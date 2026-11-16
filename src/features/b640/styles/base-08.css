@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p08 {
+@layer b640.base {
   @media (min-width: 768px) {
     .b640 .qa-mob { display: none; }
     .b640 .qa-side { display: grid; gap: var(--career-space-3); position: sticky; inset-block-start: var(--career-space-4); padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); }

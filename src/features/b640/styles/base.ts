@@ -1,5 +1,4 @@
 // Сгенерировано scripts/b640/port-mockup-css.mjs. Руками не править.
-import './base-layers.css';
 import './base-01.css';
 import './base-02.css';
 import './base-03.css';

@@ -128,11 +128,25 @@ export function limitOf(
   };
 }
 
+/** Строка без разметки ответа: звёздочек, решёток, маркеров списка. */
+function plainLine(text: string): string {
+  return text
+    .replace(/\*+|`+|__/gu, '')
+    .replace(/^\s*(?:#{1,6}|[-•]|\d{1,2}[.)])\s+/u, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+/**
+ * Тема разговора одной строкой: первый вопрос кандидата; его нет — первая строка итога.
+ * Итог целиком в строку не идёт; по ширине строку обрезает вёрстка.
+ */
 export function conversationTitle(item: {
   readonly summary: string | null;
   readonly firstPhrase: string;
 }): string {
-  return item.summary?.trim() || item.firstPhrase.trim() || 'Разговор без темы';
+  const lines = [item.firstPhrase, ...(item.summary ?? '').split('\n')].map(plainLine);
+  return lines.find((line) => line.length > 0) ?? 'Разговор без темы';
 }
 
 /** «Сегодня, 15:02» или «11 ноября». */

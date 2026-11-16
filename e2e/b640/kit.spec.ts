@@ -162,6 +162,8 @@ test.describe('B649: витрина общих компонентов', () => {
       { name: 'page', query: '' },
       { name: 'buttons', query: '?view=buttons' },
       { name: 'composer', query: '?view=composer' },
+      { name: 'composer-closed', query: '?view=composer&state=closed' },
+      { name: 'composer-recording', query: '?view=composer&state=recording' },
       { name: 'dialog', query: '?open=dialog' },
     ];
     for (const theme of ['light', 'dark']) {

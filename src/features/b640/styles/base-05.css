@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p05 {
+@layer b640.base {
   @media (max-width: 767px) {
     .b640 .va-tabs { flex: 0 1 auto; }
     .b640 .va-lact { inline-size: auto; }

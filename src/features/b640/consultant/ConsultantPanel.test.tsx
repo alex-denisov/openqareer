@@ -6,7 +6,7 @@ import type { AuthUser, CandidateMemory } from '../../coach/coachApi';
 import { click, mount, press, type Mounted } from '../kit/testDom';
 import { ShellProvider } from '../shell/ShellContext';
 import { ConsultantPanel, type PanelView } from './ConsultantPanel';
-import { panelPath, panelViewOf } from './index';
+import { panelPath, panelViewOf } from './panelRoute';
 
 const api = vi.hoisted(() => ({
   getCandidateWithMessages: vi.fn(),
@@ -57,7 +57,12 @@ const fact: CandidateMemory = {
 
 const feed = [
   { id: 'u1', role: 'user', content: 'Команда была 18 человек.' },
-  { id: 'a1', role: 'assistant', content: 'Принято.\n\nЭто нужно записать в профиль.' },
+  {
+    id: 'a1',
+    role: 'assistant',
+    content:
+      'Принято.\n\nЭто нужно **записать в профиль**.\n1. Команда 18 человек\n2. **Платёжная** платформа',
+  },
 ];
 
 function quotas(remaining: number) {
@@ -83,6 +88,7 @@ async function open(panel: PanelView): Promise<HTMLElement> {
     path: '/app/consultant',
     search: '',
     match: null,
+    consultantRoute: null,
     navigate,
     signOut: async () => undefined,
     theme: 'light' as const,
@@ -143,12 +149,22 @@ describe('панель консультанта: разговор (K1)', () => {
     const back = panel.querySelector('a.ph-back') as HTMLAnchorElement;
     expect(back.getAttribute('aria-label')).toBe('Все разговоры');
     expect(back.getAttribute('href')).toBe('/app/consultant/history');
+    click(back);
+    expect(onView).toHaveBeenCalledWith({ kind: 'history' });
     expect(panel.querySelector('.ph-new')).toBeNull();
     expect(panel.querySelector('.msg.me')?.textContent).toBe('Команда была 18 человек.');
     expect(panel.querySelectorAll('.msg.bot p')).toHaveLength(2);
+    expect(panel.querySelector('.msg.bot strong')?.textContent).toBe('записать в профиль');
+    expect([...panel.querySelectorAll('.msg.bot ol > li')].map((li) => li.textContent)).toEqual([
+      'Команда 18 человек',
+      'Платёжная платформа',
+    ]);
+    expect(panel.querySelector('.msg.bot')?.textContent).not.toMatch(/\*\*|^\d\./mu);
     expect(panel.textContent).not.toMatch(/gemini|gpt|claude|openrouter|vertex/iu);
     click(panel.querySelector('[aria-label="Свернуть"]'));
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    press(document, 'Escape');
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it('запись из разговора: строка сверху и карточка; «Верно» пишет в профиль на месте', async () => {
@@ -291,6 +307,9 @@ describe('панель консультанта: все разговоры (K5)'
     const first = root.querySelector('ul.hist.hist2 a.hist-t.hist-row') as HTMLAnchorElement;
     expect(first.querySelector('.hist-tt')?.textContent).toBe('С чего начать поиск');
     expect(first.getAttribute('href')).toBe('/app/consultant?conversation=c1');
+    click(first);
+    expect(onView).toHaveBeenCalledWith({ kind: 'conversation', id: 'c1' });
+    expect(navigate).not.toHaveBeenCalled();
     click(root.querySelector('.vl-foot .btn'));
     await settle();
     expect(api.fetchConversationPage).toHaveBeenLastCalledWith('next');
