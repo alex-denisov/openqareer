@@ -115,7 +115,12 @@ describe('b640 today: отклики и вакансии', () => {
     expect(
       applicationsSummary(
         { favorites: 0, applied: 7, responses: 0, offers: 0 },
-        { company: 'Арка Холдинг', title: 'Руководитель платформы', round: 1, at: '2026-11-12T12:00:00.000Z' },
+        {
+          company: 'Арка Холдинг',
+          title: 'Руководитель платформы',
+          round: 1,
+          at: '2026-11-12T12:00:00.000Z',
+        },
         'Europe/Moscow',
       ),
     ).toEqual({
@@ -126,7 +131,9 @@ describe('b640 today: отклики и вакансии', () => {
 
   it('без откликов сводки нет, без интервью нет второй строки', () => {
     expect(applicationsSummary(undefined, null, 'UTC')).toBeNull();
-    expect(applicationsSummary({ favorites: 0, applied: 2, responses: 0, offers: 0 }, null, 'UTC')).toEqual({
+    expect(
+      applicationsSummary({ favorites: 0, applied: 2, responses: 0, offers: 0 }, null, 'UTC'),
+    ).toEqual({
       title: 'Ваши отклики: 2',
       text: null,
     });
@@ -185,7 +192,10 @@ describe('b640 today: раскладка модулей по колонкам', 
   });
 
   it('«Работаю»: остаётся только план, встреча и результат не показаны', () => {
-    const layout = moduleLayout('working', modules('onboarding_plan', 'next_meeting', 'record_result'));
+    const layout = moduleLayout(
+      'working',
+      modules('onboarding_plan', 'next_meeting', 'record_result'),
+    );
     expect(keys(layout.main)).toEqual(['onboarding_plan']);
     expect(layout.side).toEqual([]);
   });

@@ -28,7 +28,9 @@ export interface TodayAction {
 type ActionFace = Pick<TodayAction, 'label' | 'shortLabel' | 'icon' | 'path'>;
 
 function responsePath(applicationId: string | undefined): string {
-  return applicationId ? buildNodePath('o01c', { responseId: applicationId }) : buildNodePath('o01');
+  return applicationId
+    ? buildNodePath('o01c', { responseId: applicationId })
+    : buildNodePath('o01');
 }
 
 function actionFace(item: TodayQueueItem): ActionFace {
@@ -39,7 +41,12 @@ function actionFace(item: TodayQueueItem): ActionFace {
     return { label: 'Подготовиться', shortLabel: 'Готовиться', icon: 'play', path };
   }
   if (item.kind === 'linkedin_post') {
-    return { label: 'Открыть пост', shortLabel: 'Открыть', icon: 'linkedin', path: buildNodePath('a03b') };
+    return {
+      label: 'Открыть пост',
+      shortLabel: 'Открыть',
+      icon: 'linkedin',
+      path: buildNodePath('a03b'),
+    };
   }
   if (item.kind === 'new_vacancy' || item.kind === 'shortlist') {
     const path = item.clusterId
@@ -83,7 +90,11 @@ export interface SkillFit {
   readonly source: string;
 }
 
-const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', {
+  day: '2-digit',
+  month: '2-digit',
+  timeZone: 'UTC',
+});
 
 /** Частые требования роли: что уже есть в профиле и чего не хватает. */
 export function skillFit(demand: RoleSkillDemand | undefined): SkillFit | null {
@@ -111,8 +122,14 @@ export interface ApplicationsSummary {
 function interviewMoment(at: string, timeZone: string): string | null {
   const date = new Date(at);
   if (Number.isNaN(date.getTime())) return null;
-  const day = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone }).format(date);
-  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone }).format(date);
+  const day = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone }).format(
+    date,
+  );
+  const time = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone,
+  }).format(date);
   return `${day}, ${time}`;
 }
 

@@ -30,7 +30,9 @@ describe('b640 уведомления: действие события', () => {
   });
 
   it('без источника ответ ведёт в список откликов', () => {
-    const action = notificationAction(note({ action: { label: 'x', href: '/app?view=responses' } }));
+    const action = notificationAction(
+      note({ action: { label: 'x', href: '/app?view=responses' } }),
+    );
     expect(action.path).toBe('/app/responses');
   });
 
@@ -47,7 +49,11 @@ describe('b640 уведомления: действие события', () => {
         'import_completed',
         'delivery_error',
       ] as const
-    ).map((kind) => [kind, notificationAction(note({ kind })).path, notificationAction(note({ kind })).label]);
+    ).map((kind) => [
+      kind,
+      notificationAction(note({ kind })).path,
+      notificationAction(note({ kind })).label,
+    ]);
     expect(paths).toEqual([
       ['email_approval', '/app/responses', 'Проверить письмо'],
       ['post_approval', '/app/profile/linkedin/posts', 'Открыть пост'],

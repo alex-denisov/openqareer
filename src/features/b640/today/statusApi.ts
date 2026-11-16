@@ -1,4 +1,7 @@
-import type { CandidateStatusState, CandidateStatusToday } from '../../../../shared/candidateStatus';
+import type {
+  CandidateStatusState,
+  CandidateStatusToday,
+} from '../../../../shared/candidateStatus';
 import { apiFetch, readData } from '../../coach/apiClient';
 
 const STATUS_API = '/api/v1/candidate/status';
