@@ -31,6 +31,7 @@ function principal(username: string): AuthPrincipal {
 function flagConfig(usernames?: readonly string[]): ServerConfig {
   return {
     secureCookies: false,
+    allowedOrigins: ['http://localhost:3000'],
     ...(usernames ? { cabinetB640Usernames: usernames } : {}),
   } as ServerConfig;
 }
@@ -41,6 +42,7 @@ async function probeApp(usernames?: readonly string[]) {
   const sessions = new Map([
     ['token-flagged', principal('flagged.test')],
     ['token-plain', principal('plain.test')],
+    ['token-unverified', { ...principal('unverified.test'), emailVerified: false }],
   ]);
   const authService = {
     authenticate: (token: string) => sessions.get(token) ?? null,
@@ -51,6 +53,11 @@ async function probeApp(usernames?: readonly string[]) {
     const allowed = requireCabinetB640(request, reply, { authService, config });
     if (!allowed) return reply;
     return { data: { username: allowed.username } };
+  });
+  app.post('/api/v1/b640/probe', async (request, reply) => {
+    const allowed = requireCabinetB640(request, reply, { authService, config });
+    if (!allowed) return reply;
+    return { data: { saved: true } };
   });
   apps.push(app);
   return app;
@@ -134,5 +141,29 @@ describe('requireCabinetB640 on a probe route', () => {
     const app = await probeApp(['*']);
     expect((await probe(app, 'token-plain')).statusCode).toBe(200);
     expect((await probe(app)).statusCode).toBe(404);
+  });
+
+  it('asks a flagged account with an unconfirmed email to confirm it first', async () => {
+    const app = await probeApp(['*']);
+    const unverified = await probe(app, 'token-unverified');
+    expect(unverified.statusCode).toBe(403);
+    expect(unverified.json().error.code).toBe('email_unverified');
+  });
+
+  it('rejects a cookie mutation from a foreign page, and only for flagged accounts', async () => {
+    const app = await probeApp(['flagged.test']);
+    const post = (token: string, origin?: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/b640/probe',
+        headers: { cookie: `openqareer_session=${token}`, ...(origin ? { origin } : {}) },
+      });
+
+    expect((await post('token-flagged', 'http://localhost:3000')).statusCode).toBe(200);
+    const foreign = await post('token-flagged', 'https://evil.example');
+    expect(foreign.statusCode).toBe(403);
+    expect(foreign.json().error.code).toBe('origin_not_allowed');
+    expect((await post('token-flagged')).statusCode).toBe(403);
+    expect((await post('token-plain', 'https://evil.example')).statusCode).toBe(404);
   });
 });
