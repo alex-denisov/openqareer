@@ -145,6 +145,7 @@ const renderScriptPage = existsSync(siteRenderWorkerFile)
     });
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
+  registerRequestedAts: true,
   linkedinBudget,
   linkedinFetch,
   renderScriptPage,

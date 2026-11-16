@@ -183,6 +183,24 @@ describe('B641 · здоровье источника в keyed не считае
 });
 
 describe('B641 · опрос ручных запросов не читает всё состояние площадок', () => {
+  it('registers an approved source during the next poll without replacing existing sources', () => {
+    const pool = new MemoryVacancyPoolStore();
+    const requestedAt = '2026-11-10T10:00:00.000Z';
+    const store = Object.assign(Object.create(pool) as VacancyPoolStore, {
+      loadRequestedSourceSyncs: () => [
+        { sourceId: 'ats-approved', syncRequestedAt: requestedAt },
+        { sourceId: 'ats-unapproved', syncRequestedAt: requestedAt },
+      ],
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source()],
+      pool: store,
+      loadRequestedSource: (id) => id === 'ats-approved' ? source({ id }) : undefined,
+    });
+    expect(engine.getRequestedSourceSyncs()).toEqual([{ sourceId: 'ats-approved', requestedAt }]);
+    expect(engine.getSources()).toHaveLength(2);
+  });
+
   it('reads only pending requests on the worker poll', () => {
     const pool = new MemoryVacancyPoolStore();
     let fullReads = 0;

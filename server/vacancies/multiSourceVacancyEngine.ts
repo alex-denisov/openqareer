@@ -468,6 +468,7 @@ export class MultiSourceVacancyEngine {
   private keyedClusterings = 0;
   private fetcher?: SourceFetcher;
   private readonly holdSource: (source: VacancySourceConfig) => boolean;
+  private readonly loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
   private readonly companyLaneSourceTimeoutMs: number;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
@@ -530,10 +531,12 @@ export class MultiSourceVacancyEngine {
     workdayDetailFetch?: WorkdayDetailFetch;
     /** Источник сейчас нельзя опрашивать (пауза бюджета LinkedIn): место в волне не занимает. */
     holdSource?: (source: VacancySourceConfig) => boolean;
+    loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
     /** B628: сколько полоса каналов компаний ждёт один источник, прежде чем освободить место. */
     companyLaneSourceTimeoutMs?: number;
   }) {
     this.holdSource = options?.holdSource ?? (() => false);
+    this.loadRequestedSource = options?.loadRequestedSource;
     this.companyLaneSourceTimeoutMs =
       options?.companyLaneSourceTimeoutMs ?? COMPANY_LANE_SOURCE_TIMEOUT_MS;
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
@@ -581,6 +584,13 @@ export class MultiSourceVacancyEngine {
       return;
     }
     const pending = new Map(load().map((row) => [row.sourceId, row]));
+    if (this.loadRequestedSource) {
+      for (const id of pending.keys()) {
+        if (this.sources.has(id)) continue;
+        const source = this.loadRequestedSource(id);
+        if (source?.id === id && source.enabled) this.addOrUpdateSource(source);
+      }
+    }
     for (const source of this.sources.values()) {
       const row = pending.get(source.id);
       source.syncRequestedAt = row?.syncRequestedAt;
