@@ -123,7 +123,55 @@ function firstPage(): Note[] {
   ];
 }
 
+/** Ответ `/candidate/today` в форме прода 16.11: пустые `dueAt` и `fit`, у поста — `draftId`. */
+const PROD_DAY = {
+  digest: {
+    waitingForYou: 3,
+    newVacancies: 0,
+    followUpsDueToday: 0,
+    followUpsOverdue: 1,
+    closedVacancies: 0,
+    interviewsAhead: 0,
+    nextInterview: null,
+    newVacanciesCaption: null,
+    followUpCaptions: [],
+  },
+  queue: [
+    {
+      kind: 'follow_up',
+      applicationId: 'app-prod-1',
+      title: 'Director of Engineering, AI Functions',
+      company: 'Snowflake',
+      eyebrow: 'ответа нет 47 дней',
+      dueAt: '2026-10-05T00:00:00.000Z',
+      fit: null,
+    },
+    ...['о найме инженеров', 'про рост команды'].map((title, index) => ({
+      kind: 'linkedin_post',
+      draftId: `draft-${index + 1}`,
+      title,
+      company: 'LinkedIn',
+      eyebrow: 'сам не опубликуется',
+      dueAt: null,
+      fit: null,
+    })),
+  ],
+  followUps: [],
+  sinceLastVisit: { since: null, items: [] },
+  vacanciesPending: false,
+  momentum: null,
+  funnel: { favorites: 2, applied: 13, responses: 2, interviews: 1, offers: 1 },
+  queueTotal: 3,
+  queueRevision: 'rev-1',
+  queueOffset: 0,
+  connectedSources: ['linkedin'],
+};
+
 interface Mocks {
+  /** День в форме прода вместо общей фикстуры. */
+  readonly prodDay?: boolean;
+  /** Сколько первых чтений дня оборвать, как при истёкшем ожидании. */
+  readonly dayFailures?: number;
   readonly status?: StatusId;
   readonly revert?: boolean;
   /** Сколько первых чтений статуса отдать ошибкой. */
@@ -154,6 +202,14 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
       });
     }
     return route.fulfill({ json: { data: { today: statusToday(status, revert) } } });
+  });
+  let dayFailures = mocks.dayFailures ?? 0;
+  await page.route(`${API}/today?**`, (route) => {
+    if (dayFailures > 0) {
+      dayFailures -= 1;
+      return route.abort('timedout');
+    }
+    return mocks.prodDay ? route.fulfill({ json: { data: PROD_DAY } }) : route.fallback();
   });
   await page.route(`${API}/status/revert`, (route) => {
     calls.reverted += 1;
@@ -281,6 +337,53 @@ test.describe('B650: «Сегодня» нового кабинета', () => {
   });
 });
 
+test.describe('B650: «Сегодня» на данных в форме прода', () => {
+  test('первое дело, посты без служебной приписки, одна залитая кнопка; гейты', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/today', { prodDay: true });
+    const screen = today(page);
+    await expect(screen.locator('.lead .lead-title')).toHaveText(
+      'Напомнить компании Snowflake про ответ',
+    );
+    await expect(screen.locator('.lead .lead-sub')).toContainText('ответа нет 47 дней');
+    await expect(screen.locator('.s5-prog')).toContainText('13 откликов → 1 интервью → 1 оффер');
+    await expect(screen.locator('.ev-row')).toHaveCount(2);
+    await expect(screen.locator('.ev-row .row-sub').first()).toHaveText('LinkedIn');
+    await expect(screen.getByText('сам не опубликуется')).toHaveCount(0);
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
+    await expectGates(page);
+  });
+
+  test('первый ответ оборвался по ожиданию: экран дочитывает сам, ошибки нет', async ({ page }) => {
+    await openCabinet(page, '/app/today', { prodDay: true, dayFailures: 1 });
+    const screen = today(page);
+    await expect(screen.locator('.lead .lead-title')).toHaveText(
+      'Напомнить компании Snowflake про ответ',
+    );
+    await expect(screen.getByRole('alert')).toHaveCount(0);
+  });
+
+  test('три сбоя подряд: ошибка на месте, причина в консоли, «Повторить» читает заново', async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text());
+    });
+    await openCabinet(page, '/app/today', { prodDay: true, dayFailures: 3 });
+    const screen = today(page);
+    await expect(screen.getByRole('alert')).toContainText('Не удалось загрузить дела на сегодня.');
+    expect(errors.some((text) => text.includes('B640 «Сегодня»: не прочитали дела дня'))).toBe(
+      true,
+    );
+    await screen.getByRole('button', { name: 'Повторить' }).click();
+    await expect(screen.locator('.lead .lead-title')).toHaveText(
+      'Напомнить компании Snowflake про ответ',
+    );
+  });
+});
+
 test.describe('B650: «Все уведомления»', () => {
   test('события по дням, действие ведёт в раздел и отмечает прочитанным; гейты', async ({
     page,
@@ -347,6 +450,7 @@ test.describe('B650: снимки для сверки с макетами', () =
     ['today-choosing-role', '/app/today', { status: 'choosing_role' }],
     ['today-looking', '/app/today', { status: 'looking' }],
     ['today-working', '/app/today', { status: 'working' }],
+    ['today-prod-day', '/app/today', { prodDay: true }],
     ['notifications', '/app/notifications', { hasMore: true }],
     ['notifications-empty', '/app/notifications', { notes: [] }],
   ];
