@@ -201,6 +201,7 @@ export function candidateStatusToday(
     status: choice.status,
     title: titleOf(choice),
     chosen: latest !== null,
+    since: latest?.createdAt ?? null,
     modules: todayModulesFor(choice.status),
     revert: revertOf(latest, now),
   };
