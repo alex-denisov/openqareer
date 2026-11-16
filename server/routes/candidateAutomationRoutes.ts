@@ -28,6 +28,8 @@ import {
 } from '../candidate/sqliteCandidateAutomationRepository';
 import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStore';
 import type { RouteDeps } from './deps';
+import { createAutomationPausePort } from '../candidate/automationPausePort';
+import { registerCandidateStatusRoutes } from './candidateStatusRoutes';
 import {
   authenticateCandidate,
   authenticateSession,
@@ -751,6 +753,11 @@ export function registerCandidateAutomationRoutes(app: FastifyInstance, deps: Ro
   app.delete('/api/v1/candidate/automation/stop-companies', withDeps(bound, removeStopCompany));
   app.post('/api/v1/candidate/automation/stop-companies/import-rejections', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, withDeps(bound, importRejectedCompanies));
   registerCandidateAutomationScheduleRoutes(app, bound);
+  // B665: статус кандидата ставит ту же паузу; свои маршруты закрыты флагом B640.
+  registerCandidateStatusRoutes(app, {
+    ...deps,
+    automationPause: createAutomationPausePort(automationRepository, deps.candidateActionRepository),
+  });
 }
 
 const getStopCompanies: Handler = async (deps, request, reply) => {
