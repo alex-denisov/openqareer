@@ -7,10 +7,10 @@ import { footOf } from './sortModel';
 export const FIT_TIP = 'Совпадение требований вакансии с подтверждённым опытом профиля.';
 
 /** Сбой чтения подборки или отметок: строка с «Повторить» на месте, введённое не теряется. */
-export function LoadErrors({ pool, links }: { pool: MatchedPool; links: VacancyLinks }) {
+export function LoadErrors({ pool, links, poolFailed }: { pool: MatchedPool; links: VacancyLinks; poolFailed: boolean }) {
   return (
     <>
-      {pool.failed ? (
+      {poolFailed ? (
         <div className="vl-err" role="alert">
           <Icon name="warn" />
           <span>Подборка не обновилась</span>
@@ -34,10 +34,10 @@ export function LoadErrors({ pool, links }: { pool: MatchedPool; links: VacancyL
   );
 }
 
-export function LoadingLine() {
+export function LoadingLine({ text = 'Загружаем подборку…' }: { text?: string }) {
   return (
     <p className="ls-state" role="status">
-      Загружаем подборку…
+      {text}
     </p>
   );
 }
@@ -105,6 +105,20 @@ export function EmptyByFilters({
           Снять все фильтры
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Сбой серверной сортировки: строка на месте таблицы, прочитанные порции остаются. */
+export function SortError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="vl-err" role="alert">
+      <Icon name="warn" />
+      <span>Подборка не отсортировалась</span>
+      <button className="row-act" type="button" onClick={onRetry}>
+        <Icon name="refresh" />
+        Повторить
+      </button>
     </div>
   );
 }

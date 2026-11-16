@@ -8,6 +8,7 @@ import type { MoneyCurrency } from '../format';
 import type { VacancyLinks } from '../vacancyLinks';
 import { EMPTY_FILTERS, applyFilters, blockersOf, type Blocker, type FilterKind, type ListFilters } from './filterModel';
 import { buildOptions, type FilterOptions } from './filterOptions';
+import { useServerSortedList, type ServerListStatus } from './useServerSortedList';
 import { PAGE_SIZE, SERVER_SORT, nextSort, sortItems, visibleSlice, type SortKey, type SortState } from './sortModel';
 
 export interface VacancyList {
@@ -32,6 +33,10 @@ export interface VacancyList {
   readonly count: number;
   readonly blockers: readonly Blocker[];
   readonly showMore: () => void;
+  /** Подвал «Показать ещё»: всего и показано (в серверном режиме — прочитано с сервера). */
+  readonly more: { readonly total: number; readonly shown: number };
+  /** Подборка прочитана не целиком и выбран столбец: строки и порядок отдаёт сервер. */
+  readonly server: { readonly active: boolean; readonly status: ServerListStatus; readonly retry: () => void };
   readonly noRole: boolean;
 }
 
@@ -69,15 +74,26 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   useServerRoles(pool, filters.roles, (roles) => setFilters((current) => ({ ...current, roles })));
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
-  const base = useMemo(() => pool.matched.filter((item) => !hidden.has(item.cluster.id)), [pool.matched, hidden]);
+  const serverMode = !pool.complete && sortState !== null;
+  const server = useServerSortedList(serverMode, sortState ?? SERVER_SORT, filters.roles);
+  const poolBase = useMemo(() => pool.matched.filter((item) => !hidden.has(item.cluster.id)), [pool.matched, hidden]);
+  const base = useMemo(
+    () => (serverMode ? server.rows.filter((item) => !hidden.has(item.cluster.id)) : poolBase),
+    [serverMode, server.rows, poolBase, hidden],
+  );
   const context = { currency, rates, now };
   const all = useMemo(
-    () => sortItems(applyFilters(base, filters, { currency, rates, now }), sortState, rates),
-    [base, filters, currency, rates, now, sortState],
+    () => sortItems(applyFilters(base, filters, { currency, rates, now }), serverMode ? null : sortState, rates),
+    [base, filters, currency, rates, now, sortState, serverMode],
   );
-  const options = useMemo(() => buildOptions(base, pool.facets, now), [base, pool.facets, now]);
+  const options = useMemo(() => buildOptions(poolBase, pool.facets, now), [poolBase, pool.facets, now]);
   const narrowed = filters.locations.length > 0 || filters.formats.length > 0 || filters.reloc || filters.moneyFrom !== null || filters.date !== 'any';
-  const count = narrowed || pool.complete ? all.length : Math.max(pool.total - hidden.size, all.length);
+  const knownTotal = serverMode && server.total > 0 ? server.total : pool.total;
+  const count = narrowed || pool.complete ? all.length : Math.max(knownTotal - hidden.size, all.length);
+  const visible = serverMode ? all : visibleSlice(all, shown);
+  const more = serverMode
+    ? { total: server.hasMore ? server.total : base.length, shown: base.length }
+    : { total: count, shown: visible.length };
   const blockers = useMemo(
     () => (all.length === 0 && !pool.loading ? blockersOf(base, filters, context) : []),
     [all.length, pool.loading, base, filters, currency, rates, now],
@@ -87,8 +103,9 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     currency, setCurrency, sort: sortState ?? SERVER_SORT,
     toggleSort: (key) => setSortState((current) => nextSort(current ?? SERVER_SORT, key)),
     openKind, setOpenKind, sheetOpen, setSheetOpen, options, all,
-    visible: visibleSlice(all, shown), count, blockers,
-    showMore: () => setShown((value) => value + PAGE_SIZE),
+    visible, count, blockers, more,
+    showMore: serverMode ? server.loadMore : () => setShown((value) => value + PAGE_SIZE),
+    server: { active: serverMode, status: server.status, retry: server.retry },
     noRole: pool.campaign !== undefined && pool.campaign.roles.value.length === 0,
   };
 }

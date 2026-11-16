@@ -9,6 +9,8 @@ import {
 import { useShell } from '../../shell/ShellContext';
 import { useToast } from '../../kit';
 import { buildNodePath } from '../../routes';
+import type { SkipReasonId } from '../../../../../shared/skipReasons';
+import type { HiddenRow } from '../b640Api';
 import { hideVacancy, unhideVacancy } from '../skipApi';
 import type { VacancyLinks } from '../vacancyLinks';
 import type { MenuView, RowMenuActions } from './RowMenu';
@@ -18,6 +20,10 @@ export interface RowInteractions {
   readonly openId: string | null;
   readonly menu: TableMenu | null;
   readonly hiddenIds: ReadonlySet<string>;
+  /** Скрытые в этой сессии, свежие первыми: видны в «Показать скрытые» без перечитывания. */
+  readonly hiddenRows: readonly HiddenRow[];
+  /** Вернуть вакансию в подборку; сбой пробрасывается вызывающему. */
+  readonly unhide: (id: string) => Promise<void>;
   readonly wantedKeys: ReadonlySet<string>;
   readonly toggleOpen: (id: string) => void;
   readonly openMenu: (id: string, view: MenuView) => void;
@@ -53,7 +59,7 @@ interface ActionDeps {
   readonly wantedKeys: ReadonlySet<string>;
   readonly closeMenu: () => void;
   readonly toGoal: () => void;
-  readonly onHidden: (id: string) => void;
+  readonly onHidden: (item: MatchedVacancyItem, reason: SkipReasonId) => void;
 }
 
 function buildActions(item: MatchedVacancyItem, deps: ActionDeps): RowMenuActions {
@@ -70,7 +76,7 @@ function buildActions(item: MatchedVacancyItem, deps: ActionDeps): RowMenuAction
     hide: async (reason) => {
       await hideVacancy(cluster.id, reason);
       deps.closeMenu();
-      deps.onHidden(cluster.id);
+      deps.onHidden(item, reason);
     },
     applied: async (occurredAt) => {
       await deps.links.markApplied(cluster, occurredAt);
@@ -86,7 +92,8 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
   const records = useWantRecords();
   const [openId, setOpenId] = useState<string | null>(null);
   const [menu, setMenu] = useState<TableMenu | null>(null);
-  const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(new Set());
+  const [hiddenRows, setHiddenRows] = useState<readonly HiddenRow[]>([]);
+  const hiddenIds = useMemo(() => new Set(hiddenRows.map((row) => row.cluster.id)), [hiddenRows]);
   const wantedKeys = useMemo(() => new Set(records.keys()), [records]);
 
   const toggleOpen = useCallback((id: string) => setOpenId((current) => (current === id ? null : id)), []);
@@ -102,13 +109,16 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
     [links, toast],
   );
 
+  const unhide = useCallback(async (id: string) => {
+    await unhideVacancy(id);
+    setHiddenRows((rows) => rows.filter((row) => row.cluster.id !== id));
+  }, []);
+
   const undoHide = useCallback(
     (id: string) => {
-      unhideVacancy(id)
-        .then(() => setHiddenIds((ids) => new Set([...ids].filter((value) => value !== id))))
-        .catch((reason: unknown) => toast.show({ text: errorText(reason, 'Не удалось вернуть вакансию') }));
+      unhide(id).catch((reason: unknown) => toast.show({ text: errorText(reason, 'Не удалось вернуть вакансию') }));
     },
-    [toast],
+    [toast, unhide],
   );
 
   const actionsFor = useCallback(
@@ -119,13 +129,15 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
         wantedKeys,
         closeMenu,
         toGoal: () => navigate(buildNodePath('o08')),
-        onHidden: (id) => {
-          setHiddenIds((ids) => new Set([...ids, id]));
+        onHidden: (hiddenItem, reason) => {
+          const id = hiddenItem.cluster.id;
+          const row: HiddenRow = { ...hiddenItem, hidden: { reasonId: reason, at: new Date().toISOString() } };
+          setHiddenRows((rows) => [row, ...rows.filter((entry) => entry.cluster.id !== id)]);
           toast.show({ text: 'Скрыто', undo: { label: 'Отменить', onUndo: () => undoHide(id) } });
         },
       }),
     [links, navigate, records, toast, undoHide, wantedKeys, closeMenu],
   );
 
-  return { openId, menu, hiddenIds, wantedKeys, toggleOpen, openMenu, closeMenu, toggleSaved, actionsFor };
+  return { openId, menu, hiddenIds, hiddenRows, unhide, wantedKeys, toggleOpen, openMenu, closeMenu, toggleSaved, actionsFor };
 }
