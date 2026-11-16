@@ -60,3 +60,6 @@ data/private/
 .serena/
 prototypes/
 .vitest-reports/
+
+# B649: снимки нового кабинета для сверки с макетами
+.s13-shots/
