@@ -67,7 +67,7 @@ export function ButtonSection() {
 }
 
 export function FormRowSection() {
-  const [kind, setKind] = useState<'remote' | 'office'>('remote');
+  const [kind, setKind] = useState<'office' | 'remote' | 'hybrid'>('remote');
   return (
     <Section name="form-row" title="Ряд полей">
       <div className="kit-form-row">
@@ -88,8 +88,9 @@ export function FormRowSection() {
           value={kind}
           onChange={setKind}
           options={[
+            { value: 'office', label: 'Офис' },
             { value: 'remote', label: 'Удалённо' },
-            { value: 'office', label: 'В офисе' },
+            { value: 'hybrid', label: 'Гибрид' },
           ]}
         />
       </div>
