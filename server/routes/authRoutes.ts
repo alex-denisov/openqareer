@@ -108,7 +108,7 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return reply.code(201).send({
       data: {
-        ...publicPrincipal(authenticated.principal),
+        ...publicPrincipal(authenticated.principal, deps.config),
         sessionToken: authenticated.sessionToken,
       },
       meta: { requestId: request.id },
@@ -183,7 +183,7 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
   setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
   return {
     data: {
-      ...publicPrincipal(authenticated.principal),
+      ...publicPrincipal(authenticated.principal, deps.config),
       sessionToken: authenticated.sessionToken,
     },
     meta: { requestId: request.id },
@@ -252,7 +252,7 @@ async function handleVerifyEmail(deps: RouteDeps, request: FastifyRequest, reply
     }
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return {
-      data: { ...publicPrincipal(authenticated.principal), sessionToken: authenticated.sessionToken },
+      data: { ...publicPrincipal(authenticated.principal, deps.config), sessionToken: authenticated.sessionToken },
       meta: { requestId: request.id },
     };
   } catch (error) {
@@ -278,7 +278,7 @@ async function handleResendEmailVerification(
     setSessionCookie(reply, sessionToken, deps.config.secureCookies);
     return {
       data: {
-        ...publicPrincipal(result.principal),
+        ...publicPrincipal(result.principal, deps.config),
         emailVerificationEmailSent: result.emailVerificationEmailSent,
         sessionToken,
       },
@@ -314,7 +314,7 @@ async function handleChangeUnverifiedEmail(
     setSessionCookie(reply, sessionToken, deps.config.secureCookies);
     return {
       data: {
-        ...publicPrincipal(result.principal),
+        ...publicPrincipal(result.principal, deps.config),
         emailVerificationEmailSent: result.emailVerificationEmailSent,
         sessionToken,
       },
@@ -337,7 +337,7 @@ async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, reply: Fas
   if (sessionCameFromCookie(request, deps.config)) {
     setSessionCookie(reply, extractSessionToken(request, deps.config), deps.config.secureCookies);
   }
-  return { data: publicPrincipal(principal), meta: { requestId: request.id } };
+  return { data: publicPrincipal(principal, deps.config), meta: { requestId: request.id } };
 }
 
 async function handleLogout(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -427,7 +427,7 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
     }
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return {
-      data: publicPrincipal(authenticated.principal),
+      data: publicPrincipal(authenticated.principal, deps.config),
       meta: { requestId: request.id },
     };
   } catch (error) {
@@ -536,7 +536,7 @@ async function handleCreateAccountEmailChange(
     return {
       data: {
         status: result.status,
-        ...publicPrincipal(result.principal),
+        ...publicPrincipal(result.principal, deps.config),
       },
       meta: { requestId: request.id },
     };
@@ -592,7 +592,7 @@ async function handleVerifyAccountEmailChange(
     }
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return {
-      data: publicPrincipal(authenticated.principal),
+      data: publicPrincipal(authenticated.principal, deps.config),
       meta: { requestId: request.id },
     };
   } catch (error) {
@@ -647,7 +647,7 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return {
       data: {
-        ...publicPrincipal(authenticated.principal),
+        ...publicPrincipal(authenticated.principal, deps.config),
         sessionToken: authenticated.sessionToken,
       },
       meta: { requestId: request.id },

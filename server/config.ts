@@ -91,6 +91,14 @@ const configSchema = z.object({
     .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{2,79}$/)
     .optional(),
   OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
+  OPENQAREER_CABINET_B640_USERNAMES: z
+    .string()
+    .max(8_192)
+    .default('')
+    .transform(parseCabinetB640Usernames)
+    .refine((names) => names.every(isCabinetB640Entry), {
+      message: 'expected sign-in names separated by commas, or *',
+    }),
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
   OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
   OPENQAREER_EMAIL_VERIFICATION_REQUIRED: z.preprocess(
@@ -188,6 +196,18 @@ function blankAsUnset(schema: z.ZodString) {
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     schema.optional(),
   );
+}
+
+/** B649: имена входа приводятся к виду, в котором их хранит вход. */
+function parseCabinetB640Usernames(value: string): string[] {
+  return value
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isCabinetB640Entry(name: string): boolean {
+  return name === '*' || /^[a-z0-9][a-z0-9._-]{2,79}$/u.test(name);
 }
 
 function parseEmailMxBypassDomains(value: string): string[] {
@@ -303,6 +323,8 @@ export interface ServerConfig {
   /** B471: zero means new Executive requests are placed on the waitlist. */
   executiveRequestCapacity?: number;
   emailMxCheckBypassDomains?: readonly string[];
+  /** B649: кому включён новый кабинет B640; пусто — никому, `*` — всем. */
+  cabinetB640Usernames?: readonly string[];
   desktopTunnel?: DesktopTunnelConfig;
   robokassa?: RobokassaGatewayConfig;
 }
@@ -446,6 +468,7 @@ export function readServerConfig(
     release: builtRelease,
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
     emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
+    cabinetB640Usernames: parsed.OPENQAREER_CABINET_B640_USERNAMES,
     emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
     executiveRequestCapacity: parsed.OPENQAREER_EXECUTIVE_REQUEST_CAPACITY,
     emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,

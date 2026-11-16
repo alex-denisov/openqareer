@@ -28,6 +28,11 @@ export interface CareerPartnerCandidatePage {
   nextOffset: number | null;
 }
 
+/** B649: возможности интерфейса в ответах входа и `/auth/me`. */
+export interface CabinetFeatures {
+  readonly cabinetB640: boolean;
+}
+
 export interface AuthPrincipal {
   userId: string;
   username: string;

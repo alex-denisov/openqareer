@@ -1,6 +1,7 @@
 import cookie from '@fastify/cookie';
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import type { ServerConfig } from '../config';
 import {
@@ -41,7 +42,9 @@ async function probeApp(usernames?: readonly string[]) {
     ['token-flagged', principal('flagged.test')],
     ['token-plain', principal('plain.test')],
   ]);
-  const authService = { authenticate: (token: string) => sessions.get(token) ?? null };
+  const authService = {
+    authenticate: (token: string) => sessions.get(token) ?? null,
+  } as unknown as SessionAuth;
   const app = Fastify();
   await app.register(cookie);
   app.get('/api/v1/b640/probe', async (request, reply) => {
