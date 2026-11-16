@@ -64,7 +64,7 @@ export function ToastHost() {
   }, [id, timeoutMs]);
 
   return (
-    <div role="status" aria-live="polite">
+    <div role="status" aria-live="polite" data-kit-keep>
       {toast ? (
         <div className="va-snack" key={toast.id}>
           <span>{toast.text}</span>
