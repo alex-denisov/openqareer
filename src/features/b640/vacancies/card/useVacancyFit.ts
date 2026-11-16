@@ -33,9 +33,12 @@ export function useVacancyFit(vacancyId: string): VacancyFitState {
       if (!alive) return;
       setView(next);
       const waiting = COUNTING.includes(next.state) || (stale && !queued);
-      if (waiting && polls < MAX_POLLS) {
-        timer = setTimeout(() => void run(polls + 1, true), POLL_MS);
+      if (!waiting) return;
+      if (polls >= MAX_POLLS) {
+        setFailed(true);
+        return;
       }
+      timer = setTimeout(() => void run(polls + 1, true), POLL_MS);
     };
     const run = (polls: number, queued: boolean): Promise<void> =>
       settle(polls, queued).catch(() => {

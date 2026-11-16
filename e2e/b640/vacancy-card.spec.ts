@@ -40,17 +40,30 @@ const FIT_VIEW = {
     reason: 'assessed',
     gates: {},
     assessments: [
-      { requirementId: 'a', status: 'matched', evidence: [{ factId: 'f1', quote: 'Финтех Лаб · переход на Kubernetes, 2024' }] },
-      { requirementId: 'b', status: 'partial', evidence: [{ factId: 'f2', quote: 'Финтех Лаб · нанимали разработчиков' }] },
+      {
+        requirementId: 'a',
+        status: 'matched',
+        evidence: [{ factId: 'f1', quote: 'Финтех Лаб · переход на Kubernetes, 2024' }],
+      },
+      {
+        requirementId: 'b',
+        status: 'partial',
+        evidence: [{ factId: 'f2', quote: 'Финтех Лаб · нанимали разработчиков' }],
+      },
       { requirementId: 'c', status: 'unknown', evidence: [] },
-      { requirementId: 'd', status: 'matched', evidence: [{ factId: 'f3', quote: 'Финтех Лаб · Go, PostgreSQL' }] },
+      {
+        requirementId: 'd',
+        status: 'matched',
+        evidence: [{ factId: 'f3', quote: 'Финтех Лаб · Go, PostgreSQL' }],
+      },
     ],
   },
 } as unknown as VacancyFitView;
 
 const DETAIL = {
   id: 'cluster-0',
-  description: 'О вакансии:\nКоманда платежей, 40 человек.\n\nЗадачи:\nРуководить развитием платёжной платформы.',
+  description:
+    'О вакансии:\nКоманда платежей, 40 человек.\n\nЗадачи:\nРуководить развитием платёжной платформы.',
   truncated: false,
   skills: [],
   responsibilities: [],
@@ -139,7 +152,10 @@ test.describe('B654: карточка вакансии нового кабине
       await expect(page.locator('.v4-fit-n').first()).toContainText('Совпадение 75 %');
       for (const width of desktop ? [1440, 1176] : [390]) {
         await page.setViewportSize({ width, height: desktop ? 900 : 844 });
-        await page.screenshot({ path: `.s13-shots/vacancy-card-${width}-${theme}.png`, fullPage: true });
+        await page.screenshot({
+          path: `.s13-shots/vacancy-card-${width}-${theme}.png`,
+          fullPage: true,
+        });
       }
     }
   });

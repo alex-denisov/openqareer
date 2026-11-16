@@ -58,7 +58,7 @@ export function ListScreen() {
   const waiting = pool.loading && pool.matched.length === 0;
   const strip = list.noRole ? 'role' : profileIsEmpty(list) ? 'profile' : null;
   return (
-    <div className="page" data-b640-node="s07">
+    <div className="page" data-b640-node="s07" data-b640-section="vacancies">
       {strip ? <GapStrip kind={strip} /> : null}
       <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}`} aria-labelledby="list-title">
         <div className="vl-top vl-countbar">

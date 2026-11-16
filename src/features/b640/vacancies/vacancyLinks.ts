@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import type { VacancyApplicationSnapshot } from '../../../../shared/vacancyApplication';
 import {
   createApplication,
@@ -104,8 +112,15 @@ async function persistApplied(
   });
 }
 
-/** Карточки откликов кандидата: по ним строка знает «сохранена» и «откликнулся». */
-export function useVacancyLinks(): VacancyLinks {
+interface LoadedApplications {
+  readonly applications: readonly ApplicationView[];
+  readonly setApplications: Dispatch<SetStateAction<readonly ApplicationView[]>>;
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly reload: () => void;
+}
+
+function useLoadedApplications(): LoadedApplications {
   const [applications, setApplications] = useState<readonly ApplicationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -127,6 +142,17 @@ export function useVacancyLinks(): VacancyLinks {
     return () => controller.abort();
   }, [attempt]);
 
+  const reload = useCallback(() => {
+    setLoading(true);
+    setAttempt((value) => value + 1);
+  }, []);
+  return { applications, setApplications, loading, failed, reload };
+}
+
+/** Карточки откликов кандидата: по ним строка знает «сохранена» и «откликнулся». */
+export function useVacancyLinks(): VacancyLinks {
+  const { applications, setApplications, loading, failed, reload } = useLoadedApplications();
+
   const byCluster = useMemo(() => {
     const map = new Map<string, ApplicationView>();
     for (const application of applications) {
@@ -135,27 +161,33 @@ export function useVacancyLinks(): VacancyLinks {
     return map;
   }, [applications]);
 
-  const reload = useCallback(() => {
-    setLoading(true);
-    setAttempt((value) => value + 1);
-  }, []);
+  // Пока запись по вакансии идёт, повторное нажатие получает тот же ответ, а не второй запрос.
+  const inFlight = useRef(new Map<string, Promise<ApplicationView>>());
+  const write = useCallback(
+    (clusterId: string, persist: () => Promise<ApplicationView>): Promise<ApplicationView> => {
+      const running = inFlight.current.get(clusterId);
+      if (running) return running;
+      const request = persist()
+        .then((updated) => {
+          setApplications((list) => replaceApplication(list, updated));
+          return updated;
+        })
+        .finally(() => inFlight.current.delete(clusterId));
+      inFlight.current.set(clusterId, request);
+      return request;
+    },
+    [setApplications],
+  );
 
   const toggleSaved = useCallback(
-    async (cluster: Cluster) => {
-      const updated = await persistSaved(cluster, byCluster.get(cluster.id));
-      setApplications((list) => replaceApplication(list, updated));
-      return updated;
-    },
-    [byCluster],
+    (cluster: Cluster) => write(cluster.id, () => persistSaved(cluster, byCluster.get(cluster.id))),
+    [byCluster, write],
   );
 
   const markApplied = useCallback(
-    async (cluster: Cluster, occurredAt: string) => {
-      const updated = await persistApplied(cluster, byCluster.get(cluster.id), occurredAt);
-      setApplications((list) => replaceApplication(list, updated));
-      return updated;
-    },
-    [byCluster],
+    (cluster: Cluster, occurredAt: string) =>
+      write(cluster.id, () => persistApplied(cluster, byCluster.get(cluster.id), occurredAt)),
+    [byCluster, write],
   );
 
   return { applications, byCluster, loading, failed, reload, toggleSaved, markApplied };

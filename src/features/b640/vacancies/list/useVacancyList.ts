@@ -49,6 +49,8 @@ function useServerRoles(pool: MatchedPool, roles: readonly string[], seed: (role
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;
+    // Кандидат выбрал роли сам — сохранённый выбор сервера их уже не заменит.
+    seeded.current = true;
     sent.current = key;
     pool.setFilters?.({ roles: [...roles], regions: [], remoteOnly: false });
   }, [key]);

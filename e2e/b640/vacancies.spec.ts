@@ -54,7 +54,9 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expectGates(page);
   });
 
-  test('фильтр локаций меняет число вакансий, «Сбросить всё» возвращает', async ({ page }, testInfo) => {
+  test('фильтр локаций меняет число вакансий, «Сбросить всё» возвращает', async ({
+    page,
+  }, testInfo) => {
     test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
     await openCabinet(page, '/app/vacancies');
     const count = page.locator('.vl-count .num');
@@ -65,6 +67,8 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await page.locator('.vt-pop .vt-opt input').first().check();
     const after = Number(await count.innerText());
     expect(after).toBeLessThan(before);
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    await expect(page.locator('.vt-pop')).toHaveCount(0);
     await page.locator('.vt-chips').getByRole('button', { name: 'Сбросить всё' }).click();
     await expect(count).toHaveText(String(before));
   });
@@ -73,7 +77,9 @@ test.describe('B654: раздел «Вакансии», подборка и со
     test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
     await openCabinet(page, '/app/vacancies');
     await page.getByRole('button', { name: /^Все роли/ }).click();
-    await expect(page.locator('.vt-pop .vt-opt', { hasText: 'Руководитель продукта' })).toBeVisible();
+    await expect(
+      page.locator('.vt-pop .vt-opt', { hasText: 'Руководитель продукта' }),
+    ).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('.vt-pop')).toHaveCount(0);
   });
@@ -95,8 +101,11 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await openHide(page, isMobile(testInfo.project.name));
     await page.getByRole('radio', { name: 'Зарплата ниже ожиданий' }).check();
     await page.getByRole('button', { name: 'Скрыть', exact: true }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'Скрыто' })).toBeVisible();
-    await expect(page.locator(`${ROWS} .vt-toggle`).first()).not.toHaveAttribute('title', first ?? '');
+    await expect(page.locator('.va-snack')).toContainText('Скрыто');
+    await expect(page.locator(`${ROWS} .vt-toggle`).first()).not.toHaveAttribute(
+      'title',
+      first ?? '',
+    );
     await page.getByRole('button', { name: 'Отменить' }).click();
     await expect(page.locator(`${ROWS} .vt-toggle`).first()).toHaveAttribute('title', first ?? '');
   });
@@ -122,7 +131,9 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator('[data-b640-node="s07"]')).toBeVisible();
     const star = page.locator(ROWS).first().getByRole('button', { name: 'Сохранить вакансию' });
     await star.click();
-    await expect(page.locator(ROWS).first().getByRole('button', { name: 'Убрать из сохранённых' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      page.locator(ROWS).first().getByRole('button', { name: 'Убрать из сохранённых' }),
+    ).toHaveAttribute('aria-pressed', 'true');
     await page.goto('/app/vacancies/saved', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="v06s"]')).toBeVisible();
     await expect(page.locator(ROWS)).toHaveCount(1);

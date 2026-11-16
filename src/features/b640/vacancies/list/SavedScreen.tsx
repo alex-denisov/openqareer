@@ -46,7 +46,7 @@ export function SavedScreen() {
   const env = { currency: 'RUB' as const, rates, noRole: false };
   const empty = !waiting && items.length === 0 && !pool.failed && !links.failed;
   return (
-    <div className="page" data-b640-node="v06s">
+    <div className="page" data-b640-node="v06s" data-b640-section="vacancies">
       {empty ? <EmptySaved /> : null}
       <section className="col vl vt-wrap is-v6" aria-labelledby="list-title">
         {items.length > 0 ? (

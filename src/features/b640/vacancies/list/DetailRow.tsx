@@ -33,7 +33,8 @@ function useFriend(clusterId: string): string | null {
     getVacancyConnectionCircles(clusterId)
       .then((result) => {
         const first = result.circles.find((circle) => circle.circle === 1 && circle.state === 'available');
-        const person = first?.paths[0]?.recipient.fullName?.trim();
+        const known = first?.paths.find((path) => path.source !== 'cold');
+        const person = known?.recipient.fullName?.trim();
         if (alive) setName(person || null);
       })
       .catch(() => {

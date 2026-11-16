@@ -106,8 +106,8 @@ export function CardScreen({ vacancyId }: { readonly vacancyId: string }) {
   return (
     <>
       <StepTabs vacancyId={vacancyId} />
-      <div className="page two v4" data-b640-node="v04">
-        {data.item ? <CardBody vacancyId={vacancyId} item={data.item} data={data} /> : <Notice data={data} />}
+      <div className="page two v4" data-b640-node="v04" data-b640-section="vacancies">
+        {data.item ? <CardBody key={vacancyId} vacancyId={vacancyId} item={data.item} data={data} /> : <Notice data={data} />}
       </div>
     </>
   );

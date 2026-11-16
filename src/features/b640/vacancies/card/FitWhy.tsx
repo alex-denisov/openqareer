@@ -60,13 +60,17 @@ export function FitWhy({ percent, view, sourceName }: FitWhyProps) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
-  const close = () => setOpen(false);
+  const close = () => {
+    setOpen(false);
+    button.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return undefined;
     dialog.current?.focus();
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      event.stopPropagation();
       setOpen(false);
       button.current?.focus();
     };

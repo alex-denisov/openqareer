@@ -14,7 +14,10 @@ const LONG_TITLE = 40;
 /** Шапка: компания, «Город · формат», название и «Сохранить» (на 390 — в углу шапки). */
 export function Head({ item, companyPath, save }: HeadProps) {
   const { cluster } = item;
-  const sub = [rowGeo(item), rowFormat(item)].filter(Boolean).join(' · ');
+  const geo = rowGeo(item);
+  const format = rowFormat(item);
+  // «Удалённо · везде» уже называет формат: второй раз его не пишем.
+  const sub = [geo, geo.startsWith('Удалённо') ? '' : format].filter(Boolean).join(' · ');
   return (
     <section className="lead vd-lead v4-head" aria-labelledby="vc-title">
       <p className="v4-coname">
