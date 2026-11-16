@@ -270,7 +270,7 @@ const worker = new MaintenanceWorker({
     ? {}
     : {
         aggregatorCompanies: new AggregatorCompanyTicker(
-          new AggregatorCompanyBackfill(semanticDatabase),
+          new AggregatorCompanyBackfill(semanticDatabase, { autoResolve: true }),
         ),
       }),
   // B643: careers pages that are not vacancy pages or stay closed leave the directory; off — OPENQAREER_CAREERS_PRUNE_OFF=1.

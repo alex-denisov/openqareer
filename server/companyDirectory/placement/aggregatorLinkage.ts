@@ -16,7 +16,7 @@ const GENERIC_NAMES: ReadonlySet<string> = new Set([
   'unknown', 'n-a', 'na', 'none', 'various', 'multiple', 'remote', 'jobs', 'careers', 'hiring', 'recruiter',
   'recruitment', 'staffing', 'talent', 'hr', 'startup', 'agency', 'freelance', 'self-employed',
   'компания', 'работодатель', 'не-указано', 'конфиденциально', 'кадровое-агентство', 'частный-работодатель',
-  'частное-лицо', 'анонимный-работодатель',
+  'частныи-работодатель', 'частное-лицо', 'анонимный-работодатель', 'анонимныи-работодатель',
 ]);
 const MIN_KEY = 2;
 
