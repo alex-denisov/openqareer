@@ -69,4 +69,36 @@ describe('createAutomationPausePort', () => {
       status: before.status, pauseUntil: before.pauseUntil, nextSendAt: before.nextSendAt,
     });
   });
+
+  it('leaves a kill switch that stood before the status change', () => {
+    const { actions, automationPause } = setup();
+    actions.setKillSwitch('candidate:alice', true, 'manual_pause');
+    const snapshot = automationPause.pause('alice', now);
+    expect(snapshot.killSwitchSetAt).toBeNull();
+    expect(automationPause.restore('alice', snapshot)).toBe(true);
+    expect(actions.getKillSwitch('candidate:alice')?.active).toBe(true);
+  });
+
+  it('leaves an emergency pause switched on before the status change', () => {
+    const { automation, actions, automationPause } = setup();
+    automation.schedulerRepository.setEmergencyPause('alice', true);
+    actions.setKillSwitch('candidate:alice', true, 'manual_pause');
+    const snapshot = automationPause.pause('alice', now);
+    expect(snapshot.runtimeTouched).toBe(false);
+    automationPause.restore('alice', snapshot);
+    expect(automation.schedulerRepository.getRuntime('alice')).toMatchObject({ emergencyPaused: true, status: 'paused' });
+    expect(actions.getKillSwitch('candidate:alice')?.active).toBe(true);
+  });
+
+  it('leaves an emergency pause switched on after the status change', async () => {
+    const { automation, actions, automationPause } = setup();
+    const snapshot = automationPause.pause('alice', now);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    automation.schedulerRepository.setEmergencyPause('alice', true);
+    actions.setKillSwitch('candidate:alice', true, 'manual_pause');
+    automationPause.restore('alice', snapshot);
+    expect(automation.schedulerRepository.getRuntime('alice').emergencyPaused).toBe(true);
+    expect(actions.getKillSwitch('candidate:alice')?.active).toBe(true);
+    expect(automationPause.isPaused('alice', now)).toBe(false);
+  });
 });

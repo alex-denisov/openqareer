@@ -170,6 +170,8 @@ export function normalizeTargetProfession(
   value: string | null | undefined,
 ): string | null {
   if (status !== 'changing_profession' || !value) return null;
-  const text = value.replace(/\s+/g, ' ').trim().slice(0, TARGET_PROFESSION_MAX_LENGTH);
+  const text = value
+    .replace(/[\p{Cc}\p{Cf}\s]+/gu, ' ')
+    .trim().slice(0, TARGET_PROFESSION_MAX_LENGTH);
   return text || null;
 }

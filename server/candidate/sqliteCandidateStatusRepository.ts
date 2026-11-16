@@ -36,6 +36,10 @@ export interface AutoApplyPauseSnapshot {
     readonly nextSendAt: string | null;
   };
   readonly wasPaused: boolean;
+  /** Расписание трогали, только если не стояла аварийная пауза. */
+  readonly runtimeTouched: boolean;
+  /** Метка нашего выключателя; `null` — он уже стоял, и снимать его не нам. */
+  readonly killSwitchSetAt: string | null;
 }
 
 /** Настройки, которые кандидат переключил при этой смене; их возвращает «Вернуть прежний». */

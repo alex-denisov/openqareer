@@ -68,6 +68,8 @@ describe('SqliteCandidateStatusRepository', () => {
         previousPausedUntil: null,
         previousRuntime: { status: 'ready', pauseUntil: null, nextSendAt: null },
         wasPaused: false,
+        runtimeTouched: true,
+        killSwitchSetAt: '2026-11-16T10:00:00.000Z',
       },
     };
     repository.record({ ...change('c1', 'working', '2026-11-16T10:00:00.000Z'), applied });

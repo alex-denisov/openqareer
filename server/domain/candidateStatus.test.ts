@@ -124,6 +124,7 @@ describe('normalizeTargetProfession', () => {
   it('keeps the profession only for «Меняю профессию», trimmed and single-spaced', () => {
     expect(normalizeTargetProfession('changing_profession', '  продакт-\n менеджер ')).toBe('продакт- менеджер');
     expect(normalizeTargetProfession('changing_profession', '   ')).toBeNull();
+    expect(normalizeTargetProfession('changing_profession', 'ана\u0000лит\u202Eик')).toBe('ана лит ик');
     expect(normalizeTargetProfession('working', 'продакт-менеджер')).toBeNull();
     expect(normalizeTargetProfession('changing_profession', undefined)).toBeNull();
   });
