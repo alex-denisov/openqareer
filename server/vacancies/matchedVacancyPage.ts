@@ -147,7 +147,7 @@ function employmentKindOf(cluster: MatchedVacancyItem['cluster']) {
   return kind ? { employmentKind: kind } : {};
 }
 
-function trim(item: MatchedVacancyItem): MatchedVacancyItem {
+export function trim(item: MatchedVacancyItem): MatchedVacancyItem {
   const companyFeatures = item.cluster.companyFeatures ?? resolveCompanyFeatures(item.cluster);
   return {
     cluster: {

@@ -164,7 +164,7 @@ function logMatchedTiming(
 }
 
 /** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
-function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLimit: number) {
+export function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLimit: number) {
   return {
     warmIds: vacanciesToWarm(items),
     countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
@@ -196,7 +196,7 @@ function startShownPageFit(
   void requestFitForShownPage(deps, candidateId, shown).catch(fitFailureLog(request)(shown.length));
 }
 
-function startFitWork(
+export function startFitWork(
   deps: RouteDeps,
   candidateId: string,
   response: {
@@ -347,7 +347,7 @@ function matchedVacancyResponse(
 }
 
 /** B546: the page carries the estimate the maintenance process computed. */
-function withMarketSalary(deps: RouteDeps, items: MatchedVacancyItem[]): MatchedVacancyItem[] {
+export function withMarketSalary(deps: RouteDeps, items: MatchedVacancyItem[]): MatchedVacancyItem[] {
   const store = deps.marketSalaryEstimates;
   if (!store) return items;
   return attachMarketSalaryEstimates(items, {
@@ -382,7 +382,7 @@ async function finishMatchedPage(
 }
 
 /** What a read needs before the list, timed: on a cold process the stored results open here. */
-async function prepareMatchedRead(
+export async function prepareMatchedRead(
   deps: RouteDeps,
   candidateId: string,
   targetRoles: readonly string[],
