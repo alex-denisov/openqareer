@@ -42,6 +42,32 @@ async function openHide(page: Page, mobile: boolean): Promise<void> {
   }
 }
 
+const HIDDEN_ROW = {
+  cluster: {
+    id: 'hid-1',
+    canonicalTitle: 'Руководитель разработки',
+    canonicalCompany: 'Кредит Онлайн',
+    canonicalLocation: 'Москва',
+    isRemote: false,
+    primaryUrl: 'https://example.com/careers',
+    firstObservedAt: '2026-11-10T09:00:00Z',
+    sources: [{ sourceId: 'hh', observedAt: '2026-11-10T09:00:00Z' }],
+    companyFeatures: {},
+  },
+  explanation: { summary: '', calculatedAt: '2026-11-10T09:00:00Z' },
+  hidden: { reasonId: 'comp-below', at: '2026-11-11T09:00:00Z' },
+};
+
+async function showHidden(page: Page, mobile: boolean): Promise<void> {
+  if (mobile) await page.getByRole('button', { name: /^Фильтры/ }).click();
+  else
+    await page
+      .getByRole('button', { name: /^Роли|^Все роли/ })
+      .first()
+      .click();
+  await page.getByRole('button', { name: 'Показать скрытые' }).click();
+}
+
 test.describe('B654: раздел «Вакансии», подборка и сохранённые', () => {
   test('таблица подборки видна, порции по 20, гейты макетов', async ({ page }) => {
     await openCabinet(page, '/app/vacancies');
@@ -149,6 +175,29 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.getByRole('link', { name: 'Откликнуться' })).toBeVisible();
     await toggles.nth(1).click();
     await expect(page.locator('.vt-detail-row .vs')).toHaveCount(1);
+  });
+
+  test('«Показать скрытые»: строка с меткой, «Вернуть в подборку» убирает её', async ({
+    page,
+  }, testInfo) => {
+    const mobile = isMobile(testInfo.project.name);
+    await page.route('**/api/v1/candidate/b640/hidden-vacancies**', (route) =>
+      route.fulfill({
+        json: { data: [HIDDEN_ROW], meta: { total: 1, offset: 0, limit: 20, nextOffset: null } },
+      }),
+    );
+    await openCabinet(page, '/app/vacancies');
+    await showHidden(page, mobile);
+    const hidden = page.locator('tbody.vt-hid tr.vt-row.is-hid');
+    await expect(hidden).toHaveCount(1);
+    await expect(hidden.locator('.va-hid')).toHaveText('скрыто');
+    await expect(hidden.locator('[role="tooltip"]')).toHaveText(
+      'Скрыто 11.11 · Зарплата ниже ожиданий',
+    );
+    await expectGates(page);
+    await hidden.getByRole('button', { name: 'Ещё действия' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Вернуть в подборку' }).click();
+    await expect(page.getByText('Скрытых вакансий нет')).toBeVisible();
   });
 
   test('снимки подборки и сохранённых для сверки с макетом', async ({ page }, testInfo) => {

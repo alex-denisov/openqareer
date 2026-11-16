@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
 import { getHiddenVacancies, type HiddenRow } from '../b640Api';
@@ -9,13 +9,22 @@ import { useHiddenVacancies } from './useHiddenVacancies';
 vi.mock('../b640Api', () => ({ getHiddenVacancies: vi.fn() }));
 const read = vi.mocked(getHiddenVacancies);
 const at = '2026-11-11T09:00:00Z';
-const hidden = (id: string): HiddenRow => ({ ...makeItem({ id }), hidden: { reasonId: 'stale', at } });
-const page = (ids: string[], total: number, nextOffset: number | null) => ({ rows: ids.map(hidden), total, nextOffset });
+const hidden = (id: string): HiddenRow => ({
+  ...makeItem({ id }),
+  hidden: { reasonId: 'stale', at },
+});
+const page = (ids: string[], total: number, nextOffset: number | null) => ({
+  rows: ids.map(hidden),
+  total,
+  nextOffset,
+});
 
-function Probe({ enabled, session = [] }: { enabled: boolean; session?: HiddenRow[] }) {
+function Probe({ enabled, session: initial = [] }: { enabled: boolean; session?: HiddenRow[] }) {
+  const [session, setSession] = useState(initial);
   const list = useHiddenVacancies(enabled, session);
   return (
     <div>
+      <button id="add" onClick={() => setSession([hidden('s')])} />
       <output data-status={list.status} data-left={list.left}>
         {list.rows.map((row) => row.cluster.id).join(',')}
       </output>
@@ -80,6 +89,20 @@ describe('скрытые вакансии раздела', () => {
     await flush();
     click(view.container.querySelector('#remove'));
     expect(out(view.container).textContent).toBe('b');
+    view.unmount();
+  });
+
+  it('скрыли ещё одну во время просмотра: сдвинутая порция не двоит строку и не завышает остаток', async () => {
+    read
+      .mockResolvedValueOnce(page(['a', 'b'], 3, 2))
+      .mockResolvedValueOnce(page(['b', 'c'], 4, null));
+    const view = mount(<Probe enabled />);
+    await flush();
+    click(view.container.querySelector('#add'));
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(out(view.container).textContent).toBe('s,a,b,c');
+    expect(out(view.container).dataset.left).toBe('0');
     view.unmount();
   });
 });

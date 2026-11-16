@@ -13,16 +13,24 @@ export function usePoolRetry(pool: Pick<MatchedPool, 'failed' | 'refresh'>): boo
   const [waiting, setWaiting] = useState(false);
   const { failed, refresh } = pool;
 
+  const latest = useRef(refresh);
+  latest.current = refresh;
+
   useEffect(() => {
-    if (!failed || used.current || !refresh) return undefined;
-    used.current = true;
+    if (!failed || used.current || !latest.current) return undefined;
     setWaiting(true);
+    // Повтор считается использованным, только когда пауза дошла до конца:
+    // повторный запуск эффекта (StrictMode) ставит таймер заново.
     const timer = setTimeout(() => {
+      used.current = true;
       setWaiting(false);
-      refresh();
+      latest.current?.();
     }, POOL_RETRY_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [failed, refresh]);
+    return () => {
+      clearTimeout(timer);
+      setWaiting(false);
+    };
+  }, [failed]);
 
   // Первый сбой ещё не показан: эффект повтора ставит паузу сразу после него.
   return waiting || (failed && !used.current && Boolean(refresh));

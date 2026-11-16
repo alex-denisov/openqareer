@@ -76,9 +76,7 @@ function compare(
 ): number {
   const sign = sort.dir === 'asc' ? 1 : -1;
   if (!NUMERIC.includes(sort.key)) {
-    return (
-      sign * textValue(left, sort.key).localeCompare(textValue(right, sort.key), 'ru-RU')
-    );
+    return sign * textValue(left, sort.key).localeCompare(textValue(right, sort.key), 'ru-RU');
   }
   const a = numberValue(left, sort.key, rates);
   const b = numberValue(right, sort.key, rates);
@@ -101,7 +99,26 @@ export function visibleSlice<T>(items: readonly T[], shown: number): readonly T[
 }
 
 /** Подвал «Показать ещё 20 · осталось N»; всё показано — `null`. */
-export function footOf(total: number, shown: number): { readonly step: number; readonly left: number } | null {
+export function footOf(
+  total: number,
+  shown: number,
+): { readonly step: number; readonly left: number } | null {
   const left = total - shown;
   return left > 0 ? { step: Math.min(PAGE_SIZE, left), left } : null;
+}
+
+/**
+ * Подвал и число в шапке в серверном режиме. Клиентские фильтры режут уже прочитанные строки,
+ * а сколько подходящих в непрочитанном, неизвестно: число не пишем и шапку не занижаем.
+ */
+export function serverFoot(input: {
+  readonly narrowed: boolean;
+  readonly hasMore: boolean;
+  readonly serverTotal: number;
+  readonly loaded: number;
+}): { readonly total: number | null; readonly shown: number; readonly countKnown: boolean } {
+  const { narrowed, hasMore, serverTotal, loaded } = input;
+  if (!hasMore) return { total: loaded, shown: loaded, countKnown: true };
+  if (narrowed) return { total: null, shown: loaded, countKnown: false };
+  return { total: serverTotal, shown: loaded, countKnown: true };
 }

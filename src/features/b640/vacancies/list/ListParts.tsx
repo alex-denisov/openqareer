@@ -2,12 +2,20 @@ import type { MatchedPool } from '../../../vacancies/useMatchedPool';
 import { Icon, InfoTip, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import type { VacancyLinks } from '../vacancyLinks';
-import { footOf } from './sortModel';
+import { PAGE_SIZE, footOf } from './sortModel';
 
 export const FIT_TIP = 'Совпадение требований вакансии с подтверждённым опытом профиля.';
 
 /** Сбой чтения подборки или отметок: строка с «Повторить» на месте, введённое не теряется. */
-export function LoadErrors({ pool, links, poolFailed }: { pool: MatchedPool; links: VacancyLinks; poolFailed: boolean }) {
+export function LoadErrors({
+  pool,
+  links,
+  poolFailed,
+}: {
+  pool: MatchedPool;
+  links: VacancyLinks;
+  poolFailed: boolean;
+}) {
   return (
     <>
       {poolFailed ? (
@@ -52,15 +60,30 @@ export function CountTitle({ count, word, tip }: { count: number; word: string; 
   );
 }
 
-export function MoreFoot({ total, shown, onMore }: { total: number; shown: number; onMore: () => void }) {
-  const foot = footOf(total, shown);
+/** Подвал «Показать ещё»; `total` равен `null`, когда остаток неизвестен: кнопка без числа. */
+export function MoreFoot({
+  total,
+  shown,
+  onMore,
+}: {
+  total: number | null;
+  shown: number;
+  onMore: () => void;
+}) {
+  const foot = total === null ? { step: PAGE_SIZE, left: null } : footOf(total, shown);
   if (!foot) return null;
   return (
     <div className="vl-foot">
       <button className="btn" type="button" onClick={onMore}>
         <Icon name="down" />
         <span>
-          Показать ещё {foot.step} · осталось <span className="num">{foot.left}</span>
+          Показать ещё {foot.step}
+          {foot.left === null ? null : (
+            <>
+              {' '}
+              · осталось <span className="num">{foot.left}</span>
+            </>
+          )}
         </span>
       </button>
     </div>
@@ -71,9 +94,15 @@ export function MoreFoot({ total, shown, onMore }: { total: number; shown: numbe
 export function GapStrip({ kind }: { kind: 'profile' | 'role' }) {
   const profile = kind === 'profile';
   return (
-    <section className="gap-strip sk-strip" aria-label={profile ? 'Профиль пуст' : 'Роль не выбрана'}>
+    <section
+      className="gap-strip sk-strip"
+      aria-label={profile ? 'Профиль пуст' : 'Роль не выбрана'}
+    >
       <p>{profile ? 'Опыта в профиле нет' : 'Роль поиска не выбрана'}</p>
-      <Link className={profile ? 'btn' : 'btn is-primary'} to={buildNodePath(profile ? 'p04' : 's10')}>
+      <Link
+        className={profile ? 'btn' : 'btn is-primary'}
+        to={buildNodePath(profile ? 'p04' : 's10')}
+      >
         <Icon name={profile ? 'plus' : 'target'} />
         {profile ? 'Добавить опыт' : 'Выбрать роль'}
       </Link>
@@ -95,7 +124,12 @@ export function EmptyByFilters({
       <p className="vl-empty-t">По фильтрам ничего</p>
       <div className="vl-empty-a">
         {blockers.map((blocker) => (
-          <button key={blocker.kind} className="btn" type="button" onClick={() => onRemove(blocker.kind)}>
+          <button
+            key={blocker.kind}
+            className="btn"
+            type="button"
+            onClick={() => onRemove(blocker.kind)}
+          >
             <Icon name="close" />
             Снять: {blocker.label}
           </button>

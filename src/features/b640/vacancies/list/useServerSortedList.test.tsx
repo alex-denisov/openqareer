@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
 import { getSortedMatchedPage } from '../b640Api';
@@ -15,10 +15,17 @@ const page = (ids: string[], total: number, nextOffset: number | null) => ({
   nextOffset,
 });
 
-function Probe({ active, sort }: { active: boolean; sort: SortState }) {
-  const list = useServerSortedList(active, sort, ['CTO']);
+const OTHER: SortState = { key: 'role', dir: 'asc' };
+
+function Probe({ active, sort: initial }: { active: boolean; sort: SortState }) {
+  const [sort, setSort] = useState(initial);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const list = useServerSortedList(active, sort, ['CTO'], hidden);
   return (
     <div>
+      <button id="sort" onClick={() => setSort(OTHER)} />
+      <button id="hide" onClick={() => setHidden(new Set(['a']))} />
+      <button id="unhide" onClick={() => setHidden(new Set())} />
       <output data-status={list.status} data-total={list.total} data-more={String(list.hasMore)}>
         {list.rows.map((row) => row.cluster.id).join(',')}
       </output>
@@ -52,7 +59,12 @@ describe('серверная сортировка неполной подбор�
     expect(out(view.container).dataset.more).toBe('true');
     click(view.container.querySelector('#more'));
     await flush();
-    expect(read).toHaveBeenLastCalledWith({ key: 'money', dir: 'desc' }, ['CTO'], 2, expect.anything());
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      2,
+      expect.anything(),
+    );
     expect(out(view.container).textContent).toBe('a,b,c');
     expect(out(view.container).dataset.more).toBe('false');
     view.unmount();
@@ -68,7 +80,12 @@ describe('серверная сортировка неполной подбор�
     const next = mount(<Probe active sort={{ key: 'role', dir: 'asc' }} />);
     expect(out(next.container).textContent).toBe('');
     await flush();
-    expect(read).toHaveBeenLastCalledWith({ key: 'role', dir: 'asc' }, ['CTO'], 0, expect.anything());
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'role', dir: 'asc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+    );
     expect(out(next.container).textContent).toBe('z');
     next.unmount();
   });
@@ -81,8 +98,69 @@ describe('серверная сортировка неполной подбор�
     click(view.container.querySelector('#retry'));
     await flush();
     expect(read).toHaveBeenCalledTimes(2);
-    expect(read).toHaveBeenLastCalledWith({ key: 'fit', dir: 'asc' }, ['CTO'], 0, expect.anything());
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'fit', dir: 'asc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+    );
     expect(out(view.container).dataset.status).toBe('ready');
+    view.unmount();
+  });
+
+  it('скрытая вакансия сдвигает следующую порцию на строку назад', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 5, 2)).mockResolvedValueOnce(page(['c'], 4, null));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#hide'));
+    expect(out(view.container).dataset.total).toBe('4');
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      1,
+      expect.anything(),
+    );
+    view.unmount();
+  });
+
+  it('возврат в подборку перечитывает список с первой порции', async () => {
+    read
+      .mockResolvedValueOnce(page(['a', 'b'], 5, 2))
+      .mockResolvedValueOnce(page(['a', 'b'], 5, 2))
+      .mockResolvedValueOnce(page(['a', 'b'], 5, 2));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#hide'));
+    click(view.container.querySelector('#unhide'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'money', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+    );
+    expect(out(view.container).dataset.total).toBe('5');
+    view.unmount();
+  });
+
+  it('поздний ответ прежнего столбца не затирает ответ нового', async () => {
+    let resolveOld: (value: ReturnType<typeof page>) => void = () => {};
+    read
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(page(['new'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'money', dir: 'desc' }} />);
+    click(view.container.querySelector('#sort'));
+    await flush();
+    expect(out(view.container).textContent).toBe('new');
+    await act(async () => resolveOld(page(['old'], 1, null)));
+    expect(out(view.container).textContent).toBe('new');
     view.unmount();
   });
 });

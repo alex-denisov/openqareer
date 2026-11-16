@@ -1,4 +1,3 @@
-import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { Icon, InfoTip } from '../../kit';
 import type { HiddenRow } from '../b640Api';

@@ -6,10 +6,30 @@ import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { MoneyCurrency } from '../format';
 import type { VacancyLinks } from '../vacancyLinks';
-import { EMPTY_FILTERS, applyFilters, blockersOf, type Blocker, type FilterKind, type ListFilters } from './filterModel';
+import {
+  EMPTY_FILTERS,
+  applyFilters,
+  blockersOf,
+  type Blocker,
+  type FilterKind,
+  type ListFilters,
+} from './filterModel';
 import { buildOptions, type FilterOptions } from './filterOptions';
-import { useServerSortedList, type ServerListStatus } from './useServerSortedList';
-import { PAGE_SIZE, SERVER_SORT, nextSort, sortItems, visibleSlice, type SortKey, type SortState } from './sortModel';
+import {
+  useServerSortedList,
+  type ServerListStatus,
+  type ServerSortedList,
+} from './useServerSortedList';
+import {
+  PAGE_SIZE,
+  SERVER_SORT,
+  nextSort,
+  serverFoot,
+  sortItems,
+  visibleSlice,
+  type SortKey,
+  type SortState,
+} from './sortModel';
 
 export interface VacancyList {
   readonly pool: MatchedPool;
@@ -34,14 +54,24 @@ export interface VacancyList {
   readonly blockers: readonly Blocker[];
   readonly showMore: () => void;
   /** Подвал «Показать ещё»: всего и показано (в серверном режиме — прочитано с сервера). */
-  readonly more: { readonly total: number; readonly shown: number };
+  readonly more: { readonly total: number | null; readonly shown: number };
+  /** `false`: число в шапке было бы меньше реального (серверный режим с клиентскими фильтрами). */
+  readonly countKnown: boolean;
   /** Подборка прочитана не целиком и выбран столбец: строки и порядок отдаёт сервер. */
-  readonly server: { readonly active: boolean; readonly status: ServerListStatus; readonly retry: () => void };
+  readonly server: {
+    readonly active: boolean;
+    readonly status: ServerListStatus;
+    readonly retry: () => void;
+  };
   readonly noRole: boolean;
 }
 
 /** Роли читает сервер; пока выбор ролей не менялся, повторного чтения нет. */
-function useServerRoles(pool: MatchedPool, roles: readonly string[], seed: (roles: readonly string[]) => void): void {
+function useServerRoles(
+  pool: MatchedPool,
+  roles: readonly string[],
+  seed: (roles: readonly string[]) => void,
+): void {
   const sent = useRef('');
   const seeded = useRef(false);
   const initial = pool.initialFilters;
@@ -61,6 +91,84 @@ function useServerRoles(pool: MatchedPool, roles: readonly string[], seed: (role
   }, [key]);
 }
 
+interface RowsInput {
+  readonly pool: MatchedPool;
+  readonly hidden: ReadonlySet<string>;
+  readonly filters: ListFilters;
+  readonly currency: MoneyCurrency;
+  readonly rates?: CurrencyRates;
+  readonly now: Date;
+  readonly sortState: SortState | null;
+  readonly serverMode: boolean;
+  readonly server: ServerSortedList;
+  readonly shown: number;
+}
+
+type DerivedRows = Pick<
+  VacancyList,
+  'options' | 'all' | 'visible' | 'count' | 'blockers' | 'more' | 'countKnown'
+>;
+
+type FilterContext = Parameters<typeof applyFilters>[2];
+
+function useBlockers(
+  empty: boolean,
+  base: readonly MatchedVacancyItem[],
+  filters: ListFilters,
+  context: FilterContext,
+): readonly Blocker[] {
+  const { currency, rates, now } = context;
+  return useMemo(() => (empty ? blockersOf(base, filters, context) : []), [empty, base, filters, currency, rates, now]);
+}
+
+function isNarrowed(filters: ListFilters): boolean {
+  const { locations, formats, reloc, moneyFrom, date } = filters;
+  return locations.length > 0 || formats.length > 0 || reloc || moneyFrom !== null || date !== 'any';
+}
+
+/** Строки списка: источник (пул или порции сервера), фильтры, сортировка, число и подвал. */
+function useListRows(input: RowsInput): DerivedRows {
+  const { pool, hidden, filters, currency, rates, now, sortState, serverMode, server, shown } =
+    input;
+  const poolBase = useMemo(() => pool.matched.filter((item) => !hidden.has(item.cluster.id)), [pool.matched, hidden]);
+  const base = useMemo(
+    () => (serverMode ? server.rows.filter((item) => !hidden.has(item.cluster.id)) : poolBase),
+    [serverMode, server.rows, poolBase, hidden],
+  );
+  const all = useMemo(
+    () =>
+      sortItems(
+        applyFilters(base, filters, { currency, rates, now }),
+        serverMode ? null : sortState,
+        rates,
+      ),
+    [base, filters, currency, rates, now, sortState, serverMode],
+  );
+  const options = useMemo(() => buildOptions(poolBase, pool.facets, now), [poolBase, pool.facets, now]);
+  const narrowed = isNarrowed(filters);
+  // Серверный итог уже без скрытых в этой сессии (их вычел список порций), пул — нет.
+  const known = serverMode && server.total > 0 ? server.total : pool.total - hidden.size;
+  const count = narrowed || pool.complete ? all.length : Math.max(known, all.length);
+  const visible = serverMode ? all : visibleSlice(all, shown);
+  const foot = serverFoot({
+    narrowed,
+    hasMore: server.hasMore,
+    serverTotal: server.total,
+    loaded: base.length,
+  });
+  const more = serverMode ? { total: foot.total, shown: foot.shown } : { total: count, shown: visible.length };
+  const blockers = useBlockers(all.length === 0 && !pool.loading, base, filters, { currency, rates, now });
+  return {
+    options,
+    all,
+    visible,
+    count,
+    blockers,
+    more,
+    countKnown: !serverMode || foot.countKnown,
+  };
+}
+
 export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>): VacancyList {
   const pool = useMatchedPool();
   const rates = useCurrencyRates();
@@ -75,35 +183,35 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
   const serverMode = !pool.complete && sortState !== null;
-  const server = useServerSortedList(serverMode, sortState ?? SERVER_SORT, filters.roles);
-  const poolBase = useMemo(() => pool.matched.filter((item) => !hidden.has(item.cluster.id)), [pool.matched, hidden]);
-  const base = useMemo(
-    () => (serverMode ? server.rows.filter((item) => !hidden.has(item.cluster.id)) : poolBase),
-    [serverMode, server.rows, poolBase, hidden],
-  );
-  const context = { currency, rates, now };
-  const all = useMemo(
-    () => sortItems(applyFilters(base, filters, { currency, rates, now }), serverMode ? null : sortState, rates),
-    [base, filters, currency, rates, now, sortState, serverMode],
-  );
-  const options = useMemo(() => buildOptions(poolBase, pool.facets, now), [poolBase, pool.facets, now]);
-  const narrowed = filters.locations.length > 0 || filters.formats.length > 0 || filters.reloc || filters.moneyFrom !== null || filters.date !== 'any';
-  const knownTotal = serverMode && server.total > 0 ? server.total : pool.total;
-  const count = narrowed || pool.complete ? all.length : Math.max(knownTotal - hidden.size, all.length);
-  const visible = serverMode ? all : visibleSlice(all, shown);
-  const more = serverMode
-    ? { total: server.hasMore ? server.total : base.length, shown: base.length }
-    : { total: count, shown: visible.length };
-  const blockers = useMemo(
-    () => (all.length === 0 && !pool.loading ? blockersOf(base, filters, context) : []),
-    [all.length, pool.loading, base, filters, currency, rates, now],
-  );
+  const server = useServerSortedList(serverMode, sortState ?? SERVER_SORT, filters.roles, hidden);
+  const derived = useListRows({
+    pool,
+    hidden,
+    filters,
+    currency,
+    rates,
+    now,
+    sortState,
+    serverMode,
+    server,
+    shown,
+  });
   return {
-    pool, links, rates, filters, setFilters, resetFilters: () => setFilters(EMPTY_FILTERS),
-    currency, setCurrency, sort: sortState ?? SERVER_SORT,
+    pool,
+    links,
+    rates,
+    filters,
+    setFilters,
+    resetFilters: () => setFilters(EMPTY_FILTERS),
+    currency,
+    setCurrency,
+    sort: sortState ?? SERVER_SORT,
     toggleSort: (key) => setSortState((current) => nextSort(current ?? SERVER_SORT, key)),
-    openKind, setOpenKind, sheetOpen, setSheetOpen, options, all,
-    visible, count, blockers, more,
+    openKind,
+    setOpenKind,
+    sheetOpen,
+    setSheetOpen,
+    ...derived,
     showMore: serverMode ? server.loadMore : () => setShown((value) => value + PAGE_SIZE),
     server: { active: serverMode, status: server.status, retry: server.retry },
     noRole: pool.campaign !== undefined && pool.campaign.roles.value.length === 0,

@@ -103,6 +103,7 @@ async function readList(
       filters,
       sourceRegistry,
       order: read.order,
+      seal: false,
       ...(typeof deps.multiSourceEngine.getCatalogTotals === 'function'
         ? { catalogTotals: () => deps.multiSourceEngine.getCatalogTotals!() }
         : {}),

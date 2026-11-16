@@ -134,6 +134,8 @@ export interface MatchedListInput {
   readonly sourceRegistry: readonly MatchedVacancySourceDefinition[];
   readonly order: MatchedOrder;
   readonly catalogTotals?: () => CatalogTotals | undefined;
+  /** B674: `false` — список читают, но запечатанную строку кандидата не пишут. По умолчанию пишут. */
+  readonly seal?: boolean;
 }
 
 /**
@@ -344,7 +346,7 @@ function buildAndSeal(
     // The moment the list cache dates a build from: a stored list ages exactly like a held one.
     const builtAt = Date.now();
     const list = await buildMatchedList(input);
-    sealMatchedList(input, choice, list, builtAt, log);
+    if (input.seal !== false) sealMatchedList(input, choice, list, builtAt, log);
     return list;
   };
 }

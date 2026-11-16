@@ -49,6 +49,40 @@ async function setup(saved: { by: 'fit' | 'money'; dir: 'desc' | 'asc' } = { by:
 const within = <T,>(work: Promise<T>, ms: number, what: string): Promise<T> =>
   Promise.race([work, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${what}: no answer in ${ms} ms (cold read)`)), ms))]);
 
+const FILTERS = ['role=Инженер данных', 'region=eu', 'level=ic', 'source=src', 'remote=1', 'place=Москва'];
+
+describe('B674: filters never reseal the list', () => {
+  it('keeps the sealed row byte for byte for each filter and their mix', async () => {
+    const h = await setup();
+    await h.get(OLD, h.user);
+    const before = h.sealedRow();
+    const queries = [...FILTERS, FILTERS.join('&')];
+    for (const query of queries) {
+      expect((await h.get(`${NEW}?${query}&sort=company`, h.user)).statusCode).toBe(200);
+    }
+    expect(h.sealedRow()).toEqual(before);
+  });
+
+  it('the old route without filters answers sealed, same ids, after filtered calls', async () => {
+    const h = await setup();
+    const first = h.ids((await h.get(OLD, h.user)).body);
+    for (const query of FILTERS) await h.get(`${NEW}?${query}`, h.user);
+    forgetMatchedListsForTests();
+    h.hangPool(true);
+    const again = await within(h.get(OLD, h.user), 3000, 'old route');
+    expect(h.ids(again.body)).toEqual(first);
+    expect(h.lastServed()).toBe('sealed');
+  });
+
+  it('the old route with filters still seals its own list', async () => {
+    const h = await setup();
+    await h.get(OLD, h.user);
+    const before = h.sealedRow();
+    await h.get(`${OLD}?remote=1`, h.user);
+    expect(h.sealedRow()).not.toEqual(before);
+  });
+});
+
 describe('B674: the new route leaves what the old route reads', () => {
   it('keeps the sealed row byte for byte and the remembered sort, for every sort both ways', async () => {
     const h = await setup();

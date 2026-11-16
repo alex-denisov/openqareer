@@ -1,14 +1,23 @@
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
-import { useVacancyLinks } from '../vacancyLinks';
+import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
 import { FilterSheet } from './FilterSheet';
 import { HiddenRows } from './HiddenRows';
 import { FiltersBar } from './FiltersBar';
 import { withoutKind, type FilterKind } from './filterModel';
-import { CountTitle, EmptyByFilters, GapStrip, LoadErrors, LoadingLine, MoreFoot, SortError } from './ListParts';
+import {
+  CountTitle,
+  EmptyByFilters,
+  GapStrip,
+  LoadErrors,
+  LoadingLine,
+  MoreFoot,
+  SortError,
+} from './ListParts';
 import { TableBlock } from './TableBlock';
+import type { RowEnv } from './VacancyRow';
 import { useHiddenSection, type HiddenSection } from './useHiddenSection';
-import { useRowInteractions } from './useRowInteractions';
+import { useRowInteractions, type RowInteractions } from './useRowInteractions';
 import { usePoolRetry } from './usePoolRetry';
 import { useVacancyList, type VacancyList } from './useVacancyList';
 
@@ -53,6 +62,53 @@ function EmptyList({ list }: { list: VacancyList }) {
   );
 }
 
+function ListTable({
+  list,
+  rows,
+  section,
+  env,
+  links,
+}: {
+  list: VacancyList;
+  rows: RowInteractions;
+  section: HiddenSection;
+  env: RowEnv;
+  links: VacancyLinks;
+}) {
+  if (list.all.length === 0 && !section.show && !list.server.active) return null;
+  const { status, retry } = list.server;
+  const hidden = section.show ? (
+    <HiddenRows
+      hidden={section.hidden}
+      env={env}
+      openId={rows.openId}
+      menuId={section.menuId}
+      onToggleOpen={rows.toggleOpen}
+      onMenu={section.setMenuId}
+      onUnhide={section.unhide}
+    />
+  ) : undefined;
+  return (
+    <>
+      <TableBlock
+        items={list.visible}
+        env={env}
+        sort={list.sort}
+        onSort={list.toggleSort}
+        links={links}
+        rows={rows}
+        rates={list.rates}
+        hidden={hidden}
+      />
+      {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
+      {status === 'failed' ? <SortError onRetry={retry} /> : null}
+      {status === 'loading' || status === 'failed' ? null : (
+        <MoreFoot total={list.more.total} shown={list.more.shown} onMore={list.showMore} />
+      )}
+    </>
+  );
+}
+
 /** Узел s07: подборка вакансий с фильтрами, сортировкой и порциями по 20. */
 export function ListScreen() {
   const links = useVacancyLinks();
@@ -73,7 +129,9 @@ export function ListScreen() {
       {strip ? <GapStrip kind={strip} /> : null}
       <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}`} aria-labelledby="list-title">
         <div className="vl-top vl-countbar">
-          {unread ? null : <CountTitle count={list.count} word={vacanciesWord(list.count)} tip />}
+          {unread || !list.countKnown ? null : (
+            <CountTitle count={list.count} word={vacanciesWord(list.count)} tip />
+          )}
         </div>
         <FiltersBar
           {...filterProps(list, section)}
@@ -86,23 +144,7 @@ export function ListScreen() {
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {waiting ? <LoadingLine /> : null}
         {!unread && list.all.length === 0 && !serverBusy ? <EmptyList list={list} /> : null}
-        {list.all.length > 0 || section.show || list.server.active ? (
-          <>
-            <TableBlock
-              items={list.visible}
-              env={env}
-              sort={list.sort}
-              onSort={list.toggleSort}
-              links={links}
-              rows={rows}
-              rates={list.rates}
-              hidden={section.show ? <HiddenRows hidden={section.hidden} env={env} openId={rows.openId} menuId={section.menuId} onToggleOpen={rows.toggleOpen} onMenu={section.setMenuId} onUnhide={section.unhide} /> : undefined}
-            />
-            {list.server.status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
-            {list.server.status === 'failed' ? <SortError onRetry={list.server.retry} /> : null}
-            {list.server.status === 'loading' || list.server.status === 'failed' ? null : <MoreFoot total={list.more.total} shown={list.more.shown} onMore={list.showMore} />}
-          </>
-        ) : null}
+        <ListTable list={list} rows={rows} section={section} env={env} links={links} />
       </section>
       <FilterSheet
         {...filterProps(list, section)}

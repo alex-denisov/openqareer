@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { StrictMode, act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '../../kit/testDom';
 import { POOL_RETRY_DELAY_MS, usePoolRetry } from './usePoolRetry';
@@ -24,6 +24,19 @@ describe('usePoolRetry: один повтор чтения подборки', ()
     expect(state()).toBe('false');
     act(() => vi.advanceTimersByTime(POOL_RETRY_DELAY_MS * 3));
     expect(refresh).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it('в StrictMode повтор тоже срабатывает один раз', () => {
+    const refresh = vi.fn();
+    const view = mount(
+      <StrictMode>
+        <Probe failed refresh={refresh} />
+      </StrictMode>,
+    );
+    act(() => vi.advanceTimersByTime(POOL_RETRY_DELAY_MS));
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(view.container.querySelector('output')?.getAttribute('data-retrying')).toBe('false');
     view.unmount();
   });
 

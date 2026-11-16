@@ -69,7 +69,21 @@ const DETAIL = {
   responsibilities: [],
 };
 
-async function openCard(page: Page): Promise<void> {
+async function openCard(page: Page, remaining: number | null = 3): Promise<void> {
+  await page.route('**/api/v1/candidate/b640/application-quota', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          plan: 'free',
+          limit: remaining === null ? null : 10,
+          used: 7,
+          remaining,
+          renewsAt: null,
+        },
+        meta: {},
+      },
+    }),
+  );
   await mockSignedInCabinet(page, { cabinetB640: true, firstVacancyFitView: FIT_VIEW });
   await page.route('**/api/v1/candidate/vacancies/*/detail', (route) =>
     route.fulfill({ json: { data: DETAIL } }),
@@ -119,6 +133,25 @@ test.describe('B654: карточка вакансии нового кабине
     await expect(save).toHaveAttribute('aria-pressed', 'false');
     await save.click();
     await expect(save).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('остаток откликов: «Осталось 3 отклика», без лимита строки нет', async ({ page }) => {
+    await openCard(page);
+    const line = page.locator('p.pm-line');
+    await expect(line.locator('b')).toHaveText('Осталось 3 отклика');
+    await expect(line.getByRole('link', { name: 'Перейти на Basic' })).toBeVisible();
+    await page.unroute('**/api/v1/candidate/b640/application-quota');
+    await page.route('**/api/v1/candidate/b640/application-quota', (route) =>
+      route.fulfill({
+        json: {
+          data: { plan: 'max', limit: null, used: 0, remaining: null, renewsAt: null },
+          meta: {},
+        },
+      }),
+    );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator('[data-b640-node="v04"]')).toBeVisible();
+    await expect(page.locator('p.pm-line')).toHaveCount(0);
   });
 
   test('гейты макетов на карточке', async ({ page }) => {
