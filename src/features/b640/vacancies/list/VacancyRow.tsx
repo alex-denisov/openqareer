@@ -30,7 +30,7 @@ export interface VacancyRowProps {
   readonly onCloseMenu: () => void;
 }
 
-function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
+export function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   const mark = vacancyFitMark(item.explanation.fitView);
   if (mark.kind === 'number') {
     return (
@@ -66,7 +66,7 @@ function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   return <span className="num">{mark.caption}</span>;
 }
 
-function MoneyCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
+export function MoneyCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   const money = moneyView(item, { currency: env.currency, rates: env.rates });
   return (
     <span className="vt-main num" title={money.title}>
@@ -76,7 +76,7 @@ function MoneyCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   );
 }
 
-function CompanyCell({ item, application }: { item: MatchedVacancyItem; application?: ApplicationView }) {
+export function CompanyCell({ item, application }: { item: MatchedVacancyItem; application?: ApplicationView }) {
   const name = item.cluster.canonicalCompany ?? '';
   return (
     <>

@@ -14,6 +14,7 @@ import { FitBlock } from './FitBlock';
 import { Head } from './Head';
 import { LetterBlock } from './LetterBlock';
 import { MoneyBlock } from './MoneyBlock';
+import { QuotaLine } from './QuotaLine';
 import { ReqsBox } from './ReqsBox';
 import { StepTabs } from './StepTabs';
 import { TextDialog } from './TextDialog';
@@ -40,6 +41,7 @@ function CardBody({ vacancyId, item, data }: { readonly vacancyId: string; reado
   });
   return (
     <>
+      <QuotaLine />
       <div className="col">
         <Head item={item} companyPath={companyPath} save={save.button} />
         <div className="v4-head2">

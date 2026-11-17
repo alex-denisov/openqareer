@@ -31,6 +31,7 @@ import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerMatchedVacancyRoutes } from './matchedVacancyRoutes';
+import { registerB640VacancyRoutes } from './b640VacancyRoutes';
 import { registerVacancyPitchRoutes } from './vacancyPitchRoutes';
 import { registerSavedVacancyStateRoutes } from './savedVacancyStateRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
@@ -694,5 +695,6 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   registerVacancySubscriptionRoutes(app, deps);
   registerRecruiterIntelligenceRoutes(app, deps);
   registerMatchedVacancyRoutes(app, deps);
+  registerB640VacancyRoutes(app, deps);
   registerVacancyPitchRoutes(app, deps);
 }

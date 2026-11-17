@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom';
 import { Icon } from '../../kit';
 import { useModalFocus } from '../../kit/useModalFocus';
 import { FilterPane, type PaneProps } from './FilterPanes';
+import { HiddenChip, type HiddenChipProps } from './HiddenChip';
 import { dateLabel, labelOf, type FilterKind } from './filterModel';
 import { SORT_COLUMNS, type SortKey, type SortState } from './sortModel';
 
-export interface FilterSheetProps extends PaneProps {
+export interface FilterSheetProps extends PaneProps, HiddenChipProps {
   readonly open: boolean;
   readonly shown: number;
   readonly sort: SortState;
@@ -75,6 +76,7 @@ function SheetBody(props: FilterSheetProps) {
           <FilterPane kind={section.kind} {...props} />
         </Section>
       ))}
+      <HiddenChip showHidden={props.showHidden} onShowHidden={props.onShowHidden} />
     </div>
   );
 }

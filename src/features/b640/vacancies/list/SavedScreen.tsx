@@ -54,7 +54,7 @@ export function SavedScreen() {
             <CountTitle count={items.length} word={SAVED_WORD(items.length)} />
           </div>
         ) : null}
-        <LoadErrors pool={pool} links={links} />
+        <LoadErrors pool={pool} links={links} poolFailed={pool.failed} />
         {waiting ? <LoadingLine /> : null}
         {items.length > 0 ? (
           <TableBlock
