@@ -5,7 +5,16 @@ import type {
   RejectionReviewItem,
 } from '../../../../shared/rejectionReview';
 import { apiErrorMessage } from '../../coach/apiClient';
-import { Button, Icon, InfoTip, Link, ResultLine, StatusLine } from '../kit';
+import {
+  ActionDock,
+  Button,
+  Icon,
+  InfoTip,
+  Link,
+  ResultLine,
+  StatusLine,
+  useIsMobile,
+} from '../kit';
 import { buildNodePath } from '../routes';
 import { getRejectionReview, saveReviewFeedback } from './data/rejectionReviewApi';
 import { useAsync } from './data/useAsync';
@@ -153,6 +162,22 @@ function Helped({ initial }: { readonly initial: boolean | null }) {
   );
 }
 
+/**
+ * Главное действие экрана. На 390 — закреплённая полоса над навигацией (она сама оставляет
+ * место под собой); на 1440 и 1176 кнопка стоит в блоке, как в макете.
+ */
+function LeadAction({ step }: { readonly step: RejectionRecommendation | null }) {
+  const mobile = useIsMobile();
+  const text = step ? recommendationText(step) : null;
+  const link = (
+    <Link className="btn is-primary" to={buildNodePath(text?.node ?? 's07')}>
+      <Icon name={text?.icon ?? 'vacancies'} />
+      {text?.action ?? 'Посмотреть вакансии'}
+    </Link>
+  );
+  return mobile ? <ActionDock kind="auto" primary={link} /> : <div className="actions">{link}</div>;
+}
+
 function ReviewLead({ review }: { readonly review: RejectionReview }) {
   const step = review.firstStep;
   const low = review.state === 'low_data';
@@ -169,16 +194,7 @@ function ReviewLead({ review }: { readonly review: RejectionReview }) {
       </div>
       {low ? <DataMeter review={review} /> : null}
       {step && !low ? <p className="lead-text">{recommendationText(step).why}</p> : null}
-      {step ? (
-        <StepAction step={step} primary />
-      ) : (
-        <div className="actions">
-          <Link className="btn is-primary" to={buildNodePath('s07')}>
-            <Icon name="vacancies" />
-            Посмотреть вакансии
-          </Link>
-        </div>
-      )}
+      <LeadAction step={step} />
     </section>
   );
 }

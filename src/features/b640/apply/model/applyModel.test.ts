@@ -7,6 +7,7 @@ import {
   parseStep,
   recipientOptions,
   resolveTarget,
+  stepsFor,
 } from './applyModel';
 
 describe('B657: шаг отклика из адреса', () => {
@@ -15,6 +16,9 @@ describe('B657: шаг отклика из адреса', () => {
     expect(parseStep('?step=send')).toBe('send');
     expect(parseStep('?step=resume')).toBe('resume');
     expect(parseStep('?step=anything')).toBe('letter');
+    expect(parseStep('?step=form')).toBe('form');
+    expect(stepsFor(false).map((step) => step.id)).toEqual(['resume', 'letter', 'send']);
+    expect(stepsFor(true).map((step) => step.id)).toEqual(['resume', 'letter', 'form', 'send']);
   });
 });
 
@@ -45,6 +49,7 @@ describe('B657: шапка отклика', () => {
       company: 'Арка Холдинг',
       url: 'https://hh.ru/vacancy/1',
       source: 'hh.ru',
+      platform: { label: 'hh.ru', site: false },
     });
   });
 
@@ -60,7 +65,13 @@ describe('B657: шапка отклика', () => {
           sources: [{ sourceName: 'hh.ru (страница поиска)' }],
         },
       }),
-    ).toEqual({ title: 'Head of Engineering', company: 'Гринкод', url: null, source: 'hh.ru' });
+    ).toEqual({
+      title: 'Head of Engineering',
+      company: 'Гринкод',
+      url: null,
+      source: 'hh.ru',
+      platform: { label: 'hh.ru', site: false },
+    });
   });
 
   it('скрытая компания не подставляется', () => {
