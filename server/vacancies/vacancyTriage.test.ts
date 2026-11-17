@@ -43,7 +43,7 @@ describe('triageVacancies: gates', () => {
   });
   it('hides a blocked region or format', () => {
     for (const gates of [{ region: 'blocked' }, { workFormat: 'blocked' }] as const) {
-      expect(only([{ id: 'a', gates }])).toMatchObject({ verdict: 'hide', reasonId: 'geo-format', reasonLabel: 'не подходят условия' });
+      expect(only([{ id: 'a', gates }])).toMatchObject({ verdict: 'hide', reasonId: 'geo-format', reasonLabel: 'не те условия' });
     }
   });
   it('does not hide remote by region, but hides it by format', () => {

@@ -45,7 +45,7 @@ function gateRule(item: MatchedVacancyItem): VacancyTriageRow | undefined {
   if (gates.level.status === 'blocked') return hide(id, 'level', 'не тот уровень');
   const regionBlocked = gates.region.status === 'blocked' && !item.cluster.isRemote;
   if (regionBlocked || gates.workFormat.status === 'blocked') {
-    return hide(id, 'geo-format', 'не подходят условия');
+    return hide(id, 'geo-format', 'не те условия');
   }
   return undefined;
 }

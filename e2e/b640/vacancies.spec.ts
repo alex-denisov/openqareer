@@ -100,7 +100,7 @@ function triageRows(ids: readonly string[], yes: boolean) {
   return ids.map((id, index) => {
     if (index === 0) return hide(id, 'role-family', 'не та роль');
     if (index === 1) return hide(id, 'level', 'не тот уровень');
-    if (index === 2) return hide(id, 'geo-format', 'не подходят условия');
+    if (index === 2) return hide(id, 'geo-format', 'не те условия');
     if (index !== 3) return { clusterId: id, verdict: 'keep' };
     return yes
       ? hide(id, 'comp-below', 'зарплата ниже')
@@ -305,6 +305,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator(`${PICKED} .vz-ck`).first()).toBeChecked();
     await expect(page.locator('.vz-q1-n')).toHaveText('1 из 1');
     await expect(page.locator(PRIMARY)).toContainText('3');
+    await expect(page.locator(PRIMARY)).toBeEnabled();
     expect(calls[0]?.clusterIds.length).toBeGreaterThan(20);
     await expectGates(page);
 
@@ -365,6 +366,9 @@ test.describe('B654: раздел «Вакансии», подборка и со
       await page.goto('/app/vacancies', { waitUntil: 'domcontentloaded' });
       await page.locator('.va-review').click();
       await expect(page.locator(PICKED).first()).toBeVisible();
+      await expect(page.locator(PRIMARY)).toBeEnabled();
+      // Кнопка меняет цвет плавно: снимок — после перехода.
+      await page.waitForTimeout(400);
       await page.screenshot({ path: `.s13-shots/vacancies-triage-${width}-${theme}.png` });
     }
   });
