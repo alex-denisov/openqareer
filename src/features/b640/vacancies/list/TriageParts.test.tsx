@@ -72,11 +72,22 @@ describe('полоса действий', () => {
     view.unmount();
   });
 
-  it('идёт скрытие: кнопка занята, «Отмена» доступна', () => {
+  it('идёт скрытие: обе кнопки заняты, серию нельзя бросить на середине', () => {
     const view = mount(<TriageBar count={2} busy onHide={vi.fn()} onCancel={vi.fn()} />);
-    const primary = view.container.querySelector('.is-primary') as HTMLButtonElement;
-    expect(primary.disabled).toBe(true);
-    expect(primary.getAttribute('aria-busy')).toBe('true');
+    const [primary, cancel] = [...view.container.querySelectorAll('button')];
+    expect(primary!.disabled).toBe(true);
+    expect(primary!.getAttribute('aria-busy')).toBe('true');
+    expect(cancel!.disabled).toBe(true);
+    view.unmount();
+  });
+
+  it('идёт повторный разбор: скрывать по прежним отметкам нельзя, «Отмена» доступна', () => {
+    const view = mount(
+      <TriageBar count={2} busy={false} loading onHide={vi.fn()} onCancel={vi.fn()} />,
+    );
+    const [primary, cancel] = [...view.container.querySelectorAll('button')];
+    expect(primary!.disabled).toBe(true);
+    expect(cancel!.disabled).toBe(false);
     view.unmount();
   });
 });

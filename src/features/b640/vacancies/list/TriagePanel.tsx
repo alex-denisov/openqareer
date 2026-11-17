@@ -12,6 +12,7 @@ export function TriagePanel({ triage }: { triage: Triage }) {
       <TriageBar
         count={triage.picked}
         busy={hide.status === 'busy'}
+        loading={loading}
         onHide={triage.hideSelected}
         onCancel={triage.cancel}
       />

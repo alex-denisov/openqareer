@@ -48,11 +48,14 @@ export function TriageQuestion({
 export function TriageBar({
   count,
   busy,
+  loading = false,
   onHide,
   onCancel,
 }: {
   count: number;
   busy: boolean;
+  /** Идёт повторный разбор: число и отметки ещё прежние, скрывать по ним нельзя. */
+  loading?: boolean;
   onHide: () => void;
   onCancel: () => void;
 }) {
@@ -61,13 +64,13 @@ export function TriageBar({
       <button
         className="btn is-primary"
         type="button"
-        disabled={count === 0 || busy}
+        disabled={count === 0 || busy || loading}
         aria-busy={busy || undefined}
         onClick={onHide}
       >
         Скрыть выбранные · <span className="num">{count}</span>
       </button>
-      <button className="btn" type="button" onClick={onCancel}>
+      <button className="btn" type="button" disabled={busy} onClick={onCancel}>
         Отмена
       </button>
     </div>

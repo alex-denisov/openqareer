@@ -1,3 +1,5 @@
+// Общая таблица «Подборки» и «Сохранённых»: стили узкой области грузятся вместе с ней.
+import './list.css';
 import type { ReactNode } from 'react';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
