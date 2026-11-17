@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
+import { sendFrom } from '../responses/model/platform';
 import type { ApplyHead } from './model/applyModel';
 
 type Sent =
@@ -128,11 +129,14 @@ export interface SendStepProps {
   readonly sourceType: string;
   readonly approved: ApprovedVacancyLetterResult | null;
   readonly letterText: string;
+  /** Ответы анкеты работодателя для вставки; пусто — анкеты нет. */
+  readonly answersText?: string;
   readonly onLetter: () => void;
 }
 
 /** Шаг «Отправка» в вебе (O4d): письмо для вставки на площадке и отметка «Я откликнулся». */
-export function SendStep({ vacancyId, head, sourceType, approved, letterText, onLetter }: SendStepProps) {
+export function SendStep(props: SendStepProps) {
+  const { vacancyId, head, sourceType, approved, letterText, onLetter } = props;
   const [sent, setSent] = useState<Sent>({ kind: 'idle' });
   if (!approved) return <NeedsLetter onLetter={onLetter} />;
   const applicationId = approved.applicationId;
@@ -149,7 +153,7 @@ export function SendStep({ vacancyId, head, sourceType, approved, letterText, on
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        {head.source ? `Отправьте отклик с ${head.source}` : 'Отправьте отклик'}
+        {head.platform ? `Отправьте отклик ${sendFrom(head.platform)}` : 'Отправьте отклик'}
       </h2>
       {head.url ? (
         <div className="actions cb-top">
@@ -161,6 +165,7 @@ export function SendStep({ vacancyId, head, sourceType, approved, letterText, on
       ) : null}
       <ul className="cb-list" aria-label="Письмо для отклика">
         <CopyItem label="Сопроводительное письмо" text={letterText} />
+        {props.answersText ? <CopyItem label="Ответы анкеты" text={props.answersText} /> : null}
       </ul>
       <SentActions
         sent={sent}

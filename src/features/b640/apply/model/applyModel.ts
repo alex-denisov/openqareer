@@ -1,18 +1,24 @@
-import { vacancySourceLabel } from '../../../../../shared/vacancySourceLabel';
 import type { ApplicationView } from '../../../applications/applicationsApi';
+import { platformOf, type Platform } from '../../responses/model/platform';
 import type {
   ConnectionCircleNumber,
   ConnectionCircleResult,
 } from '../../../vacancies/vacancyLetterApi';
 
-/** Шаги единого экрана отклика. «Анкета» появится вместе с механикой анкет (B641). */
-export type ApplyStep = 'resume' | 'letter' | 'send';
+/** Шаги единого экрана отклика. «Анкета» есть только у вакансий с прочитанной анкетой. */
+export type ApplyStep = 'resume' | 'letter' | 'form' | 'send';
 
 export const APPLY_STEPS: readonly { readonly id: ApplyStep; readonly label: string }[] = [
   { id: 'resume', label: 'Резюме' },
   { id: 'letter', label: 'Письмо' },
+  { id: 'form', label: 'Анкета' },
   { id: 'send', label: 'Отправка' },
 ];
+
+/** Шаги для вакансии: без анкеты вкладки «Анкета» нет. */
+export function stepsFor(hasForm: boolean): typeof APPLY_STEPS {
+  return hasForm ? APPLY_STEPS : APPLY_STEPS.filter((step) => step.id !== 'form');
+}
 
 /** Шаг из адреса (`?step=send`); по умолчанию — письмо. */
 export function parseStep(search: string): ApplyStep {
@@ -45,8 +51,9 @@ export interface ApplyHead {
   readonly title: string;
   readonly company: string;
   readonly url: string | null;
-  /** Площадка словами: «hh.ru». */
+  /** Площадка словами: «hh.ru», «сайт компании». */
   readonly source: string | null;
+  readonly platform: Platform | null;
 }
 
 interface HeadSources {
@@ -71,6 +78,7 @@ export function buildHead({ application, known, cluster }: HeadSources): ApplyHe
   const snapshot = application?.vacancy ?? null;
   const sourceType = snapshot?.source;
   const sourceName = cluster?.sources[0]?.sourceName;
+  const platform = sourceType || sourceName ? platformOf(sourceType || sourceName) : null;
   return {
     title: snapshot?.title || known?.vacancyTitle || cluster?.canonicalTitle || 'Вакансия',
     company:
@@ -79,11 +87,8 @@ export function buildHead({ application, known, cluster }: HeadSources): ApplyHe
       cluster?.canonicalCompany ||
       '',
     url: safeUrl(snapshot?.url) ?? safeUrl(cluster?.primaryUrl),
-    source: sourceType
-      ? vacancySourceLabel({ sourceType })
-      : sourceName
-        ? vacancySourceLabel({ sourceType: sourceName, sourceName })
-        : null,
+    source: platform?.label ?? null,
+    platform,
   };
 }
 
