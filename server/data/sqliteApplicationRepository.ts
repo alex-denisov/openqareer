@@ -111,6 +111,14 @@ export class SqliteApplicationRepository {
     private readonly sealedText: SealedText,
   ) {}
 
+  /** Только чтение: пары (вакансия, этап) карточек кандидата, без переноса старых откликов и без расшифровки. */
+  listClusterStages(candidateId: string): Array<{ clusterId: string; stage: ApplicationStage }> {
+    const rows = this.database
+      .prepare('SELECT cluster_id, stage FROM applications WHERE candidate_id = ? AND cluster_id IS NOT NULL')
+      .all(candidateId) as unknown as Array<{ cluster_id: string; stage: ApplicationStage }>;
+    return rows.map((row) => ({ clusterId: row.cluster_id, stage: row.stage }));
+  }
+
   list(candidateId: string): StoredApplication[] {
     const rows = this.database
       .prepare(

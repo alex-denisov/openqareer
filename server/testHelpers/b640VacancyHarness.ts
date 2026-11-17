@@ -108,9 +108,11 @@ export async function createB640Harness(options: HarnessOptions) {
   });
   const get = (url: string, user?: HarnessUser) =>
     app.inject({ method: 'GET', url, headers: user ? { authorization: `Bearer ${tokens[user]}` } : {} });
+  const post = (url: string, payload: unknown, user?: HarnessUser) =>
+    app.inject({ method: 'POST', url, payload: payload as object, headers: user ? { authorization: `Bearer ${tokens[user]}` } : {} });
   const close = async () => {
     await app.close(); auth.close(); candidates.close();
     rmSync(directory, { recursive: true, force: true });
   };
-  return { app, get, candidates, candidateIds, tokens, databasePath, poolReads: () => poolReads, hangPool: (hangs: boolean) => { poolHangs = hangs; }, close };
+  return { app, get, post, candidates, candidateIds, tokens, databasePath, poolReads: () => poolReads, hangPool: (hangs: boolean) => { poolHangs = hangs; }, close };
 }

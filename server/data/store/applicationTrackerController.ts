@@ -256,6 +256,11 @@ export class ApplicationTrackerController {
     return [...saved, ...skipped];
   }
 
+  /** Чистое чтение (B675): без ленивого переноса `applied`, как делает `list`. */
+  listClusterStages(candidateId: string): Array<{ clusterId: string; stage: ApplicationStage }> {
+    return this.applications.listClusterStages(candidateId);
+  }
+
   /** `POST /visits` (architecture.md §4): moves the mark only past 30 minutes. */
   recordVisit(candidateId: string, now: string): RecordVisitResult {
     const workspaceVisit = this.workspaces.recordVisit(

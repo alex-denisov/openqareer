@@ -81,4 +81,29 @@ describe('строка таблицы по макету s07', () => {
     expect(html({ item: noProfile })).toContain('Добавить опыт');
     expect(html({ item: noProfile, env: { currency: 'RUB', noRole: true } })).toContain('Выберите роль');
   });
+
+  it('режим «Помочь выбрать»: флажок перед названием, причина после, aria-label', () => {
+    const pick = { checked: true, reason: 'не та роль', onToggle: noop };
+    const out = html({ item, pick });
+    expect(out).toContain('vt-row is-pick');
+    expect(out).toContain('class="vz-ck"');
+    expect(out).toMatch(/<input[^>]*checked/u);
+    expect(out).toContain('aria-label="Скрыть: Руководитель разработки, Ладога Банк"');
+    expect(out).toContain('<span class="vz-why">не та роль</span>');
+    expect(out.indexOf('vz-ck')).toBeLessThan(out.indexOf('vt-toggle'));
+    expect(out.indexOf('vt-toggle')).toBeLessThan(out.indexOf('vz-why'));
+  });
+
+  it('снятый флажок: причина остаётся, подсветки строки нет', () => {
+    const out = html({ item, pick: { checked: false, reason: 'зарплата ниже', onToggle: noop } });
+    expect(out).not.toContain('is-pick');
+    expect(out).not.toMatch(/<input[^>]*checked/u);
+    expect(out).toContain('зарплата ниже');
+  });
+
+  it('без режима флажка и причины нет', () => {
+    const out = html({ item });
+    expect(out).not.toContain('vz-ck');
+    expect(out).not.toContain('vz-why');
+  });
 });

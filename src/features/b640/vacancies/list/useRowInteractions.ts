@@ -13,6 +13,8 @@ import type { SkipReasonId } from '../../../../../shared/skipReasons';
 import type { HiddenRow } from '../b640Api';
 import { hideVacancy, unhideVacancy } from '../skipApi';
 import type { VacancyLinks } from '../vacancyLinks';
+import { useHideMany } from './useHideMany';
+import type { HideMany } from './useTriage';
 import type { MenuView, RowMenuActions } from './RowMenu';
 import type { TableMenu } from './VacancyTable';
 
@@ -25,6 +27,8 @@ export interface RowInteractions {
   /** Вернуть вакансию в подборку; сбой пробрасывается вызывающему. */
   readonly unhide: (id: string) => Promise<void>;
   readonly wantedKeys: ReadonlySet<string>;
+  /** Серия скрытий из режима «Помочь выбрать»: один тост «Скрыто» с «Отменить» на всех. */
+  readonly hideMany: HideMany;
   readonly toggleOpen: (id: string) => void;
   readonly openMenu: (id: string, view: MenuView) => void;
   readonly closeMenu: () => void;
@@ -121,6 +125,7 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
     [toast, unhide],
   );
 
+  const hideMany = useHideMany(setHiddenRows, unhide);
   const actionsFor = useCallback(
     (item: MatchedVacancyItem): RowMenuActions =>
       buildActions(item, {
@@ -139,5 +144,5 @@ export function useRowInteractions(links: VacancyLinks): RowInteractions {
     [links, navigate, records, toast, undoHide, wantedKeys, closeMenu],
   );
 
-  return { openId, menu, hiddenIds, hiddenRows, unhide, wantedKeys, toggleOpen, openMenu, closeMenu, toggleSaved, actionsFor };
+  return { openId, menu, hiddenIds, hiddenRows, unhide, hideMany, wantedKeys, toggleOpen, openMenu, closeMenu, toggleSaved, actionsFor };
 }
