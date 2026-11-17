@@ -80,7 +80,7 @@ describe('B657: «Кому»', () => {
       message: '',
       paths: [
         {
-          id: 'p1', circle: 1, path: [person('a', 'Анна Ветрова')], recipient: person('a', 'Анна Ветрова'),
+          id: 'p1', circle: 1, path: [person('me', 'Марина Соколова'), person('a', 'Анна Ветрова')], recipient: person('a', 'Анна Ветрова'),
           evidence: [], strength: 'direct', source: 'manual', nextStep: 'write' as never,
         },
       ],
@@ -91,7 +91,7 @@ describe('B657: «Кому»', () => {
       message: '',
       paths: [
         {
-          id: 'p2', circle: 2, path: [person('i', 'Игорь Шаталов'), person('a', 'Анна Ветрова')],
+          id: 'p2', circle: 2, path: [person('me', 'Марина Соколова'), person('i', 'Игорь Шаталов'), person('a', 'Анна Ветрова')],
           recipient: person('a', 'Анна Ветрова'), evidence: [], strength: 'weak', source: 'linkedin_import',
           nextStep: 'ask' as never,
         },

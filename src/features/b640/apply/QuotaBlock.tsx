@@ -20,7 +20,7 @@ const FREE = [
 export function funnelLine(funnel: ApplicationFunnel): string {
   const interview = funnel.interview + funnel.offer;
   const answered = funnel.responded + interview + funnel.rejected;
-  const sent = funnel.applied + answered + funnel.archived;
+  const sent = funnel.applied + answered;
   return [
     `${sent} ${pluralRu(sent, ['отклик', 'отклика', 'откликов'])}`,
     `${answered} ${pluralRu(answered, ['ответ', 'ответа', 'ответов'])}`,

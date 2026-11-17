@@ -47,6 +47,7 @@ function StepTabs({ step, done, onStep }: TabsProps) {
             href={`${path}?step=${item.id}`}
             aria-current={item.id === step ? 'page' : undefined}
             onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
               event.preventDefault();
               onStep(item.id);
             }}
@@ -104,6 +105,8 @@ interface BodyProps {
   readonly setStep: (step: ApplyStep) => void;
   readonly letter: LetterScreenState;
   readonly resumeOk: boolean;
+  /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
+  readonly resumeSeen: boolean;
   readonly onResumeOk: () => void;
 }
 
@@ -126,21 +129,25 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter }: BodyProps) {
 }
 
 function EditorBody(props: BodyProps) {
-  const { vacancyId, head, step, setStep, letter, resumeOk, onResumeOk } = props;
+  const { vacancyId, head, step, setStep, letter, resumeOk, resumeSeen, onResumeOk } = props;
   return (
     <>
       <VacancyColumn vacancyId={vacancyId} head={head} />
       <div className="col">
-        {step === 'resume' ? (
-          <ResumeStep
-            vacancyId={vacancyId}
-            approved={letter.approval.saved?.resume ?? null}
-            confirmed={resumeOk}
-            onConfirm={onResumeOk}
-          />
-        ) : (
+        {/* Резюме собирается один раз и остаётся при переходе между шагами. */}
+        {resumeSeen ? (
+          <div hidden={step !== 'resume'}>
+            <ResumeStep
+              vacancyId={vacancyId}
+              approved={letter.approval.saved?.resume ?? null}
+              confirmed={resumeOk}
+              onConfirm={onResumeOk}
+            />
+          </div>
+        ) : null}
+        <div hidden={step !== 'letter'}>
           <LetterStep letter={letter} head={head} onSend={() => setStep('send')} />
-        )}
+        </div>
       </div>
     </>
   );
@@ -180,6 +187,8 @@ function ApplyFlow({ target, cluster }: FlowProps) {
   const { search } = useShell();
   const [step, setStep] = useState<ApplyStep>(() => parseStep(search));
   const [resumeOk, setResumeOk] = useState(false);
+  const [resumeSeen, setResumeSeen] = useState(step === 'resume');
+  if (step === 'resume' && !resumeSeen) setResumeSeen(true);
   const letter = useVacancyLetterController(target.vacancyId, COLD_CIRCLE);
   const quota = useExhaustedQuota(letter);
   const head = buildHead({ application: target.application, known: letter.circles.data, cluster });
@@ -193,6 +202,7 @@ function ApplyFlow({ target, cluster }: FlowProps) {
     setStep,
     letter,
     resumeOk,
+    resumeSeen,
     onResumeOk: () => {
       setResumeOk(true);
       setStep('letter');

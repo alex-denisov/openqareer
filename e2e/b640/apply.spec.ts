@@ -37,7 +37,10 @@ function circles(vacancyId: string, withPath: boolean) {
               {
                 id: 'path-anna',
                 circle: 1,
-                path: [anna],
+                path: [
+                  { id: 'me', fullName: 'Марина Соколова', roleTitle: null, companyName: null },
+                  anna,
+                ],
                 recipient: anna,
                 evidence: [],
                 strength: 'direct',
@@ -223,6 +226,8 @@ test.describe('B657: единый экран отклика', () => {
     await page.getByRole('button', { name: 'Одобрить' }).click();
     await expect(page.getByText('Письмо одобрено').first()).toBeVisible();
     expect(mock.calls).toContain('approve confident');
+    await expect(page.getByLabel('Тон')).toBeDisabled();
+    await expect(page.getByLabel('Текст письма')).toHaveAttribute('readonly', '');
 
     await page.getByRole('button', { name: 'К отправке' }).click();
     await expect(page.getByRole('heading', { name: 'Отправьте отклик с hh.ru' })).toBeVisible();

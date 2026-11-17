@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { listApplications, patchApplication } from '../../applications/applicationsApi';
 import { recordVacancyApplication } from '../../coach/coachApi';
 import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
@@ -17,6 +18,7 @@ interface CopyItemProps {
 
 function CopyItem({ label, text }: CopyItemProps) {
   const toast = useToast();
+  const labelId = useId();
   const copy = () => {
     const failed = () => toast.show({ text: 'Не получилось скопировать' });
     try {
@@ -31,7 +33,7 @@ function CopyItem({ label, text }: CopyItemProps) {
   return (
     <li className="cb-item">
       <div className="cb-main">
-        <p className="cb-l" id="cb-letter">
+        <p className="cb-l" id={labelId}>
           {label}
         </p>
         <p className="cb-t">{text}</p>
@@ -40,13 +42,39 @@ function CopyItem({ label, text }: CopyItemProps) {
         className="icon-btn cb-copy"
         type="button"
         aria-label="Скопировать"
-        aria-describedby="cb-letter"
+        aria-describedby={labelId}
         onClick={copy}
       >
         <Icon name="copy" />
       </button>
     </li>
   );
+}
+
+interface MarkInput {
+  readonly vacancyId: string;
+  readonly head: ApplyHead;
+  readonly sourceType: string;
+  readonly applicationId: string;
+}
+
+/**
+ * «Я откликнулся». Со ссылкой на вакансию — прежняя отметка отклика; без ссылки (её требует
+ * тот маршрут) стадия меняется у самой карточки, которую создало одобрение письма.
+ */
+async function markApplied({ vacancyId, head, sourceType, applicationId }: MarkInput): Promise<void> {
+  if (head.url) {
+    await recordVacancyApplication({
+      clusterId: vacancyId,
+      status: 'applied',
+      vacancy: { title: head.title, company: head.company, url: head.url, source: sourceType },
+    });
+    return;
+  }
+  const card = (await listApplications()).find((item) => item.id === applicationId);
+  if (!card) throw new Error('application_missing');
+  if (card.stage !== 'saved') return;
+  await patchApplication(card.id, { expectedVersion: card.version, stage: 'applied' });
 }
 
 function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
@@ -107,14 +135,11 @@ export interface SendStepProps {
 export function SendStep({ vacancyId, head, sourceType, approved, letterText, onLetter }: SendStepProps) {
   const [sent, setSent] = useState<Sent>({ kind: 'idle' });
   if (!approved) return <NeedsLetter onLetter={onLetter} />;
+  const applicationId = approved.applicationId;
 
   function confirm() {
     setSent({ kind: 'busy' });
-    recordVacancyApplication({
-      clusterId: vacancyId,
-      status: 'applied',
-      vacancy: { title: head.title, company: head.company, url: head.url ?? '', source: sourceType },
-    })
+    markApplied({ vacancyId, head, sourceType, applicationId })
       .then(() => setSent({ kind: 'done' }))
       .catch((reason: unknown) =>
         setSent({ kind: 'error', text: apiErrorMessage(reason, 'Отметка не сохранилась. Повторите.') }),
@@ -139,7 +164,7 @@ export function SendStep({ vacancyId, head, sourceType, approved, letterText, on
       </ul>
       <SentActions
         sent={sent}
-        responsePath={buildNodePath('o01c', { responseId: approved.applicationId })}
+        responsePath={buildNodePath('o01c', { responseId: applicationId })}
         onConfirm={confirm}
       />
       {sent.kind === 'error' ? <StatusLine state="err" text={sent.text} /> : null}

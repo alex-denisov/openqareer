@@ -38,6 +38,7 @@ function Recipient({ letter, options }: RecipientProps) {
       <select
         id={id}
         value={options.some((option) => option.value === value) ? value : COLD_RECIPIENT}
+        disabled={Boolean(letter.approval.saved)}
         onChange={(event) => {
           const picked = options.find((option) => option.value === event.currentTarget.value);
           if (!picked) return;
@@ -55,11 +56,44 @@ function Recipient({ letter, options }: RecipientProps) {
   );
 }
 
+interface SelectFieldProps {
+  readonly id: string;
+  readonly label: string;
+  readonly value: string;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly disabled: boolean;
+  readonly onChange: (value: string) => void;
+}
+
+function SelectField({ id, label, value, options, disabled, onChange }: SelectFieldProps) {
+  return (
+    <div className="ls-f">
+      <label className="ls-l" htmlFor={id}>
+        {label}
+      </label>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
+        {options.map((item) => (
+          <option key={item.value} value={item.value}>
+            {item.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function ToneAndLanguage({ letter }: { readonly letter: LetterScreenState }) {
   const id = useId();
   const tone = TONES.find((item) => item.value === letter.tone)?.label ?? TONES[0].label;
   const used = letter.draft.pitch?.language;
   const language = letter.language === 'auto' ? used : letter.language;
+  // Одобренное письмо не пересобирается: сначала «Изменить письмо».
+  const locked = Boolean(letter.approval.saved);
   return (
     <details className="ls ls-chip">
       <summary className="ls-sum">
@@ -67,40 +101,22 @@ function ToneAndLanguage({ letter }: { readonly letter: LetterScreenState }) {
         <Icon name="down" />
       </summary>
       <div className="ls-body">
-        <div className="ls-f">
-          <label className="ls-l" htmlFor={`${id}-tone`}>
-            Тон
-          </label>
-          <select
-            id={`${id}-tone`}
-            value={letter.tone}
-            onChange={(event) => letter.setTone(event.currentTarget.value as typeof letter.tone)}
-          >
-            {TONES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="ls-f">
-          <label className="ls-l" htmlFor={`${id}-lang`}>
-            Язык
-          </label>
-          <select
-            id={`${id}-lang`}
-            value={letter.language}
-            onChange={(event) =>
-              letter.setLanguage(event.currentTarget.value as typeof letter.language)
-            }
-          >
-            {LANGUAGES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <SelectField
+          id={`${id}-tone`}
+          label="Тон"
+          value={letter.tone}
+          options={TONES}
+          disabled={locked}
+          onChange={(value) => letter.setTone(value as typeof letter.tone)}
+        />
+        <SelectField
+          id={`${id}-lang`}
+          label="Язык"
+          value={letter.language}
+          options={LANGUAGES}
+          disabled={locked}
+          onChange={(value) => letter.setLanguage(value as typeof letter.language)}
+        />
       </div>
     </details>
   );

@@ -112,8 +112,9 @@ export function recipientOptions(
     .filter((result) => result.circle !== 3)
     .flatMap((result) => result.paths)
     .map((path): RecipientOption => {
-      const via = path.path[0];
-      const direct = !via || via.id === path.recipient.id;
+      // Сервер ставит первым самого кандидата: посредник — следующий в цепочке.
+      const via = path.path.slice(1).find((person) => person.id !== path.recipient.id);
+      const direct = !via;
       return {
         value: path.id,
         label: direct
