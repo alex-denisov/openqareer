@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p09 {
+@layer b640.base {
   @container main (max-width: 1039px) {
     .b640 .page.v4 .v4-head { order: 0; }
     .b640 .page.v4 .v4-money { order: 1; }

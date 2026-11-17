@@ -124,14 +124,18 @@ describe('модель «Консультанта»', () => {
     expect(limitOf(top, null)).toEqual({ resetLabel: '20 ноября', upgradePlan: null });
   });
 
-  it('тема разговора — выжимка, иначе первая фраза', () => {
-    expect(conversationTitle({ summary: 'Оффер Вектор Банка', firstPhrase: 'Привет' })).toBe(
-      'Оффер Вектор Банка',
-    );
-    expect(conversationTitle({ summary: null, firstPhrase: '  С чего начать поиск  ' })).toBe(
+  it('тема разговора — первый вопрос одной строкой, без разметки; итог целиком не выводится', () => {
+    const summary = '**Что выяснили**\n- В шапке резюме есть три утверждения\n- Нет цифр';
+    expect(conversationTitle({ summary, firstPhrase: '  С чего\nначать **поиск**  ' })).toBe(
       'С чего начать поиск',
     );
+    expect(conversationTitle({ summary, firstPhrase: '' })).toBe('Что выяснили');
+    expect(conversationTitle({ summary: '## Итог\n1. Первое', firstPhrase: ' ' })).toBe('Итог');
+    expect(conversationTitle({ summary: null, firstPhrase: '2025. Итог по snake_case' })).toBe(
+      '2025. Итог по snake_case',
+    );
     expect(conversationTitle({ summary: ' ', firstPhrase: '' })).toBe('Разговор без темы');
+    expect(conversationTitle({ summary: null, firstPhrase: '' })).toBe('Разговор без темы');
   });
 
   it('дата разговора: сегодня со временем, иначе день и месяц', () => {

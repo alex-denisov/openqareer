@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from './Icon';
 import type { ComposerMode } from './useVoiceMode';
 
@@ -11,6 +11,13 @@ export interface ComposerMenuProps {
   readonly id: string;
   readonly mode: ComposerMode;
   readonly onChoose: (mode: ComposerMode) => void;
+}
+
+/** Esc закрывает только меню: панель под ним остаётся открытой. */
+function closeOnEscape(event: KeyboardEvent<HTMLButtonElement>, close: () => void): void {
+  if (event.key !== 'Escape') return;
+  event.preventDefault();
+  close();
 }
 
 /** Меню «Текстом / Голосом» у кнопки отправки. */
@@ -55,7 +62,7 @@ export function ComposerMenu({ id, mode, onChoose }: ComposerMenuProps) {
             role="menuitemradio"
             aria-checked={mode === item.id}
             onClick={() => pick(item.id)}
-            onKeyDown={(event) => event.key === 'Escape' && pick(mode)}
+            onKeyDown={(event) => closeOnEscape(event, () => pick(mode))}
           >
             {item.label}
           </button>

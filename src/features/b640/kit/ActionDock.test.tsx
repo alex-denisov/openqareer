@@ -39,4 +39,12 @@ describe('ActionDock', () => {
     v.unmount();
     expect(root.style.getPropertyValue('--career-m-commit-h')).toBe('');
   });
+  it('полоса действия объекта: div.act-dock.is-auto без only-mob', () => {
+    view = mount(
+      <ActionDock kind="auto" primary={<Button variant="primary">Откликнуться</Button>} />,
+    );
+    const dock = view.container.querySelector('div.act-dock.is-auto') as HTMLElement;
+    expect(dock.classList.contains('only-mob')).toBe(false);
+    expect(dock.querySelector('.is-primary')?.textContent).toBe('Откликнуться');
+  });
 });

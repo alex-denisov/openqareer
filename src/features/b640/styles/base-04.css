@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p04 {
+@layer b640.base {
   .b640 .cv-why.is-sugg { background: var(--career-paper); }
   .b640 .cv-undo { min-block-size: var(--career-target-min); padding-inline: var(--career-space-2); border: 0; background: none; color: var(--career-paper-accent); font: inherit; font-family: var(--font-main); font-size: var(--career-text-xs); font-weight: 600; text-decoration: none; cursor: pointer; }
   .b640 .cv-saved { display: flex; align-items: center; gap: var(--career-space-2); margin: var(--career-space-3) 0 0; color: var(--career-text-soft); font-size: var(--career-text-xs); }

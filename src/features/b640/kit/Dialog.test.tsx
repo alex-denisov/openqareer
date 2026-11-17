@@ -88,4 +88,12 @@ describe('Dialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(view.container.querySelector('.pf-dialog')).toBeNull();
   });
+  it('класс-модификатор ширины добавляется к окну', () => {
+    view = mount(
+      <Dialog open title="Текст вакансии" onClose={() => undefined} className="v4-text-dlg">
+        <p>Текст</p>
+      </Dialog>,
+    );
+    expect(view.container.querySelector('.pf-dialog.v4-text-dlg[role=dialog]')).not.toBeNull();
+  });
 });

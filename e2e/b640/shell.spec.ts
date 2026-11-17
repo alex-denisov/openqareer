@@ -25,6 +25,12 @@ test.describe('B649: оболочка нового кабинета', () => {
         window.history.pushState(null, '', path);
         window.dispatchEvent(new PopStateEvent('popstate'));
       }, samplePath(node.path));
+      if (node.section === 'consultant') {
+        // B700: консультант — панель над «Сегодня», своей страницы у него нет.
+        await expect(page.locator('.b640 aside.panel-col'), node.path).toBeVisible();
+        await expect(page.locator('[data-b640-node="s03"]'), node.path).toBeVisible();
+        continue;
+      }
       const screen = page.locator(`[data-b640-node="${node.code}"]`);
       await expect(screen, node.path).toBeVisible();
       await expect(screen).toHaveAttribute('data-b640-section', node.section);

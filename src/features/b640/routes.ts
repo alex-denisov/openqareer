@@ -77,7 +77,7 @@ type NodeRow = readonly [
 const ROWS: readonly NodeRow[] = [
   // Сегодня и уведомления
   ['s03', 's03-segodnya-posle-smeny', 'today', 'today', '/app/today', 'Сегодня', 'desk'],
-  ['n01b', 'n01b-vse-uvedomleniya', 'today', 'bell', '/app/notifications', 'Все уведомления', 'list', { crumb: 'Уведомления' }],
+  ['n01b', 'n01b-vse-uvedomleniya', 'today', 'settings', '/app/notifications', 'Все уведомления', 'list', { parent: 'n02', tabs: 'account', tabOf: 'n02' }],
   // Профиль
   ['s01', 's01-profil-status', 'profile', 'profile', '/app/profile', 'Профиль', 'object', { tabs: 'profile' }],
   ['s02', 's02-status-vybor', 'profile', 'profile', '/app/profile/status', 'Статус', 'focus', { parent: 's01', crumb: 'Статус поиска' }],
@@ -179,6 +179,8 @@ export const B640_NODES: readonly B640Node[] = ROWS.map(
 
 export interface B640Tab {
   readonly label: string;
+  /** Подпись на 390, если полная не помещается: начало полной («Компании» у «Компании и люди»). */
+  readonly shortLabel?: string;
   readonly code: string;
   /** Параметры адреса, если вкладка ведёт на узел с параметром. */
   readonly params?: Readonly<Record<string, string>>;
@@ -220,7 +222,7 @@ export const B640_TAB_SETS: Readonly<Record<B640TabSetId, B640TabSet>> = {
     tabs: [
       { label: 'Подборка', code: 's07' },
       { label: 'Сохранённые', code: 'v06s' },
-      { label: 'Компании и люди', code: 'v10' },
+      { label: 'Компании и люди', shortLabel: 'Компании', code: 'v10' },
     ],
   },
   responses: {

@@ -2,23 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SpeechRecognitionScope } from '../../coach/localSpeechRecognition';
 import { VoiceInputController } from '../../coach/voiceInputController';
 import type { VoiceInputState } from '../../coach/voiceInputMachine';
+import type { ComposerDictation } from '../kit/Composer';
 
 const DENIED_TOAST_MS = 4000;
 // Макет рисует один исход сбоя диктовки (K3b): строка о микрофоне и возврат к тексту.
 const FAILED: readonly VoiceInputState[] = ['denied', 'unsupported', 'error'];
-
-export interface Dictation {
-  /** Браузер умеет распознавать речь: иначе способ «Голосом» не предлагается. */
-  readonly supported: boolean;
-  readonly recording: boolean;
-  /** Диктовка остановлена, последние слова ещё дописываются в поле. */
-  readonly settling: boolean;
-  /** Показано «Нет доступа к микрофону». */
-  readonly denied: boolean;
-  /** Начать диктовку: сказанное дописывается к `currentText`. */
-  readonly start: (currentText: string) => void;
-  readonly stop: () => void;
-}
 
 function speechSupported(): boolean {
   if (typeof window === 'undefined') return false;
@@ -35,26 +23,24 @@ function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
 }
 
 /** Диктовка в поле ввода: распознанный текст приходит в `onText` по мере речи. */
-export function useDictation(onText: (text: string) => void, onFail: () => void): Dictation {
+export function useDictation(onText: (text: string) => void): ComposerDictation {
   const [supported] = useState(speechSupported);
   const [state, setState] = useState<VoiceInputState>('idle');
   const [denied, setDenied] = useState(false);
-  const handlers = useRef({ onText, onFail });
+  const handler = useRef(onText);
   const controller = useRef<VoiceInputController | null>(null);
 
   useEffect(() => {
-    handlers.current = { onText, onFail };
-  }, [onText, onFail]);
+    handler.current = onText;
+  }, [onText]);
 
   useEffect(() => {
     const created = new VoiceInputController({
       onState: (next) => {
         setState(next);
-        if (!FAILED.includes(next)) return;
-        setDenied(true);
-        handlers.current.onFail();
+        if (FAILED.includes(next)) setDenied(true);
       },
-      onText: (text) => handlers.current.onText(text),
+      onText: (text) => handler.current(text),
       onVoiceDraft: () => undefined,
       onTextMode: () => undefined,
       onElapsedSeconds: () => undefined,

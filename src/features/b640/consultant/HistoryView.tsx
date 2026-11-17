@@ -13,6 +13,7 @@ import { useHistory } from './useHistory';
 export interface HistoryViewProps {
   /** Адрес прошлого разговора по его номеру. */
   readonly conversationPath: (id: string) => string;
+  readonly onOpen: (id: string) => void;
   /** «Начать» в пустом списке: открыть текущий разговор. */
   readonly onStart: () => void;
 }
@@ -20,14 +21,22 @@ export interface HistoryViewProps {
 interface RowsProps {
   readonly items: readonly ConsultantConversationSummary[];
   readonly pathOf: (id: string) => string;
+  readonly onOpen: (id: string) => void;
 }
 
-function Rows({ items, pathOf }: RowsProps) {
+function Rows({ items, pathOf, onOpen }: RowsProps) {
   return (
     <ul className="hist hist2" aria-label="Разговоры, последние сверху">
       {items.map((item) => (
         <li key={item.id}>
-          <Link className="hist-t hist-row" to={pathOf(item.id)}>
+          <Link
+            className="hist-t hist-row"
+            to={pathOf(item.id)}
+            onClick={(event) => {
+              event.preventDefault();
+              onOpen(item.id);
+            }}
+          >
             <span className="hist-tt">{conversationTitle(item)}</span>
             <span className="hist-open" aria-hidden="true">
               <span className="hist-open-l">Открыть</span>
@@ -55,12 +64,12 @@ function Empty({ onStart }: { readonly onStart: () => void }) {
 }
 
 /** «Все разговоры» (K5, пусто — K5b): темы одной строкой, последние сверху, по 20. */
-export function HistoryView({ conversationPath, onStart }: HistoryViewProps) {
+export function HistoryView({ conversationPath, onOpen, onStart }: HistoryViewProps) {
   const { items, nextCursor, status, loadMore, retry } = useHistory();
   const loadingMore = status === 'more';
   return (
     <div className="chat" aria-live="polite" aria-busy={status === 'loading'}>
-      {items.length > 0 ? <Rows items={items} pathOf={conversationPath} /> : null}
+      {items.length > 0 ? <Rows items={items} pathOf={conversationPath} onOpen={onOpen} /> : null}
       {status === 'failed' ? <ErrorRow text="Разговоры не загрузились" onRetry={retry} /> : null}
       {nextCursor && status !== 'failed' ? (
         <div className="vl-foot">

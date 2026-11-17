@@ -9,6 +9,7 @@ import {
 } from './showcaseControls';
 import {
   ComposerSection,
+  type ComposerShowcaseState,
   DialogSection,
   DockSection,
   PagedSection,
@@ -27,6 +28,11 @@ type ViewId = (typeof VIEWS)[number]['id'];
 function readView(search: string): ViewId {
   const value = new URLSearchParams(search).get('view');
   return VIEWS.find((view) => view.id === value)?.id ?? 'main';
+}
+
+function readComposerState(params: URLSearchParams): ComposerShowcaseState {
+  const value = params.get('state');
+  return value === 'closed' || value === 'recording' ? value : 'ask';
 }
 
 function MainView({ open }: { readonly open: string | null }) {
@@ -57,7 +63,7 @@ function ButtonsView() {
 
 /**
  * Витрина общих компонентов: `/app/kit`. Каждый вид — отдельный экран:
- * `?view=buttons`, `?view=composer`; `?open=dialog` и `?open=toast` — для снимков.
+ * `?view=buttons`, `?view=composer` (и `&state=closed`, `&state=recording`); `?open=dialog` и `?open=toast` — для снимков.
  */
 export default function Showcase() {
   const { search } = useShell();
@@ -73,7 +79,7 @@ export default function Showcase() {
       <SecTabs label="Виды витрины" tabs={tabs} />
       {view === 'main' ? <MainView open={params.get('open')} /> : null}
       {view === 'buttons' ? <ButtonsView /> : null}
-      {view === 'composer' ? <ComposerSection /> : null}
+      {view === 'composer' ? <ComposerSection state={readComposerState(params)} /> : null}
     </div>
   );
 }
