@@ -36,8 +36,13 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Audit dependencies
-        run: npm audit --audit-level=high
+      # Production dependencies: no exceptions.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # Whole tree: same bar, minus the dated exceptions listed in the script.
+      - name: Audit all dependencies
+        run: node scripts/audit-gate.mjs
 
       - name: Lint and check adopted formatting baseline
         run: npm run lint
