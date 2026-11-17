@@ -5,14 +5,20 @@ import type {
   ConnectionCircleResult,
 } from '../../../vacancies/vacancyLetterApi';
 
-/** Шаги единого экрана отклика. «Анкета» появится вместе с механикой анкет (B641). */
-export type ApplyStep = 'resume' | 'letter' | 'send';
+/** Шаги единого экрана отклика. «Анкета» есть только у вакансий с прочитанной анкетой. */
+export type ApplyStep = 'resume' | 'letter' | 'form' | 'send';
 
 export const APPLY_STEPS: readonly { readonly id: ApplyStep; readonly label: string }[] = [
   { id: 'resume', label: 'Резюме' },
   { id: 'letter', label: 'Письмо' },
+  { id: 'form', label: 'Анкета' },
   { id: 'send', label: 'Отправка' },
 ];
+
+/** Шаги для вакансии: без анкеты вкладки «Анкета» нет. */
+export function stepsFor(hasForm: boolean): typeof APPLY_STEPS {
+  return hasForm ? APPLY_STEPS : APPLY_STEPS.filter((step) => step.id !== 'form');
+}
 
 /** Шаг из адреса (`?step=send`); по умолчанию — письмо. */
 export function parseStep(search: string): ApplyStep {

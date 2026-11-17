@@ -12,9 +12,11 @@ import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { CtxHead } from '../shell/CtxHead';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
+import { FormStep, useQuestionnaire, type QuestionnaireState } from './FormStep';
 import { LetterStep } from './LetterStep';
+import { copyText } from './model/formModel';
 import {
-  APPLY_STEPS,
+  stepsFor,
   buildHead,
   paragraphs,
   parseStep,
@@ -32,16 +34,17 @@ const COLD_CIRCLE = 3;
 interface TabsProps {
   readonly step: ApplyStep;
   readonly done: Readonly<Record<ApplyStep, boolean>>;
+  readonly hasForm: boolean;
   readonly onStep: (step: ApplyStep) => void;
 }
 
 /** Шаги отклика (вкладки макета): пройденный шаг отмечен галочкой. */
-function StepTabs({ step, done, onStep }: TabsProps) {
+function StepTabs({ step, done, hasForm, onStep }: TabsProps) {
   const { path } = useShell();
   return (
     <nav className="tabs sec-tabs r6-steps resp-tabs" aria-label="Отклик">
       <div className="sec-tabs-in">
-        {APPLY_STEPS.map((item) => (
+        {stepsFor(hasForm).map((item) => (
           <a
             key={item.id}
             href={`${path}?step=${item.id}`}
@@ -104,13 +107,15 @@ interface BodyProps {
   readonly step: ApplyStep;
   readonly setStep: (step: ApplyStep) => void;
   readonly letter: LetterScreenState;
+  /** Ответы анкеты одним текстом для вставки на площадке; пусто — анкеты нет. */
+  readonly answers: string;
   readonly resumeOk: boolean;
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter }: BodyProps) {
+function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: BodyProps) {
   return (
     <>
       <div className="col">
@@ -120,6 +125,7 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter }: BodyProps) {
           sourceType={sourceType}
           approved={letter.approval.saved}
           letterText={letter.draft.text}
+          answersText={answers}
           onLetter={() => setStep('letter')}
         />
       </div>
@@ -183,7 +189,20 @@ function FlowHead({ head, applicationId }: FlowHeadProps) {
   );
 }
 
-function ApplyFlow({ target, cluster }: FlowProps) {
+interface FlowState {
+  readonly shown: ApplyStep;
+  readonly setStep: (step: ApplyStep) => void;
+  readonly head: ApplyHead;
+  readonly body: BodyProps;
+  readonly quota: TariffQuotaStatus | null;
+  readonly questionnaire: QuestionnaireState;
+  readonly done: Readonly<Record<ApplyStep, boolean>>;
+  /** Два окна: вакансия и редактор. */
+  readonly wide: boolean;
+}
+
+/** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
+function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const { search } = useShell();
   const [step, setStep] = useState<ApplyStep>(() => parseStep(search));
   const [resumeOk, setResumeOk] = useState(false);
@@ -191,43 +210,66 @@ function ApplyFlow({ target, cluster }: FlowProps) {
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
   const letter = useVacancyLetterController(target.vacancyId, COLD_CIRCLE);
   const quota = useExhaustedQuota(letter);
+  const questionnaire = useQuestionnaire(target.vacancyId);
+  const form = questionnaire.form;
+  // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
+  const shown: ApplyStep = step === 'form' && !form ? 'letter' : step;
   const head = buildHead({ application: target.application, known: letter.circles.data, cluster });
   const saved = Boolean(letter.approval.saved);
-
-  const body: BodyProps = {
-    vacancyId: target.vacancyId,
-    head,
-    sourceType: target.application?.vacancy?.source ?? cluster?.sources[0]?.sourceName ?? 'manual',
-    step,
+  return {
+    shown,
     setStep,
-    letter,
-    resumeOk,
-    resumeSeen,
-    onResumeOk: () => {
-      setResumeOk(true);
-      setStep('letter');
+    head,
+    quota,
+    questionnaire,
+    wide: shown !== 'send' && shown !== 'form' && !quota,
+    done: {
+      resume: resumeOk || saved,
+      letter: saved,
+      form: questionnaire.submitted.kind === 'done',
+      send: false,
+    },
+    body: {
+      vacancyId: target.vacancyId,
+      head,
+      sourceType: target.application?.vacancy?.source ?? cluster?.sources[0]?.sourceName ?? 'manual',
+      step: shown,
+      setStep,
+      letter,
+      answers: form ? copyText(form.questions, questionnaire.draft) : '',
+      resumeOk,
+      resumeSeen,
+      onResumeOk: () => {
+        setResumeOk(true);
+        setStep('letter');
+      },
     },
   };
+}
+
+function ApplyFlow(props: FlowProps) {
+  const flow = useApplyFlow(props);
+  const { shown, head, quota, questionnaire, wide, body } = flow;
+  const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
-  const wide = step !== 'send' && !quota;
   useScreenChrome({
     crumb: head.company || head.title,
     rootData: wide ? { mtight: '1', 'main-right': '1' } : { mtight: '1' },
   });
-  const application = target.application;
   return (
     <>
-      <StepTabs step={step} done={{ resume: resumeOk || saved, letter: saved, send: false }} onStep={setStep} />
+      <StepTabs step={shown} done={flow.done} hasForm={Boolean(form)} onStep={flow.setStep} />
       <div
         className={wide ? 'page two split-editor' : 'page two'}
         data-b640-node="o02"
         data-b640-section="apply"
-        data-apply-step={step}
+        data-apply-step={shown}
       >
-        <FlowHead head={head} applicationId={application?.id ?? null} />
+        <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
-        {!quota && step === 'send' ? <SendBody {...body} /> : null}
-        {!quota && step !== 'send' ? <EditorBody {...body} /> : null}
+        {!quota && shown === 'send' ? <SendBody {...body} /> : null}
+        {!quota && shown === 'form' && form ? <FormStep state={questionnaire} form={form} /> : null}
+        {!quota && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>
   );

@@ -7,6 +7,7 @@ import {
   parseStep,
   recipientOptions,
   resolveTarget,
+  stepsFor,
 } from './applyModel';
 
 describe('B657: шаг отклика из адреса', () => {
@@ -15,6 +16,9 @@ describe('B657: шаг отклика из адреса', () => {
     expect(parseStep('?step=send')).toBe('send');
     expect(parseStep('?step=resume')).toBe('resume');
     expect(parseStep('?step=anything')).toBe('letter');
+    expect(parseStep('?step=form')).toBe('form');
+    expect(stepsFor(false).map((step) => step.id)).toEqual(['resume', 'letter', 'send']);
+    expect(stepsFor(true).map((step) => step.id)).toEqual(['resume', 'letter', 'form', 'send']);
   });
 });
 
