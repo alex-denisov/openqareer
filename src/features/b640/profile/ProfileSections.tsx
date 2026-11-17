@@ -35,7 +35,7 @@ export function ProfileSection({ id, title, count, open = false, children }: Sec
   );
 }
 
-function JobFacts({ job }: { readonly job: JobRow }) {
+function JobFacts({ job, extra }: { readonly job: JobRow; readonly extra?: ReactNode }) {
   return (
     <dl className="job-kv">
       <dt>Команда</dt>
@@ -71,11 +71,12 @@ function JobFacts({ job }: { readonly job: JobRow }) {
           <dd>{job.stack}</dd>
         </>
       ) : null}
+      {extra}
     </dl>
   );
 }
 
-function Job({ job }: { readonly job: JobRow }) {
+function Job({ job, extra }: { readonly job: JobRow; readonly extra?: ReactNode }) {
   const titleId = `job-${job.id}`;
   return (
     <article className="job" aria-labelledby={titleId}>
@@ -100,13 +101,19 @@ function Job({ job }: { readonly job: JobRow }) {
           <Icon name="edit" />
         </Link>
       </header>
-      <JobFacts job={job} />
+      <JobFacts job={job} extra={extra} />
     </article>
   );
 }
 
 /** Места работы: первые два на виду, остальные — под «Ещё N мест работы». */
-export function JobList({ jobs }: { readonly jobs: readonly JobRow[] }) {
+export interface JobListProps {
+  readonly jobs: readonly JobRow[];
+  /** Строки в карточке первого, нынешнего места: доход и ожидания. */
+  readonly firstExtra?: ReactNode;
+}
+
+export function JobList({ jobs, firstExtra }: JobListProps) {
   const { shown, rest } = splitVisible(jobs, JOBS_VISIBLE);
   const names = rest
     .map((job) => job.employer)
@@ -114,8 +121,8 @@ export function JobList({ jobs }: { readonly jobs: readonly JobRow[] }) {
     .join(', ');
   return (
     <div className="jobs">
-      {shown.map((job) => (
-        <Job job={job} key={job.id} />
+      {shown.map((job, index) => (
+        <Job job={job} key={job.id} extra={index === 0 ? firstExtra : undefined} />
       ))}
       {rest.length > 0 ? (
         <details className="more-n">

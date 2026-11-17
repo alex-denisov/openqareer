@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileHistoryItem } from '../../resume/profileHistoryApi';
-import { canRevert, historyDays, historyHeading, sourceLabel } from './historyModel';
+import { canReapply, canRevert, historyDays, historyHeading, sourceLabel } from './historyModel';
 
 function entry(overrides: Partial<ProfileHistoryItem>): ProfileHistoryItem {
   return {
@@ -64,6 +64,7 @@ describe('b640 profile: история изменений', () => {
       now: '9 человек',
       reverted: false,
       revertable: true,
+      reappliable: false,
     });
   });
 
@@ -71,5 +72,15 @@ describe('b640 profile: история изменений', () => {
     expect(canRevert(entry({}))).toBe(true);
     expect(canRevert(entry({ revertedAt: '2026-11-12T00:00:00.000Z' }))).toBe(false);
     expect(canRevert(entry({ section: 'status' }))).toBe(false);
+    expect(canRevert(entry({ section: 'photo' }))).toBe(false);
+    expect(canRevert(entry({ section: 'income' }))).toBe(false);
+  });
+
+  it('вернуть можно отменённую правку значения профиля', () => {
+    const reverted = { revertedAt: '2026-11-12T00:00:00.000Z' };
+    expect(canReapply(entry(reverted))).toBe(true);
+    expect(canReapply(entry({}))).toBe(false);
+    expect(canReapply(entry({ ...reverted, kind: 'confirmation' }))).toBe(false);
+    expect(canReapply(entry({ ...reverted, section: 'income' }))).toBe(false);
   });
 });

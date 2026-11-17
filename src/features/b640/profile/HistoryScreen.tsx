@@ -9,6 +9,7 @@ import { Button, Icon, InfoTip, StatusLine } from '../kit';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
+import { reapplyChange } from './profileExtrasApi';
 import { historyDays, historyHeading, type HistoryDay, type HistoryRow } from './historyModel';
 
 const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -27,7 +28,14 @@ interface RowProps {
   readonly onReverted: (id: string) => void;
 }
 
-function RowDiff({ row }: { readonly row: HistoryRow }) {
+interface RowDiffProps {
+  readonly row: HistoryRow;
+  readonly day: string;
+  readonly busy: boolean;
+  readonly onReapply: () => void;
+}
+
+function RowDiff({ row, day, busy, onReapply }: RowDiffProps) {
   return (
     <>
       <p className="hx-diff">
@@ -39,31 +47,57 @@ function RowDiff({ row }: { readonly row: HistoryRow }) {
         <p className="res-row hx-res" role="status">
           <Icon name="check" />
           <span className="res-t">Отменено</span>
+          {row.reappliable ? (
+            <button
+              className="res-act"
+              type="button"
+              disabled={busy}
+              aria-label={`Вернуть: ${row.what}, ${day}`}
+              onClick={onReapply}
+            >
+              Вернуть
+            </button>
+          ) : null}
         </p>
       ) : null}
     </>
   );
 }
 
-function Row({ row, day, onReverted }: RowProps) {
+/** «Отменить» и «Вернуть» у правки: ожидание на кнопке, отказ — строкой в правке. */
+function useRowAction(row: HistoryRow, onChanged: (id: string) => void) {
   const [state, setState] = useState<RevertState>('idle');
 
-  async function revert() {
+  async function run(action: (id: string) => Promise<void>, settled: string, fallback: string) {
     setState('busy');
     try {
-      await revertProfileHistoryEntry(row.id);
+      await action(row.id);
       setState('idle');
-      onReverted(row.id);
+      onChanged(row.id);
     } catch (reason) {
-      // Правку уже отменили (в другой вкладке): показываем её отменённой.
-      if (reason instanceof CoachApiError && reason.code === 'profile_change_already_reverted') {
+      // Уже сделано в другой вкладке: показываем как есть на сервере.
+      if (reason instanceof CoachApiError && reason.code === settled) {
         setState('idle');
-        onReverted(row.id);
+        onChanged(row.id);
         return;
       }
-      setState({ error: apiErrorMessage(reason, 'Не удалось отменить правку.') });
+      setState({ error: apiErrorMessage(reason, fallback) });
     }
   }
+
+  const revert = () =>
+    void run(
+      revertProfileHistoryEntry,
+      'profile_change_already_reverted',
+      'Не удалось отменить правку.',
+    );
+  const reapply = () =>
+    void run(reapplyChange, 'profile_change_not_reverted', 'Не удалось вернуть правку.');
+  return { state, revert, reapply };
+}
+
+function Row({ row, day, onReverted }: RowProps) {
+  const { state, revert, reapply } = useRowAction(row, onReverted);
 
   return (
     <li className="hx-row">
@@ -73,7 +107,7 @@ function Row({ row, day, onReverted }: RowProps) {
           <span className="hx-src">{row.source}</span>
           <Icon name="down" className="hx-chev" />
         </summary>
-        <RowDiff row={row} />
+        <RowDiff row={row} day={day} busy={state === 'busy'} onReapply={reapply} />
         {row.revertable ? (
           <button
             className="row-act is-neutral hx-undo"
@@ -81,7 +115,7 @@ function Row({ row, day, onReverted }: RowProps) {
             disabled={state === 'busy'}
             aria-busy={state === 'busy' || undefined}
             aria-label={`Отменить: ${row.what}, ${day}`}
-            onClick={() => void revert()}
+            onClick={revert}
           >
             Отменить
           </button>

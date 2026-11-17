@@ -3,6 +3,7 @@ import type { SectionProps } from '../sections';
 import { ConnectionsScreen } from './ConnectionsScreen';
 import { ExperienceEditScreen } from './ExperienceEditScreen';
 import { HistoryScreen } from './HistoryScreen';
+import { PhotoScreen } from './PhotoScreen';
 import { ProfileScreen } from './ProfileScreen';
 import { QuestionScreen } from './QuestionScreen';
 import { ReviewScreen } from './ReviewScreen';
@@ -18,6 +19,7 @@ export default function Section({ node, params }: SectionProps) {
     return <ExperienceEditScreen node={node} entryId={params.entryId ?? ''} />;
   }
   if (node.code === 'p04') return <SourcesScreen node={node} />;
+  if (node.code === 'p08') return <PhotoScreen node={node} />;
   if (node.code === 'p09') return <QuestionScreen node={node} />;
   if (node.code === 'p11') return <ConnectionsScreen node={node} />;
   if (node.code === 'p10') return <HistoryScreen node={node} />;
