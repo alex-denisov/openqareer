@@ -12,10 +12,10 @@ import { normalizeWish, wishInstruction } from '../domain/textVariants';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { requireTariffQuota } from './tariffQuotaGuard';
 import {
   pitchSourceId,
   resolvePitchVacancy,
-  vacancyPitchInputSchema,
   writeVacancyPitch,
 } from './vacancyPitchRoutes';
 
@@ -44,8 +44,25 @@ const listQuerySchema = z
     subjectId: z.string().min(1).max(SUBJECT_ID_MAX_LENGTH),
   })
   .strict();
+/**
+ * Параметры письма для варианта. Описание вакансии из запроса не принимается: вариант
+ * пишется только к вакансии, которую сервер знает сам.
+ */
+const letterInputSchema = z
+  .object({
+    tone: z.enum(['executive', 'confident', 'technical']).optional(),
+    language: z.enum(['en', 'ru']).optional(),
+    recipient: z
+      .object({
+        name: z.string().trim().min(1).max(200).optional(),
+        role: z.string().trim().max(200).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 const letterVariantSchema = z
-  .object({ wish: wishSchema.optional(), letter: vacancyPitchInputSchema })
+  .object({ wish: wishSchema.optional(), letter: letterInputSchema.optional() })
   .strict();
 
 function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): string | null {
@@ -104,23 +121,24 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
   // Проверяем предел до вызова модели: четвёртый вариант не собирается вовсе.
   if (deps.variants.count(subject) >= MAX_TEXT_VARIANTS) return limitReached(reply, request);
 
+  const letter = parsed.data.letter ?? {};
   const { multiSourceEngine } = deps;
   const loaded = await multiSourceEngine.loadVacancyDescription(pitchSourceId(vacancyId));
-  const vacancy = resolvePitchVacancy(
-    parsed.data.letter,
-    vacancyId,
-    multiSourceEngine.getActiveCluster(vacancyId),
-    loaded.vacancy ?? multiSourceEngine.getVacancy?.(pitchSourceId(vacancyId)),
-  );
-  if (!vacancy.title) {
+  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
+  const poolVacancy = loaded.vacancy ?? multiSourceEngine.getVacancy?.(pitchSourceId(vacancyId));
+  const vacancy = resolvePitchVacancy(letter, vacancyId, cluster, poolVacancy);
+  if ((!cluster && !poolVacancy) || !vacancy.title) {
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   }
+  // Вариант стоит на той же единице квоты, что и письмо к вакансии: повтор к ней бесплатен,
+  // а без письма единица списывается, как у первого письма. При сбое единица не возвращается.
+  if (!requireTariffQuota(deps, request, reply, candidateId, 'applications', vacancyId)) return reply;
   const wish = normalizeWish(parsed.data.wish);
   const result = await writeVacancyPitch(
     deps,
     request,
     candidateId,
-    parsed.data.letter,
+    letter,
     { ...vacancy, title: vacancy.title },
     wishInstruction(wish),
   );

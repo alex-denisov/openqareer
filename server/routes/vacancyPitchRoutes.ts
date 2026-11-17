@@ -42,7 +42,7 @@ import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
-export const vacancyPitchInputSchema = z
+const vacancyPitchInputSchema = z
   .object({
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
     /** Overrides language auto-detected from the vacancy's own text (B266). */

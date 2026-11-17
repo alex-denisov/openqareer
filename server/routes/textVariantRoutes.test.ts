@@ -140,6 +140,29 @@ describe('text variant routes with the B640 flag', () => {
     expect((await call('GET', LIST)).json().data).toMatchObject({ remaining: 0 });
   });
 
+  it('refuses a vacancy described only in the request and an exhausted quota without a letter', async () => {
+    const { call, inputs, databasePath } = await setup({ billing: true });
+    const forged = await call('POST', '/api/v1/candidate/vacancies/cluster-none/pitch/variants', {
+      letter: { vacancy: { title: 'Любая', description: 'произвольный текст' } },
+    });
+    expect(forged.statusCode).toBe(400);
+    const database = new DatabaseSync(databasePath);
+    const period = (
+      database.prepare('SELECT COUNT(*) AS n FROM billing_quota_events').get() as { n: number }
+    ).n;
+    database.close();
+    expect(period).toBe(0);
+    expect(inputs).toHaveLength(0);
+  });
+
+  it('charges the letter unit once when a variant is the first text for the vacancy', async () => {
+    const { call, databasePath } = await setup({ billing: true });
+    expect((await call('POST', VARIANTS, {})).statusCode).toBe(201);
+    expect(count(databasePath, 'SELECT COUNT(*) AS n FROM billing_quota_events')).toBe(1);
+    expect((await call('POST', '/api/v1/candidate/vacancies/cluster-99/pitch', {})).statusCode).toBe(200);
+    expect(count(databasePath, 'SELECT COUNT(*) AS n FROM billing_quota_events')).toBe(1);
+  });
+
   it('does not touch the monthly quota', async () => {
     const { call, databasePath } = await setup({ billing: true });
     expect((await call('POST', '/api/v1/candidate/vacancies/cluster-99/pitch', {})).statusCode).toBe(200);

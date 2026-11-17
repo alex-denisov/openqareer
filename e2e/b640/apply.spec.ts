@@ -161,6 +161,35 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       }),
     );
   }
+  const variants: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/candidate/text-variants**', (route) =>
+    route.fulfill({ json: { data: { variants, remaining: 3 - variants.length } } }),
+  );
+  await page.route('**/api/v1/candidate/vacancies/*/pitch/variants', async (route) => {
+    const body = route.request().postDataJSON() as { wish: { chips: string[]; text: string } };
+    calls.push(`variant ${body.wish.chips.join(',')} ${body.wish.text}`.trim());
+    if (variants.length >= 3) {
+      await route.fulfill({
+        status: 409,
+        json: { error: { code: 'variant_limit_reached', message: 'Лимит' } },
+      });
+      return;
+    }
+    const text = `Здравствуйте!\n\nДругой вариант письма, короче.\n\nМарина Соколова — ${variants.length + 1}`;
+    const variant = {
+      id: `variant-${variants.length + 1}`,
+      position: variants.length + 1,
+      text,
+      wish: body.wish,
+      createdAt: new Date().toISOString(),
+      payload: { emailPitch: { subject: 'Отклик', body: text } },
+    };
+    variants.push(variant);
+    await route.fulfill({
+      status: 201,
+      json: { data: { variant, variants, remaining: 3 - variants.length } },
+    });
+  });
   const formAnswers: { questionId: string; text: string }[] = [];
   let formSubmittedAt: string | null = null;
   const formView = (vacancyId: string) => {
@@ -337,6 +366,60 @@ test.describe('B657: единый экран отклика', () => {
       '/app/profile',
     );
     await expectGates(page);
+  });
+
+  test('другой вариант: пожелание, листание, предел в три', async ({ page }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter');
+    const letter = page.getByLabel('Текст письма');
+    await expect(letter).toHaveValue(/вырастила группу разработки/u);
+    await expect(page.getByRole('group', { name: 'Варианты письма' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: /Другой вариант · 3/u }).click();
+    const pop = page.getByRole('dialog', { name: 'Что поменять' });
+    await expect(pop).toBeVisible();
+    await expectGates(page, { only: ['modal_fit', 'field_height'] });
+    await pop.getByRole('button', { name: 'Короче' }).click();
+    await pop.getByLabel('Своё пожелание').fill('начать с результата');
+    await pop.getByRole('button', { name: 'Сделать вариант' }).click();
+    await expect(pop).toHaveCount(0);
+    await expect(letter).toHaveValue(/Другой вариант письма, короче/u);
+    expect(mock.calls).toContain('variant shorter начать с результата');
+
+    const pager = page.getByRole('group', { name: 'Варианты письма' });
+    await expect(pager).toContainText('2 из 2');
+    await pager.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(letter).toHaveValue(/вырастила группу разработки/u);
+    await expect(pager).toContainText('1 из 2');
+    await expect(page.getByRole('button', { name: /Другой вариант · 2/u })).toBeVisible();
+
+    for (const left of [2, 1]) {
+      await page.getByRole('button', { name: new RegExp(`Другой вариант · ${left}`, 'u') }).click();
+      await page
+        .getByRole('dialog', { name: 'Что поменять' })
+        .getByRole('button', { name: 'Сделать вариант' })
+        .click();
+      await expect(pager).toContainText(`${5 - left} из ${5 - left}`);
+    }
+    await expect(page.getByRole('button', { name: /Другой вариант/u })).toHaveCount(0);
+    await expectGates(page);
+
+    await page.getByRole('button', { name: 'Одобрить' }).click();
+    await expect(page.getByText('Письмо одобрено').first()).toBeVisible();
+    await expect(pager).toHaveCount(0);
+  });
+
+  test('«Что поменять» закрывается по Esc и «Отмена»', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter');
+    await page.getByRole('button', { name: /Другой вариант/u }).click();
+    await expect(page.getByRole('dialog', { name: 'Что поменять' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Что поменять' })).toHaveCount(0);
+    await page.getByRole('button', { name: /Другой вариант/u }).click();
+    await page
+      .getByRole('dialog', { name: 'Что поменять' })
+      .getByRole('button', { name: 'Отмена' })
+      .click();
+    await expect(page.getByRole('dialog', { name: 'Что поменять' })).toHaveCount(0);
   });
 
   test('анкета работодателя: ответы, подсказка из профиля, копирование и отметка', async ({

@@ -1,6 +1,8 @@
 import { useId } from 'react';
 import type { LetterScreenState } from '../../vacancies/vacancyLetterController';
 import { Button, Icon, ResultLine, StatusLine } from '../kit';
+import type { LetterVariantsState } from './useLetterVariants';
+import { VariantButton, VariantSwitch } from './VariantControls';
 import {
   COLD_RECIPIENT,
   recipientOptions,
@@ -124,6 +126,7 @@ function ToneAndLanguage({ letter }: { readonly letter: LetterScreenState }) {
 
 interface ApprovalProps {
   readonly letter: LetterScreenState;
+  readonly variants: LetterVariantsState;
   readonly onSend: () => void;
 }
 
@@ -153,7 +156,7 @@ function ResumeGate({ letter }: { readonly letter: LetterScreenState }) {
   );
 }
 
-function Approval({ letter, onSend }: ApprovalProps) {
+function Approval({ letter, variants, onSend }: ApprovalProps) {
   const { approval, draft } = letter;
   if (approval.saved) {
     return (
@@ -184,6 +187,7 @@ function Approval({ letter, onSend }: ApprovalProps) {
         >
           Одобрить
         </Button>
+        <VariantButton variants={variants} />
       </div>
     </>
   );
@@ -191,12 +195,13 @@ function Approval({ letter, onSend }: ApprovalProps) {
 
 export interface LetterStepProps {
   readonly letter: LetterScreenState;
+  readonly variants: LetterVariantsState;
   readonly head: ApplyHead;
   readonly onSend: () => void;
 }
 
 /** Шаг «Письмо» (O2): адресат, тон и язык, текст и одобрение. */
-export function LetterStep({ letter, head, onSend }: LetterStepProps) {
+export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) {
   const { draft, circles, approval } = letter;
   const options = recipientOptions(circles.data?.circles ?? [], head.source);
   const pending = circles.loading || (draft.loading && !draft.pitch);
@@ -226,6 +231,7 @@ export function LetterStep({ letter, head, onSend }: LetterStepProps) {
       ) : null}
       {!pending && !failed ? (
         <>
+          {approval.saved ? null : <VariantSwitch variants={variants} />}
           <textarea
             className="letter full ap-letter"
             aria-label="Текст письма"
@@ -238,7 +244,7 @@ export function LetterStep({ letter, head, onSend }: LetterStepProps) {
               Пересобираем письмо…
             </p>
           ) : (
-            <Approval letter={letter} onSend={onSend} />
+            <Approval letter={letter} variants={variants} onSend={onSend} />
           )}
         </>
       ) : null}
