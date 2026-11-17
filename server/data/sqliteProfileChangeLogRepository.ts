@@ -152,6 +152,17 @@ export class SqliteProfileChangeLogRepository {
       .run(revertedAt, candidateId, id);
   }
 
+  /** B673: отменённая правка применена снова — отметка отмены снимается. */
+  markReapplied(candidateId: string, id: string): boolean {
+    const result = this.database
+      .prepare(
+        `UPDATE profile_change_log SET reverted_at = NULL
+         WHERE candidate_id = ? AND id = ? AND reverted_at IS NOT NULL`,
+      )
+      .run(candidateId, id);
+    return Number(result.changes) > 0;
+  }
+
   /** Current trust of live facts; deleted or unknown ids are skipped. */
   readFactStates(candidateId: string, memoryIds: readonly string[]): FactTrustState[] {
     const read = this.database.prepare(

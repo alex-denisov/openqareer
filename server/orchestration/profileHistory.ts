@@ -238,6 +238,44 @@ export async function revertProfileChange(
   });
 }
 
+export class ProfileChangeNotRevertedError extends Error {
+  constructor() {
+    super('Эта правка сейчас действует: возвращать нечего.');
+  }
+}
+
+/** Разделы журнала, которые живут не в профиле: их правят на своих экранах. */
+const OUTSIDE_DRAFT_SECTIONS: ReadonlySet<string> = new Set(['status', 'photo', 'income']);
+
+/**
+ * B673: «Вернуть» у отменённой правки — применить её снова. Только правка
+ * значения профиля, сделанная без команды консультанта; если с момента отмены
+ * место изменилось, новое значение не затираем.
+ */
+export function reapplyProfileChange(
+  store: CandidateStore,
+  candidateId: string,
+  changeId: string,
+): void {
+  const entry = store.profileChangeLog.get(candidateId, changeId);
+  if (!entry) throw new ProfileChangeNotFoundError();
+  if (!entry.revertedAt) throw new ProfileChangeNotRevertedError();
+  const plainValue =
+    entry.kind === 'value' && !entry.commandId && !OUTSIDE_DRAFT_SECTIONS.has(entry.section);
+  if (!plainValue) throw new ProfileChangeConflictError();
+  store.transaction(() => {
+    const snapshot = store.getSnapshot(candidateId);
+    const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
+    if (currentProfileValue(draft, entry.section, entry.itemId) !== entry.previous) {
+      throw new ProfileChangeConflictError();
+    }
+    const applied = withProfileValue(draft, entry.section, entry.itemId, entry.applied);
+    const projection = buildResumeStudioProjection({ ...applied, evidence: snapshot.memory });
+    store.saveResumeDraft(candidateId, applied, projection.evidenceSnapshot);
+    store.profileChangeLog.markReapplied(candidateId, entry.id);
+  });
+}
+
 function revertConfirmation(
   store: CandidateStore,
   candidateId: string,
