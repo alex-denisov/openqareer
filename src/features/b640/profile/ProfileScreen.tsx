@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { CandidateStatusState } from '../../../../shared/candidateStatus';
+import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
 import { getResumeStudio } from '../../resume/resumeApi';
 import type { ResumeDraft, ResumeStudioView } from '../../resume/resumeTypes';
 import { Button, Icon, Link } from '../kit';
@@ -17,6 +18,8 @@ import {
 } from './profileModel';
 import { JobList, LanguageList, ProfileSection, RecordList, SkillChips } from './ProfileSections';
 import { PROFILE_CHANGED } from './ExperienceEditScreen';
+import { IncomeRows } from './IncomeRows';
+import { getIncome, type ProfileIncome } from './profileExtrasApi';
 import { getStatus } from './statusChoice';
 
 function loadProfile(): Promise<ResumeStudioView> {
@@ -26,15 +29,23 @@ function loadProfile(): Promise<ResumeStudioView> {
 function Head({ draft }: { readonly draft: ResumeDraft }) {
   const name = draft.candidate.fullName?.trim();
   const role = headLine(draft);
-  if (!name && !role) return null;
+  const photo = useCandidateMediaSrc(draft.candidate.photoMediaId);
   return (
     <section className="phead col-wide" aria-labelledby="ph-name">
+      {photo ? (
+        <div className="phead-pic">
+          <img className="phead-photo" src={photo} alt="Фото профиля" width={72} height={72} />
+        </div>
+      ) : null}
       <div className="phead-main">
         <h2 className="phead-name" id="ph-name">
           {name || 'Имя не указано'}
         </h2>
         {role ? <p className="phead-role">{role}</p> : null}
       </div>
+      <Link className="icon-btn" to={buildNodePath('p08')} aria-label="Изменить фото">
+        <Icon name="edit" />
+      </Link>
     </section>
   );
 }
@@ -61,13 +72,14 @@ function StatusRow({ status }: { readonly status: Load<CandidateStatusState> }) 
   );
 }
 
-function Experience({
-  view,
-  draft,
-}: {
+interface ExperienceProps {
   readonly view: ResumeStudioView;
   readonly draft: ResumeDraft;
-}) {
+  /** Доход и ожидания; `null` — не прочитаны, строк нет. */
+  readonly income: ProfileIncome | null;
+}
+
+function Experience({ view, draft, income }: ExperienceProps) {
   const statements = statementsOf(view);
   const jobs = draft.experience.map((entry) => jobRow(entry, statements));
   return (
@@ -91,7 +103,11 @@ function Experience({
           Уточнить
         </Link>
       </div>
-      {jobs.length > 0 ? <JobList jobs={jobs} /> : <p className="mod-text">Мест работы пока нет</p>}
+      {jobs.length > 0 ? (
+        <JobList jobs={jobs} firstExtra={income ? <IncomeRows initial={income} /> : undefined} />
+      ) : (
+        <p className="mod-text">Мест работы пока нет</p>
+      )}
     </ProfileSection>
   );
 }
@@ -162,11 +178,11 @@ function EmptyProfile() {
   );
 }
 
-function Filled({ view, draft }: { readonly view: ResumeStudioView; readonly draft: ResumeDraft }) {
+function Filled({ view, draft, income }: ExperienceProps) {
   return (
     <>
       <div className="col">
-        <Experience view={view} draft={draft} />
+        <Experience view={view} draft={draft} income={income} />
         <Lists draft={draft} />
       </div>
       <div className="col">
@@ -187,6 +203,7 @@ function Filled({ view, draft }: { readonly view: ResumeStudioView; readonly dra
 export function ProfileScreen({ node }: { readonly node: B640Node }) {
   const profile = useLoad(loadProfile);
   const status = useLoad(getStatus);
+  const income = useLoad(getIncome);
   const reload = profile.retry;
   // Правку отменили из тоста, пока профиль открыт: показываем, что на сервере.
   useEffect(() => {
@@ -216,7 +233,15 @@ export function ProfileScreen({ node }: { readonly node: B640Node }) {
         <>
           {draft ? <Head draft={draft} /> : null}
           <StatusRow status={status} />
-          {draft ? <Filled view={profile.data} draft={draft} /> : <EmptyProfile />}
+          {draft ? (
+            <Filled
+              view={profile.data}
+              draft={draft}
+              income={income.state === 'ready' ? income.data : null}
+            />
+          ) : (
+            <EmptyProfile />
+          )}
         </>
       ) : null}
     </div>

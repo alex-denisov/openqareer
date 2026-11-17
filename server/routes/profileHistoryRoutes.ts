@@ -1,3 +1,4 @@
+import { registerProfileB640Routes } from './profileB640Routes';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { ResumeRevisionConflictError } from '../orchestration/careerCommandDispatcher';
@@ -107,6 +108,8 @@ export async function registerProfileHistoryRoutes(
   deps: RouteDeps,
 ): Promise<void> {
   app.get('/api/v1/candidate/profile/history', withDeps(deps, handleList));
+  // B666, B673: фото, доход и повтор отменённой правки; свои маршруты закрыты флагом B640.
+  registerProfileB640Routes(app, deps);
   app.post('/api/v1/candidate/profile/history/:changeId/revert', withDeps(deps, handleRevert));
   app.post(
     '/api/v1/candidate/profile/experience/:experienceId/confirm',

@@ -18,12 +18,22 @@ export function sourceLabel(actor: ProfileHistoryItem['actor']): string {
   return SOURCE[actor] ?? 'вы';
 }
 
+/** Разделы журнала вне профиля: статус, фото и доход правят на своих экранах. */
+const OWN_SCREEN_SECTIONS: ReadonlySet<string> = new Set(['status', 'photo', 'income']);
+
 /**
- * «Отменить» есть у неотменённой правки. Смену статуса отсюда не отменяем:
- * её возвращает «Вернуть прежний» на «Сегодня» в день смены.
+ * «Отменить» есть у неотменённой правки профиля. Смену статуса возвращает
+ * «Вернуть прежний» на «Сегодня», фото и доход меняют там же, где задают.
  */
 export function canRevert(entry: ProfileHistoryItem): boolean {
-  return entry.revertedAt === null && entry.section !== 'status';
+  return entry.revertedAt === null && !OWN_SCREEN_SECTIONS.has(entry.section);
+}
+
+/** «Вернуть» есть у отменённой правки значения профиля: её можно применить снова. */
+export function canReapply(entry: ProfileHistoryItem): boolean {
+  return (
+    entry.revertedAt !== null && entry.kind === 'value' && !OWN_SCREEN_SECTIONS.has(entry.section)
+  );
 }
 
 export interface HistoryRow {
@@ -34,6 +44,7 @@ export interface HistoryRow {
   readonly now: string;
   readonly reverted: boolean;
   readonly revertable: boolean;
+  readonly reappliable: boolean;
 }
 
 export interface HistoryDay {
@@ -52,6 +63,7 @@ function rowOf(entry: ProfileHistoryItem): HistoryRow {
     now: entry.appliedText.trim() || '—',
     reverted: entry.revertedAt !== null,
     revertable: canRevert(entry),
+    reappliable: canReapply(entry),
   };
 }
 

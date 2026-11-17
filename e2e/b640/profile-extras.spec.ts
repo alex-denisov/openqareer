@@ -1,0 +1,284 @@
+import { mkdirSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
+import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
+import { candidateSnapshot } from '../fixtures/readabilityWorkspace';
+import { expectGates } from './gates';
+
+const SHOTS = process.env.B640_SHOTS;
+const API = '**/api/v1/candidate';
+
+/** Точка 1×1 в PNG: её отдаёт мок хранилища фото. */
+const PIXEL = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
+
+function change(index: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id: `ch-${index}`,
+    actor: 'candidate',
+    section: 'headline',
+    kind: 'value',
+    itemId: null,
+    label: `Заголовок профиля ${index}`,
+    previousText: 'Руководитель продукта',
+    appliedText: 'Директор по продукту',
+    createdAt: '2026-11-12T09:00:00.000Z',
+    revertedAt: null,
+    ...overrides,
+  };
+}
+
+interface Mocks {
+  readonly photo?: boolean;
+  readonly income?: { current: number | null; expected: number | null };
+  /** Ответ сервера на загрузку фото вместо успеха. */
+  readonly uploadError?: { status: number; code: string; message: string };
+}
+
+interface Calls {
+  readonly uploads: Array<Record<string, unknown>>;
+  photoRemoved: number;
+  readonly incomePuts: unknown[];
+  readonly reapplied: string[];
+}
+
+async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise<Calls> {
+  const calls: Calls = { uploads: [], photoRemoved: 0, incomePuts: [], reapplied: [] };
+  let photoMediaId: string | null = mocks.photo ? 'photo-1' : null;
+  let income = mocks.income ?? { current: null, expected: null };
+  const reverted = new Set(['ch-0']);
+  await mockSignedInCabinet(page, { cabinetB640: true });
+  await page.route(`${API}/resume`, (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const base = candidateSnapshot.resume.draft;
+    const candidate = photoMediaId ? { ...base.candidate, photoMediaId } : base.candidate;
+    return route.fulfill({
+      json: {
+        data: {
+          draft: { ...base, candidate },
+          savedAt: null,
+          projection: { evidenceSnapshot: [], excludedEvidenceIds: [] },
+          evidenceFreshness: { valid: true, stale: [] },
+        },
+      },
+    });
+  });
+  await page.route(`${API}/media/*`, (route) =>
+    route.fulfill({ status: 200, contentType: 'image/png', body: PIXEL }),
+  );
+  await page.route(`${API}/profile/photo`, (route) => {
+    if (route.request().method() === 'DELETE') {
+      calls.photoRemoved += 1;
+      photoMediaId = null;
+      return route.fulfill({ json: { data: { photoMediaId: null } } });
+    }
+    calls.uploads.push(route.request().postDataJSON());
+    if (mocks.uploadError) {
+      const { status, code, message } = mocks.uploadError;
+      return route.fulfill({ status, json: { error: { code, message } } });
+    }
+    photoMediaId = `photo-${calls.uploads.length + 1}`;
+    return route.fulfill({ json: { data: { photoMediaId } } });
+  });
+  await page.route(`${API}/profile/income`, (route) => {
+    if (route.request().method() === 'PUT') {
+      income = route.request().postDataJSON();
+      calls.incomePuts.push(income);
+    }
+    return route.fulfill({ json: { data: income } });
+  });
+  await page.route(`${API}/profile/history**`, (route) => {
+    const url = new URL(route.request().url());
+    const reapply = url.pathname.match(/history\/([^/]+)\/reapply$/u);
+    if (reapply) {
+      calls.reapplied.push(reapply[1]);
+      reverted.delete(reapply[1]);
+      return route.fulfill({ json: { data: { reapplied: true } } });
+    }
+    const entries = [
+      change(0),
+      change(1),
+      change(2, {
+        section: 'income',
+        label: 'Доход сейчас',
+        previousText: '',
+        appliedText: '440 000 ₽',
+      }),
+    ].map((entry) =>
+      reverted.has(entry.id) ? { ...entry, revertedAt: '2026-11-13T09:00:00.000Z' } : entry,
+    );
+    return route.fulfill({
+      json: { data: { entries, total: entries.length, page: 0, pageSize: 20 } },
+    });
+  });
+  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
+  return calls;
+}
+
+const node = (page: Page, code: string) => page.locator(`[data-b640-node="${code}"]`);
+/** Настоящая картинка: экран открывает её и пересобирает перед отправкой. */
+const photoFile = { name: 'me.png', mimeType: 'image/png', buffer: PIXEL };
+
+test.describe('B666: «Фото» (p08)', () => {
+  test('загрузка своего фото: результат на месте, фото в шапке профиля; гейты', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/profile/photo');
+    const screen = node(page, 'p08');
+    await expect(screen.getByText('Фото пока нет')).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Убрать фото' })).toHaveCount(0);
+    await expectGates(page);
+
+    await screen.locator('input[type="file"]').setInputFiles(photoFile);
+    await expect(screen.locator('.res-row')).toHaveText('Фото обновлено');
+    await expect(screen.locator('img.ph-big')).toBeVisible();
+    expect(calls.uploads).toHaveLength(1);
+    // Уходит пересобранный JPEG, а не исходный файл: без имени, типа и метаданных.
+    const sent = Buffer.from(String(calls.uploads[0].contentBase64), 'base64');
+    expect(Object.keys(calls.uploads[0])).toEqual(['contentBase64']);
+    expect(sent.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+
+    await page.goto('/app/profile', { waitUntil: 'domcontentloaded' });
+    await expect(node(page, 's01').locator('img.phead-photo')).toBeVisible();
+  });
+
+  test('сервер отклонил файл: причина на месте, фото не меняется', async ({ page }) => {
+    await openCabinet(page, '/app/profile/photo', {
+      uploadError: { status: 400, code: 'photo_format', message: 'Подойдёт фото в JPEG или PNG.' },
+    });
+    const screen = node(page, 'p08');
+    await screen.locator('input[type="file"]').setInputFiles(photoFile);
+    await expect(screen.getByRole('alert')).toContainText('Подойдёт фото в JPEG или PNG.');
+    await expect(screen.getByText('Фото пока нет')).toBeVisible();
+    await expect(screen.getByRole('button', { name: 'Загрузить' })).toBeEnabled();
+  });
+
+  test('файл не открывается как картинка: причина на месте, на сервер ничего не ушло', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/profile/photo');
+    const screen = node(page, 'p08');
+    await screen.locator('input[type="file"]').setInputFiles({
+      name: 'photo.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+      ),
+    });
+    await expect(screen.getByRole('alert')).toContainText('Файл не открылся как фото.');
+    expect(calls.uploads).toHaveLength(0);
+  });
+
+  test('слишком тяжёлый файл не уходит на сервер', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/photo');
+    const screen = node(page, 'p08');
+    await screen.locator('input[type="file"]').setInputFiles({
+      ...photoFile,
+      buffer: Buffer.alloc(5 * 1024 * 1024 + 1, 1),
+    });
+    await expect(screen.getByRole('alert')).toContainText('Фото больше 5 МБ.');
+    expect(calls.uploads).toHaveLength(0);
+  });
+
+  test('фото можно убрать', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/photo', { photo: true });
+    const screen = node(page, 'p08');
+    await expect(screen.locator('img.ph-big')).toBeVisible();
+    await screen.getByRole('button', { name: 'Убрать фото' }).click();
+    await expect(screen.locator('.res-row')).toHaveText('Фото убрано');
+    await expect(screen.getByText('Фото пока нет')).toBeVisible();
+    expect(calls.photoRemoved).toBe(1);
+  });
+});
+
+test.describe('B673: доход и ожидания на «Профиле» (s01)', () => {
+  test('строки видны только кандидату, правка в окне, ошибка у поля; гейты', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile');
+    const job = node(page, 's01').locator('#sec-exp .job').first();
+    await expect(job.getByText('видно только вам')).toBeVisible();
+    await expect(job.getByText('Доход сейчас')).toBeVisible();
+    await expect(
+      node(page, 's01').locator('#sec-exp .job').nth(1).getByText('Доход сейчас'),
+    ).toHaveCount(0);
+
+    await job.getByRole('button', { name: 'Изменить' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Доход и ожидания' });
+    await expectGates(page);
+    await dialog.getByLabel('Доход сейчас, ₽ в месяц на руки').fill('много');
+    await dialog.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(dialog.getByText('Только число')).toBeVisible();
+    expect(calls.incomePuts).toHaveLength(0);
+
+    await dialog.getByLabel('Доход сейчас, ₽ в месяц на руки').fill('440 000');
+    await dialog.getByLabel('Ожидания, ₽ в месяц на руки').fill('500000');
+    await dialog.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(job.getByText('440 000 ₽ на руки', { exact: true })).toBeVisible();
+    await expect(job.getByText('от 500 000 ₽ на руки')).toBeVisible();
+    expect(calls.incomePuts).toEqual([{ current: 440000, expected: 500000 }]);
+  });
+
+  test('сохранённый доход показан при открытии', async ({ page }) => {
+    await openCabinet(page, '/app/profile', { income: { current: 440000, expected: null } });
+    const job = node(page, 's01').locator('#sec-exp .job').first();
+    await expect(job.getByText('440 000 ₽ на руки')).toBeVisible();
+    // Не указаны команда и ожидания.
+    await expect(job.getByText('Не указано')).toHaveCount(2);
+  });
+});
+
+test.describe('B673: «Вернуть» в «Истории изменений» (p10)', () => {
+  test('отменённую правку можно применить снова; у дохода нет «Отменить»', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/history');
+    const rows = node(page, 'p10').locator('.hx-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0).locator('.hx-res')).toContainText('Отменено');
+    await expect(rows.nth(2).getByRole('button', { name: /Отменить/u })).toHaveCount(0);
+    await expectGates(page);
+
+    await rows
+      .nth(0)
+      .getByRole('button', { name: /Вернуть: Заголовок профиля 0/u })
+      .click();
+    await expect(rows.nth(0).locator('.hx-res')).toHaveCount(0);
+    await expect(rows.nth(0).getByRole('button', { name: /Отменить/u })).toBeVisible();
+    expect(calls.reapplied).toEqual(['ch-0']);
+  });
+});
+
+test.describe('B666, B673: снимки для сверки с макетами', () => {
+  const SCREENS: readonly (readonly [string, string, Mocks])[] = [
+    ['profile-photo', '/app/profile/photo', { photo: true }],
+    [
+      'profile-income',
+      '/app/profile',
+      { photo: true, income: { current: 440000, expected: 500000 } },
+    ],
+    ['profile-history-reverted', '/app/profile/history', {}],
+  ];
+
+  for (const [name, path, mocks] of SCREENS) {
+    test(`снимки: ${name}`, async ({ page }, testInfo) => {
+      test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
+      mkdirSync('.s13-shots', { recursive: true });
+      const desktop = testInfo.project.name === 'desktop-1440';
+      const widths = desktop ? [1440, 1176] : [390];
+      await openCabinet(page, path, mocks);
+      for (const theme of ['light', 'dark'] as const) {
+        await page.evaluate((value) => window.localStorage.setItem('oq_b640_theme', value), theme);
+        await page.goto(path, { waitUntil: 'domcontentloaded' });
+        await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', theme);
+        await expect(page.locator('.b640 .ls-skel, .b640 .ls-state')).toHaveCount(0);
+        for (const width of widths) {
+          await page.setViewportSize({ width, height: desktop ? 900 : 844 });
+          await page.screenshot({
+            path: `.s13-shots/${name}-${width}-${theme}.png`,
+            fullPage: true,
+          });
+        }
+      }
+    });
+  }
+});
