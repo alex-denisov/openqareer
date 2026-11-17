@@ -154,6 +154,8 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly careerDiaryRepo: SqliteCareerDiaryRepository;
+  /** B683: записи дневника и итоги недель (маршруты за флагом B640). */
+  readonly diaryEntryRepo: import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   readonly relocationQuestionnaireRepo: SqliteRelocationQuestionnaireRepository;
   declare getLinkedInLanguageImport: CandidateStore['getLinkedInLanguageImport'];
@@ -210,6 +212,7 @@ export class SqliteCandidateStore implements CandidateStore {
       referralTrackRepo: this.referralTrackRepo,
       careerVectorRepo: this.careerVectorRepo,
       careerDiaryRepo: this.careerDiaryRepo,
+      diaryEntryRepo: this.diaryEntryRepo,
       decisionProfileRepo: this.decisionProfileRepo,
       relocationQuestionnaireRepo: this.relocationQuestionnaireRepo,
       roleSkillAssessments: this.roleSkillAssessments,
@@ -265,7 +268,7 @@ export class SqliteCandidateStore implements CandidateStore {
         roleSkillAssessments: this.roleSkillAssessments,
         starStoriesRepo: this.starStoriesRepo,
         interviewSimulatorRepo: this.interviewSimulatorRepo,
-        careerDiaryRepo: this.careerDiaryRepo,
+        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo,
       }),
     );
   }
