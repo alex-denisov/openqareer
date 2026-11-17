@@ -6,6 +6,8 @@ readonly SERVICE=openqareer-static.service
 readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
 readonly HEALTH_URL=http://127.0.0.1:3210/health
+# Сервер под нагрузкой стартует 34-43 с и дольше (B701); окно считается по часам.
+readonly HEALTH_WINDOW_SECONDS=180
 
 fail() {
   printf 'openqareer-activate: %s\n' "$1" >&2
@@ -124,7 +126,8 @@ if ! sudo -n /usr/bin/systemctl restart "$SERVICE"; then
 fi
 
 healthy=0
-for _attempt in $(seq 1 60); do
+health_deadline=$((SECONDS + HEALTH_WINDOW_SECONDS))
+while ((SECONDS < health_deadline)); do
   if [[ "$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null | tr -d '\r\n')" == "$release_sha" ]]; then
     healthy=1
     break
@@ -137,7 +140,7 @@ if [[ "$healthy" != "1" ]]; then
     atomic_link "$old_target" current
     sudo -n /usr/bin/systemctl restart "$SERVICE"
   fi
-  fail "release health check failed; previous release restored"
+  fail "release health check failed after ${HEALTH_WINDOW_SECONDS} s; previous release restored"
 fi
 
 # Обслуживатель пула (B230) перезапускается после того, как HTTP подтвердил
