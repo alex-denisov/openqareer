@@ -139,3 +139,39 @@ export function paragraphs(text: string): readonly string[] {
     .map((line) => line.trim())
     .filter(Boolean);
 }
+
+export interface ResumeLine {
+  readonly kind: 'heading' | 'line';
+  readonly text: string;
+}
+
+/** Служебная разметка раздела из исходного файла: `=== SUMMARY ===`, `--- Опыт ---`, `## Навыки`. */
+const MARKED = /^(?:[=\-_*~]{2,}|#{1,6})\s*(.*?)\s*(?:[=\-_*~#]{2,})?$/u;
+const SECTION_NAMES: Readonly<Record<string, string>> = {
+  summary: 'О себе',
+  about: 'О себе',
+  profile: 'О себе',
+  experience: 'Опыт работы',
+  'work experience': 'Опыт работы',
+  education: 'Образование',
+  skills: 'Навыки',
+  languages: 'Языки',
+  certifications: 'Сертификаты',
+  projects: 'Проекты',
+  contacts: 'Контакты',
+};
+
+/**
+ * Резюме строками для показа. Служебная разметка разделов на экран не выходит: строка
+ * `=== SUMMARY ===` становится заголовком «О себе», линия из одних знаков пропадает.
+ */
+export function resumeLines(text: string): readonly ResumeLine[] {
+  return paragraphs(text).flatMap((line): ResumeLine[] => {
+    const marked = MARKED.exec(line);
+    if (!marked) return [{ kind: 'line', text: line }];
+    const title = (marked[1] ?? '').replace(/[=\-_*~#]+$/u, '').trim();
+    if (!title) return [];
+    const known = SECTION_NAMES[title.toLowerCase()];
+    return [{ kind: 'heading', text: Object.hasOwn(SECTION_NAMES, title.toLowerCase()) ? known! : title }];
+  });
+}

@@ -7,6 +7,7 @@ import {
   parseStep,
   recipientOptions,
   resolveTarget,
+  resumeLines,
   stepsFor,
 } from './applyModel';
 
@@ -133,5 +134,28 @@ describe('B657: текст абзацами', () => {
       'Пять лет…',
       'Марина',
     ]);
+  });
+});
+
+describe('резюме без служебной разметки', () => {
+  it('маркеры разделов из исходного файла становятся заголовками', () => {
+    expect(
+      resumeLines('=== SUMMARY ===\nРуковожу разработкой.\n\n--- Опыт работы ---\nФинтех Лаб\n## Skills\nGo, Kotlin'),
+    ).toEqual([
+      { kind: 'heading', text: 'О себе' },
+      { kind: 'line', text: 'Руковожу разработкой.' },
+      { kind: 'heading', text: 'Опыт работы' },
+      { kind: 'line', text: 'Финтех Лаб' },
+      { kind: 'heading', text: 'Навыки' },
+      { kind: 'line', text: 'Go, Kotlin' },
+    ]);
+  });
+
+  it('линия из одних знаков пропадает, обычный текст не трогается', () => {
+    expect(resumeLines('=====\n----\nKubernetes — 3 года\nC# и .NET')).toEqual([
+      { kind: 'line', text: 'Kubernetes — 3 года' },
+      { kind: 'line', text: 'C# и .NET' },
+    ]);
+    expect(resumeLines('=== constructor ===')).toEqual([{ kind: 'heading', text: 'constructor' }]);
   });
 });

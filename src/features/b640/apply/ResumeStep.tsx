@@ -7,7 +7,7 @@ import {
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
-import { paragraphs } from './model/applyModel';
+import { resumeLines } from './model/applyModel';
 
 const TITLES: Readonly<Record<LetterResumePreview['kind'], string>> = {
   targeted: 'Резюме под эту вакансию',
@@ -24,15 +24,21 @@ const SOURCES: Readonly<Record<LetterResumePreview['kind'], string>> = {
 const SKELETON = ['w1', 'w2', 'w3', 'w4', 'w5', 'w2', 'w3', 'w4'] as const;
 
 function Sheet({ preview }: { readonly preview: LetterResumePreview }) {
-  const lines = paragraphs(preview.text);
+  const lines = resumeLines(preview.text);
   if (lines.length === 0) return null;
   return (
     <div className="cv-stage">
       <article className="cv-sheet cv-doc cv-strict" aria-label="Резюме">
         <section className="cv-page" aria-label={preview.title}>
-          {lines.map((line, index) => (
-            <p key={`${index}-${line.slice(0, 24)}`}>{line}</p>
-          ))}
+          {lines.map((line, index) =>
+            line.kind === 'heading' ? (
+              <h4 className="cv-h" key={`${index}-${line.text.slice(0, 24)}`}>
+                {line.text}
+              </h4>
+            ) : (
+              <p key={`${index}-${line.text.slice(0, 24)}`}>{line.text}</p>
+            ),
+          )}
         </section>
       </article>
     </div>
