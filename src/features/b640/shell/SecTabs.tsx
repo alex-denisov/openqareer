@@ -3,6 +3,8 @@ import { Link } from './Link';
 
 export interface SecTab {
   readonly label: string;
+  /** Подпись на 390: начало полной; остаток виден только на 1440 и 1176. */
+  readonly shortLabel?: string;
   readonly path: string;
   readonly current: boolean;
 }
@@ -12,6 +14,17 @@ export interface SecTabsProps {
   readonly label: string;
   readonly tabs: readonly SecTab[];
   readonly className?: string;
+}
+
+function TabLabel({ tab }: { readonly tab: SecTab }) {
+  const short = tab.shortLabel;
+  if (!short || !tab.label.startsWith(short) || short === tab.label) return <>{tab.label}</>;
+  return (
+    <span>
+      {short}
+      <span className="only-desk">{tab.label.slice(short.length)}</span>
+    </span>
+  );
 }
 
 /** Место под затухание у края строки: текущая вкладка под него не уходит. */
@@ -52,7 +65,7 @@ export function SecTabs({ label, tabs, className }: SecTabsProps) {
       <div className="sec-tabs-in" ref={rowRef}>
         {tabs.map((tab) => (
           <Link key={tab.path} to={tab.path} aria-current={tab.current ? 'page' : undefined}>
-            {tab.label}
+            <TabLabel tab={tab} />
           </Link>
         ))}
       </div>

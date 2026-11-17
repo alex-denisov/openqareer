@@ -10,7 +10,9 @@
 //   - каждое правило получает область `.b640`: `:root` → `.b640`, `body` → `div.b640`,
 //     `html` → `div.b640` (или `:not(a)` рядом с `body`), остальное — `.b640 <селектор>`;
 //     так сохраняется взаимная специфичность правил макета;
-//   - всё лежит в слое каскада `b640`, порядок частей задан слоями `b640.base.pNN`;
+//   - всё лежит в слое каскада `b640`; все части базы — один слой `b640.base`, поэтому между
+//     правилами разных частей, как в макете, решает специфичность, а при равной — порядок:
+//     части подключаются по номерам (styles/base.ts) и попадают в одну таблицу стилей;
 //   - `@keyframes` получают приставку `b640-`;
 //   - `--font-main` не переносится: шрифт приложения задаёт src/App.css;
 //   - комментарии макета не переносятся.
@@ -224,23 +226,18 @@ for (const node of base.nodes) {
 }
 if (current.length > 0) parts.push(current);
 
-const partName = (index) => `p${String(index + 1).padStart(2, '0')}`;
 parts.forEach((nodes, index) => {
   const file = `base-${String(index + 1).padStart(2, '0')}.css`;
   writeFileSync(
     join(stylesDir, file),
-    `${HEADER}@layer b640.base.${partName(index)} {\n${indent(render(nodes))}\n}\n`,
+    `${HEADER}@layer b640.base {\n${indent(render(nodes))}\n}\n`,
   );
 });
 
-writeFileSync(
-  join(stylesDir, 'base-layers.css'),
-  `${HEADER}@layer ${parts.map((_, index) => `b640.base.${partName(index)}`).join(', ')};\n`,
-);
+rmSync(join(stylesDir, 'base-layers.css'), { force: true });
 writeFileSync(
   join(stylesDir, 'base.ts'),
   `// Сгенерировано scripts/b640/port-mockup-css.mjs. Руками не править.\n` +
-    `import './base-layers.css';\n` +
     parts.map((_, index) => `import './base-${String(index + 1).padStart(2, '0')}.css';`).join('\n') +
     '\n',
 );

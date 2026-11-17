@@ -1,13 +1,20 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { CandidateMemory, CoachTurnStage } from '../../coach/coachApi';
 import { useTariffQuotas } from '../../tariffs/useTariffQuotas';
+import { Composer } from '../kit/Composer';
 import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
-import { ConsultantComposer } from './ConsultantComposer';
 import { FactCard } from './FactCard';
-import { factsByMessage, limitOf, pendingLabel, proposedFacts } from './model';
+import {
+  factsByMessage,
+  limitOf,
+  pendingLabel,
+  proposedFacts,
+  type ConsultantLimit,
+} from './model';
 import { ErrorRow, Message, Reply } from './parts';
 import { useDialog, type DialogState, type FactDecision } from './useDialog';
+import { useDictation } from './useDictation';
 
 export interface DialogViewProps {
   readonly stage: CoachTurnStage;
@@ -61,6 +68,56 @@ function Feed({ dialog, placed, onDecide }: FeedProps) {
   );
 }
 
+/** Строка закрытого ввода (K3): причина, дата новых сообщений и путь к тарифам. */
+function LimitLine({ limit, tariffsPath }: { limit: ConsultantLimit; tariffsPath: string }) {
+  return (
+    <>
+      <span className="cmp-line-t">
+        Лимит сообщений исчерпан
+        {limit.resetLabel ? (
+          <>
+            {' · '}
+            <span className="cmp-line-d">
+              обновится <span className="num">{limit.resetLabel}</span>
+            </span>
+          </>
+        ) : null}
+      </span>
+      {limit.upgradePlan ? (
+        <Link className="cmp-line-a" to={tariffsPath}>
+          Перейти на {limit.upgradePlan}
+        </Link>
+      ) : null}
+    </>
+  );
+}
+
+interface AskProps {
+  readonly onSubmit: (text: string) => void;
+  /** Ответ ещё пишется или не пришёл: новая отправка ждёт, набранное остаётся в поле. */
+  readonly busy: boolean;
+  readonly limit: ConsultantLimit | null;
+  readonly tariffsPath: string;
+}
+
+/** Ввод вопроса: текст или диктовка (K1b), предел сообщений (K3). */
+function Ask({ onSubmit, busy, limit, tariffsPath }: AskProps) {
+  const [text, setText] = useState('');
+  const dictation = useDictation(setText);
+  return (
+    <Composer
+      label="Ваш вопрос консультанту"
+      placeholder="Спросите своими словами"
+      onSubmit={onSubmit}
+      busy={busy}
+      text={text}
+      onText={setText}
+      dictation={dictation}
+      closed={limit ? <LimitLine limit={limit} tariffsPath={tariffsPath} /> : null}
+    />
+  );
+}
+
 /** Разговор по теме раздела (макеты K1, K1b, K3, K7 и состояния K2, K3b, K4). */
 export function DialogView({ stage, reviewPath, tariffsPath }: DialogViewProps) {
   const dialog = useDialog(stage);
@@ -84,7 +141,7 @@ export function DialogView({ stage, reviewPath, tariffsPath }: DialogViewProps) 
     <>
       {pending.length > 0 ? <PendingBanner count={pending.length} to={reviewPath} /> : null}
       <Feed dialog={dialog} placed={placed} onDecide={decide} />
-      <ConsultantComposer
+      <Ask
         onSubmit={dialog.send}
         busy={dialog.reply !== null || dialog.sendFailed}
         limit={limitOf(quotas, dialog.refused)}

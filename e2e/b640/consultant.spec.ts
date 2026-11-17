@@ -1,9 +1,17 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
-import { expectGates } from './gates';
+import { expectGates, type GateName } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
+const GATES_BESIDE_SECTION: readonly GateName[] = [
+  'first_screen',
+  'primary_pinned',
+  'spacing',
+  'modal_fit',
+  'field_height',
+  'desktop_bottom',
+];
 
 const FEED = [
   { id: 'u1', role: 'user', content: 'Почему у Ладога Банка 86 %, а у Гринкода только 81?' },
@@ -17,7 +25,8 @@ const FEED = [
   {
     id: 'a2',
     role: 'assistant',
-    content: 'Принято. Это нужно записать в профиль, иначе процент для Ладога Банка будет ниже.',
+    content:
+      'Принято. Это нужно **записать в профиль**, иначе процент будет ниже:\n1. **Команда**: 18 человек\n2. Платёжная платформа',
   },
 ];
 
@@ -30,6 +39,18 @@ const FACT = {
   sourceMessageIds: ['u2'],
   sensitive: false,
   status: 'proposed',
+};
+
+const STATUS_TODAY = {
+  status: 'job_search',
+  title: 'Ищу работу',
+  chosen: true,
+  modules: [
+    { key: 'next_action', title: 'Следующее действие' },
+    { key: 'applications_summary', title: 'Ваши отклики' },
+    { key: 'profile_question', title: 'Один вопрос о профиле' },
+  ],
+  revert: null,
 };
 
 const TOPICS = [
@@ -48,7 +69,7 @@ function conversation(id: string, firstPhrase: string) {
     closedAt: '2026-11-10T11:00:00.000Z',
     messageCount: 2,
     firstPhrase,
-    summary: null,
+    summary: '**Что выяснили**\n- В шапке резюме есть три утверждения\n- Нет цифр',
   };
 }
 
@@ -59,9 +80,23 @@ interface ConsultantMocks {
 }
 
 async function openConsultant(page: Page, path: string, mocks: ConsultantMocks = {}) {
+  const calls = await mockConsultant(page, mocks);
+  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.b640 aside.panel-col')).toBeVisible({ timeout: 15_000 });
+  return calls;
+}
+
+async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
   await mockSignedInCabinet(page, { cabinetB640: true });
   const memory = [...(mocks.memory ?? [FACT])];
   const sent: { key: string | undefined; content: string }[] = [];
+  // Раздел под панелью живой: «Сегодня» и число у колокольчика.
+  await page.route('**/api/v1/candidate/status/today', (route) =>
+    route.fulfill({ json: { data: { today: STATUS_TODAY } } }),
+  );
+  await page.route('**/api/v1/candidate/notifications?**', (route) =>
+    route.fulfill({ json: { data: { items: [], unreadCount: 2, nextCursor: null } } }),
+  );
   const feed = [...FEED];
   await page.route('**/api/v1/candidate/me/messages**', (route) =>
     route.fulfill({ json: { data: feed, meta: { nextOffset: null } } }),
@@ -177,8 +212,6 @@ async function openConsultant(page: Page, path: string, mocks: ConsultantMocks =
     });
     return route.fulfill({ json: { data, meta: { nextCursor: second ? null : 'page-2' } } });
   });
-  await page.goto(path, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('.b640 aside.panel-col')).toBeVisible({ timeout: 15_000 });
   return { sent };
 }
 
@@ -190,6 +223,11 @@ test.describe('B660: «Консультант» нового кабинета', 
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-dialog', '1');
     await expect(panel.locator('.msg.me').first()).toHaveText(FEED[0].content);
     await expect(panel.locator('.ptop .pend')).toHaveText('1 запись ждёт проверки');
+    // Разметка ответа показана как текст с выделением и списком, без звёздочек.
+    const reply = panel.locator('.msg.bot').nth(1);
+    await expect(reply.locator('strong').first()).toHaveText('записать в профиль');
+    await expect(reply.locator('ol > li')).toHaveCount(2);
+    await expect(reply).not.toContainText('**');
     const card = panel.locator('section.ec.fc');
     await expect(card.locator('.ec-title')).toHaveText(
       'Записать в профиль: Сфера Платежи — команда 18 человек',
@@ -252,6 +290,11 @@ test.describe('B660: «Консультант» нового кабинета', 
     await expect(panel.locator('.ph-title')).toHaveText('Все разговоры');
     const rows = panel.locator('ul.hist.hist2 > li');
     await expect(rows).toHaveCount(20);
+    // Строка — тема одной строкой: итог разговора и его разметка в неё не попадают.
+    await expect(rows.first().locator('.hist-tt')).toHaveText(TOPICS[0]);
+    await expect(panel.locator('ul.hist')).not.toContainText(/Что выяснили|\*\*/u);
+    const row = await rows.first().boundingBox();
+    expect(row?.height).toBeLessThanOrEqual(56);
     await expectGates(page);
     await panel.getByRole('button', { name: 'Показать ещё' }).click();
     await expect(rows).toHaveCount(23);
@@ -268,10 +311,56 @@ test.describe('B660: «Консультант» нового кабинета', 
     await openConsultant(page, '/app/consultant/history', { history: 'empty' });
     const panel = page.locator('.b640 aside.panel-col');
     await expect(panel.locator('.vl-empty-t')).toHaveText('Разговоров пока нет');
-    await expectGates(page);
+    // «Начать» залита, как в макете k05b, и стоит рядом с главной кнопкой раздела под панелью:
+    // правило «одна главная на экране» здесь нарушает сам макет, остальные шесть гейтов в силе.
+    await expectGates(page, { only: GATES_BESIDE_SECTION });
     await panel.getByRole('button', { name: 'Начать' }).click();
     await expect(page).toHaveURL(/\/app\/consultant$/u);
     await expect(panel.getByLabel('Ваш вопрос консультанту')).toBeVisible();
+  });
+
+  test('B700: панель открывается над «Вакансиями» и закрывается без ухода с раздела', async ({
+    page,
+  }, testInfo) => {
+    const mobile = testInfo.project.name === 'mobile-390';
+    await mockConsultant(page);
+    await page.goto('/app/vacancies', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('[data-b640-node="s07"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.b640 aside.panel-col')).toHaveCount(0);
+    const open = mobile
+      ? page.getByRole('link', { name: /Консультант: открыть/u })
+      : page.locator('.b640 .top-actions .btn-panel');
+    await open.click();
+    const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
+    await expect(panel).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/vacancies$/u);
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-dialog', '1');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-active', 'vacancies');
+    await expect(panel.locator('.ph-conv')).toHaveText('Консультант · Вакансии');
+    await expect(page.locator('.b640 .top-actions .btn-panel')).toHaveCount(0);
+    await expect(panel.locator('.msg.me').first()).toHaveText(FEED[0].content);
+    await expectGates(page);
+    // Виды панели меняются на месте: адрес раздела не трогают.
+    await panel.getByRole('link', { name: 'Все разговоры' }).click();
+    await expect(panel.locator('ul.hist.hist2 > li')).toHaveCount(20);
+    await expect(page).toHaveURL(/\/app\/vacancies$/u);
+    await panel.getByRole('button', { name: 'Свернуть' }).click();
+    await expect(page.locator('.b640 aside.panel-col')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/app\/vacancies$/u);
+    await expect(page.locator('[data-b640-node="s07"]')).toBeVisible();
+    await expect(page.getByTestId('cabinet-b640')).not.toHaveAttribute('data-dialog', '1');
+  });
+
+  test('B700: адрес консультанта открывает панель над «Сегодня», гейты', async ({ page }) => {
+    await openConsultant(page, '/app/consultant', { memory: [] });
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-active', 'today');
+    await expect(page.locator('[data-b640-node="s03"]')).toBeVisible();
+    await expect(page.locator('[data-b640-node="s03"]')).toContainText('Ищу работу');
+    await expect(page.locator('.b640 .bell:visible .dot')).toHaveText('2');
+    await expect(page.locator('.b640 aside.panel-col .ph-conv')).toHaveText(
+      'Консультант · Сегодня',
+    );
+    await expectGates(page);
   });
 
   test('«Свернуть» закрывает панель и возвращает в кабинет', async ({ page }) => {
@@ -309,8 +398,22 @@ test.describe('B660: «Консультант» нового кабинета', 
           await page.setViewportSize({ width, height });
           await openConsultant(page, view.path, view.mocks);
           await page.locator('.b640 .chat').locator('> *').first().waitFor();
+          await expect(page.locator('[data-b640-node="s03"]')).toContainText('Ищу работу');
           await page.screenshot({ path: `.s13-shots/${view.name}-${width}-${theme}.png` });
         }
+      }
+      for (const [width, height] of [
+        [1440, 900],
+        [390, 844],
+      ]) {
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await page.setViewportSize({ width, height });
+        await mockConsultant(page);
+        await page.goto('/app/vacancies', { waitUntil: 'domcontentloaded' });
+        await expect(page.locator('[data-b640-node="s07"]')).toBeVisible({ timeout: 15_000 });
+        await page.locator(width < 768 ? '.b640 .mob-coach' : '.b640 .btn-panel').click();
+        await page.locator('.b640 .chat').locator('> *').first().waitFor();
+        await page.screenshot({ path: `.s13-shots/k01-vacancies-${width}-${theme}.png` });
       }
     }
   });

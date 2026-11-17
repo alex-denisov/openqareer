@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p02 {
+@layer b640.base {
   @media (max-width: 767px) { .b640 .only-desk-t { display: none; } }
   @media (min-width: 768px) { .b640 .role-cards.only-mob { display: none; } }
   .b640 .kv .sub { display: block; color: var(--career-text-dim); font-size: var(--career-text-xs); }
