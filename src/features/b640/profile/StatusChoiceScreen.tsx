@@ -5,6 +5,7 @@ import type {
   StatusChangeOption,
 } from '../../../../shared/candidateStatus';
 import { TARGET_PROFESSION_MAX_LENGTH } from '../../../../shared/candidateStatus';
+import { CoachApiError } from '../../coach/apiClient';
 import { ActionDock, Button, Icon, InfoTip, Link } from '../kit';
 import { B640_HOME_PATH, buildNodePath, type B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
@@ -27,29 +28,41 @@ type PreviewLoad =
   | { readonly state: 'ready'; readonly preview: CandidateStatusPreview }
   | { readonly state: 'error' };
 
-/** «Что изменится» для выбранного статуса; набор профессии не шлёт запрос на каждую букву. */
+interface KeyedPreview {
+  /** Для какого выбора получен ответ. */
+  readonly key: string;
+  readonly load: PreviewLoad;
+}
+
+const LOADING: PreviewLoad = { state: 'loading' };
+
+/**
+ * «Что изменится» для выбранного статуса; набор профессии не шлёт запрос на каждую букву.
+ * Ответ привязан к выбору: предпросмотр прежнего статуса для нового не показываем.
+ */
 function usePreview(choice: StatusChoice): PreviewLoad & { readonly retry: () => void } {
-  const [load, setLoad] = useState<PreviewLoad>({ state: 'loading' });
-  const [attempt, setAttempt] = useState(0);
   const { status, targetProfession } = choice;
+  const key = `${status}|${targetProfession}`;
+  const [keyed, setKeyed] = useState<KeyedPreview>({ key, load: LOADING });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    setLoad({ state: 'loading' });
+    const settle = (load: PreviewLoad) => {
+      if (!controller.signal.aborted) setKeyed({ key, load });
+    };
+    setKeyed({ key, load: LOADING });
     const timer = setTimeout(() => {
       previewStatus({ status, targetProfession }, controller.signal).then(
-        (preview) => {
-          if (!controller.signal.aborted) setLoad({ state: 'ready', preview });
-        },
-        () => {
-          if (!controller.signal.aborted) setLoad({ state: 'error' });
-        },
+        (preview) => settle({ state: 'ready', preview }),
+        () => settle({ state: 'error' }),
       );
     }, PREVIEW_DELAY_MS);
     return () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [status, targetProfession, attempt]);
+  }, [key, status, targetProfession, attempt]);
+  const load = keyed.key === key ? keyed.load : LOADING;
   return { ...load, retry: () => setAttempt((value) => value + 1) };
 }
 
@@ -226,12 +239,18 @@ function useStatusChange(state: CandidateStatusState, search: string) {
   }
 
   async function save(shown: CandidateStatusPreview) {
+    if (saving || shown.to !== choice.status) return;
     setSaving(true);
     setFailed(false);
     try {
       await changeStatus(choice, resolvedOptions(shown, options));
       navigate(B640_HOME_PATH);
-    } catch {
+    } catch (reason) {
+      // Статус уже такой (сменили в другой вкладке): менять нечего, идём на «Сегодня».
+      if (reason instanceof CoachApiError && reason.code === 'status_unchanged') {
+        navigate(B640_HOME_PATH);
+        return;
+      }
       setFailed(true);
       setSaving(false);
     }

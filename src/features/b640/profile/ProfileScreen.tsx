@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { CandidateStatusState } from '../../../../shared/candidateStatus';
 import { getResumeStudio } from '../../resume/resumeApi';
 import type { ResumeDraft, ResumeStudioView } from '../../resume/resumeTypes';
@@ -15,6 +16,7 @@ import {
   type RecordRow,
 } from './profileModel';
 import { JobList, LanguageList, ProfileSection, RecordList, SkillChips } from './ProfileSections';
+import { PROFILE_CHANGED } from './ExperienceEditScreen';
 import { getStatus } from './statusChoice';
 
 function loadProfile(): Promise<ResumeStudioView> {
@@ -185,6 +187,12 @@ function Filled({ view, draft }: { readonly view: ResumeStudioView; readonly dra
 export function ProfileScreen({ node }: { readonly node: B640Node }) {
   const profile = useLoad(loadProfile);
   const status = useLoad(getStatus);
+  const reload = profile.retry;
+  // Правку отменили из тоста, пока профиль открыт: показываем, что на сервере.
+  useEffect(() => {
+    window.addEventListener(PROFILE_CHANGED, reload);
+    return () => window.removeEventListener(PROFILE_CHANGED, reload);
+  }, [reload]);
   const draft = profile.state === 'ready' ? profile.data.draft : null;
   return (
     <div className="page two" data-b640-node={node.code} data-b640-section={node.section}>

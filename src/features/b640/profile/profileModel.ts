@@ -10,7 +10,9 @@ import { buildNodePath } from '../routes';
 
 /** Текст факта по его id: результаты места работы хранятся ссылками на факты. */
 export function statementsOf(view: ResumeStudioView): ReadonlyMap<string, string> {
-  return new Map(view.projection.evidenceSnapshot.map((item) => [item.memoryId, item.statement]));
+  return new Map(
+    (view.projection?.evidenceSnapshot ?? []).map((item) => [item.memoryId, item.statement]),
+  );
 }
 
 function yearsRange(start: string | undefined, end: string | undefined, current: boolean): string {
