@@ -72,7 +72,7 @@ function VacancyColumn({ vacancyId, head }: { readonly vacancyId: string; readon
           <h3 className="mod-title" id="vp-title">
             {head.title}
           </h3>
-          {head.source ? <InfoTip label="Источник" text={`Текст вакансии с ${head.source}.`} /> : null}
+          {head.source ? <InfoTip label="Источник" text={`Текст вакансии: ${head.source}.`} /> : null}
         </div>
         {detail.status === 'loading' || detail.status === 'idle' ? (
           <p className="ls-state" role="status">

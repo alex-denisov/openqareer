@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import { vacancySourceLabel } from '../../../../shared/vacancySourceLabel';
 import type { ApplicationView } from '../../applications/applicationsApi';
-import { generateCompanyReminderDraft } from '../../applications/companyReminderDraft';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
+import { onPlatform, platformOf } from './model/platform';
+import { reminderDraft } from './model/reminderDraft';
 import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
 import { actionPath } from './ResponsesTable';
@@ -225,12 +225,10 @@ function NoteField({ fieldId, application, writer }: NoteProps) {
 function VacancyLink({ application }: { readonly application: ApplicationView }) {
   const url = application.vacancy?.url;
   if (!url || !/^https?:\/\//u.test(url)) return null;
-  const source = application.vacancy?.source
-    ? vacancySourceLabel({ sourceType: application.vacancy.source })
-    : null;
+  const place = onPlatform(platformOf(application.vacancy?.source));
   return (
     <a className="row-act" href={url} target="_blank" rel="noopener noreferrer">
-      <Icon name="out" /> {source ? `Вакансия на ${source}` : 'Вакансия'}
+      <Icon name="out" /> {`Вакансия ${place}`}
     </a>
   );
 }
@@ -247,12 +245,7 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
   const { application, row } = item;
   const writer = useResponseWriter(application, onChanged);
   const actions = useResponseActions(application, writer);
-  const [draft, setDraft] = useState(() =>
-    generateCompanyReminderDraft({
-      company: application.vacancy?.company,
-      positionTitle: application.vacancy?.title ?? '',
-    }),
-  );
+  const [draft, setDraft] = useState(() => reminderDraft(application));
   return (
     <>
       <h3 className="od-head" id={titleId}>

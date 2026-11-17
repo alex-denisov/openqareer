@@ -22,20 +22,4 @@
   .b640 .meter > .rs-w-90 { inline-size: 90%; }
   .b640 .meter > .rs-w-95 { inline-size: 95%; }
   .b640 .meter > .rs-w-100 { inline-size: 100%; }
-
-  /*
-   * Раскрытый отклик на телефоне: только он, без списка и строки автооткликов.
-   * Правила есть в макете, но при переносе попали в ранний слой (base.p03) и проигрывают
-   * поздним файлам независимо от специфичности. Повтор здесь — до правки переноса в основе.
-   */
-  @media (max-width: 767px) {
-    .b640 .ot-open .ot-wrap > :not(.ot-scroll),
-    .b640 .ot-open .ot-row,
-    .b640 .ot-open .ot thead { display: none; }
-    .b640 .ot-open .vt-detail-row,
-    .b640 .ot-open .vt-detail-row > td { display: block; padding: 0; }
-    .b640 .ot-row > .ot-c-act { inline-size: auto; }
-    /* «Разбор отказов»: закреплённая главная кнопка не должна закрывать «Разбор помог?» внизу. */
-    .b640 .page[data-b640-node='o07'] { padding-block-end: calc(var(--career-space-12) * 3); }
-  }
 }

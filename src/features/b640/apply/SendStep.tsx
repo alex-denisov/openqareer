@@ -5,6 +5,7 @@ import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
+import { sendFrom } from '../responses/model/platform';
 import type { ApplyHead } from './model/applyModel';
 
 type Sent =
@@ -149,7 +150,7 @@ export function SendStep({ vacancyId, head, sourceType, approved, letterText, on
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        {head.source ? `Отправьте отклик с ${head.source}` : 'Отправьте отклик'}
+        {head.platform ? `Отправьте отклик ${sendFrom(head.platform)}` : 'Отправьте отклик'}
       </h2>
       {head.url ? (
         <div className="actions cb-top">

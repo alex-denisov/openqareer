@@ -45,6 +45,7 @@ describe('B657: шапка отклика', () => {
       company: 'Арка Холдинг',
       url: 'https://hh.ru/vacancy/1',
       source: 'hh.ru',
+      platform: { label: 'hh.ru', site: false },
     });
   });
 
@@ -60,7 +61,13 @@ describe('B657: шапка отклика', () => {
           sources: [{ sourceName: 'hh.ru (страница поиска)' }],
         },
       }),
-    ).toEqual({ title: 'Head of Engineering', company: 'Гринкод', url: null, source: 'hh.ru' });
+    ).toEqual({
+      title: 'Head of Engineering',
+      company: 'Гринкод',
+      url: null,
+      source: 'hh.ru',
+      platform: { label: 'hh.ru', site: false },
+    });
   });
 
   it('скрытая компания не подставляется', () => {
