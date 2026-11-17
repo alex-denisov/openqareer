@@ -5,11 +5,20 @@ export interface ActionDockProps {
   readonly primary: ReactNode;
   /** Не больше одной контурной кнопки. */
   readonly secondary?: ReactNode;
-  /** `dock` — отдельная панель (только 390), `commit` — блок действий формы, на 390 он закреплён. */
-  readonly kind?: 'dock' | 'commit';
+  /**
+   * `dock` — отдельная панель (только 390); `commit` — блок действий формы, на 390 он закреплён;
+   * `auto` — полоса действия объекта (`act-dock is-auto`): на 1440 и 1176 липнет к низу страницы,
+   * на 390 закреплена над навигацией, кнопки делят её ширину поровну.
+   */
+  readonly kind?: 'dock' | 'commit' | 'auto';
 }
 
 const HEIGHT_VAR = '--career-m-commit-h';
+const CLASS_OF = {
+  dock: 'act-dock only-mob',
+  commit: 'actions m-commit',
+  auto: 'act-dock is-auto',
+} as const;
 
 /**
  * Закреплённая главная кнопка. На 390 полоса стоит над нижней навигацией;
@@ -33,7 +42,7 @@ export function ActionDock({ primary, secondary, kind = 'dock' }: ActionDockProp
     };
   }, []);
 
-  const className = kind === 'dock' ? 'act-dock only-mob' : 'actions m-commit';
+  const className = CLASS_OF[kind];
   return (
     <div ref={ref} className={className}>
       {secondary}

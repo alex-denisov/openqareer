@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import type { CandidateStatusToday, TodayStatusModule } from '../../../../shared/candidateStatus';
 import { pluralRu } from '../../../../shared/pluralRu';
-import { listNotifications } from '../../notifications/notificationsApi';
 import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
-import { useScreenChrome } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from './parts';
 import {
   OnboardingPlanModule,
@@ -22,11 +20,6 @@ import { getStatusToday } from './statusApi';
 import { StatusStrip } from './StatusStrip';
 import { funnelLine, moduleLayout } from './todayModel';
 import { useLoad } from './useLoad';
-
-async function loadUnreadCount(signal: AbortSignal): Promise<number> {
-  const page = await listNotifications({ limit: 1, signal });
-  return page.unreadCount;
-}
 
 function weeklyTitle(today: TodayDay, fallback: string): string {
   const count = today.snapshot?.digest.newVacancies ?? 0;
@@ -111,8 +104,6 @@ export function TodayScreen({ node }: { readonly node: B640Node }) {
   const status = useLoad(getStatusToday);
   const [revertedTitle, setRevertedTitle] = useState<string | null>(null);
   const today = useTodayDay();
-  const unread = useLoad(loadUnreadCount);
-  useScreenChrome({ bellCount: unread.state === 'ready' ? unread.data : 0 });
 
   const twoColumns =
     status.state === 'ready' &&

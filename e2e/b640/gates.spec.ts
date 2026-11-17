@@ -3,7 +3,13 @@ import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates, GATES, runGates, type GateName } from './gates';
 import { sizesForWindow } from './gates/common';
 
-const VIEWS = ['', '?view=buttons', '?view=composer'] as const;
+const VIEWS = [
+  '',
+  '?view=buttons',
+  '?view=composer',
+  '?view=composer&state=closed',
+  '?view=composer&state=recording',
+] as const;
 
 async function openKit(page: Page, query = ''): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });

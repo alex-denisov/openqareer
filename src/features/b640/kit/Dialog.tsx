@@ -10,13 +10,15 @@ export interface DialogProps {
   readonly children: ReactNode;
   /** Подвал: главная и вторая кнопка. */
   readonly footer?: ReactNode;
+  /** Класс-модификатор окна из макета: ширина и раскладка (`v4-text-dlg`). */
+  readonly className?: string;
 }
 
 /**
  * Окно на 1440/1176 и нижний лист на 390. Рисуется внутри корня `.b640`:
  * стили действуют только под ним. Фокус уходит в окно и возвращается на открывшую кнопку.
  */
-export function Dialog({ open, onClose, title, children, footer }: DialogProps) {
+export function Dialog({ open, onClose, title, children, footer, className }: DialogProps) {
   const titleId = useId();
   const anchor = useRef<HTMLSpanElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -39,7 +41,7 @@ export function Dialog({ open, onClose, title, children, footer }: DialogProps) 
               <div ref={backRef} className="pf-back" aria-hidden="true" onClick={onClose} />
               <div
                 ref={dialogRef}
-                className="pf-dialog"
+                className={className ? `pf-dialog ${className}` : 'pf-dialog'}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}

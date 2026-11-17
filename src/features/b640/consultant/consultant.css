@@ -1,0 +1,10 @@
+/* Раздел «Консультант»: списки и заголовки в ответе (в макете реплики без разметки). */
+@layer b640.sections {
+  .b640 .msg.bot > * + * { margin-block-start: var(--career-space-2); }
+  .b640 .msg.bot ul,
+  .b640 .msg.bot ol { display: grid; gap: var(--career-space-1); margin-block-end: 0; padding-inline-start: var(--career-space-5); }
+  .b640 .msg.bot ul { list-style: disc; }
+  .b640 .msg.bot ol { list-style: decimal; }
+  .b640 .msg.bot li { padding-inline-start: var(--career-space-1); }
+  .b640 .msg.bot strong { font-weight: 600; }
+}
