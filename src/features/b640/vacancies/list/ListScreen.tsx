@@ -16,10 +16,14 @@ import {
   SortError,
 } from './ListParts';
 import { TableBlock } from './TableBlock';
-import type { RowEnv } from './VacancyRow';
+import { TriagePanel } from './TriagePanel';
+import { ReviewButton } from './TriageParts';
+import type { RowEnv, RowPick } from './VacancyRow';
+import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { useHiddenSection, type HiddenSection } from './useHiddenSection';
 import { useRowInteractions, type RowInteractions } from './useRowInteractions';
 import { usePoolRetry } from './usePoolRetry';
+import { useTriage, type Triage } from './useTriage';
 import { useVacancyList, type VacancyList } from './useVacancyList';
 
 /** Профиль пуст: у каждой загруженной вакансии процента нет из-за отсутствия опыта. */
@@ -63,18 +67,28 @@ function EmptyList({ list }: { list: VacancyList }) {
   );
 }
 
+/** Флажок и причина строки, которую режим «Помочь выбрать» предлагает скрыть. */
+function pickOf(triage: Triage, item: MatchedVacancyItem): RowPick | undefined {
+  const id = item.cluster.id;
+  const row = triage.rowFor(id);
+  if (row?.verdict !== 'hide') return undefined;
+  return { checked: triage.isPicked(id), reason: row.reasonLabel ?? '', onToggle: () => triage.toggle(id) };
+}
+
 function ListTable({
   list,
   rows,
   section,
   env,
   links,
+  triage,
 }: {
   list: VacancyList;
   rows: RowInteractions;
   section: HiddenSection;
   env: RowEnv;
   links: VacancyLinks;
+  triage: Triage;
 }) {
   if (list.all.length === 0 && !section.show && !list.server.active) return null;
   const { status, retry } = list.server;
@@ -100,6 +114,7 @@ function ListTable({
         rows={rows}
         rates={list.rates}
         hidden={hidden}
+        pickFor={(item) => pickOf(triage, item)}
       />
       {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
       {status === 'failed' ? <SortError onRetry={retry} /> : null}
@@ -110,6 +125,22 @@ function ListTable({
   );
 }
 
+/** Строка счётчика: число вакансий слева, «Помочь выбрать» справа. */
+function CountBar({ list, hideCount, triage }: { list: VacancyList; hideCount: boolean; triage: Triage }) {
+  return (
+    <div className="vl-top vl-countbar">
+      {hideCount || !list.countKnown ? null : (
+        <CountTitle count={list.count} word={vacanciesWord(list.count)} tip />
+      )}
+      {list.all.length > 0 || triage.active ? (
+        <div className="va-lact vl-acts">
+          <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : triage.start} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Узел s07: подборка вакансий с фильтрами, сортировкой и порциями по 20. */
 export function ListScreen() {
   const links = useVacancyLinks();
@@ -117,6 +148,7 @@ export function ListScreen() {
   const list = useVacancyList(links, rows.hiddenIds);
   const { pool } = list;
   const section = useHiddenSection(rows, pool.refresh);
+  const triage = useTriage(list.all, rows.hideMany);
   const env = { currency: list.currency, rates: list.rates, noRole: list.noRole };
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';
@@ -128,12 +160,8 @@ export function ListScreen() {
   return (
     <div className="page" data-b640-node="s07" data-b640-section="vacancies">
       {strip ? <GapStrip kind={strip} /> : null}
-      <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}`} aria-labelledby="list-title">
-        <div className="vl-top vl-countbar">
-          {unread || !list.countKnown ? null : (
-            <CountTitle count={list.count} word={vacanciesWord(list.count)} tip />
-          )}
-        </div>
+      <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
+        <CountBar list={list} hideCount={unread} triage={triage} />
         <FiltersBar
           {...filterProps(list, section)}
           openKind={list.openKind}
@@ -142,10 +170,11 @@ export function ListScreen() {
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
         />
+        <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {waiting ? <LoadingLine /> : null}
         {!unread && list.all.length === 0 && !serverBusy ? <EmptyList list={list} /> : null}
-        <ListTable list={list} rows={rows} section={section} env={env} links={links} />
+        <ListTable list={list} rows={rows} section={section} env={env} links={links} triage={triage} />
       </section>
       <FilterSheet
         {...filterProps(list, section)}

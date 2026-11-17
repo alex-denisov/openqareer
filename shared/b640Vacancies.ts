@@ -35,3 +35,39 @@ export interface B640ApplicationQuota {
   /** Начало следующего периода квоты, ISO; `null`, если периода нет. */
   readonly renewsAt: string | null;
 }
+
+/** B675: `POST /api/v1/candidate/b640/vacancy-triage` — разбор списка по правилам, без модели. */
+export const VACANCY_TRIAGE_MAX_IDS = 1000;
+export const VACANCY_TRIAGE_QUESTION_IDS = ['salaryLowerBound'] as const;
+export type VacancyTriageQuestionId = (typeof VACANCY_TRIAGE_QUESTION_IDS)[number];
+export type VacancyTriageAnswers = Readonly<Partial<Record<VacancyTriageQuestionId, boolean>>>;
+
+export interface VacancyTriageRow {
+  readonly clusterId: string;
+  readonly verdict: 'keep' | 'hide' | 'needs_data';
+  /** Только у hide: с этой причиной строка скрывается. */
+  readonly reasonId?: string;
+  /** Только у hide: короткая подпись причины. */
+  readonly reasonLabel?: string;
+  /** Только у needs_data. */
+  readonly questionId?: VacancyTriageQuestionId;
+}
+
+export interface VacancyTriageQuestion {
+  readonly id: VacancyTriageQuestionId;
+  readonly text: string;
+}
+
+export interface VacancyTriage {
+  readonly rows: readonly VacancyTriageRow[];
+  /** Только вопросы без ответа, в порядке показа. */
+  readonly questions: readonly VacancyTriageQuestion[];
+  /** Сколько вопросов у списка всего (с ответом и без). */
+  readonly questionTotal: number;
+  readonly summary: {
+    readonly total: number;
+    readonly keep: number;
+    readonly hide: number;
+    readonly needsData: number;
+  };
+}
