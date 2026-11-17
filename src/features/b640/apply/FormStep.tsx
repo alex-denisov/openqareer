@@ -31,9 +31,11 @@ type Mark =
 export interface QuestionnaireState {
   /** Анкета с вопросами; `null` — её нет или вопросы заранее не читаются. */
   readonly form: ApplicationQuestionnaire | null;
+  /** Название и компания вакансии, как их знает сервер. */
+  readonly known: { readonly vacancyTitle: string; readonly companyName: string } | null;
   readonly draft: AnswerDraft;
   readonly setAnswer: (questionId: string, text: string) => void;
-  /** Сохранить ответы: при уходе из поля, после подсказки и перед копированием. */
+  /** Сохранить ответы: при уходе из поля, после выбора и перед копированием. */
   readonly save: (next?: AnswerDraft) => void;
   readonly saveError: string | null;
   readonly submitted: Mark;
@@ -55,8 +57,10 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
     if (form) setDraft(draftOf(form));
   }, [form]);
 
+  const title = state.data?.vacancyTitle;
   return {
     form,
+    known: title ? { vacancyTitle: title, companyName: state.data?.vacancyCompany ?? '' } : null,
     draft,
     saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
@@ -80,6 +84,46 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   };
 }
 
+interface AnswerFieldProps {
+  readonly fieldId: string;
+  readonly question: QuestionnaireQuestion;
+  readonly value: string;
+  readonly state: QuestionnaireState;
+}
+
+/** Поле ответа: у вопроса с вариантами — выбор из них, иначе свободный текст. */
+function AnswerField({ fieldId, question, value, state }: AnswerFieldProps) {
+  if (question.kind === 'choice' && question.options?.length) {
+    const pick = (next: string) => {
+      state.setAnswer(question.id, next);
+      state.save({ ...state.draft, [question.id]: next });
+    };
+    return (
+      <select id={fieldId} value={value} onChange={(event) => pick(event.currentTarget.value)}>
+        <option value="">Выберите ответ</option>
+        {/* Сохранённый ответ, которого уже нет среди вариантов, не теряется молча. */}
+        {value && !question.options.includes(value) ? <option value={value}>{value}</option> : null}
+        {question.options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <textarea
+      id={fieldId}
+      rows={2}
+      placeholder="Ваш ответ"
+      maxLength={QUESTIONNAIRE_ANSWER_MAX_LENGTH}
+      value={value}
+      onChange={(event) => state.setAnswer(question.id, event.currentTarget.value)}
+      onBlur={() => state.save()}
+    />
+  );
+}
+
 interface QuestionProps {
   readonly question: QuestionnaireQuestion;
   readonly suggestion: QuestionnaireSuggestion | undefined;
@@ -89,16 +133,11 @@ interface QuestionProps {
 function Question({ question, suggestion, state }: QuestionProps) {
   const fieldId = `qa-${question.id}`;
   const value = answerOf(state.draft, question.id);
-  const useSuggestion = () => {
-    if (!suggestion) return;
-    state.setAnswer(question.id, suggestion.text);
-    state.save({ ...state.draft, [question.id]: suggestion.text });
-  };
   return (
     <li className="qa">
       <div className="qa-q">
         <span>{question.text}</span>
-        {suggestion ? (
+        {suggestion && value === suggestion.text ? (
           <InfoTip label="Откуда ответ" text={`${suggestion.source}: ${suggestion.text}`} />
         ) : null}
         {question.required ? null : <span className="tag src">необязательный</span>}
@@ -107,22 +146,7 @@ function Question({ question, suggestion, state }: QuestionProps) {
         <label className="vh" htmlFor={fieldId}>
           {`Ваш ответ: ${question.text}`}
         </label>
-        <textarea
-          id={fieldId}
-          rows={2}
-          placeholder={question.options?.length ? question.options.join(' / ') : 'Ваш ответ'}
-          maxLength={QUESTIONNAIRE_ANSWER_MAX_LENGTH}
-          value={value}
-          onChange={(event) => state.setAnswer(question.id, event.currentTarget.value)}
-          onBlur={() => state.save()}
-        />
-      </div>
-      <div className="qa-meta">
-        {suggestion && !value.trim() ? (
-          <Button variant="quiet" size="sm" icon="profile" onClick={useSuggestion}>
-            {`Вписать из профиля: ${suggestion.text}`}
-          </Button>
-        ) : null}
+        <AnswerField fieldId={fieldId} question={question} value={value} state={state} />
       </div>
     </li>
   );

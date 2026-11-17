@@ -6,6 +6,7 @@ import {
   type QuestionnaireQuestion,
   type QuestionnaireSuggestion,
 } from '../../shared/applicationQuestionnaire';
+import { profileAnswers, type QuestionnaireProfileFacts } from './questionnaireProfileAnswers';
 
 const QUESTION_TEXT_MAX_LENGTH = 500;
 const OPTION_MAX_LENGTH = 200;
@@ -77,7 +78,7 @@ export interface SalaryProfile {
 const SALARY_QUESTION = /доход|зарплат|оклад|вознагражд|компенсац|salary|compensation|pay expectation/iu;
 const CURRENCY_SIGNS: Readonly<Record<string, string>> = { RUB: '₽', USD: '$', EUR: '€' };
 
-/** Подсказка на вопрос о деньгах: только если ожидания уже записаны в профиле. */
+/** Ответ на вопрос о деньгах: только если ожидания уже записаны в профиле. */
 export function salarySuggestions(
   questions: readonly QuestionnaireQuestion[],
   profile: SalaryProfile | null,
@@ -100,6 +101,10 @@ export interface QuestionnaireInput {
   readonly questions: readonly QuestionnaireQuestion[];
   readonly answers: readonly QuestionnaireAnswer[];
   readonly profile: SalaryProfile | null;
+  /** Контакты и гражданство из профиля: из них подставляются ответы. */
+  readonly facts?: QuestionnaireProfileFacts | null;
+  readonly vacancyTitle?: string;
+  readonly vacancyCompany?: string;
   readonly readAt: string | null;
   readonly submittedAt: string | null;
 }
@@ -121,20 +126,43 @@ export function cleanAnswers(
   });
 }
 
+/** Сохранённые ответы и, где ответа ещё нет, подставленные из профиля — в порядке вопросов. */
+function withProfileAnswers(
+  questions: readonly QuestionnaireQuestion[],
+  saved: readonly QuestionnaireAnswer[],
+  fromProfile: readonly QuestionnaireSuggestion[],
+): readonly QuestionnaireAnswer[] {
+  const savedById = new Map(saved.map((answer) => [answer.questionId, answer.text]));
+  const profileById = new Map(fromProfile.map((item) => [item.questionId, item.text]));
+  return questions.flatMap((question) => {
+    const text = savedById.get(question.id) ?? profileById.get(question.id);
+    return text ? [{ questionId: question.id, text }] : [];
+  });
+}
+
 /** Анкета для экрана: вопросы, ответы, подсказки и счётчики готовности. */
 export function buildQuestionnaire(input: QuestionnaireInput): ApplicationQuestionnaire {
-  const answers = cleanAnswers(input.questions, input.answers);
+  const saved = cleanAnswers(input.questions, input.answers);
+  const contacts = profileAnswers(input.questions, input.facts ?? null);
+  const taken = new Set(contacts.map((item) => item.questionId));
+  const fromProfile = [
+    ...contacts,
+    ...salarySuggestions(input.questions, input.profile).filter((item) => !taken.has(item.questionId)),
+  ];
+  const answers = withProfileAnswers(input.questions, saved, fromProfile);
   const answered = new Set(answers.map((answer) => answer.questionId));
+  const texts = new Map(answers.map((answer) => [answer.questionId, answer.text]));
   const state = input.state === 'ready' && input.questions.length === 0 ? 'none' : input.state;
   return {
     vacancyId: input.vacancyId,
+    ...(input.vacancyTitle ? { vacancyTitle: input.vacancyTitle } : {}),
+    ...(input.vacancyCompany ? { vacancyCompany: input.vacancyCompany } : {}),
     state,
     formUrl: input.formUrl,
     questions: input.questions,
     answers,
-    suggestions: salarySuggestions(input.questions, input.profile).filter(
-      (suggestion) => !answered.has(suggestion.questionId),
-    ),
+    // Источник у подставленного ответа виден, пока кандидат не написал своё.
+    suggestions: fromProfile.filter((item) => texts.get(item.questionId) === item.text),
     answered: answers.length,
     total: input.questions.length,
     missingRequired: input.questions.filter(

@@ -23,7 +23,7 @@ export interface QuestionnaireAnswer {
   readonly text: string;
 }
 
-/** Подсказка из профиля: кандидат вписывает её сам, кнопкой. */
+/** Ответ, подставленный из профиля: в поле стоит то, что в профиле записано. */
 export interface QuestionnaireSuggestion {
   readonly questionId: string;
   readonly text: string;
@@ -33,6 +33,9 @@ export interface QuestionnaireSuggestion {
 
 export interface ApplicationQuestionnaire {
   readonly vacancyId: string;
+  /** Название и компания вакансии, как их знает сервер; пусто — не знает. */
+  readonly vacancyTitle?: string;
+  readonly vacancyCompany?: string;
   /**
    * `ready` — вопросы прочитаны; `none` — у вакансии анкеты нет;
    * `unreadable` — площадка не отдаёт вопросы заранее, анкета открывается на её странице.

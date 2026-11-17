@@ -116,12 +116,18 @@ describe('B641: готовность анкеты', () => {
       readAt: '2026-11-17T00:00:00.000Z',
       submittedAt: null,
     });
-    expect(view).toMatchObject({ answered: 1, total: 3, missingRequired: 1 });
-    expect(view.answers).toEqual([{ questionId: 'q1', text: '9 человек' }]);
-    expect(view.suggestions).toHaveLength(1);
+    // Ожидания по доходу из профиля уже стоят ответом, и у них назван источник.
+    expect(view).toMatchObject({ answered: 2, total: 3, missingRequired: 0 });
+    expect(view.answers).toEqual([
+      { questionId: 'q1', text: '9 человек' },
+      { questionId: 'q2', text: 'от 500 000 ₽' },
+    ]);
+    expect(view.suggestions).toEqual([
+      { questionId: 'q2', text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' },
+    ]);
   });
 
-  it('подсказка исчезает, когда на вопрос уже ответили', () => {
+  it('источник исчезает, когда кандидат написал своё', () => {
     const view = buildQuestionnaire({
       vacancyId: 'v1',
       state: 'ready',
