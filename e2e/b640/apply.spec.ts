@@ -1,0 +1,320 @@
+import { mkdirSync } from 'node:fs';
+import { expect, test, type Page } from '@playwright/test';
+import { expectGates } from './gates';
+import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
+
+const SHOTS = process.env.B640_SHOTS;
+const LETTER =
+  'Здравствуйте!\n\nЗа пять лет я вырастила группу разработки с 3 до 9 человек.\n\nМарина Соколова';
+
+interface ApplyMock {
+  readonly calls: string[];
+}
+
+interface ApplyOptions extends ResponsesMockOptions {
+  /** Сколько раз письмо не собирается, прежде чем собраться. */
+  readonly failPitch?: number;
+  /** Письмо отвечает «отклики закончились». */
+  readonly quotaExhausted?: boolean;
+  /** Сервер нашёл знакомого в компании. */
+  readonly withPath?: boolean;
+}
+
+function circles(vacancyId: string, withPath: boolean) {
+  const anna = { id: 'anna', fullName: 'Анна Ветрова', roleTitle: 'HRD', companyName: 'Гринкод' };
+  return {
+    vacancyId,
+    companyKey: 'grinkod',
+    companyName: 'Гринкод',
+    vacancyTitle: 'Head of Engineering',
+    circles: [
+      {
+        circle: 1,
+        state: withPath ? 'available' : 'none',
+        message: '',
+        paths: withPath
+          ? [
+              {
+                id: 'path-anna',
+                circle: 1,
+                path: [anna],
+                recipient: anna,
+                evidence: [],
+                strength: 'direct',
+                source: 'manual',
+                nextStep: 'write',
+              },
+            ]
+          : [],
+      },
+      { circle: 2, state: 'none', message: '', paths: [] },
+      { circle: 3, state: 'available', message: '', paths: [] },
+    ],
+    resume: { available: true, kind: 'master' },
+    linkedinImport: { state: 'unknown', importedAt: null, importedCount: null },
+  };
+}
+
+/** Заглушки механик единого отклика поверх заглушек раздела «Отклики». */
+async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyMock> {
+  const calls: string[] = [];
+  let failPitch = options.failPitch ?? 0;
+  await mockResponses(page, options);
+  const vacancyOf = (url: string) =>
+    decodeURIComponent(new URL(url).pathname.split('/').at(-2) ?? '');
+
+  await page.route('**/api/v1/candidate/vacancies/*/connection-circles', (route) =>
+    route.fulfill({
+      json: { data: circles(vacancyOf(route.request().url()), options.withPath === true) },
+    }),
+  );
+  await page.route('**/api/v1/candidate/vacancies/*/detail', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          id: vacancyOf(route.request().url()),
+          description: 'Ищем руководителя для 3 команд платформы.\nЗадачи: переход на Kubernetes.',
+          truncated: false,
+          skills: [],
+          responsibilities: [],
+        },
+      },
+    }),
+  );
+  await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
+    const body = route.request().postDataJSON() as { tone?: string; recipient?: { name?: string } };
+    calls.push(`pitch ${body.tone ?? ''} ${body.recipient?.name ?? ''}`.trim());
+    if (options.quotaExhausted) {
+      await route.fulfill({
+        status: 402,
+        json: { error: { code: 'quota_exhausted', message: 'Отклики закончились.' } },
+      });
+      return;
+    }
+    if (failPitch > 0) {
+      failPitch -= 1;
+      await route.fulfill({
+        status: 503,
+        json: { error: { code: 'unavailable', message: 'Сбой' } },
+      });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        data: {
+          vacancyId: vacancyOf(route.request().url()),
+          emailPitch: { subject: 'Отклик', body: LETTER },
+          linkedInNote: LETTER,
+          contactMessage: LETTER,
+          atsCoverLetter: LETTER,
+          usedEvidenceIds: [],
+          language: 'ru',
+          resumeAvailable: true,
+          resumeKind: 'master',
+          generatedAt: new Date().toISOString(),
+        },
+      },
+    });
+  });
+  if (options.quotaExhausted) {
+    await page.route('**/api/v1/candidate/billing/quotas', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            plan: 'free',
+            unlimited: false,
+            period: null,
+            quotas: [
+              {
+                key: 'applications',
+                label: 'Отклики',
+                limit: 20,
+                used: 20,
+                remaining: 0,
+                upgradePlan: 'basic',
+              },
+            ],
+            fitPercentLimit: null,
+          },
+        },
+      }),
+    );
+    await page.route('**/api/v1/candidate/applications/funnel', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            saved: 1,
+            applied: 15,
+            responded: 3,
+            interview: 1,
+            offer: 0,
+            rejected: 1,
+            archived: 0,
+            opened: 0,
+          },
+        },
+      }),
+    );
+  }
+  await page.route('**/api/v1/candidate/vacancies/*/letter-resume', (route) =>
+    route.fulfill({ json: { data: { ready: false } } }),
+  );
+  await page.route('**/api/v1/candidate/vacancies/*/letter-approvals', async (route) => {
+    const body = route.request().postDataJSON() as { body: string; tone: string };
+    calls.push(`approve ${body.tone}`);
+    await route.fulfill({
+      json: {
+        data: {
+          applicationId: 'a-draft',
+          documentId: 'doc-1',
+          approvedAt: new Date().toISOString(),
+          status: 'approved',
+          sent: false,
+          resume: null,
+        },
+      },
+    });
+  });
+  await page.route('**/api/v1/candidate/vacancy-applications', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.fulfill({ json: { data: [] } });
+      return;
+    }
+    const body = route.request().postDataJSON() as { clusterId: string; status: string };
+    calls.push(`sent ${body.clusterId} ${body.status}`);
+    await route.fulfill({
+      json: {
+        data: {
+          clusterId: body.clusterId,
+          status: body.status,
+          vacancy: { title: '', company: '', url: '', source: 'hh' },
+          openedAt: null,
+          appliedAt: new Date().toISOString(),
+        },
+      },
+    });
+  });
+  return { calls };
+}
+
+async function open(page: Page, path: string, options: ApplyOptions = {}): Promise<ApplyMock> {
+  const mock = await mockApply(page, options);
+  await page.goto(path, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-b640-node="o02"]')).toBeVisible({ timeout: 15_000 });
+  return mock;
+}
+
+const step = (page: Page, name: string) =>
+  page.getByRole('navigation', { name: 'Отклик' }).getByRole('link', { name });
+
+test.describe('B657: единый экран отклика', () => {
+  test('письмо: текст вакансии, тон, одобрение, отправка и «Я откликнулся»', async ({ page }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter');
+    await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
+    await expect(page.getByLabel('Текст письма')).toHaveValue(/вырастила группу разработки/u);
+    await expect(step(page, 'Письмо')).toHaveAttribute('aria-current', 'page');
+    await expectGates(page);
+
+    await page.locator('.ls-chip summary').click();
+    await page.getByLabel('Тон').selectOption('confident');
+    await expect
+      .poll(() => mock.calls.filter((call) => call.startsWith('pitch confident')).length)
+      .toBe(1);
+    await page.getByRole('button', { name: 'Одобрить' }).click();
+    await expect(page.getByText('Письмо одобрено').first()).toBeVisible();
+    expect(mock.calls).toContain('approve confident');
+
+    await page.getByRole('button', { name: 'К отправке' }).click();
+    await expect(page.getByRole('heading', { name: 'Отправьте отклик с hh.ru' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Открыть вакансию на сайте' })).toHaveAttribute(
+      'href',
+      'https://hh.ru/vacancy/1',
+    );
+    await expect(page.locator('.cb-t')).toContainText('вырастила группу разработки');
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Я откликнулся' }).click();
+    await expect(page.getByText('Отклик отмечен как отправленный')).toBeVisible();
+    expect(mock.calls).toContain('sent cluster-a-draft applied');
+    await expect(page.getByRole('link', { name: 'К отклику' })).toHaveAttribute(
+      'href',
+      '/app/responses/a-draft',
+    );
+  });
+
+  test('вход по id вакансии без карточки отклика', async ({ page }) => {
+    await open(page, '/app/responses/cluster-from-list/letter');
+    await expect(page.getByLabel('Текст письма')).toHaveValue(/Здравствуйте/u);
+    await expect(page.getByLabel('Текст вакансии')).toContainText('переход на Kubernetes');
+    await expect(page.locator('.ctx-title').first()).toContainText('Head of Engineering · Гринкод');
+  });
+
+  test('письмо через знакомого: адресат меняет письмо', async ({ page }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter', { withPath: true });
+    await expect(page.getByLabel('Текст письма')).toHaveValue(/Здравствуйте/u);
+    await page.getByLabel('Кому').selectOption({ label: 'Анна Ветрова · знакомый' });
+    await expect.poll(() => mock.calls.some((call) => call.includes('Анна Ветрова'))).toBe(true);
+  });
+
+  test('письмо не собралось: ошибка на месте и «Повторить»', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter', { failPitch: 1 });
+    await expect(page.getByRole('alert')).toContainText('Письмо не собралось');
+    await page.getByRole('button', { name: 'Повторить' }).click();
+    await expect(page.getByLabel('Текст письма')).toHaveValue(/Здравствуйте/u);
+  });
+
+  test('отклики закончились: следующий тариф и «Отложить»', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter', { quotaExhausted: true, plan: 'free' });
+    await expect(page.getByRole('heading', { name: 'Отклики закончились' })).toBeVisible();
+    await expect(page.getByText('20 откликов → 5 ответов → 1 интервью')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Перейти на Basic' })).toHaveAttribute(
+      'href',
+      '/app/account/billing',
+    );
+    await expect(page.getByRole('link', { name: 'Отложить' })).toHaveAttribute(
+      'href',
+      '/app/responses',
+    );
+    await expectGates(page);
+  });
+
+  test('резюме: шаг открывается по адресу, без опыта ведёт в профиль', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=resume');
+    await expect(step(page, 'Резюме')).toHaveAttribute('aria-current', 'page');
+    await expect(
+      page.getByRole('heading', { name: 'Резюме пока не из чего собрать' }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Открыть профиль' })).toHaveAttribute(
+      'href',
+      '/app/profile',
+    );
+    await expectGates(page);
+  });
+
+  test('отправка без одобренного письма возвращает к письму', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=send');
+    await expect(page.getByRole('heading', { name: 'Сначала одобрите письмо' })).toBeVisible();
+    await page.getByRole('button', { name: 'К письму' }).click();
+    await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
+  });
+
+  test('снимки единого отклика для сверки с макетами', async ({ page }, testInfo) => {
+    test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
+    mkdirSync('.s13-shots', { recursive: true });
+    const desktop = testInfo.project.name === 'desktop-1440';
+    const widths = desktop ? [1440, 1176] : [390];
+    await mockApply(page);
+    await page.goto('/app/responses/a-draft/letter', { waitUntil: 'domcontentloaded' });
+    for (const theme of ['light', 'dark'] as const) {
+      await page.evaluate((value) => window.localStorage.setItem('oq_b640_theme', value), theme);
+      await page.goto('/app/responses/a-draft/letter', { waitUntil: 'domcontentloaded' });
+      await expect(page.getByLabel('Текст письма')).toHaveValue(/Здравствуйте/u);
+      for (const width of widths) {
+        await page.setViewportSize({ width, height: desktop ? 900 : 844 });
+        await page.screenshot({
+          path: `.s13-shots/o02-pismo-${width}-${theme}.png`,
+          fullPage: true,
+        });
+      }
+    }
+  });
+});
