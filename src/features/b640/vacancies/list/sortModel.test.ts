@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeItem } from './fixtures';
-import { footOf, nextSort, sortItems, visibleSlice } from './sortModel';
+import { footOf, serverFoot, nextSort, sortItems, visibleSlice } from './sortModel';
 
 const items = [
   makeItem({ id: 'a', title: 'Бета', percent: 50 }),
@@ -42,5 +42,31 @@ describe('порции по 20', () => {
     const all = Array.from({ length: 30 }, (_, i) => i);
     expect(visibleSlice(all, 20)).toHaveLength(20);
     expect(all).toHaveLength(30);
+  });
+});
+
+describe('подвал серверного режима', () => {
+  it('без клиентских фильтров — число осталось от выдачи сервера', () => {
+    expect(serverFoot({ narrowed: false, hasMore: true, serverTotal: 90, loaded: 20 })).toEqual({
+      total: 90,
+      shown: 20,
+      countKnown: true,
+    });
+  });
+
+  it('с клиентскими фильтрами число не пишем и не занижаем заголовок', () => {
+    expect(serverFoot({ narrowed: true, hasMore: true, serverTotal: 90, loaded: 20 })).toEqual({
+      total: null,
+      shown: 20,
+      countKnown: false,
+    });
+  });
+
+  it('всё прочитано — подвала нет, число известно', () => {
+    expect(serverFoot({ narrowed: true, hasMore: false, serverTotal: 90, loaded: 31 })).toEqual({
+      total: 31,
+      shown: 31,
+      countKnown: true,
+    });
   });
 });

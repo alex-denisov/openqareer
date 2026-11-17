@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { VacancyLinks } from '../vacancyLinks';
@@ -15,10 +16,11 @@ export interface TableBlockProps {
   readonly links: VacancyLinks;
   readonly rows: RowInteractions;
   readonly rates?: CurrencyRates;
+  readonly hidden?: ReactNode;
 }
 
 /** Таблица подборки с общим состоянием строк: раскрытие, окно действий, ☆. */
-export function TableBlock({ items, env, sort, onSort, links, rows, rates }: TableBlockProps) {
+export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidden }: TableBlockProps) {
   return (
     <VacancyTable
       items={items}
@@ -35,6 +37,7 @@ export function TableBlock({ items, env, sort, onSort, links, rows, rates }: Tab
       onToggleSaved={rows.toggleSaved}
       onMenu={rows.openMenu}
       onCloseMenu={rows.closeMenu}
+      hidden={hidden}
     />
   );
 }

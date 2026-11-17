@@ -34,7 +34,7 @@ export function todayField(now: Date = new Date()): string {
 }
 
 /** Закрытие по Esc и по нажатию мимо; фокус уходит в окно и возвращается на открывшую кнопку. */
-function useMenuDismiss(
+export function useMenuDismiss(
   dialog: RefObject<HTMLDivElement>,
   view: MenuView,
   onClose: () => void,
@@ -81,7 +81,7 @@ function Head({ id, title, onBack }: { id: string; title: string; onBack: () => 
   );
 }
 
-function ErrorLine({ text, onRetry }: { text: string; onRetry: () => void }) {
+export function ErrorLine({ text, onRetry }: { text: string; onRetry: () => void }) {
   return (
     <p className="va-err va-m-err" role="alert">
       <Icon name="warn" />
@@ -93,7 +93,7 @@ function ErrorLine({ text, onRetry }: { text: string; onRetry: () => void }) {
   );
 }
 
-interface Runner {
+export interface Runner {
   readonly pending: boolean;
   readonly error: string | null;
   readonly run: (task: () => Promise<void>) => void;
@@ -101,7 +101,7 @@ interface Runner {
 }
 
 /** Одно действие за раз: ожидание и ошибка остаются в окне, «Повторить» гонит то же действие. */
-function useRunner(): Runner {
+export function useRunner(): Runner {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const last = useRef<(() => Promise<void>) | null>(null);
@@ -128,7 +128,7 @@ function useRunner(): Runner {
   return { pending, error, run, retry: () => last.current && run(last.current) };
 }
 
-function MenuButton({ icon, label, onClick, cls = 'va-mi', disabled, go }: { icon: IconName; label: string; onClick: () => void; cls?: string; disabled?: boolean; go?: boolean }) {
+export function MenuButton({ icon, label, onClick, cls = 'va-mi', disabled, go }: { icon: IconName; label: string; onClick: () => void; cls?: string; disabled?: boolean; go?: boolean }) {
   return (
     <li>
       <button className={cls} type="button" disabled={disabled} onClick={onClick}>
