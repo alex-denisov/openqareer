@@ -33,15 +33,27 @@ describe('B641: ответы анкеты из профиля', () => {
     expect(answer('Where are you currently based?')).toBe('Москва, Россия');
   });
 
-  it('называет источник и помечает ответ как подставленный', () => {
+  it('называет источник ответа', () => {
     expect(profileAnswers([text('q1', 'LinkedIn')], FACTS)).toEqual([
       {
         questionId: 'q1',
         text: 'https://www.linkedin.com/in/msokolova',
         source: 'Из контактов вашего профиля',
-        prefill: true,
       },
     ]);
+  });
+
+  it('готовность к переезду — только когда релокация отмечена в условиях поиска', () => {
+    const open = { openToRelocation: true };
+    expect(answer('Are you willing to relocate?', open)).toBe('Yes');
+    expect(answer('Готовы ли вы к переезду?', open)).toBe('Да');
+    expect(answer('Are you willing to relocate?', {})).toBeUndefined();
+    expect(answer('Do you require relocation assistance?', open)).toBeUndefined();
+    const choice: QuestionnaireQuestion = {
+      id: 'c', text: 'Are you open to relocation?', required: true, kind: 'choice', options: ['yes', 'No'],
+    };
+    expect(profileAnswers([choice], open)[0]?.text).toBe('yes');
+    expect(profileAnswers([{ ...choice, options: ['Maybe', 'No'] }], open)).toEqual([]);
   });
 
   it('чего нет в профиле — того нет и в ответе', () => {

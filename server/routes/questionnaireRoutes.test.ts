@@ -9,6 +9,7 @@ import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteQuestionnaireRepository } from '../candidate/sqliteQuestionnaireRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -173,6 +174,7 @@ describe('questionnaire routes with the B640 flag', () => {
     candidateStore.saveResumeDraft(
       candidateId,
       {
+        ...EMPTY_RESUME_DRAFT,
         candidate: {
           fullName: 'Марина Соколова',
           contact: {
@@ -182,8 +184,6 @@ describe('questionnaire routes with the B640 flag', () => {
             links: ['https://sokolova.dev', 'javascript:alert(1)'],
           },
         },
-        experience: [],
-        education: [],
       },
       [],
     );

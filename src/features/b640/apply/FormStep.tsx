@@ -35,7 +35,7 @@ export interface QuestionnaireState {
   readonly known: { readonly vacancyTitle: string; readonly companyName: string } | null;
   readonly draft: AnswerDraft;
   readonly setAnswer: (questionId: string, text: string) => void;
-  /** Сохранить ответы: при уходе из поля, после подсказки и перед копированием. */
+  /** Сохранить ответы: при уходе из поля, после выбора и перед копированием. */
   readonly save: (next?: AnswerDraft) => void;
   readonly saveError: string | null;
   readonly submitted: Mark;
@@ -133,16 +133,11 @@ interface QuestionProps {
 function Question({ question, suggestion, state }: QuestionProps) {
   const fieldId = `qa-${question.id}`;
   const value = answerOf(state.draft, question.id);
-  const useSuggestion = () => {
-    if (!suggestion) return;
-    state.setAnswer(question.id, suggestion.text);
-    state.save({ ...state.draft, [question.id]: suggestion.text });
-  };
   return (
     <li className="qa">
       <div className="qa-q">
         <span>{question.text}</span>
-        {suggestion && (!suggestion.prefill || value === suggestion.text) ? (
+        {suggestion && value === suggestion.text ? (
           <InfoTip label="Откуда ответ" text={`${suggestion.source}: ${suggestion.text}`} />
         ) : null}
         {question.required ? null : <span className="tag src">необязательный</span>}
@@ -152,13 +147,6 @@ function Question({ question, suggestion, state }: QuestionProps) {
           {`Ваш ответ: ${question.text}`}
         </label>
         <AnswerField fieldId={fieldId} question={question} value={value} state={state} />
-      </div>
-      <div className="qa-meta">
-        {suggestion && !suggestion.prefill && !value.trim() ? (
-          <Button variant="quiet" size="sm" icon="profile" onClick={useSuggestion}>
-            {`Вписать из профиля: ${suggestion.text}`}
-          </Button>
-        ) : null}
       </div>
     </li>
   );

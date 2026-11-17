@@ -208,13 +208,13 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
     ];
     // Ответы из профиля сервер отдаёт уже подставленными, пока кандидат не сохранил свои.
     const fromProfile = [
+      { questionId: 'q2', text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' },
       {
         questionId: 'q4',
         text: 'https://www.linkedin.com/in/msokolova',
         source: 'Из контактов вашего профиля',
-        prefill: true,
       },
-      { questionId: 'q5', text: 'Россия', source: 'Из контактов вашего профиля', prefill: true },
+      { questionId: 'q5', text: 'Россия', source: 'Из контактов вашего профиля' },
     ];
     const shown = [
       ...formAnswers,
@@ -222,7 +222,6 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
         .filter((item) => !formAnswers.some((answer) => answer.questionId === item.questionId))
         .map((item) => ({ questionId: item.questionId, text: item.text })),
     ];
-    const answered = new Set(formAnswers.map((answer) => answer.questionId));
     return {
       vacancyId,
       state: options.questionnaire ? 'ready' : 'none',
@@ -231,12 +230,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       vacancyTitle: 'Head of Engineering',
       vacancyCompany: 'Гринкод',
       answers: options.questionnaire ? shown : [],
-      suggestions: [
-        ...fromProfile,
-        ...(answered.has('q2')
-          ? []
-          : [{ questionId: 'q2', text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' }]),
-      ],
+      suggestions: fromProfile.filter((item) =>
+        shown.some((answer) => answer.questionId === item.questionId && answer.text === item.text),
+      ),
       answered: shown.length,
       total: options.questionnaire ? questions.length : 0,
       missingRequired: 0,
@@ -458,8 +454,11 @@ test.describe('B657: единый экран отклика', () => {
       questionnaire: true,
     });
     await expect(step(page, 'Анкета')).toHaveAttribute('aria-current', 'page');
-    // Контакты из профиля уже подставлены: ссылка и страна, выбор — из вариантов работодателя.
-    await expect(page.getByRole('heading', { name: '2 ответа из 5 готовы' })).toBeVisible();
+    // Ответы из профиля уже подставлены: доход, ссылка и страна; выбор — из вариантов работодателя.
+    await expect(page.getByRole('heading', { name: '3 ответа из 5 готовы' })).toBeVisible();
+    await expect(page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?')).toHaveValue(
+      'от 500 000 ₽',
+    );
     await expect(page.getByLabel('Ваш ответ: LinkedIn Profile')).toHaveValue(
       'https://www.linkedin.com/in/msokolova',
     );
@@ -478,15 +477,11 @@ test.describe('B657: единый экран отклика', () => {
     const first = page.getByLabel('Ваш ответ: Сколько человек было в вашей команде?');
     await first.fill('9 человек');
     await first.blur();
-    await expect.poll(() => mock.calls.includes('answers q1')).toBe(true);
-    await page.getByRole('button', { name: 'Вписать из профиля: от 500 000 ₽' }).click();
-    await expect(page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?')).toHaveValue(
-      'от 500 000 ₽',
-    );
+    await expect.poll(() => mock.calls.some((call) => call.startsWith('answers q1'))).toBe(true);
     await expect(page.getByRole('heading', { name: '4 ответа из 5 готовы' })).toBeVisible();
     await country.selectOption('Germany');
     await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
-    await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(2);
     // На 390 боковая панель скрыта: та же ссылка стоит в блоке действий под вопросами.
     await expect(
       page.getByRole('link', { name: 'Анкета на сайте ↗' }).locator('visible=true').first(),

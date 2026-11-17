@@ -78,7 +78,7 @@ export interface SalaryProfile {
 const SALARY_QUESTION = /доход|зарплат|оклад|вознагражд|компенсац|salary|compensation|pay expectation/iu;
 const CURRENCY_SIGNS: Readonly<Record<string, string>> = { RUB: '₽', USD: '$', EUR: '€' };
 
-/** Подсказка на вопрос о деньгах: только если ожидания уже записаны в профиле. */
+/** Ответ на вопрос о деньгах: только если ожидания уже записаны в профиле. */
 export function salarySuggestions(
   questions: readonly QuestionnaireQuestion[],
   profile: SalaryProfile | null,
@@ -143,7 +143,12 @@ function withProfileAnswers(
 /** Анкета для экрана: вопросы, ответы, подсказки и счётчики готовности. */
 export function buildQuestionnaire(input: QuestionnaireInput): ApplicationQuestionnaire {
   const saved = cleanAnswers(input.questions, input.answers);
-  const fromProfile = profileAnswers(input.questions, input.facts ?? null);
+  const contacts = profileAnswers(input.questions, input.facts ?? null);
+  const taken = new Set(contacts.map((item) => item.questionId));
+  const fromProfile = [
+    ...contacts,
+    ...salarySuggestions(input.questions, input.profile).filter((item) => !taken.has(item.questionId)),
+  ];
   const answers = withProfileAnswers(input.questions, saved, fromProfile);
   const answered = new Set(answers.map((answer) => answer.questionId));
   const texts = new Map(answers.map((answer) => [answer.questionId, answer.text]));
@@ -156,13 +161,8 @@ export function buildQuestionnaire(input: QuestionnaireInput): ApplicationQuesti
     formUrl: input.formUrl,
     questions: input.questions,
     answers,
-    suggestions: [
-      // Источник у подставленного ответа виден, пока кандидат не написал своё.
-      ...fromProfile.filter((item) => texts.get(item.questionId) === item.text),
-      ...salarySuggestions(input.questions, input.profile).filter(
-        (suggestion) => !answered.has(suggestion.questionId),
-      ),
-    ],
+    // Источник у подставленного ответа виден, пока кандидат не написал своё.
+    suggestions: fromProfile.filter((item) => texts.get(item.questionId) === item.text),
     answered: answers.length,
     total: input.questions.length,
     missingRequired: input.questions.filter(

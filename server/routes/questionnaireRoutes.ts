@@ -10,6 +10,7 @@ import {
   SqliteQuestionnaireRepository,
   type StoredQuestionnaire,
 } from '../candidate/sqliteQuestionnaireRepository';
+import type { CandidateDecisionProfile } from '../../shared/workPreferences';
 import { buildQuestionnaire, cleanAnswers } from '../domain/applicationQuestionnaire';
 import type { QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
@@ -129,7 +130,7 @@ function vacancyLabel(
 function profileFacts(
   deps: RouteDeps,
   who: Signed,
-  citizenship: readonly string[] | undefined,
+  decision: CandidateDecisionProfile | null | undefined,
 ): QuestionnaireProfileFacts {
   const candidate = deps.candidateStore.getResumeCandidate(who.candidateId);
   const contact = candidate?.contact;
@@ -141,7 +142,8 @@ function profileFacts(
     ...(contact?.linkedinUrl ? { linkedinUrl: contact.linkedinUrl } : {}),
     ...(contact?.links ? { links: contact.links.filter((link) => /^https?:\/\//u.test(link)) } : {}),
     ...(contact?.location ? { location: contact.location } : {}),
-    ...(citizenship ? { citizenship } : {}),
+    ...(decision?.citizenship ? { citizenship: decision.citizenship } : {}),
+    ...(decision?.workFormats.includes('relocation') ? { openToRelocation: true } : {}),
   };
 }
 
@@ -155,7 +157,7 @@ function view(
   return buildQuestionnaire({
     vacancyId: who.vacancyId,
     ...vacancyLabel(deps, who.vacancyId),
-    facts: profileFacts(deps, who, decision?.citizenship),
+    facts: profileFacts(deps, who, decision),
     state: stored ? 'ready' : fallback.state,
     formUrl: stored?.formUrl ?? fallback.formUrl,
     questions: stored?.questions ?? [],

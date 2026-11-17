@@ -23,14 +23,12 @@ export interface QuestionnaireAnswer {
   readonly text: string;
 }
 
-/** Подсказка из профиля: кандидат вписывает её сам, кнопкой. */
+/** Ответ, подставленный из профиля: в поле стоит то, что в профиле записано. */
 export interface QuestionnaireSuggestion {
   readonly questionId: string;
   readonly text: string;
   /** Откуда взято, словами кандидата: «Ожидания из вашего профиля». */
   readonly source: string;
-  /** Ответ уже подставлен в поле: это то, что в профиле записано дословно (контакты). */
-  readonly prefill?: boolean;
 }
 
 export interface ApplicationQuestionnaire {

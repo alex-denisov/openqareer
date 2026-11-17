@@ -18,6 +18,8 @@ export interface QuestionnaireProfileFacts {
   /** Место жительства одной строкой, как в контактах: «Москва, Россия». */
   readonly location?: string;
   readonly citizenship?: readonly string[];
+  /** В условиях поиска отмечена релокация. Не отмечена — ответа нет, а не «нет». */
+  readonly openToRelocation?: boolean;
 }
 
 const SOURCE_CONTACTS = 'Из контактов вашего профиля';
@@ -28,7 +30,7 @@ interface Rule {
   /** Вопросы, похожие по словам, но о другом: «название компании», «код страны». */
   readonly except?: RegExp;
   readonly source: string;
-  readonly value: (facts: QuestionnaireProfileFacts) => string | undefined;
+  readonly value: (facts: QuestionnaireProfileFacts, question: string) => string | undefined;
 }
 
 function clean(value: string | undefined): string | undefined {
@@ -52,7 +54,17 @@ function locationParts(location: string | undefined): { city?: string; country?:
   return { city: parts[0], country: parts[parts.length - 1] };
 }
 
+const RELOCATION = /(willing|open|ready|able|prepared) to relocat|готовы\S* (ли )?(вы )?(к )?(переезд|релокац)|рассматриваете (ли )?(переезд|релокац)/iu;
+
 const RULES: readonly Rule[] = [
+  {
+    matches: RELOCATION,
+    source: SOURCE_SEARCH,
+    value: (facts, question) => {
+      if (!facts.openToRelocation) return undefined;
+      return /\p{Script=Cyrillic}/u.test(question) ? 'Да' : 'Yes';
+    },
+  },
   {
     matches: /linkedin/iu,
     source: SOURCE_CONTACTS,
@@ -115,9 +127,9 @@ export function profileAnswers(
   return questions.flatMap((question) => {
     for (const rule of RULES) {
       if (!rule.matches.test(question.text) || rule.except?.test(question.text)) continue;
-      const value = rule.value(facts);
+      const value = rule.value(facts, question.text);
       const text = value ? forQuestion(question, value) : undefined;
-      return text ? [{ questionId: question.id, text, source: rule.source, prefill: true }] : [];
+      return text ? [{ questionId: question.id, text, source: rule.source }] : [];
     }
     return [];
   });
