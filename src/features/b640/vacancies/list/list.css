@@ -1,0 +1,28 @@
+/* Подборка вакансий в узкой области контента (открыта панель консультанта, окно уже 1100):
+   «Роль» остаётся читаемой, места ей уступают сначала «Формат», затем «Дата».
+   Столбцы не убираем из таблицы, а сводим к нулевой ширине: раскрытая строка занимает
+   восемь колонок, и без этого лишние колонки отняли бы место у роли. */
+@layer b640.sections {
+  @media (min-width: 768px) {
+    @container main (max-width: 1091px) {
+      .b640 .vt-th.vt-format,
+      .b640 .vt-row > .vt-format {
+        inline-size: 0;
+        padding: 0;
+        border-inline: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
+    }
+    @container main (max-width: 1011px) {
+      .b640 .vt-th.vt-date,
+      .b640 .vt-row > .vt-date {
+        inline-size: 0;
+        padding: 0;
+        border-inline: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
+    }
+  }
+}

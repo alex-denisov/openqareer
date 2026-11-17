@@ -1,3 +1,4 @@
+import './list.css';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
 import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
