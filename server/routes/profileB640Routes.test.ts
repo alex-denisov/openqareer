@@ -9,6 +9,7 @@ import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import type { ResumeDraft } from '../domain/resumeDraft';
+import { resetPhotoUploadCounter } from './profileB640Routes';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -16,6 +17,7 @@ const ORIGIN = 'http://localhost:3000';
 const PROFILE = '/api/v1/candidate/profile';
 
 afterEach(async () => {
+  resetPhotoUploadCounter();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
@@ -230,6 +232,18 @@ describe('фото профиля', () => {
     expect(await photoIdOf(app, flagged)).toBeUndefined();
   });
 
+  it('не больше десяти загрузок в час на кандидата; у другого кандидата свой счёт', async () => {
+    const { app } = await setup();
+    const payload = { contentBase64: jpegBase64() };
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      expect((await call(app, 'PUT', `${PROFILE}/photo`, flagged, payload)).statusCode).toBe(200);
+    }
+    const over = await call(app, 'PUT', `${PROFILE}/photo`, flagged, payload);
+    expect(over.statusCode).toBe(429);
+    expect(over.json().error.code).toBe('photo_rate_limited');
+    expect((await call(app, 'PUT', `${PROFILE}/photo`, other, payload)).statusCode).toBe(200);
+  });
+
   it('без профиля фото приложить не к чему', async () => {
     const { app } = await setup({ withProfile: false });
     const response = await call(app, 'PUT', `${PROFILE}/photo`, flagged, {
@@ -303,7 +317,9 @@ describe('доход и ожидания', () => {
       const response = await call(app, 'POST', `${PROFILE}/history/${entry.id}/revert`, flagged);
       expect(response.statusCode, entry.section).toBe(409);
     }
-    expect((await call(app, 'GET', `${PROFILE}/income`, flagged)).json().data.current).toBe(440_000);
+    expect((await call(app, 'GET', `${PROFILE}/income`, flagged)).json().data.current).toBe(
+      440_000,
+    );
   });
 
   it('отклоняет не-числа, отрицательные, дробные, огромные суммы и лишние поля', async () => {

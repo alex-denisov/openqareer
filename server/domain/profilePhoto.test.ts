@@ -136,6 +136,17 @@ describe('normalizeProfilePhoto', () => {
     expect(codeOf(() => normalizeProfilePhoto(bomb))).toBe('photo_too_many_pixels');
   });
 
+  it('чересстрочный PNG не разбирает: у него нет потолка на распаковку', () => {
+    const interlaced = pngOf(80, 80);
+    interlaced[28] = 1;
+    expect(codeOf(() => normalizeProfilePhoto(interlaced))).toBe('photo_unreadable');
+  });
+
+  it('потолок по пикселям — два мегапикселя: больше экран не отправляет', () => {
+    expect(codeOf(() => normalizeProfilePhoto(jpegOf(1400, 1400)))).toBe('ok');
+    expect(codeOf(() => normalizeProfilePhoto(jpegOf(1600, 1300)))).toBe('photo_too_many_pixels');
+  });
+
   it('у каждой ошибки есть текст для кандидата', () => {
     for (const run of [
       () => normalizeProfilePhoto(Buffer.from('nope')),

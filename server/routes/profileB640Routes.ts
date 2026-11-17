@@ -62,6 +62,33 @@ function candidateIdOf(
   return principal.candidate.id;
 }
 
+/**
+ * Разбор фото идёт в общем потоке сервера, а общий лимит запросов вошедших не
+ * касается, поэтому загрузки считаем по кандидату: не больше десяти в час.
+ */
+const UPLOADS_PER_HOUR = 10;
+const HOUR_MS = 3_600_000;
+const MAX_TRACKED_CANDIDATES = 10_000;
+const uploadTimes = new Map<string, number[]>();
+
+function uploadAllowed(candidateId: string, now: number): boolean {
+  const recent = (uploadTimes.get(candidateId) ?? []).filter((at) => now - at < HOUR_MS);
+  if (recent.length >= UPLOADS_PER_HOUR) {
+    uploadTimes.set(candidateId, recent);
+    return false;
+  }
+  if (!uploadTimes.has(candidateId) && uploadTimes.size >= MAX_TRACKED_CANDIDATES) {
+    uploadTimes.clear();
+  }
+  uploadTimes.set(candidateId, [...recent, now]);
+  return true;
+}
+
+/** Только для тестов: счётчик загрузок живёт в памяти процесса. */
+export function resetPhotoUploadCounter(): void {
+  uploadTimes.clear();
+}
+
 /** Байты файла из тела запроса; `null` — это не base64. Имя и тип от клиента не принимаем. */
 function fileBytes(body: unknown): Buffer | null {
   const parsed = photoSchema.safeParse(body ?? {});
@@ -74,6 +101,16 @@ function fileBytes(body: unknown): Buffer | null {
 const putPhoto: Handler = async (deps, request, reply) => {
   const candidateId = candidateIdOf(deps, request, reply);
   if (!candidateId) return reply;
+  if (!uploadAllowed(candidateId, Date.now())) {
+    return sendError(
+      reply,
+      request,
+      429,
+      'photo_rate_limited',
+      'Слишком много загрузок фото. Попробуйте через час.',
+      true,
+    );
+  }
   const file = fileBytes(request.body);
   if (!file) {
     return sendError(

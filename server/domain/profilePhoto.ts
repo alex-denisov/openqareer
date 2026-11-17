@@ -11,7 +11,7 @@ export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 export const PHOTO_MAX_SIDE = 640;
 const PHOTO_MIN_SIDE = 64;
 /** Разбор идёт в общем потоке сервера, поэтому потолок жёсткий; экран уменьшает снимок до отправки. */
-const PHOTO_MAX_PIXELS = 4_000_000;
+const PHOTO_MAX_PIXELS = 2_000_000;
 const JPEG_QUALITY = 86;
 
 export type ProfilePhotoErrorCode =
@@ -25,7 +25,7 @@ const MESSAGES: Record<ProfilePhotoErrorCode, string> = {
   photo_format: 'Подойдёт фото в JPEG или PNG.',
   photo_too_large: 'Фото больше 5 МБ.',
   photo_too_small: 'Фото меньше 64 пикселей по стороне.',
-  photo_too_many_pixels: 'Фото слишком большое: уменьшите его до 2000 пикселей по стороне.',
+  photo_too_many_pixels: 'Фото слишком большое: уменьшите его до 1400 пикселей по стороне.',
   photo_unreadable: 'Файл не открылся как фото.',
 };
 
@@ -128,8 +128,16 @@ function decodeJpeg(bytes: Buffer): { pixels: Pixels; orientation: number } {
   }
 }
 
+/** Байт способа развёртки в IHDR: 0 — обычная, 1 — чересстрочная. */
+const PNG_INTERLACE_OFFSET = 28;
+
 function decodePng(bytes: Buffer): { pixels: Pixels; orientation: number } {
   assertPixelBudget(bytes.readUInt32BE(16), bytes.readUInt32BE(20));
+  // Чересстрочный PNG разбирается без потолка на распаковку: «бомба» в сотни
+  // килобайт раздувается в гигабайты. Такие файлы не принимаем вовсе.
+  if (bytes.length <= PNG_INTERLACE_OFFSET || bytes[PNG_INTERLACE_OFFSET] !== 0) {
+    throw new ProfilePhotoError('photo_unreadable');
+  }
   try {
     const decoded = PNG.sync.read(bytes, { checkCRC: true });
     return { pixels: decoded, orientation: 1 };
