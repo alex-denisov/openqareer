@@ -37,6 +37,7 @@ import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
 import { registerQuestionnaireRoutes } from './questionnaireRoutes';
+import { registerTextVariantRoutes } from './textVariantRoutes';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -544,6 +545,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerApplicationOperationsRoutes(app, deps);
   registerRejectionReviewRoutes(app, deps);
   registerQuestionnaireRoutes(app, deps);
+  registerTextVariantRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },

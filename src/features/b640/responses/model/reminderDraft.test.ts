@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reminderDraft } from './reminderDraft';
+import { reminderDraft, reminderLanguage } from './reminderDraft';
 import { application } from './testApplication';
 
 describe('текст напоминания компании', () => {
@@ -31,5 +31,39 @@ describe('текст напоминания компании', () => {
     );
     expect(text).toContain('Мой отклик на вашу вакансию отправлен. ');
     expect(text).not.toContain('Тайна');
+  });
+
+  it('к англоязычной вакансии напоминание на английском', () => {
+    const english = application({
+      appliedAt: '2026-11-04T10:00:00.000Z',
+      vacancy: { title: 'Senior Solutions Engineer', company: 'Snowflake', url: '', source: 'ats-ashby-snowflake' },
+    });
+    const text = reminderDraft(english, new Date('2026-11-12T09:00:00.000Z'));
+    expect(text).toBe(
+      'Hello,\n\nI applied for the Senior Solutions Engineer role at Snowflake on November 4. Could you please confirm that my application was received and let me know when I can expect a reply?\n\nThank you!',
+    );
+    expect(text).not.toMatch(/[а-яё]/iu);
+    const after = reminderDraft(
+      { ...english, interviewScheduledAt: ['2026-11-10T12:00:00.000Z'] },
+      new Date('2026-11-12T09:00:00.000Z'),
+    );
+    expect(after).toContain('following up on our interview for the Senior Solutions Engineer role at Snowflake');
+  });
+
+  it('название с кириллицей или без букв оставляет русский текст', () => {
+    expect(reminderLanguage(application())).toBe('ru');
+    expect(
+      reminderLanguage(application({ vacancy: { title: 'Head of Engineering (Москва)', company: '', url: '', source: 'hh' } })),
+    ).toBe('ru');
+    expect(reminderLanguage(application({ vacancy: { title: '', company: '', url: '', source: 'hh' } }))).toBe('ru');
+    expect(
+      reminderLanguage(application({ vacancy: { title: 'Head of Engineering', company: 'Гринкод', url: '', source: 'linkedin' } })),
+    ).toBe('ru');
+    expect(
+      reminderLanguage(application({ vacancy: { title: 'Head of Engineering', company: 'Acme', url: '', source: 'hh' } })),
+    ).toBe('ru');
+    expect(
+      reminderLanguage(application({ vacancy: { title: 'Head of Engineering', company: 'Acme', url: '', source: 'linkedin' } })),
+    ).toBe('en');
   });
 });

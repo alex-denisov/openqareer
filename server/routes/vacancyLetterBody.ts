@@ -43,6 +43,8 @@ export interface LetterWritingRequest {
   readonly candidateName?: string;
   /** B639: место кандидата в компании вакансии или её группе (`letterCompanyLink`). */
   readonly companyLink?: string;
+  /** B682: пожелание кандидата к другому варианту письма. */
+  readonly wish?: string;
 }
 
 export interface WrittenLetterBody {
@@ -102,7 +104,7 @@ function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, profile, gender, resumeAttached, candidateName, companyLink } = letter;
+  const { vacancy, profile, gender, resumeAttached, candidateName, companyLink, wish } = letter;
   return {
     profile,
     vacancy: {
@@ -119,6 +121,7 @@ function writerInput(
     ...(resumeAttached ? {} : { resumeAttached: false }),
     ...(candidateName?.trim() ? { candidateName: candidateName.trim() } : {}),
     ...(companyLink ? { companyLink } : {}),
+    ...(wish ? { wish } : {}),
     review,
   };
 }

@@ -28,6 +28,7 @@ import {
 import { QuotaBlock } from './QuotaBlock';
 import { ResumeStep } from './ResumeStep';
 import { SendStep } from './SendStep';
+import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
 
 const COLD_CIRCLE = 3;
 
@@ -107,6 +108,7 @@ interface BodyProps {
   readonly step: ApplyStep;
   readonly setStep: (step: ApplyStep) => void;
   readonly letter: LetterScreenState;
+  readonly variants: LetterVariantsState;
   /** Ответы анкеты одним текстом для вставки на площадке; пусто — анкеты нет. */
   readonly answers: string;
   readonly resumeOk: boolean;
@@ -135,7 +137,7 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: Bod
 }
 
 function EditorBody(props: BodyProps) {
-  const { vacancyId, head, step, setStep, letter, resumeOk, resumeSeen, onResumeOk } = props;
+  const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen, onResumeOk } = props;
   return (
     <>
       <VacancyColumn vacancyId={vacancyId} head={head} />
@@ -152,7 +154,7 @@ function EditorBody(props: BodyProps) {
           </div>
         ) : null}
         <div hidden={step !== 'letter'}>
-          <LetterStep letter={letter} head={head} onSend={() => setStep('send')} />
+          <LetterStep letter={letter} variants={variants} head={head} onSend={() => setStep('send')} />
         </div>
       </div>
     </>
@@ -210,6 +212,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
   const letter = useVacancyLetterController(target.vacancyId, COLD_CIRCLE);
   const quota = useExhaustedQuota(letter);
+  const variants = useLetterVariants(target.vacancyId, letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
   const form = questionnaire.form;
   // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
@@ -236,6 +239,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
       step: shown,
       setStep,
       letter,
+      variants,
       answers: form ? copyText(form.questions, questionnaire.draft) : '',
       resumeOk,
       resumeSeen,
@@ -254,7 +258,12 @@ function ApplyFlow(props: FlowProps) {
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
     crumb: head.company || head.title,
-    rootData: wide ? { mtight: '1', 'main-right': '1' } : { mtight: '1' },
+    rootData: {
+      mtight: '1',
+      ...(wide ? { 'main-right': '1' } : {}),
+      // Открытое «Что поменять» на 390 — лист снизу (признак макета `data-vsheet`).
+      ...(body.variants.wishOpen ? { vsheet: '1' } : {}),
+    },
   });
   return (
     <>

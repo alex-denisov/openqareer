@@ -266,9 +266,6 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
       <History application={application} />
       <NoteField fieldId={`${titleId}-note`} application={application} writer={writer} />
       <VacancyLink application={application} />
-      <p className="vd-kbd od-kbd">
-        <kbd>Esc</kbd> — свернуть
-      </p>
     </>
   );
 }

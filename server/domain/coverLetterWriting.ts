@@ -70,6 +70,8 @@ export interface CoverLetterPromptInput {
   readonly companyLink?: string;
   /** B640: причина отказа проверки — отдельным абзацем после утверждённого запроса. */
   readonly correction?: string;
+  /** B682: пожелание кандидата к другому варианту письма, уже собранное в добавку к запросу. */
+  readonly wish?: string;
 }
 
 /**
@@ -143,6 +145,7 @@ export function coverLetterPrompt(input: CoverLetterPromptInput): string {
     ? linked.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
     : linked;
   const prompt = template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME|LINK)\}/gu, (_match, key: string) => values[key] ?? '').trim();
+  const wish = input.wish?.trim();
   const correction = input.correction?.trim();
-  return correction ? `${prompt}\n\n${correction}` : prompt;
+  return [prompt, wish, correction].filter(Boolean).join('\n\n');
 }

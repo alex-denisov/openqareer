@@ -139,3 +139,56 @@ export function paragraphs(text: string): readonly string[] {
     .map((line) => line.trim())
     .filter(Boolean);
 }
+
+export interface ResumeLine {
+  readonly kind: 'heading' | 'line';
+  readonly text: string;
+}
+
+/**
+ * Служебная разметка раздела из исходного файла. Знаки должны стоять с обеих сторон
+ * одинаковые (`=== SUMMARY ===`, `**Опыт**`) либо это заголовок `## Навыки`; строка с
+ * тире в начале остаётся пунктом списка.
+ */
+const FENCED = /^([=\-_*~]{2,})\s*(.*?)\s*\1$/u;
+const HASHED = /^#{2,6}\s+(.+)$/u;
+/** Длинные строки — это текст, а не разметка: сверять их с шаблоном незачем. */
+const MARKER_MAX_LENGTH = 120;
+
+function markerTitle(line: string): string | null {
+  if (line.length > MARKER_MAX_LENGTH) return null;
+  if (/^[=\-_*~#]{2,}$/u.test(line)) return '';
+  const fenced = FENCED.exec(line);
+  if (fenced) return fenced[2] ?? '';
+  const hashed = HASHED.exec(line);
+  if (hashed) return hashed[1] ?? '';
+  return null;
+}
+
+const SECTION_NAMES: Readonly<Record<string, string>> = {
+  summary: 'О себе',
+  about: 'О себе',
+  profile: 'О себе',
+  experience: 'Опыт работы',
+  'work experience': 'Опыт работы',
+  education: 'Образование',
+  skills: 'Навыки',
+  languages: 'Языки',
+  certifications: 'Сертификаты',
+  projects: 'Проекты',
+  contacts: 'Контакты',
+};
+
+/**
+ * Резюме строками для показа. Служебная разметка разделов на экран не выходит: строка
+ * `=== SUMMARY ===` становится заголовком «О себе», линия из одних знаков пропадает.
+ */
+export function resumeLines(text: string): readonly ResumeLine[] {
+  return paragraphs(text).flatMap((line): ResumeLine[] => {
+    const title = markerTitle(line)?.trim();
+    if (title === undefined) return [{ kind: 'line', text: line }];
+    if (!title) return [];
+    const key = title.toLowerCase();
+    return [{ kind: 'heading', text: Object.hasOwn(SECTION_NAMES, key) ? SECTION_NAMES[key]! : title }];
+  });
+}
