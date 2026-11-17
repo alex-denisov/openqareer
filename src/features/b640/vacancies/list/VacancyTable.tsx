@@ -5,7 +5,7 @@ import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { Icon, InfoTip } from '../../kit';
 import { DetailRow } from './DetailRow';
 import { SORT_COLUMNS, type SortKey, type SortState } from './sortModel';
-import { VacancyRow, type RowEnv } from './VacancyRow';
+import { VacancyRow, type RowEnv, type RowPick } from './VacancyRow';
 import type { MenuView, RowMenuActions } from './RowMenu';
 
 export interface TableMenu {
@@ -24,6 +24,8 @@ export interface VacancyTableProps {
   readonly menu: TableMenu | null;
   readonly moneyTip: string | null;
   readonly actionsFor: (item: MatchedVacancyItem) => RowMenuActions;
+  /** Режим «Помочь выбрать»: флажок и причина строки, `undefined` — строка обычная. */
+  readonly pickFor?: (item: MatchedVacancyItem) => RowPick | undefined;
   readonly onToggleOpen: (id: string) => void;
   readonly onToggleSaved: (item: MatchedVacancyItem) => void;
   readonly onMenu: (id: string, view: MenuView) => void;
@@ -82,6 +84,7 @@ export function VacancyTable(props: VacancyTableProps) {
                 open={open}
                 menuView={menu?.id === id ? menu.view : null}
                 menuActions={props.actionsFor(item)}
+                pick={props.pickFor?.(item)}
                 onToggleOpen={() => props.onToggleOpen(id)}
                 onToggleSaved={() => props.onToggleSaved(item)}
                 onMenu={(view) => props.onMenu(id, view)}

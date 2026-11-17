@@ -16,6 +16,13 @@ export interface RowEnv {
   readonly noRole: boolean;
 }
 
+/** Строка в режиме «Помочь выбрать»: вердикт hide с причиной и флажком. */
+export interface RowPick {
+  readonly checked: boolean;
+  readonly reason: string;
+  readonly onToggle: () => void;
+}
+
 export interface VacancyRowProps {
   readonly item: MatchedVacancyItem;
   readonly env: RowEnv;
@@ -28,6 +35,7 @@ export interface VacancyRowProps {
   readonly onToggleSaved: () => void;
   readonly onMenu: (view: MenuView) => void;
   readonly onCloseMenu: () => void;
+  readonly pick?: RowPick;
 }
 
 export function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
@@ -125,28 +133,46 @@ function Actions(props: VacancyRowProps) {
   );
 }
 
+/** Ячейка «Роль»: название, метка «Хочу», в режиме «Помочь выбрать» ещё флажок и причина. */
+function RoleCell({ item, wanted, open, pick, onToggleOpen }: VacancyRowProps) {
+  const { cluster } = item;
+  return (
+    <td className="vt-c vt-role">
+      <div className="vt-rl">
+        {pick ? (
+          <input
+            className="vz-ck"
+            type="checkbox"
+            checked={pick.checked}
+            aria-label={`Скрыть: ${cluster.canonicalTitle}, ${cluster.canonicalCompany ?? ''}`}
+            onChange={pick.onToggle}
+          />
+        ) : null}
+        <button className="vt-toggle" type="button" aria-expanded={open} aria-controls={open ? `vacancy-details-${cluster.id}` : undefined} title={cluster.canonicalTitle} onClick={onToggleOpen}>
+          <span>{cluster.canonicalTitle}</span>
+          <Icon name="down" className="vt-chev" />
+        </button>
+        {pick ? <span className="vz-why">{pick.reason}</span> : null}
+        {wanted ? (
+          <Link className="tag va-tag vg-want" title="Хочу в компанию" to={buildNodePath('o08')}>
+            <Icon name="building" />
+            <span className="vh">Хочу в компанию</span>
+          </Link>
+        ) : null}
+      </div>
+    </td>
+  );
+}
+
 /** Строка таблицы подборки: разметка и классы макета s07. */
 export function VacancyRow(props: VacancyRowProps) {
-  const { item, env, application, wanted, open } = props;
+  const { item, env, application, open, pick } = props;
   const { cluster } = item;
   const geo = rowGeo(item);
   const pending = vacancyFitMark(item.explanation.fitView).kind === 'pending';
   return (
-    <tr className={`vt-row${open ? ' is-open' : ''}${pending ? ' is-counting' : ''}`}>
-      <td className="vt-c vt-role">
-        <div className="vt-rl">
-          <button className="vt-toggle" type="button" aria-expanded={open} aria-controls={open ? `vacancy-details-${cluster.id}` : undefined} title={cluster.canonicalTitle} onClick={props.onToggleOpen}>
-            <span>{cluster.canonicalTitle}</span>
-            <Icon name="down" className="vt-chev" />
-          </button>
-          {wanted ? (
-            <Link className="tag va-tag vg-want" title="Хочу в компанию" to={buildNodePath('o08')}>
-              <Icon name="building" />
-              <span className="vh">Хочу в компанию</span>
-            </Link>
-          ) : null}
-        </div>
-      </td>
+    <tr className={`vt-row${open ? ' is-open' : ''}${pending ? ' is-counting' : ''}${pick?.checked ? ' is-pick' : ''}`}>
+      <RoleCell {...props} />
       <td className="vt-c vt-company" title={cluster.canonicalCompany}>
         <CompanyCell item={item} application={application} />
       </td>

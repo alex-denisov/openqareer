@@ -23,6 +23,15 @@ function rateCode(currency: string): string {
   return RATE_ALIASES[code] ?? code;
 }
 
+/** Одна и та же валюта с учётом псевдонимов (RUR/RUB/₽, $/USD). */
+export function sameCurrency(a: string, b: string): boolean {
+  return rateCode(a) === rateCode(b);
+}
+
+export function currencyCode(currency: string): string {
+  return rateCode(currency);
+}
+
 function rubles(currency: string, rates: CurrencyRates): number | undefined {
   const code = rateCode(currency);
   if (code === 'RUB') return 1;

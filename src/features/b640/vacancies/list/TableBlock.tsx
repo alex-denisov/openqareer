@@ -1,3 +1,5 @@
+// Общая таблица «Подборки» и «Сохранённых»: стили узкой области грузятся вместе с ней.
+import './list.css';
 import type { ReactNode } from 'react';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -6,7 +8,7 @@ import { ratesTipText } from './ratesNote';
 import type { SortKey, SortState } from './sortModel';
 import type { RowInteractions } from './useRowInteractions';
 import { VacancyTable } from './VacancyTable';
-import type { RowEnv } from './VacancyRow';
+import type { RowEnv, RowPick } from './VacancyRow';
 
 export interface TableBlockProps {
   readonly items: readonly MatchedVacancyItem[];
@@ -17,10 +19,11 @@ export interface TableBlockProps {
   readonly rows: RowInteractions;
   readonly rates?: CurrencyRates;
   readonly hidden?: ReactNode;
+  readonly pickFor?: (item: MatchedVacancyItem) => RowPick | undefined;
 }
 
 /** Таблица подборки с общим состоянием строк: раскрытие, окно действий, ☆. */
-export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidden }: TableBlockProps) {
+export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidden, pickFor }: TableBlockProps) {
   return (
     <VacancyTable
       items={items}
@@ -33,6 +36,7 @@ export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidde
       menu={rows.menu}
       moneyTip={ratesTipText(rates)}
       actionsFor={rows.actionsFor}
+      pickFor={pickFor}
       onToggleOpen={rows.toggleOpen}
       onToggleSaved={rows.toggleSaved}
       onMenu={rows.openMenu}
