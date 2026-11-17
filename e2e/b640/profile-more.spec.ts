@@ -166,7 +166,8 @@ test.describe('B651: «История изменений» (p10)', () => {
 
     const first = screen.locator('.hx-row').first();
     await first.getByRole('button', { name: /Отменить: «FinCloud» · правка 0/u }).click();
-    await expect(first.locator('.hx-res')).toHaveText('Отменено');
+    await expect(first.locator('.hx-res .res-t')).toHaveText('Отменено');
+    await expect(first.getByRole('button', { name: /Вернуть/u })).toBeVisible();
     await expect(first.getByRole('button', { name: /Отменить/u })).toHaveCount(0);
     expect(calls.reverted).toEqual(['ch-0']);
 
