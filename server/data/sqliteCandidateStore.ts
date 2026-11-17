@@ -84,10 +84,8 @@ import type {
 import type { ApplicationTrackerController } from './store/applicationTrackerController';
 import { createSqliteCandidateStoreRepositories } from './sqliteCandidateStoreRepositories';
 import { SqliteNotificationRepository } from './sqliteNotificationRepository';
-import {
-  createApplicationTrackerMethods,
-  type ApplicationTrackerMethods,
-} from './sqliteCandidateStoreApplicationMethods';
+import type { ApplicationTrackerMethods } from './sqliteCandidateStoreApplicationMethods';
+import { createTrackerMethods } from './trackerClusterStages';
 import {
   createSqliteCandidateStoreDocumentMethods,
   type SqliteCandidateStoreDocumentMethods,
@@ -311,7 +309,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   /** See `sqliteCandidateStoreApplicationMethods.ts` for what this wires in. */
   private wireApplicationTrackerMethods(): void {
-    Object.assign(this, createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id), this.database, this.sealedText));
+    Object.assign(this, createTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id), this.database, this.sealedText));
   }
 
   private wireDocumentMethods(): void {
@@ -663,7 +661,6 @@ export class SqliteCandidateStore implements CandidateStore {
   declare createVacancySkip: ApplicationTrackerMethods['createVacancySkip'];
   declare deleteVacancySkip: ApplicationTrackerMethods['deleteVacancySkip'];
   declare listVacancyDecisions: ApplicationTrackerMethods['listVacancyDecisions'];
-  listTrackerClusterStages = (id: string) => (this.requireCandidate(id), this.applicationTracker.listClusterStages(id));
   declare recordCandidateVisit: ApplicationTrackerMethods['recordCandidateVisit'];
   declare getSinceLastVisit: ApplicationTrackerMethods['getSinceLastVisit'];
   declare countSystemClosuresSince: ApplicationTrackerMethods['countSystemClosuresSince'];

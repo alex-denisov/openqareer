@@ -776,9 +776,6 @@ export interface CandidateStore {
   /** Applied to the matched pool after its cache read; never part of the cache key (architecture.md §4, §7). */
   listVacancyDecisions(candidateId: string): VacancyDecision[];
 
-  /** B675: пары (вакансия, этап) карточек трекера; только чтение, без побочных записей. */
-  listTrackerClusterStages(candidateId: string): Array<{ clusterId: string; stage: ApplicationStage }>;
-
   /** `POST /visits` (architecture.md §4): moves the mark only past 30 minutes. */
   recordCandidateVisit(candidateId: string, now: string): RecordVisitResult;
 
