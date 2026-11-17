@@ -197,6 +197,30 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       { id: 'q1', text: 'Сколько человек было в вашей команде?', required: true, kind: 'text' },
       { id: 'q2', text: 'Ожидаемый уровень дохода?', required: true, kind: 'text' },
       { id: 'q3', text: 'Готовы ли к командировкам?', required: false, kind: 'text' },
+      { id: 'q4', text: 'LinkedIn Profile', required: true, kind: 'text' },
+      {
+        id: 'q5',
+        text: 'Country of residence',
+        required: true,
+        kind: 'choice',
+        options: ['Germany', 'Россия', 'Other'],
+      },
+    ];
+    // Ответы из профиля сервер отдаёт уже подставленными, пока кандидат не сохранил свои.
+    const fromProfile = [
+      {
+        questionId: 'q4',
+        text: 'https://www.linkedin.com/in/msokolova',
+        source: 'Из контактов вашего профиля',
+        prefill: true,
+      },
+      { questionId: 'q5', text: 'Россия', source: 'Из контактов вашего профиля', prefill: true },
+    ];
+    const shown = [
+      ...formAnswers,
+      ...fromProfile
+        .filter((item) => !formAnswers.some((answer) => answer.questionId === item.questionId))
+        .map((item) => ({ questionId: item.questionId, text: item.text })),
     ];
     const answered = new Set(formAnswers.map((answer) => answer.questionId));
     return {
@@ -204,11 +228,16 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       state: options.questionnaire ? 'ready' : 'none',
       formUrl: options.questionnaire ? 'https://boards.greenhouse.io/grinkod/jobs/77' : null,
       questions: options.questionnaire ? questions : [],
-      answers: formAnswers,
-      suggestions: answered.has('q2')
-        ? []
-        : [{ questionId: 'q2', text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' }],
-      answered: formAnswers.length,
+      vacancyTitle: 'Head of Engineering',
+      vacancyCompany: 'Гринкод',
+      answers: options.questionnaire ? shown : [],
+      suggestions: [
+        ...fromProfile,
+        ...(answered.has('q2')
+          ? []
+          : [{ questionId: 'q2', text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' }]),
+      ],
+      answered: shown.length,
       total: options.questionnaire ? questions.length : 0,
       missingRequired: 0,
       readAt: null,
@@ -429,7 +458,20 @@ test.describe('B657: единый экран отклика', () => {
       questionnaire: true,
     });
     await expect(step(page, 'Анкета')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByRole('heading', { name: '0 ответов из 3 готовы' })).toBeVisible();
+    // Контакты из профиля уже подставлены: ссылка и страна, выбор — из вариантов работодателя.
+    await expect(page.getByRole('heading', { name: '2 ответа из 5 готовы' })).toBeVisible();
+    await expect(page.getByLabel('Ваш ответ: LinkedIn Profile')).toHaveValue(
+      'https://www.linkedin.com/in/msokolova',
+    );
+    const country = page.getByLabel('Ваш ответ: Country of residence');
+    await expect(country).toHaveValue('Россия');
+    await expect(country.locator('option')).toHaveText([
+      'Выберите ответ',
+      'Germany',
+      'Россия',
+      'Other',
+    ]);
+    await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(3);
     await expect(page.getByText('необязательный')).toHaveCount(1);
     await expectGates(page);
 
@@ -441,7 +483,10 @@ test.describe('B657: единый экран отклика', () => {
     await expect(page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?')).toHaveValue(
       'от 500 000 ₽',
     );
-    await expect(page.getByRole('heading', { name: '2 ответа из 3 готовы' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '4 ответа из 5 готовы' })).toBeVisible();
+    await country.selectOption('Germany');
+    await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
+    await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(1);
     // На 390 боковая панель скрыта: та же ссылка стоит в блоке действий под вопросами.
     await expect(
       page.getByRole('link', { name: 'Анкета на сайте ↗' }).locator('visible=true').first(),

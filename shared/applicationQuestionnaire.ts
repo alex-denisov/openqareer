@@ -29,10 +29,15 @@ export interface QuestionnaireSuggestion {
   readonly text: string;
   /** Откуда взято, словами кандидата: «Ожидания из вашего профиля». */
   readonly source: string;
+  /** Ответ уже подставлен в поле: это то, что в профиле записано дословно (контакты). */
+  readonly prefill?: boolean;
 }
 
 export interface ApplicationQuestionnaire {
   readonly vacancyId: string;
+  /** Название и компания вакансии, как их знает сервер; пусто — не знает. */
+  readonly vacancyTitle?: string;
+  readonly vacancyCompany?: string;
   /**
    * `ready` — вопросы прочитаны; `none` — у вакансии анкеты нет;
    * `unreadable` — площадка не отдаёт вопросы заранее, анкета открывается на её странице.

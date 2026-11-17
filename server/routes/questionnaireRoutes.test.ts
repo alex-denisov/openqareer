@@ -74,7 +74,7 @@ async function setup() {
       formUrl: 'https://boards.greenhouse.io/acme/jobs/77',
       readAt: '2026-11-17T00:00:00.000Z',
     });
-  return { app, seed, databasePath: config.databasePath };
+  return { app, seed, forms, sessions, candidateStore, databasePath: config.databasePath };
 }
 
 function call(app: App, method: 'GET' | 'PUT' | 'POST', path: string, token?: string, payload?: unknown) {
@@ -165,6 +165,63 @@ describe('questionnaire routes with the B640 flag', () => {
     const cipher = rows(databasePath)[0].answers_cipher;
     expect(cipher).toBeTruthy();
     expect(cipher).not.toContain('человек');
+  });
+
+  it('fills answers from the profile contacts and names the source', async () => {
+    const { app, forms, sessions, candidateStore } = await setup();
+    const candidateId = sessions.get(flagged)!.candidate!.id;
+    candidateStore.saveResumeDraft(
+      candidateId,
+      {
+        candidate: {
+          fullName: 'Марина Соколова',
+          contact: {
+            phone: '+7 916 245-18-07',
+            location: 'Москва, Россия',
+            linkedinUrl: 'https://www.linkedin.com/in/msokolova',
+            links: ['https://sokolova.dev', 'javascript:alert(1)'],
+          },
+        },
+        experience: [],
+        education: [],
+      },
+      [],
+    );
+    forms.saveQuestions(candidateId, 'v2', {
+      questions: [
+        { id: 'q1', text: 'LinkedIn Profile', required: true, kind: 'text' },
+        { id: 'q2', text: 'Country of residence', required: true, kind: 'choice', options: ['Germany', 'Россия'] },
+        { id: 'q3', text: 'Website', required: false, kind: 'text' },
+        { id: 'q4', text: 'Are you authorized to work in the EU?', required: true, kind: 'text' },
+      ],
+      formUrl: 'https://boards.greenhouse.io/acme/jobs/78',
+      readAt: new Date().toISOString(),
+    });
+    const data = (await call(app, 'GET', url('v2'), flagged)).json().data;
+    expect(data.answers).toEqual([
+      { questionId: 'q1', text: 'https://www.linkedin.com/in/msokolova' },
+      { questionId: 'q2', text: 'Россия' },
+      { questionId: 'q3', text: 'https://sokolova.dev' },
+    ]);
+    expect(data).toMatchObject({ answered: 3, total: 4, missingRequired: 1 });
+    expect(data.suggestions.map((item: { source: string }) => item.source)).toEqual([
+      'Из контактов вашего профиля',
+      'Из контактов вашего профиля',
+      'Из контактов вашего профиля',
+    ]);
+    // Кандидат написал своё: источник у этого ответа больше не показывается.
+    const saved = await call(app, 'PUT', url('v2', '/answers'), flagged, {
+      answers: [{ questionId: 'q1', text: 'linkedin.com/in/other' }],
+    });
+    expect(saved.json().data.answers[0]).toEqual({ questionId: 'q1', text: 'linkedin.com/in/other' });
+    expect(saved.json().data.suggestions.map((item: { questionId: string }) => item.questionId)).toEqual(['q2', 'q3']);
+    // Другой кандидат чужих контактов не получает.
+    forms.saveQuestions(sessions.get(other)!.candidate!.id, 'v2', {
+      questions: [{ id: 'q1', text: 'LinkedIn Profile', required: true, kind: 'text' }],
+      formUrl: null,
+      readAt: new Date().toISOString(),
+    });
+    expect((await call(app, 'GET', url('v2'), other)).json().data.answers).toEqual([]);
   });
 
   it('keeps one candidate away from another candidate questionnaire', async () => {

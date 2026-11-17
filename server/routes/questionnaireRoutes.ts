@@ -11,6 +11,7 @@ import {
   type StoredQuestionnaire,
 } from '../candidate/sqliteQuestionnaireRepository';
 import { buildQuestionnaire, cleanAnswers } from '../domain/applicationQuestionnaire';
+import type { QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -89,6 +90,8 @@ function poolReader(deps: RouteDeps): QuestionnaireReader {
 interface Signed {
   readonly candidateId: string;
   readonly vacancyId: string;
+  /** Подтверждённая почта аккаунта: запасная, если в контактах профиля почты нет. */
+  readonly accountEmail: string | null;
 }
 
 function signed(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): Signed | null {
@@ -103,7 +106,43 @@ function signed(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): 
     sendError(reply, request, 400, 'invalid_vacancy_id', 'Проверьте вакансию.', false);
     return null;
   }
-  return { candidateId: principal.candidate.id, vacancyId };
+  return {
+    candidateId: principal.candidate.id,
+    vacancyId,
+    accountEmail: principal.emailVerified === false ? null : principal.email,
+  };
+}
+
+/** Название и компания вакансии из подбора: экрану не приходится писать «Вакансия». */
+function vacancyLabel(
+  deps: RouteDeps,
+  vacancyId: string,
+): { readonly vacancyTitle?: string; readonly vacancyCompany?: string } {
+  const cluster = deps.multiSourceEngine.getActiveCluster?.(vacancyId);
+  const vacancy = deps.multiSourceEngine.getVacancy?.(vacancyId.replace(/^cluster-/u, ''));
+  const title = (cluster?.canonicalTitle ?? vacancy?.title ?? '').trim();
+  const company = (cluster?.canonicalCompany ?? vacancy?.company ?? '').trim();
+  return { ...(title ? { vacancyTitle: title } : {}), ...(company ? { vacancyCompany: company } : {}) };
+}
+
+/** То, что в профиле записано дословно: контакты резюме и гражданство из условий поиска. */
+function profileFacts(
+  deps: RouteDeps,
+  who: Signed,
+  citizenship: readonly string[] | undefined,
+): QuestionnaireProfileFacts {
+  const candidate = deps.candidateStore.getResumeCandidate(who.candidateId);
+  const contact = candidate?.contact;
+  const email = contact?.email?.trim() || who.accountEmail || undefined;
+  return {
+    ...(candidate?.fullName ? { fullName: candidate.fullName } : {}),
+    ...(email ? { email } : {}),
+    ...(contact?.phone ? { phone: contact.phone } : {}),
+    ...(contact?.linkedinUrl ? { linkedinUrl: contact.linkedinUrl } : {}),
+    ...(contact?.links ? { links: contact.links.filter((link) => /^https?:\/\//u.test(link)) } : {}),
+    ...(contact?.location ? { location: contact.location } : {}),
+    ...(citizenship ? { citizenship } : {}),
+  };
 }
 
 function view(
@@ -112,13 +151,16 @@ function view(
   stored: StoredQuestionnaire | null,
   fallback: { readonly state: ApplicationQuestionnaire['state']; readonly formUrl: string | null },
 ): ApplicationQuestionnaire {
+  const decision = deps.candidateStore.decisionProfileRepo.get(who.candidateId);
   return buildQuestionnaire({
     vacancyId: who.vacancyId,
+    ...vacancyLabel(deps, who.vacancyId),
+    facts: profileFacts(deps, who, decision?.citizenship),
     state: stored ? 'ready' : fallback.state,
     formUrl: stored?.formUrl ?? fallback.formUrl,
     questions: stored?.questions ?? [],
     answers: stored?.answers ?? [],
-    profile: deps.candidateStore.decisionProfileRepo.get(who.candidateId),
+    profile: decision,
     readAt: stored?.readAt ?? null,
     submittedAt: stored?.submittedAt ?? null,
   });

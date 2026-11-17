@@ -217,7 +217,9 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const form = questionnaire.form;
   // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
   const shown: ApplyStep = step === 'form' && !form ? 'letter' : step;
-  const head = buildHead({ application: target.application, known: letter.circles.data, cluster });
+  // Название вакансии: из связей по вакансии, а если их нет — из ответа об анкете.
+  const known = letter.circles.data ?? questionnaire.known;
+  const head = buildHead({ application: target.application, known, cluster });
   const saved = Boolean(letter.approval.saved);
   return {
     shown,
@@ -257,7 +259,7 @@ function ApplyFlow(props: FlowProps) {
   const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
-    crumb: head.company || head.title,
+    crumb: head.title,
     rootData: {
       mtight: '1',
       ...(wide ? { 'main-right': '1' } : {}),
