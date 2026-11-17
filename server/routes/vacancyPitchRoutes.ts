@@ -42,7 +42,7 @@ import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
-const vacancyPitchInputSchema = z
+export const vacancyPitchInputSchema = z
   .object({
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
     /** Overrides language auto-detected from the vacancy's own text (B266). */
@@ -272,12 +272,14 @@ function latinProfile(
   return withLatinEmployerNames(profile, names);
 }
 
-async function writeVacancyPitch(
+export async function writeVacancyPitch(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
+  /** B682: пожелание кандидата к другому варианту письма. */
+  wish?: string,
 ) {
   const context = await retryOnSqliteBusy(() =>
     readLetterContext(deps, candidateId, body, vacancy),
@@ -298,6 +300,7 @@ async function writeVacancyPitch(
     resumeAttached: resume.available, contextMs,
     ...(candidateName ? { candidateName } : {}),
     ...companyLinkInput(context, vacancy.company),
+    ...(wish ? { wish } : {}),
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
@@ -397,7 +400,7 @@ export function readFreshPitchSkills(
   return [...new Set(skills.filter(Boolean))];
 }
 
-function pitchSourceId(vacancyId: string): string {
+export function pitchSourceId(vacancyId: string): string {
   return vacancyId.startsWith('cluster-') ? vacancyId.slice('cluster-'.length) : vacancyId;
 }
 

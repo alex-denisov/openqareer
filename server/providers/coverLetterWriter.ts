@@ -70,6 +70,8 @@ export interface CoverLetterWriteInput {
   readonly companyLink?: string;
   /** B640: причина отказа проверки для второго вызова той же модели (`letterCorrection`). */
   readonly correction?: string;
+  /** B682: пожелание кандидата к другому варианту письма. */
+  readonly wish?: string;
 }
 
 /** Спрашивать модель не о чем: это не отказ провайдера. */
@@ -241,6 +243,7 @@ export function letterPrompt(input: CoverLetterWriteInput): string {
     ...(input.resumeAttached === false ? { resumeAttached: false } : {}),
     ...(input.candidateName ? { candidateName: input.candidateName } : {}),
     ...(input.companyLink ? { companyLink: input.companyLink } : {}),
+    ...(input.wish ? { wish: input.wish } : {}),
     ...(input.correction ? { correction: input.correction } : {}),
   });
 }
