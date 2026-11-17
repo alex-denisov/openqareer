@@ -1,11 +1,11 @@
 import { deliveryState } from '../../../../../shared/applicationStage';
-import { vacancySourceLabel } from '../../../../../shared/vacancySourceLabel';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import {
   computePipelineAnalytics,
   type SourceBreakdownItem,
 } from '../../../applications/pipelineAnalytics';
 import type { IconName } from '../../kit';
+import { platformOf, viaPlatform } from './platform';
 import { longDate, shortDate, type ResponseRow } from './responseRow';
 
 export interface ListedResponse {
@@ -105,13 +105,29 @@ function sum(items: readonly SourceBreakdownItem[], pick: (item: SourceBreakdown
   return items.reduce((total, item) => total + pick(item), 0);
 }
 
+/** Площадки словами кандидата: внутренние коды источников сливаются в «Сайт компании». */
+function byPlatform(sources: readonly SourceBreakdownItem[]): readonly SourceBreakdownItem[] {
+  const groups = new Map<string, SourceBreakdownItem>();
+  for (const source of sources) {
+    const platform = platformOf(source.source);
+    const label = platform.site ? 'Сайт компании' : platform.label;
+    const known = groups.get(label);
+    groups.set(label, {
+      source: label,
+      sourceLabel: label,
+      total: (known?.total ?? 0) + source.total,
+      responded: (known?.responded ?? 0) + source.responded,
+      interview: (known?.interview ?? 0) + source.interview,
+      offer: (known?.offer ?? 0) + source.offer,
+    });
+  }
+  return [...groups.values()].sort((a, b) => b.total - a.total);
+}
+
 export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
   const sentItems = items.filter((item) => item.application.stage !== 'saved');
   const analytics = computePipelineAnalytics(sentItems.map((item) => item.application));
-  const sources = analytics.sources.map((source) => ({
-    ...source,
-    sourceLabel: vacancySourceLabel({ sourceType: source.source, sourceName: source.sourceLabel }),
-  }));
+  const sources = byPlatform(analytics.sources);
   const first = sentItems.reduce<number | null>(
     (min, item) => (min === null || item.row.sentAt < min ? item.row.sentAt : min),
     null,
@@ -157,14 +173,12 @@ function event(icon: IconName, title: string, iso: string | null | undefined, no
  */
 export function timeline(application: ApplicationView, now: Date = new Date()): readonly TimelineEvent[] {
   if (application.stage === 'saved') return [];
-  const source = application.vacancy?.source
-    ? vacancySourceLabel({ sourceType: application.vacancy.source })
-    : null;
+  const via = viaPlatform(platformOf(application.vacancy?.source));
   const receipt = application.deliveryReceipt ?? null;
   const delivery = receipt ? deliveryState('applied', receipt) : null;
   const stage = STAGE_EVENTS[application.stage];
   const events = [
-    ...event('send', source ? `Отправлен через ${source}` : 'Отправлен', application.appliedAt),
+    ...event('send', `Отправлен ${via}`, application.appliedAt),
     ...(delivery === 'delivered'
       ? event('checkc', 'Доставлен', application.deliveryReceiptRecordedAt)
       : []),

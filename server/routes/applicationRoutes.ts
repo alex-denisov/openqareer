@@ -36,6 +36,7 @@ import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest'
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
+import { registerQuestionnaireRoutes } from './questionnaireRoutes';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -542,6 +543,7 @@ const handleToday: Handler = async (deps, request, reply) => {
 export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   registerApplicationOperationsRoutes(app, deps);
   registerRejectionReviewRoutes(app, deps);
+  registerQuestionnaireRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },

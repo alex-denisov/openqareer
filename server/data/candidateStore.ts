@@ -137,6 +137,11 @@ export interface CandidateSnapshot {
 export interface CandidateExport extends CandidateSnapshot {
   adaptationApplications: import('./adaptationApplications').AdaptationApplication[];
   interviewPractices: import('../../shared/careerDiary').CareerDiaryInterviewPractice[];
+  /** B683: записи дневника и итоги недель. */
+  careerDiaryEntries: {
+    entries: import('../../shared/careerDiaryEntries').CareerDiaryEntry[];
+    weekSummaries: import('../../shared/careerDiaryEntries').CareerDiaryWeekSummary[];
+  };
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
@@ -452,6 +457,8 @@ export interface CandidateStore {
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   /** Карьерный дневник: кандидатские цели, замеры и разборы (B456). */
   readonly careerDiaryRepo: SqliteCareerDiaryRepository;
+  /** B683: записи дневника и итоги недель (маршруты за флагом B640). */
+  readonly diaryEntryRepo: import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository;
   /** Профиль ограничений кандидата (B384), запечатан. */
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   /** Separate, encrypted relocation questionnaire and purpose-specific consent. */
