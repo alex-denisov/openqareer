@@ -1,0 +1,21 @@
+/* Единый экран отклика: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  /* Письмо можно править на месте: поле выглядит как текст письма из макета. */
+  .b640 textarea.ap-letter {
+    inline-size: 100%;
+    box-sizing: border-box;
+    min-block-size: calc(var(--career-target-min) * 4);
+    border: 0;
+    background: transparent;
+    color: var(--career-text);
+    font-family: inherit;
+    resize: vertical;
+    field-sizing: content;
+  }
+  .b640 textarea.ap-letter:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: var(--career-focus-offset);
+  }
+  /* Резюме текстом: строки одна под другой, как в файле. */
+  .b640 .cv-page > p { margin: 0 0 var(--career-space-2); }
+}
