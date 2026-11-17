@@ -70,6 +70,8 @@ const DETAIL = {
 };
 
 async function openCard(page: Page, remaining: number | null = 3): Promise<void> {
+  // Свои маршруты — после общей заглушки: срабатывает последний зарегистрированный.
+  await mockSignedInCabinet(page, { cabinetB640: true, firstVacancyFitView: FIT_VIEW });
   await page.route('**/api/v1/candidate/b640/application-quota', (route) =>
     route.fulfill({
       json: {
@@ -84,7 +86,6 @@ async function openCard(page: Page, remaining: number | null = 3): Promise<void>
       },
     }),
   );
-  await mockSignedInCabinet(page, { cabinetB640: true, firstVacancyFitView: FIT_VIEW });
   await page.route('**/api/v1/candidate/vacancies/*/detail', (route) =>
     route.fulfill({ json: { data: DETAIL } }),
   );

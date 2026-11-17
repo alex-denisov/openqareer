@@ -6,7 +6,11 @@ import { expectGates } from './gates';
 const SHOTS = process.env.B640_SHOTS;
 const ROWS = '.b640 table.vt tbody tr.vt-row';
 
-async function openCabinet(page: Page, path: string): Promise<void> {
+async function openCabinet(
+  page: Page,
+  path: string,
+  options: { readonly hidden?: readonly unknown[] } = {},
+): Promise<void> {
   await mockSignedInCabinet(page, {
     cabinetB640: true,
     vacancyTotal: 45,
@@ -19,6 +23,15 @@ async function openCabinet(page: Page, path: string): Promise<void> {
       sources: [],
     } as never,
   });
+  const hidden = options.hidden ?? [];
+  await page.route('**/api/v1/candidate/b640/hidden-vacancies**', (route) =>
+    route.fulfill({
+      json: {
+        data: hidden,
+        meta: { total: hidden.length, offset: 0, limit: 20, nextOffset: null },
+      },
+    }),
+  );
   await page.route('**/api/v1/candidate/vacancy-skips**', (route) =>
     route.request().method() === 'POST'
       ? route.fulfill({ status: 201, json: { data: { clusterId: 'x', reasonId: 'role-family' } } })
@@ -66,6 +79,9 @@ async function showHidden(page: Page, mobile: boolean): Promise<void> {
       .first()
       .click();
   await page.getByRole('button', { name: 'Показать скрытые' }).click();
+  // На 390 лист фильтров закрывает кнопка «Показать N» в его шапке.
+  if (mobile) await page.locator('.vt-sheet-go').click();
+  else await page.locator('.vt-pop-foot .btn.is-primary').click();
 }
 
 test.describe('B654: раздел «Вакансии», подборка и сохранённые', () => {
@@ -181,12 +197,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
     page,
   }, testInfo) => {
     const mobile = isMobile(testInfo.project.name);
-    await page.route('**/api/v1/candidate/b640/hidden-vacancies**', (route) =>
-      route.fulfill({
-        json: { data: [HIDDEN_ROW], meta: { total: 1, offset: 0, limit: 20, nextOffset: null } },
-      }),
-    );
-    await openCabinet(page, '/app/vacancies');
+    await openCabinet(page, '/app/vacancies', { hidden: [HIDDEN_ROW] });
     await showHidden(page, mobile);
     const hidden = page.locator('tbody.vt-hid tr.vt-row.is-hid');
     await expect(hidden).toHaveCount(1);
