@@ -91,7 +91,12 @@ export function ConsultantPanel({ view, stage, named, pathOf, onView, onClose }:
   return (
     <>
       <div className="backdrop only-mob" aria-hidden="true" onClick={onClose} />
-      <aside className="panel-col" aria-labelledby={titleId} data-b640-panel={view.kind}>
+      <aside
+        className="panel-col"
+        role="dialog"
+        aria-labelledby={titleId}
+        data-b640-panel={view.kind}
+      >
         <span className="grab" aria-hidden="true" />
         <PanelHead
           titleId={titleId}
