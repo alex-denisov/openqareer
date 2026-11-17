@@ -58,6 +58,13 @@ describe('b640 today: действие строки очереди', () => {
       path: '/app/vacancies/c%201',
     });
     expect(queueAction(item({ kind: 'shortlist' })).path).toBe('/app/vacancies');
+    const post = item({
+      kind: 'linkedin_post',
+      title: 'о найме',
+      company: 'LinkedIn',
+      eyebrow: 'сам не опубликуется',
+    });
+    expect(queueAction(post).sub).toBe('LinkedIn');
     expect(queueAction(item({ kind: 'linkedin_post', title: 'о найме' }))).toMatchObject({
       label: 'Открыть пост',
       path: '/app/profile/linkedin/posts',

@@ -142,6 +142,95 @@ const COMPANIES = [
   company('gorod', 'Город Данных', { wantStage: 'path', industry: 'Аналитика', contactsCount: 0 }),
 ];
 
+const TEAM_GUESS = {
+  requirement: 'Команда от 20 человек',
+  quote: 'опыт управления командой от 20 человек',
+  profileFact: 'руководил командой из 9 человек',
+};
+
+function reviewPayload(
+  ready: boolean,
+  reason: Record<string, unknown> | null,
+  helped: boolean | null,
+) {
+  const rejection = {
+    applicationId: 'a-rejected',
+    title: 'Руководитель группы бэкенда',
+    company: 'Сбыт Онлайн',
+    rejectedAt: iso(3),
+    guess: TEAM_GUESS,
+    candidateReason: reason,
+  };
+  const base = { threshold: 20, rejectedCount: 1, rejections: [rejection], helped };
+  if (!ready) {
+    return {
+      ...base,
+      state: 'low_data',
+      sentCount: 6,
+      firstStep: {
+        kind: 'update_statuses',
+        requirement: null,
+        profileFact: null,
+        count: 2,
+        total: 6,
+      },
+      recommendations: [],
+    };
+  }
+  return {
+    ...base,
+    state: 'ready',
+    sentCount: 22,
+    firstStep: { kind: 'show_in_resume', ...TEAM_GUESS, quote: undefined, count: 2, total: 3 },
+    recommendations: [
+      {
+        kind: 'match_vacancies',
+        requirement: 'Опыт в брокерских системах',
+        profileFact: null,
+        count: 1,
+        total: 3,
+      },
+    ],
+  };
+}
+
+const reviewState: { reason: Record<string, unknown> | null; helped: boolean | null } = {
+  reason: null,
+  helped: null,
+};
+
+/** Заглушки механики разбора отказов (B679). */
+async function mockReview(
+  route: Route,
+  path: string,
+  method: string,
+  ready: boolean,
+  calls: string[],
+) {
+  const base = '/api/v1/candidate/applications/rejection-review';
+  if (path === base && method === 'GET') {
+    await route.fulfill({
+      json: { data: reviewPayload(ready, reviewState.reason, reviewState.helped) },
+    });
+    return true;
+  }
+  if (path === `${base}/feedback` && method === 'PUT') {
+    const body = route.request().postDataJSON() as { helped: boolean };
+    calls.push(`PUT feedback ${body.helped}`);
+    reviewState.helped = body.helped;
+    await route.fulfill({ json: { data: body } });
+    return true;
+  }
+  if (path.endsWith('/rejection-reason') && method === 'PUT') {
+    const body = route.request().postDataJSON() as { reason: string; note: string | null };
+    calls.push(`PUT reason ${body.reason} ${body.note ?? ''}`.trim());
+    reviewState.reason = { ...body, recordedAt: new Date().toISOString() };
+    await route.fulfill({ json: { data: reviewState.reason } });
+    return true;
+  }
+  return false;
+}
+
 export interface ResponsesMockOptions {
   readonly applications?: Stub[];
   readonly companies?: readonly Record<string, unknown>[];
@@ -149,6 +238,8 @@ export interface ResponsesMockOptions {
   readonly automation?: boolean;
   /** Сколько раз список откликов отвечает ошибкой, прежде чем отдать данные. */
   readonly failList?: number;
+  /** Разбор отказов готов (откликов хватает); иначе — «мало данных». */
+  readonly reviewReady?: boolean;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
 }
@@ -163,6 +254,8 @@ export async function mockResponses(
   options: ResponsesMockOptions = {},
 ): Promise<ResponsesMock> {
   const applications = options.applications ?? responseFixtures();
+  reviewState.reason = null;
+  reviewState.helped = null;
   let companies = [...(options.companies ?? COMPANIES)];
   let failList = options.failList ?? 0;
   const calls: string[] = [];
@@ -194,6 +287,7 @@ export async function mockResponses(
         });
         return true;
       }
+      if (await mockReview(route, path, method, options.reviewReady === true, calls)) return true;
       const match = path.match(/^\/api\/v1\/candidate\/applications\/([^/]+)(\/events)?$/u);
       const record = match
         ? applications.find((item) => item.id === decodeURIComponent(match[1]!))

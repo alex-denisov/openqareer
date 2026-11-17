@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p06 {
+@layer b640.base {
   .b640 .va-pop-foot .btn { min-block-size: var(--career-target-min); }
   .b640 .va-date { display: inline-flex; align-items: center; gap: var(--career-space-1); justify-self: start; }
   .b640 .va-date input { inline-size: calc(10ch + var(--career-space-6)); min-block-size: var(--career-target-min); box-sizing: border-box; padding-inline: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); font-variant-numeric: tabular-nums; }

@@ -126,7 +126,57 @@ export function DialogSection({ autoOpen }: { autoOpen: boolean }) {
   );
 }
 
-export function ComposerSection() {
+/** Витрина: запись «идёт» всегда, кнопки её не меняют. */
+const KIT_DICTATION = {
+  supported: true,
+  recording: true,
+  settling: false,
+  denied: false,
+  start: () => undefined,
+  stop: () => undefined,
+};
+
+function KitLimitLine() {
+  return (
+    <>
+      <span className="cmp-line-t">
+        Лимит сообщений исчерпан ·{' '}
+        <span className="cmp-line-d">
+          обновится <span className="num">20 ноября</span>
+        </span>
+      </span>
+      <a className="cmp-line-a" href="/app/tariffs">
+        Перейти на Basic
+      </a>
+    </>
+  );
+}
+
+export type ComposerShowcaseState = 'ask' | 'closed' | 'recording';
+
+function KitComposer({ state, onAsk }: { state: ComposerShowcaseState; onAsk: (t: string) => void }) {
+  const [dictated, setDictated] = useState('Из 9 наняла 6, остальные перешли из другой команды.');
+  const common = { label: 'Ваш вопрос консультанту', placeholder: 'Спросите своими словами' };
+  if (state === 'closed') {
+    const dictation = { ...KIT_DICTATION, recording: false };
+    return <Composer {...common} onSubmit={onAsk} dictation={dictation} closed={<KitLimitLine />} />;
+  }
+  if (state === 'recording') {
+    return (
+      <Composer
+        {...common}
+        onSubmit={onAsk}
+        text={dictated}
+        onText={setDictated}
+        dictation={KIT_DICTATION}
+      />
+    );
+  }
+  return <Composer {...common} onSubmit={onAsk} onVoice={() => Promise.reject(new Error('mic'))} />;
+}
+
+/** Панель ввода закреплена внизу; состояние выбирает адрес: `&state=closed`, `&state=recording`. */
+export function ComposerSection({ state }: { readonly state: ComposerShowcaseState }) {
   const [asked, setAsked] = useState<string | null>(null);
   return (
     <Section name="composer" title="Панель ввода">
@@ -137,13 +187,8 @@ export function ComposerSection() {
         </div>
         {asked ? <p className="msg me">{asked}</p> : null}
       </div>
-      <div className="kit-chat-dock">
-        <Composer
-          label="Ваш вопрос консультанту"
-          placeholder="Спросите своими словами"
-          onSubmit={setAsked}
-          onVoice={() => Promise.reject(new Error('mic'))}
-        />
+      <div className="kit-chat-dock" data-kit-composer={state}>
+        <KitComposer state={state} onAsk={setAsked} />
       </div>
     </Section>
   );

@@ -1,6 +1,6 @@
 /* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
    правки вносятся в макет и переносятся скриптом. */
-@layer b640.base.p07 {
+@layer b640.base {
   .b640 .cn-jobs .cn-f label { font-weight: 400; }
   .b640 .cn-panel .ha-list { margin: 0; }
   .b640 .aw-scrim { position: fixed; inset: 0; z-index: 30; background: var(--career-backdrop); }

@@ -5,6 +5,14 @@ import { click, mount, press, type Mounted } from './testDom';
 import { Composer } from './Composer';
 
 let view: Mounted | null = null;
+const idle = {
+  supported: false,
+  recording: false,
+  settling: false,
+  denied: false,
+  start: () => undefined,
+  stop: () => undefined,
+};
 afterEach(() => view?.unmount());
 
 function typeText(v: Mounted, value: string): HTMLTextAreaElement {
@@ -90,5 +98,86 @@ describe('Composer', () => {
     expect(view.container.querySelector('.cmp-send')?.getAttribute('aria-label')).toBe(
       'Надиктовать',
     );
+  });
+  it('закрытый ввод: строка сверху, поле и отправка недоступны', () => {
+    const onSubmit = vi.fn();
+    view = mount(
+      <Composer
+        label="Вопрос"
+        placeholder="…"
+        onSubmit={onSubmit}
+        closed={<span className="cmp-line-t">Лимит сообщений исчерпан</span>}
+        dictation={{ ...idle, supported: true }}
+      />,
+    );
+    const form = view.container.querySelector('form.compose.cmp.is-off') as HTMLFormElement;
+    expect(form.querySelector('p.cmp-line[role=status]')?.textContent).toBe(
+      'Лимит сообщений исчерпан',
+    );
+    expect((form.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect((form.querySelector('.cmp-send') as HTMLButtonElement).disabled).toBe(true);
+    expect((form.querySelector('.cmp-caret') as HTMLButtonElement).disabled).toBe(true);
+    act(() => form.requestSubmit());
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+  it('управляемый текст: значение и правки идут через владельца, после отправки — пусто', () => {
+    const onText = vi.fn();
+    const onSubmit = vi.fn();
+    view = mount(
+      <Composer label="Вопрос" placeholder="…" onSubmit={onSubmit} text="Готово" onText={onText} />,
+    );
+    const area = view.container.querySelector('textarea') as HTMLTextAreaElement;
+    expect(area.value).toBe('Готово');
+    expect(view.container.querySelector('form')?.classList.contains('has-text')).toBe(true);
+    typeText(view, 'Готово!');
+    expect(onText).toHaveBeenLastCalledWith('Готово!');
+    press(area, 'Enter');
+    expect(onSubmit).toHaveBeenCalledWith('Готово');
+    expect(onText).toHaveBeenLastCalledWith('');
+  });
+  it('диктовка: пустое поле начинает запись, запись останавливается той же кнопкой', async () => {
+    const start = vi.fn();
+    const stop = vi.fn();
+    const onSubmit = vi.fn();
+    const render = (recording: boolean) => (
+      <Composer
+        label="Вопрос"
+        placeholder="…"
+        onSubmit={onSubmit}
+        dictation={{ ...idle, supported: true, recording, start, stop }}
+      />
+    );
+    view = mount(render(false));
+    click(view.container.querySelector('.cmp-caret'));
+    await act(async () =>
+      (view?.container.querySelectorAll('.cmp-menu [role=menuitemradio]')[1] as HTMLElement).click(),
+    );
+    expect(view.container.querySelector('form')?.dataset.mode).toBe('voice');
+    click(view.container.querySelector('.cmp-send'));
+    expect(start).toHaveBeenCalledWith('');
+    view.unmount();
+    view = mount(render(true));
+    const send = view.container.querySelector('.cmp-send.is-rec') as HTMLElement;
+    expect(send.getAttribute('aria-label')).toBe('Остановить диктовку');
+    expect(send.getAttribute('aria-pressed')).toBe('true');
+    click(send);
+    expect(stop).toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+  it('диктовка: способа «Голосом» нет, если браузер не умеет; отказ показывает строку', () => {
+    view = mount(
+      <Composer label="Вопрос" placeholder="…" onSubmit={() => undefined} dictation={idle} />,
+    );
+    expect(view.container.querySelector('.cmp-mode')).toBeNull();
+    view.unmount();
+    view = mount(
+      <Composer
+        label="Вопрос"
+        placeholder="…"
+        onSubmit={() => undefined}
+        dictation={{ ...idle, supported: true, denied: true }}
+      />,
+    );
+    expect(view.container.querySelector('.cmp-toast')?.textContent).toBe('Нет доступа к микрофону');
   });
 });

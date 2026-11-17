@@ -76,6 +76,41 @@ describe('CabinetB640 (корень нового кабинета, B649)', () =>
     expect(html).toContain('href="/app/today"');
   });
 
+  it('адрес консультанта открывает панель над «Сегодня» (B700)', () => {
+    const html = render('/app/consultant/history');
+    expect(html).toContain('data-active="today"');
+    expect(html).toContain('data-dialog="1"');
+    expect(html).toContain('class="app has-panel"');
+    // При открытой панели кнопки «Консультант» в полосе нет, на 390 она отмечена открытой.
+    expect(html).not.toContain('btn-panel');
+    expect(html).toMatch(/class="mob-coach"[^>]*aria-expanded="true"/u);
+    const plain = render('/app/vacancies');
+    expect(plain).toContain('class="app"');
+    expect(plain).not.toContain('data-dialog');
+    expect(plain).toMatch(/class="btn is-quiet btn-panel"[^>]*href="\/app\/consultant"/u);
+    expect(plain).toMatch(/class="mob-coach"[^>]*aria-expanded="false"/u);
+  });
+
+  it('над «Все уведомления» вкладки аккаунта, текущая — «Уведомления» (B700)', () => {
+    const html = render('/app/notifications');
+    expect(html).toContain('data-active="settings"');
+    expect(html).toContain('data-tabs="Разделы аккаунта"');
+    expect(html).toMatch(
+      /<a (?=[^>]*href="\/app\/account\/notifications")(?=[^>]*aria-current="page")[^>]*>Уведомления/u,
+    );
+  });
+
+  it('вкладка с короткой подписью: остаток виден только на 1440 и 1176 (B700)', () => {
+    const html = render('/app/vacancies');
+    expect(html).toContain('<span>Компании<span class="only-desk"> и люди</span></span>');
+  });
+
+  it('колокольчик без подключённой панели остаётся ссылкой на «Все уведомления»', () => {
+    const html = render('/app/vacancies');
+    expect(html).toMatch(/class="icon-btn bell"[^>]*href="\/app\/notifications"/u);
+    expect(html).not.toContain('aria-controls="notif-pop"');
+  });
+
   it('не содержит запрещённых формулировок', () => {
     expect(render('/app')).not.toMatch(/пока недоступно|скоро|в разработке/iu);
   });

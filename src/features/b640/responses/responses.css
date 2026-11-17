@@ -35,5 +35,7 @@
     .b640 .ot-open .vt-detail-row,
     .b640 .ot-open .vt-detail-row > td { display: block; padding: 0; }
     .b640 .ot-row > .ot-c-act { inline-size: auto; }
+    /* «Разбор отказов»: закреплённая главная кнопка не должна закрывать «Разбор помог?» внизу. */
+    .b640 .page[data-b640-node='o07'] { padding-block-end: calc(var(--career-space-12) * 3); }
   }
 }

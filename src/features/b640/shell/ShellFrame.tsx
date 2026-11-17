@@ -14,10 +14,12 @@ import { BottomNav } from './BottomNav';
 import { Crumbs, type Crumb } from './Crumbs';
 import { Link } from './Link';
 import { backLabel } from './navigation';
+import { ShellPanels } from './panels';
 import { Rail } from './Rail';
 import { SecTabs, type SecTab } from './SecTabs';
 import { useShell } from './ShellContext';
 import { Topbar } from './Topbar';
+import { useBellCount } from './useBellCount';
 
 const Showcase = lazy(() => import('../kit/Showcase'));
 
@@ -47,7 +49,8 @@ function tabsOf(match: B640Match): { label: string; className?: string; tabs: Se
   const currentCode = node.tabOf ?? node.code;
   const tabs = tabSet.tabs.flatMap((tab) => {
     const path = pathOrNull(tab.code, { ...match.params, ...tab.params });
-    return path ? [{ label: tab.label, path, current: tab.code === currentCode }] : [];
+    const current = tab.code === currentCode;
+    return path ? [{ label: tab.label, shortLabel: tab.shortLabel, path, current }] : [];
   });
   return { label: tabSet.label, className: tabSet.className, tabs };
 }
@@ -83,18 +86,19 @@ function NotFound() {
 
 /** Оболочка вокруг экрана: рейл, верхняя полоса, путь, вкладки, нижняя навигация. */
 export function ShellFrame() {
-  const { match, path, session, chrome, setCtxSlot } = useShell();
+  const { match, path, session, chrome, setCtxSlot, panel } = useShell();
+  const counted = useBellCount(path);
   const isKit = path.replace(/\/$/u, '') === B640_KIT_PATH;
   const node = match?.node ?? null;
   const trail = match ? trailOf(match, chrome.crumb) : [];
   const tabs = match ? tabsOf(match) : null;
   const back = match ? mobileBackOf(match, trail) : null;
   const title = chrome.title ?? (isKit ? 'Общие компоненты' : (node?.title ?? 'Кабинет'));
-  const bellCount = chrome.bellCount ?? 0;
+  const bellCount = chrome.bellCount ?? counted;
   const Section = node ? SECTION_ENTRIES[node.section] : null;
 
   return (
-    <div className={chrome.hasPanel ? 'app has-panel' : 'app'} id="screen">
+    <div className={panel?.kind === 'consultant' ? 'app has-panel' : 'app'} id="screen">
       <Rail active={node?.nav ?? null} />
       <Topbar
         title={title}
@@ -117,6 +121,7 @@ export function ShellFrame() {
           {!isKit && !match ? <NotFound /> : null}
         </Suspense>
       </main>
+      <ShellPanels nav={node?.nav ?? null} />
       <BottomNav
         active={node?.nav ?? null}
         bellCount={bellCount}
