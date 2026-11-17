@@ -757,7 +757,23 @@ export function registerCandidateAutomationRoutes(app: FastifyInstance, deps: Ro
   registerCandidateStatusRoutes(app, {
     ...deps,
     automationPause: createAutomationPausePort(automationRepository, deps.candidateActionRepository),
+    // B691: сигналы «Сегодня» отличают свои отклики кандидата от автооткликов.
+    autoAppliedApplicationIds: (candidateId) => autoAppliedApplicationIds(automationRepository, candidateId),
   });
+}
+
+const AUTO_APPLIED_STATUSES: ReadonlySet<string> = new Set(['approved', 'sent', 'attempted', 'failed']);
+
+/** Отклики, которые прошли через очередь автооткликов (последние 500 строк очереди). */
+function autoAppliedApplicationIds(
+  repository: SqliteCandidateAutomationRepository,
+  candidateId: string,
+): ReadonlySet<string> {
+  const ids = repository
+    .listQueue(candidateId, { limit: 500 })
+    .filter((item) => AUTO_APPLIED_STATUSES.has(item.status))
+    .flatMap((item) => (item.applicationId ? [item.applicationId] : []));
+  return new Set(ids);
 }
 
 const getStopCompanies: Handler = async (deps, request, reply) => {

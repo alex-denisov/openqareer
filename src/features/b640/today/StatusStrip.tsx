@@ -20,6 +20,16 @@ type RevertState =
   | { readonly step: 'busy' }
   | { readonly step: 'error'; readonly message: string };
 
+const SINCE_FORMAT = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
+
+/** «С 2 октября: 13 откликов → 1 интервью → 1 оффер»; без даты — только путь. */
+export function progressLine(since: string | null | undefined, progress: string): string {
+  const date = since ? new Date(since) : null;
+  return date && !Number.isNaN(date.getTime())
+    ? `С ${SINCE_FORMAT.format(date)}: ${progress}`
+    : progress;
+}
+
 interface UndoStripProps {
   readonly title: string;
   readonly busy: boolean;
@@ -86,7 +96,7 @@ export function StatusStrip({ status, progress, revertedTitle, onReverted }: Sta
         <span>
           Статус: <strong>{revertedTitle ?? status.title}</strong>
         </span>
-        {progress ? <span className="num">{progress}</span> : null}
+        {progress ? <span className="num">{progressLine(status.since, progress)}</span> : null}
         <Link className="row-act is-sm" to={buildNodePath('s02')}>
           Сменить
         </Link>
