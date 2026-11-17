@@ -60,6 +60,8 @@ export interface HarnessOptions {
   readonly billing?: boolean;
   /** Журнал сервера по строкам: нужен тестам, которые различают запечатанный ответ и холодный. */
   readonly logLines?: string[];
+  /** Дополнительные методы подставного движка пула (getVacancy, getActiveCluster). */
+  readonly engine?: Record<string, unknown>;
 }
 
 const PASSWORD = 'candidate-password-for-tests';
@@ -100,6 +102,7 @@ export async function createB640Harness(options: HarnessOptions) {
   const engine = {
     getMatchedVacanciesAsync: async () => (poolReads += 1, poolHangs ? new Promise<never>(() => undefined) : options.pool()),
     restore: () => ({ clusters: 0, sources: 0 }),
+    ...options.engine,
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
