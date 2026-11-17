@@ -143,6 +143,11 @@ describe('панель консультанта: разговор (K1)', () => {
     const root = await open({ kind: 'dialog' });
     expect(api.getCandidateWithMessages).toHaveBeenCalledWith('vacancies');
     const panel = root.querySelector('aside.panel-col') as HTMLElement;
+    // Панель — окно с подписью: экранный чтец называет её по заголовку.
+    expect(panel.getAttribute('role')).toBe('dialog');
+    expect(document.getElementById(panel.getAttribute('aria-labelledby') ?? '')?.textContent).toBe(
+      'Консультант · Вакансии',
+    );
     expect(panel.querySelector('.panel-head.ph2 .ph-title.ph-conv')?.textContent).toBe(
       'Консультант · Вакансии',
     );
