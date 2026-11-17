@@ -158,4 +158,14 @@ describe('резюме без служебной разметки', () => {
     ]);
     expect(resumeLines('=== constructor ===')).toEqual([{ kind: 'heading', text: 'constructor' }]);
   });
+
+  it('пункты списка и обычные строки со знаками не становятся заголовками', () => {
+    const lines = ['- Руководил командой -', '-- Вёл релизы', '# 1 в рейтинге', 'C# разработчик', '=== SUMMARY === и текст'];
+    expect(resumeLines(lines.join('\n'))).toEqual(lines.map((text) => ({ kind: 'line', text })));
+    expect(resumeLines('**Опыт**\n__Skills__')).toEqual([
+      { kind: 'heading', text: 'Опыт' },
+      { kind: 'heading', text: 'Навыки' },
+    ]);
+    expect(resumeLines(`== a${' '.repeat(5000)}b`)).toHaveLength(1);
+  });
 });

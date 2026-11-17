@@ -47,7 +47,8 @@ export interface TextVariantList<Payload = unknown> {
 /** Данные варианта письма: то, из чего экран собирает текст для выбранного адресата. */
 export interface LetterVariantPayload {
   readonly emailPitch: { readonly subject: string; readonly body: string };
-  readonly contactMessage?: string;
+  /** Кому написан вариант; пусто — работодателю напрямую. */
+  readonly recipientName?: string;
   readonly senderName?: string;
   readonly senderFirstName?: string;
 }

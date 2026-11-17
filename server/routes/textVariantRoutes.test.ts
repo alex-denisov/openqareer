@@ -121,9 +121,14 @@ describe('text variant routes with the B640 flag', () => {
     const listed = (await call('GET', LIST)).json().data;
     expect(listed.variants).toHaveLength(1);
     const database = new DatabaseSync(databasePath);
-    const row = database.prepare('SELECT text_cipher FROM text_variants').get() as { text_cipher: string };
+    const row = database.prepare('SELECT text_cipher, wish_cipher FROM text_variants').get() as {
+      text_cipher: string;
+      wish_cipher: string;
+    };
     database.close();
     expect(row.text_cipher).not.toContain('Пишу по вакансии');
+    expect(row.wish_cipher).not.toContain('начни с результата');
+    expect(data.variant.payload.contactMessage).toBeUndefined();
   });
 
   it('gives three variants and refuses the fourth without calling the model', async () => {

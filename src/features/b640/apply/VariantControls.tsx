@@ -19,7 +19,7 @@ export function VariantSwitch({ variants }: { readonly variants: LetterVariantsS
         className="icon-btn"
         type="button"
         aria-label="Предыдущий вариант"
-        disabled={index === 0}
+        disabled={variants.locked || index === 0}
         onClick={() => variants.select(index - 1)}
       >
         <Icon name="left" />
@@ -29,7 +29,7 @@ export function VariantSwitch({ variants }: { readonly variants: LetterVariantsS
         className="icon-btn"
         type="button"
         aria-label="Следующий вариант"
-        disabled={index >= total - 1}
+        disabled={variants.locked || index >= total - 1}
         onClick={() => variants.select(index + 1)}
       >
         <Icon name="right" />
@@ -67,7 +67,10 @@ function WishChips({ labelledBy, chips, onToggle }: ChipsProps) {
   );
 }
 
-/** Esc закрывает всплывашку, фокус при открытии уходит в неё. */
+/**
+ * Фокус при открытии уходит во всплывашку; Esc и нажатие мимо неё закрывают.
+ * Нажатие по кнопке, которая её открыла, закрывает сама кнопка.
+ */
 function usePopFocus(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -79,8 +82,18 @@ function usePopFocus(onClose: () => void) {
       event.preventDefault();
       close.current();
     };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || ref.current?.contains(target)) return;
+      if ((target as Element).closest?.('[aria-haspopup="dialog"]')) return;
+      close.current();
+    };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
   }, []);
   return ref;
 }
@@ -130,14 +143,23 @@ function WishPop({ popId, variants }: WishProps) {
 export function VariantButton({ variants }: { readonly variants: LetterVariantsState }) {
   const popId = useId();
   const mobile = useIsMobile();
-  const wrap = useRef<HTMLSpanElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const [cabinet, setCabinet] = useState<Element | null>(null);
+  const open = variants.wishOpen;
+  const wasOpen = useRef(open);
+  // Закрыли всплывашку — фокус возвращается на кнопку, которая её открыла.
+  useEffect(() => {
+    if (wasOpen.current && !open) button.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
   if (variants.remaining <= 0) return null;
-  const pop = variants.wishOpen ? <WishPop popId={popId} variants={variants} /> : null;
+  const pop = open ? <WishPop popId={popId} variants={variants} /> : null;
   // На 390 лист встаёт в корень кабинета: внутри закреплённой полосы его закрыло бы затемнение.
-  const root = mobile ? wrap.current?.closest('.b640') : null;
+  const root = mobile ? cabinet : null;
   return (
-    <span className="va-popwrap" ref={wrap}>
+    <span className="va-popwrap" ref={(element) => setCabinet(element?.closest('.b640') ?? null)}>
       <button
+        ref={button}
         className="btn"
         type="button"
         aria-haspopup="dialog"

@@ -7,7 +7,10 @@ import {
   VARIANT_WISH_MAX_LENGTH,
   type LetterVariantPayload,
 } from '../../shared/textVariants';
-import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
+import {
+  SqliteTextVariantRepository,
+  type TextSubject,
+} from '../candidate/sqliteTextVariantRepository';
 import { normalizeWish, wishInstruction } from '../domain/textVariants';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -22,7 +25,8 @@ import {
 /**
  * B682: «Другой вариант» для нового кабинета. Маршруты начинаются с `requireCabinetB640`.
  * Вариант письма собирается тем же путём, что и письмо, с пожеланием кандидата в запросе.
- * Квоту откликов маршрут не трогает: предел — три варианта на текст — держит хранилище.
+ * Вариант стоит на единице квоты самого письма и новых не списывает. Сохраняется не больше
+ * трёх вариантов на текст; одновременно для одного текста собирается один вариант.
  */
 export type TextVariantRouteDeps = RouteDeps & {
   readonly textVariantRepository?: SqliteTextVariantRepository;
@@ -99,11 +103,17 @@ function limitReached(reply: FastifyReply, request: FastifyRequest) {
   );
 }
 
-/** Данные варианта письма: из них экран собирает текст для выбранного адресата. */
-function letterPayload(pitch: Awaited<ReturnType<typeof writeVacancyPitch>>['pitch']): LetterVariantPayload {
+/**
+ * Данные варианта письма. Шаблонный текст «для знакомого» сюда не кладётся: у варианта
+ * один текст — тот, что написала модель с учётом адресата.
+ */
+function letterPayload(
+  pitch: Awaited<ReturnType<typeof writeVacancyPitch>>['pitch'],
+  recipientName: string | undefined,
+): LetterVariantPayload {
   return {
     emailPitch: pitch.emailPitch,
-    ...(pitch.contactMessage ? { contactMessage: pitch.contactMessage } : {}),
+    ...(recipientName ? { recipientName } : {}),
     ...(pitch.senderName ? { senderName: pitch.senderName } : {}),
     ...(pitch.senderFirstName ? { senderFirstName: pitch.senderFirstName } : {}),
   };
@@ -122,6 +132,43 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
   if (deps.variants.count(subject) >= MAX_TEXT_VARIANTS) return limitReached(reply, request);
 
   const letter = parsed.data.letter ?? {};
+  // Один вариант на текст за раз: параллельные запросы не обходят предел лишними вызовами модели.
+  const flight = `${candidateId}:${vacancyId}`;
+  if (inFlight.has(flight)) {
+    return sendError(reply, request, 409, 'variant_in_progress', 'Вариант уже собирается.', true);
+  }
+  inFlight.add(flight);
+  try {
+    return await writeLetterVariant(deps, request, reply, { subject, vacancyId, letter, wish: parsed.data.wish });
+  } catch (error) {
+    request.log.warn({ err: error }, 'letter_variant_failed');
+    return generationFailed(reply, request);
+  } finally {
+    inFlight.delete(flight);
+  }
+};
+
+const inFlight = new Set<string>();
+
+function generationFailed(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 503, 'variant_generation_failed', 'Не удалось подготовить другой вариант. Попробуйте ещё раз.', true);
+}
+
+interface VariantJob {
+  readonly subject: TextSubject;
+  readonly vacancyId: string;
+  readonly letter: z.infer<typeof letterInputSchema>;
+  readonly wish: z.infer<typeof wishSchema> | undefined;
+}
+
+async function writeLetterVariant(
+  deps: BoundDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  job: VariantJob,
+) {
+  const { subject, vacancyId, letter } = job;
+  const candidateId = subject.candidateId;
   const { multiSourceEngine } = deps;
   const loaded = await multiSourceEngine.loadVacancyDescription(pitchSourceId(vacancyId));
   const cluster = multiSourceEngine.getActiveCluster(vacancyId);
@@ -133,7 +180,7 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
   // Вариант стоит на той же единице квоты, что и письмо к вакансии: повтор к ней бесплатен,
   // а без письма единица списывается, как у первого письма. При сбое единица не возвращается.
   if (!requireTariffQuota(deps, request, reply, candidateId, 'applications', vacancyId)) return reply;
-  const wish = normalizeWish(parsed.data.wish);
+  const wish = normalizeWish(job.wish);
   const result = await writeVacancyPitch(
     deps,
     request,
@@ -143,10 +190,8 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
     wishInstruction(wish),
   );
   // Другой вариант пишет только модель: шаблон дал бы тот же текст.
-  if (!result.written.body) {
-    return sendError(reply, request, 503, 'variant_generation_failed', 'Не удалось подготовить другой вариант. Попробуйте ещё раз.', true);
-  }
-  const payload = letterPayload(result.pitch);
+  if (!result.written.body) return generationFailed(reply, request);
+  const payload = letterPayload(result.pitch, letter.recipient?.name);
   const variant = deps.variants.add({
     ...subject,
     text: result.pitch.emailPitch.body,
@@ -159,7 +204,7 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
     data: { variant, ...deps.variants.list(subject) },
     meta: { requestId: request.id },
   });
-};
+}
 
 export function registerTextVariantRoutes(app: FastifyInstance, deps: TextVariantRouteDeps): void {
   const repository =

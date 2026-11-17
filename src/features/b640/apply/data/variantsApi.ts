@@ -21,7 +21,7 @@ export async function listLetterVariants(
   );
 }
 
-/** Новый вариант письма с пожеланием кандидата; квоту откликов не расходует. */
+/** Новый вариант письма с пожеланием кандидата; стоит на той же единице квоты, что и письмо. */
 export async function createLetterVariant(
   vacancyId: string,
   wish: VariantWish,

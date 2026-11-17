@@ -12,7 +12,7 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 /**
  * B682: другие варианты одного текста. Только новая таблица; пустая до первого варианта.
- * Текст и его данные запечатаны. Предел в три варианта держит сама запись: четвёртая строка
+ * Текст, его данные и пожелание кандидата запечатаны. Предел в три варианта держит сама запись: четвёртая строка
  * с тем же текстом не создаётся.
  */
 export const TEXT_VARIANT_SCHEMA = `
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS text_variants (
   position INTEGER NOT NULL CHECK (position BETWEEN 1 AND ${MAX_TEXT_VARIANTS}),
   text_cipher TEXT NOT NULL,
   payload_cipher TEXT,
-  wish_json TEXT NOT NULL,
+  wish_cipher TEXT NOT NULL,
   created_at TEXT NOT NULL,
   UNIQUE (candidate_id, kind, subject_id, position)
 ) STRICT;
@@ -49,7 +49,7 @@ interface Row {
   position: number;
   text_cipher: string;
   payload_cipher: string | null;
-  wish_json: string;
+  wish_cipher: string;
   created_at: string;
 }
 
@@ -86,7 +86,7 @@ export class SqliteTextVariantRepository {
         id: row.id,
         position: row.position,
         text: this.sealedText.open(row.text_cipher, scope),
-        wish: JSON.parse(row.wish_json) as VariantWish,
+        wish: JSON.parse(this.sealedText.open(row.wish_cipher, scope)) as VariantWish,
         createdAt: row.created_at,
         payload: row.payload_cipher
           ? (JSON.parse(this.sealedText.open(row.payload_cipher, scope)) as unknown)
@@ -109,7 +109,7 @@ export class SqliteTextVariantRepository {
   list(subject: TextSubject): TextVariantList {
     const rows = this.database
       .prepare(
-        `SELECT id, position, text_cipher, payload_cipher, wish_json, created_at
+        `SELECT id, position, text_cipher, payload_cipher, wish_cipher, created_at
          FROM text_variants WHERE candidate_id = ? AND kind = ? AND subject_id = ?
          ORDER BY position`,
       )
@@ -137,7 +137,7 @@ export class SqliteTextVariantRepository {
       this.database
         .prepare(
           `INSERT INTO text_variants
-             (id, candidate_id, kind, subject_id, position, text_cipher, payload_cipher, wish_json, created_at)
+             (id, candidate_id, kind, subject_id, position, text_cipher, payload_cipher, wish_cipher, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
@@ -148,7 +148,7 @@ export class SqliteTextVariantRepository {
           position,
           this.sealedText.seal(input.text, scope),
           input.payload === undefined ? null : this.sealedText.seal(JSON.stringify(input.payload), scope),
-          JSON.stringify(input.wish),
+          this.sealedText.seal(JSON.stringify(input.wish), scope),
           input.createdAt,
         );
       this.database.exec('COMMIT');
@@ -161,7 +161,11 @@ export class SqliteTextVariantRepository {
         payload: input.payload ?? null,
       };
     } catch (error) {
-      this.database.exec('ROLLBACK');
+      try {
+        this.database.exec('ROLLBACK');
+      } catch {
+        // Транзакция уже закрыта: исходная ошибка важнее.
+      }
       throw error;
     }
   }
