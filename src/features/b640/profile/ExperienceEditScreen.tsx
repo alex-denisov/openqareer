@@ -43,7 +43,7 @@ export const PROFILE_CHANGED = 'openqareer:b640-profile-changed';
  * Свежий черновик перед записью: сохраняется весь профиль целиком, поэтому
  * правку накладываем на то, что на сервере сейчас, а не на прочитанное при открытии.
  */
-async function freshDraft(): Promise<ResumeDraft> {
+export async function freshDraft(): Promise<ResumeDraft> {
   forgetSharedRead('resume');
   const view = await getResumeStudio();
   if (!view.draft) throw new Error('profile_draft_missing');
