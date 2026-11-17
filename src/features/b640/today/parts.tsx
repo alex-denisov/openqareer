@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ActionDock, Button, Icon, Link, StatusLine, useIsMobile, type IconName } from '../kit';
+import { Button, Icon, Link, StatusLine, type IconName } from '../kit';
 
 export interface ScreenAction {
   readonly label: string;
@@ -49,8 +49,9 @@ export function BlockError({
 }
 
 /**
- * Действия главного блока. Залитая кнопка на экране одна: на 390 она стоит
- * в закреплённой полосе над нижней навигацией, на широком окне — в блоке.
+ * Действия главного блока. Залитая кнопка на экране одна. На 390 блок `.actions`
+ * с залитой кнопкой закрепляют стили макета: полоса над нижней навигацией,
+ * кнопка по содержимому справа (макет s03).
  */
 export function LeadActions({
   primary,
@@ -59,25 +60,15 @@ export function LeadActions({
   readonly primary?: ScreenAction;
   readonly children?: ReactNode;
 }) {
-  const mobile = useIsMobile();
-  const main = primary ? (
-    <Link className="btn is-primary" to={primary.path}>
-      <Icon name={primary.icon} />
-      {primary.label}
-    </Link>
-  ) : null;
-  if (mobile && main) {
-    return (
-      <>
-        {children ? <div className="actions">{children}</div> : null}
-        <ActionDock primary={main} />
-      </>
-    );
-  }
-  if (!main && !children) return null;
+  if (!primary && !children) return null;
   return (
     <div className="actions">
-      {main}
+      {primary ? (
+        <Link className="btn is-primary" to={primary.path}>
+          <Icon name={primary.icon} />
+          {primary.label}
+        </Link>
+      ) : null}
       {children}
     </div>
   );
