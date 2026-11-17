@@ -56,9 +56,14 @@ function locationParts(location: string | undefined): { city?: string; country?:
 
 const RELOCATION = /(willing|open|ready|able|prepared) to relocat|готовы\S* (ли )?(вы )?(к )?(переезд|релокац)|рассматриваете (ли )?(переезд|релокац)/iu;
 
+/** Вопрос о другом человеке или о том, откуда кандидат узнал о вакансии, — не о его контактах. */
+const NOT_ABOUT_CANDIDATE = /referee|reference|referr|manager|supervisor|emergency|recruiter|how did you|where did you|рекомендат|руководител|экстренн|(откуда|как) вы узнали/iu;
+
 const RULES: readonly Rule[] = [
   {
     matches: RELOCATION,
+    // «Готовы переехать в Берлин?» — про конкретное место, в профиле этого нет.
+    except: /relocat\w* to\b|(переезд\S*|переехать|релокаци\S*) в(?!\p{L})/iu,
     source: SOURCE_SEARCH,
     value: (facts, question) => {
       if (!facts.openToRelocation) return undefined;
@@ -73,6 +78,7 @@ const RULES: readonly Rule[] = [
   { matches: /github/iu, source: SOURCE_CONTACTS, value: (facts) => facts.links?.find(isGithub) },
   {
     matches: /web\s?site|portfolio|personal (site|page)|сайт|портфолио/iu,
+    except: /our (web)?site|company|наш\S* сайт|сайт\S* компании/iu,
     source: SOURCE_CONTACTS,
     value: (facts) => facts.links?.find((link) => !isLinkedin(link) && !isGithub(link)),
   },
@@ -88,13 +94,14 @@ const RULES: readonly Rule[] = [
     value: (facts) => clean(facts.citizenship?.map((item) => item.trim()).filter(Boolean).join(', ')),
   },
   {
-    matches: /\bcountry\b|стран[аеу]\b/iu,
+    matches: /\bcountry\b|стран[аеу](?!\p{L})/iu,
     except: /country code|код страны|countries/iu,
     source: SOURCE_CONTACTS,
     value: (facts) => locationParts(facts.location).country,
   },
   {
     matches: /\bcity\b|город/iu,
+    except: /office|офис|relocat|переезд|переехать/iu,
     source: SOURCE_CONTACTS,
     value: (facts) => locationParts(facts.location).city,
   },
@@ -104,7 +111,7 @@ const RULES: readonly Rule[] = [
     value: (facts) => clean(facts.location),
   },
   {
-    matches: /^(your |full |legal )*name\b|полное имя|имя и фамили|фамилия и имя|\bфио\b/iu,
+    matches: /^(your |full |legal )*name\b|полное имя|имя и фамили|фамилия и имя|(?<!\p{L})фио(?!\p{L})/iu,
     except: /company|employer|компани|работодател/iu,
     source: SOURCE_CONTACTS,
     value: (facts) => clean(facts.fullName),
@@ -127,6 +134,7 @@ export function profileAnswers(
   return questions.flatMap((question) => {
     for (const rule of RULES) {
       if (!rule.matches.test(question.text) || rule.except?.test(question.text)) continue;
+      if (NOT_ABOUT_CANDIDATE.test(question.text)) return [];
       const value = rule.value(facts, question.text);
       const text = value ? forQuestion(question, value) : undefined;
       return text ? [{ questionId: question.id, text, source: rule.source }] : [];

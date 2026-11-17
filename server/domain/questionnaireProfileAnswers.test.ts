@@ -25,6 +25,8 @@ describe('B641: ответы анкеты из профиля', () => {
     expect(answer('Номер телефона')).toBe('+7 916 245-18-07');
     expect(answer('Full name')).toBe('Марина Соколова');
     expect(answer('Ваше гражданство')).toBe('Россия');
+    expect(answer('ФИО')).toBe('Марина Соколова');
+    expect(answer('Страна')).toBe('Россия');
   });
 
   it('город и страну берёт из места жительства', () => {
@@ -49,6 +51,8 @@ describe('B641: ответы анкеты из профиля', () => {
     expect(answer('Готовы ли вы к переезду?', open)).toBe('Да');
     expect(answer('Are you willing to relocate?', {})).toBeUndefined();
     expect(answer('Do you require relocation assistance?', open)).toBeUndefined();
+    expect(answer('Are you willing to relocate to Berlin?', open)).toBeUndefined();
+    expect(answer('Готовы ли вы к переезду в Казань?', open)).toBeUndefined();
     const choice: QuestionnaireQuestion = {
       id: 'c', text: 'Are you open to relocation?', required: true, kind: 'choice', options: ['yes', 'No'],
     };
@@ -73,6 +77,12 @@ describe('B641: ответы анкеты из профиля', () => {
       'Why do you want to work with us?',
       'How many people were on your team?',
       'Which countries have you worked in?',
+      'Reference email',
+      'Emergency contact phone',
+      'Name of your manager',
+      'How did you find our website?',
+      'Откуда вы узнали о вакансии: LinkedIn, сайт?',
+      'Which city is the office you prefer?',
     ]) {
       expect(answer(label), label).toBeUndefined();
     }

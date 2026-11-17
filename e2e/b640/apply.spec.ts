@@ -477,7 +477,7 @@ test.describe('B657: единый экран отклика', () => {
     const first = page.getByLabel('Ваш ответ: Сколько человек было в вашей команде?');
     await first.fill('9 человек');
     await first.blur();
-    await expect.poll(() => mock.calls.some((call) => call.startsWith('answers q1'))).toBe(true);
+    await expect.poll(() => mock.calls.some((call) => /^answers .*q1/u.test(call))).toBe(true);
     await expect(page.getByRole('heading', { name: '4 ответа из 5 готовы' })).toBeVisible();
     await country.selectOption('Germany');
     await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
