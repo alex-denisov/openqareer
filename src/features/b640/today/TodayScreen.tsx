@@ -17,6 +17,7 @@ import {
   ProfileQuestionModule,
 } from './searchModules';
 import { getStatusToday } from './statusApi';
+import { StatusSignalBlock } from './StatusSignalBlock';
 import { StatusStrip } from './StatusStrip';
 import { funnelLine, moduleLayout } from './todayModel';
 import { useLoad } from './useLoad';
@@ -72,19 +73,19 @@ interface TodayBodyProps {
 
 function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps) {
   const layout = moduleLayout(status.status, status.modules);
-  const column = (modules: readonly TodayStatusModule[], withLead: boolean) => (
-    <div className="col">
-      {modules.map((module, index) => (
-        <TodayModule
-          key={module.key}
-          module={module}
-          status={status}
-          today={today}
-          lead={withLead && index === 0}
-        />
-      ))}
-    </div>
-  );
+  // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
+  const wideSignal = status.status === 'looking' || layout.side.length === 0;
+  const signal = <StatusSignalBlock statusTitle={status.title} wide={wideSignal} />;
+  const modules = (list: readonly TodayStatusModule[], withLead: boolean) =>
+    list.map((module, index) => (
+      <TodayModule
+        key={module.key}
+        module={module}
+        status={status}
+        today={today}
+        lead={withLead && index === 0}
+      />
+    ));
   return (
     <>
       <StatusStrip
@@ -93,8 +94,14 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
         revertedTitle={revertedTitle}
         onReverted={onReverted}
       />
-      {column(layout.main, true)}
-      {layout.side.length > 0 ? column(layout.side, false) : null}
+      {wideSignal ? signal : null}
+      <div className="col">{modules(layout.main, true)}</div>
+      {layout.side.length > 0 ? (
+        <div className="col">
+          {wideSignal ? null : signal}
+          {modules(layout.side, false)}
+        </div>
+      ) : null}
     </>
   );
 }

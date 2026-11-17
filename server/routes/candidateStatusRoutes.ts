@@ -19,6 +19,7 @@ import { normalizeTargetProfession, type StatusChoice } from '../domain/candidat
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { registerStatusSignalRoutes } from './statusSignalRoutes';
 
 /**
  * B665: статус кандидата для кабинета B640. Каждый маршрут начинается с
@@ -27,6 +28,8 @@ import { sendError, withDeps } from './helpers';
 export type CandidateStatusRouteDeps = RouteDeps & {
   readonly automationPause: AutomationPausePort;
   readonly candidateStatusRepository?: SqliteCandidateStatusRepository;
+  /** B691: отклики, отправленные автооткликом; сигналы «Сегодня» их не считают. */
+  readonly autoAppliedApplicationIds?: (candidateId: string) => ReadonlySet<string>;
 };
 
 type BoundDeps = RouteDeps & { readonly status: CandidateStatusDeps };
@@ -162,4 +165,6 @@ export function registerCandidateStatusRoutes(
   app.put('/api/v1/candidate/status', write, withDeps(bound, putStatus));
   app.post('/api/v1/candidate/status/revert', write, withDeps(bound, revertStatus));
   app.get('/api/v1/candidate/status/today', withDeps(bound, getStatusToday));
+  // B691: сигналы «Сегодня» читают тот же статус; свои маршруты закрыты тем же флагом.
+  registerStatusSignalRoutes(app, { ...deps, statusRepository: repository });
 }

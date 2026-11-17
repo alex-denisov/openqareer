@@ -137,6 +137,8 @@ export interface CandidateStatusToday {
   readonly status: CandidateStatusId;
   readonly title: string;
   readonly chosen: boolean;
+  /** Когда кандидат выбрал статус; `null`, пока он не выбирал (B691). */
+  readonly since: string | null;
   /** Модули по порядку: первый — главное на «Сегодня» при этом статусе. */
   readonly modules: readonly TodayStatusModule[];
   readonly revert: CandidateStatusRevert | null;

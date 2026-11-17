@@ -55,6 +55,7 @@ function statusToday(status: StatusId, revert: typeof REVERT | null = null) {
     status,
     title: TITLES[status],
     chosen: true,
+    since: '2026-10-02T09:00:00.000Z',
     modules: MODULES[status].map(([key, title]) => ({ key, title })),
     revert,
   };
@@ -167,7 +168,28 @@ const PROD_DAY = {
   connectedSources: ['linkedin'],
 };
 
+const SIGNALS = {
+  started_search: {
+    kind: 'started_search',
+    question: { before: 'Похоже, вы ', accent: 'начали искать работу', after: '. Верно?' },
+    facts: ['3 отклика за неделю, раньше 0', 'Отправили сами, не автооткликами'],
+    suggest: { status: 'job_search', targetProfession: null },
+  },
+  changing_profession: {
+    kind: 'changing_profession',
+    question: {
+      before: 'Смотрите вакансии по направлению ',
+      accent: 'Управление продуктом',
+      after: '. Хотите сменить профессию?',
+    },
+    facts: ['За 3 недели сохранили 4 вакансии этого направления', 'Откликнулись на 2 из них'],
+    suggest: { status: 'changing_profession', targetProfession: 'Управление продуктом' },
+  },
+} as const;
+
 interface Mocks {
+  /** Сигнал, который показывает «Сегодня»; без него вопроса нет. */
+  readonly signal?: keyof typeof SIGNALS;
   /** День в форме прода вместо общей фикстуры. */
   readonly prodDay?: boolean;
   /** Сколько первых чтений дня оборвать, как при истёкшем ожидании. */
@@ -181,13 +203,14 @@ interface Mocks {
 }
 
 interface Calls {
+  readonly answers: string[];
   readonly read: string[];
   readAll: number;
   reverted: number;
 }
 
 async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise<Calls> {
-  const calls: Calls = { read: [], readAll: 0, reverted: 0 };
+  const calls: Calls = { answers: [], read: [], readAll: 0, reverted: 0 };
   let status = mocks.status ?? 'job_search';
   let revert = mocks.revert ? REVERT : null;
   let failures = mocks.statusFailures ?? 0;
@@ -232,6 +255,24 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
         },
       },
     });
+  });
+  let signal: (typeof SIGNALS)[keyof typeof SIGNALS] | null = mocks.signal
+    ? SIGNALS[mocks.signal]
+    : null;
+  let answered: { id: string; kind: string; answer: string; undoUntil: string } | null = null;
+  await page.route(`${API}/status/signal**`, (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/answer/undo')) {
+      calls.answers.push('undo');
+      signal = mocks.signal ? SIGNALS[mocks.signal] : null;
+      answered = null;
+    } else if (url.pathname.endsWith('/answer')) {
+      const body = route.request().postDataJSON() as { kind: string; answer: string };
+      calls.answers.push(body.answer);
+      answered = { id: 'ans-1', ...body, undoUntil: '2099-01-01T00:00:00.000Z' };
+      signal = null;
+    }
+    return route.fulfill({ json: { data: { signal, answered } } });
   });
   await page.route(`${API}/role-skill-demand`, (route) =>
     route.fulfill({ json: { data: SKILL_DEMAND } }),
@@ -384,6 +425,77 @@ test.describe('B650: «Сегодня» на данных в форме прод
   });
 });
 
+test.describe('B691: сигналы на «Сегодня»', () => {
+  const card = (page: Page) => today(page).locator('.route.why');
+
+  test('«Присматриваюсь»: вопрос над колонками, факты в ⓘ, «Нет» и «Отменить ответ»; гейты', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/today', {
+      status: 'looking',
+      signal: 'started_search',
+    });
+    await expect(card(page)).toHaveClass(/col-wide/u);
+    await expect(card(page).locator('.why-q')).toContainText(
+      'Похоже, вы начали искать работу. Верно?',
+    );
+    await expect(card(page).locator('.why-q strong')).toHaveText('начали искать работу');
+    await card(page).getByRole('button', { name: 'Почему мы так думаем' }).click();
+    await expect(card(page).getByRole('tooltip')).toContainText(
+      '3 отклика за неделю, раньше 0 · Отправили сами, не автооткликами',
+    );
+    await page.keyboard.press('Escape');
+    await expectGates(page);
+
+    await card(page).getByRole('button', { name: 'Нет', exact: true }).click();
+    await expect(card(page).locator('.res-row')).toContainText(
+      'Хорошо, оставляем «Присматриваюсь»',
+    );
+    await expect(card(page).locator('.why-q')).toHaveCount(0);
+    await card(page).getByRole('button', { name: 'Отменить ответ' }).click();
+    await expect(card(page).locator('.why-q')).toBeVisible();
+    expect(calls.answers).toEqual(['no', 'undo']);
+  });
+
+  test('«Верно» ведёт к выбору статуса с предложением, сам статус не меняет', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/today', {
+      status: 'looking',
+      signal: 'started_search',
+    });
+    await card(page).getByRole('button', { name: 'Верно' }).click();
+    await expect(page).toHaveURL(/\/app\/profile\/status\?status=job_search$/u);
+    expect(calls.answers).toEqual(['yes']);
+    expect(calls.reverted).toBe(0);
+  });
+
+  test('«Ищу работу»: вопрос о смене профессии в правой колонке, «Не сейчас» убирает его; гейты', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/today', { signal: 'changing_profession' });
+    await expect(card(page)).not.toHaveClass(/col-wide/u);
+    await expect(card(page).locator('.why-q strong')).toHaveText('Управление продуктом');
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
+    await expectGates(page);
+    await card(page).getByRole('button', { name: 'Не сейчас' }).click();
+    await expect(card(page)).toHaveCount(0);
+    expect(calls.answers).toEqual(['later']);
+  });
+
+  test('после «Нет» и перезагрузки ответ ещё можно отменить', async ({ page }) => {
+    await openCabinet(page, '/app/today', { status: 'looking', signal: 'started_search' });
+    await card(page).getByRole('button', { name: 'Нет', exact: true }).click();
+    await expect(card(page).locator('.res-row')).toBeVisible();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(card(page).getByRole('button', { name: 'Отменить ответ' })).toBeVisible();
+  });
+
+  test('без сигнала вопроса на экране нет', async ({ page }) => {
+    await openCabinet(page, '/app/today', { status: 'looking' });
+    await expect(today(page).locator('.lead')).toBeVisible();
+    await expect(card(page)).toHaveCount(0);
+  });
+});
+
 test.describe('B650: «Все уведомления»', () => {
   test('события по дням, действие ведёт в раздел и отмечает прочитанным; гейты', async ({
     page,
@@ -451,6 +563,8 @@ test.describe('B650: снимки для сверки с макетами', () =
     ['today-looking', '/app/today', { status: 'looking' }],
     ['today-working', '/app/today', { status: 'working' }],
     ['today-prod-day', '/app/today', { prodDay: true }],
+    ['today-signal-looking', '/app/today', { status: 'looking', signal: 'started_search' }],
+    ['today-signal-job-search', '/app/today', { signal: 'changing_profession' }],
     ['notifications', '/app/notifications', { hasMore: true }],
     ['notifications-empty', '/app/notifications', { notes: [] }],
   ];
