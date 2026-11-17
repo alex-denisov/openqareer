@@ -18,6 +18,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly quotaExhausted?: boolean;
   /** Сервер нашёл знакомого в компании. */
   readonly withPath?: boolean;
+  /** У вакансии есть анкета работодателя. */
+  readonly questionnaire?: boolean;
 }
 
 function circles(vacancyId: string, withPath: boolean) {
@@ -159,6 +161,48 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       }),
     );
   }
+  const formAnswers: { questionId: string; text: string }[] = [];
+  let formSubmittedAt: string | null = null;
+  const formView = (vacancyId: string) => {
+    const questions = [
+      { id: 'q1', text: 'Сколько человек было в вашей команде?', required: true, kind: 'text' },
+      { id: 'q2', text: 'Ожидаемый уровень дохода?', required: true, kind: 'text' },
+      { id: 'q3', text: 'Готовы ли к командировкам?', required: false, kind: 'text' },
+    ];
+    const answered = new Set(formAnswers.map((answer) => answer.questionId));
+    return {
+      vacancyId,
+      state: options.questionnaire ? 'ready' : 'none',
+      formUrl: options.questionnaire ? 'https://boards.greenhouse.io/grinkod/jobs/77' : null,
+      questions: options.questionnaire ? questions : [],
+      answers: formAnswers,
+      suggestions: answered.has('q2')
+        ? []
+        : [{ questionId: 'q2', text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' }],
+      answered: formAnswers.length,
+      total: options.questionnaire ? questions.length : 0,
+      missingRequired: 0,
+      readAt: null,
+      submittedAt: formSubmittedAt,
+    };
+  };
+  await page.route('**/api/v1/candidate/vacancies/*/questionnaire**', async (route) => {
+    const parts = new URL(route.request().url()).pathname.split('/');
+    const vacancyId = decodeURIComponent(parts[parts.indexOf('vacancies') + 1] ?? '');
+    const method = route.request().method();
+    if (method === 'PUT') {
+      const body = route.request().postDataJSON() as { answers: typeof formAnswers };
+      formAnswers.splice(0, formAnswers.length, ...body.answers);
+      calls.push(`answers ${body.answers.map((answer) => answer.questionId).join(',')}`);
+    }
+    if (method === 'POST') {
+      formSubmittedAt = new Date().toISOString();
+      calls.push('form submitted');
+      await route.fulfill({ json: { data: { submittedAt: formSubmittedAt } } });
+      return;
+    }
+    await route.fulfill({ json: { data: formView(vacancyId) } });
+  });
   await page.route('**/api/v1/candidate/vacancies/*/letter-resume', (route) =>
     route.fulfill({ json: { data: { ready: false } } }),
   );
@@ -293,6 +337,41 @@ test.describe('B657: единый экран отклика', () => {
       '/app/profile',
     );
     await expectGates(page);
+  });
+
+  test('анкета работодателя: ответы, подсказка из профиля, копирование и отметка', async ({
+    page,
+  }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter?step=form', {
+      questionnaire: true,
+    });
+    await expect(step(page, 'Анкета')).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: '0 ответов из 3 готовы' })).toBeVisible();
+    await expect(page.getByText('необязательный')).toHaveCount(1);
+    await expectGates(page);
+
+    const first = page.getByLabel('Ваш ответ: Сколько человек было в вашей команде?');
+    await first.fill('9 человек');
+    await first.blur();
+    await expect.poll(() => mock.calls.includes('answers q1')).toBe(true);
+    await page.getByRole('button', { name: 'Вписать из профиля: от 500 000 ₽' }).click();
+    await expect(page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?')).toHaveValue(
+      'от 500 000 ₽',
+    );
+    await expect(page.getByRole('heading', { name: '2 ответа из 3 готовы' })).toBeVisible();
+    // На 390 боковая панель скрыта: та же ссылка стоит в блоке действий под вопросами.
+    await expect(
+      page.getByRole('link', { name: 'Анкета на сайте ↗' }).locator('visible=true').first(),
+    ).toHaveAttribute('href', 'https://boards.greenhouse.io/grinkod/jobs/77');
+    await page.getByRole('button', { name: 'Анкета отправлена' }).click();
+    await expect(page.getByText('Анкета отмечена как отправленная')).toBeVisible();
+    expect(mock.calls).toContain('form submitted');
+  });
+
+  test('без анкеты вкладки «Анкета» нет, адрес шага ведёт к письму', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=form');
+    await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
+    await expect(step(page, 'Анкета')).toHaveCount(0);
   });
 
   test('отправка без одобренного письма возвращает к письму', async ({ page }) => {
