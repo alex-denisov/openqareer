@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { Icon } from '../../kit';
 import { vacanciesWord, type MoneyCurrency } from '../format';
 import { FilterPane, type PaneProps } from './FilterPanes';
+import { HiddenChip, type HiddenChipProps } from './HiddenChip';
 import {
   CHIP_LIMIT,
   FILTER_KINDS,
@@ -13,7 +14,7 @@ import {
   type FilterKind,
 } from './filterModel';
 
-export interface FiltersBarProps extends PaneProps {
+export interface FiltersBarProps extends PaneProps, HiddenChipProps {
   readonly openKind: FilterKind | null;
   readonly shown: number;
   readonly onOpenKind: (kind: FilterKind | null) => void;
@@ -43,6 +44,7 @@ function Popover(props: FiltersBarProps & { kind: FilterKind }) {
         ))}
       </div>
       <FilterPane {...props} key={kind} kind={kind} />
+      <HiddenChip showHidden={props.showHidden} onShowHidden={props.onShowHidden} />
       <div className="vt-pop-foot">
         <button className="btn is-quiet" type="button" onClick={props.onReset}>
           Сбросить

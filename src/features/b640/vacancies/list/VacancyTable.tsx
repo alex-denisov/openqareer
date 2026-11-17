@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
@@ -27,6 +28,8 @@ export interface VacancyTableProps {
   readonly onToggleSaved: (item: MatchedVacancyItem) => void;
   readonly onMenu: (id: string, view: MenuView) => void;
   readonly onCloseMenu: () => void;
+  /** Блок скрытых вакансий: отдельный `tbody` над обычными строками. */
+  readonly hidden?: ReactNode;
 }
 
 function SortHead({ column, sort, onSort, tip }: { column: (typeof SORT_COLUMNS)[number]; sort: SortState; onSort: (key: SortKey) => void; tip: string | null }) {
@@ -64,6 +67,7 @@ export function VacancyTable(props: VacancyTableProps) {
             </th>
           </tr>
         </thead>
+        {props.hidden}
         <tbody>
           {items.flatMap((item) => {
             const id = item.cluster.id;

@@ -6,7 +6,11 @@ import { expectGates } from './gates';
 const SHOTS = process.env.B640_SHOTS;
 const ROWS = '.b640 table.vt tbody tr.vt-row';
 
-async function openCabinet(page: Page, path: string): Promise<void> {
+async function openCabinet(
+  page: Page,
+  path: string,
+  options: { readonly hidden?: readonly unknown[] } = {},
+): Promise<void> {
   await mockSignedInCabinet(page, {
     cabinetB640: true,
     vacancyTotal: 45,
@@ -19,6 +23,15 @@ async function openCabinet(page: Page, path: string): Promise<void> {
       sources: [],
     } as never,
   });
+  const hidden = options.hidden ?? [];
+  await page.route('**/api/v1/candidate/b640/hidden-vacancies**', (route) =>
+    route.fulfill({
+      json: {
+        data: hidden,
+        meta: { total: hidden.length, offset: 0, limit: 20, nextOffset: null },
+      },
+    }),
+  );
   await page.route('**/api/v1/candidate/vacancy-skips**', (route) =>
     route.request().method() === 'POST'
       ? route.fulfill({ status: 201, json: { data: { clusterId: 'x', reasonId: 'role-family' } } })
@@ -40,6 +53,35 @@ async function openHide(page: Page, mobile: boolean): Promise<void> {
   } else {
     await row.getByRole('button', { name: 'Не подходит' }).click();
   }
+}
+
+const HIDDEN_ROW = {
+  cluster: {
+    id: 'hid-1',
+    canonicalTitle: 'Руководитель разработки',
+    canonicalCompany: 'Кредит Онлайн',
+    canonicalLocation: 'Москва',
+    isRemote: false,
+    primaryUrl: 'https://example.com/careers',
+    firstObservedAt: '2026-11-10T09:00:00Z',
+    sources: [{ sourceId: 'hh', observedAt: '2026-11-10T09:00:00Z' }],
+    companyFeatures: {},
+  },
+  explanation: { summary: '', calculatedAt: '2026-11-10T09:00:00Z' },
+  hidden: { reasonId: 'comp-below', at: '2026-11-11T09:00:00Z' },
+};
+
+async function showHidden(page: Page, mobile: boolean): Promise<void> {
+  if (mobile) await page.getByRole('button', { name: /^Фильтры/ }).click();
+  else
+    await page
+      .getByRole('button', { name: /^Роли|^Все роли/ })
+      .first()
+      .click();
+  await page.getByRole('button', { name: 'Показать скрытые' }).click();
+  // На 390 лист фильтров закрывает кнопка «Показать N» в его шапке.
+  if (mobile) await page.locator('.vt-sheet-go').click();
+  else await page.locator('.vt-pop-foot .btn.is-primary').click();
 }
 
 test.describe('B654: раздел «Вакансии», подборка и сохранённые', () => {
@@ -149,6 +191,24 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.getByRole('link', { name: 'Откликнуться' })).toBeVisible();
     await toggles.nth(1).click();
     await expect(page.locator('.vt-detail-row .vs')).toHaveCount(1);
+  });
+
+  test('«Показать скрытые»: строка с меткой, «Вернуть в подборку» убирает её', async ({
+    page,
+  }, testInfo) => {
+    const mobile = isMobile(testInfo.project.name);
+    await openCabinet(page, '/app/vacancies', { hidden: [HIDDEN_ROW] });
+    await showHidden(page, mobile);
+    const hidden = page.locator('tbody.vt-hid tr.vt-row.is-hid');
+    await expect(hidden).toHaveCount(1);
+    await expect(hidden.locator('.va-hid')).toHaveText('скрыто');
+    await expect(hidden.locator('[role="tooltip"]')).toHaveText(
+      'Скрыто 11.11 · Зарплата ниже ожиданий',
+    );
+    await expectGates(page);
+    await hidden.getByRole('button', { name: 'Ещё действия' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Вернуть в подборку' }).click();
+    await expect(page.getByText('Скрытых вакансий нет')).toBeVisible();
   });
 
   test('снимки подборки и сохранённых для сверки с макетом', async ({ page }, testInfo) => {
