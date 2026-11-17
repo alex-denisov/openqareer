@@ -58,6 +58,7 @@ function Probe({
         data-failed={triage.hide.failed}
         data-pick-a={String(triage.isPicked('a'))}
         data-why-a={triage.rowFor('a')?.reasonLabel ?? ''}
+        data-nothing={triage.nothing === null ? '' : String(triage.nothing)}
       />
       <button id="start" onClick={triage.start} />
       <button id="cancel" onClick={triage.cancel} />
@@ -66,6 +67,9 @@ function Probe({
       <button id="toggle-a" onClick={() => triage.toggle('a')} />
       <button id="hide" onClick={triage.hideSelected} />
       <button id="narrow" onClick={() => setShown(items.slice(0, 2))} />
+      <button id="grow" onClick={() => setShown((current) => [...current, makeItem({ id: `n${current.length}` })])} />
+      <button id="reorder" onClick={() => setShown((current) => [...current].reverse())} />
+      <button id="clear" onClick={triage.clearResult} />
     </div>
   );
 }
@@ -120,16 +124,63 @@ describe('режим «Помочь выбрать»', () => {
     view.unmount();
   });
 
-  it('гонка: ответ старого разбора не перезаписывает новый', async () => {
+  it('одно нажатие — один запрос: дочитывание и перестановка списка разбор не перезапускают', async () => {
     const resolvers: Array<(value: VacancyTriage) => void> = [];
     request.mockImplementation(() => new Promise((resolve) => resolvers.push(resolve)));
     const view = mount(<Probe />);
     press(view.container, 'start');
+    press(view.container, 'grow');
+    press(view.container, 'grow');
+    press(view.container, 'reorder');
     press(view.container, 'narrow');
-    expect(resolvers).toHaveLength(2);
-    await act(async () => resolvers[1]!(result([hide('a'), keep('b')])));
-    await act(async () => resolvers[0]!(result([hide('a'), hide('b'), hide('c')])));
-    expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', total: '2' });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c']);
+    expect(out(view.container).dataset.total).toBe('3');
+    await act(async () => resolvers[0]!(result([hide('a'), keep('b'), keep('c')])));
+    press(view.container, 'grow');
+    await flush();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', total: '3' });
+    view.unmount();
+  });
+
+  it('повторное нажатие разбирает список, видимый в этот момент', async () => {
+    request.mockResolvedValue(result([hide('a'), keep('b')]));
+    const view = mount(<Probe />);
+    press(view.container, 'start');
+    await flush();
+    press(view.container, 'cancel');
+    press(view.container, 'narrow');
+    press(view.container, 'start');
+    await flush();
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[1]![0]).toEqual(['a', 'b']);
+    view.unmount();
+  });
+
+  it('скрывать нечего: режим закрывается сам, остаётся итог с числом вакансий', async () => {
+    request.mockResolvedValue(result([keep('a'), keep('b'), keep('c')]));
+    const view = mount(<Probe />);
+    press(view.container, 'start');
+    await flush();
+    expect(out(view.container).dataset).toMatchObject({ active: 'false', nothing: '3' });
+    expect(request).toHaveBeenCalledTimes(1);
+    press(view.container, 'clear');
+    expect(out(view.container).dataset.nothing).toBe('');
+    view.unmount();
+  });
+
+  it('скрывать нечего, но есть вопрос: режим остаётся; после ответа без скрытия — итог', async () => {
+    request.mockResolvedValueOnce(result([keep('a'), needs('b'), keep('c')], true));
+    request.mockResolvedValueOnce(result([keep('a'), keep('b'), keep('c')]));
+    const view = mount(<Probe />);
+    press(view.container, 'start');
+    await flush();
+    expect(out(view.container).dataset).toMatchObject({ active: 'true', nothing: '' });
+    press(view.container, 'yes');
+    await flush();
+    expect(out(view.container).dataset).toMatchObject({ active: 'false', nothing: '3' });
+    expect(request).toHaveBeenCalledTimes(2);
     view.unmount();
   });
 
@@ -143,18 +194,6 @@ describe('режим «Помочь выбрать»', () => {
     press(view.container, 'retry');
     await flush();
     expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1' });
-    view.unmount();
-  });
-
-  it('смена списка в режиме запускает разбор заново', async () => {
-    request.mockResolvedValue(result([hide('a'), keep('b'), keep('c')]));
-    const view = mount(<Probe />);
-    press(view.container, 'start');
-    await flush();
-    press(view.container, 'narrow');
-    await flush();
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[1]![0]).toEqual(['a', 'b']);
     view.unmount();
   });
 

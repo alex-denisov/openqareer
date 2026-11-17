@@ -66,9 +66,10 @@ describe('полоса действий', () => {
     view.unmount();
   });
 
-  it('N = 0: кнопка неактивна', () => {
+  it('N = 0: кнопки с нулём нет, остаётся «Отмена»', () => {
     const view = mount(<TriageBar count={0} busy={false} onHide={vi.fn()} onCancel={vi.fn()} />);
-    expect((view.container.querySelector('.is-primary') as HTMLButtonElement).disabled).toBe(true);
+    expect(view.container.querySelector('.is-primary')).toBeNull();
+    expect(view.container.querySelector('div.vz-bar')!.textContent).toBe('Отмена');
     view.unmount();
   });
 
@@ -93,6 +94,22 @@ describe('полоса действий', () => {
 });
 
 describe('состояния', () => {
+  it('итог «скрывать нечего» со склонением', () => {
+    const many = mount(<TriageStatus kind="nothing" total={884} />);
+    const line = many.container.querySelector('p.vz-st')!;
+    expect(line.getAttribute('role')).toBe('status');
+    expect(line.getAttribute('aria-busy')).toBeNull();
+    expect(line.textContent).toBe('Скрывать нечего: все 884 вакансии подходят');
+    expect(line.querySelector('.num')!.textContent).toBe('884');
+    many.unmount();
+    const five = mount(<TriageStatus kind="nothing" total={5} />);
+    expect(five.container.textContent).toBe('Скрывать нечего: все 5 вакансий подходят');
+    five.unmount();
+    const one = mount(<TriageStatus kind="nothing" total={1} />);
+    expect(one.container.textContent).toBe('Скрывать нечего: вакансия подходит');
+    one.unmount();
+  });
+
   it('«Разбираем N вакансий…»', () => {
     const view = mount(<TriageStatus kind="loading" total={214} />);
     const line = view.container.querySelector('p.vz-st')!;
