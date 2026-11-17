@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ApplicationQuestionnaire,
   QuestionnaireQuestion,
@@ -6,7 +6,7 @@ import type {
 } from '../../../../shared/applicationQuestionnaire';
 import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQuestionnaire';
 import { apiErrorMessage } from '../../coach/apiClient';
-import { Button, Icon, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
+import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import {
   getQuestionnaire,
@@ -14,6 +14,7 @@ import {
   saveQuestionnaireAnswers,
 } from './data/questionnaireApi';
 import {
+  answerOf,
   answersOf,
   copyText,
   draftOf,
@@ -32,8 +33,8 @@ export interface QuestionnaireState {
   readonly form: ApplicationQuestionnaire | null;
   readonly draft: AnswerDraft;
   readonly setAnswer: (questionId: string, text: string) => void;
-  /** Сохранить ответы: при уходе из поля и перед копированием. */
-  readonly save: () => void;
+  /** Сохранить ответы: при уходе из поля, после подсказки и перед копированием. */
+  readonly save: (next?: AnswerDraft) => void;
   readonly saveError: string | null;
   readonly submitted: Mark;
   readonly markSubmitted: () => void;
@@ -47,6 +48,8 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const [draft, setDraft] = useState<AnswerDraft>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Mark>({ kind: 'idle' });
+  // Сохранения идут по одному: поздний ответ сервера не затирает более свежий набор.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     if (form) setDraft(draftOf(form));
@@ -58,8 +61,9 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
     saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
     setAnswer: (questionId, text) => setDraft((current) => ({ ...current, [questionId]: text })),
-    save: () => {
-      saveQuestionnaireAnswers(vacancyId, answersOf(draft))
+    save: (next = draft) => {
+      queue.current = queue.current
+        .then(() => saveQuestionnaireAnswers(vacancyId, answersOf(next)))
         .then(() => setSaveError(null))
         .catch((reason: unknown) =>
           setSaveError(apiErrorMessage(reason, 'Ответы не сохранились. Повторите.')),
@@ -84,9 +88,11 @@ interface QuestionProps {
 
 function Question({ question, suggestion, state }: QuestionProps) {
   const fieldId = `qa-${question.id}`;
-  const value = state.draft[question.id] ?? '';
+  const value = answerOf(state.draft, question.id);
   const useSuggestion = () => {
-    if (suggestion) state.setAnswer(question.id, suggestion.text);
+    if (!suggestion) return;
+    state.setAnswer(question.id, suggestion.text);
+    state.save({ ...state.draft, [question.id]: suggestion.text });
   };
   return (
     <li className="qa">
@@ -108,7 +114,7 @@ function Question({ question, suggestion, state }: QuestionProps) {
           maxLength={QUESTIONNAIRE_ANSWER_MAX_LENGTH}
           value={value}
           onChange={(event) => state.setAnswer(question.id, event.currentTarget.value)}
-          onBlur={state.save}
+          onBlur={() => state.save()}
         />
       </div>
       <div className="qa-meta">
@@ -126,6 +132,13 @@ interface ActionsProps {
   readonly form: ApplicationQuestionnaire;
   readonly ready: FormReadiness;
   readonly state: QuestionnaireState;
+}
+
+/** Переводит к полю вопроса: прокрутка и фокус, без смены адреса. */
+function focusField(fieldId: string): void {
+  const field = document.getElementById(fieldId);
+  field?.scrollIntoView({ block: 'center' });
+  field?.focus();
 }
 
 /** Главное действие анкеты: дойти до пропущенного обязательного вопроса или скопировать ответы. */
@@ -146,10 +159,9 @@ function FormActions({ form, ready, state }: ActionsProps) {
   return (
     <>
       {ready.nextRequired ? (
-        <a className="btn is-primary" href={`#qa-${ready.nextRequired.id}`}>
-          <Icon name="edit" />
+        <Button variant="primary" icon="edit" onClick={() => focusField(`qa-${ready.nextRequired?.id}`)}>
           {`Ответьте на обязательные · ${ready.missingRequired}`}
-        </a>
+        </Button>
       ) : (
         <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
           Скопировать ответы

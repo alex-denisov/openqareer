@@ -7,6 +7,11 @@ import { pluralRu } from '../../responses/model/responseRow';
 
 export type AnswerDraft = Readonly<Record<string, string>>;
 
+/** Ответ из черновика. Идентификатор вопроса — чужой текст: читаем только свои ключи. */
+export function answerOf(draft: AnswerDraft, questionId: string): string {
+  return Object.hasOwn(draft, questionId) ? draft[questionId]! : '';
+}
+
 export function draftOf(form: ApplicationQuestionnaire): AnswerDraft {
   return Object.fromEntries(form.answers.map((answer) => [answer.questionId, answer.text]));
 }
@@ -26,7 +31,7 @@ export interface FormReadiness {
 }
 
 export function readiness(questions: readonly QuestionnaireQuestion[], draft: AnswerDraft): FormReadiness {
-  const filled = (question: QuestionnaireQuestion) => Boolean(draft[question.id]?.trim());
+  const filled = (question: QuestionnaireQuestion) => Boolean(answerOf(draft, question.id).trim());
   const missing = questions.filter((question) => question.required && !filled(question));
   return {
     answered: questions.filter(filled).length,
@@ -46,7 +51,7 @@ export function readinessTitle(state: FormReadiness): string {
 /** Вопросы и ответы одним текстом — чтобы вставить на странице работодателя. */
 export function copyText(questions: readonly QuestionnaireQuestion[], draft: AnswerDraft): string {
   return questions
-    .filter((question) => draft[question.id]?.trim())
-    .map((question) => `${question.text}\n${draft[question.id]!.trim()}`)
+    .filter((question) => answerOf(draft, question.id).trim())
+    .map((question) => `${question.text}\n${answerOf(draft, question.id).trim()}`)
     .join('\n\n');
 }

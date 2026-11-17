@@ -135,6 +135,15 @@ describe('questionnaire routes with the B640 flag', () => {
     expect(rows(databasePath)).toEqual([]);
   });
 
+  it('keeps the stored questions when a day-old questionnaire cannot be read again', async () => {
+    const { app, seed, databasePath } = await setup();
+    seed(flagged, 'v1');
+    const database = new DatabaseSync(databasePath);
+    database.prepare("UPDATE application_questionnaires SET read_at = '2026-01-01T00:00:00.000Z'").run();
+    database.close();
+    expect((await call(app, 'GET', url('v1'), flagged)).json().data).toMatchObject({ state: 'ready', total: 3 });
+  });
+
   it('returns questions with readiness and saves answers sealed', async () => {
     const { app, seed, databasePath } = await setup();
     seed(flagged, 'v1');

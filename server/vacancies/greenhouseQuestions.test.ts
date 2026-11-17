@@ -1,5 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
-import { greenhouseJobRef, readGreenhouseQuestions } from './greenhouseQuestions';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  greenhouseJobRef,
+  readGreenhouseQuestions,
+  resetGreenhouseQuestionsCache,
+} from './greenhouseQuestions';
+
+beforeEach(() => resetGreenhouseQuestionsCache());
 
 const provenance = (sourceId: string, externalId?: string) => ({
   provenance: { sourceType: 'json_api' as never, sourceId, sourceUrl: '', externalId, observedAt: '' },
@@ -43,7 +49,27 @@ describe('B641: чтение вопросов Greenhouse', () => {
       async () => new Response('x'.repeat(600_000)),
     ];
     for (const run of cases) {
+      resetGreenhouseQuestionsCache();
       expect(await readGreenhouseQuestions(ref, run as never)).toBeNull();
     }
+  });
+
+  it('после сбоя ту же вакансию не читает повторно, другую — читает', async () => {
+    const failing = vi.fn(async () => new Response('nope', { status: 429 }));
+    expect(await readGreenhouseQuestions(ref, failing as never)).toBeNull();
+    expect(await readGreenhouseQuestions(ref, failing as never)).toBeNull();
+    expect(failing).toHaveBeenCalledTimes(1);
+    const ok = vi.fn(async () => new Response(JSON.stringify({ questions: [question] })));
+    expect(await readGreenhouseQuestions({ board: 'acme', jobId: '78' }, ok as never)).toHaveLength(1);
+  });
+
+  it('одновременные чтения одной вакансии идут одним запросом', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ questions: [question] })));
+    const [a, b] = await Promise.all([
+      readGreenhouseQuestions(ref, fetchImpl as never),
+      readGreenhouseQuestions(ref, fetchImpl as never),
+    ]);
+    expect(a).toEqual(b);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

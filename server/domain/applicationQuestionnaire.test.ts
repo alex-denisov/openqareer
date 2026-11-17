@@ -46,6 +46,15 @@ describe('B641: вопросы Greenhouse', () => {
     ]);
   });
 
+  it('вопрос с небезопасным идентификатором отбрасывается', () => {
+    const field = (name: string) => ({ label: 'Q', required: false, fields: [{ name, type: 'input_text' }] });
+    expect(
+      parseGreenhouseQuestions({
+        questions: [field('constructor x'), field('a b'), field('q"1'), field('question_7'), field('answers[0]')],
+      }).map((question) => question.id),
+    ).toEqual(['question_7', 'answers[0]']);
+  });
+
   it('чужая форма ответа даёт пустой список, а не падение', () => {
     expect(parseGreenhouseQuestions(null)).toEqual([]);
     expect(parseGreenhouseQuestions({ questions: 'nope' })).toEqual([]);

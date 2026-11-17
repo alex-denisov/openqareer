@@ -15,8 +15,15 @@ const STANDARD_FIELD = /^(first_name|last_name|preferred_name|email|phone|resume
 const TEXT_TYPES = new Set(['input_text', 'textarea']);
 const CHOICE_TYPES = new Set(['multi_value_single_select', 'multi_value_multi_select']);
 
+/** Идентификатор вопроса идёт в ключи и адреса на клиенте: только простые символы. */
+const QUESTION_ID = /^[A-Za-z0-9_\-[\]]{1,100}$/u;
+
 function clip(value: string, max: number): string {
-  const flat = value.replace(/\s+/gu, ' ').trim();
+  // Управляющие символы и символы смены направления текста в чужом тексте не нужны.
+  const flat = value
+    .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
@@ -37,8 +44,8 @@ function toQuestion(raw: unknown): QuestionnaireQuestion | null {
   const field: unknown = raw.fields[0];
   if (!isRecord(field) || typeof field.name !== 'string' || typeof field.type !== 'string') return null;
   const text = clip(raw.label, QUESTION_TEXT_MAX_LENGTH);
-  if (!text || STANDARD_FIELD.test(field.name)) return null;
-  const base = { id: clip(field.name, 100), text, required: raw.required === true };
+  if (!text || STANDARD_FIELD.test(field.name) || !QUESTION_ID.test(field.name)) return null;
+  const base = { id: field.name, text, required: raw.required === true };
   if (TEXT_TYPES.has(field.type)) return { ...base, kind: 'text' };
   if (!CHOICE_TYPES.has(field.type)) return null;
   const options = optionLabels(field.values);
@@ -78,8 +85,9 @@ export function salarySuggestions(
   const floor = profile?.salaryFloor;
   if (!floor || !Number.isFinite(floor) || floor <= 0) return [];
   const currency = profile?.salaryCurrency ?? 'RUB';
-  const amount = new Intl.NumberFormat('ru-RU').format(floor).replace(/ /gu, ' ');
-  const text = `от ${amount} ${CURRENCY_SIGNS[currency] ?? currency}`;
+  const amount = new Intl.NumberFormat('ru-RU').format(floor).replace(/\p{Zs}/gu, ' ');
+  const sign = Object.hasOwn(CURRENCY_SIGNS, currency) ? CURRENCY_SIGNS[currency] : currency;
+  const text = `от ${amount} ${sign}`;
   return questions
     .filter((question) => question.kind === 'text' && SALARY_QUESTION.test(question.text))
     .map((question) => ({ questionId: question.id, text, source: 'Ожидания из вашего профиля' }));

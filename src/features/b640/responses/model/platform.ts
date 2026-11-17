@@ -10,24 +10,29 @@ export interface Platform {
 
 const KNOWN: readonly (readonly [RegExp, string])[] = [
   [/^hh(\.ru)?$/u, 'hh.ru'],
-  [/linkedin/u, 'LinkedIn'],
+  [/^linkedin/u, 'LinkedIn'],
   [/^telegram/u, 'Telegram'],
   [/^remotive$/u, 'Remotive'],
   [/^trudvsem$/u, 'ТрудВсем'],
   [/^himalayas$/u, 'Himalayas'],
 ];
 const SITE: Platform = { label: 'сайт компании', site: true };
-/** Код, а не название: латиница в нижнем регистре, цифры, дефисы и подчёркивания. */
-const CODE = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/u;
+/**
+ * Внутренние обозначения источника: доска работодателя (`ats-ashby-snowflake`), тип чтения
+ * (`json_api`, `rss`, `html`), ручная карточка. Всё это для кандидата — «сайт компании».
+ */
+const INTERNAL = /^(?:ats[-._]|cluster[-._]|direct[-._]|site[-._]|json[-_]?api$|rss$|html$|manual$|other$|unknown$)/u;
 
 export function platformOf(source: string | null | undefined): Platform {
   const raw = (source ?? '').trim();
   if (!raw) return SITE;
-  const lower = raw.toLowerCase();
+  // Пометка в скобках («hh.ru (страница поиска)») — внутреннее различие сбора, её убираем первой.
+  const name = vacancySourceDisplayName(raw);
+  const lower = name.toLowerCase();
+  if (INTERNAL.test(lower)) return SITE;
   const known = KNOWN.find(([pattern]) => pattern.test(lower));
   if (known) return { label: known[1], site: false };
-  if (CODE.test(raw)) return SITE;
-  return { label: vacancySourceDisplayName(raw), site: false };
+  return { label: name.charAt(0).toUpperCase() + name.slice(1), site: false };
 }
 
 /** «через hh.ru», «через сайт компании». */

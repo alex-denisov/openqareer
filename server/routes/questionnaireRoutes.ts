@@ -40,6 +40,13 @@ type BoundDeps = RouteDeps & {
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const VACANCY_ID_MAX_LENGTH = 200;
+/** Через сутки вопросы читаются заново; анкета с ответами кандидата не перечитывается. */
+const QUESTIONS_TTL_MS = 24 * 60 * 60 * 1000;
+
+function fresh(stored: StoredQuestionnaire, now: number): boolean {
+  if (stored.answers.length > 0 || stored.submittedAt) return true;
+  return now - new Date(stored.readAt).getTime() < QUESTIONS_TTL_MS;
+}
 const answersSchema = z
   .object({
     answers: z
@@ -55,8 +62,17 @@ const answersSchema = z
   })
   .strict();
 
+const FORM_URL_MAX_LENGTH = 2048;
+
+/** Ссылка на страницу анкеты: только https, без логина в адресе и разумной длины. */
 function safeUrl(url: string | undefined): string | null {
-  return url && /^https:\/\//u.test(url) ? url : null;
+  if (!url || url.length > FORM_URL_MAX_LENGTH) return null;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password ? parsed.href : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Вопросы по записи подбора: читаем заранее только у Greenhouse. */
@@ -112,9 +128,12 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const known = deps.forms.get(who.candidateId, who.vacancyId);
-  if (known) return { data: view(deps, who, known, { state: 'ready', formUrl: null }), meta: { requestId: request.id } };
+  if (known && fresh(known, Date.now())) {
+    return { data: view(deps, who, known, { state: 'ready', formUrl: null }), meta: { requestId: request.id } };
+  }
   const source = await deps.reader(who.vacancyId);
-  if (source?.questions && source.questions.length > 0) {
+  // Пустой список тоже запоминаем: вакансию без анкеты не читаем у площадки при каждом заходе.
+  if (source?.questions) {
     deps.forms.saveQuestions(who.candidateId, who.vacancyId, {
       questions: source.questions,
       formUrl: source.formUrl,
@@ -123,7 +142,8 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   }
   const stored = deps.forms.get(who.candidateId, who.vacancyId);
   // Вопросы не отдаются заранее, но страница отклика известна: анкету откроют там.
-  const state = source && source.questions === null && source.formUrl ? 'unreadable' : 'none';
+  const unread = !stored && source && source.questions === null && source.formUrl;
+  const state = unread ? 'unreadable' : 'none';
   return {
     data: view(deps, who, stored, { state, formUrl: source?.formUrl ?? null }),
     meta: { requestId: request.id },

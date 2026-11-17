@@ -9,13 +9,16 @@ describe('название площадки для кандидата', () => {
   });
 
   it('внутренний код источника не показывается', () => {
-    for (const code of ['ats-ashby-snowflake', 'json_api', 'manual', 'rss', 'greenhouse-acme', '', null]) {
+    for (const code of ['ats-ashby-snowflake', 'ATS-Ashby-Snowflake', 'ats.lever.acme', 'json_api', 'manual', 'rss', '', null]) {
       expect(platformOf(code)).toEqual({ label: 'сайт компании', site: true });
     }
   });
 
-  it('название с заглавной остаётся названием', () => {
+  it('площадка без своей строки в списке остаётся названием, а не «сайтом компании»', () => {
     expect(platformOf('Habr Career')).toEqual({ label: 'Habr Career', site: false });
+    expect(platformOf('indeed')).toEqual({ label: 'Indeed', site: false });
+    expect(platformOf('superjob')).toEqual({ label: 'Superjob', site: false });
+    expect(platformOf('my-linkedin-clone').label).toBe('My-linkedin-clone');
   });
 
   it('предлоги согласованы', () => {

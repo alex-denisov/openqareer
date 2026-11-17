@@ -6,11 +6,13 @@ import { longDate } from './responseRow';
  * Текст напоминания компании. Опирается только на то, что было по отклику: о собеседовании
  * говорит, если оно назначалось; иначе напоминает об отправленном отклике.
  */
-export function reminderDraft(application: ApplicationView): string {
+export function reminderDraft(application: ApplicationView, now: Date = new Date()): string {
   const title = application.vacancy?.title?.trim() ?? '';
   const company = application.vacancy?.companyHidden ? '' : (application.vacancy?.company?.trim() ?? '');
-  const interviewed =
-    application.stage === 'interview' || (application.interviewScheduledAt ?? []).length > 0;
+  // Собеседование было, только если его дата уже прошла: назначенное на будущее не считается.
+  const interviewed = (application.interviewScheduledAt ?? []).some(
+    (at) => new Date(at).getTime() <= now.getTime(),
+  );
   if (interviewed) return generateCompanyReminderDraft({ company, positionTitle: title });
   const role = title ? `на вакансию «${title}»` : 'на вашу вакансию';
   const where = company ? ` в компании ${company}` : '';

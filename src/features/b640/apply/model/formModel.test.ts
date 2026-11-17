@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QuestionnaireQuestion } from '../../../../../shared/applicationQuestionnaire';
-import { answersOf, copyText, readiness, readinessTitle } from './formModel';
+import { answerOf, answersOf, copyText, readiness, readinessTitle } from './formModel';
 
 const QUESTIONS: readonly QuestionnaireQuestion[] = [
   { id: 'q1', text: 'Сколько человек было в вашей команде?', required: true, kind: 'text' },
@@ -15,6 +15,11 @@ describe('B641: готовность анкеты на экране', () => {
     expect(state.nextRequired?.id).toBe('q2');
     expect(readinessTitle(state)).toBe('1 ответ из 3 готов');
     expect(readinessTitle(readiness(QUESTIONS, { q1: 'a', q2: 'b', q3: 'c' }))).toBe('3 ответа из 3 готовы');
+  });
+
+  it('идентификатор вопроса, совпавший со встроенным свойством, не ломает экран', () => {
+    expect(answerOf({}, 'constructor')).toBe('');
+    expect(readiness([{ id: 'toString', text: 'Q', required: true, kind: 'text' }], {}).answered).toBe(0);
   });
 
   it('пустые ответы не сохраняются и не копируются', () => {

@@ -9,11 +9,20 @@ describe('текст напоминания компании', () => {
     expect(text).not.toMatch(/собеседован/u);
   });
 
-  it('после назначенного интервью спрашивает о его итогах', () => {
+  it('после прошедшего интервью спрашивает о его итогах', () => {
     const text = reminderDraft(
       application({ stage: 'responded', interviewScheduledAt: ['2026-11-11T12:00:00.000Z'] }),
+      new Date('2026-11-12T09:00:00.000Z'),
     );
     expect(text).toMatch(/собеседования/u);
+  });
+
+  it('интервью, которое ещё впереди, собеседованием не считается', () => {
+    const text = reminderDraft(
+      application({ stage: 'interview', interviewScheduledAt: ['2026-11-20T12:00:00.000Z'] }),
+      new Date('2026-11-12T09:00:00.000Z'),
+    );
+    expect(text).not.toMatch(/собеседован/u);
   });
 
   it('скрытая компания и пустое название не подставляются', () => {
