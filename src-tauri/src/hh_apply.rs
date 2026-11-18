@@ -213,10 +213,7 @@ pub async fn run_hh_apply(
         }
     }
     // After the click the pop-up may stay open while hh.ru answers.
-    let mut result = wait_for(&window, &popup_script(), RESULT_WAIT).await;
-    if result == "popup" {
-        result = wait_for(&window, &result_script(), RESULT_WAIT).await;
-    }
+    let result = wait_for(&window, &result_script(), RESULT_WAIT).await;
     Ok(report_for(&result))
 }
 

@@ -90,10 +90,13 @@ b.click();return {{code:'opened'}};",
 
 /// What the page shows after a click. `open_code` is the answer for an open
 /// response form: `popup` while waiting for it, `waiting` after the submit.
-fn surface_script(open_code: &str) -> String {
+/// Only hh.ru's own elements count as a success, never page text (a vacancy
+/// description can say «Отклик отправлен»), and only after our submit: before
+/// it the same elements mean an earlier response.
+fn surface_script(open_code: &str, success_code: &str) -> String {
     wrap(&format!(
         "if(location.pathname.indexOf('/applicant/vacancy_response')===0||seen({questionnaire}))return {{code:'questionnaire'}};\
-if(q({success})||/(Резюме доставлено|Отклик отправлен)/.test((document.body&&(document.body.innerText||document.body.textContent))||''))return {{code:'sent'}};\
+if(q({success}))return {{code:{done}}};\
 if(seen({error}))return {{code:'hh_error'}};\
 if(seen({relocation}))return {{code:'relocation_warning'}};\
 return {{code:seen({popup})?{open}:'waiting'}};",
@@ -103,18 +106,19 @@ return {{code:seen({popup})?{open}:'waiting'}};",
         relocation = literal(HH_RELOCATION_WARNING),
         popup = literal(HH_APPLY_POPUP),
         open = literal(open_code),
+        done = literal(success_code),
     ))
 }
 
 /// hh.ru either opens the response pop-up or, for a vacancy with a
 /// questionnaire, takes the candidate to its own response page.
 pub fn popup_script() -> String {
-    surface_script("popup")
+    surface_script("popup", "already_applied")
 }
 
-/// The same answer as `popup_script`, but an open pop-up still means "waiting".
+/// After the submit: an open pop-up still means "waiting", a success means `sent`.
 pub fn result_script() -> String {
-    surface_script("waiting")
+    surface_script("waiting", "sent")
 }
 
 /// Polled: answers `resume_ok` once the requested resume is the chosen one.

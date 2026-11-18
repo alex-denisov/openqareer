@@ -160,15 +160,20 @@ fn recognises_the_live_response_modal_and_its_outcomes() {
             format!(
                 r#"{MODAL}<div data-qa="vacancy-response-success-standard-notification">Отклик отправлен</div>"#
             ),
-            "sent",
+            "already_applied",
             "sent",
         ),
         (
             r#"<button data-qa="vacancy-response-link-view-topic">Вы откликнулись</button>"#.into(),
-            "sent",
+            "already_applied",
             "sent",
         ),
-        ("<h2>Резюме доставлено</h2>".into(), "sent", "sent"),
+        // Words in a vacancy description are not hh.ru's confirmation.
+        (
+            format!("{MODAL}<p>Резюме доставлено. Отклик отправлен.</p>"),
+            "popup",
+            "waiting",
+        ),
         (
             r#"<button data-qa="relocation-warning-confirm">Всё равно откликнуться</button>"#
                 .into(),
