@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planImpact } from './impact-tests.mjs';
+import { acquireTestLock } from './lib/test-lock.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bin = (name) => path.join(root, 'node_modules', '.bin', name);
@@ -161,7 +162,16 @@ async function main() {
     ]);
     if (r.code !== 0) return r.code;
   }
-  return withE2e ? runSequential(e2eSteps(plan)) : 0;
+  const e2e = withE2e ? e2eSteps(plan) : [];
+  if (!e2e.length) return 0;
+  // Сборка и Playwright — по одному на машину (scripts/lib/test-lock.mjs).
+  const lock = acquireTestLock({ log: (s) => console.log(`[check:changed] ${s}`) });
+  if (lock.acquired) process.env.OQ_LOCK_HELD = String(process.pid);
+  try {
+    return await runSequential(e2e);
+  } finally {
+    lock.release();
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

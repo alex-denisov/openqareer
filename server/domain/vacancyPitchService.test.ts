@@ -204,6 +204,15 @@ describe('vacancyPitchService', () => {
     expect(en.emailPitch.subject).toBe('Lead Backend Engineer — Alexey Denisov');
   });
 
+  it('B714: русское письмо без имени от модели подписано кириллицей, а не латиницей профиля', () => {
+    const ru = generateVacancyPitch({
+      vacancy: sampleVacancy, candidateName: 'Alexey Denisov', facts: [], language: 'ru',
+    });
+    expect(ru.senderName).toBe('Алексей Денисов');
+    expect(ru.emailPitch.subject).toBe('Lead Backend Engineer — Алексей Денисов');
+    expect(ru.senderName).not.toMatch(/\p{Script=Latin}/u);
+  });
+
   it('generates clean text with zero emoji and without hidden markers', () => {
     const pitch = generateVacancyPitch({
       vacancy: sampleVacancy,
