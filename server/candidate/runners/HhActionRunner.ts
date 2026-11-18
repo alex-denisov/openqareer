@@ -82,7 +82,7 @@ export class HhActionRunner implements PlatformActionRunner {
   private async prepareApplication(item: CandidateActionItem, page: Page): Promise<RunnerOutcome | null> {
     const availableResumes = page.locator(HH_SELECTORS.apply.resumeRadio);
     const resume = item.resumeId
-      ? page.locator(`${HH_SELECTORS.apply.resumeRadio}[data-resume-id="${escapeCssAttribute(item.resumeId)}"]`)
+      ? page.locator(`${HH_SELECTORS.apply.resumeRadio}[value="${escapeCssAttribute(item.resumeId)}"]`)
       : availableResumes;
     if ((await resume.count()) !== 1 || !(await resume.isVisible().catch(() => false))) {
       return { status: 'failed', failureCode: 'approved_resume_missing' };

@@ -8,28 +8,21 @@
 
 use crate::connector_session::{
     eval_json, is_allowed_session_url, is_transient_eval_error, read_session_page,
-    session_window_label, SessionWindowRequest, HH_SIGNED_IN_SELECTOR,
+    session_window_label, SessionWindowRequest,
+};
+use crate::hh_apply_scripts::{
+    letter_script, open_script, popup_script, result_script, resume_script, submit_script,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
-pub const HH_RESPONSE_BUTTON_TOP: &str = r#"[data-qa="vacancy-response-link-top"]"#;
-pub const HH_RESPONSE_BUTTON_BOTTOM: &str = r#"[data-qa="vacancy-response-link-bottom"]"#;
-pub const HH_ALREADY_APPLIED: &str = r#"[data-qa="vacancy-response-already-applied"]"#;
-pub const HH_APPLY_POPUP: &str = r#"[data-qa="vacancy-response-popup"]"#;
-pub const HH_RESUME_ITEM: &str = r#"[data-qa="vacancy-response-popup__resume-item"]"#;
-pub const HH_LETTER_TOGGLE: &str = r#"[data-qa="vacancy-response-popup__letter-toggle"]"#;
-pub const HH_LETTER_TEXTAREA: &str = r#"[data-qa="vacancy-response-popup__letter-textarea"]"#;
-pub const HH_SUBMIT: &str = r#"[data-qa="vacancy-response-submit-popup"]"#;
-pub const HH_QUESTIONNAIRE: &str = r#"[data-qa="vacancy-response-questionnaire"]"#;
-pub const HH_SUCCESS: &str = r#"[data-qa="vacancy-response-success"]"#;
-pub const HH_CAPTCHA: &str = r#"[data-qa="captcha"], #captcha, .captcha-container"#;
-
 const LETTER_MAX_CHARS: usize = 10_000;
 const STEP_POLL: Duration = Duration::from_millis(500);
 const POPUP_WAIT: Duration = Duration::from_secs(10);
+/// The resume drop-down and the letter field open after a short animation.
+const FORM_STEP_WAIT: Duration = Duration::from_secs(6);
 /// Mockup a01d: wait up to a minute for hh.ru to confirm or ask for a questionnaire.
 const RESULT_WAIT: Duration = Duration::from_secs(60);
 
@@ -98,76 +91,6 @@ pub fn validate_request(request: &HhApplyRequest) -> Result<(), String> {
 
 pub fn vacancy_url(vacancy_id: &str) -> String {
     format!("https://hh.ru/vacancy/{vacancy_id}")
-}
-
-fn literal(value: &str) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
-}
-
-/// Shared prelude: a visible-element check and the blocking surfaces.
-fn prelude() -> String {
-    format!(
-        "var q=function(s){{return document.querySelector(s);}};\
-var seen=function(s){{var e=q(s);return !!(e&&e.getClientRects().length);}};\
-var bodyText=((document.body&&document.body.innerText)||'').slice(0,2000);\
-if(seen({captcha})||/(captcha|robot|робот|проверка)/i.test(document.title)||\
-/(подтвердите[^.]{{0,80}}(?:робот|человек)|captcha)/i.test(bodyText))return {{code:'captcha'}};",
-        captcha = literal(HH_CAPTCHA),
-    )
-}
-
-pub fn open_script() -> String {
-    format!(
-        "(function(){{try{{{prelude}\
-if(!seen({signed}))return {{code:'not_signed_in'}};\
-if(seen({already}))return {{code:'already_applied'}};\
-var b=q({top})||q({bottom});if(!b)return {{code:'no_response_button'}};\
-b.click();return {{code:'opened'}};}}catch(e){{return {{code:'script_error'}};}}}})()",
-        prelude = prelude(),
-        signed = literal(HH_SIGNED_IN_SELECTOR),
-        already = literal(HH_ALREADY_APPLIED),
-        top = literal(HH_RESPONSE_BUTTON_TOP),
-        bottom = literal(HH_RESPONSE_BUTTON_BOTTOM),
-    )
-}
-
-/// hh.ru either opens the response pop-up or, for a vacancy with a
-/// questionnaire, takes the candidate to its own response page.
-pub fn popup_script() -> String {
-    format!(
-        "(function(){{try{{{prelude}\
-if(location.pathname.indexOf('/applicant/vacancy_response')===0||seen({questionnaire}))return {{code:'questionnaire'}};\
-if(seen({success}))return {{code:'sent'}};\
-return {{code:seen({popup})?'popup':'waiting'}};}}catch(e){{return {{code:'script_error'}};}}}})()",
-        prelude = prelude(),
-        questionnaire = literal(HH_QUESTIONNAIRE),
-        success = literal(HH_SUCCESS),
-        popup = literal(HH_APPLY_POPUP),
-    )
-}
-
-pub fn fill_script(resume_id: &str, letter: &str) -> String {
-    format!(
-        "(function(){{try{{{prelude}\
-var id={resume};var items=document.querySelectorAll({item});var pick=null;\
-for(var i=0;i<items.length;i++){{var it=items[i];var input=it.querySelector('input');\
-if(it.getAttribute('data-resume-id')===id||(input&&input.value===id)){{pick=input||it;break;}}}}\
-if(!pick)return {{code:'resume_not_found'}};pick.click();\
-var area=q({area});if(!area){{var t=q({toggle});if(t)t.click();area=q({area});}}\
-if(!area)return {{code:'letter_field_missing'}};\
-var setter=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;\
-setter.call(area,{letter});area.dispatchEvent(new Event('input',{{bubbles:true}}));\
-area.dispatchEvent(new Event('change',{{bubbles:true}}));\
-var s=q({submit});if(!s||s.disabled)return {{code:'submit_unavailable'}};\
-s.click();return {{code:'submitted'}};}}catch(e){{return {{code:'script_error'}};}}}})()",
-        prelude = prelude(),
-        resume = literal(resume_id),
-        item = literal(HH_RESUME_ITEM),
-        area = literal(HH_LETTER_TEXTAREA),
-        toggle = literal(HH_LETTER_TOGGLE),
-        letter = literal(letter.trim()),
-        submit = literal(HH_SUBMIT),
-    )
 }
 
 async fn step(window: &tauri::Webview, script: &str) -> Result<String, String> {
@@ -262,9 +185,32 @@ pub async fn run_hh_apply(
             &surface
         }));
     }
-    let filled = step(&window, &fill_script(&request.resume_id, &request.letter)).await?;
-    if filled != "submitted" {
-        return Ok(report_for(&filled));
+    let form_steps = [
+        (
+            resume_script(&request.resume_id),
+            "resume_ok",
+            "resume_not_found",
+        ),
+        (
+            letter_script(&request.letter),
+            "letter_set",
+            "letter_field_missing",
+        ),
+        (
+            submit_script(&request.letter),
+            "submitted",
+            "submit_unavailable",
+        ),
+    ];
+    for (script, done, on_timeout) in form_steps {
+        let code = wait_for(&window, &script, FORM_STEP_WAIT).await;
+        if code != done {
+            return Ok(report_for(if code == "timeout" {
+                on_timeout
+            } else {
+                &code
+            }));
+        }
     }
     // After the click the pop-up may stay open while hh.ru answers.
     let mut result = wait_for(&window, &popup_script(), RESULT_WAIT).await;
@@ -272,11 +218,6 @@ pub async fn run_hh_apply(
         result = wait_for(&window, &result_script(), RESULT_WAIT).await;
     }
     Ok(report_for(&result))
-}
-
-/// The same answer as `popup_script`, but an open pop-up still means "waiting".
-fn result_script() -> String {
-    popup_script().replace("'popup':'waiting'", "'waiting':'waiting'")
 }
 
 #[cfg(test)]
@@ -314,14 +255,6 @@ mod tests {
     }
 
     #[test]
-    fn embeds_parameters_as_escaped_literals() {
-        let script = fill_script("abc123", "Строка\n\"кавычки\" </script> '); alert(1);//");
-        assert!(script.contains(r#""Строка\n\"кавычки\" </script> '); alert(1);//""#));
-        assert!(script.contains(r#"var id="abc123";"#));
-        assert!(!script.contains("alert(1);//\";\n"));
-    }
-
-    #[test]
     fn opens_from_the_vacancy_page_only() {
         assert_eq!(vacancy_url("77"), "https://hh.ru/vacancy/77");
         assert!(is_allowed_session_url("hh", &vacancy_url("77")));
@@ -340,20 +273,6 @@ mod tests {
             report_for("not_signed_in"),
             HhApplyReport::failed("not_signed_in")
         );
-    }
-
-    #[test]
-    fn result_wait_treats_an_open_popup_as_waiting() {
-        assert!(popup_script().contains("'popup':'waiting'"));
-        assert!(result_script().contains("'waiting':'waiting'"));
-    }
-
-    #[test]
-    fn stops_on_a_captcha_by_title_or_page_text() {
-        for script in [open_script(), popup_script(), fill_script("abc", "x")] {
-            assert!(script.contains("document.title"));
-            assert!(script.contains("робот|человек"));
-        }
     }
 
     #[test]
