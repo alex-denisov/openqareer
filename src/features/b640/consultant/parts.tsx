@@ -1,10 +1,17 @@
+import type { ReactNode } from 'react';
 import { ConsultantMessage } from '../../journey/ConsultantMessage';
 import { Icon } from '../kit/Icon';
 import './consultant.css';
 import type { ChatMessage } from './model';
 
 /** Ошибка на месте действия с «Повторить» (`p.res-row.is-err`). */
-export function ErrorRow({ text, onRetry }: { readonly text: string; readonly onRetry?: () => void }) {
+export function ErrorRow({
+  text,
+  onRetry,
+}: {
+  readonly text: string;
+  readonly onRetry?: () => void;
+}) {
   return (
     <p className="res-row is-err" role="alert">
       <Icon name="warn" />
@@ -22,11 +29,18 @@ export function ErrorRow({ text, onRetry }: { readonly text: string; readonly on
  * Реплика ленты: вопрос кандидата справа, ответ консультанта слева. Разметку ответа
  * (жирный, списки, абзацы) разбирает тот же разбор, что в прежнем кабинете: в React, без HTML.
  */
-export function Message({ message }: { readonly message: ChatMessage }) {
+export function Message({
+  message,
+  extra,
+}: {
+  readonly message: ChatMessage;
+  readonly extra?: ReactNode;
+}) {
   if (message.role === 'user') return <p className="msg me">{message.content}</p>;
   return (
     <div className="msg bot">
       <ConsultantMessage text={message.content} />
+      {extra}
     </div>
   );
 }

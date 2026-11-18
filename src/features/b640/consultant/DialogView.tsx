@@ -13,19 +13,36 @@ import {
   type ConsultantLimit,
 } from './model';
 import { ErrorRow, Message, Reply } from './parts';
+import { ReplyExtras } from './ReplyExtras';
 import { useDialog, type DialogState, type FactDecision } from './useDialog';
 import { useDictation } from './useDictation';
 
 export interface DialogViewProps {
   readonly stage: CoachTurnStage;
+  /** Записи на проверку открываются в этой же панели. */
   readonly reviewPath: string;
+  readonly onReview: () => void;
   readonly tariffsPath: string;
 }
 
-function PendingBanner({ count, to }: { readonly count: number; readonly to: string }) {
+interface PendingBannerProps {
+  readonly count: number;
+  readonly to: string;
+  readonly onOpen: () => void;
+}
+
+/** Полоса «N записей ждут проверки»: ведёт к записям, где по каждой можно решить. */
+export function PendingBanner({ count, to, onOpen }: PendingBannerProps) {
   return (
     <div className="ptop">
-      <Link className="pend" to={to}>
+      <Link
+        className="pend"
+        to={to}
+        onClick={(event) => {
+          event.preventDefault();
+          onOpen();
+        }}
+      >
         <Icon name="checkc" />
         <span>
           <b>{pendingLabel(count)}</b>
@@ -43,6 +60,10 @@ interface FeedProps {
 }
 
 function Feed({ dialog, placed, onDecide }: FeedProps) {
+  const extras = useMemo(
+    () => new Map(dialog.replies.map((item) => [item.messageId, item])),
+    [dialog.replies],
+  );
   const chat = useRef<HTMLDivElement>(null);
   const lastId = dialog.messages[dialog.messages.length - 1]?.id;
   useEffect(() => {
@@ -54,14 +75,20 @@ function Feed({ dialog, placed, onDecide }: FeedProps) {
       {dialog.loadFailed ? (
         <ErrorRow text="Разговор не загрузился" onRetry={dialog.reload} />
       ) : null}
-      {dialog.messages.map((message) => (
-        <Fragment key={message.id}>
-          <Message message={message} />
-          {placed.get(message.id)?.map((fact) => (
-            <FactCard key={fact.id} fact={fact} onDecide={onDecide} />
-          ))}
-        </Fragment>
-      ))}
+      {dialog.messages.map((message) => {
+        const extra = extras.get(message.id);
+        return (
+          <Fragment key={message.id}>
+            <Message
+              message={message}
+              extra={extra ? <ReplyExtras extras={extra} memory={dialog.memory} /> : null}
+            />
+            {placed.get(message.id)?.map((fact) => (
+              <FactCard key={fact.id} fact={fact} onDecide={onDecide} />
+            ))}
+          </Fragment>
+        );
+      })}
       {dialog.reply !== null ? <Reply text={dialog.reply} /> : null}
       {dialog.sendFailed ? <ErrorRow text="Ответ не пришёл" onRetry={dialog.retry} /> : null}
     </div>
@@ -119,7 +146,7 @@ function Ask({ onSubmit, busy, limit, tariffsPath }: AskProps) {
 }
 
 /** Разговор по теме раздела (макеты K1, K1b, K3, K7 и состояния K2, K3b, K4). */
-export function DialogView({ stage, reviewPath, tariffsPath }: DialogViewProps) {
+export function DialogView({ stage, reviewPath, onReview, tariffsPath }: DialogViewProps) {
   const dialog = useDialog(stage);
   const quotas = useTariffQuotas(dialog.turnCount);
   // Записи, по которым решение принято здесь: их итог остаётся в ленте.
@@ -139,7 +166,9 @@ export function DialogView({ stage, reviewPath, tariffsPath }: DialogViewProps) 
 
   return (
     <>
-      {pending.length > 0 ? <PendingBanner count={pending.length} to={reviewPath} /> : null}
+      {pending.length > 0 ? (
+        <PendingBanner count={pending.length} to={reviewPath} onOpen={onReview} />
+      ) : null}
       <Feed dialog={dialog} placed={placed} onDecide={decide} />
       <Ask
         onSubmit={dialog.send}

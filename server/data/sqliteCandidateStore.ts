@@ -453,6 +453,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare closeConsultantConversation: CandidateStore['closeConsultantConversation'];
   declare resumeConsultantConversation: CandidateStore['resumeConsultantConversation'];
   declare currentConsultantConversation: CandidateStore['currentConsultantConversation'];
+  declare consultantReplyResults: CandidateStore['consultantReplyResults'];
   declare exportConsultantConversations: CandidateStore['exportConsultantConversations'];
   declare listPendingConsultantSummaries: CandidateStore['listPendingConsultantSummaries'];
   declare getConsultantSummaryInput: CandidateStore['getConsultantSummaryInput'];
