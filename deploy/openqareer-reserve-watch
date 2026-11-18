@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# B705-2: тёплый резерв. Запускается юнитом openqareer-reserve@<новый порт>
+# после выката. RESERVE_SECONDS следит за новым экземпляром: если он перестал
+# работать или systemd его перезапустил, Caddy уходит на прежний экземпляр,
+# current откатывается, а причина пишется в журнал юнита. Если окно прошло
+# чисто, прежний экземпляр гасится.
+set -Eeuo pipefail
+
+readonly RELEASE_ROOT="${OPENQAREER_RELEASE_ROOT:-/srv/openqareer}"
+readonly SLOTS_LIB="${OPENQAREER_SLOTS_LIB:-/usr/local/lib/openqareer/openqareer-slots.sh}"
+readonly RESERVE_SECONDS="${OPENQAREER_RESERVE_SECONDS:-600}"
+readonly POLL_SECONDS="${OPENQAREER_RESERVE_POLL_SECONDS:-2}"
+readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
+readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
+
+fail() {
+  printf 'openqareer-reserve: %s\n' "$1" >&2
+  exit 1
+}
+
+log() {
+  printf 'openqareer-reserve: %s\n' "$1"
+}
+
+# shellcheck source=openqareer-slots.sh
+source "$SLOTS_LIB"
+
+next_link=""
+trap '[[ -z "$next_link" ]] || rm -f -- "$next_link"' EXIT
+atomic_link() {
+  local -r target="$1" link_name="$2"
+  next_link="$RELEASE_ROOT/.${link_name}.next.$$"
+  rm -f -- "$next_link"
+  ln -s "$target" "$next_link"
+  mv -Tf "$next_link" "$RELEASE_ROOT/$link_name"
+  next_link=""
+}
+
+unit_value() {
+  systemctl show -p "$2" --value "$1" 2>/dev/null || true
+}
+
+new_port="${1:-}"
+[[ "$new_port" == "3210" || "$new_port" == "3211" ]] || fail "port must be 3210 or 3211"
+old_port="$(other_port "$new_port")"
+new_unit="$(slot_service "$new_port")"
+
+if ! slot_is_active "$old_port"; then
+  log "no reserve on $old_port; nothing to watch"
+  exit 0
+fi
+
+restarts_at_start="$(unit_value "$new_unit" NRestarts)"
+pid_at_start="$(unit_value "$new_unit" MainPID)"
+log "watching $new_unit for ${RESERVE_SECONDS} s; reserve on $old_port"
+
+reason=""
+deadline=$((SECONDS + RESERVE_SECONDS))
+while ((SECONDS < deadline)); do
+  if ! slot_is_active "$new_port"; then
+    reason="$new_unit is not active"
+    break
+  fi
+  restarts="$(unit_value "$new_unit" NRestarts)"
+  if [[ "$restarts" != "$restarts_at_start" ]]; then
+    reason="systemd restarted $new_unit (NRestarts $restarts_at_start -> $restarts)"
+    break
+  fi
+  pid="$(unit_value "$new_unit" MainPID)"
+  if [[ "$pid" != "$pid_at_start" ]]; then
+    reason="$new_unit main process changed ($pid_at_start -> $pid)"
+    break
+  fi
+  sleep "$POLL_SECONDS"
+done
+
+# Выкат или откат, начавшийся в окне, сам решает судьбу резерва.
+exec 9>"$RELEASE_ROOT/.deploy.lock"
+if ! flock -n 9; then
+  log "deploy or rollback in progress; leaving the reserve to it"
+  exit 0
+fi
+cd "$RELEASE_ROOT"
+
+if [[ -z "$reason" ]]; then
+  switch_upstream "$new_port" || fail "could not drop reserve $old_port from Caddy"
+  stop_slot "$old_port"
+  sudo -n /usr/bin/systemctl disable "$(slot_service "$old_port")" >/dev/null 2>&1 || true
+  log "window passed without failures; reserve on $old_port stopped"
+  exit 0
+fi
+
+log "FAILOVER: $reason"
+switch_upstream "$old_port" || fail "could not switch Caddy to reserve $old_port"
+reserve_target="$(readlink "slots/$old_port")"
+reserve_target="${reserve_target#../}"
+failed_target="$(readlink current 2>/dev/null || true)"
+atomic_link "$reserve_target" current
+[[ -z "$failed_target" ]] || atomic_link "$failed_target" previous
+stop_slot "$new_port"
+sudo -n /usr/bin/systemctl disable "$new_unit" >/dev/null 2>&1 || true
+sudo -n /usr/bin/systemctl enable "$(slot_service "$old_port")" ||
+  log "warning: could not enable $(slot_service "$old_port")"
+sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
+  log "warning: $MAINTENANCE_SERVICE did not restart"
+if systemctl cat "$MECHANICS_SERVICE" >/dev/null 2>&1; then
+  sudo -n /usr/bin/systemctl restart "$MECHANICS_SERVICE" ||
+    log "warning: $MECHANICS_SERVICE did not restart"
+fi
+log "FAILOVER done: serving $reserve_target on $old_port; failed release $failed_target stopped"

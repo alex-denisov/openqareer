@@ -64,6 +64,7 @@ previous_target="$(readlink previous 2>/dev/null || true)"
   fail "current/previous release is unavailable"
 [[ -d "$previous_target" ]] || fail "previous release directory is missing"
 
+stop_reserve_watch
 expected="$(basename "$previous_target")"
 live_port="$(active_port)"
 back_port="$(other_port "$live_port")"

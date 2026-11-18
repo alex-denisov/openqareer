@@ -18,6 +18,10 @@ readonly HEALTH_WINDOW_SECONDS="${OPENQAREER_HEALTH_WINDOW_SECONDS:-180}"
 # Запросы, принятые старым экземпляром до переключения (потоки консультанта),
 # успевают закончиться, прежде чем он получит SIGTERM.
 readonly DRAIN_SECONDS="${OPENQAREER_DRAIN_SECONDS:-20}"
+# Тёплый резерв (B705-2): прежний экземпляр живёт ещё 10 минут вторым upstream
+# Caddy, а openqareer-reserve@<новый порт> следит за новым. Релиз со сменой
+# схемы базы кладёт в архив файл-маркер, и резерв не держится.
+readonly NO_RESERVE_MARKER=no-warm-reserve
 
 slot_service() {
   printf 'openqareer-static@%s.service' "$1"
@@ -28,7 +32,8 @@ slot_service() {
 active_port() {
   local port=""
   if [[ -f "$UPSTREAM_FILE" ]]; then
-    port="$(sed -nE 's/^[[:space:]]*to[[:space:]]+127\.0\.0\.1:(3210|3211)[[:space:]]*$/\1/p' \
+    # Первый адрес строки to — основной; второй, если есть, — резерв.
+    port="$(sed -nE 's/^[[:space:]]*to[[:space:]]+127\.0\.0\.1:(3210|3211)([[:space:]]+127\.0\.0\.1:(3210|3211))?[[:space:]]*$/\1/p' \
       "$UPSTREAM_FILE" | head -n 1)"
     [[ -n "$port" ]] || fail "upstream snippet has no known port: $UPSTREAM_FILE"
   else
@@ -86,8 +91,37 @@ start_slot() {
   fi
 }
 
+# switch_upstream <основной> [резерв]
 switch_upstream() {
-  sudo -n "$UPSTREAM_HELPER" "$1"
+  sudo -n "$UPSTREAM_HELPER" "$@"
+}
+
+reserve_service() {
+  printf 'openqareer-reserve@%s.service' "$1"
+}
+
+# Новый выкат или откат сам решает судьбу резерва: сторож прежнего окна
+# останавливается до того, как скрипт что-либо меняет.
+stop_reserve_watch() {
+  local port
+  for port in "${SLOT_PORTS[@]}"; do
+    if systemctl is-active --quiet "$(reserve_service "$port")"; then
+      sudo -n /usr/bin/systemctl stop "$(reserve_service "$port")" || true
+    fi
+  done
+}
+
+# Оставляет прежний экземпляр резервом: Caddy знает оба порта, сторож 10 минут
+# смотрит за новым и гасит резерв сам, если новый не падал.
+keep_reserve() {
+  local -r new_port="$1" old_port="$2"
+  sudo -n /usr/bin/systemctl enable "$(slot_service "$new_port")" ||
+    printf 'warning: could not enable %s\n' "$(slot_service "$new_port")" >&2
+  if legacy_is_active; then
+    sudo -n /usr/bin/systemctl disable --now "$LEGACY_SERVICE" ||
+      printf 'warning: could not stop %s\n' "$LEGACY_SERVICE" >&2
+  fi
+  sudo -n /usr/bin/systemctl restart "$(reserve_service "$new_port")"
 }
 
 # Гасит прежний экземпляр после переключения Caddy и закрепляет новый для
