@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
 
 // Параллельные агенты в разных worktree задают свой порт, чтобы не делить превью.
@@ -7,15 +8,23 @@ const port = Number(process.env.E2E_PORT ?? 4173);
 // Chromium shards.
 const WEBKIT_SPECS = ['**/*-b446r.spec.ts', '**/*-b549r.spec.ts'];
 const webkitOnly = process.env.E2E_WEBKIT === 'only';
-const webkitSkipped = process.env.E2E_WEBKIT === 'skip';
+// Locally WebKit specs are skipped unless E2E_WEBKIT=only|include; CI sets the
+// variable explicitly per job.
+const webkitSkipped =
+  process.env.E2E_WEBKIT === 'skip' || (!process.env.CI && !process.env.E2E_WEBKIT);
+// CI keeps two workers (cold-start UI gates on small runners). Locally half the
+// cores: one worker per core timed out shell gates when other sessions loaded
+// the Mac (4 of 138 tests at load 227). E2E_WORKERS overrides.
+const workers =
+  Number(process.env.E2E_WORKERS) ||
+  (process.env.CI ? 2 : Math.max(2, Math.floor(os.availableParallelism() / 2)));
 
 export default defineConfig({
   testDir: './e2e',
   ...(webkitOnly ? { testMatch: WEBKIT_SPECS } : {}),
   ...(webkitSkipped ? { testIgnore: WEBKIT_SPECS } : {}),
   fullyParallel: false,
-  // The built shell loads split chunks on first use; two workers keep cold-start UI gates stable.
-  workers: 2,
+  workers,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'line' : 'list',

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Лёгкая проверка перед push: lint и prettier с кэшем, инкрементальные типы и
+# затронутые unit-тесты по диффу с origin/main. E2E здесь не гоняются (их
+# запускает `npm run check:changed` вручную и CI). Пропустить: SKIP_PRE_PUSH=1 git push.
+# Подключение один раз на клон (действует для всех worktree): npm run hooks:install
+[ "${SKIP_PRE_PUSH:-0}" = "1" ] && exit 0
+[ -x node_modules/.bin/vitest ] || { echo "pre-push: нет node_modules, проверка пропущена" >&2; exit 0; }
+exec node scripts/check-changed.mjs --no-e2e

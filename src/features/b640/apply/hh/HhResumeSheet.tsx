@@ -38,27 +38,42 @@ interface SheetBodyProps {
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
   readonly onSignIn: () => void;
+  readonly onRetry: () => void;
 }
 
-function SheetBody({ picker, selectedId, onSelect, onSignIn }: SheetBodyProps) {
-  if (picker.kind === 'reading') return <StatusLine state="wait" text="Читаем резюме в hh.ru" />;
+function stopLine(picker: HhPicker, onSignIn: () => void) {
   if (picker.kind === 'empty') return <StatusLine state="err" text="На hh.ru у вас нет резюме" />;
   if (picker.kind === 'error') return <StatusLine state="err" text={picker.text} />;
-  if (picker.kind === 'signin') {
-    return (
-      <StatusLine
-        state="err"
-        text="Нужен вход в hh.ru"
-        action={
-          <button className="res-act" type="button" onClick={onSignIn}>
-            Войти в hh.ru
-          </button>
-        }
-      />
-    );
+  const signIn = (
+    <button className="res-act" type="button" onClick={onSignIn}>
+      Войти в hh.ru
+    </button>
+  );
+  return <StatusLine state="err" text="Нужен вход в hh.ru" action={signIn} />;
+}
+
+/** Нет входа, нет резюме или сбой: строка состояния и под ней «Прочитать снова». */
+function SheetStop({ picker, onSignIn, onRetry }: Omit<SheetBodyProps, 'selectedId' | 'onSelect'>) {
+  return (
+    <div className="hh2-sec">
+      {stopLine(picker, onSignIn)}
+      <div className="hh2-acts">
+        <Button icon="refresh" onClick={onRetry}>
+          Прочитать снова
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SheetBody(props: SheetBodyProps) {
+  const { picker } = props;
+  if (picker.kind === 'reading') return <StatusLine state="wait" text="Читаем резюме в hh.ru" />;
+  if (picker.kind === 'choose') {
+    return <ResumeChoices resumes={picker.resumes} selectedId={props.selectedId} onSelect={props.onSelect} />;
   }
-  if (picker.kind !== 'choose') return null;
-  return <ResumeChoices resumes={picker.resumes} selectedId={selectedId} onSelect={onSelect} />;
+  if (picker.kind === 'closed') return null;
+  return <SheetStop picker={picker} onSignIn={props.onSignIn} onRetry={props.onRetry} />;
 }
 
 interface SheetProps {
@@ -77,16 +92,12 @@ export function HhResumeSheet(props: SheetProps) {
   const [picked, setPicked] = useState<string | null>(null);
   const selectedId = picked ?? currentId;
   const chosen = picker.kind === 'choose' ? picker.resumes.find((item) => item.id === selectedId) : undefined;
-  const retry = picker.kind === 'signin' || picker.kind === 'error' || picker.kind === 'empty';
-  const footer = retry ? (
-    <Button icon="refresh" onClick={onRetry}>
-      Прочитать снова
-    </Button>
-  ) : (
-    <Button variant="primary" busy={saving} disabled={!chosen} onClick={() => chosen && onChoose(chosen)}>
-      Продолжить
-    </Button>
-  );
+  const footer =
+    picker.kind === 'choose' ? (
+      <Button variant="primary" busy={saving} disabled={!chosen} onClick={() => chosen && onChoose(chosen)}>
+        Продолжить
+      </Button>
+    ) : undefined;
   return (
     <Dialog
       open={picker.kind !== 'closed'}
@@ -95,7 +106,13 @@ export function HhResumeSheet(props: SheetProps) {
       className="hh2-sheet"
       footer={footer}
     >
-      <SheetBody picker={picker} selectedId={selectedId} onSelect={setPicked} onSignIn={props.onSignIn} />
+      <SheetBody
+        picker={picker}
+        selectedId={selectedId}
+        onSelect={setPicked}
+        onSignIn={props.onSignIn}
+        onRetry={onRetry}
+      />
     </Dialog>
   );
 }
