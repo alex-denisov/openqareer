@@ -8,3 +8,8 @@
   .b640 .msg.bot li { padding-inline-start: var(--career-space-1); }
   .b640 .msg.bot strong { font-weight: 600; }
 }
+
+/* B688: «Продолжить разговор» под лентой прошлого разговора — на месте поля ввода, на 390 закреплена внизу листа. */
+@layer b640.sections {
+  .b640 .panel-col > .conv-foot { flex: none; justify-content: center; padding: var(--career-space-3) var(--career-space-4) var(--career-space-4); border-block-start: var(--career-border-width) solid var(--career-line); background: var(--career-bg-elevated); }
+}
