@@ -28,7 +28,10 @@ const isLinux = process.platform === 'linux';
 const STUBS: Record<string, string> = {
   id: `#!/usr/bin/env bash
 case "$1" in -un) echo openqareer-deploy ;; -u) echo 1000 ;; *) exec /usr/bin/id "$@" ;; esac`,
-  flock: '#!/usr/bin/env bash\nexit 0',
+  flock: `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$STATE/flock.log"
+[[ -f "$STATE/lock-held" ]] && exit 1
+exit 0`,
   sleep: '#!/usr/bin/env bash\nexit 0',
   // BSD mv has no -T; the scripts only use it to replace a symlink atomically.
   mv: `#!/usr/bin/env bash
@@ -270,6 +273,25 @@ describe('openqareer-reserve-watch: тёплый резерв 10 минут (B70
     expect(result.stdout).toContain('FAILOVER: systemd restarted openqareer-static@3210.service');
     expect(read(host.snippet)).toBe('to 127.0.0.1:3211\n');
     expect(isActive(host, 'openqareer-static@3210.service')).toBe(false);
+  });
+
+  it('ждёт блокировку выката, а не уходит сразу: выкат ещё перезапускает maintenance', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+    rmSync(join(host.state, 'active', 'openqareer-static@3210.service'));
+    host.env.OPENQAREER_RESERVE_SECONDS = '5';
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+    expect(result.stdout).toContain('FAILOVER');
+    expect(read(join(host.state, 'flock.log'))).toContain('-w 900 9');
+  });
+
+  it('блокировка так и не освободилась — резерв оставлен выкату, Caddy не тронут', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+    writeFileSync(join(host.state, 'lock-held'), '');
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+    expect(result.stdout).toContain('deploy lock still held');
+    expect(read(host.snippet)).toContain('to 127.0.0.1:3210 127.0.0.1:3211');
   });
 
   it('резерва нет — сторож ничего не трогает', () => {
