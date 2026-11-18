@@ -46,7 +46,8 @@ const VACANCY_ID_MAX_LENGTH = 200;
 const QUESTIONS_TTL_MS = 24 * 60 * 60 * 1000;
 
 function fresh(stored: StoredQuestionnaire, now: number): boolean {
-  if (stored.answers.length > 0 || stored.submittedAt) return true;
+  // Пустой ответ — только отметка «стёрто»: вопросы из-за него не закрепляются.
+  if (stored.answers.some((answer) => answer.text) || stored.submittedAt) return true;
   return now - new Date(stored.readAt).getTime() < QUESTIONS_TTL_MS;
 }
 const answersSchema = z

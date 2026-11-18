@@ -37,6 +37,43 @@ export function variantsFor(
 }
 
 /**
+ * Правки руками: у первого письма и у каждого варианта своя. Текст поля и ключ показанного
+ * текста читаются из ссылок — переход после ответа сервера видит то, что набрано сейчас.
+ */
+function useVariantEdits(pitch: unknown, text: string): (toKey: string, generated: string) => string {
+  const edits = useRef<VariantEdits>({});
+  const shownKey = useRef(FIRST_LETTER_KEY);
+  const latest = useRef(text);
+  latest.current = text;
+  // Письмо пересобрали (тон, язык, адресат): правки прежних текстов к нему не относятся.
+  useEffect(() => {
+    edits.current = {};
+    shownKey.current = FIRST_LETTER_KEY;
+  }, [pitch]);
+  return (toKey, generated) => {
+    const moved = switchVariant(
+      edits.current,
+      { key: shownKey.current, text: latest.current },
+      { key: toKey, generated },
+    );
+    edits.current = moved.edits;
+    shownKey.current = toKey;
+    return moved.text;
+  };
+}
+
+type Recipient = ReturnType<typeof recipientForConnectionPath>;
+
+/** С какими настройками письма пишется вариант: те же тон, язык и адресат. */
+function letterRequest(letter: LetterScreenState, recipient: Recipient | undefined) {
+  return {
+    tone: letter.tone,
+    ...(letter.language === 'auto' ? {} : { language: letter.language }),
+    ...(recipient ? { recipient } : {}),
+  };
+}
+
+/**
  * Другие варианты письма: первое письмо остаётся нулевым, сохранённые варианты листаются.
  * Выбранный текст подставляется в поле письма; одобряется то, что в поле.
  */
@@ -48,31 +85,20 @@ export function useLetterVariants(vacancyId: string, letter: LetterScreenState):
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { pitch, text, setText, loading } = letter.draft;
-  // Правки руками: у первого письма и у каждого варианта своя.
-  const edits = useRef<VariantEdits>({});
+  const moveTo = useVariantEdits(pitch, text);
   const { circle, selectedPath: path } = letter.circle;
   const recipient = path ? recipientForConnectionPath(path) : undefined;
   const stored = variantsFor(state.data?.variants ?? [], recipient?.name ?? '');
 
   // Письмо пересобрали (тон, язык, адресат): в поле снова первое письмо.
-  useEffect(() => {
-    setIndex(0);
-    edits.current = {};
-  }, [pitch]);
+  useEffect(() => setIndex(0), [pitch]);
   const current = Math.min(index, stored.length);
 
   const show = (next: number, variants: readonly LetterVariant[]) => {
     const variant = next > 0 ? variants[next - 1] : null;
     const source = variant?.payload ?? pitch;
     if (!source || loading) return;
-    const key = (at: number) => (at > 0 ? (variants[at - 1]?.id ?? FIRST_LETTER_KEY) : FIRST_LETTER_KEY);
-    const moved = switchVariant(
-      edits.current,
-      { key: key(current), text },
-      { key: key(next), generated: letterBodyForCircle(circle, source) },
-    );
-    edits.current = moved.edits;
-    setText(moved.text);
+    setText(moveTo(variant?.id ?? FIRST_LETTER_KEY, letterBodyForCircle(circle, source)));
     setIndex(next);
   };
 
@@ -90,11 +116,7 @@ export function useLetterVariants(vacancyId: string, letter: LetterScreenState):
     create: (wish) => {
       setBusy(true);
       setError(null);
-      createLetterVariant(vacancyId, wish, {
-        tone: letter.tone,
-        ...(letter.language === 'auto' ? {} : { language: letter.language }),
-        ...(recipient ? { recipient } : {}),
-      })
+      createLetterVariant(vacancyId, wish, letterRequest(letter, recipient))
         .then((result) => {
           setData(() => ({ variants: result.variants, remaining: result.remaining }));
           const mine = variantsFor(result.variants, recipient?.name ?? '');
