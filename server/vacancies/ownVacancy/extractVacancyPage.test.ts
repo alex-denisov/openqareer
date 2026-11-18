@@ -72,6 +72,8 @@ describe('extractVacancyPage: страница-ловушка не держит 
     ['незакрытые скобки', '<a '.repeat(MB / 3)],
     ['незакрытые скрипты JSON-LD', '<script type="application/ld+json">{'.repeat(MB / 40)],
     ['много itemprop без закрытия', '<div itemscope itemtype="https://schema.org/JobPosting">' + '<span itemprop="x">'.repeat(MB / 20)],
+    ['одна скобка и много itemprop', 'itemtype="https://schema.org/JobPosting" <' + 'itemprop=x >'.repeat(MB / 12)],
+    ['много meta и одна далёкая скобка', '<meta '.repeat(MB / 6) + '>'],
     ['незакрытые main', '<main>'.repeat(MB / 6)],
     ['itemprop без открывающей скобки', 'itemtype="https://schema.org/JobPosting" ' + 'itemprop=x '.repeat(MB / 11) + '>'],
   ])('%s — меньше секунды', (_name, html) => {

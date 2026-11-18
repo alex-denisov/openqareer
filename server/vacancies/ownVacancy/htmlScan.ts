@@ -90,7 +90,7 @@ function stripOnce(html: string, skip: ReadonlySet<string>): string {
 function tidy(text: string): string {
   return text
     .replace(/\r\n?/gu, '\n')
-    .replace(/[ \t ]+/gu, ' ')
+    .replace(/[ \t\u00a0]+/gu, ' ')
     .replace(/ ?\n ?/gu, '\n')
     .replace(/\n{3,}/gu, '\n\n')
     .trim();
@@ -123,8 +123,8 @@ export function findElement(html: string, name: string, test: (attrs: string) =>
     const gt = gtFrom(at);
     if (gt < 0) return null;
     const after = lower[at + name.length + 1] ?? '';
-    const attrs = html.slice(at + name.length + 1, gt);
-    if (/[\s>/]/u.test(after) && gt - at <= ATTR_MAX && test(attrs)) {
+    if (/[\s>/]/u.test(after) && gt - at <= ATTR_MAX && test(html.slice(at + name.length + 1, gt))) {
+      const attrs = html.slice(at + name.length + 1, gt);
       const end = lower.indexOf(`</${name}`, gt + 1);
       return { attrs, inner: html.slice(gt + 1, end < 0 ? html.length : end) };
     }
@@ -144,8 +144,8 @@ export function findElements(html: string, name: string, test: (attrs: string) =
     const gt = gtFrom(at);
     if (gt < 0) break;
     const end = lower.indexOf(`</${name}`, gt + 1);
-    const attrs = html.slice(at + name.length + 1, gt);
-    if (gt - at <= ATTR_MAX && test(attrs)) out.push({ attrs, inner: html.slice(gt + 1, end < 0 ? html.length : end) });
+    const attrs = gt - at <= ATTR_MAX ? html.slice(at + name.length + 1, gt) : null;
+    if (attrs !== null && test(attrs)) out.push({ attrs, inner: html.slice(gt + 1, end < 0 ? html.length : end) });
     if (end < 0) break;
     index = end + name.length + 2;
   }
@@ -179,7 +179,7 @@ export function findItemprop(html: string, prop: string): string | null {
     const lt = lastLtBefore(at);
     const gt = gtFrom(at);
     if (gt < 0) return null;
-    if (lt < 0) { index = at + 1; continue; }
+    if (lt < 0 || gt - lt > ATTR_MAX) { index = at + 1; continue; }
     const attrs = html.slice(lt, gt);
     if (attrValue(attrs.replace(/^<[a-z0-9]+/iu, ' '), 'itemprop') === prop) {
       const name = tagName(html.slice(lt + 1, gt));
