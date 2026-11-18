@@ -17,6 +17,8 @@ import {
   SortError,
 } from './ListParts';
 import { TableBlock } from './TableBlock';
+import { OwnAddButton, OwnVacancyPanel } from './OwnVacancyPanel';
+import { OwnRows } from './OwnRows';
 import { TriagePanel } from './TriagePanel';
 import { ReviewButton } from './TriageParts';
 import type { RowEnv, RowPick } from './VacancyRow';
@@ -24,6 +26,7 @@ import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { useHiddenSection, type HiddenSection } from './useHiddenSection';
 import { useRowInteractions, type RowInteractions } from './useRowInteractions';
 import { usePoolRetry } from './usePoolRetry';
+import { useOwnSection, type OwnSection } from './useOwnSection';
 import { useTriage, type Triage } from './useTriage';
 import { isNarrowed, useVacancyList, type VacancyList } from './useVacancyList';
 
@@ -76,22 +79,18 @@ function pickOf(triage: Triage, item: MatchedVacancyItem): RowPick | undefined {
   return { checked: triage.isPicked(id), reason: row.reasonLabel ?? '', onToggle: () => triage.toggle(id) };
 }
 
-function ListTable({
-  list,
-  rows,
-  section,
-  env,
-  links,
-  triage,
-}: {
+interface ListTableProps {
   list: VacancyList;
   rows: RowInteractions;
   section: HiddenSection;
   env: RowEnv;
   links: VacancyLinks;
   triage: Triage;
-}) {
-  if (list.all.length === 0 && !section.show && !list.server.active) return null;
+  own: OwnSection;
+}
+
+function ListTable({ list, rows, section, env, links, triage, own }: ListTableProps) {
+  if (list.all.length === 0 && own.items.length === 0 && !section.show && !list.server.active) return null;
   const { status, retry } = list.server;
   const hidden = section.show ? (
     <HiddenRows
@@ -115,6 +114,7 @@ function ListTable({
         rows={rows}
         rates={list.rates}
         hidden={hidden}
+        own={<OwnRows items={own.items} onRemove={own.removeWithToast} />}
         pickFor={(item) => pickOf(triage, item)}
       />
       {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
@@ -126,19 +126,25 @@ function ListTable({
   );
 }
 
-/** Строка счётчика: число вакансий слева, «Помочь выбрать» справа. */
-function CountBar({ list, hideCount, triage }: { list: VacancyList; hideCount: boolean; triage: Triage }) {
+/** Строка счётчика: число вакансий слева, «Проверить свою вакансию» и «Помочь выбрать» справа. */
+function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCount: boolean; triage: Triage; own: OwnSection }) {
   return (
-    <div className="vl-top vl-countbar">
-      {hideCount || !list.countKnown ? null : (
-        <CountTitle count={list.count} word={vacanciesWord(list.count)} tip />
-      )}
-      {list.all.length > 0 || triage.active ? (
+    <>
+      <div className="vl-top vl-countbar">
+        {hideCount || !list.countKnown ? null : (
+          <CountTitle count={list.count} word={vacanciesWord(list.count)} tip />
+        )}
         <div className="va-lact vl-acts">
-          <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : triage.start} />
+          <OwnAddButton open={own.panelOpen} onClick={own.togglePanel} />
+          {list.all.length > 0 || triage.active ? (
+            <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : triage.start} />
+          ) : null}
         </div>
+      </div>
+      {own.panelOpen ? (
+        <OwnVacancyPanel status={own.status} onAdd={own.add} onClose={own.closePanel} onEdit={own.resetStatus} />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -164,11 +170,12 @@ export function ListScreen() {
   // Числа и список появляются с первой прочитанной порцией: «0 вакансий» на время чтения не пишем.
   const unread = empty && (pool.loading || retrying || pool.failed);
   const strip = list.noRole ? 'role' : profileIsEmpty(list) ? 'profile' : null;
+  const own = useOwnSection();
   return (
     <div className="page" data-b640-node="s07" data-b640-section="vacancies">
       {strip ? <GapStrip kind={strip} /> : null}
       <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
-        <CountBar list={list} hideCount={unread} triage={triage} />
+        <CountBar list={list} hideCount={unread} triage={triage} own={own} />
         <FiltersBar
           {...filterProps(list, section)}
           openKind={list.openKind}
@@ -181,7 +188,7 @@ export function ListScreen() {
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {waiting ? <LoadingLine /> : null}
         {!unread && list.all.length === 0 && !serverBusy ? <EmptyList list={list} /> : null}
-        <ListTable list={list} rows={rows} section={section} env={env} links={links} triage={triage} />
+        <ListTable list={list} rows={rows} section={section} env={env} links={links} triage={triage} own={own} />
       </section>
       <FilterSheet
         {...filterProps(list, section)}

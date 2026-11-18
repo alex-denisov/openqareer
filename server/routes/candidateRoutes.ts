@@ -61,6 +61,7 @@ import {
   recordImportCompletedNotification,
 } from './notificationRepositoryAccess';
 import { registerNotificationRoutes } from './notificationRoutes';
+import { forgetOwnVacancies } from '../vacancies/ownVacancy/ownVacancyStore';
 import {
   assessmentIdSchema,
   candidateCreateSchema,
@@ -317,6 +318,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   notificationRepositoryFor(deps).deleteByCandidate(candidate.id);
   candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
+  forgetOwnVacancies(deps, candidate.id);
   deps.vacancyMechanics?.deleteCandidate(candidate.id);
   deps.multiSourceEngine.forgetHhTextRoleTarget(candidate.id);
   candidateStore.deleteCandidate(candidate.id);

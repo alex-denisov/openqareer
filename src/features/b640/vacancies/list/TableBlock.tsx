@@ -19,11 +19,12 @@ export interface TableBlockProps {
   readonly rows: RowInteractions;
   readonly rates?: CurrencyRates;
   readonly hidden?: ReactNode;
+  readonly own?: ReactNode;
   readonly pickFor?: (item: MatchedVacancyItem) => RowPick | undefined;
 }
 
 /** Таблица подборки с общим состоянием строк: раскрытие, окно действий, ☆. */
-export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidden, pickFor }: TableBlockProps) {
+export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidden, own, pickFor }: TableBlockProps) {
   return (
     <VacancyTable
       items={items}
@@ -42,6 +43,7 @@ export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidde
       onMenu={rows.openMenu}
       onCloseMenu={rows.closeMenu}
       hidden={hidden}
+      own={own}
     />
   );
 }

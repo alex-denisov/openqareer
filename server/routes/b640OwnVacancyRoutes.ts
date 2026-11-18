@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OWN_VACANCY_LINK_MAX, OWN_VACANCY_TEXT_MAX, OWN_VACANCY_TEXT_MIN } from '../../shared/b640OwnVacancy';
-import { SqliteOwnVacancyStore } from '../data/sqliteOwnVacancyStore';
+import type { SqliteOwnVacancyStore } from '../data/sqliteOwnVacancyStore';
 import { createOwnVacancy } from '../vacancies/ownVacancy/createOwnVacancy';
+import { ownVacancyStoreFor } from '../vacancies/ownVacancy/ownVacancyStore';
 import { forgetOwnVacancyComparison, ownVacancyDetail, ownVacancySummary } from '../vacancies/ownVacancy/ownVacancyComparison';
 import { sessionCandidate } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -26,24 +27,13 @@ const bodySchema = z.union([
   z.object({ text: z.string().trim().min(OWN_VACANCY_TEXT_MIN).max(OWN_VACANCY_TEXT_MAX) }).strict(),
 ]);
 
-const stores = new WeakMap<object, SqliteOwnVacancyStore>();
-function storeOf(deps: RouteDeps): SqliteOwnVacancyStore | null {
-  const runtime = deps.vacancyMechanics;
-  if (!runtime) return null;
-  const known = stores.get(runtime);
-  if (known) return known;
-  const store = new SqliteOwnVacancyStore(runtime.database, deps.config.dataEncryptionKey);
-  stores.set(runtime, store);
-  return store;
-}
-
 type Gate = { readonly candidateId: string; readonly store: SqliteOwnVacancyStore } | null;
 function gate(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply): Gate {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return null;
   const candidate = sessionCandidate(request, reply, principal.candidate);
   if (!candidate) return null;
-  const store = storeOf(deps);
+  const store = ownVacancyStoreFor(deps);
   if (!store) {
     sendError(reply, request, 503, 'own_vacancy_unavailable', 'Проверка вакансии сейчас недоступна.', true);
     return null;

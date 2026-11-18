@@ -70,4 +70,8 @@ export class SqliteOwnVacancyStore {
     const result = this.db.prepare('DELETE FROM b640_own_vacancies WHERE id=? AND candidate_key=?').run(id, this.candidateKey(candidateId));
     return Number(result.changes) > 0;
   }
+
+  deleteCandidate(candidateId: string): number {
+    return Number(this.db.prepare('DELETE FROM b640_own_vacancies WHERE candidate_key=?').run(this.candidateKey(candidateId)).changes);
+  }
 }

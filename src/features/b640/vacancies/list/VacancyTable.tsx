@@ -32,6 +32,8 @@ export interface VacancyTableProps {
   readonly onCloseMenu: () => void;
   /** Блок скрытых вакансий: отдельный `tbody` над обычными строками. */
   readonly hidden?: ReactNode;
+  /** Свои вакансии кандидата (B676): `tbody` первым, над всеми строками. */
+  readonly own?: ReactNode;
 }
 
 function SortHead({ column, sort, onSort, tip }: { column: (typeof SORT_COLUMNS)[number]; sort: SortState; onSort: (key: SortKey) => void; tip: string | null }) {
@@ -69,6 +71,7 @@ export function VacancyTable(props: VacancyTableProps) {
             </th>
           </tr>
         </thead>
+        {props.own}
         {props.hidden}
         <tbody>
           {items.flatMap((item) => {
