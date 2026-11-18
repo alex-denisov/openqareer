@@ -180,7 +180,7 @@ ensure_upstream_snippet() {
 }
 
 live_port() {
-  sed -nE 's/^[[:space:]]*to[[:space:]]+127\.0\.0\.1:(3210|3211)[[:space:]]*$/\1/p' \
+  sed -nE 's/^[[:space:]]*to[[:space:]]+127\.0\.0\.1:(3210|3211)([[:space:]]+127\.0\.0\.1:(3210|3211))?[[:space:]]*$/\1/p' \
     "$UPSTREAM_SNIPPET" | head -n 1
 }
 
@@ -197,7 +197,12 @@ install_sudoers() {
       printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl %s openqareer-static@%s.service\n' \
         restart "$port" stop "$port" enable "$port" disable "$port"
       printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/local/bin/openqareer-upstream %s\n' "$port"
+      # B705-2: тёплый резерв — сторож окна и Caddy с двумя портами.
+      printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl %s openqareer-reserve@%s.service\n' \
+        restart "$port" stop "$port"
     done
+    printf 'openqareer-deploy ALL=(root) NOPASSWD: /usr/local/bin/openqareer-upstream %s\n' \
+      '3210 3211' '3211 3210'
   } > "$sudoers_temp"
   # Проверка до установки: битый файл в sudoers.d не должен попасть на хост.
   visudo -cf "$sudoers_temp" >/dev/null || fail "generated sudoers rules do not parse"
@@ -220,9 +225,15 @@ install_zero_downtime_files() {
   install -o root -g root -m 0644 \
     "$SCRIPT_DIR/openqareer-static@.service" \
     "/etc/systemd/system/openqareer-static@.service"
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-reserve-watch" /usr/local/bin/openqareer-reserve-watch
+  install -o root -g root -m 0644 \
+    "$SCRIPT_DIR/openqareer-reserve@.service" \
+    "/etc/systemd/system/openqareer-reserve@.service"
   install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 "$RELEASE_ROOT/slots"
   systemctl daemon-reload
   systemd-analyze verify "/etc/systemd/system/openqareer-static@3210.service"
+  systemd-analyze verify "/etc/systemd/system/openqareer-reserve@3210.service"
 }
 
 [[ "$(id -u)" == "0" ]] || fail "run with sudo/root"

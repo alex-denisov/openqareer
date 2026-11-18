@@ -1,8 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import type { ConsultantReplyExtras } from '../../shared/consultantReply';
 import { coachTurnStageSchema } from '../domain/coach';
+import { replyExtrasOf } from '../domain/consultantReplyExtras';
 import { confirmConsultantFact } from '../orchestration/consultantFactConfirmation';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { withStaleAnalysis } from './coachTurnAnalysis';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
@@ -35,8 +38,27 @@ const handleCurrent: Handler = async (deps, request, reply) => {
   const query = currentQuery.safeParse(request.query);
   if (!query.success) return sendError(reply, request, 400, 'invalid_stage', 'Проверьте раздел.', false);
   const conversation = deps.candidateStore.currentConsultantConversation(id, query.data.stage);
-  return { data: conversation, meta: { requestId: request.id } };
+  const data = conversation ? { ...conversation, ...replyExtras(deps, id, conversation.id) } : null;
+  return { data, meta: { requestId: request.id } };
 };
+
+interface ReplyExtrasData {
+  readonly replies: ConsultantReplyExtras[];
+  /** Разбор эксперта и стратега ещё идёт фоном: действия под ответом придут позже. */
+  readonly analysisPending: boolean;
+}
+
+/** Действия и ссылки под ответами открытого разговора; реплики без них не перечисляются. */
+function replyExtras(deps: RouteDeps, candidateId: string, conversationId: string): ReplyExtrasData {
+  const results = deps.candidateStore.consultantReplyResults(candidateId, conversationId);
+  if (results.length === 0) return { replies: [], analysisPending: false };
+  const analysisPending = results.some(({ result }) => withStaleAnalysis(result).analysis === 'pending');
+  const memory = deps.candidateStore.getSnapshot(candidateId).memory;
+  const replies = results
+    .map(({ messageId, result }) => ({ messageId, ...replyExtrasOf(result, memory) }))
+    .filter((extras) => extras.actions.length > 0 || extras.memoryIds.length > 0);
+  return { replies, analysisPending };
+}
 
 const handleClose: Handler = async (deps, request, reply) => {
   const id = candidateId(deps, request, reply);

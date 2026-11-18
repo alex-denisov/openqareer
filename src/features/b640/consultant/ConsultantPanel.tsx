@@ -7,6 +7,7 @@ import { Link } from '../shell/Link';
 import { closeCurrentConversation } from './consultantApi';
 import { DialogView } from './DialogView';
 import { ConversationView, HistoryView } from './HistoryView';
+import { ReviewView } from './ReviewView';
 import { panelTitle } from './model';
 import { ErrorRow } from './parts';
 import type { PanelView } from './panelRoute';
@@ -25,15 +26,20 @@ export interface ConsultantPanelProps {
   readonly onClose: () => void;
 }
 
-const REVIEW_PATH = buildNodePath('p06');
 const TARIFFS_PATH = buildNodePath('t01');
+
+interface PanelBack {
+  readonly label: string;
+  readonly path: string;
+  readonly onOpen: () => void;
+}
 
 interface PanelHeadProps {
   readonly titleId: string;
   /** Заголовок разговора; `null` — открыт список разговоров. */
   readonly conversation: string | null;
-  readonly historyPath: string;
-  readonly onHistory: () => void;
+  /** Куда ведёт «‹»: из записей на проверку — к разговору, иначе — ко всем разговорам. */
+  readonly back: PanelBack;
   /** «Новый разговор»; нет — кнопки нет (открыт прошлый разговор). */
   readonly onNew?: () => void;
   readonly newBusy: boolean;
@@ -58,7 +64,7 @@ function NewButton({ onNew, busy }: { readonly onNew: () => void; readonly busy:
   );
 }
 
-function PanelHead({ titleId, conversation, historyPath, onHistory, onNew, newBusy, onClose }: PanelHeadProps) {
+function PanelHead({ titleId, conversation, back, onNew, newBusy, onClose }: PanelHeadProps) {
   return (
     <header className="panel-head ph2">
       {conversation === null ? (
@@ -69,15 +75,15 @@ function PanelHead({ titleId, conversation, historyPath, onHistory, onNew, newBu
         <>
           <Link
             className="ph-back"
-            to={historyPath}
-            aria-label="Все разговоры"
+            to={back.path}
+            aria-label={back.label}
             onClick={(event) => {
               event.preventDefault();
-              onHistory();
+              back.onOpen();
             }}
           >
             <Icon name="left" />
-            <span className="ph-back-l">Все разговоры</span>
+            <span className="ph-back-l">{back.label}</span>
           </Link>
           <h2 className="ph-title ph-conv" id={titleId}>
             {conversation}
@@ -134,11 +140,76 @@ function useFreshDialog(onDialog: () => void): FreshDialog {
   return { key, busy, failed, startNew, reopen };
 }
 
+function headTitle(view: PanelView, stage: CoachTurnStage | null): string | null {
+  if (view.kind === 'history') return null;
+  return view.kind === 'review' ? 'Записи на проверку' : panelTitle(stage);
+}
+
+function backOf(
+  view: PanelView,
+  pathOf: (view: PanelView) => string,
+  onView: (view: PanelView) => void,
+): PanelBack {
+  if (view.kind === 'review') {
+    return {
+      label: 'К разговору',
+      path: pathOf({ kind: 'dialog' }),
+      onOpen: () => onView({ kind: 'dialog' }),
+    };
+  }
+  return {
+    label: 'Все разговоры',
+    path: pathOf({ kind: 'history' }),
+    onOpen: () => onView({ kind: 'history' }),
+  };
+}
+
+interface PanelBodyProps {
+  readonly view: PanelView;
+  readonly stage: CoachTurnStage;
+  readonly freshKey: number;
+  readonly pathOf: (view: PanelView) => string;
+  readonly onView: (view: PanelView) => void;
+  readonly onContinued: () => void;
+}
+
+function PanelBody({ view, stage, freshKey, pathOf, onView, onContinued }: PanelBodyProps) {
+  if (view.kind === 'review') return <ReviewView />;
+  if (view.kind === 'conversation') {
+    return <ConversationView key={view.id} id={view.id} onContinued={onContinued} />;
+  }
+  if (view.kind === 'history') {
+    return (
+      <HistoryView
+        conversationPath={(id) => pathOf({ kind: 'conversation', id })}
+        onOpen={(id) => onView({ kind: 'conversation', id })}
+        onStart={() => onView({ kind: 'dialog' })}
+      />
+    );
+  }
+  return (
+    <DialogView
+      key={freshKey}
+      stage={stage}
+      reviewPath={pathOf({ kind: 'review' })}
+      onReview={() => onView({ kind: 'review' })}
+      tariffsPath={TARIFFS_PATH}
+    />
+  );
+}
+
 /**
  * Панель консультанта (макеты K1–K7): на 1440 и 1176 — третья колонка сетки `.app.has-panel`,
  * на 390 — лист снизу. Ставится соседом `main` внутри `.app`.
  */
-export function ConsultantPanel({ view, stage, named, pathOf, onView, onClose }: ConsultantPanelProps) {
+export function ConsultantPanel({
+  view,
+  stage,
+  named,
+  pathOf,
+  onView,
+  onClose,
+}: ConsultantPanelProps) {
   const titleId = useId();
   useEscape(onClose);
   const showDialog = useCallback(() => onView({ kind: 'dialog' }), [onView]);
@@ -155,27 +226,23 @@ export function ConsultantPanel({ view, stage, named, pathOf, onView, onClose }:
         <span className="grab" aria-hidden="true" />
         <PanelHead
           titleId={titleId}
-          conversation={view.kind === 'history' ? null : panelTitle(named ? stage : null)}
-          historyPath={pathOf({ kind: 'history' })}
-          onHistory={() => onView({ kind: 'history' })}
-          onNew={view.kind === 'conversation' ? undefined : fresh.startNew}
+          conversation={headTitle(view, named ? stage : null)}
+          back={backOf(view, pathOf, onView)}
+          onNew={view.kind === 'dialog' || view.kind === 'history' ? fresh.startNew : undefined}
           newBusy={fresh.busy}
           onClose={onClose}
         />
-        {fresh.failed ? <ErrorRow text="Новый разговор не начался" onRetry={fresh.startNew} /> : null}
-        {view.kind === 'dialog' ? (
-          <DialogView key={fresh.key} stage={stage} reviewPath={REVIEW_PATH} tariffsPath={TARIFFS_PATH} />
+        {fresh.failed ? (
+          <ErrorRow text="Новый разговор не начался" onRetry={fresh.startNew} />
         ) : null}
-        {view.kind === 'history' ? (
-          <HistoryView
-            conversationPath={(id) => pathOf({ kind: 'conversation', id })}
-            onOpen={(id) => onView({ kind: 'conversation', id })}
-            onStart={() => onView({ kind: 'dialog' })}
-          />
-        ) : null}
-        {view.kind === 'conversation' ? (
-          <ConversationView key={view.id} id={view.id} onContinued={fresh.reopen} />
-        ) : null}
+        <PanelBody
+          view={view}
+          stage={stage}
+          freshKey={fresh.key}
+          pathOf={pathOf}
+          onView={onView}
+          onContinued={fresh.reopen}
+        />
       </aside>
     </>
   );

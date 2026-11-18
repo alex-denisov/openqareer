@@ -63,3 +63,7 @@ prototypes/
 
 # B649: снимки нового кабинета для сверки с макетами
 .s13-shots/
+
+# Local check caches
+.eslintcache
+.prettiercache

@@ -111,6 +111,7 @@ fi
   fail "existing release health marker does not match"
 
 cd "$RELEASE_ROOT"
+stop_reserve_watch
 old_target="$(readlink current 2>/dev/null || true)"
 live_port="$(active_port)"
 next_port="$(other_port "$live_port")"
@@ -126,12 +127,27 @@ if [[ -n "$old_target" && "$old_target" != "releases/$release_sha" ]]; then
   atomic_link "$old_target" previous
 fi
 atomic_link "releases/$release_sha" current
-if ! switch_upstream "$next_port"; then
+# Резерв держится, только если прежний релиз сейчас работает как экземпляр
+# шаблона на свободном порту (не прежний одиночный сервис) и новый релиз не
+# меняет схему базы (маркер в архиве).
+reserve=0
+if [[ ! -f "$release_dir/$NO_RESERVE_MARKER" && -n "$old_target" ]] &&
+  slot_is_active "$live_port"; then
+  reserve=1
+fi
+upstream_args=("$next_port")
+[[ "$reserve" == "1" ]] && upstream_args+=("$live_port")
+if ! switch_upstream "${upstream_args[@]}"; then
   [[ -z "$old_target" ]] || atomic_link "$old_target" current
   stop_slot "$next_port"
   fail "proxy switch to port $next_port failed; previous release still serving"
 fi
-retire_slot "$next_port" "$live_port"
+if [[ "$reserve" == "1" ]]; then
+  keep_reserve "$next_port" "$live_port" ||
+    fail "reserve watch did not start; check journalctl -u $(reserve_service "$next_port")"
+else
+  retire_slot "$next_port" "$live_port"
+fi
 
 # Обслуживатель пула (B230) перезапускается после того, как HTTP подтвердил
 # релиз. Он не участвует в /health, поэтому один только health-check не может
@@ -164,5 +180,6 @@ done < <(find releases -regextype posix-extended -mindepth 1 -maxdepth 1 \
   -type d -regex '.*/[0-9a-f]{40}' -printf '%T@ %p\n' |
   sort -rn | awk 'NR > 5 {print $2}')
 
-printf 'release=%s health=ok port=%s previous=%s\n' \
-  "$release_sha" "$next_port" "${old_target:-none}"
+printf 'release=%s health=ok port=%s reserve=%s previous=%s\n' \
+  "$release_sha" "$next_port" "$([[ "$reserve" == "1" ]] && printf '%s' "$live_port" || printf none)" \
+  "${old_target:-none}"

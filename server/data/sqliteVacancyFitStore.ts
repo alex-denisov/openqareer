@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
+import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
 import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
@@ -75,7 +76,12 @@ export class SqliteVacancyFitStore {
       latest_key TEXT PRIMARY KEY, candidate_key TEXT NOT NULL,
       result_cipher TEXT NOT NULL, updated_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS vacancy_fit_latest_candidate ON vacancy_fit_latest(candidate_key);`);
+    CREATE INDEX IF NOT EXISTS vacancy_fit_latest_candidate ON vacancy_fit_latest(candidate_key);
+    CREATE TABLE IF NOT EXISTS vacancy_fit_own_rows (
+      cache_key TEXT PRIMARY KEY, candidate_key TEXT NOT NULL, vacancy_key TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS vacancy_fit_own_rows_vacancy ON vacancy_fit_own_rows(vacancy_key);
+    CREATE INDEX IF NOT EXISTS vacancy_fit_own_rows_candidate ON vacancy_fit_own_rows(candidate_key);`);
     addLateColumns(database, 'vacancy_fit_queue', LATE_COLUMNS);
     addLateColumns(database, 'vacancy_fit_cache', LATE_CACHE_COLUMNS);
   }
@@ -86,6 +92,15 @@ export class SqliteVacancyFitStore {
   /** One row per vacancy and candidate, whatever the profile: the percent shown while a new one is counted. */
   private latestKey(candidateId: string, vacancyId: string): string {
     return this.sealedText.indexToken(`vacancy-fit-latest:${candidateId}`, vacancyId);
+  }
+  /** B676: own vacancy rows are linked by this token, so a delete finds them without opening anything. */
+  private ownVacancyKey(candidateId: string, vacancyId: string): string {
+    return this.sealedText.indexToken(`vacancy-fit-own:${candidateId}`, vacancyId);
+  }
+  private linkOwnRow(input: VacancyFitInput, key: string): void {
+    if (!input.vacancyId.startsWith(OWN_VACANCY_ID_PREFIX)) return;
+    this.database.prepare('INSERT OR IGNORE INTO vacancy_fit_own_rows(cache_key,candidate_key,vacancy_key) VALUES(?,?,?)')
+      .run(key, this.candidateKey(input.candidateId), this.ownVacancyKey(input.candidateId, input.vacancyId));
   }
   cacheKey(input: VacancyFitInput, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION, factScope: VacancyFitFactScope = 'evidence'): string {
     const fingerprint = vacancyFitFingerprint(input, algorithmVersion, factScope);
@@ -243,6 +258,7 @@ export class SqliteVacancyFitStore {
     const key = this.cacheKey(input, algorithmVersion);
     this.database.prepare(`INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at,answered_by) VALUES(?,?,?,?,?)
       ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at,answered_by=excluded.answered_by`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now, answeredBy);
+    this.linkOwnRow(input, key);
     if (result.status !== 'assessed') return;
     const latest = this.latestKey(input.candidateId, input.vacancyId);
     this.database.prepare(`INSERT INTO vacancy_fit_latest(latest_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
@@ -287,6 +303,7 @@ export class SqliteVacancyFitStore {
     this.database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,requested_at,created_at,updated_at)
       VALUES(?,?,?,'pending',?,?,?) ON CONFLICT(cache_key) DO UPDATE SET requested_at=excluded.requested_at WHERE status='pending'`)
       .run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, now);
+    this.linkOwnRow(input, key);
     const row = this.database.prepare('SELECT status FROM vacancy_fit_queue WHERE cache_key=?').get(key) as { status: string };
     return { key, status: row.status };
   }
@@ -491,23 +508,19 @@ export class SqliteVacancyFitStore {
 
   /**
    * B676: a candidate deletes one own vacancy — every row for it goes, under any profile version.
-   * Rows are found by opening the candidate's own sealed rows; it runs only on that explicit delete.
+   * Rows are found through vacancy_fit_own_rows by index; nothing is read or opened (18.11: opening
+   * every sealed row of a candidate with thousands of them ran the server out of memory).
    */
   forgetVacancy(candidateId: string, vacancyId: string): number {
-    const candidateKey = this.candidateKey(candidateId);
-    const matches = (cipher: string, key: string) => {
-      try { return (JSON.parse(this.sealedText.open(cipher, key)) as { vacancyId?: string }).vacancyId === vacancyId; } catch { return false; }
-    };
-    const cache = (this.database.prepare('SELECT cache_key AS key,result_cipher AS cipher FROM vacancy_fit_cache WHERE candidate_key=?').all(candidateKey) as unknown as { key: string; cipher: string }[])
-      .filter((row) => matches(row.cipher, row.key)).map((row) => row.key);
-    const queue = (this.database.prepare('SELECT cache_key AS key,input_cipher AS cipher FROM vacancy_fit_queue WHERE candidate_key=?').all(candidateKey) as unknown as { key: string; cipher: string }[])
-      .filter((row) => matches(row.cipher, row.key)).map((row) => row.key);
+    const vacancyKey = this.ownVacancyKey(candidateId, vacancyId);
+    const linked = 'SELECT cache_key FROM vacancy_fit_own_rows WHERE vacancy_key=?';
     this.database.exec('BEGIN IMMEDIATE');
     try {
-      let removed = 0;
-      for (const key of cache) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_cache WHERE cache_key=?').run(key).changes);
-      for (const key of queue) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_queue WHERE cache_key=?').run(key).changes);
+      let removed = Number(this.database.prepare(`DELETE FROM vacancy_fit_cache WHERE cache_key IN (${linked})`).run(vacancyKey).changes);
+      // A completed job has its sealed input wiped; the link by cache_key still finds it.
+      removed += Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE cache_key IN (${linked})`).run(vacancyKey).changes);
       removed += Number(this.database.prepare('DELETE FROM vacancy_fit_latest WHERE latest_key=?').run(this.latestKey(candidateId, vacancyId)).changes);
+      this.database.prepare('DELETE FROM vacancy_fit_own_rows WHERE vacancy_key=?').run(vacancyKey);
       this.database.exec('COMMIT');
       return removed;
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
@@ -520,6 +533,7 @@ export class SqliteVacancyFitStore {
       this.database.prepare('DELETE FROM vacancy_fit_cache WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_queue WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_latest WHERE candidate_key=?').run(key);
+      this.database.prepare('DELETE FROM vacancy_fit_own_rows WHERE candidate_key=?').run(key);
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }

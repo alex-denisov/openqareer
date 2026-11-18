@@ -10,6 +10,7 @@ import {
   readDataObject,
   throwApiError,
 } from '../../coach/apiClient';
+import { readReplies, type ConsultantReplyExtras } from './replyModel';
 
 export type { ConsultantConversationDetail, ConsultantConversationSummary };
 
@@ -50,13 +51,30 @@ function checkedDetail(detail: ConsultantConversationDetail): ConsultantConversa
   return detail;
 }
 
+/** Открытый разговор и действия со ссылками под его ответами. */
+export interface CurrentConversation extends ConsultantConversationDetail {
+  readonly replies: readonly ConsultantReplyExtras[];
+  /** Фоновый разбор ответа ещё идёт: действия под ним придут позже. */
+  readonly analysisPending: boolean;
+}
+
 /** Открытый разговор раздела (B688); `null` — разговор ещё не начат. */
 export async function fetchCurrentConversation(
   stage: CoachTurnStage,
-): Promise<ConsultantConversationDetail | null> {
+): Promise<CurrentConversation | null> {
   const response = await apiFetch(`${CONSULTANT_URL}/current?stage=${encodeURIComponent(stage)}`);
-  const detail = await readData<ConsultantConversationDetail | null>(response);
-  return detail === null ? null : checkedDetail(detail);
+  const detail = await readData<
+    (ConsultantConversationDetail & { replies?: unknown; analysisPending?: unknown }) | null
+  >(
+    response,
+  );
+  return detail === null
+    ? null
+    : {
+        ...checkedDetail(detail),
+        replies: readReplies(detail.replies),
+        analysisPending: detail.analysisPending === true,
+      };
 }
 
 /** «Новый разговор»: открытый разговор уходит в «Все разговоры». */

@@ -28,7 +28,10 @@ const isLinux = process.platform === 'linux';
 const STUBS: Record<string, string> = {
   id: `#!/usr/bin/env bash
 case "$1" in -un) echo openqareer-deploy ;; -u) echo 1000 ;; *) exec /usr/bin/id "$@" ;; esac`,
-  flock: '#!/usr/bin/env bash\nexit 0',
+  flock: `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$STATE/flock.log"
+[[ -f "$STATE/lock-held" ]] && exit 1
+exit 0`,
   sleep: '#!/usr/bin/env bash\nexit 0',
   // BSD mv has no -T; the scripts only use it to replace a symlink atomically.
   mv: `#!/usr/bin/env bash
@@ -45,7 +48,13 @@ exit 99`,
   systemctl: `#!/usr/bin/env bash
 port_of() { [[ "$1" =~ ^openqareer-static@([0-9]+)\\.service$ ]] && printf '%s' "\${BASH_REMATCH[1]}"; }
 case "$1" in
-  show) echo 5min ;;
+  show)
+    if [[ "$*" == *TimeoutStopUSec* ]]; then echo 5min; exit 0; fi
+    prop="$3"; unit="\${@: -1}"
+    if [[ "$prop" == NRestarts && -f "$STATE/restarting-$unit" ]]; then
+      n="$(cat "$STATE/nrestarts-$unit" 2>/dev/null || echo 0)"; echo "$n"; echo $((n + 1)) > "$STATE/nrestarts-$unit"
+    elif [[ "$prop" == MainPID ]]; then echo 4242
+    else echo 0; fi ;;
   cat) exit 0 ;;
   is-active) [[ -f "$STATE/active/$3" ]] ;;
   enable|disable)
@@ -107,6 +116,8 @@ function makeHost(): Host {
       OPENQAREER_CADDYFILE: join(base, 'Caddyfile'),
       OPENQAREER_HEALTH_WINDOW_SECONDS: '2',
       OPENQAREER_DRAIN_SECONDS: '0',
+      OPENQAREER_RESERVE_SECONDS: '0',
+      OPENQAREER_RESERVE_POLL_SECONDS: '0',
     },
   };
 }
@@ -141,9 +152,10 @@ const read = (path: string): string => (existsSync(path) ? readFileSync(path, 'u
 const isActive = (host: Host, unit: string): boolean => existsSync(join(host.state, 'active', unit));
 const link = (host: Host, name: string): string => readlinkSync(join(host.root, name));
 
-function stageArchive(host: Host, sha: string): string {
+function stageArchive(host: Host, sha: string, options: { noReserve?: boolean } = {}): string {
   const src = mkdtempSync(join(tmpdir(), 'oq-zdd-src-'));
   for (const file of ['index.html', 'server.mjs', 'maintenance.mjs']) writeFileSync(join(src, file), '');
+  if (options.noReserve) writeFileSync(join(src, 'no-warm-reserve'), '');
   writeFileSync(join(src, 'health'), `${sha}\n`);
   const archive = join(host.root, 'incoming', `${sha}.tar.gz`);
   execFileSync('tar', ['-czf', archive, '-C', src, '.']);
@@ -209,7 +221,101 @@ describe('openqareer-rollback: возврат без простоя (B705)', () 
   });
 });
 
+/** Window after a deploy: new release primary on 3210, old one reserve on 3211. */
+function inReserveWindow(host: Host): void {
+  serving(host, SHA_B, '3211');
+  addRelease(host, SHA_C);
+  symlinkSync(`../releases/${SHA_C}`, join(host.root, 'slots', '3210'));
+  writeFileSync(join(host.state, 'active', 'openqareer-static@3210.service'), '');
+  writeFileSync(join(host.state, 'health-3210'), `${SHA_C}\n`);
+  rmSync(join(host.root, 'current'));
+  symlinkSync(`releases/${SHA_C}`, join(host.root, 'current'));
+  symlinkSync(`releases/${SHA_B}`, join(host.root, 'previous'));
+  writeFileSync(host.snippet, 'to 127.0.0.1:3210 127.0.0.1:3211\nlb_policy first\n');
+}
+
+describe('openqareer-reserve-watch: тёплый резерв 10 минут (B705-2)', () => {
+  it('окно прошло без падений — резерв убран из Caddy и погашен', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('window passed without failures');
+    expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
+    expect(isActive(host, 'openqareer-static@3211.service')).toBe(false);
+    expect(link(host, 'current')).toBe(`releases/${SHA_C}`);
+  });
+
+  it('новый экземпляр упал — Caddy на резерв, current откатан, причина в журнале', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+    rmSync(join(host.state, 'active', 'openqareer-static@3210.service'));
+    host.env.OPENQAREER_RESERVE_SECONDS = '5';
+    // Exit code of the stopped unit is irrelevant: the watcher only needs it gone.
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+
+    expect(result.stdout).toContain('FAILOVER: openqareer-static@3210.service is not active');
+    expect(read(host.snippet)).toBe('to 127.0.0.1:3211\n');
+    expect(link(host, 'current')).toBe(`releases/${SHA_B}`);
+    expect(link(host, 'previous')).toBe(`releases/${SHA_C}`);
+    expect(isActive(host, 'openqareer-static@3211.service')).toBe(true);
+    expect(read(join(host.state, 'units.log'))).toContain('restart openqareer-maintenance.service');
+  });
+
+  it('systemd перезапустил новый экземпляр — это тоже отказ, хотя юнит снова active', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+    writeFileSync(join(host.state, 'restarting-openqareer-static@3210.service'), '');
+    host.env.OPENQAREER_RESERVE_SECONDS = '5';
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+    expect(result.stdout).toContain('FAILOVER: systemd restarted openqareer-static@3210.service');
+    expect(read(host.snippet)).toBe('to 127.0.0.1:3211\n');
+    expect(isActive(host, 'openqareer-static@3210.service')).toBe(false);
+  });
+
+  it('ждёт блокировку выката, а не уходит сразу: выкат ещё перезапускает maintenance', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+    rmSync(join(host.state, 'active', 'openqareer-static@3210.service'));
+    host.env.OPENQAREER_RESERVE_SECONDS = '5';
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+    expect(result.stdout).toContain('FAILOVER');
+    expect(read(join(host.state, 'flock.log'))).toContain('-w 900 9');
+  });
+
+  it('блокировка так и не освободилась — резерв оставлен выкату, Caddy не тронут', () => {
+    const host = makeHost();
+    inReserveWindow(host);
+    writeFileSync(join(host.state, 'lock-held'), '');
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+    expect(result.stdout).toContain('deploy lock still held');
+    expect(read(host.snippet)).toContain('to 127.0.0.1:3210 127.0.0.1:3211');
+  });
+
+  it('резерва нет — сторож ничего не трогает', () => {
+    const host = makeHost();
+    serving(host, SHA_C, '3210');
+    const result = run(host, 'openqareer-reserve-watch', ['3210']);
+    expect(result.stdout).toContain('nothing to watch');
+    expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
+  });
+});
+
 describe('openqareer-upstream: переключение Caddy (B705)', () => {
+  it('основной и резерв — оба адреса и проверки здоровья; один порт дважды нельзя', () => {
+    const host = makeHost();
+    writeFileSync(host.snippet, 'to 127.0.0.1:3211\n');
+    expect(run(host, 'openqareer-upstream', ['3210', '3211']).status).toBe(0);
+    const snippet = read(host.snippet);
+    expect(snippet).toContain('to 127.0.0.1:3210 127.0.0.1:3211');
+    expect(snippet).toContain('fail_duration 30s');
+    expect(snippet).toContain('health_interval 2s');
+    expect(run(host, 'openqareer-upstream', ['3210', '3210']).status).not.toBe(0);
+    expect(run(host, 'openqareer-upstream', ['3210', '8080']).status).not.toBe(0);
+  });
+
   it('принимает только 3210 и 3211', () => {
     const host = makeHost();
     const result = run(host, 'openqareer-upstream', ['8080']);
@@ -266,7 +372,7 @@ describe('bootstrap.sh: sudoers покрывает каждый вызов sudo 
         .split('\n')
         .map((line) => line.replace('openqareer-deploy ALL=(root) NOPASSWD: ', '')),
     );
-    const scripts = ['openqareer-slots.sh', 'openqareer-activate', 'openqareer-rollback']
+    const scripts = ['openqareer-slots.sh', 'openqareer-activate', 'openqareer-rollback', 'openqareer-reserve-watch']
       .map((file) => readFileSync(join(DEPLOY, file), 'utf8'))
       .join('\n');
     for (const port of ['3210', '3211']) {
@@ -276,6 +382,12 @@ describe('bootstrap.sh: sudoers покрывает каждый вызов sudo 
       expect(allowed).toContain(`/usr/local/bin/openqareer-upstream ${port}`);
     }
     expect(allowed).toContain('/usr/bin/systemctl disable --now openqareer-static.service');
+    for (const port of ['3210', '3211']) {
+      expect(allowed).toContain(`/usr/bin/systemctl restart openqareer-reserve@${port}.service`);
+      expect(allowed).toContain(`/usr/bin/systemctl stop openqareer-reserve@${port}.service`);
+    }
+    expect(allowed).toContain('/usr/local/bin/openqareer-upstream 3210 3211');
+    expect(allowed).toContain('/usr/local/bin/openqareer-upstream 3211 3210');
     expect(scripts).toContain('sudo -n "$UPSTREAM_HELPER"');
     expect([...allowed].every((line) => !line.includes('*'))).toBe(true);
   });
@@ -300,7 +412,7 @@ describe.runIf(isLinux)('openqareer-activate: выкат без простоя (
     expect(units.indexOf('reload caddy')).toBeLessThan(units.indexOf('disable openqareer-static.service'));
   });
 
-  it('следующий выкат чередует порт и гасит прежний экземпляр после переключения', () => {
+  it('следующий выкат чередует порт и оставляет прежний экземпляр тёплым резервом (B705-2)', () => {
     const host = makeHost();
     serving(host, SHA_B, '3211');
     const checksum = stageArchive(host, SHA_C);
@@ -308,11 +420,30 @@ describe.runIf(isLinux)('openqareer-activate: выкат без простоя (
     const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
 
     expect(result.stderr).toBe('');
-    expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
+    expect(result.stdout).toContain('port=3210 reserve=3211');
+    const snippet = read(host.snippet);
+    expect(snippet.split('\n')[0]).toBe('to 127.0.0.1:3210 127.0.0.1:3211');
+    expect(snippet).toContain('health_uri /health');
+    expect(snippet).toContain('lb_policy first');
     expect(isActive(host, 'openqareer-static@3210.service')).toBe(true);
+    expect(isActive(host, 'openqareer-static@3211.service')).toBe(true);
+    expect(read(join(host.state, 'units.log'))).toContain('restart openqareer-reserve@3210.service');
+  });
+
+  it('маркер no-warm-reserve в релизе — резерва нет, прежний гасится после переключения', () => {
+    const host = makeHost();
+    serving(host, SHA_B, '3211');
+    const checksum = stageArchive(host, SHA_C, { noReserve: true });
+
+    const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('reserve=none');
+    expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
     expect(isActive(host, 'openqareer-static@3211.service')).toBe(false);
     const units = read(join(host.state, 'units.log'));
     expect(units.indexOf('reload caddy')).toBeLessThan(units.indexOf('stop openqareer-static@3211.service'));
+    expect(units).not.toContain('openqareer-reserve@');
   });
 
   it('новый релиз не ответил /health — Caddy и current не тронуты', () => {

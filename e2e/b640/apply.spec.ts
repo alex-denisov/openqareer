@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
+import { installDesktopApiTestBridge } from '../../scripts/desktop-api-test-bridge.mjs';
 import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -545,6 +546,56 @@ test.describe('B657: единый экран отклика', () => {
     await open(page, '/app/responses/a-draft/letter?step=form');
     await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
     await expect(step(page, 'Анкета')).toHaveCount(0);
+  });
+
+  test('B704 в приложении: окна hh.ru нет — выбор резюме ведёт ко входу, не к ошибке', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'приложение только на компьютере');
+    await page.addInitScript(installDesktopApiTestBridge);
+    await page.addInitScript(() => {
+      localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
+      const calls: string[] = [];
+      (window as unknown as { __hhCalls: string[] }).__hhCalls = calls;
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {
+          invoke: (command: string, args?: { url?: string }) => {
+            calls.push(args?.url ? `${command} ${args.url}` : command);
+            // Ровно так отвечает Rust (`inspect_session_page_for`), когда окна сессии hh.ru нет.
+            if (command === 'inspect_connector_session_page')
+              return Promise.reject('session_window_missing');
+            if (command === 'open_connector_session') {
+              return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
+            }
+            return Promise.resolve(null);
+          },
+        };
+    });
+    await page.route('**/api/v1/candidate/hh/resumes', (route) =>
+      route.fulfill({ json: { data: null } }),
+    );
+    await open(page, '/app/responses/a-draft/letter');
+    await page.getByRole('button', { name: 'Одобрить' }).click();
+    await page.getByRole('button', { name: 'К отправке' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Всё одобрено — можно отправлять' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Отправить отклик' })).toBeDisabled();
+
+    await page.getByRole('button', { name: 'Выбрать резюме' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Каким резюме откликаться' });
+    await expect(sheet.getByText('Нужен вход в hh.ru')).toBeVisible();
+    await expect(sheet.getByText('не прочитался')).toHaveCount(0);
+    const retry = sheet.getByRole('button', { name: 'Прочитать снова' });
+    const box = await retry.boundingBox();
+    expect(box && box.width > box.height).toBe(true);
+    expect(box!.height).toBeLessThan(80);
+    await expectGates(page);
+
+    await sheet.getByRole('button', { name: 'Войти в hh.ru' }).click();
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __hhCalls: string[] }).__hhCalls))
+      .toContain('open_connector_session');
   });
 
   test('отправка без одобренного письма возвращает к письму', async ({ page }) => {
