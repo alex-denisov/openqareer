@@ -66,6 +66,39 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await expect(page.getByRole('switch', { name: 'Цифровой след' })).not.toBeChecked();
   });
 
+  test('n05: отзыв «Цифрового следа» спрашивает подтверждение', async ({ page }) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    let revokes = 0;
+    await page.route('**/api/v1/me/consents**', (route) => {
+      if (route.request().method() === 'DELETE') {
+        revokes += 1;
+        return route.fulfill({ json: { data: { granted: false, revoked: true, consent: null } } });
+      }
+      const consent = {
+        id: 'c1',
+        capability: 'digital_footprint',
+        versionId: 'digital_footprint-v1.2',
+        grantedAt: '2026-11-01T10:00:00.000Z',
+        revokedAt: revokes > 0 ? '2026-11-18T10:00:00.000Z' : null,
+      };
+      return route.fulfill({ json: { data: { consents: [consent] } } });
+    });
+    await page.goto('/app/account/data', { waitUntil: 'domcontentloaded' });
+    const toggle = page.getByRole('switch', { name: 'Цифровой след' });
+    await expect(toggle).toBeChecked({ timeout: 15_000 });
+    await toggle.click();
+    const dialog = page.getByRole('dialog', { name: 'Отозвать согласие на цифровой след?' });
+    await expect(dialog).toContainText('Сохранённые находки удалятся.');
+    await expectGates(page);
+    await dialog.getByRole('button', { name: 'Отмена' }).click();
+    await expect(toggle).toBeChecked();
+    expect(revokes).toBe(0);
+    await toggle.click();
+    await dialog.getByRole('button', { name: 'Отозвать' }).click();
+    await expect(toggle).not.toBeChecked();
+    expect(revokes).toBe(1);
+  });
+
   test('n06: тема переключается сразу, часовой пояс выбирается', async ({ page }) => {
     await openAccount(page, '/app/account/app');
     const screen = page.locator('[data-b640-node="n06"]');

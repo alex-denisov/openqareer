@@ -179,9 +179,6 @@ describe('n05 «Согласия и данные»', () => {
     api.revokeConsent.mockResolvedValue(null);
     api.grantConsent.mockResolvedValue({});
     const root = await open(<DataScreen node={node('n05')} />);
-    click(root.querySelector('input[aria-label="Цифровой след"]'));
-    await settle();
-    expect(api.revokeConsent).toHaveBeenCalledWith('digital_footprint');
     click(root.querySelector('input[aria-label="Подключённый профиль"]'));
     expect(api.grantConsent).not.toHaveBeenCalled();
     const dialog = view!.container.ownerDocument.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
@@ -190,6 +187,43 @@ describe('n05 «Согласия и данные»', () => {
     click(button(dialog, 'Дать согласие'));
     await settle();
     expect(api.grantConsent).toHaveBeenCalledWith('profile_activity', 'profile_activity-v1.0');
+  });
+
+  it('отзыв «Цифрового следа» стирает находки: без подтверждения запрос не уходит', async () => {
+    api.revokeConsent.mockResolvedValue(null);
+    const root = await open(<DataScreen node={node('n05')} />);
+    const input = () => root.querySelector('input[aria-label="Цифровой след"]') as HTMLInputElement;
+    click(input());
+    await settle();
+    expect(api.revokeConsent).not.toHaveBeenCalled();
+    expect(input().checked).toBe(true);
+    const dialog = () => document.querySelector('.pf-dialog[role=dialog]') as HTMLElement | null;
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Отозвать согласие на цифровой след?');
+    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые находки удалятся.');
+    click(button(dialog()!, 'Отмена'));
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(api.revokeConsent).not.toHaveBeenCalled();
+    click(input());
+    api.getConsents.mockResolvedValue([]);
+    click(button(dialog()!, 'Отозвать'));
+    await settle();
+    expect(api.revokeConsent).toHaveBeenCalledTimes(1);
+    expect(api.revokeConsent).toHaveBeenCalledWith('digital_footprint');
+    expect(dialog()).toBeNull();
+    expect(input().checked).toBe(false);
+  });
+
+  it('согласие, отзыв которого ничего не стирает, отзывается переключателем сразу', async () => {
+    api.getConsents.mockResolvedValue([
+      { id: 'c2', capability: 'actions_on_behalf', versionId: 'v', grantedAt: '2026-11-01', revokedAt: null },
+    ]);
+    api.revokeConsent.mockResolvedValue(null);
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(root.querySelector('input[aria-label="Действия от вашего имени"]'));
+    await settle();
+    expect(api.revokeConsent).toHaveBeenCalledWith('actions_on_behalf');
+    expect(document.querySelector('.pf-dialog')).toBeNull();
   });
 
   it('«Остановить всё» спрашивает подтверждение; после — «Возобновить»', async () => {

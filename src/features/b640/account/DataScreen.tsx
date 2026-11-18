@@ -112,6 +112,59 @@ function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: Con
   );
 }
 
+interface ConsentSwitchProps {
+  readonly label: string;
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly onChange: (checked: boolean) => void;
+}
+
+function ConsentSwitch({ label, checked, disabled, onChange }: ConsentSwitchProps) {
+  return (
+    <div className="set-r">
+      <span className="sw-cell">
+        <input
+          className="sw"
+          type="checkbox"
+          role="switch"
+          aria-label={label}
+          checked={checked}
+          disabled={disabled}
+          onChange={(event) => onChange(event.currentTarget.checked)}
+        />
+      </span>
+    </div>
+  );
+}
+
+interface RevokeDialogProps {
+  readonly row: ConsentRow;
+  readonly open: boolean;
+  readonly busy: boolean;
+  readonly failed: boolean;
+  readonly onRevoke: () => void;
+  readonly onClose: () => void;
+}
+
+/** Подтверждение отзыва согласия, с которым стираются данные. */
+function RevokeDialog({ row, open, busy, failed, onRevoke, onClose }: RevokeDialogProps) {
+  if (!row.revokeWarning) return null;
+  return (
+    <Dialog open={open} title={row.revokeWarning.title} onClose={onClose}>
+      <p className="c5-lead">{row.revokeWarning.text}</p>
+      {failed ? <ErrorLine text="Согласие не отозвано" /> : null}
+      <div className="actions">
+        <button className="btn is-danger" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onRevoke}>
+          Отозвать
+        </button>
+        <button className="btn" type="button" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
 interface ConsentProps {
   readonly row: ConsentRow;
   readonly granted: boolean;
@@ -123,32 +176,34 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
   const [asking, setAsking] = useState(false);
   const { busy, failed, run } = useAction(() => {
     setAsking(false);
+    setRevoking(false);
     onChanged();
   });
   const grant = () =>
     run(() => grantAccountCapabilityConsent(row.capability, CAPABILITY_CONSENT_CURRENT_VERSION[row.capability]));
-  const toggle = (checked: boolean) =>
-    checked ? setAsking(true) : run(() => revokeAccountCapabilityConsent(row.capability));
+  const revoke = () => run(() => revokeAccountCapabilityConsent(row.capability));
+  const [revoking, setRevoking] = useState(false);
+  const toggle = (checked: boolean) => {
+    if (checked) return setAsking(true);
+    // Отзыв, который стирает данные, идёт только через подтверждение.
+    return row.revokeWarning ? setRevoking(true) : revoke();
+  };
   return (
     <li className="set-row">
       <div className="set-l">
         <span className="set-t">{row.title}</span>
         <span className="set-v">{row.line}</span>
-        {failed && !asking ? <ErrorLine text="Не сохранилось" /> : null}
+        {failed && !asking && !revoking ? <ErrorLine text="Не сохранилось" /> : null}
       </div>
-      <div className="set-r">
-        <span className="sw-cell">
-          <input
-            className="sw"
-            type="checkbox"
-            role="switch"
-            aria-label={row.title}
-            checked={granted}
-            disabled={busy}
-            onChange={(event) => toggle(event.currentTarget.checked)}
-          />
-        </span>
-      </div>
+      <ConsentSwitch label={row.title} checked={granted} disabled={busy} onChange={toggle} />
+      <RevokeDialog
+        row={row}
+        open={revoking}
+        busy={busy}
+        failed={failed}
+        onRevoke={revoke}
+        onClose={() => setRevoking(false)}
+      />
       <ConsentDialog
         capability={row.capability}
         open={asking}

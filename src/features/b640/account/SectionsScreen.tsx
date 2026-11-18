@@ -1,6 +1,8 @@
 import { getAccountCapabilityConsents } from '../../account/accountCapabilityConsentApi';
 import { getNotificationPreferences } from '../../account/notificationPreferencesApi';
 import { getAccount, getConnections } from '../../coach/coachApi';
+import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
+import { getResumeStudio } from '../../resume/resumeApi';
 import { getCandidateBillingSummary } from '../../shell/candidateBillingApi';
 import { Icon } from '../kit/Icon';
 import { buildNodePath, type B640Node } from '../routes';
@@ -23,18 +25,21 @@ interface Summaries {
   readonly notifications: string | null;
   readonly consents: string | null;
   readonly plan: string | null;
+  /** Фото из профиля; `null` — фото нет или профиль не прочитался. */
+  readonly photoMediaId: string | null;
 }
 
 const valueOf = <T,>(result: PromiseSettledResult<T>): T | null =>
   result.status === 'fulfilled' ? result.value : null;
 
 async function loadSummaries(): Promise<Summaries> {
-  const [account, connections, preferences, consents, billing] = await Promise.allSettled([
+  const [account, connections, preferences, consents, billing, profile] = await Promise.allSettled([
     getAccount(),
     getConnections(),
     getNotificationPreferences(),
     getAccountCapabilityConsents(),
     getCandidateBillingSummary(),
+    getResumeStudio(),
   ]);
   const sessions = valueOf(account)?.sessions;
   const links = valueOf(connections);
@@ -47,6 +52,7 @@ async function loadSummaries(): Promise<Summaries> {
     notifications: events ? notificationsSummary(events) : null,
     consents: granted ? consentsSummary(granted.length) : null,
     plan: plan ? PLAN_NAME[plan] : null,
+    photoMediaId: valueOf(profile)?.draft?.candidate.photoMediaId ?? null,
   };
 }
 
@@ -66,11 +72,23 @@ function SectionRow({ code, title, value }: { code: string; title: string; value
   );
 }
 
+/** Фото кандидата из профиля; фото нет — первая буква имени. */
+function Photo({ mediaId, name }: { readonly mediaId: string | null; readonly name: string }) {
+  const src = useCandidateMediaSrc(mediaId ?? undefined);
+  if (src) return <img className="phead-photo" src={src} alt="" width={72} height={72} />;
+  return (
+    <span className="phead-ini" aria-hidden="true">
+      {name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 /** n00 «Аккаунт»: разделы списком (на 390 — вход в аккаунт вместо вкладок). */
 export function SectionsScreen({ node }: { readonly node: B640Node }) {
   const { session } = useShell();
   const load = useLoad(loadSummaries);
   const summaries = load.state === 'ready' ? load.data : null;
+  const name = session.displayName ?? session.username;
   return (
     <div
       className="page set-page"
@@ -79,10 +97,15 @@ export function SectionsScreen({ node }: { readonly node: B640Node }) {
       aria-busy={load.state === 'loading' || undefined}
     >
       <section className="lead" aria-labelledby="b640-account-name">
-        <h2 className="lead-title" id="b640-account-name">
-          {session.displayName ?? session.username}
-        </h2>
-        {session.email ? <p className="mod-text">{session.email}</p> : null}
+        <div className="acc-photo">
+          <Photo mediaId={summaries?.photoMediaId ?? null} name={name} />
+          <div>
+            <h2 className="lead-title" id="b640-account-name">
+              {name}
+            </h2>
+            {session.email ? <p className="mod-text">{session.email}</p> : null}
+          </div>
+        </div>
       </section>
       <section className="set-group" aria-label="Разделы аккаунта">
         <ul className="set-list">
