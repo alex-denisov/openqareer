@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SealedText } from '../data/sealedText';
 import type { BulkLlmClient, BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import type { VacancyFitInput } from './vacancyFit';
@@ -55,8 +56,10 @@ describe('B676: своя вакансия в расчёте совпадения
     runtime.fit.enqueue(input);
     runtime.fit.enqueue(older);
     runtime.fit.enqueue(other);
-    await runtime.runNext(null);
-    expect(runtime.fit.forgetVacancy(input.candidateId, input.vacancyId)).toBeGreaterThanOrEqual(2);
+    // Every job completes: a completed job keeps no input, so it must be found by its link, not by its text.
+    for (let round = 0; round < 3; round += 1) await runtime.runNext(null);
+    expect(runtime.fit.getJobStatus(input)?.state).toBe('completed');
+    expect(runtime.fit.forgetVacancy(input.candidateId, input.vacancyId)).toBeGreaterThanOrEqual(3);
     expect(runtime.fit.getJobStatus(input)).toBeUndefined();
     expect(runtime.fit.getJobStatus(older)).toBeUndefined();
     expect(runtime.fit.getCache(input)).toBeUndefined();
@@ -77,5 +80,26 @@ describe('B676: своя вакансия в расчёте совпадения
     runtime.fit.forgetVacancy(input.candidateId, input.vacancyId);
     expect(runtime.fit.getJobStatus(input)).toBeUndefined();
     expect(runtime.fit.getJobStatus(older)).toBeUndefined();
+  });
+
+  it('удаление на кандидате с 5 000 строк подборки не вскрывает их и укладывается в 600 мс', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'oq-own-forget-volume-'));
+    const { runtime, input } = ownInput(directory);
+    cleanup.push(() => { vi.restoreAllMocks(); runtime.close(); rmSync(directory, { recursive: true, force: true }); });
+    const bulky = `${DESCRIPTION}\n${'x'.repeat(20_000)}`;
+    runtime.database.exec('BEGIN');
+    for (let index = 0; index < 5_000; index += 1) {
+      const pool = { ...input, vacancyId: `pool-${index}`, description: bulky };
+      runtime.fit.enqueue(pool);
+    }
+    runtime.database.exec('COMMIT');
+    runtime.fit.enqueue(input);
+    const opened = vi.spyOn(SealedText.prototype, 'open');
+    const started = performance.now();
+    expect(runtime.fit.forgetVacancy(input.candidateId, input.vacancyId)).toBe(1);
+    expect(performance.now() - started).toBeLessThan(600);
+    expect(opened).not.toHaveBeenCalled();
+    expect(runtime.fit.getJobStatus(input)).toBeUndefined();
+    expect(runtime.fit.getJobStatus({ ...input, vacancyId: 'pool-7', description: bulky })).toBeDefined();
   });
 });
