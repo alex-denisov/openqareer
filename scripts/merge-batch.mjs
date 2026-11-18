@@ -300,17 +300,18 @@ async function runBatch() {
   );
   for (const pr of batch.members) setLabel(pr, IN_BATCH_LABEL, true);
 
-  let mergedAny = false;
+  let outcome = { mergedAny: false, verifiedTip: '' };
   try {
-    mergedAny = await bisectAndMerge(batch.members, base);
+    outcome = await bisectAndMerge(batch.members, base);
   } finally {
-    finish(batch.members, mergedAny);
+    finish(batch.members, outcome);
   }
 }
 
 /** Full runs round by round until every member is merged, blamed or requeued. */
 async function bisectAndMerge(members, base) {
   let mergedAny = false;
+  let verifiedTip = '';
   let groups = [members];
   for (let round = 0; groups.length > 0; round += 1) {
     const results = await runGroups(groups, base, round);
@@ -325,7 +326,10 @@ async function bisectAndMerge(members, base) {
     );
     if (decision.merge.length > 0) {
       const run = results.find((r) => r.prs === decision.merge);
-      mergedAny = (await mergeGroup(decision.merge, run)).length > 0 || mergedAny;
+      const merged = await mergeGroup(decision.merge, run);
+      mergedAny = merged.length > 0 || mergedAny;
+      // Only a fully merged group leaves main on the tree its run verified.
+      verifiedTip = merged.length === decision.merge.length ? decision.merge.at(-1).tree : '';
     }
     for (const pr of decision.culprits) {
       const run = results.find((r) => r.prs.length === 1 && r.prs[0].number === pr.number);
@@ -337,15 +341,20 @@ async function bisectAndMerge(members, base) {
     }
     groups = DRY ? [] : decision.retest;
   }
-  return mergedAny;
+  return { mergedAny, verifiedTip };
 }
 
 /** Labels off, one deploy for the whole batch, batch branches deleted. */
-function finish(members, mergedAny) {
+function finish(members, { mergedAny, verifiedTip }) {
   for (const pr of members) setLabel(pr, IN_BATCH_LABEL, false);
   if (mergedAny) {
-    act('dispatch deploy of main (deploy_verified=true)', () =>
-      gh('workflow', 'run', WORKFLOW, '--ref', 'main', '-f', 'deploy_verified=true'),
+    const mainTree = DRY ? verifiedTip : git('rev-parse', `${mainSha()}^{tree}`);
+    // Deploy-only only when main is exactly the verified tip; a partial merge
+    // left an untested intermediate tree, which gets every gate before deploy.
+    const verified = verifiedTip !== '' && mainTree === verifiedTip;
+    const inputs = verified ? ['-f', 'deploy_verified=true'] : [];
+    act(`dispatch ${verified ? 'deploy-only' : 'full-gate'} run of main`, () =>
+      gh('workflow', 'run', WORKFLOW, '--ref', 'main', ...inputs),
     );
   }
   if (DRY) return;
