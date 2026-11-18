@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  # Ready for a merge queue (needs an organization-owned repo); fires nowhere today.
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -14,15 +17,86 @@ env:
   VITE_OPENQAREER_RELEASE: ${{ github.sha }}
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('verify-{0}', github.ref) || 'openqareer-production' }}
+  # Light and full runs of one PR live in separate groups so a push does not
+  # cancel the pre-merge full run; a label other than merge-ready is a no-op.
+  group: >-
+    ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'openqareer-production'
+    || (github.event.action == 'labeled' && github.event.label.name != 'merge-ready') && format('noop-{0}', github.run_id)
+    || format('verify-{0}-{1}', github.ref, contains(github.event.pull_request.labels.*.name, 'merge-ready') && 'full' || 'light') }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A push to main whose tree is byte-for-byte a PR head that already passed
+  # Verify skips the gates and only rebuilds the stamped archive. The ruleset
+  # on main requires an up-to-date branch, so a squash merge keeps that tree.
+  # Anything else (direct push, stale merge, manual run) runs every gate.
+  # Three modes keep the 20-job account limit free for parallel PRs:
+  # light  - a PR push: one quick-gates job + one job with the affected tests.
+  # full   - a PR labelled merge-ready (or merge_group / manual run / a push to
+  #          main that no PR verified): every gate, sharded. Its success posts
+  #          the commit status "Full verify" that the ruleset on main requires.
+  # deploy - a push to main whose tree is byte-for-byte a PR head with
+  #          "Full verify" success: no gates, only the stamped archive. The
+  #          ruleset requires an up-to-date branch, so a squash merge keeps it.
+  plan:
+    name: Plan gates
+    if: github.event.action != 'labeled' || github.event.label.name == 'merge-ready'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+    steps:
+      - name: Decide light, full or deploy-only
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          MERGE_READY: ${{ contains(github.event.pull_request.labels.*.name, 'merge-ready') }}
+        run: |
+          set -euo pipefail
+          mode=full
+          if [ "$EVENT" = "pull_request" ] && [ "$MERGE_READY" != "true" ]; then
+            mode=light
+          fi
+          if [ "$EVENT" = "push" ]; then
+            pr=""
+            for attempt in 1 2 3 4 5 6; do
+              pr="$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" \
+                --jq '[.[] | select(.merged_at != null)][0] | "\(.number) \(.head.sha)"' || true)"
+              [ -n "$pr" ] && [ "$pr" != "null null" ] && break
+              sleep 5
+            done
+            if [ -n "$pr" ] && [ "$pr" != "null null" ]; then
+              head_sha="${pr#* }"
+              main_tree="$(gh api "repos/$REPO/commits/$GITHUB_SHA" --jq .commit.tree.sha)"
+              head_tree="$(gh api "repos/$REPO/commits/$head_sha" --jq .commit.tree.sha)"
+              verified="$(gh api "repos/$REPO/commits/$head_sha/status" \
+                --jq '[.statuses[] | select(.context == "Full verify")][0].state // "none"')"
+              printf 'pr=%s head=%s head_tree=%s main_tree=%s full_verify=%s\n' \
+                "${pr%% *}" "$head_sha" "$head_tree" "$main_tree" "$verified"
+              if [ "$head_tree" = "$main_tree" ] && [ "$verified" = "success" ]; then
+                mode=deploy
+              fi
+            else
+              printf 'no merged PR found for %s\n' "$GITHUB_SHA"
+            fi
+          fi
+          printf 'mode=%s\n' "$mode" | tee -a "$GITHUB_OUTPUT"
+
   # Independent gates run side by side; the slowest one sets the wall time.
   static:
-    name: Lint, types, audit
+    name: Lint, types, audit, built shell
+    needs: plan
+    if: needs.plan.outputs.mode != 'deploy'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Chromium and its system libraries ship in the image: no apt step.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+    timeout-minutes: 20
     steps:
       - name: Check out exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -50,8 +124,70 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Build production artifact
+        run: npm run build
+
+      - name: Verify built shell, intake fits and wizard source step
+        run: |
+          node scripts/verify-built-shell.mjs
+          node scripts/verify-intake-fits.mjs
+          node scripts/verify-wizard-source-step.mjs
+
+      - name: Verify the .app web folder opens the cabinet
+        run: |
+          npx tsx scripts/build-desktop-dist.ts
+          node scripts/verify-desktop-shell.mjs
+
+  # Light mode: only the unit and browser specs that the diff against main can
+  # reach. The full sharded suite runs once, when the PR is labelled merge-ready.
+  affected:
+    name: Affected tests
+    needs: plan
+    if: needs.plan.outputs.mode == 'light'
+    runs-on: ubuntu-latest
+    # Chromium and its system libraries ship in the image: no apt step.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact commit with history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Mark checkout safe for git in the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Unit tests reachable from the diff
+        run: npx vitest run --changed "origin/${{ github.base_ref }}" --passWithNoTests
+
+      - name: Build production artifact
+        run: npm run build
+
+      - name: Browser specs reachable from the diff
+        env:
+          E2E_WEBKIT: skip
+        run: npx playwright test --only-changed="origin/${{ github.base_ref }}" --pass-with-no-tests
+
   unit:
     name: Unit tests (shard ${{ matrix.shard }}/4)
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -92,7 +228,8 @@ jobs:
 
   coverage:
     name: Coverage thresholds
-    needs: unit
+    needs: [plan, unit]
+    if: needs.plan.outputs.mode == 'full'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -126,7 +263,9 @@ jobs:
         run: npx vitest run --merge-reports --coverage
 
   e2e:
-    name: Browser tests (shard ${{ matrix.shard }}/6)
+    name: Browser tests (shard ${{ matrix.shard }}/8)
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -134,7 +273,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Check out exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,10 +297,12 @@ jobs:
       - name: Verify built shell in real Chromium
         env:
           E2E_WEBKIT: skip
-        run: npx playwright test --shard=${{ matrix.shard }}/6
+        run: npx playwright test --shard=${{ matrix.shard }}/8
 
   e2e-webkit:
     name: Browser tests (WebKit)
+    needs: plan
+    if: needs.plan.outputs.mode == 'full'
     runs-on: ubuntu-latest
     # The image ships WebKit's system libraries: no apt, no mirror to stall. Not
     # macOS: hosted macOS runners ran out on busy evenings, the job waited 15 min
@@ -193,45 +334,11 @@ jobs:
           E2E_WEBKIT: only
         run: npx playwright test
 
-  built-shell:
-    name: Built shell scripts
-    runs-on: ubuntu-latest
-    # Chromium and its system libraries ship in the image: no apt step.
-    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
-    timeout-minutes: 15
-    steps:
-      - name: Check out exact commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Use Node.js 24
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install locked dependencies
-        run: npm ci
-
-      # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
-      - name: Install Playwright Chromium
-        run: npx playwright install chromium
-
-      - name: Build production artifact
-        run: npm run build
-
-      - name: Verify built shell, intake fits and wizard source step
-        run: |
-          node scripts/verify-built-shell.mjs
-          node scripts/verify-intake-fits.mjs
-          node scripts/verify-wizard-source-step.mjs
-
-      - name: Verify the .app web folder opens the cabinet
-        run: |
-          npx tsx scripts/build-desktop-dist.ts
-          node scripts/verify-desktop-shell.mjs
-
   release:
     name: Build release archive
+    needs: plan
+    # Only a run that can deploy needs the stamped archive.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -269,19 +376,49 @@ jobs:
 
   verify:
     name: Verify
-    if: always()
-    needs: [static, unit, coverage, e2e, e2e-webkit, built-shell, release]
+    if: always() && needs.plan.result != 'skipped'
+    needs: [plan, static, affected, unit, coverage, e2e, e2e-webkit, release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
     steps:
-      - name: Require every gate to pass
+      # Every job the plan scheduled must succeed; the ones it skipped are expected.
+      - name: Require every planned gate to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          DEPLOYS: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
         run: |
-          printf '%s\n' '${{ toJSON(needs) }}'
-          test '${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}' = 'false'
+          set -euo pipefail
+          printf 'mode=%s\n%s\n' "$MODE" "$NEEDS"
+          case "$MODE" in
+            light) want='["plan","static","affected"]' ;;
+            full) want='["plan","static","unit","coverage","e2e","e2e-webkit"]' ;;
+            deploy) want='["plan"]' ;;
+            *) exit 1 ;;
+          esac
+          if [ "$DEPLOYS" = "true" ]; then want="$(printf '%s' "$want" | jq -c '. + ["release"]')"; fi
+          printf '%s' "$NEEDS" | jq -e --argjson want "$want" \
+            '. as $n | $want | all(. as $k | $n[$k].result == "success")'
+
+      # The ruleset on main requires this status; only a full run can set it.
+      - name: Publish Full verify status
+        if: always() && github.event_name == 'pull_request' && needs.plan.outputs.mode == 'full'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -f state="$STATE" -f context="Full verify" -f target_url="$RUN_URL" \
+            -f description="Full sharded gates for this exact head"
 
   deploy:
     name: Deploy production
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
