@@ -64,3 +64,19 @@ describe('extractVacancyPage', () => {
     expect(out.botWall).toBe(true);
   });
 });
+
+describe('extractVacancyPage: страница-ловушка не держит поток', () => {
+  const MB = 1_500_000;
+  it.each([
+    ['незакрытые служебные теги', '<nav>'.repeat(MB / 5)],
+    ['незакрытые скобки', '<a '.repeat(MB / 3)],
+    ['незакрытые скрипты JSON-LD', '<script type="application/ld+json">{'.repeat(MB / 40)],
+    ['много itemprop без закрытия', '<div itemscope itemtype="https://schema.org/JobPosting">' + '<span itemprop="x">'.repeat(MB / 20)],
+    ['незакрытые main', '<main>'.repeat(MB / 6)],
+    ['itemprop без открывающей скобки', 'itemtype="https://schema.org/JobPosting" ' + 'itemprop=x '.repeat(MB / 11) + '>'],
+  ])('%s — меньше секунды', (_name, html) => {
+    const started = performance.now();
+    extractVacancyPage(html);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});
