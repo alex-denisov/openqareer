@@ -616,6 +616,21 @@ export class ConsultantHistoryStore {
     return { ...this.summaryView(candidateId, active), messages: this.readMessages(candidateId, active.id) };
   }
 
+  /** B688: завершённые ходы разговора кандидата — ответ консультанта и ключ хода. */
+  replyTurns(candidateId: string, conversationId: string): Array<{ readonly messageId: string; readonly key: string }> {
+    const rows = this.database
+      .prepare(
+        `SELECT t.assistant_message_id AS message_id, t.idempotency_key AS key
+         FROM consultant_conversation_turns c
+         JOIN turns t ON t.candidate_id = c.candidate_id AND t.idempotency_key = c.idempotency_key
+         WHERE c.candidate_id = ? AND c.conversation_id = ? AND t.status = 'completed'
+           AND t.assistant_message_id IS NOT NULL
+         ORDER BY t.created_at, t.idempotency_key`,
+      )
+      .all(candidateId, conversationId) as Array<{ message_id: string; key: string }>;
+    return rows.map((row) => ({ messageId: row.message_id, key: row.key }));
+  }
+
   private isIdle(candidateId: string, row: ConversationRow, now: number): boolean {
     const resumed = this.resumedAt(candidateId, row.id);
     const last = Math.max(Date.parse(row.last_message_at), resumed ? Date.parse(resumed) : 0);

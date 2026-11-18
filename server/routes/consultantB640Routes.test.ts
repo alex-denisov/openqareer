@@ -101,6 +101,38 @@ describe('consultant B640 routes with the flag', () => {
     expect((await call(app, 'GET', `${BASE}/current?stage=profile`, flagged)).json().data.id).toBe(conversationId);
   });
 
+  it('puts actions and links to the candidate’s own records under the reply', async () => {
+    const { app, store, candidateOf, ask } = await setup();
+    ask(flagged);
+    ask(intruder);
+    const own = store.getSnapshot(candidateOf(flagged)).memory[0]!;
+    const foreign = store.getSnapshot(candidateOf(intruder)).memory[0]!;
+    const proposal = {
+      kind: 'vacancies.search',
+      objective: 'Найти вакансии в платёжных системах',
+      evidenceRefs: [`memory:${own.id}`, `memory:${foreign.id}`],
+      acceptanceCriteria: ['Опыт назван'],
+      expectedSignal: 'Процент выше',
+      measureAfter: '2026-12-01',
+      risk: 'read_only',
+    };
+    const second = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2';
+    const started = store.startTurn(candidateOf(flagged), second, {
+      ...turnRequest,
+      messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9',
+      stage: 'today',
+    });
+    if (started.state !== 'ready') throw new Error('expected a ready turn');
+    store.completeTurn(candidateOf(flagged), second, {
+      ...output,
+      result: { ...output.result, actionProposals: [proposal] },
+    } as never);
+
+    const current = (await call(app, 'GET', `${BASE}/current?stage=today`, flagged)).json().data;
+    const replyIds = current.messages.filter((m: { role: string }) => m.role === 'assistant').map((m: { id: string }) => m.id);
+    expect(current.replies).toEqual([{ messageId: replyIds[1], actions: ['vacancies'], memoryIds: [own.id] }]);
+  });
+
   it('rejects a bad stage, a bad conversation id and an empty close', async () => {
     const { app } = await setup();
     expect((await call(app, 'GET', `${BASE}/current?stage=nowhere`, flagged)).statusCode).toBe(400);

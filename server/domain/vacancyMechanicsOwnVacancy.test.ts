@@ -62,4 +62,20 @@ describe('B676: своя вакансия в расчёте совпадения
     expect(runtime.fit.getCache(input)).toBeUndefined();
     expect(runtime.fit.getJobStatus(other)).toBeDefined();
   });
+
+  it('удаление убирает и завершённые задачи, у которых запечатанный вход уже стёрт', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'oq-own-forget-done-'));
+    const { runtime, input } = ownInput(directory);
+    cleanup.push(() => { runtime.close(); rmSync(directory, { recursive: true, force: true }); });
+    const older = { ...input, profileContextHash: 'older-profile' };
+    runtime.fit.enqueue(input);
+    runtime.fit.enqueue(older);
+    await runtime.runNext(null);
+    await runtime.runNext(null);
+    expect(runtime.fit.getJobStatus(input)?.state).toBe('completed');
+    expect(runtime.fit.getJobStatus(older)?.state).toBe('completed');
+    runtime.fit.forgetVacancy(input.candidateId, input.vacancyId);
+    expect(runtime.fit.getJobStatus(input)).toBeUndefined();
+    expect(runtime.fit.getJobStatus(older)).toBeUndefined();
+  });
 });
