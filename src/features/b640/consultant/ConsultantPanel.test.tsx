@@ -15,6 +15,10 @@ const api = vi.hoisted(() => ({
   fetchTariffQuotas: vi.fn(),
   fetchConversationPage: vi.fn(),
   fetchConversation: vi.fn(),
+  fetchCurrentConversation: vi.fn(),
+  closeCurrentConversation: vi.fn(),
+  resumeConversation: vi.fn(),
+  confirmFact: vi.fn(),
 }));
 
 vi.mock('../../coach/candidateSnapshotApi', () => ({
@@ -32,6 +36,10 @@ vi.mock('../../tariffs/tariffQuotaApi', async (original) => ({
 vi.mock('./consultantApi', () => ({
   fetchConversationPage: api.fetchConversationPage,
   fetchConversation: api.fetchConversation,
+  fetchCurrentConversation: api.fetchCurrentConversation,
+  closeCurrentConversation: api.closeCurrentConversation,
+  resumeConversation: api.resumeConversation,
+  confirmFact: api.confirmFact,
 }));
 
 const session: AuthUser = {
@@ -132,6 +140,9 @@ beforeEach(() => {
   api.getCandidateWithMessages.mockResolvedValue({ messages: feed, memory: [fact] });
   api.fetchTariffQuotas.mockResolvedValue(quotas(12));
   api.changeMemory.mockResolvedValue(undefined);
+  api.confirmFact.mockResolvedValue(undefined);
+  api.closeCurrentConversation.mockResolvedValue(undefined);
+  api.fetchCurrentConversation.mockResolvedValue({ id: 'current', stage: 'vacancies', messages: feed });
 });
 afterEach(() => {
   view?.unmount();
@@ -139,9 +150,9 @@ afterEach(() => {
 });
 
 describe('панель консультанта: разговор (K1)', () => {
-  it('шапка и лента по макету, без «Нового разговора» и названий моделей', async () => {
+  it('шапка и лента открытого разговора по макету, без названий моделей', async () => {
     const root = await open({ kind: 'dialog' });
-    expect(api.getCandidateWithMessages).toHaveBeenCalledWith('vacancies');
+    expect(api.fetchCurrentConversation).toHaveBeenCalledWith('vacancies');
     const panel = root.querySelector('aside.panel-col') as HTMLElement;
     // Панель — окно с подписью: экранный чтец называет её по заголовку.
     expect(panel.getAttribute('role')).toBe('dialog');
@@ -156,7 +167,7 @@ describe('панель консультанта: разговор (K1)', () => {
     expect(back.getAttribute('href')).toBe('/app/consultant/history');
     click(back);
     expect(onView).toHaveBeenCalledWith({ kind: 'history' });
-    expect(panel.querySelector('.ph-new')).toBeNull();
+    expect(panel.querySelector('.ph-new')?.getAttribute('aria-label')).toBe('Новый разговор');
     expect(panel.querySelector('.msg.me')?.textContent).toBe('Команда была 18 человек.');
     expect(panel.querySelectorAll('.msg.bot p')).toHaveLength(2);
     expect(panel.querySelector('.msg.bot strong')?.textContent).toBe('записать в профиль');
@@ -185,7 +196,8 @@ describe('панель консультанта: разговор (K1)', () => {
     expect(labels).toEqual(['Верно', 'Исправить', 'Не нужно']);
     click(card.querySelector('.btn.is-write'));
     await settle();
-    expect(api.changeMemory).toHaveBeenCalledWith('fact-1', { action: 'confirm' });
+    expect(api.confirmFact).toHaveBeenCalledWith('fact-1');
+    expect(api.changeMemory).not.toHaveBeenCalled();
     expect(root.querySelector('section.ec.fc')).toBeNull();
     expect(root.querySelector('.chat .res-row')?.textContent).toBe('Записано в профиль');
     expect(root.querySelector('.ptop')).toBeNull();
@@ -270,6 +282,32 @@ describe('панель консультанта: разговор (K1)', () => {
     expect((form.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
     expect((form.querySelector('.cmp-send') as HTMLButtonElement).disabled).toBe(true);
     expect(root.querySelector('.chat > .res-row.is-err')).toBeNull();
+  });
+
+  it('«Новый разговор» закрывает текущий и показывает пустую ленту; сбой — на месте', async () => {
+    const root = await open({ kind: 'dialog' });
+    api.closeCurrentConversation.mockRejectedValueOnce(new Error('сеть'));
+    click(root.querySelector('.ph-new'));
+    await settle();
+    expect(root.querySelector('aside > .res-row.is-err .res-t')?.textContent).toBe(
+      'Новый разговор не начался',
+    );
+    api.fetchCurrentConversation.mockResolvedValue(null);
+    click(root.querySelector('aside > .res-row.is-err .res-act'));
+    await settle();
+    expect(api.closeCurrentConversation).toHaveBeenCalledTimes(2);
+    expect(onView).toHaveBeenCalledWith({ kind: 'dialog' });
+    expect(root.querySelector('aside > .res-row.is-err')).toBeNull();
+    expect(root.querySelector('.msg')).toBeNull();
+  });
+
+  it('продолженный разговор другой темы: вопросы идут в его тему', async () => {
+    api.fetchCurrentConversation.mockResolvedValue({ id: 'old', stage: 'profile', messages: feed });
+    api.sendCoachTurn.mockResolvedValueOnce({ message: 'Да.' });
+    const root = await open({ kind: 'dialog' });
+    ask(root, 'Продолжим?');
+    await settle();
+    expect(api.sendCoachTurn.mock.calls[0][0]).toMatchObject({ stage: 'profile' });
   });
 
   it('остаток 0 закрывает ввод сразу при открытии', async () => {
@@ -357,6 +395,27 @@ describe('панель консультанта: все разговоры (K5)'
     expect(root.querySelector('.msg.me')?.textContent).toBe('С чего начать поиск');
     expect(root.querySelector('a.ph-back')?.getAttribute('href')).toBe('/app/consultant/history');
     expect(root.querySelector('form.compose')).toBeNull();
+    expect(root.querySelector('.ph-new')).toBeNull();
+  });
+
+  it('«Продолжить разговор» открывает его снова; сбой — на месте кнопки', async () => {
+    api.fetchConversation.mockResolvedValueOnce({
+      ...row('c1', 'Тема'),
+      messages: [{ id: 'm1', role: 'user', content: 'Тема', createdAt: '2026-11-10T10:00:00.000Z' }],
+    });
+    const root = await open({ kind: 'conversation', id: 'c1' });
+    api.resumeConversation.mockRejectedValueOnce(new Error('сеть'));
+    const button = root.querySelector('.vl-foot .btn') as HTMLButtonElement;
+    expect(button.textContent).toBe('Продолжить разговор');
+    click(button);
+    await settle();
+    expect(root.querySelector('.vl-foot .res-row.is-err')?.textContent).toBe('Разговор не продолжился');
+    expect(onView).not.toHaveBeenCalled();
+    api.resumeConversation.mockResolvedValueOnce({});
+    click(root.querySelector('.vl-foot .btn'));
+    await settle();
+    expect(api.resumeConversation).toHaveBeenLastCalledWith('c1');
+    expect(onView).toHaveBeenCalledWith({ kind: 'dialog' });
   });
 });
 

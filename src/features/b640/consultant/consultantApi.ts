@@ -2,7 +2,14 @@ import type {
   ConsultantConversationDetail,
   ConsultantConversationSummary,
 } from '../../../../server/data/candidateStore';
-import { apiFetch, malformedResponseError, readDataObject, throwApiError } from '../../coach/apiClient';
+import type { CoachTurnStage } from '../../coach/coachApi';
+import {
+  apiFetch,
+  malformedResponseError,
+  readData,
+  readDataObject,
+  throwApiError,
+} from '../../coach/apiClient';
 
 export type { ConsultantConversationDetail, ConsultantConversationSummary };
 
@@ -33,7 +40,45 @@ export async function fetchConversationPage(cursor?: string): Promise<Conversati
 
 export async function fetchConversation(id: string): Promise<ConsultantConversationDetail> {
   const response = await apiFetch(`${HISTORY_URL}/${encodeURIComponent(id)}`);
-  const detail = await readDataObject<ConsultantConversationDetail>(response);
+  return checkedDetail(await readDataObject<ConsultantConversationDetail>(response));
+}
+
+const CONSULTANT_URL = '/api/v1/candidate/consultant';
+
+function checkedDetail(detail: ConsultantConversationDetail): ConsultantConversationDetail {
   if (!Array.isArray(detail.messages)) throw malformedResponseError();
   return detail;
+}
+
+/** Открытый разговор раздела (B688); `null` — разговор ещё не начат. */
+export async function fetchCurrentConversation(
+  stage: CoachTurnStage,
+): Promise<ConsultantConversationDetail | null> {
+  const response = await apiFetch(`${CONSULTANT_URL}/current?stage=${encodeURIComponent(stage)}`);
+  const detail = await readData<ConsultantConversationDetail | null>(response);
+  return detail === null ? null : checkedDetail(detail);
+}
+
+/** «Новый разговор»: открытый разговор уходит в «Все разговоры». */
+export async function closeCurrentConversation(): Promise<void> {
+  const response = await apiFetch(`${CONSULTANT_URL}/current/close`, { method: 'POST' });
+  if (!response.ok) await throwApiError(response);
+}
+
+/** Продолжить закрытый разговор: он снова открыт, текущий закрыт. */
+export async function resumeConversation(id: string): Promise<ConsultantConversationDetail> {
+  const response = await apiFetch(
+    `${CONSULTANT_URL}/conversations/${encodeURIComponent(id)}/resume`,
+    { method: 'POST' },
+  );
+  return checkedDetail(await readDataObject<ConsultantConversationDetail>(response));
+}
+
+/** «Верно»: запись подтверждена и стоит в истории профиля, где её можно вернуть. */
+export async function confirmFact(memoryId: string): Promise<void> {
+  const response = await apiFetch(
+    `${CONSULTANT_URL}/facts/${encodeURIComponent(memoryId)}/confirm`,
+    { method: 'POST' },
+  );
+  if (!response.ok) await throwApiError(response);
 }

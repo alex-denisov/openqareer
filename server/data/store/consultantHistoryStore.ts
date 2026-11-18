@@ -198,7 +198,7 @@ export class ConsultantHistoryStore {
     let conversation = active;
     // 28.10: беседа о компании («Компании и люди») не продолжает беседу о вакансии того же раздела.
     const topicChanged = active !== null && companyTopic(request.subject) !== this.activeCompany(candidateId, active.id);
-    if (active && (active.stage !== stage || topicChanged || Date.now() - Date.parse(active.last_message_at) > IDLE_CLOSE_MS)) {
+    if (active && (active.stage !== stage || topicChanged || this.isIdle(candidateId, active, Date.now()))) {
       const reason = active.stage === stage && !topicChanged ? 'idle_timeout' : 'stage_changed';
       const task = this.close(active, reason, now);
       if (task) closedConversations.push(task);
@@ -568,7 +568,85 @@ export class ConsultantHistoryStore {
     return row;
   }
 
-  private close(row: ConversationRow, reason: 'stage_changed' | 'idle_timeout', at: string): ConsultantSummaryTask | null {
+  /**
+   * B688 «Новый разговор»: кандидат сам закрывает текущий разговор. Причина пустая —
+   * прежний список причин в базе не меняется. Возвращает задачу сводки, если в нём были реплики.
+   */
+  closeActive(candidateId: string, at: string): { readonly closedId: string | null; readonly task: ConsultantSummaryTask | null } {
+    this.ensureLegacyHistory(candidateId);
+    const active = this.activeConversation(candidateId);
+    if (!active) return { closedId: null, task: null };
+    return { closedId: active.id, task: this.close(active, null, at) };
+  }
+
+  /**
+   * B688: продолжить закрытый разговор. Текущий закрывается, выбранный снова открыт;
+   * время продолжения держит его открытым ещё полчаса без новых реплик.
+   */
+  resume(candidateId: string, conversationId: string, at: string): {
+    readonly conversation: ConsultantConversationDetail;
+    readonly task: ConsultantSummaryTask | null;
+  } | null {
+    this.ensureLegacyHistory(candidateId);
+    const row = this.getConversation(candidateId, conversationId);
+    if (!row?.closed_at) return null;
+    const active = this.activeConversation(candidateId);
+    const task = active ? this.close(active, null, at) : null;
+    this.ensureResumeTable();
+    this.database.prepare('UPDATE consultant_conversations SET closed_at = NULL, close_reason = NULL WHERE candidate_id = ? AND id = ?')
+      .run(candidateId, conversationId);
+    this.database.prepare(
+      `INSERT INTO consultant_conversation_resumes (candidate_id, conversation_id, resumed_at) VALUES (?, ?, ?)
+       ON CONFLICT (candidate_id, conversation_id) DO UPDATE SET resumed_at = excluded.resumed_at`,
+    ).run(candidateId, conversationId, at);
+    const reopened = { ...row, closed_at: null };
+    return { conversation: { ...this.summaryView(candidateId, reopened), messages: this.readMessages(candidateId, conversationId) }, task };
+  }
+
+  /**
+   * B688: открытый разговор для ленты панели. Разговор другого раздела и разговор,
+   * молчащий дольше получаса, лентой не считаются: следующая реплика их закроет.
+   * Продолжённый из истории разговор показывается в любом разделе.
+   */
+  current(candidateId: string, stage: CoachTurnStage, now: number): ConsultantConversationDetail | null {
+    this.ensureLegacyHistory(candidateId);
+    const active = this.activeConversation(candidateId);
+    if (!active || this.isIdle(candidateId, active, now)) return null;
+    if (active.stage !== stage && this.resumedAt(candidateId, active.id) === null) return null;
+    return { ...this.summaryView(candidateId, active), messages: this.readMessages(candidateId, active.id) };
+  }
+
+  private isIdle(candidateId: string, row: ConversationRow, now: number): boolean {
+    const resumed = this.resumedAt(candidateId, row.id);
+    const last = Math.max(Date.parse(row.last_message_at), resumed ? Date.parse(resumed) : 0);
+    return now - last > IDLE_CLOSE_MS;
+  }
+
+  private resumedAt(candidateId: string, conversationId: string): string | null {
+    this.ensureResumeTable();
+    const row = this.database
+      .prepare('SELECT resumed_at FROM consultant_conversation_resumes WHERE candidate_id = ? AND conversation_id = ?')
+      .get(candidateId, conversationId) as { resumed_at: string } | undefined;
+    return row?.resumed_at ?? null;
+  }
+
+  private resumeTableReady = false;
+
+  /** Таблица добавлена рядом (B688): прежние таблицы истории не меняются. */
+  private ensureResumeTable(): void {
+    if (this.resumeTableReady) return;
+    this.database.exec(`CREATE TABLE IF NOT EXISTS consultant_conversation_resumes (
+      candidate_id TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      resumed_at TEXT NOT NULL,
+      PRIMARY KEY (candidate_id, conversation_id),
+      FOREIGN KEY (candidate_id, conversation_id)
+        REFERENCES consultant_conversations(candidate_id, id) ON DELETE CASCADE
+    ) STRICT`);
+    this.resumeTableReady = true;
+  }
+
+  private close(row: ConversationRow, reason: 'stage_changed' | 'idle_timeout' | null, at: string): ConsultantSummaryTask | null {
     this.database.prepare('UPDATE consultant_conversations SET closed_at = ?, close_reason = ? WHERE id = ? AND closed_at IS NULL')
       .run(at, reason, row.id);
     return row.message_count > 0

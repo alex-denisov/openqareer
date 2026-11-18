@@ -396,9 +396,7 @@ export class SqliteCandidateStore implements CandidateStore {
     const candidate = this.requireCandidate(candidateId);
     const started = this.transaction(() => this.consultantMethods.decorateTurn(
       this.conversations.startTurn(candidate, candidateId, idempotencyKey, request),
-      candidateId,
-      idempotencyKey,
-      request,
+      candidateId, idempotencyKey, request,
     ));
     if (started.state !== 'ready' || request.phase !== 'resume') return started;
     return {
@@ -452,6 +450,9 @@ export class SqliteCandidateStore implements CandidateStore {
   declare listConsultantConversations: CandidateStore['listConsultantConversations'];
   declare getConsultantConversation: CandidateStore['getConsultantConversation'];
   declare deleteConsultantConversation: CandidateStore['deleteConsultantConversation'];
+  declare closeConsultantConversation: CandidateStore['closeConsultantConversation'];
+  declare resumeConsultantConversation: CandidateStore['resumeConsultantConversation'];
+  declare currentConsultantConversation: CandidateStore['currentConsultantConversation'];
   declare exportConsultantConversations: CandidateStore['exportConsultantConversations'];
   declare listPendingConsultantSummaries: CandidateStore['listPendingConsultantSummaries'];
   declare getConsultantSummaryInput: CandidateStore['getConsultantSummaryInput'];

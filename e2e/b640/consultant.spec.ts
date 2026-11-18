@@ -186,6 +186,38 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
       },
     });
   });
+  const consultant = { open: true, closed: 0, resumed: [] as string[], confirmed: [] as string[] };
+  await page.route('**/api/v1/candidate/consultant/**', (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/current')) {
+      const data = consultant.open
+        ? { ...conversation('current', TOPICS[0]), closedAt: null, messages: feed }
+        : null;
+      return route.fulfill({ json: { data } });
+    }
+    if (path.endsWith('/current/close')) {
+      consultant.open = false;
+      consultant.closed += 1;
+      feed.length = 0;
+      return route.fulfill({ json: { data: { closedId: 'current' } } });
+    }
+    const resumed = /\/conversations\/([^/]+)\/resume$/u.exec(path);
+    if (resumed) {
+      consultant.resumed.push(resumed[1]);
+      consultant.open = true;
+      feed.splice(0, feed.length, ...FEED);
+      return route.fulfill({
+        json: { data: { ...conversation(resumed[1], TOPICS[0]), closedAt: null, messages: feed } },
+      });
+    }
+    const fact = /\/facts\/([^/]+)\/confirm$/u.exec(path);
+    if (fact) {
+      consultant.confirmed.push(fact[1]);
+      memory.length = 0;
+      return route.fulfill({ json: { data: { changeId: 'change-1' } } });
+    }
+    return route.fulfill({ status: 404, json: { error: { code: 'not_found', message: 'Нет.' } } });
+  });
   await page.route('**/api/v1/candidate/consultant-history**', (route) => {
     const url = new URL(route.request().url());
     const id = url.pathname.split('/consultant-history/')[1];
@@ -212,12 +244,12 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
     });
     return route.fulfill({ json: { data, meta: { nextCursor: second ? null : 'page-2' } } });
   });
-  return { sent };
+  return { sent, consultant };
 }
 
 test.describe('B660: «Консультант» нового кабинета', () => {
   test('разговор: панель в сетке, лента, запись в профиль, гейты', async ({ page }) => {
-    await openConsultant(page, '/app/consultant');
+    const { consultant } = await openConsultant(page, '/app/consultant');
     const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
     await expect(panel).toBeVisible();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-dialog', '1');
@@ -235,6 +267,7 @@ test.describe('B660: «Консультант» нового кабинета', 
     await expectGates(page);
     await card.getByRole('button', { name: 'Верно' }).click();
     await expect(panel.locator('.chat .res-row')).toHaveText('Записано в профиль');
+    expect(consultant.confirmed).toEqual([FACT.id]);
     await expect(panel.locator('.ptop')).toHaveCount(0);
     await expect(panel).not.toContainText(/пока недоступно|gemini|gpt|openrouter|vertex/iu);
   });
@@ -305,6 +338,26 @@ test.describe('B660: «Консультант» нового кабинета', 
     await expect(panel.locator('.msg.me').first()).toHaveText(FEED[0].content);
     await panel.getByRole('link', { name: 'Все разговоры' }).click();
     await expect(page).toHaveURL(/\/app\/consultant\/history$/u);
+  });
+
+  test('B688: «Новый разговор» и продолжение прошлого из «Все разговоры»', async ({ page }) => {
+    const { consultant } = await openConsultant(page, '/app/consultant');
+    const panel = page.locator('.b640 aside.panel-col');
+    await expect(panel.locator('.msg.me').first()).toHaveText(FEED[0].content);
+    await panel.getByRole('button', { name: 'Новый разговор' }).click();
+    await expect(panel.locator('.msg')).toHaveCount(0);
+    expect(consultant.closed).toBe(1);
+    await expect(panel.getByLabel('Ваш вопрос консультанту')).toBeVisible();
+    await panel.getByRole('link', { name: 'Все разговоры' }).click();
+    await panel.locator('ul.hist.hist2 > li').first().locator('a').click();
+    await expect(page).toHaveURL(/\/app\/consultant\?conversation=c0$/u);
+    await expect(panel.getByRole('button', { name: 'Новый разговор' })).toHaveCount(0);
+    await expectGates(page);
+    await panel.getByRole('button', { name: 'Продолжить разговор' }).click();
+    await expect(page).toHaveURL(/\/app\/consultant$/u);
+    await expect(panel.locator('.msg.me').first()).toHaveText(FEED[0].content);
+    await expect(panel.getByLabel('Ваш вопрос консультанту')).toBeVisible();
+    expect(consultant.resumed).toEqual(['c0']);
   });
 
   test('разговоров нет: одна строка и «Начать» открывает разговор', async ({ page }) => {

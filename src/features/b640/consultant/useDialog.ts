@@ -16,6 +16,7 @@ import {
   type CoachTurnStage,
 } from '../../coach/coachApi';
 import { consultantTurns } from '../../journey/consultantHistory';
+import { confirmFact, fetchCurrentConversation } from './consultantApi';
 import { refusalOf, type ChatMessage, type TurnRefusal } from './model';
 
 interface PendingTurn {
@@ -44,6 +45,8 @@ interface FeedInternals extends Feed {
   readonly asking: { current: boolean };
   readonly refresh: () => Promise<void>;
   readonly setMessages: Dispatch<SetStateAction<readonly ChatMessage[]>>;
+  /** Тема, в которую идут вопросы: у продолжённого из истории разговора — своя. */
+  readonly turnStage: CoachTurnStage;
 }
 
 interface Turns {
@@ -82,6 +85,7 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [turnStage, setTurnStage] = useState(stage);
   const alive = useRef(true);
   const asking = useRef(false);
 
@@ -93,9 +97,13 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
   }, []);
 
   const refresh = useCallback(async () => {
-    const snapshot = await getCandidateWithMessages(stage);
+    const [snapshot, current] = await Promise.all([
+      getCandidateWithMessages(stage),
+      fetchCurrentConversation(stage),
+    ]);
     if (!alive.current) return;
-    if (!asking.current) setMessages(consultantTurns(snapshot.messages));
+    if (!asking.current) setMessages(consultantTurns(current?.messages.map(chatMessage) ?? []));
+    setTurnStage(current?.stage ?? stage);
     setMemory(snapshot.memory);
   }, [stage]);
 
@@ -111,7 +119,8 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
   }, [refresh, revision]);
 
   const decideFact = useCallback(async (id: string, decision: FactDecision) => {
-    await changeMemory(id, decision);
+    if (decision.action === 'confirm') await confirmFact(id);
+    else await changeMemory(id, decision);
     if (alive.current) setMemory((current) => withFact(current, id, decision));
   }, []);
   const reload = useCallback(() => {
@@ -121,8 +130,12 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
 
   return {
     ...{ messages, memory, loading, loadFailed, reload, decideFact },
-    ...{ alive, asking, refresh, setMessages },
+    ...{ alive, asking, refresh, setMessages, turnStage },
   };
+}
+
+function chatMessage({ id, role, content }: ChatMessage): ChatMessage {
+  return { id, role, content };
 }
 
 function newTurn(content: string): PendingTurn {
@@ -143,8 +156,8 @@ function answerOf(turn: PendingTurn, content: string): ChatMessage {
  * Отправка вопроса: ответ по мере записи, сбой с повтором тем же ключом, отказ по тарифу.
  * После ответа снимок перечитывается: с ним приходят записи в профиль из этого хода.
  */
-function useTurns(stage: CoachTurnStage, feed: FeedInternals): Turns {
-  const { alive, asking, refresh, setMessages } = feed;
+function useTurns(feed: FeedInternals): Turns {
+  const { alive, asking, refresh, setMessages, turnStage: stage } = feed;
   const [reply, setReply] = useState<string | null>(null);
   const [sendFailed, setSendFailed] = useState(false);
   const [refused, setRefused] = useState<TurnRefusal | null>(null);
@@ -199,7 +212,7 @@ function useTurns(stage: CoachTurnStage, feed: FeedInternals): Turns {
 /** Текущий разговор по теме раздела: лента, отправка с ответом по мере записи, записи в профиль. */
 export function useDialog(stage: CoachTurnStage): DialogState {
   const feed = useFeed(stage);
-  const turns = useTurns(stage, feed);
+  const turns = useTurns(feed);
   const { messages, memory, loading, loadFailed, reload, decideFact } = feed;
   return { messages, memory, loading, loadFailed, reload, decideFact, ...turns };
 }

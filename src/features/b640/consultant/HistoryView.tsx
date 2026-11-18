@@ -3,6 +3,7 @@ import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
 import {
   fetchConversation,
+  resumeConversation,
   type ConsultantConversationDetail,
   type ConsultantConversationSummary,
 } from './consultantApi';
@@ -93,8 +94,45 @@ type ConversationState =
   | { readonly status: 'loading' | 'failed' }
   | { readonly status: 'ready'; readonly detail: ConsultantConversationDetail };
 
-/** Прошлый разговор из списка: лента с датой. */
-export function ConversationView({ id }: { readonly id: string }) {
+export interface ConversationViewProps {
+  readonly id: string;
+  /** Разговор снова открыт: панель переходит к нему. */
+  readonly onContinued: () => void;
+}
+
+/** «Продолжить разговор»: ожидание и ошибка на месте кнопки. */
+function Continue({ id, onContinued }: ConversationViewProps) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  async function start() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      await resumeConversation(id);
+      onContinued();
+    } catch {
+      setFailed(true);
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="vl-foot conv-foot">
+      {failed ? <ErrorRow text="Разговор не продолжился" /> : null}
+      <button
+        className="btn"
+        type="button"
+        disabled={busy}
+        aria-busy={busy || undefined}
+        onClick={() => void start()}
+      >
+        Продолжить разговор
+      </button>
+    </div>
+  );
+}
+
+/** Прошлый разговор из списка: лента с датой и «Продолжить разговор». */
+export function ConversationView({ id, onContinued }: ConversationViewProps) {
   const [state, setState] = useState<ConversationState>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
 
@@ -116,10 +154,13 @@ export function ConversationView({ id }: { readonly id: string }) {
   const detail = state.status === 'ready' ? state.detail : null;
   const day = detail ? dayLabel(detail.lastMessageAt) : null;
   return (
-    <div className="chat" aria-live="polite" aria-busy={state.status === 'loading'}>
-      {state.status === 'failed' ? <ErrorRow text="Разговор не загрузился" onRetry={retry} /> : null}
-      {day ? <span className="day">{day}</span> : null}
-      {detail?.messages.map((message) => <Message key={message.id} message={message} />)}
-    </div>
+    <>
+      <div className="chat" aria-live="polite" aria-busy={state.status === 'loading'}>
+        {state.status === 'failed' ? <ErrorRow text="Разговор не загрузился" onRetry={retry} /> : null}
+        {day ? <span className="day">{day}</span> : null}
+        {detail?.messages.map((message) => <Message key={message.id} message={message} />)}
+      </div>
+      {detail ? <Continue id={id} onContinued={onContinued} /> : null}
+    </>
   );
 }
