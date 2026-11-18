@@ -1,5 +1,11 @@
 import os from 'node:os';
 import { defineConfig, devices } from '@playwright/test';
+import { acquireTestLock } from './scripts/lib/test-lock.mjs';
+
+// Один Playwright на машину: остальные worktree ждут очереди. Берёт только
+// главный процесс раннера; воркеры и webServer видят OQ_LOCK_HELD.
+if (!process.env.TEST_WORKER_INDEX && acquireTestLock().acquired)
+  process.env.OQ_LOCK_HELD = String(process.pid);
 
 // Параллельные агенты в разных worktree задают свой порт, чтобы не делить превью.
 const port = Number(process.env.E2E_PORT ?? 4173);
