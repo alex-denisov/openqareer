@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-readonly RELEASE_ROOT=/srv/openqareer
-readonly SERVICE=openqareer-static.service
+readonly RELEASE_ROOT="${OPENQAREER_RELEASE_ROOT:-/srv/openqareer}"
+readonly SLOTS_LIB="${OPENQAREER_SLOTS_LIB:-/usr/local/lib/openqareer/openqareer-slots.sh}"
 readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
-readonly HEALTH_URL=http://127.0.0.1:3210/health
-# Сервер под нагрузкой стартует 34-43 с и дольше (B701); окно считается по часам.
-readonly HEALTH_WINDOW_SECONDS=180
 
 fail() {
   printf 'openqareer-activate: %s\n' "$1" >&2
@@ -32,6 +29,9 @@ assert_maintenance_stop_timeout() {
   esac
   fail "maintenance service TimeoutStopSec must be at least 5 minutes (effective: ${timeout_value:-unknown})"
 }
+
+# shellcheck source=openqareer-slots.sh
+source "$SLOTS_LIB"
 
 [[ "$(id -un)" == "openqareer-deploy" ]] ||
   fail "must run as openqareer-deploy"
@@ -112,36 +112,26 @@ fi
 
 cd "$RELEASE_ROOT"
 old_target="$(readlink current 2>/dev/null || true)"
-if [[ -n "$old_target" ]]; then
+live_port="$(active_port)"
+next_port="$(other_port "$live_port")"
+
+# B705: новый релиз стартует рядом с работающим; пока он не ответил своим SHA,
+# трафик идёт на прежний экземпляр, и при неудаче ничего не переключается.
+start_slot "$next_port" "releases/$release_sha" "$release_sha" ||
+  fail "release health check failed after ${HEALTH_WINDOW_SECONDS} s on port $next_port; previous release still serving"
+
+# current меняется вместе с Caddy: статика ищется в /current, затем в /previous,
+# так что страницы обоих релизов находят свои файлы.
+if [[ -n "$old_target" && "$old_target" != "releases/$release_sha" ]]; then
   atomic_link "$old_target" previous
 fi
 atomic_link "releases/$release_sha" current
-
-if ! sudo -n /usr/bin/systemctl restart "$SERVICE"; then
-  if [[ -n "$old_target" ]]; then
-    atomic_link "$old_target" current
-    sudo -n /usr/bin/systemctl restart "$SERVICE" || true
-  fi
-  fail "service restart failed"
+if ! switch_upstream "$next_port"; then
+  [[ -z "$old_target" ]] || atomic_link "$old_target" current
+  stop_slot "$next_port"
+  fail "proxy switch to port $next_port failed; previous release still serving"
 fi
-
-healthy=0
-health_deadline=$((SECONDS + HEALTH_WINDOW_SECONDS))
-while ((SECONDS < health_deadline)); do
-  if [[ "$(curl -fsS --max-time 3 "$HEALTH_URL" 2>/dev/null | tr -d '\r\n')" == "$release_sha" ]]; then
-    healthy=1
-    break
-  fi
-  sleep 1
-done
-
-if [[ "$healthy" != "1" ]]; then
-  if [[ -n "$old_target" ]]; then
-    atomic_link "$old_target" current
-    sudo -n /usr/bin/systemctl restart "$SERVICE"
-  fi
-  fail "release health check failed after ${HEALTH_WINDOW_SECONDS} s; previous release restored"
-fi
+retire_slot "$next_port" "$live_port"
 
 # Обслуживатель пула (B230) перезапускается после того, как HTTP подтвердил
 # релиз. Он не участвует в /health, поэтому один только health-check не может
@@ -174,4 +164,5 @@ done < <(find releases -regextype posix-extended -mindepth 1 -maxdepth 1 \
   -type d -regex '.*/[0-9a-f]{40}' -printf '%T@ %p\n' |
   sort -rn | awk 'NR > 5 {print $2}')
 
-printf 'release=%s health=ok previous=%s\n' "$release_sha" "${old_target:-none}"
+printf 'release=%s health=ok port=%s previous=%s\n' \
+  "$release_sha" "$next_port" "${old_target:-none}"

@@ -99,7 +99,10 @@ openqareer.com {
 		file_server
 	}
 
-	reverse_proxy 127.0.0.1:3210 {
+	# B705: the live instance (3210 or 3211) lives in a snippet that
+	# openqareer-upstream rewrites on deploy; a reload keeps open connections.
+	reverse_proxy {
+		import /etc/caddy/openqareer-upstream.caddy
 		# One hop, the real client: rate limits must not merge every relayed user.
 		header_up X-Forwarded-For {client_ip}
 	}
