@@ -14,6 +14,9 @@ type PublicHistoryMethods = Pick<CandidateStore,
   | 'listConsultantConversations'
   | 'getConsultantConversation'
   | 'deleteConsultantConversation'
+  | 'closeConsultantConversation'
+  | 'resumeConsultantConversation'
+  | 'currentConsultantConversation'
   | 'exportConsultantConversations'
   | 'listPendingConsultantSummaries'
   | 'getConsultantSummaryInput'
@@ -64,6 +67,18 @@ function createPublicHistoryMethods(
     deleteConsultantConversation(candidateId, conversationId) {
       requireCandidate(candidateId);
       return input.transaction(() => input.history.delete(candidateId, conversationId));
+    },
+    closeConsultantConversation(candidateId) {
+      requireCandidate(candidateId);
+      return input.transaction(() => input.history.closeActive(candidateId, new Date().toISOString()).closedId);
+    },
+    resumeConsultantConversation(candidateId, conversationId) {
+      requireCandidate(candidateId);
+      return input.transaction(() => input.history.resume(candidateId, conversationId, new Date().toISOString())?.conversation ?? null);
+    },
+    currentConsultantConversation(candidateId, stage) {
+      requireCandidate(candidateId);
+      return input.transaction(() => input.history.current(candidateId, stage, Date.now()));
     },
     exportConsultantConversations(candidateId) {
       requireCandidate(candidateId);

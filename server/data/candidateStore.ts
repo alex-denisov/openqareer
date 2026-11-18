@@ -513,6 +513,12 @@ export interface CandidateStore {
     conversationId: string,
   ): ConsultantConversationDetail | null;
   deleteConsultantConversation(candidateId: string, conversationId: string): boolean;
+  /** B688 «Новый разговор»: закрыть открытый разговор; `null` — открытого не было. */
+  closeConsultantConversation(candidateId: string): string | null;
+  /** B688: продолжить закрытый разговор; `null` — закрытого с таким id нет. */
+  resumeConsultantConversation(candidateId: string, conversationId: string): ConsultantConversationDetail | null;
+  /** B688: открытый разговор для ленты панели раздела. */
+  currentConsultantConversation(candidateId: string, stage: CoachTurnStage): ConsultantConversationDetail | null;
   exportConsultantConversations(candidateId: string): ConsultantConversationExport[];
   listPendingConsultantSummaries(candidateId: string): ConsultantSummaryTask[];
   getConsultantSummaryInput(
