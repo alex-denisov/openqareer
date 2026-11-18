@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
 
 vi.mock('../../coach/candidateSnapshotApi', () => ({
   getCandidateWithMessages: api.getCandidateWithMessages,
+  getCandidate: api.getCandidateWithMessages,
 }));
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -79,7 +80,14 @@ function quotas(remaining: number) {
     unlimited: false,
     period: { startedAt: '2026-10-20T00:00:00.000Z', endsAt: '2026-11-20T09:00:00.000Z' },
     quotas: [
-      { key: 'coach_turns', label: 'Сообщения', limit: 30, used: 30 - remaining, remaining, upgradePlan: 'basic' },
+      {
+        key: 'coach_turns',
+        label: 'Сообщения',
+        limit: 30,
+        used: 30 - remaining,
+        remaining,
+        upgradePlan: 'basic',
+      },
     ],
     fitPercentLimit: null,
   };
@@ -142,11 +150,99 @@ beforeEach(() => {
   api.changeMemory.mockResolvedValue(undefined);
   api.confirmFact.mockResolvedValue(undefined);
   api.closeCurrentConversation.mockResolvedValue(undefined);
-  api.fetchCurrentConversation.mockResolvedValue({ id: 'current', stage: 'vacancies', messages: feed });
+  api.fetchCurrentConversation.mockResolvedValue({
+    id: 'current',
+    stage: 'vacancies',
+    messages: feed,
+    replies: [],
+  });
 });
 afterEach(() => {
   view?.unmount();
   view = null;
+});
+
+describe('панель консультанта: действия, ссылки и записи на проверку (B688)', () => {
+  it('под ответом — своя запись с источником и шаг в раздел из закрытого списка', async () => {
+    const imported: CandidateMemory = {
+      ...fact,
+      id: 'imp-1',
+      statement: 'Руководитель группы бэкенда — Сфера Платежи',
+      status: 'confirmed',
+      provenance: { kind: 'import', platform: 'hh', at: '2026-10-02T10:00:00.000Z' },
+    };
+    api.getCandidateWithMessages.mockResolvedValue({ messages: feed, memory: [fact, imported] });
+    api.fetchCurrentConversation.mockResolvedValue({
+      id: 'current',
+      stage: 'vacancies',
+      messages: feed,
+      replies: [{ messageId: 'a1', actions: ['profile', 'vacancies'], memoryIds: ['imp-1', 'foreign'] }],
+    });
+    const root = await open({ kind: 'dialog' });
+    const bot = root.querySelector('.msg.bot') as HTMLElement;
+    const refs = [...bot.querySelectorAll('.ref')];
+    expect(refs).toHaveLength(1);
+    expect(refs[0]?.querySelector('b')?.textContent).toBe('Руководитель группы бэкенда — Сфера Платежи');
+    expect(refs[0]?.querySelector('.from')?.textContent).toMatch(/^из hh\.ru/u);
+    const acts = [...bot.querySelectorAll('.msg-acts a.btn')];
+    expect(acts.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+      ['Открыть в профиле', '/app/profile'],
+      ['Открыть вакансии', '/app/vacancies'],
+    ]);
+    expect(acts[1]?.classList.contains('is-quiet')).toBe(true);
+    expect(root.querySelectorAll('.btn.is-primary')).toHaveLength(0);
+  });
+
+  it('строка «ждут проверки» открывает записи в панели, «Верно» решает там', async () => {
+    const root = await open({ kind: 'dialog' });
+    click(root.querySelector('.ptop a.pend'));
+    expect(onView).toHaveBeenCalledWith({ kind: 'review' });
+    view?.unmount();
+    const review = await open({ kind: 'review' });
+    const back = review.querySelector('a.ph-back') as HTMLAnchorElement;
+    expect(back.textContent).toBe('К разговору');
+    expect(back.getAttribute('href')).toBe('/app/consultant');
+    expect(review.querySelector('.ph-new')).toBeNull();
+    const card = review.querySelector('.rv-list section.ec.fc') as HTMLElement;
+    expect(card.querySelector('.ec-title')?.textContent).toBe(
+      'Записать в профиль: Сфера Платежи — команда 18 человек',
+    );
+    click(card.querySelector('.btn.is-write'));
+    await settle();
+    expect(api.confirmFact).toHaveBeenCalledWith('fact-1');
+    expect(review.querySelector('.rv-list .res-row')?.textContent).toBe('Записано в профиль');
+    click(back);
+    expect(onView).toHaveBeenCalledWith({ kind: 'dialog' });
+  });
+
+  it('пустой список и сбой загрузки — на месте', async () => {
+    api.getCandidateWithMessages.mockResolvedValueOnce({ messages: [], memory: [] });
+    const empty = await open({ kind: 'review' });
+    expect(empty.querySelector('.chat')?.textContent).toBe('Все записи проверены');
+    view?.unmount();
+    api.getCandidateWithMessages.mockRejectedValueOnce(new Error('down'));
+    const failed = await open({ kind: 'review' });
+    expect(failed.querySelector('.res-row.is-err')?.textContent).toMatch('Записи не загрузились');
+  });
+
+  it('записи на проверку идут по 20, «Показать ещё» открывает остальные', async () => {
+    const many = Array.from({ length: 25 }, (_, index) => ({
+      ...fact,
+      id: `fact-${index}`,
+      statement: `Запись ${index}`,
+    }));
+    api.getCandidateWithMessages.mockResolvedValueOnce({ messages: [], memory: many });
+    const root = await open({ kind: 'review' });
+    expect(root.querySelectorAll('.rv-list section.ec.fc')).toHaveLength(20);
+    expect(root.querySelector('.ct-count')?.textContent).toBe('20 из 25');
+    click(root.querySelector('.vl-foot .btn'));
+    expect(root.querySelectorAll('.rv-list section.ec.fc')).toHaveLength(25);
+  });
+
+  it('адрес записей на проверку', () => {
+    expect(panelPath({ kind: 'review' })).toBe('/app/consultant?review=1');
+    expect(panelViewOf('k01', '?review=1')).toEqual({ kind: 'review' });
+  });
 });
 
 describe('панель консультанта: разговор (K1)', () => {
@@ -187,7 +283,7 @@ describe('панель консультанта: разговор (K1)', () => {
     const root = await open({ kind: 'dialog' });
     const pend = root.querySelector('.ptop a.pend') as HTMLAnchorElement;
     expect(pend.textContent).toBe('1 запись ждёт проверки');
-    expect(pend.getAttribute('href')).toBe('/app/profile/review');
+    expect(pend.getAttribute('href')).toBe('/app/consultant?review=1');
     const card = root.querySelector('section.ec.fc') as HTMLElement;
     expect(card.querySelector('.ec-title')?.textContent).toBe(
       'Записать в профиль: Сфера Платежи — команда 18 человек',
@@ -385,8 +481,18 @@ describe('панель консультанта: все разговоры (K5)'
     api.fetchConversation.mockResolvedValueOnce({
       ...row('c1', 'Тема'),
       messages: [
-        { id: 'm1', role: 'user', content: 'С чего начать поиск', createdAt: '2026-11-10T10:00:00.000Z' },
-        { id: 'm2', role: 'assistant', content: 'С профиля.', createdAt: '2026-11-10T10:01:00.000Z' },
+        {
+          id: 'm1',
+          role: 'user',
+          content: 'С чего начать поиск',
+          createdAt: '2026-11-10T10:00:00.000Z',
+        },
+        {
+          id: 'm2',
+          role: 'assistant',
+          content: 'С профиля.',
+          createdAt: '2026-11-10T10:01:00.000Z',
+        },
       ],
     });
     const root = await open({ kind: 'conversation', id: 'c1' });
@@ -401,7 +507,9 @@ describe('панель консультанта: все разговоры (K5)'
   it('«Продолжить разговор» открывает его снова; сбой — на месте кнопки', async () => {
     api.fetchConversation.mockResolvedValueOnce({
       ...row('c1', 'Тема'),
-      messages: [{ id: 'm1', role: 'user', content: 'Тема', createdAt: '2026-11-10T10:00:00.000Z' }],
+      messages: [
+        { id: 'm1', role: 'user', content: 'Тема', createdAt: '2026-11-10T10:00:00.000Z' },
+      ],
     });
     const root = await open({ kind: 'conversation', id: 'c1' });
     api.resumeConversation.mockRejectedValueOnce(new Error('сеть'));
@@ -409,7 +517,9 @@ describe('панель консультанта: все разговоры (K5)'
     expect(button.textContent).toBe('Продолжить разговор');
     click(button);
     await settle();
-    expect(root.querySelector('.vl-foot .res-row.is-err')?.textContent).toBe('Разговор не продолжился');
+    expect(root.querySelector('.vl-foot .res-row.is-err')?.textContent).toBe(
+      'Разговор не продолжился',
+    );
     expect(onView).not.toHaveBeenCalled();
     api.resumeConversation.mockResolvedValueOnce({});
     click(root.querySelector('.vl-foot .btn'));
@@ -424,7 +534,9 @@ describe('адреса видов панели', () => {
     expect(panelViewOf('k05', '')).toEqual({ kind: 'history' });
     expect(panelViewOf('k01', '')).toEqual({ kind: 'dialog' });
     expect(panelViewOf('k01', '?conversation=c%201')).toEqual({ kind: 'conversation', id: 'c 1' });
-    expect(panelPath({ kind: 'conversation', id: 'c 1' })).toBe('/app/consultant?conversation=c%201');
+    expect(panelPath({ kind: 'conversation', id: 'c 1' })).toBe(
+      '/app/consultant?conversation=c%201',
+    );
     expect(panelPath({ kind: 'history' })).toBe('/app/consultant/history');
     expect(panelPath({ kind: 'dialog' })).toBe('/app/consultant');
   });

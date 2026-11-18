@@ -77,6 +77,7 @@ interface ConsultantMocks {
   readonly turn?: 'ok' | 'fail' | 'limit';
   readonly history?: 'two-pages' | 'empty';
   readonly memory?: readonly unknown[];
+  readonly replies?: readonly unknown[];
 }
 
 async function openConsultant(page: Page, path: string, mocks: ConsultantMocks = {}) {
@@ -191,7 +192,12 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/current')) {
       const data = consultant.open
-        ? { ...conversation('current', TOPICS[0]), closedAt: null, messages: feed }
+        ? {
+            ...conversation('current', TOPICS[0]),
+            closedAt: null,
+            messages: feed,
+            replies: mocks.replies ?? [],
+          }
         : null;
       return route.fulfill({ json: { data } });
     }
@@ -338,6 +344,43 @@ test.describe('B660: «Консультант» нового кабинета', 
     await expect(panel.locator('.msg.me').first()).toHaveText(FEED[0].content);
     await panel.getByRole('link', { name: 'Все разговоры' }).click();
     await expect(page).toHaveURL(/\/app\/consultant\/history$/u);
+  });
+
+  test('B688: под ответом своя запись с источником и шаг в раздел; записи на проверку в панели', async ({
+    page,
+  }) => {
+    const record = {
+      ...FACT,
+      id: 'imp-1',
+      statement: 'Руководитель группы бэкенда — Сфера Платежи, 2018–2021',
+      status: 'confirmed',
+      provenance: { kind: 'import', platform: 'hh', at: '2026-10-02T10:00:00.000Z' },
+    };
+    const { consultant } = await openConsultant(page, '/app/consultant', {
+      memory: [FACT, record],
+      replies: [{ messageId: 'a1', actions: ['profile', 'vacancies'], memoryIds: ['imp-1'] }],
+    });
+    const panel = page.locator('.b640 aside.panel-col');
+    const reply = panel.locator('.msg.bot').first();
+    await expect(reply.locator('.ref b')).toHaveText(record.statement);
+    await expect(reply.locator('.ref .from')).toContainText('из hh.ru');
+    await expect(reply.getByRole('link', { name: 'Открыть в профиле' })).toHaveAttribute(
+      'href',
+      '/app/profile',
+    );
+    await expect(reply.getByRole('link', { name: 'Открыть вакансии' })).toBeVisible();
+    await expectGates(page);
+    await panel.locator('.ptop .pend').click();
+    await expect(page).toHaveURL(/\/app\/consultant\?review=1$/u);
+    await expect(panel.locator('.ph-title')).toHaveText('Записи на проверку');
+    const card = panel.locator('.rv-list section.ec.fc');
+    await expect(card).toHaveCount(1);
+    await expectGates(page);
+    await card.getByRole('button', { name: 'Верно' }).click();
+    await expect(panel.locator('.rv-list .res-row')).toHaveText('Записано в профиль');
+    expect(consultant.confirmed).toEqual([FACT.id]);
+    await panel.getByRole('link', { name: 'К разговору' }).click();
+    await expect(page).toHaveURL(/\/app\/consultant$/u);
   });
 
   test('B688: «Новый разговор» и продолжение прошлого из «Все разговоры»', async ({ page }) => {

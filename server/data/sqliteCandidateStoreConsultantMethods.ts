@@ -17,6 +17,7 @@ type PublicHistoryMethods = Pick<CandidateStore,
   | 'closeConsultantConversation'
   | 'resumeConsultantConversation'
   | 'currentConsultantConversation'
+  | 'consultantReplyResults'
   | 'exportConsultantConversations'
   | 'listPendingConsultantSummaries'
   | 'getConsultantSummaryInput'
@@ -102,7 +103,7 @@ function createPublicHistoryMethods(
  */
 function createConversationControls(
   input: Parameters<typeof createSqliteCandidateStoreConsultantMethods>[0],
-): Pick<ConsultantStoreMethods, 'closeConsultantConversation' | 'resumeConsultantConversation' | 'currentConsultantConversation'> {
+): Pick<ConsultantStoreMethods, 'closeConsultantConversation' | 'resumeConsultantConversation' | 'currentConsultantConversation' | 'consultantReplyResults'> {
   const now = () => new Date().toISOString();
   return {
     closeConsultantConversation(candidateId) {
@@ -116,6 +117,13 @@ function createConversationControls(
     currentConsultantConversation(candidateId, stage) {
       input.requireCandidate(candidateId);
       return input.transaction(() => input.history.current(candidateId, stage, Date.now()));
+    },
+    consultantReplyResults(candidateId, conversationId) {
+      input.requireCandidate(candidateId);
+      return input.history.replyTurns(candidateId, conversationId).flatMap(({ messageId, key }) => {
+        const result = input.conversations.getCoachTurn(candidateId, key)?.result;
+        return result ? [{ messageId, result }] : [];
+      });
     },
   };
 }

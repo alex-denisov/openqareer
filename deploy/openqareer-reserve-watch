@@ -10,6 +10,7 @@ readonly RELEASE_ROOT="${OPENQAREER_RELEASE_ROOT:-/srv/openqareer}"
 readonly SLOTS_LIB="${OPENQAREER_SLOTS_LIB:-/usr/local/lib/openqareer/openqareer-slots.sh}"
 readonly RESERVE_SECONDS="${OPENQAREER_RESERVE_SECONDS:-600}"
 readonly POLL_SECONDS="${OPENQAREER_RESERVE_POLL_SECONDS:-2}"
+readonly LOCK_WAIT_SECONDS="${OPENQAREER_RESERVE_LOCK_WAIT_SECONDS:-900}"
 readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
 
@@ -74,10 +75,12 @@ while ((SECONDS < deadline)); do
   sleep "$POLL_SECONDS"
 done
 
-# Выкат или откат, начавшийся в окне, сам решает судьбу резерва.
+# Блокировку может ещё держать сам выкат, запустивший сторожа (перезапуск
+# maintenance идёт минутами): ждём её. Новый выкат или откат останавливает
+# сторожа до любых изменений, так что ожидание не мешает им.
 exec 9>"$RELEASE_ROOT/.deploy.lock"
-if ! flock -n 9; then
-  log "deploy or rollback in progress; leaving the reserve to it"
+if ! flock -w "$LOCK_WAIT_SECONDS" 9; then
+  log "deploy lock still held after ${LOCK_WAIT_SECONDS} s; leaving the reserve to it"
   exit 0
 fi
 cd "$RELEASE_ROOT"
