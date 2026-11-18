@@ -9,6 +9,16 @@ on:
   # Ready for a merge queue (needs an organization-owned repo); fires nowhere today.
   merge_group:
   workflow_dispatch:
+    inputs:
+      # scripts/merge-batch.mjs: full gates on a batch/<ts> branch, no release or deploy.
+      batch:
+        type: boolean
+        default: false
+      # scripts/merge-batch.mjs after the last squash: deploy-only when main's tree
+      # equals a PR head with "Full verify" success, like a push would.
+      deploy_verified:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,7 +30,8 @@ concurrency:
   # Light and full runs of one PR live in separate groups so a push does not
   # cancel the pre-merge full run; a label other than merge-ready is a no-op.
   group: >-
-    ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'openqareer-production'
+    ${{ inputs.batch && format('batch-{0}', github.ref)
+    || (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'openqareer-production'
     || (github.event.action == 'labeled' && github.event.label.name != 'merge-ready') && format('noop-{0}', github.run_id)
     || format('verify-{0}-{1}', github.ref, contains(github.event.pull_request.labels.*.name, 'merge-ready') && 'full' || 'light') }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -57,13 +68,23 @@ jobs:
           EVENT: ${{ github.event_name }}
           REPO: ${{ github.repository }}
           MERGE_READY: ${{ contains(github.event.pull_request.labels.*.name, 'merge-ready') }}
+          # On: merge-ready PRs get the full run from the batch (scripts/merge-batch.mjs),
+          # except PRs that change workflows: GITHUB_TOKEN cannot push those.
+          MERGE_BATCH: ${{ vars.MERGE_BATCH_ENABLED == 'true' }}
+          PR: ${{ github.event.pull_request.number }}
+          DEPLOY_VERIFIED: ${{ inputs.deploy_verified == true }}
         run: |
           set -euo pipefail
           mode=full
           if [ "$EVENT" = "pull_request" ] && [ "$MERGE_READY" != "true" ]; then
             mode=light
           fi
-          if [ "$EVENT" = "push" ]; then
+          if [ "$EVENT" = "pull_request" ] && [ "$MERGE_READY" = "true" ] && [ "$MERGE_BATCH" = "true" ]; then
+            workflows="$(gh api "repos/$REPO/pulls/$PR/files" --paginate \
+              --jq '[.[].filename | select(startswith(".github/workflows/"))] | length' | paste -sd+ - | bc)"
+            if [ "$workflows" = "0" ]; then mode=light; fi
+          fi
+          if [ "$EVENT" = "push" ] || [ "$DEPLOY_VERIFIED" = "true" ]; then
             pr=""
             for attempt in 1 2 3 4 5 6; do
               pr="$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" \
@@ -338,7 +359,7 @@ jobs:
     name: Build release archive
     needs: plan
     # Only a run that can deploy needs the stamped archive.
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.batch)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -389,7 +410,7 @@ jobs:
         env:
           NEEDS: ${{ toJSON(needs) }}
           MODE: ${{ needs.plan.outputs.mode }}
-          DEPLOYS: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+          DEPLOYS: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.batch) }}
         run: |
           set -euo pipefail
           printf 'mode=%s\n%s\n' "$MODE" "$NEEDS"
@@ -420,7 +441,7 @@ jobs:
     name: Deploy production
     # always(): the plan skips gates on purpose, and a skipped ancestor would
     # otherwise skip this job too; Verify is the single gate for deploy.
-    if: always() && needs.verify.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: always() && needs.verify.result == 'success' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.batch))
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
