@@ -93,6 +93,27 @@ describe('POST own-vacancies', () => {
     expect(outside.json().data).toEqual({ outcome: 'unreadable', reason: 'site_closed' });
     expect(reader.read).not.toHaveBeenCalled();
   });
+  it('B707: ссылка hh.ru на вакансию из подборки — in_pool, как ищет прод', async () => {
+    const live = {
+      id: 'src-hh-search:139180469', fingerprint: 'f', title: 'Директор по данным', company: 'Ромашка',
+      description: 'Платформа данных', requiredSkills: [], isRemote: true, url: 'https://hh.ru/vacancy/139180469',
+      publishedAt: '2026-11-17T00:00:00.000Z', status: 'active',
+      provenance: { sourceType: 'json_api', sourceId: 'src-hh-search', sourceUrl: 'https://hh.ru/vacancy/139180469', observedAt: '2026-11-18T00:00:00.000Z' },
+    };
+    const saved = { id: 'cluster-founder', status: 'active' };
+    // Движок прода: кластер ищется только по id строки `cluster-…` (и ключу `member` за ним).
+    const h = await setup({
+      getVacancy: (id: string) => (id === live.id || id === 'src-hh-search:22222222' ? { ...live, id } : undefined),
+      getActiveCluster: (id: string) => (id === 'cluster-src-hh-search:22222222' ? saved : undefined),
+    });
+    const fromPool = await h.send('POST', BASE, 'flagged.test', { link: 'https://hh.ru/vacancy/139180469' });
+    expect(fromPool.json().data).toEqual({ outcome: 'in_pool', clusterId: 'cluster-src-hh-search:139180469' });
+    const glued = await h.send('POST', BASE, 'flagged.test', { link: 'https://hh.ru/vacancy/22222222/' });
+    expect(glued.json().data).toEqual({ outcome: 'in_pool', clusterId: 'cluster-founder' });
+    const gone = await h.send('POST', BASE, 'flagged.test', { link: 'https://hh.ru/vacancy/33333333' });
+    expect(gone.json().data).toEqual({ outcome: 'unreadable', reason: 'site_closed' });
+    expect(reader.read).not.toHaveBeenCalled();
+  });
   it('предел — limit', async () => {
     const h = await setup();
     for (let index = 0; index < OWN_VACANCY_MAX; index += 1) {
