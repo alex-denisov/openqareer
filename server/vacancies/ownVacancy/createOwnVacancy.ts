@@ -2,6 +2,7 @@ import { OWN_VACANCY_MAX, OWN_VACANCY_TEXT_MAX, OWN_VACANCY_TITLE_MAX, type OwnV
 import type { NewOwnVacancy, SqliteOwnVacancyStore } from '../../data/sqliteOwnVacancyStore';
 import { poolIdFromVacancyLink } from '../../resumeBuilder/vacancyLink';
 import type { RouteDeps } from '../../routes/deps';
+import { resolvePoolVacancyCluster } from '../poolVacancyCluster';
 import { extractVacancyPage } from './extractVacancyPage';
 import { isClosedSite } from './closedSites';
 import { takeLinkReadSlot } from './linkReadLimit';
@@ -37,7 +38,7 @@ function hostOf(link: string): URL | null {
 async function fromLink(deps: RouteDeps, candidateId: string, link: string): Promise<LinkOutcome> {
   const poolId = poolIdFromVacancyLink(link);
   if (poolId) {
-    const cluster = deps.multiSourceEngine.getActiveCluster?.(poolId);
+    const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, poolId);
     return { result: cluster ? { outcome: 'in_pool', clusterId: cluster.id } : { outcome: 'unreadable', reason: 'site_closed' } };
   }
   const url = hostOf(link);

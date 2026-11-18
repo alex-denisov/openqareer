@@ -12,7 +12,7 @@ import { writeCoverLetterBody, type WrittenLetterBody } from './vacancyLetterBod
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
-import { resolveLetterCluster } from './letterVacancyCluster';
+import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import {
   attachApprovedResume,
@@ -492,7 +492,7 @@ const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
-  const cluster = resolveLetterCluster(multiSourceEngine, vacancyId);
+  const cluster = resolvePoolVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
     const state = prepareLetterResume(deps, candidate.id, cluster);
@@ -511,7 +511,7 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   const vacancyId = (request.params as { id: string }).id;
   const parsed = approvedLetterSnapshotSchema.safeParse(request.body);
   if (!parsed.success) return invalidLetterSnapshot(reply, request);
-  const cluster = resolveLetterCluster(multiSourceEngine, vacancyId);
+  const cluster = resolvePoolVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   const evidenceIds = new Set(
     filterUsablePitchFacts(candidateStore.getSnapshot(candidate.id).memory).map((fact) => fact.id),
