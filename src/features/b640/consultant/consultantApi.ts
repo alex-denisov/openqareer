@@ -54,6 +54,8 @@ function checkedDetail(detail: ConsultantConversationDetail): ConsultantConversa
 /** Открытый разговор и действия со ссылками под его ответами. */
 export interface CurrentConversation extends ConsultantConversationDetail {
   readonly replies: readonly ConsultantReplyExtras[];
+  /** Фоновый разбор ответа ещё идёт: действия под ним придут позже. */
+  readonly analysisPending: boolean;
 }
 
 /** Открытый разговор раздела (B688); `null` — разговор ещё не начат. */
@@ -61,12 +63,18 @@ export async function fetchCurrentConversation(
   stage: CoachTurnStage,
 ): Promise<CurrentConversation | null> {
   const response = await apiFetch(`${CONSULTANT_URL}/current?stage=${encodeURIComponent(stage)}`);
-  const detail = await readData<(ConsultantConversationDetail & { replies?: unknown }) | null>(
+  const detail = await readData<
+    (ConsultantConversationDetail & { replies?: unknown; analysisPending?: unknown }) | null
+  >(
     response,
   );
   return detail === null
     ? null
-    : { ...checkedDetail(detail), replies: readReplies(detail.replies) };
+    : {
+        ...checkedDetail(detail),
+        replies: readReplies(detail.replies),
+        analysisPending: detail.analysisPending === true,
+      };
 }
 
 /** «Новый разговор»: открытый разговор уходит в «Все разговоры». */

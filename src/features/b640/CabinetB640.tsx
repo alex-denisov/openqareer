@@ -34,6 +34,13 @@ export function CabinetB640({ session, path, onNavigate, onSessionChange }: Cabi
     () => resolveAddress(pathname, search),
     [pathname, search],
   );
+  const navigate = useCallback(
+    (to: string) => {
+      onNavigate(to);
+      announceAddress();
+    },
+    [onNavigate],
+  );
   const signOut = useCallback(async () => {
     await logout();
     onSessionChange(null);
@@ -45,12 +52,12 @@ export function CabinetB640({ session, path, onNavigate, onSessionChange }: Cabi
       search,
       match,
       consultantRoute,
-      navigate: onNavigate,
+      navigate,
       signOut,
       theme,
       setTheme,
     }),
-    [session, pathname, search, match, consultantRoute, onNavigate, signOut, theme, setTheme],
+    [session, pathname, search, match, consultantRoute, navigate, signOut, theme, setTheme],
   );
   return (
     <ShellProvider value={value}>
@@ -77,9 +84,23 @@ function resolveAddress(pathname: string, search: string): Address {
   };
 }
 
+/**
+ * `App` хранит путь без `?…`: переход с `/app/consultant?review=1` на `/app/consultant`
+ * путь не меняет и перерисовки не даёт. Свой переход сообщает о новом адресе сам.
+ */
+const ADDRESS_EVENT = 'b640:address';
+
+function announceAddress(): void {
+  window.dispatchEvent(new Event(ADDRESS_EVENT));
+}
+
 function subscribeToHistory(onChange: () => void): () => void {
   window.addEventListener('popstate', onChange);
-  return () => window.removeEventListener('popstate', onChange);
+  window.addEventListener(ADDRESS_EVENT, onChange);
+  return () => {
+    window.removeEventListener('popstate', onChange);
+    window.removeEventListener(ADDRESS_EVENT, onChange);
+  };
 }
 
 /** Атрибуты корня повторяют атрибуты `<body>` макета: от них зависят его стили. */
