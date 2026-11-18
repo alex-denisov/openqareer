@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { registerB640ApplicationQuotaRoutes } from './b640ApplicationQuotaRoutes';
 import { registerB640HiddenVacancyRoutes } from './b640HiddenVacancyRoutes';
 import { registerB640MatchedVacancyRoutes } from './b640MatchedVacancyRoutes';
+import { registerB640OwnVacancyRoutes } from './b640OwnVacancyRoutes';
 import { registerB640VacancyTriageRoutes } from './b640VacancyTriageRoutes';
 import type { RouteDeps } from './deps';
 
@@ -11,4 +12,5 @@ export function registerB640VacancyRoutes(app: FastifyInstance, deps: RouteDeps)
   registerB640MatchedVacancyRoutes(app, deps);
   registerB640ApplicationQuotaRoutes(app, deps);
   registerB640VacancyTriageRoutes(app, deps);
+  registerB640OwnVacancyRoutes(app, deps);
 }

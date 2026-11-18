@@ -57,6 +57,13 @@ function shortDate(date: Date, withYear: boolean): string {
   }).format(date);
 }
 
+/** Дата по ISO-строке: «11.11», для другого года — «10.11.2025»; неверная — пусто. */
+export function isoRowDate(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return shortDate(date, date.getUTCFullYear() !== now.getUTCFullYear());
+}
+
 /** Дата строки: «11.11», для другого года — «10.11.2025». */
 export function rowDate(item: MatchedVacancyItem, now: Date = new Date()): string {
   const date = new Date(item.cluster.sources[0]?.observedAt ?? item.cluster.firstObservedAt);

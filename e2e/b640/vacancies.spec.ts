@@ -9,7 +9,11 @@ const ROWS = '.b640 table.vt tbody tr.vt-row';
 async function openCabinet(
   page: Page,
   path: string,
-  options: { readonly hidden?: readonly unknown[]; readonly total?: number } = {},
+  options: {
+    readonly hidden?: readonly unknown[];
+    readonly total?: number;
+    readonly own?: readonly unknown[];
+  } = {},
 ): Promise<void> {
   await mockSignedInCabinet(page, {
     cabinetB640: true,
@@ -36,6 +40,12 @@ async function openCabinet(
     route.request().method() === 'POST'
       ? route.fulfill({ status: 201, json: { data: { clusterId: 'x', reasonId: 'role-family' } } })
       : route.fulfill({ status: 200, json: { data: { ok: true } } }),
+  );
+  const own = options.own ?? [];
+  await page.route('**/api/v1/candidate/b640/own-vacancies', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: { data: own, meta: { requestId: 'own' } } })
+      : route.fallback(),
   );
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('[data-b640-node]').first()).toBeVisible({ timeout: 15_000 });
@@ -454,5 +464,105 @@ test.describe('B654: раздел «Вакансии», подборка и со
       await page.waitForTimeout(400);
       await page.screenshot({ path: `.s13-shots/vacancies-triage-${width}-${theme}.png` });
     }
+  });
+});
+
+const OWN = {
+  id: 'own-00000000-0000-4000-8000-000000000001',
+  title: 'Руководитель группы бэкенда',
+  company: 'Ритм Ритейл',
+  location: 'Москва',
+  workFormat: 'office',
+  url: null,
+  createdAt: '2026-11-18T10:00:00.000Z',
+  coverage: { matched: 3, total: 5 },
+  comparing: false,
+};
+
+async function openOwnPanel(page: Page): Promise<void> {
+  await page.locator('.va-addbtn').click();
+  await expect(page.locator('#va-add')).toBeVisible();
+  await expect(page.locator('#va-add-in')).toBeFocused();
+}
+
+test.describe('B676: своя вакансия', () => {
+  test('вставленный текст — строка «ваша» первой, «3 из 5» без процента', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    const bodies: unknown[] = [];
+    await page.route('**/api/v1/candidate/b640/own-vacancies', (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      bodies.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: { data: { outcome: 'created', vacancy: OWN }, meta: { requestId: 'c' } },
+      });
+    });
+    await openOwnPanel(page);
+    await page
+      .locator('#va-add-in')
+      .fill('Руководитель группы бэкенда\n\nТребования:\n- Go\n- Kafka');
+    await page.locator('#va-add .va-add-foot .btn').click();
+    await expect(page.locator('#va-add')).toHaveCount(0);
+    const first = page.locator(ROWS).first();
+    await expect(first.locator('.va-mine')).toContainText('ваша');
+    await expect(first.locator('.vt-fitc')).toContainText('3 из 5');
+    await expect(first.locator('.vt-fitc')).not.toContainText('%');
+    expect(bodies).toEqual([{ text: 'Руководитель группы бэкенда\n\nТребования:\n- Go\n- Kafka' }]);
+    await expectGates(page);
+  });
+
+  test('страница не открылась — ошибка у поля, «Повторить» и «Вставить текст»', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/vacancies');
+    let posts = 0;
+    await page.route('**/api/v1/candidate/b640/own-vacancies', (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      posts += 1;
+      return route.fulfill({
+        json: { data: { outcome: 'unreadable', reason: 'failed' }, meta: { requestId: 'u' } },
+      });
+    });
+    await openOwnPanel(page);
+    await page.locator('#va-add-in').fill('https://jobs.example.com/a/1');
+    await page.locator('#va-add .va-add-foot .btn').click();
+    const status = page.locator('#va-add-st');
+    await expect(status).toContainText('Страница не открылась');
+    await expect(page.locator('#va-add-in')).toHaveAttribute('aria-invalid', 'true');
+    await status.getByRole('button', { name: 'Повторить' }).click();
+    await expect.poll(() => posts).toBe(2);
+    await status.getByRole('button', { name: 'Вставить текст' }).click();
+    await expect(page.locator('#va-add-in')).toHaveValue('');
+    await expect(page.locator('#va-add-in')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#va-add')).toHaveCount(0);
+  });
+
+  test('ссылка на вакансию из подборки открывает её карточку', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    await page.route('**/api/v1/candidate/b640/own-vacancies', (route) =>
+      route.request().method() === 'POST'
+        ? route.fulfill({
+            json: {
+              data: { outcome: 'in_pool', clusterId: 'cluster-hh-1' },
+              meta: { requestId: 'p' },
+            },
+          })
+        : route.fallback(),
+    );
+    await openOwnPanel(page);
+    await page.locator('#va-add-in').fill('https://hh.ru/vacancy/12345678');
+    await page.locator('#va-add .va-add-foot .btn').click();
+    await expect(page).toHaveURL(/\/app\/vacancies\/cluster-hh-1$/u);
+  });
+
+  test('снимки панели и строки «ваша» для сверки с макетом', async ({ page }, testInfo) => {
+    test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
+    mkdirSync('.s13-shots', { recursive: true });
+    const width = isMobile(testInfo.project.name) ? 390 : 1440;
+    await openCabinet(page, '/app/vacancies', { own: [OWN] });
+    await expect(page.locator(ROWS).first().locator('.va-mine')).toBeVisible();
+    await page.screenshot({ path: `.s13-shots/own-row-${width}.png` });
+    await openOwnPanel(page);
+    await page.screenshot({ path: `.s13-shots/own-panel-${width}.png` });
   });
 });
