@@ -190,7 +190,9 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
   await page.route('**/api/v1/candidate/consultant/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/current')) {
-      const data = consultant.open ? { ...conversation('current', TOPICS[0]), closedAt: null, messages: feed } : null;
+      const data = consultant.open
+        ? { ...conversation('current', TOPICS[0]), closedAt: null, messages: feed }
+        : null;
       return route.fulfill({ json: { data } });
     }
     if (path.endsWith('/current/close')) {
@@ -204,7 +206,9 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
       consultant.resumed.push(resumed[1]);
       consultant.open = true;
       feed.splice(0, feed.length, ...FEED);
-      return route.fulfill({ json: { data: { ...conversation(resumed[1], TOPICS[0]), closedAt: null, messages: feed } } });
+      return route.fulfill({
+        json: { data: { ...conversation(resumed[1], TOPICS[0]), closedAt: null, messages: feed } },
+      });
     }
     const fact = /\/facts\/([^/]+)\/confirm$/u.exec(path);
     if (fact) {

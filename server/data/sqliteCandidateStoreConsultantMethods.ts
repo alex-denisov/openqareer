@@ -68,18 +68,7 @@ function createPublicHistoryMethods(
       requireCandidate(candidateId);
       return input.transaction(() => input.history.delete(candidateId, conversationId));
     },
-    closeConsultantConversation(candidateId) {
-      requireCandidate(candidateId);
-      return input.transaction(() => input.history.closeActive(candidateId, new Date().toISOString()).closedId);
-    },
-    resumeConsultantConversation(candidateId, conversationId) {
-      requireCandidate(candidateId);
-      return input.transaction(() => input.history.resume(candidateId, conversationId, new Date().toISOString())?.conversation ?? null);
-    },
-    currentConsultantConversation(candidateId, stage) {
-      requireCandidate(candidateId);
-      return input.transaction(() => input.history.current(candidateId, stage, Date.now()));
-    },
+    ...createConversationControls(input),
     exportConsultantConversations(candidateId) {
       requireCandidate(candidateId);
       return input.transaction(() => input.history.export(candidateId));
@@ -102,6 +91,31 @@ function createPublicHistoryMethods(
     releaseConsultantSummaryClaim(candidateId, task) {
       requireCandidate(candidateId);
       input.transaction(() => input.history.releaseSummaryClaim(candidateId, task));
+    },
+  };
+}
+
+/**
+ * B688: «Новый разговор» закрывает открытый разговор (`null` — открытого не было),
+ * продолжение открывает закрытый снова, `current` — открытый разговор для ленты панели.
+ * Сводку закрытого разговора подхватывает `pendingSummaryTasks` после следующего хода.
+ */
+function createConversationControls(
+  input: Parameters<typeof createSqliteCandidateStoreConsultantMethods>[0],
+): Pick<ConsultantStoreMethods, 'closeConsultantConversation' | 'resumeConsultantConversation' | 'currentConsultantConversation'> {
+  const now = () => new Date().toISOString();
+  return {
+    closeConsultantConversation(candidateId) {
+      input.requireCandidate(candidateId);
+      return input.transaction(() => input.history.closeActive(candidateId, now()).closedId);
+    },
+    resumeConsultantConversation(candidateId, conversationId) {
+      input.requireCandidate(candidateId);
+      return input.transaction(() => input.history.resume(candidateId, conversationId, now())?.conversation ?? null);
+    },
+    currentConsultantConversation(candidateId, stage) {
+      input.requireCandidate(candidateId);
+      return input.transaction(() => input.history.current(candidateId, stage, Date.now()));
     },
   };
 }

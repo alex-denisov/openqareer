@@ -1,4 +1,5 @@
 import type { FactProvenance, ImportPlatform, ImportWalk } from '../domain/factProvenance';
+import type { ConsultantHistoryMethods } from './consultantHistoryContract';
 import type { EmployerRead } from './applicationEmployerReads';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type {
@@ -436,7 +437,7 @@ export interface CommittedResumeImport {
   readonly idempotentReplay: boolean;
 }
 
-export interface CandidateStore {
+export interface CandidateStore extends ConsultantHistoryMethods {
   /** Candidate inbox and preferences share the candidate SQLite database. */
   readonly notificationRepository?: SqliteNotificationRepository;
   /** Candidate-scoped, encrypted profile revision journal on the same SQLite connection. */
@@ -504,34 +505,6 @@ export interface CandidateStore {
     stage?: CoachTurnStage,
     subject?: CoachTurnSubject,
   ): CoachMessage[];
-  listConsultantConversations(
-    candidateId: string,
-    options?: { readonly cursor?: string; readonly limit?: number },
-  ): ConsultantConversationPage;
-  getConsultantConversation(
-    candidateId: string,
-    conversationId: string,
-  ): ConsultantConversationDetail | null;
-  deleteConsultantConversation(candidateId: string, conversationId: string): boolean;
-  /** B688 «Новый разговор»: закрыть открытый разговор; `null` — открытого не было. */
-  closeConsultantConversation(candidateId: string): string | null;
-  /** B688: продолжить закрытый разговор; `null` — закрытого с таким id нет. */
-  resumeConsultantConversation(candidateId: string, conversationId: string): ConsultantConversationDetail | null;
-  /** B688: открытый разговор для ленты панели раздела. */
-  currentConsultantConversation(candidateId: string, stage: CoachTurnStage): ConsultantConversationDetail | null;
-  exportConsultantConversations(candidateId: string): ConsultantConversationExport[];
-  listPendingConsultantSummaries(candidateId: string): ConsultantSummaryTask[];
-  getConsultantSummaryInput(
-    candidateId: string,
-    task: ConsultantSummaryTask,
-  ): CoachTurnInput | null;
-  saveConsultantSummary(
-    candidateId: string,
-    task: ConsultantSummaryTask,
-    result: CoachProviderResult,
-  ): boolean;
-  claimConsultantSummary(candidateId: string, task: ConsultantSummaryTask): boolean;
-  releaseConsultantSummaryClaim(candidateId: string, task: ConsultantSummaryTask): void;
   rejectConsultantProposal(candidateId: string, proposalKey: string, reason?: string): void;
   getConsultantRejections(candidateId: string): ConsultantRejection[];
   withdrawConsultantRejection(candidateId: string, proposalKey: string): void;
