@@ -11,7 +11,7 @@ import {
   type StoredQuestionnaire,
 } from '../candidate/sqliteQuestionnaireRepository';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
-import { buildQuestionnaire, cleanAnswers } from '../domain/applicationQuestionnaire';
+import { answersToStore, buildQuestionnaire } from '../domain/applicationQuestionnaire';
 import type { QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -46,7 +46,8 @@ const VACANCY_ID_MAX_LENGTH = 200;
 const QUESTIONS_TTL_MS = 24 * 60 * 60 * 1000;
 
 function fresh(stored: StoredQuestionnaire, now: number): boolean {
-  if (stored.answers.length > 0 || stored.submittedAt) return true;
+  // Пустой ответ — только отметка «стёрто»: вопросы из-за него не закрепляются.
+  if (stored.answers.some((answer) => answer.text) || stored.submittedAt) return true;
   return now - new Date(stored.readAt).getTime() < QUESTIONS_TTL_MS;
 }
 const answersSchema = z
@@ -205,7 +206,7 @@ const putAnswers: Handler = async (deps, request, reply) => {
   if (!stored) {
     return sendError(reply, request, 404, 'questionnaire_not_found', 'Анкета не найдена.', false);
   }
-  const answers = cleanAnswers(stored.questions, parsed.data.answers);
+  const answers = answersToStore(stored.questions, parsed.data.answers);
   deps.forms.saveAnswers(who.candidateId, who.vacancyId, answers);
   return {
     data: view(deps, who, { ...stored, answers }, { state: 'ready', formUrl: null }),

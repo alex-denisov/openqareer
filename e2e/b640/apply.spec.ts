@@ -182,7 +182,10 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       text,
       wish: body.wish,
       createdAt: new Date().toISOString(),
-      payload: { emailPitch: { subject: 'Отклик', body: text } },
+      payload: {
+        emailPitch: { subject: 'Отклик', body: text },
+        usedEvidenceIds: [`fact-v${variants.length + 1}`],
+      },
     };
     variants.push(variant);
     await route.fulfill({
@@ -216,8 +219,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       },
       { questionId: 'q5', text: 'Россия', source: 'Из контактов вашего профиля' },
     ];
+    // Стёртый ответ хранится пустым: из профиля он больше не подставляется.
     const shown = [
-      ...formAnswers,
+      ...formAnswers.filter((answer) => answer.text),
       ...fromProfile
         .filter((item) => !formAnswers.some((answer) => answer.questionId === item.questionId))
         .map((item) => ({ questionId: item.questionId, text: item.text })),
@@ -248,6 +252,8 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       const body = route.request().postDataJSON() as { answers: typeof formAnswers };
       formAnswers.splice(0, formAnswers.length, ...body.answers);
       calls.push(`answers ${body.answers.map((answer) => answer.questionId).join(',')}`);
+      for (const answer of body.answers)
+        if (!answer.text) calls.push(`cleared ${answer.questionId}`);
     }
     if (method === 'POST') {
       formSubmittedAt = new Date().toISOString();
@@ -261,8 +267,14 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
     route.fulfill({ json: { data: { ready: false } } }),
   );
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals', async (route) => {
-    const body = route.request().postDataJSON() as { body: string; tone: string };
+    const body = route.request().postDataJSON() as {
+      body: string;
+      tone: string;
+      usedEvidenceIds: readonly string[];
+    };
     calls.push(`approve ${body.tone}`);
+    calls.push(`facts ${body.usedEvidenceIds.join(',')}`);
+    calls.push(`body ${body.body}`);
     await route.fulfill({
       json: {
         data: {
@@ -393,6 +405,32 @@ test.describe('B657: единый экран отклика', () => {
     await expectGates(page);
   });
 
+  test('другой вариант: правка хранится у своего текста, в одобрение идут его факты', async ({
+    page,
+  }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter');
+    const letter = page.getByLabel('Текст письма');
+    await expect(letter).toHaveValue(/вырастила группу разработки/u);
+    await letter.fill('Первое письмо, моя правка');
+    await page.getByRole('button', { name: /Другой вариант · 3/u }).click();
+    await page
+      .getByRole('dialog', { name: 'Что поменять' })
+      .getByRole('button', { name: 'Сделать вариант' })
+      .click();
+    await expect(letter).toHaveValue(/Другой вариант письма, короче/u);
+    await letter.fill('Вариант, моя правка');
+    const pager = page.getByRole('group', { name: 'Варианты письма' });
+    await pager.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(letter).toHaveValue('Первое письмо, моя правка');
+    await pager.getByRole('button', { name: 'Следующий вариант' }).click();
+    await expect(letter).toHaveValue('Вариант, моя правка');
+
+    await page.getByRole('button', { name: 'Одобрить' }).click();
+    await expect(page.getByText('Письмо одобрено').first()).toBeVisible();
+    expect(mock.calls).toContain('facts fact-v1');
+    expect(mock.calls).toContain('body Вариант, моя правка');
+  });
+
   test('другой вариант: пожелание, листание, предел в три', async ({ page }) => {
     const mock = await open(page, '/app/responses/a-draft/letter');
     const letter = page.getByLabel('Текст письма');
@@ -482,6 +520,18 @@ test.describe('B657: единый экран отклика', () => {
     await country.selectOption('Germany');
     await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
     await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(2);
+    // Вопрос с выбором — поле набора, а не системный список без оформления.
+    await expect(country.locator('xpath=..')).toHaveClass(/pf-f/u);
+    // Стёртый ответ из профиля уходит на сервер пустым и после перезагрузки не возвращается.
+    const salary = page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?');
+    await salary.fill('');
+    await salary.blur();
+    await expect.poll(() => mock.calls.includes('cleared q2')).toBe(true);
+    await page.reload();
+    await expect(page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?')).toHaveValue('');
+    await expect(page.getByLabel('Ваш ответ: LinkedIn Profile')).toHaveValue(
+      'https://www.linkedin.com/in/msokolova',
+    );
     // На 390 боковая панель скрыта: та же ссылка стоит в блоке действий под вопросами.
     await expect(
       page.getByRole('link', { name: 'Анкета на сайте ↗' }).locator('visible=true').first(),

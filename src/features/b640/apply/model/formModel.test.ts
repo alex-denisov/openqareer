@@ -22,8 +22,11 @@ describe('B641: готовность анкеты на экране', () => {
     expect(readiness([{ id: 'toString', text: 'Q', required: true, kind: 'text' }], {}).answered).toBe(0);
   });
 
-  it('пустые ответы не сохраняются и не копируются', () => {
-    expect(answersOf({ q1: ' 9 ', q2: '   ' })).toEqual([{ questionId: 'q1', text: '9' }]);
+  it('стёртый ответ сохраняется пустым, но не копируется', () => {
+    expect(answersOf({ q1: ' 9 ', q2: '   ' })).toEqual([
+      { questionId: 'q1', text: '9' },
+      { questionId: 'q2', text: '' },
+    ]);
     expect(copyText(QUESTIONS, { q1: '9 человек', q2: '', q3: 'Да' })).toBe(
       'Сколько человек было в вашей команде?\n9 человек\n\nГотовы ли к командировкам?\nДа',
     );

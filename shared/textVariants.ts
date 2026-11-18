@@ -51,4 +51,6 @@ export interface LetterVariantPayload {
   readonly recipientName?: string;
   readonly senderName?: string;
   readonly senderFirstName?: string;
+  /** Факты профиля, на которые опирается этот вариант: они и уходят в одобрение. */
+  readonly usedEvidenceIds?: readonly string[];
 }

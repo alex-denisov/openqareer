@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { QuestionnaireQuestion } from '../../shared/applicationQuestionnaire';
 import {
+  answersToStore,
   buildQuestionnaire,
   parseGreenhouseQuestions,
   salarySuggestions,
@@ -139,6 +140,21 @@ describe('B641: готовность анкеты', () => {
       submittedAt: null,
     });
     expect(view.suggestions).toEqual([]);
+  });
+
+  it('стёртый кандидатом ответ из профиля не подставляется снова', () => {
+    const stored = answersToStore(QUESTIONS, [
+      { questionId: 'q2', text: '  ' },
+      { questionId: 'gone', text: '' },
+    ]);
+    expect(stored).toEqual([{ questionId: 'q2', text: '' }]);
+    const view = buildQuestionnaire({
+      vacancyId: 'v1', state: 'ready', formUrl: null, questions: QUESTIONS, answers: stored,
+      profile: { salaryFloor: 500000 }, readAt: null, submittedAt: null,
+    });
+    expect(view.answers).toEqual([]);
+    expect(view.suggestions).toEqual([]);
+    expect(view).toMatchObject({ answered: 0, missingRequired: 2 });
   });
 
   it('без вопросов состояние не «готово»', () => {

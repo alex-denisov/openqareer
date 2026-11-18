@@ -16,10 +16,9 @@ export function draftOf(form: ApplicationQuestionnaire): AnswerDraft {
   return Object.fromEntries(form.answers.map((answer) => [answer.questionId, answer.text]));
 }
 
+/** Пустой ответ тоже уходит на сервер: так стёртое из профиля не подставится снова. */
 export function answersOf(draft: AnswerDraft): readonly QuestionnaireAnswer[] {
-  return Object.entries(draft)
-    .map(([questionId, text]) => ({ questionId, text: text.trim() }))
-    .filter((answer) => answer.text);
+  return Object.entries(draft).map(([questionId, text]) => ({ questionId, text: text.trim() }));
 }
 
 export interface FormReadiness {

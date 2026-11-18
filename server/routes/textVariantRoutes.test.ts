@@ -116,6 +116,8 @@ describe('text variant routes with the B640 flag', () => {
       wish: { chips: ['shorter'], text: 'начни с результата' },
     });
     expect(data.variant.payload.emailPitch.body).toBe('Здравствуйте! Пишу по вакансии коротко.');
+    // Факты профиля, на которые опирается вариант, сохраняются вместе с ним — для одобрения.
+    expect(data.variant.payload.usedEvidenceIds).toEqual(expect.arrayContaining(['mem-201']));
     expect(inputs[0].wish).toContain('сделай текст заметно короче');
     expect(inputs[0].wish).toContain('«начни с результата»');
     const listed = (await call('GET', LIST)).json().data;
