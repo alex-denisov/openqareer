@@ -86,6 +86,9 @@ export async function setup(role?: string, options: SetupOptions = {}) {
     headers: { cookie, origin: 'http://localhost:3000' },
     payload: {},
   });
+  const readApproval = (vacancyId = 'cluster-99') => app.inject({
+    method: 'GET', url: '/api/v1/candidate/vacancies/' + vacancyId + '/letter-approvals/latest', headers: { cookie },
+  });
   const resumeDocuments = () =>
     candidates.getSnapshot(candidateId).documents.filter((document) => document.kind === 'resume');
   const versions = () => candidates.listResumeVersions(candidateId, { limit: 50, cursor: null }).items;
@@ -101,6 +104,6 @@ export async function setup(role?: string, options: SetupOptions = {}) {
       database.close();
     }
   };
-  return { candidates, candidateId, approve, prepareResume, pitch, resumeDocuments, versions, linkedResume };
+  return { candidates, candidateId, approve, readApproval, prepareResume, pitch, resumeDocuments, versions, linkedResume };
 }
 

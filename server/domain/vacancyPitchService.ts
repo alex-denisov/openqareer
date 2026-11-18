@@ -1,6 +1,7 @@
 import { PERSON_FIRST_NAMES } from '../../shared/personFirstNames';
 import { stripHiddenMarkers } from '../../shared/textHygiene';
 import { isImportedMemoryId } from './resumeImport';
+import { russianProperName } from './letterCyrillicName';
 import {
   hasRoleAwarePitchRanking,
   rankPitchFacts,
@@ -704,7 +705,8 @@ function letterSender(
     return { senderName: letterName, ...(first && first !== letterName ? { senderFirstName: first } : {}) };
   }
   if (!ownName) return {};
-  const inLetter = (name: string): string => (language === 'en' ? englishProperName(name) : name);
+  // B714: латиница профиля в русском письме не остаётся.
+  const inLetter = (name: string): string => (language === 'en' ? englishProperName(name) : russianProperName(name));
   const firstName = ownName.split(/\s+/u).find((part) => PERSON_FIRST_NAMES.has(part));
   return {
     senderName: inLetter(ownName),
@@ -719,7 +721,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const ownName = options.candidateName?.trim();
   const letterName = options.letterName?.trim() || undefined;
   const candidateName =
-    letterName ?? (ownName ? (language === 'en' ? englishProperName(ownName) : ownName) : copy.candidateFallback);
+    letterName ?? (ownName ? (language === 'en' ? englishProperName(ownName) : russianProperName(ownName)) : copy.candidateFallback);
   const facts = withTranslatedStatements(options.facts, language === 'en' ? options.translations : undefined);
   const usableFacts = rankPitchFacts(filterUsableFacts(facts), vacancy, options.rankingContext);
   const useRanking = hasRoleAwarePitchRanking(options.rankingContext);

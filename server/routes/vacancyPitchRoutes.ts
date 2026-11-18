@@ -12,7 +12,7 @@ import { writeCoverLetterBody, type WrittenLetterBody } from './vacancyLetterBod
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
-import { resolveLetterCluster } from './letterVacancyCluster';
+import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import {
   attachApprovedResume,
@@ -22,6 +22,7 @@ import {
   ResumeSnapshotError,
 } from './letterApprovalResume';
 import { currentMaster, masterProjectionOf } from './resumeMaster';
+import { APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -87,6 +88,8 @@ const approvedLetterSnapshotSchema = z.object({
   resumeAvailable: z.boolean().optional(),
   /** Снимок не создался, и кандидат выбрал своё общее резюме. */
   generalResumeId: z.string().trim().min(1).max(200).optional(),
+  /** B711: какой вариант письма одобрен — экран вернётся к нему. */
+  variantId: z.string().trim().min(1).max(200).optional(),
 });
 
 /** Перевод результатов идёт до письма: модель цитирует и проверка сверяет один и тот же текст. */
@@ -492,7 +495,7 @@ const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
-  const cluster = resolveLetterCluster(multiSourceEngine, vacancyId);
+  const cluster = resolvePoolVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
     const state = prepareLetterResume(deps, candidate.id, cluster);
@@ -511,7 +514,7 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   const vacancyId = (request.params as { id: string }).id;
   const parsed = approvedLetterSnapshotSchema.safeParse(request.body);
   if (!parsed.success) return invalidLetterSnapshot(reply, request);
-  const cluster = resolveLetterCluster(multiSourceEngine, vacancyId);
+  const cluster = resolvePoolVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   const evidenceIds = new Set(
     filterUsablePitchFacts(candidateStore.getSnapshot(candidate.id).memory).map((fact) => fact.id),
@@ -564,12 +567,18 @@ function persistApprovedLetterSnapshot(
         source: cluster.sources[0]?.sourceName ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
       },
     });
+    // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).
+    const resume = attachApprovedResume(deps, candidateId, {
+      applicationId: application.id, cluster, approvedAt,
+      ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
+    });
     const approvalId = randomUUID();
     const snapshot = {
       version: 1, approvalId, vacancyId, applicationId: application.id, approvedAt,
       circle: input.circle, language: input.language, tone: input.tone,
       recipient: input.recipient ?? null, subject: input.subject ?? null, body: input.body,
       usedEvidenceIds: input.usedEvidenceIds, includedWorkplaceIds: input.includedWorkplaceIds, sent: false,
+      variantId: input.variantId ?? null, resume,
     };
     const document = candidateStore.saveDocumentAndLinkApplicationMaterial(
       candidateId,
@@ -578,19 +587,13 @@ function persistApprovedLetterSnapshot(
       {
         kind: 'cover_letter',
         source: 'generated',
-        fileName: 'approved-letter-' + approvalId + '.json',
+        fileName: APPROVED_LETTER_PREFIX + approvalId + '.json',
         mimeType: 'application/json',
         contentBase64: Buffer.from(JSON.stringify(snapshot), 'utf8').toString('base64'),
         extractedText: input.body,
         parseStatus: 'not_applicable',
       },
     ).document;
-    const resume = attachApprovedResume(deps, candidateId, {
-      applicationId: application.id,
-      cluster,
-      approvedAt,
-      ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
-    });
     return { application, document, resume };
   });
 }
@@ -606,6 +609,7 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     withDeps(deps, handleApproveVacancyLetter),
   );
+  app.get('/api/v1/candidate/vacancies/:id/letter-approvals/latest', withDeps(deps, handleReadLetterApproval));
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-resume',
     { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
