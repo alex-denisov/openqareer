@@ -11,7 +11,7 @@ import {
   type StoredQuestionnaire,
 } from '../candidate/sqliteQuestionnaireRepository';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
-import { buildQuestionnaire, cleanAnswers } from '../domain/applicationQuestionnaire';
+import { answersToStore, buildQuestionnaire } from '../domain/applicationQuestionnaire';
 import type { QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -205,7 +205,7 @@ const putAnswers: Handler = async (deps, request, reply) => {
   if (!stored) {
     return sendError(reply, request, 404, 'questionnaire_not_found', 'Анкета не найдена.', false);
   }
-  const answers = cleanAnswers(stored.questions, parsed.data.answers);
+  const answers = answersToStore(stored.questions, parsed.data.answers);
   deps.forms.saveAnswers(who.candidateId, who.vacancyId, answers);
   return {
     data: view(deps, who, { ...stored, answers }, { state: 'ready', formUrl: null }),

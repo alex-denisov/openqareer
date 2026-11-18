@@ -29,6 +29,7 @@ import { QuotaBlock } from './QuotaBlock';
 import { ResumeStep } from './ResumeStep';
 import { SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
+import { useVariantApproval } from './useVariantApproval';
 
 const COLD_CIRCLE = 3;
 
@@ -210,9 +211,10 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const [resumeOk, setResumeOk] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
-  const letter = useVacancyLetterController(target.vacancyId, COLD_CIRCLE);
+  const draft = useVacancyLetterController(target.vacancyId, COLD_CIRCLE);
+  const variants = useLetterVariants(target.vacancyId, draft);
+  const letter = useVariantApproval(target.vacancyId, draft, variants);
   const quota = useExhaustedQuota(letter);
-  const variants = useLetterVariants(target.vacancyId, letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
   const form = questionnaire.form;
   // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.

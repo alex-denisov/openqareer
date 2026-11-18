@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MAX_TEXT_VARIANTS, type VariantWish } from '../../../../shared/textVariants';
 import { apiErrorMessage } from '../../coach/apiClient';
 import type { LetterScreenState } from '../../vacancies/vacancyLetterController';
@@ -8,12 +8,15 @@ import {
 } from '../../vacancies/vacancyLetterModel';
 import { useAsync } from '../responses/data/useAsync';
 import { createLetterVariant, listLetterVariants, type LetterVariant } from './data/variantsApi';
+import { FIRST_LETTER_KEY, switchVariant, type VariantEdits } from './model/variantModel';
 
 export interface LetterVariantsState {
   /** Сколько всего текстов можно листать: первое письмо и его другие варианты. */
   readonly total: number;
   /** Какой текст сейчас в поле: 0 — первое письмо. */
   readonly index: number;
+  /** Данные выбранного варианта; `null` — в поле первое письмо. */
+  readonly selected: LetterVariant['payload'];
   readonly remaining: number;
   /** Листать нельзя, пока письмо пересобирается. */
   readonly locked: boolean;
@@ -44,25 +47,39 @@ export function useLetterVariants(vacancyId: string, letter: LetterScreenState):
   const [wishOpen, setWishOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { pitch, setText, loading } = letter.draft;
+  const { pitch, text, setText, loading } = letter.draft;
+  // Правки руками: у первого письма и у каждого варианта своя.
+  const edits = useRef<VariantEdits>({});
   const { circle, selectedPath: path } = letter.circle;
   const recipient = path ? recipientForConnectionPath(path) : undefined;
   const stored = variantsFor(state.data?.variants ?? [], recipient?.name ?? '');
 
   // Письмо пересобрали (тон, язык, адресат): в поле снова первое письмо.
-  useEffect(() => setIndex(0), [pitch]);
+  useEffect(() => {
+    setIndex(0);
+    edits.current = {};
+  }, [pitch]);
+  const current = Math.min(index, stored.length);
 
   const show = (next: number, variants: readonly LetterVariant[]) => {
     const variant = next > 0 ? variants[next - 1] : null;
     const source = variant?.payload ?? pitch;
     if (!source || loading) return;
-    setText(letterBodyForCircle(circle, source));
+    const key = (at: number) => (at > 0 ? (variants[at - 1]?.id ?? FIRST_LETTER_KEY) : FIRST_LETTER_KEY);
+    const moved = switchVariant(
+      edits.current,
+      { key: key(current), text },
+      { key: key(next), generated: letterBodyForCircle(circle, source) },
+    );
+    edits.current = moved.edits;
+    setText(moved.text);
     setIndex(next);
   };
 
   return {
     total: 1 + stored.length,
-    index: Math.min(index, stored.length),
+    index: current,
+    selected: current > 0 ? (stored[current - 1]?.payload ?? null) : null,
     remaining: state.data?.remaining ?? MAX_TEXT_VARIANTS,
     locked: loading || !pitch,
     wishOpen,

@@ -126,6 +126,24 @@ export function cleanAnswers(
   });
 }
 
+/**
+ * Ответы для хранения: как `cleanAnswers`, но пустой ответ на существующий вопрос остаётся —
+ * так запоминается, что кандидат стёр подставленное из профиля.
+ */
+export function answersToStore(
+  questions: readonly QuestionnaireQuestion[],
+  answers: readonly QuestionnaireAnswer[],
+): readonly QuestionnaireAnswer[] {
+  const byQuestion = new Map<string, string>();
+  for (const answer of answers) {
+    byQuestion.set(answer.questionId, answer.text.trim().slice(0, QUESTIONNAIRE_ANSWER_MAX_LENGTH));
+  }
+  return questions.flatMap((question) => {
+    const text = byQuestion.get(question.id);
+    return text === undefined ? [] : [{ questionId: question.id, text }];
+  });
+}
+
 /** Сохранённые ответы и, где ответа ещё нет, подставленные из профиля — в порядке вопросов. */
 function withProfileAnswers(
   questions: readonly QuestionnaireQuestion[],
@@ -145,10 +163,14 @@ export function buildQuestionnaire(input: QuestionnaireInput): ApplicationQuesti
   const saved = cleanAnswers(input.questions, input.answers);
   const contacts = profileAnswers(input.questions, input.facts ?? null);
   const taken = new Set(contacts.map((item) => item.questionId));
+  // Стёртый кандидатом ответ хранится пустым: из профиля он больше не подставляется.
+  const cleared = new Set(
+    input.answers.filter((answer) => !answer.text.trim()).map((answer) => answer.questionId),
+  );
   const fromProfile = [
     ...contacts,
     ...salarySuggestions(input.questions, input.profile).filter((item) => !taken.has(item.questionId)),
-  ];
+  ].filter((item) => !cleared.has(item.questionId));
   const answers = withProfileAnswers(input.questions, saved, fromProfile);
   const answered = new Set(answers.map((answer) => answer.questionId));
   const texts = new Map(answers.map((answer) => [answer.questionId, answer.text]));

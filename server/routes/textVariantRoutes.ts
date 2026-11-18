@@ -116,6 +116,7 @@ function letterPayload(
     ...(recipientName ? { recipientName } : {}),
     ...(pitch.senderName ? { senderName: pitch.senderName } : {}),
     ...(pitch.senderFirstName ? { senderFirstName: pitch.senderFirstName } : {}),
+    usedEvidenceIds: pitch.usedEvidenceIds,
   };
 }
 

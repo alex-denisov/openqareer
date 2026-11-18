@@ -142,7 +142,8 @@ function Question({ question, suggestion, state }: QuestionProps) {
         ) : null}
         {question.required ? null : <span className="tag src">необязательный</span>}
       </div>
-      <div className="field">
+      {/* Вопрос с выбором — поле набора (`pf-f`), как в остальных формах кабинета. */}
+      <div className={question.kind === 'choice' ? 'field pf-f' : 'field'}>
         <label className="vh" htmlFor={fieldId}>
           {`Ваш ответ: ${question.text}`}
         </label>
