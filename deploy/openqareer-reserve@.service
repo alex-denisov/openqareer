@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenQareer warm reserve watch for the instance on port %i (B705-2)
+After=openqareer-static@%i.service
+
+[Service]
+Type=simple
+User=openqareer-deploy
+Group=openqareer-deploy
+# Без NoNewPrivileges: сторож переключает Caddy и юниты через sudo с точными
+# аргументами из /etc/sudoers.d/openqareer-deploy.
+ExecStart=/usr/local/bin/openqareer-reserve-watch %i
+TimeoutStopSec=10s
