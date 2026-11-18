@@ -418,7 +418,9 @@ jobs:
 
   deploy:
     name: Deploy production
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # always(): the plan skips gates on purpose, and a skipped ancestor would
+    # otherwise skip this job too; Verify is the single gate for deploy.
+    if: always() && needs.verify.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 15
