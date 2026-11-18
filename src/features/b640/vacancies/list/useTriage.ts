@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VacancyTriage, VacancyTriageAnswers, VacancyTriageRow } from '../../../../../shared/b640Vacancies';
 import { isKnownSkipReasonId } from '../../../../../shared/skipReasons';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -111,16 +111,82 @@ function useNothingResult(
   return useMemo(() => ({ nothing, clearResult }), [nothing, clearResult]);
 }
 
-/** Режим «Помочь выбрать»: разбор всего списка, флажки, вопросы по одному, скрытие серией. */
-export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMany): Triage {
+/** Откуда режим знает, что подборка дочитана, и сколько в ней вакансий, пока она читается. */
+export interface TriageSource {
+  readonly ready: boolean;
+  readonly expected: number;
+}
+
+const READY_NOW: TriageSource = { ready: true, expected: 0 };
+/** Сколько ждать дочитывания подборки, прежде чем разобрать то, что уже прочитано. */
+export const TRIAGE_POOL_WAIT_MS = 20_000;
+
+interface TriageList {
+  /** Список одного разбора; `null` — нажатие ждёт, пока подборка дочитается. */
+  readonly ids: readonly string[] | null;
+  readonly capture: () => void;
+}
+
+/**
+ * Одно нажатие — один список: он берётся целиком, когда подборка дочитана, и после этого
+ * не меняется. Дочитывание, сортировка и фильтры новый разбор не запускают.
+ */
+function useTriageList(
+  active: boolean,
+  items: readonly MatchedVacancyItem[],
+  ready: boolean,
+): TriageList {
+  const [ids, setIds] = useState<readonly string[] | null>(null);
+  const latest = useRef(items);
+  latest.current = items;
+  const waiting = active && ids === null;
+  useEffect(() => {
+    if (!waiting) return undefined;
+    if (ready) {
+      setIds(triageIds(latest.current));
+      return undefined;
+    }
+    const timer = setTimeout(() => setIds(triageIds(latest.current)), TRIAGE_POOL_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [waiting, ready]);
+  const capture = useCallback(() => setIds(null), []);
+  return { ids, capture };
+}
+
+/** Ответ на текущий вопрос; вопроса нет — ответы прежние. */
+function withAnswer(
+  answers: VacancyTriageAnswers,
+  triage: VacancyTriage | null,
+  value: boolean,
+): VacancyTriageAnswers {
+  const id = currentQuestion(triage)?.id;
+  return id ? { ...answers, [id]: value } : answers;
+}
+
+/** Пока нажатие ждёт подборку, это тоже «разбираем», а число — из шапки списка. */
+function progressOf(
+  active: boolean,
+  ids: readonly string[] | null,
+  status: TriageStatus,
+  expected: number,
+): Pick<Triage, 'status' | 'total'> {
+  if (ids === null) return { status: active ? 'loading' : status, total: expected };
+  return { status, total: ids.length };
+}
+
+/** Режим «Помочь выбрать»: разбор всей подборки, флажки, вопросы по одному, скрытие серией. */
+export function useTriage(
+  items: readonly MatchedVacancyItem[],
+  hideMany: HideMany,
+  source: TriageSource = READY_NOW,
+): Triage {
   const [active, setActive] = useState(false);
   const [answers, setAnswers] = useState<VacancyTriageAnswers>(NO_ANSWERS);
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(NONE);
   const series = useHideSeries(hideMany);
   const { state: hide, reset: resetSeries } = series;
-  // Список фиксируется в момент нажатия: дочитывание подборки и сортировка разбор не перезапускают.
-  const [ids, setIds] = useState<readonly string[]>(NO_IDS);
-  const request = useTriageRequest(active, hide.status === 'busy', ids, answers);
+  const { ids, capture } = useTriageList(active, items, source.ready);
+  const request = useTriageRequest(active && ids !== null, hide.status === 'busy', ids ?? NO_IDS, answers);
   const rows = useMemo(() => triageRowMap(request.triage), [request.triage]);
   const picked = useMemo(() => pickedIds(request.triage, unchecked), [request.triage, unchecked]);
 
@@ -135,9 +201,9 @@ export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMa
 
   const start = useCallback(() => {
     result.clearResult();
-    setIds(triageIds(items));
+    capture();
     setActive(true);
-  }, [items, result]);
+  }, [capture, result]);
 
   const hideSelected = useCallback(() => {
     if (picked.length === 0) return;
@@ -147,9 +213,8 @@ export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMa
 
   return {
     active,
-    status: request.status,
     triage: request.triage,
-    total: ids.length,
+    ...progressOf(active, ids, request.status, source.expected),
     ...result,
     question: currentQuestion(request.triage),
     picked: picked.length,
@@ -158,10 +223,7 @@ export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMa
     rowFor: (id) => (active ? rows.get(id) : undefined),
     isPicked: (id) => active && rows.get(id)?.verdict === 'hide' && !unchecked.has(id),
     toggle: (id) => setUnchecked((current) => toggleUnchecked(current, id)),
-    answer: (value) => {
-      const id = currentQuestion(request.triage)?.id;
-      if (id) setAnswers((current) => ({ ...current, [id]: value }));
-    },
+    answer: (value) => setAnswers((current) => withAnswer(current, request.triage, value)),
     start,
     cancel,
     retry: request.retry,

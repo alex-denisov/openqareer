@@ -342,7 +342,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator(ROWS)).toHaveCount(20);
   });
 
-  test('«Помочь выбрать»: один запрос на нажатие, дочитывание подборки разбор не перезапускает', async ({
+  test('«Помочь выбрать»: нажатие до конца дочитывания даёт один запрос на всю подборку', async ({
     page,
   }) => {
     await openCabinet(page, '/app/vacancies', { total: 450 });
@@ -356,12 +356,14 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator(ROWS).first()).toBeVisible();
     await page.locator('.va-review').click();
+    // Подборка ещё дочитывается: режим ждёт её на месте и запрос не отправляет.
+    await expect(page.locator('p.vz-st[aria-busy="true"]')).toContainText('Разбираем 450');
+    expect(calls).toHaveLength(0);
     await expect(page.locator(PICKED).first()).toBeVisible();
-    await expect(page.locator('.vl-count .num')).toHaveText('450');
     await expect(page.locator('.vl-foot .btn')).toContainText('осталось 430');
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.clusterIds.length).toBeGreaterThanOrEqual(20);
-    expect(calls[0]?.clusterIds.length).toBeLessThan(450);
+    expect(calls[0]?.clusterIds).toHaveLength(450);
+    expect(new Set(calls[0]?.clusterIds).size).toBe(450);
     await expect(page.locator(PICKED)).toHaveCount(3);
   });
 
