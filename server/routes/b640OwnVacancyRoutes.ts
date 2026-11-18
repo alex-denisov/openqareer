@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { OWN_VACANCY_LINK_MAX, OWN_VACANCY_TEXT_MAX, OWN_VACANCY_TEXT_MIN } from '../../shared/b640OwnVacancy';
 import type { SqliteOwnVacancyStore } from '../data/sqliteOwnVacancyStore';
-import { createOwnVacancy } from '../vacancies/ownVacancy/createOwnVacancy';
+import { createOwnVacancy, OwnVacancyReadBusy } from '../vacancies/ownVacancy/createOwnVacancy';
 import { ownVacancyStoreFor } from '../vacancies/ownVacancy/ownVacancyStore';
 import { forgetOwnVacancyComparison, ownVacancyDetail, ownVacancySummary } from '../vacancies/ownVacancy/ownVacancyComparison';
 import { sessionCandidate } from './b640VacancyContext';
@@ -51,8 +51,13 @@ async function postOwnVacancy(deps: RouteDeps, request: FastifyRequest, reply: F
   if (!context) return reply;
   const body = bodySchema.safeParse(request.body);
   if (!body.success) return sendError(reply, request, 400, 'invalid_own_vacancy', 'Вставьте ссылку или текст вакансии.', false);
-  const data = await createOwnVacancy(deps, context.store, context.candidateId, body.data);
-  return { data, meta: meta(request) };
+  try {
+    const data = await createOwnVacancy(deps, context.store, context.candidateId, body.data);
+    return { data, meta: meta(request) };
+  } catch (error) {
+    if (!(error instanceof OwnVacancyReadBusy)) throw error;
+    return sendError(reply, request, 429, 'own_vacancy_read_busy', 'Слишком много проверок подряд. Попробуйте через несколько минут.', true);
+  }
 }
 
 function listOwnVacancies(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

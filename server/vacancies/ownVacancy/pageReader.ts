@@ -1,6 +1,6 @@
 import { OWN_VACANCY_USER_AGENT, type OwnVacancyUnreadable } from '../../../shared/b640OwnVacancy';
 import { isPublicHost } from '../../connectors/publicHost';
-import { createPinnedFetch, defaultResolve, privateAddress } from '../../outreach/dossier/pinnedFetch';
+import { createPinnedFetch, defaultResolve, pinnedFetch, privateAddress } from '../../outreach/dossier/pinnedFetch';
 import { evaluateRobotsPolicy } from '../robotsParser';
 import { isClosedSite } from './closedSites';
 
@@ -128,7 +128,8 @@ export async function readVacancyPage(link: string, options: PageReaderOptions =
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
   const context: Context = {
-    fetchImpl: options.fetchImpl ?? createPinnedFetch(resolve), resolve, signal: controller.signal,
+    // Один агент на процесс: новый `Agent` на каждое чтение не закрывался бы.
+    fetchImpl: options.fetchImpl ?? (options.resolve ? createPinnedFetch(resolve) : pinnedFetch), resolve, signal: controller.signal,
     maxBytes: options.maxBytes ?? MAX_BYTES, robotsChecked: new Set(),
   };
   let timer: ReturnType<typeof setTimeout> | undefined;

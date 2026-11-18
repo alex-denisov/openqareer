@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OWN_VACANCY_MAX } from '../../shared/b640OwnVacancy';
 import { createB640Harness, poolItem, type HarnessUser } from '../testHelpers/b640VacancyHarness';
 import { forgetMatchedListsForTests } from './matchedVacancyList';
+import { forgetLinkReadSlotsForTests } from '../vacancies/ownVacancy/linkReadLimit';
 
 const reader = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('../vacancies/ownVacancy/pageReader', () => ({ readVacancyPage: reader.read }));
@@ -19,6 +20,7 @@ const closers: Array<() => Promise<void>> = [];
 beforeEach(() => reader.read.mockReset());
 afterEach(async () => {
   forgetMatchedListsForTests();
+  forgetLinkReadSlotsForTests();
   for (const close of closers.splice(0)) await close();
 });
 
@@ -105,6 +107,23 @@ describe('POST own-vacancies', () => {
   ])('неверное тело %j — 400', async (body) => {
     const h = await setup();
     expect((await h.send('POST', BASE, 'flagged.test', body)).statusCode).toBe(400);
+  });
+  it('чтение чужих страниц: одно за раз и не больше 10 за 10 минут — дальше 429', async () => {
+    const h = await setup();
+    let finish: (value: unknown) => void = () => undefined;
+    reader.read.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const slow = h.send('POST', BASE, 'flagged.test', { link: 'https://jobs.example.com/slow' });
+    await vi.waitFor(() => expect(reader.read).toHaveBeenCalledTimes(1));
+    expect((await h.send('POST', BASE, 'flagged.test', { link: 'https://jobs.example.com/b' })).statusCode).toBe(429);
+    finish({ ok: false, reason: 'failed' });
+    expect((await slow).statusCode).toBe(200);
+    reader.read.mockResolvedValue({ ok: false, reason: 'failed' });
+    for (let index = 0; index < 9; index += 1) {
+      expect((await h.send('POST', BASE, 'flagged.test', { link: `https://jobs.example.com/${index}` })).statusCode).toBe(200);
+    }
+    expect((await h.send('POST', BASE, 'flagged.test', { link: 'https://jobs.example.com/x' })).statusCode).toBe(429);
+    expect((await createText(h)).json().data.outcome).toBe('created');
+    expect((await h.send('POST', BASE, 'other.test', { link: 'https://jobs.example.com/x' })).statusCode).toBe(200);
   });
   it('тело больше 64 КБ — 413', async () => {
     const h = await setup();

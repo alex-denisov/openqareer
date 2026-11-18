@@ -72,11 +72,7 @@ export function ownVacancyDetail(deps: RouteDeps, candidateId: string, record: O
   return { ...summary(record, fit), text: record.text, fit };
 }
 
-/** Удаление убирает задачу и результат совпадения под текущим ключом; всё это и так запечатано. */
+/** Удаление убирает все задачи и результаты совпадения этой вакансии, под любой версией профиля. */
 export function forgetOwnVacancyComparison(deps: RouteDeps, candidateId: string, record: OwnVacancyRecord): void {
-  const runtime = deps.vacancyMechanics;
-  if (!runtime) return;
-  const key = runtime.fit.cacheKey(fitInput(deps, candidateId, record));
-  runtime.database.prepare('DELETE FROM vacancy_fit_queue WHERE cache_key=?').run(key);
-  runtime.database.prepare('DELETE FROM vacancy_fit_cache WHERE cache_key=?').run(key);
+  deps.vacancyMechanics?.fit.forgetVacancy(candidateId, record.id);
 }

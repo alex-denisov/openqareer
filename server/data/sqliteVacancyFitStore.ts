@@ -489,6 +489,30 @@ export class SqliteVacancyFitStore {
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }
 
+  /**
+   * B676: a candidate deletes one own vacancy — every row for it goes, under any profile version.
+   * Rows are found by opening the candidate's own sealed rows; it runs only on that explicit delete.
+   */
+  forgetVacancy(candidateId: string, vacancyId: string): number {
+    const candidateKey = this.candidateKey(candidateId);
+    const matches = (cipher: string, key: string) => {
+      try { return (JSON.parse(this.sealedText.open(cipher, key)) as { vacancyId?: string }).vacancyId === vacancyId; } catch { return false; }
+    };
+    const cache = (this.database.prepare('SELECT cache_key AS key,result_cipher AS cipher FROM vacancy_fit_cache WHERE candidate_key=?').all(candidateKey) as unknown as { key: string; cipher: string }[])
+      .filter((row) => matches(row.cipher, row.key)).map((row) => row.key);
+    const queue = (this.database.prepare('SELECT cache_key AS key,input_cipher AS cipher FROM vacancy_fit_queue WHERE candidate_key=?').all(candidateKey) as unknown as { key: string; cipher: string }[])
+      .filter((row) => matches(row.cipher, row.key)).map((row) => row.key);
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      let removed = 0;
+      for (const key of cache) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_cache WHERE cache_key=?').run(key).changes);
+      for (const key of queue) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_queue WHERE cache_key=?').run(key).changes);
+      removed += Number(this.database.prepare('DELETE FROM vacancy_fit_latest WHERE latest_key=?').run(this.latestKey(candidateId, vacancyId)).changes);
+      this.database.exec('COMMIT');
+      return removed;
+    } catch (error) { this.database.exec('ROLLBACK'); throw error; }
+  }
+
   deleteCandidate(candidateId: string): void {
     const key = this.candidateKey(candidateId);
     this.database.exec('BEGIN IMMEDIATE');

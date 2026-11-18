@@ -45,4 +45,21 @@ describe('B676: своя вакансия в расчёте совпадения
     runtime.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     expect(readFileSync(join(directory, 'db.sqlite')).toString('latin1')).not.toContain('UNIQUE_OWN_REQUIREMENT');
   });
+
+  it('удаление своей вакансии убирает её задачи и результаты под любым ключом, чужие не трогает', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'oq-own-forget-'));
+    const { runtime, input } = ownInput(directory);
+    cleanup.push(() => { runtime.close(); rmSync(directory, { recursive: true, force: true }); });
+    const other = { ...input, vacancyId: 'own-00000000-0000-4000-8000-000000000002' };
+    const older = { ...input, profileContextHash: 'older-profile' };
+    runtime.fit.enqueue(input);
+    runtime.fit.enqueue(older);
+    runtime.fit.enqueue(other);
+    await runtime.runNext(null);
+    expect(runtime.fit.forgetVacancy(input.candidateId, input.vacancyId)).toBeGreaterThanOrEqual(2);
+    expect(runtime.fit.getJobStatus(input)).toBeUndefined();
+    expect(runtime.fit.getJobStatus(older)).toBeUndefined();
+    expect(runtime.fit.getCache(input)).toBeUndefined();
+    expect(runtime.fit.getJobStatus(other)).toBeDefined();
+  });
 });

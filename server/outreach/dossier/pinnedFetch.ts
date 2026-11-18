@@ -27,7 +27,8 @@ export function privateAddress(address: string): boolean {
       const v4 = mappedV4(v6);
       return v4 === null || privateAddress(v4);
     }
-    return v6 === '::1' || v6 === '::' || /^f[cd]/u.test(v6) || /^fe[89ab]/u.test(v6);
+    // NAT64 и 6to4 несут IPv4 внутри, site-local и IPv4-compatible устарели — не публичные (B676).
+    return v6 === '::1' || v6 === '::' || /^f[cd]/u.test(v6) || /^fe[89abcdef]/u.test(v6) || /^64:ff9b:/u.test(v6) || /^2002:/u.test(v6) || /^::[0-9a-f]/u.test(v6);
   }
   const [a = 0, b = 0] = address.split('.').map(Number);
   return (
@@ -37,6 +38,8 @@ export function privateAddress(address: string): boolean {
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
+    (a === 192 && b === 0) ||
+    (a === 198 && (b === 18 || b === 19)) ||
     (a === 100 && b >= 64 && b <= 127) ||
     a >= 224
   );
