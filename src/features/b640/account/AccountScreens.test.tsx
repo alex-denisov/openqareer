@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   getAccountCapabilityConsents: vi.fn(),
   getCandidateBillingSummary: vi.fn(),
   getPendingAccountEmailChange: vi.fn(),
+  getResumeStudio: vi.fn(),
   requestAccountEmailChange: vi.fn(),
   verifyAccountEmailChange: vi.fn(),
 }));
@@ -51,6 +52,7 @@ vi.mock('../../account/notificationPreferencesApi', () => ({
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
 }));
+vi.mock('../../resume/resumeApi', () => ({ getResumeStudio: api.getResumeStudio }));
 vi.mock('../../shell/candidateBillingApi', () => ({
   getCandidateBillingSummary: api.getCandidateBillingSummary,
 }));
@@ -153,6 +155,7 @@ beforeEach(() => {
   ]);
   api.getCandidateBillingSummary.mockResolvedValue({ currentPlan: 'pro', subscription: null, plans: [] });
   api.getPendingAccountEmailChange.mockResolvedValue(null);
+  api.getResumeStudio.mockResolvedValue({ draft: { candidate: { photoMediaId: null } } });
 });
 afterEach(() => {
   view?.unmount();
@@ -176,6 +179,24 @@ describe('n00 «Аккаунт»: разделы', () => {
       ['/app/account/app', 'Приложение', 'Тема и часовой пояс'],
       ['/app/account/billing', 'Подписка и платежи', 'Pro'],
     ]);
+  });
+
+  it('фото из профиля вместо буквы; фото нет или профиль не прочитался — буква', async () => {
+    const first = await open(<SectionsScreen node={node('n00')} />);
+    expect(first.querySelector('.acc-photo img')).toBeNull();
+    expect(first.querySelector('.acc-photo .phead-ini')?.textContent).toBe('М');
+    view?.unmount();
+    api.getResumeStudio.mockResolvedValue({ draft: { candidate: { photoMediaId: 'media-1' } } });
+    const second = await open(<SectionsScreen node={node('n00')} />);
+    const photo = second.querySelector('.acc-photo img.phead-photo') as HTMLImageElement;
+    expect(photo.getAttribute('src')).toContain('/api/v1/candidate/media/media-1');
+    expect(photo.alt).toBe('');
+    expect(second.querySelector('.phead-ini')).toBeNull();
+    view?.unmount();
+    api.getResumeStudio.mockRejectedValue(new Error('сеть'));
+    const third = await open(<SectionsScreen node={node('n00')} />);
+    expect(third.querySelector('.acc-photo .phead-ini')?.textContent).toBe('М');
+    expect(third.querySelectorAll('.set-list > .set-row')).toHaveLength(6);
   });
 
   it('сбой одного чтения не прячет разделы: подпись просто не показана', async () => {

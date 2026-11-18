@@ -5,6 +5,8 @@ export interface ConsentRow {
   readonly title: string;
   /** Что разрешает согласие — одной строкой, как в макете N5. */
   readonly line: string;
+  /** Отзыв стирает данные на сервере: вопрос и одна фраза для окна подтверждения. */
+  readonly revokeWarning?: { readonly title: string; readonly text: string };
 }
 
 /** Согласия, которые умеет хранить сервер. */
@@ -18,6 +20,11 @@ export const CONSENT_ROWS: readonly ConsentRow[] = [
     capability: 'digital_footprint',
     title: 'Цифровой след',
     line: 'Проверять, что о вас видно в открытом доступе',
+    // server/routes/capabilityConsentRoutes.ts: при отзыве удаляются проверки следа.
+    revokeWarning: {
+      title: 'Отозвать согласие на цифровой след?',
+      text: 'Сохранённые находки удалятся.',
+    },
   },
   {
     capability: 'actions_on_behalf',
