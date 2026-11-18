@@ -1,0 +1,10 @@
+/* «Цифровой след»: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  @media (max-width: 767px) {
+    /* Закреплённая главная кнопка стоит над нижней навигацией: отступ на обе полосы,
+       иначе последний блок (согласие) остаётся под ними. */
+    div.b640:has(main :is([data-b640-node="p02"], [data-b640-node="f01"], [data-b640-node="f03"], [data-b640-node="f04"]) .lead > .actions > .is-primary) #career-main {
+      padding-block-end: calc(var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + var(--career-target-min) + var(--career-space-8));
+    }
+  }
+}
