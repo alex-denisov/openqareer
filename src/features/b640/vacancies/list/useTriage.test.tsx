@@ -39,12 +39,15 @@ const flush = () => act(async () => {});
 function Probe({
   hideMany = async () => [],
   items = ITEMS,
+  waitPool = false,
 }: {
+  waitPool?: boolean;
   hideMany?: (entries: readonly { item: unknown; reason: string }[]) => Promise<readonly string[]>;
   items?: typeof ITEMS;
 }) {
   const [shown, setShown] = useState(items);
-  const triage = useTriage(shown, hideMany as never);
+  const [ready, setReady] = useState(!waitPool);
+  const triage = useTriage(shown, hideMany as never, { ready, expected: 883 });
   return (
     <div>
       <output
@@ -61,6 +64,7 @@ function Probe({
         data-nothing={triage.nothing === null ? '' : String(triage.nothing)}
       />
       <button id="start" onClick={triage.start} />
+      <button id="ready" onClick={() => setReady(true)} />
       <button id="cancel" onClick={triage.cancel} />
       <button id="yes" onClick={() => triage.answer(true)} />
       <button id="retry" onClick={triage.retry} />
@@ -141,6 +145,50 @@ describe('режим «Помочь выбрать»', () => {
     await flush();
     expect(request).toHaveBeenCalledTimes(1);
     expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', total: '3' });
+    view.unmount();
+  });
+
+  it('нажатие до конца дочитывания: ждёт всю подборку и отправляет один запрос на неё', async () => {
+    request.mockResolvedValue(result([hide('a'), keep('b'), keep('c'), keep('n3'), keep('n4')]));
+    const view = mount(<Probe waitPool />);
+    press(view.container, 'start');
+    expect(out(view.container).dataset).toMatchObject({ active: 'true', status: 'loading', total: '883' });
+    press(view.container, 'grow');
+    press(view.container, 'grow');
+    await flush();
+    expect(request).not.toHaveBeenCalled();
+    press(view.container, 'ready');
+    await flush();
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c', 'n3', 'n4']);
+    expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', total: '5' });
+    press(view.container, 'grow');
+    await flush();
+    expect(request).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
+  it('подборка так и не дочиталась: через 20 секунд разбирается то, что прочитано', async () => {
+    vi.useFakeTimers();
+    request.mockResolvedValue(result([hide('a'), keep('b'), keep('c')]));
+    const view = mount(<Probe waitPool />);
+    press(view.container, 'start');
+    expect(request).not.toHaveBeenCalled();
+    await act(async () => vi.advanceTimersByTime(20_000));
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c']);
+    vi.useRealTimers();
+    view.unmount();
+  });
+
+  it('«Отмена» во время ожидания подборки: запрос не уходит', async () => {
+    const view = mount(<Probe waitPool />);
+    press(view.container, 'start');
+    press(view.container, 'cancel');
+    press(view.container, 'ready');
+    await flush();
+    expect(request).not.toHaveBeenCalled();
+    expect(out(view.container).dataset.active).toBe('false');
     view.unmount();
   });
 

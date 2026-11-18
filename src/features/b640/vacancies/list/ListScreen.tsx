@@ -148,7 +148,9 @@ export function ListScreen() {
   const list = useVacancyList(links, rows.hiddenIds);
   const { pool } = list;
   const section = useHiddenSection(rows, pool.refresh);
-  const triage = useTriage(list.all, rows.hideMany);
+  // Разбор ждёт всю подборку: она дочитана, чтение сорвалось или строк уже столько, сколько обещал сервер.
+  const poolRead = pool.complete || pool.failed || (!pool.loading && pool.matched.length >= pool.total);
+  const triage = useTriage(list.all, rows.hideMany, { ready: poolRead, expected: list.count });
   // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
   const { clearResult } = triage;
   const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
