@@ -506,7 +506,8 @@ export class SqliteVacancyFitStore {
     try {
       let removed = 0;
       for (const key of cache) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_cache WHERE cache_key=?').run(key).changes);
-      for (const key of queue) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_queue WHERE cache_key=?').run(key).changes);
+      // A completed job has its sealed input wiped, so it can only be found by the key of its result.
+      for (const key of new Set([...queue, ...cache])) removed += Number(this.database.prepare('DELETE FROM vacancy_fit_queue WHERE cache_key=?').run(key).changes);
       removed += Number(this.database.prepare('DELETE FROM vacancy_fit_latest WHERE latest_key=?').run(this.latestKey(candidateId, vacancyId)).changes);
       this.database.exec('COMMIT');
       return removed;
