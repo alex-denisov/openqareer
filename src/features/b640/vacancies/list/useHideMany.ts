@@ -24,8 +24,10 @@ export function useHideMany(
       const { done, failed } = await hideInBatches(entries);
       if (done.length === 0) return failed;
       const at = new Date().toISOString();
-      const added = done.map(({ item, reason }): HiddenRow => ({ ...item, hidden: { reasonId: reason, at } }));
-      const ids = done.map(({ item }) => item.cluster.id);
+      const added = done.flatMap(({ item, reason }): HiddenRow[] =>
+        item ? [{ ...item, hidden: { reasonId: reason, at } }] : [],
+      );
+      const ids = done.map(({ id }) => id);
       setHiddenRows((rows) => [...added, ...rows.filter((row) => !ids.includes(row.cluster.id))]);
       toast.show({ text: 'Скрыто', undo: { label: 'Отменить', onUndo: () => undo(ids) } });
       return failed;

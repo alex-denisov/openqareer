@@ -85,8 +85,27 @@ async function showHidden(page: Page, mobile: boolean): Promise<void> {
 }
 
 interface TriageBody {
-  readonly clusterIds: readonly string[];
+  readonly clusterIds?: readonly string[];
+  /** Разбор всей подборки: строка фильтров списка вместо списка id. */
+  readonly query?: string;
   readonly answers?: Record<string, boolean>;
+}
+
+/**
+ * Вся подборка глазами сервера: первые id — настоящие строки первой порции, остальные клиент
+ * ещё не дочитал.
+ */
+async function poolIds(page: Page, size: number): Promise<string[]> {
+  const first = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/candidate/matched-vacancies?offset=0');
+    const body = (await response.json()) as { data: Array<{ cluster: { id: string } }> };
+    return body.data.map((item) => item.cluster.id);
+  });
+  const unread = Array.from(
+    { length: Math.max(0, size - first.length) },
+    (_, index) => `unread-${index}`,
+  );
+  return [...first, ...unread].slice(0, size);
 }
 
 /** Разбор: три первые строки скрыть, четвёртая ждёт ответа про зарплату, остальные подходят. */
@@ -108,13 +127,13 @@ function triageRows(ids: readonly string[], yes: boolean) {
   });
 }
 
-async function mockTriage(page: Page): Promise<TriageBody[]> {
+async function mockTriage(page: Page, poolSize = 45): Promise<TriageBody[]> {
   const calls: TriageBody[] = [];
-  await page.route('**/api/v1/candidate/b640/vacancy-triage', (route) => {
+  await page.route('**/api/v1/candidate/b640/vacancy-triage', async (route) => {
     const body = route.request().postDataJSON() as TriageBody;
     calls.push(body);
     const yes = body.answers?.salaryLowerBound === true;
-    const rows = triageRows(body.clusterIds, yes);
+    const rows = triageRows(body.clusterIds ?? (await poolIds(page, poolSize)), yes);
     const count = (verdict: string) => rows.filter((row) => row.verdict === verdict).length;
     return route.fulfill({
       json: {
@@ -306,7 +325,8 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator('.vz-q1-n')).toHaveText('1 из 1');
     await expect(page.locator(PRIMARY)).toContainText('3');
     await expect(page.locator(PRIMARY)).toBeEnabled();
-    expect(calls[0]?.clusterIds.length).toBeGreaterThan(20);
+    expect(calls[0]?.query).toBe('');
+    expect(calls[0]?.clusterIds).toBeUndefined();
     await expectGates(page);
 
     await page.locator('.vz-q1-a').getByRole('button', { name: 'Да' }).click();
@@ -342,29 +362,38 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator(ROWS)).toHaveCount(20);
   });
 
-  test('«Помочь выбрать»: нажатие до конца дочитывания даёт один запрос на всю подборку', async ({
+  test('«Помочь выбрать»: нажатие до конца дочитывания — один запрос, сервер разбирает всю подборку', async ({
     page,
   }) => {
     await openCabinet(page, '/app/vacancies', { total: 450 });
-    // Следующие порции подборки приходят с задержкой: режим включается, пока она дочитывается.
+    // Следующие порции подборки приходят с задержкой: разбор их не ждёт.
     await page.route('**/api/v1/candidate/matched-vacancies?**', async (route) => {
       const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? '0');
-      if (offset > 0) await new Promise((resolve) => setTimeout(resolve, 1_200));
+      if (offset > 0) await new Promise((resolve) => setTimeout(resolve, 1_500));
       return route.fallback();
     });
-    const calls = await mockTriage(page);
+    const calls = await mockTriage(page, 450);
+    const skips: string[] = [];
+    await page.route('**/api/v1/candidate/vacancy-skips**', (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      skips.push((route.request().postDataJSON() as { clusterId: string }).clusterId);
+      return route.fulfill({ json: { data: {} } });
+    });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator(ROWS).first()).toBeVisible();
     await page.locator('.va-review').click();
-    // Подборка ещё дочитывается: режим ждёт её на месте и запрос не отправляет.
-    await expect(page.locator('p.vz-st[aria-busy="true"]')).toContainText('Разбираем 450');
-    expect(calls).toHaveLength(0);
-    await expect(page.locator(PICKED).first()).toBeVisible();
+    await expect(page.locator(PICKED)).toHaveCount(3);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.query).toBe('');
+    expect(calls[0]?.clusterIds).toBeUndefined();
     await expect(page.locator('.vl-foot .btn')).toContainText('осталось 430');
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.clusterIds).toHaveLength(450);
-    expect(new Set(calls[0]?.clusterIds).size).toBe(450);
-    await expect(page.locator(PICKED)).toHaveCount(3);
+    await page.locator('.vz-q1-a').getByRole('button', { name: 'Да' }).click();
+    await expect(page.locator(PRIMARY)).toContainText('4');
+    expect(calls).toHaveLength(2);
+    await page.locator(PRIMARY).click();
+    await expect(page.locator('.va-snack')).toContainText('Скрыто');
+    expect(skips).toHaveLength(4);
   });
 
   test('«Помочь выбрать»: скрывать нечего — строка итога, режим закрыт, кнопки с нулём нет', async ({
@@ -372,9 +401,9 @@ test.describe('B654: раздел «Вакансии», подборка и со
   }) => {
     await openCabinet(page, '/app/vacancies');
     let calls = 0;
-    await page.route('**/api/v1/candidate/b640/vacancy-triage', (route) => {
+    await page.route('**/api/v1/candidate/b640/vacancy-triage', async (route) => {
       calls += 1;
-      const ids = (route.request().postDataJSON() as TriageBody).clusterIds;
+      const ids = await poolIds(page, 45);
       return route.fulfill({
         json: {
           data: {

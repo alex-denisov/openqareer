@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { VacancyTriage, VacancyTriageAnswers, VacancyTriageRow } from '../../../../../shared/b640Vacancies';
 import { isKnownSkipReasonId } from '../../../../../shared/skipReasons';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -12,6 +12,7 @@ import {
   type CurrentQuestion,
   type HideEntry,
 } from './triageModel';
+import type { TriageTarget } from '../triageApi';
 import { useTriageRequest, type TriageStatus } from './useTriageRequest';
 
 /** Скрывает вакансии с причинами; возвращает id, которые скрыть не удалось. */
@@ -29,7 +30,7 @@ export interface Triage {
   /** Сколько вакансий уходит на разбор. */
   readonly total: number;
   /** Итог «скрывать нечего»: сколько вакансий разобрано; `null` — итога нет. */
-  readonly nothing: number | null;
+  readonly nothing: NothingResult | null;
   readonly clearResult: () => void;
   readonly question: CurrentQuestion | null;
   readonly picked: number;
@@ -48,7 +49,6 @@ export interface Triage {
 const NO_HIDE: HideState = { status: 'idle', failed: 0 };
 const NO_ANSWERS: VacancyTriageAnswers = {};
 const NONE: ReadonlySet<string> = new Set();
-const NO_IDS: readonly string[] = [];
 
 function entriesFor(
   ids: readonly string[],
@@ -61,7 +61,8 @@ function entriesFor(
   for (const id of ids) {
     const item = byId.get(id);
     const reason = rows.get(id)?.reasonId;
-    if (item && reason && isKnownSkipReasonId(reason)) entries.push({ item, reason });
+    // Строки может ещё не быть на клиенте: скрытию хватает id и причины.
+    if (reason && isKnownSkipReasonId(reason)) entries.push({ id, reason, ...(item ? { item } : {}) });
     else lost.push(id);
   }
   return { entries, lost };
@@ -80,7 +81,7 @@ function useHideSeries(hideMany: HideMany): HideSeries {
     (entries: readonly HideEntry[], lost: number, onDone: () => void) => {
       setState({ status: 'busy', failed: 0 });
       hideMany(entries)
-        .catch(() => entries.map((entry) => entry.item.cluster.id))
+        .catch(() => entries.map((entry) => entry.id))
         .then((failed) => {
           const left = failed.length + lost;
           if (left === 0) onDone();
@@ -93,64 +94,57 @@ function useHideSeries(hideMany: HideMany): HideSeries {
   return useMemo(() => ({ state, run, reset }), [state, run, reset]);
 }
 
-/**
- * Скрывать нечего и спрашивать не о чем: режим закрывается сам, на его месте остаётся итог
- * с числом разобранных вакансий.
- */
+/** Итог «скрывать нечего»: сколько разобрано и, если подборка больше потолка разбора, её размер. */
+export interface NothingResult {
+  readonly total: number;
+  readonly pool?: number;
+}
+
+/** Скрывать нечего и спрашивать не о чем: режим закрывается сам, на его месте остаётся итог. */
 function useNothingResult(
   settled: VacancyTriage | null,
   close: () => void,
-): { readonly nothing: number | null; readonly clearResult: () => void } {
-  const [nothing, setNothing] = useState<number | null>(null);
+): { readonly nothing: NothingResult | null; readonly clearResult: () => void } {
+  const [nothing, setNothing] = useState<NothingResult | null>(null);
   useEffect(() => {
     if (!settled || settled.summary.hide > 0 || settled.questions.length > 0) return;
     close();
-    setNothing(settled.summary.total);
+    const { total } = settled.summary;
+    const pool = settled.poolTotal;
+    setNothing(pool !== undefined && pool > total ? { total, pool } : { total });
   }, [settled, close]);
   const clearResult = useCallback(() => setNothing(null), []);
   return useMemo(() => ({ nothing, clearResult }), [nothing, clearResult]);
 }
 
-/** Откуда режим знает, что подборка дочитана, и сколько в ней вакансий, пока она читается. */
+/**
+ * Что разбирать по нажатию: `query` — вся подборка по этим фильтрам списка (сервер берёт её сам);
+ * `null` — только показанные строки (у списка есть фильтры, которых сервер не знает).
+ */
 export interface TriageSource {
-  readonly ready: boolean;
+  readonly query: string | null;
+  /** Число вакансий из шапки списка: показывается, пока разбор идёт. */
   readonly expected: number;
 }
 
-const READY_NOW: TriageSource = { ready: true, expected: 0 };
-/** Сколько ждать дочитывания подборки, прежде чем разобрать то, что уже прочитано. */
-export const TRIAGE_POOL_WAIT_MS = 20_000;
+const SHOWN_ROWS: TriageSource = { query: null, expected: 0 };
 
-interface TriageList {
-  /** Список одного разбора; `null` — нажатие ждёт, пока подборка дочитается. */
-  readonly ids: readonly string[] | null;
+interface TriageTargetState {
+  readonly target: TriageTarget | null;
   readonly capture: () => void;
 }
 
-/**
- * Одно нажатие — один список: он берётся целиком, когда подборка дочитана, и после этого
- * не меняется. Дочитывание, сортировка и фильтры новый разбор не запускают.
- */
-function useTriageList(
-  active: boolean,
+/** Одно нажатие — одна цель разбора: дочитывание, сортировка и фильтры её потом не меняют. */
+function useTriageTarget(
   items: readonly MatchedVacancyItem[],
-  ready: boolean,
-): TriageList {
-  const [ids, setIds] = useState<readonly string[] | null>(null);
-  const latest = useRef(items);
-  latest.current = items;
-  const waiting = active && ids === null;
-  useEffect(() => {
-    if (!waiting) return undefined;
-    if (ready) {
-      setIds(triageIds(latest.current));
-      return undefined;
-    }
-    const timer = setTimeout(() => setIds(triageIds(latest.current)), TRIAGE_POOL_WAIT_MS);
-    return () => clearTimeout(timer);
-  }, [waiting, ready]);
-  const capture = useCallback(() => setIds(null), []);
-  return { ids, capture };
+  query: string | null,
+): TriageTargetState {
+  const [target, setTarget] = useState<TriageTarget | null>(null);
+  const capture = useCallback(
+    () => setTarget(query === null ? { clusterIds: triageIds(items) } : { query }),
+    [items, query],
+  );
+  return { target, capture };
 }
 
 /** Ответ на текущий вопрос; вопроса нет — ответы прежние. */
@@ -163,30 +157,31 @@ function withAnswer(
   return id ? { ...answers, [id]: value } : answers;
 }
 
-/** Пока нажатие ждёт подборку, это тоже «разбираем», а число — из шапки списка. */
+/** Пока разбор идёт, число — из шапки списка; после — сколько вакансий разобрано на самом деле. */
 function progressOf(
-  active: boolean,
-  ids: readonly string[] | null,
   status: TriageStatus,
+  triage: VacancyTriage | null,
+  target: TriageTarget | null,
   expected: number,
 ): Pick<Triage, 'status' | 'total'> {
-  if (ids === null) return { status: active ? 'loading' : status, total: expected };
-  return { status, total: ids.length };
+  if (status === 'ready' && triage) return { status, total: triage.summary.total };
+  const shown = target && 'clusterIds' in target ? target.clusterIds.length : expected;
+  return { status, total: shown };
 }
 
 /** Режим «Помочь выбрать»: разбор всей подборки, флажки, вопросы по одному, скрытие серией. */
 export function useTriage(
   items: readonly MatchedVacancyItem[],
   hideMany: HideMany,
-  source: TriageSource = READY_NOW,
+  source: TriageSource = SHOWN_ROWS,
 ): Triage {
   const [active, setActive] = useState(false);
   const [answers, setAnswers] = useState<VacancyTriageAnswers>(NO_ANSWERS);
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(NONE);
   const series = useHideSeries(hideMany);
   const { state: hide, reset: resetSeries } = series;
-  const { ids, capture } = useTriageList(active, items, source.ready);
-  const request = useTriageRequest(active && ids !== null, hide.status === 'busy', ids ?? NO_IDS, answers);
+  const { target, capture } = useTriageTarget(items, source.query);
+  const request = useTriageRequest(active, hide.status === 'busy', target, answers);
   const rows = useMemo(() => triageRowMap(request.triage), [request.triage]);
   const picked = useMemo(() => pickedIds(request.triage, unchecked), [request.triage, unchecked]);
 
@@ -214,7 +209,7 @@ export function useTriage(
   return {
     active,
     triage: request.triage,
-    ...progressOf(active, ids, request.status, source.expected),
+    ...progressOf(request.status, request.triage, target, source.expected),
     ...result,
     question: currentQuestion(request.triage),
     picked: picked.length,

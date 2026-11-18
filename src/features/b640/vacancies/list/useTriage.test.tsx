@@ -39,15 +39,14 @@ const flush = () => act(async () => {});
 function Probe({
   hideMany = async () => [],
   items = ITEMS,
-  waitPool = false,
+  query = null,
 }: {
-  waitPool?: boolean;
+  query?: string | null;
   hideMany?: (entries: readonly { item: unknown; reason: string }[]) => Promise<readonly string[]>;
   items?: typeof ITEMS;
 }) {
   const [shown, setShown] = useState(items);
-  const [ready, setReady] = useState(!waitPool);
-  const triage = useTriage(shown, hideMany as never, { ready, expected: 883 });
+  const triage = useTriage(shown, hideMany as never, { query, expected: 883 });
   return (
     <div>
       <output
@@ -61,10 +60,10 @@ function Probe({
         data-failed={triage.hide.failed}
         data-pick-a={String(triage.isPicked('a'))}
         data-why-a={triage.rowFor('a')?.reasonLabel ?? ''}
-        data-nothing={triage.nothing === null ? '' : String(triage.nothing)}
+        data-nothing={triage.nothing === null ? '' : String(triage.nothing.total)}
+        data-nothing-pool={triage.nothing?.pool === undefined ? '' : String(triage.nothing.pool)}
       />
       <button id="start" onClick={triage.start} />
-      <button id="ready" onClick={() => setReady(true)} />
       <button id="cancel" onClick={triage.cancel} />
       <button id="yes" onClick={() => triage.answer(true)} />
       <button id="retry" onClick={triage.retry} />
@@ -95,7 +94,7 @@ describe('режим «Помочь выбрать»', () => {
     expect(out(view.container).dataset.status).toBe('loading');
     expect(out(view.container).dataset.total).toBe('3');
     await flush();
-    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c']);
+    expect(request.mock.calls[0]![0]).toEqual({ clusterIds: ['a', 'b', 'c'] });
     expect(request.mock.calls[0]![1]).toEqual({});
     expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', pickA: 'true', whyA: 'не та роль' });
     view.unmount();
@@ -138,7 +137,7 @@ describe('режим «Помочь выбрать»', () => {
     press(view.container, 'reorder');
     press(view.container, 'narrow');
     expect(request).toHaveBeenCalledTimes(1);
-    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c']);
+    expect(request.mock.calls[0]![0]).toEqual({ clusterIds: ['a', 'b', 'c'] });
     expect(out(view.container).dataset.total).toBe('3');
     await act(async () => resolvers[0]!(result([hide('a'), keep('b'), keep('c')])));
     press(view.container, 'grow');
@@ -148,47 +147,43 @@ describe('режим «Помочь выбрать»', () => {
     view.unmount();
   });
 
-  it('нажатие до конца дочитывания: ждёт всю подборку и отправляет один запрос на неё', async () => {
-    request.mockResolvedValue(result([hide('a'), keep('b'), keep('c'), keep('n3'), keep('n4')]));
-    const view = mount(<Probe waitPool />);
+  it('вся подборка: один запрос с фильтрами без списка id, дочитывание его не перезапускает', async () => {
+    request.mockResolvedValue({ ...result([hide('a'), keep('b'), hide('zz')]), poolTotal: 3 });
+    const view = mount(<Probe query="role=%D0%A0" />);
     press(view.container, 'start');
     expect(out(view.container).dataset).toMatchObject({ active: 'true', status: 'loading', total: '883' });
     press(view.container, 'grow');
-    press(view.container, 'grow');
-    await flush();
-    expect(request).not.toHaveBeenCalled();
-    press(view.container, 'ready');
+    press(view.container, 'reorder');
     await flush();
     expect(request).toHaveBeenCalledTimes(1);
-    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c', 'n3', 'n4']);
-    expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', total: '5' });
-    press(view.container, 'grow');
-    await flush();
-    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]![0]).toEqual({ query: 'role=%D0%A0' });
+    expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '2', total: '3' });
     view.unmount();
   });
 
-  it('подборка так и не дочиталась: через 20 секунд разбирается то, что прочитано', async () => {
-    vi.useFakeTimers();
-    request.mockResolvedValue(result([hide('a'), keep('b'), keep('c')]));
-    const view = mount(<Probe waitPool />);
+  it('вся подборка: скрываются и вакансии, которых клиент ещё не дочитал', async () => {
+    request.mockResolvedValue({ ...result([hide('a'), keep('b'), hide('zz')]), poolTotal: 3 });
+    const hideMany = vi.fn(async (_entries: readonly unknown[]): Promise<readonly string[]> => []);
+    const view = mount(<Probe query="" hideMany={hideMany} />);
     press(view.container, 'start');
-    expect(request).not.toHaveBeenCalled();
-    await act(async () => vi.advanceTimersByTime(20_000));
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(request.mock.calls[0]![0]).toEqual(['a', 'b', 'c']);
-    vi.useRealTimers();
-    view.unmount();
-  });
-
-  it('«Отмена» во время ожидания подборки: запрос не уходит', async () => {
-    const view = mount(<Probe waitPool />);
-    press(view.container, 'start');
-    press(view.container, 'cancel');
-    press(view.container, 'ready');
     await flush();
-    expect(request).not.toHaveBeenCalled();
+    press(view.container, 'hide');
+    await flush();
+    const entries = hideMany.mock.calls[0]![0] as ReadonlyArray<{ id: string; reason: string; item?: unknown }>;
+    expect(entries.map((entry) => [entry.id, entry.reason, Boolean(entry.item)])).toEqual([
+      ['a', 'role-family', true],
+      ['zz', 'role-family', false],
+    ]);
     expect(out(view.container).dataset.active).toBe('false');
+    view.unmount();
+  });
+
+  it('вся подборка больше потолка: итог несёт и разобранное, и размер подборки', async () => {
+    request.mockResolvedValue({ ...result([keep('a'), keep('b'), keep('c')]), poolTotal: 1005 });
+    const view = mount(<Probe query="" />);
+    press(view.container, 'start');
+    await flush();
+    expect(out(view.container).dataset).toMatchObject({ active: 'false', nothing: '3', nothingPool: '1005' });
     view.unmount();
   });
 
@@ -202,7 +197,7 @@ describe('режим «Помочь выбрать»', () => {
     press(view.container, 'start');
     await flush();
     expect(request).toHaveBeenCalledTimes(2);
-    expect(request.mock.calls[1]![0]).toEqual(['a', 'b']);
+    expect(request.mock.calls[1]![0]).toEqual({ clusterIds: ['a', 'b'] });
     view.unmount();
   });
 

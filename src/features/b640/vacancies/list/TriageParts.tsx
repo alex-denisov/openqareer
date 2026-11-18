@@ -83,7 +83,9 @@ export type TriageStatusProps =
   | { readonly kind: 'loading'; readonly total: number }
   | { readonly kind: 'weak'; readonly keep: number; readonly total: number }
   /** Итог разбора, в котором скрывать нечего: режим уже закрыт, строка стоит на его месте. */
-  | { readonly kind: 'nothing'; readonly total: number };
+  | { readonly kind: 'nothing'; readonly total: number; readonly pool?: number }
+  /** Подборка больше потолка разбора: разобраны первые `total` из `pool`. */
+  | { readonly kind: 'capped'; readonly total: number; readonly pool: number };
 
 export function TriageStatus(props: TriageStatusProps) {
   if (props.kind === 'loading') {
@@ -92,6 +94,16 @@ export function TriageStatus(props: TriageStatusProps) {
       <p className="vz-st" role="status" aria-busy="true">
         <Icon name="hourglass" />
         Разбираем <span className="num">{props.total}</span> {word}…
+      </p>
+    );
+  }
+  if (props.kind === 'capped' || (props.kind === 'nothing' && props.pool !== undefined)) {
+    const pool = props.pool ?? props.total;
+    return (
+      <p className="vz-st" role="status">
+        {props.kind === 'nothing' ? 'Скрывать нечего: разобраны' : 'Разобраны'} первые{' '}
+        <span className="num">{props.total}</span> из <span className="num">{pool}</span>{' '}
+        {pluralRu(pool, 'вакансии', 'вакансий', 'вакансий')}
       </p>
     );
   }

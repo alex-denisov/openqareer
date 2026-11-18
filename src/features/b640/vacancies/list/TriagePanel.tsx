@@ -4,7 +4,7 @@ import type { Triage } from './useTriage';
 /** Всё, что режим «Помочь выбрать» добавляет над таблицей: вопрос, полоса, состояния. */
 export function TriagePanel({ triage }: { triage: Triage }) {
   if (!triage.active) {
-    return triage.nothing === null ? null : <TriageStatus kind="nothing" total={triage.nothing} />;
+    return triage.nothing === null ? null : <TriageStatus kind="nothing" {...triage.nothing} />;
   }
   const { status, question, hide, triage: data } = triage;
   const loading = status === 'loading' || status === 'idle';
@@ -24,6 +24,9 @@ export function TriagePanel({ triage }: { triage: Triage }) {
       ) : null}
       {hide.status === 'failed' ? (
         <TriageError text={`Не скрыто вакансий: ${hide.failed}`} onRetry={triage.hideSelected} />
+      ) : null}
+      {status === 'ready' && data?.poolTotal !== undefined && data.poolTotal > data.summary.total ? (
+        <TriageStatus kind="capped" total={data.summary.total} pool={data.poolTotal} />
       ) : null}
       {status === 'ready' && triage.weak && data ? (
         <TriageStatus kind="weak" keep={data.summary.keep} total={data.summary.total} />

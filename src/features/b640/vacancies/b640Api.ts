@@ -50,6 +50,13 @@ export async function getHiddenVacancies(offset: number, signal?: AbortSignal): 
   return readPage<HiddenRow>(response);
 }
 
+/** Фильтры списка, которые знает сервер (роли), строкой запроса: по ней сервер разбирает всю подборку. */
+export function poolFilterQuery(roles: readonly string[]): string {
+  const query = new URLSearchParams(matchedVacancyQuery(0, { roles, regions: [], remoteOnly: false }));
+  query.delete('offset');
+  return query.toString();
+}
+
 /** Запрос порции подборки: прежние фильтры (роли), `sort`, `direction`, `offset`, `limit`. */
 export function matchedPageQuery(sort: SortState, roles: readonly string[], offset: number): string {
   const query = new URLSearchParams(matchedVacancyQuery(offset, { roles, regions: [], remoteOnly: false }));

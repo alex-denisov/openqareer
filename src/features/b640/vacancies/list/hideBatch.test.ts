@@ -7,6 +7,7 @@ vi.mock('../skipApi', () => ({ hideVacancy: vi.fn() }));
 const hide = vi.mocked(hideVacancy);
 
 const entry = (id: string, reason: 'role-family' | 'comp-below' = 'role-family') => ({
+  id,
   item: makeItem({ id }),
   reason,
 });
@@ -23,7 +24,7 @@ describe('серия скрытий', () => {
       ['a', 'role-family'],
       ['b', 'comp-below'],
     ]);
-    expect(result.done.map((row) => row.item.cluster.id)).toEqual(['a', 'b']);
+    expect(result.done.map((row) => row.id)).toEqual(['a', 'b']);
     expect(result.failed).toEqual([]);
   });
 
@@ -32,7 +33,7 @@ describe('серия скрытий', () => {
       if (id === 'b') throw new Error('сеть');
     });
     const result = await hideInBatches([entry('a'), entry('b'), entry('c')]);
-    expect(result.done.map((row) => row.item.cluster.id)).toEqual(['a', 'c']);
+    expect(result.done.map((row) => row.id)).toEqual(['a', 'c']);
     expect(result.failed).toEqual(['b']);
   });
 

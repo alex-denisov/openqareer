@@ -70,4 +70,12 @@ export interface VacancyTriage {
     readonly hide: number;
     readonly needsData: number;
   };
+  /**
+   * Разбор всей подборки по фильтрам: сколько в ней вакансий. Больше `summary.total` —
+   * разобраны первые `VACANCY_TRIAGE_MAX_IDS` в порядке списка.
+   */
+  readonly poolTotal?: number;
 }
+
+/** Предел длины строки фильтров в запросе разбора всей подборки. */
+export const VACANCY_TRIAGE_QUERY_MAX = 2_000;
