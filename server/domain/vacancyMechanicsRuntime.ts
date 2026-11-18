@@ -8,6 +8,7 @@ import { SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVac
 import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
+import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
 import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
 import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
@@ -71,7 +72,15 @@ function assessesAll(result: VacancyFitResult, resolved: VacancyFitInput): boole
   const assessed = new Set(result.assessments.map((item) => item.requirementId));
   return sourcedRequirements(resolved).every((item) => assessed.has(item.id));
 }
-function fitFailure(lastError: string | null | undefined): VacancyFitFailure {
+/**
+ * B676: a candidate's own vacancy carries its rule requirements inside the sealed fit job; its text
+ * never enters the requirements queue, which stores the description unsealed.
+ */
+function carriedRequirements(input: VacancyFitInput): { readonly requirements: VacancyFitInput['requirements'] } | null {
+  return input.vacancyId.startsWith(OWN_VACANCY_ID_PREFIX) && input.requirements.length > 0 ? { requirements: input.requirements } : null;
+}
+
+export function fitFailure(lastError: string | null | undefined): VacancyFitFailure {
   return (lastError && FIT_FAILURES[lastError]) || 'other';
 }
 
@@ -251,7 +260,7 @@ export class VacancyMechanicsRuntime {
     this.stats.claimed += 1;
     try {
       const requirementsInput = { vacancyId: job.input.vacancyId, description: job.input.description };
-      let requirements = this.requirements.getLatest(job.input.vacancyId, vacancyDescriptionHash(job.input.description));
+      let requirements = carriedRequirements(job.input) ?? this.requirements.getLatest(job.input.vacancyId, vacancyDescriptionHash(job.input.description));
       if (!requirements) {
         // B510: extract this vacancy's requirements now instead of deferring. Fresh jobs are claimed
         // first, so on prod every one of 442 queued fits was deferred once (~90 min) before any finished.

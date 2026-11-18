@@ -25,6 +25,7 @@ export type OwnVacancyCreateResult =
   | { readonly outcome: 'in_pool'; readonly clusterId: string }
   | { readonly outcome: 'unreadable'; readonly reason: OwnVacancyUnreadable }
   | { readonly outcome: 'limit' };
+export const OWN_VACANCY_ID_PREFIX = 'own-';
 export const OWN_VACANCY_MAX = 50;
 export const OWN_VACANCY_TEXT_MIN = 40;
 export const OWN_VACANCY_TEXT_MAX = 30_000;
