@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { OwnVacancy, OwnVacancyUnreadable } from '../../../../../shared/b640OwnVacancy';
 import { buildNodePath } from '../../routes';
 import { useShell } from '../../shell/ShellContext';
+import { apiErrorMessage } from '../../../coach/apiClient';
 import { createOwnVacancy, deleteOwnVacancy, listOwnVacancies, ownVacancySource } from '../ownVacancyApi';
 
 /** Что панель показывает под полем. */
@@ -10,7 +11,7 @@ export type OwnAddStatus =
   | { readonly kind: 'reading' }
   | { readonly kind: 'unreadable'; readonly reason: OwnVacancyUnreadable }
   | { readonly kind: 'limit' }
-  | { readonly kind: 'error' };
+  | { readonly kind: 'error'; readonly text: string };
 
 export interface OwnVacancies {
   readonly items: readonly OwnVacancy[];
@@ -60,8 +61,8 @@ export function useOwnVacancies(): OwnVacancies {
       }
       setStatus(result.outcome === 'limit' ? { kind: 'limit' } : { kind: 'unreadable', reason: result.reason });
       return false;
-    } catch {
-      setStatus({ kind: 'error' });
+    } catch (reason) {
+      setStatus({ kind: 'error', text: apiErrorMessage(reason, 'Не удалось добавить') });
       return false;
     }
   }, [navigate]);

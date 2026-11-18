@@ -23,7 +23,7 @@ const UNREADABLE: Readonly<Record<string, string>> = {
 function statusText(status: OwnAddStatus): string | null {
   if (status.kind === 'unreadable') return UNREADABLE[status.reason] ?? UNREADABLE.failed!;
   if (status.kind === 'limit') return `Своих вакансий уже ${OWN_VACANCY_MAX} — это предел`;
-  return status.kind === 'error' ? 'Не удалось добавить' : null;
+  return status.kind === 'error' ? status.text : null;
 }
 
 interface StatusProps {
