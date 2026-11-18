@@ -53,6 +53,8 @@ jobs:
   unit:
     name: Unit tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    # Chromium and its system libraries ship in the image: no apt step.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
     timeout-minutes: 20
     strategy:
       fail-fast: true
@@ -71,8 +73,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run unit test shard with coverage
         env:
@@ -91,6 +94,8 @@ jobs:
     name: Coverage thresholds
     needs: unit
     runs-on: ubuntu-latest
+    # Chromium and its system libraries ship in the image: no apt step.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
     timeout-minutes: 20 # прогон с покрытием подошёл к 10 мин и снимался (23.10)
     steps:
       - name: Check out exact commit
@@ -105,8 +110,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Collect shard reports
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -122,6 +128,8 @@ jobs:
   e2e:
     name: Browser tests (shard ${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
+    # Chromium and its system libraries ship in the image: no apt step.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
     timeout-minutes: 20
     strategy:
       fail-fast: true
@@ -140,8 +148,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Build production artifact
         run: npm run build
@@ -187,6 +196,8 @@ jobs:
   built-shell:
     name: Built shell scripts
     runs-on: ubuntu-latest
+    # Chromium and its system libraries ship in the image: no apt step.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
     timeout-minutes: 15
     steps:
       - name: Check out exact commit
@@ -201,8 +212,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Build production artifact
         run: npm run build
@@ -218,10 +230,47 @@ jobs:
           npx tsx scripts/build-desktop-dist.ts
           node scripts/verify-desktop-shell.mjs
 
+  release:
+    name: Build release archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      # Built once, beside the gates; deploy ships exactly these bytes.
+      - name: Build immutable release
+        env:
+          OPENQAREER_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          printf '%s\n' "$GITHUB_SHA" > dist/health
+          mkdir -p release
+          tar --sort=name --mtime='UTC 1970-01-01' \
+            --owner=0 --group=0 --numeric-owner \
+            -czf "release/openqareer-$GITHUB_SHA.tar.gz" -C dist .
+          (cd release && sha256sum "openqareer-$GITHUB_SHA.tar.gz" > "openqareer-$GITHUB_SHA.tar.gz.sha256")
+
+      - name: Keep release archive for deploy
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ github.sha }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
   verify:
     name: Verify
     if: always()
-    needs: [static, unit, coverage, e2e, e2e-webkit, built-shell]
+    needs: [static, unit, coverage, e2e, e2e-webkit, built-shell, release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -238,28 +287,18 @@ jobs:
     timeout-minutes: 15
     environment: production
     steps:
-      - name: Check out exact commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Use Node.js 24
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Fetch release archive
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          node-version: 24
-          cache: npm
+          name: release-${{ github.sha }}
+          path: .
 
-      - name: Build immutable release
+      - name: Check release checksum
         id: release
-        env:
-          OPENQAREER_COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          npm ci
-          npm run build
-          printf '%s\n' "$GITHUB_SHA" > dist/health
-          tar --sort=name --mtime='UTC 1970-01-01' \
-            --owner=0 --group=0 --numeric-owner \
-            -czf "openqareer-$GITHUB_SHA.tar.gz" -C dist .
-          checksum="$(sha256sum "openqareer-$GITHUB_SHA.tar.gz" | awk '{print $1}')"
+          sha256sum -c "openqareer-$GITHUB_SHA.tar.gz.sha256"
+          checksum="$(awk '{print $1}' "openqareer-$GITHUB_SHA.tar.gz.sha256")"
           printf 'checksum=%s\n' "$checksum" >> "$GITHUB_OUTPUT"
 
       - name: Configure pinned SSH host identity
