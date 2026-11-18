@@ -4,6 +4,7 @@
 mod automation_worker;
 mod connector_session;
 mod desktop_notify;
+mod hh_apply;
 mod linkedin_read_guard;
 mod network_probe;
 mod session_token_store;
@@ -99,6 +100,21 @@ fn external_web_url(raw: &str) -> Result<Url, String> {
 #[tauri::command]
 async fn execute_local_action(request: LocalActionRequest) -> Result<LocalActionResult, String> {
     execute_candidate_action_safely(request).await
+}
+
+/// B704: a response to an hh.ru vacancy in the candidate's own hh.ru window, after the
+/// candidate confirmed it on the response screen.
+#[tauri::command]
+async fn run_hh_apply(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_apply::HhApplyRequest,
+) -> Result<hh_apply::HhApplyReport, String> {
+    // Only the cabinet window may ask; a page opened in the hh.ru window never can.
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_apply::run_hh_apply(&app, request).await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -510,6 +526,7 @@ fn main() {
             start_tunnel,
             stop_tunnel,
             execute_local_action,
+            run_hh_apply,
             desktop_native_fetch,
             print_resume,
             save_resume_pdf,

@@ -27,7 +27,7 @@ const PAGE_SETTLE_DELAY: Duration = Duration::from_millis(900);
 /// DOM after ~2 s. Waiting for `complete` timed out every read (23.10.2026).
 const HH_INTERACTIVE_GRACE: Duration = Duration::from_secs(3);
 const EVAL_TIMEOUT: Duration = Duration::from_secs(15);
-const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
+pub(crate) const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
 /// Shared with the live hh.ru evidence gate, so a drifted recogniser cannot
 /// pass in Chromium while failing in the desktop webview (B157).
 const INSPECTION_SCRIPT: &str = include_str!("connector_inspection.js");
@@ -1237,7 +1237,7 @@ struct DocumentState {
 
 /// `eval_with_callback` hands the JSON-encoded result to a `Fn` callback; the
 /// oneshot sender has to survive being borrowed, hence the mutex.
-async fn eval_json(window: &Webview, js: &str) -> Result<String, String> {
+pub(crate) async fn eval_json(window: &Webview, js: &str) -> Result<String, String> {
     let (sender, receiver) = tokio::sync::oneshot::channel::<String>();
     let slot = Mutex::new(Some(sender));
     window
@@ -2015,7 +2015,7 @@ fn first_code(error: &str) -> &str {
 }
 
 /// `eval_cancelled` / `eval_timeout`: the page moved under the script.
-fn is_transient_eval_error(error: &str) -> bool {
+pub(crate) fn is_transient_eval_error(error: &str) -> bool {
     error == "eval_cancelled" || error == "eval_timeout"
 }
 
