@@ -45,9 +45,24 @@ const poller = createHhSessionPoller({
   readSessionPage: (url) => readSessionPage('hh', url),
 });
 
+/**
+ * Окна сессии hh.ru нет: кандидат ещё не входил в приложении или закрыл окно. Rust отвечает
+ * отказом `session_window_missing` — это «нужен вход», а не сбой чтения.
+ */
+function isMissingSessionWindow(reason: unknown): boolean {
+  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
+  return raw.split(':')[0]?.trim() === 'session_window_missing';
+}
+
 /** Список резюме кандидата в его сессии hh.ru. */
 export async function readHhResumes(): Promise<HhSessionRead> {
-  const result = await poller.poll();
+  let result: Awaited<ReturnType<typeof poller.poll>>;
+  try {
+    result = await poller.poll();
+  } catch (reason: unknown) {
+    if (isMissingSessionWindow(reason)) return { kind: 'signed_out' };
+    throw reason;
+  }
   if (result.status === 'waiting_for_sign_in') return { kind: 'signed_out' };
   if (result.status === 'authenticated_empty') return { kind: 'empty' };
   const usable = result.resumes.filter((item) => HH_RESUME_ID.test(item.id) && item.title.trim());
