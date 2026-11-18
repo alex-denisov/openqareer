@@ -1,4 +1,4 @@
-import type { CoachTurnInput, CoachTurnStage } from '../domain/coach';
+import type { CoachTurnInput, CoachTurnResult, CoachTurnStage } from '../domain/coach';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type {
   ConsultantConversationDetail,
@@ -25,6 +25,11 @@ export interface ConsultantHistoryMethods {
   closeConsultantConversation(candidateId: string): string | null;
   resumeConsultantConversation(candidateId: string, conversationId: string): ConsultantConversationDetail | null;
   currentConsultantConversation(candidateId: string, stage: CoachTurnStage): ConsultantConversationDetail | null;
+  /** B688: результаты завершённых ходов разговора по id ответа консультанта. */
+  consultantReplyResults(
+    candidateId: string,
+    conversationId: string,
+  ): Array<{ readonly messageId: string; readonly result: CoachTurnResult }>;
   exportConsultantConversations(candidateId: string): ConsultantConversationExport[];
   listPendingConsultantSummaries(candidateId: string): ConsultantSummaryTask[];
   getConsultantSummaryInput(
