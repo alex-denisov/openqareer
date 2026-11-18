@@ -1,0 +1,130 @@
+import { Button, Dialog, Icon, Link, ResultLine, StatusLine } from '../../kit';
+import { buildNodePath } from '../../routes';
+import type { ApplyHead } from '../model/applyModel';
+import { HhResumeSheet } from './HhResumeSheet';
+import { elapsedLabel } from './hhSendModel';
+import { useHhApply, type HhApplyControls } from './useHhApply';
+import { useHhResumes, type HhResumesState } from './useHhResumes';
+
+export interface HhSendStepProps {
+  /** Номер вакансии на hh.ru из её ссылки. */
+  readonly hhVacancyId: string;
+  readonly head: ApplyHead;
+  readonly applicationId: string;
+  readonly approvedLabel: string;
+  readonly letterText: string;
+  readonly onSent: () => Promise<void>;
+}
+
+interface PartsProps {
+  readonly props: HhSendStepProps;
+  readonly resumes: HhResumesState;
+}
+
+function Parts({ props, resumes }: PartsProps) {
+  const selected = resumes.snapshot?.selected ?? null;
+  return (
+    <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
+      <li>
+        <p>
+          <b>Письмо</b> · {props.approvedLabel}
+        </p>
+        <p className="ap-lines">{props.letterText}</p>
+        <span className="tag ok">готово</span>
+      </li>
+      <li>
+        <p>
+          <b>Резюме hh.ru</b> {selected ? `«${selected.title}»` : null}
+        </p>
+        <button className="res-act" type="button" onClick={resumes.openPicker}>
+          {selected ? 'Другое резюме' : 'Выбрать резюме'}
+        </button>
+        {selected ? <span className="tag ok">готово</span> : null}
+      </li>
+    </ul>
+  );
+}
+
+function Outcome({ apply, resumes, responsePath }: { apply: HhApplyControls; resumes: HhResumesState; responsePath: string }) {
+  const { state } = apply;
+  if (state.kind === 'sending') {
+    return <StatusLine state="wait" text={`Ждём ответа hh.ru · ${elapsedLabel(state.seconds)}`} />;
+  }
+  if (state.kind === 'signin') {
+    const signIn = (
+      <button className="res-act" type="button" onClick={resumes.signIn}>
+        Войти в hh.ru
+      </button>
+    );
+    return <StatusLine state="err" text="Не отправлен · нужен вход в hh.ru" action={signIn} />;
+  }
+  if (state.kind === 'error') return <StatusLine state="err" text={state.text} />;
+  if (state.kind !== 'sent' && state.kind !== 'questionnaire') return null;
+  return (
+    <>
+      <ResultLine
+        text={state.kind === 'sent' ? 'Отклик отправлен на hh.ru' : 'Отклик отправлен · работодатель просит заполнить анкету на hh.ru'}
+      />
+      <div className="actions">
+        <Link className="btn is-primary" to={responsePath}>
+          <Icon name="right" />К отклику
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string }) {
+  const footer = (
+    <>
+      <Button onClick={apply.cancel}>Отмена</Button>
+      <Button variant="primary" icon="send" onClick={apply.confirm}>
+        Отправить
+      </Button>
+    </>
+  );
+  return (
+    <Dialog open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
+      <p>Отклик на «{title}» уйдёт от вашего имени из вашего входа в hh.ru.</p>
+    </Dialog>
+  );
+}
+
+/** Шаг «Отправка» в приложении (a01): отклик через hh.ru от имени кандидата после подтверждения. */
+export function HhSendStep(props: HhSendStepProps) {
+  const resumes = useHhResumes();
+  const resumeId = resumes.snapshot?.selected?.id ?? null;
+  const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
+  const done = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
+  const busy = apply.state.kind === 'sending';
+  return (
+    <section className="lead" aria-labelledby="w-title">
+      <h2 className="lead-title is-long" id="w-title">
+        Всё одобрено — можно отправлять
+      </h2>
+      <Parts props={props} resumes={resumes} />
+      {done ? null : (
+        <div className="actions">
+          <Button variant="primary" icon="send" busy={busy} disabled={!resumeId || resumes.loading} onClick={apply.ask}>
+            Отправить отклик
+          </Button>
+          <a className="btn m-ico" href={props.head.url ?? undefined} target="_blank" rel="noopener noreferrer">
+            <Icon name="out" />
+            Вакансия на hh.ru
+          </a>
+        </div>
+      )}
+      <Outcome apply={apply} resumes={resumes} responsePath={buildNodePath('o01c', { responseId: props.applicationId })} />
+      <ConfirmDialog apply={apply} title={props.head.title} />
+      <HhResumeSheet
+        picker={resumes.picker}
+        currentId={resumeId}
+        saving={resumes.saving}
+        onClose={resumes.closePicker}
+        onSignIn={resumes.signIn}
+        onRetry={resumes.openPicker}
+        onChoose={resumes.choose}
+      />
+    </section>
+  );
+}

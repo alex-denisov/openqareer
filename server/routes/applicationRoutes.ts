@@ -36,6 +36,7 @@ import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest'
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
+import { registerHhSessionRoutes } from './hhSessionRoutes';
 import { registerQuestionnaireRoutes } from './questionnaireRoutes';
 import { registerTextVariantRoutes } from './textVariantRoutes';
 
@@ -546,6 +547,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerRejectionReviewRoutes(app, deps);
   registerQuestionnaireRoutes(app, deps);
   registerTextVariantRoutes(app, deps);
+  registerHhSessionRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },

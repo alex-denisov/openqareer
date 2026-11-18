@@ -6,7 +6,10 @@ import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterA
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
 import { sendFrom } from '../responses/model/platform';
+import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
+import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import type { ApplyHead } from './model/applyModel';
+import { HhSendStep } from './hh/HhSendStep';
 
 type Sent =
   | { readonly kind: 'idle' | 'busy' | 'done' }
@@ -63,7 +66,7 @@ interface MarkInput {
  * «Я откликнулся». Со ссылкой на вакансию — прежняя отметка отклика; без ссылки (её требует
  * тот маршрут) стадия меняется у самой карточки, которую создало одобрение письма.
  */
-async function markApplied({ vacancyId, head, sourceType, applicationId }: MarkInput): Promise<void> {
+export async function markApplied({ vacancyId, head, sourceType, applicationId }: MarkInput): Promise<void> {
   if (head.url) {
     await recordVacancyApplication({
       clusterId: vacancyId,
@@ -76,6 +79,14 @@ async function markApplied({ vacancyId, head, sourceType, applicationId }: MarkI
   if (!card) throw new Error('application_missing');
   if (card.stage !== 'saved') return;
   await patchApplication(card.id, { expectedVersion: card.version, stage: 'applied' });
+}
+
+/** «одобрено 18.11» — дата одобрения письма. */
+function approvedLabel(approvedAt: string): string {
+  const date = new Date(approvedAt);
+  if (Number.isNaN(date.getTime())) return 'одобрено';
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `одобрено ${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
 }
 
 function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
@@ -134,13 +145,30 @@ export interface SendStepProps {
   readonly onLetter: () => void;
 }
 
-/** Шаг «Отправка» в вебе (O4d): письмо для вставки на площадке и отметка «Я откликнулся». */
+/** Шаг «Отправка»: в приложении вакансия hh.ru уходит откликом из входа кандидата (B704), иначе — веб (O4d). */
 export function SendStep(props: SendStepProps) {
+  const { vacancyId, head, sourceType, approved, letterText } = props;
+  const hhVacancyId = approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
+  if (!approved || !hhVacancyId) return <WebSendStep {...props} />;
+  const applicationId = approved.applicationId;
+  return (
+    <HhSendStep
+      hhVacancyId={hhVacancyId}
+      head={head}
+      applicationId={applicationId}
+      approvedLabel={approvedLabel(approved.approvedAt)}
+      letterText={letterText}
+      onSent={() => markApplied({ vacancyId, head, sourceType, applicationId })}
+    />
+  );
+}
+
+/** Шаг «Отправка» в вебе (O4d): письмо для вставки на площадке и отметка «Я откликнулся». */
+function WebSendStep(props: SendStepProps) {
   const { vacancyId, head, sourceType, approved, letterText, onLetter } = props;
   const [sent, setSent] = useState<Sent>({ kind: 'idle' });
   if (!approved) return <NeedsLetter onLetter={onLetter} />;
   const applicationId = approved.applicationId;
-
   function confirm() {
     setSent({ kind: 'busy' });
     markApplied({ vacancyId, head, sourceType, applicationId })
