@@ -26,6 +26,9 @@ interface PendingTurn {
   readonly content: string;
 }
 
+/** Пока идёт фоновый разбор ответа, разговор перечитывается с этим шагом. */
+export const ANALYSIS_POLL_MS = 5_000;
+
 export type FactDecision =
   | { readonly action: 'confirm' | 'delete' }
   | { readonly action: 'correct'; readonly statement: string };
@@ -87,6 +90,18 @@ export async function sendFactDecision(id: string, decision: FactDecision): Prom
   else await changeMemory(id, decision);
 }
 
+/** Компонент ещё на экране: ответ, пришедший после ухода, ленту не трогает. */
+function useAlive(): RefObject<boolean> {
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  return alive;
+}
+
 /** Лента разговора и записи из него: первое чтение, повтор, решение по записи. */
 function useFeed(stage: CoachTurnStage): FeedInternals {
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
@@ -95,16 +110,10 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [analysisPending, setAnalysisPending] = useState(false);
   const [turnStage, setTurnStage] = useState(stage);
-  const alive = useRef(true);
+  const alive = useAlive();
   const asking = useRef(false);
-
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
 
   const refresh = useCallback(async () => {
     const [snapshot, current] = await Promise.all([
@@ -115,8 +124,11 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
     if (!asking.current) setMessages(consultantTurns(current?.messages.map(chatMessage) ?? []));
     setTurnStage(current?.stage ?? stage);
     setReplies(current?.replies ?? []);
+    setAnalysisPending(current?.analysisPending ?? false);
     setMemory(snapshot.memory);
   }, [stage]);
+
+  useAnalysisPoll(analysisPending, refresh);
 
   useEffect(() => {
     let active = true;
@@ -142,6 +154,23 @@ function useFeed(stage: CoachTurnStage): FeedInternals {
     ...{ messages, memory, replies, loading, loadFailed, reload, decideFact },
     ...{ alive, asking, refresh, setMessages, turnStage },
   };
+}
+
+/**
+ * Действия под ответом приносит фоновый разбор эксперта и стратега: пока он идёт,
+ * разговор перечитывается. Сбой чтения не трогает ленту, следующий шаг пробует снова.
+ */
+function useAnalysisPoll(pending: boolean, refresh: () => Promise<void>): void {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!pending) return undefined;
+    const timer = window.setTimeout(() => {
+      refresh()
+        .catch(() => undefined)
+        .finally(() => setTick((value) => value + 1));
+    }, ANALYSIS_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [pending, refresh, tick]);
 }
 
 function chatMessage({ id, role, content }: ChatMessage): ChatMessage {
