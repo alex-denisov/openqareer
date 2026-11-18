@@ -61,15 +61,17 @@ export function TriageBar({
 }) {
   return (
     <div className="vz-bar" role="group" aria-label="Помочь выбрать">
-      <button
-        className="btn is-primary"
-        type="button"
-        disabled={count === 0 || busy || loading}
-        aria-busy={busy || undefined}
-        onClick={onHide}
-      >
-        Скрыть выбранные · <span className="num">{count}</span>
-      </button>
+      {count > 0 ? (
+        <button
+          className="btn is-primary"
+          type="button"
+          disabled={busy || loading}
+          aria-busy={busy || undefined}
+          onClick={onHide}
+        >
+          Скрыть выбранные · <span className="num">{count}</span>
+        </button>
+      ) : null}
       <button className="btn" type="button" disabled={busy} onClick={onCancel}>
         Отмена
       </button>
@@ -79,7 +81,9 @@ export function TriageBar({
 
 export type TriageStatusProps =
   | { readonly kind: 'loading'; readonly total: number }
-  | { readonly kind: 'weak'; readonly keep: number; readonly total: number };
+  | { readonly kind: 'weak'; readonly keep: number; readonly total: number }
+  /** Итог разбора, в котором скрывать нечего: режим уже закрыт, строка стоит на его месте. */
+  | { readonly kind: 'nothing'; readonly total: number };
 
 export function TriageStatus(props: TriageStatusProps) {
   if (props.kind === 'loading') {
@@ -88,6 +92,20 @@ export function TriageStatus(props: TriageStatusProps) {
       <p className="vz-st" role="status" aria-busy="true">
         <Icon name="hourglass" />
         Разбираем <span className="num">{props.total}</span> {word}…
+      </p>
+    );
+  }
+  if (props.kind === 'nothing') {
+    return (
+      <p className="vz-st" role="status">
+        {props.total === 1 ? (
+          'Скрывать нечего: вакансия подходит'
+        ) : (
+          <>
+            Скрывать нечего: все <span className="num">{props.total}</span>{' '}
+            {pluralRu(props.total, 'вакансия', 'вакансии', 'вакансий')} подходят
+          </>
+        )}
       </p>
     );
   }

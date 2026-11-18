@@ -3,7 +3,9 @@ import type { Triage } from './useTriage';
 
 /** Всё, что режим «Помочь выбрать» добавляет над таблицей: вопрос, полоса, состояния. */
 export function TriagePanel({ triage }: { triage: Triage }) {
-  if (!triage.active) return null;
+  if (!triage.active) {
+    return triage.nothing === null ? null : <TriageStatus kind="nothing" total={triage.nothing} />;
+  }
   const { status, question, hide, triage: data } = triage;
   const loading = status === 'loading' || status === 'idle';
   return (

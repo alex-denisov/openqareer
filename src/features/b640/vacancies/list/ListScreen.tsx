@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
 import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
@@ -148,6 +149,10 @@ export function ListScreen() {
   const { pool } = list;
   const section = useHiddenSection(rows, pool.refresh);
   const triage = useTriage(list.all, rows.hideMany);
+  // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
+  const { clearResult } = triage;
+  const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
+  useEffect(() => clearResult(), [listAction, clearResult]);
   const env = { currency: list.currency, rates: list.rates, noRole: list.noRole };
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';

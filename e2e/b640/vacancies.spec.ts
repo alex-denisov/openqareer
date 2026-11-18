@@ -9,13 +9,13 @@ const ROWS = '.b640 table.vt tbody tr.vt-row';
 async function openCabinet(
   page: Page,
   path: string,
-  options: { readonly hidden?: readonly unknown[] } = {},
+  options: { readonly hidden?: readonly unknown[]; readonly total?: number } = {},
 ): Promise<void> {
   await mockSignedInCabinet(page, {
     cabinetB640: true,
-    vacancyTotal: 45,
+    vacancyTotal: options.total ?? 45,
     vacancyFacets: {
-      total: 45,
+      total: options.total ?? 45,
       regions: [],
       remote: 0,
       levels: [],
@@ -340,6 +340,58 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator('.vz-bar')).toHaveCount(0);
     await expect(page.locator('.va-review')).not.toHaveAttribute('aria-current', 'true');
     await expect(page.locator(ROWS)).toHaveCount(20);
+  });
+
+  test('«Помочь выбрать»: один запрос на нажатие, дочитывание подборки разбор не перезапускает', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/vacancies', { total: 450 });
+    // Следующие порции подборки приходят с задержкой: режим включается, пока она дочитывается.
+    await page.route('**/api/v1/candidate/matched-vacancies?**', async (route) => {
+      const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? '0');
+      if (offset > 0) await new Promise((resolve) => setTimeout(resolve, 1_200));
+      return route.fallback();
+    });
+    const calls = await mockTriage(page);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible();
+    await page.locator('.va-review').click();
+    await expect(page.locator(PICKED).first()).toBeVisible();
+    await expect(page.locator('.vl-count .num')).toHaveText('450');
+    await expect(page.locator('.vl-foot .btn')).toContainText('осталось 430');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.clusterIds.length).toBeGreaterThanOrEqual(20);
+    expect(calls[0]?.clusterIds.length).toBeLessThan(450);
+    await expect(page.locator(PICKED)).toHaveCount(3);
+  });
+
+  test('«Помочь выбрать»: скрывать нечего — строка итога, режим закрыт, кнопки с нулём нет', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/vacancies');
+    let calls = 0;
+    await page.route('**/api/v1/candidate/b640/vacancy-triage', (route) => {
+      calls += 1;
+      const ids = (route.request().postDataJSON() as TriageBody).clusterIds;
+      return route.fulfill({
+        json: {
+          data: {
+            rows: ids.map((clusterId) => ({ clusterId, verdict: 'keep' })),
+            questions: [],
+            questionTotal: 0,
+            summary: { total: ids.length, keep: ids.length, hide: 0, needsData: 0 },
+          },
+          meta: { requestId: 'triage-empty' },
+        },
+      });
+    });
+    await page.locator('.va-review').click();
+    await expect(page.locator('p.vz-st')).toHaveText('Скрывать нечего: все 45 вакансий подходят');
+    await expect(page.locator('.vz-bar')).toHaveCount(0);
+    await expect(page.locator('.va-review')).not.toHaveAttribute('aria-current', 'true');
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    expect(calls).toBe(1);
+    await expectGates(page);
   });
 
   test('«Помочь выбрать»: сбой разбора — строка с «Повторить», режим остаётся', async ({

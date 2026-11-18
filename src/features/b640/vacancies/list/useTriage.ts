@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { VacancyTriage, VacancyTriageAnswers, VacancyTriageRow } from '../../../../../shared/b640Vacancies';
 import { isKnownSkipReasonId } from '../../../../../shared/skipReasons';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -28,6 +28,9 @@ export interface Triage {
   readonly triage: VacancyTriage | null;
   /** Сколько вакансий уходит на разбор. */
   readonly total: number;
+  /** Итог «скрывать нечего»: сколько вакансий разобрано; `null` — итога нет. */
+  readonly nothing: number | null;
+  readonly clearResult: () => void;
   readonly question: CurrentQuestion | null;
   readonly picked: number;
   readonly weak: boolean;
@@ -45,6 +48,7 @@ export interface Triage {
 const NO_HIDE: HideState = { status: 'idle', failed: 0 };
 const NO_ANSWERS: VacancyTriageAnswers = {};
 const NONE: ReadonlySet<string> = new Set();
+const NO_IDS: readonly string[] = [];
 
 function entriesFor(
   ids: readonly string[],
@@ -63,13 +67,59 @@ function entriesFor(
   return { entries, lost };
 }
 
+interface HideSeries {
+  readonly state: HideState;
+  /** Скрывает серией; всё скрыто — зовёт `onDone`, иначе оставляет число нескрытых. */
+  readonly run: (entries: readonly HideEntry[], lost: number, onDone: () => void) => void;
+  readonly reset: () => void;
+}
+
+function useHideSeries(hideMany: HideMany): HideSeries {
+  const [state, setState] = useState<HideState>(NO_HIDE);
+  const run = useCallback(
+    (entries: readonly HideEntry[], lost: number, onDone: () => void) => {
+      setState({ status: 'busy', failed: 0 });
+      hideMany(entries)
+        .catch(() => entries.map((entry) => entry.item.cluster.id))
+        .then((failed) => {
+          const left = failed.length + lost;
+          if (left === 0) onDone();
+          else setState({ status: 'failed', failed: left });
+        });
+    },
+    [hideMany],
+  );
+  const reset = useCallback(() => setState(NO_HIDE), []);
+  return useMemo(() => ({ state, run, reset }), [state, run, reset]);
+}
+
+/**
+ * Скрывать нечего и спрашивать не о чем: режим закрывается сам, на его месте остаётся итог
+ * с числом разобранных вакансий.
+ */
+function useNothingResult(
+  settled: VacancyTriage | null,
+  close: () => void,
+): { readonly nothing: number | null; readonly clearResult: () => void } {
+  const [nothing, setNothing] = useState<number | null>(null);
+  useEffect(() => {
+    if (!settled || settled.summary.hide > 0 || settled.questions.length > 0) return;
+    close();
+    setNothing(settled.summary.total);
+  }, [settled, close]);
+  const clearResult = useCallback(() => setNothing(null), []);
+  return useMemo(() => ({ nothing, clearResult }), [nothing, clearResult]);
+}
+
 /** Режим «Помочь выбрать»: разбор всего списка, флажки, вопросы по одному, скрытие серией. */
 export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMany): Triage {
   const [active, setActive] = useState(false);
   const [answers, setAnswers] = useState<VacancyTriageAnswers>(NO_ANSWERS);
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(NONE);
-  const [hide, setHide] = useState<HideState>(NO_HIDE);
-  const ids = useMemo(() => triageIds(items), [items]);
+  const series = useHideSeries(hideMany);
+  const { state: hide, reset: resetSeries } = series;
+  // Список фиксируется в момент нажатия: дочитывание подборки и сортировка разбор не перезапускают.
+  const [ids, setIds] = useState<readonly string[]>(NO_IDS);
   const request = useTriageRequest(active, hide.status === 'busy', ids, answers);
   const rows = useMemo(() => triageRowMap(request.triage), [request.triage]);
   const picked = useMemo(() => pickedIds(request.triage, unchecked), [request.triage, unchecked]);
@@ -78,27 +128,29 @@ export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMa
     setActive(false);
     setAnswers(NO_ANSWERS);
     setUnchecked(NONE);
-    setHide(NO_HIDE);
-  }, []);
+    resetSeries();
+  }, [resetSeries]);
+
+  const result = useNothingResult(active && request.status === 'ready' ? request.triage : null, cancel);
+
+  const start = useCallback(() => {
+    result.clearResult();
+    setIds(triageIds(items));
+    setActive(true);
+  }, [items, result]);
 
   const hideSelected = useCallback(() => {
-    const { entries, lost } = entriesFor(picked, rows, items);
     if (picked.length === 0) return;
-    setHide({ status: 'busy', failed: 0 });
-    hideMany(entries)
-      .catch(() => entries.map((entry) => entry.item.cluster.id))
-      .then((failed) => {
-        const left = failed.length + lost.length;
-        if (left === 0) cancel();
-        else setHide({ status: 'failed', failed: left });
-      });
-  }, [picked, rows, items, hideMany, cancel]);
+    const { entries, lost } = entriesFor(picked, rows, items);
+    series.run(entries, lost.length, cancel);
+  }, [picked, rows, items, series, cancel]);
 
   return {
     active,
     status: request.status,
     triage: request.triage,
     total: ids.length,
+    ...result,
     question: currentQuestion(request.triage),
     picked: picked.length,
     weak: request.triage ? isWeakMatch(request.triage.summary) : false,
@@ -110,7 +162,7 @@ export function useTriage(items: readonly MatchedVacancyItem[], hideMany: HideMa
       const id = currentQuestion(request.triage)?.id;
       if (id) setAnswers((current) => ({ ...current, [id]: value }));
     },
-    start: () => setActive(true),
+    start,
     cancel,
     retry: request.retry,
     hideSelected,
