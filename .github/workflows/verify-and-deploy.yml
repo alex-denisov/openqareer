@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Ready for a merge queue (needs an organization-owned repo); fires nowhere today.
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -14,13 +16,64 @@ env:
   VITE_OPENQAREER_RELEASE: ${{ github.sha }}
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('verify-{0}', github.ref) || 'openqareer-production' }}
+  group: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'openqareer-production' || format('verify-{0}', github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A push to main whose tree is byte-for-byte a PR head that already passed
+  # Verify skips the gates and only rebuilds the stamped archive. The ruleset
+  # on main requires an up-to-date branch, so a squash merge keeps that tree.
+  # Anything else (direct push, stale merge, manual run) runs every gate.
+  plan:
+    name: Plan gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    outputs:
+      full: ${{ steps.plan.outputs.full }}
+    steps:
+      - name: Decide full gates or deploy-only
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          full=true
+          if [ "$EVENT" = "push" ]; then
+            pr=""
+            for attempt in 1 2 3 4 5 6; do
+              pr="$(gh api "repos/$REPO/commits/$GITHUB_SHA/pulls" \
+                --jq '[.[] | select(.merged_at != null)][0] | "\(.number) \(.head.sha)"' || true)"
+              [ -n "$pr" ] && [ "$pr" != "null" ] && [ "$pr" != "null null" ] && break
+              sleep 5
+            done
+            if [ -n "$pr" ] && [ "$pr" != "null null" ]; then
+              head_sha="${pr#* }"
+              main_tree="$(gh api "repos/$REPO/commits/$GITHUB_SHA" --jq .commit.tree.sha)"
+              head_tree="$(gh api "repos/$REPO/commits/$head_sha" --jq .commit.tree.sha)"
+              passed="$(gh api "repos/$REPO/commits/$head_sha/check-runs?check_name=Verify" \
+                --jq '[.check_runs[] | select(.conclusion == "success")] | length')"
+              printf 'pr=%s head=%s head_tree=%s main_tree=%s verify_passed=%s\n' \
+                "${pr%% *}" "$head_sha" "$head_tree" "$main_tree" "$passed"
+              if [ "$head_tree" = "$main_tree" ] && [ "$passed" -gt 0 ]; then
+                full=false
+              fi
+            else
+              printf 'no merged PR found for %s\n' "$GITHUB_SHA"
+            fi
+          fi
+          printf 'full=%s\n' "$full" | tee -a "$GITHUB_OUTPUT"
+
   # Independent gates run side by side; the slowest one sets the wall time.
   static:
     name: Lint, types, audit
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -52,6 +105,8 @@ jobs:
 
   unit:
     name: Unit tests (shard ${{ matrix.shard }}/4)
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -92,7 +147,8 @@ jobs:
 
   coverage:
     name: Coverage thresholds
-    needs: unit
+    needs: [plan, unit]
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -126,7 +182,9 @@ jobs:
         run: npx vitest run --merge-reports --coverage
 
   e2e:
-    name: Browser tests (shard ${{ matrix.shard }}/6)
+    name: Browser tests (shard ${{ matrix.shard }}/10)
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -134,7 +192,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     steps:
       - name: Check out exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -158,10 +216,12 @@ jobs:
       - name: Verify built shell in real Chromium
         env:
           E2E_WEBKIT: skip
-        run: npx playwright test --shard=${{ matrix.shard }}/6
+        run: npx playwright test --shard=${{ matrix.shard }}/10
 
   e2e-webkit:
     name: Browser tests (WebKit)
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     # The image ships WebKit's system libraries: no apt, no mirror to stall. Not
     # macOS: hosted macOS runners ran out on busy evenings, the job waited 15 min
@@ -195,6 +255,8 @@ jobs:
 
   built-shell:
     name: Built shell scripts
+    needs: plan
+    if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -270,14 +332,24 @@ jobs:
   verify:
     name: Verify
     if: always()
-    needs: [static, unit, coverage, e2e, e2e-webkit, built-shell, release]
+    needs: [plan, static, unit, coverage, e2e, e2e-webkit, built-shell, release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Require every gate to pass
+      # Full plan: every gate must pass. Deploy-only plan (tree already verified
+      # in its PR): plan and release must pass, the skipped gates are expected.
+      - name: Require every planned gate to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          FULL: ${{ needs.plan.outputs.full }}
         run: |
-          printf '%s\n' '${{ toJSON(needs) }}'
-          test '${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}' = 'false'
+          set -euo pipefail
+          printf '%s\n' "$NEEDS"
+          if [ "$FULL" = "false" ]; then
+            printf '%s' "$NEEDS" | jq -e '.plan.result == "success" and .release.result == "success"'
+          else
+            printf '%s' "$NEEDS" | jq -e '[.[].result] | all(. == "success")'
+          fi
 
   deploy:
     name: Deploy production
