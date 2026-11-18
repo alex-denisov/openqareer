@@ -131,6 +131,48 @@ describe('consultant B640 routes with the flag', () => {
     const current = (await call(app, 'GET', `${BASE}/current?stage=today`, flagged)).json().data;
     const replyIds = current.messages.filter((m: { role: string }) => m.role === 'assistant').map((m: { id: string }) => m.id);
     expect(current.replies).toEqual([{ messageId: replyIds[1], actions: ['vacancies'], memoryIds: [own.id] }]);
+    expect(current.analysisPending).toBe(false);
+  });
+
+  it('says the background analysis is still running, and brings its actions once merged', async () => {
+    const { app, store, candidateOf, ask } = await setup();
+    ask(flagged);
+    const own = store.getSnapshot(candidateOf(flagged)).memory[0]!;
+    const key = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3';
+    const started = store.startTurn(candidateOf(flagged), key, {
+      ...turnRequest,
+      messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
+      stage: 'today',
+    });
+    if (started.state !== 'ready') throw new Error('expected a ready turn');
+    const analysisStartedAt = new Date().toISOString();
+    store.completeTurn(candidateOf(flagged), key, {
+      ...output,
+      result: { ...output.result, analysis: 'pending', analysisStartedAt },
+    } as never);
+
+    const pending = (await call(app, 'GET', `${BASE}/current?stage=today`, flagged)).json().data;
+    expect(pending.analysisPending).toBe(true);
+    expect(pending.replies).toEqual([]);
+
+    store.updateCoachTurnResult(candidateOf(flagged), key, (result) => ({
+      ...result,
+      analysis: 'ready',
+      actionProposals: [
+        {
+          kind: 'vacancies.search',
+          objective: 'Найти вакансии COO',
+          evidenceRefs: [`memory:${own.id}`],
+          acceptanceCriteria: ['Город записан'],
+          expectedSignal: 'Подборка точнее',
+          measureAfter: '2026-12-01',
+          risk: 'read_only',
+        },
+      ] as never,
+    }));
+    const ready = (await call(app, 'GET', `${BASE}/current?stage=today`, flagged)).json().data;
+    expect(ready.analysisPending).toBe(false);
+    expect(ready.replies).toEqual([expect.objectContaining({ actions: ['vacancies'], memoryIds: [own.id] })]);
   });
 
   it('rejects a bad stage, a bad conversation id and an empty close', async () => {

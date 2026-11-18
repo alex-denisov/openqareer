@@ -78,6 +78,8 @@ interface ConsultantMocks {
   readonly history?: 'two-pages' | 'empty';
   readonly memory?: readonly unknown[];
   readonly replies?: readonly unknown[];
+  /** Сколько первых чтений разговора фоновый разбор ещё идёт: до того ответов с действиями нет. */
+  readonly pendingReads?: number;
 }
 
 async function openConsultant(page: Page, path: string, mocks: ConsultantMocks = {}) {
@@ -187,16 +189,25 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
       },
     });
   });
-  const consultant = { open: true, closed: 0, resumed: [] as string[], confirmed: [] as string[] };
+  const consultant = {
+    open: true,
+    closed: 0,
+    reads: 0,
+    resumed: [] as string[],
+    confirmed: [] as string[],
+  };
   await page.route('**/api/v1/candidate/consultant/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/current')) {
+      consultant.reads += 1;
+      const pending = consultant.reads <= (mocks.pendingReads ?? 0);
       const data = consultant.open
         ? {
             ...conversation('current', TOPICS[0]),
             closedAt: null,
             messages: feed,
-            replies: mocks.replies ?? [],
+            replies: pending ? [] : (mocks.replies ?? []),
+            analysisPending: pending,
           }
         : null;
       return route.fulfill({ json: { data } });
@@ -381,6 +392,37 @@ test.describe('B660: «Консультант» нового кабинета', 
     expect(consultant.confirmed).toEqual([FACT.id]);
     await panel.getByRole('link', { name: 'К разговору' }).click();
     await expect(page).toHaveURL(/\/app\/consultant$/u);
+    await expect(panel).toHaveAttribute('data-b640-panel', 'dialog');
+  });
+
+  test('B688: «К разговору» из записей, открытых прямой ссылкой, возвращает разговор', async ({
+    page,
+  }) => {
+    const { consultant } = await openConsultant(page, '/app/consultant?review=1', {
+      memory: [FACT],
+    });
+    const panel = page.locator('.b640 aside.panel-col');
+    await expect(panel.locator('.ph-title')).toHaveText('Записи на проверку');
+    const readsBefore = consultant.reads;
+    await panel.getByRole('link', { name: 'К разговору' }).click();
+    await expect(page).toHaveURL(/\/app\/consultant$/u);
+    await expect(panel).toHaveAttribute('data-b640-panel', 'dialog');
+    await expect(panel.locator('.msg.bot').first()).toBeVisible();
+    expect(consultant.reads).toBeGreaterThan(readsBefore);
+  });
+
+  test('B688: действия под ответом приходят, когда закончится фоновый разбор', async ({ page }) => {
+    await openConsultant(page, '/app/consultant', {
+      memory: [FACT],
+      replies: [{ messageId: 'a1', actions: ['career'], memoryIds: [] }],
+      pendingReads: 1,
+    });
+    const reply = page.locator('.b640 aside.panel-col .msg.bot').first();
+    await expect(reply).toBeVisible();
+    await expect(reply.getByRole('link', { name: 'Открыть «Карьеру»' })).toHaveCount(0);
+    await expect(reply.getByRole('link', { name: 'Открыть «Карьеру»' })).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   test('B688: «Новый разговор» и продолжение прошлого из «Все разговоры»', async ({ page }) => {
