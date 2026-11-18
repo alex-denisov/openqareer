@@ -62,7 +62,7 @@ function ruleFor(finding: CandidateFootprintFinding): Rule {
 }
 
 const TOOL_NAMES =
-  /(?<![\p{L}\p{N}])(sherlock|maigret|hibp|have i been pwned|wayback(?: machine)?|exa|exiftool)(?![\p{L}\p{N}])/giu;
+  /(?<![\p{L}\p{N}])(sherlock|maigret|hibp|have i been pwned|wayback(?: machine)?|internet archive|web\.archive\.org|cdx|exa|exiftool)(?![\p{L}\p{N}])/giu;
 
 /** Заголовок без названия инструмента: «Sherlock: профиль» → «профиль». */
 function cleanTitle(title: string): string {
@@ -83,11 +83,16 @@ function cleanDetail(detail: string): string {
     .trim();
 }
 
+const ARCHIVED_PAGE = /\/web\/\d+[a-z_]*\/(https?:\/\/.+)$/u;
+
 function safeUrl(value: string | null | undefined): string | null {
   if (!value) return null;
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    // Копия из веб-архива: отдаём адрес самой страницы, а не способ, которым её нашли.
+    const archived = url.hostname === 'web.archive.org' && url.href.match(ARCHIVED_PAGE);
+    if (archived) return safeUrl(archived[1]);
     url.hash = '';
     return url.href;
   } catch {
@@ -114,20 +119,38 @@ function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
   };
 }
 
-/** Расхождение с резюме привязываем к находке с той же страницы. */
+/**
+ * Находка, к которой относится расхождение: та же страница или та же площадка
+ * (источник расхождения бывает адресом, а бывает названием площадки).
+ */
+function linkedFinding(
+  source: string,
+  findings: readonly CandidateFootprintFinding[],
+): CandidateFootprintFinding | undefined {
+  const url = safeUrl(source);
+  if (url) return findings.find((finding) => safeUrl(finding.url) === url);
+  const name = source.trim().toLocaleLowerCase('ru');
+  if (name.length < 3) return undefined;
+  return findings.find((finding) =>
+    `${finding.title} ${finding.url ?? ''}`.toLocaleLowerCase('ru').includes(name),
+  );
+}
+
+/** Расхождение с резюме привязываем к находке. */
 function mismatchItem(
   discrepancy: ConsistencyDiscrepancy,
   findings: readonly CandidateFootprintFinding[],
 ): FootprintRiskItem {
-  const url = safeUrl(discrepancy.externalSource);
-  const linked = url ? findings.find((finding) => safeUrl(finding.url) === url) : undefined;
+  const linked = linkedFinding(discrepancy.externalSource, findings);
+  const url = safeUrl(discrepancy.externalSource) ?? safeUrl(linked?.url);
   const level: FootprintRiskLevel = discrepancy.severity === 'critical' ? 'high' : 'low';
   return {
     id: `mismatch:${discrepancy.id}`,
     category: 'resume_mismatch',
     level,
     levelLabel: FOOTPRINT_LEVEL_LABELS[level],
-    title: `${discrepancy.field}: «${discrepancy.externalValue}»`,
+    title:
+      cleanTitle(`${discrepancy.field}: «${discrepancy.externalValue}»`) || 'Расхождение с резюме',
     detail: cleanDetail(discrepancy.suggestion),
     url,
     observedAt: linked?.observedAt ?? null,
@@ -135,9 +158,9 @@ function mismatchItem(
     action: FIX,
     findingId: linked?.id ?? null,
     mismatch: {
-      field: discrepancy.field,
+      field: cleanTitle(discrepancy.field),
       profileValue: discrepancy.candidateValue,
-      foundValue: discrepancy.externalValue,
+      foundValue: cleanTitle(discrepancy.externalValue),
     },
   };
 }
@@ -180,6 +203,7 @@ const STATE: Record<CandidateFootprintAudit['state'], FootprintRiskState> = {
 export function buildFootprintRiskSummary(
   audit: CandidateFootprintAudit | null,
   discrepancies: readonly ConsistencyDiscrepancy[],
+  options: { readonly checkRunning?: boolean } = {},
 ): FootprintRiskSummary {
   const findings = (audit?.findings ?? []).filter(
     (finding) => finding.review !== 'not_self' && finding.review !== 'hidden',
@@ -189,7 +213,9 @@ export function buildFootprintRiskSummary(
     ...(audit ? discrepancies.map((discrepancy) => mismatchItem(discrepancy, findings)) : []),
   ].sort((a, b) => (LEVEL_RANK.get(a.level) ?? 0) - (LEVEL_RANK.get(b.level) ?? 0));
   const toRemove = items.filter((item) => item.level !== 'useful' && !item.resolved).length;
-  const state = audit ? STATE[audit.state] : 'not_checked';
+  // «Идёт проверка» верим, только если она и правда идёт: оборванную показываем сорванной.
+  const stalled = audit?.state === 'pending' && options.checkRunning === false;
+  const state = !audit ? 'not_checked' : stalled ? 'failed' : STATE[audit.state];
   return {
     state,
     checkedAt: audit?.completedAt ?? null,

@@ -290,6 +290,40 @@ describe('buildFootprintRiskSummary', () => {
     );
   });
 
+  it('у копии из веб-архива отдаёт адрес самой страницы', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({
+          kind: 'archive',
+          url: 'https://web.archive.org/web/20160101000000/https://moikrug.test/sokolova',
+        }),
+      ]),
+      [],
+    );
+    expect(summary.items[0].url).toBe('https://moikrug.test/sokolova');
+  });
+
+  it('расхождение по названию площадки привязывается к находке этой площадки', () => {
+    const page = finding({
+      id: 'li',
+      title: 'Профиль LinkedIn',
+      url: 'https://linkedin.test/in/sokolova',
+    });
+    const item = buildFootprintRiskSummary(audit([page]), [
+      { ...mismatch, externalSource: 'LinkedIn' },
+    ]).items.find((entry) => entry.category === 'resume_mismatch');
+    expect(item).toMatchObject({ findingId: 'li', url: 'https://linkedin.test/in/sokolova' });
+  });
+
+  it('оборванную проверку не показывает идущей', () => {
+    expect(buildFootprintRiskSummary(audit([], 'pending'), [], { checkRunning: false }).state).toBe(
+      'failed',
+    );
+    expect(buildFootprintRiskSummary(audit([], 'pending'), [], { checkRunning: true }).state).toBe(
+      'checking',
+    );
+  });
+
   it('ссылку отдаёт только http(s)', () => {
     const summary = buildFootprintRiskSummary(audit([finding({ url: 'javascript:alert(1)' })]), []);
     expect(summary.items[0].url).toBeNull();

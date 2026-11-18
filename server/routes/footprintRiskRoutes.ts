@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildFootprintRiskSummary } from '../domain/footprintRisk';
+import { isFootprintRunActive } from '../osint/candidateFootprintWorker';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -33,7 +34,9 @@ async function handleGetFootprintRisks(
     repository?.getLatestAudit(candidateId, { trustedOnly: true })?.consistencyDiscrepancies ?? [];
   reply.header('Cache-Control', 'no-store');
   return {
-    data: buildFootprintRiskSummary(audit, discrepancies),
+    data: buildFootprintRiskSummary(audit, discrepancies, {
+      checkRunning: audit ? isFootprintRunActive(audit.id) : false,
+    }),
     meta: { requestId: request.id },
   };
 }
