@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { VacancyTriage, VacancyTriageAnswers } from '../../../../../shared/b640Vacancies';
-import { requestTriage } from '../triageApi';
+import { requestTriage, type TriageTarget } from '../triageApi';
 
 export type TriageStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
@@ -19,18 +19,18 @@ interface RequestState {
 const IDLE: RequestState = { status: 'idle', triage: null };
 
 /**
- * Разбор списка на сервере. Любая смена списка или ответов отменяет прежний запрос, а ответ
+ * Разбор списка на сервере. Любая смена цели разбора или ответов отменяет прежний запрос, а ответ
  * отменённого запроса отбрасывается: старый разбор не перезапишет новый.
  */
 export function useTriageRequest(
   active: boolean,
   paused: boolean,
-  ids: readonly string[],
+  target: TriageTarget | null,
   answers: VacancyTriageAnswers,
 ): TriageRequest {
   const [state, setState] = useState<RequestState>(IDLE);
   const [attempt, setAttempt] = useState(0);
-  const idsKey = ids.join('\n');
+  const targetKey = JSON.stringify(target);
   const answersKey = JSON.stringify(answers);
 
   useEffect(() => {
@@ -39,13 +39,13 @@ export function useTriageRequest(
       return undefined;
     }
     if (paused) return undefined;
-    if (ids.length === 0) {
+    if (!target || ('clusterIds' in target && target.clusterIds.length === 0)) {
       setState({ status: 'ready', triage: null });
       return undefined;
     }
     const controller = new AbortController();
     setState((current) => ({ status: 'loading', triage: current.triage }));
-    requestTriage(ids, answers, controller.signal)
+    requestTriage(target, answers, controller.signal)
       .then((triage) => {
         if (!controller.signal.aborted) setState({ status: 'ready', triage });
       })
@@ -53,7 +53,7 @@ export function useTriageRequest(
         if (!controller.signal.aborted) setState((current) => ({ status: 'failed', triage: current.triage }));
       });
     return () => controller.abort();
-  }, [active, paused, idsKey, answersKey, attempt]);
+  }, [active, paused, targetKey, answersKey, attempt]);
 
   return { ...state, retry: () => setAttempt((value) => value + 1) };
 }

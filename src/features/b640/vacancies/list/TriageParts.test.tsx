@@ -110,6 +110,17 @@ describe('состояния', () => {
     one.unmount();
   });
 
+  it('подборка больше потолка разбора: итог называет, сколько разобрано из скольких', () => {
+    const view = mount(<TriageStatus kind="nothing" total={1000} pool={1005} />);
+    expect(view.container.textContent).toBe('Скрывать нечего: разобраны первые 1000 из 1005 вакансий');
+    view.unmount();
+    const capped = mount(<TriageStatus kind="capped" total={1000} pool={1005} />);
+    const line = capped.container.querySelector('p.vz-st')!;
+    expect(line.getAttribute('role')).toBe('status');
+    expect(line.textContent).toBe('Разобраны первые 1000 из 1005 вакансий');
+    capped.unmount();
+  });
+
   it('«Разбираем N вакансий…»', () => {
     const view = mount(<TriageStatus kind="loading" total={214} />);
     const line = view.container.querySelector('p.vz-st')!;

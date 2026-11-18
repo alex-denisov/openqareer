@@ -16,12 +16,12 @@ export async function hideInBatches(entries: readonly HideEntry[]): Promise<Hide
   for (let start = 0; start < entries.length; start += BATCH) {
     const batch = entries.slice(start, start + BATCH);
     const results = await Promise.allSettled(
-      batch.map((entry) => hideVacancy(entry.item.cluster.id, entry.reason)),
+      batch.map((entry) => hideVacancy(entry.id, entry.reason)),
     );
     results.forEach((result, index) => {
       const entry = batch[index]!;
       if (result.status === 'fulfilled') done.push(entry);
-      else failed.push(entry.item.cluster.id);
+      else failed.push(entry.id);
     });
   }
   return { done, failed };

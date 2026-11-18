@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   VACANCY_TRIAGE_MAX_IDS,
+  VACANCY_TRIAGE_QUERY_MAX,
   VACANCY_TRIAGE_QUESTION_IDS,
   type VacancyTriage,
 } from '../../shared/b640Vacancies';
@@ -11,6 +12,7 @@ import { readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { mapYielding } from '../vacancies/mapYielding';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { triageVacancies } from '../vacancies/vacancyTriage';
+import { readB640PoolRows } from './b640MatchedVacancyRoutes';
 import { profileIsEmpty, readB640ListContext, sessionCandidate } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -22,16 +24,21 @@ const answersShape = Object.fromEntries(
   VACANCY_TRIAGE_QUESTION_IDS.map((id) => [id, z.boolean().optional()]),
 ) as Record<(typeof VACANCY_TRIAGE_QUESTION_IDS)[number], z.ZodOptional<z.ZodBoolean>>;
 
+/** Либо список id (разбор показанного), либо строка фильтров списка (разбор всей подборки). */
 const bodySchema = z
   .object({
     clusterIds: z
       .array(z.string().min(1).max(200))
       .min(1)
       .max(VACANCY_TRIAGE_MAX_IDS)
-      .refine((ids) => new Set(ids).size === ids.length),
+      .refine((ids) => new Set(ids).size === ids.length)
+      .optional(),
+    query: z.string().max(VACANCY_TRIAGE_QUERY_MAX).optional(),
     answers: z.object(answersShape).strict().default({}),
   })
-  .strict();
+  .strict()
+  .refine((body) => (body.clusterIds === undefined) !== (body.query === undefined));
+type Body = z.infer<typeof bodySchema>;
 
 const EMPTY: VacancyTriage = {
   rows: [],
@@ -72,14 +79,26 @@ function withStoredFitViews(
   });
 }
 
-async function buildTriage(
+interface TriageRows {
+  readonly rows: readonly MatchedVacancyItem[];
+  /** Размер всей подборки по фильтрам; только у разбора без списка id. */
+  readonly poolTotal?: number;
+}
+
+/** Строки разбора: показанные по id или вся подборка по фильтрам, не больше потолка; `null` — фильтры неверны. */
+async function triageRows(
   deps: RouteDeps,
+  request: FastifyRequest,
   candidateId: string,
-  ids: readonly string[],
-  answers: z.infer<typeof bodySchema>['answers'],
-): Promise<VacancyTriage> {
+  body: Body,
+): Promise<TriageRows | null> {
   const context = readB640ListContext(deps, candidateId);
-  if (profileIsEmpty(context)) return EMPTY;
+  if (profileIsEmpty(context)) return { rows: [] };
+  if (body.query !== undefined) {
+    const filters = Object.fromEntries(new URLSearchParams(body.query));
+    const pool = await readB640PoolRows(deps, request, candidateId, context, filters);
+    return pool && { rows: pool.slice(0, VACANCY_TRIAGE_MAX_IDS), poolTotal: pool.length };
+  }
   const snapshot = await readMatchedSnapshot(
     deps.multiSourceEngine,
     candidateId,
@@ -88,7 +107,17 @@ async function buildTriage(
     context.targetLevel,
     context.geography,
   );
-  const rows = await withStoredFitViews(deps, candidateId, requestedRows(snapshot, deps, candidateId, ids));
+  return { rows: requestedRows(snapshot, deps, candidateId, body.clusterIds ?? []) };
+}
+
+async function buildTriage(
+  deps: RouteDeps,
+  candidateId: string,
+  source: TriageRows,
+  answers: Body['answers'],
+): Promise<VacancyTriage> {
+  if (source.rows.length === 0) return { ...EMPTY, ...(source.poolTotal === undefined ? {} : { poolTotal: 0 }) };
+  const rows = await withStoredFitViews(deps, candidateId, source.rows);
   const profile = deps.candidateStore.decisionProfileRepo.get(candidateId);
   const appliedIds = new Set([
     ...deps.candidateStore
@@ -100,7 +129,7 @@ async function buildTriage(
       .filter((card) => card.stage !== 'archived')
       .map((card) => card.clusterId),
   ]);
-  return triageVacancies({
+  const triage = triageVacancies({
     rows,
     answers,
     appliedIds,
@@ -109,6 +138,7 @@ async function buildTriage(
       : {}),
     ...(getCurrencyRates() ? { rates: getCurrencyRates() } : {}),
   });
+  return source.poolTotal === undefined ? triage : { ...triage, poolTotal: source.poolTotal };
 }
 
 const postTriage = async (
@@ -125,11 +155,15 @@ const postTriage = async (
     return sendError(reply, request, 400, 'invalid_body', 'Неверный список вакансий для разбора.', false);
   }
   const deps = withRequestScopedCandidateReads(routeDeps);
-  const data = await buildTriage(deps, candidate.id, body.data.clusterIds, body.data.answers);
+  const source = await triageRows(deps, request, candidate.id, body.data);
+  if (!source) {
+    return sendError(reply, request, 400, 'invalid_body', 'Неверные фильтры подборки для разбора.', false);
+  }
+  const data = await buildTriage(deps, candidate.id, source, body.data.answers);
   return { data, meta: { requestId: request.id } };
 };
 
-/** B675: «Помочь выбрать» — разбор показанного списка по правилам; ничего не пишет, модель не зовёт. */
+/** B675: «Помочь выбрать» — разбор показанного списка или всей подборки по правилам; ничего не пишет, модель не зовёт. */
 export function registerB640VacancyTriageRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.post('/api/v1/candidate/b640/vacancy-triage', withDeps(deps, postTriage));
 }

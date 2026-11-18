@@ -11,8 +11,10 @@ export const TRIAGE_MAX_IDS = VACANCY_TRIAGE_MAX_IDS;
 
 /** Вакансия к скрытию и причина, с которой её скрывают. */
 export interface HideEntry {
-  readonly item: MatchedVacancyItem;
+  readonly id: string;
   readonly reason: SkipReasonId;
+  /** Строка списка, если клиент её уже дочитал: по ней вакансия сразу видна в «скрытых». */
+  readonly item?: MatchedVacancyItem;
 }
 
 export interface CurrentQuestion {

@@ -22,7 +22,7 @@ beforeEach(() => fetchMock.mockReset());
 describe('разбор списка', () => {
   it('шлёт id и ответы, возвращает разбор', async () => {
     fetchMock.mockResolvedValue(json({ data, meta: { requestId: 'r' } }));
-    const result = await requestTriage(['a'], { salaryLowerBound: true });
+    const result = await requestTriage({ clusterIds: ['a'] }, { salaryLowerBound: true });
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/candidate/b640/vacancy-triage');
     expect(init?.method).toBe('POST');
@@ -35,11 +35,11 @@ describe('разбор списка', () => {
 
   it('чужая форма ответа — ошибка', async () => {
     fetchMock.mockResolvedValue(json({ data: { rows: 1 } }));
-    await expect(requestTriage(['a'], {})).rejects.toThrow();
+    await expect(requestTriage({ clusterIds: ['a'] }, {})).rejects.toThrow();
   });
 
   it('ошибка сервера пробрасывается', async () => {
     fetchMock.mockResolvedValue(json({ error: { message: 'сбой' } }, 500));
-    await expect(requestTriage(['a'], {})).rejects.toThrow();
+    await expect(requestTriage({ clusterIds: ['a'] }, {})).rejects.toThrow();
   });
 });

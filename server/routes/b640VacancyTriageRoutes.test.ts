@@ -155,4 +155,88 @@ describe('POST b640/vacancy-triage', () => {
       expect(dump()).toBe(before);
     });
   });
+  describe('whole pool by filters, without ids', () => {
+    async function poolSetup(size = 4) {
+      const pool = Array.from({ length: size }, (_, index) =>
+        poolItem({
+          id: `pool-${index}`,
+          title: `Роль ${index}`,
+          company: 'К',
+          isRemote: index % 2 === 0,
+          location: index % 2 === 0 ? 'Удалённо' : 'Москва',
+        }),
+      );
+      const harness = await createB640Harness({ pool: () => pool });
+      closers.push(harness.close);
+      return harness;
+    }
+
+    it('answers 404 without a session and without the flag', async () => {
+      const { post } = await poolSetup();
+      for (const user of [undefined, 'plain.test'] as const) {
+        expect((await post(URL, { query: '' }, user)).statusCode).toBe(404);
+      }
+    });
+
+    it('triages every vacancy of the candidate pool when no ids are sent', async () => {
+      const { post, get } = await poolSetup();
+      const list = (await get('/api/v1/candidate/b640/matched-vacancies?limit=50', 'flagged.test')).json();
+      const body = (await post(URL, { query: '' }, 'flagged.test')).json();
+      expect(ids(body)).toEqual(list.data.map((item: { cluster: { id: string } }) => item.cluster.id));
+      expect(body.data.summary.total).toBe(4);
+      expect(body.data.poolTotal).toBe(4);
+    });
+
+    it('applies the same filters as the list route', async () => {
+      const { post, get } = await poolSetup();
+      const list = (await get('/api/v1/candidate/b640/matched-vacancies?remote=1&limit=50', 'flagged.test')).json();
+      const body = (await post(URL, { query: 'remote=1' }, 'flagged.test')).json();
+      expect(list.data.length).toBeGreaterThan(0);
+      expect(list.data.length).toBeLessThan(4);
+      expect(ids(body)).toEqual(list.data.map((item: { cluster: { id: string } }) => item.cluster.id));
+      expect(body.data.poolTotal).toBe(list.data.length);
+    });
+
+    it('leaves out vacancies the candidate has hidden', async () => {
+      const { post, candidates, candidateIds } = await poolSetup();
+      candidates.createVacancySkip(candidateIds['flagged.test'], { clusterId: 'pool-1', reasonId: 'company', origin: 'vacancy_card' });
+      const body = (await post(URL, { query: '' }, 'flagged.test')).json();
+      expect(ids(body)).not.toContain('pool-1');
+      expect(body.data.summary.total).toBe(3);
+    });
+
+    it('triages the first 1000 in list order and reports the pool size beyond the cap', async () => {
+      const { post } = await poolSetup(1_005);
+      const started = performance.now();
+      const body = (await post(URL, { query: '' }, 'flagged.test')).json();
+      const elapsed = performance.now() - started;
+      expect(body.data.rows).toHaveLength(1_000);
+      expect(body.data.summary.total).toBe(1_000);
+      expect(body.data.poolTotal).toBe(1_005);
+      expect(elapsed).toBeLessThan(5_000);
+    });
+
+    it('rejects a body with both ids and a query, an unknown filter value and an oversized query', async () => {
+      const { post } = await poolSetup();
+      for (const payload of [
+        { clusterIds: ['pool-0'], query: '' },
+        { query: 'sort=nonsense' },
+        { query: 'x'.repeat(2_001) },
+        {},
+      ]) {
+        expect((await post(URL, payload, 'flagged.test')).statusCode).toBe(400);
+      }
+    });
+
+    it('keeps the old route answer and the sealed row untouched', async () => {
+      const { post, get } = await poolSetup();
+      const before = (await get(OLD, 'flagged.test')).json();
+      await post(URL, { query: '' }, 'flagged.test');
+      await post(URL, { query: 'remote=1' }, 'flagged.test');
+      const after = (await get(OLD, 'flagged.test')).json();
+      expect(after.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        before.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+    });
+  });
 });

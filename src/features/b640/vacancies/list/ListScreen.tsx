@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { poolFilterQuery } from '../b640Api';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
 import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
@@ -24,7 +25,7 @@ import { useHiddenSection, type HiddenSection } from './useHiddenSection';
 import { useRowInteractions, type RowInteractions } from './useRowInteractions';
 import { usePoolRetry } from './usePoolRetry';
 import { useTriage, type Triage } from './useTriage';
-import { useVacancyList, type VacancyList } from './useVacancyList';
+import { isNarrowed, useVacancyList, type VacancyList } from './useVacancyList';
 
 /** Профиль пуст: у каждой загруженной вакансии процента нет из-за отсутствия опыта. */
 function profileIsEmpty(list: VacancyList): boolean {
@@ -148,9 +149,9 @@ export function ListScreen() {
   const list = useVacancyList(links, rows.hiddenIds);
   const { pool } = list;
   const section = useHiddenSection(rows, pool.refresh);
-  // Разбор ждёт всю подборку: она дочитана, чтение сорвалось или строк уже столько, сколько обещал сервер.
-  const poolRead = pool.complete || pool.failed || (!pool.loading && pool.matched.length >= pool.total);
-  const triage = useTriage(list.all, rows.hideMany, { ready: poolRead, expected: list.count });
+  // Всю подборку по фильтрам сервер разбирает сам; с фильтрами, которых он не знает, — показанные строки.
+  const triageQuery = isNarrowed(list.filters) ? null : poolFilterQuery(list.filters.roles);
+  const triage = useTriage(list.all, rows.hideMany, { query: triageQuery, expected: list.count });
   // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
   const { clearResult } = triage;
   const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;

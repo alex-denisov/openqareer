@@ -121,7 +121,8 @@ function useBlockers(
   return useMemo(() => (empty ? blockersOf(base, filters, context) : []), [empty, base, filters, currency, rates, now]);
 }
 
-function isNarrowed(filters: ListFilters): boolean {
+/** Выбраны фильтры, которые считает клиент (локации, формат, деньги, дата, релокация): сервер их не знает. */
+export function isNarrowed(filters: ListFilters): boolean {
   const { locations, formats, reloc, moneyFrom, date } = filters;
   return locations.length > 0 || formats.length > 0 || reloc || moneyFrom !== null || date !== 'any';
 }

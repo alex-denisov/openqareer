@@ -194,6 +194,23 @@ const getMatchedVacancies = async (
   };
 };
 
+/**
+ * B675: вся подборка кандидата по фильтрам списка, в порядке списка, для разбора «Помочь выбрать».
+ * Читается тем же путём, что и список (без записи запечатанной строки); `null` — фильтры неверны.
+ */
+export async function readB640PoolRows(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  context: B640ListContext,
+  filters: Readonly<Record<string, string>>,
+): Promise<Rows | null> {
+  const parsed = querySchema.safeParse(filters);
+  if (!parsed.success) return null;
+  const read = await readList(deps, request, candidateId, context, parsed.data);
+  return read.list.filtered;
+}
+
 /** B674: подборка с сортировкой по любому столбцу; запомненную сортировку и запечатанный список прежнего маршрута читает как он, но не пишет. */
 export function registerB640MatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/b640/matched-vacancies', withDeps(deps, getMatchedVacancies));

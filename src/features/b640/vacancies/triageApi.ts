@@ -11,16 +11,21 @@ function isTriage(value: unknown): value is VacancyTriage {
   return Array.isArray(data.rows) && Array.isArray(data.questions) && typeof data.summary === 'object';
 }
 
-/** Разбор списка по правилам: ничего не пишет, ответы на вопросы кладутся в тело. */
+/** Что разбирать: показанные вакансии по id или всю подборку по строке фильтров списка. */
+export type TriageTarget =
+  | { readonly clusterIds: readonly string[] }
+  | { readonly query: string };
+
+/** Разбор по правилам: ничего не пишет, ответы на вопросы кладутся в тело. */
 export async function requestTriage(
-  clusterIds: readonly string[],
+  target: TriageTarget,
   answers: VacancyTriageAnswers,
   signal?: AbortSignal,
 ): Promise<VacancyTriage> {
   const response = await apiFetch(TRIAGE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ clusterIds, answers }),
+    body: JSON.stringify({ ...target, answers }),
     signal,
   });
   const data = await readDataObject<VacancyTriage>(response);
