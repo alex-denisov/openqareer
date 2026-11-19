@@ -30,4 +30,6 @@
     max-inline-size: 22rem;
     min-inline-size: 0;
   }
+  /* B678: строки текста раздела hh.ru одна под другой, как на hh.ru. */
+  .b640 .hh2-line { display: block; }
 }
