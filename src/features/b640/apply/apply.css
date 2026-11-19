@@ -32,4 +32,13 @@
   }
   /* B678: строки текста раздела hh.ru одна под другой, как на hh.ru. */
   .b640 .hh2-line { display: block; }
+  /* B678: отказ hh.ru применить правку — под строкой правки, текст остаётся для копирования. */
+  .b640 .hh2-err {
+    margin: var(--career-space-2) 0 0;
+    padding: var(--career-space-2) var(--career-space-3);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-danger-soft);
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+  }
 }

@@ -65,7 +65,14 @@ function linesOf(draft: HhEditDraft): Line[] {
 }
 
 function publicEdit(draft: HhEditDraft, now: string): HhResumeEdit {
-  return { id: draft.id, section: draft.section, ...(draft.place ? { place: draft.place } : {}), was: draft.was, now };
+  return {
+    id: draft.id,
+    section: draft.section,
+    ...(draft.place ? { place: draft.place } : {}),
+    was: draft.was,
+    now,
+    ...(draft.added ? { added: draft.added } : {}),
+  };
 }
 
 export async function localizeHhResumeEdits(

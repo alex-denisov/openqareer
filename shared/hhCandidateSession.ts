@@ -63,6 +63,8 @@ export interface HhResumeEdit {
   readonly place?: string;
   readonly was: string;
   readonly now: string;
+  /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */
+  readonly added?: readonly string[];
 }
 
 export interface HhResumeSnapshot {

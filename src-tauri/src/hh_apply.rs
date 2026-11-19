@@ -101,7 +101,7 @@ async fn step(window: &tauri::Webview, script: &str) -> Result<String, String> {
 }
 
 /// Polls `script` until it answers something other than `waiting`.
-async fn wait_for(window: &tauri::Webview, script: &str, limit: Duration) -> String {
+pub(crate) async fn wait_for(window: &tauri::Webview, script: &str, limit: Duration) -> String {
     let deadline = tokio::time::Instant::now() + limit;
     loop {
         match step(window, script).await {
@@ -126,19 +126,19 @@ pub fn report_for(code: &str) -> HhApplyReport {
     }
 }
 
-fn on_hh(window: &tauri::Webview) -> bool {
+pub(crate) fn on_hh(window: &tauri::Webview) -> bool {
     window
         .url()
         .is_ok_and(|url| is_allowed_session_url("hh", url.as_str()))
 }
 
-/// One response at a time: the hh.ru window is a single page shared by every step.
+/// One hh.ru action at a time (a response or a resume edit): the hh.ru window is a single page.
 static APPLY_RUNNING: AtomicBool = AtomicBool::new(false);
 
-struct RunningGuard;
+pub(crate) struct RunningGuard;
 
 impl RunningGuard {
-    fn take() -> Option<Self> {
+    pub(crate) fn take() -> Option<Self> {
         APPLY_RUNNING
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
             .ok()
