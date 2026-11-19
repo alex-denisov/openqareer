@@ -23,7 +23,7 @@ describe('B647: разбор ссылается на схему', () => {
     });
     expect(linked.criteria.requirements).not.toHaveProperty('schemaNodeIds');
     expect(linked.criteria.tradeoffs).not.toHaveProperty('schemaNodeIds');
-    expect(linked.score).toBe(evaluation.score);
+    expect(linked.points).toBe(evaluation.points);
   });
 
   it('keeps only nodes left in the corrected schema and leaves text-only review as is', () => {
@@ -37,8 +37,8 @@ describe('B647: разбор ссылается на схему', () => {
   });
 
   it('does not change the plain scoring', () => {
-    expect(scoreInterviewAnswerWithQuotes(ANSWER, 'system_design').score).toBe(
-      scoreInterviewAnswer(ANSWER, 'system_design').score,
+    expect(scoreInterviewAnswerWithQuotes(ANSWER, 'system_design').points).toBe(
+      scoreInterviewAnswer(ANSWER, 'system_design').points,
     );
   });
 });
