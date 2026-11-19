@@ -9,12 +9,13 @@ export interface Platform {
 }
 
 const KNOWN: readonly (readonly [RegExp, string])[] = [
-  [/^hh(\.ru)?$/u, 'hh.ru'],
+  [/^hh(\.ru)?(?:[-._].*)?$/u, 'hh.ru'],
+  [/^indeed/u, 'Indeed'],
   [/^linkedin/u, 'LinkedIn'],
   [/^telegram/u, 'Telegram'],
   [/^remotive$/u, 'Remotive'],
   [/^trudvsem$/u, 'ТрудВсем'],
-  [/^himalayas$/u, 'Himalayas'],
+  [/^himalayas/u, 'Himalayas'],
 ];
 const SITE: Platform = { label: 'сайт компании', site: true };
 /**
@@ -28,11 +29,13 @@ export function platformOf(source: string | null | undefined): Platform {
   if (!raw) return SITE;
   // Пометка в скобках («hh.ru (страница поиска)») — внутреннее различие сбора, её убираем первой.
   const name = vacancySourceDisplayName(raw);
-  const lower = name.toLowerCase();
+  // Коды сбора «src-hh-search», «src-indeed»: приставка — внутреннее имя канала, не площадка.
+  const lower = name.toLowerCase().replace(/^src[-._]/u, '');
   if (INTERNAL.test(lower)) return SITE;
   const known = KNOWN.find(([pattern]) => pattern.test(lower));
   if (known) return { label: known[1], site: false };
-  return { label: name.charAt(0).toUpperCase() + name.slice(1), site: false };
+  const bare = name.replace(/^src[-._]/iu, '');
+  return { label: bare.charAt(0).toUpperCase() + bare.slice(1), site: false };
 }
 
 /** «через hh.ru», «через сайт компании». */

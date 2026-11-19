@@ -65,6 +65,24 @@ export interface RejectionRecommendation {
   readonly total: number;
 }
 
+export interface RejectionCheckCount {
+  readonly count: number;
+  readonly total: number;
+}
+
+/** B645: проверки экрана «Мало данных», которым порог не нужен. */
+export interface RejectionReviewChecks {
+  /** Первый отправленный отклик (ISO); `null` — дат отправки нет. */
+  readonly since: string | null;
+  /** Отклики без ответа: статус стоит обновить. */
+  readonly unfinished: RejectionCheckCount;
+  /** Вакансии, где верх вилки ниже ожиданий кандидата; `null` — ожиданий в профиле нет. */
+  readonly salaryBelow:
+    (RejectionCheckCount & { readonly floor: number; readonly currency: string }) | null;
+  /** Отклики позже 10 дней после публикации вакансии. */
+  readonly late: RejectionCheckCount;
+}
+
 export interface RejectionReview {
   /** `low_data` — откликов меньше порога: отказы показываем, выводов и рекомендаций нет. */
   readonly state: 'low_data' | 'ready';
@@ -76,4 +94,6 @@ export interface RejectionReview {
   readonly recommendations: readonly RejectionRecommendation[];
   /** Ответ на «Разбор помог?»; `null` — ещё не отвечали. */
   readonly helped: boolean | null;
+  /** B645: только при `low_data`. */
+  readonly checks?: RejectionReviewChecks;
 }

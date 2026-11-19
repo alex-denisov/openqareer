@@ -136,4 +136,19 @@ describe('useVariantApproval: одобрение переживает уход �
     expect(restore).toHaveBeenCalledWith('variant-2', 'Одобренный второй вариант.');
     expect(view.get().approval.saved).toMatchObject({ applicationId: 'app-1' });
   });
+
+  it('B645: одобренное письмо показывает язык и тон из снимка, после «Изменить» — выбор кандидата', async () => {
+    api.readLatestLetterApproval.mockResolvedValue({
+      ...STORED,
+      language: 'ru',
+      tone: 'confident',
+    });
+    const view = await mount(letterOf({ emailPitch: {} }), variantsOf(true));
+    expect(view.get().language).toBe('ru');
+    expect(view.get().tone).toBe('confident');
+
+    await act(async () => view.get().approval.reset());
+    expect(view.get().language).toBe('auto');
+    expect(view.get().tone).toBe('executive');
+  });
 });
