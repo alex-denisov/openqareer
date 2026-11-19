@@ -78,6 +78,8 @@ export interface CareerDiaryWorkplace {
   readonly startDate: string;
   readonly endDate: string | null;
   readonly sourceExperienceId: string | null;
+  /** d01: «Что от вас ждут» — задачи из оффера или вакансии; план строится по ним. */
+  readonly expectations?: string | null;
   readonly status: CareerDiaryWorkplaceStatus;
   readonly isPrimary: boolean;
   readonly createdAt: string;
@@ -144,6 +146,7 @@ export interface CareerDiaryWorkplaceInput {
   readonly startDate: string;
   readonly endDate?: string | null;
   readonly sourceExperienceId?: string | null;
+  readonly expectations?: string | null;
 }
 
 export type CareerDiaryWorkplacePatch = Partial<CareerDiaryWorkplaceInput>;

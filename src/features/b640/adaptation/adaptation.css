@@ -25,4 +25,58 @@
   .b640 .dn-task .icon-btn {
     flex: none;
   }
+
+  /* d01g: «Что от вас ждут» — как поле ввода gb-f, высота под 5 строк */
+  .b640 .gb-f textarea {
+    box-sizing: border-box;
+    inline-size: 40rem;
+    max-inline-size: 100%;
+    min-block-size: 8.5rem;
+    padding: var(--career-space-3);
+    border-radius: var(--career-radius-ctl);
+    border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated));
+    background: var(--career-bg);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-sm);
+    line-height: 1.5;
+    resize: vertical;
+  }
+  .b640 .gb-f textarea:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: var(--career-focus-offset);
+  }
+  /* d01h: компании из откликов — список под полем «Компания» */
+  .b640 .ac-wrap { position: relative; inline-size: 40rem; max-inline-size: 100%; }
+  .b640 .ac-wrap input { inline-size: 100%; }
+  .b640 .ac-list {
+    position: absolute;
+    z-index: 6;
+    inset-inline: 0;
+    inset-block-start: calc(100% + var(--career-space-1));
+    margin: 0;
+    padding: var(--career-space-1);
+    list-style: none;
+    background: var(--career-surface);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-md);
+    box-shadow: var(--career-back-shadow);
+  }
+  .b640 .ac-list li {
+    display: grid;
+    gap: 2px;
+    padding: var(--career-space-2) var(--career-space-3);
+    border-radius: var(--career-radius-ctl);
+    cursor: pointer;
+  }
+  .b640 .ac-list li[aria-selected="true"],
+  .b640 .ac-list li:hover {
+    background: var(--career-surface-raised, color-mix(in srgb, var(--career-accent) 8%, var(--career-surface)));
+  }
+  .b640 .ac-t { font-size: var(--career-text-sm); font-weight: 600; color: var(--career-text); }
+  .b640 .ac-v { font-size: var(--career-text-xs); color: var(--career-text-soft); }
+  @media (max-width: 767px) {
+    .b640 .gb-f textarea, .b640 .ac-wrap { inline-size: 100%; }
+    .b640 .gb-f.gb-long, .b640 .gb-f.gb-co { justify-items: stretch; }
+  }
 }

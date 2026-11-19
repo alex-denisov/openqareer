@@ -105,6 +105,8 @@ const workplaceFieldsSchema = z.object({
   startDate: dateSchema,
   endDate: dateSchema.nullable().optional(),
   sourceExperienceId: z.string().trim().max(200).nullable().optional(),
+  // d01: «Что от вас ждут»; предел — EXPECTATIONS_MAX формы.
+  expectations: z.string().trim().max(1500).nullable().optional(),
 }).strict();
 
 const workplaceSchema = workplaceFieldsSchema.refine(
