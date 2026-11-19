@@ -480,16 +480,19 @@ try {
   retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
   retentionSweepTimer.unref();
   // B699: только ставит поднятия резюме в очередь кандидатам с флагом; в hh не ходит.
-  const hhRaiseRepository = new SqliteHhRaiseRepository({ databasePath: config.databasePath });
-  const hhRaiseFlag = candidateFlagLookup(new DatabaseSync(config.databasePath, { readOnly: true }), config);
-  hhRaiseQueueTimer = setInterval(() => {
-    try {
-      queueDueRaises(hhRaiseRepository, new Date(), hhRaiseFlag);
-    } catch (error) {
-      app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'hh-raise-queue-failed');
-    }
-  }, 60_000);
-  hhRaiseQueueTimer.unref();
+  // Включается OPENQAREER_HH_AUTO_RAISE=1 после первого живого подъёма, показанного оркестратору.
+  if (process.env.OPENQAREER_HH_AUTO_RAISE === '1') {
+    const hhRaiseRepository = new SqliteHhRaiseRepository({ databasePath: config.databasePath });
+    const hhRaiseFlag = candidateFlagLookup(new DatabaseSync(config.databasePath, { readOnly: true }), config);
+    hhRaiseQueueTimer = setInterval(() => {
+      try {
+        queueDueRaises(hhRaiseRepository, new Date(), hhRaiseFlag);
+      } catch (error) {
+        app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'hh-raise-queue-failed');
+      }
+    }, 60_000);
+    hhRaiseQueueTimer.unref();
+  }
   // Expired LinkedIn bearer cookies are removed at most fifteen minutes after li_at expiry.
   linkedinPoolSessionExpiryTimer = setInterval(runLinkedinPoolSessionExpiryPurge, 15 * 60 * 1_000);
   linkedinPoolSessionExpiryTimer.unref();
