@@ -260,14 +260,23 @@ test.describe('B651: «Профиль» (s01)', () => {
     }
     await expect(screen.locator('#sec-exp .exp-check')).toContainText('Уточнить · 3 вопроса');
     await expect(screen.locator('#unk-title ~ .actions')).toContainText('Ответить на 3 вопроса');
-    for (const id of ['sec-recs', 'sec-awards', 'sec-orgs']) {
+    // B645 s01: пустые разделы — подзаголовки макета и «Не указано · Добавить» под каждым.
+    const empty: Record<string, readonly string[]> = {
+      'sec-recs': [],
+      'sec-awards': ['Награды', 'Публикации и выступления'],
+      'sec-orgs': ['Организации'],
+    };
+    for (const [id, subs] of Object.entries(empty)) {
       const section = screen.locator(`#${id}`);
       await section.locator('summary').click();
-      await expect(section.getByText('Не указано')).toBeVisible();
-      await expect(section.getByRole('link', { name: 'Добавить' })).toHaveAttribute(
-        'href',
-        '/app/profile/sources',
-      );
+      await expect(section.locator('h3.psec-sub')).toHaveText([...subs]);
+      const rows = Math.max(subs.length, 1);
+      await expect(section.getByText('Не указано')).toHaveCount(rows);
+      const add = section.getByRole('link', { name: 'Добавить' });
+      await expect(add).toHaveCount(rows);
+      for (const link of await add.all()) {
+        await expect(link).toHaveAttribute('href', '/app/profile/sources');
+      }
     }
     await expect(screen.locator('.psec-addmore .row-act')).toHaveText(['Патенты', 'Волонтёрство']);
     await expectGates(page);

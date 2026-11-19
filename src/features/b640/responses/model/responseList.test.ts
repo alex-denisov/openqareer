@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildResponseRow } from './responseRow';
 import {
   chipCounts,
+  markAuto,
   filterRows,
   funnelSummary,
   sortRows,
@@ -29,7 +30,7 @@ const ITEMS: readonly ListedResponse[] = [
 
 describe('B656: список откликов', () => {
   it('считает чипы стадий', () => {
-    expect(chipCounts(ITEMS)).toEqual({ active: 2, interview: 1, offer: 1, archive: 2 });
+    expect(chipCounts(ITEMS)).toEqual({ active: 2, interview: 1, offer: 1, archive: 2, auto: 0 });
   });
 
   it('фильтрует по выбранным чипам, без выбора показывает всё', () => {
@@ -87,5 +88,24 @@ describe('B656: что было', () => {
 
   it('у черновика событий отправки нет', () => {
     expect(timeline(application({ stage: 'saved', appliedAt: null }), NOW)).toEqual([]);
+  });
+});
+
+describe('B680: автоотклики отдельно', () => {
+  const marked = markAuto(ITEMS, new Set(['wait', 'talk']));
+
+  it('отмечает автоотклики по списку сервера и считает их в чипе «Авто»', () => {
+    expect(marked.filter((item) => item.auto).map((item) => item.row.id).sort()).toEqual(['talk', 'wait']);
+    expect(chipCounts(marked).auto).toBe(2);
+  });
+
+  it('«Авто» сужает выбранные стадии, а не добавляет к ним', () => {
+    expect(filterRows(marked, ['auto']).map((item) => item.row.id).sort()).toEqual(['talk', 'wait']);
+    expect(filterRows(marked, ['auto', 'interview']).map((item) => item.row.id)).toEqual(['talk']);
+  });
+
+  it('воронка показывает, сколько отправлено автооткликами', () => {
+    expect(funnelSummary(marked).auto).toBe(2);
+    expect(funnelSummary(ITEMS).auto).toBe(0);
   });
 });

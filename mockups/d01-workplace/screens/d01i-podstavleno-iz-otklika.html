@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D1i · Дневник: адаптация, данные из отклика подставлены</title>
+<meta name="b640-sizes" content="1440,390">
+<link rel="stylesheet" href="../b640.css">
+<style>
+/* d01g (новое): многострочное поле в форме gb — как поле ввода gb-f, высота под 5 строк */
+.gb-f textarea { box-sizing: border-box; inline-size: 40rem; max-inline-size: 100%; min-block-size: 8.5rem; padding: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); line-height: 1.5; resize: vertical; }
+@media (max-width: 767px) { .gb-f textarea { inline-size: 100%; } .gb-f.gb-long { justify-items: stretch; } }
+/* d01h (новое): подсказка компании из откликов — список под полем «Компания» */
+.ac-wrap { position: relative; inline-size: 40rem; max-inline-size: 100%; }
+.ac-wrap input { inline-size: 100%; }
+.ac-list { position: absolute; z-index: 6; inset-inline: 0; inset-block-start: calc(100% + var(--career-space-1)); margin: 0; padding: var(--career-space-1); list-style: none; background: var(--career-surface); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-md); box-shadow: var(--career-back-shadow); }
+.ac-list li { display: grid; gap: 2px; padding: var(--career-space-2) var(--career-space-3); border-radius: var(--career-radius-ctl); cursor: pointer; }
+.ac-list li[aria-selected="true"] { background: var(--career-surface-raised, color-mix(in srgb, var(--career-accent) 8%, var(--career-surface))); }
+.ac-t { font-size: var(--career-text-sm); font-weight: 600; color: var(--career-text); }
+.ac-v { font-size: var(--career-text-xs); color: var(--career-text-soft); }
+@media (max-width: 767px) { .gb-f.gb-co { justify-items: stretch; } .ac-wrap { inline-size: 100%; } }
+/* d01g: на 390 действие только в закреплённой панели; низ формы не уходит под неё */
+@media (max-width: 767px) { .gb-acts.only-desk { display: none; } }
+</style>
+</head>
+<body data-active="diary" data-title="Дневник" data-title-tip="Дневник виден только вам: работодатель его не видит." data-tabs="Разделы дневника^Записи|d00-zapisi|;Цели и показатели|d02-celi-i-kpi|;Адаптация|d01-plan-30-60-90|1;Итоги|d04-itog-90-dnej|" data-template="list">
+<div class="app" id="screen">
+  <main class="main" id="career-main">
+    <nav class="tabs sec-tabs" aria-label="Разделы дневника"><div class="sec-tabs-in"><a href="d00-zapisi.html">Записи</a><a href="d02-celi-i-kpi.html">Цели и показатели</a><a href="d01-plan-30-60-90.html" aria-current="page">Адаптация</a><a href="d04-itog-90-dnej.html">Итоги</a></div></nav>
+    <div class="page gb-page">
+      <div class="col">
+        <section class="lead" aria-labelledby="ad-w">
+          <h2 class="lead-title is-long" id="ad-w">Чтобы собрать план, укажите, куда вы выходите</h2>
+        </section>
+        <form class="gb-form" aria-labelledby="ad-w" onsubmit="return false">
+          <div class="gb-f gb-name gb-co"><label for="ad-c">Компания</label><input id="ad-c" type="text" autocomplete="organization" value="Вектор Банк"></div>
+          <div class="gb-f gb-name"><label for="ad-t">Должность</label><input id="ad-t" type="text" autocomplete="organization-title" value="Руководитель разработки"></div>
+          <div class="gb-f gb-date"><label for="ad-d">День выхода</label><input id="ad-d" type="text" inputmode="numeric" placeholder="дд.мм.гггг" value="01.12.2026"></div>
+          <div class="gb-f gb-long"><label for="ad-x">Что от вас ждут</label><textarea id="ad-x" rows="5">Руководить командой разработки из 25 человек: найм, рост, оценка.
+Выстроить поставку: релиз раз в две недели.
+Снизить число инцидентов в продуктивной среде.
+Согласовать с бизнесом план развития платформы на год.</textarea></div>
+          <div class="gb-acts only-desk"><a class="btn is-primary" href="d01-plan-30-60-90.html"><i data-i="path"></i>Собрать план</a></div>
+        </form>
+      </div>
+    </div>
+  </main>
+  <div class="act-dock only-mob"><a class="btn is-primary" href="d01-plan-30-60-90.html"><i data-i="path"></i>Собрать план</a></div>
+</div>
+<script src="../icons.js"></script>
+<script src="../shell.js"></script>
+</body>
+</html>

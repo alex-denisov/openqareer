@@ -20,6 +20,7 @@ import {
   type ServerListStatus,
   type ServerSortedList,
 } from './useServerSortedList';
+import { usePreferredMoneyCurrency } from '../../account/usePreferredMoneyCurrency';
 import {
   PAGE_SIZE,
   SERVER_SORT,
@@ -170,11 +171,22 @@ function useListRows(input: RowsInput): DerivedRows {
   };
 }
 
+/** B593: список открывается в валюте из «Приложения»; кандидат может сменить её фильтром. */
+function usePreferredListCurrency() {
+  const state = useState<MoneyCurrency>('RUB');
+  const preferred = usePreferredMoneyCurrency();
+  const setCurrency = state[1];
+  useEffect(() => {
+    if (preferred) setCurrency(preferred);
+  }, [preferred, setCurrency]);
+  return state;
+}
+
 export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>): VacancyList {
   const pool = useMatchedPool();
   const rates = useCurrencyRates();
   const [filters, setFilters] = useState<ListFilters>(EMPTY_FILTERS);
-  const [currency, setCurrency] = useState<MoneyCurrency>('RUB');
+  const [currency, setCurrency] = usePreferredListCurrency();
   const [sortState, setSortState] = useState<SortState | null>(null);
   const [openKind, setOpenKind] = useState<FilterKind | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
