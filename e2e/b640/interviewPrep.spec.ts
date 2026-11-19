@@ -61,11 +61,11 @@ test.describe('B659: «Подготовка к интервью» (I1)', () => {
     const mock = await open(page, '/app/responses/r-arka/interview', 'i01d', { noInterview: true });
     await expect(page.getByRole('heading', { name: 'Когда интервью?' })).toBeVisible();
     await expectGates(page);
-    await page.getByLabel('Дата и время').fill('2026-11-09T15:00');
+    await page.getByLabel('Дата и время').fill('09.11.2026 15:00');
     await page.getByRole('button', { name: 'Готовиться' }).click();
     await expect(page.getByText('Эта дата уже прошла')).toBeVisible();
     expect(mock.calls).toEqual([]);
-    await page.getByLabel('Дата и время').fill('2026-11-12T15:00');
+    await page.getByLabel('Дата и время').fill('12.11.2026 15:00');
     await page.getByRole('button', { name: 'Готовиться' }).click();
     await expect(page.locator('[data-b640-node="i01"]')).toBeVisible();
     expect(mock.calls).toHaveLength(1);

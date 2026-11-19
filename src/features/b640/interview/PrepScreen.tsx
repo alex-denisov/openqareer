@@ -228,10 +228,11 @@ function NoInterview() {
 export function PrepScreen({ responseId }: { readonly responseId: string }) {
   const load = useCallback((signal: AbortSignal) => loadPrep(responseId, signal), [responseId]);
   const { state, reload, replaceData } = useAsync(load, 'Подготовка не загрузилась.');
-  useScreenChrome({ rootData: { mtight: '1' } });
   const data = state.data;
   const id = data?.response.id ?? responseId;
   const scheduled = Boolean(data?.response.nearestInterview);
+  // На I1 мобильные отступы плотные (`data-mtight`), на I1d — обычные, как в макетах.
+  useScreenChrome({ rootData: data && !scheduled ? {} : { mtight: '1' } });
   return (
     <>
       <PrepSteps responseId={id} current="prep" />

@@ -1,17 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { createApplicationInterview } from '../../applications/applicationsApi';
 import { Button, Icon, StatusLine } from '../kit';
-
-type When =
-  { readonly ok: true; readonly iso: string } | { readonly ok: false; readonly error: string };
-
-/** `datetime-local` в ISO; прошедшая дата — ошибка поля. */
-export function parseWhen(value: string, now: Date): When {
-  const time = Date.parse(value);
-  if (!value || Number.isNaN(time)) return { ok: false, error: 'Выберите дату и время' };
-  if (time < now.getTime()) return { ok: false, error: 'Эта дата уже прошла' };
-  return { ok: true, iso: new Date(time).toISOString() };
-}
+import { parseWhen } from './model/whenModel';
 
 function WhenField(props: {
   readonly value: string;
@@ -23,8 +13,9 @@ function WhenField(props: {
       <label htmlFor="iw-when">Дата и время</label>
       <input
         id="iw-when"
-        type="datetime-local"
-        className="pf-pick"
+        type="text"
+        inputMode="numeric"
+        placeholder="Например, 12.11.2026 15:00"
         value={props.value}
         aria-invalid={props.error ? true : undefined}
         aria-describedby={props.error ? 'iw-err' : undefined}
