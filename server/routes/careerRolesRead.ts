@@ -2,7 +2,7 @@ import type { FastifyRequest } from 'fastify';
 import type { ProposedRole } from '../../shared/roleProposals';
 import { readCampaign } from './campaignContext';
 import { masterResumeDocument, withResumeCoverage } from './careerRoleResumeCoverage';
-import { countRolesLikeTheList } from './careerRoleCounts';
+import { careerTimeZone, countRolesLikeTheList } from './careerRoleCounts';
 import { careerRolesWithCandidateChoices } from './careerRoleSync';
 import type { RouteDeps } from './deps';
 import { conditionsMarketCount, finishMatchedVacancies } from './matchedVacancyRoutes';
@@ -48,7 +48,12 @@ export async function readCareerRoleContext(
   const roles = countRolesLikeTheList(
     careerRolesWithCandidateChoices(deps, candidateId, context, listed),
     shown,
-    { skills: context.confirmedSkills, now: new Date() },
+    {
+      skills: context.confirmedSkills,
+      now: new Date(),
+      // Граница дня — как у «Сегодня»: пояс кандидата из `?tz=`, без него UTC.
+      timeZone: careerTimeZone(request.query),
+    },
   );
   return {
     context,

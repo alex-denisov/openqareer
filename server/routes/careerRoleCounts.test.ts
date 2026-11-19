@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ProposedRole } from '../../shared/roleProposals';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
-import { countRolesLikeTheList, observedWithinDays } from './careerRoleCounts';
+import {
+  careerTimeZone,
+  countRolesLikeTheList,
+  observedWithinDays,
+  startOfDayIn,
+} from './careerRoleCounts';
 
 const NOW = new Date('2026-11-19T12:00:00.000Z');
 
@@ -49,5 +54,30 @@ describe('B726: число роли «Карьеры» = строкам «Под
   it('роль без строк — «не найдено», а не прежнее число пула', () => {
     const [lost] = countRolesLikeTheList([role('CFO')], [], { skills: [], now: NOW });
     expect(lost!.confirmation).toEqual({ state: 'not-found' });
+  });
+
+  it('начало дня — в поясе кандидата, как у «Сегодня»; без пояса UTC', () => {
+    const late = new Date('2026-11-19T22:30:00.000Z');
+    expect(new Date(startOfDayIn(late, 'Europe/Moscow')).toISOString()).toBe(
+      '2026-11-19T21:00:00.000Z',
+    );
+    expect(new Date(startOfDayIn(late, 'UTC')).toISOString()).toBe('2026-11-19T00:00:00.000Z');
+    const early = new Date('2026-11-19T03:00:00.000Z');
+    expect(new Date(startOfDayIn(early, 'America/New_York')).toISOString()).toBe(
+      '2026-11-18T05:00:00.000Z',
+    );
+    expect(
+      observedWithinDays(row('COO', '2026-10-20T21:00:00.000Z'), 30, late, 'Europe/Moscow'),
+    ).toBe(true);
+    expect(
+      observedWithinDays(row('COO', '2026-10-20T20:59:00.000Z'), 30, late, 'Europe/Moscow'),
+    ).toBe(false);
+  });
+
+  it('пояс из запроса — только IANA, иначе UTC', () => {
+    expect(careerTimeZone({ tz: 'Europe/Moscow' })).toBe('Europe/Moscow');
+    expect(careerTimeZone({ tz: 'Mars/Olympus' })).toBe('UTC');
+    expect(careerTimeZone({ tz: ['Europe/Moscow'] })).toBe('UTC');
+    expect(careerTimeZone(undefined)).toBe('UTC');
   });
 });
