@@ -65,6 +65,35 @@ describe('letterProfileText: весь мастер-профиль для пис�
     expect(text).not.toContain('Директор в Россети Цифра');
   });
 
+  it('факт консультанта стоит под своим местом работы, а не в уточнениях без места (B713)', () => {
+    const rewritten: ResumeDraft = {
+      ...draft,
+      experience: draft.experience.map((place) =>
+        place.id === 'w1' ? { ...place, bulletMemoryIds: [...place.bulletMemoryIds, 'rw1'] } : place),
+      factRewrites: [{
+        id: 'r1', appliedAt: '2026-11-18T10:00:00Z', declinedFactIds: [],
+        bullets: [
+          { memoryId: 'rw1', experienceId: 'w1', sourceFactIds: ['src-margin'] },
+          // Пункт снят кандидатом, но место работы консультант уже назвал.
+          { memoryId: 'rw-gone', experienceId: 'w2', sourceFactIds: ['src-team'] },
+        ],
+      }],
+    };
+    const text = letterProfileText({
+      draft: rewritten,
+      facts: [...facts,
+        fact('rw1', 'Raised margin from 0% to 40% at Rosseti Digital'),
+        fact('src-margin', 'Маржа выросла с 0 до 40%'),
+        fact('src-team', 'Собрал команду из 12 инженеров с нуля')],
+    });
+    const [experience, notes] = text.split('УТОЧНЕНИЯ КАНДИДАТА');
+    expect(text).not.toContain('Маржа выросла с 0 до 40%');
+    expect(experience).toContain('- Raised margin from 0% to 40% at Rosseti Digital');
+    const optiLab = experience!.slice(experience!.indexOf('## Советник | OptiLab'));
+    expect(optiLab).toContain('- Собрал команду из 12 инженеров с нуля');
+    expect(notes ?? '').not.toContain('12 инженеров');
+  });
+
   it('уточнения без места работы помечены: модель не приписывает их компании (B601, 10.11)', () => {
     const text = letterProfileText({ draft, facts });
     expect(text).toContain('УТОЧНЕНИЯ КАНДИДАТА К ПРОФИЛЮ (место работы у пунктов не указано');
@@ -171,6 +200,19 @@ describe('letterProfileText: весь мастер-профиль для пис�
       'ru',
     ]);
     expect(letterNotesToTranslate(draft, notes, 'ru')).toEqual([]);
+  });
+
+  it('английскому письму переводят и факт консультанта под местом работы (B713)', () => {
+    const placed: ResumeDraft = {
+      ...draft,
+      factRewrites: [{
+        id: 'r1', appliedAt: '2026-11-18T10:00:00Z', declinedFactIds: [],
+        bullets: [{ memoryId: 'rw-gone', experienceId: 'w2', sourceFactIds: ['src-team'] }],
+      }],
+    };
+    const notes = [...facts, fact('src-team', 'Собрал команду из 12 инженеров с нуля')];
+    expect(letterNotesToTranslate(placed, notes, 'en').map((item) => item.id)).toEqual(['note', 'src-team']);
+    expect(letterNoteFacts(placed, notes).map((item) => item.id)).toEqual(['note']);
   });
 
   it('без подтверждённого факта о названии остаётся название из профиля (B639)', () => {
