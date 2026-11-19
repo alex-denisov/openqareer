@@ -193,6 +193,21 @@ function Approval({ letter, variants, onSend }: ApprovalProps) {
   );
 }
 
+function DraftFailure({ letter }: { readonly letter: LetterScreenState }) {
+  const { circles, draft } = letter;
+  return (
+    <StatusLine
+      state="err"
+      text="Письмо не собралось"
+      action={
+        <Button size="sm" variant="primary" icon="repeat" onClick={circles.error ? circles.retry : draft.retry}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
 export interface LetterStepProps {
   readonly letter: LetterScreenState;
   readonly variants: LetterVariantsState;
@@ -220,17 +235,7 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
           Собираем письмо…
         </p>
       ) : null}
-      {!pending && failed ? (
-        <StatusLine
-          state="err"
-          text="Письмо не собралось"
-          action={
-            <Button size="sm" variant="primary" icon="repeat" onClick={circles.error ? circles.retry : draft.retry}>
-              Повторить
-            </Button>
-          }
-        />
-      ) : null}
+      {!pending && failed ? <DraftFailure letter={letter} /> : null}
       {!pending && !failed ? (
         <>
           {approval.saved ? null : <VariantSwitch variants={variants} />}
