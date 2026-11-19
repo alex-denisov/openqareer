@@ -21,6 +21,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly withPath?: boolean;
   /** У вакансии есть анкета работодателя. */
   readonly questionnaire?: boolean;
+  /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
+  readonly approvedBody?: string;
 }
 
 function circles(vacancyId: string, withPath: boolean) {
@@ -264,6 +266,23 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
     }
     await route.fulfill({ json: { data: formView(vacancyId) } });
   });
+  await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', async (route) => {
+    calls.push('approval read');
+    const approved = options.approvedBody
+      ? {
+          applicationId: 'a-draft',
+          documentId: 'doc-1',
+          approvedAt: '2026-11-19T10:00:00.000Z',
+          status: 'approved',
+          sent: false,
+          resume: null,
+          subject: null,
+          body: options.approvedBody,
+          variantId: null,
+        }
+      : null;
+    await route.fulfill({ json: { data: { approval: approved } } });
+  });
   await page.route('**/api/v1/candidate/vacancies/*/letter-resume', (route) =>
     route.fulfill({ json: { data: { ready: false } } }),
   );
@@ -355,6 +374,18 @@ test.describe('B657: единый экран отклика', () => {
       'href',
       '/app/responses/a-draft',
     );
+  });
+
+  test('одобренное письмо открывается своим текстом без новой сборки черновика', async ({
+    page,
+  }) => {
+    const body = 'Одобренный текст письма для Гринкода.';
+    const mock = await open(page, '/app/responses/a-draft/letter', { approvedBody: body });
+    await expect(page.getByRole('heading', { name: 'Письмо одобрено' })).toBeVisible();
+    await expect(page.getByLabel('Текст письма')).toHaveValue(body);
+    await expect(page.getByText('Собираем письмо…')).toHaveCount(0);
+    expect(mock.calls).toContain('approval read');
+    expect(mock.calls.filter((call) => call.startsWith('pitch'))).toEqual([]);
   });
 
   test('путь с шапкой контекста: на 390 скрыт, шаги под верхней полосой (B721)', async ({

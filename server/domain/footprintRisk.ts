@@ -100,6 +100,53 @@ function safeUrl(value: string | null | undefined): string | null {
   }
 }
 
+/** Адрес страницы для глаз: «duolingo.com/profile/ник» — без схемы, www и косой черты в конце. */
+function pageAddress(url: string | null): string | null {
+  if (!url) return null;
+  const { hostname, pathname, search } = new URL(url);
+  const path = `${pathname}${search}`.replace(/\/+$/u, '');
+  let shown = `${hostname.replace(/^www\./u, '')}${path}`;
+  try {
+    shown = decodeURI(shown);
+  } catch {
+    // Битая кодировка в адресе — показываем как есть.
+  }
+  return shown.toLocaleLowerCase('ru');
+}
+
+/** Строка находки: какая именно страница (B645 p02), затем описание. */
+function detailWithAddress(detail: string, url: string | null): string {
+  const address = pageAddress(url);
+  if (!address || detail.toLocaleLowerCase('ru').includes(address)) return detail;
+  return detail ? `${address} · ${detail}` : address;
+}
+
+/** Разобранная копия важнее: отметку кандидата не теряем при склейке. */
+function reviewed(finding: CandidateFootprintFinding): boolean {
+  return finding.checklistMark !== undefined || finding.removal !== undefined;
+}
+
+/**
+ * Одна страница — одна находка (B645 p02): разные поиски находят один профиль по разным
+ * адресам (www, косая черта). Находки без адреса не склеиваются.
+ */
+function onePerPage(findings: readonly CandidateFootprintFinding[]): CandidateFootprintFinding[] {
+  const byPage = new Map<string, CandidateFootprintFinding>();
+  const unique: CandidateFootprintFinding[] = [];
+  for (const finding of findings) {
+    const page = pageAddress(safeUrl(finding.url));
+    const kept = page ? byPage.get(page) : undefined;
+    if (!page || !kept) {
+      if (page) byPage.set(page, finding);
+      unique.push(finding);
+    } else if (reviewed(finding) && !reviewed(kept)) {
+      byPage.set(page, finding);
+      unique[unique.indexOf(kept)] = finding;
+    }
+  }
+  return unique;
+}
+
 function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
   const rule = ruleFor(finding);
   // Отметка чек-листа или подтверждённое удаление (B382) — находка разобрана.
@@ -110,7 +157,7 @@ function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
     level: rule.level,
     levelLabel: FOOTPRINT_LEVEL_LABELS[rule.level],
     title: cleanTitle(finding.title) || 'Находка',
-    detail: cleanDetail(finding.detail),
+    detail: detailWithAddress(cleanDetail(finding.detail), safeUrl(finding.url)),
     url: safeUrl(finding.url),
     observedAt: finding.observedAt || null,
     resolved,
@@ -207,8 +254,10 @@ export function buildFootprintRiskSummary(
   discrepancies: readonly ConsistencyDiscrepancy[],
   options: { readonly checkRunning?: boolean } = {},
 ): FootprintRiskSummary {
-  const findings = (audit?.findings ?? []).filter(
-    (finding) => finding.review !== 'not_self' && finding.review !== 'hidden',
+  const findings = onePerPage(
+    (audit?.findings ?? []).filter(
+      (finding) => finding.review !== 'not_self' && finding.review !== 'hidden',
+    ),
   );
   const items = [
     ...findings.map(findingItem),
