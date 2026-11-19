@@ -12,14 +12,24 @@ export function AdaptationGate({
   node,
   children,
   aside,
+  split = false,
 }: {
   readonly node: B640Node;
   readonly children: (data: AdaptationData, actions: AdaptationActions) => ReactNode;
   /** Правая колонка макета (на 390 — под основной). */
   readonly aside?: (data: AdaptationData) => ReactNode;
+  /** Экран сам раскладывает обе колонки (данные правой колонки грузятся внутри экрана). */
+  readonly split?: boolean;
 }) {
   const adaptation = useAdaptation();
   const { data } = adaptation;
+  if (split && data.state === 'ready' && data.view.hasPlan) {
+    return (
+      <div className="page two" data-b640-node={node.code} data-b640-section={node.section}>
+        {children(data, adaptation)}
+      </div>
+    );
+  }
   return (
     <div className="page two" data-b640-node={node.code} data-b640-section={node.section}>
       <div className="col">

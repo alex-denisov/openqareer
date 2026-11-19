@@ -26,11 +26,45 @@ export function rejectReason(pr) {
   if (pr.baseRefName && pr.baseRefName !== 'main') return 'base is not main';
   if (pr.mergeable === 'CONFLICTING') return 'conflicts with main';
   if (pr.touchesWorkflows) return 'changes .github/workflows (goes the single route)';
-  const checks = (pr.statusCheckRollup ?? []).filter((c) => !NOT_LIGHT_RUN.has(checkName(c)));
+  const checks = effectiveChecks(
+    (pr.statusCheckRollup ?? []).filter((c) => !NOT_LIGHT_RUN.has(checkName(c))),
+  );
   if (checks.length === 0) return 'no light run yet';
   const bad = checks.find((c) => !GREEN.has(checkState(c)));
   if (bad) return `light run not green (${checkName(bad)}: ${checkState(bad) || 'pending'})`;
   return null;
+}
+
+const checkKey = (c) => `${c.workflowName ?? ''}/${checkName(c)}`;
+const finishedAt = (c) => c.completedAt || c.startedAt || '';
+const isCancelled = (c) => checkState(c) === 'CANCELLED';
+
+/**
+ * One entry per check. A head often has two runs of the same job: the label
+ * event arrives with synchronize and concurrency cancels one of them. A
+ * cancelled run counts only when no other run of that job exists; otherwise
+ * the newest non-cancelled run (pending ones included) decides.
+ */
+export function effectiveChecks(checks) {
+  const groups = new Map();
+  for (const c of checks) groups.set(checkKey(c), [...(groups.get(checkKey(c)) ?? []), c]);
+  return [...groups.values()].map((runs) => {
+    const live = runs.filter((c) => !isCancelled(c));
+    const pool = live.length > 0 ? live : runs;
+    const pending = pool.find((c) => !c.completedAt && !c.conclusion && !c.state);
+    if (pending) return pending;
+    return [...pool].sort((a, b) => finishedAt(b).localeCompare(finishedAt(a)))[0];
+  });
+}
+
+/** Run ids to re-run: checks whose only runs on this head were cancelled. */
+export function cancelledOnlyRuns(pr) {
+  const checks = (pr.statusCheckRollup ?? []).filter((c) => !NOT_LIGHT_RUN.has(checkName(c)));
+  const ids = effectiveChecks(checks)
+    .filter(isCancelled)
+    .map((c) => /\/actions\/runs\/(\d+)/.exec(c.detailsUrl ?? '')?.[1])
+    .filter(Boolean);
+  return [...new Set(ids)];
 }
 
 /** Ready PRs, oldest first, capped at MAX_BATCH. */

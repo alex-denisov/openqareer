@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CandidateCompanyOpportunity } from '../../../../shared/candidateCompany';
 import { validateAutomationDraft, type AutomationDraft } from './AutomationSheet';
-import { companyWantFace } from './CompanyWantsScreen';
+import { companyWantFace, pendingRefreshDelay } from './CompanyWantsScreen';
 import { meterStep } from './ReviewScreen';
 import { marksFor } from './useResponseActions';
 
@@ -39,6 +39,32 @@ describe('B656: «Хочу в компанию»', () => {
     const face = companyWantFace(company({ hasNewVacancies: true, vacancyCount: 2, contactsCount: 1, wantStage: 'waiting' }));
     expect(face.tag).toEqual({ tone: 'ok', label: 'новые вакансии' });
     expect(face.brief).toBe('2 вакансии · 1 знакомый');
+  });
+
+  it('у каждой компании рабочий следующий шаг, без заглушки страницы компании (B645)', () => {
+    expect(
+      companyWantFace(company({ wantStage: 'waiting', contactsCount: 1, nextStep: { text: 'написать Igor Siusiukov', dueAt: null } })),
+    ).toMatchObject({ actionLabel: 'Написать Igor Siusiukov', actionNode: 'a02' });
+    expect(companyWantFace(company({ hasNewVacancies: true, vacancyCount: 2 }))).toMatchObject({
+      actionLabel: 'Смотреть вакансии',
+      actionNode: 's07',
+    });
+    expect(companyWantFace(company({ wantStage: 'want' }))).toMatchObject({
+      actionLabel: 'Найти путь',
+      actionNode: 'a02',
+    });
+  });
+
+  it('пока подборка догружается, «нет вакансий» не пишется (B645)', () => {
+    expect(companyWantFace(company({ contactsCount: 1 }), true).brief).toBe('1 знакомый');
+    expect(companyWantFace(company({}), true).brief).toBe('');
+  });
+
+  it('счётчики перезапрашиваются с нарастающей паузой и не дольше минуты (B645)', () => {
+    const delays = [0, 1, 2, 3, 4, 5].map(pendingRefreshDelay);
+    expect(delays.slice(0, 5)).toEqual([2_000, 4_000, 8_000, 16_000, 30_000]);
+    expect(delays[5]).toBeNull();
+    expect(delays.slice(0, 5).reduce<number>((sum, ms) => sum + (ms ?? 0), 0)).toBeLessThanOrEqual(60_000);
   });
 
   it('без списка знакомых число знакомых не выдумывается', () => {

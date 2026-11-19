@@ -50,7 +50,7 @@ const valueSchema = z.union([z.number().finite(), z.boolean(), z.string().trim()
 const indicatorSchema = z
   .object({
     title: z.string().trim().min(1).max(240),
-    unit: z.string().trim().min(1).max(80),
+    unit: z.string().trim().max(80),
     baselineValue: z.number().finite().nullable(),
     targetValue: valueSchema,
   })

@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { RouteDeps } from '../routes/deps';
 import type { deriveCandidateTargetLevel } from './candidateLevel';
-import { MatchedPoolSnapshots, type MatchedPoolReadOptions } from './matchedPoolSnapshot';
+import {
+  MatchedPoolSnapshots,
+  type MatchedPoolReadOptions,
+  type MatchedSnapshotStore,
+} from './matchedPoolSnapshot';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { matchGeographyKey, type MatchGeography } from './matchGeography';
 import { candidateGradeRange, type GradeRange } from './titleParse/gradeRange';
@@ -139,6 +143,34 @@ function snapshotsOf(engine: RouteDeps['multiSourceEngine']): MatchedPoolSnapsho
   const created = new MatchedPoolSnapshots();
   matchedPoolSnapshots.set(engine, created);
   return created;
+}
+
+/** What the candidate store keeps between processes: text in, text out. */
+interface SealedSnapshotText {
+  read(candidateId: string, profileKey: string): { builtAt: number; text: string } | null;
+  write(candidateId: string, profileKey: string, builtAt: number, text: string): void;
+  delete(candidateId: string): void;
+}
+
+/** Prod 19.11: a new process answers from the last snapshot, not from a cold pool read. */
+export function setMatchedSnapshotStore(
+  engine: RouteDeps['multiSourceEngine'],
+  sealed: SealedSnapshotText,
+): void {
+  const store: MatchedSnapshotStore = {
+    read(candidateId, profileKey) {
+      const row = sealed.read(candidateId, profileKey);
+      if (!row) return null;
+      const items = JSON.parse(row.text) as unknown;
+      return Array.isArray(items)
+        ? { items: items as MatchedVacancyItem[], storedAt: row.builtAt }
+        : null;
+    },
+    write: (candidateId, profileKey, snapshot) =>
+      sealed.write(candidateId, profileKey, snapshot.storedAt, JSON.stringify(snapshot.items)),
+    delete: (candidateId) => sealed.delete(candidateId),
+  };
+  snapshotsOf(engine).setStore(store);
 }
 
 /** A rebuild behind an expired snapshot has no request to fail: its failure goes here. */

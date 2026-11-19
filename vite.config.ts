@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { logicalVarToPhysical } from './scripts/vite/logicalVarToPhysical.ts';
 
 export default defineConfig({
   define: {
@@ -9,6 +10,8 @@ export default defineConfig({
     __APP_BUILD_DATE__: JSON.stringify(process.env.OPENQAREER_BUILD_DATE ?? new Date().toISOString()),
   },
   plugins: [react()],
+  // B640 в окне .app: логические сокращения с var() → физические стороны (см. плагин).
+  css: { postcss: { plugins: [logicalVarToPhysical()] } },
   build: { manifest: true },
   server: {
     port: 3000,
@@ -23,4 +26,3 @@ export default defineConfig({
     hookTimeout: 20000,
   },
 });
-

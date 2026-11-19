@@ -12,7 +12,7 @@ const port = Number(process.env.E2E_PORT ?? 4173);
 // WebKit specs (the .app renders in WKWebView) run in their own CI job, in the
 // Playwright image: WebKit's apt deps on bare Ubuntu runners stall and failed the
 // Chromium shards.
-const WEBKIT_SPECS = ['**/*-b446r.spec.ts', '**/*-b549r.spec.ts'];
+const WEBKIT_SPECS = ['**/*-b446r.spec.ts', '**/*-b549r.spec.ts', '**/*.webkit.spec.ts'];
 const webkitOnly = process.env.E2E_WEBKIT === 'only';
 // Locally WebKit specs are skipped unless E2E_WEBKIT=only|include; CI sets the
 // variable explicitly per job.

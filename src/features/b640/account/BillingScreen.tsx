@@ -158,7 +158,7 @@ function ReceiptRow({ receipt }: { readonly receipt: CandidateBillingReceipt }) 
   );
 }
 
-/** «Платежи и чеки»: по 20, «Показать ещё»; платежей нет — одна строка и путь к тарифам (T3f). */
+/** «Платежи и чеки»: по 20, «Показать ещё»; платежей нет — одна строка, у Free ещё путь к тарифам (T3f). */
 function Receipts({ billing, load }: PartProps) {
   const { busy, failed, run } = useRequest();
   const more = () =>
@@ -183,11 +183,13 @@ function Receipts({ billing, load }: PartProps) {
             <div className="set-l">
               <span className="set-t">Платежей нет</span>
             </div>
-            <div className="set-r">
-              <Link className="btn is-sm" to={TARIFFS_PATH}>
-                Выбрать тариф
-              </Link>
-            </div>
+            {billing.summary.currentPlan === 'free' ? (
+              <div className="set-r">
+                <Link className="btn is-sm" to={TARIFFS_PATH}>
+                  Выбрать тариф
+                </Link>
+              </div>
+            ) : null}
           </li>
         ) : null}
         {failed ? (

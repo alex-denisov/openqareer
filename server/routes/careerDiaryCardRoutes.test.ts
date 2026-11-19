@@ -68,7 +68,14 @@ async function setup() {
   return { app, candidateStore, sessions, databasePath: config.databasePath };
 }
 
-function call(app: App, method: Method, url: string, token?: string, payload?: unknown, key = randomUUID()) {
+function call(
+  app: App,
+  method: Method,
+  url: string,
+  token?: string,
+  payload?: unknown,
+  key = randomUUID(),
+) {
   return app.inject({
     method,
     url,
@@ -205,7 +212,8 @@ describe('B684: без флага B640', () => {
       ].sort(),
     );
     const workplaceId = await workplaceWithPlan(app, plain, [task('a')]);
-    const workplace = (await call(app, 'GET', `${DIARY}/workplaces/${workplaceId}`, plain)).json().data;
+    const workplace = (await call(app, 'GET', `${DIARY}/workplaces/${workplaceId}`, plain)).json()
+      .data;
     expect(Object.keys(workplace.planning.adaptationPlan.tasks[0]).sort()).toEqual(
       ['category', 'completed', 'description', 'dueDate', 'id', 'source', 'stage', 'title'].sort(),
     );
@@ -237,9 +245,28 @@ describe('B684: цель с показателями под флагом', () =>
     expect(list.archived).toEqual([]);
 
     const database = new DatabaseSync(databasePath, { readOnly: true });
-    const row = database.prepare('SELECT * FROM career_diary_goal_details').get() as Record<string, string>;
+    const row = database.prepare('SELECT * FROM career_diary_goal_details').get() as Record<
+      string,
+      string
+    >;
     database.close();
     expect(JSON.stringify(row)).not.toContain('manager');
+  });
+
+  it('показатель без единицы принимается: единица бывает частью названия', async () => {
+    const { app } = await setup();
+    const indicators = [
+      { title: 'Кандидатов в финале', unit: '', baselineValue: 0, targetValue: 3 },
+    ];
+    const created = await call(app, 'POST', `${DIARY}/goal-cards`, flagged, {
+      ...CARD,
+      indicators,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().data.indicators[0]).toMatchObject({
+      title: 'Кандидатов в финале',
+      unit: '',
+    });
   });
 
   it('замер показателя виден в карточке цели', async () => {
@@ -268,7 +295,14 @@ describe('B684: цель с показателями под флагом', () =>
     const list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
     expect(list.items).toHaveLength(1);
     expect(list.items[0].indicators).toHaveLength(3);
-    const changed = await call(app, 'POST', `${DIARY}/goal-cards`, flagged, { ...CARD, title: 'Другая' }, key);
+    const changed = await call(
+      app,
+      'POST',
+      `${DIARY}/goal-cards`,
+      flagged,
+      { ...CARD, title: 'Другая' },
+      key,
+    );
     expect(changed.statusCode).toBe(409);
     expect(changed.json().error.code).toBe('idempotency_key_reused');
   });
@@ -296,9 +330,15 @@ describe('B684: цель с показателями под флагом', () =>
       setBy: 'manager',
       weight: 20,
     });
-    expect(patched.json().data.details).toMatchObject({ setBy: 'manager', weight: 20, agreedOn: null });
+    expect(patched.json().data.details).toMatchObject({
+      setBy: 'manager',
+      weight: 20,
+      agreedOn: null,
+    });
     const reason = 'Отменена директором: банк меняет платформу сборки';
-    const archived = await call(app, 'PUT', `${DIARY}/goal-cards/${goal.id}/archive`, flagged, { reason });
+    const archived = await call(app, 'PUT', `${DIARY}/goal-cards/${goal.id}/archive`, flagged, {
+      reason,
+    });
     expect(archived.json().data.details.archive).toMatchObject({ reason });
     const list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
     expect(list.items).toEqual([]);
@@ -313,8 +353,12 @@ describe('B684: цель с показателями под флагом', () =>
   it('детали удалённой цели не остаются в базе', async () => {
     const { app, databasePath } = await setup();
     const goal = await legacyGoal(app, flagged, 'Временная цель');
-    await call(app, 'PUT', `${DIARY}/goal-cards/${goal.id}/archive`, flagged, { reason: 'Отменена' });
-    expect((await call(app, 'DELETE', `${DIARY}/goals/${goal.id}`, flagged)).statusCode).toBeLessThan(300);
+    await call(app, 'PUT', `${DIARY}/goal-cards/${goal.id}/archive`, flagged, {
+      reason: 'Отменена',
+    });
+    expect(
+      (await call(app, 'DELETE', `${DIARY}/goals/${goal.id}`, flagged)).statusCode,
+    ).toBeLessThan(300);
     const list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
     expect(list).toEqual({ items: [], archived: [] });
     const database = new DatabaseSync(databasePath, { readOnly: true });
@@ -339,12 +383,28 @@ describe('B684: цель с показателями под флагом', () =>
       expect(response.statusCode, JSON.stringify(payload).slice(0, 80)).toBe(400);
     }
     const foreign = await legacyGoal(app, other, 'Чужая цель');
-    expect((await call(app, 'PATCH', `${DIARY}/goal-cards/${foreign.id}`, flagged, { weight: 5 })).statusCode).toBe(404);
-    expect((await call(app, 'PUT', `${DIARY}/goal-cards/${foreign.id}/archive`, flagged, { reason: 'x' })).statusCode).toBe(404);
+    expect(
+      (await call(app, 'PATCH', `${DIARY}/goal-cards/${foreign.id}`, flagged, { weight: 5 }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await call(app, 'PUT', `${DIARY}/goal-cards/${foreign.id}/archive`, flagged, {
+          reason: 'x',
+        })
+      ).statusCode,
+    ).toBe(404);
     const card = (await call(app, 'POST', `${DIARY}/goal-cards`, flagged, CARD)).json().data;
     const indicatorId = card.indicators[0].id;
-    expect((await call(app, 'PATCH', `${DIARY}/goal-cards/${indicatorId}`, flagged, { weight: 5 })).statusCode).toBe(404);
-    expect((await call(app, 'GET', `${DIARY}/goal-cards`, other)).json().data.items.map((c: { title: string }) => c.title)).toEqual(['Чужая цель']);
+    expect(
+      (await call(app, 'PATCH', `${DIARY}/goal-cards/${indicatorId}`, flagged, { weight: 5 }))
+        .statusCode,
+    ).toBe(404);
+    expect(
+      (await call(app, 'GET', `${DIARY}/goal-cards`, other))
+        .json()
+        .data.items.map((c: { title: string }) => c.title),
+    ).toEqual(['Чужая цель']);
   });
 });
 
@@ -357,8 +417,15 @@ describe('B684: план адаптации под флагом', () => {
       task('c', { stage: 'days_1_30', category: 'people' }),
       task('d', { stage: 'days_31_60', category: 'delivery' }),
     ]);
-    const view = (await call(app, 'GET', `${DIARY}/workplaces/${workplaceId}/adaptation`, flagged)).json().data;
-    expect(view).toMatchObject({ workplaceId, hasPlan: true, startDate: '2026-12-01', relocated: null });
+    const view = (
+      await call(app, 'GET', `${DIARY}/workplaces/${workplaceId}/adaptation`, flagged)
+    ).json().data;
+    expect(view).toMatchObject({
+      workplaceId,
+      hasPlan: true,
+      startDate: '2026-12-01',
+      relocated: null,
+    });
     expect(view.steps.map((step: { id: string }) => step.id)).toEqual([
       'before_start',
       'first_two_weeks',
@@ -369,8 +436,12 @@ describe('B684: план адаптации под флагом', () => {
     ]);
     expect(view.steps[0]).toMatchObject({ tasksTotal: 2, tasksDone: 1, status: 'active' });
     expect(view.steps[1]).toMatchObject({ tasksTotal: 1, tasksDone: 0 });
-    expect(view.stages.map((stage: { tasksTotal: number }) => stage.tasksTotal)).toEqual([2, 1, 1, 0]);
-    const titles = view.stages.flatMap((stage: { tasks: { title: string }[] }) => stage.tasks.map((t) => t.title));
+    expect(view.stages.map((stage: { tasksTotal: number }) => stage.tasksTotal)).toEqual([
+      2, 1, 1, 0,
+    ]);
+    const titles = view.stages.flatMap((stage: { tasks: { title: string }[] }) =>
+      stage.tasks.map((t) => t.title),
+    );
     expect(titles.sort()).toEqual(['Задача a', 'Задача b', 'Задача c', 'Задача d']);
   });
 
@@ -388,16 +459,22 @@ describe('B684: план адаптации под флагом', () => {
       ownDecisions: 'Найм в рамках бюджета',
       manager: 'Ирина Лаврова, директор по технологиям',
     };
-    const saved = await call(app, 'PATCH', `${DIARY}/workplaces/${workplaceId}/adaptation`, flagged, {
-      tasks: {
-        a: { step: 'settling', group: 'Документы', goalId: null },
-        b: { step: 'before_start', group: 'Уточнить у HR', goalId: goal.id },
+    const saved = await call(
+      app,
+      'PATCH',
+      `${DIARY}/workplaces/${workplaceId}/adaptation`,
+      flagged,
+      {
+        tasks: {
+          a: { step: 'settling', group: 'Документы', goalId: null },
+          b: { step: 'before_start', group: 'Уточнить у HR', goalId: goal.id },
+        },
+        stages: { days_31_60: { title: 'Первый заметный результат', goalId: goal.id } },
+        probation: { endsOn: '2027-03-01', reviewer: 'Ирина Лаврова' },
+        firstMeeting,
+        relocated: false,
       },
-      stages: { days_31_60: { title: 'Первый заметный результат', goalId: goal.id } },
-      probation: { endsOn: '2027-03-01', reviewer: 'Ирина Лаврова' },
-      firstMeeting,
-      relocated: false,
-    });
+    );
     expect(saved.statusCode, saved.body).toBe(200);
     const view = saved.json().data;
     expect(view.steps[5].groups).toEqual([
@@ -412,24 +489,38 @@ describe('B684: план адаптации под флагом', () => {
       relocated: false,
     });
     // Частичная правка не стирает остальное; прежний план места работы не изменился.
-    const partial = await call(app, 'PATCH', `${DIARY}/workplaces/${workplaceId}/adaptation`, flagged, { relocated: true });
+    const partial = await call(
+      app,
+      'PATCH',
+      `${DIARY}/workplaces/${workplaceId}/adaptation`,
+      flagged,
+      { relocated: true },
+    );
     expect(partial.json().data).toMatchObject({ relocated: true, firstMeeting });
     expect(partial.json().data.steps[5].tasksTotal).toBe(1);
     // Одно поле задачи правится отдельно; `null` убирает детали — задача возвращается в шаг по умолчанию.
     const url = `${DIARY}/workplaces/${workplaceId}/adaptation`;
-    const regrouped = (await call(app, 'PATCH', url, flagged, { tasks: { a: { group: 'Банк' } } })).json().data;
+    const regrouped = (
+      await call(app, 'PATCH', url, flagged, { tasks: { a: { group: 'Банк' } } })
+    ).json().data;
     expect(regrouped.steps[5].groups).toEqual([
       { name: 'Банк', tasks: [expect.objectContaining({ id: 'a', step: 'settling' })] },
     ]);
-    const cleared = (await call(app, 'PATCH', url, flagged, { tasks: { a: null }, firstMeeting: null })).json().data;
+    const cleared = (
+      await call(app, 'PATCH', url, flagged, { tasks: { a: null }, firstMeeting: null })
+    ).json().data;
     expect(cleared.steps[5].tasksTotal).toBe(0);
     expect(cleared.steps[0].tasksTotal).toBe(2);
     expect(cleared.firstMeeting).toBeNull();
-    const workplace = (await call(app, 'GET', `${DIARY}/workplaces/${workplaceId}`, flagged)).json().data;
+    const workplace = (await call(app, 'GET', `${DIARY}/workplaces/${workplaceId}`, flagged)).json()
+      .data;
     expect(Object.keys(workplace.planning.adaptationPlan.tasks[0])).not.toContain('step');
 
     const database = new DatabaseSync(databasePath, { readOnly: true });
-    const row = database.prepare('SELECT * FROM career_diary_adaptation_details').get() as Record<string, string>;
+    const row = database.prepare('SELECT * FROM career_diary_adaptation_details').get() as Record<
+      string,
+      string
+    >;
     database.close();
     expect(JSON.stringify(row)).not.toContain('Лаврова');
   });
@@ -437,7 +528,8 @@ describe('B684: план адаптации под флагом', () => {
   it('место работы без плана отдаёт пустые шаги; чужое и неверное — отказ', async () => {
     const { app } = await setup();
     const empty = await workplaceWithPlan(app, flagged, null);
-    const view = (await call(app, 'GET', `${DIARY}/workplaces/${empty}/adaptation`, flagged)).json().data;
+    const view = (await call(app, 'GET', `${DIARY}/workplaces/${empty}/adaptation`, flagged)).json()
+      .data;
     expect(view.hasPlan).toBe(false);
     expect(view.steps).toHaveLength(6);
     const foreignGoal = await legacyGoal(app, other, 'Чужая цель');
@@ -492,7 +584,9 @@ describe('B684: план адаптации под флагом', () => {
     const { app, candidateStore, sessions, databasePath } = await setup();
     await call(app, 'POST', `${DIARY}/goal-cards`, flagged, CARD);
     const workplaceId = await workplaceWithPlan(app, flagged, [task('a')]);
-    await call(app, 'PATCH', `${DIARY}/workplaces/${workplaceId}/adaptation`, flagged, { relocated: true });
+    await call(app, 'PATCH', `${DIARY}/workplaces/${workplaceId}/adaptation`, flagged, {
+      relocated: true,
+    });
     candidateStore.deleteCandidate(sessions.get(flagged)!.candidate!.id);
     const database = new DatabaseSync(databasePath, { readOnly: true });
     const count = (table: string) =>
