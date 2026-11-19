@@ -50,12 +50,12 @@ test.describe('B653: «Карьера» — роли и условия поис�
     if (desk(page)) {
       await expect(list.first()).toContainText('380–520 тыс. ₽hh.ru, 96 вакансий, 10.11');
       await expect(list.first()).toContainText('роль поиска');
-      // B726: ссылка несёт роль в «Подборку».
+      // B726: ссылка несёт роль и «Дату: 30 дней» в «Подборку» — строки числа роли.
       await expect(
         screen.getByRole('link', { name: 'Вакансии по роли «Руководитель разработки»' }),
       ).toHaveAttribute(
         'href',
-        '/app/vacancies?role=%D0%A0%D1%83%D0%BA%D0%BE%D0%B2%D0%BE%D0%B4%D0%B8%D1%82%D0%B5%D0%BB%D1%8C+%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B8',
+        '/app/vacancies?role=%D0%A0%D1%83%D0%BA%D0%BE%D0%B2%D0%BE%D0%B4%D0%B8%D1%82%D0%B5%D0%BB%D1%8C+%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B8&date=30',
       );
       await expect(list.last()).toContainText('нет данных о зарплатах');
       await expect(list.nth(2)).toContainText('Открытый API, Страница вакансий, hh.ru');

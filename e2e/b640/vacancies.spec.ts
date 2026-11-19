@@ -283,6 +283,26 @@ test.describe('B654: раздел «Вакансии», подборка и со
     ).toBeChecked();
   });
 
+  test('B726: «Вакансии по роли» — роль и «Дата: 30 дней» из адреса, строк столько же, сколько в счёте', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies?role=Руководитель+продукта&date=30');
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Дата · 30 дней/ })).toBeVisible();
+    await expect(page.locator('.vt-chips')).toContainText('Дата: 30 дней');
+    const count = page.locator('.vl-count .num');
+    await expect(count).toBeVisible();
+    await expect(page.locator(ROWS)).toHaveCount(Number(await count.innerText()));
+  });
+
+  test('B726: «Дата» не из фильтра в адресе не ставится', async ({ page }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies?role=Руководитель+продукта&date=45');
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Дата$/ })).toBeVisible();
+  });
+
   test('вкладка «Роли» показывает роли с числом вакансий', async ({ page }, testInfo) => {
     test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
     await openCabinet(page, '/app/vacancies');

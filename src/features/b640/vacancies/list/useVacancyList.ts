@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatchedPool } from '../../../vacancies/useMatchedPool';
 import { useMatchedPool } from '../../../vacancies/useMatchedPool';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
-import { linkedRole } from '../../career/careerPaths';
+import { linkedDate, linkedRole } from '../../career/careerPaths';
 import { useShell } from '../../shell/ShellContext';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -13,6 +13,7 @@ import {
   applyFilters,
   blockersOf,
   type Blocker,
+  type DateId,
   type FilterKind,
   type ListFilters,
 } from './filterModel';
@@ -73,15 +74,17 @@ export interface VacancyList {
 
 /**
  * Роли читает сервер; пока выбор ролей не менялся, повторного чтения нет.
- * Роль из адреса (B726, «Вакансии по роли» из «Карьеры») ставится только на этот заход,
- * сохранённый выбор не заменяет.
+ * Роль и «Дата» из адреса (B726, «Вакансии по роли» из «Карьеры») ставятся только на этот
+ * заход, сохранённый выбор не заменяют.
  */
 function useServerRoles(
   pool: MatchedPool,
   roles: readonly string[],
-  seed: (roles: readonly string[]) => void,
+  seed: (roles: readonly string[], date?: DateId) => void,
 ): void {
-  const linked = linkedRole(useShell().search);
+  const { search } = useShell();
+  const linked = linkedRole(search);
+  const linkedPeriod = linkedDate(search);
   const sent = useRef('');
   const seeded = useRef(false);
   const initial = pool.initialFilters;
@@ -91,7 +94,7 @@ function useServerRoles(
     // «Вакансии по роли» из «Карьеры» (B726): подборка открывается с этой ролью в фильтре.
     if (linked) {
       seeded.current = true;
-      seed([linked]);
+      seed([linked], linkedPeriod ?? undefined);
       return;
     }
     if (!initial && !campaign) return;
@@ -100,7 +103,7 @@ function useServerRoles(
     sent.current = (initial?.roles ?? []).join('\n');
     const start = defaultRoles(initial?.roles, campaign?.roles);
     if (start.length > 0) seed(start);
-  }, [initial, campaign, seed, linked]);
+  }, [initial, campaign, seed, linked, linkedPeriod]);
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;
@@ -221,7 +224,9 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   const [sheetOpen, setSheetOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
   const now = useMemo(() => new Date(), [pool.matched]);
-  useServerRoles(pool, filters.roles, (roles) => setFilters((current) => ({ ...current, roles })));
+  useServerRoles(pool, filters.roles, (roles, date) =>
+    setFilters((current) => ({ ...current, roles, ...(date ? { date } : {}) })),
+  );
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
   const serverMode = serverSortApplies(pool);
