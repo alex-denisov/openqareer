@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
@@ -146,5 +147,14 @@ test.describe('B692: профиль LinkedIn по разделам', () => {
       timeout: 15_000,
     });
     await expect(page.getByRole('button', { name: 'Повторить' })).toBeVisible();
+  });
+
+  test('снимки для сверки с макетом', async ({ page }, testInfo) => {
+    test.skip(!process.env.B640_SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
+    mkdirSync('.s13-shots', { recursive: true });
+    await mock(page);
+    await open(page);
+    const width = testInfo.project.name === 'desktop-1440' ? 1440 : 390;
+    await page.screenshot({ path: `.s13-shots/linkedin-sections-${width}.png`, fullPage: true });
   });
 });
