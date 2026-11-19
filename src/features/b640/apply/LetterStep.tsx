@@ -193,6 +193,21 @@ function Approval({ letter, variants, onSend }: ApprovalProps) {
   );
 }
 
+function DraftFailure({ letter }: { readonly letter: LetterScreenState }) {
+  const { circles, draft } = letter;
+  return (
+    <StatusLine
+      state="err"
+      text="Письмо не собралось"
+      action={
+        <Button size="sm" variant="primary" icon="repeat" onClick={circles.error ? circles.retry : draft.retry}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
 export interface LetterStepProps {
   readonly letter: LetterScreenState;
   readonly variants: LetterVariantsState;
@@ -204,8 +219,10 @@ export interface LetterStepProps {
 export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) {
   const { draft, circles, approval } = letter;
   const options = recipientOptions(circles.data?.circles ?? [], head.source);
-  const pending = circles.loading || (draft.loading && !draft.pitch);
-  const failed = circles.error || draft.error;
+  // B716: одобренное письмо — свой текст с сервера; пересборка черновика ему не нужна.
+  const saved = Boolean(approval.saved);
+  const pending = !saved && (circles.loading || (draft.loading && !draft.pitch));
+  const failed = !saved && (circles.error || draft.error);
   return (
     <section className="lead" aria-labelledby="lt-title">
       <h2 className="lead-title is-long" id="lt-title">
@@ -218,17 +235,7 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
           Собираем письмо…
         </p>
       ) : null}
-      {!pending && failed ? (
-        <StatusLine
-          state="err"
-          text="Письмо не собралось"
-          action={
-            <Button size="sm" variant="primary" icon="repeat" onClick={circles.error ? circles.retry : draft.retry}>
-              Повторить
-            </Button>
-          }
-        />
-      ) : null}
+      {!pending && failed ? <DraftFailure letter={letter} /> : null}
       {!pending && !failed ? (
         <>
           {approval.saved ? null : <VariantSwitch variants={variants} />}
@@ -239,7 +246,7 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
             readOnly={Boolean(approval.saved)}
             onChange={(event) => draft.setText(event.currentTarget.value)}
           />
-          {draft.loading ? (
+          {draft.loading && !saved ? (
             <p className="ls-state" role="status">
               Пересобираем письмо…
             </p>
