@@ -67,6 +67,8 @@ export interface HarnessOptions {
   readonly coverLetterWriter?: CoverLetterWriter;
   /** Подставной автор черновиков LinkedIn: тесты не зовут модель. */
   readonly linkedinDraftWriter?: { writeDraft(input: unknown): Promise<{ text: string }> };
+  /** Подставной переписчик фактов (B645: тексты профиля LinkedIn): тесты не зовут модель. */
+  readonly experienceFactRewriter?: unknown;
 }
 
 const PASSWORD = 'candidate-password-for-tests';
@@ -111,7 +113,7 @@ export async function createB640Harness(options: HarnessOptions) {
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
-    multiSourceVacancyEngine: engine as never, serveStatic: false, linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
+    multiSourceVacancyEngine: engine as never, serveStatic: false, linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
     ...(options.logLines ? { logDestination: { write: (line: string) => { options.logLines?.push(line); } } } : {}),
   });
   const get = (url: string, user?: HarnessUser) =>

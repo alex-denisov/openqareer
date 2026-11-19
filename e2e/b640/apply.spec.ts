@@ -23,6 +23,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly questionnaire?: boolean;
   /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
   readonly approvedBody?: string;
+  /** Длинный текст вакансии, как у настоящих на hh.ru (B645). */
+  readonly longVacancy?: boolean;
 }
 
 function circles(vacancyId: string, withPath: boolean) {
@@ -81,7 +83,11 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
       json: {
         data: {
           id: vacancyOf(route.request().url()),
-          description: 'Ищем руководителя для 3 команд платформы.\nЗадачи: переход на Kubernetes.',
+          description: options.longVacancy
+            ? Array.from({ length: 80 }, (_, i) => `Пункт ${i + 1}: задачи и требования.`).join(
+                '\n',
+              )
+            : 'Ищем руководителя для 3 команд платформы.\nЗадачи: переход на Kubernetes.',
           truncated: false,
           skills: [],
           responsibilities: [],
@@ -341,6 +347,22 @@ const step = (page: Page, name: string) =>
   page.getByRole('navigation', { name: 'Отклик' }).getByRole('link', { name });
 
 test.describe('B657: единый экран отклика', () => {
+  test('длинный текст вакансии прокручивается внутри и не растягивает страницу (B645)', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'проверка первого экрана ноутбука');
+    await page.setViewportSize({ width: 1440, height: 790 });
+    await open(page, '/app/responses/a-draft/letter', { longVacancy: true });
+    const text = page.getByRole('region', { name: 'Текст вакансии' });
+    await expect(text).toBeVisible();
+    const box = await text.boundingBox();
+    expect(box?.height ?? 9999).toBeLessThanOrEqual(790);
+    const scrolls = await text.evaluate((node) => node.scrollHeight > node.clientHeight);
+    expect(scrolls).toBe(true);
+    const approve = await page.getByRole('button', { name: 'Одобрить' }).boundingBox();
+    expect((approve?.y ?? 9999) + (approve?.height ?? 0)).toBeLessThanOrEqual(790);
+  });
+
   test('письмо: текст вакансии, тон, одобрение, отправка и «Я откликнулся»', async ({ page }) => {
     const mock = await open(page, '/app/responses/a-draft/letter');
     await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
