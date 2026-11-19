@@ -12,6 +12,9 @@ import { createEntry } from './diaryApi';
 import { today } from './model';
 import { RetryButton } from './parts';
 
+/** Поле быстрой записи: в него ставит курсор «Первая запись» (d00a). */
+export const QUICK_ENTRY_INPUT_ID = 'dn-new';
+
 export interface QuickEntryProps {
   /** Вид новой записи: выбранный фильтр, при «Все» — заметка. */
   readonly kind: CareerDiaryEntryKind;
@@ -83,11 +86,11 @@ export function QuickEntry(props: QuickEntryProps) {
       >
         <div className="dn-q-row dn-q-grid">
           <div className="fld-mic">
-            <label className="vh" htmlFor="dn-new">
+            <label className="vh" htmlFor={QUICK_ENTRY_INPUT_ID}>
               Новая запись
             </label>
             <input
-              id="dn-new"
+              id={QUICK_ENTRY_INPUT_ID}
               type="text"
               placeholder="Что произошло?"
               value={text}

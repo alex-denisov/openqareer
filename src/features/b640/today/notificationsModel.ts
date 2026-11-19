@@ -44,16 +44,16 @@ function isSameDay(createdAt: string, now: Date, timeZone: string): boolean {
   return !Number.isNaN(date.getTime()) && dayKey(date, timeZone) === dayKey(now, timeZone);
 }
 
-export interface NotificationGroups {
-  readonly today: readonly CandidateNotification[];
-  readonly earlier: readonly CandidateNotification[];
+export interface NotificationGroups<T> {
+  readonly today: readonly T[];
+  readonly earlier: readonly T[];
 }
 
-export function groupNotifications(
-  items: readonly CandidateNotification[],
+export function groupNotifications<T extends { readonly createdAt: string }>(
+  items: readonly T[],
   now: Date,
   timeZone: string,
-): NotificationGroups {
+): NotificationGroups<T> {
   return {
     today: items.filter((item) => isSameDay(item.createdAt, now, timeZone)),
     earlier: items.filter((item) => !isSameDay(item.createdAt, now, timeZone)),
