@@ -42,7 +42,8 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(page).toHaveURL(/\/app\/responses\/a-interview$/u);
     const detail = page.locator('#otklik-a-interview');
     await expect(detail.getByRole('heading', { name: 'Что дальше' })).toBeVisible();
-    await expect(detail.getByRole('link', { name: 'Подготовиться к интервью' })).toBeVisible();
+    // B645: раздел «Интервью» ещё заглушка — ссылок в него нет.
+    await expect(detail.locator('a[href*="/interview"], a[href*="/debrief"]')).toHaveCount(0);
     await expect(detail.getByText('Интервью назначено')).toBeVisible();
     await expect(detail.getByLabel('Ваша заметка')).toHaveValue(
       'Спросить про размер команды платформы.',
