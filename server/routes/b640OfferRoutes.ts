@@ -21,7 +21,8 @@ const BASE = '/api/v1/candidate/b640';
 const taxSchema = z
   .object({ taxPercent: z.number().min(0).max(B640_TAX_PERCENT_MAX).nullable() })
   .strict();
-const decisionSchema = z.object({ decision: z.enum(B640_OFFER_DECISIONS) }).strict();
+/** `null` — «Думаю»: снять записанное решение (B658). */
+const decisionSchema = z.object({ decision: z.enum(B640_OFFER_DECISIONS).nullable() }).strict();
 const applicationIdSchema = z.string().trim().min(1).max(120);
 
 interface Ctx {

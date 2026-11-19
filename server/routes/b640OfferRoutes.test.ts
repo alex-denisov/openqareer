@@ -216,6 +216,19 @@ describe('B640 offer routes: offers, tax, decision', () => {
     expect((await send('PUT', url, 'flagged.test', { decision: 'maybe' })).statusCode).toBe(400);
   });
 
+  it('clears the decision back to «Думаю» with decision null (B658)', async () => {
+    const { send, offer } = await setup();
+    const own = offer('flagged.test');
+    const url = `${BASE}/offers/${own.id}/decision`;
+    await send('PUT', url, 'flagged.test', { decision: 'accepted' });
+    const cleared = await send('PUT', url, 'flagged.test', { decision: null });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().data).toMatchObject({
+      proposeStatus: null,
+      offer: { decision: null, decidedAt: null },
+    });
+  });
+
   it('does not propose working when the status is already working, and changes nothing itself', async () => {
     const { send, offer, application } = await setup();
     const own = offer('flagged.test');

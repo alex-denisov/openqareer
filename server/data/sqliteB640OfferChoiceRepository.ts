@@ -76,7 +76,7 @@ export class SqliteB640OfferChoiceRepository {
   setDecision(
     candidateId: string,
     applicationId: string,
-    decision: B640OfferDecision,
+    decision: B640OfferDecision | null,
     now: string,
   ): void {
     this.database
@@ -87,7 +87,7 @@ export class SqliteB640OfferChoiceRepository {
            decision = excluded.decision, decided_at = excluded.decided_at, updated_at = excluded.updated_at
          WHERE b640_offer_choices.candidate_id = excluded.candidate_id`,
       )
-      .run(applicationId, candidateId, decision, now, now);
+      .run(applicationId, candidateId, decision, decision === null ? null : now, now);
   }
 
   /**
