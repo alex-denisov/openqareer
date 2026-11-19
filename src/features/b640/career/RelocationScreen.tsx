@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Button, Icon, InfoTip, Link, SegControl, type SegOption } from '../kit';
+import { useState, type ReactNode } from 'react';
+import { ActionDock, Button, Icon, InfoTip, Link, SegControl, type SegOption } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { BlockError } from '../today/parts';
 import { useLoad } from '../today/useLoad';
@@ -121,7 +121,6 @@ function Lists(props: {
 function Head(props: {
   readonly title: string;
   readonly role: string | null;
-  readonly onWho: () => void;
   readonly onPlaces: () => void;
 }) {
   return (
@@ -133,19 +132,23 @@ function Head(props: {
         <InfoTip label="Как посчитано" text={TIP} />
       </div>
       {props.role ? <p className="lead-sub">{props.role}</p> : null}
-      <div className="actions">
-        <Button variant="primary" icon="question" onClick={props.onWho}>
-          Уточнить, кто едет
-        </Button>
-        <Button icon="pin" onClick={props.onPlaces}>
-          Изменить места
-        </Button>
-      </div>
+      {/* «Изменить места» — вторичным действием, не в главной позиции (B645 c06). */}
+      <button className="row-act" type="button" onClick={props.onPlaces}>
+        <Icon name="pin" />
+        Изменить места
+      </button>
     </>
   );
 }
 
-function Places({ data, reload }: { readonly data: RelocationData; readonly reload: () => void }) {
+interface PlacesProps {
+  readonly data: RelocationData;
+  readonly reload: () => void;
+  /** Правая колонка: стоит между колонкой мест и полосой действия. */
+  readonly aside: ReactNode;
+}
+
+function Places({ data, reload, aside }: PlacesProps) {
   const [who, setWho] = useState(false);
   const [editPlaces, setEditPlaces] = useState(false);
   const family = familyOf(data.questionnaire?.profile ?? null);
@@ -164,32 +167,70 @@ function Places({ data, reload }: { readonly data: RelocationData; readonly relo
   const abroad = data.places.filter((place) => place.kind === 'country');
   const inside = data.places.filter((place) => place.kind === 'city');
   return (
-    <section className="lead" aria-labelledby="rl-title">
-      <Head
-        title={placesTitle(abroad.length, inside.length)}
-        role={data.role}
-        onWho={() => setWho(true)}
-        onPlaces={() => setEditPlaces(true)}
-      />
-      <RelocationWhoDialog
-        key={JSON.stringify(family)}
-        open={who}
-        onClose={() => setWho(false)}
-        questionnaire={data.questionnaire}
-        family={family}
-        onSaved={reload}
-      />
-      <RelocationPlacesDialog
-        key={data.choices.map(choiceKey).join()}
-        open={editPlaces}
-        onClose={() => setEditPlaces(false)}
-        choices={data.choices}
-        cities={data.cities}
-        questionnaire={data.questionnaire}
-        onSaved={reload}
-      />
-      <Lists abroad={abroad} inside={inside} context={context} />
-    </section>
+    <>
+      <div className="col">
+        <section className="lead" aria-labelledby="rl-title">
+          <Head
+            title={placesTitle(abroad.length, inside.length)}
+            role={data.role}
+            onPlaces={() => setEditPlaces(true)}
+          />
+          <RelocationWhoDialog
+            key={JSON.stringify(family)}
+            open={who}
+            onClose={() => setWho(false)}
+            questionnaire={data.questionnaire}
+            family={family}
+            onSaved={reload}
+          />
+          <PlacesDialog
+            data={data}
+            open={editPlaces}
+            onClose={() => setEditPlaces(false)}
+            reload={reload}
+          />
+          <Lists abroad={abroad} inside={inside} context={context} />
+        </section>
+      </div>
+      {aside}
+      <WhoDock onWho={() => setWho(true)} />
+    </>
+  );
+}
+
+function PlacesDialog(props: {
+  readonly data: RelocationData;
+  readonly open: boolean;
+  readonly onClose: () => void;
+  readonly reload: () => void;
+}) {
+  return (
+    <RelocationPlacesDialog
+      key={props.data.choices.map(choiceKey).join()}
+      open={props.open}
+      onClose={props.onClose}
+      choices={props.data.choices}
+      cities={props.data.cities}
+      questionnaire={props.data.questionnaire}
+      onSaved={props.reload}
+    />
+  );
+}
+
+/**
+ * Главное действие — полоса act-dock на всю ширину страницы, как в макете c06 (B645):
+ * на 1440 у низа окна, на 390 над навигацией во всю ширину.
+ */
+function WhoDock({ onWho }: { readonly onWho: () => void }) {
+  return (
+    <ActionDock
+      kind="auto"
+      primary={
+        <Button variant="primary" icon="question" onClick={onWho}>
+          Уточнить: кто едет и бюджет
+        </Button>
+      }
+    />
   );
 }
 
@@ -222,14 +263,15 @@ export function RelocationScreen({ node }: { readonly node: B640Node }) {
           <BlockError text="Не удалось посчитать страны." onRetry={load.retry} />
         </div>
       ) : (
-        <>
-          <div className="col">
-            <Places data={load.data} reload={load.retry} />
-          </div>
-          <div className="col">
-            <Companies count={load.data.companies} />
-          </div>
-        </>
+        <Places
+          data={load.data}
+          reload={load.retry}
+          aside={
+            <div className="col">
+              <Companies count={load.data.companies} />
+            </div>
+          }
+        />
       )}
     </div>
   );

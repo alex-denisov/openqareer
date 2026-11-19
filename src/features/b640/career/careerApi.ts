@@ -22,10 +22,13 @@ export interface RolesData {
   readonly rows: readonly RoleRow[];
   readonly searchTitles: readonly string[];
   readonly campaign: CampaignMetaView;
-  /** Частых требований роли поиска, которых нет в профиле: число для полосы «Проверьте». */
-  readonly skillGap: number;
-  /** Роль поиска, проверку навыков которой можно начать; `null` — полосы нет. */
-  readonly skillRole: string | null;
+}
+
+/** Полоса «Проверьте N навыков»: роль поиска, проверку которой можно начать. */
+export interface SkillStripData {
+  /** Частых требований роли, которых нет в профиле. */
+  readonly gap: number;
+  readonly role: string;
 }
 
 const key = (title: string): string => title.trim().toLocaleLowerCase('ru');
@@ -47,28 +50,34 @@ async function readyRole(searchTitles: readonly string[]): Promise<{
   readonly title: string;
   readonly skills: number;
 } | null> {
-  for (const title of searchTitles) {
-    try {
-      const current = await getCurrentRoleSkillAssessment(title);
-      if (current.state === 'ready') return { title, skills: current.skills.length };
-    } catch {
-      // Роль не прочиталась — смотрим следующую.
-    }
-  }
-  return null;
+  // Роли спрашиваем разом (B645 s09): по очереди это 5+ запросов подряд до полосы.
+  const answers = await Promise.all(
+    searchTitles.map((title) => getCurrentRoleSkillAssessment(title).catch(() => null)),
+  );
+  const index = answers.findIndex((current) => current?.state === 'ready');
+  const current = answers[index];
+  return current?.state === 'ready'
+    ? { title: searchTitles[index]!, skills: current.skills.length }
+    : null;
 }
 
 const demandOf = (demand: readonly RoleSkillDemand[], title: string) =>
   demand.find((entry) => key(entry.roleTitle) === key(title));
 
 /** Сколько навыков проверить: частые требования роли, которых нет в профиле. */
-function gapOf(demand: readonly RoleSkillDemand[], role: { title: string; skills: number }): number {
+function gapOf(
+  demand: readonly RoleSkillDemand[],
+  role: { title: string; skills: number },
+): number {
   const entry = demandOf(demand, role.title);
   return entry ? entry.skills.filter((skill) => !skill.inProfile).length : role.skills;
 }
 
 /** «Чего не хватает» без данных роли — первый навык из вакансий, которого нет в профиле. */
-function withLacks(rows: readonly RoleRow[], demand: readonly RoleSkillDemand[]): readonly RoleRow[] {
+function withLacks(
+  rows: readonly RoleRow[],
+  demand: readonly RoleSkillDemand[],
+): readonly RoleRow[] {
   return rows.map((row) => {
     if (row.lacks) return row;
     const missing = demandOf(demand, row.title)?.skills.find((skill) => !skill.inProfile);
@@ -84,14 +93,19 @@ export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
     readDemand(),
   ]);
   const searchTitles = campaign.roles.value;
-  const ready = await readyRole(searchTitles);
   return {
     rows: withLacks(buildRoleRows(roles, searchTitles, checked), demand),
     searchTitles,
     campaign,
-    skillGap: ready ? gapOf(demand, ready) : 0,
-    skillRole: ready?.title ?? null,
   };
+}
+
+/** Полоса навыков догружается после таблицы ролей и её не держит. */
+export async function loadSkillStrip(signal: AbortSignal): Promise<SkillStripData | null> {
+  const demandRead = readDemand();
+  const campaign = await getCandidateCampaign(signal);
+  const [ready, demand] = await Promise.all([readyRole(campaign.roles.value), demandRead]);
+  return ready ? { gap: gapOf(demand, ready), role: ready.title } : null;
 }
 
 /** C04 без роли в адресе: роли поиска и первая из них, проверку которой можно начать. */
