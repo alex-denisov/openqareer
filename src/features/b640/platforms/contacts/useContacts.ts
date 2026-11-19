@@ -1,61 +1,67 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  listCandidateConnectionContacts,
-  type CandidateConnectionContact,
-  type CandidateConnectionContactsPage,
-} from '../../../outreach/connectionContactsApi';
-import { appendContacts } from './contactsModel';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { B640Contact, B640ContactFacets, B640ContactSort, B640ContactState } from '../../../../../shared/b640Contacts';
+import { EMPTY_FILTERS, activeCount, type ContactFilters } from './contactsFilters';
+import { useContactsPage, type ContactsLoad } from './useContactsPage';
 
-export type ContactsLoad = 'loading' | 'ready' | 'error';
+export type { ContactsLoad };
+export const SEARCH_DELAY_MS = 300;
+
+export interface Criteria {
+  readonly search: string;
+  readonly filters: ContactFilters;
+  readonly sort: B640ContactSort;
+}
 
 export interface ContactsState {
   readonly load: ContactsLoad;
-  readonly items: readonly CandidateConnectionContact[];
+  /** Данные уже приходили: панель управления остаётся на экране при новом запросе и ошибке. */
+  readonly everLoaded: boolean;
+  readonly items: readonly B640Contact[];
   readonly total: number;
+  readonly facets: B640ContactFacets | null;
   readonly importedAt: string | null;
+  readonly criteria: Criteria;
+  readonly searchText: string;
+  readonly filtered: boolean;
+  readonly setSearchText: (value: string) => void;
+  readonly setFilters: (filters: ContactFilters) => void;
+  readonly setSort: (sort: B640ContactSort) => void;
+  readonly resetAll: () => void;
   readonly retry: () => void;
   readonly loadMore: () => Promise<void>;
+  readonly patchStatus: (id: string, from: B640ContactState, to: B640ContactState, at: string | null) => void;
 }
 
-/** Контакты порциями с сервера; экран показывает их по 20. */
-export function useContacts(): ContactsState {
-  const [load, setLoad] = useState<ContactsLoad>('loading');
-  const [page, setPage] = useState<CandidateConnectionContactsPage | null>(null);
-  const [items, setItems] = useState<readonly CandidateConnectionContact[]>([]);
-  const [attempt, setAttempt] = useState(0);
-  const generation = useRef(0);
-
+/** Дебаунс строки поиска: в запрос уходит значение через 300 мс после последней буквы. */
+function useDebounced(value: string): string {
+  const [settled, setSettled] = useState(value);
   useEffect(() => {
-    const current = ++generation.current;
-    setLoad('loading');
-    listCandidateConnectionContacts(0)
-      .then((first) => {
-        if (current !== generation.current) return;
-        setPage(first);
-        setItems(first.items);
-        setLoad('ready');
-      })
-      .catch(() => {
-        if (current === generation.current) setLoad('error');
-      });
-  }, [attempt]);
+    const timer = setTimeout(() => setSettled(value), SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [value]);
+  return settled;
+}
 
-  const nextOffset = page?.nextOffset ?? null;
-  const loadMore = useCallback(async () => {
-    if (nextOffset === null) return;
-    const current = generation.current;
-    const next = await listCandidateConnectionContacts(nextOffset);
-    if (current !== generation.current) return;
-    setPage(next);
-    setItems((before) => appendContacts(before, next.items));
-  }, [nextOffset]);
-
+/** Контакты порциями по 20 с сервера B697: поиск, фильтры, сортировка. */
+export function useContacts(): ContactsState {
+  const [searchText, setSearchText] = useState('');
+  const search = useDebounced(searchText);
+  const [filters, setFilters] = useState<ContactFilters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<B640ContactSort>('selection');
+  const criteria = useMemo<Criteria>(() => ({ search, filters, sort }), [search, filters, sort]);
+  const data = useContactsPage(criteria);
+  const resetAll = useCallback(() => {
+    setSearchText('');
+    setFilters(EMPTY_FILTERS);
+  }, []);
   return {
-    load,
-    items,
-    total: page?.total ?? 0,
-    importedAt: page?.linkedinImport.importedAt ?? null,
-    retry: () => setAttempt((value) => value + 1),
-    loadMore,
+    ...data,
+    criteria,
+    searchText,
+    filtered: Boolean(search.trim()) || activeCount(filters) > 0,
+    setSearchText,
+    setFilters,
+    setSort,
+    resetAll,
   };
 }
