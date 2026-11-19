@@ -132,7 +132,9 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page, { only: ['modal_fit'] });
   });
 
-  test('без согласий строка есть: включение открывает лист с согласием (B645)', async ({ page }) => {
+  test('без согласий строка есть: включение открывает лист с согласием (B645)', async ({
+    page,
+  }) => {
     const mock = await open(page, '/app/responses', 'o01', { automation: false });
     await expect(page.locator('tr.ot-row')).toHaveCount(7);
     const bar = page.getByRole('group', { name: 'Автоотклики' });
