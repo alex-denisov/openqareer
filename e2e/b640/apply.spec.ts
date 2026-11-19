@@ -357,6 +357,21 @@ test.describe('B657: единый экран отклика', () => {
     );
   });
 
+  test('путь с шапкой контекста: на 390 скрыт, шаги под верхней полосой (B721)', async ({
+    page,
+  }, testInfo) => {
+    await open(page, '/app/responses/a-draft/letter');
+    const crumbs = page.getByRole('navigation', { name: 'Путь' });
+    const steps = page.getByRole('navigation', { name: 'Отклик' });
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(crumbs).toBeHidden();
+      // Макет o02/o06a на 390: шаги сразу под верхней полосой (y44), строки пути нет.
+      expect((await steps.boundingBox())?.y).toBe(44);
+    } else {
+      await expect(crumbs).toBeVisible();
+    }
+  });
+
   test('вход по id вакансии без карточки отклика', async ({ page }) => {
     await open(page, '/app/responses/cluster-from-list/letter');
     await expect(page.getByLabel('Текст письма')).toHaveValue(/Здравствуйте/u);
