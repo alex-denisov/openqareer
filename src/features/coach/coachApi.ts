@@ -30,6 +30,7 @@ import {
   readData,
   readDataArray,
   readDataObject,
+  malformedResponseError,
   setStoredSessionToken,
   throwApiError,
 } from './apiClient';
@@ -437,11 +438,41 @@ export async function getSession(signal?: AbortSignal): Promise<AuthUser | null>
   return readData<AuthUser | null>(response);
 }
 
+/**
+ * B401: пароль верный, но у кандидата включена двухфакторная защита — сессии ещё нет,
+ * нужен код из приложения. `challenge` живёт 5 минут и годится для одного входа.
+ */
+export class TwoFactorRequiredError extends Error {
+  constructor(readonly challenge: string) {
+    super('Введите код из приложения-аутентификатора.');
+    this.name = 'TwoFactorRequiredError';
+  }
+}
+
+function sessionOrChallenge(data: AuthUser | { twoFactorRequired?: boolean; challenge?: unknown }): AuthUser {
+  if ('twoFactorRequired' in data && data.twoFactorRequired === true) {
+    if (typeof data.challenge !== 'string') throw malformedResponseError();
+    throw new TwoFactorRequiredError(data.challenge);
+  }
+  return data as AuthUser;
+}
+
 export async function login(username: string, password: string): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...clientDeviceHeader() },
     body: JSON.stringify({ username, password }),
+    signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
+  });
+  return sessionOrChallenge(await readDataObject<AuthUser>(response));
+}
+
+/** B401: второй шаг входа — код из приложения или резервный код. */
+export async function completeTwoFactorLogin(challenge: string, code: string): Promise<AuthUser> {
+  const response = await apiFetch('/api/v1/auth/login/two-factor', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ challenge, code: code.trim() }),
     signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
   return readDataObject<AuthUser>(response);
@@ -560,6 +591,8 @@ export async function updateAccountProfile(input: {
 export async function changePassword(input: {
   currentPassword: string;
   newPassword: string;
+  /** B401: при включённой двухфакторной защите. */
+  twoFactorCode?: string;
 }): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/account/password', {
     method: 'POST',
@@ -585,7 +618,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, newPassword }),
   });
-  return readDataObject<AuthUser>(response);
+  return sessionOrChallenge(await readDataObject<AuthUser>(response));
 }
 
 export async function revokeOtherSessions(): Promise<number> {

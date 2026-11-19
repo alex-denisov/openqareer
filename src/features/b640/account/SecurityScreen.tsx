@@ -11,6 +11,8 @@ import { useShell } from '../shell/ShellContext';
 import { deviceLine, deviceName, devicesTitle, type AccountSession } from './model';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 import { EmailCodeForm, EmailForm, NameForm, PasswordForm } from './securityForms';
+import { getTwoFactorStatus } from './twoFactorApi';
+import { TwoFactorPanel, TwoFactorRow, type TwoFactorState, type TwoFactorView } from './TwoFactorSection';
 
 interface Security {
   readonly account: AccountSnapshot;
@@ -127,14 +129,16 @@ function Identity({ data, load }: SectionProps) {
   );
 }
 
-/** «Вход»: смена пароля на месте (макет N4b). */
-function SignIn({ onChanged }: { readonly onChanged: () => void }) {
+/** «Вход»: смена пароля на месте (макет N4b) и строка двухфакторной защиты (B401). */
+function SignIn({ onChanged, twoFactor }: { readonly onChanged: () => void; readonly twoFactor: TwoFactorState }) {
+  const needsCode = twoFactor.load.state === 'ready' && twoFactor.load.data.enabled;
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
   return (
     <Group title={open ? 'Сменить пароль' : 'Вход'}>
       {open ? (
         <PasswordForm
+          needsCode={needsCode}
           onCancel={() => setOpen(false)}
           onDone={() => {
             setOpen(false);
@@ -144,7 +148,10 @@ function SignIn({ onChanged }: { readonly onChanged: () => void }) {
           }}
         />
       ) : (
-        <Row title="Пароль" action="Сменить пароль" onAction={() => setOpen(true)} />
+        <>
+          <Row title="Пароль" action="Сменить пароль" onAction={() => setOpen(true)} />
+          <TwoFactorRow state={twoFactor} />
+        </>
       )}
       {saved && !open ? (
         <li className="set-foot">
@@ -243,16 +250,24 @@ function SignOut() {
   );
 }
 
-/** n04 «Вход и безопасность»: почта, имя, пароль, устройства, выход. */
+/** n04 «Вход и безопасность»: почта, имя, пароль, двухфакторная защита, устройства, выход. */
+function useTwoFactor(): TwoFactorState {
+  const load = useLoad(getTwoFactorStatus);
+  const [view, setView] = useState<TwoFactorView>({ kind: 'idle' });
+  return { load, view, setView };
+}
+
 export function SecurityScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadSecurity);
+  const twoFactor = useTwoFactor();
   return (
     <SettingsPage node={node} heading="Вход и безопасность" busy={load.state === 'loading'}>
       {load.state === 'error' ? <ErrorLine text="Раздел не загрузился" onRetry={load.retry} /> : null}
       {load.state === 'ready' ? (
         <>
           <Identity data={load.data} load={load} />
-          <SignIn onChanged={load.retry} />
+          <SignIn onChanged={load.retry} twoFactor={twoFactor} />
+          <TwoFactorPanel state={twoFactor} />
           <Devices data={load.data} load={load} />
           <SignOut />
         </>

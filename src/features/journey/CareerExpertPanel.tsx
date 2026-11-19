@@ -40,6 +40,7 @@ import {
   type CoachResult,
   type CoachTurnStage,
   type CoachTurnSubject,
+  TwoFactorRequiredError,
 } from '../coach/coachApi';
 import { applySkillQuizResult } from '../coach/careerCommandApi';
 import { waitForCoachAnalysis } from '../coach/coachResultDelivery';
@@ -369,7 +370,9 @@ export function CareerExpertPanel({
       onIdentityChange(authenticated);
       setLoginOpen(false);
     } catch (reason) {
-      setError(messageFrom(reason));
+      // B401: код из приложения спрашивает только страница входа.
+      if (reason instanceof TwoFactorRequiredError) window.location.assign('/login');
+      else setError(messageFrom(reason));
     } finally {
       setSending(false);
     }
