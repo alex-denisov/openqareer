@@ -446,7 +446,8 @@
   .b640 .r6-steps a .ico { inline-size: var(--career-icon-sm); block-size: var(--career-icon-sm); color: var(--career-accent); }
   .b640 .lk-draft { field-sizing: content; min-block-size: calc(3 * var(--career-target-min)); }
   .b640 .tag { white-space: normal; overflow-wrap: break-word; max-inline-size: 100%; }
-  .b640 .crumbs.has-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--career-space-3); }
+  /* B721: на 390 путь с шапкой контекста скрыт (`only-desk`), шапка стоит первой строкой страницы. */
+  @media (min-width: 768px) { .b640 .crumbs.has-ctx { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--career-space-3); } }
   .b640 .crumbs .ctx-one { position: relative; }
   .b640 .crumbs .ctx-one .ctx-kind { display: none; }
   .b640 .crumbs .ctx-more { position: absolute; z-index: 12; inset-block-start: 100%; inset-inline-start: 0; min-inline-size: 18rem; padding: var(--career-space-3); background: var(--career-surface); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-md); box-shadow: var(--career-shadow-pop); }
