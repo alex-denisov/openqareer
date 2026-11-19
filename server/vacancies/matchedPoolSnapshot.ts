@@ -84,6 +84,8 @@ export interface MatchedPoolSnapshotsOptions {
 export interface MatchedPoolReadOptions {
   /** For a background pass: its next candidate waits for the rebuild instead of running beside it. */
   readonly awaitRebuild?: boolean;
+  /** A route that can answer without the selection (B645 o08 `vacanciesPending`) waits less. */
+  readonly waitMs?: number;
 }
 
 export class MatchedPoolSnapshots {
@@ -206,7 +208,12 @@ export class MatchedPoolSnapshots {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
-    const waitMs = options.awaitRebuild ? undefined : stored ? this.staleWaitMs : this.waitMs;
+    const waitMs = options.awaitRebuild
+      ? undefined
+      : Math.min(
+          stored ? this.staleWaitMs : this.waitMs,
+          options.waitMs ?? Number.POSITIVE_INFINITY,
+        );
     return this.awaitCompute(key, compute, stored, waitMs);
   }
 

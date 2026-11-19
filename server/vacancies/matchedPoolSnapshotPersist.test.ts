@@ -59,6 +59,18 @@ describe('MatchedPoolSnapshots: the reader waits a bounded time, the build does 
     expect(compute).toHaveBeenCalledTimes(1);
   });
 
+  it('a route that can answer without the selection gets the refusal within its own short budget', async () => {
+    const snapshots = new MatchedPoolSnapshots({ waitMs: 60_000 });
+    const started = performance.now();
+
+    const refused = await snapshots
+      .readAsync('one', 'profile', () => new Promise(() => undefined), { waitMs: 5 })
+      .catch((error: unknown) => error);
+
+    expect(refused).toBeInstanceOf(VacancyMatchUnavailable);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it('a background pass that asks to wait is not cut by the reader budget', async () => {
     const snapshots = new MatchedPoolSnapshots({ waitMs: 1 });
     const compute = () =>
