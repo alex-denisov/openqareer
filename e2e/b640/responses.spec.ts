@@ -211,6 +211,20 @@ test.describe('B656: «Отклики» нового кабинета', () => {
       '/app/responses',
     );
     await expect(page.getByRole('heading', { name: 'Разбор помог?' })).toHaveCount(0);
+    // B645, O7c: три проверки и путь к 20 откликам.
+    await expect(
+      page.getByRole('heading', { name: 'Три проверки, которым данные не нужны' }),
+    ).toBeVisible();
+    await expect(page.getByText('Незавершённых откликов — 3 из 6.')).toBeVisible();
+    await expect(
+      page.getByText(/В 2 из 6 вакансий верх вилки ниже ваших 500 000 ₽\./u),
+    ).toBeVisible();
+    await expect(page.getByText('4 из 6 откликов — позже 10 дней после публикации.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Что будет при 20 откликах' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Посмотреть вакансии' })).toHaveAttribute(
+      'href',
+      '/app/vacancies',
+    );
     await expectGates(page);
   });
 

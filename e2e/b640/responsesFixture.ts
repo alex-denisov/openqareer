@@ -177,6 +177,12 @@ function reviewPayload(
         total: 6,
       },
       recommendations: [],
+      checks: {
+        since: '2026-10-02T10:00:00.000Z',
+        unfinished: { count: 3, total: 6 },
+        salaryBelow: { count: 2, total: 6, floor: 500000, currency: 'RUB' },
+        late: { count: 4, total: 6 },
+      },
     };
   }
   return {
