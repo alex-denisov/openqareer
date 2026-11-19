@@ -21,6 +21,8 @@ import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
 import { ResultLine } from '../kit/ResultLine';
 import type { B640Node } from '../routes';
+import { AccountDeletionGroup } from './AccountDeletion';
+import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 
@@ -29,15 +31,18 @@ interface AccountData {
   readonly granted: readonly CandidateCapability[];
   /** Автоотклики; `null` — состояние не прочиталось. */
   readonly automation: AutomationState | null;
+  /** Удаление аккаунта; `undefined` — состояние не прочиталось, группы нет. */
+  readonly deletion: AccountDeletion | null | undefined;
 }
 
 /** Пауза «Остановить всё» ставится на предельный срок: снимает её сам кандидат. */
 const STOP_DAYS = 365;
 
 async function loadData(): Promise<AccountData> {
-  const [consents, automation] = await Promise.all([
+  const [consents, automation, deletion] = await Promise.all([
     getAccountCapabilityConsents(),
     getCandidateAutomation().catch(() => null),
+    getAccountDeletion().catch(() => undefined),
   ]);
   return {
     granted: consents.filter((item) => item.revokedAt === null).map((item) => item.capability),
@@ -48,6 +53,7 @@ async function loadData(): Promise<AccountData> {
           emergencyPaused: automation.schedulerRuntime?.emergencyPaused === true,
         }
       : null,
+    deletion,
   };
 }
 
@@ -321,11 +327,12 @@ function Sections({ data, load }: { readonly data: AccountData; readonly load: L
       </Group>
       {data.automation ? <Automation state={data.automation} onChanged={load.retry} /> : null}
       <Export />
+      {data.deletion !== undefined ? <AccountDeletionGroup initial={data.deletion} /> : null}
     </>
   );
 }
 
-/** n05 «Согласия и данные»: согласия, «Остановить всё», выгрузка данных. */
+/** n05 «Согласия и данные»: согласия, «Остановить всё», выгрузка данных, удаление аккаунта. */
 export function DataScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadData);
   return (
