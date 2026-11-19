@@ -92,7 +92,7 @@ function routeError(reply: FastifyReply, request: FastifyRequest, status: number
   return sendError(reply, request, status, code, message, false);
 }
 
-function accountContext(deps: CandidateDraftRouteDeps, request: FastifyRequest, candidate: CandidateIdentity) {
+export function accountContext(deps: CandidateDraftRouteDeps, request: FastifyRequest, candidate: CandidateIdentity) {
   const principal = authenticateSession(request, deps.authService, deps.config);
   const isCandidateSession = principal?.candidate?.id === candidate.id;
   const user = isCandidateSession ? deps.authService.getUser?.(principal.userId) : null;
@@ -106,7 +106,7 @@ function accountContext(deps: CandidateDraftRouteDeps, request: FastifyRequest, 
   };
 }
 
-function workflowDatabase(deps: CandidateDraftRouteDeps): DatabaseSync | null {
+export function workflowDatabase(deps: CandidateDraftRouteDeps): DatabaseSync | null {
   const database = deps.candidateActionRepository?.getDatabase() ?? null;
   if (!database) return null;
   return database
@@ -320,7 +320,7 @@ function transitionWorkflow(
   return { draft, status: 'published', approvedAt: current.approved_at, publishedAt: now };
 }
 
-function applyWorkflowTransition(database: DatabaseSync, candidateId: string, draftId: string, status: 'approved' | 'published', timezone: string) {
+export function applyWorkflowTransition(database: DatabaseSync, candidateId: string, draftId: string, status: 'approved' | 'published', timezone: string) {
   database.exec('BEGIN IMMEDIATE');
   try {
     const result = transitionWorkflow(database, candidateId, draftId, status, timezone);
@@ -397,6 +397,32 @@ async function writeCandidateDraft(
   }
 }
 
+/** Лимиты тарифа, квота и текст модели; `null` — ответ об отказе уже отправлен. */
+export async function prepareDraftText(
+  deps: CandidateDraftRouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidate: CandidateIdentity,
+  input: z.infer<typeof createSchema>,
+): Promise<{ readonly text: string; readonly localDate: string } | null> {
+  const refuse = (status: number, code: string, message: string) => {
+    routeError(reply, request, status, code, message);
+    return null;
+  };
+  const account = accountContext(deps, request, candidate);
+  const limit = dailyDraftLimit(account.tier, input.kind);
+  if (!limit) return refuse(402, 'paywall_required', 'Для этого черновика нужен другой тариф.');
+  const localDate = formatLocalDate(new Date(), account.timezone);
+  if (deps.candidateDraftRepository.countForDay(candidate.id, localDate, input.kind) >= limit)
+    return refuse(429, 'draft_daily_limit', `На сегодня черновиков больше нет: лимит ${limit} в день`);
+  const quotaUnit = randomUUID();
+  if (!requireTariffQuota(deps, request, reply, candidate.id, 'linkedin_drafts', quotaUnit)) return null;
+  const text = await writeCandidateDraft(deps, request, candidate, input, account.headline);
+  if (!text) releaseTariffQuota(deps, candidate.id, 'linkedin_drafts', quotaUnit);
+  if (!text) return refuse(503, 'draft_writer_unavailable', 'Не получилось подготовить черновик. Попробуйте позже.');
+  return { text, localDate };
+}
+
 async function generate(
   deps: CandidateDraftRouteDeps,
   request: FastifyRequest,
@@ -404,18 +430,9 @@ async function generate(
   candidate: CandidateIdentity,
   input: z.infer<typeof createSchema>,
 ) {
-  const account = accountContext(deps, request, candidate);
-  const limit = dailyDraftLimit(account.tier, input.kind);
-  if (!limit) return routeError(reply, request, 402, 'paywall_required', 'Для этого черновика нужен другой тариф.');
-  const localDate = formatLocalDate(new Date(), account.timezone);
-  if (deps.candidateDraftRepository.countForDay(candidate.id, localDate, input.kind) >= limit)
-    return routeError(reply, request, 429, 'draft_daily_limit', `На сегодня черновиков больше нет: лимит ${limit} в день`);
-  const quotaUnit = randomUUID();
-  if (!requireTariffQuota(deps, request, reply, candidate.id, 'linkedin_drafts', quotaUnit)) return reply;
-  const text = await writeCandidateDraft(deps, request, candidate, input, account.headline);
-  if (!text) releaseTariffQuota(deps, candidate.id, 'linkedin_drafts', quotaUnit);
-  if (!text) return routeError(reply, request, 503, 'draft_writer_unavailable', 'Не получилось подготовить черновик. Попробуйте позже.');
-  return persistDraft(deps, request, reply, candidate, input, text, localDate);
+  const prepared = await prepareDraftText(deps, request, reply, candidate, input);
+  if (!prepared) return reply;
+  return persistDraft(deps, request, reply, candidate, input, prepared.text, prepared.localDate);
 }
 
 function validateTopicUse(deps: CandidateDraftRouteDeps, candidate: CandidateIdentity, topicId: string | undefined, database: DatabaseSync | null) {

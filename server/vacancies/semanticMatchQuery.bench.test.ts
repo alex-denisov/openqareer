@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { MIGRATION_35, VACANCY_CLUSTER_INPUT_TABLE, VACANCY_POOL_INDEX_TABLE } from '../data/sqliteSchema';
 import { buildSemanticMatchQuery } from './semanticMatchQuery';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 /**
  * Замер на реалистичном объёме (B267 S3, план §5 п.3): 750 тыс. записей
@@ -97,14 +98,14 @@ describe.skipIf(!process.env.BENCH)('buildSemanticMatchQuery bench (B267 S3)', (
         const vpMs = timeQuery(database, ['eng-mgmt', 'it-ops', 'ops'], 3);
         const devMs = timeQuery(database, ['eng'], 0);
         console.log(`B267 S3 bench: VP=${vpMs.toFixed(1)}ms, DEV=${devMs.toFixed(1)}ms`);
-        expect(vpMs).toBeLessThan(300);
-        expect(devMs).toBeLessThan(300);
+        expect(vpMs).toBeLessThan(timeBudget(300));
+        expect(devMs).toBeLessThan(timeBudget(300));
       } finally {
         database.close();
       }
     },
     // Вставка 750 тыс. строк на медленной CI-машине дольше стандартных 5 с;
     // сам замер запроса печатается в stdout и укладывается в единицы мс.
-    120_000,
+    timeBudget(120_000),
   );
 });

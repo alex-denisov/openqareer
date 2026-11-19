@@ -63,12 +63,21 @@ export interface CareerCalls {
   readonly stopAdded: string[];
   readonly stopRemoved: string[];
   readonly ownRoles: unknown[];
+  readonly lowerIncome: unknown[];
+  readonly growthGoals: unknown[];
 }
 
 export interface CareerOptions {
   readonly status?: string;
   readonly searchRoles?: string[];
   readonly failProfileSave?: boolean;
+  /** Ответ пути в профессию (S11); без него — «цель не выбрана». */
+  readonly professionPath?: unknown;
+  /** Нынешний доход на руки из профиля. */
+  readonly income?: number | null;
+  /** Ответ цели роста (S12); выбор цели возвращает `growthAfter`, если он задан. */
+  readonly growth?: unknown;
+  readonly growthAfter?: unknown;
 }
 
 function campaign(roles: string[]) {
@@ -107,6 +116,8 @@ export async function openCareer(
     stopAdded: [],
     stopRemoved: [],
     ownRoles: [],
+    lowerIncome: [],
+    growthGoals: [],
   };
   let roles = options.searchRoles ?? ['Руководитель разработки'];
   let profile: Record<string, unknown> = {
@@ -196,6 +207,28 @@ export async function openCareer(
       }
     }
     return route.fulfill({ json: { data: { stopCompanies: stop } } });
+  });
+  await page.route(`${API}/candidate/career/profession-path`, (route) =>
+    route.fulfill({ json: { data: options.professionPath ?? { state: 'no_target' } } }),
+  );
+  await page.route(`${API}/candidate/career/profession-path/lower-income`, (route) => {
+    const body = route.request().postDataJSON() as { answer: string };
+    calls.lowerIncome.push(body);
+    return route.fulfill({ json: { data: { lowerIncome: body.answer } } });
+  });
+  await page.route(`${API}/candidate/profile/income`, (route) =>
+    route.fulfill({ json: { data: { current: options.income ?? null, expected: null } } }),
+  );
+  let growth = options.growth ?? { state: 'no_workplace' };
+  await page.route(`${API}/candidate/career/growth`, (route) =>
+    route.fulfill({ json: { data: growth } }),
+  );
+  await page.route(`${API}/candidate/career/growth/goal`, (route) => {
+    const body = route.request().postDataJSON() as { goal: string };
+    calls.growthGoals.push(body);
+    if (options.growthAfter) growth = options.growthAfter;
+    const goal = { kind: body.goal, chosenAt: '2026-11-19T09:00:00.000Z' };
+    return route.fulfill({ json: { data: { goal } } });
   });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   return calls;

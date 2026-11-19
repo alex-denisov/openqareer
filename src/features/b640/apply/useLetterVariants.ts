@@ -20,7 +20,8 @@ export interface LetterVariantsState {
   /** Идентификатор выбранного варианта; `null` — в поле первое письмо. */
   readonly selectedId: string | null;
   /** Список вариантов прочитан. */
-  readonly ready: boolean;
+  /** Список вариантов прочитан или не прочитался: одобренный текст можно ставить в поле (B716). */
+  readonly settled: boolean;
   /** Вернуть одобренный текст (B711): вариант встаёт выбранным, в поле — одобренный текст. */
   readonly restore: (variantId: string | null, body: string) => void;
   readonly remaining: number;
@@ -130,7 +131,7 @@ export function useLetterVariants(vacancyId: string, letter: LetterScreenState):
     total: 1 + stored.length,
     index: current,
     ...chosenOf(stored, current),
-    ready: state.status === 'ready',
+    settled: state.status !== 'loading',
     restore: restorer(stored, moveTo, (body, at) => { setText(body); setIndex(at); }),
     remaining: state.data?.remaining ?? MAX_TEXT_VARIANTS,
     locked: loading || !pitch,
