@@ -7,6 +7,7 @@ import type {
   B640ContactState,
 } from '../../shared/b640Contacts';
 import { candidateCompanyKey, type ConnectionCircleWorkplace } from './candidateCompanies';
+import { hiringRank } from './contactHiringRole';
 
 /** Контакт кандидата в том виде, что читает список: без почты и телефона. */
 export interface B640ContactSource {
@@ -40,7 +41,10 @@ export interface B640ContactListInput {
   readonly linkedinImport?: B640ContactList['linkedinImport'];
 }
 
-type Row = B640Contact & { readonly updatedAt: string };
+type Row = B640Contact & { readonly updatedAt: string; readonly rank: 0 | 1 };
+
+/** What the old import routes write as `relationship` when the file says nothing: it is not a path (B645). */
+const IMPORT_PLACEHOLDER = 'Контакт из импортированного списка LinkedIn';
 
 const year = (value: string | null | undefined): string | null => /^\d{4}/u.exec(value ?? '')?.[0] ?? null;
 
@@ -73,7 +77,10 @@ function linkOf(
 ): Pick<B640Contact, 'link' | 'linkNote'> {
   const shared = sharedWorkplaceNote(contact, own);
   if (shared) return { link: 'direct', linkNote: shared };
-  if (contact.source === 'manual') return { link: 'direct', linkNote: contact.relationship.trim() || null };
+  const relationship = contact.relationship.trim();
+  if (contact.source === 'manual' && relationship && relationship !== IMPORT_PLACEHOLDER) {
+    return { link: 'direct', linkNote: relationship };
+  }
   const through = introducers.get(contact.id);
   if (through) return { link: 'intro', linkNote: `общий знакомый: ${through}` };
   return { link: 'none', linkNote: null };
@@ -93,9 +100,12 @@ function introducersOf(contacts: readonly B640ContactSource[]): Map<string, stri
 function toRows(input: B640ContactListInput): Row[] {
   const own = new Map(input.candidateWorkplaces.map((place) => [candidateCompanyKey(place.companyName), place]));
   const introducers = introducersOf(input.contacts);
-  return input.contacts.map((contact) => {
+  // B645: the screen is «люди, которые нанимают»; the others still count as introducers above.
+  return input.contacts.flatMap((contact) => {
+    const rank = hiringRank(contact.roleTitle);
+    if (rank === null) return [];
     const stored = input.statuses.get(contact.id);
-    return {
+    return [{
       id: contact.id,
       fullName: contact.fullName,
       roleTitle: contact.roleTitle,
@@ -104,7 +114,8 @@ function toRows(input: B640ContactListInput): Row[] {
       status: stored ? { state: stored.state, at: stored.at } : { state: 'none', at: null },
       inSelection: contact.companyName !== '' && input.selectionKeys.has(candidateCompanyKey(contact.companyName)),
       updatedAt: contact.updatedAt,
-    };
+      rank,
+    }];
   });
 }
 
@@ -114,7 +125,11 @@ const byName = (a: Row, b: Row): number =>
 
 const SORTS: Readonly<Record<B640ContactSort, (a: Row, b: Row) => number>> = {
   name: byName,
-  selection: (a, b) => Number(b.inSelection) - Number(a.inSelection) || byName(a, b),
+  selection: (a, b) =>
+    Number(b.inSelection) - Number(a.inSelection) ||
+    a.companyName.localeCompare(b.companyName, 'ru-RU') ||
+    a.rank - b.rank ||
+    byName(a, b),
   recent: (a, b) =>
     (b.status.at ?? '').localeCompare(a.status.at ?? '') ||
     b.updatedAt.localeCompare(a.updatedAt) ||
@@ -154,7 +169,7 @@ export function buildB640ContactList(input: B640ContactListInput, query: B640Con
   const page = filtered.slice(query.offset, query.offset + query.limit);
   const shown = query.offset + page.length;
   return {
-    items: page.map(({ updatedAt: _updatedAt, ...contact }) => contact),
+    items: page.map(({ updatedAt: _updatedAt, rank: _rank, ...contact }) => contact),
     total: filtered.length,
     offset: query.offset,
     nextOffset: shown < filtered.length ? shown : null,

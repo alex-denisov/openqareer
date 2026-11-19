@@ -1,4 +1,4 @@
-import type { CandidateConnectionContact } from '../../../outreach/connectionContactsApi';
+import type { B640Contact } from '../../../../../shared/b640Contacts';
 import { pluralRu } from '../../vacancies/format';
 
 const COUNT = new Intl.NumberFormat('ru-RU');
@@ -7,18 +7,18 @@ export const formatCount = (count: number): string => COUNT.format(count);
 
 /** «1 500 контактов» — заголовок списка. */
 export const contactsTitle = (count: number): string =>
-  `${formatCount(count)} ${pluralRu(count, 'контакт', 'контакта', 'контактов')}`;
+  `${formatCount(count)} ${contactsWord(count)}`;
+
+/** Слово после числа: «контактов», «контакт», «контакта». */
+export const contactsWord = (count: number): string => pluralRu(count, 'контакт', 'контакта', 'контактов');
 
 /** «руководитель найма · Гринкод»; пустые части не выводим. */
-export function workLine(contact: CandidateConnectionContact): string {
+export function workLine(contact: Pick<B640Contact, 'roleTitle' | 'companyName'>): string {
   return [contact.roleTitle, contact.companyName].map((part) => part.trim()).filter(Boolean).join(' · ');
 }
 
 /** Дописывает новую порцию, не дублируя уже загруженных людей. */
-export function appendContacts(
-  before: readonly CandidateConnectionContact[],
-  next: readonly CandidateConnectionContact[],
-): readonly CandidateConnectionContact[] {
+export function appendContacts(before: readonly B640Contact[], next: readonly B640Contact[]): readonly B640Contact[] {
   const known = new Set(before.map((contact) => contact.id));
   return [...before, ...next.filter((contact) => !known.has(contact.id))];
 }

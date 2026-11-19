@@ -17,7 +17,7 @@ async function setup() {
       headers: { ...(user ? { authorization: `Bearer ${h.tokens[user]}` } : {}), origin: 'http://localhost:3000' },
     });
   const seed = (id: string, body: object, user: HarnessUser = 'flagged.test') =>
-    send('PUT', `${OLD}/${id}`, user, { roleTitle: '', relationship: 'Коллега', strength: 'strong', ...body });
+    send('PUT', `${OLD}/${id}`, user, { roleTitle: 'Рекрутер', relationship: 'Коллега', strength: 'strong', ...body });
   return { h, send, seed };
 }
 

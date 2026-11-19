@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { logout, type AuthUser } from '../coach/coachApi';
+import { startHhRaisePoller } from './apply/hh/hhRaisePoller';
 import { panelViewOf, type PanelView } from './consultant/panelRoute';
 import { B640_HOME_PATH, B640_TAB_SETS, matchNode, type B640Match } from './routes';
 import { ToastHost } from './kit/Toast';
@@ -22,6 +23,8 @@ export interface CabinetB640Props {
  */
 export function CabinetB640({ session, path, onNavigate, onSessionChange }: CabinetB640Props) {
   const { theme, setTheme } = useB640Theme();
+  // B699: автоподнятие резюме hh.ru; только в настольном приложении, в браузере не запускается.
+  useEffect(() => startHhRaisePoller(), []);
   // `App` ведёт путь; параметры после `?` читаются из адреса окна, чтобы «Назад»
   // и «Вперёд» браузера между ними тоже перерисовывали экран.
   const pathname = path.split(/[?#]/u)[0];
