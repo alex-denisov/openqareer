@@ -4,7 +4,7 @@ import { Icon, Link } from '../kit';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
-import { loadRoles, type RolesData } from './careerApi';
+import { loadRoles, loadSkillStrip, type RolesData } from './careerApi';
 import { conditionsPath, pageAttrs } from './careerPaths';
 import { RolePickDialog } from './RolePickDialog';
 import { RoleTable } from './RoleTable';
@@ -59,6 +59,13 @@ function SearchRoleStrip({
   );
 }
 
+/** Полоса «Проверьте N навыков» читается отдельно: таблица ролей её не ждёт. */
+function SkillStripLoad() {
+  const strip = useLoad(loadSkillStrip);
+  if (strip.state !== 'ready' || !strip.data) return null;
+  return <SkillStrip gap={strip.data.gap} role={strip.data.role} />;
+}
+
 /** S9 «Карьера» при «Ищу работу»: роль поиска, проверка навыков, роли по профилю. */
 export function RolesView({ node, data }: { readonly node: B640Node; readonly data: RolesData }) {
   const { search } = useShell();
@@ -67,7 +74,7 @@ export function RolesView({ node, data }: { readonly node: B640Node; readonly da
   return (
     <div className="page" {...pageAttrs(node)}>
       <SearchRoleStrip data={data} onEdit={() => setPicking(true)} />
-      {data.skillRole ? <SkillStrip gap={data.skillGap} role={data.skillRole} /> : null}
+      <SkillStripLoad />
       <RoleTable rows={data.rows} />
       <Link className="row-act is-sm" to={conditionsPath()}>
         <Icon name="sliders" />

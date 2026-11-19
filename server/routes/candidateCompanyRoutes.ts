@@ -19,6 +19,7 @@ import { createCandidateWindowCache } from './candidateWindowCache';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
+import { VacancyMatchUnavailable } from '../vacancies/vacancyMatchReader';
 import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
 import { readTargetLevel } from './vacancyRoleContext';
 import { companyCoachContextText } from './companyCoachContext';
@@ -72,6 +73,8 @@ interface CandidateCompanyContext {
     readonly contactsImported: boolean;
   };
   readonly searchConsentGranted: boolean;
+  /** Подборка не прочиталась вовремя: компании без её вакансий, счётчики догрузятся (B645). */
+  readonly vacanciesPending?: boolean;
 }
 
 function safeHttpsUrl(value: string): string {
@@ -244,11 +247,27 @@ function linkedinStatus(
   return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
+/** Подборка или, если читатель пула не успел, пустая подборка с отметкой «догружается». */
+async function readSelectionOrPending(
+  deps: RouteDeps,
+  candidateId: string,
+): Promise<SelectionProjection & { readonly pending: boolean }> {
+  try {
+    return { ...(await readSelection(deps, candidateId)), pending: false };
+  } catch (error) {
+    if (!(error instanceof VacancyMatchUnavailable)) throw error;
+    return { vacancies: [], pending: true };
+  }
+}
+
 export async function companyContext(
   deps: RouteDeps,
   candidateId: string,
+  options: { readonly allowPendingVacancies?: boolean } = {},
 ): Promise<CandidateCompanyContext> {
-  const { vacancies } = await readSelection(deps, candidateId);
+  const { vacancies, pending } = options.allowPendingVacancies
+    ? await readSelectionOrPending(deps, candidateId)
+    : { ...(await readSelection(deps, candidateId)), pending: false };
   const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
   // Макет 13: у компании только вакансии подборки, пул компании не подмешивается (28.10).
   const vacancyCompanyKeys = new Map(
@@ -282,6 +301,7 @@ export async function companyContext(
     vacancies,
     linkedin: linkedinStatus(deps, candidateId, contactsImportedAt),
     searchConsentGranted: deps.searchConsentRepo?.get(candidateId).granted ?? false,
+    ...(pending ? { vacanciesPending: true } : {}),
   };
 }
 

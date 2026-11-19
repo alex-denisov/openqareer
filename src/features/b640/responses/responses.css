@@ -22,4 +22,14 @@
   .b640 .meter > .rs-w-90 { inline-size: 90%; }
   .b640 .meter > .rs-w-95 { inline-size: 95%; }
   .b640 .meter > .rs-w-100 { inline-size: 100%; }
+  /* B645: счётчик вакансий догружается — спокойная плашка на месте числа, без «0». */
+  .b640 .cw-wait {
+    display: inline-block;
+    inline-size: 9ch;
+    block-size: 1em;
+    border-radius: var(--career-radius-sm);
+    background: var(--career-line);
+    vertical-align: middle;
+  }
+  .b640 .cw-wait.is-num { inline-size: 2ch; }
 }

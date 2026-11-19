@@ -71,4 +71,15 @@ describe('linkedinModel', () => {
     expect(currentPostDraft(all)?.id).toBe('b');
     expect(currentPostDraft([draft('a', 'post', 'published')])).toBeNull();
   });
+
+  it('пост из ссылки «Сегодня» открывается сам, а не первый (B645 s03)', () => {
+    const all = [
+      draft('a', 'post', 'draft'),
+      draft('b', 'post', 'copied'),
+      draft('c', 'comment', 'draft'),
+    ];
+    expect(currentPostDraft(all, 'b')?.id).toBe('b');
+    expect(currentPostDraft(all, 'c')?.id).toBe('a');
+    expect(currentPostDraft(all, 'нет')?.id).toBe('a');
+  });
 });
