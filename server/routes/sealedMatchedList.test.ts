@@ -332,6 +332,67 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect(sealedListText(list([]), 'c')).toBeUndefined();
   });
 
+  it('B725: the lean variant keeps the first 5 pages of 20 lean rows, and gives way first over the limit', () => {
+    const list = (rows: MatchedVacancyItem[]) =>
+      ({ filtered: rows, pageOffsets: rows.map((_, index) => index), facets: {}, campaignWithHypotheses: {} }) as never;
+    const sealed = JSON.parse(sealedListText(list(pool(130)), 'c')!);
+    expect(sealed.leanPages.map((page: { offset: number }) => page.offset)).toEqual([0, 20, 40, 60, 80]);
+    expect(sealed.leanPages[0].items).toHaveLength(20);
+    expect(sealed.leanPages[0].items[0].cluster.descriptionSummary).toBe('');
+
+    // ~25 KB a row: the usual 5 pages of one row fit, the lean pages of 20 do not all fit.
+    const wide = Array.from({ length: 100 }, (_, index) => ({
+      ...row(`w-${index}`),
+      explanation: { ...row(`w-${index}`).explanation, summary: 'ж'.repeat(12_000) },
+    })) as MatchedVacancyItem[];
+    const trimmed = JSON.parse(sealedListText(list(wide), 'c')!);
+    expect(trimmed.pages).toHaveLength(5);
+    expect(trimmed.leanPages.length).toBeLessThan(5);
+  });
+
+  it('B725: a B640 account is answered from the lean sealed pages', async () => {
+    const { createB640Harness, poolItem } = await import('../testHelpers/b640VacancyHarness');
+    // ~2.6 KB a row: a byte page of 40 KB holds fewer than 20, so only the lean pages give 20.
+    const rows = Array.from({ length: 45 }, (_, index) => {
+      const item = poolItem({ id: `v-${index}`, title: `Инженер ${index}`, company: 'К' });
+      return { ...item, explanation: { ...item.explanation, summary: 'с'.repeat(1_300) } } as MatchedVacancyItem;
+    });
+    const lines: string[] = [];
+    const harness = await createB640Harness({ pool: () => rows, logLines: lines });
+    try {
+      const url = '/api/v1/candidate/matched-vacancies?offset=20';
+      const live = (await harness.get(url, 'flagged.test')).json();
+      await vi.waitFor(() => expect(lines.some((line) => line.includes('matched-list-sealed'))).toBe(true));
+      forgetMatchedListsForTests();
+      const sealed = (await harness.get(url, 'flagged.test')).json();
+      const timing = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
+      expect(timing.listServed).toBe('sealed');
+      expect(sealed.data).toHaveLength(20);
+      expect(sealed.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        live.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+      const first = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
+      expect(first.meta.pageOffsets).toEqual([0, 20, 40]);
+
+      // A row sealed before B725 has no lean pages: the first lean page comes from its usual ones.
+      const id = harness.candidateIds['flagged.test'];
+      const stored = harness.candidates.sealedMatchedLists.read(id, 0)!;
+      const { leanPages: _lean, ...older } = JSON.parse(stored.text);
+      harness.candidates.sealedMatchedLists.write(id, Date.now(), JSON.stringify(older));
+      forgetMatchedListsForTests();
+      const fromUsual = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
+      const lastTiming = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
+      expect(lastTiming.listServed).toBe('sealed');
+      expect(fromUsual.data).toHaveLength(20);
+      expect(fromUsual.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        first.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+      expect(fromUsual.meta.pageOffsets).toEqual([0, 20, 40]);
+    } finally {
+      await harness.close();
+    }
+  });
+
   it('the switch off stops the write', async () => {
     const { candidateStore, candidate } = await sealedApp();
     const writing = vi.spyOn(candidateStore.sealedMatchedLists, 'write');

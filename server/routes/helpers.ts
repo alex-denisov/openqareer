@@ -163,6 +163,17 @@ export function authenticateCandidate(
   authService: SessionAuth,
   config: ServerConfig,
 ): CandidateIdentity | null {
+  return authenticateCandidateSession(request, reply, candidateStore, authService, config)?.candidate ?? null;
+}
+
+/** The candidate and the session it came with, from one session read (B725: the B640 flag). */
+export function authenticateCandidateSession(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateStore: CandidateStore,
+  authService: SessionAuth,
+  config: ServerConfig,
+): { readonly candidate: CandidateIdentity; readonly principal: AuthPrincipal | null } | null {
   const authorization = request.headers.authorization;
   const accessToken = authorization?.startsWith('Bearer ')
     ? authorization.slice('Bearer '.length)
@@ -176,7 +187,7 @@ export function authenticateCandidate(
     sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия кандидата.', false);
     return null;
   }
-  return candidate;
+  return { candidate, principal };
 }
 
 /** Stop every candidate AI boundary at the server when the stored account is Free. */
