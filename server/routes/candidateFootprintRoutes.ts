@@ -1,3 +1,4 @@
+import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
 import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -340,4 +341,5 @@ export function registerCandidateFootprintRoutes(app: FastifyInstance, deps: Rou
   registerCandidateFootprintChecklistRoutes(app, deps);
   // B667: сводка по категориям риска; свой маршрут закрыт флагом B640.
   registerFootprintRiskRoutes(app, deps);
+  registerFootprintRemovalRoutes(app, deps);
 }

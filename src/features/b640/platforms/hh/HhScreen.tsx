@@ -5,6 +5,7 @@ import { buildNodePath } from '../../routes';
 import type { SectionProps } from '../../sections';
 import { useLoad } from '../../today/useLoad';
 import { PlatformRetry } from '../PlatformRetry';
+import { HhRaiseStatus } from './HhRaiseStatus';
 import { buildHhView, type HhStat, type HhUsage, type HhView } from './hhModel';
 
 interface HhData {
@@ -80,6 +81,7 @@ function Body({ load }: { readonly load: ReturnType<typeof useLoad<HhData>> }) {
       <h2 className="lead-title" id="hh-t">
         Резюме на hh.ru
       </h2>
+      <HhRaiseStatus />
       <Stats stats={load.data.view.stats} />
     </section>
   );
