@@ -347,6 +347,15 @@ describe('t03 «Подписка и оплата»', () => {
     expect(button(root, 'Выбрать тариф')?.getAttribute('href')).toBe('/app/tariffs');
   });
 
+  it('платный тариф без оплаты: строка тарифа говорит об этом, «Выбрать тариф» под платежами нет', async () => {
+    api.getSummary.mockResolvedValue({ ...free, currentPlan: 'max' });
+    api.getReceipts.mockResolvedValue({ receipts: [], nextCursor: null });
+    const root = await open(<BillingScreen node={node('t03')} />);
+    expect(n(root.querySelector('.set-row .set-v')?.textContent)).toBe('2 000 откликов в месяц · подключён без оплаты');
+    expect(root.textContent).toContain('Платежей нет');
+    expect(button(root, 'Выбрать тариф')).toBeNull();
+  });
+
   it('платежи по 20: «Показать ещё» дочитывает; небезопасная ссылка чека не показывается', async () => {
     api.getReceipts
       .mockResolvedValueOnce({ receipts: [receipt(1, 'javascript:alert(1)')], nextCursor: 'next' })

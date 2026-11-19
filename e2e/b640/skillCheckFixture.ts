@@ -133,6 +133,10 @@ export interface SkillOptions {
   readonly run?: SkillRun;
   /** Ответ на кейс падает столько раз, потом проходит. */
   readonly failAnswers?: number;
+  /** Роли поиска кандидата; по умолчанию одна — `ROLE`. */
+  readonly searchRoles?: readonly string[];
+  /** Роли, требований которых мало: `insufficient_requirements`, сбор не идёт. */
+  readonly insufficient?: readonly string[];
 }
 
 function answered(run: SkillRun, caseId: string, answer: string): SkillRun {
@@ -205,9 +209,31 @@ export async function openSkillCheck(
     cases: [],
   };
   let started = !options.ready;
-  await page.route(`${BASE}/current*`, (route) =>
-    route.fulfill({ json: { data: started ? { state: 'run', run } : ready } }),
+  const searchRoles = options.searchRoles ?? [ROLE];
+  await page.route('**/api/v1/candidate/campaign', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          roles: { value: searchRoles, origin: 'explicit' },
+          regions: { value: [], origin: 'default' },
+        },
+      },
+    }),
   );
+  await page.route(`${BASE}/current*`, (route) => {
+    const role = new URL(route.request().url()).searchParams.get('role') ?? ROLE;
+    if (options.insufficient?.includes(role)) {
+      const data = {
+        state: 'insufficient_requirements',
+        roleTitle: role,
+        sampleSize: 12,
+        requirementCount: 1,
+        collecting: false,
+      };
+      return route.fulfill({ json: { data } });
+    }
+    return route.fulfill({ json: { data: started ? { state: 'run', run } : ready } });
+  });
   await page.route(`${BASE}/start`, (route) => {
     started = true;
     calls.posts.push({ path: 'start', body: route.request().postDataJSON() });

@@ -7,6 +7,8 @@ export interface DiaryCalls {
   deleted: string[];
   weeks: unknown[];
   measurements: unknown[];
+  goals: unknown[];
+  archived: unknown[];
 }
 
 function isoDay(offsetDays: number): string {
@@ -102,10 +104,34 @@ const CARDS = [
   {
     ...goal('goal-2', 'Закрыть 2 вакансии в команду', 'вакансий', 0, 2, 0),
     dueDate: isoDay(70),
+    risk: { status: 'at_risk', rule: 'linear_progress_v1', explanation: '' },
     details: { setBy: 'manager', agreedOn: null, weight: null, archive: null },
     indicators: [goal('ind-2', 'Закрыто вакансий', '', 0, 2, 0)],
   },
 ];
+
+const ARCHIVED = [
+  {
+    ...goal('goal-3', 'Перевести сборку на общий конвейер', '', 0, 1, null),
+    details: {
+      setBy: 'manager',
+      agreedOn: null,
+      weight: null,
+      archive: { archivedAt: '', reason: 'Банк меняет платформу' },
+    },
+    indicators: [],
+  },
+];
+
+const HISTORY = [7, 9, 11, 14].map((value, index) => ({
+  id: `h${index}`,
+  goalId: 'ind-1',
+  value,
+  measuredAt: isoDay(-10 - index * 7),
+  note: index === 1 ? 'Убрали ручное согласование' : null,
+  source: 'candidate_entered',
+  createdAt: '',
+}));
 
 function weekDraft(weekStart: string, items: ReturnType<typeof entries>) {
   const week = items.filter((item) => item.weekStart === weekStart);
@@ -143,11 +169,25 @@ async function handle(
       },
     });
   }
-  if (path === '/goal-cards')
-    return route.fulfill({ json: { data: { items: CARDS, archived: [] } } });
+  if (path === '/goal-cards' && method === 'GET')
+    return route.fulfill({ json: { data: { items: CARDS, archived: ARCHIVED } } });
+  if (path === '/goal-cards' && method === 'POST') {
+    calls.goals.push(request.postDataJSON());
+    return route.fulfill({ status: 201, json: { data: { ...CARDS[0], id: 'goal-new' } } });
+  }
+  const archive = /^\/goal-cards\/([^/]+)\/archive$/u.exec(path);
+  if (archive) {
+    calls.archived.push({ id: archive[1], method, body: request.postDataJSON() });
+    return route.fulfill({ json: { data: CARDS[0] } });
+  }
+  if (/^\/goals\/[^/]+\/measurements$/u.test(path) && method === 'GET')
+    return route.fulfill({ json: { data: { items: HISTORY, nextCursor: null } } });
   if (path === '/entries' && method === 'GET') {
     const kind = url.searchParams.get('kind');
-    const items = state.items.filter((item) => !kind || item.kind === kind);
+    const goalId = url.searchParams.get('goalId');
+    const items = state.items.filter(
+      (item) => (!kind || item.kind === kind) && (!goalId || item.goalId === goalId),
+    );
     return route.fulfill({ json: { data: { items, nextCursor: null, summaries: [] } } });
   }
   if (path === '/entries' && method === 'POST') {
@@ -195,7 +235,14 @@ async function handle(
 
 /** Ставит маршруты дневника поверх общего фикстура кабинета. */
 export async function mockDiary(page: Page): Promise<DiaryCalls> {
-  const calls: DiaryCalls = { created: [], deleted: [], weeks: [], measurements: [] };
+  const calls: DiaryCalls = {
+    created: [],
+    deleted: [],
+    weeks: [],
+    measurements: [],
+    goals: [],
+    archived: [],
+  };
   const state = { items: entries() };
   await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls, state));
   return calls;

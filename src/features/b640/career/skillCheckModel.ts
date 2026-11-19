@@ -1,3 +1,4 @@
+import { criterionLabel } from '../../skills/roleSkillLabels';
 import type {
   RoleSkillAssessmentRun,
   RoleSkillEvaluation,
@@ -83,3 +84,8 @@ export function skillCheckPath(role?: string): string {
   const path = buildNodePath('c04');
   return role ? `${path}?role=${encodeURIComponent(role)}` : path;
 }
+
+/** Три пункта оценки кейса — `CASE_CRITERIA` на сервере, подписи из прежнего экрана навыков. */
+export const CASE_CRITERIA_LABELS: readonly string[] = ['context', 'actions', 'verification'].map(
+  criterionLabel,
+);
