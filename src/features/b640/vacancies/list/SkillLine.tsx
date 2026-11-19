@@ -9,8 +9,8 @@ export function skillLineText(count: number): string {
 }
 
 /** Сколько частых требований роли поиска ещё не подтверждено в профиле. */
-function useSkillGap(roles: readonly string[]): number {
-  const [gap, setGap] = useState(0);
+function useSkillGap(roles: readonly string[]): { readonly gap: number; readonly role: string | null } {
+  const [gap, setGap] = useState<{ readonly gap: number; readonly role: string | null }>({ gap: 0, role: null });
   const key = roles.join('\n');
   const titles = useMemo(() => (key ? key.split('\n') : []), [key]);
   useEffect(() => {
@@ -27,11 +27,12 @@ function useSkillGap(roles: readonly string[]): number {
 
 /** Строка под фильтрами: ссылка на проверку навыков роли поиска. Нет пробелов — строки нет. */
 export function SkillLine({ roles }: { readonly roles: readonly string[] }) {
-  const gap = useSkillGap(roles);
-  if (gap <= 0) return null;
+  // The link goes to the role whose check is ready, not to the first one: otherwise it is a dead end.
+  const { gap, role } = useSkillGap(roles);
+  if (gap <= 0 || !role) return null;
   return (
     <p className="vt-skill">
-      <Link className="row-act is-sm" to={skillCheckPath(roles[0])}>
+      <Link className="row-act is-sm" to={skillCheckPath(role)}>
         <Icon name="checkc" />
         {skillLineText(gap)}
       </Link>
