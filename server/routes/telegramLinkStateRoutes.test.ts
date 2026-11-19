@@ -101,6 +101,22 @@ describe('B690: состояние привязки Telegram', () => {
     expect(tables).toEqual([]);
   });
 
+  it('account erasure removes the stored name', async () => {
+    const { app, issue, databasePath } = await setup();
+    issue('flagged', new Date(Date.now() + 60_000).toISOString());
+    await confirm(app, { username: 'msokolova_dev' });
+    const { SqliteNotificationRepository } = await import('../data/sqliteNotificationRepository');
+    const { SealedText } = await import('../data/sealedText');
+    const repository = new SqliteNotificationRepository({ databasePath }, new SealedText(Buffer.alloc(32, 7)));
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    const before = database.prepare('SELECT candidate_id FROM candidate_telegram_usernames').all() as { candidate_id: string }[];
+    expect(before).toHaveLength(1);
+    repository.deleteByCandidate(before[0].candidate_id);
+    expect(database.prepare('SELECT * FROM candidate_telegram_usernames').all()).toEqual([]);
+    database.close();
+    repository.close();
+  });
+
   it('a strange sender shape still links the chat, just without a name', async () => {
     const { app, issue } = await setup();
     issue('flagged', new Date(Date.now() + 60_000).toISOString());

@@ -535,6 +535,10 @@ export class SqliteNotificationRepository {
     this.database.prepare('DELETE FROM candidate_notification_telegram_chats WHERE candidate_id = ?').run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_telegram_link_codes WHERE candidate_id = ?').run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_unsubscribe_tokens WHERE candidate_id = ?').run(candidateId);
+    // B690: имя в Telegram живёт в своей таблице, она появляется только при первой записи.
+    if (this.database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_telegram_usernames'").get()) {
+      this.database.prepare('DELETE FROM candidate_telegram_usernames WHERE candidate_id = ?').run(candidateId);
+    }
     return removed;
   }
 

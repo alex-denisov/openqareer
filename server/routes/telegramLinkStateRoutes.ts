@@ -20,6 +20,8 @@ import { sendError } from './helpers';
 interface Bound {
   readonly store: () => SqliteTelegramUsernameStore;
   readonly flagged: (candidateId: string) => boolean;
+  /** Таблица имён уже есть: стирать можно без флага, не создавая её. */
+  readonly hasNames: () => boolean;
   readonly close: () => void;
 }
 
@@ -43,13 +45,25 @@ function bind(deps: RouteDeps): Bound {
       lookup ??= candidateFlagLookup(users, deps.config);
       return lookup(candidateId);
     },
+    hasNames: () => {
+      if (store) return true;
+      users ??= new DatabaseSync(deps.config.databasePath, { readOnly: true });
+      return Boolean(users.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_telegram_usernames'").get());
+    },
     close: () => {
-      store?.close();
-      users?.close();
+      try {
+        store?.close();
+      } finally {
+        users?.close();
+      }
     },
   };
   bindings.set(deps, bound);
   return bound;
+}
+
+function logFailure(log: FastifyBaseLogger, candidateId: string, error: unknown): void {
+  log.error({ code: 'telegram_username_failed', candidateId, failureType: error instanceof Error ? error.name : 'UnknownError' }, 'candidate-telegram-username-failed');
 }
 
 /** Вебхук: после привязки запомнить имя в Telegram, если оно есть и у кандидата новый кабинет. */
@@ -57,17 +71,26 @@ export function rememberTelegramUsername(deps: RouteDeps, log: FastifyBaseLogger
   try {
     const username = normalizeTelegramUsername(raw);
     const bound = bind(deps);
-    if (!bound.flagged(candidateId)) return;
-    if (username) bound.store().save(candidateId, username);
-    else bound.store().remove(candidateId);
+    if (username && bound.flagged(candidateId)) bound.store().save(candidateId, username);
+    else if (bound.hasNames()) bound.store().remove(candidateId);
   } catch (error) {
-    log.error({ code: 'telegram_username_save_failed', candidateId, failureType: error instanceof Error ? error.name : 'UnknownError' }, 'candidate-telegram-username-save-failed');
+    logFailure(log, candidateId, error);
   }
 }
 
-/** Отвязка: имя больше не показывается. */
+/** Отвязка: имя стирается и без флага, если оно когда-то было записано. */
 export function forgetTelegramUsername(deps: RouteDeps, log: FastifyBaseLogger, candidateId: string): void {
   rememberTelegramUsername(deps, log, candidateId, null);
+}
+
+function readUsername(deps: RouteDeps, log: FastifyBaseLogger, candidateId: string): string | null {
+  try {
+    return bind(deps).store().get(candidateId);
+  } catch (error) {
+    // Сменился ключ или запись повреждена: строка покажет «Telegram подключён» без имени.
+    logFailure(log, candidateId, error);
+    return null;
+  }
 }
 
 async function handleState(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -81,7 +104,7 @@ async function handleState(deps: RouteDeps, request: FastifyRequest, reply: Fast
     codeExpiresAt: repository.getTelegramLinkCodeExpiry(candidateId),
     now: new Date().toISOString(),
   });
-  const username = link.state === 'connected' ? bind(deps).store().get(candidateId) : null;
+  const username = link.state === 'connected' ? readUsername(deps, request.log, candidateId) : null;
   reply.header('Cache-Control', 'private, no-store');
   return { data: { ...link, username: username ? `@${username}` : null }, meta: { requestId: request.id } };
 }
@@ -90,7 +113,8 @@ export function registerTelegramLinkStateRoutes(app: FastifyInstance, deps: Rout
   app.addHook('onClose', () => bindings.get(deps)?.close());
   app.get(
     '/api/v1/candidate/notifications/telegram/state',
-    { config: { rateLimit: { max: 600, timeWindow: '1 hour' } } },
+    // Экран опрашивает раз в 3 с, пока ждёт подтверждения: до 1200 чтений в час с вкладки.
+    { config: { rateLimit: { max: 1500, timeWindow: '1 hour' } } },
     (request, reply) => handleState(deps, request, reply),
   );
 }
