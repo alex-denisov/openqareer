@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { clusterKeys, clusterVacancies } from './vacancyDeduplicator';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 function vacancy(index: number): UnifiedVacancy {
   const url = `https://jobs.example/${index}`;
@@ -120,7 +121,7 @@ describe('vacancy_cluster_keys (B230)', () => {
     const third = new SqliteVacancyPoolStore({ databasePath: path });
     expect(third.clusterKeysReady()).toBe(true);
     third.close();
-  }, 15_000);
+  }, timeBudget(15_000));
 
   it('a fresh database is ready at once: nothing to backfill', () => {
     const store = new SqliteVacancyPoolStore({ databasePath: freshPath() });

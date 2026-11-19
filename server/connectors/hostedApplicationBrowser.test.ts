@@ -4,6 +4,7 @@ import { chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ConnectorHarness } from './connectorHarness';
 import { HostedApplicationBrowserExecutor } from './hostedApplicationBrowser';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const fixtureUrl = new URL('./fixtures/syntheticHostedApplication.html', import.meta.url);
 const request = {
@@ -26,7 +27,7 @@ describe('hosted application browser executor', { timeout: 30_000 }, () => {
 
   afterAll(async () => {
     if (browser) await browser.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   it('submits a synthetic hosted form once and emits a normalized receipt', async () => {
     const session = await HostedApplicationBrowserExecutor.create(browser, {

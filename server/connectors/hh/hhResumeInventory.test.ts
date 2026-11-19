@@ -2,6 +2,7 @@ import type { Browser, Page } from 'playwright';
 import { chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { hasResumeId, readHhResumeInventory } from './hhResumeInventory';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 const ownerResumeId = '260801e7ff10eeac690039ed1f4f655a417a35';
 
@@ -12,11 +13,11 @@ describe('hh.ru resume inventory', () => {
   beforeAll(async () => {
     browser = await chromium.launch({ headless: true });
     page = await browser.newPage();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   afterAll(async () => {
     if (browser) await browser.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   it('keeps hh.ru wording and separates a counter label from its number', async () => {
     await page.setContent(`

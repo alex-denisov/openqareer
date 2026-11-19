@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ATS_REFRESH_INTERVAL_MINUTES, atsBoardSource, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { hasJsonAdapter } from './jsonSourceAdapters';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 describe('доска работодателя как источник', () => {
   it('строит источник с замеренным адресом и именем компании', () => {
@@ -85,7 +86,7 @@ describe('доски работодателей подключены к прод
     expect(board).toBeDefined();
     await engine.syncSource(board!.id);
     expect(asked).toContain(board!.targetUrl);
-  }, 30_000);
+  }, timeBudget(30_000));
 });
 
 describe('ATS board refresh interval (B628 throughput)', () => {
