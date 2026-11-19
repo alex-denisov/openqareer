@@ -123,6 +123,19 @@ describe('чтение подбора страницами', () => {
     expect(second.meta.nextOffset).toBeNull();
   });
 
+  it('B725: кампания едет только с первой страницей — клиент читает её только там', async () => {
+    const { app, authorization } = await createPagingApp();
+    const get = (offset: number) =>
+      app.inject({
+        url: `/api/v1/candidate/matched-vacancies?offset=${offset}`,
+        headers: { authorization },
+      });
+    expect((await get(0)).json().meta.campaign).toBeDefined();
+    const second = (await get(20)).json();
+    expect(second.data).toHaveLength(20);
+    expect(second.meta.campaign).toBeUndefined();
+  });
+
   it('serves session and connections while a matching read is still running', async () => {
     let finish!: () => void;
     const waiting = new Promise<void>((resolve) => {

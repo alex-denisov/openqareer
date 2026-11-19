@@ -348,7 +348,8 @@ function matchedVacancyResponse(
       offset: response.page.offset,
       nextOffset: response.page.nextOffset,
       ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
-      campaign: campaignMeta(response.campaignWithHypotheses),
+      // B725: 25 КБ кампании на каждой из 154 страниц; клиент читает её только с первой.
+      ...(response.page.offset === 0 ? { campaign: campaignMeta(response.campaignWithHypotheses) } : {}),
       candidateLevel: targetLevel ?? null,
       ...(response.facets ? { facets: response.facets } : {}),
     },
