@@ -387,7 +387,7 @@ describe('n06 «Приложение»', () => {
     const root = await open(<AppScreen node={node('n06')} />);
     const group = root.querySelector('[role=radiogroup][aria-label="Валюта зарплат"]') as HTMLElement;
     const options = [...group.querySelectorAll('label')];
-    expect(options.map((item) => item.textContent)).toEqual(['₽', '$', '€']);
+    expect(options.map((item) => item.textContent)).toEqual(['₽', '$', '€', 'AED']);
     expect((options[1].querySelector('input') as HTMLInputElement).checked).toBe(true);
     api.saveAppPreferences.mockResolvedValueOnce({ theme: null, moneyCurrency: 'EUR' });
     click(options[2].querySelector('input'));

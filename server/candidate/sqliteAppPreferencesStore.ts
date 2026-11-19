@@ -7,7 +7,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS candidate_app_preferences (
   candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
   theme TEXT CHECK (theme IN ('light', 'dark', 'system')),
-  money_currency TEXT CHECK (money_currency IN ('RUB', 'USD', 'EUR')),
+  money_currency TEXT CHECK (money_currency IN ('RUB', 'USD', 'EUR', 'AED')),
   updated_at TEXT NOT NULL
 ) STRICT;
 `;
@@ -40,17 +40,15 @@ export class SqliteAppPreferencesStore {
     return { theme: row?.theme ?? null, moneyCurrency: row?.money_currency ?? null };
   }
 
-  /** Меняет только переданные поля; остальные остаются как были. */
+  /** Меняет только переданные поля одной записью: параллельные PUT разных полей не затирают друг друга. */
   patch(candidateId: string, patch: AppPreferencesPatch, now: string): B640AppPreferences {
-    const current = this.get(candidateId);
-    const next = { ...current, ...patch };
     this.database
       .prepare(
         `INSERT INTO candidate_app_preferences (candidate_id, theme, money_currency, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(candidate_id) DO UPDATE SET theme = excluded.theme,
-           money_currency = excluded.money_currency, updated_at = excluded.updated_at`,
+         ON CONFLICT(candidate_id) DO UPDATE SET theme = COALESCE(excluded.theme, theme),
+           money_currency = COALESCE(excluded.money_currency, money_currency), updated_at = excluded.updated_at`,
       )
-      .run(candidateId, next.theme, next.moneyCurrency, now);
-    return next;
+      .run(candidateId, patch.theme ?? null, patch.moneyCurrency ?? null, now);
+    return this.get(candidateId);
   }
 }

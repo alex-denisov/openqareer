@@ -28,6 +28,7 @@ const CURRENCIES: ReadonlyArray<{ value: AppMoneyCurrency; label: string }> = [
   { value: 'RUB', label: '₽' },
   { value: 'USD', label: '$' },
   { value: 'EUR', label: '€' },
+  { value: 'AED', label: 'AED' },
 ];
 
 /** Тема меняется сразу на этом устройстве и запоминается за кандидатом для других. */

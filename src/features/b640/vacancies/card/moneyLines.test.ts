@@ -13,7 +13,8 @@ describe('B593: валюта показа сумм', () => {
   it('выбор в «Приложении» важнее валюты условий; без выбора — условия, иначе рубли', () => {
     expect(targetMoneyCurrency('USD', 'EUR')).toBe('USD');
     expect(targetMoneyCurrency(null, 'eur')).toBe('EUR');
-    expect(targetMoneyCurrency(null, 'AED')).toBe('RUB');
+    expect(targetMoneyCurrency('AED', 'USD')).toBe('AED');
+    expect(targetMoneyCurrency(null, 'GBP')).toBe('RUB');
     expect(targetMoneyCurrency(null, undefined)).toBe('RUB');
   });
 });

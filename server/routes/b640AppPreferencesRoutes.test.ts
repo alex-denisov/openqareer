@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createB640Harness } from '../testHelpers/b640VacancyHarness';
 
@@ -42,9 +43,20 @@ describe('B593: настройки приложения кабинета', () =>
     expect((await get(URL, 'other.test')).json().data).toEqual({ theme: null, moneyCurrency: null });
   });
 
+  it('erasing the candidate removes the row', async () => {
+    const { put, candidates, candidateIds, databasePath } = await setup();
+    await put({ moneyCurrency: 'EUR' }, 'flagged.test');
+    expect(candidates.deleteCandidate(candidateIds['flagged.test'])).toBe(true);
+    const db = new DatabaseSync(databasePath);
+    const left = db.prepare('SELECT COUNT(*) AS n FROM candidate_app_preferences').get() as { n: number };
+    db.close();
+    expect(left.n).toBe(0);
+  });
+
   it('refuses unknown values and fields', async () => {
     const { put } = await setup();
-    for (const body of [{ theme: 'neon' }, { moneyCurrency: 'AED' }, { theme: 'dark', candidateId: 'x' }, {}]) {
+    expect((await put({ moneyCurrency: 'AED' }, 'flagged.test')).json().data.moneyCurrency).toBe('AED');
+    for (const body of [{ theme: 'neon' }, { moneyCurrency: 'GBP' }, { theme: 'dark', candidateId: 'x' }, {}]) {
       expect((await put(body, 'flagged.test')).statusCode).toBe(400);
     }
   });
