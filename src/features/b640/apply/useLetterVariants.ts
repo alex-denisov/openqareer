@@ -17,6 +17,12 @@ export interface LetterVariantsState {
   readonly index: number;
   /** Данные выбранного варианта; `null` — в поле первое письмо. */
   readonly selected: LetterVariant['payload'];
+  /** Идентификатор выбранного варианта; `null` — в поле первое письмо. */
+  readonly selectedId: string | null;
+  /** Список вариантов прочитан. */
+  readonly ready: boolean;
+  /** Вернуть одобренный текст (B711): вариант встаёт выбранным, в поле — одобренный текст. */
+  readonly restore: (variantId: string | null, body: string) => void;
   readonly remaining: number;
   /** Листать нельзя, пока письмо пересобирается. */
   readonly locked: boolean;
@@ -62,6 +68,24 @@ function useVariantEdits(pitch: unknown, text: string): (toKey: string, generate
   };
 }
 
+/** Показанный вариант: его данные и идентификатор; нулевой индекс — первое письмо. */
+function chosenOf(stored: readonly LetterVariant[], current: number) {
+  const variant = current > 0 ? stored[current - 1] : undefined;
+  return { selected: variant?.payload ?? null, selectedId: variant?.id ?? null };
+}
+
+/** Одобренный текст встаёт в поле (B711): вариант — выбранным, если он ещё есть в списке. */
+function restorer(
+  stored: readonly LetterVariant[],
+  moveTo: (toKey: string, generated: string) => string,
+  apply: (text: string, index: number) => void,
+): LetterVariantsState['restore'] {
+  return (variantId, body) => {
+    const at = variantId ? stored.findIndex((variant) => variant.id === variantId) : -1;
+    apply(moveTo(at >= 0 ? stored[at]!.id : FIRST_LETTER_KEY, body), at + 1);
+  };
+}
+
 type Recipient = ReturnType<typeof recipientForConnectionPath>;
 
 /** С какими настройками письма пишется вариант: те же тон, язык и адресат. */
@@ -79,7 +103,7 @@ function letterRequest(letter: LetterScreenState, recipient: Recipient | undefin
  */
 export function useLetterVariants(vacancyId: string, letter: LetterScreenState): LetterVariantsState {
   const load = useCallback((signal: AbortSignal) => listLetterVariants(vacancyId, signal), [vacancyId]);
-  const { state, setData } = useAsync(load, '');
+  const { state, replaceData } = useAsync(load, '');
   const [index, setIndex] = useState(0);
   const [wishOpen, setWishOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -105,11 +129,12 @@ export function useLetterVariants(vacancyId: string, letter: LetterScreenState):
   return {
     total: 1 + stored.length,
     index: current,
-    selected: current > 0 ? (stored[current - 1]?.payload ?? null) : null,
+    ...chosenOf(stored, current),
+    ready: state.status === 'ready',
+    restore: restorer(stored, moveTo, (body, at) => { setText(body); setIndex(at); }),
     remaining: state.data?.remaining ?? MAX_TEXT_VARIANTS,
     locked: loading || !pitch,
-    wishOpen,
-    setWishOpen,
+    wishOpen, setWishOpen,
     busy,
     error,
     select: (next) => show(next, stored),
@@ -118,7 +143,7 @@ export function useLetterVariants(vacancyId: string, letter: LetterScreenState):
       setError(null);
       createLetterVariant(vacancyId, wish, letterRequest(letter, recipient))
         .then((result) => {
-          setData(() => ({ variants: result.variants, remaining: result.remaining }));
+          replaceData({ variants: result.variants, remaining: result.remaining });
           const mine = variantsFor(result.variants, recipient?.name ?? '');
           show(mine.length, mine);
           setWishOpen(false);

@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { CoachApiError } from '../coach/apiClient';
 import type { ApprovalState } from './vacancyLetterController';
 import type {
@@ -27,6 +27,10 @@ interface ApprovalInput {
   readonly includedWorkplaceIds: readonly string[];
   /** Резюме в профиле изменилось после черновика: письмо готовится заново. */
   readonly onResumeChanged: () => void;
+  /** Выбранный вариант письма: одобрение помнит его (B711). */
+  readonly variantId?: string | null;
+  /** Одобрение, прочитанное с сервера: показывается, пока кандидат не нажал «Изменить». */
+  readonly restored?: ApprovedVacancyLetterResult | null;
 }
 
 function approvedSnapshot(
@@ -57,6 +61,7 @@ function approvedSnapshot(
       ? {}
       : { resumeAvailable: input.pitch.resumeAvailable }),
     ...(generalResumeId ? { generalResumeId } : {}),
+    ...(input.variantId ? { variantId: input.variantId } : {}),
   };
 }
 
@@ -139,6 +144,20 @@ function useResumeGateActions(
   return { approve, prepareResume, attachGeneralResume };
 }
 
+/** Одобрение с сервера встаёт сохранённым один раз; после «Изменить» не возвращается (B711). */
+function useRestoredSaved(
+  restored: ApprovedVacancyLetterResult | null,
+  setSaved: Dispatch<SetStateAction<ApprovedVacancyLetterResult | null>>,
+): () => void {
+  const dismissed = useRef(false);
+  useEffect(() => {
+    if (restored && !dismissed.current) setSaved((current) => current ?? restored);
+  }, [restored, setSaved]);
+  return useCallback(() => {
+    dismissed.current = true;
+  }, []);
+}
+
 /**
  * Одобрение письма (B601, решения владельца 08.11): снимок резюме не создался — письмо не одобряется,
  * строка резюме предлагает повторить снимок, а после неудачного повтора — приложить общее резюме.
@@ -149,10 +168,12 @@ export function useLetterApproval(input: ApprovalInput): ApprovalState {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [resumeFailure, setResumeFailure] = useState<ResumeSnapshotFailure | null>(null);
+  const dismiss = useRestoredSaved(input.restored ?? null, setSaved);
   const reset = useCallback(() => {
+    dismiss();
     setSaved(null);
     setError('');
-  }, []);
+  }, [dismiss]);
   const submit = useCallback(
     async (generalResumeId?: string) => {
       if (busy || !input.pitch || !input.body.trim()) return;

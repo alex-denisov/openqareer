@@ -11,16 +11,17 @@ const REPOSITORY_ROOT = join(import.meta.dirname, '..', '..', '..');
  * этот тест держит обе копии одинаковыми.
  */
 describe('hh.ru apply selectors are the same in the desktop app and the product', () => {
-  const rust = readFileSync(join(REPOSITORY_ROOT, 'src-tauri', 'src', 'hh_apply.rs'), 'utf8');
+  const rust = readFileSync(join(REPOSITORY_ROOT, 'src-tauri', 'src', 'hh_apply_scripts.rs'), 'utf8');
   const constant = (name: string) =>
-    new RegExp(`pub const ${name}: &str = r#"([\\s\\S]*?)"#;`, 'u').exec(rust)?.[1];
+    new RegExp(`pub const ${name}: &str =\\s*r#"([\\s\\S]*?)"#;`, 'u').exec(rust)?.[1];
 
   it.each([
     ['HH_RESPONSE_BUTTON_TOP', HH_SELECTORS.vacancy.responseButtonTop],
     ['HH_RESPONSE_BUTTON_BOTTOM', HH_SELECTORS.vacancy.responseButtonBottom],
     ['HH_ALREADY_APPLIED', HH_SELECTORS.vacancy.alreadyAppliedBadge],
     ['HH_APPLY_POPUP', HH_SELECTORS.apply.popup],
-    ['HH_RESUME_ITEM', HH_SELECTORS.apply.resumeRadio],
+    ['HH_RESUME_RADIO', HH_SELECTORS.apply.resumeRadio],
+    ['HH_RELOCATION_WARNING', HH_SELECTORS.apply.relocationConfirm],
     ['HH_LETTER_TOGGLE', HH_SELECTORS.apply.letterToggle],
     ['HH_LETTER_TEXTAREA', HH_SELECTORS.apply.letterTextarea],
     ['HH_SUBMIT', HH_SELECTORS.apply.submitButton],
@@ -28,6 +29,6 @@ describe('hh.ru apply selectors are the same in the desktop app and the product'
     ['HH_SUCCESS', HH_SELECTORS.apply.success],
     ['HH_CAPTCHA', HH_SELECTORS.security.captchaContainer],
   ])('%s', (name, expected) => {
-    expect(constant(name), `${name} must stay a raw string literal in hh_apply.rs`).toBe(expected);
+    expect(constant(name), `${name} must stay a raw string literal in hh_apply_scripts.rs`).toBe(expected);
   });
 });

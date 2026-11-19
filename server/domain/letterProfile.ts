@@ -98,18 +98,63 @@ export function letterEmployerNames<T extends VacancyPitchInputFact>(
   });
 }
 
+/**
+ * B713: исходные факты консультанта по местам работы. Пункт, который он из них написал, уже стоит в своём
+ * месте: факт не повторяется уточнением без места (19.11 письмо COO взяло «маржу 0→40%» не той компании).
+ * Пункт снят кандидатом — сам факт идёт под тем местом, которое назвал консультант.
+ */
+interface RewritePlacement {
+  /** Факт консультанта → место работы, под которым он стоит в профиле письма. */
+  readonly placeOf: ReadonlyMap<string, string>;
+  /** Факты, чей пункт уже стоит в месте работы: в профиль письма они не идут вовсе. */
+  readonly shownAsBullet: ReadonlySet<string>;
+}
+
+function rewritePlacement(draft: ResumeDraft): RewritePlacement {
+  const places = new Map(draft.experience.map((place) => [place.id, new Set(place.bulletMemoryIds)]));
+  const placeOf = new Map<string, string>();
+  const shownAsBullet = new Set<string>();
+  for (const bullet of (draft.factRewrites ?? []).flatMap((rewrite) => rewrite.bullets)) {
+    const place = places.get(bullet.experienceId);
+    if (!place) continue;
+    for (const factId of bullet.sourceFactIds) {
+      if (place.has(bullet.memoryId)) shownAsBullet.add(factId);
+      else placeOf.set(factId, bullet.experienceId);
+    }
+  }
+  for (const factId of shownAsBullet) placeOf.delete(factId);
+  return { placeOf, shownAsBullet };
+}
+
+/** Факты консультанта под местом работы без своего пункта, в порядке фактов. */
+function placedRewriteFacts<T extends VacancyPitchInputFact>(
+  draft: ResumeDraft,
+  usable: readonly T[],
+  placeId?: string,
+): T[] {
+  const { placeOf } = rewritePlacement(draft);
+  const linked = linkedIds(draft);
+  return usable.filter((fact) => {
+    const place = placeOf.get(fact.id);
+    return place !== undefined && (placeId === undefined || place === placeId) && !linked.has(fact.id) && isLetterBasis(fact);
+  });
+}
+
 function experienceLines(
   place: ResumeExperienceInput,
   usable: ReadonlyMap<string, string>,
+  consultantFacts: readonly VacancyPitchInputFact[],
 ): string[] {
   const evidence = [place.descriptionMemoryId, ...place.bulletMemoryIds];
   const bullets = evidence.flatMap((id) => {
     const statement = id ? usable.get(id) : undefined;
     return statement ? [`- ${statement}`] : [];
   });
+  const consultant = consultantFacts.map((fact) => `- ${usable.get(fact.id) ?? fact.statement.trim()}`);
   return [
     `## ${line(place.title, employerOf(place, usable), place.location, period(place.startDate, place.endDate, place.current))}`,
     ...bullets,
+    ...consultant,
     '',
   ];
 }
@@ -179,8 +224,9 @@ function isLetterBasis(fact: VacancyPitchInputFact): boolean {
 /** Факт вне мест работы: уточнение из беседы с консультантом, подтверждённые раньше импортированных. */
 function noteFacts<T extends VacancyPitchInputFact>(draft: ResumeDraft, usable: readonly T[]): T[] {
   const linked = linkedIds(draft);
+  const { placeOf, shownAsBullet } = rewritePlacement(draft);
   const free = usable.filter((fact) =>
-    !linked.has(fact.id) && isLetterBasis(fact) && !isStructuredRecordStatement(fact.statement) && !repeatsProfile(fact.statement, draft));
+    !linked.has(fact.id) && !placeOf.has(fact.id) && !shownAsBullet.has(fact.id) && isLetterBasis(fact) && !isStructuredRecordStatement(fact.statement) && !repeatsProfile(fact.statement, draft));
   const confirmed = free.filter((fact) => fact.status !== 'proposed');
   const imported = free.filter((fact) => fact.status === 'proposed');
   return [...confirmed, ...imported];
@@ -207,7 +253,8 @@ export function letterNotesToTranslate<T extends VacancyPitchInputFact>(
   language: string,
 ): T[] {
   if (language !== 'en') return [];
-  return letterNoteFacts(draft, facts)
+  const usable = filterUsablePitchFacts(facts) as T[];
+  return [...noteFacts(draft, usable), ...placedRewriteFacts(draft, usable)]
     .filter((fact) => /\p{Script=Cyrillic}/u.test(fact.statement))
     .slice(0, LETTER_NOTE_TRANSLATION_LIMIT);
 }
@@ -265,7 +312,8 @@ export function letterProfileText({
     ...(headline ? [`HEADLINE: ${headline}`, ''] : []),
     ...(aboutVisible ? ['ABOUT:', about, ''] : []),
     ...(contact?.location ? [`LOCATION: ${contact.location}`, ''] : []),
-    ...section('EXPERIENCE', draft.experience.flatMap((place) => experienceLines(place, usableById))),
+    ...section('EXPERIENCE', draft.experience.flatMap((place) =>
+      experienceLines(place, usableById, placedRewriteFacts(draft, usable, place.id)))),
     ...draftSections(draft, withheldEvidenceIds),
     ...joinedLine('LANGUAGES', visibleItems(draft.languages, withheldEvidenceIds).map((item) => [item.name, item.cefr ?? item.sourceLabel].filter(Boolean).join(' '))),
     ...joinedLine('SKILLS', visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name)),

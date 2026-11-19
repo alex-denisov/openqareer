@@ -41,7 +41,7 @@ export interface HhResumesState {
 /** Резюме hh.ru кандидата: список и содержимое выбранного — из его сессии hh.ru. */
 export function useHhResumes(): HhResumesState {
   const load = useCallback((signal: AbortSignal) => getHhResumes(signal), []);
-  const { state, setData } = useAsync(load, '');
+  const { state, replaceData } = useAsync(load, '');
   const [picker, setPicker] = useState<HhPicker>({ kind: 'closed' });
   const [saving, setSaving] = useState(false);
 
@@ -59,7 +59,8 @@ export function useHhResumes(): HhResumesState {
     readHhResumeContent(item)
       .then((content) => saveHhResumes(listed, content))
       .then((saved) => {
-        setData(() => saved);
+        // Снимка до выбора могло не быть (GET вернул null): ставим его целиком.
+        replaceData(saved);
         setPicker({ kind: 'closed' });
       })
       .catch((reason: unknown) =>

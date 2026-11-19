@@ -9,28 +9,29 @@
     <main>
       <h1 data-qa="vacancy-title">Руководитель продукта</h1>
       <button data-qa="vacancy-response-link-top" type="button">Откликнуться</button>
-      <section data-qa="vacancy-response-popup" hidden>
-        <label data-qa="vacancy-response-popup__resume-item" data-resume-id="synthetic-resume-1">
-          <input type="radio" name="resume" value="synthetic-resume-1" />
+      <section role="dialog" id="RESPONSE_MODAL_FORM_ID" hidden>
+        <button data-qa="response-popup-close" type="button">×</button>
+        <label>
+          <input type="radio" name="resumeId" value="synthetic-resume-1" />
           Основное резюме
         </label>
-        <button data-qa="vacancy-response-popup__letter-toggle" type="button">
+        <button data-qa="add-cover-letter" type="button">
           Добавить сопроводительное письмо
         </button>
         <label>
           Сопроводительное письмо
-          <textarea data-qa="vacancy-response-popup__letter-textarea" hidden></textarea>
+          <textarea data-qa="vacancy-response-popup-form-letter-input" hidden></textarea>
         </label>
         <button data-qa="vacancy-response-submit-popup" type="button">Отправить отклик</button>
       </section>
-      <p data-qa="vacancy-response-success" data-response-id="synthetic-response-42" hidden>
+      <p data-qa="vacancy-response-success-standard-notification" data-response-id="synthetic-response-42" hidden>
         Отклик отправлен
       </p>
     </main>
     <script>
-      const popup = document.querySelector('[data-qa="vacancy-response-popup"]');
+      const popup = document.querySelector('#RESPONSE_MODAL_FORM_ID');
       const textarea = document.querySelector(
-        '[data-qa="vacancy-response-popup__letter-textarea"]',
+        '[data-qa="vacancy-response-popup-form-letter-input"]',
       );
       document
         .querySelector('[data-qa="vacancy-response-link-top"]')
@@ -39,7 +40,7 @@
           popup.hidden = false;
         });
       document
-        .querySelector('[data-qa="vacancy-response-popup__letter-toggle"]')
+        .querySelector('[data-qa="add-cover-letter"]')
         .addEventListener('click', () => {
           textarea.hidden = false;
         });
@@ -47,7 +48,7 @@
         .querySelector('[data-qa="vacancy-response-submit-popup"]')
         .addEventListener('click', () => {
           window.syntheticSubmitted = true;
-          document.querySelector('[data-qa="vacancy-response-success"]').hidden = false;
+          document.querySelector('[data-qa="vacancy-response-success-standard-notification"]').hidden = false;
         });
     </script>
   </body>

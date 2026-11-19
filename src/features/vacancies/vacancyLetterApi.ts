@@ -101,6 +101,8 @@ export interface ApprovedVacancyLetterInput {
   readonly resumeAvailable?: boolean;
   /** Снимок не создался, и кандидат выбрал своё общее резюме. */
   readonly generalResumeId?: string;
+  /** B711: какой вариант письма одобрен — экран вернётся к нему. */
+  readonly variantId?: string;
 }
 
 export interface LetterGeneralResume {
@@ -147,6 +149,25 @@ export async function approveVacancyLetter(
     },
   );
   return readData<ApprovedVacancyLetterResult>(response);
+}
+
+/** Одобрение, сохранённое на сервере (B711): текст и вариант, к которым экран возвращается. */
+export interface StoredLetterApproval extends ApprovedVacancyLetterResult {
+  readonly subject: string | null;
+  readonly body: string;
+  readonly variantId: string | null;
+}
+
+/** Последнее одобренное письмо вакансии; `null` — письмо ещё не одобряли. */
+export async function readLatestLetterApproval(
+  vacancyId: string,
+  signal?: AbortSignal,
+): Promise<StoredLetterApproval | null> {
+  const response = await apiFetch(
+    '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-approvals/latest',
+    { method: 'GET', signal },
+  );
+  return (await readData<{ readonly approval: StoredLetterApproval | null }>(response)).approval;
 }
 
 /** «Подготовить резюме»: повторяет снимок резюме под вакансию, письмо не одобряет. */

@@ -11,6 +11,8 @@ export interface AsyncResult<T> {
   readonly reload: () => void;
   /** Подменить данные без запроса: после своего же действия. */
   readonly setData: (update: (current: T) => T) => void;
+  /** Поставить данные целиком без запроса — и когда прежних ещё нет (B710). */
+  readonly replaceData: (data: T) => void;
 }
 
 /**
@@ -46,5 +48,7 @@ export function useAsync<T>(load: (signal: AbortSignal) => Promise<T>, fallback:
     );
   }, []);
 
-  return { state, reload, setData };
+  const replaceData = useCallback((data: T) => setState({ status: 'ready', data }), []);
+
+  return { state, reload, setData, replaceData };
 }

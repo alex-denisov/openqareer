@@ -79,3 +79,12 @@ export async function getSortedMatchedPage(
 export async function getApplicationQuota(signal?: AbortSignal): Promise<B640ApplicationQuota> {
   return readDataObject<B640ApplicationQuota>(await apiFetch(`${BASE}/application-quota`, { signal }));
 }
+
+/** B715: одна вакансия пула для карточки v04, когда её нет в загруженной подборке. */
+export async function getVacancyCard(vacancyId: string, signal?: AbortSignal): Promise<MatchedVacancyItem> {
+  const data = await readDataObject<MatchedVacancyItem>(
+    await apiFetch(`${BASE}/vacancies/${encodeURIComponent(vacancyId)}`, { signal }),
+  );
+  if (typeof data.cluster?.id !== 'string' || !data.explanation) throw malformedResponseError();
+  return data;
+}

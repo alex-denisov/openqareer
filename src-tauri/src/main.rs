@@ -5,6 +5,7 @@ mod automation_worker;
 mod connector_session;
 mod desktop_notify;
 mod hh_apply;
+mod hh_apply_scripts;
 mod linkedin_read_guard;
 mod network_probe;
 mod session_token_store;

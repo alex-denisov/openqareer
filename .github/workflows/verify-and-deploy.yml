@@ -121,8 +121,10 @@ jobs:
       - name: Lint and check adopted formatting baseline
         run: npm run lint
 
-      - name: Typecheck
-        run: npx tsc --noEmit
+      # tsgo (TypeScript 7 native) gives the same errors ~10x faster; the
+      # reference tsc still runs inside `npm run build` below, so strictness holds.
+      - name: Typecheck (tsgo)
+        run: npx tsgo --noEmit
 
       # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
       - name: Install Playwright Chromium
