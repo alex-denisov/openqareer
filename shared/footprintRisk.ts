@@ -17,7 +17,13 @@ export const FOOTPRINT_RISK_LEVELS = ['high', 'important', 'low', 'useful'] as c
 export type FootprintRiskLevel = (typeof FOOTPRINT_RISK_LEVELS)[number];
 
 export type FootprintRiskActionKind =
-  'close_account' | 'check_now' | 'ask_to_fix' | 'hide' | 'add_to_profile';
+  | 'close_account'
+  | 'check_now'
+  | 'ask_to_fix'
+  | 'hide'
+  | 'add_to_profile'
+  /** B727: страница найдена по нику — открыть её и решить «моё / не моё». */
+  | 'confirm_owner';
 
 export interface FootprintRiskAction {
   readonly kind: FootprintRiskActionKind;

@@ -3,6 +3,7 @@ import type { CandidateFootprintAudit } from '../../../../shared/candidateFootpr
 import type { FootprintRiskItem } from '../../../../shared/footprintRisk';
 import {
   auditProgress,
+  confirmsOwner,
   defaultSelection,
   failedChecks,
   findingsWord,
@@ -81,6 +82,12 @@ describe('находки', () => {
     expect(opensRemovalPath(item)).toBe(true);
     expect(opensRemovalPath({ ...item, action: { kind: 'add_to_profile', label: 'В профиль' } })).toBe(false);
     expect(opensRemovalPath({ ...item, action: null })).toBe(false);
+    // B727: страница по нику — «Проверить» ведёт на саму страницу, а не на путь удаления.
+    const nick = { ...item, action: { kind: 'confirm_owner' as const, label: 'Проверить' } };
+    expect(confirmsOwner(nick)).toBe(true);
+    expect(opensRemovalPath(nick)).toBe(false);
+    expect(confirmsOwner({ ...nick, url: null })).toBe(false);
+    expect(confirmsOwner(item)).toBe(false);
   });
 
   it('письмо сайту: удалить данные или исправить расхождение', () => {

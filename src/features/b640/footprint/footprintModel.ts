@@ -124,6 +124,7 @@ export const ACTION_ICON: Readonly<Record<FootprintRiskActionKind, IconName>> = 
   ask_to_fix: 'edit',
   hide: 'eyeoff',
   add_to_profile: 'plus',
+  confirm_owner: 'flag',
 };
 
 /** Находки, которые ещё стоит разобрать: открытые и не полезные. */
@@ -137,7 +138,12 @@ export function usefulItems(summary: FootprintRiskSummary): readonly FootprintRi
 
 /** Ведёт ли действие на экран пути удаления (у полезной находки — нет). */
 export function opensRemovalPath(item: FootprintRiskItem): boolean {
-  return item.action !== null && item.action.kind !== 'add_to_profile';
+  return item.action !== null && item.action.kind !== 'add_to_profile' && !confirmsOwner(item);
+}
+
+/** B727: страница по нику — «Проверить» открывает саму страницу, кандидат решает, его ли она. */
+export function confirmsOwner(item: FootprintRiskItem): boolean {
+  return item.action?.kind === 'confirm_owner' && item.url !== null;
 }
 
 /** Готовый текст письма владельцу сайта; отправляет сам кандидат. */
