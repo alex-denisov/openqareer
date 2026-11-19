@@ -1,4 +1,5 @@
 import { registerInterviewDiaryRoutes } from './interviewDiaryRoutes';
+import { registerB640InterviewTrainingRoutes } from './b640InterviewTrainingRoutes';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -366,6 +367,7 @@ const handleDeleteSession: Handler = async (deps, request, reply) => {
 
 export function registerInterviewSimulatorRoutes(app: FastifyInstance, deps: RouteDeps): void {
   registerInterviewDiaryRoutes(app, deps);
+  registerB640InterviewTrainingRoutes(app, deps);
   app.get(`${URL}/current`, withDeps(deps, handleGetCurrent));
   app.get(`${URL}/:id`, withDeps(deps, handleGetSession));
   app.post(

@@ -3,25 +3,31 @@ import {
   getNotificationChannelStatus,
   getNotificationPreferences,
   updateNotificationPreference,
-  type NotificationChannelPreference,
   type NotificationChannelStatus,
 } from '../../account/notificationPreferencesApi';
+import {
+  INVITATION_KEY,
+  getInvitationPreference,
+  putInvitationPreference,
+  type B640ChannelPreference,
+} from './invitationPreferenceApi';
 import type { B640Node } from '../routes';
 import { CHANNEL_LABEL, NOTIFICATION_ROWS, type NotificationChannel, type NotificationRow } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 import { useTelegramLink, type TelegramLink } from './useTelegramLink';
 
 interface Settings {
-  readonly events: readonly NotificationChannelPreference[];
+  readonly events: readonly B640ChannelPreference[];
   readonly channels: NotificationChannelStatus;
 }
 
 async function loadSettings(): Promise<Settings> {
-  const [events, channels] = await Promise.all([
+  const [events, invitation, channels] = await Promise.all([
     getNotificationPreferences(),
+    getInvitationPreference(),
     getNotificationChannelStatus(),
   ]);
-  return { events, channels };
+  return { events: [invitation, ...events], channels };
 }
 
 const OFF = { app: false, email: false, telegram: false };
@@ -111,7 +117,7 @@ function TelegramLine({ link }: { readonly link: TelegramLink }) {
 }
 
 interface MatrixProps {
-  readonly events: readonly NotificationChannelPreference[];
+  readonly events: readonly B640ChannelPreference[];
   readonly columns: readonly NotificationChannel[];
   readonly link: TelegramLink;
   readonly saving: ReadonlySet<string>;
@@ -156,7 +162,7 @@ function Matrix({ events, columns, link, saving, onToggle }: MatrixProps) {
   );
 }
 
-const withEvent = (value: NotificationChannelPreference) => (settings: Settings): Settings => ({
+const withEvent = (value: B640ChannelPreference) => (settings: Settings): Settings => ({
   ...settings,
   events: [...settings.events.filter((item) => item.key !== value.key), value],
 });
@@ -177,7 +183,11 @@ function useToggle(settings: Settings, update: (change: (data: Settings) => Sett
     update(withEvent(next));
     try {
       const { key: _key, ...preference } = next;
-      update(withEvent(await updateNotificationPreference(row.key, preference)));
+      const saved =
+        row.key === INVITATION_KEY
+          ? await putInvitationPreference(preference)
+          : await updateNotificationPreference(row.key, preference);
+      update(withEvent(saved));
     } catch {
       update(withEvent(current));
       setFailed(true);

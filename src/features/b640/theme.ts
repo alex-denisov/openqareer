@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** B649: тема нового кабинета. Светлая по умолчанию; «system» следует за устройством. */
 export const B640_THEMES = ['light', 'dark', 'system'] as const;
@@ -34,12 +34,34 @@ export interface B640ThemeState {
   readonly setTheme: (theme: B640Theme) => void;
 }
 
-export function useB640Theme(): B640ThemeState {
+/**
+ * `readServerTheme` (B593): выбор кандидата, общий для его устройств. Пришёл — тема
+ * этого устройства становится им; выбор на экране раньше ответа сервера остаётся,
+ * нет ответа — остаётся сохранённая здесь.
+ */
+export function useB640Theme(readServerTheme?: () => Promise<B640Theme | null>): B640ThemeState {
   const [theme, setThemeState] = useState<B640Theme>(readStoredTheme);
+  const chosenHere = useRef(false);
   const setTheme = useCallback((next: B640Theme) => {
+    chosenHere.current = true;
     storeTheme(next);
     setThemeState(next);
   }, []);
+  useEffect(() => {
+    if (!readServerTheme) return undefined;
+    let active = true;
+    readServerTheme().then(
+      (server) => {
+        if (!active || chosenHere.current || !isTheme(server)) return;
+        storeTheme(server);
+        setThemeState(server);
+      },
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, [readServerTheme]);
   return { theme, setTheme };
 }
 

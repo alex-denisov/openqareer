@@ -18,6 +18,8 @@ export interface OfferForm {
   readonly benefits: string;
   readonly risks: string;
   readonly source: string;
+  /** Дата выхода (ISO): поля в сетке нет, приходит из сохранённого оффера или письма (B646). */
+  readonly startDate: string;
 }
 
 export type OfferFormErrors = Partial<Record<keyof OfferForm, string>>;
@@ -51,17 +53,18 @@ export function emptyOfferForm(): OfferForm {
     benefits: '',
     risks: '',
     source: '',
+    startDate: '',
   };
 }
 
-function amount(value: number | null | undefined): string {
+export function amount(value: number | null | undefined): string {
   if (value === undefined || value === null) return '';
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 })
     .format(value)
     .replace(/\s/g, ' ');
 }
 
-function dayText(iso: string | null): string {
+export function dayText(iso: string | null): string {
   const match = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
   return match ? `${match[3]}.${match[2]}.${match[1]}` : '';
 }
@@ -84,6 +87,7 @@ export function formFromCard(card: OfferCard | null): OfferForm {
     benefits: (terms.benefits ?? []).join(', '),
     risks: (terms.risks ?? []).join(', '),
     source: terms.sourceNote ?? '',
+    startDate: terms.startDate ?? '',
   };
 }
 
@@ -170,6 +174,7 @@ export function parseOfferForm(form: OfferForm, isNew: boolean): ParsedOfferForm
       benefits: list(form.benefits),
       risks: list(form.risks),
       sourceNote: text(form.source),
+      startDate: text(form.startDate),
     }),
   };
 }

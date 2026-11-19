@@ -100,7 +100,8 @@ export function CompanyVacancies(props: CompanyVacanciesProps) {
   const left = total - vacancies.length;
   return (
     <section className="mod" aria-labelledby="co-vac">
-      <h3 className="mod-title" id="co-vac">
+      {/* tabIndex: сюда переводит фокус «Откликнуться на вакансию» из пустых «Людей компании». */}
+      <h3 className="mod-title" id="co-vac" tabIndex={-1}>
         Вакансии по вашим ролям · <span className="num">{formatCount(total)}</span>
       </h3>
       {vacancies.length === 0 ? (

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { B640Contact, B640ContactFacets, B640ContactSort, B640ContactState } from '../../../../../shared/b640Contacts';
-import { EMPTY_FILTERS, activeCount, type ContactFilters } from './contactsFilters';
+import { EMPTY_FILTERS, activeCount, filtersFromSearch, type ContactFilters } from './contactsFilters';
 import { useContactsPage, type ContactsLoad } from './useContactsPage';
 
 export type { ContactsLoad };
@@ -46,7 +46,7 @@ function useDebounced(value: string): string {
 export function useContacts(): ContactsState {
   const [searchText, setSearchText] = useState('');
   const search = useDebounced(searchText);
-  const [filters, setFilters] = useState<ContactFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ContactFilters>(() => filtersFromSearch(window.location.search));
   const [sort, setSort] = useState<B640ContactSort>('selection');
   const criteria = useMemo<Criteria>(() => ({ search, filters, sort }), [search, filters, sort]);
   const data = useContactsPage(criteria);

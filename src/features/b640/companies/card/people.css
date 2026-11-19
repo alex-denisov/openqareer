@@ -1,0 +1,13 @@
+/* «Люди компании» без знакомых (B645): строка и следующий шаг; атрибут style в кабинете запрещён. */
+@layer b640.sections {
+  .b640 .co-ppl-next {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--career-space-3);
+  }
+  .b640 .co-ppl-next > .row-sub {
+    margin: 0;
+  }
+}

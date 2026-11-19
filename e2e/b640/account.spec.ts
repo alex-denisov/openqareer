@@ -39,6 +39,7 @@ interface AccountMocks {
 
 interface Calls {
   preferenceWrites: number;
+  invitationWrites: number;
   linkRequests: number;
   disconnected: string[];
   passwordChanges: number;
@@ -47,6 +48,7 @@ interface Calls {
 async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): Promise<Calls> {
   const calls: Calls = {
     preferenceWrites: 0,
+    invitationWrites: 0,
     linkRequests: 0,
     disconnected: [],
     passwordChanges: 0,
@@ -108,6 +110,13 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
     cabinetB640: true,
     accountNotificationHandler: notifications,
     billing: { initialPlan: 'pro' },
+  });
+  await page.route('**/api/v1/candidate/b640/notifications/preferences/invitations', (route) => {
+    const method = route.request().method();
+    if (method === 'PUT') calls.invitationWrites += 1;
+    const body = method === 'PUT' ? (route.request().postDataJSON() as object) : {};
+    const saved = { key: 'ev-invitation', app: true, email: true, telegram: true, ...body };
+    return route.fulfill({ json: { data: saved } });
   });
   await page.route('**/api/v1/candidate/connections**', (route) => {
     const platform = new URL(route.request().url()).pathname.split('/connections/')[1];
@@ -198,8 +207,15 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       'Почта',
       'Telegram',
     ]);
-    await expect(screen.locator('.set-mx:not(.is-head)')).toHaveCount(6);
+    await expect(screen.locator('.set-mx:not(.is-head)')).toHaveCount(7);
+    await expect(screen.locator('.set-mx:not(.is-head) .set-t').first()).toHaveText('Приглашения');
     await expectGates(page);
+    const invitations = screen.getByRole('switch', { name: 'Приглашения: Почта' });
+    await expect(invitations).toBeChecked();
+    await invitations.uncheck();
+    await expect.poll(() => calls.invitationWrites).toBe(1);
+    await expect(invitations).not.toBeChecked();
+    expect(calls.preferenceWrites).toBe(0);
     const digest = screen.getByRole('switch', { name: 'Итоги недели: Приложение' });
     await expect(digest).not.toBeChecked();
     await digest.check();
