@@ -3,6 +3,7 @@ import { rulesParse } from './rulesParse';
 import { LEVEL_RANK } from '../levelMatcher';
 import type { FunctionCode } from '../../../shared/roleTaxonomy';
 import { ontology } from '../../../shared/roleOntology';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 const ONTOLOGY_FUNCTION_VARIANTS = ontology.roles
   .slice()
@@ -67,7 +68,7 @@ describe('rulesParse (B267 S1)', () => {
     );
     const startedAt = performance.now();
     titles.forEach((title) => rulesParse(title));
-    expect(performance.now() - startedAt).toBeLessThan(2_000);
+    expect(performance.now() - startedAt).toBeLessThan(timeBudget(2_000));
   });
 
   it('reads the level from an existing marker word', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractVacancyPage } from './extractVacancyPage';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 const LONG = 'Вы будете строить платформу данных. '.repeat(20);
 const DESC = `<p>${LONG}</p><h3>Требования</h3><ul><li>Python 5 лет</li><li>SQL</li></ul>`;
@@ -79,6 +80,6 @@ describe('extractVacancyPage: страница-ловушка не держит 
   ])('%s — меньше секунды', (_name, html) => {
     const started = performance.now();
     extractVacancyPage(html);
-    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(performance.now() - started).toBeLessThan(timeBudget(1_000));
   });
 });

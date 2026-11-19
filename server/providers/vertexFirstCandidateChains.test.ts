@@ -7,6 +7,7 @@ import { QueuedCampaignRoleModel } from './campaignRoleModel';
 import { GeminiLinkedinDraftWriter, QueuedLinkedinDraftWriter } from './linkedinDraftWriter';
 import { CANDIDATE_VERTEX_TIMEOUT_MS, createMeteredVertexFetch } from './meteredVertexFetch';
 import { createVertexGate, type VertexCreditConfig } from './vertexCredit';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const dirs: string[] = [];
 afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -65,7 +66,7 @@ describe('Vertex первым в механиках, где кандидат ж�
       input,
     );
     expect(result.text).toBe('Текст второй ступени.');
-    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    expect(Date.now() - startedAt).toBeLessThan(timeBudget(2_000));
     expect(
       ledger.db.prepare("SELECT status FROM bulk_llm_spend WHERE provider='gemini'").all(),
     ).toEqual([{ status: 'rejected' }]);
@@ -110,7 +111,7 @@ describe('Vertex первым в механиках, где кандидат ж�
     const result = await new QueuedLinkedinDraftWriter([vertex, fallbackStage]).writeDraft(input);
     expect(result.text).toBe('Текст второй ступени.');
     expect(inner).toHaveBeenCalledTimes(1);
-    expect(Date.now() - startedAt).toBeLessThan(3_000);
+    expect(Date.now() - startedAt).toBeLessThan(timeBudget(3_000));
   });
 
   it('роли кампании: исключение ворот ведёт к следующей ступени', async () => {

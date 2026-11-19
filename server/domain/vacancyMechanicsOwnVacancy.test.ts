@@ -7,6 +7,7 @@ import type { BulkLlmClient, BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import type { VacancyFitInput } from './vacancyFit';
 import { extractVacancyRequirements } from './vacancyRequirements';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const DESCRIPTION = 'Requirements\n- UNIQUE_OWN_REQUIREMENT TypeScript\n- Node services';
 const unknownGate = { status: 'unknown' as const, reason: 'unknown' };
@@ -97,7 +98,7 @@ describe('B676: своя вакансия в расчёте совпадения
     const opened = vi.spyOn(SealedText.prototype, 'open');
     const started = performance.now();
     expect(runtime.fit.forgetVacancy(input.candidateId, input.vacancyId)).toBe(1);
-    expect(performance.now() - started).toBeLessThan(600);
+    expect(performance.now() - started).toBeLessThan(timeBudget(600));
     expect(opened).not.toHaveBeenCalled();
     expect(runtime.fit.getJobStatus(input)).toBeUndefined();
     expect(runtime.fit.getJobStatus({ ...input, vacancyId: 'pool-7', description: bulky })).toBeDefined();

@@ -9,11 +9,8 @@ import { composeVacancyEngine } from '../vacancies/composeVacancyEngine';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
 import { clusterVacancies } from '../vacancies/vacancyDeduplicator';
-import {
-  DESCRIPTION_SKILLS_STEP_CHUNK,
-  MaintenanceWorker,
-  type MaintenanceLog,
-} from './maintenanceWorker';
+import { DESCRIPTION_SKILLS_STEP_CHUNK, MaintenanceWorker, type MaintenanceLog } from './maintenanceWorker';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 /**
  * B230, срез 1: одна волна обслуживателя пишет срез площадки в файловую базу,
@@ -182,7 +179,7 @@ describe('MaintenanceWorker (B230)', () => {
     // × источник соседний писатель ждал 1 036 мс (run 35537971412), поэтому
     // порог с запасом на медленную машину. Настоящий замер — на проде, по
     // журналу HTTP: `request-waited-out-db-lock` (PRB-043).
-    expect(stats.maxWaitMs).toBeLessThan(2000);
+    expect(stats.maxWaitMs).toBeLessThan(timeBudget(2000));
     expect(log.entries.some((e) => e.msg === 'multi-source-sync-completed')).toBe(true);
     // Волна свела улов по ключам, а не отложила его.
     expect(composed.pool.countClusters()).toBeGreaterThan(0);
@@ -425,7 +422,7 @@ describe('MaintenanceWorker (B230)', () => {
     const result = await worker.stop(200);
 
     expect(result).toEqual({ waveFinished: false });
-    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(Date.now() - started).toBeLessThan(timeBudget(2_000));
     expect(log.entries.some((e) => e.msg === 'maintenance-stop-wave-abandoned')).toBe(true);
     composed.close();
   });

@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createB640Harness, poolItem } from '../testHelpers/b640VacancyHarness';
 import { forgetMatchedListsForTests } from './matchedVacancyList';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const URL = '/api/v1/candidate/b640/vacancy-triage';
 const OLD = '/api/v1/candidate/matched-vacancies';
@@ -213,7 +214,7 @@ describe('POST b640/vacancy-triage', () => {
       expect(body.data.rows).toHaveLength(1_000);
       expect(body.data.summary.total).toBe(1_000);
       expect(body.data.poolTotal).toBe(1_005);
-      expect(elapsed).toBeLessThan(5_000);
+      expect(elapsed).toBeLessThan(timeBudget(5_000));
     });
 
     it('rejects a body with both ids and a query, an unknown filter value and an oversized query', async () => {

@@ -14,6 +14,7 @@ import {
   MIGRATION_39,
 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 describe('vacancy source schema migration', () => {
   it('preserves existing hh subscriptions, observations and health', () => {
@@ -454,7 +455,7 @@ describe('title parse and semantic index schema (B267 slice 1)', () => {
       database.exec(MIGRATION_35);
       database.exec(MIGRATION_35);
     }).not.toThrow();
-    expect(Date.now() - startedAt).toBeLessThan(50);
+    expect(Date.now() - startedAt).toBeLessThan(timeBudget(50));
 
     for (const table of ['title_parse', 'vacancy_semantic']) {
       expect(

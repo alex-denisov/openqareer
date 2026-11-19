@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 /**
  * Прод 2026-09-06: пул вырос с 1867 до 4836 вакансий (доски работодателей,
@@ -141,6 +142,6 @@ describe('clustering scales with an index, not a full scan (B216)', () => {
     const seconds = (performance.now() - started) / 1000;
 
     expect(clusters).toHaveLength(20_000);
-    expect(seconds).toBeLessThan(4);
+    expect(seconds).toBeLessThan(timeBudget(4));
   });
 });

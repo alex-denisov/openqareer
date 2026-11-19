@@ -6,6 +6,7 @@ import { buildApp } from './app';
 import { filterApplicationRows, listApplicationsQuerySchema } from './routes/applicationOperationsRoutes';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
+import { timeBudget } from '../shared/testing/timeBudget';
 
 /**
  * Трекер откликов, срез 1 (B251, architecture.md §6 QA):
@@ -785,7 +786,7 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     const executionMs = performance.now() - executionStart;
     expect(preview.json().data.affectedCount).toBe(1_000);
     expect(execution.json().data.changedCount).toBe(1_000);
-    expect(executionMs, `preview ${previewMs.toFixed(0)} ms; execution`).toBeLessThan(1_000);
+    expect(executionMs, `preview ${previewMs.toFixed(0)} ms; execution`).toBeLessThan(timeBudget(1_000));
   });
 
   it('writes company wants when the store and the wants repository share one database file', async () => {
@@ -838,6 +839,6 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     expect(response.statusCode).toBe(200);
     expect(response.json().meta.total).toBe(167);
     expect(response.json().meta.stageCounts.applied).toBe(167);
-    expect(elapsedMs).toBeLessThan(1_000);
+    expect(elapsedMs).toBeLessThan(timeBudget(1_000));
   }, 30_000);
 });

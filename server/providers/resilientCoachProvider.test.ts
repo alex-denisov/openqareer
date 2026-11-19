@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
 import { CoachProviderError, type CoachProvider } from './coachProvider';
 import { ResilientCoachProvider } from './resilientCoachProvider';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const input: CoachTurnInput = {
   candidateReference: 'candidate-test-001',
@@ -361,7 +362,7 @@ describe('дедлайн хода (28.10)', () => {
       clock = 100;
     }, 20);
     await expect(turn).rejects.toMatchObject({ code: 'provider_timeout' });
-    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(Date.now() - started).toBeLessThan(timeBudget(1_000));
     expect(calls).toEqual([]);
   });
 });
