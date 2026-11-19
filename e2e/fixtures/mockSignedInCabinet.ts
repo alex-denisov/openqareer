@@ -2585,7 +2585,11 @@ export async function mockSignedInCabinet(
     if (path.endsWith('/candidate/matched-vacancies')) {
       const offset = Number(url.searchParams.get('offset') ?? 0);
       const page = withFirstFitView(
-        matchedVacancyPage(offset, options.vacancyTotal),
+        matchedVacancyPage(
+          offset,
+          options.vacancyTotal,
+          Number(url.searchParams.get('limit')) || 50,
+        ),
         offset,
         options.firstVacancyFitView,
       );
