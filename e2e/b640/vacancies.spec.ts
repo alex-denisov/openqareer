@@ -263,6 +263,26 @@ test.describe('B654: раздел «Вакансии», подборка и со
     );
   });
 
+  test('B726: роль из адреса («Вакансии по роли» из «Карьеры») — в фильтре и в запросе', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    const asked: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/candidate/matched-vacancies')) {
+        asked.push(...url.searchParams.getAll('role'));
+      }
+    });
+    await openCabinet(page, '/app/vacancies?role=Руководитель+продукта');
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await expect.poll(() => asked).toContain('Руководитель продукта');
+    await page.getByRole('button', { name: /^Роли: выбрано 1/ }).click();
+    await expect(
+      page.locator('.vt-pop .vt-opt', { hasText: 'Руководитель продукта' }).getByRole('checkbox'),
+    ).toBeChecked();
+  });
+
   test('вкладка «Роли» показывает роли с числом вакансий', async ({ page }, testInfo) => {
     test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
     await openCabinet(page, '/app/vacancies');

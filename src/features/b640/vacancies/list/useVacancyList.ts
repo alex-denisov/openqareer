@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MatchedPool } from '../../../vacancies/useMatchedPool';
 import { useMatchedPool } from '../../../vacancies/useMatchedPool';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
+import { linkedRole } from '../../career/careerPaths';
+import { useShell } from '../../shell/ShellContext';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { MoneyCurrency } from '../format';
@@ -69,24 +71,36 @@ export interface VacancyList {
   readonly noRole: boolean;
 }
 
-/** Роли читает сервер; пока выбор ролей не менялся, повторного чтения нет. */
+/**
+ * Роли читает сервер; пока выбор ролей не менялся, повторного чтения нет.
+ * Роль из адреса (B726, «Вакансии по роли» из «Карьеры») ставится только на этот заход,
+ * сохранённый выбор не заменяет.
+ */
 function useServerRoles(
   pool: MatchedPool,
   roles: readonly string[],
   seed: (roles: readonly string[]) => void,
 ): void {
+  const linked = linkedRole(useShell().search);
   const sent = useRef('');
   const seeded = useRef(false);
   const initial = pool.initialFilters;
   const campaign = pool.campaign;
   useEffect(() => {
-    if (seeded.current || (!initial && !campaign)) return;
+    if (seeded.current) return;
+    // «Вакансии по роли» из «Карьеры» (B726): подборка открывается с этой ролью в фильтре.
+    if (linked) {
+      seeded.current = true;
+      seed([linked]);
+      return;
+    }
+    if (!initial && !campaign) return;
     seeded.current = true;
     // Сервер уже отдал подборку с сохранёнными ролями; роли «Карьеры» подборку ещё не сузили.
     sent.current = (initial?.roles ?? []).join('\n');
     const start = defaultRoles(initial?.roles, campaign?.roles);
     if (start.length > 0) seed(start);
-  }, [initial, campaign, seed]);
+  }, [initial, campaign, seed, linked]);
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;
