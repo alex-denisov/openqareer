@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import type { B640Contact } from '../../../../../shared/b640Contacts';
 import { Icon, PagedList, StatusLine } from '../../kit';
 import { useShell } from '../../shell/ShellContext';
+import { ContactMessageDialog } from './ContactMessageDialog';
 import { ContactRow } from './ContactRow';
 import { ContactsControls } from './ContactsControls';
 import { formatCount } from './contactsModel';
@@ -54,7 +57,13 @@ function NothingFound({ onReset }: { readonly onReset: () => void }) {
   );
 }
 
-function Rows({ state }: { readonly state: ContactsState }) {
+function Rows({
+  state,
+  onWrite,
+}: {
+  readonly state: ContactsState;
+  readonly onWrite: (contact: B640Contact) => void;
+}) {
   const { criteria } = state;
   if (state.load === 'loading') return <StatusLine state="wait" text="Загружаем контакты…" />;
   if (state.load === 'error') return <RetryLine onRetry={state.retry} />;
@@ -66,12 +75,17 @@ function Rows({ state }: { readonly state: ContactsState }) {
       total={state.total}
       onLoadMore={state.loadMore}
       listClassName="rows exp-rows ct-rows"
-      renderItem={(contact) => <ContactRow contact={contact} />}
+      renderItem={(contact) => <ContactRow contact={contact} onWrite={onWrite} />}
     />
   );
 }
 
 function List({ state }: { readonly state: ContactsState }) {
+  const [writing, setWriting] = useState<B640Contact | null>(null);
+  const sent = (contact: B640Contact, sentAt: string) => {
+    state.patchStatus(contact.id, contact.status.state, 'written', sentAt);
+    setWriting(null);
+  };
   return (
     <div className="col col-wide">
       <section className="col ct-list" aria-labelledby="ct-title">
@@ -81,8 +95,11 @@ function List({ state }: { readonly state: ContactsState }) {
           </h2>
         </div>
         <ContactsControls state={state} />
-        <Rows state={state} />
+        <Rows state={state} onWrite={setWriting} />
       </section>
+      {writing ? (
+        <ContactMessageDialog contact={writing} onClose={() => setWriting(null)} onSent={sent} />
+      ) : null}
     </div>
   );
 }

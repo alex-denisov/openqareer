@@ -8,17 +8,28 @@ const NAME_BOX = { display: 'block', minBlockSize: 'var(--career-space-6)' } as 
 
 export interface ContactRowProps {
   readonly contact: B640Contact;
+  /** Имя — ссылка на письмо: «Написать» или «Попросить представить». */
+  readonly onWrite: (contact: B640Contact) => void;
 }
 
-/** Строка контакта (a02): имя, должность и компания, метка статуса, путь знакомства. Статус меняется в письме. */
-export function ContactRow({ contact }: ContactRowProps) {
+/** Строка контакта (a02): имя, должность и компания, метка статуса, путь знакомства. Имя открывает письмо; статус меняется отметкой «Отправил». */
+export function ContactRow({ contact, onWrite }: ContactRowProps) {
   const tag = statusTag(contact.status);
   const note = contact.linkNote?.trim();
   return (
     <li className="row ct-row ct-row2">
-      <div className="row-title ct-n" style={NAME_BOX}>
+      <a
+        className="row-title ct-n"
+        href="#write"
+        role="button"
+        style={NAME_BOX}
+        onClick={(event) => {
+          event.preventDefault();
+          onWrite(contact);
+        }}
+      >
         {contact.fullName}
-      </div>
+      </a>
       <div className="row-sub ct-w">{workLine(contact)}</div>
       <div className="ct-tags">
         <span className={tag.cls}>{tag.text}</span>
