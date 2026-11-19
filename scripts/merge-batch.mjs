@@ -80,7 +80,7 @@ function act(what, fn) {
 
 function listPrs() {
   const fields =
-    'number,title,headRefName,headRefOid,labels,isDraft,mergeable,baseRefName,statusCheckRollup';
+    'number,title,headRefName,headRefOid,labels,isDraft,mergeable,baseRefName,statusCheckRollup,isCrossRepository';
   const prs = ghJson(
     'pr',
     'list',
@@ -125,9 +125,25 @@ function headCommit(sha) {
     'api',
     `repos/${repo()}/commits/${sha}`,
     '--jq',
-    '{author: .author.login, message: .commit.message, parents: [.parents[].sha], date: .commit.committer.date}',
+    '{author: .author.login, message: .commit.message, parents: [.parents[].sha], date: .commit.committer.date, tree: .commit.tree.sha}',
   );
   return c;
+}
+
+/**
+ * The author name can be spoofed, so trust the merge only by content: the
+ * second parent is on main and the tree is exactly the merge of its parents,
+ * i.e. the commit adds nothing beyond main.
+ */
+function isPureMainMerge(commit) {
+  const [head, mainSide] = commit.parents;
+  try {
+    git('fetch', '-q', 'origin', head, mainSide, 'main');
+    git('merge-base', '--is-ancestor', mainSide, 'origin/main');
+    return git('merge-tree', '--write-tree', head, mainSide) === commit.tree;
+  } catch {
+    return false;
+  }
 }
 
 function lightChecksOf(sha) {
@@ -148,7 +164,8 @@ function resolveBotHead(pr) {
   try {
     const commit = headCommit(pr.headRefOid);
     const withDate = { ...pr, headDate: commit.date };
-    if (!isOwnMainMerge(commit)) return withDate;
+    if (pr.isCrossRepository || !isOwnMainMerge(commit) || !isPureMainMerge(commit))
+      return withDate;
     approveWaitingRuns(pr);
     const out = inheritParentChecks(withDate, commit, lightChecksOf(commit.parents[0]));
     if (out.inheritedFrom)
