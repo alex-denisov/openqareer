@@ -1,6 +1,8 @@
-import { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
+import { pluralRu } from '../../../../shared/pluralRu';
 import type { CandidateStatusState } from '../../../../shared/candidateStatus';
 import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
+import { initialsFor } from '../../shell/accountIdentity';
 import { getResumeStudio } from '../../resume/resumeApi';
 import type { ResumeDraft, ResumeStudioView } from '../../resume/resumeTypes';
 import { Button, Icon, Link } from '../kit';
@@ -19,6 +21,13 @@ import {
 import { JobList, LanguageList, ProfileSection, RecordList, SkillChips } from './ProfileSections';
 import { PROFILE_CHANGED } from './ExperienceEditScreen';
 import { IncomeRows } from './IncomeRows';
+import {
+  achievementGroups,
+  missingAchievementKinds,
+  type AchievementGroup,
+} from './achievementsModel';
+import { questionCount } from './partTwoModel';
+import './profile.css';
 import { getIncome, type ProfileIncome } from './profileExtrasApi';
 import { getStatus } from './statusChoice';
 import { ProfileAside, TermsRowMobile } from './ProfileAside';
@@ -34,11 +43,16 @@ function Head({ draft }: { readonly draft: ResumeDraft }) {
   const photo = useCandidateMediaSrc(draft.candidate.photoMediaId);
   return (
     <section className="phead col-wide" aria-labelledby="ph-name">
-      {photo ? (
-        <div className="phead-pic">
+      <div className="phead-pic">
+        {photo ? (
           <img className="phead-photo" src={photo} alt="Фото профиля" width={72} height={72} />
-        </div>
-      ) : null}
+        ) : (
+          // Без фото круг 72 с инициалами: шапка стоит по фото, как в макете (B645 s01).
+          <span className="phead-ini" aria-hidden="true">
+            {initialsFor(name)}
+          </span>
+        )}
+      </div>
       <div className="phead-main">
         <h2 className="phead-name" id="ph-name">
           {name || 'Имя не указано'}
@@ -100,10 +114,7 @@ function Experience({ view, draft, income }: ExperienceProps) {
           <Icon name="eye" />
           Как мы прочитали
         </Link>
-        <Link className="row-act" to={buildNodePath('p09')} aria-label="Уточнить профиль">
-          <Icon name="target" />
-          Уточнить
-        </Link>
+        <RefineLink count={questionCount(draft)} />
       </div>
       {jobs.length > 0 ? (
         <JobList jobs={jobs} firstExtra={income ? <IncomeRows initial={income} /> : undefined} />
@@ -114,24 +125,91 @@ function Experience({ view, draft, income }: ExperienceProps) {
   );
 }
 
+/** «Уточнить · 1 вопрос»: число вопросов о профиле, как в макете; без вопросов — «Уточнить». */
+function RefineLink({ count }: { readonly count: number }) {
+  const label =
+    count > 0 ? `Уточнить · ${pluralRu(count, ['вопрос', 'вопроса', 'вопросов'])}` : 'Уточнить';
+  return (
+    <Link
+      className="row-act"
+      to={buildNodePath('p09')}
+      aria-label={label.replace('Уточнить', 'Уточнить профиль')}
+    >
+      <Icon name="target" />
+      {label}
+    </Link>
+  );
+}
+
+/** Пустой раздел: «Не указано» и «Добавить» вместо пропуска раздела (B645 s01). */
+function EmptyRecords() {
+  return (
+    <p className="rec">
+      <span className="rec-text dim">Не указано</span>
+      <Link className="row-act" to={buildNodePath('p04')}>
+        Добавить
+      </Link>
+    </p>
+  );
+}
+
+interface GroupSectionProps {
+  readonly id: string;
+  readonly title: string;
+  readonly groups: readonly AchievementGroup[];
+}
+
+/** Раздел из групп с подзаголовками («Награды», «Публикации и выступления»). */
+function GroupSection({ id, title, groups }: GroupSectionProps) {
+  const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
+  return (
+    <ProfileSection id={id} title={title} count={total > 0 ? String(total) : undefined}>
+      {groups.map((group) => (
+        <Fragment key={group.sub}>
+          <h3 className="psec-sub">{group.sub}</h3>
+          {group.rows.length > 0 ? <RecordList rows={group.rows} /> : <EmptyRecords />}
+        </Fragment>
+      ))}
+    </ProfileSection>
+  );
+}
+
+/** «Ещё можно добавить: Патенты, Волонтёрство» — виды записей, которых нет. */
+function AddMore({ kinds }: { readonly kinds: readonly string[] }) {
+  if (kinds.length === 0) return null;
+  return (
+    <p className="psec-addmore">
+      Ещё можно добавить:{' '}
+      {kinds.map((kind) => (
+        <Link className="row-act" to={buildNodePath('p04')} key={kind}>
+          {kind}
+        </Link>
+      ))}
+    </p>
+  );
+}
+
 interface RecordSectionProps {
   readonly id: string;
   readonly title: string;
   readonly rows: readonly RecordRow[];
+  /** Пустой раздел показывать с «Добавить», а не прятать. */
+  readonly always?: boolean;
 }
 
-/** Раздел-список; без записей раздела нет. */
-function RecordSection({ id, title, rows }: RecordSectionProps) {
-  if (rows.length === 0) return null;
+/** Раздел-список; без записей раздела нет, кроме разделов `always`. */
+function RecordSection({ id, title, rows, always = false }: RecordSectionProps) {
+  if (rows.length === 0 && !always) return null;
   return (
-    <ProfileSection id={id} title={title} count={String(rows.length)}>
-      <RecordList rows={rows} />
+    <ProfileSection id={id} title={title} count={rows.length > 0 ? String(rows.length) : undefined}>
+      {rows.length > 0 ? <RecordList rows={rows} /> : <EmptyRecords />}
     </ProfileSection>
   );
 }
 
 function Lists({ draft }: { readonly draft: ResumeDraft }) {
   const rows = recordRows(draft);
+  const extras = achievementGroups(draft);
   const about = draft.candidate.about?.trim();
   const skills = (draft.skills ?? []).map((skill) => skill.name.trim()).filter(Boolean);
   const languages = draft.languages
@@ -157,7 +235,10 @@ function Lists({ draft }: { readonly draft: ResumeDraft }) {
         </ProfileSection>
       ) : null}
       <RecordSection id="sec-projects" title="Проекты" rows={rows.projects} />
-      <RecordSection id="sec-recs" title="Рекомендации" rows={rows.recommendations} />
+      <RecordSection id="sec-recs" title="Рекомендации" rows={rows.recommendations} always />
+      <GroupSection id="sec-awards" title="Награды и публикации" groups={extras.awards} />
+      <GroupSection id="sec-orgs" title="Организации и волонтёрство" groups={extras.orgs} />
+      <AddMore kinds={missingAchievementKinds(draft)} />
     </>
   );
 }

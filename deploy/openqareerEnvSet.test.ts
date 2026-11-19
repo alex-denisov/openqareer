@@ -110,3 +110,16 @@ describe('openqareer-env-set: флаг нового кабинета B640 (B649)
     expect(lines).toEqual([`${KEY}=*`]);
   });
 });
+
+describe('openqareer-env-set: ключ YouTube Data API (B668, 19.11)', () => {
+  it('ставит ключ, не печатает значение и повтором ничего не меняет', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'oq-env-')), 'openqareer.env');
+    writeFileSync(file, 'OPENQAREER_AI_MODEL=gpt-5.6-luna\n');
+    const key = 'AIzaSyTest_key-0123456789abcdefghijklm';
+    const first = run(`OPENQAREER_YOUTUBE_API_KEY=${key}\n`, file);
+    expect(first).toContain('OPENQAREER_YOUTUBE_API_KEY set');
+    expect(first).not.toContain(key);
+    expect(readFileSync(file, 'utf8')).toContain(`OPENQAREER_YOUTUBE_API_KEY=${key}`);
+    expect(run(`OPENQAREER_YOUTUBE_API_KEY=${key}\n`, file)).toContain('unchanged');
+  });
+});

@@ -304,6 +304,35 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     return route.fallback();
   });
+  // B671: лента нового кабинета — те же события в форме нового маршрута.
+  await page.route(`${API}/b640/notifications**`, (route) => {
+    const url = new URL(route.request().url());
+    const unreadCount = notes.filter((item) => item.readAt === null).length;
+    const later = Boolean(url.searchParams.get('cursor'));
+    const source = later
+      ? Array.from({ length: 20 }, (_, index) =>
+          note(100 + index, { title: `Раннее событие ${index + 1}`, createdAt: OLD, readAt: OLD }),
+        )
+      : notes;
+    const items = source.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      category: 'responses',
+      important: false,
+      title: item.title,
+      company: null,
+      role: null,
+      eventAt: null,
+      createdAt: item.createdAt,
+      readAt: item.readAt,
+      sourceType: 'application',
+      sourceId: new URL(item.action.href, 'https://x.invalid').searchParams.get(
+        'notificationSource',
+      ),
+    }));
+    const nextCursor = !later && mocks.hasMore ? '20' : null;
+    return route.fulfill({ json: { data: { items, pinned: [], unreadCount, nextCursor } } });
+  });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
   return calls;
@@ -389,8 +418,20 @@ test.describe('B650: «Сегодня» на данных в форме прод
     );
     await expect(screen.locator('.lead .lead-sub')).toContainText('ответа нет 47 дней');
     await expect(screen.locator('.s5-prog')).toContainText('13 откликов → 1 интервью → 1 оффер');
+    // Подробность лида — вакансия, как p.lead-text макета (B645 s03).
+    await expect(screen.locator('.lead .lead-text')).toHaveText(
+      'Director of Engineering, AI Functions',
+    );
     await expect(screen.locator('.ev-row')).toHaveCount(2);
-    await expect(screen.locator('.ev-row .row-sub').first()).toHaveText('LinkedIn');
+    await expect(screen.locator('#today-more')).toHaveText('Ещё 2 дела');
+    await expect(screen.locator('.ev-row .row-sub')).toHaveText([
+      'LinkedIn · черновик готов',
+      'LinkedIn · черновик готов',
+    ]);
+    // Каждый пост открывает свой черновик (B645 s03).
+    const posts = screen.locator('.ev-row a');
+    await expect(posts.nth(0)).toHaveAttribute('href', '/app/profile/linkedin/posts?post=draft-1');
+    await expect(posts.nth(1)).toHaveAttribute('href', '/app/profile/linkedin/posts?post=draft-2');
     await expect(screen.getByText('сам не опубликуется')).toHaveCount(0);
     await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expectGates(page);

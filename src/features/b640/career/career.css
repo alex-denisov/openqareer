@@ -1,5 +1,9 @@
 /* «Карьера»: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* c06: «Изменить места» в сетке .lead — строчная ссылка по ширине текста, как row-act макета. */
+  .b640 .lead > .row-act {
+    justify-self: start;
+  }
   @media (max-width: 767px) {
     /* S10: две кнопки закреплены над нижней навигацией — последний блок («Назвать свою роль»)
        не уходит под них. */
@@ -15,11 +19,27 @@
   .b640 .c9-table {
     table-layout: fixed;
   }
-  .b640 .c9-table thead th:nth-child(1) { inline-size: 27.2%; }
-  .b640 .c9-table thead th:nth-child(2) { inline-size: 19.4%; }
-  .b640 .c9-table thead th:nth-child(3) { inline-size: 18.3%; }
-  .b640 .c9-table thead th:nth-child(4) { inline-size: 13.8%; }
-  .b640 .c9-table thead th:nth-child(5) { inline-size: 21.3%; }
+  .b640 .c9-table thead th:nth-child(1) {
+    inline-size: 27.2%;
+  }
+  .b640 .c9-table thead th:nth-child(2) {
+    inline-size: 19.4%;
+  }
+  .b640 .c9-table thead th:nth-child(3) {
+    inline-size: 18.3%;
+  }
+  .b640 .c9-table thead th:nth-child(4) {
+    inline-size: 13.8%;
+  }
+  .b640 .c9-table thead th:nth-child(5) {
+    inline-size: 21.3%;
+  }
+  /* S9: строка источников под зарплатой переносится внутри ячейки; столбец nowrap держит
+     только саму вилку, иначе строка уходит под «Вакансий» (B645). */
+  .b640 .c9-table td .c9-n {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   @media (max-width: 767px) {
     /* S9 390: «652 вакансии · по подборке за 30 дней» переносится внутри полосы, а не уходит
        под «Изменить» (B645). */
@@ -53,6 +73,25 @@
   @media (min-width: 768px) {
     .b640 .lead > .m-commit > .row-act {
       order: 1;
+    }
+  }
+  /* C4 на 390 (B645): «Пропустить» строкой над «Ответить» по правому краю, «Ответить» — от половины полосы. */
+  @media (max-width: 767px) {
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) {
+      flex-direction: row-reverse;
+      flex-wrap: wrap-reverse;
+      justify-content: space-between;
+      align-items: center;
+      row-gap: 0;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) > .btn.btn.btn {
+      order: -1;
+      flex: 0 1 auto;
+      min-inline-size: 50%;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) > .row-act {
+      flex: 0 0 auto;
+      margin-inline: calc(-1 * var(--career-space-2));
     }
   }
 }

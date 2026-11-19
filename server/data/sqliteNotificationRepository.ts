@@ -23,6 +23,7 @@ const RETENTION_MS = NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
 interface NotificationRow {
   id: string;
   event_kind: NotificationEventKind;
+  source_type?: string;
   source_id: string;
   created_at: string;
   expires_at: string;
@@ -38,6 +39,15 @@ interface PreferenceRow {
 interface Cursor {
   readonly createdAt: string;
   readonly id: string;
+}
+
+export interface NotificationFeedRow {
+  readonly id: string;
+  readonly kind: NotificationEventKind;
+  readonly sourceType: string;
+  readonly sourceId: string;
+  readonly createdAt: string;
+  readonly readAt: string | null;
 }
 
 export type NotificationDeliveryChannel = 'email' | 'telegram';
@@ -146,7 +156,7 @@ export class SqliteNotificationRepository {
     const cursor = options.cursor ? decodeCursor(options.cursor) : null;
     const rows = this.database
       .prepare(
-        `SELECT n.id, n.event_kind, n.source_id, n.created_at, n.expires_at, n.read_at
+        `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notifications n
          WHERE n.candidate_id = ? AND n.expires_at > ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
@@ -178,6 +188,50 @@ export class SqliteNotificationRepository {
       items: pageRows.map((row) => this.toItem(row)),
       unreadCount: unread.count,
       nextCursor: hasMore && last ? encodeCursor(last) : null,
+    };
+  }
+
+  /**
+   * B671: все неистёкшие уведомления кандидата (не больше `max`, новые первыми) с
+   * источником и число непрочитанных. Только чтение: без сдвига курсора и без очистки.
+   */
+  listForFeed(
+    candidateId: string,
+    options: { readonly max: number; readonly now: string },
+  ): { readonly rows: NotificationFeedRow[]; readonly unreadCount: number } {
+    const enabled = `COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
+             WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1`;
+    const rows = this.database
+      .prepare(
+        `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.read_at
+         FROM candidate_notifications n
+         WHERE n.candidate_id = ? AND n.expires_at > ? AND ${enabled}
+         ORDER BY n.created_at DESC, n.id DESC LIMIT ?`,
+      )
+      .all(candidateId, options.now, options.max) as unknown as {
+      id: string;
+      event_kind: NotificationEventKind;
+      source_type: string;
+      source_id: string;
+      created_at: string;
+      read_at: string | null;
+    }[];
+    const unread = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM candidate_notifications n
+         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND ${enabled}`,
+      )
+      .get(candidateId, options.now) as { count: number };
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        kind: row.event_kind,
+        sourceType: row.source_type,
+        sourceId: row.source_id,
+        createdAt: row.created_at,
+        readAt: row.read_at,
+      })),
+      unreadCount: unread.count,
     };
   }
 
@@ -217,6 +271,28 @@ export class SqliteNotificationRepository {
       .prepare('DELETE FROM candidate_notifications WHERE candidate_id = ? AND id = ?')
       .run(candidateId, row.id);
     return true;
+  }
+
+  /** B690: есть ли непрочитанное уведомление этого источника — повтор не нужен. */
+  hasUnreadFromSource(candidateId: string, sourceType: string, now = new Date().toISOString()): boolean {
+    return this.database
+      .prepare(
+        `SELECT 1 FROM candidate_notifications
+         WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL AND expires_at > ? LIMIT 1`,
+      )
+      .get(candidateId, sourceType, now) !== undefined;
+  }
+
+  /** B690: причина ушла — непрочитанные уведомления источника снимаются вместе с их доставками. */
+  withdrawUnreadFromSource(candidateId: string, sourceType: string): number {
+    const unread = `SELECT id FROM candidate_notifications WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL`;
+    this.database
+      .prepare(`DELETE FROM candidate_notification_deliveries WHERE notification_id IN (${unread})`)
+      .run(candidateId, sourceType);
+    const result = this.database
+      .prepare(`DELETE FROM candidate_notifications WHERE id IN (${unread})`)
+      .run(candidateId, sourceType);
+    return Number(result.changes);
   }
 
   markRead(candidateId: string, notificationId: string, now = new Date().toISOString()): boolean {
@@ -349,6 +425,14 @@ export class SqliteNotificationRepository {
     return { connected: Boolean(row), linkedAt: row?.linked_at ?? null };
   }
 
+  /** B690: срок последней невостребованной ссылки на бота; null — ссылки нет. */
+  getTelegramLinkCodeExpiry(candidateId: string): string | null {
+    const row = this.database
+      .prepare('SELECT expires_at FROM candidate_notification_telegram_link_codes WHERE candidate_id = ?')
+      .get(candidateId) as { expires_at: string } | undefined;
+    return row?.expires_at ?? null;
+  }
+
   createTelegramLinkCode(candidateId: string, codeHash: string, expiresAt: string, now = new Date().toISOString()): void {
     this.database
       .prepare(
@@ -394,7 +478,7 @@ export class SqliteNotificationRepository {
       ).run(now, now, staleAt);
       const rows = this.database.prepare(
         `SELECT d.notification_id, d.candidate_id, d.channel, d.attempts,
-                n.id, n.event_kind, n.source_id, n.created_at, n.expires_at, n.read_at
+                n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notification_deliveries d
          JOIN candidate_notifications n ON n.id = d.notification_id AND n.candidate_id = d.candidate_id
          WHERE d.status = 'pending' AND d.next_attempt_at <= ? AND n.expires_at > ?
@@ -527,6 +611,10 @@ export class SqliteNotificationRepository {
     this.database.prepare('DELETE FROM candidate_notification_telegram_chats WHERE candidate_id = ?').run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_telegram_link_codes WHERE candidate_id = ?').run(candidateId);
     this.database.prepare('DELETE FROM candidate_notification_unsubscribe_tokens WHERE candidate_id = ?').run(candidateId);
+    // B690: имя в Telegram живёт в своей таблице, она появляется только при первой записи.
+    if (this.database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_telegram_usernames'").get()) {
+      this.database.prepare('DELETE FROM candidate_telegram_usernames WHERE candidate_id = ?').run(candidateId);
+    }
     return removed;
   }
 
@@ -567,7 +655,7 @@ export class SqliteNotificationRepository {
   private readByIdempotencyKey(candidateId: string, key: string): NotificationRow | undefined {
     return this.database
       .prepare(
-        `SELECT id, event_kind, source_id, created_at, expires_at, read_at
+        `SELECT id, event_kind, source_type, source_id, created_at, expires_at, read_at
          FROM candidate_notifications WHERE candidate_id = ? AND idempotency_key = ?`,
       )
       .get(candidateId, key) as NotificationRow | undefined;
@@ -580,6 +668,7 @@ export class SqliteNotificationRepository {
       createdAt: row.created_at,
       readAt: row.read_at,
       sourceId: row.source_id,
+      sourceType: row.source_type,
     });
   }
 }

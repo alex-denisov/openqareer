@@ -241,6 +241,46 @@ test.describe('B651: «Статус» (s02)', () => {
 });
 
 test.describe('B651: «Профиль» (s01)', () => {
+  test('шапка по фото, «Уточнить · N», пустые разделы с «Добавить» (B645); гейты', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/profile');
+    const screen = node(page, 's01');
+    // Без фото — круг 72 с инициалами, роль одной строкой.
+    await expect(screen.locator('.phead-ini')).toHaveText('МС');
+    // Круг по размеру фото макета: 72 на 1440, 56 на 390; на 1440 роль одной строкой.
+    const mobile = (page.viewportSize()?.width ?? 0) < 768;
+    const pic = await screen.locator('.phead-ini').boundingBox();
+    expect(Math.round(pic?.width ?? 0)).toBe(mobile ? 56 : 72);
+    if (!mobile) {
+      const head = await screen.locator('.phead').boundingBox();
+      expect(Math.round(head?.height ?? 0)).toBe(72);
+      await expect(screen.locator('.phead-role')).toHaveCSS('white-space', 'nowrap');
+    }
+    await expect(screen.locator('#sec-exp .exp-check')).toContainText('Уточнить · 3 вопроса');
+    await expect(screen.locator('#unk-title ~ .actions')).toContainText('Ответить на 3 вопроса');
+    // B645 s01: пустые разделы — подзаголовки макета и «Не указано · Добавить» под каждым.
+    const empty: Record<string, readonly string[]> = {
+      'sec-recs': [],
+      'sec-awards': ['Награды', 'Публикации и выступления'],
+      'sec-orgs': ['Организации'],
+    };
+    for (const [id, subs] of Object.entries(empty)) {
+      const section = screen.locator(`#${id}`);
+      await section.locator('summary').click();
+      await expect(section.locator('h3.psec-sub')).toHaveText([...subs]);
+      const rows = Math.max(subs.length, 1);
+      await expect(section.getByText('Не указано')).toHaveCount(rows);
+      const add = section.getByRole('link', { name: 'Добавить' });
+      await expect(add).toHaveCount(rows);
+      for (const link of await add.all()) {
+        await expect(link).toHaveAttribute('href', '/app/profile/sources');
+      }
+    }
+    await expect(screen.locator('.psec-addmore .row-act')).toHaveText(['Патенты', 'Волонтёрство']);
+    await expectGates(page);
+  });
+
   test('шапка, статус, опыт и разделы; переходы к статусу и правке; гейты', async ({ page }) => {
     await openCabinet(page, '/app/profile');
     const screen = node(page, 's01');
@@ -285,7 +325,7 @@ test.describe('B651: «Профиль» (s01)', () => {
     ]);
     await expect(screen.locator('#ln-t')).toHaveText('Связи · 512');
     await expect(screen.locator('#unk-title')).toHaveText('Чего мы не знаем');
-    await expect(screen.getByRole('link', { name: 'Ответить на 1 вопрос' })).toBeVisible();
+    await expect(screen.getByRole('link', { name: 'Ответить на 3 вопроса' })).toBeVisible();
     await expect(screen.locator('.cv-base .cv-main b')).toHaveText('Руководитель разработки');
     await expect(screen.locator('.cv-sub')).toHaveText('Под вакансии · 14');
     await expect(screen.locator('.cv-row .tag')).toHaveText([
@@ -296,7 +336,7 @@ test.describe('B651: «Профиль» (s01)', () => {
     await expect(screen.getByRole('link', { name: 'Ещё 11 — в «Откликах»' })).toBeVisible();
     await expectGates(page);
 
-    await screen.getByRole('link', { name: 'Ответить на 1 вопрос' }).click();
+    await screen.getByRole('link', { name: 'Ответить на 3 вопроса' }).click();
     await expect(page).toHaveURL(/\/app\/profile\/question$/u);
   });
 

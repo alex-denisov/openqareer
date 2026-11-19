@@ -335,11 +335,11 @@ export class SqliteCandidateReputationRepository {
     return updated;
   }
 
-  /** B544: stores the candidate's checklist mark (and the created profile fact) on one finding. */
+  /** B544/B382: stores the candidate's checklist mark, profile fact or removal path on one finding. */
   updateFootprintFindingChecklist(
     candidateId: string,
     findingId: string,
-    patch: Pick<CandidateFootprintFinding, 'checklistMark' | 'profileFactId'>,
+    patch: Pick<CandidateFootprintFinding, 'checklistMark' | 'profileFactId' | 'removal'>,
   ): CandidateFootprintAudit | null {
     const audit = this.getLatestFootprintAudit(candidateId);
     if (!audit || !audit.findings.some((finding) => finding.id === findingId)) return null;

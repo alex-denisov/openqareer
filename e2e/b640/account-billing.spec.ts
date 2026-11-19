@@ -10,11 +10,32 @@ type Plan = 'free' | 'basic' | 'pro' | 'max';
 interface Calls {
   planRequests: number;
   checkouts: number;
+  deletions: number;
+  restores: number;
 }
 
+const DELETION = {
+  requestedAt: '2026-11-19T10:00:00.000Z',
+  purgeAfter: '2026-12-19T10:00:00.000Z',
+};
+
 async function openAccount(page: Page, path: string, plan: Plan = 'free'): Promise<Calls> {
-  const calls: Calls = { planRequests: 0, checkouts: 0 };
+  const calls: Calls = { planRequests: 0, checkouts: 0, deletions: 0, restores: 0 };
   await mockSignedInCabinet(page, { cabinetB640: true, billing: { initialPlan: plan } });
+  let deletion: typeof DELETION | null = null;
+  await page.route('**/api/v1/candidate/account/deletion', (route) => {
+    const method = route.request().method();
+    if (method === 'POST') {
+      calls.deletions += 1;
+      deletion = DELETION;
+    }
+    if (method === 'DELETE') {
+      calls.restores += 1;
+      deletion = null;
+      return route.fulfill({ status: 204 });
+    }
+    return route.fulfill({ json: { data: deletion } });
+  });
   await page.route('**/api/v1/candidate/plan-requests', (route) => {
     if (route.request().method() === 'POST') {
       calls.planRequests += 1;
@@ -39,19 +60,44 @@ async function openAccount(page: Page, path: string, plan: Plan = 'free'): Promi
 }
 
 test.describe('B661: «Аккаунт» и «Тарифы» нового кабинета, часть 2', () => {
-  test('n05: согласия, «Остановить всё» с подтверждением, выгрузка; удаления аккаунта нет', async ({
+  test('n05: согласия, «Остановить всё» с подтверждением, выгрузка, удаление аккаунта', async ({
     page,
   }) => {
     await openAccount(page, '/app/account/data');
     const screen = page.locator('[data-b640-node="n05"]');
     await expect(screen.locator('.set-h').first()).toHaveText('На что вы дали согласие');
+    await expect(screen.locator('.set-h').last()).toHaveText('Удаление аккаунта');
     await expect(screen.getByRole('switch')).toHaveCount(3);
-    await expect(screen).not.toContainText(/Удалить аккаунт|пока недоступно/iu);
+    await expect(screen.getByRole('button', { name: 'Удалить аккаунт' })).toHaveText('Удалить');
+    await expect(screen).not.toContainText(/пока недоступно/iu);
     await expectGates(page);
     const download = page.waitForEvent('download');
     await screen.getByRole('button', { name: 'Скачать мои данные' }).click();
     expect((await download).suggestedFilename()).toBe('openqareer-candidate-export.json');
     await expect(screen.locator('.res-row')).toHaveText('Файл сохранён');
+  });
+
+  test('n05b: удаление с отсрочкой после окна и возврат аккаунта', async ({ page }) => {
+    const calls = await openAccount(page, '/app/account/data');
+    const screen = page.locator('[data-b640-node="n05"]');
+    await screen.getByRole('button', { name: 'Удалить аккаунт' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Удалить аккаунт?' });
+    await expect(dialog.locator('.c5-list li')).toHaveCount(3);
+    await expectGates(page);
+    await dialog.getByRole('button', { name: 'Оставить' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(calls.deletions).toBe(0);
+    await screen.getByRole('button', { name: 'Удалить аккаунт' }).click();
+    await dialog.getByRole('button', { name: 'Удалить аккаунт' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(screen.locator('.set-row').last().locator('.set-t')).toHaveText(
+      'Аккаунт удалится 19 декабря',
+    );
+    expect(calls.deletions).toBe(1);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await screen.getByRole('button', { name: 'Вернуть аккаунт' }).click();
+    await expect(screen.getByRole('button', { name: 'Удалить аккаунт' })).toBeVisible();
+    expect(calls.restores).toBe(1);
   });
 
   test('n05: текст согласия показан до выдачи', async ({ page }) => {
@@ -99,17 +145,33 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     expect(revokes).toBe(1);
   });
 
-  test('n06: тема переключается сразу, часовой пояс выбирается', async ({ page }) => {
+  test('n06: тема переключается сразу, часовой пояс выбирается, валюта сохраняется', async ({
+    page,
+  }) => {
+    const saved: unknown[] = [];
     await openAccount(page, '/app/account/app');
+    await page.route('**/api/v1/candidate/b640/app-preferences', async (route) => {
+      if (route.request().method() === 'PUT') saved.push(route.request().postDataJSON());
+      const data = { theme: null, moneyCurrency: saved.length > 2 ? 'USD' : null };
+      await route.fulfill({ json: { data } });
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
     const screen = page.locator('[data-b640-node="n06"]');
-    await expect(screen.locator('.set-row .set-t')).toHaveText(['Тема', 'Часовой пояс']);
+    await expect(screen.locator('.set-row .set-t')).toHaveText([
+      'Тема',
+      'Часовой пояс',
+      'Валюта зарплат',
+    ]);
     await expectGates(page);
     await screen.getByRole('radio', { name: 'Тёмная' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'dark');
     await screen.getByRole('radio', { name: 'Светлая' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'light');
     await expect(screen.getByRole('combobox')).toHaveValue('Europe/Moscow');
-    await expect(screen).not.toContainText(/Валюта|Язык|Обновлени/u);
+    await screen.getByRole('radio', { name: '$' }).check();
+    await expect.poll(() => saved.at(-1)).toEqual({ moneyCurrency: 'USD' });
+    expect(saved.slice(0, 2)).toEqual([{ theme: 'dark' }, { theme: 'light' }]);
+    await expect(screen).not.toContainText(/Язык|Обновлени/u);
   });
 
   test('t03: подписка, автопродление с подтверждением, заявка на консультанта', async ({
@@ -204,6 +266,11 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
           await page.screenshot({ path: `.s13-shots/${name}-${width}-${theme}.png` });
         }
       }
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await openAccount(page, '/app/account/data');
+      await page.getByRole('button', { name: 'Удалить аккаунт' }).click();
+      await page.screenshot({ path: `.s13-shots/n05b-1440-${theme}.png` });
     }
   });
 });

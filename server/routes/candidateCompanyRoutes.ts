@@ -42,7 +42,7 @@ import {
   withDeps,
 } from './helpers';
 
-const pageQuerySchema = z.object({
+export const pageQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().default(0),
   limit: z.coerce.number().int().positive().max(20).default(20),
   sort: z.enum(['default', 'contacts', 'alphabetical']).default('default'),
@@ -247,16 +247,39 @@ function linkedinStatus(
   return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
-/** Подборка или, если читатель пула не успел, пустая подборка с отметкой «догружается». */
+/**
+ * Сколько маршрут, умеющий ответить «догружается», ждёт подборку. Холодное чтение
+ * пула идёт 12–45 с (прод 19.11): список компаний от него не зависит и приходит сразу.
+ */
+export const PENDING_SELECTION_WAIT_MS = 2_000;
+
+const SELECTION_PENDING = Symbol('selection-pending');
+
+/**
+ * Подборка или, если она не успела за `PENDING_SELECTION_WAIT_MS` или читатель пула
+ * отказал, пустая подборка с отметкой «догружается». Чтение не обрывается: оно
+ * достраивает снимок, и перезапрос экрана получает счётчики.
+ */
 async function readSelectionOrPending(
   deps: RouteDeps,
   candidateId: string,
 ): Promise<SelectionProjection & { readonly pending: boolean }> {
+  const read = readSelection(deps, candidateId);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof SELECTION_PENDING>((resolve) => {
+    timer = setTimeout(() => resolve(SELECTION_PENDING), PENDING_SELECTION_WAIT_MS);
+  });
   try {
-    return { ...(await readSelection(deps, candidateId)), pending: false };
+    const result = await Promise.race([read, deadline]);
+    if (result !== SELECTION_PENDING) return { ...result, pending: false };
+    // Ответ уже ушёл; отказ позднего чтения не должен стать необработанным.
+    read.catch(() => undefined);
+    return { vacancies: [], pending: true };
   } catch (error) {
     if (!(error instanceof VacancyMatchUnavailable)) throw error;
     return { vacancies: [], pending: true };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -305,7 +328,7 @@ export async function companyContext(
   };
 }
 
-function filterCounts(rows: CandidateCompanyContext['rows']) {
+export function filterCounts(rows: CandidateCompanyContext['rows']) {
   const knownContacts = rows.filter((row) => row.contactsCount !== null);
   return {
     all: rows.length,

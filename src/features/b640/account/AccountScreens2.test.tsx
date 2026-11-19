@@ -30,6 +30,11 @@ const api = vi.hoisted(() => ({
   getCheckout: vi.fn(),
   listPlanRequests: vi.fn(),
   createPlanRequest: vi.fn(),
+  getDeletion: vi.fn(),
+  requestDeletion: vi.fn(),
+  restoreAccount: vi.fn(),
+  getAppPreferences: vi.fn(),
+  saveAppPreferences: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
@@ -48,6 +53,15 @@ vi.mock('../../automation/automationApi', () => ({
   getCandidateAutomation: api.getAutomation,
   pauseCandidateAutomation: api.pauseAutomation,
   resumeCandidateAutomation: api.resumeAutomation,
+}));
+vi.mock('./appPreferencesApi', () => ({
+  getAppPreferences: api.getAppPreferences,
+  saveAppPreferences: api.saveAppPreferences,
+}));
+vi.mock('./accountDeletionApi', () => ({
+  getAccountDeletion: api.getDeletion,
+  requestAccountDeletion: api.requestDeletion,
+  restoreAccount: api.restoreAccount,
 }));
 vi.mock('../../resume/resumeExport', () => ({ triggerFileDownload: api.download }));
 vi.mock('../../shell/candidateBillingApi', () => ({
@@ -143,6 +157,8 @@ const button = (root: Element, text: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
+  api.saveAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
   api.getAccount.mockResolvedValue({ profile: { timezone: 'Europe/Samara' }, sessions: [] });
   api.getConsents.mockResolvedValue([
     { id: 'c1', capability: 'digital_footprint', versionId: 'v', grantedAt: '2026-11-01', revokedAt: null },
@@ -151,6 +167,7 @@ beforeEach(() => {
   api.getSummary.mockResolvedValue(paid);
   api.getReceipts.mockResolvedValue({ receipts: [receipt(1, 'https://receipts.example/1')], nextCursor: null });
   api.listPlanRequests.mockResolvedValue([]);
+  api.getDeletion.mockResolvedValue(null);
 });
 afterEach(() => {
   view?.unmount();
@@ -158,12 +175,13 @@ afterEach(() => {
 });
 
 describe('n05 «Согласия и данные»', () => {
-  it('три согласия сервера, удаления аккаунта нет, пока оно стирает сразу', async () => {
+  it('три согласия сервера и удаление аккаунта, как в макете', async () => {
     const root = await open(<DataScreen node={node('n05')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
       'На что вы дали согласие',
       'Действия от вашего имени',
       'Ваши данные',
+      'Удаление аккаунта',
     ]);
     const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
     expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
@@ -171,8 +189,72 @@ describe('n05 «Согласия и данные»', () => {
       ['Цифровой след', true],
       ['Действия от вашего имени', false],
     ]);
-    expect(root.textContent).not.toMatch(/Удалить аккаунт|Удаление аккаунта/u);
+    const remove = root.querySelector('button[aria-label="Удалить аккаунт"]') as HTMLButtonElement;
+    expect(remove.textContent).toBe('Удалить');
+    expect(remove.className).toBe('btn is-sm is-danger');
+    expect(remove.closest('.set-row')?.querySelector('.set-t')?.textContent).toBe('Удалить аккаунт');
     expect(api.deleteCandidateAccount).not.toHaveBeenCalled();
+  });
+
+  it('n05b: удаление только после окна, «Оставить» ничего не трогает', async () => {
+    api.requestDeletion.mockResolvedValue({
+      requestedAt: '2026-11-19T10:00:00.000Z',
+      purgeAfter: '2026-12-19T10:00:00.000Z',
+    });
+    const root = await open(<DataScreen node={node('n05')} />);
+    const dialog = () => document.querySelector('.pf-dialog[role=dialog]') as HTMLElement | null;
+    click(root.querySelector('button[aria-label="Удалить аккаунт"]'));
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Удалить аккаунт?');
+    expect([...dialog()!.querySelectorAll('.c5-list li')].map((item) => item.textContent)).toEqual([
+      'Профиль, отклики и дневник сотрутся через 30 дней.',
+      'Автоотклики и публикации по расписанию остановятся сразу.',
+      'До конца этого срока аккаунт можно вернуть.',
+    ]);
+    click(button(dialog()!, 'Оставить'));
+    await settle();
+    expect(dialog()).toBeNull();
+    expect(api.requestDeletion).not.toHaveBeenCalled();
+
+    click(root.querySelector('button[aria-label="Удалить аккаунт"]'));
+    click(button(dialog()!, 'Удалить аккаунт'));
+    await settle();
+    expect(api.requestDeletion).toHaveBeenCalledTimes(1);
+    expect(dialog()).toBeNull();
+    const row = button(root, 'Вернуть аккаунт')!.closest('.set-row')!;
+    expect(n(row.querySelector('.set-t')?.textContent)).toBe('Аккаунт удалится 19 декабря');
+    expect(root.querySelector('button[aria-label="Удалить аккаунт"]')).toBeNull();
+  });
+
+  it('запрошенное удаление видно сразу, «Вернуть аккаунт» его снимает', async () => {
+    api.getDeletion.mockResolvedValue({
+      requestedAt: '2026-11-19T10:00:00.000Z',
+      purgeAfter: '2026-12-19T10:00:00.000Z',
+    });
+    api.restoreAccount.mockResolvedValue(undefined);
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(button(root, 'Вернуть аккаунт'));
+    await settle();
+    expect(api.restoreAccount).toHaveBeenCalledTimes(1);
+    expect(button(root, 'Вернуть аккаунт')).toBeNull();
+    expect(root.querySelector('button[aria-label="Удалить аккаунт"]')).not.toBeNull();
+  });
+
+  it('ошибка удаления остаётся в окне, аккаунт не помечен', async () => {
+    api.requestDeletion.mockRejectedValue(new Error('500'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(root.querySelector('button[aria-label="Удалить аккаунт"]'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    click(button(dialog, 'Удалить аккаунт'));
+    await settle();
+    expect(dialog.querySelector('[role=alert]')?.textContent).toBe('Аккаунт не удалён');
+    expect(button(root, 'Вернуть аккаунт')).toBeNull();
+  });
+
+  it('без ответа об удалении группа не показывается', async () => {
+    api.getDeletion.mockRejectedValue(new Error('404'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    expect(root.textContent).not.toMatch(/Удаление аккаунта/u);
+    expect(root.querySelector('.set-h')?.textContent).toBe('На что вы дали согласие');
   });
 
   it('согласие отзывается переключателем, а даётся только после текста согласия', async () => {
@@ -284,7 +366,7 @@ describe('n06 «Приложение»', () => {
   it('тема и часовой пояс; настроек без механики и обновлений в браузере нет', async () => {
     api.updateAccountProfile.mockResolvedValue({});
     const root = await open(<AppScreen node={node('n06')} />);
-    const themes = [...root.querySelectorAll('.seg-ctl.sec-seg label')];
+    const themes = [...root.querySelectorAll('.seg-ctl.sec-seg[aria-label="Тема"] label')];
     expect(themes.map((item) => item.textContent)).toEqual(['Как в системе', 'Светлая', 'Тёмная']);
     click(themes[2].querySelector('input'));
     expect(setTheme).toHaveBeenCalledWith('dark');
@@ -296,7 +378,27 @@ describe('n06 «Приложение»', () => {
     });
     await settle();
     expect(api.updateAccountProfile).toHaveBeenCalledWith({ timezone: 'Europe/Moscow' });
-    expect(root.textContent).not.toMatch(/Язык|Валюта|Обновлени|строке меню|Запуск при входе/u);
+    expect(api.saveAppPreferences).toHaveBeenCalledWith({ theme: 'dark' });
+    expect(root.textContent).not.toMatch(/Язык|Обновлени|строке меню|Запуск при входе/u);
+  });
+
+  it('B593: валюта зарплат сохраняется; сбой возвращает прежнюю и показывает строку', async () => {
+    api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: 'USD' });
+    const root = await open(<AppScreen node={node('n06')} />);
+    const group = root.querySelector('[role=radiogroup][aria-label="Валюта зарплат"]') as HTMLElement;
+    const options = [...group.querySelectorAll('label')];
+    expect(options.map((item) => item.textContent)).toEqual(['₽', '$', '€', 'AED']);
+    expect((options[1].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    api.saveAppPreferences.mockResolvedValueOnce({ theme: null, moneyCurrency: 'EUR' });
+    click(options[2].querySelector('input'));
+    await settle();
+    expect(api.saveAppPreferences).toHaveBeenLastCalledWith({ moneyCurrency: 'EUR' });
+    expect((options[2].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    api.saveAppPreferences.mockRejectedValueOnce(new Error('сеть'));
+    click(options[0].querySelector('input'));
+    await settle();
+    expect((options[2].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    expect(root.querySelector('.set-res.is-err')?.textContent).toContain('Не сохранилось');
   });
 });
 

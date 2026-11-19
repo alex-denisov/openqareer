@@ -1,6 +1,7 @@
 import type { FootprintFinding } from '../server/osint/adapters/footprintAdapter';
+import type { FootprintRemoval } from './footprintRemoval';
 
-export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa';
+export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa' | 'youtube';
 export type FootprintReview = 'unreviewed' | 'confirmed_self' | 'not_self' | 'hidden';
 export type FootprintChecklistMark =
   | 'password_changed'
@@ -22,6 +23,8 @@ export interface CandidateFootprintFinding extends FootprintFinding {
   readonly staleAccount?: boolean;
   /** B544: the profile fact «Добавить в профиль» created from this finding. */
   readonly profileFactId?: string;
+  /** B382: removal request sent by the candidate and the last recheck of the finding URL. */
+  readonly removal?: FootprintRemoval;
 }
 
 export interface CandidateFootprintAdapterStatus {

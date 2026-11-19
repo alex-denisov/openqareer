@@ -252,7 +252,8 @@ function eyebrowFor(application: ApplicationView): string | null {
   }
   // Дата интервью стоит в правой колонке строки; подпись её не повторяет.
   if (application.nearestInterview?.scheduledAt) return null;
-  if (application.materials.coverLetter) return 'Черновик, ничего не отправлено';
+  // Письмо привязывается к отклику только одобрением (B717): это не черновик, а «пора отправить».
+  if (application.materials.coverLetter) return 'Письмо одобрено, ничего не отправлено';
   return null;
 }
 
@@ -491,7 +492,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     (application) => application.whoseTurn === 'candidate',
   );
   // Очередь — только то, что ждёт ответа или имеет срок: избранная вакансия без материалов
-  // в неё не идёт, а сохранённая с черновиком письма идёт как «одобрить письмо».
+  // в неё не идёт, а сохранённая с одобренным письмом идёт как «отправить отклик» (B717).
   const queueApplications = input.applications.filter((application) =>
     application.stage === 'saved'
       ? application.materials.coverLetter

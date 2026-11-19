@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Icon, ResultLine, StatusLine } from '../../kit';
 import type { SectionProps } from '../../sections';
-import { useScreenChrome } from '../../shell/ShellContext';
+import { useScreenChrome, useShell } from '../../shell/ShellContext';
 import { type LinkedinDraft } from '../../../today/linkedinDraftApi';
 import { PlatformRetry } from '../PlatformRetry';
 import { LiError } from './LiError';
@@ -91,7 +91,8 @@ function Body({
   readonly retry: () => void;
   readonly onPlaced: (scheduledAt: string) => void;
 }) {
-  const current = currentPostDraft(drafts);
+  const { search } = useShell();
+  const current = currentPostDraft(drafts, new URLSearchParams(search).get('post'));
   return (
     <>
       {current ? (

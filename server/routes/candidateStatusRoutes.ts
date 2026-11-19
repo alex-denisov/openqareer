@@ -19,6 +19,7 @@ import { normalizeTargetProfession, type StatusChoice } from '../domain/candidat
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { registerB640NotificationRoutes } from './b640NotificationRoutes';
 import { registerGrowthGoalRoutes } from './growthGoalRoutes';
 import { registerProfessionPathRoutes } from './professionPathRoutes';
 import { registerRelocationPayRoutes } from './relocationPayRoutes';
@@ -181,4 +182,5 @@ export function registerCandidateStatusRoutes(
   // B653 C06: вилки мест для «Релокации».
   registerRelocationPayRoutes(app, deps);
   registerRelocationPlacesRoutes(app, deps);
+  registerB640NotificationRoutes(app, deps);
 }

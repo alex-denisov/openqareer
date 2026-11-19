@@ -39,11 +39,42 @@ const DEFAULT_MIN_STALE_REBUILD_MS = 5 * 60_000;
 /** Больше снимков одновременно не держим: это верхняя граница памяти. */
 const DEFAULT_MAX_ENTRIES = 200;
 
+/**
+ * Prod 19.11: the reader kill at 12 s answered 503 and threw the build away, so a cold build of
+ * 20-45 s never finished. Now the reader gives up on waiting here, the build goes on, and the
+ * retry joins it.
+ */
+const DEFAULT_WAIT_MS = 12_000;
+
+/** With an old snapshot in hand a reader waits this long for the new one, then reads the old. */
+const DEFAULT_STALE_WAIT_MS = 1_500;
+
+export interface PersistedMatchedSnapshot {
+  readonly items: MatchedVacancyItem[];
+  readonly storedAt: number;
+}
+
+/** The last snapshot of a candidate, kept past the process: a deploy no longer starts cold. */
+export interface MatchedSnapshotStore {
+  read(candidateId: string, profileKey: string): PersistedMatchedSnapshot | null;
+  write(candidateId: string, profileKey: string, snapshot: PersistedMatchedSnapshot): void;
+  delete(candidateId: string): void;
+  /** Profiles stored for a candidate, for loading them all when a process starts. */
+  keys(candidateId: string): string[];
+}
+
+/** A snapshot of the previous process stays an answer this long; a rebuild runs behind it. */
+const STORED_MAX_AGE_MS = 24 * 60 * 60_000;
+
+const WAIT_EXPIRED = Symbol('wait-expired');
+
 interface Snapshot {
   readonly items: MatchedVacancyItem[];
   readonly storedAt: number;
   /** The shared-write count this list was read after; an older count marks it stale. */
   readonly poolWrites: number;
+  /** Read from the store: after a deploy it is the only answer that does not wait. */
+  readonly stored?: boolean;
 }
 
 export interface MatchedPoolSnapshotsOptions {
@@ -51,6 +82,8 @@ export interface MatchedPoolSnapshotsOptions {
   readonly maxAgeMs?: number;
   readonly minStaleRebuildMs?: number;
   readonly maxEntries?: number;
+  readonly waitMs?: number;
+  readonly staleWaitMs?: number;
   readonly clock?: () => number;
   readonly onRebuildFailed?: (error: unknown) => void;
 }
@@ -69,7 +102,10 @@ export class MatchedPoolSnapshots {
   private readonly minStaleRebuildMs: number;
   private onRebuildFailed: ((error: unknown) => void) | undefined;
   private readonly maxEntries: number;
+  private readonly waitMs: number;
+  private readonly staleWaitMs: number;
   private readonly clock: () => number;
+  private store: MatchedSnapshotStore | undefined;
 
   constructor(options: MatchedPoolSnapshotsOptions = {}) {
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
@@ -77,11 +113,17 @@ export class MatchedPoolSnapshots {
     this.minStaleRebuildMs = options.minStaleRebuildMs ?? DEFAULT_MIN_STALE_REBUILD_MS;
     this.onRebuildFailed = options.onRebuildFailed;
     this.maxEntries = Math.max(1, options.maxEntries ?? DEFAULT_MAX_ENTRIES);
+    this.waitMs = options.waitMs ?? DEFAULT_WAIT_MS;
+    this.staleWaitMs = options.staleWaitMs ?? DEFAULT_STALE_WAIT_MS;
     this.clock = options.clock ?? Date.now;
   }
 
   setRebuildFailureLog(log: (error: unknown) => void): void {
     this.onRebuildFailed = log;
+  }
+
+  setStore(store: MatchedSnapshotStore): void {
+    this.store = store;
   }
 
   get size(): number {
@@ -100,6 +142,7 @@ export class MatchedPoolSnapshots {
     for (const key of this.pending.keys()) {
       if (key.startsWith(prefix)) this.pending.delete(key);
     }
+    this.guard(() => this.store?.delete(candidateId));
   }
 
   /**
@@ -163,14 +206,56 @@ export class MatchedPoolSnapshots {
     options: MatchedPoolReadOptions = {},
   ): Promise<MatchedVacancyItem[]> {
     const key = this.key(candidateId, profileKey);
-    const stored = this.entries.get(key);
+    const stored = this.entries.get(key) ?? this.loadStored(candidateId, profileKey, key);
     const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
     if (stored && this.isCurrent(stored, age)) return stored.items;
-    if (stored && age < this.maxAgeMs && !options.awaitRebuild) {
+    const servable = age < (stored?.stored ? STORED_MAX_AGE_MS : this.maxAgeMs);
+    if (stored && servable && !options.awaitRebuild) {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
-    return this.awaitCompute(key, compute, stored);
+    const waitMs = options.awaitRebuild ? undefined : stored ? this.staleWaitMs : this.waitMs;
+    return this.awaitCompute(key, compute, stored, waitMs);
+  }
+
+  /** A snapshot of the previous process: it counts as read after the current pool writes. */
+  private loadStored(candidateId: string, profileKey: string, key: string): Snapshot | undefined {
+    const persisted = this.guard(() => this.store?.read(candidateId, profileKey));
+    if (!persisted) return undefined;
+    const snapshot = {
+      items: persisted.items,
+      storedAt: persisted.storedAt,
+      poolWrites: this.poolWrites,
+      stored: true,
+    };
+    this.entries.set(key, snapshot);
+    return snapshot;
+  }
+
+  /**
+   * Prod 19.11: eleven role reads after a deploy each opened a 1 MB seal on the event loop, and
+   * the screen waited up to 3.8 s in the queue. Loaded one at a time before anyone reads.
+   */
+  async preload(candidateIds: readonly string[]): Promise<number> {
+    let loaded = 0;
+    for (const candidateId of candidateIds) {
+      for (const profileKey of this.guard(() => this.store?.keys(candidateId)) ?? []) {
+        const key = this.key(candidateId, profileKey);
+        if (this.entries.has(key)) continue;
+        if (this.loadStored(candidateId, profileKey, key)) loaded += 1;
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    }
+    return loaded;
+  }
+
+  private guard<T>(action: () => T): T | undefined {
+    try {
+      return action();
+    } catch (error) {
+      this.onRebuildFailed?.(error);
+      return undefined;
+    }
   }
 
   /** PRB-041: a failed pool read falls back to any snapshot still held, however old. */
@@ -178,14 +263,20 @@ export class MatchedPoolSnapshots {
     key: string,
     compute: () => Promise<MatchedVacancyItem[]>,
     stored: Snapshot | undefined,
+    waitMs: number | undefined,
   ): Promise<MatchedVacancyItem[]> {
     try {
       const running = this.pending.get(key);
-      if (running) return await running;
-      if (this.pending.size >= this.maxEntries) {
+      if (!running && this.pending.size >= this.maxEntries) {
         throw new VacancyMatchUnavailable('vacancy_match_queue_full', 0, this.pending.size);
       }
-      return await this.computeInto(key, compute);
+      const computation = running ?? this.computeInto(key, compute);
+      const items = await this.within(computation, waitMs);
+      if (items !== WAIT_EXPIRED) return items;
+      // The build goes on behind the answer; it is not a failure to log.
+      computation.catch((error: unknown) => this.onRebuildFailed?.(error));
+      if (stored) return stored.items;
+      throw new VacancyMatchUnavailable('vacancy_match_timeout', waitMs ?? 0, this.pending.size);
     } catch (error) {
       if (!stored) throw error;
       this.onRebuildFailed?.(error);
@@ -197,6 +288,19 @@ export class MatchedPoolSnapshots {
   private rebuildBehind(key: string, compute: () => Promise<MatchedVacancyItem[]>): void {
     if (this.pending.has(key) || this.pending.size >= this.maxEntries) return;
     this.computeInto(key, compute).catch((error: unknown) => this.onRebuildFailed?.(error));
+  }
+
+  private within(
+    computation: Promise<MatchedVacancyItem[]>,
+    waitMs: number | undefined,
+  ): Promise<MatchedVacancyItem[] | typeof WAIT_EXPIRED> {
+    if (waitMs === undefined) return computation;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<typeof WAIT_EXPIRED>((resolve) => {
+      timer = setTimeout(() => resolve(WAIT_EXPIRED), waitMs);
+      timer.unref?.();
+    });
+    return Promise.race([computation, expired]).finally(() => clearTimeout(timer));
   }
 
   private computeInto(
@@ -211,6 +315,7 @@ export class MatchedPoolSnapshots {
           const now = this.clock();
           this.entries.set(key, { items, storedAt: now, poolWrites });
           this.evict(now);
+          this.persist(key, { items, storedAt: now });
         }
         return items;
       })
@@ -219,6 +324,16 @@ export class MatchedPoolSnapshots {
       });
     this.pending.set(key, computation);
     return computation;
+  }
+
+  /** Written after the answer: the reader waiting for this build does not wait for the disk. */
+  private persist(key: string, snapshot: PersistedMatchedSnapshot): void {
+    const store = this.store;
+    if (!store) return;
+    const split = key.indexOf(' ');
+    const candidateId = key.slice(0, split);
+    const profileKey = key.slice(split + 1);
+    setImmediate(() => this.guard(() => store.write(candidateId, profileKey, snapshot)));
   }
 
   private evict(now: number): void {

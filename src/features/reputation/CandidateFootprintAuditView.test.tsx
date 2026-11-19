@@ -33,7 +33,7 @@ function baseProps(
       maigret: true,
       hibp: false,
       wayback: true,
-      exa: false,
+      exa: false, youtube: false,
     },
     consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.2' },
     audit: null,

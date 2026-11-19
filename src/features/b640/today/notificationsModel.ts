@@ -25,8 +25,11 @@ const KIND_ACTION: Record<NotificationEventKind, NotificationAction> = {
   delivery_error: { label: 'Открыть отклик', path: buildNodePath('o01') },
 };
 
-/** Куда ведёт кнопка события. Ответ работодателя знает свой отклик. */
+const HH_LOGIN_ACTION: NotificationAction = { label: 'Войти снова', path: buildNodePath('n03') };
+
+/** Куда ведёт кнопка события. Ответ работодателя знает свой отклик, истёкший вход hh.ru — «Подключения». */
 export function notificationAction(item: CandidateNotification): NotificationAction {
+  if (item.source === 'hh_session') return HH_LOGIN_ACTION;
   const base = KIND_ACTION[item.kind];
   const sourceId = item.kind === 'employer_reply' ? notificationSourceId(item) : null;
   return sourceId ? { ...base, path: buildNodePath('o01c', { responseId: sourceId }) } : base;
@@ -41,16 +44,16 @@ function isSameDay(createdAt: string, now: Date, timeZone: string): boolean {
   return !Number.isNaN(date.getTime()) && dayKey(date, timeZone) === dayKey(now, timeZone);
 }
 
-export interface NotificationGroups {
-  readonly today: readonly CandidateNotification[];
-  readonly earlier: readonly CandidateNotification[];
+export interface NotificationGroups<T> {
+  readonly today: readonly T[];
+  readonly earlier: readonly T[];
 }
 
-export function groupNotifications(
-  items: readonly CandidateNotification[],
+export function groupNotifications<T extends { readonly createdAt: string }>(
+  items: readonly T[],
   now: Date,
   timeZone: string,
-): NotificationGroups {
+): NotificationGroups<T> {
   return {
     today: items.filter((item) => isSameDay(item.createdAt, now, timeZone)),
     earlier: items.filter((item) => !isSameDay(item.createdAt, now, timeZone)),

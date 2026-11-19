@@ -76,6 +76,8 @@ export interface RouteDeps {
   resumeStructurer?: ResumeStructurer;
   /** Пункты резюме из фактов беседы (29.10); без ключа блок консультанта не появляется. */
   experienceFactRewriter?: import('../providers/experienceFactRewriter').ExperienceFactRewriter;
+  /** B686: разбор KPI для дневника; без ключей и Vertex разбор отвечает отказом. */
+  kpiExtractor?: import('../providers/kpiExtractor').KpiExtractor;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */
@@ -105,6 +107,8 @@ export interface RouteDeps {
   searchConsentRepo?: import('../data/sqliteSearchConsentRepository').SqliteSearchConsentRepository;
   /** Журнал согласий кандидата на возможности профиля (B263). */
   capabilityConsentStore?: import('../auth/capabilityConsentStore').SqliteCapabilityConsentStore;
+  /** Удаление аккаунта с отсрочкой 30 дней (B689). */
+  accountDeletionStore?: import('../auth/accountDeletionStore').SqliteAccountDeletionStore;
   /** Shared index of LinkedIn people and member edges, fed only with consent (B561). */
   networkIndexRepo?: import('../data/sqliteNetworkIndexRepository').SqliteNetworkIndexRepository;
   /** Candidate-scoped «Хочу в эту компанию» list and next step (B439). */

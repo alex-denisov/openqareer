@@ -9,6 +9,8 @@ import {
   readMatchProfile,
   setMatchedRecentTitlesReader,
   setMatchedSnapshotFailureLog,
+  setMatchedSnapshotStore,
+  preloadMatchedSnapshots,
 } from './matchedPoolContext';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
 
@@ -56,6 +58,8 @@ export class MatchedPoolPrecompute {
   private warmList: MatchedListWarmer | undefined;
   /** Each candidate is checked once per process: new facts rebuild roles on their own routes. */
   private readonly rolesChecked = new Set<string>();
+  /** The first pass loads the stored snapshots before it builds anything (prod 19.11). */
+  private preloaded = false;
   private readonly pauseMs: number;
   private readonly now: () => number;
 
@@ -77,6 +81,8 @@ export class MatchedPoolPrecompute {
         'matched-snapshot-rebuild-failed',
       ),
     );
+    const sealedSnapshots = options.candidateStore.sealedMatchedLists?.snapshots;
+    if (sealedSnapshots) setMatchedSnapshotStore(options.engine, sealedSnapshots);
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
     this.now = options.now ?? Date.now;
   }
@@ -115,6 +121,11 @@ export class MatchedPoolPrecompute {
   private async runOnce(): Promise<void> {
     const startedAt = this.now();
     const candidates = this.nextCandidates();
+    if (!this.preloaded) {
+      this.preloaded = true;
+      const loaded = await preloadMatchedSnapshots(this.options.engine, candidates);
+      this.log?.info({ loaded, ms: this.now() - startedAt }, 'matched-snapshots-preloaded');
+    }
     const durationsMs: number[] = [];
     let errors = 0;
     for (const candidateId of candidates) {

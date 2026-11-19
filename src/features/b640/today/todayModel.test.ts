@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { TodayQueueItem } from '../../today/todayApi';
+import { queueMobileSubtitle } from '../../today/todayFormat';
 import {
   applicationsSummary,
   funnelLine,
+  leadText,
   moduleLayout,
+  moreTitle,
   queueAction,
   skillFit,
   vacancyRow,
@@ -22,18 +25,31 @@ function item(overrides: Partial<TodayQueueItem>): TodayQueueItem {
 }
 
 describe('b640 today: действие строки очереди', () => {
-  it('письмо на одобрение ведёт к письму отклика', () => {
+  it('B717: одобренное письмо зовёт отправить отклик, а не одобрить ещё раз', () => {
     const action = queueAction(
-      item({ material: 'cover_letter', applicationId: 'a1', eyebrow: 'черновик' }),
+      item({
+        material: 'cover_letter',
+        applicationId: 'a1',
+        eyebrow: 'Письмо одобрено, ничего не отправлено',
+      }),
     );
     expect(action).toMatchObject({
-      title: 'Одобрить письмо в «Гринкод»',
-      sub: 'черновик',
-      label: 'Проверить письмо',
-      shortLabel: 'Проверить',
-      icon: 'file',
+      title: 'Отправить отклик в «Гринкод»',
+      sub: 'Письмо одобрено, ничего не отправлено',
+      label: 'Отправить',
+      shortLabel: 'Отправить',
+      icon: 'send',
       path: '/app/responses/a1/letter',
     });
+    expect(queueAction(item({ material: 'cover_letter', applicationId: 'a1' })).sub).toBe(
+      'Письмо одобрено',
+    );
+    expect(queueMobileSubtitle(item({ material: 'cover_letter' }), false)).toBe(
+      'Письмо одобрено, ждёт отправки',
+    );
+    expect(queueAction(item({ material: 'cover_letter', company: null })).title).toBe(
+      'Отправить отклик',
+    );
   });
 
   it('интервью ведёт к подготовке; без отклика — к ближайшему интервью', () => {
@@ -64,11 +80,41 @@ describe('b640 today: действие строки очереди', () => {
       company: 'LinkedIn',
       eyebrow: 'сам не опубликуется',
     });
-    expect(queueAction(post).sub).toBe('LinkedIn');
+    expect(queueAction(post).sub).toBe('LinkedIn · черновик готов');
     expect(queueAction(item({ kind: 'linkedin_post', title: 'о найме' }))).toMatchObject({
       label: 'Открыть пост',
       path: '/app/profile/linkedin/posts',
     });
+  });
+
+  it('пост открывает свой черновик (B645 s03)', () => {
+    const post = item({ kind: 'linkedin_post', title: 'о найме', draftId: 'd 2' });
+    expect(queueAction(post).path).toBe('/app/profile/linkedin/posts?post=d%202');
+  });
+
+  it('«Ещё N дел» со склонением (B645 s03)', () => {
+    expect(moreTitle(1)).toBe('Ещё 1 дело');
+    expect(moreTitle(3)).toBe('Ещё 3 дела');
+    expect(moreTitle(5)).toBe('Ещё 5 дел');
+    expect(moreTitle(21)).toBe('Ещё 21 дело');
+  });
+
+  it('подробность лида — вакансия, место и деньги (B645 s03, как lead-text макета)', () => {
+    expect(
+      leadText(
+        item({
+          kind: 'follow_up',
+          title: 'Руководитель платформы',
+          location: 'Москва',
+          salary: { from: 400000, currency: 'RUB' },
+        }),
+      ),
+    ).toMatch(/^Руководитель платформы · Москва · .+/u);
+    expect(leadText(item({ kind: 'interview', title: 'CTO' }))).toBe('CTO');
+    expect(leadText(item({ kind: 'linkedin_post', title: 'о найме' }))).toBeNull();
+    expect(leadText(item({ kind: 'new_vacancy', title: 'CTO', location: 'Казань' }))).toBe(
+      'Казань',
+    );
   });
 });
 

@@ -1,4 +1,5 @@
 import { createServer, type Server } from 'node:http';
+import { gzipSync } from 'node:zlib';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createPinnedFetch, createPinnedSession, type ResolveAll } from './pinnedFetch';
@@ -99,6 +100,57 @@ describe('createPinnedFetch (B643, DNS rebinding)', () => {
     await expect(
       fetchPinned({ url: `http://acme.test:${port}/`, method: 'GET', headers: {} }),
     ).rejects.toThrow(/body_too_large/);
+  });
+
+  it('сжатое тело не раскрывается больше предела (B382, бомба сжатия)', async () => {
+    const bomb = gzipSync(Buffer.alloc(8 * 1024 * 1024));
+    const port = await listen((_req, res) => {
+      res.setHeader('content-encoding', 'gzip');
+      res.end(bomb);
+    });
+    const fetchPinned = createPinnedFetch({
+      resolve: to127,
+      isPublicAddress: () => true,
+      maxBodyBytes: 64 * 1024,
+    });
+    expect(bomb.length).toBeLessThan(64 * 1024);
+    await expect(
+      fetchPinned({ url: `http://acme.test:${port}/`, method: 'GET', headers: {} }),
+    ).rejects.toThrow();
+  });
+
+  it('B719: сервер по байту держит запрос — общий срок обрывает его', async () => {
+    const port = await listen((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      const drip = setInterval(() => res.write('x'), 20);
+      res.on('close', () => clearInterval(drip));
+    });
+    const fetchPinned = createPinnedFetch({
+      resolve: to127,
+      isPublicAddress: () => true,
+      timeoutMs: 1_000,
+      deadlineMs: 300,
+    });
+    const started = Date.now();
+    await expect(
+      fetchPinned({ url: `http://acme.test:${port}/`, method: 'GET', headers: {} }),
+    ).rejects.toThrow(/deadline/);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it('B719: быстрый ответ укладывается в срок и таймер не держит процесс', async () => {
+    const port = await listen((_req, res) => res.end('ok'));
+    const fetchPinned = createPinnedFetch({
+      resolve: to127,
+      isPublicAddress: () => true,
+      deadlineMs: 300,
+    });
+    const response = await fetchPinned({
+      url: `http://acme.test:${port}/`,
+      method: 'GET',
+      headers: {},
+    });
+    expect(response.body.toString()).toBe('ok');
   });
 
   it('сессия рендера держит соединение: два запроса — один сокет', async () => {

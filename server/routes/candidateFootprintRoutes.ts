@@ -1,4 +1,6 @@
+import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
 import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
+import { cabinetB640Enabled } from './cabinetB640Flag';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -40,22 +42,35 @@ const reviewSchema = z.object({
   review: z.enum(['confirmed_self', 'not_self', 'hidden', 'unreviewed']),
 }).strict();
 
-function sourceAvailability(config: RouteDeps['config']) {
+function sourceAvailability(config: RouteDeps['config'], youtube: boolean) {
   return {
     sherlock: true,
     maigret: true,
     hibp: Boolean(config.hibpApiKey),
     wayback: true,
     exa: Boolean(config.exaApiKey),
+    // B668: YouTube видят только кандидаты с флагом B640, прежний ответ не меняется.
+    ...(youtube ? { youtube: Boolean(config.youtubeApiKey) } : {}),
   } as const;
 }
 
-function getPlan(deps: RouteDeps, candidateId: string, manualEmployers?: readonly string[]) {
+/** B668: проверка канала YouTube — только кандидату с флагом нового кабинета. */
+function youtubeEnabled(deps: RouteDeps, request: FastifyRequest): boolean {
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  return Boolean(principal && cabinetB640Enabled(deps.config, principal.username));
+}
+
+function getPlan(
+  deps: RouteDeps,
+  candidateId: string,
+  manualEmployers: readonly string[] | undefined,
+  youtube: boolean,
+) {
   const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-  const availability = sourceAvailability(deps.config);
+  const availability = sourceAvailability(deps.config, youtube);
   return {
     plan: toPublicFootprintQueryPlan(
-      buildCandidateFootprintQueryPlan(draft, { manualEmployers }),
+      buildCandidateFootprintQueryPlan(draft, { manualEmployers, youtube }),
       availability,
     ),
     unidentifiedEmployers: extractUnidentifiedEmployers(draft),
@@ -111,7 +126,7 @@ async function handleGetFootprintPlan(
       : undefined;
   const consent = consentForCandidate(deps, request, candidate.id);
   const { plan, unidentifiedEmployers, sourceAvailability } = getPlan(
-    deps, candidate.id, manualEmployers,
+    deps, candidate.id, manualEmployers, youtubeEnabled(deps, request),
   );
   return {
     data: {
@@ -181,9 +196,10 @@ function validateSelectedQueryIds(
   deps: RouteDeps,
   candidateId: string,
   selectedQueryIds: readonly string[],
-  manualEmployers?: readonly string[],
+  manualEmployers: readonly string[] | undefined,
+  youtube: boolean,
 ): { valid: boolean; unavailable: boolean } {
-  const { plan } = getPlan(deps, candidateId, manualEmployers);
+  const { plan } = getPlan(deps, candidateId, manualEmployers, youtube);
   const selected = new Set(selectedQueryIds);
   const matches = plan.filter((item) => selected.has(item.id));
   return {
@@ -225,6 +241,7 @@ async function handleStartFootprintAudit(
   }
   const selected = validateSelectedQueryIds(
     deps, candidate.id, parsed.data.selectedQueryIds, parsed.data.manualEmployers,
+    youtubeEnabled(deps, request),
   );
   if (!selected.valid) {
     return sendError(reply, request, 409, 'query_plan_changed', 'План проверки изменился. Обновите страницу.', false);
@@ -249,7 +266,10 @@ async function launchFootprintRun(
   manualEmployers?: readonly string[],
 ): Promise<unknown> {
   const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-  const plan = buildCandidateFootprintQueryPlan(draft, { manualEmployers });
+  const plan = buildCandidateFootprintQueryPlan(draft, {
+    manualEmployers,
+    youtube: youtubeEnabled(deps, request),
+  });
   try {
     const audit = startCandidateFootprintAudit({
       candidateId,
@@ -340,4 +360,5 @@ export function registerCandidateFootprintRoutes(app: FastifyInstance, deps: Rou
   registerCandidateFootprintChecklistRoutes(app, deps);
   // B667: сводка по категориям риска; свой маршрут закрыт флагом B640.
   registerFootprintRiskRoutes(app, deps);
+  registerFootprintRemovalRoutes(app, deps);
 }

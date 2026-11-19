@@ -18,7 +18,9 @@ import type { ResumeEvidenceImport } from '../data/candidateStore';
 import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
+import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
 import { readTargetLevel } from './vacancyRoleContext';
+import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
@@ -214,7 +216,7 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
     return send({ state: 'result', run: latest, stale });
   }
 
-  const context = await readAssessmentContext(deps, candidate.id, role);
+  const context = await readAssessmentContext(deps, candidate.id, role, true);
   return send(context);
 }
 
@@ -397,26 +399,34 @@ function createInitialAssessmentSkills(
   }));
 }
 
+const contextCache = new RoleContextCache<AssessmentContext>();
+
+/** `cached` for «Карьера», which reads every role at once; a started run always reads anew. */
 async function readAssessmentContext(
   deps: RouteDeps,
   candidateId: string,
   role: AssessedRole | null,
+  cached = false,
 ): Promise<AssessmentContext> {
   if (!role) return { state: 'role_not_selected' };
   const snapshot = await readRoleSnapshot(deps, candidateId, role.title);
   if (snapshot.state !== 'matched') return snapshot;
-  return summarizeAssessmentContext(
-    role.title,
-    role.version,
-    snapshot.vacancies,
-    createRoleRequirementReader(deps),
-  );
+  const reader = createRoleRequirementReader(deps);
+  const build = () => summarizeAssessmentContext(role.title, role.version, snapshot.vacancies, reader);
+  const key = `${titleKey(role.title)}\u0000${role.version}`;
+  return cached ? contextCache.read(snapshot.vacancies, key, build) : build();
+}
+
+/** The background pass builds what «Карьера» will read for a role (prod 19.11). */
+export async function warmAssessmentContext(deps: RouteDeps, candidateId: string, role: string) {
+  await readAssessmentContext(deps, candidateId, resolveAssessedRole(deps, candidateId, role), true);
 }
 
 export async function readRoleSnapshot(
   deps: RouteDeps,
   candidateId: string,
   roleTitle: string,
+  options: MatchedPoolReadOptions = {},
 ): Promise<MatchedRoleSnapshot> {
   const targetRoles = [roleTitle];
   const { confirmedSkills } = readMatchProfile(deps.candidateStore, candidateId);
@@ -428,6 +438,8 @@ export async function readRoleSnapshot(
       confirmedSkills,
       targetRoles,
       targetLevel,
+      undefined,
+      options,
     );
     return { state: 'matched', vacancies };
   } catch {
