@@ -79,6 +79,16 @@ export class SealedMatchedSnapshotStore {
       .run(candidateId, MAX_SNAPSHOTS_PER_CANDIDATE);
   }
 
+  keys(candidateId: string): string[] {
+    return (
+      this.database
+        .prepare(
+          'SELECT profile_key AS profileKey FROM matched_snapshot_seals WHERE candidate_id = ? ORDER BY built_at DESC',
+        )
+        .all(candidateId) as { profileKey: string }[]
+    ).map((row) => row.profileKey);
+  }
+
   delete(candidateId: string): void {
     this.database.prepare('DELETE FROM matched_snapshot_seals WHERE candidate_id = ?').run(candidateId);
   }
