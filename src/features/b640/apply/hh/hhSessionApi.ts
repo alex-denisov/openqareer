@@ -2,6 +2,7 @@ import type {
   HhApplyAttempt,
   HhApplyOutcome,
   HhResumeContent,
+  HhResumeEdit,
   HhResumeReview,
   HhResumeSnapshot,
   HhResumeSummary,
@@ -64,4 +65,17 @@ export async function finishHhApply(
     body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}) }),
   });
   await readDataObject<object>(response);
+}
+
+export interface HhResumeEdits {
+  readonly resumeId: string;
+  readonly vacancyId: string;
+  readonly edits: readonly HhResumeEdit[];
+}
+
+/** B678: правки выбранного резюме hh.ru «было → станет» по профилю платформы. */
+export async function getHhResumeEdits(vacancyId: string, signal?: AbortSignal): Promise<HhResumeEdits> {
+  const query = new URLSearchParams({ vacancyId }).toString();
+  const response = await apiFetch(`${BASE}/resumes/edits?${query}`, { signal });
+  return readDataObject<HhResumeEdits>(response);
 }

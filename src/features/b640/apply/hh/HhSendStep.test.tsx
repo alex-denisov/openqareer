@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   getHhResumes: vi.fn(),
   saveHhResumes: vi.fn(),
   getHhResumeReview: vi.fn(),
+  getHhResumeEdits: vi.fn(),
   startHhApply: vi.fn(),
   finishHhApply: vi.fn(),
 }));
@@ -51,6 +52,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   api.getHhResumes.mockResolvedValue(snapshot);
+  api.getHhResumeEdits.mockResolvedValue({ resumeId: 'abc1', vacancyId: 'cluster-1', edits: [] });
   api.startHhApply.mockResolvedValue({ attemptId: 'att-1', remainingToday: 14 });
   api.finishHhApply.mockResolvedValue(undefined);
   desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'sent', failureCode: null });
@@ -167,5 +169,61 @@ describe('B704: отклик через hh.ru в приложении', () => {
       [{ id: 'abc1', title: 'CDO' }, { id: 'def2', title: 'Head of Data' }],
       { id: 'def2', title: 'Head of Data', text: 'Опыт' },
     );
+  });
+
+  it('B678: «N правок» открывает разбор резюме «сейчас → предложение» и возвращает к отправке', async () => {
+    const sections = { title: 'CDO', about: '', skills: ['SQL'], places: [] };
+    api.getHhResumes.mockResolvedValue({ ...snapshot, selected: { ...snapshot.selected, sections } });
+    api.getHhResumeEdits.mockResolvedValue({
+      resumeId: 'abc1',
+      vacancyId: 'cluster-1',
+      edits: [
+        { id: 'title', section: 'title', was: 'CDO', now: 'Директор по данным' },
+        { id: 'experience:0', section: 'experience', place: 'Ромашка · 2020 — н.в.', was: 'Вёл данные.', now: 'Построил платформу данных.\nВнедрил dbt.' },
+      ],
+    });
+    await render();
+    expect(api.getHhResumeEdits).toHaveBeenCalledWith('cluster-1', expect.anything());
+    click(button('2 правки'));
+    await settle();
+
+    const text = view!.container.textContent ?? '';
+    expect(text).toContain('Должность');
+    expect(text).toContain('Опыт по местам');
+    expect(text).toContain('Ромашка · 2020 — н.в.');
+    expect(view!.container.querySelectorAll('.hh2-now .hh2-line')).toHaveLength(3);
+    expect(view!.container.querySelectorAll('button[aria-label="Скопировать"]')).toHaveLength(2);
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
+    click(button('К отправке'));
+    await settle();
+    expect(view!.container.textContent).toContain('«CDO»');
+  });
+
+  it('B678: у резюме без прочитанных разделов правки не запрашиваются', async () => {
+    await render();
+    expect(api.getHhResumeEdits).not.toHaveBeenCalled();
+    expect(view!.container.textContent).not.toContain('правк');
+  });
+
+  it('B716: «Я уже откликнулся» — отметка без окна hh.ru, отклик уходит из черновиков', async () => {
+    const onSent = await render();
+    click(button('Я уже откликнулся'));
+    await settle();
+    expect(onSent).toHaveBeenCalledTimes(1);
+    expect(api.startHhApply).not.toHaveBeenCalled();
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
+    const text = view!.container.textContent ?? '';
+    expect(text).toContain('Отклик отмечен как отправленный');
+    expect(text).not.toContain('Отправить отклик');
+  });
+
+  it('B716: отметка не сохранилась — строка ошибки, отправка остаётся', async () => {
+    const onSent = vi.fn().mockRejectedValue(new Error('Сеть недоступна'));
+    await render(onSent);
+    click(button('Я уже откликнулся'));
+    await settle();
+    const text = view!.container.textContent ?? '';
+    expect(text).toContain('Отметка не сохранилась');
+    expect(text).toContain('Отправить отклик');
   });
 });

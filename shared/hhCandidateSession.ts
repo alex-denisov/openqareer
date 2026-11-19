@@ -24,11 +24,47 @@ export interface HhResumeSummary {
   readonly updatedLabel?: string;
 }
 
+/** B678: место работы в резюме hh.ru так, как его показывает страница резюме. */
+export interface HhResumePlace {
+  readonly employer: string;
+  readonly title: string;
+  readonly period: string;
+  readonly text: string;
+}
+
+/** B678: разделы резюме hh.ru, которые платформа предлагает поправить. */
+export interface HhResumeSections {
+  readonly title: string;
+  readonly about: string;
+  readonly skills: readonly string[];
+  readonly places: readonly HhResumePlace[];
+}
+
+export const HH_SECTION_PLACES_MAX = 30;
+export const HH_SECTION_TEXT_MAX_LENGTH = 4_000;
+export const HH_SECTION_SKILLS_MAX = 100;
+
 /** Содержимое резюме так, как его показывает hh.ru: заголовок и текст страницы. */
 export interface HhResumeContent {
   readonly id: string;
   readonly title: string;
   readonly text: string;
+  /** B678: разделы выбранного резюме; у прежних снимков их нет. */
+  readonly sections?: HhResumeSections;
+}
+
+export type HhResumeEditSection = 'title' | 'experience' | 'skills' | 'about';
+
+/** B678: правка раздела резюме hh.ru «было → станет». */
+export interface HhResumeEdit {
+  readonly id: string;
+  readonly section: HhResumeEditSection;
+  /** Место работы и период — у правок опыта. */
+  readonly place?: string;
+  readonly was: string;
+  readonly now: string;
+  /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */
+  readonly added?: readonly string[];
 }
 
 export interface HhResumeSnapshot {
