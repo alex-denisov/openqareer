@@ -212,6 +212,7 @@ function LoadedCard({ vacancyId, item, data }: LoadedCardProps) {
       <Page>
         {compose ? (
           <ComposeView
+            vacancyId={vacancyId}
             item={item}
             data={data}
             action={compose}

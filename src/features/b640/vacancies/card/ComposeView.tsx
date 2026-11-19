@@ -1,7 +1,8 @@
-import { Icon, InfoTip } from '../../kit';
+import { Icon, InfoTip, Link } from '../../kit';
+import { buildNodePath } from '../../routes';
 import { MessageDraft } from '../../messages/MessageDraft';
 import { CtxHead } from '../../shell/CtxHead';
-import { rowDate, rowFormat, rowGeo, type MoneyCurrency } from '../format';
+import { rowFormat, rowGeo, type MoneyCurrency } from '../format';
 import { companyFacts } from './CompanyBlock';
 import { Fold } from './Fold';
 import { HireBlock } from './HireBlock';
@@ -14,6 +15,7 @@ import type { ComposeAction } from './waysModel';
 type LoadedItem = NonNullable<CardData['item']>;
 
 export interface ComposeViewProps {
+  readonly vacancyId: string;
   readonly item: LoadedItem;
   readonly data: CardData;
   readonly action: ComposeAction;
@@ -51,13 +53,21 @@ function evidenceOf(data: CardData, action: ComposeAction): string | undefined {
   return person?.evidence ?? undefined;
 }
 
-type HeadProps = Pick<ComposeViewProps, 'item' | 'data' | 'sourceName' | 'onBack'>;
+type HeadProps = Pick<ComposeViewProps, 'item' | 'data' | 'sourceName' | 'onBack' | 'vacancyId'>;
+
+/** «11 ноября»: дата площадки в шапке контекста, как в макете. */
+function longDate(item: LoadedItem): string {
+  const date = new Date(item.cluster.sources[0]?.observedAt ?? item.cluster.firstObservedAt);
+  if (Number.isNaN(date.getTime())) return '';
+  const format = { day: 'numeric', month: 'long', timeZone: 'Europe/Moscow' } as const;
+  return new Intl.DateTimeFormat('ru-RU', format).format(date);
+}
 
 /** Строки шапки контекста: «Город, формат», вилка, «площадка, дата». */
 function headMeta({ item, data, sourceName }: HeadProps, currency: MoneyCurrency): readonly string[] {
   const geo = rowGeo(item);
   const place = [geo, geo.startsWith('Удалённо') ? '' : rowFormat(item).toLowerCase()];
-  const date = rowDate(item);
+  const date = longDate(item);
   return [
     place.filter(Boolean).join(', '),
     moneyLines(item, data.rates, currency)?.big ?? '',
@@ -74,10 +84,17 @@ function Head(props: HeadProps) {
       title={`${cluster.canonicalTitle} · ${cluster.canonicalCompany}`}
       meta={headMeta(props, currency)}
     >
-      <button className="row-act ctx-open" type="button" onClick={props.onBack}>
+      <Link
+        className="row-act ctx-open"
+        to={buildNodePath('v04', { vacancyId: props.vacancyId })}
+        onClick={(event) => {
+          event.preventDefault();
+          props.onBack();
+        }}
+      >
         <Icon name="right" />
         Открыть: вакансия
-      </button>
+      </Link>
     </CtxHead>
   );
 }
@@ -147,6 +164,7 @@ function RightColumn({ item, data, companyPath }: ComposeViewProps) {
         <HireBlock
           company={item.cluster.canonicalCompany}
           people={data.people?.items ?? []}
+          recruiter={data.recruiter}
           companyPath={companyPath}
         />
       </Fold>

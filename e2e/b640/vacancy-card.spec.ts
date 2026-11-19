@@ -245,6 +245,17 @@ test.describe('B645: карточка вакансии — способы отк
     );
   });
 
+  test('«Написать Роману» открывает шаг «Отклик» с черновиком (a02d)', async ({ page }) => {
+    await openLadoga(page);
+    await page.getByRole('button', { name: 'Написать Роману' }).click();
+    await expect(page.locator('section.lead .lead-title')).toContainText('Написать Роману Ефимову');
+    await expect(page.locator('.lk-inline .lk-lbl')).toHaveText('Черновик');
+    await expect(page.locator('.lk-inline textarea')).toHaveValue(/Мы работали вместе/u);
+    await expect(page.locator('.r6-steps [aria-current="page"]')).toHaveText('Отклик');
+    await page.getByRole('button', { name: 'Не отправлять' }).click();
+    await expect(page.locator('.ha-item')).toHaveCount(3);
+  });
+
   test('знакомых нет: «Как откликнуться» остаётся с hh.ru и сайтом', async ({ page }) => {
     await openLadoga(page, { noPeople: true });
     const ways = page.locator('.ha-item');
