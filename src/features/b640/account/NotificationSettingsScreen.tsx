@@ -102,7 +102,7 @@ function TelegramLine({ link }: { readonly link: TelegramLink }) {
   if (state.step !== 'connected') return null;
   return (
     <p className="set-res" role="status">
-      <span>Telegram подключён</span>
+      <span>{state.username ? `Telegram · ${state.username}` : 'Telegram подключён'}</span>
       <button className="btn is-sm" type="button" disabled={link.busy} onClick={link.unlink}>
         Отвязать
       </button>

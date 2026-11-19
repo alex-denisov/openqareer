@@ -78,6 +78,15 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
       await route.fulfill({ json: { data: { emailAvailable: true, telegram, mandatory: {} } } });
       return true;
     }
+    if (pathname.endsWith('/telegram/state')) {
+      // B690: бот «подтверждает» при следующем чтении состояния, имя приходит с ним.
+      if (state.linkIssued) state.telegram = true;
+      const data = state.telegram
+        ? { state: 'connected', expiresAt: null, username: '@msokolova_dev' }
+        : { state: 'none', expiresAt: null, username: null };
+      await route.fulfill({ json: { data } });
+      return true;
+    }
     if (pathname.endsWith('/telegram/link')) {
       calls.linkRequests += 1;
       state.linkIssued = true;
@@ -192,7 +201,7 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       'https://t.me/openqareer_bot?start=mock-code',
     );
     await expectGates(page);
-    const linked = screen.locator('p.set-res', { hasText: 'Telegram подключён' });
+    const linked = screen.locator('p.set-res', { hasText: 'Telegram · @msokolova_dev' });
     await expect(linked).toBeVisible({ timeout: 10_000 });
     await expect(screen.getByRole('switch', { name: 'Ответы: Telegram' })).toBeVisible();
     await linked.getByRole('button', { name: 'Отвязать' }).click();

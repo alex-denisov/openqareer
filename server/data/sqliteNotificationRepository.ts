@@ -349,6 +349,14 @@ export class SqliteNotificationRepository {
     return { connected: Boolean(row), linkedAt: row?.linked_at ?? null };
   }
 
+  /** B690: срок последней невостребованной ссылки на бота; null — ссылки нет. */
+  getTelegramLinkCodeExpiry(candidateId: string): string | null {
+    const row = this.database
+      .prepare('SELECT expires_at FROM candidate_notification_telegram_link_codes WHERE candidate_id = ?')
+      .get(candidateId) as { expires_at: string } | undefined;
+    return row?.expires_at ?? null;
+  }
+
   createTelegramLinkCode(candidateId: string, codeHash: string, expiresAt: string, now = new Date().toISOString()): void {
     this.database
       .prepare(
