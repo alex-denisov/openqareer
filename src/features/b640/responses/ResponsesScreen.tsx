@@ -184,7 +184,7 @@ function ListHead({ titleId, total, counts, chips, onChips, sort, onSort }: Head
   return (
     <div className="list-head ot-head">
       <h2 id={titleId}>{`${total} ${pluralRu(total, ['отклик', 'отклика', 'откликов'])}`}</h2>
-      <div className="chips" role="group" aria-label="Стадии и автоотклики">
+      <div className="chips" role="group" aria-label="Стадии">
         {STAGE_CHIPS.map((chip) => {
           const pressed = chips.includes(chip.id);
           return (
