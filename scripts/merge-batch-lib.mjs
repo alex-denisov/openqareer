@@ -115,3 +115,25 @@ export function parseGhJson(out) {
     throw new Error(`gh returned non-JSON (${text.slice(0, 40)}); read scalar --jq output as text`);
   }
 }
+
+/**
+ * Stacked PRs: a PR whose head contains another candidate's head is deferred.
+ * Once the lower PR is squash-merged, the upper branch no longer updates onto
+ * main without a rebase, so it waits for the next batch instead of stalling
+ * this one. isAncestor(a, b) says whether commit a is an ancestor of b.
+ */
+export function deferStacked(candidates, isAncestor) {
+  const take = [];
+  const deferred = [];
+  for (const pr of candidates) {
+    const lower = candidates.find(
+      (o) =>
+        o.number !== pr.number &&
+        o.headRefOid !== pr.headRefOid &&
+        isAncestor(o.headRefOid, pr.headRefOid),
+    );
+    if (lower) deferred.push({ pr, on: lower.number });
+    else take.push(pr);
+  }
+  return { take, deferred };
+}

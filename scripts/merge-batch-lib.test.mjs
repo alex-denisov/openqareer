@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   creditDecision,
+  deferStacked,
   parseGhJson,
   rejectReason,
   resolveRound,
@@ -173,5 +174,20 @@ describe('parseGhJson', () => {
   });
   it('rejects a bare sha with a clear message (scalar --jq is read as text)', () => {
     expect(() => parseGhJson('4ef6a1b2c3\n')).toThrow(/read scalar --jq output as text/);
+  });
+});
+
+describe('deferStacked', () => {
+  const a = { number: 735, headRefOid: 'a' };
+  const b = { number: 736, headRefOid: 'b' }; // branched from #735
+  const c = { number: 737, headRefOid: 'c' };
+  const anc = (x, y) => x === 'a' && y === 'b';
+  it('takes the bottom of a stack and defers the PR built on it', () => {
+    const r = deferStacked([a, b, c], anc);
+    expect(r.take.map((p) => p.number)).toEqual([735, 737]);
+    expect(r.deferred).toEqual([{ pr: b, on: 735 }]);
+  });
+  it('keeps independent PRs', () => {
+    expect(deferStacked([a, c], () => false).take).toEqual([a, c]);
   });
 });
