@@ -228,6 +228,18 @@ interface FlowState {
   readonly wide: boolean;
 }
 
+/** Письмо отклика: черновик, варианты и одобрение. */
+function useApplyLetter(vacancyId: string) {
+  // Одобренное письмо открывается своим текстом: черновик не просим, пока одобрение не снято.
+  const approvalHold = useApprovalHold(vacancyId);
+  const draft = useVacancyLetterController(vacancyId, COLD_CIRCLE, {
+    holdDraft: approvalHold.hold,
+  });
+  const variants = useLetterVariants(vacancyId, draft);
+  const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
+  return { letter, variants };
+}
+
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
 function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const { search } = useShell();
@@ -235,13 +247,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const [resumeOk, setResumeOk] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
-  // Одобренное письмо открывается своим текстом: черновик не просим, пока одобрение не снято.
-  const approvalHold = useApprovalHold(target.vacancyId);
-  const draft = useVacancyLetterController(target.vacancyId, COLD_CIRCLE, {
-    holdDraft: approvalHold.hold,
-  });
-  const variants = useLetterVariants(target.vacancyId, draft);
-  const letter = useVariantApproval(target.vacancyId, draft, variants, approvalHold);
+  const { letter, variants } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
   const form = questionnaire.form;
