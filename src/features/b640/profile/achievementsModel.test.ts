@@ -46,8 +46,14 @@ describe('b640 profile: награды, публикации и организа
     ]);
   });
 
-  it('без записей групп нет, а «Ещё можно добавить» перечисляет недостающее', () => {
-    expect(achievementGroups(draft({}))).toEqual({ awards: [], orgs: [] });
+  it('пустой раздел — подзаголовки макета без строк, «Ещё можно добавить» перечисляет недостающее', () => {
+    expect(achievementGroups(draft({}))).toEqual({
+      awards: [
+        { sub: 'Награды', rows: [] },
+        { sub: 'Публикации и выступления', rows: [] },
+      ],
+      orgs: [{ sub: 'Организации', rows: [] }],
+    });
     expect(missingAchievementKinds(draft({ achievements }))).toEqual(['Патенты', 'Волонтёрство']);
   });
 });
