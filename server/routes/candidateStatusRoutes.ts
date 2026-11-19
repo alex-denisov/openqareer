@@ -19,6 +19,7 @@ import { normalizeTargetProfession, type StatusChoice } from '../domain/candidat
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { registerGrowthGoalRoutes } from './growthGoalRoutes';
 import { registerProfessionPathRoutes } from './professionPathRoutes';
 import { registerStatusSignalRoutes } from './statusSignalRoutes';
 
@@ -173,4 +174,6 @@ export function registerCandidateStatusRoutes(
   registerStatusSignalRoutes(app, { ...deps, statusRepository: repository });
   // B669: путь в новую профессию читает целевую профессию из того же статуса.
   registerProfessionPathRoutes(app, { ...deps, statusRepository: repository });
+  // B670: цель роста при «Работаю».
+  registerGrowthGoalRoutes(app, deps);
 }
