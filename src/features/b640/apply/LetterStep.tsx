@@ -204,8 +204,10 @@ export interface LetterStepProps {
 export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) {
   const { draft, circles, approval } = letter;
   const options = recipientOptions(circles.data?.circles ?? [], head.source);
-  const pending = circles.loading || (draft.loading && !draft.pitch);
-  const failed = circles.error || draft.error;
+  // B716: одобренное письмо — свой текст с сервера; пересборка черновика ему не нужна.
+  const saved = Boolean(approval.saved);
+  const pending = !saved && (circles.loading || (draft.loading && !draft.pitch));
+  const failed = !saved && (circles.error || draft.error);
   return (
     <section className="lead" aria-labelledby="lt-title">
       <h2 className="lead-title is-long" id="lt-title">
@@ -239,7 +241,7 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
             readOnly={Boolean(approval.saved)}
             onChange={(event) => draft.setText(event.currentTarget.value)}
           />
-          {draft.loading ? (
+          {draft.loading && !saved ? (
             <p className="ls-state" role="status">
               Пересобираем письмо…
             </p>
