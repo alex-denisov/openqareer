@@ -4,6 +4,7 @@
 mod automation_worker;
 mod connector_session;
 mod desktop_notify;
+mod device_settings;
 mod hh_apply;
 mod hh_apply_scripts;
 mod hh_resume_edit;
@@ -494,6 +495,19 @@ fn get_desktop_environment_info() -> DesktopInfo {
     }
 }
 
+/// Закрытие главного окна не завершает приложение: фоновая работа идёт дальше.
+/// Со значком окно прячется и возвращается из него; без значка на Windows и Linux
+/// окно сворачивается на панель задач — спрятанное было бы не вернуть.
+fn hide_closed_main_window(window: &tauri::Window) {
+    let keep_on_taskbar =
+        !cfg!(target_os = "macos") && !device_settings::tray_icon_enabled(window.app_handle());
+    let _ = if keep_on_taskbar {
+        window.minimize()
+    } else {
+        window.hide()
+    };
+}
+
 fn is_tunnel_cleanup_event(event: &tauri::RunEvent) -> bool {
     matches!(
         event,
@@ -547,15 +561,22 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // B722: «Запуск при входе в систему» в n06 — LaunchAgent на macOS, ключ Run на Windows.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .manage(device_settings::DeviceSettingsState::default())
         .setup(|app| {
             desktop_notify::configure_tray(app)?;
+            device_settings::load_on_startup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, WindowEvent::CloseRequested { .. }) {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
-                    let _ = window.hide();
+                    hide_closed_main_window(window);
                 }
             }
         })
@@ -607,6 +628,8 @@ fn main() {
             desktop_notify::request_desktop_notification_permission,
             desktop_notify::show_desktop_notification,
             desktop_notify::focus_main_window,
+            device_settings::get_device_settings,
+            device_settings::save_device_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenQareer desktop application");
@@ -626,6 +649,12 @@ fn main() {
     }
 
     app.run(|app_handle, event| {
+        // Dock: без значка в строке меню спрятанное окно возвращает только он.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            desktop_notify::show_main_window(app_handle);
+            return;
+        }
         if !is_tunnel_cleanup_event(&event) {
             return;
         }
