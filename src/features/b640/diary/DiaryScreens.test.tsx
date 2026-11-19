@@ -239,6 +239,115 @@ describe('d00 «Записи»', () => {
   });
 });
 
+describe('d00 пустой дневник (d00a, d00b)', () => {
+  beforeEach(() => {
+    api.listEntries.mockResolvedValue({ items: [], nextCursor: null, summaries: [] });
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+  });
+
+  it('без записей: лид «С чего начнём дневник?», без недель, фильтров и «Подвести итог»', async () => {
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    expect(page.querySelector('.lead-title')?.textContent).toBe('С чего начнём дневник?');
+    const actions = [...page.querySelectorAll('.lead .actions .btn')].map((btn) => btn.textContent);
+    expect(actions).toEqual(['Начать с плана адаптации', 'Первая запись']);
+    expect(page.querySelector('.lead .actions a')?.getAttribute('href')).toBe(
+      '/app/diary/adaptation',
+    );
+    expect(page.querySelector('.dn-week')).toBeNull();
+    expect(page.querySelector('.dn-kinds')).toBeNull();
+    expect(page.textContent).not.toContain('Подвести итог');
+    expect(page.textContent).not.toContain('Здесь появятся ваши записи.');
+  });
+
+  it('«Первая запись» ведёт в ленту с быстрой записью и курсором в ней', async () => {
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    const first = [...page.querySelectorAll('.lead .actions a')].find(
+      (link) => link.textContent === 'Первая запись',
+    );
+    expect(first?.getAttribute('href')).toBe('/app/diary?write=1');
+    view?.unmount();
+    const writing = await open(<EntriesScreen node={nodeByCode('d00')!} />, '?write=1');
+    expect(writing.querySelector('.lead-title')).toBeNull();
+    expect(document.activeElement?.id).toBe('dn-new');
+  });
+
+  it('d00a — одна колонка: без быстрой записи и правой колонки', async () => {
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    expect(page.querySelector('.page.two')).toBeNull();
+    expect(page.querySelector('#dn-new')).toBeNull();
+    expect(page.querySelector('.dn-side')).toBeNull();
+  });
+
+  it('день выхода: «Первый рабочий день…» и подпись «компания · роль · день 1»', async () => {
+    api.getOverview.mockResolvedValue({
+      platformStartedAt: null,
+      primaryWorkplace: {
+        id: 'w1',
+        company: 'Вектор Банк',
+        title: 'Операционный директор',
+        startDate: DAY,
+      },
+    });
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    expect(page.querySelector('.lead-title')?.textContent).toBe(
+      'Первый рабочий день. С чего начнём дневник?',
+    );
+    expect(page.querySelector('.lead-sub')?.textContent).toBe(
+      'Вектор Банк · Операционный директор · день 1',
+    );
+  });
+
+  it('текущая неделя без записей — без «Подвести итог»', async () => {
+    const old = new Date(Date.parse(`${DAY}T00:00:00Z`) - 14 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    api.listEntries.mockResolvedValue({
+      items: [
+        { ...entry('e9', 'note', 'Старая запись'), date: old, weekStart: diaryWeekStart(old) },
+      ],
+      nextCursor: null,
+      summaries: [],
+    });
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    expect(page.querySelector('.dn-entry')).not.toBeNull();
+    expect(page.querySelector('.dn-week-act')).toBeNull();
+    expect(page.querySelector('.lead-title')).toBeNull();
+    const side = [...page.querySelectorAll('.dn-side')].map((block) => [
+      block.querySelector('.dn-side-h')?.textContent,
+      block.querySelector('.btn')?.textContent,
+      block.querySelector('.btn')?.getAttribute('href'),
+    ]);
+    expect(side).toEqual([
+      ['План адаптации', 'Добавить план', '/app/diary/adaptation'],
+      ['Цели', 'Задать цель', '/app/diary/goals/new'],
+    ]);
+  });
+
+  it('записи есть и место работы есть: справа «Адаптация · Открыть план»', async () => {
+    api.getOverview.mockResolvedValue({
+      platformStartedAt: null,
+      primaryWorkplace: {
+        id: 'w1',
+        company: 'Вектор Банк',
+        title: 'Операционный директор',
+        startDate: DAY,
+      },
+    });
+    api.listGoalCards.mockResolvedValue({ items: [card], archived: [] });
+    api.listEntries.mockResolvedValue({
+      items: [entry('e1', 'note', 'Запись')],
+      nextCursor: null,
+      summaries: [],
+    });
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    const heads = [...page.querySelectorAll('.dn-side-h')].map((head) => head.textContent);
+    expect(heads).toEqual(['Ближайшее', 'Адаптация']);
+    expect(page.querySelector('#dn-plan')?.parentElement?.querySelector('.btn')?.textContent).toBe(
+      'Открыть план',
+    );
+  });
+});
+
 describe('d00d «Итог недели»', () => {
   beforeEach(() => {
     api.getWeek.mockResolvedValue({
