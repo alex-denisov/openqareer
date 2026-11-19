@@ -13,7 +13,22 @@ vi.mock('./contactsApi', async (original) => ({
 const navigate = vi.fn();
 vi.mock('../../shell/ShellContext', () => ({ useShell: () => ({ navigate }) }));
 
+vi.mock('../../messages/contactMessageApi', () => ({
+  createB640ContactMessage: vi.fn(),
+  editB640ContactMessage: vi.fn(),
+  approveB640ContactMessage: vi.fn(),
+  markB640ContactMessageSent: vi.fn(),
+}));
+
 const api = await import('./contactsApi');
+const messages = await import('../../messages/contactMessageApi');
+const draft = (text: string) => ({
+  id: 'm1',
+  kind: 'known_contact' as const,
+  text,
+  recipient: { name: 'Человек', linkedinUrl: null },
+  createdAt: '2026-11-12T12:00:00.000Z',
+});
 const list = vi.mocked(api.listB640Contacts);
 
 function contact(index: number, patch: Partial<B640Contact> = {}): B640Contact {
@@ -234,17 +249,92 @@ describe('a02: контакты', () => {
     expect(sheet.textContent).toContain('Статус');
     view.unmount();
   });
-  it('имя — ссылка на карточку компании; без компании — обычный текст', async () => {
+  it('имя — ссылка в каждой строке, в том числе без компании; компания в подписи — на v10b', async () => {
     list.mockResolvedValueOnce(
       page([contact(1, { companyName: 'Грин-Код' }), contact(2, { companyName: '' })], 2, null),
     );
     const view = screen();
     await flush();
-    const names = view.container.querySelectorAll<HTMLElement>('.ct-n');
-    expect(names[0]!.tagName).toBe('A');
-    expect(names[0]!.getAttribute('href')).toBe(
+    const names = view.container.querySelectorAll<HTMLElement>('a.row-title.ct-n');
+    expect(names).toHaveLength(2);
+    expect(names[0]!.getAttribute('href')).toBe('/app/profile/contacts#write-c1');
+    expect(names[1]!.getAttribute('href')).toBe('/app/profile/contacts#write-c2');
+    const rows = view.container.querySelectorAll('li.ct-row');
+    const company = rows[0]!.querySelector<HTMLAnchorElement>('.ct-w a')!;
+    expect(company.textContent).toBe('Грин-Код');
+    expect(company.getAttribute('href')).toBe(
       `/app/vacancies/companies/${encodeURIComponent('гринкод')}`,
     );
-    expect(names[1]!.tagName).toBe('DIV');
+    expect(rows[0]!.querySelector('.ct-w')!.textContent).toBe('CTO · Грин-Код');
+    expect(rows[1]!.querySelector('.ct-w a')).toBeNull();
+    click(company);
+    expect(navigate).toHaveBeenCalledWith(
+      `/app/vacancies/companies/${encodeURIComponent('гринкод')}`,
+    );
+    view.unmount();
+  });
+
+  it('имя открывает панель «Черновик», второе нажатие закрывает; открыта одна', async () => {
+    list.mockResolvedValueOnce(page([contact(1), contact(2, { link: 'direct' })], 2, null));
+    vi.mocked(messages.createB640ContactMessage).mockResolvedValue(draft('Текст'));
+    const view = screen();
+    await flush();
+    const names = view.container.querySelectorAll<HTMLElement>('a.ct-n');
+    click(names[0]!);
+    await flush();
+    expect(messages.createB640ContactMessage).toHaveBeenLastCalledWith(
+      { contactId: 'c1' },
+      'ask_introduction',
+    );
+    expect(names[0]!.getAttribute('aria-expanded')).toBe('true');
+    const panelId = names[0]!.getAttribute('aria-controls')!;
+    expect(view.container.querySelector(`#${panelId}`)!.textContent).toContain('Черновик');
+    expect(navigate).not.toHaveBeenCalled();
+    click(names[1]!);
+    await flush();
+    expect(messages.createB640ContactMessage).toHaveBeenLastCalledWith(
+      { contactId: 'c2' },
+      'known_contact',
+    );
+    expect(view.container.querySelectorAll('.lk-inline')).toHaveLength(1);
+    expect(names[0]!.getAttribute('aria-expanded')).toBe('false');
+    click(names[1]!);
+    expect(view.container.querySelectorAll('.lk-inline')).toHaveLength(0);
+    view.unmount();
+  });
+
+  it('«Отправил» ставит метку «писали», «Не отправлять» закрывает панель', async () => {
+    list.mockResolvedValueOnce(page([contact(1)], 1, null));
+    vi.mocked(messages.createB640ContactMessage).mockResolvedValue(draft('Текст'));
+    vi.mocked(messages.approveB640ContactMessage).mockResolvedValue({
+      ...draft('Текст'),
+      state: 'approved',
+      approvedAt: 'x',
+      openUrl: null,
+    });
+    vi.mocked(messages.markB640ContactMessageSent).mockResolvedValue({
+      ...draft('Текст'),
+      state: 'sent',
+      sentAt: '2026-11-12T12:00:00.000Z',
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => undefined },
+    });
+    const view = screen();
+    await flush();
+    click(view.container.querySelector('a.ct-n'));
+    await flush();
+    click(byText(view.container, 'button', 'Одобрить и отправить'));
+    await flush();
+    click(byText(view.container, 'button', 'Отправил'));
+    await flush();
+    expect(view.container.querySelector('.ct-tags .tag')!.textContent).toBe('писали 12.11');
+    expect(view.container.querySelectorAll('.lk-inline')).toHaveLength(0);
+    click(view.container.querySelector('a.ct-n'));
+    await flush();
+    click(byText(view.container, 'button', 'Не отправлять'));
+    expect(view.container.querySelectorAll('.lk-inline')).toHaveLength(0);
+    view.unmount();
   });
 });

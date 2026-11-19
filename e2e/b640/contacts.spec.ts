@@ -260,24 +260,46 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     await expect(page.locator('li.ct-row')).toHaveCount(20);
   });
 
-  test('имя ведёт на карточку компании (v10b)', async ({ page }) => {
-    await open(page, 'list');
-    const name = page.locator('li.ct-row').first().locator('a.row-title.ct-n');
+  test('имя открывает панель «Черновик» под строкой', async ({ page }) => {
+    await open(page, 'nocompany');
+    await page.route('**/api/v1/candidate/b640/contact-messages', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            id: 'm1',
+            kind: 'ask_introduction',
+            text: 'Анна, добрый день!',
+            recipient: { name: 'Анна Ветрова', linkedinUrl: null },
+            createdAt: '2026-11-12T12:00:00.000Z',
+          },
+        },
+      }),
+    );
+    const row = page.locator('li.ct-row').first();
+    const name = row.locator('a.row-title.ct-n');
     await expect(name).toHaveText('Анна Ветрова');
-    await expect(name).toHaveAttribute(
+    await expect(name).toHaveAttribute('href', `${PATH}#write-c0`);
+    await name.click();
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`, 'u'));
+    await expect(row.getByText('Черновик', { exact: true })).toBeVisible();
+    await expect(row.locator('textarea')).toHaveValue('Анна, добрый день!');
+    await expect(name).toHaveAttribute('aria-expanded', 'true');
+    await name.click();
+    await expect(row.locator('.lk-inline')).toHaveCount(0);
+    const noCompany = page.locator('li.ct-row').nth(3);
+    await expect(noCompany.locator('a.row-title.ct-n')).toHaveCount(1);
+  });
+
+  test('компания в подписи ведёт на карточку компании (v10b)', async ({ page }) => {
+    await open(page, 'list');
+    const company = page.locator('li.ct-row').first().locator('.ct-w a');
+    await expect(company).toHaveText('Гринкод');
+    await expect(company).toHaveAttribute(
       'href',
       `/app/vacancies/companies/${encodeURIComponent('гринкод')}`,
     );
-    await name.click();
+    await company.click();
     await expect(page).toHaveURL(/\/app\/vacancies\/companies\//u);
-  });
-
-  test('у контакта без компании имя — не ссылка', async ({ page }) => {
-    await open(page, 'nocompany');
-    const row = page.locator('li.ct-row').nth(3);
-    await expect(row.locator('.ct-n')).toHaveText('Игорь Нестеров');
-    await expect(row.locator('a')).toHaveCount(0);
-    await expect(page.locator('li.ct-row').first().locator('a.ct-n')).toHaveCount(1);
   });
 
   test('снимки для сверки с макетом', async ({ page }, testInfo) => {

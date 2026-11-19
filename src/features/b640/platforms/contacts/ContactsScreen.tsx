@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Icon, PagedList, StatusLine } from '../../kit';
 import { useShell } from '../../shell/ShellContext';
 import { ContactRow } from './ContactRow';
@@ -56,6 +57,7 @@ function NothingFound({ onReset }: { readonly onReset: () => void }) {
 
 function Rows({ state }: { readonly state: ContactsState }) {
   const { criteria } = state;
+  const [openId, setOpenId] = useState<string | null>(null);
   if (state.load === 'loading') return <StatusLine state="wait" text="Загружаем контакты…" />;
   if (state.load === 'error') return <RetryLine onRetry={state.retry} />;
   if (!state.items.length) return <NothingFound onReset={state.resetAll} />;
@@ -66,7 +68,17 @@ function Rows({ state }: { readonly state: ContactsState }) {
       total={state.total}
       onLoadMore={state.loadMore}
       listClassName="rows exp-rows ct-rows"
-      renderItem={(contact) => <ContactRow contact={contact} />}
+      renderItem={(contact) => (
+        <ContactRow
+          contact={contact}
+          open={openId === contact.id}
+          onToggle={() => setOpenId((now) => (now === contact.id ? null : contact.id))}
+          onSent={(at) => {
+            state.patchStatus(contact.id, contact.status.state, 'written', at);
+            setOpenId(null);
+          }}
+        />
+      )}
     />
   );
 }
