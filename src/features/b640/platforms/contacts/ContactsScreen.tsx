@@ -5,6 +5,7 @@ import { ContactRow } from './ContactRow';
 import { ContactsControls } from './ContactsControls';
 import { formatCount } from './contactsModel';
 import { useContacts, type ContactsState } from './useContacts';
+import './contacts.css';
 
 function RetryLine({ onRetry }: { readonly onRetry: () => void }) {
   return (

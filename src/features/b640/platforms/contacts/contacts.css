@@ -1,0 +1,16 @@
+/* «Контакты» (a02): только то, чего нет в стилях макета; атрибут style в кабинете запрещён. */
+@layer b640.sections {
+  /* Панель черновика занимает обе колонки сетки строки. */
+  .b640 .ct-row > .ct-write {
+    grid-column: 1 / -1;
+  }
+  /* Компания в подписи: цвет наследуется, подчёркивание только при наведении и фокусе. */
+  .b640 .ct-w a.ct-co {
+    color: inherit;
+    text-decoration: none;
+  }
+  .b640 .ct-w a.ct-co:hover,
+  .b640 .ct-w a.ct-co:focus-visible {
+    text-decoration: underline;
+  }
+}

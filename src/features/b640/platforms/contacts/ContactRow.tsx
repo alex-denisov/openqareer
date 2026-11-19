@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { B640Contact } from '../../../../../shared/b640Contacts';
 import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { Icon, Link } from '../../kit';
@@ -7,9 +6,6 @@ import { buildNodePath } from '../../routes';
 import { statusTag } from './contactsFilters';
 
 /** Мишень имени 24 px, как у ссылки в макете (`.ct-row a.ct-n`); токен отступа. */
-const NAME_BOX = { display: 'block', minBlockSize: 'var(--career-space-6)' } as const;
-/** Панель черновика занимает обе колонки сетки строки. */
-const PANEL_SPAN = { gridColumn: '1 / -1' } as const;
 
 export interface ContactRowProps {
   readonly contact: B640Contact;
@@ -23,18 +19,10 @@ export interface ContactRowProps {
 export const writeHref = (id: string): string => `${buildNodePath('a02')}#write-${id}`;
 const panelId = (id: string): string => `ct-write-${id}`;
 
-/** Компания в подписи: цвет наследуется (`.b640 a`), подчёркивание только при наведении и фокусе. */
+/** Компания в подписи: цвет наследуется, подчёркивание при наведении и фокусе (contacts.css). */
 function CompanyLink({ name, to }: { readonly name: string; readonly to: string }) {
-  const [underlined, setUnderlined] = useState(false);
   return (
-    <Link
-      to={to}
-      style={{ textDecoration: underlined ? 'underline' : 'none' }}
-      onMouseEnter={() => setUnderlined(true)}
-      onMouseLeave={() => setUnderlined(false)}
-      onFocus={() => setUnderlined(true)}
-      onBlur={() => setUnderlined(false)}
-    >
+    <Link to={to} className="ct-co">
       {name}
     </Link>
   );
@@ -63,7 +51,6 @@ function Name({ contact, open, onToggle }: Omit<ContactRowProps, 'onSent'>) {
   return (
     <a
       className="row-title ct-n"
-      style={NAME_BOX}
       href={writeHref(contact.id)}
       aria-expanded={open}
       aria-controls={panelId(contact.id)}
@@ -96,7 +83,7 @@ export function ContactRow({ contact, open, onToggle, onSent }: ContactRowProps)
         </div>
       ) : null}
       {open ? (
-        <div id={panelId(contact.id)} style={PANEL_SPAN}>
+        <div id={panelId(contact.id)} className="ct-write">
           <MessageDraft
             target={{ contactId: contact.id }}
             kind={contact.link === 'intro' ? 'ask_introduction' : 'known_contact'}
