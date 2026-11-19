@@ -83,7 +83,9 @@ function restorer(
 ): LetterVariantsState['restore'] {
   return (variantId, body) => {
     const at = variantId ? stored.findIndex((variant) => variant.id === variantId) : -1;
-    apply(moveTo(at >= 0 ? stored[at]!.id : FIRST_LETTER_KEY, body), at + 1);
+    // В поле — одобренный текст, даже если показан тот же вариант: его прежний текст не одобрен.
+    moveTo(at >= 0 ? stored[at]!.id : FIRST_LETTER_KEY, body);
+    apply(body, at + 1);
   };
 }
 

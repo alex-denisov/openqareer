@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LetterScreenState } from '../../vacancies/vacancyLetterController';
 import type { LetterVariantsState } from './useLetterVariants';
-import { useVariantApproval } from './useVariantApproval';
+import { useApprovalHold, useVariantApproval, type ApprovalHold } from './useVariantApproval';
 
 const api = vi.hoisted(() => ({
   readLatestLetterApproval: vi.fn(),
@@ -25,7 +25,7 @@ const STORED = {
   variantId: 'variant-2',
 };
 
-function letterOf(pitch: unknown, circlesError = ''): LetterScreenState {
+function letterOf(pitch: unknown, circlesError = '', text = 'Первое письмо'): LetterScreenState {
   return {
     circles: { data: null, loading: false, error: circlesError, retry: vi.fn() },
     circle: { circle: 3 },
@@ -34,7 +34,7 @@ function letterOf(pitch: unknown, circlesError = ''): LetterScreenState {
     draft: {
       pitch,
       workplaces: [],
-      text: 'Первое письмо',
+      text,
       setText: vi.fn(),
       loading: false,
       error: '',
@@ -56,11 +56,13 @@ afterEach(() => {
 async function mount(letter: LetterScreenState, variants: LetterVariantsState) {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   let state: LetterScreenState | undefined;
+  let hold: ApprovalHold | undefined;
   function Harness(props: {
     readonly letter: LetterScreenState;
     readonly variants: LetterVariantsState;
   }) {
-    state = useVariantApproval('vac-1', props.letter, props.variants);
+    hold = useApprovalHold('vac-1');
+    state = useVariantApproval('vac-1', props.letter, props.variants, hold);
     return null;
   }
   const root = createRoot(document.createElement('div'));
@@ -68,28 +70,55 @@ async function mount(letter: LetterScreenState, variants: LetterVariantsState) {
   await act(async () => root.render(<Harness letter={letter} variants={variants} />));
   const rerender = (next: LetterScreenState, nextVariants: LetterVariantsState) =>
     act(async () => root.render(<Harness letter={next} variants={nextVariants} />));
-  return { get: () => state!, rerender };
+  return { get: () => state!, hold: () => hold!, rerender };
 }
 
 describe('useVariantApproval: одобрение переживает уход с экрана (B711)', () => {
-  it('возвращает одобренный вариант и его текст, когда письмо собрано', async () => {
+  it('одобренное письмо встаёт сразу после чтения: черновик придержан и не нужен', async () => {
     api.readLatestLetterApproval.mockResolvedValue(STORED);
     const restore = vi.fn();
-    const pending = await mount(letterOf(null), variantsOf(false, restore));
-    // Черновик ещё собирается: одобрение ждёт, иначе пришедшее письмо перезапишет текст.
-    expect(restore).not.toHaveBeenCalled();
-    expect(pending.get().approval.saved).toBeNull();
-
-    await pending.rerender(letterOf({ emailPitch: {} }), variantsOf(true, restore));
+    const view = await mount(letterOf(null), variantsOf(true, restore));
+    expect(view.hold().hold).toBe(true);
     expect(restore).toHaveBeenCalledWith('variant-2', 'Одобренный второй вариант.');
-    expect(pending.get().approval.saved).toMatchObject({
+    expect(view.get().approval.saved).toMatchObject({
       applicationId: 'app-1',
       approvedAt: STORED.approvedAt,
     });
+  });
 
-    await act(async () => pending.get().approval.reset());
-    expect(pending.get().approval.saved).toBeNull();
+  it('пока варианты не прочитаны, одобрение ждёт их', async () => {
+    api.readLatestLetterApproval.mockResolvedValue(STORED);
+    const restore = vi.fn();
+    const view = await mount(letterOf(null), variantsOf(false, restore));
+    expect(restore).not.toHaveBeenCalled();
+    await view.rerender(letterOf(null), variantsOf(true, restore));
     expect(restore).toHaveBeenCalledTimes(1);
+  });
+
+  it('пока одобрение читается, черновик придержан; без одобрения — отпущен', async () => {
+    let resolve: (value: null) => void = () => undefined;
+    api.readLatestLetterApproval.mockReturnValue(new Promise((done) => (resolve = done)));
+    const view = await mount(letterOf(null), variantsOf(true));
+    expect(view.hold().hold).toBe(true);
+    await act(async () => resolve(null));
+    expect(view.hold().hold).toBe(false);
+  });
+
+  it('«Изменить» снимает одобрение и отпускает черновик; пришедший черновик не затирает текст', async () => {
+    api.readLatestLetterApproval.mockResolvedValue(STORED);
+    const restore = vi.fn();
+    const view = await mount(letterOf(null, '', STORED.body), variantsOf(true, restore));
+    await act(async () => view.get().approval.reset());
+    expect(view.get().approval.saved).toBeNull();
+    expect(view.hold().hold).toBe(false);
+    restore.mockClear();
+    // Черновик собирается, в поле одобренный текст; черновик пришёл и записал своё.
+    await view.rerender(letterOf(null, '', 'Правка кандидата'), variantsOf(true, restore));
+    await view.rerender(
+      letterOf({ emailPitch: {} }, '', 'Новый черновик модели'),
+      variantsOf(true, restore),
+    );
+    expect(restore).toHaveBeenCalledExactlyOnceWith('variant-2', 'Правка кандидата');
   });
 
   it('без одобрения на сервере письмо не одобрено', async () => {
