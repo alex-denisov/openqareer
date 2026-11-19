@@ -121,6 +121,14 @@ export class SqliteHhRaiseRepository {
     return rows.map(toRow);
   }
 
+  /** B690: когда поднятие последний раз упёрлось в страницу входа hh.ru; `null` — не упиралось. */
+  latestLoggedOutAt(candidateId: string): string | null {
+    const row = this.database
+      .prepare(`SELECT MAX(last_result_at) AS at FROM hh_raise_schedules WHERE candidate_id = ? AND pause_reason = 'logged_out'`)
+      .get(candidateId) as { at: string | null } | undefined;
+    return row?.at ?? null;
+  }
+
   hasOpenTask(candidateId: string, resumeId: string): boolean {
     return this.database
       .prepare(`SELECT 1 FROM hh_raise_tasks WHERE candidate_id = ? AND resume_id = ? AND status != 'done'`)

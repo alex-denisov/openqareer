@@ -30,7 +30,9 @@ const api = vi.hoisted(() => ({
   getResumeStudio: vi.fn(),
   requestAccountEmailChange: vi.fn(),
   verifyAccountEmailChange: vi.fn(),
+  getHhSessionState: vi.fn(),
 }));
+vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -147,6 +149,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getAccount.mockResolvedValue(account);
   api.getConnections.mockResolvedValue([hh, linkedin]);
+  api.getHhSessionState.mockResolvedValue({ expired: false, since: null });
   api.getNotificationPreferences.mockResolvedValue(events);
   api.getNotificationChannelStatus.mockResolvedValue(channels(false));
   api.getAccountCapabilityConsents.mockResolvedValue([
@@ -255,6 +258,20 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-pop')).toBeNull();
     expect(root.querySelector('.set-h')?.textContent).toBe('Подключено 1 из 4');
     expect(root.querySelector('.cn-off')).toBeNull();
+  });
+
+  it('B690: вход в hh.ru истёк — в строке hh предупреждение вместо «подключено»', async () => {
+    api.getHhSessionState.mockResolvedValue({ expired: true, since: '2026-11-19T10:00:00.000Z' });
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const warn = root.querySelector('.set-row.cn-row .set-v.is-warn');
+    expect(warn?.textContent).toBe('вход истёк');
+    expect(warn?.querySelector('.ico')).not.toBeNull();
+    // Признак не прочитался — строка остаётся как была.
+    api.getHhSessionState.mockRejectedValue(new Error('сеть'));
+    view?.unmount();
+    const again = await open(<ConnectionsScreen node={node('n03')} />);
+    expect(again.querySelector('.set-v.is-warn')).toBeNull();
+    expect(again.querySelectorAll('.set-row.cn-row .set-v')[1]?.textContent).toBe('подключено');
   });
 
   it('«Оставить» закрывает подтверждение без запроса', async () => {

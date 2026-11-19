@@ -10,6 +10,7 @@ import { applyOutcome, canRaiseAt, firstRaiseAt, raiseAvailableAt } from '../can
 import { SqliteHhRaiseRepository, type HhRaiseScheduleRow } from '../candidate/sqliteHhRaiseRepository';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { sessionCandidate } from './b640VacancyContext';
+import { hhSessionExpiry, noteHhLoginExpired, resolveHhLoginNotice } from './b640HhSessionState';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -26,6 +27,7 @@ const taskParams = z.object({ taskId: z.string().uuid() });
 interface Stores {
   readonly raise: SqliteHhRaiseRepository;
   readonly hh: SqliteHhSessionRepository;
+  readonly deps: RouteDeps;
 }
 type Handler = (stores: Stores, candidateId: string, request: FastifyRequest, reply: FastifyReply) => unknown;
 
@@ -128,9 +130,22 @@ const postResult: Handler = (stores, candidateId, request, reply) => {
   const now = new Date();
   const task = stores.raise.finish(candidateId, params.data.taskId, now.toISOString());
   if (!task) return sendError(reply, request, 409, 'hh_raise_task_closed', 'Это задание закрыто или чужое.', false);
+  const wasExpired = hhSessionExpiry(stores.raise, stores.hh, candidateId).expired;
   const row = stores.raise.patchSchedule(candidateId, task.resumeId, applyOutcome(body.data.outcome, now), now.toISOString());
+  noteLoginChange(stores, request, candidateId, body.data.outcome, wasExpired);
   return answer(request, viewOf(true, task.resumeId, row));
 };
+
+/** B690: первый упор в страницу входа — уведомление; удачное поднятие — вход жив, уведомление снято. */
+function noteLoginChange(stores: Stores, request: FastifyRequest, candidateId: string, outcome: string, wasExpired: boolean) {
+  if (outcome === 'ok') return resolveHhLoginNotice(stores.deps, request, candidateId);
+  if (outcome !== 'logged_out' || wasExpired) return undefined;
+  const { since } = hhSessionExpiry(stores.raise, stores.hh, candidateId);
+  return since ? noteHhLoginExpired(stores.deps, request, candidateId, since) : undefined;
+}
+
+const getSession: Handler = (stores, candidateId, request) =>
+  answer(request, hhSessionExpiry(stores.raise, stores.hh, candidateId));
 
 function route(deps: RouteDeps, stores: Stores, handler: Handler) {
   return withDeps(deps, async (routeDeps, request, reply) => {
@@ -149,6 +164,7 @@ export function registerB640HhRaiseRoutes(app: FastifyInstance, deps: RouteDeps)
   const stores: Stores = {
     raise: new SqliteHhRaiseRepository({ databasePath }),
     hh: new SqliteHhSessionRepository({ databasePath, encryptionKey: dataEncryptionKey }),
+    deps,
   };
   app.addHook('onClose', async () => { stores.raise.close(); stores.hh.close(); });
   const base = '/api/v1/candidate/b640/hh/raise';
@@ -158,4 +174,6 @@ export function registerB640HhRaiseRoutes(app: FastifyInstance, deps: RouteDeps)
   app.post(`${base}/retry`, write, route(deps, stores, postRetry));
   app.post(`${base}/claim`, write, route(deps, stores, postClaim));
   app.post(`${base}/:taskId/result`, write, route(deps, stores, postResult));
+  // B690: истёк ли вход в hh.ru — для строки hh в «Подключениях».
+  app.get('/api/v1/candidate/b640/hh/session', route(deps, stores, getSession));
 }
