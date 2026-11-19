@@ -22,6 +22,7 @@ import { sendError, withDeps } from './helpers';
 import { registerGrowthGoalRoutes } from './growthGoalRoutes';
 import { registerProfessionPathRoutes } from './professionPathRoutes';
 import { registerRelocationPayRoutes } from './relocationPayRoutes';
+import { registerRelocationPlacesRoutes } from './relocationPlacesRoutes';
 import { registerStatusSignalRoutes } from './statusSignalRoutes';
 
 /**
@@ -179,4 +180,5 @@ export function registerCandidateStatusRoutes(
   registerGrowthGoalRoutes(app, deps);
   // B653 C06: вилки мест для «Релокации».
   registerRelocationPayRoutes(app, deps);
+  registerRelocationPlacesRoutes(app, deps);
 }

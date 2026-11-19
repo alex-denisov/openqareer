@@ -3,10 +3,10 @@ import { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { latinCityName } from '../../shared/placeNames';
-import { SALARY_COUNTRY_CITIES } from '../../shared/salaryCountryCities';
-import { getCountryTaxData, supportedCountryCodes } from '../../shared/taxData';
+import { getCountryTaxData } from '../../shared/taxData';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { cityPay, countryPay, type StoredStats } from '../domain/relocationPay';
+import { RELOCATION_PAY_COUNTRIES } from '../domain/relocationPlaces';
 import { salaryStatsKey } from '../vacancies/catalogSalaryStatsStore';
 import { catalogRoleOf } from '../vacancies/vacancyCatalogFacets';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -17,7 +17,7 @@ import { loadCountryCatalog } from './salaryMarketRoutes';
 /**
  * B653 C06 «Релокация»: вилка страны или города России для строки места.
  * Только чтение готовых расчётов каталога; без флага B640 адрес отвечает как
- * несуществующий. Сохранение мест — B672.
+ * несуществующий. Сохранение мест — relocationPlacesRoutes (B672).
  */
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -30,11 +30,6 @@ const querySchema = z.union([
     })
     .strict(),
 ]);
-
-/** Страны, где есть и города каталога, и проверенная налоговая шкала. */
-export const RELOCATION_PAY_COUNTRIES: readonly string[] = Object.keys(
-  SALARY_COUNTRY_CITIES,
-).filter((code) => supportedCountryCodes.some((supported) => supported === code));
 
 function readStats(databasePath: string, keys: readonly string[]): (StoredStats | null)[] {
   if (!existsSync(databasePath)) return keys.map(() => null);
