@@ -11,19 +11,36 @@ const TOTAL = 27;
 const hh = (connected: boolean) =>
   connected
     ? {
-        platform: 'hh', available: true, capabilities: ['resume_read'], importsCareerHistory: true,
-        status: 'connected', accessMode: 'native_session_snapshot',
-        connectedAt: '2026-11-01T09:00:00.000Z', lastImportedAt: '2026-11-03T09:40:00.000Z', factCount: 12,
+        platform: 'hh',
+        available: true,
+        capabilities: ['resume_read'],
+        importsCareerHistory: true,
+        status: 'connected',
+        accessMode: 'native_session_snapshot',
+        connectedAt: '2026-11-01T09:00:00.000Z',
+        lastImportedAt: '2026-11-03T09:40:00.000Z',
+        factCount: 12,
       }
-    : { platform: 'hh', available: true, capabilities: [], importsCareerHistory: true, status: 'disconnected' };
+    : {
+        platform: 'hh',
+        available: true,
+        capabilities: [],
+        importsCareerHistory: true,
+        status: 'disconnected',
+      };
 
 const entry = (index: number) => ({
-  id: `j${index}`, queueItemId: `q${index}`, platform: index % 3 === 0 ? 'linkedin' : 'hh',
+  id: `j${index}`,
+  queueItemId: `q${index}`,
+  platform: index % 3 === 0 ? 'linkedin' : 'hh',
   result: index % 7 === 0 ? 'error' : index % 5 === 0 ? 'removed' : 'delivered',
-  receiptStatus: 'delivered', attempted: true, localDate: '2026-11-10',
+  receiptStatus: 'delivered',
+  attempted: true,
+  localDate: '2026-11-10',
   company: ['Гринкод', 'Ладога Банк', 'Лента Финанс', 'Арка Холдинг'][index % 4]!,
   occurredAt: `2026-11-${String(18 - (index % 17)).padStart(2, '0')}T16:05:00.000Z`,
-  receiptId: null, failureCode: null,
+  receiptId: null,
+  failureCode: null,
 });
 
 async function mockHh(page: Page, connected: boolean): Promise<void> {
@@ -33,12 +50,23 @@ async function mockHh(page: Page, connected: boolean): Promise<void> {
   );
   await page.route('**/api/v1/candidate/actions/usage', (route) =>
     route.fulfill({
-      json: { data: { usage: { hhBoostsCount: 1, lastHhBoostAt: '2026-11-16T09:40:00.000Z' }, timezone: 'Europe/Moscow', resetAt: '2026-11-17T00:00:00.000Z', killSwitchActive: false, limits: {} } },
+      json: {
+        data: {
+          usage: { hhBoostsCount: 1, lastHhBoostAt: '2026-11-16T09:40:00.000Z' },
+          timezone: 'Europe/Moscow',
+          resetAt: '2026-11-17T00:00:00.000Z',
+          killSwitchActive: false,
+          limits: {},
+        },
+      },
     }),
   );
 }
 
-async function mockJournal(page: Page, options: { empty?: boolean; failFirst?: boolean } = {}): Promise<void> {
+async function mockJournal(
+  page: Page,
+  options: { empty?: boolean; failFirst?: boolean } = {},
+): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });
   let failed = !options.failFirst;
   await page.route('**/api/v1/candidate/automation/journal?*', (route) => {
@@ -51,8 +79,11 @@ async function mockJournal(page: Page, options: { empty?: boolean; failFirst?: b
     return route.fulfill({
       json: {
         data: {
-          entries: all.slice(offset, offset + 20), periodDays: 30,
-          counts: { total: all.length, delivered: 19, errors: 4, removed: 4 }, limit: 20, offset,
+          entries: all.slice(offset, offset + 20),
+          periodDays: 30,
+          counts: { total: all.length, delivered: 19, errors: 4, removed: 4 },
+          limit: 20,
+          offset,
         },
       },
     });
@@ -64,7 +95,11 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
     await mockHh(page, true);
     await page.goto(HH_PATH, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a11"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('.hh-st dt')).toContainText(['Последнее поднятие', 'Поднятий сегодня', 'Данные из резюме обновлены']);
+    await expect(page.locator('.hh-st dt')).toContainText([
+      'Последнее поднятие',
+      'Поднятий сегодня',
+      'Данные из резюме обновлены',
+    ]);
     await expect(page.getByRole('switch')).toHaveCount(0);
     await expectGates(page);
   });
@@ -123,7 +158,10 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
         await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', theme);
         for (const width of desktop ? [1440, 1176] : [390]) {
           await page.setViewportSize({ width, height: desktop ? 900 : 844 });
-          await page.screenshot({ path: `.s13-shots/${name}-${width}-${theme}.png`, fullPage: true });
+          await page.screenshot({
+            path: `.s13-shots/${name}-${width}-${theme}.png`,
+            fullPage: true,
+          });
         }
       }
     }
