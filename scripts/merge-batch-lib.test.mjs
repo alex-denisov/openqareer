@@ -3,6 +3,9 @@ import {
   cancelledOnlyRuns,
   creditDecision,
   effectiveChecks,
+  inheritParentChecks,
+  isOwnMainMerge,
+  shouldNoticeStuck,
   deferStacked,
   parseGhJson,
   rejectReason,
@@ -230,5 +233,57 @@ describe('effectiveChecks / cancelledOnlyRuns', () => {
     const rollup = [run(7, 'CANCELLED', '2026-11-19T04:00:00Z')];
     expect(rejectReason(pr(1, { statusCheckRollup: rollup }))).toContain('CANCELLED');
     expect(cancelledOnlyRuns(pr(1, { statusCheckRollup: rollup }))).toEqual(['7']);
+  });
+});
+
+describe('bot merge heads (#809/#792/#784/#769)', () => {
+  const merge = {
+    author: 'github-actions[bot]',
+    message: "Merge branch 'main' into claude/x",
+    parents: ['p1', 'm1'],
+  };
+  const waiting = pr(809, {
+    statusCheckRollup: [
+      { name: 'Plan gates', status: 'ACTION_REQUIRED', conclusion: 'ACTION_REQUIRED' },
+    ],
+  });
+  it('recognises only our clean merge of main', () => {
+    expect(isOwnMainMerge(merge)).toBe(true);
+    expect(isOwnMainMerge({ ...merge, author: 'alex' })).toBe(false);
+    expect(isOwnMainMerge({ ...merge, parents: ['p1'] })).toBe(false);
+    expect(isOwnMainMerge({ ...merge, message: 'feat: x' })).toBe(false);
+  });
+  it('borrows the green light run of the PR head under the merge', () => {
+    const r = inheritParentChecks(waiting, merge, green);
+    expect(rejectReason(r)).toBeNull();
+    expect(r.inheritedFrom).toBe('p1');
+  });
+  it('does not borrow a red parent run or for a non-bot head', () => {
+    const red = [{ name: 'Lint', conclusion: 'FAILURE' }];
+    expect(rejectReason(inheritParentChecks(waiting, merge, red))).not.toBeNull();
+    expect(
+      rejectReason(inheritParentChecks(waiting, { ...merge, author: 'x' }, green)),
+    ).not.toBeNull();
+  });
+  it('leaves a ready PR untouched', () => {
+    expect(inheritParentChecks(pr(1), merge, [])).toEqual(pr(1));
+  });
+});
+
+describe('shouldNoticeStuck', () => {
+  it('comments once on a merge-ready PR skipped for an hour', () => {
+    expect(
+      shouldNoticeStuck({ reason: 'no light run yet', ageMin: 61, alreadyNoticed: false }),
+    ).toBe(true);
+    expect(
+      shouldNoticeStuck({ reason: 'no light run yet', ageMin: 61, alreadyNoticed: true }),
+    ).toBe(false);
+    expect(
+      shouldNoticeStuck({ reason: 'no light run yet', ageMin: 10, alreadyNoticed: false }),
+    ).toBe(false);
+    expect(
+      shouldNoticeStuck({ reason: 'already in a batch', ageMin: 300, alreadyNoticed: false }),
+    ).toBe(false);
+    expect(shouldNoticeStuck({ reason: null, ageMin: 300, alreadyNoticed: false })).toBe(false);
   });
 });

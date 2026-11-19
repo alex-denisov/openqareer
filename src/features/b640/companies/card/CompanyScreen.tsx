@@ -1,5 +1,5 @@
 import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
-import { Icon, InfoTip, Link, StatusLine } from '../../kit';
+import { ActionDock, Icon, InfoTip, Link, StatusLine, useIsMobile } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
 import { companyAbout } from '../format';
@@ -50,10 +50,36 @@ interface HeadProps {
   readonly known: B640CompanyPerson | undefined;
 }
 
-function Head({ card, want, known }: HeadProps) {
+/** «Написать <имя>» знакомому из круга 1 и «Хочу в компанию», пока компании нет в списке «Хочу». */
+function HeadActions({ card, want, known }: HeadProps) {
   const { company } = card.details;
+  return (
+    <>
+      {known ? (
+        <Link className="btn is-primary" to={buildNodePath('o02', { responseId: known.vacancyId })}>
+          <Icon name="send" />
+          {writeToLabel(known.name ?? '')}
+        </Link>
+      ) : null}
+      {company.want ? null : (
+        <WantButton
+          company={company}
+          busy={want.busyKey === company.key}
+          small={false}
+          onWant={(target) => void want.toggle(target)}
+        />
+      )}
+    </>
+  );
+}
+
+/** На 390 действия шапки закреплены над нижней навигацией, как в макете; на 1440 — справа от названия. */
+function Head(props: HeadProps) {
+  const { company } = props.card.details;
+  const mobile = useIsMobile();
   const facts = [company.location, company.industry].filter(Boolean).join(' · ');
   const about = companyAbout(company);
+  const hasActions = Boolean(props.known) || !company.want;
   return (
     <section className="lead co-head" aria-labelledby="co-name">
       <h2 className="lead-title is-long" id="co-name">
@@ -61,25 +87,13 @@ function Head({ card, want, known }: HeadProps) {
         {about ? <InfoTip label="О компании" text={about} /> : null}
       </h2>
       {facts ? <p className="lead-text">{facts}</p> : null}
-      {company.want && !known ? null : (
+      {hasActions && !mobile ? (
         <div className="actions">
-          {known ? (
-            <Link className="btn is-primary" to={buildNodePath('o02', { responseId: known.vacancyId })}>
-              <Icon name="send" />
-              {writeToLabel(known.name ?? '')}
-            </Link>
-          ) : null}
-          {company.want ? null : (
-          <WantButton
-            company={company}
-            busy={want.busyKey === company.key}
-            small={false}
-            onWant={(target) => void want.toggle(target)}
-          />
-          )}
+          <HeadActions {...props} />
         </div>
-      )}
-      {want.failed ? <RetryLine text="Не удалось сохранить отметку" onRetry={want.retry} /> : null}
+      ) : null}
+      {hasActions && mobile ? <ActionDock primary={<HeadActions {...props} />} /> : null}
+      {props.want.failed ? <RetryLine text="Не удалось сохранить отметку" onRetry={props.want.retry} /> : null}
     </section>
   );
 }

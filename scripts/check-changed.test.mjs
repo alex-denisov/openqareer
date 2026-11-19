@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planChecks } from './check-changed.mjs';
+import { localWorkerLimit, planChecks } from './check-changed.mjs';
 
 const impact = (over = {}) => ({
   unitFiles: [],
@@ -45,5 +45,16 @@ describe('planChecks', () => {
   it('ignores worktree copies under .claude', () => {
     const plan = planChecks(['.claude/worktrees/x/src/a.ts'], impact(), prettierTargets);
     expect(plan.lintFiles).toEqual([]);
+  });
+});
+
+describe('localWorkerLimit (19.11: хук без лимита грузил Mac до load 500)', () => {
+  it('локально ограничивает vitest и Playwright двумя воркерами', () => {
+    expect(localWorkerLimit('vitest', {})).toEqual(['--maxWorkers=2']);
+    expect(localWorkerLimit('playwright', {})).toEqual(['--workers=2']);
+  });
+  it('в CI лимит не ставит', () => {
+    expect(localWorkerLimit('vitest', { CI: 'true' })).toEqual([]);
+    expect(localWorkerLimit('playwright', { CI: 'true' })).toEqual([]);
   });
 });
