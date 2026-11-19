@@ -164,16 +164,12 @@ function GroupSection({ id, title, groups }: GroupSectionProps) {
   const total = groups.reduce((sum, group) => sum + group.rows.length, 0);
   return (
     <ProfileSection id={id} title={title} count={total > 0 ? String(total) : undefined}>
-      {total > 0 ? (
-        groups.map((group) => (
-          <Fragment key={group.sub}>
-            <h3 className="psec-sub">{group.sub}</h3>
-            <RecordList rows={group.rows} />
-          </Fragment>
-        ))
-      ) : (
-        <EmptyRecords />
-      )}
+      {groups.map((group) => (
+        <Fragment key={group.sub}>
+          <h3 className="psec-sub">{group.sub}</h3>
+          {group.rows.length > 0 ? <RecordList rows={group.rows} /> : <EmptyRecords />}
+        </Fragment>
+      ))}
     </ProfileSection>
   );
 }

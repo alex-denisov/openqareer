@@ -50,10 +50,15 @@ function rowsOf(draft: ResumeDraft, kind: ResumeAchievementKind): readonly Recor
     .filter((item): item is RecordRow => item !== null);
 }
 
+/**
+ * Группы с записями. Пустой раздел показывает подзаголовки макета без строк — под каждым
+ * «Не указано» (B645 s01); патенты и волонтёрство предлагает «Ещё можно добавить».
+ */
 function groups(draft: ResumeDraft, kinds: readonly ResumeAchievementKind[]): AchievementGroup[] {
-  return kinds
-    .map((kind) => ({ sub: LABEL[kind], rows: rowsOf(draft, kind) }))
-    .filter((group) => group.rows.length > 0);
+  const all = kinds.map((kind) => ({ kind, sub: LABEL[kind], rows: rowsOf(draft, kind) }));
+  const filled = all.filter((group) => group.rows.length > 0);
+  const shown = filled.length > 0 ? filled : all.filter((g) => !OFFERED_KINDS.includes(g.kind));
+  return shown.map(({ sub, rows }) => ({ sub, rows }));
 }
 
 /** Разделы «Награды и публикации» и «Организации и волонтёрство» по видам записей. */

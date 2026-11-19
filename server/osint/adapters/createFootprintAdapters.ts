@@ -11,6 +11,7 @@ import { FootprintRequestGate, sharedFootprintRequestGate } from './requestSched
 import { createWaybackAdapter } from './waybackAdapter';
 import type { UsernamePresenceInput } from './usernamePresenceAdapter';
 import type { WaybackAdapterInput } from './waybackAdapter';
+import { createYoutubeAdapter, type YoutubeAdapterInput } from './youtubeAdapter';
 
 export interface FootprintAdapterSet {
   readonly sherlock: readonly FootprintAdapter<UsernamePresenceInput>[];
@@ -18,10 +19,11 @@ export interface FootprintAdapterSet {
   readonly hibp: FootprintAdapter<HibpAdapterInput>;
   readonly wayback: FootprintAdapter<WaybackAdapterInput>;
   readonly exa: FootprintAdapter<ExaAdapterInput>;
+  readonly youtube: FootprintAdapter<YoutubeAdapterInput>;
 }
 
 export interface FootprintAdapterSetOptions {
-  readonly config: Pick<ServerConfig, 'hibpApiKey' | 'exaApiKey'>;
+  readonly config: Pick<ServerConfig, 'hibpApiKey' | 'exaApiKey' | 'youtubeApiKey'>;
   readonly fetch?: typeof fetch;
   readonly resolveHost?: (hostname: string) => Promise<readonly string[]>;
   readonly now?: () => Date;
@@ -53,6 +55,10 @@ export function createFootprintAdapterSet(options: FootprintAdapterSetOptions): 
     exa: createExaAdapter({
       ...common,
       ...(options.config.exaApiKey ? { apiKey: options.config.exaApiKey } : {}),
+    }),
+    youtube: createYoutubeAdapter({
+      ...common,
+      ...(options.config.youtubeApiKey ? { apiKey: options.config.youtubeApiKey } : {}),
     }),
   };
 }
