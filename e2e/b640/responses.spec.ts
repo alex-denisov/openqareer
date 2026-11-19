@@ -190,6 +190,14 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page);
   });
 
+  test('воронка: автоотклики не входят в числа и названы в подсказке (B645)', async ({ page }) => {
+    await open(page, '/app/responses/funnel', 'o01e', { autoIds: ['a-interview'] });
+    await expect(page.locator('.fv-mini')).toContainText('5 отправлено');
+    await expect(page.locator('.fv-mini')).toContainText('0 интервью');
+    await expect(page.getByRole('button', { name: 'Что не входит в числа' })).toBeVisible();
+    await expect(page.getByText(/не входят 1 автоотклик и 1 ответ на них/u)).toBeAttached();
+  });
+
   test('разбор отказов: мало данных, отказ с догадкой, первый шаг', async ({ page }) => {
     await open(page, '/app/responses/review', 'o07');
     await expect(
