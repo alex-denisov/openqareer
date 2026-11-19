@@ -120,10 +120,14 @@ function putStatus(deps: RouteDeps, statuses: Statuses, request: FastifyRequest,
 export function registerB640ContactRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const statuses = new SqliteContactStatusRepository({ databasePath: deps.config.databasePath });
   app.addHook('onClose', async () => statuses.close());
-  app.get(BASE, withDeps(deps, (d, request, reply) => listContacts(d, statuses, request, reply)));
+  app.get(
+    BASE,
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, (d, request, reply) => listContacts(d, statuses, request, reply)),
+  );
   app.put(
     `${BASE}/:contactId/status`,
-    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    { config: { rateLimit: { max: 600, timeWindow: '1 hour' } } },
     withDeps(deps, (d, request, reply) => putStatus(d, statuses, request, reply)),
   );
 }

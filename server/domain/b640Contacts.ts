@@ -7,7 +7,6 @@ import type {
   B640ContactState,
 } from '../../shared/b640Contacts';
 import { candidateCompanyKey, type ConnectionCircleWorkplace } from './candidateCompanies';
-import { genitiveFullName } from './ruGenitive';
 
 /** Контакт кандидата в том виде, что читает список: без почты и телефона. */
 export interface B640ContactSource {
@@ -76,7 +75,7 @@ function linkOf(
   if (shared) return { link: 'direct', linkNote: shared };
   if (contact.source === 'manual') return { link: 'direct', linkNote: contact.relationship.trim() || null };
   const through = introducers.get(contact.id);
-  if (through) return { link: 'intro', linkNote: `знакомы через ${genitiveFullName(through)}` };
+  if (through) return { link: 'intro', linkNote: `общий знакомый: ${through}` };
   return { link: 'none', linkNote: null };
 }
 

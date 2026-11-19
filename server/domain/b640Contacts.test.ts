@@ -38,7 +38,7 @@ describe('B697: список контактов', () => {
       ]),
       query,
     );
-    expect(list.items.find((item) => item.id === 'x')).toMatchObject({ link: 'intro', linkNote: 'знакомы через Игоря Шаталова' });
+    expect(list.items.find((item) => item.id === 'x')).toMatchObject({ link: 'intro', linkNote: 'общий знакомый: Игорь Шаталов' });
   });
 
   it('поиск без регистра, фильтры, фасеты по поиску без своего фильтра', () => {
