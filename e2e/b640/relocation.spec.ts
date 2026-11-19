@@ -57,7 +57,17 @@ test.describe('B653 C06: «Релокация»', () => {
     // на 390 во всю ширину поля. «Изменить места» — вторичная ссылка.
     const dock = screen.locator('.act-dock');
     await expect(dock.getByRole('button')).toHaveText(['Уточнить: кто едет и бюджет']);
-    await expect(screen.locator('.lead .row-act', { hasText: 'Изменить места' })).toBeVisible();
+    const places = screen.locator('.lead .row-act', { hasText: 'Изменить места' });
+    await expect(places).toBeVisible();
+    // Как в макете: строчная ссылка по ширине текста, отступ −8 от края карточки (B645 c06).
+    const placesBox = await places.boundingBox();
+    const leadBox = await screen.locator('.lead').first().boundingBox();
+    expect(placesBox?.width ?? 0).toBeLessThan(160);
+    const padding = await screen
+      .locator('.lead')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).paddingLeft));
+    expect(Math.round((placesBox?.x ?? 0) - (leadBox?.x ?? 0))).toBe(padding - 8);
     const button = await dock.getByRole('button').boundingBox();
     if ((page.viewportSize()?.width ?? 0) < 768) {
       expect(Math.round(button?.width ?? 0)).toBe(358);
