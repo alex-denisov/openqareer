@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { HhResumeEdit, HhResumeEditSection } from '../../../../../shared/hhCandidateSession';
-import { Button, Icon, useToast } from '../../kit';
+import { Button, Dialog, Icon, useToast } from '../../kit';
+import { canApply, useHhResumeApply, type HhApplyState, type HhResumeApply } from './useHhResumeApply';
 
 /** B678, A1c: разбор резюме hh.ru — разделы hh.ru, сейчас и предложение платформы. */
 const SECTIONS: ReadonlyArray<readonly [HhResumeEditSection, string]> = [
@@ -56,7 +57,24 @@ function Lines({ text, className, hidden }: { readonly text: string; readonly cl
   );
 }
 
-function EditRow({ edit }: { readonly edit: HhResumeEdit }) {
+function ApplyAction({ edit, state, onApply }: { readonly edit: HhResumeEdit; readonly state: HhApplyState; readonly onApply: () => void }) {
+  if (!canApply(edit)) return null;
+  if (state.kind === 'applied') {
+    return (
+      <span className="tag ok">
+        <Icon name="check" /> Изменено на hh.ru
+      </span>
+    );
+  }
+  return (
+    <Button size="sm" busy={state.kind === 'applying'} disabled={state.kind === 'applying'} onClick={onApply}>
+      Применить
+    </Button>
+  );
+}
+
+function EditRow({ edit, apply }: { readonly edit: HhResumeEdit; readonly apply: HhResumeApply }) {
+  const state = apply.stateOf(edit.id);
   return (
     <li className="hh2-r">
       {edit.place ? <p className="hh2-place">{edit.place}</p> : null}
@@ -65,21 +83,70 @@ function EditRow({ edit }: { readonly edit: HhResumeEdit }) {
         <Lines text={edit.now} className="hh2-now" hidden="Предложение: " />
         <div className="hh2-acts">
           <CopyButton text={edit.now} />
+          <ApplyAction edit={edit} state={state} onApply={() => void apply.apply(edit)} />
         </div>
       </div>
+      {state.kind === 'failed' ? (
+        <p className="hh2-err" role="status">
+          {state.message}
+        </p>
+      ) : null}
     </li>
   );
 }
 
+function sectionLabel(section: HhResumeEditSection): string {
+  return SECTIONS.find(([key]) => key === section)?.[1] ?? '';
+}
+
+function ApplyAllDialog({
+  open,
+  resumeTitle,
+  edits,
+  onCancel,
+  onConfirm,
+}: {
+  readonly open: boolean;
+  readonly resumeTitle: string;
+  readonly edits: readonly HhResumeEdit[];
+  readonly onCancel: () => void;
+  readonly onConfirm: () => void;
+}) {
+  const footer = (
+    <>
+      <Button onClick={onCancel}>Отмена</Button>
+      <Button variant="primary" onClick={onConfirm}>
+        Изменить
+      </Button>
+    </>
+  );
+  return (
+    <Dialog open={open} onClose={onCancel} title="Изменить резюме на hh.ru?" footer={footer}>
+      <p>
+        Приложение откроет резюме «{resumeTitle}» в окне hh.ru и изменит: {edits.map((edit) => sectionLabel(edit.section)).join(', ')}.
+        Работодатели увидят новый текст.
+      </p>
+    </Dialog>
+  );
+}
+
 export interface HhResumeEditsProps {
+  readonly resumeId: string;
   readonly resumeTitle: string;
   readonly edits: readonly HhResumeEdit[];
   readonly onBack: () => void;
 }
 
-export function HhResumeEdits({ resumeTitle, edits, onBack }: HhResumeEditsProps) {
+export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResumeEditsProps) {
+  const apply = useHhResumeApply(resumeId);
+  const [confirming, setConfirming] = useState(false);
   const groups = SECTIONS.map(([section, label]) => [label, edits.filter((edit) => edit.section === section)] as const)
     .filter(([, items]) => items.length > 0);
+  const pending = edits.filter((edit) => canApply(edit) && apply.stateOf(edit.id).kind !== 'applied');
+  const confirm = () => {
+    setConfirming(false);
+    void apply.applyAll(pending);
+  };
   return (
     <section className="lead" aria-labelledby="hh2-title">
       <h2 className="lead-title is-long" id="hh2-title">
@@ -92,16 +159,28 @@ export function HhResumeEdits({ resumeTitle, edits, onBack }: HhResumeEditsProps
           </h3>
           <ul className="hh2-rows">
             {items.map((edit) => (
-              <EditRow edit={edit} key={edit.id} />
+              <EditRow edit={edit} apply={apply} key={edit.id} />
             ))}
           </ul>
         </section>
       ))}
       <div className="actions">
+        {pending.length > 0 ? (
+          <Button variant="primary" disabled={apply.busy} busy={apply.busy} onClick={() => setConfirming(true)}>
+            Применить все на hh.ru
+          </Button>
+        ) : null}
         <Button icon="back" onClick={onBack}>
           К отправке
         </Button>
       </div>
+      <ApplyAllDialog
+        open={confirming}
+        resumeTitle={resumeTitle}
+        edits={pending}
+        onCancel={() => setConfirming(false)}
+        onConfirm={confirm}
+      />
     </section>
   );
 }

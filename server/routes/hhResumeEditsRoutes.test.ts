@@ -60,6 +60,7 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     expect(experience.now).toContain('Перевёл сервисы платежей на Kubernetes.');
     const skills = data.edits.find((edit: { section: string }) => edit.section === 'skills');
     expect(skills.now).toBe('Node.js, Kubernetes, PostgreSQL');
+    expect(skills.added).toEqual(['Kubernetes', 'PostgreSQL']);
     expect(data.edits.find((edit: { section: string }) => edit.section === 'title').now).toBe('Senior Platform Engineer');
   });
 
