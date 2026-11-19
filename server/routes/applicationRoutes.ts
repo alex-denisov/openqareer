@@ -39,6 +39,7 @@ import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
 import { registerHhSessionRoutes } from './hhSessionRoutes';
 import { registerQuestionnaireRoutes } from './questionnaireRoutes';
 import { registerTextVariantRoutes } from './textVariantRoutes';
+import { snapshotWithDescription } from './applicationVacancyText';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -137,9 +138,14 @@ const handleCreateApplication: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const body = createApplicationSchema.parse(request.body);
+  const clusterId = body.clusterId ?? null;
   const created = candidateStore.createApplication(candidate.id, {
-    clusterId: body.clusterId ?? null,
-    manualVacancy: body.manualVacancy ? normalizeVacancySnapshot(body.manualVacancy) : undefined,
+    clusterId,
+    manualVacancy: snapshotWithDescription(
+      deps.multiSourceEngine,
+      clusterId,
+      body.manualVacancy ? normalizeVacancySnapshot(body.manualVacancy) : undefined,
+    ),
     stage: body.stage,
     occurredAt: body.occurredAt,
   });
