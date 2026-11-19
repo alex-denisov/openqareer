@@ -67,6 +67,7 @@ import {
   registerCandidateDraftRoutes,
   type CandidateDraftRouteDeps,
 } from './routes/candidateDraftRoutes';
+import { registerB640LinkedinJournalRoutes } from './routes/b640LinkedinJournalRoutes';
 import { registerB640LinkedinQueueRoutes } from './routes/b640LinkedinQueueRoutes';
 import { registerB640LinkedinProfileRoutes } from './routes/b640LinkedinProfileRoutes';
 import { registerB640FeedPostRoutes } from './routes/b640FeedPostRoutes';
@@ -343,6 +344,7 @@ async function registerApiRoutes(
   registerCandidateDraftRoutes(app, deps);
   registerB640LinkedinQueueRoutes(app, deps);
   registerB640LinkedinProfileRoutes(app, deps);
+  registerB640LinkedinJournalRoutes(app, deps);
   registerB640FeedPostRoutes(app, deps);
   registerBillingRoutes(app, deps);
   registerQuotaRoutes(app, deps);
