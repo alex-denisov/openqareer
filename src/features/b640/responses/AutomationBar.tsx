@@ -77,7 +77,11 @@ function BarRow({ id, view, toggle, onSetup }: BarRowProps) {
           role="switch"
           checked={view.on}
           disabled={toggle.busy}
-          onChange={(event) => toggle.switchTo(event.currentTarget.checked)}
+          onChange={(event) => {
+            const on = event.currentTarget.checked;
+            if (on && !view.consented) onSetup();
+            else toggle.switchTo(on);
+          }}
         />
         Автоотклики
       </label>
@@ -94,7 +98,8 @@ function BarRow({ id, view, toggle, onSetup }: BarRowProps) {
 
 /**
  * Строка «Автоотклики» над списком (O1): переключатель, счётчик дня и «Настроить».
- * Не загрузилась или автоотклики ещё не разрешены — строки нет, список работает без неё.
+ * Не загрузилась — строки нет, список работает без неё. Согласий ещё нет — включение открывает
+ * лист настроек с отметкой согласия (B645).
  */
 export function AutomationBar() {
   const id = useId();

@@ -42,11 +42,32 @@ export interface ResponseRow {
 }
 
 const MONTHS_SHORT = [
-  'янв.', 'февр.', 'марта', 'апр.', 'мая', 'июня', 'июля', 'авг.', 'сент.', 'окт.', 'нояб.', 'дек.',
+  'янв.',
+  'февр.',
+  'марта',
+  'апр.',
+  'мая',
+  'июня',
+  'июля',
+  'авг.',
+  'сент.',
+  'окт.',
+  'нояб.',
+  'дек.',
 ] as const;
 const MONTHS_FULL = [
-  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
 ] as const;
 
 function parse(value: string | null | undefined): Date | null {
@@ -104,17 +125,29 @@ function lastPastInterview(application: ApplicationView, now: Date): string | nu
 type Face = Pick<ResponseRow, 'tag' | 'next' | 'event' | 'action' | 'yours' | 'remind' | 'urgency'>;
 
 const LETTER_ACTION: ResponseRowAction = {
-  kind: 'letter', label: 'Проверить письмо', short: 'Проверить', icon: 'file',
+  kind: 'letter',
+  label: 'Проверить письмо',
+  short: 'Проверить',
+  icon: 'file',
 };
 /** Письмо одобрено, отклик не отправлен (B723): к шагу отправки на странице письма. */
 const SEND_ACTION: ResponseRowAction = {
-  kind: 'letter', label: 'Отправить', short: 'Отправить', icon: 'send',
+  kind: 'letter',
+  label: 'Отправить',
+  short: 'Отправить',
+  icon: 'send',
 };
 const RESEND_ACTION: ResponseRowAction = {
-  kind: 'letter', label: 'Отправить ещё раз', short: 'Повторить', icon: 'send',
+  kind: 'letter',
+  label: 'Отправить ещё раз',
+  short: 'Повторить',
+  icon: 'send',
 };
 const OFFER_ACTION: ResponseRowAction = {
-  kind: 'offer', label: 'Ответить на оффер', short: 'Ответить', icon: 'send',
+  kind: 'offer',
+  label: 'Ответить на оффер',
+  short: 'Ответить',
+  icon: 'send',
 };
 
 function appliedFace(application: ApplicationView, failure: string | null): Face {
@@ -236,18 +269,29 @@ function approvedFace(application: ApplicationView): Face {
   };
 }
 
-function face(application: ApplicationView, now: Date, failure: string | null): Face {
+/** Неотправленный отклик: черновик или одобренное письмо (B723; отметка сводки B645). */
+function savedFace(application: ApplicationView, marks: RowMarks): Face {
+  if (application.materials.coverLetter || marks.letterApproved) return approvedFace(application);
+  return {
+    tag: { tone: 'part', label: 'Черновик' },
+    next: 'Проверьте и отправьте',
+    event: withDate('черновик сохранён', dotDate(application.updatedAt)),
+    action: LETTER_ACTION,
+    yours: true,
+    remind: false,
+    urgency: 0,
+  };
+}
+
+function face(
+  application: ApplicationView,
+  now: Date,
+  failure: string | null,
+  marks: RowMarks,
+): Face {
   switch (application.stage) {
     case 'saved':
-      return application.materials.coverLetter ? approvedFace(application) : {
-        tag: { tone: 'part', label: 'Черновик' },
-        next: 'Проверьте и отправьте',
-        event: withDate('черновик сохранён', dotDate(application.updatedAt)),
-        action: LETTER_ACTION,
-        yours: true,
-        remind: false,
-        urgency: 0,
-      };
+      return savedFace(application, marks);
     case 'applied':
       return appliedFace(application, failure);
     case 'responded': {
@@ -281,8 +325,18 @@ function face(application: ApplicationView, now: Date, failure: string | null): 
   }
 }
 
+/** Что о строке известно сверх самого отклика (сводка B680). */
+export interface RowMarks {
+  /** Письмо черновика одобрено: строка зовёт отправить, как экран письма. */
+  readonly letterApproved?: boolean;
+}
+
 /** Строка таблицы «Отклики» из отклика: стадия, «что дальше», событие и действие. */
-export function buildResponseRow(application: ApplicationView, now: Date = new Date()): ResponseRow {
+export function buildResponseRow(
+  application: ApplicationView,
+  now: Date = new Date(),
+  marks: RowMarks = {},
+): ResponseRow {
   const failure = failureReason(application);
   const vacancy = application.vacancy;
   const sentIso = application.appliedAt ?? application.createdAt;
@@ -291,9 +345,9 @@ export function buildResponseRow(application: ApplicationView, now: Date = new D
     id: application.id,
     role: vacancy?.title?.trim() || 'Без названия',
     company: company || (vacancy?.companyHidden ? 'Компания скрыта' : 'Компания не указана'),
-    sent: savedLabel(application) ?? (shortDate(sentIso) ?? ''),
+    sent: savedLabel(application) ?? shortDate(sentIso) ?? '',
     sentAt: parse(sentIso)?.getTime() ?? 0,
     failure,
-    ...face(application, now, failure),
+    ...face(application, now, failure, marks),
   };
 }
