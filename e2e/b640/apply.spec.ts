@@ -547,14 +547,11 @@ test.describe('B657: единый экран отклика', () => {
     await expect(page.getByLabel('Ваш ответ: LinkedIn Profile')).toHaveValue(
       'https://www.linkedin.com/in/msokolova',
     );
-    const country = page.getByLabel('Ваш ответ: Country of residence');
-    await expect(country).toHaveValue('Россия');
-    await expect(country.locator('option')).toHaveText([
-      'Выберите ответ',
-      'Germany',
-      'Россия',
-      'Other',
-    ]);
+    // B703: вопрос с выбором — переключатели вариантов работодателя, а не поле.
+    const country = page.getByRole('radiogroup', { name: 'Ваш ответ: Country of residence' });
+    await expect(country.getByRole('radio')).toHaveCount(3);
+    await expect(country.getByRole('radio', { name: 'Россия' })).toBeChecked();
+    await expect(country.locator('select')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(3);
     await expect(page.getByText('необязательный')).toHaveCount(1);
     await expectGates(page);
@@ -564,11 +561,9 @@ test.describe('B657: единый экран отклика', () => {
     await first.blur();
     await expect.poll(() => mock.calls.some((call) => /^answers .*q1/u.test(call))).toBe(true);
     await expect(page.getByRole('heading', { name: '4 ответа из 5 готовы' })).toBeVisible();
-    await country.selectOption('Germany');
+    await country.getByRole('radio', { name: 'Germany' }).check();
     await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
     await expect(page.getByRole('button', { name: 'Откуда ответ' })).toHaveCount(2);
-    // Вопрос с выбором — поле набора, а не системный список без оформления.
-    await expect(country.locator('xpath=..')).toHaveClass(/pf-f/u);
     // Стёртый ответ из профиля уходит на сервер пустым и после перезагрузки не возвращается.
     const salary = page.getByLabel('Ваш ответ: Ожидаемый уровень дохода?');
     await salary.fill('');
