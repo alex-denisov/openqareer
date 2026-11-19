@@ -7,6 +7,7 @@ import type { ExaAdapterInput } from './adapters/exaAdapter';
 import type { HibpAdapterInput } from './adapters/hibpAdapter';
 import type { UsernamePresenceInput } from './adapters/usernamePresenceAdapter';
 import type { WaybackAdapterInput } from './adapters/waybackAdapter';
+import type { YoutubeAdapterInput } from './adapters/youtubeAdapter';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import { buildCandidateFootprintQueryPlan } from './candidateFootprintQueryPlan';
 import {
@@ -33,6 +34,7 @@ function adapterSet(options: {
   hibp?: FootprintAdapter<HibpAdapterInput>;
   wayback?: FootprintAdapter<WaybackAdapterInput>;
   exa?: FootprintAdapter<ExaAdapterInput>;
+  youtube?: FootprintAdapter<YoutubeAdapterInput>;
 } = {}): FootprintAdapterSet {
   return {
     sherlock: options.sherlock ? [options.sherlock] : [],
@@ -40,6 +42,7 @@ function adapterSet(options: {
     hibp: options.hibp ?? noAdapter<HibpAdapterInput>('hibp'),
     wayback: options.wayback ?? noAdapter<WaybackAdapterInput>('wayback'),
     exa: options.exa ?? noAdapter<ExaAdapterInput>('exa'),
+    youtube: options.youtube ?? noAdapter<YoutubeAdapterInput>('youtube'),
   };
 }
 
@@ -242,5 +245,65 @@ describe('candidateFootprintWorker', () => {
     await waitForFootprintRun(pending.id);
 
     expect(repo.getLatestFootprintAudit('candidate-1')).toBeNull();
+  });
+});
+
+describe('B668: канал YouTube в проверке следа', () => {
+  const youtubeDraft = {
+    ...candidateDraft,
+    candidate: {
+      ...candidateDraft.candidate,
+      contact: { ...candidateDraft.candidate.contact, links: ['https://www.youtube.com/@ada'] },
+    },
+  };
+
+  it('с пунктом YouTube в плане — адаптер вызван со ссылкой, находка и статус сохранены', async () => {
+    const plan = buildCandidateFootprintQueryPlan(youtubeDraft, { youtube: true });
+    const item = plan.find((entry) => entry.adapterId === 'youtube')!;
+    const run = vi.fn(async (_input: YoutubeAdapterInput, _signal: AbortSignal) => [{
+      adapter: 'youtube',
+      kind: 'profile',
+      url: 'https://www.youtube.com/@ada',
+      title: 'Канал YouTube @ada',
+      detail: 'Канал по вашей ссылке существует.',
+      match: 'likely_self' as const,
+      observedAt: '2026-11-19T12:00:00.000Z',
+      receipt: { method: 'GET', source: 'YouTube Data API', query: 'forHandle=@ada' },
+    }]);
+    const repo = createRepository();
+    const audit = startCandidateFootprintAudit({
+      candidateId: 'candidate-1',
+      userId: 'user-1',
+      plan,
+      selectedQueryIds: [item.id],
+      ownershipConfirmedAt: '2026-11-19T12:00:00.000Z',
+      repo,
+      adapters: adapterSet({ youtube: adapter('youtube', run) }),
+      isAuthorized: () => true,
+    });
+    await waitForFootprintRun(audit.id);
+    expect(run).toHaveBeenCalledWith({ profileUrl: 'https://www.youtube.com/@ada' }, expect.any(AbortSignal));
+    const completed = repo.getLatestFootprintAudit('candidate-1');
+    expect(completed?.findings.map((finding) => finding.title)).toEqual(['Канал YouTube @ada']);
+    expect(completed?.adapterStatuses.find((status) => status.adapterId === 'youtube')?.state).toBe('checked');
+  });
+
+  it('без пункта YouTube статусы прежние — пять источников', async () => {
+    const plan = buildCandidateFootprintQueryPlan(youtubeDraft);
+    const repo = createRepository();
+    const audit = startCandidateFootprintAudit({
+      candidateId: 'candidate-1',
+      userId: 'user-1',
+      plan,
+      selectedQueryIds: [plan[0]!.id],
+      ownershipConfirmedAt: '2026-11-19T12:00:00.000Z',
+      repo,
+      adapters: adapterSet({ sherlock: adapter('sherlock', async () => []) }),
+      isAuthorized: () => true,
+    });
+    await waitForFootprintRun(audit.id);
+    expect(repo.getLatestFootprintAudit('candidate-1')?.adapterStatuses.map((s) => s.adapterId)).toEqual([
+      'sherlock', 'maigret', 'hibp', 'wayback', 'exa',
+    ]);
   });
 });

@@ -262,6 +262,7 @@ describe('capability consents API routes', () => {
       hibp: noAdapter('hibp'),
       wayback: { id: 'wayback', passive: true, run: waybackRun },
       exa: noAdapter('exa'),
+      youtube: noAdapter('youtube'),
     };
     const plan: FootprintQueryPlanItem[] = [
       {
