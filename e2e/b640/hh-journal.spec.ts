@@ -48,6 +48,26 @@ async function mockHh(page: Page, connected: boolean): Promise<void> {
   await page.route('**/api/v1/candidate/connections', (route) =>
     route.fulfill({ json: { data: [hh(connected)] } }),
   );
+  let enabled = true;
+  await page.route('**/api/v1/candidate/b640/hh/raise', (route) => {
+    if (route.request().method() === 'PUT')
+      enabled = Boolean(route.request().postDataJSON()?.enabled);
+    return route.fulfill({
+      json: {
+        data: {
+          connected,
+          resumeId: connected ? 'cv-1' : null,
+          enabled,
+          everyHours: 4,
+          lastRaisedAt: '2026-11-19T06:40:00.000Z',
+          nextRaiseAt: '2026-11-19T10:40:00.000Z',
+          lastResult: { status: 'ok', reason: null, at: '2026-11-19T06:40:00.000Z' },
+          pausedUntil: null,
+          pauseReason: null,
+        },
+      },
+    });
+  });
   await page.route('**/api/v1/candidate/actions/usage', (route) =>
     route.fulfill({
       json: {
@@ -91,7 +111,7 @@ async function mockJournal(
 }
 
 test.describe('B664: hh.ru и журнал нового кабинета', () => {
-  test('hh.ru подключён: данные, без автоподнятия и аналитики', async ({ page }) => {
+  test('hh.ru подключён: «Автоподнятие резюме», данные, без аналитики', async ({ page }) => {
     await mockHh(page, true);
     await page.goto(HH_PATH, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a11"]')).toBeVisible({ timeout: 15_000 });
@@ -100,7 +120,11 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
       'Поднятий сегодня',
       'Данные из резюме обновлены',
     ]);
-    await expect(page.getByRole('switch')).toHaveCount(0);
+    const raise = page.getByRole('switch', { name: 'Автоподнятие резюме' });
+    await expect(raise).toBeChecked();
+    await expect(page.getByText(/^Резюме поднято · /u)).toBeVisible();
+    await raise.click();
+    await expect(raise).not.toBeChecked();
     await expectGates(page);
   });
 
