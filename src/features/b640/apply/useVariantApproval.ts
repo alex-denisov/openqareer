@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLetterApproval } from '../../vacancies/vacancyLetterApproval';
 import {
   readLatestLetterApproval,
@@ -9,33 +9,81 @@ import { useAsync } from '../responses/data/useAsync';
 import { approvalPitch } from './model/variantModel';
 import type { LetterVariantsState } from './useLetterVariants';
 
+/** Одобрение на сервере и придержанный черновик письма. */
+export interface ApprovalHold {
+  /** Последнее одобрение вакансии (B711); `null` — не одобряли или ещё не прочитано. */
+  readonly stored: StoredLetterApproval | null;
+  /** Черновик не просим: одобрение ещё читается или письмо одобрено и не снято «Изменить». */
+  readonly hold: boolean;
+  /** «Изменить»: одобрение снято, черновик снова нужен для нового одобрения. */
+  readonly release: () => void;
+}
+
 /**
- * Одобрение, сохранённое на сервере (B711): возвращается, когда письмо уже собрано и варианты
- * прочитаны, — иначе пришедший черновик перезаписал бы одобренный текст.
+ * Одобренное письмо открывается своим текстом сразу после чтения одобрения: модель не пишет
+ * черновик, который всё равно заменит одобренный текст (было 10–15 с «Собираем письмо…»).
  */
-function useRestoredApproval(
-  vacancyId: string,
-  letter: LetterScreenState,
-  variants: LetterVariantsState,
-): StoredLetterApproval | null {
+export function useApprovalHold(vacancyId: string): ApprovalHold {
   const load = useCallback(
     (signal: AbortSignal) => readLatestLetterApproval(vacancyId, signal),
     [vacancyId],
   );
   const { state } = useAsync(load, '');
-  const [applied, setApplied] = useState<StoredLetterApproval | null>(null);
+  const [released, setReleased] = useState(false);
   const stored = state.data ?? null;
+  const checked = state.status !== 'loading';
+  const release = useCallback(() => setReleased(true), []);
+  return { stored, hold: !checked || (stored !== null && !released), release };
+}
+
+/**
+ * Одобрение, сохранённое на сервере (B711), встаёт в поле, когда прочитаны варианты. Черновик при
+ * этом придержан; если его всё же просили (B716: круги не загрузились), ждём, пока он соберётся, —
+ * иначе пришедшее письмо перезаписало бы одобренный текст.
+ */
+function useRestoredApproval(
+  approvalHold: ApprovalHold,
+  letter: LetterScreenState,
+  variants: LetterVariantsState,
+): StoredLetterApproval | null {
+  const { stored, hold } = approvalHold;
+  const [applied, setApplied] = useState<StoredLetterApproval | null>(null);
   const { pitch, loading, error } = letter.draft;
-  // B716: круги связей не загрузились — черновик не просят вовсе; одобренный текст встаёт сразу.
   const circlesFailed = !letter.circles.loading && letter.circles.error !== '';
   const draftSettled = !loading && (pitch !== null || error !== '' || circlesFailed);
   const { settled: variantsSettled, restore } = variants;
   useEffect(() => {
-    if (!stored || applied || !draftSettled || !variantsSettled) return;
+    if (!stored || applied || !variantsSettled || !(hold || draftSettled)) return;
     restore(stored.variantId, stored.body);
     setApplied(stored);
-  }, [stored, applied, draftSettled, variantsSettled, restore]);
+  }, [stored, applied, hold, draftSettled, variantsSettled, restore]);
+  useKeptTextAfterRelease(applied, hold, letter, restore);
   return applied;
+}
+
+/**
+ * После «Изменить» черновик просится заново, а текст в поле — одобренный, возможно уже
+ * исправленный. Пришедший черновик его не заменяет: возвращаем текст, что был в поле до него.
+ */
+function useKeptTextAfterRelease(
+  applied: StoredLetterApproval | null,
+  hold: boolean,
+  letter: LetterScreenState,
+  restore: LetterVariantsState['restore'],
+): void {
+  const { pitch, text } = letter.draft;
+  const kept = useRef<string | null>(null);
+  const waiting = applied !== null && !hold;
+  useEffect(() => {
+    if (!waiting) return;
+    if (pitch === null) {
+      kept.current = text;
+      return;
+    }
+    if (kept.current === null) return;
+    restore(applied.variantId, kept.current);
+    kept.current = null;
+  }, [waiting, pitch, text, applied, restore]);
 }
 
 /**
@@ -46,8 +94,9 @@ export function useVariantApproval(
   vacancyId: string,
   letter: LetterScreenState,
   variants: LetterVariantsState,
+  approvalHold: ApprovalHold,
 ): LetterScreenState {
-  const restored = useRestoredApproval(vacancyId, letter, variants);
+  const restored = useRestoredApproval(approvalHold, letter, variants);
   const approval = useLetterApproval({
     vacancyId,
     circle: letter.circle.circle,
@@ -61,5 +110,11 @@ export function useVariantApproval(
     variantId: variants.selectedId,
     restored,
   });
-  return { ...letter, approval };
+  const { release } = approvalHold;
+  const { reset } = approval;
+  const resetAndRelease = useCallback(() => {
+    reset();
+    release();
+  }, [reset, release]);
+  return { ...letter, approval: { ...approval, reset: resetAndRelease } };
 }

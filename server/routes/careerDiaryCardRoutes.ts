@@ -21,9 +21,11 @@ import {
 } from '../../shared/careerDiaryCards';
 import { CareerDiaryIdempotencyConflictError } from '../data/sqliteCareerDiaryRepository';
 import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
+import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
 import { careerDiaryPlanningSchema } from '../domain/careerDiaryAdaptation';
 import { buildAdaptationView } from '../domain/careerDiaryAdaptationView';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
@@ -34,6 +36,7 @@ import { sendError, withDeps } from './helpers';
  */
 export type CareerDiaryCardRouteDeps = RouteDeps & {
   readonly diaryDetailsRepository?: SqliteDiaryDetailsRepository;
+  readonly kpiImportRepository?: SqliteKpiImportRepository;
 };
 type BoundDeps = RouteDeps & { readonly details: () => SqliteDiaryDetailsRepository };
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -379,4 +382,23 @@ export function registerCareerDiaryCardRoutes(app: FastifyInstance, deps: Career
   app.delete(`${BASE}/goal-cards/:goalId/archive`, write, withDeps(bound, restoreCard));
   app.get(`${BASE}/workplaces/:workplaceId/adaptation`, read, withDeps(bound, getAdaptation));
   app.patch(`${BASE}/workplaces/:workplaceId/adaptation`, write, withDeps(bound, patchAdaptation));
+  registerKpiRoutes(app, deps, bound);
+}
+
+/** B686: загрузка KPI создаёт цели тем же путём, что и форма цели. */
+function registerKpiRoutes(app: FastifyInstance, deps: CareerDiaryCardRouteDeps, bound: BoundDeps): void {
+  let imports = deps.kpiImportRepository ?? null;
+  const kpiImports = () => {
+    imports ??= new SqliteKpiImportRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: deps.config.dataEncryptionKey,
+    });
+    return imports;
+  };
+  if (!deps.kpiImportRepository) app.addHook('onClose', async () => imports?.close());
+  registerCareerDiaryKpiRoutes(app, {
+    ...deps,
+    kpiImports,
+    createCard: (candidate, input, key) => createCard(bound, candidate, input, key),
+  });
 }
