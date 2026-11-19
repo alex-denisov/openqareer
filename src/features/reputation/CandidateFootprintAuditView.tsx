@@ -48,7 +48,7 @@ function useCandidateFootprintPlanState(candidateId: string) {
   const [plan, setPlan] = useState<readonly PublicFootprintQueryPlanItem[]>([]);
   const [unidentifiedEmployers, setUnidentifiedEmployers] = useState<readonly string[]>([]);
   const [sourceAvailability, setSourceAvailability] = useState<Record<FootprintAdapterId, boolean>>({
-    sherlock: true, maigret: true, hibp: false, wayback: true, exa: false,
+    sherlock: true, maigret: true, hibp: false, wayback: true, exa: false, youtube: false,
   });
   const [consent, setConsent] = useState<CandidateFootprintConsentState>(EMPTY_CONSENT);
   const [audit, setAudit] = useState<CandidateFootprintAudit | null>(null);

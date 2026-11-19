@@ -1,17 +1,18 @@
 import { getConnections, type CandidateConnection } from '../../../coach/coachApi';
-import { getResumeStudio } from '../../../resume/resumeApi';
+import type { LinkedinProfileView } from '../../../../../shared/b640LinkedinProfile';
 import { Icon, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
 import type { SectionProps } from '../../sections';
 import { useLoad } from '../../today/useLoad';
 import { PlatformRetry } from '../PlatformRetry';
-import { CopyButton } from './CopyButton';
 import { LinkedinNav } from './LinkedinNav';
-import { buildProfileSections, type ProfileRecord, type ProfileSection } from './linkedinModel';
+import { getLinkedinProfile } from './linkedinProfileApi';
+import { ProfileSections } from './ProfileSections';
+import './linkedin.css';
 
 type ProfileData =
-  { readonly kind: 'off' } | { readonly kind: 'on'; readonly sections: readonly ProfileSection[] };
+  { readonly kind: 'off' } | { readonly kind: 'on'; readonly profile: LinkedinProfileView };
 
 function isOn(connections: readonly CandidateConnection[]): boolean {
   const linkedin = connections.find((item) => item.platform === 'linkedin');
@@ -20,8 +21,7 @@ function isOn(connections: readonly CandidateConnection[]): boolean {
 
 async function loadProfile(): Promise<ProfileData> {
   if (!isOn(await getConnections())) return { kind: 'off' };
-  const studio = await getResumeStudio();
-  return { kind: 'on', sections: buildProfileSections(studio.projection.master) };
+  return { kind: 'on', profile: await getLinkedinProfile() };
 }
 
 function NotConnected() {
@@ -45,63 +45,12 @@ function NotConnected() {
   );
 }
 
-function Record({
-  section,
-  record,
-}: {
-  readonly section: ProfileSection;
-  readonly record: ProfileRecord;
-}) {
-  return (
-    <div className="li-rec">
-      {record.label ? <p className="li-rec-l">{record.label}</p> : null}
-      <div className="li-offer">
-        <p className="li-new">{record.text}</p>
-        <div className="li-offer-a">
-          <CopyButton text={record.text} label={record.label ?? section.title} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Section({ section }: { readonly section: ProfileSection }) {
-  const titleId = `ls-${section.id}`;
-  return (
-    <section className="li-sec" aria-labelledby={titleId}>
-      <h3 className="li-sec-t" id={titleId}>
-        {section.title}
-      </h3>
-      {section.records.map((record, index) => (
-        <Record key={index} section={section} record={record} />
-      ))}
-    </section>
-  );
-}
-
-function Sections({ sections }: { readonly sections: readonly ProfileSection[] }) {
-  if (!sections.length) {
-    return (
-      <div className="vl-empty" role="status">
-        <p className="vl-empty-t">Для профиля LinkedIn пока нет текстов</p>
-      </div>
-    );
-  }
-  return (
-    <>
-      {sections.map((section) => (
-        <Section key={section.id} section={section} />
-      ))}
-    </>
-  );
-}
-
 function Body({ load }: { readonly load: ReturnType<typeof useLoad<ProfileData>> }) {
   if (load.state === 'loading') return <StatusLine state="wait" text="Загружаем LinkedIn…" />;
   if (load.state === 'error')
     return <PlatformRetry text="Не удалось загрузить LinkedIn" onRetry={load.retry} />;
   if (load.data.kind === 'off') return <NotConnected />;
-  return <Sections sections={load.data.sections} />;
+  return <ProfileSections initial={load.data.profile} />;
 }
 
 function Next() {
@@ -120,7 +69,7 @@ function Next() {
   );
 }
 
-/** Узел a03 и его состояние a03n: тексты профиля с «Скопировать» или «LinkedIn не подключён». */
+/** Узел a03 и его состояние a03n: «Сейчас» и предложение по разделам или «LinkedIn не подключён». */
 export function ProfileScreen({ node }: SectionProps) {
   const load = useLoad(loadProfile);
   const connected = load.state === 'ready' && load.data.kind === 'on';
