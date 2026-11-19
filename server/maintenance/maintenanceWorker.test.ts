@@ -185,7 +185,7 @@ describe('MaintenanceWorker (B230)', () => {
     expect(composed.pool.countClusters()).toBeGreaterThan(0);
     expect(composed.engine.reclusterStats.rebuilds).toBe(0);
     composed.close();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('consumes a durable admin request in the maintenance process, not HTTP', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-manual-sync-'));
@@ -229,7 +229,7 @@ describe('MaintenanceWorker (B230)', () => {
     expect(workerPool.countClusters()).toBe(1);
     httpPool.close();
     workerPool.close();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('stop waits for the running wave and then rejects new ones', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
@@ -255,7 +255,7 @@ describe('MaintenanceWorker (B230)', () => {
       skipped: 'stopped',
     });
     composed.close();
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('restore backfills cluster keys of pre-B230 clusters before any wave', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
@@ -381,7 +381,7 @@ describe('MaintenanceWorker (B230)', () => {
       firstWaveFinished = true;
       return report;
     });
-    await vi.waitFor(() => expect(healthy()).toBeGreaterThan(0), { timeout: 10_000 });
+    await vi.waitFor(() => expect(healthy()).toBeGreaterThan(0), { timeout: timeBudget(10_000) });
     const afterFirst = healthy();
 
     // Следующая волна не ждёт предыдущую: новые площадки читаются.
@@ -396,13 +396,13 @@ describe('MaintenanceWorker (B230)', () => {
     expect(firstWaveFinished).toBe(false);
     // B628: следующая волна не выбирает площадку, которая ещё опрашивается, и
     // завершается без неё — зависший опрос больше не держит обе волны.
-    await vi.waitFor(() => expect(nextWaveFinished).toBe(true), { timeout: 10_000 });
+    await vi.waitFor(() => expect(nextWaveFinished).toBe(true), { timeout: timeBudget(10_000) });
 
     releaseStuckSource?.();
     await expect(firstWave).resolves.toMatchObject({ synced: expect.any(Number) });
     await expect(nextWave).resolves.toMatchObject({ synced: expect.any(Number) });
     composed.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   it('stop abandons a wave that outlives the grace period', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));

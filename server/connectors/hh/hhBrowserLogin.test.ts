@@ -2,6 +2,7 @@ import type { Browser, BrowserContext } from 'playwright';
 import { chromium } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type HhBrowserFactory, verifyHhTestAccount } from './hhBrowserLogin';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 const syntheticEnvironment = {
   OPENQAREER_HH_TEST_USERNAME: 'synthetic-candidate@example.test',
@@ -212,11 +213,11 @@ describe('hh.ru read-only test-account verifier', () => {
 
   beforeAll(async () => {
     browser = await chromium.launch({ headless: true });
-  }, 60_000);
+  }, timeBudget(60_000));
 
   afterAll(async () => {
     if (browser) await browser.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   it('returns ready only after login and an exact candidate resume identity marker', async () => {
     const requests: string[] = [];

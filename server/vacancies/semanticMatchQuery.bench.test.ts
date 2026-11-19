@@ -106,6 +106,6 @@ describe.skipIf(!process.env.BENCH)('buildSemanticMatchQuery bench (B267 S3)', (
     },
     // Вставка 750 тыс. строк на медленной CI-машине дольше стандартных 5 с;
     // сам замер запроса печатается в stdout и укладывается в единицы мс.
-    120_000,
+    timeBudget(120_000),
   );
 });

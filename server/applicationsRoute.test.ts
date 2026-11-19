@@ -819,7 +819,7 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     expect(replay.json().data.replayed).toBe(true);
     const list = await app.inject({ url, headers: { authorization } });
     expect(list.json().data).toHaveLength(1);
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('lists and filters 1,000 SQLite applications under one second', async () => {
     const { app, authorization, candidateStore, candidateId } = await createApp();
@@ -840,5 +840,5 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     expect(response.json().meta.total).toBe(167);
     expect(response.json().meta.stageCounts.applied).toBe(167);
     expect(elapsedMs).toBeLessThan(timeBudget(1_000));
-  }, 30_000);
+  }, timeBudget(30_000));
 });

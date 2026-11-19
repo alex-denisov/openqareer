@@ -182,5 +182,5 @@ describe('CoverageReport', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  }, 60_000);
+  }, timeBudget(60_000));
 });
