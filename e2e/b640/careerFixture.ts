@@ -65,6 +65,10 @@ export interface CareerCalls {
   readonly ownRoles: unknown[];
   readonly lowerIncome: unknown[];
   readonly growthGoals: unknown[];
+  readonly scenarios: unknown[];
+  readonly family: unknown[];
+  readonly consents: unknown[];
+  readonly places: unknown[];
 }
 
 export interface CareerOptions {
@@ -78,6 +82,16 @@ export interface CareerOptions {
   /** Ответ цели роста (S12); выбор цели возвращает `growthAfter`, если он задан. */
   readonly growth?: unknown;
   readonly growthAfter?: unknown;
+  /** C06: вилка страны по коду; без кода — «мало данных». */
+  readonly relocationPay?: Readonly<Record<string, unknown>>;
+  readonly relocationCompanies?: number;
+  readonly relocationProfile?: unknown;
+  readonly relocationConsent?: boolean;
+  /** B672: сохранённый список мест; без него — страны из анкеты. */
+  readonly relocationPlaces?: readonly unknown[];
+  readonly relocationCities?: readonly unknown[];
+  /** Вилка города России по названию. */
+  readonly relocationCityPay?: Readonly<Record<string, unknown>>;
 }
 
 function campaign(roles: string[]) {
@@ -118,6 +132,10 @@ export async function openCareer(
     ownRoles: [],
     lowerIncome: [],
     growthGoals: [],
+    scenarios: [],
+    family: [],
+    consents: [],
+    places: [],
   };
   let roles = options.searchRoles ?? ['Руководитель разработки'];
   let profile: Record<string, unknown> = {
@@ -161,6 +179,11 @@ export async function openCareer(
       },
     }),
   );
+  // Проверка навыков готова для любой роли: полоса «Проверьте» берёт первую роль поиска.
+  await page.route(`${API}/candidate/role-skill-assessments/current*`, (route) => {
+    const role = new URL(route.request().url()).searchParams.get('role') ?? '';
+    return route.fulfill({ json: { data: { state: 'ready', roleTitle: role, skills: [] } } });
+  });
   await page.route(`${API}/candidate/role-skill-demand`, (route) =>
     route.fulfill({
       json: {
@@ -230,6 +253,73 @@ export async function openCareer(
     const goal = { kind: body.goal, chosenAt: '2026-11-19T09:00:00.000Z' };
     return route.fulfill({ json: { data: { goal } } });
   });
+  await page.route(`${API}/candidate/career/relocation/pay**`, (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    const city = params.get('city');
+    if (city)
+      return route.fulfill({
+        json: { data: options.relocationCityPay?.[city] ?? { state: 'thin' } },
+      });
+    const code = params.get('country') ?? '';
+    const pay = options.relocationPay?.[code] ?? { state: 'thin', vacancies: 0, city: null };
+    return route.fulfill({ json: { data: pay } });
+  });
+  let places = options.relocationPlaces;
+  await page.route(`${API}/candidate/career/relocation/places`, (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as { places: unknown[] };
+      calls.places.push(body.places);
+      places = body.places;
+    }
+    const data = places
+      ? { saved: true, places, updatedAt: '2026-11-19T09:00:00.000Z' }
+      : { saved: false, places: [], updatedAt: null };
+    return route.fulfill({ json: { data } });
+  });
+  await page.route(`${API}/candidate/career/relocation/cities`, (route) =>
+    route.fulfill({ json: { data: { cities: options.relocationCities ?? [] } } }),
+  );
+  await page.route(`${API}/candidate/relocation-questionnaire`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          profile: options.relocationProfile ?? null,
+          consent: options.relocationConsent
+            ? { status: 'granted', granted: true }
+            : { status: 'not_granted', granted: false },
+          consentTextStatus: 'approved',
+          alerts: [],
+        },
+      },
+    }),
+  );
+  await page.route(`${API}/candidate/relocation-scenarios**`, (route) => {
+    const method = route.request().method();
+    if (method === 'GET') return route.fulfill({ json: { data: { items: [], nextOffset: null } } });
+    if (method === 'DELETE') return route.fulfill({ status: 204, body: '' });
+    const input = route.request().postDataJSON();
+    calls.scenarios.push(input);
+    const id = `00000000-0000-4000-8000-${String(calls.scenarios.length).padStart(12, '0')}`;
+    const saved = {
+      id,
+      createdAt: new Date().toISOString(),
+      input,
+      result: {},
+      profileRevision: 1,
+    };
+    return route.fulfill({ status: 201, json: { data: saved } });
+  });
+  await page.route(`${API}/candidate/relocation-questionnaire/steps/family`, (route) => {
+    calls.family.push(route.request().postDataJSON());
+    return route.fulfill({ json: { data: { profile: options.relocationProfile, alerts: [] } } });
+  });
+  await page.route(`${API}/candidate/relocation-questionnaire/consent`, (route) => {
+    calls.consents.push(route.request().method());
+    return route.fulfill({ json: { data: { consent: { status: 'granted', granted: true } } } });
+  });
+  await page.route(`${API}/companies?**`, (route) =>
+    route.fulfill({ json: { total: options.relocationCompanies ?? 0, items: [] } }),
+  );
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   return calls;
 }

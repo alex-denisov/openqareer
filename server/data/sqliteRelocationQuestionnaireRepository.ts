@@ -1,3 +1,4 @@
+import { deleteRelocationPlacesRow } from '../candidate/sqliteRelocationPlacesRepository';
 import { SqliteRelocationScenarioRepository } from './sqliteRelocationScenarioRepository';
 import type { DatabaseSync } from 'node:sqlite';
 import { RELOCATION_CONSENT_VERSION, emptyRelocationQuestionnaire, relocationQuestionnaireSchema, relocationQuestionnaireStepSchemas, relocationProgressSchema, type RelocationConsentState, type RelocationCurrentStep, type RelocationQuestionnaire, type RelocationQuestionnaireStepData, type RelocationStepId } from '../../shared/relocationQuestionnaire';
@@ -75,6 +76,7 @@ export class SqliteRelocationQuestionnaireRepository {
       }
       this.deleteProfileRow(candidateId);
       this.scenarios.deleteAll(candidateId);
+      deleteRelocationPlacesRow(this.database, candidateId);
       return this.getConsent(candidateId);
     });
     this.checkpointAfterDeletion();
@@ -117,6 +119,7 @@ export class SqliteRelocationQuestionnaireRepository {
         throw new RelocationProfileRevisionConflictError(currentRevision);
       }
       this.scenarios.deleteAll(candidateId);
+      deleteRelocationPlacesRow(this.database, candidateId);
       return this.deleteProfileRow(candidateId);
     });
     if (deleted) this.checkpointAfterDeletion();

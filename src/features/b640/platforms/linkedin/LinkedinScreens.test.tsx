@@ -1,0 +1,216 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { click, mount } from '../../kit/testDom';
+import { nodeByCode } from '../../routes';
+import Section from '../index';
+
+vi.mock('../../shell/ShellContext', () => ({
+  useShell: () => ({ navigate: () => undefined }),
+  useScreenChrome: () => undefined,
+}));
+vi.mock('../../../coach/coachApi', () => ({ getConnections: vi.fn() }));
+vi.mock('../../../resume/resumeApi', () => ({ getResumeStudio: vi.fn() }));
+vi.mock('../../../today/linkedinDraftApi', async (original) => ({
+  ...(await original<typeof import('../../../today/linkedinDraftApi')>()),
+  listDrafts: vi.fn(),
+  updateDraft: vi.fn(),
+  listDraftTopics: vi.fn(),
+  createDraft: vi.fn(),
+}));
+
+vi.mock('./linkedinQueueApi', () => ({
+  getRhythm: vi.fn().mockResolvedValue({
+    postsPerWeek: 1,
+    days: ['fri'],
+    time: '10:00',
+    timezone: 'Europe/Moscow',
+  }),
+  listQueue: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 }),
+  enqueueDraft: vi.fn(),
+  listFeedPosts: vi.fn(),
+  createFeedPost: vi.fn(),
+  approveFeedPosts: vi.fn(),
+}));
+
+const queue = await import('./linkedinQueueApi');
+const coach = await import('../../../coach/coachApi');
+const resume = await import('../../../resume/resumeApi');
+const api = await import('../../../today/linkedinDraftApi');
+
+const flush = () =>
+  act(async () => {
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+const node = (code: string) => {
+  const found = nodeByCode(code);
+  if (!found) throw new Error(code);
+  return found;
+};
+const linkedin = (connected: boolean) =>
+  connected
+    ? {
+        platform: 'linkedin',
+        available: true,
+        capabilities: [],
+        importsCareerHistory: true,
+        status: 'imported',
+        importedAt: '2026-11-01T10:00:00Z',
+      }
+    : {
+        platform: 'linkedin',
+        available: true,
+        capabilities: [],
+        importsCareerHistory: true,
+        status: 'disconnected',
+      };
+const studio = {
+  projection: {
+    master: {
+      targetRole: 'Руководитель разработки',
+      about: 'Строю команды.',
+      skills: [{ id: '1', name: 'Go' }],
+    },
+  },
+};
+const draft = (index: number, patch: Record<string, unknown> = {}) => ({
+  id: `d${index}`,
+  kind: 'post',
+  topic: `Тема ${index}`,
+  text: `Текст ${index}`,
+  status: 'draft',
+  ...patch,
+});
+const many = (count: number, kind = 'post', status = 'published') =>
+  Array.from({ length: count }, (_, i) => draft(i, { kind, status }));
+
+afterEach(() => vi.clearAllMocks());
+
+describe('a03: профиль LinkedIn', () => {
+  it('тексты разделов с «Скопировать», без «Применить»', async () => {
+    vi.mocked(coach.getConnections).mockResolvedValue([linkedin(true)] as never);
+    vi.mocked(resume.getResumeStudio).mockResolvedValue(studio as never);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const view = mount(<Section node={node('a03')} params={{}} />);
+    await flush();
+    expect(view.container.querySelectorAll('.li-sec')).toHaveLength(3);
+    expect(view.container.textContent).not.toMatch(/Применить|Другой вариант/);
+    await act(async () =>
+      click(view.container.querySelector('button[aria-label="Скопировать: Заголовок"]')!),
+    );
+    expect(writeText).toHaveBeenCalledWith('Руководитель разработки · Go');
+    view.unmount();
+  });
+  it('не подключён: строка с «Подключить»', async () => {
+    vi.mocked(coach.getConnections).mockResolvedValue([linkedin(false)] as never);
+    const view = mount(<Section node={node('a03')} params={{}} />);
+    await flush();
+    expect(view.container.querySelector('a[aria-label="Подключить LinkedIn"]')).not.toBeNull();
+    expect(view.container.querySelector('.li-sec')).toBeNull();
+    view.unmount();
+  });
+  it('ошибка чтения: «Повторить» на месте', async () => {
+    vi.mocked(coach.getConnections).mockRejectedValue(new Error('x'));
+    const view = mount(<Section node={node('a03')} params={{}} />);
+    await flush();
+    expect(view.container.querySelector('[role="alert"]')!.textContent).toContain('Повторить');
+    view.unmount();
+  });
+});
+
+describe('a03p, a03b, a05', () => {
+  it('публикации: 20 строк и «Показать ещё»', async () => {
+    vi.mocked(api.listDrafts).mockResolvedValue(many(27) as never);
+    const view = mount(<Section node={node('a03p')} params={{}} />);
+    await flush();
+    expect(view.container.querySelectorAll('li.li-pub')).toHaveLength(20);
+    const more = [...view.container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Показать ещё'),
+    )!;
+    await act(async () => click(more));
+    expect(view.container.querySelectorAll('li.li-pub')).toHaveLength(27);
+    view.unmount();
+  });
+  it('посты: текущий черновик с «Скопировать»; без черновика — «Подготовить черновик»', async () => {
+    vi.mocked(api.listDrafts).mockResolvedValue([draft(1)] as never);
+    const view = mount(<Section node={node('a03b')} params={{}} />);
+    await flush();
+    expect((view.container.querySelector('#po-text') as HTMLTextAreaElement).value).toBe('Текст 1');
+    expect(view.container.textContent).toContain('Одобрить и поставить в план');
+    expect(view.container.textContent).toContain('не больше 1 поста в неделю');
+    view.unmount();
+    vi.mocked(api.listDrafts).mockResolvedValue([] as never);
+    const empty = mount(<Section node={node('a03b')} params={{}} />);
+    await flush();
+    expect(empty.container.textContent).toContain('Подготовить черновик');
+    empty.unmount();
+  });
+  it('«Одобрить и поставить в план»: одобряет черновик и ставит его в очередь', async () => {
+    vi.mocked(api.listDrafts).mockResolvedValue([draft(1)] as never);
+    vi.mocked(api.updateDraft).mockResolvedValue({} as never);
+    vi.mocked(queue.enqueueDraft).mockResolvedValue({ scheduledAt: '2026-11-20T07:00:00.000Z' });
+    const view = mount(<Section node={node('a03b')} params={{}} />);
+    await flush();
+    const approve = [...view.container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Одобрить'),
+    )!;
+    await act(async () => click(approve));
+    await flush();
+    expect(api.updateDraft).toHaveBeenCalledWith('d1', { status: 'approved' });
+    expect(queue.enqueueDraft).toHaveBeenCalledWith('d1');
+    expect(view.container.textContent).toContain('Поставили в план');
+    view.unmount();
+  });
+  it('лента без постов: пустое состояние и форма «Добавить пост»', async () => {
+    vi.mocked(queue.listFeedPosts).mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 });
+    const view = mount(<Section node={node('a05')} params={{}} />);
+    await flush();
+    expect(view.container.querySelector('.vl-empty-t')!.textContent).toBe('Новых постов нет');
+    expect(view.container.querySelector('#fp-text')).not.toBeNull();
+    view.unmount();
+  });
+  it('лента: карточки, «Одобрить» и пакетное «Одобрить все»', async () => {
+    const post = (n: number) => ({
+      draftId: `f${n}`,
+      postUrl: null,
+      postExcerpt: `Пост ${n}`,
+      comment: `Комментарий ${n}`,
+      state: 'draft',
+      createdAt: '2026-11-18T10:00:00Z',
+      scheduledAt: null,
+    });
+    vi.mocked(queue.listFeedPosts).mockResolvedValue({
+      items: [post(1), post(2)],
+      total: 2,
+      offset: 0,
+      limit: 20,
+    } as never);
+    vi.mocked(queue.approveFeedPosts).mockResolvedValue({ results: [] });
+    const view = mount(<Section node={node('a05')} params={{}} />);
+    await flush();
+    expect(view.container.querySelectorAll('.lk-card')).toHaveLength(2);
+    expect(view.container.querySelector('.lk-au')).toBeNull();
+    const all = [...view.container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Одобрить все'),
+    )!;
+    await act(async () => click(all));
+    expect(queue.approveFeedPosts).toHaveBeenCalledWith(['f1', 'f2']);
+    view.unmount();
+  });
+  it('лента: принести пост — текст обязателен, ссылка нет', async () => {
+    vi.mocked(queue.listFeedPosts).mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 });
+    vi.mocked(queue.createFeedPost).mockResolvedValue({
+      draftId: 'f1',
+      postUrl: null,
+      postExcerpt: 'x',
+      comment: 'y',
+    });
+    const view = mount(<Section node={node('a05')} params={{}} />);
+    await flush();
+    const submit = view.container.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    view.unmount();
+  });
+});

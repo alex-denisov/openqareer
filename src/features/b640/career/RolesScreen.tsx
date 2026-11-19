@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { useShell } from '../shell/ShellContext';
 import { Icon, Link } from '../kit';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
@@ -60,11 +61,13 @@ function SearchRoleStrip({
 
 /** S9 «Карьера» при «Ищу работу»: роль поиска, проверка навыков, роли по профилю. */
 export function RolesView({ node, data }: { readonly node: B640Node; readonly data: RolesData }) {
-  const [picking, setPicking] = useState(false);
+  const { search } = useShell();
+  // «Выбрать роль» из проверки навыков открывает выбор роли поиска сразу (B645).
+  const [picking, setPicking] = useState(() => new URLSearchParams(search).get('pick') === '1');
   return (
     <div className="page" {...pageAttrs(node)}>
       <SearchRoleStrip data={data} onEdit={() => setPicking(true)} />
-      <SkillStrip gap={data.skillGap} role={data.searchTitles[0]} />
+      {data.skillRole ? <SkillStrip gap={data.skillGap} role={data.skillRole} /> : null}
       <RoleTable rows={data.rows} />
       <Link className="row-act is-sm" to={conditionsPath()}>
         <Icon name="sliders" />

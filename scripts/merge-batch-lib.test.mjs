@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cancelledOnlyRuns,
   creditDecision,
+  effectiveChecks,
   deferStacked,
   parseGhJson,
   rejectReason,
@@ -189,5 +191,44 @@ describe('deferStacked', () => {
   });
   it('keeps independent PRs', () => {
     expect(deferStacked([a, c], () => false).take).toEqual([a, c]);
+  });
+});
+
+describe('effectiveChecks / cancelledOnlyRuns', () => {
+  const run = (id, conclusion, completedAt) => ({
+    name: 'Plan gates',
+    workflowName: 'Verify and deploy',
+    status: 'COMPLETED',
+    conclusion,
+    completedAt,
+    detailsUrl: `https://github.com/o/r/actions/runs/${id}/job/1`,
+  });
+  it('a cancelled duplicate does not hide the successful run (#742)', () => {
+    const rollup = [
+      run(44450053730, 'CANCELLED', '2026-11-19T04:00:05Z'),
+      run(44450054137, 'SUCCESS', '2026-11-19T04:09:00Z'),
+    ];
+    expect(rejectReason(pr(742, { statusCheckRollup: rollup }))).toBeNull();
+    expect(cancelledOnlyRuns(pr(742, { statusCheckRollup: rollup }))).toEqual([]);
+  });
+  it('the newest finished run wins over an older failure', () => {
+    const rollup = [
+      run(1, 'FAILURE', '2026-11-19T04:00:00Z'),
+      run(2, 'SUCCESS', '2026-11-19T05:00:00Z'),
+    ];
+    expect(effectiveChecks(rollup)).toHaveLength(1);
+    expect(effectiveChecks(rollup)[0].conclusion).toBe('SUCCESS');
+  });
+  it('a re-run in progress keeps the PR waiting', () => {
+    const rollup = [
+      run(1, 'CANCELLED', '2026-11-19T04:00:00Z'),
+      { ...run(1, '', null), status: 'IN_PROGRESS' },
+    ];
+    expect(rejectReason(pr(1, { statusCheckRollup: rollup }))).toContain('not green');
+  });
+  it('only cancelled runs: still rejected, and the run is offered for re-run', () => {
+    const rollup = [run(7, 'CANCELLED', '2026-11-19T04:00:00Z')];
+    expect(rejectReason(pr(1, { statusCheckRollup: rollup }))).toContain('CANCELLED');
+    expect(cancelledOnlyRuns(pr(1, { statusCheckRollup: rollup }))).toEqual(['7']);
   });
 });

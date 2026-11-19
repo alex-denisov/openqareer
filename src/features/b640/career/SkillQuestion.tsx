@@ -6,6 +6,8 @@ export const EVAL_ERROR = 'Оценка не получилась';
 export interface SkillQuestionProps {
   readonly eyebrow: string;
   readonly title: string;
+  /** По чему оценивается ответ кейса; у вопросов о роли пунктов нет. */
+  readonly criteria?: readonly string[];
   readonly answer: string;
   readonly busy: boolean;
   /** Сбой оценки или сохранения: строка на месте, ответ остаётся в поле. */
@@ -14,6 +16,24 @@ export interface SkillQuestionProps {
   readonly onSubmit: () => void;
   readonly onRetry: () => void;
   readonly onLater: () => void;
+}
+
+/** «Оценим по трём пунктам»: по чему оценивается ответ кейса (макет C4). */
+function Criteria({ items }: { readonly items?: readonly string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div className="change">
+      <h3>Оценим по {items.length === 3 ? 'трём пунктам' : 'пунктам'}</h3>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>
+            <Icon name="right" />
+            {item}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 /** Вопрос проверки (C4): разговор о роли и кейсы выглядят одинаково. */
@@ -35,6 +55,7 @@ export function SkillQuestion(props: SkillQuestionProps) {
       <h2 className="mod-title" id="q-title">
         {title}
       </h2>
+      <Criteria items={props.criteria} />
       <SkillAnswerField value={answer} onChange={props.onChange} disabled={busy} />
       <ActionDock
         kind="commit"
