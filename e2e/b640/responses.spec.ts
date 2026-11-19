@@ -232,6 +232,15 @@ test.describe('B656: «Отклики» нового кабинета', () => {
         .getByRole('link', { name: /Смотреть вакансии/u }),
     ).toHaveAttribute('href', '/app/vacancies');
     await expect(page.locator('.cw-row a[href^="/app/vacancies/companies"]')).toHaveCount(0);
+    // B645: действие строки — цель 44 px и 14px/600, как a.btn в макете.
+    const action = await page
+      .locator('.cw-act .btn')
+      .first()
+      .evaluate((node) => {
+        const style = getComputedStyle(node);
+        return [Math.round(node.getBoundingClientRect().height), style.fontSize, style.fontWeight];
+      });
+    expect(action).toEqual([44, '14px', '600']);
     await page.getByRole('button', { name: 'Жду вакансию · 1' }).click();
     await expect(page.locator('.cw-row')).toHaveCount(1);
     await page.getByRole('button', { name: 'Все · 4' }).click();
