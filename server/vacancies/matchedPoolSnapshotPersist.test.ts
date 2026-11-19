@@ -36,6 +36,10 @@ function memoryStore(
     delete: vi.fn((candidateId: string) => {
       rows.delete(candidateId);
     }),
+    keys: vi.fn((candidateId: string) => {
+      const row = rows.get(candidateId);
+      return row ? [row.profileKey] : [];
+    }),
   };
   return store;
 }
@@ -113,6 +117,24 @@ describe('MatchedPoolSnapshots: a snapshot outlives the process', () => {
     expect(store.rows.get('one')?.storedAt).toBe(now.value);
   });
 
+  it('a stored snapshot past 20 minutes is served at once after a deploy, rebuilt behind', async () => {
+    const store = memoryStore({
+      candidateId: 'one',
+      profileKey: 'profile',
+      items: [item('stored')],
+      storedAt: 0,
+    });
+    const snapshots = new MatchedPoolSnapshots({ clock: () => 30 * 60_000, staleWaitMs: 60_000 });
+    snapshots.setStore(store);
+    const rebuild = vi.fn(() => new Promise<MatchedVacancyItem[]>(() => undefined));
+    const started = performance.now();
+
+    expect((await snapshots.readAsync('one', 'profile', rebuild))[0]?.cluster.id).toBe('stored');
+    expect(performance.now() - started).toBeLessThan(1_000);
+    await turn();
+    expect(rebuild).toHaveBeenCalledTimes(1);
+  });
+
   it('a fresh stored snapshot is served without any rebuild', async () => {
     const store = memoryStore({
       candidateId: 'one',
@@ -184,6 +206,7 @@ describe('MatchedPoolSnapshots: a snapshot outlives the process', () => {
         throw new Error('database is locked');
       },
       delete: () => undefined,
+      keys: () => [],
     };
     const snapshots = new MatchedPoolSnapshots({
       onRebuildFailed: (error) => failures.push(error),
@@ -195,5 +218,43 @@ describe('MatchedPoolSnapshots: a snapshot outlives the process', () => {
 
     expect(read[0]?.cluster.id).toBe('new');
     expect(failures).toHaveLength(2);
+  });
+});
+
+describe('MatchedPoolSnapshots: a new process loads the stored snapshots before the first read', () => {
+  it('preloads every stored profile of a candidate, so the read does not open the store', async () => {
+    const store = memoryStore({
+      candidateId: 'one',
+      profileKey: 'role-cto',
+      items: [item('cto')],
+      storedAt: 0,
+    });
+    const snapshots = new MatchedPoolSnapshots({ clock: () => 60_000 });
+    snapshots.setStore(store);
+
+    expect(await snapshots.preload(['one', 'nobody'])).toBe(1);
+    vi.mocked(store.read).mockClear();
+    const compute = vi.fn(async () => [item('new')]);
+
+    expect((await snapshots.readAsync('one', 'role-cto', compute))[0]?.cluster.id).toBe('cto');
+    expect(store.read).not.toHaveBeenCalled();
+    expect(compute).not.toHaveBeenCalled();
+  });
+
+  it('does not replace a snapshot the process already holds', async () => {
+    const store = memoryStore({
+      candidateId: 'one',
+      profileKey: 'profile',
+      items: [item('stored')],
+      storedAt: 0,
+    });
+    const snapshots = new MatchedPoolSnapshots({ clock: () => 60_000 });
+    await snapshots.readAsync('one', 'profile', async () => [item('held')]);
+    snapshots.setStore(store);
+
+    expect(await snapshots.preload(['one'])).toBe(0);
+    expect(
+      (await snapshots.readAsync('one', 'profile', async () => [item('x')]))[0]?.cluster.id,
+    ).toBe('held');
   });
 });

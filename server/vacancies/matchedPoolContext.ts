@@ -150,6 +150,7 @@ interface SealedSnapshotText {
   read(candidateId: string, profileKey: string): { builtAt: number; text: string } | null;
   write(candidateId: string, profileKey: string, builtAt: number, text: string): void;
   delete(candidateId: string): void;
+  keys(candidateId: string): string[];
 }
 
 /** Prod 19.11: a new process answers from the last snapshot, not from a cold pool read. */
@@ -169,8 +170,17 @@ export function setMatchedSnapshotStore(
     write: (candidateId, profileKey, snapshot) =>
       sealed.write(candidateId, profileKey, snapshot.storedAt, JSON.stringify(snapshot.items)),
     delete: (candidateId) => sealed.delete(candidateId),
+    keys: (candidateId) => sealed.keys(candidateId),
   };
   snapshotsOf(engine).setStore(store);
+}
+
+/** Loads the stored snapshots of these candidates into the process; returns how many. */
+export function preloadMatchedSnapshots(
+  engine: RouteDeps['multiSourceEngine'],
+  candidateIds: readonly string[],
+): Promise<number> {
+  return snapshotsOf(engine).preload(candidateIds);
 }
 
 /** A rebuild behind an expired snapshot has no request to fail: its failure goes here. */

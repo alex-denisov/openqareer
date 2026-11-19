@@ -10,6 +10,7 @@ function observed(
   sampleSize: number,
   wage: { min: number; max: number; sampleSize: number } | null,
   matched: string[],
+  sources: readonly { source: string; count: number }[] = [{ source: 'hh', count: sampleSize }],
 ) {
   return {
     id,
@@ -23,7 +24,7 @@ function observed(
       sampleSize,
       observedFrom: '2026-10-11',
       observedTo: '2026-11-10T09:00:00.000Z',
-      sources: [{ source: 'hh', count: sampleSize }],
+      sources,
       repeatedRequirements: ['Управление командой', 'Бюджет', 'Найм'],
       matchedRequirementNames: matched,
       ...(wage ? { wage } : {}),
@@ -52,7 +53,19 @@ const ROLES = [
     { min: 350_000, max: 420_000, sampleSize: 24 },
     ['Управление командой', 'Бюджет'],
   ),
-  observed('r3', 'Директор по разработке', 31, { min: 600_000, max: 750_000, sampleSize: 31 }, []),
+  // B645 s09: длинная строка источников, как на проде, — не должна выходить за ячейку.
+  observed(
+    'r3',
+    'Директор по разработке',
+    31,
+    { min: 600_000, max: 750_000, sampleSize: 31 },
+    [],
+    [
+      { source: 'json_api', count: 12 },
+      { source: 'html', count: 10 },
+      { source: 'hh', count: 9 },
+    ],
+  ),
   notFound('r4', 'Head of Platform'),
   notFound('r5', 'Руководитель платформы'),
 ];

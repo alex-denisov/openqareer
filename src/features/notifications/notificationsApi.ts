@@ -19,6 +19,8 @@ export interface CandidateNotification {
   readonly createdAt: string;
   readonly readAt: string | null;
   readonly action: { readonly label: string; readonly href: string };
+  /** B690: есть только у уведомления «Вход в hh.ru истёк». */
+  readonly source?: 'hh_session';
 }
 
 export interface CandidateNotificationPage {
