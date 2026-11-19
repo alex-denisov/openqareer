@@ -1,0 +1,175 @@
+import type {
+  CareerDiaryGoalRiskStatus,
+  CareerDiaryGoalSummary,
+  CareerDiaryHorizon,
+  CareerDiaryValue,
+} from '../../../../shared/careerDiary';
+import type {
+  CareerDiaryGoalCard,
+  CareerDiaryGoalSetter,
+} from '../../../../shared/careerDiaryCards';
+import { shortDate } from './model';
+
+/** Модель экранов «Цели и показатели» (d02, d02a, d02b). */
+
+const MONTHS_GEN = [
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+];
+const QUARTERS = ['I', 'II', 'III', 'IV'];
+const STALE_DAYS = 14;
+const DAY_MS = 86_400_000;
+
+export const HORIZONS: readonly { readonly value: CareerDiaryHorizon; readonly label: string }[] = [
+  { value: 'quarter', label: 'Квартал' },
+  { value: 'year', label: 'Год' },
+  { value: 'next_quarter', label: 'Дальше' },
+];
+
+export const SETTERS: readonly { readonly value: CareerDiaryGoalSetter; readonly label: string }[] =
+  [
+    { value: 'self', label: 'Вы' },
+    { value: 'manager', label: 'Руководитель' },
+    { value: 'team', label: 'Команда' },
+  ];
+
+export interface RiskTag {
+  readonly text: string;
+  readonly className: string;
+}
+
+const RISK_TAGS: Record<CareerDiaryGoalRiskStatus, RiskTag> = {
+  on_track: { text: 'по плану', className: 'tag ok' },
+  planned: { text: 'по плану', className: 'tag ok' },
+  achieved: { text: 'достигнута', className: 'tag ok' },
+  at_risk: { text: 'отстаёт', className: 'tag part' },
+  unknown: { text: 'нет замера', className: 'tag miss' },
+};
+
+export function riskTag(status: CareerDiaryGoalRiskStatus): RiskTag {
+  return RISK_TAGS[status];
+}
+
+/** «12 декабря», с годом — если не текущий. */
+export function longDate(date: string, now: string): string {
+  const [year, month, day] = date.slice(0, 10).split('-').map(Number);
+  const tail = String(year) === now.slice(0, 4) ? '' : ` ${year}`;
+  return `${day} ${MONTHS_GEN[(month ?? 1) - 1]}${tail}`;
+}
+
+/** «IV квартал 2026». */
+export function quarterLabel(day: string): string {
+  const month = Number(day.slice(5, 7));
+  return `${QUARTERS[Math.floor((month - 1) / 3)]} квартал ${day.slice(0, 4)}`;
+}
+
+/** «директор · договорились 12 декабря · до 29 января». */
+export function goalByline(card: CareerDiaryGoalCard, now: string): string {
+  const who = SETTERS.find((setter) => setter.value === card.details.setBy)?.label ?? 'Вы';
+  const parts = [who.toLowerCase()];
+  if (card.details.agreedOn) parts.push(`договорились ${longDate(card.details.agreedOn, now)}`);
+  parts.push(`до ${longDate(card.dueDate, now)}`);
+  return parts.join(' · ');
+}
+
+export function formatValue(value: CareerDiaryValue, unit = ''): string {
+  if (typeof value === 'boolean') return value ? 'сделано' : 'не сделано';
+  if (typeof value === 'number') {
+    const text = String(value).replace('.', ',');
+    return unit === '%' ? `${text} %` : text;
+  }
+  return value;
+}
+
+/** Показатели цели: у старой цели без разбиения показатель — она сама. */
+export function indicatorsOf(card: CareerDiaryGoalCard): readonly CareerDiaryGoalSummary[] {
+  return card.indicators.length > 0 ? card.indicators : [card];
+}
+
+export interface IndicatorView {
+  readonly id: string;
+  readonly title: string;
+  /** Значение замера или «не внесено». */
+  readonly value: string;
+  /** «из 7 и меньше»; пусто, если цель не числовая. */
+  readonly target: string;
+  readonly sub: string;
+}
+
+function targetText(goal: CareerDiaryGoalSummary): string {
+  if (typeof goal.targetValue !== 'number') return '';
+  const target = formatValue(goal.targetValue, goal.unit);
+  const less = goal.baselineValue !== null && goal.targetValue < goal.baselineValue;
+  return less ? `из ${target} и меньше` : `из ${target}`;
+}
+
+export function indicatorView(goal: CareerDiaryGoalSummary): IndicatorView {
+  const latest = goal.latestMeasurement;
+  const title = goal.unit && goal.unit !== '%' ? `${goal.title}, ${goal.unit}` : goal.title;
+  const baseline =
+    goal.baselineValue === null ? '' : ` · было ${formatValue(goal.baselineValue, goal.unit)}`;
+  return {
+    id: goal.id,
+    title,
+    value: latest ? formatValue(latest.value, goal.unit) : 'не внесено',
+    target: latest ? targetText(goal) : '',
+    sub: latest
+      ? `${shortDate(latest.measuredAt.slice(0, 10))}${baseline}`
+      : '— · внесите в итоге недели',
+  };
+}
+
+/** Самый старый последний замер среди показателей, если он старше двух недель: «3 недели назад». */
+export function staleFlag(card: CareerDiaryGoalCard, now: string): string | null {
+  if (card.risk.status === 'achieved') return null;
+  const dates = indicatorsOf(card)
+    .map((goal) => goal.latestMeasurement?.measuredAt.slice(0, 10))
+    .filter((date): date is string => Boolean(date));
+  if (dates.length === 0) return null;
+  const oldest = dates.sort()[0]!;
+  const days = Math.floor(
+    (Date.parse(`${now}T00:00:00Z`) - Date.parse(`${oldest}T00:00:00Z`)) / DAY_MS,
+  );
+  if (days < STALE_DAYS) return null;
+  const weeks = Math.floor(days / 7);
+  return `Последний замер ${weeks} ${plural(weeks, 'неделю', 'недели', 'недель')} назад`;
+}
+
+export function plural(count: number, one: string, few: string, many: string): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+export interface GoalsLead {
+  readonly title: string;
+  /** Отстающая цель: на неё ведёт главная кнопка «Разобрать». */
+  readonly focus: CareerDiaryGoalCard | null;
+}
+
+/** Заголовок вкладки: что отстаёт, иначе «идут по плану». */
+export function goalsLead(cards: readonly CareerDiaryGoalCard[]): GoalsLead {
+  const behind = cards.filter((card) => card.risk.status === 'at_risk');
+  if (behind.length === 0) {
+    const unmeasured = cards.filter((card) => card.risk.status === 'unknown').length;
+    if (unmeasured === cards.length) return { title: 'Внесите первые замеры', focus: null };
+    return { title: 'Цели идут по плану', focus: null };
+  }
+  const title =
+    behind.length === 1
+      ? `Отстаёт «${behind[0]!.title}»`
+      : `Отстают ${behind.length} ${plural(behind.length, 'цель', 'цели', 'целей')}`;
+  return { title, focus: behind[0]! };
+}

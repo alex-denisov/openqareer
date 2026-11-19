@@ -12,6 +12,7 @@ mod hh_resume_edit_scripts;
 mod hh_jsdom_harness;
 mod hh_resume_experience;
 mod hh_resume_experience_scripts;
+mod hh_raise;
 mod linkedin_read_guard;
 mod network_probe;
 mod session_token_store;
@@ -150,6 +151,19 @@ async fn run_hh_experience_edit(
         return Err("forbidden_caller".into());
     }
     hh_resume_experience::run_hh_experience_edit(&app, request).await
+}
+
+/// B699: raises the candidate's hh.ru resume in their own hh.ru window; only the cabinet may ask.
+#[tauri::command]
+async fn run_hh_raise(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_raise::HhRaiseRequest,
+) -> Result<hh_raise::HhRaiseReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_raise::run_hh_raise(&app, request).await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -564,6 +578,7 @@ fn main() {
             run_hh_apply,
             run_hh_resume_edit,
             run_hh_experience_edit,
+            run_hh_raise,
             desktop_native_fetch,
             print_resume,
             save_resume_pdf,
