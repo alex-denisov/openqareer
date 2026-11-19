@@ -363,7 +363,7 @@ describe('n05 «Согласия и данные»', () => {
 });
 
 describe('n06 «Приложение»', () => {
-  it('тема, язык и часовой пояс; настроек этого компьютера в браузере нет', async () => {
+  it('тема, язык и часовой пояс; на сайте вместо настроек компьютера — версия и «Приложение для Mac»', async () => {
     api.updateAccountProfile.mockResolvedValue({});
     const root = await open(<AppScreen node={node('n06')} />);
     const themes = [...root.querySelectorAll('.seg-ctl.sec-seg[aria-label="Тема"] label')];
@@ -380,7 +380,11 @@ describe('n06 «Приложение»', () => {
     await settle();
     expect(api.updateAccountProfile).toHaveBeenCalledWith({ timezone: 'Europe/Moscow' });
     expect(api.saveAppPreferences).toHaveBeenCalledWith({ theme: 'dark' });
-    expect(root.textContent).not.toMatch(/Обновлени|строке меню|Запуск при входе/u);
+    expect(root.textContent).not.toMatch(/строке меню|Запуск при входе|Проверить обновления|Обновлять автоматически/u);
+    expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual(['Интерфейс', 'Обновления']);
+    expect(root.querySelector('.only-desk')?.textContent).toMatch(/^ОбновленияВерсия \d+\.\d+\.\d+.*Приложение для MacСкачать$/u);
+    const download = [...root.querySelectorAll('a')].find((item) => item.textContent === 'Скачать');
+    expect(download?.getAttribute('href')).toBe('/downloads/openqareer-macos.dmg');
   });
 
   it('B593: валюта зарплат сохраняется; сбой возвращает прежнюю и показывает строку', async () => {

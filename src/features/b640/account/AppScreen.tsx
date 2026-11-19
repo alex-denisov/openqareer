@@ -7,7 +7,7 @@ import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import type { B640Theme } from '../theme';
 import type { AppMoneyCurrency } from '../../../../shared/b640AppPreferences';
-import { DeviceSettingsSection } from './DeviceSettingsSection';
+import { DeviceSettingsSection, WebAppSection } from './DeviceSettingsSection';
 import { getAppPreferences, saveAppPreferences } from './appPreferencesApi';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 
@@ -145,7 +145,7 @@ function CurrencyRow() {
   );
 }
 
-/** n06 «Приложение»: тема, язык, часовой пояс, валюта; в приложении — настройки этого компьютера (B722). */
+/** n06 «Приложение»: тема, язык, часовой пояс, валюта; в приложении — настройки этого компьютера, на сайте — версия и скачивание (B722). */
 export function AppScreen({ node }: { readonly node: B640Node }) {
   return (
     <SettingsPage node={node} heading="Приложение">
@@ -158,7 +158,7 @@ export function AppScreen({ node }: { readonly node: B640Node }) {
           <CurrencyRow />
         </ul>
       </section>
-      {isTauriEnvironment() ? <DeviceSettingsSection /> : null}
+      {isTauriEnvironment() ? <DeviceSettingsSection /> : <WebAppSection />}
     </SettingsPage>
   );
 }

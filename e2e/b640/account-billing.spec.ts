@@ -147,7 +147,7 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
 
   test('n06: тема переключается сразу, часовой пояс выбирается, валюта сохраняется', async ({
     page,
-  }) => {
+  }, testInfo) => {
     const saved: unknown[] = [];
     await openAccount(page, '/app/account/app');
     await page.route('**/api/v1/candidate/b640/app-preferences', async (route) => {
@@ -157,7 +157,7 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     const screen = page.locator('[data-b640-node="n06"]');
-    await expect(screen.locator('.set-row .set-t')).toHaveText([
+    await expect(screen.locator('.set-group').first().locator('.set-row .set-t')).toHaveText([
       'Тема',
       'Язык',
       'Часовой пояс',
@@ -175,7 +175,17 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await screen.getByRole('radio', { name: '$' }).check();
     await expect.poll(() => saved.at(-1)).toEqual({ moneyCurrency: 'USD' });
     expect(saved.slice(0, 2)).toEqual([{ theme: 'dark' }, { theme: 'light' }]);
-    await expect(screen).not.toContainText(/Обновлени/u);
+    await expect(screen).not.toContainText(/строке меню|Запуск при входе|Обновлять автоматически/u);
+    const download = screen.getByRole('link', { name: 'Скачать' });
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(screen.locator('.set-h').filter({ visible: true })).toHaveText(['Интерфейс']);
+      await expect(download).toBeHidden();
+    } else {
+      await expect(screen.locator('.set-h')).toHaveText(['Интерфейс', 'Обновления']);
+      await expect(screen.locator('.set-row .set-t').nth(4)).toHaveText(/^Версия \d+\.\d+\.\d+/u);
+      await expect(screen.locator('.set-row .set-t').nth(5)).toHaveText('Приложение для Mac');
+      await expect(download).toHaveAttribute('href', '/downloads/openqareer-macos.dmg');
+    }
   });
 
   test('t03: подписка, автопродление с подтверждением, заявка на консультанта', async ({

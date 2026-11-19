@@ -87,6 +87,7 @@ test('B722: n06 в приложении — версия, проверка об�
   await expect(launch).toBeChecked();
   await auto.click();
   await expect(auto).not.toBeChecked();
+  await expect.poll(() => calls(page)).toContain('save_device_settings');
   const log = await calls(page);
   expect(log).toContain('plugin:updater|check');
   expect(log).toContain('plugin:autostart|enable');
