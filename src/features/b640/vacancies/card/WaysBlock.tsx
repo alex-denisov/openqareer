@@ -1,42 +1,44 @@
 import { useId, useState } from 'react';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
-import type { ApplyWay } from './waysModel';
+import type { ApplyWay, ComposeAction, WayAction as WayActionModel } from './waysModel';
 
 export interface WaysBlockProps {
   readonly ways: readonly ApplyWay[];
   readonly vacancyId: string;
+  /** «Написать <имя>»: карточка переходит в шаг «Отклик» с черновиком (a02d). */
+  readonly onCompose: (action: ComposeAction) => void;
 }
 
 interface WayActionProps {
   readonly way: ApplyWay;
+  readonly action: WayActionModel;
   readonly vacancyId: string;
-  readonly composeOpen: boolean;
-  readonly onCompose: () => void;
+  readonly onCompose: (action: ComposeAction) => void;
 }
 
-function WayAction({ way, vacancyId, composeOpen, onCompose }: WayActionProps) {
+function WayAction({ way, action, vacancyId, onCompose }: WayActionProps) {
   const icon = <Icon name={way.icon} />;
-  if (way.action.kind === 'compose') {
+  if (action.kind === 'compose') {
     return (
-      <button className="btn" type="button" aria-expanded={composeOpen} onClick={onCompose}>
+      <button className="btn" type="button" onClick={() => onCompose(action)}>
         {icon}
-        {way.action.label}
+        {action.label}
       </button>
     );
   }
-  if (way.action.kind === 'external') {
+  if (action.kind === 'external') {
     return (
-      <a className="btn" href={way.action.url} target="_blank" rel="noopener noreferrer">
+      <a className="btn" href={action.url} target="_blank" rel="noopener noreferrer">
         {icon}
-        {way.action.label}
+        {action.label}
       </a>
     );
   }
   return (
     <Link className="btn" to={buildNodePath('o02', { responseId: vacancyId })}>
       {icon}
-      {way.action.label}
+      {action.label}
     </Link>
   );
 }
@@ -47,10 +49,10 @@ interface WayItemProps {
   readonly group: string;
   readonly checked: boolean;
   readonly onSelect: () => void;
+  readonly onCompose: (action: ComposeAction) => void;
 }
 
-function WayItem({ way, vacancyId, group, checked, onSelect }: WayItemProps) {
-  const [composeOpen, setComposeOpen] = useState(false);
+function WayItem({ way, vacancyId, group, checked, onSelect, onCompose }: WayItemProps) {
   return (
     <li className={way.recommended ? 'ha-item is-next' : 'ha-item'}>
       <label className="ha-opt">
@@ -63,25 +65,17 @@ function WayItem({ way, vacancyId, group, checked, onSelect }: WayItemProps) {
           {way.sub ? <small className="ha-sub">{way.sub}</small> : null}
         </span>
       </label>
-      <div className="ha-go">
-        <WayAction
-          way={way}
-          vacancyId={vacancyId}
-          composeOpen={composeOpen}
-          onCompose={() => setComposeOpen((value) => !value)}
-        />
-      </div>
-      {/*
-        Слот черновика (a02d): при composeOpen у способа «friend» здесь раскрывается встроенная
-        панель MessageDraft из src/features/b640/messages/ (ветка claude/b698-contact-message-ui).
-        Панель встраивает координатор после слияния веток; здесь её не пишем.
-      */}
+      {way.action ? (
+        <div className="ha-go">
+          <WayAction way={way} action={way.action} vacancyId={vacancyId} onCompose={onCompose} />
+        </div>
+      ) : null}
     </li>
   );
 }
 
 /** «Как откликнуться»: только способы, известные по вакансии; выбран первый (рекомендуемый). */
-export function WaysBlock({ ways, vacancyId }: WaysBlockProps) {
+export function WaysBlock({ ways, vacancyId, onCompose }: WaysBlockProps) {
   const headId = useId();
   const group = useId();
   const [selected, setSelected] = useState<ApplyWay['id']>();
@@ -103,6 +97,7 @@ export function WaysBlock({ ways, vacancyId }: WaysBlockProps) {
                 group={group}
                 checked={current === way.id}
                 onSelect={() => setSelected(way.id)}
+                onCompose={onCompose}
               />
             ))}
           </ul>

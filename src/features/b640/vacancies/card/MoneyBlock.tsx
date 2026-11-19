@@ -16,6 +16,11 @@ export interface MoneyBlockProps {
   readonly expectation?: Expectation | undefined;
 }
 
+/** Валюта показа сумм: выбор в «Приложении», иначе валюта условий кандидата, иначе рубли. */
+export function useTargetCurrency(campaign: CampaignMetaView | undefined) {
+  return targetMoneyCurrency(usePreferredMoneyCurrency(), campaign?.salaryCurrency);
+}
+
 const VERDICTS = {
   below: 'ниже',
   inside: 'внутри',
@@ -70,8 +75,7 @@ function Scale({ scale }: { readonly scale: MoneyScale }) {
 /** «Деньги»: сумма, при пересчёте — исходная и курс; шкала рынка и вилки, если есть оценка рынка. */
 export function MoneyBlock({ item, rates, campaign, expectation }: MoneyBlockProps) {
   const titleId = useId();
-  const preferred = usePreferredMoneyCurrency();
-  const lines = moneyLines(item, rates, targetMoneyCurrency(preferred, campaign?.salaryCurrency));
+  const lines = moneyLines(item, rates, useTargetCurrency(campaign));
   if (!lines) return null;
   const market = item.explanation.marketSalary;
   const scale = moneyScale(market, item.cluster.salary, rates, expectation);

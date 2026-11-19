@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { vacancySourceLabel } from '../../../../../shared/vacancySourceLabel';
 import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { Link, StatusLine } from '../../kit';
@@ -9,6 +9,7 @@ import { AcquaintBlock } from './AcquaintBlock';
 import { ActBar } from './ActBar';
 import './card.css';
 import { CompanyBlock } from './CompanyBlock';
+import { ComposeView } from './ComposeView';
 import { fitBlockState } from './fitRows';
 import { FitBlock } from './FitBlock';
 import { Head } from './Head';
@@ -22,7 +23,7 @@ import { useCardData, type CardData } from './useCardData';
 import { useSave } from './useSave';
 import { useVacancyFit } from './useVacancyFit';
 import { WaysBlock } from './WaysBlock';
-import { applyWays, type ApplyWay } from './waysModel';
+import { applyWays, type ApplyWay, type ComposeAction } from './waysModel';
 
 type LoadedItem = NonNullable<CardData['item']>;
 
@@ -39,6 +40,7 @@ function waysFor(item: LoadedItem, data: CardData): readonly ApplyWay[] {
             name: friend.name ?? '',
             sub: pathLine(friend),
             label: writeLabel(friend.name),
+            message: friend.message,
           },
         }
       : {}),
@@ -107,21 +109,19 @@ function SaveFailure({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function CardBody({
-  vacancyId,
-  item,
-  data,
-}: {
+interface CardBodyProps {
   readonly vacancyId: string;
   readonly item: LoadedItem;
   readonly data: CardData;
-}) {
+  readonly companyPath: string;
+  readonly onCompose: (action: ComposeAction) => void;
+}
+
+function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyProps) {
   const [textOpen, setTextOpen] = useState(false);
   const fit = useVacancyFit(vacancyId);
   const save = useSave(item, data.links);
   const state = fitBlockState(fit.view, fit.failed);
-  const company = item.cluster.canonicalCompany;
-  const companyPath = buildNodePath('v10b', { companyId: companyLookupKey(company) || company });
   const ways = waysFor(item, data);
   return (
     <>
@@ -144,7 +144,7 @@ function CardBody({
           />
           {save.failed ? <SaveFailure onRetry={save.retry} /> : null}
         </div>
-        <WaysBlock ways={ways} vacancyId={vacancyId} />
+        <WaysBlock ways={ways} vacancyId={vacancyId} onCompose={onCompose} />
       </div>
       <RightColumn
         vacancyId={vacancyId}
@@ -186,20 +186,66 @@ function Notice({ data }: { readonly data: CardData }) {
   );
 }
 
+function Page({ children }: { readonly children: ReactNode }) {
+  return (
+    <div className="page two v4" data-b640-node="v04" data-b640-section="vacancies">
+      {children}
+    </div>
+  );
+}
+
+interface LoadedCardProps {
+  readonly vacancyId: string;
+  readonly item: LoadedItem;
+  readonly data: CardData;
+}
+
+/** Карточка или её шаг «Отклик» (a02d): «Написать <имя>» открывает черновик, «Не отправлять» и «Отправил» — назад. */
+function LoadedCard({ vacancyId, item, data }: LoadedCardProps) {
+  const [compose, setCompose] = useState<ComposeAction | null>(null);
+  const company = item.cluster.canonicalCompany;
+  const companyPath = buildNodePath('v10b', { companyId: companyLookupKey(company) || company });
+  const back = () => setCompose(null);
+  return (
+    <>
+      <StepTabs vacancyId={vacancyId} composing={compose !== null} onBack={back} />
+      <Page>
+        {compose ? (
+          <ComposeView
+            item={item}
+            data={data}
+            action={compose}
+            sourceName={sourceName(item)}
+            companyPath={companyPath}
+            onBack={back}
+          />
+        ) : (
+          <CardBody
+            vacancyId={vacancyId}
+            item={item}
+            data={data}
+            companyPath={companyPath}
+            onCompose={setCompose}
+          />
+        )}
+      </Page>
+    </>
+  );
+}
+
 /** Карточка вакансии (узел v04): совпадение, деньги, способы отклика, компания и знакомые. */
 export function CardScreen({ vacancyId }: { readonly vacancyId: string }) {
   const data = useCardData(vacancyId);
   useScreenChrome({ crumb: data.item?.cluster.canonicalTitle });
+  if (data.item) {
+    return <LoadedCard key={vacancyId} vacancyId={vacancyId} item={data.item} data={data} />;
+  }
   return (
     <>
       <StepTabs vacancyId={vacancyId} />
-      <div className="page two v4" data-b640-node="v04" data-b640-section="vacancies">
-        {data.item ? (
-          <CardBody key={vacancyId} vacancyId={vacancyId} item={data.item} data={data} />
-        ) : (
-          <Notice data={data} />
-        )}
-      </div>
+      <Page>
+        <Notice data={data} />
+      </Page>
     </>
   );
 }

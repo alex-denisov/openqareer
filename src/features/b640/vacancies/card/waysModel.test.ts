@@ -17,6 +17,7 @@ const friend = {
   name: 'Роман Ефимов',
   sub: '1-й круг · работали вместе',
   label: 'Написать Роману',
+  message: { kind: 'known_contact' as const, target: { contactId: 'c-p1' } },
 };
 
 function input(overrides: Partial<WaysInput> = {}): WaysInput {
@@ -77,8 +78,19 @@ describe('applyWays', () => {
       title: 'Через знакомого — Роман Ефимов',
       sub: '1-й круг · работали вместе',
       recommended: true,
-      action: { kind: 'compose', label: 'Написать Роману' },
+      action: {
+        kind: 'compose',
+        label: 'Написать Роману',
+        recipient: 'Роман Ефимов',
+        message: { kind: 'known_contact', target: { contactId: 'c-p1' } },
+      },
     });
+  });
+
+  it('у знакомого без черновика (message: null) кнопки «Написать» нет', () => {
+    const [way] = applyWays(input({ friend: { ...friend, message: null } }));
+    expect(way?.id).toBe('friend');
+    expect(way?.action).toBeUndefined();
   });
 
   it('без знакомого hh.ru и сайт остаются', () => {

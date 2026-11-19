@@ -1,10 +1,19 @@
+import type { B640PersonMessage } from '../../../../../shared/b640Companies';
 import { pluralRu } from '../../../../../shared/pluralRu';
 import type { IconName } from '../../kit';
 
 export type WayAction =
-  | { readonly kind: 'compose'; readonly label: string }
+  | {
+      readonly kind: 'compose';
+      readonly label: string;
+      /** Полное имя адресата: заголовок шага «Отклик» (a02d). */
+      readonly recipient: string;
+      readonly message: B640PersonMessage;
+    }
   | { readonly kind: 'letter'; readonly label: string }
   | { readonly kind: 'external'; readonly label: string; readonly url: string };
+
+export type ComposeAction = Extract<WayAction, { readonly kind: 'compose' }>;
 
 export interface ApplyWay {
   readonly id: 'friend' | 'hh' | 'site';
@@ -13,7 +22,8 @@ export interface ApplyWay {
   readonly sub?: string;
   readonly recommended?: boolean;
   readonly icon: IconName;
-  readonly action: WayAction;
+  /** Нет у знакомого, которому сервер не готовит черновик (`message: null`). */
+  readonly action?: WayAction;
 }
 
 export interface WaysInput {
@@ -24,8 +34,13 @@ export interface WaysInput {
     readonly sourceUrl: string;
   }[];
   readonly primaryUrl: string;
-  /** Знакомый 1-го круга: имя, подпись пути и надпись кнопки. */
-  readonly friend?: { readonly name: string; readonly sub: string; readonly label: string };
+  /** Знакомый 1-го круга: имя, подпись пути, надпись кнопки и адресат черновика. */
+  readonly friend?: {
+    readonly name: string;
+    readonly sub: string;
+    readonly label: string;
+    readonly message: B640PersonMessage | null;
+  };
   /** Вопросов в анкете работодателя; `undefined` — анкеты нет или её не прочитали. */
   readonly questionCount?: number;
 }
@@ -100,7 +115,16 @@ export function applyWays(input: WaysInput): readonly ApplyWay[] {
         sub: input.friend.sub,
         recommended: true,
         icon: 'users',
-        action: { kind: 'compose', label: input.friend.label },
+        ...(input.friend.message
+          ? {
+              action: {
+                kind: 'compose',
+                label: input.friend.label,
+                recipient: input.friend.name,
+                message: input.friend.message,
+              },
+            }
+          : {}),
       }
     : undefined;
   return [friend, hh, siteWay(input)].filter((way): way is ApplyWay => way !== undefined);

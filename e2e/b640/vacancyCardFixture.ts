@@ -197,7 +197,17 @@ export async function mockLadoga(page: Page, options: LadogaOptions = {}): Promi
       linkedinImport: { state: 'imported', importedAt: null, importedCount: null },
     }),
   );
+  await page.route('**/api/v1/candidate/b640/contact-messages', (route) => json(route, DRAFT));
 }
+
+/** Черновик Роману (a02d): текст макета. */
+export const DRAFT = {
+  id: 'm1',
+  kind: 'known_contact',
+  text: 'Роман, добрый день! Мы работали вместе в «Сфере Платежи». Вижу у Ладога Банка вакансию «Руководитель разработки» — подскажете, кто её ведёт и удобно ли передать моё резюме?',
+  recipient: { name: 'Роман Ефимов', linkedinUrl: null },
+  createdAt: '2026-11-12T12:03:00.000Z',
+};
 
 const req = (id: string, text: string) => ({
   id,
