@@ -43,7 +43,7 @@ pub const HH_RELOCATION_WARNING: &str = r#"[data-qa="relocation-warning-confirm"
 pub const HH_CAPTCHA: &str = r#"[data-qa="captcha"], #captcha, .captcha-container"#;
 pub const HH_INITIAL_STATE_ID: &str = "HH-Lux-InitialState";
 
-fn literal(value: &str) -> String {
+pub(crate) fn literal(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
 }
 
@@ -69,7 +69,7 @@ if(seen({captcha})||/(captcha|robot|робот|проверка)/i.test(document
     )
 }
 
-fn wrap(body: &str) -> String {
+pub(crate) fn wrap(body: &str) -> String {
     format!(
         "(function(){{try{{{prelude}{body}}}catch(e){{return {{code:'script_error'}};}}}})()",
         prelude = prelude(),

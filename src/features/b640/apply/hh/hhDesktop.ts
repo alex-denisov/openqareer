@@ -124,3 +124,22 @@ export async function runHhApplyInSession(input: {
   if (!report) throw new Error('desktop_unavailable');
   return report;
 }
+
+export interface HhResumeEditInput {
+  readonly resumeId: string;
+  readonly section: 'title' | 'skills' | 'about';
+  readonly text: string;
+  readonly skills: readonly string[];
+}
+
+export interface HhResumeEditReport {
+  readonly outcome: 'applied' | 'failed';
+  readonly failureCode?: string | null;
+}
+
+/** B678: раздел резюме hh.ru в окне кандидата. Вызывается только после его «Применить». */
+export async function applyHhResumeEditInSession(input: HhResumeEditInput): Promise<HhResumeEditReport> {
+  const report = await invokeDesktopCommand<HhResumeEditReport>('run_hh_resume_edit', { request: input });
+  if (!report) throw new Error('desktop_unavailable');
+  return report;
+}

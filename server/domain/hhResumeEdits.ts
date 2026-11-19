@@ -135,7 +135,8 @@ function skillsEdit(input: HhEditsInput): HhEditDraft[] {
   if (added.length === 0) return [];
   const was = sections.skills.join(', ');
   const now = [...sections.skills, ...added.map((item) => item.trim())].join(', ');
-  return [{ id: 'skills', section: 'skills', was, now, language: hhResumeLanguage(sections) }];
+  const trimmed = added.map((item) => item.trim());
+  return [{ id: 'skills', section: 'skills', was, now, language: hhResumeLanguage(sections), added: trimmed }];
 }
 
 function aboutEdit(input: HhEditsInput): HhEditDraft[] {
