@@ -16,7 +16,8 @@ import {
 
 export interface FiltersBarProps extends PaneProps, HiddenChipProps {
   readonly openKind: FilterKind | null;
-  readonly shown: number;
+  /** `null` — подборка ещё читается и число неполное (B728): кнопка без числа. */
+  readonly shown: number | null;
   readonly onOpenKind: (kind: FilterKind | null) => void;
   readonly onOpenSheet: () => void;
   readonly onReset: () => void;
@@ -50,7 +51,7 @@ function Popover(props: FiltersBarProps & { kind: FilterKind }) {
           Сбросить
         </button>
         <button className="btn is-primary" type="button" onClick={() => onOpenKind(null)}>
-          Показать {shown} {vacanciesWord(shown)}
+          {shown === null ? 'Показать' : `Показать ${shown} ${vacanciesWord(shown)}`}
         </button>
       </div>
     </div>

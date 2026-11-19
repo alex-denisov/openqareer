@@ -10,7 +10,7 @@ import {
   labelOf,
   withoutChip,
 } from './filterModel';
-import { buildOptions, splitOptions } from './filterOptions';
+import { buildOptions, listCount, splitOptions } from './filterOptions';
 
 const NOW = new Date('2026-11-11T10:00:00Z');
 const context = { currency: 'RUB' as const, now: NOW };
@@ -96,3 +96,29 @@ describe('значения фильтров', () => {
     expect(splitOptions(options.locations, 'город 3').top).toHaveLength(1);
   });
 });
+
+/**
+ * B728: «30 дней 169», а после выбора — 266. Счёт по дате идёт по загруженным строкам, а пул
+ * дочитывается страницами: до конца чтения число меньше настоящего.
+ */
+describe('B728: число «Даты» — только по дочитанной подборке', () => {
+  const items = [
+    makeItem({ id: 'a', observedAt: '2026-11-11T08:00:00Z' }),
+    makeItem({ id: 'b', observedAt: '2026-10-01T08:00:00Z' }),
+  ];
+
+  it('пул дочитан — числа есть; ещё читается — чисел нет, а не неполные', () => {
+    const counts = (complete: boolean) =>
+      buildOptions(items, undefined, NOW, complete).dates.map((option) => option.count);
+    expect(counts(true)).toEqual([undefined, 1, 1, 1, 2]);
+    expect(counts(false)).toEqual([undefined, undefined, undefined, undefined, undefined]);
+  });
+
+  it('с «Датой» до конца чтения число списка не известно; после — равно строкам', () => {
+    const partial = { narrowed: true, complete: false, serverMode: false, known: 266, filtered: 169 };
+    expect(listCount(partial)).toEqual({ count: 169, countKnown: false });
+    expect(listCount({ ...partial, complete: true, filtered: 266 })).toEqual({ count: 266, countKnown: true });
+    expect(listCount({ ...partial, narrowed: false })).toEqual({ count: 266, countKnown: true });
+  });
+});
+

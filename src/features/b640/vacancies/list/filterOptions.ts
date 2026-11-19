@@ -41,11 +41,15 @@ function locationOptions(items: readonly MatchedVacancyItem[]): readonly FilterO
   ].sort(byCount);
 }
 
-/** Значения фильтров с числом вакансий; роли берёт сервер, остальное считается по загруженным. */
+/**
+ * Значения фильтров с числом вакансий; роли берёт сервер, остальное считается по загруженным.
+ * Число «Даты» — только по дочитанной подборке (B728): до конца чтения оно меньше настоящего.
+ */
 export function buildOptions(
   items: readonly MatchedVacancyItem[],
   facets: MatchedVacancyFacets | undefined,
   now: Date,
+  complete = true,
 ): FilterOptions {
   const formatCount = (id: string) => items.filter((item) => vacancyFormat(item) === id).length;
   const dateContext = { currency: 'RUB' as const, now };
@@ -59,10 +63,35 @@ export function buildOptions(
     dates: DATE_OPTIONS.map((option) => ({
       id: option.id,
       label: option.label,
-      ...(option.id === 'any'
+      ...(option.id === 'any' || !complete
         ? {}
         : { count: applyFilters(items, { ...EMPTY_FILTERS, date: option.id }, dateContext).length }),
     })),
+  };
+}
+
+/** Число в шапке и в «Показать»: строки после фильтров или ответ сервера. */
+export interface ListCountInput {
+  /** Выбран фильтр, который считает клиент (локации, формат, деньги, дата, релокация). */
+  readonly narrowed: boolean;
+  /** Подборка дочитана целиком. */
+  readonly complete: boolean;
+  readonly serverMode: boolean;
+  /** Итог сервера без скрытых. */
+  readonly known: number;
+  /** Строк после клиентских фильтров. */
+  readonly filtered: number;
+}
+
+/**
+ * B728: с клиентским фильтром по недочитанной подборке число растёт по мере чтения — его не
+ * показываем, пока подборка не дочитана: иначе «Показать 169», а в списке потом 266.
+ */
+export function listCount(input: ListCountInput): { count: number; countKnown: boolean } {
+  const { narrowed, complete, serverMode, known, filtered } = input;
+  return {
+    count: narrowed || complete ? filtered : Math.max(known, filtered),
+    countKnown: !narrowed || complete || serverMode,
   };
 }
 
