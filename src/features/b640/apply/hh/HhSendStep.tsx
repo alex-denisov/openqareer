@@ -112,7 +112,8 @@ export function HhSendStep(props: HhSendStepProps) {
   const done = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
   const busy = apply.state.kind === 'sending';
   if (reviewing && resumes.snapshot?.selected && edits.length > 0) {
-    return <HhResumeEdits resumeTitle={resumes.snapshot.selected.title} edits={edits} onBack={() => setReviewing(false)} />;
+    const { selected } = resumes.snapshot;
+    return <HhResumeEdits resumeId={selected.id} resumeTitle={selected.title} edits={edits} onBack={() => setReviewing(false)} />;
   }
   return (
     <section className="lead" aria-labelledby="w-title">
