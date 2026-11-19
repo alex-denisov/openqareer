@@ -7,6 +7,7 @@ import { isConditionsView } from './careerPaths';
 import { CompareView } from './CompareView';
 import { ConditionsScreen } from './ConditionsScreen';
 import { GrowthScreen } from './GrowthScreen';
+import { RelocationScreen } from './RelocationScreen';
 import { RolesLoad } from './RolesScreen';
 import { ProfessionScreen } from './ProfessionScreen';
 import { SkillCheckScreen } from './SkillCheckScreen';
@@ -27,5 +28,6 @@ export default function Section({ node }: SectionProps) {
   if (node.code === 's11') return <ProfessionScreen node={node} />;
   if (node.code === 's12') return <GrowthScreen node={node} />;
   if (node.code === 'c04') return <SkillCheckScreen node={node} />;
+  if (node.code === 'c06') return <RelocationScreen node={node} />;
   return <NodeStub node={node} />;
 }
