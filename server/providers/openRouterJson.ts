@@ -1,4 +1,5 @@
 import { modelRegistry } from './modelRegistry';
+import { openRouterRouting } from './openRouterPrivacy';
 import { openRouterReasoning } from './openRouterReasoning';
 import type { ProviderRoute } from './providerQueue';
 
@@ -8,6 +9,8 @@ export interface ChatJsonRequest {
   readonly user: string;
   readonly maxTokens: number;
   readonly timeoutMs: number;
+  /** Данные кандидата: OpenRouter не отдаёт их провайдерам, которые собирают данные. */
+  readonly personal?: boolean;
 }
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -35,7 +38,13 @@ export async function requestChatJson(
       response_format: { type: 'json_object' },
       ...(route.provider === 'openai'
         ? { max_completion_tokens: request.maxTokens }
-        : { max_tokens: request.maxTokens, reasoning: openRouterReasoning(route.model) }),
+        : {
+            max_tokens: request.maxTokens,
+            reasoning: openRouterReasoning(route.model),
+            ...(route.provider === 'openrouter' && request.personal
+              ? openRouterRouting({ personal: true })
+              : {}),
+          }),
     }),
     signal: AbortSignal.timeout(request.timeoutMs),
   });
