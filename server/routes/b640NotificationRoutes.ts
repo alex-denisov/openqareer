@@ -50,9 +50,13 @@ function applicationContexts(
 type FeedQuery = z.infer<typeof querySchema>;
 
 function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
-  const stored = notificationRepositoryFor(deps).listForFeed(candidateId, {
+  const repository = notificationRepositoryFor(deps);
+  const invitation = repository.getInvitationPreference(candidateId);
+  const replies = repository.getPreferences(candidateId).find((item) => item.key === 'ev-reply');
+  const stored = repository.listForFeed(candidateId, {
     max: FEED_ROW_LIMIT,
     now: new Date().toISOString(),
+    keepReplies: invitation.stored,
   });
   const needed = new Set(
     stored.rows.filter((row) => row.sourceType === 'application').map((row) => row.sourceId),
@@ -61,6 +65,9 @@ function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
     rows: stored.rows,
     applications: applicationContexts(deps, candidateId, needed),
     unreadCount: stored.unreadCount,
+    inApp: invitation.stored
+      ? { replies: replies?.app ?? true, invitations: invitation.app }
+      : undefined,
     category: query.category,
     offset: query.cursor,
     limit: query.limit,
@@ -106,10 +113,100 @@ async function listNotifications(deps: RouteDeps, request: FastifyRequest, reply
   }
 }
 
+const INVITATION_PATH = `${PATH}/preferences/invitations`;
+const invitationSchema = z
+  .object({ app: z.boolean(), email: z.boolean(), telegram: z.boolean() })
+  .strict();
+
+function storageUnavailable(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateId: string,
+  error: unknown,
+) {
+  request.log.error(
+    {
+      code: 'b640_invitation_preference_failed',
+      candidateId,
+      failureType: error instanceof Error ? error.name : 'UnknownError',
+    },
+    'b640-invitation-preference-failed',
+  );
+  return sendError(
+    reply,
+    request,
+    503,
+    'notification_storage_unavailable',
+    'Настройка временно недоступна.',
+    true,
+  );
+}
+
+/** N02 «Приглашения»: чтение ничего не пишет; без сохранённого ключа — значения «Ответов». */
+async function readInvitationPreference(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  try {
+    const { app, email, telegram } = notificationRepositoryFor(deps).getInvitationPreference(
+      candidate.id,
+    );
+    return {
+      data: { key: 'ev-invitation', app, email, telegram },
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    return storageUnavailable(request, reply, candidate.id, error);
+  }
+}
+
+async function writeInvitationPreference(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  const body = invitationSchema.safeParse(request.body ?? {});
+  if (!body.success) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_preference',
+      'Проверьте настройку приглашений.',
+      false,
+    );
+  }
+  try {
+    const saved = notificationRepositoryFor(deps).setInvitationPreference(candidate.id, body.data);
+    return { data: { key: 'ev-invitation', ...saved }, meta: { requestId: request.id } };
+  } catch (error) {
+    return storageUnavailable(request, reply, candidate.id, error);
+  }
+}
+
 export function registerB640NotificationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get(
     PATH,
     { config: { rateLimit: { max: 600, timeWindow: '1 hour' } } },
     withDeps(deps, listNotifications),
+  );
+  app.get(
+    INVITATION_PATH,
+    { config: { rateLimit: { max: 600, timeWindow: '1 hour' } } },
+    withDeps(deps, readInvitationPreference),
+  );
+  app.put(
+    INVITATION_PATH,
+    { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
+    withDeps(deps, writeInvitationPreference),
   );
 }

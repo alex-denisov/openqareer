@@ -198,6 +198,7 @@ function recordApplicationNotifications(
       sourceId: applicationId,
       idempotencyKey: `employer-reply:${applicationId}:${updated.version}`,
       createdAt,
+      invitation: updated.stage === 'interview' || updated.stage === 'offer',
     });
   }
   if (input.deliveryReceipt?.kind === 'failure_note') {

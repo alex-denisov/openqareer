@@ -169,17 +169,37 @@ export interface BuildB640FeedInput {
   readonly category: B640NotificationFilter;
   readonly offset: number;
   readonly limit: number;
+  /**
+   * B671: показ в приложении по ключам «Ответы» и «Приглашения». Задаётся, когда у приглашений
+   * свой сохранённый ключ и репозиторий отдал ответы без фильтра по «Ответам».
+   */
+  readonly inApp?: { readonly replies: boolean; readonly invitations: boolean };
+}
+
+const INVITATION_KINDS: ReadonlySet<B640NotificationKind> = new Set([
+  'interview_invitation',
+  'offer',
+]);
+
+function shownInApp(item: B640Notification, inApp: BuildB640FeedInput['inApp']): boolean {
+  if (!inApp) return true;
+  if (INVITATION_KINDS.has(item.kind)) return inApp.invitations;
+  return item.kind === 'employer_reply' ? inApp.replies : true;
 }
 
 export function buildB640NotificationFeed(input: BuildB640FeedInput): B640NotificationFeed {
   const newestReplies = newestReplyIds(input.rows);
-  const classified = input.rows.map((row) =>
+  const all = input.rows.map((row) =>
     classifyB640Notification(
       row,
       row.sourceType === 'application' ? input.applications.get(row.sourceId) : undefined,
       newestReplies,
     ),
   );
+  const classified = all.filter((item) => shownInApp(item, input.inApp));
+  const hiddenUnread = all.filter(
+    (item) => item.readAt === null && !shownInApp(item, input.inApp),
+  ).length;
   const filtered =
     input.category === 'all'
       ? classified
@@ -195,7 +215,7 @@ export function buildB640NotificationFeed(input: BuildB640FeedInput): B640Notifi
   return {
     items,
     pinned,
-    unreadCount: input.unreadCount,
+    unreadCount: Math.max(0, input.unreadCount - hiddenUnread),
     nextCursor: next < rest.length ? String(next) : null,
   };
 }
