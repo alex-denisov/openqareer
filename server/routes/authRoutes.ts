@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
+import { registerTwoFactorRoutes } from './twoFactorRoutes';
+import { twoFactorLoginGate, twoFactorStoreFor } from './twoFactorAccess';
 import {
   authenticateSession,
   clearSessionCookie,
@@ -180,6 +182,8 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
   if (!authenticated) {
     return sendError(reply, request, 401, 'invalid_credentials', 'Неверный логин или пароль.', false);
   }
+  const gated = twoFactorLoginGate(deps, request, reply, authenticated, deviceId ?? null);
+  if (gated) return gated;
   setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
   return {
     data: {
@@ -406,6 +410,17 @@ async function handleUpdateProfile(deps: RouteDeps, request: FastifyRequest, rep
   }
 }
 
+/** B401: при включённой защите смена пароля требует код приложения или резервный код. */
+function passwordChangeSecondFactor(deps: RouteDeps, userId: string, code: string | undefined) {
+  const store = twoFactorStoreFor(deps);
+  if (!store.isEnabled(userId)) return null;
+  const check = code ? store.verify(userId, code, new Date()) : 'invalid';
+  if (check === 'ok') return null;
+  return check === 'locked'
+    ? { status: 429, code: 'two_factor_locked', message: 'Слишком много попыток. Попробуйте через 15 минут.' }
+    : { status: 400, code: 'two_factor_invalid', message: 'Код не подошёл.' };
+}
+
 async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const sessionToken = extractSessionToken(request, deps.config);
@@ -415,6 +430,8 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
   const body = passwordChangeSchema.parse(request.body);
+  const secondFactor = passwordChangeSecondFactor(deps, principal.userId, body.twoFactorCode);
+  if (secondFactor) return sendError(reply, request, secondFactor.status, secondFactor.code, secondFactor.message, false);
   try {
     const authenticated =
       (await deps.authService.changePassword?.(
@@ -644,6 +661,8 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
   try {
     const authenticated = await deps.authService.resetPassword?.(body.token, body.newPassword);
     if (!authenticated) throw new AuthInvalidResetTokenError();
+    const gated = twoFactorLoginGate(deps, request, reply, authenticated, clientDeviceIdFrom(request) ?? null);
+    if (gated) return gated;
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return {
       data: {
@@ -700,6 +719,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
   );
   app.get('/api/v1/auth/me', withDeps(deps, handleAuthMe));
   app.post('/api/v1/auth/logout', withDeps(deps, handleLogout));
+  registerTwoFactorRoutes(app, deps);
 
   registerEmailVerificationRoutes(app, deps);
 

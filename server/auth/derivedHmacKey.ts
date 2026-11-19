@@ -3,7 +3,8 @@ import { createHash, hkdfSync } from 'node:crypto';
 export type HmacKeyPurpose =
   | 'email-verification-code'
   | 'registration-fingerprint'
-  | 'email-delivery-recipient';
+  | 'email-delivery-recipient'
+  | 'two-factor-backup-code';
 
 const DERIVATION_SALT = Buffer.from('openqareer-hmac-key-derivation-v1');
 const derivedKeys = new Map<string, Buffer>();
