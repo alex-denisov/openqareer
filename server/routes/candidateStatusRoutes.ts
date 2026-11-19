@@ -21,6 +21,7 @@ import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 import { registerGrowthGoalRoutes } from './growthGoalRoutes';
 import { registerProfessionPathRoutes } from './professionPathRoutes';
+import { registerRelocationPayRoutes } from './relocationPayRoutes';
 import { registerStatusSignalRoutes } from './statusSignalRoutes';
 
 /**
@@ -176,4 +177,6 @@ export function registerCandidateStatusRoutes(
   registerProfessionPathRoutes(app, { ...deps, statusRepository: repository });
   // B670: цель роста при «Работаю».
   registerGrowthGoalRoutes(app, deps);
+  // B653 C06: вилки мест для «Релокации».
+  registerRelocationPayRoutes(app, deps);
 }

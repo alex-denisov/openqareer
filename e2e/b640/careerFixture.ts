@@ -78,6 +78,10 @@ export interface CareerOptions {
   /** Ответ цели роста (S12); выбор цели возвращает `growthAfter`, если он задан. */
   readonly growth?: unknown;
   readonly growthAfter?: unknown;
+  /** C06: вилка страны по коду; без кода — «мало данных». */
+  readonly relocationPay?: Readonly<Record<string, unknown>>;
+  readonly relocationCompanies?: number;
+  readonly relocationProfile?: unknown;
 }
 
 function campaign(roles: string[]) {
@@ -230,6 +234,26 @@ export async function openCareer(
     const goal = { kind: body.goal, chosenAt: '2026-11-19T09:00:00.000Z' };
     return route.fulfill({ json: { data: { goal } } });
   });
+  await page.route(`${API}/candidate/career/relocation/pay**`, (route) => {
+    const code = new URL(route.request().url()).searchParams.get('country') ?? '';
+    const pay = options.relocationPay?.[code] ?? { state: 'thin', vacancies: 0, city: null };
+    return route.fulfill({ json: { data: pay } });
+  });
+  await page.route(`${API}/candidate/relocation-questionnaire`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          profile: options.relocationProfile ?? null,
+          consent: { status: 'not_granted' },
+          consentTextStatus: 'approved',
+          alerts: [],
+        },
+      },
+    }),
+  );
+  await page.route(`${API}/companies?**`, (route) =>
+    route.fulfill({ json: { total: options.relocationCompanies ?? 0, items: [] } }),
+  );
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   return calls;
 }
