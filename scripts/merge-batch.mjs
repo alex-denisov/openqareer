@@ -24,6 +24,7 @@ import {
   IN_BATCH_LABEL,
   READY_LABEL,
   creditDecision,
+  deferStacked,
   parseGhJson,
   rejectReason,
   resolveRound,
@@ -132,6 +133,16 @@ function buildBranch(name, prs, baseSha) {
   return { name, members, dropped, tip: git('rev-parse', 'HEAD') };
 }
 
+function isAncestor(a, b) {
+  try {
+    git('fetch', '-q', 'origin', a, b);
+    git('merge-base', '--is-ancestor', a, b);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function comment(pr, body) {
   act(`comment on #${pr.number}: ${body.split('\n')[0]}`, () =>
     gh('pr', 'comment', String(pr.number), '--body', body),
@@ -217,14 +228,21 @@ async function headAfterUpdate(pr) {
     '{behind: .behind_by}',
   );
   if (compare.behind === 0) return cur.head.sha;
-  gh(
-    'api',
-    '-X',
-    'PUT',
-    `repos/${repo()}/pulls/${pr.number}/update-branch`,
-    '-f',
-    `expected_head_sha=${cur.head.sha}`,
-  );
+  try {
+    gh(
+      'api',
+      '-X',
+      'PUT',
+      `repos/${repo()}/pulls/${pr.number}/update-branch`,
+      '-f',
+      `expected_head_sha=${cur.head.sha}`,
+    );
+  } catch (err) {
+    // 422 merge conflict: usually a PR stacked on one just squash-merged.
+    throw Object.assign(new Error(`update-branch failed: ${err.message.split('\n')[0]}`), {
+      needsRebase: true,
+    });
+  }
   for (let i = 0; i < 20; i += 1) {
     await sleep(3000);
     const sha = ghText('api', `repos/${repo()}/pulls/${pr.number}`, '--jq', '.head.sha');
@@ -269,6 +287,16 @@ async function mergeGroup(members, run) {
       log(`#${pr.number} merged (${d.reason})`);
     } catch (err) {
       log(`#${pr.number} not merged: ${err.message}; the rest go back to the queue`);
+      // The later members' batch trees include this PR, so they cannot be
+      // credited without it; they are re-batched next tick. This PR leaves the
+      // queue so it does not stall every following batch.
+      if (err.needsRebase) {
+        comment(
+          pr,
+          `Групповое слияние: ветка не обновляется на main без конфликта (часто это PR поверх уже слитого squash). Перебазируйте на main (git rebase --onto origin/main <старая база>) и поставьте метку ${READY_LABEL} снова.`,
+        );
+        setLabel(pr, READY_LABEL, false);
+      }
       break;
     }
   }
@@ -291,7 +319,8 @@ async function runBatch() {
     const why = rejectReason(pr);
     if (why !== 'no merge-ready label') log(`#${pr.number} ${why ?? 'ready'} — ${pr.title}`);
   }
-  const candidates = selectCandidates(prs);
+  const { take: candidates, deferred } = deferStacked(selectCandidates(prs), isAncestor);
+  for (const { pr, on } of deferred) log(`#${pr.number} waits: stacked on #${on}`);
   if (!shouldStart(candidates, trigger))
     return log(`nothing to do (${candidates.length} ready, trigger ${trigger})`);
 
