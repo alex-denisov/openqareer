@@ -6,11 +6,15 @@ import {
   HH_RESUME_TEXT_MAX_LENGTH,
   HH_RESUME_TITLE_MAX_LENGTH,
   HH_RESUMES_MAX,
+  HH_REVIEW_RESUMES_MAX,
+  HH_REVIEW_TEXT_MAX_LENGTH,
   HH_VACANCY_ID,
   type HhResumeSnapshot,
 } from '../../shared/hhCandidateSession';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { hhApplyGate, type HhApplyRefusal } from '../domain/hhApplyGate';
+import { reviewHhResumes } from '../domain/hhResumeReview';
+import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -26,6 +30,10 @@ type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) =
 const resumeId = z.string().regex(HH_RESUME_ID);
 const title = z.string().trim().min(1).max(HH_RESUME_TITLE_MAX_LENGTH);
 
+const contentSchema = z
+  .object({ id: resumeId, title, text: z.string().trim().min(1).max(HH_RESUME_TEXT_MAX_LENGTH) })
+  .strict();
+
 const snapshotSchema = z
   .object({
     resumes: z
@@ -34,15 +42,23 @@ const snapshotSchema = z
       )
       .min(1)
       .max(HH_RESUMES_MAX),
-    selected: z
-      .object({ id: resumeId, title, text: z.string().trim().min(1).max(HH_RESUME_TEXT_MAX_LENGTH) })
-      .strict()
-      .nullable(),
+    selected: contentSchema.nullable(),
+    /** B678: содержимое остальных резюме списка для сверки с вакансией. */
+    contents: z
+      .array(contentSchema.extend({ text: z.string().trim().min(1).max(HH_REVIEW_TEXT_MAX_LENGTH) }))
+      .max(HH_REVIEW_RESUMES_MAX)
+      .optional(),
   })
   .strict()
   .refine((value) => !value.selected || value.resumes.some((item) => item.id === value.selected?.id), {
     message: 'selected_not_listed',
-  });
+  })
+  .refine(
+    (value) => (value.contents ?? []).every((content) => value.resumes.some((item) => item.id === content.id)),
+    { message: 'content_not_listed' },
+  );
+
+const reviewQuerySchema = z.object({ vacancyId: z.string().trim().min(1).max(512) });
 
 const attemptSchema = z
   .object({ vacancyId: z.string().regex(HH_VACANCY_ID), resumeId, confirmed: z.literal(true) })
@@ -77,8 +93,17 @@ function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyRep
 const getResumes: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
-  return { data: deps.hh.getSnapshot(candidateId), meta: { requestId: request.id } };
+  const snapshot = deps.hh.getSnapshot(candidateId);
+  // B678: тексты остальных резюме нужны только сверке на сервере, в интерфейс они не уходят.
+  const { contents: _contents, ...visible } = snapshot ?? { contents: undefined };
+  return { data: snapshot ? visible : null, meta: { requestId: request.id } };
 };
+
+/** PUT без `contents` (выбор резюме) сохраняет прочитанное раньше для резюме, что остались в списке. */
+function keptContents(previous: HhResumeSnapshot | null, listed: ReadonlySet<string>) {
+  const kept = (previous?.contents ?? []).filter((content) => listed.has(content.id));
+  return kept.length > 0 ? { contents: kept } : {};
+}
 
 const putResumes: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
@@ -87,9 +112,36 @@ const putResumes: Handler = async (deps, request, reply) => {
   if (!parsed.success) {
     return sendError(reply, request, 400, 'invalid_hh_resumes', 'Резюме hh.ru не прочитались. Повторите.', false);
   }
-  const snapshot: HhResumeSnapshot = { ...parsed.data, readAt: new Date().toISOString() };
+  const { contents, ...rest } = parsed.data;
+  const listed = new Set(rest.resumes.map((item) => item.id));
+  const snapshot: HhResumeSnapshot = {
+    ...rest,
+    ...(contents ? { contents } : keptContents(deps.hh.getSnapshot(candidateId), listed)),
+    readAt: new Date().toISOString(),
+  };
   deps.hh.saveSnapshot(candidateId, snapshot);
-  return { data: snapshot, meta: { requestId: request.id } };
+  const { contents: _contents, ...visible } = snapshot;
+  return { data: visible, meta: { requestId: request.id } };
+};
+
+/** B678: какое из прочитанных резюме hh.ru подходит вакансии платформы и чего в каждом не хватает. */
+const getReview: Handler = async (deps, request, reply) => {
+  const candidateId = candidateOf(deps, request, reply);
+  if (!candidateId) return reply;
+  const query = reviewQuerySchema.safeParse(request.query ?? {});
+  if (!query.success) {
+    return sendError(reply, request, 400, 'invalid_hh_review', 'Не указана вакансия.', false);
+  }
+  const snapshot = deps.hh.getSnapshot(candidateId);
+  if (!snapshot) {
+    const [status, message] = REFUSAL_REPLY.hh_resumes_not_read;
+    return sendError(reply, request, status, 'hh_resumes_not_read', message, false);
+  }
+  const { vacancyId } = query.data;
+  const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, vacancyId);
+  if (!cluster) return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  const review = reviewHhResumes(snapshot, cluster.skills);
+  return { data: { vacancyId, ...review }, meta: { requestId: request.id } };
 };
 
 const postAttempt: Handler = async (deps, request, reply) => {
@@ -152,6 +204,7 @@ export function registerHhSessionRoutes(app: FastifyInstance, deps: RouteDeps): 
   const base = '/api/v1/candidate/hh';
   app.get(`${base}/resumes`, withDeps(bound, getResumes));
   app.put(`${base}/resumes`, write, withDeps(bound, putResumes));
+  app.get(`${base}/resumes/review`, withDeps(bound, getReview));
   app.post(`${base}/applications`, write, withDeps(bound, postAttempt));
   app.post(`${base}/applications/:attemptId/result`, write, withDeps(bound, postResult));
 }
