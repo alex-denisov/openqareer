@@ -67,3 +67,7 @@ prototypes/
 # Local check caches
 .eslintcache
 .prettiercache
+
+# Flaky test records (CI) and scripts/flaky-report.mjs cache
+reports/
+.flaky-cache/
