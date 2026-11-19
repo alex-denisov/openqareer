@@ -1,5 +1,10 @@
 import { Icon, InfoTip } from '../kit';
+import type { SavedRelocationScenario } from '../../../../shared/relocationScenario';
+import type { RelocationQuestionnaireResponse } from '../../relocation/relocationApi';
 import type { CountryPay, RelocationPlace } from './relocationApi';
+import type { ScenarioCountry } from './relocationCostsApi';
+import type { Family } from './relocationCostsModel';
+import { RelocationCosts } from './RelocationCosts';
 import { cityName, formatMoney, placeTaxes, vacanciesLabel, workRight } from './relocationModel';
 
 type ReadyPay = Extract<CountryPay, { state: 'ready' }>;
@@ -49,12 +54,54 @@ function netLine(place: RelocationPlace): string {
 }
 
 /** Строка страны C06: место, «на руки», право работать; раскрытие — налоги и взносы. */
+export interface RowContext {
+  readonly questionnaire: RelocationQuestionnaireResponse | null;
+  readonly scenario: SavedRelocationScenario | undefined;
+  readonly family: Family | null;
+  readonly onWho: () => void;
+  readonly onConsent: () => void;
+}
+
+function Costs({
+  place,
+  pay,
+  context,
+}: {
+  readonly place: RelocationPlace;
+  readonly pay: ReadyPay;
+  readonly context: RowContext;
+}) {
+  const taxes = placeTaxes(place.code, pay.median);
+  if (!taxes) return null;
+  const city = pay.city ? cityName(pay.city) : place.name;
+  return (
+    <RelocationCosts
+      target={{
+        countryCode: place.code as ScenarioCountry,
+        countryName: place.name,
+        city,
+        currency: taxes.currency,
+        grossMonthly: pay.median,
+        scenarioId: workRight(place.fit).scenarioId,
+        family: context.family,
+      }}
+      net={taxes.net}
+      scenario={context.scenario}
+      questionnaire={context.questionnaire}
+      onWho={context.onWho}
+      onConsent={context.onConsent}
+    />
+  );
+}
+
 export function RelocationRow({
   place,
   open,
+  context,
 }: {
   readonly place: RelocationPlace;
   readonly open: boolean;
+  readonly context: RowContext;
 }) {
   const right = workRight(place.fit);
   const city = place.pay.state === 'error' ? null : place.pay.city;
@@ -89,6 +136,7 @@ export function RelocationRow({
           <Icon name="down" className="rl-chev" />
         </summary>
         <Taxes place={place} pay={place.pay} />
+        <Costs place={place} pay={place.pay} context={context} />
       </details>
     </li>
   );

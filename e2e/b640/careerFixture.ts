@@ -65,6 +65,9 @@ export interface CareerCalls {
   readonly ownRoles: unknown[];
   readonly lowerIncome: unknown[];
   readonly growthGoals: unknown[];
+  readonly scenarios: unknown[];
+  readonly family: unknown[];
+  readonly consents: unknown[];
 }
 
 export interface CareerOptions {
@@ -82,6 +85,7 @@ export interface CareerOptions {
   readonly relocationPay?: Readonly<Record<string, unknown>>;
   readonly relocationCompanies?: number;
   readonly relocationProfile?: unknown;
+  readonly relocationConsent?: boolean;
 }
 
 function campaign(roles: string[]) {
@@ -122,6 +126,9 @@ export async function openCareer(
     ownRoles: [],
     lowerIncome: [],
     growthGoals: [],
+    scenarios: [],
+    family: [],
+    consents: [],
   };
   let roles = options.searchRoles ?? ['Руководитель разработки'];
   let profile: Record<string, unknown> = {
@@ -244,13 +251,39 @@ export async function openCareer(
       json: {
         data: {
           profile: options.relocationProfile ?? null,
-          consent: { status: 'not_granted' },
+          consent: options.relocationConsent
+            ? { status: 'granted', granted: true }
+            : { status: 'not_granted', granted: false },
           consentTextStatus: 'approved',
           alerts: [],
         },
       },
     }),
   );
+  await page.route(`${API}/candidate/relocation-scenarios**`, (route) => {
+    const method = route.request().method();
+    if (method === 'GET') return route.fulfill({ json: { data: { items: [], nextOffset: null } } });
+    if (method === 'DELETE') return route.fulfill({ status: 204, body: '' });
+    const input = route.request().postDataJSON();
+    calls.scenarios.push(input);
+    const id = `00000000-0000-4000-8000-${String(calls.scenarios.length).padStart(12, '0')}`;
+    const saved = {
+      id,
+      createdAt: new Date().toISOString(),
+      input,
+      result: {},
+      profileRevision: 1,
+    };
+    return route.fulfill({ status: 201, json: { data: saved } });
+  });
+  await page.route(`${API}/candidate/relocation-questionnaire/steps/family`, (route) => {
+    calls.family.push(route.request().postDataJSON());
+    return route.fulfill({ json: { data: { profile: options.relocationProfile, alerts: [] } } });
+  });
+  await page.route(`${API}/candidate/relocation-questionnaire/consent`, (route) => {
+    calls.consents.push(route.request().method());
+    return route.fulfill({ json: { data: { consent: { status: 'granted', granted: true } } } });
+  });
   await page.route(`${API}/companies?**`, (route) =>
     route.fulfill({ json: { total: options.relocationCompanies ?? 0, items: [] } }),
   );

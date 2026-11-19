@@ -4,7 +4,12 @@ import { SALARY_COUNTRY_CITIES } from '../../../../shared/salaryCountryCities';
 import { supportedCountryCodes } from '../../../../shared/taxData';
 import { apiFetch, readData } from '../../coach/apiClient';
 import { getCandidateCampaign } from '../../coach/matchedVacancyApi';
-import { getRelocationQuestionnaire } from '../../relocation/relocationApi';
+import {
+  getRelocationQuestionnaire,
+  type RelocationQuestionnaireResponse,
+} from '../../relocation/relocationApi';
+import type { SavedRelocationScenario } from '../../../../shared/relocationScenario';
+import { latestScenarios } from './relocationCostsApi';
 import { mobilityCandidateFromQuestionnaire } from '../../relocation/relocationCountryData';
 
 const PAY_API = '/api/v1/candidate/career/relocation/pay';
@@ -38,6 +43,10 @@ export interface RelocationData {
   readonly role: string | null;
   /** Компании, которые оплачивают переезд; `null` — список не прочитан. */
   readonly companies: number | null;
+  /** Анкета релокации и согласие: «Кто едет» и запись трат. */
+  readonly questionnaire: RelocationQuestionnaireResponse | null;
+  /** Последний расчёт трат каждой страны. */
+  readonly scenarios: ReadonlyMap<string, SavedRelocationScenario>;
 }
 
 /** Страны, где есть и вакансии каталога по городам, и проверенная налоговая шкала. */
@@ -70,6 +79,9 @@ export async function loadRelocation(signal: AbortSignal): Promise<RelocationDat
     getCandidateCampaign(signal).catch(() => null),
     relocationCompanies(signal).catch(() => null),
   ]);
+  const scenarios = questionnaire?.consent.granted
+    ? await latestScenarios()
+    : new Map<string, SavedRelocationScenario>();
   const profile = questionnaire?.profile ?? null;
   const candidate = mobilityCandidateFromQuestionnaire(profile);
   const codes = placeCodes(profile?.selectedCountryCodes);
@@ -81,5 +93,5 @@ export async function loadRelocation(signal: AbortSignal): Promise<RelocationDat
       fit: evaluateCountryFit(code, candidate),
     })),
   );
-  return { places, role: campaign?.roles.value[0] ?? null, companies };
+  return { places, role: campaign?.roles.value[0] ?? null, companies, questionnaire, scenarios };
 }

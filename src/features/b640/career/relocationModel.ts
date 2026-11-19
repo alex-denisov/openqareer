@@ -28,11 +28,15 @@ const MODE: Readonly<Record<MobilityScenarioId, string>> = {
   simple_mobility: 'въезд без визы',
 };
 
+const FALLBACK: MobilityScenarioId = 'employer_sponsorship';
+
 export interface WorkRight {
   readonly tag: 'ok' | 'part' | 'miss';
   readonly text: string;
   /** Путь работы в стране для подписи строки; `null` — путь не проверен. */
   readonly mode: string | null;
+  /** Путь для расчёта трат; без проверенного пути — переезд с работодателем. */
+  readonly scenarioId: MobilityScenarioId;
 }
 
 /** «Право работать» по правилам страны и анкете кандидата. */
@@ -41,15 +45,25 @@ export function workRight(fit: CountryFitEvaluation): WorkRight {
   const conditional = fit.scenarios.find((scenario) => scenario.status === 'barriers');
   if (open) {
     const mode = MODE[open.id];
-    return { tag: 'ok', text: `Право работать: есть · ${mode}`, mode };
+    return { tag: 'ok', text: `Право работать: есть · ${mode}`, mode, scenarioId: open.id };
   }
   if (fit.status === 'legally_unavailable')
-    return { tag: 'miss', text: 'Права работать нет', mode: null };
+    return { tag: 'miss', text: 'Права работать нет', mode: null, scenarioId: FALLBACK };
   if (conditional) {
     const mode = MODE[conditional.id];
-    return { tag: 'part', text: `Право работать: с условиями · ${mode}`, mode };
+    return {
+      tag: 'part',
+      text: `Право работать: с условиями · ${mode}`,
+      mode,
+      scenarioId: conditional.id,
+    };
   }
-  return { tag: 'part', text: 'Право работать: неизвестно · виза не проверена', mode: null };
+  return {
+    tag: 'part',
+    text: 'Право работать: неизвестно · виза не проверена',
+    mode: null,
+    scenarioId: FALLBACK,
+  };
 }
 
 export interface TaxLine {

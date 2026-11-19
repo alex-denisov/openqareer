@@ -56,6 +56,71 @@ test.describe('B653 C06: «Релокация»', () => {
     await expectGates(page);
   });
 
+  test('траты страны: добавить раздел с согласием, итог после всех разделов', async ({ page }) => {
+    const calls = await openCareer(page, PATH, OPTIONS);
+    const germany = screenOf(page).locator('.rl-row').filter({ hasText: 'Германия' });
+    await expect(germany.getByText('Кто едет: только вы')).toBeVisible({ timeout: 15_000 });
+    await germany.getByRole('button', { name: /Добавить расходы · 9/u }).click();
+    await germany.getByLabel('Жильё, EUR в месяц').fill('1500');
+    const save = germany.getByRole('button', { name: 'Сохранить' });
+    await expect(save).toBeDisabled();
+    await germany.getByLabel(/Даю согласие на обработку данных о мобильности/u).check();
+    await save.click();
+    await expect(germany.getByRole('button', { name: /1\s500\s€ в месяц/u })).toBeVisible();
+    await expect(germany.getByRole('button', { name: /Добавить расходы · 8/u })).toBeVisible();
+    expect(calls.consents).toHaveLength(1);
+    expect(calls.scenarios).toHaveLength(1);
+    expect(calls.scenarios[0]).toMatchObject({
+      countryCode: 'DE',
+      city: 'Берлин',
+      householdSize: 1,
+      grossAnnualIncome: 78_000,
+      expenses: { rent: { amount: 1500, currency: 'EUR', period: 'monthly' } },
+    });
+    await expect(germany.getByText('Остаётся на жизнь')).toHaveCount(0);
+  });
+
+  test('кто едет: партнёр и дети уходят в анкету', async ({ page }) => {
+    const profile = {
+      schemaVersion: 1,
+      revision: 3,
+      currentStep: 'family',
+      skippedSteps: [],
+      citizenshipDocuments: { citizenshipCountryCodes: ['RU'], documents: [] },
+      education: { education: [], certificates: [] },
+      family: {
+        partnerStatus: 'unknown',
+        relocationTimeframe: 'unknown',
+        familyMovePlan: 'undecided',
+      },
+      languages: { languages: [] },
+      selectedCountryCodes: [],
+      updatedAt: null,
+    };
+    const calls = await openCareer(page, PATH, {
+      ...OPTIONS,
+      relocationConsent: true,
+      relocationProfile: profile,
+    });
+    await screenOf(page)
+      .getByRole('button', { name: 'Уточнить, кто едет' })
+      .click({ timeout: 15_000 });
+    const dialog = page.getByRole('dialog', { name: 'Кто едет' });
+    await dialog.getByRole('button', { name: 'Я и партнёр' }).click();
+    await dialog.getByLabel('Детей').fill('2');
+    await dialog.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(calls.family).toEqual([
+      {
+        partnerStatus: 'has_partner',
+        childrenCount: 2,
+        relocationTimeframe: 'unknown',
+        familyMovePlan: 'together',
+      },
+    ]);
+    expect(calls.consents).toHaveLength(0);
+  });
+
   test('снимки: c06-relokaciya', async ({ page }, testInfo) => {
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
     mkdirSync('.s13-shots', { recursive: true });

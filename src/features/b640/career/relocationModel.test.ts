@@ -15,6 +15,7 @@ describe('relocationModel', () => {
       tag: 'part',
       text: 'Право работать: неизвестно · виза не проверена',
       mode: null,
+      scenarioId: 'employer_sponsorship',
     });
     const citizen = workRight(
       evaluateCountryFit('RS', { citizenshipCountryCodes: ['RS'], residenceDocuments: [] }),
