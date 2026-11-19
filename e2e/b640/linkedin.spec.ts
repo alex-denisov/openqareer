@@ -11,34 +11,67 @@ const FEED = '/app/profile/linkedin/feed';
 
 const linkedin = (connected: boolean) =>
   connected
-    ? { platform: 'linkedin', available: true, capabilities: ['profile_read'], importsCareerHistory: true, status: 'imported', importedAt: '2026-11-03T09:40:00.000Z' }
-    : { platform: 'linkedin', available: true, capabilities: [], importsCareerHistory: true, status: 'disconnected' };
+    ? {
+        platform: 'linkedin',
+        available: true,
+        capabilities: ['profile_read'],
+        importsCareerHistory: true,
+        status: 'imported',
+        importedAt: '2026-11-03T09:40:00.000Z',
+      }
+    : {
+        platform: 'linkedin',
+        available: true,
+        capabilities: [],
+        importsCareerHistory: true,
+        status: 'disconnected',
+      };
 
 const studio = {
-  draft: null, savedAt: null, evidenceFreshness: { fresh: true },
+  draft: null,
+  savedAt: null,
+  evidenceFreshness: { fresh: true },
   projection: {
     master: {
-      kind: 'master', targetRole: 'Руководитель разработки платёжной платформы',
+      kind: 'master',
+      targetRole: 'Руководитель разработки платёжной платформы',
       about: 'Руковожу разработкой платёжной платформы: 9 человек, релиз раз в 3 дня.',
       skills: ['Go', 'Kotlin', 'PostgreSQL', 'Kubernetes'].map((name) => ({ id: name, name })),
-      experience: [], education: [], languages: [], unknowns: [],
+      experience: [],
+      education: [],
+      languages: [],
+      unknowns: [],
     },
-    germanyVariant: {}, evidenceSnapshot: [], excludedEvidenceIds: [],
+    germanyVariant: {},
+    evidenceSnapshot: [],
+    excludedEvidenceIds: [],
   },
 };
 
 const draft = (index: number, kind: 'post' | 'comment', status: string) => ({
-  id: `d${index}`, kind, status, topic: `Тема ${index}`, text: `Текст черновика ${index}`,
+  id: `d${index}`,
+  kind,
+  status,
+  topic: `Тема ${index}`,
+  text: `Текст черновика ${index}`,
   ...(status === 'published' ? { publishedAt: '2026-11-04T10:00:00.000Z' } : {}),
 });
 
-async function mock(page: Page, options: { connected?: boolean; drafts?: unknown[]; failFirst?: boolean } = {}): Promise<void> {
+async function mock(
+  page: Page,
+  options: { connected?: boolean; drafts?: unknown[]; failFirst?: boolean } = {},
+): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
+  await page
+    .context()
+    .grantPermissions(['clipboard-read', 'clipboard-write'])
+    .catch(() => undefined);
   await page.route('**/api/v1/candidate/connections', (route) =>
     route.fulfill({ json: { data: [linkedin(options.connected ?? true)] } }),
   );
-  await page.route('**/api/v1/candidate/resume', (route) => route.fulfill({ json: { data: studio } }));
+  await page.route('**/api/v1/candidate/resume', (route) =>
+    route.fulfill({ json: { data: studio } }),
+  );
   let failed = !options.failFirst;
   await page.route('**/api/v1/candidate/drafts?*', (route) => {
     if (!failed) {
@@ -94,7 +127,9 @@ test.describe('B664: LinkedIn нового кабинета', () => {
   test('посты: ошибка с «Повторить» на месте', async ({ page }) => {
     await mock(page, { drafts: publications, failFirst: true });
     await page.goto(POSTS, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('alert')).toContainText('Не удалось загрузить посты', { timeout: 15_000 });
+    await expect(page.getByRole('alert')).toContainText('Не удалось загрузить посты', {
+      timeout: 15_000,
+    });
     await page.getByRole('button', { name: 'Повторить' }).click();
     await expect(page.locator('#po-text')).toBeVisible();
   });
@@ -135,7 +170,10 @@ test.describe('B664: LinkedIn нового кабинета', () => {
         await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', theme);
         for (const width of desktop ? [1440, 1176] : [390]) {
           await page.setViewportSize({ width, height: desktop ? 900 : 844 });
-          await page.screenshot({ path: `.s13-shots/${name}-${width}-${theme}.png`, fullPage: true });
+          await page.screenshot({
+            path: `.s13-shots/${name}-${width}-${theme}.png`,
+            fullPage: true,
+          });
         }
       }
     }
