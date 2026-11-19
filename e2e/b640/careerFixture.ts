@@ -64,6 +64,7 @@ export interface CareerCalls {
   readonly stopRemoved: string[];
   readonly ownRoles: unknown[];
   readonly lowerIncome: unknown[];
+  readonly growthGoals: unknown[];
 }
 
 export interface CareerOptions {
@@ -74,6 +75,9 @@ export interface CareerOptions {
   readonly professionPath?: unknown;
   /** Нынешний доход на руки из профиля. */
   readonly income?: number | null;
+  /** Ответ цели роста (S12); выбор цели возвращает `growthAfter`, если он задан. */
+  readonly growth?: unknown;
+  readonly growthAfter?: unknown;
 }
 
 function campaign(roles: string[]) {
@@ -113,6 +117,7 @@ export async function openCareer(
     stopRemoved: [],
     ownRoles: [],
     lowerIncome: [],
+    growthGoals: [],
   };
   let roles = options.searchRoles ?? ['Руководитель разработки'];
   let profile: Record<string, unknown> = {
@@ -214,6 +219,17 @@ export async function openCareer(
   await page.route(`${API}/candidate/profile/income`, (route) =>
     route.fulfill({ json: { data: { current: options.income ?? null, expected: null } } }),
   );
+  let growth = options.growth ?? { state: 'no_workplace' };
+  await page.route(`${API}/candidate/career/growth`, (route) =>
+    route.fulfill({ json: { data: growth } }),
+  );
+  await page.route(`${API}/candidate/career/growth/goal`, (route) => {
+    const body = route.request().postDataJSON() as { goal: string };
+    calls.growthGoals.push(body);
+    if (options.growthAfter) growth = options.growthAfter;
+    const goal = { kind: body.goal, chosenAt: '2026-11-19T09:00:00.000Z' };
+    return route.fulfill({ json: { data: { goal } } });
+  });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   return calls;
 }

@@ -4,12 +4,13 @@ import { useLoad } from '../today/useLoad';
 import { loadStatusId } from './careerApi';
 import { CompareView } from './CompareView';
 import { pageAttrs } from './careerPaths';
+import { GrowthScreen } from './GrowthScreen';
 import { ProfessionScreen } from './ProfessionScreen';
 import { RolesLoad, RolesView } from './RolesScreen';
 
 /**
  * Корень «Карьеры» по статусу кандидата (B665): «Ищу, кем работать» — сравнение ролей (s10),
- * «Меняю профессию» — путь в профессию (s11), остальные — роль поиска и роли по профилю (s09).
+ * «Меняю профессию» — путь в профессию (s11), «Работаю» — цель роста (s12), остальные — роль поиска и роли по профилю (s09).
  */
 export function CareerRoot({ node }: { readonly node: B640Node }) {
   const status = useLoad(loadStatusId);
@@ -28,5 +29,6 @@ export function CareerRoot({ node }: { readonly node: B640Node }) {
     );
   }
   if (status.data === 'changing_profession') return <ProfessionScreen node={node} state="s11" />;
+  if (status.data === 'working') return <GrowthScreen node={node} />;
   return <RolesLoad node={node}>{(data) => <RolesView node={node} data={data} />}</RolesLoad>;
 }
