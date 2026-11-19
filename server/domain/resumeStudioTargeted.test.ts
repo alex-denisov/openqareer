@@ -173,7 +173,7 @@ describe('buildTargetedResumeSlice', () => {
     });
   });
 
-  it('prioritizes supported facts, compresses other roles, and keeps unsupported requirements visible', () => {
+  it('prioritizes supported facts, keeps every role described, and keeps unsupported requirements visible', () => {
     const result = buildTargetedResumeSlice(master, {
       title: 'Инженер платформы',
       requirements: ['Kubernetes', 'PostgreSQL', 'GraphQL'],
@@ -186,7 +186,9 @@ describe('buildTargetedResumeSlice', () => {
     ]);
     expect(result.document.experience[0]?.bullets).toEqual(master.experience[1]?.bullets);
     expect(result.document.experience[1]?.bullets).toEqual(master.experience[0]?.bullets);
-    expect(result.document.experience[2]?.bullets).toEqual([]);
+    // B713: a role without a literal match keeps its bullets: a targeted resume never lists bare titles.
+    expect(result.document.experience[2]?.bullets).toEqual(master.experience[2]?.bullets);
+    expect(result.compressedExperienceIds).toEqual([]);
     expect(result.document.projects?.map((project) => project.id)).toEqual(['cluster-migration']);
     expect(result.document.skills?.map((skill) => skill.name)).toEqual([
       'Kubernetes',
@@ -199,5 +201,19 @@ describe('buildTargetedResumeSlice', () => {
 
     const masterValues = new Set(documentFacts(master));
     expect(documentFacts(result.document).every((value) => masterValues.has(value))).toBe(true);
+  });
+
+  it('keeps every place described when no requirement matches the profile wording (B713)', () => {
+    const result = buildTargetedResumeSlice(master, {
+      title: 'Операционный директор',
+      requirements: ['Управление процессами', 'Бюджетирование'],
+    });
+
+    expect(result.matchedRequirements).toEqual([]);
+    expect(result.document.experience.map((role) => role.id)).toEqual(['operations', 'platform', 'sales']);
+    for (const [index, role] of result.document.experience.entries()) {
+      expect(role.bullets).toEqual(master.experience[index]?.bullets);
+    }
+    expect(result.detailedExperienceIds).toEqual(['operations', 'platform', 'sales']);
   });
 });

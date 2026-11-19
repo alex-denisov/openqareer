@@ -142,8 +142,10 @@ jobs:
       - name: Lint and check adopted formatting baseline
         run: npm run lint
 
-      - name: Typecheck
-        run: npx tsc --noEmit
+      # tsgo (TypeScript 7 native) gives the same errors ~10x faster; the
+      # reference tsc still runs inside `npm run build` below, so strictness holds.
+      - name: Typecheck (tsgo)
+        run: npx tsgo --noEmit
 
       # No-op while the image matches the lockfile, downloads Chromium if it falls behind.
       - name: Install Playwright Chromium
@@ -237,7 +239,21 @@ jobs:
       - name: Run unit test shard with coverage
         env:
           COVERAGE_SHARD: '1'
-        run: npx vitest run --shard=${{ matrix.shard }}/4 --coverage --reporter=blob --reporter=default
+        run: npx vitest run --shard=${{ matrix.shard }}/4 --coverage --reporter=blob --reporter=default --reporter=json --outputFile.json=reports/vitest.json
+
+      - name: Record failed and retried tests
+        if: ${{ !cancelled() }}
+        env:
+          FLAKY_JOB_NAME: unit-${{ matrix.shard }}
+        run: node scripts/flaky-extract.mjs reports/vitest.json reports/flaky.json
+
+      - name: Keep the flaky record for scripts/flaky-report.mjs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-unit-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: reports/flaky.json
+          retention-days: 30
 
       - name: Keep shard report for the coverage merge
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -320,6 +336,20 @@ jobs:
           E2E_WEBKIT: skip
         run: npx playwright test --shard=${{ matrix.shard }}/8
 
+      - name: Record failed and retried tests
+        if: ${{ !cancelled() }}
+        env:
+          FLAKY_JOB_NAME: e2e-${{ matrix.shard }}
+        run: node scripts/flaky-extract.mjs reports/playwright.json reports/flaky.json
+
+      - name: Keep the flaky record for scripts/flaky-report.mjs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-e2e-${{ matrix.shard }}-attempt-${{ github.run_attempt }}
+          path: reports/flaky.json
+          retention-days: 30
+
   e2e-webkit:
     name: Browser tests (WebKit)
     needs: plan
@@ -354,6 +384,20 @@ jobs:
         env:
           E2E_WEBKIT: only
         run: npx playwright test
+
+      - name: Record failed and retried tests
+        if: ${{ !cancelled() }}
+        env:
+          FLAKY_JOB_NAME: webkit
+        run: node scripts/flaky-extract.mjs reports/playwright.json reports/flaky.json
+
+      - name: Keep the flaky record for scripts/flaky-report.mjs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flaky-webkit-attempt-${{ github.run_attempt }}
+          path: reports/flaky.json
+          retention-days: 30
 
   release:
     name: Build release archive

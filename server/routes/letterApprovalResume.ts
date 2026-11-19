@@ -68,9 +68,15 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
  * Одна версия на вакансию и ревизию мастер-резюме: повторное одобрение находит ту же версию,
  * а изменённое резюме даёт новую. Формат UUID нужен маршруту версий.
  */
+/**
+ * Правило сборки версии под вакансию. B713: версии до него перечисляли места работы без пунктов, и
+ * одобренная такая версия возвращалась бы для той же вакансии и ревизии; новая сборка даёт новый id.
+ */
+export const TARGETED_RESUME_BUILD = 'b713';
+
 function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string): string {
   const hex = createHash('sha256')
-    .update(['letter-approval-resume', candidateId, vacancyId, masterRevision].join('\u0000'))
+    .update(['letter-approval-resume', TARGETED_RESUME_BUILD, candidateId, vacancyId, masterRevision].join('\u0000'))
     .digest('hex');
   const variant = ((Number.parseInt(hex[16] ?? '0', 16) & 0x3) | 0x8).toString(16);
   return [hex.slice(0, 8), hex.slice(8, 12), '5' + hex.slice(13, 16), variant + hex.slice(17, 20), hex.slice(20, 32)].join('-');
