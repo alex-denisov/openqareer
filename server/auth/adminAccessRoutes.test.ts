@@ -9,6 +9,7 @@ import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { CoachProvider } from '../providers/coachProvider';
 import { AuthService } from './authService';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const ADMIN = { username: 'admin.test', password: 'admin-password-for-tests' };
 const CANDIDATE = { username: 'candidate.test', password: 'candidate-password-for-tests' };
@@ -194,7 +195,7 @@ describe('admin access control', () => {
       headers: { cookie: partnerCookie },
     });
     expect(session.json().data.role).toBe('CareerPartner');
-  }, 15_000);
+  }, timeBudget(15_000));
 
   it('keeps existing administrator permissions enabled by default', async () => {
     const app = await createApp();
@@ -252,7 +253,7 @@ describe('admin access control', () => {
       action: 'change_user_permission',
     });
     expect(audit.json().data.records[0].detail).toContain('can_view_audit');
-  }, 15_000);
+  }, timeBudget(15_000));
 
   it('opens audit to a CareerPartner only after an explicit grant', async () => {
     const app = await createApp();
@@ -285,7 +286,7 @@ describe('admin access control', () => {
       headers: { cookie: partnerCookie },
     });
     expect(allowed.statusCode).toBe(200);
-  }, 15_000);
+  }, timeBudget(15_000));
 
   it('requires can_edit_campaigns before changing an assigned candidate campaign', async () => {
     const app = await createApp();
@@ -330,7 +331,7 @@ describe('admin access control', () => {
     expect(changed.statusCode).toBe(200);
     expect(changed.json().data.roles.value).toEqual(['COO']);
     expect(changed.json().data.remoteOnly).toBe(true);
-  }, 15_000);
+  }, timeBudget(15_000));
 
   it('protects the last active SuperAdmin from removing their own rights', async () => {
     const app = await createApp();
@@ -382,7 +383,7 @@ describe('admin access control', () => {
     });
     expect(permissions.json().data.permissions.can_manage_pool).toBe(false);
     expect(permissions.json().data.overrides).toEqual({});
-  }, 15_000);
+  }, timeBudget(15_000));
 
   it('assigns candidates and limits partner profile reads to assigned IDs', async () => {
     const app = await createApp();
@@ -434,5 +435,5 @@ describe('admin access control', () => {
       const coverage = await app.inject({ method: 'GET', url, headers: { cookie: partnerCookie } });
       expect(coverage.statusCode, url).toBe(403);
     }
-  }, 20_000);
+  }, timeBudget(20_000));
 });

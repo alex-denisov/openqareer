@@ -65,6 +65,9 @@ describe('тарифы и подписка', () => {
     expect(subscriptionLine(summary({ currentPlan: 'free', subscription: null }))).toBe(
       '20 откликов в месяц',
     );
+    expect(n(subscriptionLine(summary({ currentPlan: 'max', subscription: null })))).toBe(
+      '2 000 откликов в месяц · подключён без оплаты',
+    );
   });
 
   it('автопродление: следующее списание или дата, до которой действует тариф', () => {

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 /**
  * B230: куча обслуживателя на 100 000 синтетических записей партиями по 500
@@ -113,5 +114,5 @@ heavy('keyed clustering heap budget (B230)', () => {
     );
     expect(peakHeapMb).toBeLessThan(HEAP_BUDGET_MB);
     pool.close();
-  }, 300_000);
+  }, timeBudget(300_000));
 });
