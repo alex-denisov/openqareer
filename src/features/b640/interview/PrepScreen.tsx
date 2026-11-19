@@ -239,7 +239,7 @@ export function PrepScreen({ responseId }: { readonly responseId: string }) {
       <div
         className={data && !scheduled ? 'page' : 'page two'}
         data-b640-node={data && !scheduled ? 'i01d' : 'i01'}
-        data-b640-section="responses"
+        data-b640-section="interview"
       >
         {data ? <InterviewHead response={data.response} /> : null}
         {state.status === 'ready' && data === null ? <NoInterview /> : null}
