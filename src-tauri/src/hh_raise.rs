@@ -118,7 +118,8 @@ pub async fn run_hh_raise(
         url: resume_url(&request.resume_id),
         layout: None,
         session_key: None,
-        background: false,
+        // Automatic raise: the window must never take focus from the candidate.
+        background: true,
     };
     read_session_page(app, &page).await?;
     let window = app.get_webview(label).ok_or("session_window_missing")?;
