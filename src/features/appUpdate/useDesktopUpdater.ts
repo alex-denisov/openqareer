@@ -31,6 +31,8 @@ export interface DesktopUpdater {
   readonly subscribe: (listener: () => void) => () => void;
   readonly start: () => () => void;
   readonly check: () => Promise<void>;
+  /** B722: «Обновлять автоматически» — найденная версия скачивается сама и ждёт перезапуска. */
+  readonly setAutoInstall: (enabled: boolean) => void;
   readonly actions: AppUpdateActions;
 }
 
@@ -75,9 +77,20 @@ function createActions(patch: Patch, install: () => Promise<void>): AppUpdateAct
   };
 }
 
+/** B359: a background check shortly after launch, then every six hours; returns the stop. */
+function scheduleChecks(check: () => Promise<void>): () => void {
+  const first = window.setTimeout(() => void check(), UPDATE_CHECK_DELAY_MS);
+  const repeat = window.setInterval(() => void check(), UPDATE_CHECK_INTERVAL_MS);
+  return () => {
+    window.clearTimeout(first);
+    window.clearInterval(repeat);
+  };
+}
+
 /** One updater per app window: the banner can unmount with its screen, the download goes on. */
 export function createDesktopUpdater(): DesktopUpdater {
   let status = IDLE_UPDATER_STATUS;
+  let autoInstall = false;
   const listeners = new Set<() => void>();
   const patch: Patch = (next, info) => {
     status = { ...status, ...next, info: { ...status.info, ...info } };
@@ -95,6 +108,7 @@ export function createDesktopUpdater(): DesktopUpdater {
         releaseDate: releaseDate(result.date),
         changelog: result.notes ? [{ tag: 'new', tagLabel: 'Новое', text: result.notes }] : [],
       });
+      if (autoInstall) await install();
     } catch {
       // Offline or the feed is unreachable: stay quiet, the next check retries.
     }
@@ -110,23 +124,17 @@ export function createDesktopUpdater(): DesktopUpdater {
     }
   };
 
-  const start = () => {
-    const first = window.setTimeout(() => void check(), UPDATE_CHECK_DELAY_MS);
-    const repeat = window.setInterval(() => void check(), UPDATE_CHECK_INTERVAL_MS);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(repeat);
-    };
-  };
-
   return {
     getStatus: () => status,
     subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    start,
+    start: () => scheduleChecks(check),
     check,
+    setAutoInstall: (enabled) => {
+      autoInstall = enabled;
+    },
     actions: createActions(patch, install),
   };
 }

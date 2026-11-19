@@ -9,6 +9,22 @@ export interface OfferFieldsProps {
   readonly errors: OfferFormErrors;
   readonly isNew: boolean;
   readonly onChange: (key: Key, value: string) => void;
+  /** После разбора письма (B646): поля из письма; `null` — письмо не разбирали. */
+  readonly fromLetter?: ReadonlySet<Key> | null;
+}
+
+type Mark = 'letter' | 'own' | null;
+
+function describedBy(key: Key, error: string | undefined, mark: Mark): string | undefined {
+  const ids = [error ? `of-${key}-err` : '', mark === 'letter' ? `of-${key}-src` : ''];
+  return ids.filter(Boolean).join(' ') || undefined;
+}
+
+/** Из письма — рамка; заполненное кандидатом после разбора — «с ваших слов». */
+function markOf(props: OfferFieldsProps, key: Key): Mark {
+  if (!props.fromLetter) return null;
+  if (props.fromLetter.has(key)) return 'letter';
+  return key !== 'source' && props.form[key].trim() ? 'own' : null;
 }
 
 interface TextSpec {
@@ -31,12 +47,26 @@ function Field(props: {
   readonly label: string;
   readonly wide?: boolean;
   readonly error?: string;
+  readonly mark?: Mark;
   readonly children: ReactNode;
 }) {
+  const className = [
+    'of-f',
+    props.wide ? 'is-wide' : '',
+    props.mark === 'letter' ? 'is-letter' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <div className={props.wide ? 'of-f is-wide' : 'of-f'}>
+    <div className={className}>
       <label htmlFor={`of-${props.id}`}>{props.label}</label>
       {props.children}
+      {props.mark === 'letter' ? (
+        <span className="vh" id={`of-${props.id}-src`}>
+          из письма, проверьте
+        </span>
+      ) : null}
+      {props.mark === 'own' ? <small className="of-src">с ваших слов</small> : null}
       {props.error ? (
         <small className="is-err" id={`of-${props.id}-err`}>
           <Icon name="warn" />
@@ -49,8 +79,9 @@ function Field(props: {
 
 function TextField({ spec, ...props }: OfferFieldsProps & { readonly spec: TextSpec }) {
   const error = props.errors[spec.key];
+  const mark = markOf(props, spec.key);
   return (
-    <Field id={spec.key} label={spec.label} wide={spec.wide} error={error}>
+    <Field id={spec.key} label={spec.label} wide={spec.wide} error={error} mark={mark}>
       <input
         id={`of-${spec.key}`}
         type="text"
@@ -58,7 +89,7 @@ function TextField({ spec, ...props }: OfferFieldsProps & { readonly spec: TextS
         value={props.form[spec.key]}
         placeholder={spec.placeholder}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `of-${spec.key}-err` : undefined}
+        aria-describedby={describedBy(spec.key, error, mark)}
         onChange={(event) => props.onChange(spec.key, event.currentTarget.value)}
       />
     </Field>
@@ -73,11 +104,13 @@ function SelectField(
   },
 ) {
   const current = props.form[props.id];
+  const mark = markOf(props, props.id);
   const known = props.options.some((option) => option.value === current);
   return (
-    <Field id={props.id} label={props.label}>
+    <Field id={props.id} label={props.label} mark={mark}>
       <select
         id={`of-${props.id}`}
+        aria-describedby={describedBy(props.id, undefined, mark)}
         value={current}
         onChange={(event) => props.onChange(props.id, event.currentTarget.value)}
       >

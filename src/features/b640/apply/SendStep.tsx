@@ -12,8 +12,7 @@ import type { ApplyHead } from './model/applyModel';
 import { HhSendStep } from './hh/HhSendStep';
 
 type Sent =
-  | { readonly kind: 'idle' | 'busy' | 'done' }
-  | { readonly kind: 'error'; readonly text: string };
+  { readonly kind: 'idle' | 'busy' | 'done' } | { readonly kind: 'error'; readonly text: string };
 
 interface CopyItemProps {
   readonly label: string;
@@ -66,7 +65,12 @@ interface MarkInput {
  * «Я откликнулся». Со ссылкой на вакансию — прежняя отметка отклика; без ссылки (её требует
  * тот маршрут) стадия меняется у самой карточки, которую создало одобрение письма.
  */
-export async function markApplied({ vacancyId, head, sourceType, applicationId }: MarkInput): Promise<void> {
+export async function markApplied({
+  vacancyId,
+  head,
+  sourceType,
+  applicationId,
+}: MarkInput): Promise<void> {
   if (head.url) {
     await recordVacancyApplication({
       clusterId: vacancyId,
@@ -125,8 +129,7 @@ function SentActions({ sent, responsePath, onConfirm }: SentActionsProps) {
       <ResultLine text="Отклик отмечен как отправленный" />
       <div className="actions">
         <Link className="btn is-primary" to={responsePath}>
-          <Icon name="right" />
-          К отклику
+          <Icon name="right" />К отклику
         </Link>
       </div>
     </>
@@ -148,7 +151,8 @@ export interface SendStepProps {
 /** Шаг «Отправка»: в приложении вакансия hh.ru уходит откликом из входа кандидата (B704), иначе — веб (O4d). */
 export function SendStep(props: SendStepProps) {
   const { vacancyId, head, sourceType, approved, letterText } = props;
-  const hhVacancyId = approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
+  const hhVacancyId =
+    approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
   if (!approved || !hhVacancyId) return <WebSendStep {...props} />;
   const applicationId = approved.applicationId;
   return (
@@ -175,7 +179,10 @@ function WebSendStep(props: SendStepProps) {
     markApplied({ vacancyId, head, sourceType, applicationId })
       .then(() => setSent({ kind: 'done' }))
       .catch((reason: unknown) =>
-        setSent({ kind: 'error', text: apiErrorMessage(reason, 'Отметка не сохранилась. Повторите.') }),
+        setSent({
+          kind: 'error',
+          text: apiErrorMessage(reason, 'Отметка не сохранилась. Повторите.'),
+        }),
       );
   }
 
@@ -190,6 +197,12 @@ function WebSendStep(props: SendStepProps) {
             <Icon name="out" />
             Открыть вакансию на сайте
           </a>
+          {isTauriEnvironment() ? null : (
+            <Link className="row-act" to={buildNodePath('n06')}>
+              Отправлять из приложения
+              <Icon name="right" />
+            </Link>
+          )}
         </div>
       ) : null}
       <ul className="cb-list" aria-label="Письмо для отклика">

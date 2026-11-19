@@ -4,7 +4,7 @@ import { Button, Icon, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { AutomationBar } from './AutomationBar';
-import { useAutoApplicationIds } from './data/responseSummaryApi';
+import { useResponseMarks } from './data/responseSummaryApi';
 import { useAsync, type AsyncState } from './data/useAsync';
 import {
   DEFAULT_SORT,
@@ -21,6 +21,7 @@ import {
 import { buildResponseRow, pluralRu } from './model/responseRow';
 import { ResponseDetail } from './ResponseDetail';
 import { ResponsesTable } from './ResponsesTable';
+import { ownPanelPath } from '../vacancies/list/ownPanelLink';
 
 const PAGE_SIZE = 20;
 
@@ -124,15 +125,17 @@ interface ListState {
 function useResponsesList(): ListState {
   const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
   const { state, reload, setData } = useAsync(load, 'Отклики не загрузились.');
-  const autoIds = useAutoApplicationIds();
+  const marks = useResponseMarks();
   const all = useMemo<readonly ListedResponse[]>(() => {
     const now = new Date();
     const rows = (state.data ?? []).map((application) => ({
       application,
-      row: buildResponseRow(application, now),
+      row: buildResponseRow(application, now, {
+        letterApproved: marks.approvedLetters.has(application.id),
+      }),
     }));
-    return markAuto(rows, autoIds);
-  }, [state.data, autoIds]);
+    return markAuto(rows, marks.auto);
+  }, [state.data, marks]);
   const onChanged = useCallback(
     (next: ApplicationView) =>
       setData((items) => items.map((item) => (item.id === next.id ? next : item))),
@@ -195,7 +198,7 @@ function ListHead({ titleId, total, counts, chips, onChips, sort, onSort }: Head
               aria-pressed={pressed}
               onClick={() => onChips(pressed ? chips.filter((id) => id !== chip.id) : [...chips, chip.id])}
             >
-              {`${chip.label} · ${counts[chip.id]}`}
+              {chip.id === 'auto' ? chip.label : `${chip.label} · ${counts[chip.id]}`}
             </button>
           );
         })}
@@ -357,6 +360,12 @@ function ListFoot({ view, missing, onMore }: FootProps) {
           </Button>
         </div>
       ) : null}
+      <div className="vl-foot">
+        <Link className="row-act" to={ownPanelPath()}>
+          <Icon name="plus" />
+          Откликнулся сам — добавить
+        </Link>
+      </div>
     </>
   );
 }

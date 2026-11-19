@@ -177,6 +177,12 @@ function reviewPayload(
         total: 6,
       },
       recommendations: [],
+      checks: {
+        since: '2026-10-02T10:00:00.000Z',
+        unfinished: { count: 3, total: 6 },
+        salaryBelow: { count: 2, total: 6, floor: 500000, currency: 'RUB' },
+        late: { count: 4, total: 6 },
+      },
     };
   }
   return {
@@ -244,6 +250,8 @@ export interface ResponsesMockOptions {
   readonly reviewReady?: boolean;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
+  /** Сводка B680: какие отклики — автоотклики. Без опции сводка не отвечает. */
+  readonly autoIds?: readonly string[];
 }
 
 export interface ResponsesMock {
@@ -417,6 +425,13 @@ export async function mockResponses(
       json: { data: { key: `new-${companies.length}`, name: body.companyName } },
     });
   });
+
+  if (options.autoIds) {
+    const autoApplicationIds = options.autoIds;
+    await page.route('**/api/v1/candidate/b640/responses/summary', (route) =>
+      route.fulfill({ json: { data: { autoApplicationIds, approvedLetterIds: [] } } }),
+    );
+  }
 
   return { calls };
 }
