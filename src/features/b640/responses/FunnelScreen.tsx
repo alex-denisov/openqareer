@@ -4,7 +4,8 @@ import { MIN_PIPELINE_SAMPLE_SIZE } from '../../applications/pipelineAnalytics';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useAsync } from './data/useAsync';
-import { funnelSummary, type FunnelSummary, type ListedResponse } from './model/responseList';
+import { funnelSummary, markAuto, type FunnelSummary, type ListedResponse } from './model/responseList';
+import { useAutoApplicationIds } from './data/responseSummaryApi';
 import { buildResponseRow, pluralRu } from './model/responseRow';
 
 async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationView[]> {
@@ -15,11 +16,13 @@ async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationV
 export function useListedResponses() {
   const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
   const { state, reload } = useAsync(load, 'Отклики не загрузились.');
+  const autoIds = useAutoApplicationIds();
   const items = useMemo<readonly ListedResponse[] | null>(() => {
     if (!state.data) return null;
     const now = new Date();
-    return state.data.map((application) => ({ application, row: buildResponseRow(application, now) }));
-  }, [state.data]);
+    const rows = state.data.map((application) => ({ application, row: buildResponseRow(application, now) }));
+    return markAuto(rows, autoIds);
+  }, [state.data, autoIds]);
   return { state, reload, items };
 }
 
@@ -137,6 +140,12 @@ function FunnelNumbers({ summary }: { readonly summary: FunnelSummary }) {
       <b className="num">{summary.sent}</b> отправлено · <b className="num">{summary.responded}</b>{' '}
       ответили · <b className="num">{summary.interview}</b> интервью ·{' '}
       <b className="num">{summary.offer}</b> {pluralRu(summary.offer, ['оффер', 'оффера', 'офферов'])}
+      {summary.auto > 0 ? (
+        <>
+          {' '}
+          · из них <b className="num">{summary.auto}</b> {pluralRu(summary.auto, ['автоотклик', 'автоотклика', 'автооткликов'])}
+        </>
+      ) : null}
     </p>
   );
 }

@@ -287,10 +287,17 @@ function useLetterDraft({
   return { ...pitchState, workplaces };
 }
 
+export interface LetterControllerOptions {
+  /** Черновик не просить: письмо уже одобрено, его текст придёт из одобрения. */
+  readonly holdDraft?: boolean;
+}
+
 export function useVacancyLetterController(
   vacancyId: string,
   initialCircle?: ConnectionCircleNumber,
+  options: LetterControllerOptions = {},
 ): LetterScreenState {
+  const held = options.holdDraft === true;
   const circles = useConnectionCircles(vacancyId);
   const circle = useCircleSelection(circles.data?.circles ?? [], initialCircle);
   const [tone, setTone] = useState<PitchTone>('executive');
@@ -302,11 +309,13 @@ export function useVacancyLetterController(
     tone,
     language,
     enabled:
+      !held &&
       Boolean(circles.data) &&
       !circles.loading &&
       !circles.error &&
       (circle.circle === 3 || Boolean(circle.selectedPath)),
     resetWhenDisabled:
+      !held &&
       Boolean(circles.data) &&
       !circles.loading &&
       !circles.error &&
