@@ -11,6 +11,7 @@
  * `waiting` while the page is still drawing or the click is being confirmed.
  * The button is found by its text, `data-qa` is only a second hint.
  */
+/* global __SIGNED_IN_SELECTOR__ -- substituted by hh_raise.rs before evaluation */
 (function () {
   try {
     var KEY = '__oqHhRaise';
@@ -34,7 +35,7 @@
     if (!signedIn) {
       var state = document.getElementById('HH-Lux-InitialState');
       var raw = state ? (state.content && state.content.textContent) || state.textContent || '' : '';
-      try { signedIn = JSON.parse(raw).userType === 'applicant'; } catch (e) { signedIn = false; }
+      try { signedIn = JSON.parse(raw).userType === 'applicant'; } catch (_e) { signedIn = false; }
     }
     if (location.pathname.indexOf('/account/login') === 0 || shown(q('input[type="password"]')) || !signedIn) {
       return { code: 'logged_out' };
@@ -54,7 +55,7 @@
     var disabled = !!button && (button.disabled || button.getAttribute('aria-disabled') === 'true');
 
     var mark = null;
-    try { mark = sessionStorage.getItem(KEY); } catch (e) { mark = window[KEY] || null; }
+    try { mark = sessionStorage.getItem(KEY); } catch (_e) { mark = window[KEY] || null; }
     var parts = (mark || '').split('|');
     var clicked = parts[0] === location.pathname && Date.now() - Number(parts[1]) < CLICK_TTL_MS;
 
@@ -66,10 +67,10 @@
     if (!button) return { code: 'waiting' };
 
     var stamp = location.pathname + '|' + Date.now();
-    try { sessionStorage.setItem(KEY, stamp); } catch (e) { window[KEY] = stamp; }
+    try { sessionStorage.setItem(KEY, stamp); } catch (_e) { window[KEY] = stamp; }
     button.click();
     return { code: 'waiting' };
-  } catch (e) {
+  } catch (_e) {
     return { code: 'script_error' };
   }
 })()

@@ -63,7 +63,7 @@ pub fn resume_url(resume_id: &str) -> String {
 /// The page script with the signed-in marker embedded as a JSON string literal.
 pub fn page_script() -> String {
     let marker = serde_json::to_string(HH_SIGNED_IN_SELECTOR).unwrap_or_else(|_| "\"\"".into());
-    PAGE_SCRIPT.replacen(SIGNED_IN_PLACEHOLDER, &marker, 1)
+    PAGE_SCRIPT.replace(SIGNED_IN_PLACEHOLDER, &marker)
 }
 
 /// Maps the last page answer to one of the outcomes the server accepts.
