@@ -40,7 +40,8 @@ const querySchema = z.object({
 const statusBodySchema = z.object({ state: z.enum(B640_CONTACT_STATES) }).strict();
 const contactIdSchema = z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/u);
 
-function sources(repository: ConnectionRepository, candidateId: string) {
+/** Контакты кандидата из импорта связей; нужен и журналу LinkedIn (B696) для имён. */
+export function contactSources(repository: ConnectionRepository, candidateId: string) {
   const records = connectionRecords(repository, candidateId);
   const contacts = records.flatMap((record): B640ContactSource[] => {
     const meta = readConnectionMetadata(record);
@@ -82,7 +83,7 @@ async function listContacts(deps: RouteDeps, statuses: Statuses, request: Fastif
   if (!query.success) return sendError(reply, request, 400, 'invalid_query', 'Неверные параметры списка контактов.', false);
   const repository = connectionRepository(deps, request, reply);
   if (!repository) return reply;
-  const { contacts, receipt } = sources(repository, candidate.id);
+  const { contacts, receipt } = contactSources(repository, candidate.id);
   const selectionKeys = await selectionKeysWithin(
     companyContext(deps, candidate.id).then((context) => context.vacancies.map((vacancy) => vacancy.companyName)),
   );
@@ -111,7 +112,7 @@ function putStatus(deps: RouteDeps, statuses: Statuses, request: FastifyRequest,
   if (!body.success) return sendError(reply, request, 400, 'invalid_body', 'Неверный статус контакта.', false);
   const repository = connectionRepository(deps, request, reply);
   if (!repository) return reply;
-  const known = contactId.success && sources(repository, candidate.id).contacts.some((contact) => contact.id === contactId.data);
+  const known = contactId.success && contactSources(repository, candidate.id).contacts.some((contact) => contact.id === contactId.data);
   if (!contactId.success || !known) return sendError(reply, request, 404, 'contact_not_found', 'Контакт не найден.', false);
   const at = statuses.set(candidate.id, contactId.data, body.data.state, new Date().toISOString());
   const data: B640ContactStatusResult = { contactId: contactId.data, state: body.data.state, at };
