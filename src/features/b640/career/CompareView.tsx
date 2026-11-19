@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
-import { buildNodePath, type B640Node } from '../routes';
+import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import type { RolesData } from './careerApi';
 import { pageAttrs } from './careerPaths';
 import { OwnRole } from './OwnRole';
 import { PICK_ERROR } from './RolePickDialog';
+import { skillCheckPath } from './skillCheckModel';
 import { roleKey, searchButtonLabel, useRolePick, type RolePick } from './useRolePick';
 import { compareCheckTag, type RoleRow } from './rolesModel';
 
@@ -133,6 +134,7 @@ function SearchActions({
   const busy = pick.state === 'busy';
   const first = columns.find((row) => row.title === pick.selected[0]);
   const checkLabel = first?.check ? 'Проверить вторую роль' : 'Проверить навыки';
+  const checkRole = first?.check ? pick.selected[1] : pick.selected[0];
   return (
     <>
       {pick.state === 'error' ? <StatusLine state="err" text={PICK_ERROR} /> : null}
@@ -147,7 +149,7 @@ function SearchActions({
           <Icon name={busy ? 'hourglass' : 'check'} />
           {searchButtonLabel(pick.selected)}
         </button>
-        <Link className="btn" to={buildNodePath('c04')}>
+        <Link className="btn" to={skillCheckPath(checkRole)}>
           {checkLabel}
         </Link>
       </div>
