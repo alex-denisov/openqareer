@@ -16,6 +16,14 @@ export function preferredMoneyCurrency(): Promise<B640AppPreferences['moneyCurre
   );
 }
 
+/** B593: тема кандидата при открытии кабинета; не прочиталась — `null`, остаётся тема устройства. */
+export function preferredTheme(): Promise<B640AppPreferences['theme']> {
+  return getAppPreferences().then(
+    (prefs) => prefs.theme,
+    () => null,
+  );
+}
+
 export async function saveAppPreferences(
   patch: Partial<{ [K in keyof B640AppPreferences]: NonNullable<B640AppPreferences[K]> }>,
 ): Promise<B640AppPreferences> {
