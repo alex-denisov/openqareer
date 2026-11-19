@@ -14,6 +14,7 @@ describe('buildSystemDesignTask', () => {
     expect(task.timeLimitMinutes).toBe(45);
     expect(SYSTEM_DESIGN_TIME_LIMIT_MINUTES).toBe(45);
     expect(task.prompt).toContain('Спроектируйте сервис платежей');
+    expect(task.title).toBe('Сервис платежей');
     expect(task.prompt).toContain('«Senior Go-разработчик»');
     expect(task.prompt).toContain('«Арка Пэй»');
     expect(task.stack).toEqual(['Go', 'Kafka', 'PostgreSQL']);
@@ -37,6 +38,12 @@ describe('buildSystemDesignTask', () => {
     expect(task.basis).toBe('role');
     expect(task.domain).toBe('core_api');
     expect(task.prompt).toContain('«Инженер платформы»');
+  });
+
+  it('names the role task by its core API', () => {
+    expect(buildSystemDesignTask({ vacancyTitle: 'Инженер данных' }).title).toBe(
+      'Основной API продукта',
+    );
   });
 
   it('falls back to the role without a description', () => {

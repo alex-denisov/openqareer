@@ -24,6 +24,8 @@ export interface SystemDesignTaskInput {
 }
 
 export interface SystemDesignTask {
+  /** Короткое название задачи для заголовка экрана: что проектируем. */
+  readonly title: string;
   readonly prompt: string;
   readonly hint: string;
   readonly timeLimitMinutes: number;
@@ -205,6 +207,7 @@ export function buildSystemDesignTask(input: SystemDesignTaskInput): SystemDesig
   const company = input.company?.trim() ? ` в «${input.company.trim()}»` : '';
   const stackLine = stack.length ? ` Используйте стек из вакансии: ${stack.join(', ')}.` : '';
   return {
+    title: `${spec.service.charAt(0).toLocaleUpperCase('ru-RU')}${spec.service.slice(1)}`,
     prompt: `Спроектируйте ${spec.service} для «${input.vacancyTitle}»${company}: ${spec.scope}.${stackLine} Начните с требований и ограничений.`,
     hint: `Начните с вопросов о нагрузке: ${spec.requirements}.`,
     timeLimitMinutes: SYSTEM_DESIGN_TIME_LIMIT_MINUTES,
