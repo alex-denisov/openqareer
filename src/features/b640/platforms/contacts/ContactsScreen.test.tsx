@@ -231,6 +231,33 @@ describe('a02: контакты', () => {
     view.unmount();
   });
 
+  it('B645: «Найти рекрутера» с карточки компании — фильтр компании из адреса с первого запроса', async () => {
+    window.history.replaceState(null, '', '/app/profile/contacts?company=%D0%9B%D0%B0%D0%B4%D0%BE%D0%B3%D0%B0%20%D0%91%D0%B0%D0%BD%D0%BA');
+    list.mockResolvedValue(page(many(1), 1, null));
+    const view = screen();
+    await flush();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filters: { company: ['Ладога Банк'], link: [], status: [] } }),
+    );
+    expect(view.container.querySelector('.vt-chip')!.textContent).toBe('Ладога Банк');
+    view.unmount();
+    window.history.replaceState(null, '', '/');
+  });
+
+  it('B645: в этой компании никого — «Никого не нашли» с действием, не пустой экран', async () => {
+    window.history.replaceState(null, '', '/app/profile/contacts?company=Arka');
+    list.mockResolvedValueOnce(page([], 0, null)).mockResolvedValue(page(many(2), 2, null));
+    const view = screen();
+    await flush();
+    expect(view.container.querySelector('.vl-empty-t')!.textContent).toBe('Никого не нашли');
+    click(byText(view.container, '.vl-empty button', 'Сбросить всё'));
+    await flush();
+    expect(view.container.querySelectorAll('li.ct-row')).toHaveLength(2);
+    view.unmount();
+    window.history.replaceState(null, '', '/');
+  });
+
   it('ошибка загрузки — «Повторить» читает ещё раз', async () => {
     list.mockRejectedValueOnce(new Error('net')).mockResolvedValue(page(many(2), 2, null));
     const view = screen();
