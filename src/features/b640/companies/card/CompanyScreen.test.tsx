@@ -18,6 +18,15 @@ vi.mock('../../../vacancies/candidateCompaniesApi', () => ({
   removeCandidateCompanyWant: vi.fn(async () => undefined),
 }));
 
+// Ширина экрана для `useIsMobile`: в jsdom своего matchMedia нет.
+let mobile = false;
+vi.stubGlobal('matchMedia', (query: string) => ({
+  matches: mobile,
+  media: query,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+}));
+
 const api = { ...(await import('../companiesApi')), ...(await import('../../../vacancies/candidateCompaniesApi')) };
 const KEY = 'c'.repeat(24);
 
@@ -53,7 +62,10 @@ function card(patch: Partial<B640CompanyItem> = {}, roles = [vacancy('cl-1', 'Р
 }
 
 const flush = () => act(async () => { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  mobile = false;
+});
 
 function people(items: B640CompanyPerson[]) {
   vi.mocked(api.getB640CompanyPeople).mockResolvedValue({ items, total: items.length, offset: 0, nextOffset: null });
@@ -82,6 +94,40 @@ describe('v10b: карточка компании', () => {
     expect(rows[1]!.querySelector('.row-title')!.textContent).toBe('Участник платформы');
     expect(rows[1]!.querySelector('.btn')!.textContent).toBe('Попросить представить');
     expect(rows[2]!.querySelector('.btn')!.textContent).toBe('Холодный отклик');
+    view.unmount();
+  });
+
+  it('B645: на 390 действия шапки — в закреплённой панели над навигацией', async () => {
+    mobile = true;
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([person({ id: 'a', circle: 1, name: 'Роман Ефимов', nextStep: 'write_known_contact' })]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    expect(view.container.querySelector('.co-head .actions')).toBeNull();
+    const dock = view.container.querySelector('.act-dock')!;
+    expect([...dock.children].map((node) => node.textContent)).toEqual(['Написать Роману', 'Хочу в компанию']);
+    expect(dock.querySelector('.is-primary')!.textContent).toBe('Написать Роману');
+    view.unmount();
+  });
+
+  it('B645: на 390 без знакомого в панели остаётся только «Хочу в компанию»', async () => {
+    mobile = true;
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    const dock = view.container.querySelector('.act-dock')!;
+    expect([...dock.children].map((node) => node.textContent)).toEqual(['Хочу в компанию']);
+    view.unmount();
+  });
+
+  it('на 1440 действия остаются в шапке, панели нет', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    expect(view.container.querySelector('.co-head .actions .co-want')).not.toBeNull();
+    expect(view.container.querySelector('.act-dock')).toBeNull();
     view.unmount();
   });
 
