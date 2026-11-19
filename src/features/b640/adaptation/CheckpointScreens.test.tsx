@@ -146,10 +146,15 @@ describe('d04 итоги 90 дней', () => {
     expect(page.textContent).toContain('Скопировано');
   });
 
-  it('без целей — одна строка пустого состояния, текстов нет', async () => {
+  it('без целей — строка пустого состояния и одно действие «Задать цели», без пустых заголовков текстов', async () => {
     checks.getResults90.mockResolvedValue({ workplaceId: 'w1', periodFrom: '2026-12-01', periodTo: '2027-02-28', items: [], resumeText: null, talkText: null });
     const page = await open(<ResultsScreen node={nodeByCode('d04')!} />);
     expect(page.textContent).toContain('Целей с замерами за 90 дней нет');
+    const action = [...page.querySelectorAll('a')].find((item) => item.textContent === 'Задать цели');
+    expect(action?.getAttribute('href')).toBe('/app/diary/goals');
+    expect(action?.className).toContain('is-primary');
     expect(page.textContent).not.toContain('Для резюме');
+    expect(page.textContent).not.toContain('Для разговора об итоговой оценке');
+    expect(page.textContent).toContain('Цели на год вперёд');
   });
 });
