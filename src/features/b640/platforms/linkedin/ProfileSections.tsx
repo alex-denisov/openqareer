@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type {
   LinkedinProfileView,
   LinkedinSection,
+  LinkedinSectionCurrent,
   LinkedinSectionView,
 } from '../../../../../shared/b640LinkedinProfile';
 import { PasteField } from './PasteField';
@@ -15,6 +16,36 @@ interface SectionCardProps {
   readonly onChange: (patch: Partial<LinkedinSectionView>) => void;
 }
 
+interface CurrentBlockProps {
+  readonly section: LinkedinSection;
+  readonly title: string;
+  readonly current: LinkedinSectionCurrent | null;
+  readonly onSaved: (current: LinkedinSectionCurrent) => void;
+}
+
+/** «Сейчас»: текст с источником и «Обновить», либо поле вставки, если текста ещё нет. */
+function CurrentBlock({ section, title, current, onSaved }: CurrentBlockProps) {
+  const [editing, setEditing] = useState(false);
+  if (!current || editing) {
+    const saved = (next: LinkedinSectionCurrent) => {
+      setEditing(false);
+      onSaved(next);
+    };
+    return <PasteField section={section} title={title} initial={current?.text} onSaved={saved} />;
+  }
+  return (
+    <>
+      <div className="li-cur-h">
+        <p className="li-rec-l">{currentCaption(current)}</p>
+        <button className="btn is-sm" type="button" aria-label={`Обновить: ${title}`} onClick={() => setEditing(true)}>
+          Обновить
+        </button>
+      </div>
+      <p className="li-cur">{current.text}</p>
+    </>
+  );
+}
+
 function SectionCard({ section, title, view, onChange }: SectionCardProps) {
   const titleId = `ls-${section}`;
   return (
@@ -23,14 +54,7 @@ function SectionCard({ section, title, view, onChange }: SectionCardProps) {
         {title}
       </h3>
       <div className="li-rec">
-        {view.current ? (
-          <>
-            <p className="li-rec-l">{currentCaption(view.current)}</p>
-            <p className="li-cur">{view.current.text}</p>
-          </>
-        ) : (
-          <PasteField section={section} title={title} onSaved={(current) => onChange({ current })} />
-        )}
+        <CurrentBlock section={section} title={title} current={view.current} onSaved={(current) => onChange({ current })} />
         {view.suggestion ? (
           <SectionOffer
             section={section}

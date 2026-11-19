@@ -154,6 +154,22 @@ describe('a03: разделы профиля LinkedIn', () => {
     expect(view.container.querySelector('.li-cur')).not.toBeNull();
     view.unmount();
   });
+  it('«Обновить» открывает поле с прежним текстом, сохранение возвращает «Сейчас»', async () => {
+    vi.mocked(api.saveSectionCurrent).mockResolvedValue({ text: 'Руковожу платформой', source: 'paste', capturedAt: '2026-11-20T10:00:00Z' } as never);
+    const view = await open();
+    click(button(view.container, 'Обновить: Заголовок'));
+    await flush();
+    const area = view.container.querySelector<HTMLTextAreaElement>('#li-paste-headline')!;
+    expect(area.value).toBe('Руковожу группой');
+    type(area, 'Руковожу платформой');
+    await flush();
+    click(button(view.container, 'Сохранить: Заголовок'));
+    await flush();
+    expect(api.saveSectionCurrent).toHaveBeenCalledWith('headline', 'Руковожу платформой');
+    expect(view.container.querySelector('#li-paste-headline')).toBeNull();
+    expect(view.container.querySelector('.li-cur')!.textContent).toBe('Руковожу платформой');
+    view.unmount();
+  });
   it('ошибка чтения — «Повторить»', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue(connected as never);
     vi.mocked(api.getLinkedinProfile).mockRejectedValue(new Error('x'));

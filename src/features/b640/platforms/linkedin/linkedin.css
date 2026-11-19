@@ -64,4 +64,6 @@
       margin-inline-start: auto;
     }
   }
+  /* «Сейчас · …» и «Обновить» в одну строку. */
+  .b640 .li-cur-h { display: flex; align-items: center; justify-content: space-between; gap: var(--career-space-3); }
 }

@@ -11,6 +11,8 @@ interface PasteFieldProps {
   readonly section: LinkedinSection;
   readonly title: string;
   readonly onSaved: (current: LinkedinSectionCurrent) => void;
+  /** Текст для «Обновить»: поле открывается с прежним «Сейчас». */
+  readonly initial?: string;
 }
 
 interface SaveState {
@@ -44,8 +46,8 @@ function useSave(
 }
 
 /** Поле «Вставьте текущий текст раздела»: ошибка сохранения остаётся под полем, текст не теряется. */
-export function PasteField({ section, title, onSaved }: PasteFieldProps) {
-  const [text, setText] = useState('');
+export function PasteField({ section, title, onSaved, initial = '' }: PasteFieldProps) {
+  const [text, setText] = useState(initial);
   const { busy, error, save } = useSave(section, onSaved);
   const fieldId = `li-paste-${section}`;
 
