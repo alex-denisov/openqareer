@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Icon, Link, useToast } from '../kit';
-import { buildNodePath } from '../routes';
+import { skillCheckPath } from './skillCheckModel';
 import { skillStripText } from './rolesModel';
 
 const STORAGE_KEY = 'openqareer.b640.career.skill-strip-hidden';
@@ -23,7 +23,7 @@ function writeHidden(hidden: boolean): void {
 }
 
 /** «Проверьте N навыков — точнее подбор»: ведёт в проверку навыков, крестик скрывает. */
-export function SkillStrip({ gap }: { readonly gap: number }) {
+export function SkillStrip({ gap, role }: { readonly gap: number; readonly role?: string }) {
   const [hidden, setHidden] = useState(readHidden);
   const toast = useToast();
   if (gap <= 0 || hidden) return null;
@@ -46,7 +46,7 @@ export function SkillStrip({ gap }: { readonly gap: number }) {
   return (
     <section className="gap-strip sk-strip" aria-label="Проверка навыков">
       <p>{skillStripText(gap)}</p>
-      <Link className="btn is-primary" to={buildNodePath('c04')}>
+      <Link className="btn is-primary" to={skillCheckPath(role)}>
         <Icon name="checkc" />
         Проверить
       </Link>
