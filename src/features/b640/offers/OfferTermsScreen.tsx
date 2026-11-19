@@ -1,4 +1,5 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent, type ReactNode } from 'react';
+import type { ParsedOfferLetter } from '../../../../shared/offerLetterParse';
 import { Button, Icon, Link, StatusLine } from '../kit';
 import { useAsync, type AsyncState } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
@@ -8,6 +9,7 @@ import { loadOffers, putOfferDecision, type OffersData } from './data/offersApi'
 import { OfferCalc } from './OfferCalc';
 import { WORKING_STATUS_PATH } from './OfferDecision';
 import { OfferFields } from './OfferFields';
+import { OfferLetterPaste } from './OfferLetterPaste';
 import { flashOfferSaved, NEW_OFFER_ID } from './OffersScreen';
 import {
   formFromCard,
@@ -16,6 +18,7 @@ import {
   type OfferForm,
   type OfferFormErrors,
 } from './model/offerForm';
+import { applyLetter, type OfferFormKey } from './model/offerLetterForm';
 import { formatDay, payText, type OfferCard } from './model/offerModel';
 import { useSaveOffer, type SaveState } from './useSaveOffer';
 
@@ -92,9 +95,39 @@ function SaveActions(props: { readonly state: SaveState; readonly onRetry: () =>
   );
 }
 
+function PasteLead(props: { readonly children?: ReactNode }) {
+  return (
+    <section className="lead col-wide of-paste" aria-labelledby="op-t">
+      <h2 className="lead-title is-long" id="op-t">
+        Условия оффера
+      </h2>
+      {props.children}
+    </section>
+  );
+}
+
+/** Состояние формы и пометки «из письма»: правка поля делает его словами кандидата. */
+function useOfferForm(card: OfferCard | null) {
+  const [form, setForm] = useState<OfferForm>(() => formFromCard(card));
+  const [fromLetter, setFromLetter] = useState<ReadonlySet<OfferFormKey> | null>(null);
+  function change(key: OfferFormKey, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+    setFromLetter((current) =>
+      current?.has(key) ? new Set([...current].filter((item) => item !== key)) : current,
+    );
+  }
+  function letter(parsed: ParsedOfferLetter): number {
+    const applied = applyLetter(form, parsed);
+    setForm(applied.form);
+    if (applied.fromLetter.size > 0) setFromLetter(applied.fromLetter);
+    return applied.fromLetter.size;
+  }
+  return { form, fromLetter, change, letter };
+}
+
 function TermsForm({ card }: { readonly card: OfferCard | null }) {
   const { navigate } = useShell();
-  const [form, setForm] = useState<OfferForm>(() => formFromCard(card));
+  const { form, fromLetter, change, letter } = useOfferForm(card);
   const [errors, setErrors] = useState<OfferFormErrors>({});
   const save = useSaveOffer(card, () => {
     flashOfferSaved();
@@ -108,6 +141,9 @@ function TermsForm({ card }: { readonly card: OfferCard | null }) {
   }
   return (
     <>
+      <PasteLead>
+        <OfferLetterPaste onParsed={letter} />
+      </PasteLead>
       <div className="col">
         <form className="mod of-form" aria-labelledby="of-ft" noValidate onSubmit={submit}>
           <h3 className="mod-title" id="of-ft">
@@ -117,7 +153,8 @@ function TermsForm({ card }: { readonly card: OfferCard | null }) {
             form={form}
             errors={errors}
             isNew={card === null}
-            onChange={(key, value) => setForm((current) => ({ ...current, [key]: value }))}
+            fromLetter={fromLetter}
+            onChange={change}
           />
           <SaveActions state={save.state} onRetry={() => submit()} />
         </form>
@@ -193,15 +230,13 @@ export function OfferTermsScreen({ offerId }: { readonly offerId: string }) {
       <StepTabs offerId={offerId} />
       <div className="page two" data-b640-node="o06a" data-b640-section="offers">
         {card ? <ContextHead card={card} /> : null}
-        <section className="lead col-wide of-paste" aria-labelledby="op-t">
-          <h2 className="lead-title is-long" id="op-t">
-            Условия оффера
-          </h2>
-        </section>
         {ready && (isNew || card) ? (
           <TermsForm key={card?.applicationId ?? NEW_OFFER_ID} card={card} />
         ) : (
-          <LoadLine state={state} onRetry={reload} />
+          <>
+            <PasteLead />
+            <LoadLine state={state} onRetry={reload} />
+          </>
         )}
       </div>
     </>
