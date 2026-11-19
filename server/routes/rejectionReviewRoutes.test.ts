@@ -50,7 +50,13 @@ async function setup() {
     ...noSessions,
     authenticate: (token: string) => sessions.get(token) ?? null,
   };
-  const app = await buildApp({ config, candidateStore, authService, coachProvider: {} as never, serveStatic: false });
+  const app = await buildApp({
+    config,
+    candidateStore,
+    authService,
+    coachProvider: {} as never,
+    serveStatic: false,
+  });
   cleanups.push(
     () => rmSync(directory, { recursive: true, force: true }),
     () => candidateStore.close(),
@@ -61,10 +67,22 @@ async function setup() {
       stage,
       vacancy: { title, company: 'Сбыт Онлайн', url: 'https://example.test/v', source: 'manual' },
     });
-  return { app, add, databasePath: config.databasePath };
+  const floor = (token: string, salaryFloor: number) =>
+    candidateStore.decisionProfileRepo.put(
+      sessions.get(token)!.candidate!.id,
+      { citizenship: [], languages: [], workFormats: [], salaryFloor, salaryCurrency: 'RUB' },
+      '2026-11-19T00:00:00.000Z',
+    );
+  return { app, add, floor, databasePath: config.databasePath };
 }
 
-function call(app: App, method: 'GET' | 'PUT' | 'PATCH', url: string, token?: string, payload?: unknown) {
+function call(
+  app: App,
+  method: 'GET' | 'PUT' | 'PATCH',
+  url: string,
+  token?: string,
+  payload?: unknown,
+) {
   return app.inject({
     method,
     url,
@@ -90,7 +108,11 @@ describe('rejection review routes without the B640 flag', () => {
     const routes: ReadonlyArray<['GET' | 'PUT', string, unknown?]> = [
       ['GET', REVIEW],
       ['PUT', `${REVIEW}/feedback`, { helped: true }],
-      ['PUT', `/api/v1/candidate/applications/${rejected.id}/rejection-reason`, { reason: 'level' }],
+      [
+        'PUT',
+        `/api/v1/candidate/applications/${rejected.id}/rejection-reason`,
+        { reason: 'level' },
+      ],
     ];
     for (const [method, url, payload] of routes) {
       for (const token of [plain, undefined]) {
@@ -113,10 +135,16 @@ describe('rejection review routes without the B640 flag', () => {
     const funnel = await call(app, 'GET', '/api/v1/candidate/applications/funnel', plain);
     expect(funnel.statusCode).toBe(200);
     expect(funnel.json().data.applied).toBe(1);
-    const patched = await call(app, 'PATCH', `/api/v1/candidate/applications/${application.id}`, plain, {
-      expectedVersion: application.version,
-      stage: 'rejected',
-    });
+    const patched = await call(
+      app,
+      'PATCH',
+      `/api/v1/candidate/applications/${application.id}`,
+      plain,
+      {
+        expectedVersion: application.version,
+        stage: 'rejected',
+      },
+    );
     expect(patched.statusCode).toBe(200);
     expect(patched.json().data.stage).toBe('rejected');
   });
@@ -132,7 +160,13 @@ describe('rejection review routes with the B640 flag', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toContain('no-store');
     const review = response.json().data;
-    expect(review).toMatchObject({ state: 'low_data', sentCount: 2, threshold: 20, rejectedCount: 1, helped: null });
+    expect(review).toMatchObject({
+      state: 'low_data',
+      sentCount: 2,
+      threshold: 20,
+      rejectedCount: 1,
+      helped: null,
+    });
     expect(review.rejections).toEqual([
       expect.objectContaining({
         applicationId: rejected.id,
@@ -145,11 +179,31 @@ describe('rejection review routes with the B640 flag', () => {
     expect(review.recommendations).toEqual([]);
   });
 
+  it('B645: low data carries the three checks; the money check needs a salary floor', async () => {
+    const { app, add, floor } = await setup();
+    add(flagged, 'saved', 'Черновик');
+    add(flagged, 'applied', 'Аналитик');
+    add(flagged, 'rejected', 'Руководитель группы');
+    const bare = (await call(app, 'GET', REVIEW, flagged)).json().data.checks;
+    expect(bare).toMatchObject({
+      unfinished: { count: 1, total: 2 },
+      late: { count: 0, total: 2 },
+      salaryBelow: null,
+    });
+    expect(typeof bare.since).toBe('string');
+    floor(flagged, 500_000);
+    const withFloor = (await call(app, 'GET', REVIEW, flagged)).json().data.checks;
+    expect(withFloor.salaryBelow).toEqual({ count: 0, total: 2, floor: 500_000, currency: 'RUB' });
+  });
+
   it('records the candidate reason, replaces it and returns it in the review', async () => {
     const { app, add } = await setup();
     const rejected = add(flagged, 'rejected', 'Руководитель группы');
     const url = `/api/v1/candidate/applications/${rejected.id}/rejection-reason`;
-    const first = await call(app, 'PUT', url, flagged, { reason: 'money', note: '  просили ниже вилки  ' });
+    const first = await call(app, 'PUT', url, flagged, {
+      reason: 'money',
+      note: '  просили ниже вилки  ',
+    });
     expect(first.statusCode).toBe(200);
     expect(first.json().data).toMatchObject({ reason: 'money', note: 'просили ниже вилки' });
     const second = await call(app, 'PUT', url, flagged, { reason: 'level' });
@@ -161,13 +215,21 @@ describe('rejection review routes with the B640 flag', () => {
   it('keeps the note sealed at rest', async () => {
     const { app, add, databasePath } = await setup();
     const rejected = add(flagged, 'rejected', 'Руководитель группы');
-    await call(app, 'PUT', `/api/v1/candidate/applications/${rejected.id}/rejection-reason`, flagged, {
-      reason: 'other',
-      note: 'секретная причина',
-    });
+    await call(
+      app,
+      'PUT',
+      `/api/v1/candidate/applications/${rejected.id}/rejection-reason`,
+      flagged,
+      {
+        reason: 'other',
+        note: 'секретная причина',
+      },
+    );
     const database = new DatabaseSync(databasePath);
     try {
-      const row = database.prepare('SELECT note_cipher FROM application_rejection_reasons').get() as {
+      const row = database
+        .prepare('SELECT note_cipher FROM application_rejection_reasons')
+        .get() as {
         note_cipher: string;
       };
       expect(row.note_cipher).toBeTruthy();
@@ -182,16 +244,29 @@ describe('rejection review routes with the B640 flag', () => {
     const rejected = add(flagged, 'rejected', 'Руководитель группы');
     const active = add(flagged, 'applied', 'Аналитик');
     const url = (id: string) => `/api/v1/candidate/applications/${id}/rejection-reason`;
-    expect((await call(app, 'PUT', url(rejected.id), flagged, { reason: 'bad' })).statusCode).toBe(400);
+    expect((await call(app, 'PUT', url(rejected.id), flagged, { reason: 'bad' })).statusCode).toBe(
+      400,
+    );
     expect(
-      (await call(app, 'PUT', url(rejected.id), flagged, { reason: 'other', note: 'x'.repeat(2001) })).statusCode,
+      (
+        await call(app, 'PUT', url(rejected.id), flagged, {
+          reason: 'other',
+          note: 'x'.repeat(2001),
+        })
+      ).statusCode,
     ).toBe(400);
     expect(
       (await call(app, 'PUT', url(rejected.id), flagged, { reason: 'other', extra: 1 })).statusCode,
     ).toBe(400);
-    expect((await call(app, 'PUT', url(active.id), flagged, { reason: 'level' })).statusCode).toBe(409);
-    expect((await call(app, 'PUT', url(rejected.id), other, { reason: 'level' })).statusCode).toBe(404);
-    expect((await call(app, 'PUT', url('no-such'), flagged, { reason: 'level' })).statusCode).toBe(404);
+    expect((await call(app, 'PUT', url(active.id), flagged, { reason: 'level' })).statusCode).toBe(
+      409,
+    );
+    expect((await call(app, 'PUT', url(rejected.id), other, { reason: 'level' })).statusCode).toBe(
+      404,
+    );
+    expect((await call(app, 'PUT', url('no-such'), flagged, { reason: 'level' })).statusCode).toBe(
+      404,
+    );
     expect(rowCount(databasePath, 'application_rejection_reasons')).toBe(0);
   });
 
@@ -211,9 +286,15 @@ describe('rejection review routes with the B640 flag', () => {
 
   it('stores «разбор помог» per candidate', async () => {
     const { app } = await setup();
-    expect((await call(app, 'PUT', `${REVIEW}/feedback`, flagged, { helped: 'yes' })).statusCode).toBe(400);
-    expect((await call(app, 'PUT', `${REVIEW}/feedback`, flagged, { helped: false })).statusCode).toBe(200);
-    expect((await call(app, 'PUT', `${REVIEW}/feedback`, flagged, { helped: true })).statusCode).toBe(200);
+    expect(
+      (await call(app, 'PUT', `${REVIEW}/feedback`, flagged, { helped: 'yes' })).statusCode,
+    ).toBe(400);
+    expect(
+      (await call(app, 'PUT', `${REVIEW}/feedback`, flagged, { helped: false })).statusCode,
+    ).toBe(200);
+    expect(
+      (await call(app, 'PUT', `${REVIEW}/feedback`, flagged, { helped: true })).statusCode,
+    ).toBe(200);
     expect((await call(app, 'GET', REVIEW, flagged)).json().data.helped).toBe(true);
     expect((await call(app, 'GET', REVIEW, other)).json().data.helped).toBeNull();
   });
