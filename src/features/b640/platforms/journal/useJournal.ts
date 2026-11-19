@@ -1,33 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
-import { listCandidateAutomationJournal, type AutomationJournalPage } from '../../../automation/automationApi';
-import { JOURNAL_PERIOD_DAYS } from './journalModel';
-
-const PAGE = 20;
+import type { LinkedinJournalPage } from '../../../../../shared/b640LinkedinJournal';
+import { getLinkedinJournal } from './journalApi';
 
 export type JournalState =
   | { readonly state: 'loading' }
   | { readonly state: 'error' }
-  | { readonly state: 'ready'; readonly page: AutomationJournalPage };
+  | { readonly state: 'ready'; readonly page: LinkedinJournalPage };
 
 export interface Journal {
   readonly data: JournalState;
   readonly retry: () => void;
-  /** Дочитывает следующие записи; сбой пробрасывается «Показать ещё». */
+  /** Дочитывает следующие события; сбой пробрасывается «Показать ещё». */
   readonly loadMore: () => Promise<void>;
 }
 
-function read(offset: number): Promise<AutomationJournalPage> {
-  return listCandidateAutomationJournal({ periodDays: JOURNAL_PERIOD_DAYS, limit: PAGE, offset });
-}
-
-/** Журнал действий автоотклика за 30 дней по 20 записей. */
+/** Журнал LinkedIn по 20 событий (B696). */
 export function useJournal(): Journal {
   const [data, setData] = useState<JournalState>({ state: 'loading' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
     setData({ state: 'loading' });
-    read(0).then(
+    getLinkedinJournal(0).then(
       (page) => live && setData({ state: 'ready', page }),
       () => live && setData({ state: 'error' }),
     );
@@ -38,8 +32,8 @@ export function useJournal(): Journal {
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
   const loadMore = useCallback(async () => {
     if (data.state !== 'ready') return;
-    const next = await read(data.page.entries.length);
-    setData({ state: 'ready', page: { ...next, entries: [...data.page.entries, ...next.entries] } });
+    const next = await getLinkedinJournal(data.page.events.length);
+    setData({ state: 'ready', page: { ...next, events: [...data.page.events, ...next.events] } });
   }, [data]);
   return { data, retry, loadMore };
 }
