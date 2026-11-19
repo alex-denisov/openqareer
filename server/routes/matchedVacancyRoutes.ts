@@ -26,7 +26,7 @@ import {
 import { rebuildBehindSealedList } from './matchedListWarm';
 import type { SealedMatchedList, SealedPage } from './sealedMatchedList';
 import type { StaleListServed } from './staleListCache';
-import { matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
+import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 import {
   filterMatchedVacancies,
   type MatchedVacancyFilters,
@@ -485,8 +485,8 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   if (!candidate) return undefined;
   const { filters, sort } = readSortedFilters(deps, candidate.id, request.query);
   const { offset } = filters;
-  const sourceRegistry = matchedVacancySourceRegistry(multiSourceEngine.getSources?.() ?? []);
-  const knownSourceIds = sourceRegistry.map(({ id }) => id);
+  // B725: 74 тыс. источников досок — реестр на минуту, а не на каждую страницу.
+  const { registry: sourceRegistry, knownSourceIds } = cachedMatchedSourceRegistry(multiSourceEngine);
   const beforeCampaignMs = elapsedMs(requestStartedAt);
   const candidateCampaignStartedAt = performance.now();
   const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
