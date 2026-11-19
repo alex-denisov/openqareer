@@ -37,87 +37,147 @@ const company = (
   recruiterSearchStatus: 'idle',
   sources: [{ name: 'hh.ru', observedAt: '2026-11-10T09:00:00.000Z' }],
   vacancies: [],
-  recruiters:
-    index === 3
-      ? [
-          {
-            id: 'r1',
-            companyKey: KEY,
-            vacancyId: 'cluster-0',
-            fullName: 'Алина Громова',
-            roleTitle: 'технический рекрутер',
-            email: null,
-            emailStatus: 'unverified',
-            phone: null,
-            telegram: null,
-            whatsapp: null,
-            linkedinUrl: null,
-            githubUrl: null,
-            twitterUrl: null,
-            source: 'vacancy',
-            sourceLabel: 'hh.ru',
-            sourceDate: '2026-11-11T09:00:00.000Z',
-            isHypothesis: false,
-          },
-        ]
-      : [],
+  recruiters: [],
+  relocation: index % 3 === 0 ? { sourceLabel: 'hh.ru', readAt: '2026-11-10' } : null,
 });
+
+const vacancy = (id: string, title: string, percent?: number) => ({
+  cluster: {
+    id,
+    canonicalTitle: title,
+    canonicalCompany: 'Ладога Банк',
+    canonicalLocation: 'Москва',
+    isRemote: false,
+    workFormat: 'hybrid',
+    salary: { from: 480000, to: 580000, currency: 'RUR' },
+    skills: [],
+    descriptionSummary: '',
+    primaryUrl: '',
+    sources: [],
+    firstObservedAt: '2026-11-11T09:00:00.000Z',
+    lastSeenAt: '2026-11-11T09:00:00.000Z',
+    status: 'active',
+    vacanciesCount: 1,
+  },
+  explanation: {
+    clusterId: id,
+    roleMatch: 'target',
+    matchingPoints: [],
+    missingPoints: [],
+    summary: '',
+    calculatedAt: '',
+    ...(percent
+      ? {
+          fitView: {
+            state: 'ready',
+            result: {
+              status: 'assessed',
+              dataState: 'known',
+              coveragePercent: percent,
+              coverage: { total: 5 },
+            },
+          },
+        }
+      : {}),
+  },
+});
+
+const PEOPLE = [
+  {
+    id: 'p1',
+    circle: 1,
+    name: 'Роман Ефимов',
+    roleTitle: 'руководитель группы платежей',
+    evidence: 'Общее место работы: «Сфера Платежи», 2018–2021',
+    nextStep: 'write_known_contact',
+    vacancyId: 'cluster-0',
+    platformMember: false,
+  },
+  {
+    id: 'p2',
+    circle: 2,
+    name: null,
+    roleTitle: null,
+    evidence: 'Знаком с участником платформы — тот согласен представлять кандидатов',
+    nextStep: 'ask_for_introduction',
+    vacancyId: 'cluster-0',
+    platformMember: true,
+  },
+  {
+    id: 'p3',
+    circle: 3,
+    name: 'Алина Громова',
+    roleTitle: 'технический рекрутер',
+    evidence: 'Холодный отклик по вакансии; ничего не отправлено.',
+    nextStep: 'cold_application',
+    vacancyId: 'cluster-0',
+    platformMember: false,
+  },
+];
 
 const COMPANIES = NAMES.map(company);
 const wants = new Set(COMPANIES.filter((item) => item.want).map((item) => item.key));
 
 async function mockCompanies(page: Page): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });
-  await page.route('**/api/v1/candidate/companies?*', (route) => {
+  await page.route('**/api/v1/candidate/b640/companies?*', (route) => {
     const url = new URL(route.request().url());
     const filter = url.searchParams.get('filter');
-    const items = COMPANIES.map((item) => ({ ...item, want: wants.has(item.key) })).filter(
-      (item) => filter !== 'want' || item.want,
-    );
+    const relocation = url.searchParams.get('relocation') === '1';
+    const city = url.searchParams.get('city');
+    const items = COMPANIES.map((item) => ({ ...item, want: wants.has(item.key) }))
+      .filter((item) => filter !== 'want' || item.want)
+      .filter((item) => !relocation || item.relocation)
+      .filter((item) => !city || item.location === city);
+    const narrowed = filter === 'want' || relocation || city;
     return route.fulfill({
       json: {
         data: {
           items,
-          total: filter === 'want' ? items.length : 132,
+          total: narrowed ? items.length : 132,
           offset: 0,
           limit: 20,
           sort: 'default',
           filter: filter ?? 'all',
-          filterCounts: { all: 132, want: wants.size, contacts: 5, recruiter: 4 },
+          filterCounts: { all: 132, want: wants.size, contacts: 5, recruiter: 4, relocation: 4 },
           linkedin: {
             status: 'connected',
             importedAt: '2026-11-10T09:00:00.000Z',
             contactsImported: true,
           },
           searchConsentGranted: false,
+          relocation,
+          city,
+          cities: [
+            { name: 'Москва', count: 8 },
+            { name: 'Санкт-Петербург', count: 2 },
+            { name: 'Тула', count: 0 },
+          ],
         },
       },
     });
   });
-  await page.route(`**/api/v1/candidate/companies/${KEY}?*`, (route) => {
-    const base = COMPANIES[3]!;
-    const vacancies = [
-      {
-        id: 'cluster-0',
-        title: 'Руководитель разработки',
-        location: 'Москва',
-        sourceName: 'hh.ru',
-        sourceDate: '2026-11-11T09:00:00.000Z',
-        href: '',
-      },
-    ];
-    return route.fulfill({
+  await page.route(`**/api/v1/candidate/b640/companies/${KEY}/people?*`, (route) =>
+    route.fulfill({ json: { data: { items: PEOPLE, total: 3, offset: 0, nextOffset: null } } }),
+  );
+  await page.route(`**/api/v1/candidate/b640/companies/${KEY}?*`, (route) =>
+    route.fulfill({
       json: {
         data: {
-          company: { ...base, want: wants.has(KEY), vacancies },
-          vacancies,
-          totalVacancies: 1,
-          vacancyOffset: 0,
-          nextOffset: null,
+          company: { ...COMPANIES[3]!, want: wants.has(KEY) },
+          roleVacancies: [vacancy('cluster-0', 'Руководитель разработки', 86)],
+          roleTotal: 1,
+          roleNextOffset: null,
+          otherVacancies: [
+            vacancy('cluster-8', 'Руководитель группы QA'),
+            vacancy('cluster-9', 'Аналитик данных'),
+          ],
+          otherTotal: 2,
+          applications: {},
         },
       },
-    });
-  });
+    }),
+  );
   await page.route(`**/api/v1/candidate/companies/*/want`, (route) => {
     const key = new URL(route.request().url()).pathname.split('/').at(-2)!;
     if (route.request().method() === 'DELETE') wants.delete(key);
@@ -140,7 +200,7 @@ async function openCompany(page: Page): Promise<void> {
   await expect(page.locator('#co-name')).toContainText('Ладога Банк');
 }
 
-test.describe('B655: «Компании и люди» нового кабинета', () => {
+test.describe('B655/B677: «Компании и люди» нового кабинета', () => {
   test.beforeEach(() => {
     wants.clear();
     for (const item of COMPANIES) if (item.want) wants.add(item.key);
@@ -153,6 +213,7 @@ test.describe('B655: «Компании и люди» нового кабине�
       'Хочу · 2',
       'Есть контакты в сети · 5',
       'Рекрутер известен · 4',
+      'Релокация · 4',
     ]);
     await expect(page.locator('.vl-foot')).toContainText('Показать ещё 20 · осталось 122');
   });
@@ -172,11 +233,31 @@ test.describe('B655: «Компании и люди» нового кабине�
     await page.locator('a.co-nm', { hasText: 'Ладога Банк' }).click();
     await expect(page.locator('[data-b640-node="v10b"]')).toBeVisible();
     await expect(page.locator('.co-vrow')).toHaveCount(1);
-    await expect(page.locator('.co-person')).toContainText('Алина Громова');
+    await expect(page.locator('.co-vrow .vt-fit')).toContainText('86');
+    await expect(page.locator('.more-n summary')).toHaveText('Другие вакансии компании · 2');
+    await expect(page.locator('.co-person .tag')).toHaveText(['круг 1', 'круг 2', 'круг 3']);
+    await expect(page.locator('.co-person').nth(1)).toContainText('Участник платформы');
     await page.getByRole('button', { name: 'Хочу в компанию: Ладога Банк' }).click();
     await expect(page.locator('.co-wantline')).toContainText('В списке «Хочу»');
     await page.locator('.co-wantline .row-act').click();
     await expect(page.locator('.co-wantline')).toHaveCount(0);
+  });
+
+  test('релокация в городе без компаний — v10g и путь к удалённой работе', async ({ page }) => {
+    await openList(page);
+    await page.getByRole('button', { name: 'Фильтры' }).click();
+    await page.getByRole('switch').check();
+    await page.getByLabel('Город').selectOption('Тула');
+    await page.getByRole('button', { name: 'Показать компании' }).click();
+    await expect(page.locator('.co-h')).toHaveText('Компании с релокацией');
+    await expect(page.locator('.vt-chip')).toHaveText(['Релокация', 'Тула']);
+    await expect(page.locator('.vl-empty')).toContainText(
+      'В этом городе компаний с релокацией не нашли',
+    );
+    await expect(page.getByRole('link', { name: 'Посмотреть удалённую работу' })).toBeVisible();
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Сбросить всё' }).click();
+    await expect(page.locator('tr.co-row')).toHaveCount(10);
   });
 
   test('гейты макетов на списке и карточке', async ({ page }) => {

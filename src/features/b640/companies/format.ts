@@ -1,3 +1,4 @@
+import type { ApplicationStage } from '../../../../shared/applicationStage';
 import { pluralRu } from '../vacancies/format';
 
 export { pluralRu };
@@ -44,4 +45,19 @@ export function companyAbout(input: {
   const latest = input.sources.map((source) => source.observedAt).sort().at(-1);
   if (names.length) lines.push(`Источник: ${names.join(' и ')}${latest ? `, ${shortDate(latest)}` : ''}`);
   return lines.join(' · ');
+}
+
+const STAGE_LABELS: Readonly<Record<ApplicationStage, string>> = {
+  saved: 'Сохранена',
+  applied: 'Отклик отправлен',
+  responded: 'Ответили',
+  interview: 'Интервью',
+  offer: 'Оффер',
+  rejected: 'Отказ',
+  archived: 'В архиве',
+};
+
+/** Статус отклика в строке вакансии компании; без отклика и для «сохранена» — кнопка «Откликнуться». */
+export function applicationTag(stage: ApplicationStage | undefined): string | null {
+  return stage && stage !== 'saved' ? STAGE_LABELS[stage] : null;
 }

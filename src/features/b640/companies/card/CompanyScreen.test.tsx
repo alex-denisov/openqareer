@@ -1,63 +1,104 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CandidateCompanyDetails, CandidateCompanyRecruiter } from '../../../../../shared/candidateCompany';
+import type { B640CompanyItem, B640CompanyPerson } from '../../../../../shared/b640Companies';
 import { CoachApiError } from '../../../coach/apiClient';
+import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { click, mount } from '../../kit/testDom';
+import type { CompanyCard } from '../companiesApi';
 import { CompanyScreen } from './CompanyScreen';
 
 vi.mock('../../shell/ShellContext', () => ({
   useShell: () => ({ navigate: () => undefined }),
   useScreenChrome: () => undefined,
 }));
+vi.mock('../companiesApi', () => ({ getB640Company: vi.fn(), getB640CompanyPeople: vi.fn() }));
 vi.mock('../../../vacancies/candidateCompaniesApi', () => ({
-  getCandidateCompanyDetails: vi.fn(),
   setCandidateCompanyWant: vi.fn(async () => undefined),
   removeCandidateCompanyWant: vi.fn(async () => undefined),
 }));
 
-const api = await import('../../../vacancies/candidateCompaniesApi');
+const api = { ...(await import('../companiesApi')), ...(await import('../../../vacancies/candidateCompaniesApi')) };
 const KEY = 'c'.repeat(24);
 
-const recruiter = (id: string, fullName: string): CandidateCompanyRecruiter => ({
-  id, companyKey: KEY, vacancyId: 'cl-1', fullName, roleTitle: 'технический рекрутер', email: null, emailStatus: 'unverified',
-  phone: null, telegram: null, whatsapp: null, linkedinUrl: null, githubUrl: null, twitterUrl: null, source: 'vacancy',
-  sourceLabel: 'hh.ru', sourceDate: '2026-11-11T09:00:00.000Z', isHypothesis: false,
+function vacancy(id: string, title: string, percent?: number): MatchedVacancyItem {
+  return {
+    cluster: {
+      id, canonicalTitle: title, canonicalCompany: 'Ладога Банк', canonicalLocation: 'Москва', isRemote: false, workFormat: 'hybrid',
+      salary: { from: 480000, to: 580000, currency: 'RUR' }, skills: [], descriptionSummary: '', primaryUrl: '', sources: [],
+      firstObservedAt: '2026-11-11T09:00:00.000Z', lastSeenAt: '2026-11-11T09:00:00.000Z', status: 'active', vacanciesCount: 1,
+    },
+    explanation: {
+      clusterId: id, roleMatch: 'target', levelMatch: undefined, matchingPoints: [], missingPoints: [], summary: '', calculatedAt: '',
+      ...(percent ? { fitView: { state: 'ready', result: { status: 'assessed', dataState: 'known', coveragePercent: percent, coverage: { total: 5 } } } } : {}),
+    },
+  } as unknown as MatchedVacancyItem;
+}
+
+const person = (patch: Partial<B640CompanyPerson>): B640CompanyPerson => ({
+  id: 'p', circle: 3, name: 'Алина Громова', roleTitle: 'технический рекрутер', evidence: 'рекрутер вакансии на hh.ru, 11.11',
+  nextStep: 'cold_application', vacancyId: 'cl-1', platformMember: false, ...patch,
 });
 
-function details(patch: Partial<CandidateCompanyDetails['company']> = {}, total = 1): CandidateCompanyDetails {
-  const vacancies = [{ id: 'cl-1', title: 'Руководитель разработки', location: 'Москва', sourceName: 'hh.ru', sourceDate: '2026-11-11T09:00:00.000Z', href: '' }];
+function card(patch: Partial<B640CompanyItem> = {}, roles = [vacancy('cl-1', 'Руководитель разработки', 86)]): CompanyCard {
+  const company = {
+    key: KEY, name: 'Ладога Банк', location: 'Москва', industry: 'Банки', vacancyCount: 1, contactsCount: null, contactsImportedAt: null,
+    want: false, nextStep: null, hasRecruiter: true, recruiterSearchStatus: 'ready', sources: [{ name: 'hh.ru', observedAt: '2026-11-10T09:00:00.000Z' }],
+    vacancies: [], recruiters: [], relocation: null, ...patch,
+  } as B640CompanyItem;
   return {
-    company: {
-      key: KEY, name: 'Ладога Банк', location: 'Москва', industry: 'Банки', vacancyCount: 1, contactsCount: null, contactsImportedAt: null,
-      want: false, nextStep: null, hasRecruiter: true, recruiterSearchStatus: 'ready', sources: [{ name: 'hh.ru', observedAt: '2026-11-10T09:00:00.000Z' }],
-      vacancies, recruiters: [recruiter('r1', 'Алина Громова'), recruiter('r2', 'Алина Громова')], ...patch,
-    },
-    vacancies, totalVacancies: total, vacancyOffset: 0, nextOffset: null,
+    company, roleVacancies: roles, roleTotal: roles.length, roleNextOffset: null,
+    otherVacancies: [vacancy('cl-9', 'Аналитик данных')], otherTotal: 1, applications: {},
   };
 }
 
 const flush = () => act(async () => { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); });
 afterEach(() => vi.clearAllMocks());
 
+function people(items: B640CompanyPerson[]) {
+  vi.mocked(api.getB640CompanyPeople).mockResolvedValue({ items, total: items.length, offset: 0, nextOffset: null });
+}
+
 describe('v10b: карточка компании', () => {
-  it('шапка, вакансии со ссылками на карточку и отклик, человек один раз', async () => {
-    vi.mocked(api.getCandidateCompanyDetails).mockResolvedValue(details());
+  it('шапка, вакансия с процентом и деньгами, другие вакансии, люди по кругам', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([
+      person({ id: 'a', circle: 1, name: 'Роман Ефимов', nextStep: 'write_known_contact' }),
+      person({ id: 'b', circle: 2, name: null, roleTitle: null, platformMember: true, nextStep: 'ask_for_introduction' }),
+      person({ id: 'c' }),
+    ]);
     const view = mount(<CompanyScreen companyId={KEY} />);
     await flush();
     expect(view.container.querySelector('#co-name')!.textContent).toContain('Ладога Банк');
     expect(view.container.querySelector('.lead-text')!.textContent).toBe('Москва · Банки');
-    expect(view.container.querySelector('.tip-bubble')!.textContent).toBe('Отрасль: Банки · Город: Москва · Источник: hh.ru, 10.11');
     const row = view.container.querySelector('.co-vrow')!;
     expect(row.querySelector('a.row-title')!.getAttribute('href')).toBe('/app/vacancies/cl-1');
-    expect(row.querySelector('.row-sub')!.textContent).toBe('Москва · hh.ru · 11.11');
-    expect(view.container.querySelectorAll('.co-person')).toHaveLength(1);
-    expect(view.container.querySelector('.co-src')!.textContent).toBe('рекрутер вакансии на hh.ru, 11.11');
+    expect(row.querySelector('.row-sub')!.textContent).toMatch(/480.*580.*гибрид · 11\.11/u);
+    expect(row.querySelector('.vt-fit')!.textContent).toContain('86');
+    expect(view.container.querySelector('.more-n summary')!.textContent).toBe('Другие вакансии компании · 1');
+    const rows = [...view.container.querySelectorAll('.co-person')];
+    expect(rows.map((item) => item.querySelector('.tag')!.textContent)).toEqual(['круг 1', 'круг 2', 'круг 3']);
+    expect(rows[0]!.querySelector('.btn')!.textContent).toBe('Написать знакомому');
+    expect(rows[1]!.querySelector('.row-title')!.textContent).toBe('Участник платформы');
+    expect(rows[1]!.querySelector('.btn')!.textContent).toBe('Попросить представить');
+    expect(rows[2]!.querySelector('.btn')!.textContent).toBe('Холодный отклик');
+    view.unmount();
+  });
+
+  it('статус отклика вместо кнопки «Откликнуться»', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue({ ...card(), applications: { 'cl-1': 'interview' } });
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    expect(view.container.querySelector('.co-vrow .tag')!.textContent).toBe('Интервью');
+    expect(view.container.querySelector('.co-vrow .btn')).toBeNull();
+    expect(view.container.textContent).toContain('Знакомых в компании не нашли');
     view.unmount();
   });
 
   it('«Хочу в компанию» → строка «В списке «Хочу»» с «Отменить»', async () => {
-    vi.mocked(api.getCandidateCompanyDetails).mockResolvedValue(details());
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([]);
     const view = mount(<CompanyScreen companyId={KEY} />);
     await flush();
     click(view.container.querySelector('.co-want'));
@@ -71,21 +112,19 @@ describe('v10b: карточка компании', () => {
     view.unmount();
   });
 
-  it('компании нет в подборке или ключ чужой — путь назад к списку', async () => {
-    vi.mocked(api.getCandidateCompanyDetails).mockRejectedValue(new CoachApiError('нет', 'company_not_in_selection', false));
-    const view = mount(<CompanyScreen companyId={KEY} />);
+  it('ключ названия из карточки вакансии идёт на сервер; вне подборки — путь назад', async () => {
+    vi.mocked(api.getB640Company).mockRejectedValue(new CoachApiError('нет', 'company_not_in_selection', false));
+    const view = mount(<CompanyScreen companyId="ladogabank" />);
     await flush();
+    expect(api.getB640Company).toHaveBeenCalledWith('ladogabank');
+    expect(view.container.textContent).toContain('Этой компании нет в вашей подборке');
     expect(view.container.querySelector('.vl-empty a')!.getAttribute('href')).toBe('/app/vacancies/companies');
     view.unmount();
-    const other = mount(<CompanyScreen companyId="ladogabank" />);
-    await flush();
-    expect(api.getCandidateCompanyDetails).toHaveBeenCalledTimes(1);
-    expect(other.container.textContent).toContain('Этой компании нет в вашей подборке');
-    other.unmount();
   });
 
   it('ошибка чтения — «Повторить»', async () => {
-    vi.mocked(api.getCandidateCompanyDetails).mockRejectedValueOnce(new Error('net')).mockResolvedValue(details({}, 0));
+    vi.mocked(api.getB640Company).mockRejectedValueOnce(new Error('net')).mockResolvedValue(card({}, []));
+    people([]);
     const view = mount(<CompanyScreen companyId={KEY} />);
     await flush();
     click([...view.container.querySelectorAll('button')].find((button) => button.textContent === 'Повторить')!);

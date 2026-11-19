@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CandidateCompanyOpportunity, CandidateCompanyPage } from '../../../../../shared/candidateCompany';
+import type { B640CompanyItem, B640CompanyPage } from '../../../../../shared/b640Companies';
+type CandidateCompanyOpportunity = B640CompanyItem;
 import { click, mount } from '../../kit/testDom';
 import { CompanyListScreen } from './CompanyListScreen';
 
@@ -9,27 +10,28 @@ vi.mock('../../shell/ShellContext', () => ({
   useShell: () => ({ navigate: () => undefined }),
   useScreenChrome: () => undefined,
 }));
+vi.mock('../companiesApi', () => ({ getB640CompanyPage: vi.fn() }));
 vi.mock('../../../vacancies/candidateCompaniesApi', () => ({
-  getCandidateCompanyPage: vi.fn(),
   setCandidateCompanyWant: vi.fn(async () => undefined),
   removeCandidateCompanyWant: vi.fn(async () => undefined),
 }));
 
-const api = await import('../../../vacancies/candidateCompaniesApi');
+const api = { ...(await import('../../../vacancies/candidateCompaniesApi')), getCandidateCompanyPage: (await import('../companiesApi')).getB640CompanyPage };
 
 function company(key: string, name: string, patch: Partial<CandidateCompanyOpportunity> = {}): CandidateCompanyOpportunity {
   return {
     key, name, location: 'Москва', industry: 'Банки', vacancyCount: 2, contactsCount: 0, contactsImportedAt: null,
     want: false, nextStep: null, hasRecruiter: false, recruiterSearchStatus: 'idle', sources: [], vacancies: [], recruiters: [],
-    ...patch,
+    relocation: null, ...patch,
   };
 }
 
-function page(items: CandidateCompanyOpportunity[], total = items.length): CandidateCompanyPage {
+function page(items: CandidateCompanyOpportunity[], total = items.length, relocation = 0): B640CompanyPage {
   return {
     items, total, offset: 0, limit: 20, sort: 'default', filter: 'all',
-    filterCounts: { all: total, want: 1, contacts: null, recruiter: 4 },
+    filterCounts: { all: total, want: 1, contacts: null, recruiter: 4, relocation },
     linkedin: { status: 'disconnected', importedAt: null, contactsImported: false }, searchConsentGranted: false,
+    relocation: false, city: null, cities: [{ name: 'Тула', count: 3 }],
   };
 }
 
@@ -102,6 +104,26 @@ describe('v10: компании подборки', () => {
     click([...view.container.querySelectorAll('button')].find((button) => button.textContent === 'Повторить')!);
     await flush();
     expect(view.container.textContent).toContain('В подборке пока нет компаний');
+    view.unmount();
+  });
+
+  it('релокация: чип с числом, снимаемый чип и пустое состояние v10g', async () => {
+    vi.mocked(api.getCandidateCompanyPage)
+      .mockResolvedValueOnce(page([company('a'.repeat(24), 'Ладога Банк')], 1, 9))
+      .mockResolvedValue(page([], 0, 9));
+    const view = mount(<CompanyListScreen />);
+    await flush();
+    const chip = [...view.container.querySelectorAll('.chip')].find((button) => button.textContent?.startsWith('Релокация'))!;
+    expect(chip.textContent).toBe('Релокация · 9');
+    click(chip);
+    await flush();
+    expect(api.getCandidateCompanyPage).toHaveBeenLastCalledWith(expect.objectContaining({ relocation: true, city: null }));
+    expect(view.container.querySelector('.co-h')!.textContent).toBe('Компании с релокацией');
+    expect(view.container.querySelector('.vt-chip')!.textContent).toBe('Релокация');
+    expect(view.container.querySelector('.vl-empty a')!.textContent).toBe('Посмотреть удалённую работу');
+    click(view.container.querySelector('.vt-reset'));
+    await flush();
+    expect(api.getCandidateCompanyPage).toHaveBeenLastCalledWith(expect.objectContaining({ relocation: false }));
     view.unmount();
   });
 });

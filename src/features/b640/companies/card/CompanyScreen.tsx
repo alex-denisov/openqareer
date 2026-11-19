@@ -8,6 +8,7 @@ import { useCompanyWant, type CompanyWant } from '../useCompanyWant';
 import { CompanyPeople } from './CompanyPeople';
 import { CompanyVacancies } from './CompanyVacancies';
 import { useCompany, type CompanyCard } from './useCompany';
+import { usePeople } from './usePeople';
 
 function Notice({ card }: { readonly card: CompanyCard }) {
   if (card.load === 'loading') return <StatusLine state="wait" text="Загружаем компанию…" />;
@@ -64,9 +65,10 @@ function Head({ card, want }: { readonly card: LoadedCard; readonly want: Compan
   );
 }
 
-function Loaded({ card }: { readonly card: LoadedCard }) {
-  const { company, totalVacancies } = card.details;
+function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly companyId: string }) {
+  const { company } = card.details;
   const want = useCompanyWant(card.markWant);
+  const people = usePeople(companyId, true);
   return (
     <>
       {company.want ? (
@@ -79,12 +81,15 @@ function Loaded({ card }: { readonly card: LoadedCard }) {
         <Head card={card} want={want} />
         <CompanyVacancies
           vacancies={card.vacancies}
-          total={totalVacancies}
+          total={card.details.roleTotal}
+          others={card.details.otherVacancies}
+          othersTotal={card.details.otherTotal}
+          applications={card.details.applications}
           moreBusy={card.moreBusy}
           moreFailed={card.moreFailed}
           onMore={() => void card.loadMore()}
         />
-        <CompanyPeople recruiters={company.recruiters} />
+        <CompanyPeople state={people} />
       </div>
     </>
   );
@@ -98,7 +103,7 @@ export function CompanyScreen({ companyId }: { readonly companyId: string }) {
   return (
     <div className="page" data-b640-node="v10b" data-b640-section="vacancies">
       {card.load === 'ready' && card.details ? (
-        <Loaded card={{ ...card, details: card.details }} />
+        <Loaded card={{ ...card, details: card.details }} companyId={companyId} />
       ) : (
         <Notice card={card} />
       )}

@@ -1,10 +1,12 @@
 import type { CandidateCompanyFilter, CandidateCompanySort } from '../../../../../shared/candidateCompany';
-import { Button, StatusLine } from '../../kit';
+import { Button, Icon, Link, StatusLine } from '../../kit';
+import { buildNodePath } from '../../routes';
 import { companiesTitle, formatCount } from '../format';
 import { RetryLine } from '../RetryLine';
 import { useCompanyWant } from '../useCompanyWant';
 import { CompanyRow } from './CompanyRow';
 import { filterChips, SORT_OPTIONS } from './listModel';
+import { FiltersButton, PlaceChips } from './PlaceFilters';
 import { useCompanyList, type CompanyList } from './useCompanyList';
 
 const PAGE = 20;
@@ -38,6 +40,7 @@ function Tools({ list }: { readonly list: CompanyList }) {
           ))}
         </select>
       </div>
+      <FiltersButton place={list.query} cities={list.cities} onChange={list.setPlace} />
     </div>
   );
 }
@@ -59,6 +62,17 @@ function Chips({ list }: { readonly list: CompanyList }) {
           {chip.label} · <span className="num">{formatCount(chip.count)}</span>
         </button>
       ))}
+      {list.counts && list.counts.relocation > 0 ? (
+        <button
+          className="chip"
+          type="button"
+          aria-pressed={list.query.relocation}
+          onClick={() => list.setPlace({ relocation: !list.query.relocation, city: list.query.city })}
+        >
+          <Icon name="plane" />
+          Релокация · <span className="num">{formatCount(list.counts.relocation)}</span>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -114,13 +128,29 @@ function CompanyTable({ list }: { readonly list: CompanyList }) {
   );
 }
 
+/** v10g: с релокацией никого — ведём к удалённой работе. */
+function RelocationEmpty({ city }: { readonly city: string | null }) {
+  return (
+    <div className="vl-empty" role="status">
+      <p className="vl-empty-t">
+        {city ? 'В этом городе компаний с релокацией не нашли' : 'Компаний с релокацией в подборке не нашли'}
+      </p>
+      <Link className="btn is-primary" to={buildNodePath('s07', {})}>
+        <Icon name="desktop" />
+        Посмотреть удалённую работу
+      </Link>
+    </div>
+  );
+}
+
 function Body({ list }: { readonly list: CompanyList }) {
   if (list.load === 'loading' && !list.items.length) {
     return <StatusLine state="wait" text="Загружаем компании…" />;
   }
   if (list.load === 'error') return <RetryLine text="Не удалось загрузить компании" onRetry={list.retry} />;
+  if (!list.items.length && list.query.relocation) return <RelocationEmpty city={list.query.city} />;
   if (!list.items.length) {
-    const narrowed = list.query.search || list.query.filter !== 'all';
+    const narrowed = list.query.search || list.query.filter !== 'all' || list.query.city;
     return (
       <div className="vl-empty" role="status">
         <p className="vl-empty-t">{narrowed ? 'Таких компаний в подборке нет' : 'В подборке пока нет компаний'}</p>
@@ -138,7 +168,9 @@ export function CompanyListScreen() {
     <div className="page" data-b640-node="v10" data-b640-section="vacancies">
       <section className="col col-wide co-list" aria-labelledby="co-title">
         <h2 className="co-h" id="co-title">
-          {all === undefined ? (
+          {list.query.relocation ? (
+            'Компании с релокацией'
+          ) : all === undefined ? (
             'Компании в подборке'
           ) : (
             <>
@@ -148,6 +180,7 @@ export function CompanyListScreen() {
         </h2>
         <Tools list={list} />
         <Chips list={list} />
+        <PlaceChips place={list.query} onChange={list.setPlace} />
         <Body list={list} />
       </section>
     </div>

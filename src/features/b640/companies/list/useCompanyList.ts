@@ -7,13 +7,9 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from 'react';
-import type {
-  CandidateCompanyFilter,
-  CandidateCompanyOpportunity,
-  CandidateCompanyPage,
-  CandidateCompanySort,
-} from '../../../../../shared/candidateCompany';
-import { getCandidateCompanyPage } from '../../../vacancies/candidateCompaniesApi';
+import type { B640CompanyCity, B640CompanyItem, B640CompanyPage } from '../../../../../shared/b640Companies';
+import type { CandidateCompanyFilter, CandidateCompanySort } from '../../../../../shared/candidateCompany';
+import { getB640CompanyPage } from '../companiesApi';
 import { appendPage, withWant, withWantCount } from './listModel';
 
 const SEARCH_DELAY_MS = 300;
@@ -24,31 +20,39 @@ export interface CompanyListQuery {
   readonly search: string;
   readonly sort: CandidateCompanySort;
   readonly filter: CandidateCompanyFilter;
+  readonly relocation: boolean;
+  readonly city: string | null;
 }
+
+export type CompanyCounts = B640CompanyPage['filterCounts'];
 
 export interface CompanyList {
   readonly load: ListLoad;
-  readonly items: readonly CandidateCompanyOpportunity[];
+  readonly items: readonly B640CompanyItem[];
   readonly total: number;
-  readonly counts: CandidateCompanyPage['filterCounts'] | undefined;
+  readonly counts: CompanyCounts | undefined;
+  readonly cities: readonly B640CompanyCity[];
   readonly query: CompanyListQuery;
   readonly moreBusy: boolean;
   readonly moreFailed: boolean;
   readonly setSearch: (search: string) => void;
   readonly setSort: (sort: CandidateCompanySort) => void;
   readonly setFilter: (filter: CandidateCompanyFilter) => void;
+  readonly setPlace: (place: Pick<CompanyListQuery, 'relocation' | 'city'>) => void;
   readonly retry: () => void;
   readonly loadMore: () => Promise<void>;
   readonly markWant: (key: string, want: boolean) => void;
 }
 
 interface Loaded {
-  readonly items: readonly CandidateCompanyOpportunity[];
+  readonly items: readonly B640CompanyItem[];
   readonly total: number;
-  readonly counts: CandidateCompanyPage['filterCounts'] | undefined;
+  readonly counts: CompanyCounts | undefined;
+  readonly cities: readonly B640CompanyCity[];
 }
 
-const EMPTY: Loaded = { items: [], total: 0, counts: undefined };
+const EMPTY: Loaded = { items: [], total: 0, counts: undefined, cities: [] };
+const START: CompanyListQuery = { search: '', sort: 'default', filter: 'all', relocation: false, city: null };
 
 /** Запрос, который уходит на сервер: поиск — с задержкой ввода, остальное — сразу. */
 function useAskedQuery(query: CompanyListQuery): CompanyListQuery {
@@ -77,10 +81,10 @@ function useFirstPage(asked: CompanyListQuery): FirstPage {
   useEffect(() => {
     const current = ++generation.current;
     setLoad('loading');
-    getCandidateCompanyPage({ offset: 0, ...asked })
+    getB640CompanyPage({ offset: 0, ...asked })
       .then((page) => {
         if (current !== generation.current) return;
-        setLoaded({ items: page.items, total: page.total, counts: page.filterCounts });
+        setLoaded({ items: page.items, total: page.total, counts: page.filterCounts, cities: page.cities });
         setLoad('ready');
       })
       .catch(() => {
@@ -92,7 +96,7 @@ function useFirstPage(asked: CompanyListQuery): FirstPage {
 
 /** Компании подборки порциями по 20: поиск, сортировка и быстрый фильтр читаются сервером. */
 export function useCompanyList(): CompanyList {
-  const [query, setQuery] = useState<CompanyListQuery>({ search: '', sort: 'default', filter: 'all' });
+  const [query, setQuery] = useState<CompanyListQuery>(START);
   const asked = useAskedQuery(query);
   const first = useFirstPage(asked);
   const { loaded, setLoaded, generation } = first;
@@ -104,7 +108,7 @@ export function useCompanyList(): CompanyList {
     setMoreBusy(true);
     setMoreFailed(false);
     try {
-      const page = await getCandidateCompanyPage({ offset: loaded.items.length, ...asked });
+      const page = await getB640CompanyPage({ offset: loaded.items.length, ...asked });
       if (current !== generation.current) return;
       setLoaded((before) => ({ ...before, items: appendPage(before.items, page.items), total: page.total }));
     } catch {
@@ -124,12 +128,14 @@ export function useCompanyList(): CompanyList {
     items: loaded.items,
     total: loaded.total,
     counts: loaded.counts,
+    cities: loaded.cities,
     query,
     moreBusy,
     moreFailed,
     setSearch: (search) => setQuery((before) => ({ ...before, search })),
     setSort: (sort) => setQuery((before) => ({ ...before, sort })),
     setFilter: (filter) => setQuery((before) => ({ ...before, filter })),
+    setPlace: (place) => setQuery((before) => ({ ...before, ...place })),
     retry: first.retry,
     loadMore,
     markWant,
