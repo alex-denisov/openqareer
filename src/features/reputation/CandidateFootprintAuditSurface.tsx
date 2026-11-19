@@ -53,6 +53,7 @@ const ADAPTER_LABELS: Readonly<Record<FootprintAdapterId, string>> = {
   hibp: 'Утечки почты',
   wayback: 'Старые версии страниц',
   exa: 'Упоминания в открытом вебе',
+  youtube: 'Канал YouTube',
 };
 
 export interface CandidateFootprintAuditSurfaceProps {

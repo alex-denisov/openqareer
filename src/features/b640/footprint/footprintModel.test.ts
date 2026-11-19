@@ -97,3 +97,14 @@ describe('находки', () => {
     expect(mailtoHref(item)).toMatch(/^mailto:\?subject=%D0/u);
   });
 });
+
+describe('B668: ссылка YouTube в «Данных для поиска»', () => {
+  it('архив и канал по одной ссылке — одна строка, выбор запускает оба', () => {
+    const preview = 'Проверить архив публичной страницы https://www.youtube.com/@ada';
+    const groups = planGroups([
+      { id: 'w', kind: 'profile_url', preview, selectedByDefault: true, available: true },
+      { id: 'y', kind: 'profile_url', preview, selectedByDefault: true, available: true },
+    ]);
+    expect(groups).toEqual([{ key: `profile_url\0${preview}`, kind: 'profile_url', label: preview, ids: ['w', 'y'] }]);
+  });
+});
