@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
-import { moneyLines } from './moneyLines';
+import { moneyLines, targetMoneyCurrency } from './moneyLines';
 
 function item(salary: unknown, marketSalary?: unknown): MatchedVacancyItem {
   return { cluster: { salary }, explanation: { marketSalary } } as unknown as MatchedVacancyItem;
 }
 
 const rates = { date: '2026-11-10', rubPerUnit: { USD: 91, EUR: 99 } } as unknown as CurrencyRates;
+
+describe('B593: валюта показа сумм', () => {
+  it('выбор в «Приложении» важнее валюты условий; без выбора — условия, иначе рубли', () => {
+    expect(targetMoneyCurrency('USD', 'EUR')).toBe('USD');
+    expect(targetMoneyCurrency(null, 'eur')).toBe('EUR');
+    expect(targetMoneyCurrency('AED', 'USD')).toBe('AED');
+    expect(targetMoneyCurrency(null, 'GBP')).toBe('RUB');
+    expect(targetMoneyCurrency(null, undefined)).toBe('RUB');
+  });
+});
 
 describe('moneyLines', () => {
   it('рубли в вакансии: крупно сумма, подпись «в вакансии», пересчёта нет', () => {
