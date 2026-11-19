@@ -1,9 +1,7 @@
 import type { AccountSnapshot } from '../../coach/cabinetTypes';
 import type { CandidateConnection } from '../../coach/coachApi';
-import type {
-  NotificationChannelPreference,
-  NotificationPreferenceKey,
-} from '../../account/notificationPreferencesApi';
+import type { NotificationChannelPreference } from '../../account/notificationPreferencesApi';
+import type { B640PreferenceKey } from './invitationPreferenceApi';
 
 export type AccountSession = AccountSnapshot['sessions'][number];
 
@@ -87,12 +85,13 @@ export function deviceName(session: AccountSession): string {
 }
 
 export interface NotificationRow {
-  readonly key: NotificationPreferenceKey;
+  readonly key: B640PreferenceKey;
   readonly label: string;
 }
 
 /** События, которые умеет присылать сервер, в порядке макета N2. */
 export const NOTIFICATION_ROWS: readonly NotificationRow[] = [
+  { key: 'ev-invitation', label: 'Приглашения' },
   { key: 'ev-reply', label: 'Ответы' },
   { key: 'ev-reminder', label: 'Напоминания' },
   { key: 'ev-approval', label: 'Письмо на одобрение' },
