@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useToast } from '../../kit';
+import { useShell } from '../../shell/ShellContext';
+import { ownPanelRequested } from './ownPanelLink';
 import { useOwnVacancies, type OwnVacancies } from './useOwnVacancies';
 
 /** Свои вакансии и панель «Своя вакансия» на экране подборки (B676). */
@@ -13,7 +15,8 @@ export interface OwnSection extends OwnVacancies {
 export function useOwnSection(): OwnSection {
   const own = useOwnVacancies();
   const toast = useToast();
-  const [panelOpen, setPanelOpen] = useState(false);
+  const { search } = useShell();
+  const [panelOpen, setPanelOpen] = useState(() => ownPanelRequested(search));
   const { resetStatus, remove } = own;
   const closePanel = useCallback(() => {
     setPanelOpen(false);

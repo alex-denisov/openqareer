@@ -113,6 +113,29 @@ describe('B640 offer routes: responses summary', () => {
     expect(data.autoApplicationIds).toEqual([a.id]);
   });
 
+  it('lists drafts whose letter is approved, only for own live applications', async () => {
+    const { send, application, candidates, candidateIds } = await setup();
+    const approve = (user: 'flagged.test' | 'other.test', applicationId: string) =>
+      candidates.saveDocumentAndLinkApplicationMaterial(candidateIds[user], applicationId, 'cover_letter', {
+        kind: 'cover_letter',
+        source: 'generated',
+        fileName: `approved-letter-${randomUUID()}.json`,
+        mimeType: 'application/json',
+        contentBase64: Buffer.from(
+          JSON.stringify({ vacancyId: 'v1', applicationId, approvedAt: '2026-11-19T08:00:00Z', body: 'Текст' }),
+          'utf8',
+        ).toString('base64'),
+        extractedText: 'Текст',
+        parseStatus: 'not_applicable',
+      });
+    const approved = application('flagged.test', 'saved');
+    application('flagged.test', 'saved');
+    approve('flagged.test', approved.id);
+    approve('other.test', application('other.test', 'saved').id);
+    const data = (await send('GET', `${BASE}/responses/summary`, 'flagged.test')).json().data;
+    expect(data.approvedLetterIds).toEqual([approved.id]);
+  });
+
   it('a response taken off the auto queue counts as manual', async () => {
     const { send, application, queueAuto } = await setup();
     const a = application('flagged.test', 'applied');

@@ -64,15 +64,7 @@ export function latestLetterApproval(
   vacancyId: string,
 ): StoredLetterApproval | null {
   const { candidateStore } = deps;
-  const approvals = candidateStore
-    .getSnapshot(candidateId)
-    .documents.filter(
-      (document) =>
-        document.kind === 'cover_letter' && document.fileName.startsWith(APPROVED_LETTER_PREFIX),
-    )
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .slice(0, MAX_APPROVALS_SCANNED);
-  for (const document of approvals) {
+  for (const document of recentApprovalDocuments(deps, candidateId)) {
     const snapshot = readSnapshot(deps, candidateId, document);
     if (!snapshot || snapshot.vacancyId !== vacancyId) continue;
     if (!candidateStore.getApplication(candidateId, snapshot.applicationId)) continue;
@@ -89,6 +81,31 @@ export function latestLetterApproval(
     };
   }
   return null;
+}
+
+function recentApprovalDocuments(deps: RouteDeps, candidateId: string): StoredCandidateDocument[] {
+  return deps.candidateStore
+    .getSnapshot(candidateId)
+    .documents.filter(
+      (document) =>
+        document.kind === 'cover_letter' && document.fileName.startsWith(APPROVED_LETTER_PREFIX),
+    )
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, MAX_APPROVALS_SCANNED);
+}
+
+/**
+ * Отклики кандидата с одобренным письмом (B645): список «Откликов» показывает у черновика
+ * то же, что экран письма. Удалённые заявки не попадают. Ничего не пишет.
+ */
+export function approvedLetterApplicationIds(deps: RouteDeps, candidateId: string): string[] {
+  const ids = new Set<string>();
+  for (const document of recentApprovalDocuments(deps, candidateId)) {
+    const snapshot = readSnapshot(deps, candidateId, document);
+    if (!snapshot || ids.has(snapshot.applicationId)) continue;
+    if (deps.candidateStore.getApplication(candidateId, snapshot.applicationId)) ids.add(snapshot.applicationId);
+  }
+  return [...ids];
 }
 
 /** `GET /api/v1/candidate/vacancies/:id/letter-approvals/latest`. */

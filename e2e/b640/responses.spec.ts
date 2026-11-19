@@ -132,10 +132,29 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page, { only: ['modal_fit'] });
   });
 
-  test('без согласий на автоотклики строки нет, список работает', async ({ page }) => {
-    await open(page, '/app/responses', 'o01', { automation: false });
+  test('без согласий строка есть: включение открывает лист с согласием (B645)', async ({ page }) => {
+    const mock = await open(page, '/app/responses', 'o01', { automation: false });
     await expect(page.locator('tr.ot-row')).toHaveCount(7);
-    await expect(page.getByRole('group', { name: 'Автоотклики' })).toHaveCount(0);
+    const bar = page.getByRole('group', { name: 'Автоотклики' });
+    await expect(bar.getByRole('switch', { name: 'Автоотклики' })).not.toBeChecked();
+    await bar.getByRole('switch', { name: 'Автоотклики' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Настроить автоотклики' });
+    await sheet.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(sheet.getByText('Отметьте согласие, чтобы включить автоотклики.')).toBeVisible();
+    expect(mock.calls.some((call) => call.includes('/enable'))).toBe(false);
+    await sheet.getByRole('checkbox', { name: /Разрешаю готовить отклики/u }).check();
+    await sheet.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(sheet).toBeHidden();
+    await expect(bar.getByRole('switch', { name: 'Автоотклики' })).toBeChecked();
+  });
+
+  test('«Откликнулся сам — добавить» ведёт к своей вакансии (B645)', async ({ page }) => {
+    await open(page, '/app/responses', 'o01');
+    await expect(page.getByRole('link', { name: 'Откликнулся сам — добавить' })).toHaveAttribute(
+      'href',
+      '/app/vacancies?own=1',
+    );
+    await expect(page.getByRole('button', { name: 'Авто', exact: true })).toBeVisible();
   });
 
   test('откликов нет: одна строка и путь к вакансиям', async ({ page }) => {

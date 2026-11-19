@@ -27,6 +27,7 @@ function company(overrides: Partial<CandidateCompanyOpportunity>): CandidateComp
 }
 
 const DRAFT: AutomationDraft = {
+  consent: false,
   roles: ['Руководитель разработки'],
   platforms: ['hh', 'linkedin'],
   dayLimit: '30',
@@ -99,6 +100,8 @@ describe('B656: настройки автооткликов', () => {
     expect(validateAutomationDraft({ ...DRAFT, dayLimit: '51' }, true)).toMatch(/Лимит/u);
     expect(validateAutomationDraft({ ...DRAFT, dayLimit: '1' }, true)).toMatch(/Лимит/u);
     expect(validateAutomationDraft({ ...DRAFT, pauseUntil: '2000-01-01' }, true)).toMatch(/паузы/u);
+    expect(validateAutomationDraft(DRAFT, true, true)).toMatch(/согласие/u);
+    expect(validateAutomationDraft({ ...DRAFT, consent: true }, true, true)).toBeNull();
   });
 });
 

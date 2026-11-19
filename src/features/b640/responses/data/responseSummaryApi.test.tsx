@@ -10,13 +10,13 @@ vi.mock('../../../coach/apiClient', async (original) => ({
   readDataObject: api.readDataObject,
 }));
 
-import { useAutoApplicationIds } from './responseSummaryApi';
+import { useResponseMarks, type ResponseMarks } from './responseSummaryApi';
 
 let root: Root | null = null;
-let seen: ReadonlySet<string> | null = null;
+let seen: ResponseMarks | null = null;
 
 function Probe() {
-  seen = useAutoApplicationIds();
+  seen = useResponseMarks();
   return null;
 }
 
@@ -36,15 +36,21 @@ afterEach(() => {
 describe('B680: автоотклики для списка и воронки', () => {
   it('берёт id автооткликов из сводки сервера', async () => {
     api.apiFetch.mockResolvedValue(new Response('{}'));
-    api.readDataObject.mockResolvedValue({ counts: {}, autoApplicationIds: ['a1', 'a2'] });
+    api.readDataObject.mockResolvedValue({
+      counts: {},
+      autoApplicationIds: ['a1', 'a2'],
+      approvedLetterIds: ['d1'],
+    });
     await mount();
     expect(api.apiFetch).toHaveBeenCalledWith('/api/v1/candidate/b640/responses/summary', expect.anything());
-    expect([...seen!]).toEqual(['a1', 'a2']);
+    expect([...seen!.auto]).toEqual(['a1', 'a2']);
+    expect([...seen!.approvedLetters]).toEqual(['d1']);
   });
 
   it('без сводки список не ломается: автооткликов просто нет', async () => {
     api.apiFetch.mockRejectedValue(new Error('404'));
     await mount();
-    expect(seen!.size).toBe(0);
+    expect(seen!.auto.size).toBe(0);
+    expect(seen!.approvedLetters.size).toBe(0);
   });
 });

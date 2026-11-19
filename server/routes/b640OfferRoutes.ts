@@ -12,6 +12,7 @@ import type { StoredApplicationOffer } from '../data/sqliteApplicationOfferRepos
 import { ApplicationNotFoundError } from '../data/store/errors';
 import { buildOfferView, summarizeResponses } from '../domain/b640Offers';
 import { sessionCandidate } from './b640VacancyContext';
+import { approvedLetterApplicationIds } from './letterApprovalRead';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -82,7 +83,10 @@ const getSummary: Handler = async (ctx, request, reply) => {
   const candidateId = candidateOf(ctx, request, reply);
   if (!candidateId) return reply;
   const applications = ctx.deps.candidateStore.listApplications(candidateId);
-  const data = summarizeResponses(applications, ctx.choices.autoApplicationIds(candidateId));
+  const data = {
+    ...summarizeResponses(applications, ctx.choices.autoApplicationIds(candidateId)),
+    approvedLetterIds: approvedLetterApplicationIds(ctx.deps, candidateId),
+  };
   reply.header('Cache-Control', 'no-store');
   return { data, meta: { requestId: request.id } };
 };
