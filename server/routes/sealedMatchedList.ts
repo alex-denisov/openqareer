@@ -13,7 +13,7 @@ export const SEALED_MATCHED_LIST_PAGES = 5;
 export const SEALED_MATCHED_LIST_MAX_BYTES = 512_000;
 
 /** Raise when the shape of a row or the order of a list changes: an older row is then not served. */
-export const SEALED_MATCHED_LIST_VERSION = 2;
+export const SEALED_MATCHED_LIST_VERSION = 1;
 
 export interface SealedPage {
   readonly offset: number;
@@ -28,7 +28,11 @@ export interface SealedMatchedList {
   readonly pageOffsets: readonly number[];
   readonly pages: readonly SealedPage[];
   readonly facets: MatchedList['facets'];
-  /** B729 (version 2): moments the rows appeared, for the «Дата» counts in the candidate's zone. */
+  /**
+   * B729: moments the rows appeared, for the «Дата» counts in the candidate's zone. Optional, so
+   * the version stays: a list sealed before it answers without them, and the rebuild behind that
+   * answer seals one with them (no cold first read after the deploy, PRB-055).
+   */
   readonly filteredObserved?: readonly number[];
   readonly campaignWithHypotheses: MatchedList['campaignWithHypotheses'];
 }

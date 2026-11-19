@@ -326,6 +326,20 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect(sealed.facets?.filtered).toEqual(built.facets?.filtered);
   });
 
+  it('a list sealed before B729 still answers, only without the «Дата» counts', async () => {
+    const { read, candidateStore, candidate } = await sealedApp();
+    await read('offset=0&tz=Europe/Moscow');
+    const stored = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    const { filteredObserved: _observed, ...old } = JSON.parse(stored.text);
+    const { filtered: _filtered, ...oldFacets } = old.facets;
+    candidateStore.sealedMatchedLists.write(candidate.id, stored.builtAt + 1, JSON.stringify({ ...old, facets: oldFacets }));
+    forgetMatchedListsForTests();
+    const sealed = await read('offset=0&tz=Europe/Moscow');
+    expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
+    expect(sealed.total).toBe(40);
+    expect(sealed.facets?.filtered).toBeUndefined();
+  });
+
   it('an older build does not replace a newer one', async () => {
     const { candidateStore, candidate } = await sealedApp();
     candidateStore.sealedMatchedLists.write(candidate.id, 2_000, 'newer');
