@@ -1,3 +1,4 @@
+import { pluralRu } from '../../../../shared/pluralRu';
 import type { ReactNode } from 'react';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import type { B640Node } from '../routes';
@@ -14,8 +15,13 @@ const COLUMNS = 3;
 const TIP =
   'Вилка и число вакансий — по вакансиям на hh.ru и сайтах компаний за 30 дней; вилка — по вакансиям с указанной зарплатой.';
 
+const vacancyCount = (row: RoleRow): string =>
+  row.vacancies === null
+    ? 'вакансий не найдено'
+    : pluralRu(row.vacancies, ['вакансия', 'вакансии', 'вакансий']);
+
 function market(row: RoleRow): string {
-  const count = row.vacancies === null ? 'вакансий не найдено' : `${row.vacancies} вакансий`;
+  const count = vacancyCount(row);
   return row.wage ? `${row.wage} · ${count}` : count;
 }
 
@@ -67,7 +73,7 @@ function DeskTable({ rows, picked, onToggle }: PickProps) {
           <>
             {row.wage ?? 'нет данных о зарплатах'}
             <span className="sub">
-              {row.vacancies === null ? 'вакансий не найдено' : `${row.vacancies} вакансий`}
+              {vacancyCount(row)}
             </span>
           </>
         ))}

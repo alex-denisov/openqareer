@@ -10,6 +10,24 @@
       );
     }
   }
+  /* S9: столбцы таблицы ролей — ширины макета на 1080 px (294 / 209 / 198 / 149 / 229),
+     иначе таблица растягивает столбцы по данным (B645). */
+  .b640 .c9-table {
+    table-layout: fixed;
+  }
+  .b640 .c9-table thead th:nth-child(1) { inline-size: 27.2%; }
+  .b640 .c9-table thead th:nth-child(2) { inline-size: 19.4%; }
+  .b640 .c9-table thead th:nth-child(3) { inline-size: 18.3%; }
+  .b640 .c9-table thead th:nth-child(4) { inline-size: 13.8%; }
+  .b640 .c9-table thead th:nth-child(5) { inline-size: 21.3%; }
+  @media (max-width: 767px) {
+    /* S9 390: «652 вакансии · по подборке за 30 дней» переносится внутри полосы, а не уходит
+       под «Изменить» (B645). */
+    .b640 .role-strip-n {
+      flex: 0 1 auto;
+      max-inline-size: 100%;
+    }
+  }
   /* S9c: подвал окна «Роли поиска» переносит длинную главную кнопку (в макете `pf-df rs-foot`). */
   .b640 .rs-dlg .pf-df {
     flex-wrap: wrap;
