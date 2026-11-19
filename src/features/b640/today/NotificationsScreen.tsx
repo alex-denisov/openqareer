@@ -1,29 +1,25 @@
 import { useMemo } from 'react';
-import type { CandidateNotification } from '../../notifications/notificationsApi';
-import { useNotifications } from '../../notifications/useNotifications';
 import { Button, Icon, Link, StatusLine } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome } from '../shell/ShellContext';
-import {
-  groupNotifications,
-  notificationAction,
-  notificationWhen,
-  unreadHeading,
-} from './notificationsModel';
+import type { B640Notification } from './b640NotificationsApi';
+import { FEED_FILTERS, feedAction, feedSubtitle } from './feedModel';
+import { groupNotifications, unreadHeading } from './notificationsModel';
 import { BlockError, BlockSkeleton } from './parts';
+import { LOAD_ERROR, useFeed, type Feed } from './useFeed';
 
 const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 interface RowProps {
-  readonly item: CandidateNotification;
+  readonly item: B640Notification;
   readonly now: Date;
   /** Первое новое событие: его кнопка залита. */
   readonly next: boolean;
-  readonly onOpen: (item: CandidateNotification) => void;
+  readonly onOpen: (item: B640Notification) => void;
 }
 
 function NotificationRow({ item, now, next, onOpen }: RowProps) {
-  const action = notificationAction(item);
+  const action = feedAction(item);
   const unread = item.readAt === null;
   const className = ['notif', 'ev-row2', unread && 'unread', next && 'is-next']
     .filter(Boolean)
@@ -34,7 +30,7 @@ function NotificationRow({ item, now, next, onOpen }: RowProps) {
         {unread ? <span className="vh">Новое. </span> : null}
         {item.title}
       </span>
-      <span className="notif-s">{notificationWhen(item.createdAt, now, TIME_ZONE)}</span>
+      <span className="notif-s">{feedSubtitle(item, now, TIME_ZONE)}</span>
       <Link
         className={next ? 'btn is-sm is-primary' : 'btn is-sm'}
         to={action.path}
@@ -46,73 +42,107 @@ function NotificationRow({ item, now, next, onOpen }: RowProps) {
   );
 }
 
-type Feed = ReturnType<typeof useNotifications>;
+/** Важные непрочитанные события сверху: одно действие у каждого. */
+function Pinned({ feed }: { readonly feed: Feed }) {
+  if (feed.status !== 'ready' || feed.pinned.length === 0) return null;
+  return (
+    <ul className="np-crit" aria-label="Важно: нужно ваше действие">
+      {feed.pinned.map((item, index) => {
+        const action = feedAction(item);
+        return (
+          <li className="np-crit-i is-one" key={item.id}>
+            {index === 0 ? <span className="np-crit-l">Важно</span> : null}
+            <span className="np-crit-t">{[item.title, item.role].filter(Boolean).join(' · ')}</span>
+            <Link className="btn is-sm" to={action.path} onClick={() => void feed.markRead(item)}>
+              {action.label}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Filters({ feed }: { readonly feed: Feed }) {
+  return (
+    <div className="chips" role="group" aria-label="Показать">
+      {FEED_FILTERS.map((filter) => (
+        <button
+          className="chip"
+          type="button"
+          key={filter.value}
+          aria-pressed={feed.filter === filter.value}
+          onClick={() => feed.setFilter(filter.value)}
+        >
+          {filter.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function MoreNotifications({ feed }: { readonly feed: Feed }) {
+  if (!feed.nextCursor) return null;
+  return (
+    <div className="actions">
+      <Button
+        variant="quiet"
+        icon="down"
+        busy={feed.loadingMore}
+        onClick={() => void feed.loadMore()}
+      >
+        Показать ещё 20
+      </Button>
+    </div>
+  );
+}
+
+function Group(props: {
+  readonly title: string;
+  readonly items: readonly B640Notification[];
+  readonly now: Date;
+  readonly nextId: string | null;
+  readonly onOpen: (item: B640Notification) => void;
+}) {
+  if (props.items.length === 0) return null;
   return (
     <>
-      {feed.nextCursor ? (
-        <div className="actions">
-          <Button
-            variant="quiet"
-            icon="down"
-            busy={feed.loadingMore}
-            onClick={() => void feed.loadMore()}
-          >
-            Показать ещё 20
-          </Button>
-        </div>
-      ) : null}
-      {feed.moreError ? (
-        <BlockError text={feed.moreError} onRetry={() => void feed.loadMore()} />
-      ) : null}
+      <h3 className="np-group">{props.title}</h3>
+      <ul>
+        {props.items.map((item) => (
+          <NotificationRow
+            key={item.id}
+            item={item}
+            now={props.now}
+            next={item.id === props.nextId}
+            onOpen={props.onOpen}
+          />
+        ))}
+      </ul>
     </>
   );
 }
 
 function NotificationsFeed({ feed, now }: { readonly feed: Feed; readonly now: Date }) {
+  if (feed.status === 'loading') return <BlockSkeleton label="Загружаем уведомления" rows={4} />;
+  if (feed.status === 'error') return <BlockError text={LOAD_ERROR} onRetry={feed.retry} />;
   const groups = groupNotifications(feed.items, now, TIME_ZONE);
   const nextId = feed.items.find((item) => item.readAt === null)?.id ?? null;
-  const open = (item: CandidateNotification) => void feed.markRead(item);
-
-  const group = (title: string, items: readonly CandidateNotification[]) =>
-    items.length === 0 ? null : (
-      <>
-        <h3 className="np-group">{title}</h3>
-        <ul>
-          {items.map((item) => (
-            <NotificationRow
-              key={item.id}
-              item={item}
-              now={now}
-              next={item.id === nextId}
-              onOpen={open}
-            />
-          ))}
-        </ul>
-      </>
-    );
-
+  const open = (item: B640Notification) => void feed.markRead(item);
+  const empty = feed.items.length === 0 && feed.pinned.length === 0;
   return (
     <>
-      {feed.actionError ? <StatusLine state="err" text={feed.actionError} /> : null}
-      {feed.status === 'loading' ? <BlockSkeleton label="Загружаем уведомления" rows={4} /> : null}
-      {feed.status === 'error' ? (
-        <BlockError text={feed.error ?? 'Не удалось загрузить уведомления.'} onRetry={feed.retry} />
-      ) : null}
-      {feed.status === 'ready' && feed.items.length === 0 ? (
-        <p className="np-empty-t">Новых уведомлений нет</p>
-      ) : null}
-      {feed.status === 'ready' ? group('Сегодня', groups.today) : null}
-      {feed.status === 'ready' ? group('Раньше', groups.earlier) : null}
-      {feed.status === 'ready' ? <MoreNotifications feed={feed} /> : null}
+      {empty ? <p className="np-empty-t">Новых уведомлений нет</p> : null}
+      <Group title="Сегодня" items={groups.today} now={now} nextId={nextId} onOpen={open} />
+      <Group title="Раньше" items={groups.earlier} now={now} nextId={nextId} onOpen={open} />
+      <MoreNotifications feed={feed} />
     </>
   );
 }
 
-/** n01b «Все уведомления»: события по дням, действие у каждого, по 20 на порцию. */
+/** n01b «Все уведомления»: важное сверху, фильтр по категории, события по дням. */
 export function NotificationsScreen({ node }: { readonly node: B640Node }) {
-  const feed = useNotifications();
+  const feed = useFeed();
   useScreenChrome({ bellCount: feed.unreadCount });
   const now = useMemo(() => new Date(), []);
   return (
@@ -137,6 +167,9 @@ export function NotificationsScreen({ node }: { readonly node: B640Node }) {
               <Icon name="settings" />
             </Link>
           </div>
+          {feed.actionError ? <StatusLine state="err" text={feed.actionError} /> : null}
+          <Pinned feed={feed} />
+          <Filters feed={feed} />
           <NotificationsFeed feed={feed} now={now} />
         </section>
       </div>

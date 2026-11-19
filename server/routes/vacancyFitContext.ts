@@ -14,7 +14,7 @@ import type { VacancyRequirement } from '../domain/vacancyRequirements';
 
 const gate = (status: VacancyFitGate['status'], reason: string): VacancyFitGate => ({ status, reason });
 
-export function readVacancyFitTarget(deps: RouteDeps, vacancyId: string) {
+export function readVacancyFitTarget(deps: Pick<RouteDeps, 'multiSourceEngine'>, vacancyId: string) {
   const sourceId = vacancyId.replace(/^cluster-/u, '');
   const cluster = deps.multiSourceEngine.getActiveCluster?.(vacancyId);
   const vacancy = deps.multiSourceEngine.getVacancy?.(sourceId);

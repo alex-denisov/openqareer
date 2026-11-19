@@ -114,8 +114,8 @@ export function responseNextStep(input: FaceInput): ResponseNextStep {
   if (input.whoseTurn === null) return { text: 'Закрыт, шагов нет', yours: false };
   const due = formatDayMonth(input.followUp?.dueAt ?? input.followUpDueAt);
   if (input.stage === 'saved') {
-    const hasLetter = input.materials.coverLetter || input.materials.resume;
-    const action = hasLetter ? 'Одобрить письмо' : 'Собрать письмо';
+    // B723: письмо привязано к отклику только одобрением — дальше отправка, как на «Сегодня».
+    const action = input.materials.coverLetter ? 'Отправить отклик' : 'Собрать письмо';
     return { text: due ? `${action} до ${due}` : action, yours: true };
   }
   if (needsResend(input)) return { text: 'Повторить отклик', yours: true };

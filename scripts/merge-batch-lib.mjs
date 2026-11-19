@@ -171,3 +171,38 @@ export function deferStacked(candidates, isAncestor) {
   }
   return { take, deferred };
 }
+
+export const BOT_LOGIN = 'github-actions[bot]';
+export const STUCK_AFTER_MIN = 60;
+
+/** The batcher's own merge of main into a PR head (pushMainInto / update-branch). */
+export function isOwnMainMerge(commit) {
+  return (
+    commit?.author === BOT_LOGIN &&
+    (commit.parents ?? []).length === 2 &&
+    /^Merge (branch 'main'|remote-tracking branch 'origin\/main'|[0-9a-f]{7,40}) into /.test(
+      commit.message ?? '',
+    )
+  );
+}
+
+/**
+ * A bot merge head gets no light run of its own (the pull_request run waits
+ * for approval as action_required). It may borrow the green light run of its
+ * first parent, the PR's own head: the merge is clean by construction and the
+ * batch's full run checks the merged tree anyway.
+ */
+export function inheritParentChecks(pr, commit, parentChecks) {
+  if (rejectReason(pr) === null || !isOwnMainMerge(commit)) return pr;
+  const borrowed = { ...pr, statusCheckRollup: parentChecks };
+  return rejectReason(borrowed) === null ? { ...borrowed, inheritedFrom: commit.parents[0] } : pr;
+}
+
+/** A merge-ready PR skipped this long gets one comment per head, so no PR waits silently. */
+export function shouldNoticeStuck({ reason, ageMin, alreadyNoticed }) {
+  if (!reason || alreadyNoticed) return false;
+  if (reason === 'no merge-ready label' || reason === 'already in a batch') return false;
+  return ageMin >= STUCK_AFTER_MIN;
+}
+
+export const stuckMarker = (sha) => `<!-- merge-batch-skip:${sha} -->`;

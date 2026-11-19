@@ -21,8 +21,11 @@ const api = vi.hoisted(() => ({
   createGoalCard: vi.fn(),
   patchGoal: vi.fn(),
   patchGoalDetails: vi.fn(),
+  getOverview: vi.fn(),
 }));
 vi.mock('./diaryApi', () => api);
+const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
+vi.mock('../../resume/resumeApi', () => resume);
 const toast = vi.hoisted(() => ({ show: vi.fn(), hide: vi.fn() }));
 vi.mock('../kit/Toast', () => ({ useToast: () => toast }));
 
@@ -130,6 +133,8 @@ const button = (root: ParentNode, text: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+  resume.getResumeStudio.mockResolvedValue({ projection: { master: null } });
   api.listGoalCards.mockResolvedValue({ items: [hiring], archived: [archived] });
   api.listEntries.mockResolvedValue({ items: [], nextCursor: null, summaries: [] });
   api.listMeasurements.mockResolvedValue({ items: [], nextCursor: null });
@@ -169,6 +174,37 @@ describe('d02 «Цели и показатели»', () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     expect(page.querySelector('.gc-title')).not.toBeNull();
     expect(page.querySelector('.ghost')).not.toBeNull();
+  });
+
+  it('целей нет — роль из места работы в вопросе, примеры без релизов', async () => {
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+    api.getOverview.mockResolvedValue({
+      primaryWorkplace: { id: 'w1', company: 'Вектор Банк', title: 'Операционный директор' },
+    });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe(
+      'Какие цели в роли «Операционный директор» в первом квартале?',
+    );
+    expect(page.querySelector('.ghost')?.textContent).not.toMatch(/релиз/iu);
+    expect(resume.getResumeStudio).not.toHaveBeenCalled();
+  });
+
+  it('целей и места работы нет — роль из профиля', async () => {
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    resume.getResumeStudio.mockResolvedValue({ projection: { master: { targetRole: 'COO' } } });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe(
+      'Какие цели в роли «COO» в первом квартале?',
+    );
+  });
+
+  it('роли нигде нет — общий вопрос', async () => {
+    api.listGoalCards.mockResolvedValue({ items: [], archived: [] });
+    api.getOverview.mockRejectedValue(new Error('down'));
+    resume.getResumeStudio.mockRejectedValue(new Error('down'));
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe('Какие у вас цели на этот квартал?');
   });
 });
 
