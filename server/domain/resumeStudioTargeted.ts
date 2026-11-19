@@ -138,16 +138,16 @@ function normalizeRequirements(
   });
 }
 
+/**
+ * Matching places go first; every place keeps its bullets (B713). Requirements are matched word for word,
+ * so a Russian vacancy against an English profile matched nothing and the version listed bare titles.
+ * Length is fitted later by trimming bullets that match nothing (`estimateResumePages`).
+ */
 function targetedExperience(
   experience: readonly ResumeExperience[],
   requirements: readonly { normalized: string }[],
 ): ResumeExperience[] {
-  return rankEntries(experience, experienceFactTexts, requirements)
-    .map(({ entry, matchedRequirementIndexes }) =>
-      requirements.length === 0 || matchedRequirementIndexes.length > 0
-        ? entry
-        : { ...entry, bullets: [] },
-    );
+  return rankEntries(experience, experienceFactTexts, requirements).map(({ entry }) => entry);
 }
 
 function targetedProjects(

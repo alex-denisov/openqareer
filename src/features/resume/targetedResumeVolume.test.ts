@@ -71,30 +71,32 @@ function sliceOf(experience: readonly ResumeExperience[]) {
 }
 
 describe('estimateResumePages', () => {
-  it('trims irrelevant experience oldest first, then irrelevant bullets, to at most two pages', () => {
-    const longIrrelevantBullets = Array.from(
-      { length: 100 },
-      () => 'Поддерживала внутренние процессы и готовила отчёты для команды.',
+  it('never drops a place: trims irrelevant bullets oldest place first and keeps a minimum per place (B713)', () => {
+    const irrelevant = (prefix: string) => Array.from(
+      { length: 40 },
+      (_, index) => `${prefix}: поддерживала внутренние процессы и готовила отчёты для команды ${index}.`,
     );
     const target = sliceOf([
-      role('newer', '2018', 'Менеджер процессов', []),
+      role('newer', '2018', 'Менеджер процессов', irrelevant('newer')),
       role('relevant', '2023', 'Инженер платформы', [
         'Поддерживала Kubernetes в производственных сервисах.',
-        ...longIrrelevantBullets,
+        ...irrelevant('relevant'),
       ]),
-      role('oldest', '2010', 'Менеджер по продажам', []),
+      role('oldest', '2010', 'Менеджер по продажам', irrelevant('oldest')),
     ]);
 
     const result = estimateResumePages(target);
 
     expect(result.pages).toBeLessThanOrEqual(2);
-    expect(result.trimmed.slice(0, 2).map((item) => item.id)).toEqual([
-      'experience:oldest',
-      'experience:newer',
-    ]);
-    expect(result.trimmed.some((item) => item.kind === 'bullet')).toBe(true);
+    expect(result.trimmed.every((item) => item.kind === 'bullet')).toBe(true);
+    expect(result.trimmed[0]?.id).toMatch(/^bullet:oldest:/u);
     expect(result.trimmed.every((item) => item.reason.length > 0)).toBe(true);
-    expect(result.document.experience.map((item) => item.id)).toEqual(['relevant']);
+    expect(result.document.experience.map((item) => item.id).sort()).toEqual(['newer', 'oldest', 'relevant']);
+    for (const place of result.document.experience) {
+      expect(place.bullets.length).toBeGreaterThanOrEqual(2);
+    }
+    expect(result.document.experience.find((item) => item.id === 'relevant')?.bullets[0]?.value)
+      .toBe('Поддерживала Kubernetes в производственных сервисах.');
   });
 
   it('leaves a short targeted resume unchanged', () => {
