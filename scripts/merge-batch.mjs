@@ -23,6 +23,7 @@ import {
   FULL_VERIFY,
   IN_BATCH_LABEL,
   READY_LABEL,
+  cancelledOnlyRuns,
   creditDecision,
   deferStacked,
   parseGhJson,
@@ -355,11 +356,25 @@ async function main() {
   }
 }
 
+/** A light run cancelled by concurrency and never repeated: start it again. */
+function rerunCancelled(pr) {
+  for (const id of cancelledOnlyRuns(pr))
+    act(`re-run cancelled run ${id} of #${pr.number}`, () => {
+      try {
+        gh('run', 'rerun', id, '--repo', repo());
+      } catch (err) {
+        log(`#${pr.number}: re-run ${id} failed: ${err.message}`);
+      }
+    });
+}
+
 async function runBatch() {
   const prs = listPrs();
   for (const pr of prs) {
     const why = rejectReason(pr);
     if (why !== 'no merge-ready label') log(`#${pr.number} ${why ?? 'ready'} — ${pr.title}`);
+    if (why?.includes('CANCELLED') && (pr.labels ?? []).some((l) => l.name === READY_LABEL))
+      rerunCancelled(pr);
   }
   const { take: candidates, deferred } = deferStacked(selectCandidates(prs), isAncestor);
   for (const { pr, on } of deferred) log(`#${pr.number} waits: stacked on #${on}`);
