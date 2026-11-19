@@ -9,7 +9,7 @@ describe('B711: одобренное письмо читается после у
     expect(response.json().data.approval).toBeNull();
   });
 
-  it('возвращает последнее одобрение вакансии: текст, вариант и резюме', async () => {
+  it('возвращает последнее одобрение вакансии: текст, вариант, язык, тон и резюме', async () => {
     const { approve, readApproval } = await setup('Head of Platform');
     await approve({ body: 'Первый текст письма.' });
     const second = (
@@ -26,6 +26,8 @@ describe('B711: одобренное письмо читается после у
       subject: 'Тема',
       body: 'Второй вариант письма.',
       variantId: 'variant-2',
+      language: 'ru',
+      tone: 'executive',
     });
     expect(read.resume).toMatchObject({ kind: 'targeted' });
   });

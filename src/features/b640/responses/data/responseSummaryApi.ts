@@ -10,18 +10,36 @@ export async function getResponseSummary(signal?: AbortSignal): Promise<B640Resp
   return readDataObject<B640ResponseSummary>(await apiFetch(SUMMARY, { signal }));
 }
 
+export interface ResponseMarks {
+  readonly auto: ReadonlySet<string>;
+  /** Черновики с одобренным письмом (B645). */
+  readonly approvedLetters: ReadonlySet<string>;
+}
+
+const NO_MARKS: ResponseMarks = { auto: NONE, approvedLetters: NONE };
+
 /**
- * Id автооткликов для списка и воронки. Сводка — дополнение к списку: если она не пришла,
- * отклики показываются как раньше, просто без отметки «Авто».
+ * Отметки строк для списка и воронки: автоотклики и одобренные письма. Сводка — дополнение
+ * к списку: если она не пришла, отклики показываются как раньше, без отметок.
  */
-export function useAutoApplicationIds(): ReadonlySet<string> {
-  const [ids, setIds] = useState<ReadonlySet<string>>(NONE);
+export function useResponseMarks(): ResponseMarks {
+  const [marks, setMarks] = useState<ResponseMarks>(NO_MARKS);
   useEffect(() => {
     const controller = new AbortController();
     getResponseSummary(controller.signal)
-      .then((summary) => setIds(new Set(summary.autoApplicationIds)))
-      .catch(() => setIds(NONE));
+      .then((summary) =>
+        setMarks({
+          auto: new Set(summary.autoApplicationIds),
+          approvedLetters: new Set(summary.approvedLetterIds ?? []),
+        }),
+      )
+      .catch(() => setMarks(NO_MARKS));
     return () => controller.abort();
   }, []);
-  return ids;
+  return marks;
+}
+
+/** Id автооткликов (воронка). */
+export function useAutoApplicationIds(): ReadonlySet<string> {
+  return useResponseMarks().auto;
 }

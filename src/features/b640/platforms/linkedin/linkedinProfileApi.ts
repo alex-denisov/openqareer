@@ -1,33 +1,21 @@
 import { apiFetch, readData } from '../../../coach/apiClient';
-import type {
-  LinkedinProfileView,
-  LinkedinSection,
-  LinkedinSectionCurrent,
-} from '../../../../../shared/b640LinkedinProfile';
+import type { LinkedinDoneResult, LinkedinOffer, LinkedinProfileView } from '../../../../../shared/b640LinkedinProfile';
 
 const BASE = '/api/v1/candidate/b640/linkedin/profile';
 
-export interface SectionMarks {
-  readonly copiedAt: string | null;
-  readonly pastedAt: string | null;
-}
-
-const send = (method: 'PUT' | 'POST', body: unknown = {}) =>
-  ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) satisfies RequestInit;
+const post = (body: unknown = {}) =>
+  ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) satisfies RequestInit;
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return readData<T>(await apiFetch(url, init));
 }
 
-/** Все четыре раздела: «сейчас», предложение, отметки «скопировано» и «вставлено». */
+/** Семь разделов: «сейчас» из импорта LinkedIn и предложения; без импорта — `no_import`. */
 export const getLinkedinProfile = () => call<LinkedinProfileView>(BASE);
 
-/** Вставленный кандидатом текущий текст раздела; на LinkedIn ничего не уходит. */
-export const saveSectionCurrent = (section: LinkedinSection, text: string) =>
-  call<LinkedinSectionCurrent>(`${BASE}/${section}/current`, send('PUT', { text }));
+/** «Выполнено»: кандидат сам вставил тексты в LinkedIn; на LinkedIn ничего не уходит. */
+export const markOffersDone = (keys: readonly string[]) => call<LinkedinDoneResult>(`${BASE}/done`, post({ keys }));
 
-export const markSectionCopied = (section: LinkedinSection) =>
-  call<SectionMarks>(`${BASE}/${section}/copied`, send('POST'));
-
-export const markSectionPasted = (section: LinkedinSection) =>
-  call<SectionMarks>(`${BASE}/${section}/pasted`, send('POST'));
+/** «Предложить заново»: другой вариант одного предложения, в счёт квоты тарифа. */
+export const requestOfferVariant = (key: string) =>
+  call<LinkedinOffer>(`${BASE}/offers/${encodeURIComponent(key)}/variant`, post());

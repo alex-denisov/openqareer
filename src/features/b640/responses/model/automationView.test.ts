@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CandidateAutomationSnapshot } from '../../../automation/automationApi';
 import type { TariffQuotaSummary } from '../../../tariffs/tariffQuotaApi';
-import { buildAutomationView, pauseDays, splitDayLimit } from './automationView';
+import { buildAutomationView, consentsToGrant, pauseDays, splitDayLimit } from './automationView';
 
 const NOW = new Date('2026-11-12T09:00:00.000Z');
 
@@ -51,9 +51,17 @@ describe('B656: строка «Автоотклики»', () => {
     expect(view.on).toBe(false);
   });
 
-  it('без согласий и без включения строки нет', () => {
+  it('без согласий строка есть, переключатель выключен и ждёт согласия (B645)', () => {
     const view = buildAutomationView(snapshot({ enabled: false, consents: [] }), quotas(500), NOW);
-    expect(view.visible).toBe(false);
+    expect(view).toMatchObject({ visible: true, on: false, consented: false });
+    expect(buildAutomationView(snapshot({}), quotas(500), NOW).consented).toBe(true);
+  });
+
+  it('согласия выдаются только отметкой кандидата и только если их ещё нет', () => {
+    const fresh = buildAutomationView(snapshot({ enabled: false, consents: [] }), quotas(500), NOW);
+    expect(consentsToGrant(fresh, false)).toBeNull();
+    expect(consentsToGrant(fresh, true)).toEqual(['drafts', 'send_after_approval', 'notifications']);
+    expect(consentsToGrant(buildAutomationView(snapshot({}), quotas(500), NOW), true)).toBeNull();
   });
 
   it('тариф без автооткликов зовёт на Pro', () => {
