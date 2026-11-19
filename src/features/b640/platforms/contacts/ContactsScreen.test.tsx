@@ -5,10 +5,14 @@ import type { B640Contact, B640ContactList } from '../../../../../shared/b640Con
 import { click, mount } from '../../kit/testDom';
 import { ContactsScreen } from './ContactsScreen';
 
-vi.mock('./contactsApi', async (original) => ({
-  ...(await original<typeof import('./contactsApi')>()),
-  listB640Contacts: vi.fn(),
-}));
+vi.mock('./contactsApi', async (original) => {
+  const listB640Contacts = vi.fn();
+  return {
+    ...(await original<typeof import('./contactsApi')>()),
+    listB640Contacts,
+    listB640ContactsRetrying: (query: unknown) => listB640Contacts(query),
+  };
+});
 
 const navigate = vi.fn();
 vi.mock('../../shell/ShellContext', () => ({ useShell: () => ({ navigate }) }));

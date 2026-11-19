@@ -147,7 +147,10 @@ async function mockContacts(page: Page, mode: Mode) {
     requests.push(url.search);
     if (mode === 'error' || (mode === 'flaky' && !failed)) {
       failed = true;
-      return route.fulfill({ status: 500, json: { error: { code: 'internal', message: 'x' } } });
+      return route.fulfill({
+        status: 500,
+        json: { error: { code: 'internal', message: 'x', retryable: false } },
+      });
     }
     const q = url.searchParams;
     const search = (q.get('search') ?? '').toLowerCase();

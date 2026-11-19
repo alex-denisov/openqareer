@@ -10,7 +10,7 @@ import {
 } from '../../shared/b640Contacts';
 import { SqliteContactStatusRepository } from '../data/sqliteContactStatusRepository';
 import { buildB640ContactList, type B640ContactSource } from '../domain/b640Contacts';
-import { candidateCompanyKey } from '../domain/candidateCompanies';
+import { selectionKeysWithin } from './b640ContactSelection';
 import { sessionCandidate } from './b640VacancyContext';
 import { companyContext } from './candidateCompanyRoutes';
 import {
@@ -83,13 +83,15 @@ async function listContacts(deps: RouteDeps, statuses: Statuses, request: Fastif
   const repository = connectionRepository(deps, request, reply);
   if (!repository) return reply;
   const { contacts, receipt } = sources(repository, candidate.id);
-  const selection = await companyContext(deps, candidate.id);
+  const selectionKeys = await selectionKeysWithin(
+    companyContext(deps, candidate.id).then((context) => context.vacancies.map((vacancy) => vacancy.companyName)),
+  );
   const data = buildB640ContactList(
     {
       contacts,
       candidateWorkplaces: candidateWorkplaces(deps, candidate.id),
       statuses: statuses.list(candidate.id),
-      selectionKeys: new Set(selection.vacancies.map((vacancy) => candidateCompanyKey(vacancy.companyName))),
+      selectionKeys,
       ...(receipt
         ? { linkedinImport: { state: 'imported' as const, importedAt: receipt.importedAt, importedCount: receipt.importedCount } }
         : {}),

@@ -62,11 +62,14 @@ const DROPPED_RESPONSE_HEADERS = new Set([
   'transfer-encoding',
   'connection',
 ]);
-const DECODERS: Record<string, (body: Buffer) => Promise<Buffer>> = {
-  gzip: promisify(gunzip),
-  deflate: promisify(inflate),
-  br: promisify(brotliDecompress),
+type Decode = (body: Buffer, options: { maxOutputLength: number }) => Promise<Buffer>;
+const DECODERS: Record<string, Decode> = {
+  gzip: promisify(gunzip) as Decode,
+  deflate: promisify(inflate) as Decode,
+  br: promisify(brotliDecompress) as Decode,
 };
+/** Раскрытое тело не больше предела × множитель: иначе малый ответ раздувается в гигабайты. */
+const DECODED_BODY_FACTOR = 64;
 
 const defaultResolve: ResolveAll = (host) => dnsLookup(host, { all: true });
 
@@ -105,9 +108,13 @@ function flatHeaders(headers: IncomingHttpHeaders): Record<string, string> {
   );
 }
 
-async function decode(body: Buffer, encoding: string | undefined): Promise<Buffer> {
+async function decode(
+  body: Buffer,
+  encoding: string | undefined,
+  maxBodyBytes: number,
+): Promise<Buffer> {
   const decoder = encoding ? DECODERS[encoding.trim().toLowerCase()] : undefined;
-  return decoder ? decoder(body) : body;
+  return decoder ? decoder(body, { maxOutputLength: maxBodyBytes * DECODED_BODY_FACTOR }) : body;
 }
 
 interface SendSettings {
@@ -134,7 +141,7 @@ function readResponse(
   });
   incoming.on('error', reject);
   incoming.on('end', () => {
-    decode(Buffer.concat(chunks), incoming.headers['content-encoding']).then(
+    decode(Buffer.concat(chunks), incoming.headers['content-encoding'], maxBodyBytes).then(
       (body) =>
         resolve({ status: incoming.statusCode ?? 0, headers: flatHeaders(incoming.headers), body }),
       reject,
