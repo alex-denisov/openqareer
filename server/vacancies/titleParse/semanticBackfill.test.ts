@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { MIGRATION_23, VACANCY_POOL_INDEX_TABLE } from '../../data/sqliteSchema';
 import { SemanticBackfill } from './semanticBackfill';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 function poolDatabase(): DatabaseSync {
   const database = new DatabaseSync(':memory:');
@@ -216,7 +217,7 @@ describe('SemanticBackfill (B267 S2)', () => {
     const elapsed = performance.now() - startedAt;
 
     expect(report.backfilled).toBe(1_000);
-    expect(elapsed).toBeLessThan(1_000);
+    expect(elapsed).toBeLessThan(timeBudget(1_000));
   });
 
   it('переразбирает названия старой версии словаря и пересобирает их строки индекса', () => {

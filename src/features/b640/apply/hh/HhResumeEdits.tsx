@@ -58,7 +58,7 @@ function Lines({ text, className, hidden }: { readonly text: string; readonly cl
 }
 
 function ApplyAction({ edit, state, onApply }: { readonly edit: HhResumeEdit; readonly state: HhApplyState; readonly onApply: () => void }) {
-  if (!canApply(edit)) return null;
+  if (!canApply(edit) || (state.kind === 'failed' && !state.retry)) return null;
   if (state.kind === 'applied') {
     return (
       <span className="tag ok">
@@ -142,7 +142,10 @@ export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResume
   const [confirming, setConfirming] = useState(false);
   const groups = SECTIONS.map(([section, label]) => [label, edits.filter((edit) => edit.section === section)] as const)
     .filter(([, items]) => items.length > 0);
-  const pending = edits.filter((edit) => canApply(edit) && apply.stateOf(edit.id).kind !== 'applied');
+  const pending = edits.filter((edit) => {
+    const state = apply.stateOf(edit.id);
+    return canApply(edit) && state.kind !== 'applied' && !(state.kind === 'failed' && !state.retry);
+  });
   const confirm = () => {
     setConfirming(false);
     void apply.applyAll(pending);

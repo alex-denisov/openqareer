@@ -61,6 +61,9 @@ export interface HhResumeEdit {
   readonly section: HhResumeEditSection;
   /** Место работы и период — у правок опыта. */
   readonly place?: string;
+  /** Работодатель и должность места, как их показал hh.ru: по ним приложение находит исходное место (срез 4). */
+  readonly employer?: string;
+  readonly position?: string;
   readonly was: string;
   readonly now: string;
   /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */

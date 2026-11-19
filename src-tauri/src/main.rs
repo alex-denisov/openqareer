@@ -8,6 +8,10 @@ mod hh_apply;
 mod hh_apply_scripts;
 mod hh_resume_edit;
 mod hh_resume_edit_scripts;
+#[cfg(test)]
+mod hh_jsdom_harness;
+mod hh_resume_experience;
+mod hh_resume_experience_scripts;
 mod linkedin_read_guard;
 mod network_probe;
 mod session_token_store;
@@ -132,6 +136,20 @@ async fn run_hh_resume_edit(
         return Err("forbidden_caller".into());
     }
     hh_resume_edit::run_hh_resume_edit(&app, request).await
+}
+
+/// B678 slice 4: a reworded place of work put into one hh.ru resume as a new place ticked
+/// only for it, after the candidate pressed «Применить» and confirmed it.
+#[tauri::command]
+async fn run_hh_experience_edit(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: hh_resume_experience::HhExperienceEditRequest,
+) -> Result<hh_resume_edit::HhResumeEditReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_resume_experience::run_hh_experience_edit(&app, request).await
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -545,6 +563,7 @@ fn main() {
             execute_local_action,
             run_hh_apply,
             run_hh_resume_edit,
+            run_hh_experience_edit,
             desktop_native_fetch,
             print_resume,
             save_resume_pdf,

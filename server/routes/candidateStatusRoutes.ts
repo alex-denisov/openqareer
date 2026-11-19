@@ -19,6 +19,8 @@ import { normalizeTargetProfession, type StatusChoice } from '../domain/candidat
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { registerGrowthGoalRoutes } from './growthGoalRoutes';
+import { registerProfessionPathRoutes } from './professionPathRoutes';
 import { registerStatusSignalRoutes } from './statusSignalRoutes';
 
 /**
@@ -41,7 +43,10 @@ interface Signed {
 
 const choiceSchema = z.object({
   status: z.enum(CANDIDATE_STATUSES),
-  targetProfession: z.string().max(TARGET_PROFESSION_MAX_LENGTH * 2).nullish(),
+  targetProfession: z
+    .string()
+    .max(TARGET_PROFESSION_MAX_LENGTH * 2)
+    .nullish(),
 });
 const changeSchema = choiceSchema.extend({
   options: z.object({ pauseAutoApply: z.boolean().optional() }).strict().optional(),
@@ -167,4 +172,8 @@ export function registerCandidateStatusRoutes(
   app.get('/api/v1/candidate/status/today', withDeps(bound, getStatusToday));
   // B691: сигналы «Сегодня» читают тот же статус; свои маршруты закрыты тем же флагом.
   registerStatusSignalRoutes(app, { ...deps, statusRepository: repository });
+  // B669: путь в новую профессию читает целевую профессию из того же статуса.
+  registerProfessionPathRoutes(app, { ...deps, statusRepository: repository });
+  // B670: цель роста при «Работаю».
+  registerGrowthGoalRoutes(app, deps);
 }

@@ -113,6 +113,8 @@ function experienceEdits(input: HhEditsInput): HhEditDraft[] {
         id: `experience:${index}`,
         section: 'experience' as const,
         place: [place.employer, place.period].filter(Boolean).join(' · '),
+        employer: place.employer,
+        position: place.title,
         was: place.text,
         now,
         language: languageOf(now),

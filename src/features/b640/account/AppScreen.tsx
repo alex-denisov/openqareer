@@ -8,6 +8,7 @@ import { SegControl } from '../kit/SegControl';
 import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import type { B640Theme } from '../theme';
+import { appBuildLine } from './appBuild';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 
 const THEMES: ReadonlyArray<{ value: B640Theme; label: string }> = [
@@ -101,7 +102,7 @@ function Updates() {
         <ul className="set-list">
           <li className="set-row">
             <div className="set-l">
-              <span className="set-t">Версия {__APP_VERSION__}</span>
+              <span className="set-t">{appBuildLine(__APP_VERSION__, __APP_COMMIT__, __APP_BUILD_DATE__)}</span>
               {result ? (
                 <ResultLine text={result === 'available' ? 'Есть новая версия' : 'У вас последняя версия'} />
               ) : null}

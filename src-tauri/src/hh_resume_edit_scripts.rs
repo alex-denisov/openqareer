@@ -14,8 +14,8 @@
 //!   a recommended skill is a checkbox `resume-editor-skills-recommended-<name>`.
 //!
 //! Work experience is not edited here: the editor changes a place of work for
-//! every resume that shows it, and hh.ru's rule is a new place ticked only for
-//! this resume, which the editor bundles do not expose.
+//! every resume that shows it. hh.ru's rule is a new place ticked only for
+//! this resume; that lives in `hh_resume_experience_scripts` (slice 4).
 //!
 //! Scripts only add or replace text. They never press delete, never touch the
 //! other fields of the page and never press a button other than «Сохранить».
