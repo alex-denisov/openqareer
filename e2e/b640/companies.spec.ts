@@ -250,6 +250,18 @@ test.describe('B655/B677: «Компании и люди» нового каби
     await expect(want).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Отменить' }).click();
     await expect(want).toHaveAttribute('aria-pressed', 'false');
+    if ((page.viewportSize()?.width ?? 1440) >= 768) {
+      // B645: кнопка строчная и прижата к правому краю ячейки, как в макете.
+      const edge = await want.evaluate((node) => {
+        const cell = node.closest('td')!.getBoundingClientRect();
+        const padding = parseFloat(getComputedStyle(node.closest('td')!).paddingInlineEnd);
+        return {
+          display: getComputedStyle(node).display,
+          gap: Math.round(cell.right - padding - node.getBoundingClientRect().right),
+        };
+      });
+      expect(edge).toEqual({ display: 'inline-flex', gap: 0 });
+    }
   });
 
   test('карточка компании: вакансии, люди, путь назад', async ({ page }) => {
@@ -266,6 +278,15 @@ test.describe('B655/B677: «Компании и люди» нового каби
       'круг 3',
     ]);
     await expect(page.locator('.co-person').nth(2)).toContainText('имя скрыто');
+    // B645: на 390 действия шапки закреплены над нижней навигацией, на 1440 — в шапке.
+    const mobile = (page.viewportSize()?.width ?? 1440) < 768;
+    await expect(page.locator('.co-head .actions')).toHaveCount(mobile ? 0 : 1);
+    await expect(page.locator('.act-dock')).toHaveCount(mobile ? 1 : 0);
+    if (mobile) {
+      const dock = await page.locator('.act-dock').boundingBox();
+      const nav = await page.locator('.bottomnav').boundingBox();
+      if (dock && nav) expect(dock.y + dock.height).toBeLessThanOrEqual(nav.y + 1);
+    }
     await page.getByRole('button', { name: 'Хочу в компанию: Ладога Банк' }).click();
     await expect(page.locator('.co-wantline')).toContainText('В списке «Хочу»');
     await page.locator('.co-wantline .row-act').click();
