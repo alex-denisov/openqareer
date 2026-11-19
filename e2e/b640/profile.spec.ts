@@ -54,6 +54,69 @@ interface Mocks {
   readonly statusSaveFailures?: number;
   /** Профиль не загрузился с первого раза. */
   readonly resumeFailures?: number;
+  /** Правая колонка s01: условия, связи и резюме под вакансии. */
+  readonly aside?: boolean;
+}
+
+const VERSIONS = [
+  ['v-1', 'Head of Engineering', 'draft', '2026-11-10T09:00:00.000Z'],
+  ['v-2', 'Engineering Manager', 'sent', '2026-11-08T09:00:00.000Z'],
+  ['v-3', 'Руководитель платформы', 'sent', '2026-11-04T09:00:00.000Z'],
+].map(([id, title, status, updatedAt]) => ({
+  id,
+  title,
+  status,
+  updatedAt,
+  createdAt: updatedAt,
+  requirements: [],
+  revision: 1,
+  sourceMasterRevision: 'm-1',
+}));
+
+async function mockAside(page: Page, full: boolean): Promise<void> {
+  await page.route(`${API}/campaign`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          roles: { value: full ? ['Руководитель разработки'] : [], origin: 'explicit' },
+          regions: { value: [], origin: 'default' },
+        },
+      },
+    }),
+  );
+  if (!full) return;
+  await page.route(`${API}/decision-profile`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          salaryFloor: 500_000,
+          searchLocations: ['Москва'],
+          workFormats: ['remote_home', 'home_market'],
+        },
+      },
+    }),
+  );
+  await page.route(`${API}/connection-contacts?*`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          items: [],
+          total: 512,
+          offset: 0,
+          limit: 100,
+          nextOffset: null,
+          linkedinImport: { state: 'unknown', importedAt: null, importedCount: null },
+        },
+      },
+    }),
+  );
+  await page.route(`${API}/resume/versions?*`, (route) =>
+    route.fulfill({
+      json: {
+        data: { items: VERSIONS, nextCursor: null, totalCount: 14, currentMasterRevision: 'm-1' },
+      },
+    }),
+  );
 }
 
 interface Calls {
@@ -109,6 +172,7 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     return route.fallback();
   });
+  await mockAside(page, mocks.aside ?? false);
   await page.route(`${API}/profile/experience/*/confirm`, (route) => {
     calls.confirmed.push(new URL(route.request().url()).pathname.split('/').at(-2) ?? '');
     return route.fulfill({ json: { data: { confirmed: true } } });
@@ -188,7 +252,9 @@ test.describe('B651: «Профиль» (s01)', () => {
     await expect(screen.locator('#sec-exp .job-org').first()).toContainText(
       'FinCloud · 2022 — сейчас',
     );
-    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(0);
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(
+      (await screen.locator('#unk-title').count()) > 0 ? 1 : 0,
+    );
     await expectGates(page);
 
     await screen.getByRole('link', { name: 'Изменить запись: FinCloud' }).click();
@@ -196,6 +262,42 @@ test.describe('B651: «Профиль» (s01)', () => {
     await page.goBack();
     await node(page, 's01').getByRole('link', { name: 'Сменить' }).click();
     await expect(page).toHaveURL(/\/app\/profile\/status$/u);
+  });
+
+  test('правая колонка: условия, связи, чего мы не знаем, резюме под роль (B645); гейты', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/profile', { aside: true });
+    const screen = node(page, 's01');
+    const desk = (page.viewportSize()?.width ?? 0) >= 768;
+    const terms = desk ? screen.locator('.mod.terms') : screen.locator('details.terms-row');
+    if (!desk) {
+      await expect(terms.locator('.terms-sum')).toHaveText(
+        'Руководитель разработки · от 500 000 ₽ на руки · Москва',
+      );
+      await terms.locator('summary').click();
+    }
+    await expect(terms.locator('dd')).toHaveText([
+      'Руководитель разработки',
+      'от 500 000 ₽ на руки',
+      'Москва',
+      'удалённо или гибрид',
+    ]);
+    await expect(screen.locator('#ln-t')).toHaveText('Связи · 512');
+    await expect(screen.locator('#unk-title')).toHaveText('Чего мы не знаем');
+    await expect(screen.getByRole('link', { name: 'Ответить на 1 вопрос' })).toBeVisible();
+    await expect(screen.locator('.cv-base .cv-main b')).toHaveText('Руководитель разработки');
+    await expect(screen.locator('.cv-sub')).toHaveText('Под вакансии · 14');
+    await expect(screen.locator('.cv-row .tag')).toHaveText([
+      'черновик',
+      'отправлено',
+      'отправлено',
+    ]);
+    await expect(screen.getByRole('link', { name: 'Ещё 11 — в «Откликах»' })).toBeVisible();
+    await expectGates(page);
+
+    await screen.getByRole('link', { name: 'Ответить на 1 вопрос' }).click();
+    await expect(page).toHaveURL(/\/app\/profile\/question$/u);
   });
 
   test('профиль не загрузился: строка на месте и «Повторить»', async ({ page }) => {

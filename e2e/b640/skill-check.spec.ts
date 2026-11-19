@@ -9,6 +9,25 @@ const PATH = '/app/career/skills';
 const node = (page: Page, code: string) =>
   page.locator(`[data-b640-node="${code}"]:not([data-b640-state]), [data-b640-state="${code}"]`);
 
+/**
+ * B645 c04 на 390: «Пропустить · продолжу позже» строкой над «Ответить», по правому краю;
+ * «Ответить» не уже половины полосы и не выходит за поле 16 px.
+ */
+async function expectDockLikeMockup(page: Page, screen: ReturnType<typeof node>) {
+  if ((page.viewportSize()?.width ?? 0) >= 768) return;
+  const answer = await screen.getByRole('button', { name: 'Ответить' }).boundingBox();
+  const skip = await screen
+    .getByRole('button', { name: 'Пропустить · продолжу позже' })
+    .boundingBox();
+  expect(answer && skip).toBeTruthy();
+  if (!answer || !skip) return;
+  expect(skip.y + skip.height).toBeLessThanOrEqual(answer.y + 1);
+  expect(answer.width).toBeGreaterThanOrEqual(178);
+  expect(answer.x + answer.width).toBeCloseTo(374, 0);
+  expect(skip.x + skip.width).toBeCloseTo(382, 0);
+  expect(skip.x).toBeGreaterThanOrEqual(16);
+}
+
 test.describe('B653: «Карьера» — проверка навыков C04', () => {
   test('C4: старт по роли, кейс, итог C4b и следующий кейс; гейты', async ({ page }) => {
     const calls = await openSkillCheck(
@@ -19,14 +38,19 @@ test.describe('B653: «Карьера» — проверка навыков C04'
       },
     );
     const screen = node(page, 'c04');
-    await expect(
-      screen.getByRole('heading', { name: 'Проверка навыков роли «Руководитель разработки»' }),
-    ).toBeVisible();
-    await screen.getByRole('button', { name: 'Начать проверку' }).click();
-    expect(calls.posts[0]).toEqual({ path: 'start', body: { role: 'Руководитель разработки' } });
+    // Без промежуточного экрана: первый вопрос открывается сразу (B645, макет C4).
     await expect(screen.getByText('Управление сроками · вопрос 5 из 6')).toBeVisible();
+    expect(calls.posts[0]).toEqual({ path: 'start', body: { role: 'Руководитель разработки' } });
+    await expect(screen.getByRole('button', { name: 'Начать проверку' })).toHaveCount(0);
+    const criteria = screen.locator('.change');
+    await expect(criteria.getByRole('heading', { name: 'Оценим по трём пунктам' })).toBeVisible();
+    await expect(criteria.locator('li')).toHaveCount(3);
     await expect(screen.getByRole('heading', { name: /сорвала срок релиза/u })).toBeVisible();
     await expectGates(page);
+    // Текущий навык помечен в списке навыков роли, как в макете C4.
+    await screen.locator('details.more-n > summary').click();
+    await expect(screen.locator('.exp-rows .row-sub')).toHaveText(['Идёт сейчас · 5 из 6']);
+    await expectDockLikeMockup(page, screen);
     await page.mouse.move(0, 0);
     await screen.getByLabel('Ваш ответ').fill('Разберу причины с командой и назову новый срок.');
     await screen.getByRole('button', { name: 'Ответить' }).click();
@@ -85,6 +109,32 @@ test.describe('B653: «Карьера» — проверка навыков C04'
     expect(
       (saved?.body.suggestions as Array<{ accepted: boolean }>).map((item) => item.accepted),
     ).toEqual([true, false]);
+  });
+
+  test('C4 без роли: берётся первая роль поиска с готовой проверкой (B645)', async ({ page }) => {
+    const calls = await openSkillCheck(page, PATH, {
+      ready: true,
+      searchRoles: ['VP of Engineering', 'Руководитель разработки'],
+      insufficient: ['VP of Engineering'],
+    });
+    await expect(node(page, 'c04').getByText('Управление сроками · вопрос 5 из 6')).toBeVisible();
+    expect(calls.posts[0]).toEqual({ path: 'start', body: { role: 'Руководитель разработки' } });
+  });
+
+  test('C4: мало требований — короткая строка и выбор роли на месте (B645)', async ({ page }) => {
+    await openSkillCheck(page, `${PATH}?role=${encodeURIComponent('VP of Engineering')}`, {
+      ready: true,
+      searchRoles: ['VP of Engineering', 'Руководитель разработки'],
+      insufficient: ['VP of Engineering'],
+    });
+    const screen = node(page, 'c04');
+    await expect(screen.locator('.re-line')).toHaveText(
+      'По роли «VP of Engineering» в вакансиях мало требований для проверки.',
+    );
+    await expect(screen.getByRole('heading', { level: 2 })).toHaveCount(0);
+    await expect(screen.getByText(/ещё собираются/u)).toHaveCount(0);
+    await screen.getByRole('link', { name: 'Проверить «Руководитель разработки»' }).click();
+    await expect(screen.getByText('Управление сроками · вопрос 5 из 6')).toBeVisible();
   });
 
   test('C4: «Пропустить · продолжу позже» ведёт к ролям', async ({ page }) => {

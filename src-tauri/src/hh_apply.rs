@@ -135,6 +135,7 @@ pub(crate) fn on_hh(window: &tauri::Webview) -> bool {
 /// One hh.ru action at a time (a response or a resume edit): the hh.ru window is a single page.
 static APPLY_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// Shared with the resume raise (`hh_raise`): both drive the same hh.ru window.
 pub(crate) struct RunningGuard;
 
 impl RunningGuard {

@@ -10,6 +10,34 @@
       );
     }
   }
+  /* S9: столбцы таблицы ролей — ширины макета на 1080 px (294 / 209 / 198 / 149 / 229),
+     иначе таблица растягивает столбцы по данным (B645). */
+  .b640 .c9-table {
+    table-layout: fixed;
+  }
+  .b640 .c9-table thead th:nth-child(1) {
+    inline-size: 27.2%;
+  }
+  .b640 .c9-table thead th:nth-child(2) {
+    inline-size: 19.4%;
+  }
+  .b640 .c9-table thead th:nth-child(3) {
+    inline-size: 18.3%;
+  }
+  .b640 .c9-table thead th:nth-child(4) {
+    inline-size: 13.8%;
+  }
+  .b640 .c9-table thead th:nth-child(5) {
+    inline-size: 21.3%;
+  }
+  @media (max-width: 767px) {
+    /* S9 390: «652 вакансии · по подборке за 30 дней» переносится внутри полосы, а не уходит
+       под «Изменить» (B645). */
+    .b640 .role-strip-n {
+      flex: 0 1 auto;
+      max-inline-size: 100%;
+    }
+  }
   /* S9c: подвал окна «Роли поиска» переносит длинную главную кнопку (в макете `pf-df rs-foot`). */
   .b640 .rs-dlg .pf-df {
     flex-wrap: wrap;
@@ -35,6 +63,25 @@
   @media (min-width: 768px) {
     .b640 .lead > .m-commit > .row-act {
       order: 1;
+    }
+  }
+  /* C4 на 390 (B645): «Пропустить» строкой над «Ответить» по правому краю, «Ответить» — от половины полосы. */
+  @media (max-width: 767px) {
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) {
+      flex-direction: row-reverse;
+      flex-wrap: wrap-reverse;
+      justify-content: space-between;
+      align-items: center;
+      row-gap: 0;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) > .btn.btn.btn {
+      order: -1;
+      flex: 0 1 auto;
+      min-inline-size: 50%;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit:has(> .row-act) > .row-act {
+      flex: 0 0 auto;
+      margin-inline: calc(-1 * var(--career-space-2));
     }
   }
 }

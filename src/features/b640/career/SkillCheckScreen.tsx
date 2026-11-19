@@ -4,12 +4,14 @@ import { buildNodePath, type B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { pageAttrs } from './careerPaths';
-import { caseEyebrow, dialogueEyebrow, runSkillRows } from './skillCheckModel';
+import { CASE_CRITERIA_LABELS, caseEyebrow, dialogueEyebrow, runSkillRows } from './skillCheckModel';
 import { SkillQuestion } from './SkillQuestion';
 import { SkillResult } from './SkillResult';
 import { SkillStart } from './SkillStart';
 import { SkillSuggestions } from './SkillSuggestions';
 import { useSkillCheck, type SkillCheck } from './useSkillCheck';
+import { loadSkillRoles } from './careerApi';
+import { useLoad } from '../today/useLoad';
 
 function SkillList({ run }: { readonly run: RoleSkillAssessmentRun }) {
   const rows = runSkillRows(run);
@@ -99,6 +101,7 @@ function QuestionStep({
     <SkillQuestion
       eyebrow={caseEyebrow(run, activeCase)}
       title={activeCase.assessmentCase.prompt}
+      criteria={CASE_CRITERIA_LABELS}
       answer={state.caseAnswer}
       busy={state.busy}
       failed={failed}
@@ -145,7 +148,15 @@ function RunStep({ check, onLater }: { readonly check: SkillCheck; readonly onLa
   return <QuestionStep check={check} onLater={onLater} />;
 }
 
-function Body({ check, onLater }: { readonly check: SkillCheck; readonly onLater: () => void }) {
+function Body({
+  check,
+  onLater,
+  otherRoles,
+}: {
+  readonly check: SkillCheck;
+  readonly onLater: () => void;
+  readonly otherRoles: readonly string[];
+}) {
   const { state, actions } = check;
   if (state.loading && !state.current) return <BlockSkeleton label="Загружаем проверку" rows={4} />;
   if (!state.current)
@@ -162,6 +173,7 @@ function Body({ check, onLater }: { readonly check: SkillCheck; readonly onLater
         current={state.current}
         busy={state.busy}
         failed={Boolean(state.error)}
+        otherRoles={otherRoles}
         onStart={() => void actions.start()}
         onRetry={() => void actions.loadCurrent()}
       />
@@ -174,11 +186,23 @@ function Body({ check, onLater }: { readonly check: SkillCheck; readonly onLater
   );
 }
 
-/** C04 «Проверка навыков»: вопросы о роли, кейсы и итог кейса (C4b) на месте. */
-export function SkillCheckScreen({ node }: { readonly node: B640Node }) {
-  const { search, navigate } = useShell();
-  const role = new URLSearchParams(search).get('role') ?? undefined;
+/** C04: вопросы о роли, кейсы и итог кейса (C4b) на месте. */
+function CheckPage({
+  node,
+  role,
+  searchTitles,
+}: {
+  readonly node: B640Node;
+  readonly role: string | undefined;
+  readonly searchTitles: readonly string[];
+}) {
+  const { navigate } = useShell();
   const check = useSkillCheck(role);
+  const current = check.state.current;
+  const shownRole = current && 'roleTitle' in current ? current.roleTitle : role;
+  const otherRoles = searchTitles.filter(
+    (title) => title.trim().toLocaleLowerCase('ru') !== shownRole?.trim().toLocaleLowerCase('ru'),
+  );
   const later = async () => {
     if (check.state.caseDraftDirty) await check.actions.saveCaseDraft();
     navigate(buildNodePath('s09'));
@@ -186,11 +210,32 @@ export function SkillCheckScreen({ node }: { readonly node: B640Node }) {
   return (
     <div className="page" {...pageAttrs(node, check.resultCase ? 'c04b' : undefined)}>
       <div className="col">
-        <Body check={check} onLater={() => void later()} />
+        <Body check={check} onLater={() => void later()} otherRoles={otherRoles} />
         {check.run && !check.resultCase && check.state.current?.state !== 'role_changed' ? (
           <SkillList run={check.run} />
         ) : null}
       </div>
     </div>
   );
+}
+
+/**
+ * C04 «Проверка навыков». Без роли в адресе берётся первая роль поиска, проверку которой
+ * можно начать: иначе вкладка открывала роль без требований и вела в тупик (B645).
+ */
+export function SkillCheckScreen({ node }: { readonly node: B640Node }) {
+  const { search } = useShell();
+  const param = new URLSearchParams(search).get('role') ?? undefined;
+  const roles = useLoad(loadSkillRoles);
+  if (roles.state === 'loading')
+    return (
+      <div className="page" {...pageAttrs(node)}>
+        <div className="col">
+          <BlockSkeleton label="Загружаем проверку" rows={4} />
+        </div>
+      </div>
+    );
+  const titles = roles.state === 'ready' ? roles.data.searchTitles : [];
+  const role = param ?? (roles.state === 'ready' ? (roles.data.ready ?? titles[0]) : undefined);
+  return <CheckPage key={role ?? ''} node={node} role={role} searchTitles={titles} />;
 }
