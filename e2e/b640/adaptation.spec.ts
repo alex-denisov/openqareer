@@ -18,7 +18,9 @@ test.describe('B663: «Дневник» — адаптация', () => {
   test('d01 → шаг → отметка задачи; первая встреча; карта людей', async ({ page }) => {
     const calls = await openNode(page, '/app/diary/adaptation', 'd01');
     const plan = page.locator('[data-b640-node="d01"]');
-    await expect(plan.locator('#pl-title')).toHaveText('День 34 из 90: цель — первый заметный результат');
+    await expect(plan.locator('#pl-title')).toHaveText(
+      'День 34 из 90: цель — первый заметный результат',
+    );
     await expect(plan.getByText('13 человек · 2 без встречи')).toBeVisible();
     await expectGates(page);
     await plan.getByRole('button', { name: 'Готово: Своя тестовая среда для команды' }).click();
@@ -45,11 +47,16 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await dialog.getByLabel('С кем').selectOption({ label: 'Руководитель тестовых сред' });
     await dialog.getByLabel('Когда').fill('2027-01-08');
     await dialog.getByRole('button', { name: 'Назначить' }).click();
-    await expect.poll(() => calls.people.map((call) => call.path)).toEqual(['/workplaces/w1/people/p4/meeting']);
+    await expect
+      .poll(() => calls.people.map((call) => call.path))
+      .toEqual(['/workplaces/w1/people/p4/meeting']);
   });
 
   test('снимки адаптации: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {
-    test.skip(!SHOTS || testInfo.project.name !== 'desktop-1440', 'снимки снимаются по запросу: B640_SHOTS=1');
+    test.skip(
+      !SHOTS || testInfo.project.name !== 'desktop-1440',
+      'снимки снимаются по запросу: B640_SHOTS=1',
+    );
     test.setTimeout(400_000);
     mkdirSync('.s13-shots', { recursive: true });
     const views = [
@@ -61,13 +68,23 @@ test.describe('B663: «Дневник» — адаптация', () => {
       ['d01f', '/app/diary/adaptation/settling'],
     ] as const;
     for (const theme of ['light', 'dark']) {
-      await page.addInitScript((value) => window.localStorage.setItem('oq_b640_theme', value), theme);
+      await page.addInitScript(
+        (value) => window.localStorage.setItem('oq_b640_theme', value),
+        theme,
+      );
       for (const [name, path] of views) {
-        for (const [width, height] of [[1440, 900], [1176, 900], [390, 844]]) {
+        for (const [width, height] of [
+          [1440, 900],
+          [1176, 900],
+          [390, 844],
+        ]) {
           await page.unrouteAll({ behavior: 'ignoreErrors' });
           await page.setViewportSize({ width, height });
           await openNode(page, path, name);
-          await page.screenshot({ path: `.s13-shots/${name}-${width}-${theme}.png`, fullPage: true });
+          await page.screenshot({
+            path: `.s13-shots/${name}-${width}-${theme}.png`,
+            fullPage: true,
+          });
         }
       }
     }
