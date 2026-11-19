@@ -64,7 +64,7 @@ export function RolesView({ node, data }: { readonly node: B640Node; readonly da
   return (
     <div className="page" {...pageAttrs(node)}>
       <SearchRoleStrip data={data} onEdit={() => setPicking(true)} />
-      <SkillStrip gap={data.skillGap} />
+      <SkillStrip gap={data.skillGap} role={data.searchTitles[0]} />
       <RoleTable rows={data.rows} />
       <Link className="row-act is-sm" to={conditionsPath()}>
         <Icon name="sliders" />

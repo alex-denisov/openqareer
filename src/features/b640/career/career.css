@@ -31,4 +31,10 @@
     padding: 0;
     list-style: none;
   }
+  /* C4: на 1440 и 1176 главная кнопка «Ответить» первой, как в макете; на 390 полоса закреплена. */
+  @media (min-width: 768px) {
+    .b640 .lead > .m-commit > .row-act {
+      order: 1;
+    }
+  }
 }

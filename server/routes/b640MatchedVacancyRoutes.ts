@@ -29,8 +29,10 @@ import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
 import { readMatchedList } from './matchedVacancyList';
-import { fitWorkIds, prepareMatchedRead, startFitWork, withMarketSalary } from './matchedVacancyRoutes';
-import { withDeps } from './helpers';
+import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
+import { readB640Sealed } from './b640SealedAnswer';
+import { selectionFitLimit } from './fitSelectionSweep';
+import { candidatePlan, withDeps } from './helpers';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 
 
@@ -154,6 +156,49 @@ async function orderRows(
   return { byFit, rows: sortMatchedByColumn(byFit, query.sort as ColumnSortKey, query.direction) };
 }
 
+/** B702: страница из списка прошлого процесса; проценты, уровни и деньги читаются как обычно. */
+async function sealedAnswer(
+  deps: RouteDeps,
+  backgroundDeps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  context: B640ListContext,
+  query: Query,
+) {
+  const saved = savedOrder(deps, candidateId);
+  const slice = readB640Sealed(deps, backgroundDeps, request, {
+    candidateId,
+    context,
+    filters: listFilters(query, saved),
+    saved,
+    sort: query.sort,
+    direction: query.direction,
+    offset: query.offset,
+    limit: query.limit,
+  });
+  if (!slice) return undefined;
+  const shown = slice.rows.map(trim);
+  const levels = addStoredVacancyLevels(shown, context.targetLevel, (key) => deps.titleParseStore.getByKey(key));
+  const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidateId, levels));
+  const fitLimit = selectionFitLimit(candidatePlan(deps, candidateId));
+  startShownPageFit(backgroundDeps, candidateId, data, query.offset, fitLimit, request);
+  request.log.info({ rows: slice.total, offset: query.offset }, 'b640-matched-served-sealed');
+  return {
+    data,
+    meta: {
+      requestId: request.id,
+      sort: { by: query.sort, direction: query.direction },
+      total: slice.total,
+      offset: query.offset,
+      limit: query.limit,
+      nextOffset: nextOffsetOf(query.offset, shown.length, slice.total),
+      campaign: campaignMeta(slice.campaignWithHypotheses),
+      candidateLevel: context.targetLevel ?? null,
+      ...(query.offset === 0 ? { facets: slice.facets } : {}),
+    },
+  };
+}
+
 const getMatchedVacancies = async (
   backgroundDeps: RouteDeps,
   request: FastifyRequest,
@@ -169,6 +214,8 @@ const getMatchedVacancies = async (
   const deps = withRequestScopedCandidateReads(backgroundDeps);
   const context = readB640ListContext(deps, candidate.id);
   if (profileIsEmpty(context)) return emptyResponse(request, query, context);
+  const sealed = await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
+  if (sealed) return sealed;
   const read = await readList(deps, request, candidate.id, context, query);
   const { list, fitLimit, targetLevel } = read;
   const { rows, byFit } = await orderRows(deps, request, candidate.id, context, read, query);

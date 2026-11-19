@@ -7,6 +7,8 @@ import { useHhApply, type HhApplyControls } from './useHhApply';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
 
 export interface HhSendStepProps {
+  /** Вакансия платформы: с ней сверяются резюме hh.ru (B678). */
+  readonly vacancyId: string;
   /** Номер вакансии на hh.ru из её ссылки. */
   readonly hhVacancyId: string;
   readonly head: ApplyHead;
@@ -92,7 +94,7 @@ function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string
 
 /** Шаг «Отправка» в приложении (a01): отклик через hh.ru от имени кандидата после подтверждения. */
 export function HhSendStep(props: HhSendStepProps) {
-  const resumes = useHhResumes();
+  const resumes = useHhResumes(props.vacancyId);
   const resumeId = resumes.snapshot?.selected?.id ?? null;
   const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
   const done = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
