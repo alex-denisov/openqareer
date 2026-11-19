@@ -125,12 +125,24 @@ export async function runHhApplyInSession(input: {
   return report;
 }
 
-export interface HhResumeEditInput {
+export interface HhSectionEditInput {
   readonly resumeId: string;
   readonly section: 'title' | 'skills' | 'about';
   readonly text: string;
   readonly skills: readonly string[];
 }
+
+/** B678, срез 4: место работы — новым местом с галочкой только этого резюме. */
+export interface HhExperienceEditInput {
+  readonly resumeId: string;
+  readonly section: 'experience';
+  readonly employer: string;
+  readonly position: string;
+  readonly was: string;
+  readonly text: string;
+}
+
+export type HhResumeEditInput = HhSectionEditInput | HhExperienceEditInput;
 
 export interface HhResumeEditReport {
   readonly outcome: 'applied' | 'failed';
@@ -139,7 +151,12 @@ export interface HhResumeEditReport {
 
 /** B678: раздел резюме hh.ru в окне кандидата. Вызывается только после его «Применить». */
 export async function applyHhResumeEditInSession(input: HhResumeEditInput): Promise<HhResumeEditReport> {
-  const report = await invokeDesktopCommand<HhResumeEditReport>('run_hh_resume_edit', { request: input });
+  const report =
+    input.section === 'experience'
+      ? await invokeDesktopCommand<HhResumeEditReport>('run_hh_experience_edit', {
+          request: { resumeId: input.resumeId, employer: input.employer, position: input.position, was: input.was, text: input.text },
+        })
+      : await invokeDesktopCommand<HhResumeEditReport>('run_hh_resume_edit', { request: input });
   if (!report) throw new Error('desktop_unavailable');
   return report;
 }
