@@ -7,6 +7,7 @@ import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
 import { elapsedLabel } from './hhSendModel';
 import { useHhApply, type HhApplyControls } from './useHhApply';
+import { useMarkSent, type MarkSentState } from './useMarkSent';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
 
 export interface HhSendStepProps {
@@ -86,6 +87,21 @@ function Outcome({ apply, resumes, responsePath }: { apply: HhApplyControls; res
   );
 }
 
+function MarkedOutcome({ marked, responsePath }: { readonly marked: MarkSentState; readonly responsePath: string }) {
+  if (marked.kind === 'error') return <StatusLine state="err" text={marked.text} />;
+  if (marked.kind !== 'done') return null;
+  return (
+    <>
+      <ResultLine text="Отклик отмечен как отправленный" />
+      <div className="actions">
+        <Link className="btn is-primary" to={responsePath}>
+          <Icon name="right" />К отклику
+        </Link>
+      </div>
+    </>
+  );
+}
+
 function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string }) {
   const footer = (
     <>
@@ -109,8 +125,11 @@ export function HhSendStep(props: HhSendStepProps) {
   const [reviewing, setReviewing] = useState(false);
   const resumeId = resumes.snapshot?.selected?.id ?? null;
   const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
-  const done = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
+  const marked = useMarkSent(props.onSent);
+  const sentHere = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
+  const done = sentHere || marked.state.kind === 'done';
   const busy = apply.state.kind === 'sending';
+  const responsePath = buildNodePath('o01c', { responseId: props.applicationId });
   if (reviewing && resumes.snapshot?.selected && edits.length > 0) {
     const { selected } = resumes.snapshot;
     return <HhResumeEdits resumeId={selected.id} resumeTitle={selected.title} edits={edits} onBack={() => setReviewing(false)} />;
@@ -130,9 +149,13 @@ export function HhSendStep(props: HhSendStepProps) {
             <Icon name="out" />
             Вакансия на hh.ru
           </a>
+          <Button variant="quiet" icon="checkc" busy={marked.state.kind === 'busy'} disabled={busy} onClick={marked.mark}>
+            Я уже откликнулся
+          </Button>
         </div>
       )}
-      <Outcome apply={apply} resumes={resumes} responsePath={buildNodePath('o01c', { responseId: props.applicationId })} />
+      <Outcome apply={apply} resumes={resumes} responsePath={responsePath} />
+      <MarkedOutcome marked={marked.state} responsePath={responsePath} />
       <ConfirmDialog apply={apply} title={props.head.title} />
       <HhResumeSheet
         picker={resumes.picker}

@@ -26,13 +26,15 @@ function useRestoredApproval(
   const [applied, setApplied] = useState<StoredLetterApproval | null>(null);
   const stored = state.data ?? null;
   const { pitch, loading, error } = letter.draft;
-  const settled = !loading && (pitch !== null || error !== '');
-  const { ready, restore } = variants;
+  // B716: круги связей не загрузились — черновик не просят вовсе; одобренный текст встаёт сразу.
+  const circlesFailed = !letter.circles.loading && letter.circles.error !== '';
+  const draftSettled = !loading && (pitch !== null || error !== '' || circlesFailed);
+  const { settled: variantsSettled, restore } = variants;
   useEffect(() => {
-    if (!stored || applied || !settled || !ready) return;
+    if (!stored || applied || !draftSettled || !variantsSettled) return;
     restore(stored.variantId, stored.body);
     setApplied(stored);
-  }, [stored, applied, settled, ready, restore]);
+  }, [stored, applied, draftSettled, variantsSettled, restore]);
   return applied;
 }
 
