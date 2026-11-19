@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>N4d · Включить двухфакторную защиту</title>
+<meta name="b640-sizes" content="1440,1176,390">
+<link rel="stylesheet" href="../b640.css">
+<style>
+/* B401: новые части набора для макета; в коде — токены набора. */
+.fa-setup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--career-space-4); align-items: start; grid-column: 1 / -1; }
+.fa-fields { display: grid; gap: var(--career-space-3); }
+.fa-l { color: var(--career-text-soft); font-size: var(--career-text-xs); font-weight: 600; }
+.fa-key code { white-space: nowrap; }
+.fa-qr { inline-size: 10rem; block-size: 10rem; border-radius: var(--career-radius-sm); border: var(--career-border-width) solid var(--career-line); background: #fff; }
+.fa-key { display: flex; align-items: center; gap: var(--career-space-2); }
+.fa-key code, .fa-codes code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--career-text-sm); color: var(--career-text); white-space: nowrap; }
+.fa-codes { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--career-space-2) var(--career-space-4); margin: 0; padding: var(--career-space-3) var(--career-space-4); list-style: none; border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-sm); background: var(--career-surface-2, var(--career-surface)); }
+@media (max-width: 767px) {
+  .fa-setup { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+  .fa-codes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body data-active="settings" data-title="Вход и безопасность" data-crumbs="Аккаунт|n00-akkaunt-razdely;Вход и безопасность" data-template="settings" data-crumbs-desk="0">
+<div class="app" id="screen">
+  <main class="main" id="career-main">
+    <nav class="tabs sec-tabs acct-tabs" aria-label="Разделы аккаунта"><div class="sec-tabs-in"><a href="n03-akkaunt.html">Подключения</a><a href="n02-nastrojki-uvedomlenij.html">Уведомления</a><a href="n04-vhod-i-bezopasnost.html" aria-current="page">Вход и безопасность</a><a href="n05-soglasiya-i-dannye.html">Согласия и данные</a><a href="t03-podpiska-i-oplata.html">Подписка</a><a href="n06-prilozhenie.html">Приложение</a></div></nav>
+    <div class="page set-page">
+      <h2 class="vh">Вход и безопасность</h2>
+      <section class="set-group" aria-labelledby="sc-me">
+        <h3 class="set-h" id="sc-me">Почта и имя</h3>
+        <ul class="set-list"><li class="set-row"><div class="set-l"><span class="set-t">Почта для входа</span><span class="set-v">m.sokolova@mail.ru · подтверждена</span></div><div class="set-r"><button class="btn is-sm" type="button">Изменить</button></div></li><li class="set-row"><div class="set-l"><span class="set-t">Имя</span><span class="set-v">Марина Соколова</span></div><div class="set-r"><button class="btn is-sm" type="button">Изменить</button></div></li></ul>
+      </section>
+      <section class="set-group" aria-labelledby="sc-in">
+        <h3 class="set-h" id="sc-in">Вход</h3>
+        <ul class="set-list"><li class="set-row"><div class="set-l"><span class="set-t">Пароль</span></div><div class="set-r"><a class="btn is-sm" href="n04b-smena-parolya-2fa.html">Сменить пароль</a></div></li><li class="set-row"><div class="set-l"><span class="set-t">Вход по Touch ID / Face ID</span><span class="set-v">включено на этом Mac</span></div><div class="set-r"><button class="btn is-sm" type="button">Добавить устройство</button></div></li></ul>
+      </section>
+      <section class="set-group" aria-labelledby="sc-2fa">
+        <h3 class="set-h" id="sc-2fa">Двухфакторная защита</h3>
+        <ul class="set-list"><li class="set-row is-block is-next"><form class="c5-form" onsubmit="return false"><div class="fa-setup"><img class="fa-qr" src="../qr-sample.svg" alt="QR-код для приложения-аутентификатора" width="160" height="160"><div class="fa-fields"><div class="cn-f"><span class="fa-l" id="fa-key-l">Ключ для ввода вручную</span><div class="fa-key"><code aria-labelledby="fa-key-l">JBSW Y3DP EHPK 3PXP K4ZQ 7XWM</code><button class="icon-btn" type="button" aria-label="Скопировать ключ"><i data-i="copy"></i></button></div></div><div class="cn-f"><label for="fa-code">Код из приложения-аутентификатора</label><input id="fa-code" type="text" autocomplete="one-time-code" inputmode="numeric" maxlength="6"></div><div class="cn-f"><label for="fa-pw">Текущий пароль</label><input id="fa-pw" type="password" autocomplete="current-password"></div></div></div><div class="actions"><button class="btn is-primary" type="button"><i data-i="check"></i>Включить</button><button class="row-act" type="button">Отмена</button></div></form></li></ul>
+      </section>
+      <section class="set-group" aria-labelledby="sc-dev">
+        <h3 class="set-h" id="sc-dev">Устройства · 2</h3>
+        <ul class="set-list"><li class="set-row"><div class="set-l"><span class="set-t">MacBook · приложение openqareer</span><span class="set-v">Москва · сейчас · эта сессия</span></div></li><li class="set-row"><div class="set-l"><span class="set-t">iPhone · Safari</span><span class="set-v">Москва · вчера, 21:40</span></div><div class="set-r"><button class="btn is-sm" type="button" aria-label="Завершить сеанс iPhone · Safari">Завершить</button></div></li><li class="set-foot"><button class="btn is-sm" type="button">Выйти на других устройствах</button></li></ul>
+      </section>
+      <section class="set-group" aria-label="Выход">
+        <ul class="set-list"><li class="set-row"><button class="set-rowbtn" type="button">Выйти из аккаунта</button></li></ul>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="../icons.js"></script>
+<script src="../shell.js"></script>
+</body>
+</html>
