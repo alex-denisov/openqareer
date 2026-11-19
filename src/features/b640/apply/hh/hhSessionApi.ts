@@ -2,6 +2,7 @@ import type {
   HhApplyAttempt,
   HhApplyOutcome,
   HhResumeContent,
+  HhResumeReview,
   HhResumeSnapshot,
   HhResumeSummary,
 } from '../../../../../shared/hhCandidateSession';
@@ -21,13 +22,25 @@ export async function getHhResumes(signal?: AbortSignal): Promise<HhResumeSnapsh
 export async function saveHhResumes(
   resumes: readonly HhResumeSummary[],
   selected: HhResumeContent | null,
+  contents?: readonly HhResumeContent[],
 ): Promise<HhResumeSnapshot> {
   const response = await apiFetch(`${BASE}/resumes`, {
     method: 'PUT',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ resumes, selected }),
+    body: JSON.stringify({ resumes, selected, ...(contents ? { contents } : {}) }),
   });
   return readDataObject<HhResumeSnapshot>(response);
+}
+
+export interface HhResumeVacancyReview extends HhResumeReview {
+  readonly vacancyId: string;
+}
+
+/** B678: какое из прочитанных резюме hh.ru подходит вакансии и чего в каждом не хватает. */
+export async function getHhResumeReview(vacancyId: string): Promise<HhResumeVacancyReview> {
+  const query = new URLSearchParams({ vacancyId }).toString();
+  const response = await apiFetch(`${BASE}/resumes/review?${query}`);
+  return readDataObject<HhResumeVacancyReview>(response);
 }
 
 /** Начать отклик: сервер проверяет подтверждение, резюме и суточный лимит. */

@@ -1,15 +1,37 @@
 import { useId, useState } from 'react';
+import type { HhResumeFit } from '../../../../../shared/hhCandidateSession';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
-import { Button, Dialog, StatusLine } from '../../kit';
+import { Button, Dialog, InfoTip, StatusLine } from '../../kit';
+import type { HhResumeVacancyReview } from './hhSessionApi';
 import type { HhPicker } from './useHhResumes';
 
 interface ResumeChoicesProps {
   readonly resumes: readonly HhResumeItem[];
+  readonly review: HhResumeVacancyReview | null;
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
 }
 
-function ResumeChoices({ resumes, selectedId, onSelect }: ResumeChoicesProps) {
+/** B678: «подходит» или «не хватает: …»; сверка — в ⓘ. Несверенное резюме метки не получает. */
+function FitTag({ fit, recommended }: { readonly fit: HhResumeFit | undefined; readonly recommended: boolean }) {
+  if (!fit || fit.status === 'unread') return null;
+  const label = fit.status === 'fits' ? 'подходит' : `не хватает: ${fit.missing.join(', ')}`;
+  const detail = [
+    fit.matched.length > 0 ? `Есть в резюме: ${fit.matched.join(', ')}.` : 'Требований вакансии в резюме нет.',
+    fit.missing.length > 0 ? `Нет в резюме: ${fit.missing.join(', ')}.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <span className="hh2-st">
+      {recommended ? <span className="tag ok">Рекомендуем</span> : null}
+      <span className={fit.status === 'fits' ? 'tag ok' : 'tag part'}>{label}</span>
+      <InfoTip label="Сверка с вакансией" text={detail} />
+    </span>
+  );
+}
+
+function ResumeChoices({ resumes, review, selectedId, onSelect }: ResumeChoicesProps) {
   const name = useId();
   return (
     <ul className="hh2-picks" aria-label="Резюме на hh.ru">
@@ -27,6 +49,10 @@ function ResumeChoices({ resumes, selectedId, onSelect }: ResumeChoicesProps) {
               {resume.updatedLabel ? <span className="hh2-sub"> · {resume.updatedLabel}</span> : null}
             </span>
           </label>
+          <FitTag
+            fit={review?.resumes.find((fit) => fit.resumeId === resume.id)}
+            recommended={review?.recommendedId === resume.id}
+          />
         </li>
       ))}
     </ul>
@@ -70,7 +96,14 @@ function SheetBody(props: SheetBodyProps) {
   const { picker } = props;
   if (picker.kind === 'reading') return <StatusLine state="wait" text="Читаем резюме в hh.ru" />;
   if (picker.kind === 'choose') {
-    return <ResumeChoices resumes={picker.resumes} selectedId={props.selectedId} onSelect={props.onSelect} />;
+    return (
+      <ResumeChoices
+        resumes={picker.resumes}
+        review={picker.review}
+        selectedId={props.selectedId}
+        onSelect={props.onSelect}
+      />
+    );
   }
   if (picker.kind === 'closed') return null;
   return <SheetStop picker={picker} onSignIn={props.onSignIn} onRetry={props.onRetry} />;
@@ -90,7 +123,9 @@ interface SheetProps {
 export function HhResumeSheet(props: SheetProps) {
   const { picker, currentId, saving, onClose, onChoose, onRetry } = props;
   const [picked, setPicked] = useState<string | null>(null);
-  const selectedId = picked ?? currentId;
+  const recommendedId = picker.kind === 'choose' ? (picker.review?.recommendedId ?? null) : null;
+  // B678: пока кандидат не выбрал сам, выбрано рекомендованное; без сверки — то, которым он откликается.
+  const selectedId = picked ?? recommendedId ?? currentId;
   const chosen = picker.kind === 'choose' ? picker.resumes.find((item) => item.id === selectedId) : undefined;
   const footer =
     picker.kind === 'choose' ? (
