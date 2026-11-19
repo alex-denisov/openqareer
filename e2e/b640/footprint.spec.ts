@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
-import { fid, finishSearch, openFootprint, type FootprintCase } from './footprintFixture';
+import { fid, finishSearch, NICK_URL, openFootprint, type FootprintCase } from './footprintFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 /** Узел адреса без варианта или вариант экрана (f01 до поиска, f04 «ничего рискового»). */
@@ -63,6 +63,29 @@ test.describe('B652: «Цифровой след»', () => {
         { id: fid(1), review: 'hidden' },
         { id: fid(1), review: 'unreviewed' },
       ]);
+  });
+
+  test('B727: страница по нику — «Нужно проверить», «Проверить» открывает её, «Это не моё» убирает', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, '/app/profile/footprint', 'nick');
+    const screen = node(page, 'p02');
+    const row = screen.locator('.fp-find', { hasText: 'Duolingo' });
+    await expect(row).toContainText('важно');
+    await expect(row).not.toContainText('владение нужно подтвердить');
+    await expect(row.getByRole('button', { name: 'В профиль' })).toHaveCount(0);
+    const check = row.getByRole('link', { name: /^Проверить: Duolingo/ });
+    await expect(check).toHaveAttribute('href', NICK_URL);
+    await expect(check).toHaveAttribute('target', '_blank');
+    await expect(screen.locator('.fp-cat', { hasText: 'Полезные доказательства' })).toContainText(
+      '2 находки',
+    );
+    await expect(screen.locator('.fp-cat', { hasText: 'Нужно проверить сейчас' })).toContainText(
+      '2 находки',
+    );
+    await row.getByRole('button', { name: 'Это не моё' }).click();
+    await expect.poll(() => calls.reviews).toEqual([{ id: fid(7), review: 'not_self' }]);
+    await expect(screen.locator('.fp-find', { hasText: 'Duolingo' })).toHaveCount(0);
   });
 
   test('разбор F3 → находка F3б: письмо, формы поисковиков, путь назад; гейты', async ({

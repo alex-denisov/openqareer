@@ -179,7 +179,7 @@ export function ListScreen() {
         <FiltersBar
           {...filterProps(list, section)}
           openKind={list.openKind}
-          shown={list.count}
+          shown={list.countKnown ? list.count : null}
           onOpenKind={list.setOpenKind}
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
@@ -193,7 +193,7 @@ export function ListScreen() {
       <FilterSheet
         {...filterProps(list, section)}
         open={list.sheetOpen}
-        shown={list.count}
+        shown={list.countKnown ? list.count : null}
         sort={list.sort}
         onSort={list.toggleSort}
         onClose={() => list.setSheetOpen(false)}
