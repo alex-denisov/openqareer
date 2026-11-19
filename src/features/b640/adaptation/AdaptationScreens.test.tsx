@@ -24,6 +24,13 @@ const api = vi.hoisted(() => ({
   scheduleMeeting: vi.fn(),
 }));
 vi.mock('./adaptationApi', () => api);
+const responsesApi = vi.hoisted(() => ({ listApplicationsPool: vi.fn(), fetchVacancyDetail: vi.fn() }));
+vi.mock('../../applications/applicationsApi', () => ({ listApplicationsPool: responsesApi.listApplicationsPool }));
+vi.mock('../../vacancies/vacancyDetailApi', () => ({ fetchVacancyDetail: responsesApi.fetchVacancyDetail }));
+const RESPONSES = [
+  { clusterId: 'cl-bank', stage: 'applied', createdAt: '2026-11-12T09:00:00.000Z', appliedAt: '2026-11-12T09:00:00.000Z', offer: null, vacancy: { title: 'Руководитель разработки', company: 'Вектор Банк', url: '', source: 'hh' } },
+  { clusterId: 'cl-tel', stage: 'applied', createdAt: '2026-11-05T09:00:00.000Z', appliedAt: '2026-11-05T09:00:00.000Z', offer: null, vacancy: { title: 'Технический директор', company: 'Вектор Телеком', url: '', source: 'hh' } },
+];
 
 const session = { username: 'f.test', role: 'candidate', isTest: true, candidateId: 'c', features: { cabinetB640: true }, emailVerified: true } as AuthUser;
 const WORKPLACE = { id: 'w1', company: 'Вектор Банк', title: 'руководитель разработки', startDate: '2026-12-01', status: 'active' };
@@ -75,6 +82,8 @@ beforeEach(() => {
   api.getWorkplace.mockResolvedValue({ ...WORKPLACE, planning: { adaptationPlan: PLAN } });
   api.getAdaptation.mockResolvedValue(VIEW);
   api.getPeople.mockResolvedValue(PEOPLE);
+  responsesApi.listApplicationsPool.mockResolvedValue({ items: RESPONSES, meta: { total: 2, offset: 0 } });
+  responsesApi.fetchVacancyDetail.mockResolvedValue({ id: 'cl-bank', description: '', truncated: false, skills: [], responsibilities: ['Руководить командой из 25 человек', 'Выстроить поставку'] });
 });
 afterEach(() => {
   view?.unmount();
@@ -94,21 +103,82 @@ describe('d01 план адаптации', () => {
     expect(api.savePlan).toHaveBeenCalledWith('w1', expect.objectContaining({ tasks: [expect.objectContaining({ id: 't1', completed: true })] }));
   });
 
-  it('нет места работы — форма старта с ошибками полей, затем место и план', async () => {
+  it('d01g: нет места работы — фраза-лид, четыре поля без подсказок, ошибки на месте, затем место и план', async () => {
     api.getOverview.mockResolvedValue({ primaryWorkplace: null });
     api.createWorkplace.mockResolvedValue({ ...WORKPLACE, planning: null });
     api.savePlan.mockResolvedValue({});
     const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
-    click(button(page, 'Начать план'));
+    const screen = page.querySelector('.page.gb-page[data-b640-node="d01"]')!;
+    expect(screen.classList.contains('two')).toBe(false);
+    expect(screen.querySelector('h2.lead-title.is-long')?.textContent).toBe('Чтобы собрать план, укажите, куда вы выходите');
+    expect([...screen.querySelectorAll('.gb-f label')].map((item) => item.textContent)).toEqual([
+      'Компания', 'Должность', 'День выхода', 'Что от вас ждут',
+    ]);
+    expect([...screen.querySelectorAll('.gb-f')].map((field) => field.children.length)).toEqual([2, 2, 2, 2]);
+    click(button(page, 'Собрать план'));
     await settle();
     expect([...page.querySelectorAll('.va-err')].map((item) => item.textContent)).toEqual(['Укажите компанию', 'Укажите должность', 'Укажите день выхода']);
-    typeInto(page.querySelector('#ap-company'), 'Вектор Банк');
+    typeInto(page.querySelector('#ap-company'), 'Норма');
     typeInto(page.querySelector('#ap-title'), 'руководитель разработки');
     typeInto(page.querySelector('#ap-start-date'), '2026-12-01');
-    click(button(page, 'Начать план'));
+    click(button(page, 'Собрать план'));
     await settle();
-    expect(api.createWorkplace).toHaveBeenCalledWith({ company: 'Вектор Банк', title: 'руководитель разработки', startDate: '2026-12-01' });
+    expect(api.createWorkplace).toHaveBeenCalledWith({ company: 'Норма', title: 'руководитель разработки', startDate: '2026-12-01' });
     expect(api.savePlan).toHaveBeenCalledWith('w1', expect.objectContaining({ status: 'active', tasks: expect.any(Array) }));
+  });
+
+  it('d01h/d01i: компания из откликов подставляет должность и обязанности вакансии', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    api.createWorkplace.mockResolvedValue({ ...WORKPLACE, planning: null });
+    api.savePlan.mockResolvedValue({});
+    const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
+    const company = page.querySelector('#ap-company') as HTMLInputElement;
+    expect(company.getAttribute('role')).toBe('combobox');
+    expect(company.getAttribute('aria-expanded')).toBe('false');
+    typeInto(company, 'Вект');
+    const options = [...page.querySelectorAll('[role=listbox] [role=option]')];
+    expect(company.getAttribute('aria-expanded')).toBe('true');
+    expect(options.map((item) => [item.querySelector('.ac-t')?.textContent, item.querySelector('.ac-v')?.textContent])).toEqual([
+      ['Вектор Банк', 'Руководитель разработки · отклик 12.11'],
+      ['Вектор Телеком', 'Технический директор · отклик 05.11'],
+    ]);
+    act(() => {
+      company.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    expect(company.getAttribute('aria-activedescendant')).toBe(options[0].id);
+    act(() => {
+      company.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await settle();
+    expect(page.querySelector('[role=listbox]')).toBeNull();
+    expect(company.value).toBe('Вектор Банк');
+    expect((page.querySelector('#ap-title') as HTMLInputElement).value).toBe('Руководитель разработки');
+    expect(responsesApi.fetchVacancyDetail).toHaveBeenCalledWith('cl-bank');
+    const duties = page.querySelector('#ap-expectations') as HTMLTextAreaElement;
+    expect(duties.value).toBe('Руководить командой из 25 человек\nВыстроить поставку');
+    typeInto(page.querySelector('#ap-start-date'), '2026-12-01');
+    click(button(page, 'Собрать план'));
+    await settle();
+    expect(api.createWorkplace).toHaveBeenCalledWith({
+      company: 'Вектор Банк', title: 'Руководитель разработки', startDate: '2026-12-01',
+      expectations: 'Руководить командой из 25 человек\nВыстроить поставку',
+    });
+  });
+
+  it('d01h: подстановка не затирает то, что кандидат уже написал, и молчит без откликов', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
+    typeInto(page.querySelector('#ap-expectations'), 'Своё описание');
+    typeInto(page.querySelector('#ap-company'), 'Вект');
+    click(page.querySelector('[role=option]'));
+    await settle();
+    expect((page.querySelector('#ap-expectations') as HTMLTextAreaElement).value).toBe('Своё описание');
+    view?.unmount();
+    responsesApi.listApplicationsPool.mockRejectedValue(new Error('500'));
+    const again = await open(<PlanScreen node={nodeByCode('d01')!} />);
+    typeInto(again.querySelector('#ap-company'), 'Вект');
+    expect(again.querySelector('[role=listbox]')).toBeNull();
+    expect(again.querySelector('[role=alert]')).toBeNull();
   });
 });
 

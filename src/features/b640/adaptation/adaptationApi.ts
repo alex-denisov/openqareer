@@ -34,6 +34,8 @@ export interface NewWorkplace {
   readonly company: string;
   readonly title: string;
   readonly startDate: string;
+  /** d01: «Что от вас ждут»; пустое не отправляется. */
+  readonly expectations?: string;
 }
 
 export function createWorkplace(input: NewWorkplace): Promise<CareerDiaryWorkplaceWithPlanning> {
