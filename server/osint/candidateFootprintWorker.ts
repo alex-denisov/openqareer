@@ -10,6 +10,7 @@ import type { ExaAdapterInput } from './adapters/exaAdapter';
 import type { HibpAdapterInput } from './adapters/hibpAdapter';
 import type { UsernamePresenceInput } from './adapters/usernamePresenceAdapter';
 import type { WaybackAdapterInput } from './adapters/waybackAdapter';
+import type { YoutubeAdapterInput } from './adapters/youtubeAdapter';
 import type { FootprintQueryPlanItem } from './candidateFootprintQueryPlan';
 import { mergeFootprintFindings } from './mergeFootprintFindings';
 import type { FootprintAdapterSet } from './adapters/createFootprintAdapters';
@@ -50,6 +51,11 @@ const activeRunsByAudit = new Map<string, ActiveRun>();
 const activeAuditByCandidate = new Map<string, string>();
 const ADAPTER_IDS: readonly FootprintAdapterId[] = ['sherlock', 'maigret', 'hibp', 'wayback', 'exa'];
 
+/** B668: YouTube есть в статусах только у запусков, где он в плане, — прежние проверки не меняются. */
+function adapterIdsFor(plan: readonly FootprintQueryPlanItem[]): readonly FootprintAdapterId[] {
+  return plan.some((item) => item.adapterId === 'youtube') ? [...ADAPTER_IDS, 'youtube'] : ADAPTER_IDS;
+}
+
 export class FootprintConsentRequiredError extends Error {
   constructor() {
     super('Для запуска цифрового следа требуется утверждённое согласие кандидата.');
@@ -87,7 +93,7 @@ function selectPlanItems(input: CandidateFootprintWorkerInput): readonly Footpri
 
 function makeStatuses(plan: readonly FootprintQueryPlanItem[]): Map<FootprintAdapterId, MutableStatus> {
   const selected = new Set(plan.map((item) => item.adapterId));
-  return new Map(ADAPTER_IDS.map((adapterId) => [adapterId, {
+  return new Map(adapterIdsFor(plan).map((adapterId) => [adapterId, {
     adapterId,
     state: selected.has(adapterId) ? 'pending' : 'not_run',
     sourcesChecked: 0,
@@ -213,6 +219,12 @@ async function runExternalAdapters(
       input.adapters.wayback, { profileUrl: item.input.profileUrl }, 'wayback', input, statuses, signal, now,
     ));
   }
+  for (const item of plan.filter((entry) => entry.adapterId === 'youtube')) {
+    if (!('profileUrl' in item.input)) continue;
+    findings.push(...await runSingleInputAdapter<YoutubeAdapterInput>(
+      input.adapters.youtube, { profileUrl: item.input.profileUrl }, 'youtube', input, statuses, signal, now,
+    ));
+  }
   const exa = await runExa(plan, input, statuses, signal, now);
   findings.push(...exa);
   return findings;
@@ -268,8 +280,7 @@ function finalizedStatuses(
   statuses: Map<FootprintAdapterId, MutableStatus>,
   now: () => Date,
 ): readonly CandidateFootprintAdapterStatus[] {
-  return ADAPTER_IDS.map((adapterId) => {
-    const status = statuses.get(adapterId)!;
+  return [...statuses.values()].map((status) => {
     const checkedAt = status.checkedAt ?? (status.state === 'not_run' ? undefined : now().toISOString());
     return {
       ...status,
@@ -281,7 +292,7 @@ function finalizedStatuses(
 
 function pendingStatuses(plan: readonly FootprintQueryPlanItem[]): readonly CandidateFootprintAdapterStatus[] {
   const selected = new Set(plan.map((item) => item.adapterId));
-  return ADAPTER_IDS.map((adapterId) => ({
+  return adapterIdsFor(plan).map((adapterId) => ({
     adapterId,
     state: selected.has(adapterId) ? 'pending' : 'not_run',
     sourcesChecked: 0,
