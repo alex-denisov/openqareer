@@ -28,6 +28,17 @@ describe('rejectReason', () => {
   it('accepts a labelled PR with a green light run', () => {
     expect(rejectReason(pr(1))).toBeNull();
   });
+  it.each(['Merge batch: IN_PROGRESS', 'Merge batch: FAILURE'])(
+    'ignores the batcher job (%s)',
+    (_) => {
+      const own = {
+        name: 'Merge batch',
+        conclusion: _.includes('FAILURE') ? 'FAILURE' : '',
+        status: 'IN_PROGRESS',
+      };
+      expect(rejectReason(pr(1, { statusCheckRollup: [...green, own] }))).toBeNull();
+    },
+  );
   it('ignores the Full verify status itself', () => {
     expect(
       rejectReason(

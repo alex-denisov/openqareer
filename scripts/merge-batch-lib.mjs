@@ -5,6 +5,9 @@
 export const READY_LABEL = 'merge-ready';
 export const IN_BATCH_LABEL = 'in-batch';
 export const FULL_VERIFY = 'Full verify';
+// Not part of the light run: the required status itself and the batcher's own
+// job, which runs on the merge-ready label event (.github/workflows/merge-batch.yml).
+export const NOT_LIGHT_RUN = new Set([FULL_VERIFY, 'Merge batch']);
 export const MAX_BATCH = 8;
 export const MAX_PARALLEL_RUNS = 2;
 
@@ -23,7 +26,7 @@ export function rejectReason(pr) {
   if (pr.baseRefName && pr.baseRefName !== 'main') return 'base is not main';
   if (pr.mergeable === 'CONFLICTING') return 'conflicts with main';
   if (pr.touchesWorkflows) return 'changes .github/workflows (goes the single route)';
-  const checks = (pr.statusCheckRollup ?? []).filter((c) => checkName(c) !== FULL_VERIFY);
+  const checks = (pr.statusCheckRollup ?? []).filter((c) => !NOT_LIGHT_RUN.has(checkName(c)));
   if (checks.length === 0) return 'no light run yet';
   const bad = checks.find((c) => !GREEN.has(checkState(c)));
   if (bad) return `light run not green (${checkName(bad)}: ${checkState(bad) || 'pending'})`;

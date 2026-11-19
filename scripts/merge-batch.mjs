@@ -134,6 +134,12 @@ function comment(pr, body) {
     gh('pr', 'comment', String(pr.number), '--body', body),
   );
 }
+/** Creates the label once; --force keeps an existing one as is apart from colour/description. */
+function ensureLabel(name, description) {
+  act(`ensure label ${name}`, () =>
+    gh('label', 'create', name, '--force', '--color', 'BFD4F2', '--description', description),
+  );
+}
 function setLabel(pr, label, on) {
   act(`${on ? 'add' : 'remove'} label ${label} on #${pr.number}`, () =>
     gh('pr', 'edit', String(pr.number), on ? '--add-label' : '--remove-label', label),
@@ -298,6 +304,7 @@ async function runBatch() {
   log(
     `batch ${batch.name}: ${batch.members.map((p) => `#${p.number}`).join(' ')} → tree ${batch.members.at(-1).tree.slice(0, 12)}`,
   );
+  ensureLabel(IN_BATCH_LABEL, 'In a merge batch (scripts/merge-batch.mjs)');
   for (const pr of batch.members) setLabel(pr, IN_BATCH_LABEL, true);
 
   let outcome = { mergedAny: false, verifiedTip: '' };
