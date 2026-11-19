@@ -59,13 +59,20 @@ export async function putStarPrep(
   return (await readDataObject<StarPrepView>(response)).paragraphs;
 }
 
-/** Отклик по адресу; `next` — ближайшее интервью. `null` — откликов с интервью нет. */
-export async function loadPrep(responseId: string, signal: AbortSignal): Promise<PrepData | null> {
+/** Отклик по адресу; `next` — ближайшее интервью. `null` — такого отклика нет. */
+export async function findResponse(
+  responseId: string,
+  signal: AbortSignal,
+): Promise<ApplicationView | null> {
   const pool = await listApplicationsPool({}, signal);
-  const response =
-    responseId === 'next'
-      ? pickNextResponse(pool.items, new Date())
-      : (pool.items.find((item) => item.id === responseId) ?? null);
+  return responseId === 'next'
+    ? pickNextResponse(pool.items, new Date())
+    : (pool.items.find((item) => item.id === responseId) ?? null);
+}
+
+/** Подготовка к интервью отклика; `null` — откликов с интервью нет. */
+export async function loadPrep(responseId: string, signal: AbortSignal): Promise<PrepData | null> {
+  const response = await findResponse(responseId, signal);
   if (!response) return null;
   const brief = generateInterviewPrepBrief({
     vacancy: {
