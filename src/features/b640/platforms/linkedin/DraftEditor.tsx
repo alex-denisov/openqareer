@@ -1,31 +1,39 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { ResultLine, RowAction, StatusLine } from '../../kit';
+import { ResultLine, RowAction, StatusLine, Button } from '../../kit';
 import { updateDraft, type LinkedinDraft } from '../../../today/linkedinDraftApi';
 import { CopyButton } from './CopyButton';
 import { LiError } from './LiError';
+import { enqueueDraft } from './linkedinQueueApi';
 
 type Save = 'idle' | 'busy' | 'done' | 'error';
 
 function Actions({
   text,
   dirty,
-  onSave,
-  onReject,
+  busy,
+  on,
 }: {
   readonly text: string;
   readonly dirty: boolean;
-  readonly onSave: () => void;
-  readonly onReject: () => void;
+  readonly busy: boolean;
+  readonly on: {
+    readonly approve: () => void;
+    readonly save: () => void;
+    readonly reject: () => void;
+  };
 }) {
   return (
     <div className="actions">
-      <CopyButton text={text} label="пост" caption="Скопировать" />
+      <Button variant="primary" icon="check" disabled={busy} onClick={on.approve}>
+        Одобрить и поставить в план
+      </Button>
+      <CopyButton text={text} label="пост" caption="Скопировать" className="btn" />
       {dirty ? (
-        <RowAction type="button" icon="check" onClick={onSave}>
+        <RowAction type="button" icon="check" onClick={on.save}>
           Сохранить
         </RowAction>
       ) : null}
-      <RowAction type="button" onClick={onReject}>
+      <RowAction type="button" onClick={on.reject}>
         Не публиковать
       </RowAction>
     </div>
@@ -47,56 +55,78 @@ function SaveStatus({
   return null;
 }
 
-/** Текущий черновик: правка текста, «Скопировать», «Не публиковать». Публикации на площадке нет. */
-export function DraftEditor({
-  draft,
-  onChanged,
-}: {
-  readonly draft: LinkedinDraft;
-  readonly onChanged: () => void;
-}) {
-  const [text, setText] = useState(draft.text);
+function useDraftActions(
+  draft: LinkedinDraft,
+  text: string,
+  after: { readonly onChanged: () => void; readonly onPlaced: (scheduledAt: string) => void },
+) {
+  const { onChanged, onPlaced } = after;
   const [save, setSave] = useState<Save>('idle');
   const last = useRef<() => void>(() => undefined);
-  const dirty = text !== draft.text;
 
-  async function run(update: Parameters<typeof updateDraft>[1], after: () => void) {
-    last.current = () => void run(update, after);
+  async function run(action: () => Promise<void>, done: () => void) {
+    last.current = () => void run(action, done);
     setSave('busy');
     try {
-      await updateDraft(draft.id, update);
-      after();
+      await action();
+      done();
     } catch {
       setSave('error');
     }
   }
 
+  const saved = () => {
+    setSave('done');
+    onChanged();
+  };
+  const set = async (update: Parameters<typeof updateDraft>[1]) =>
+    void (await updateDraft(draft.id, update));
+  const approve = async () => {
+    if (text !== draft.text) await set({ text });
+    await set({ status: 'approved' });
+    onPlaced((await enqueueDraft(draft.id)).scheduledAt);
+  };
+  const on = {
+    approve: () => void run(approve, onChanged),
+    save: () => void run(() => set({ text }), saved),
+    reject: () => void run(() => set({ status: 'rejected' }), onChanged),
+  };
+  return { save, setSave, on, retry: () => last.current() };
+}
+
+/**
+ * Текущий черновик: правка текста, «Одобрить и поставить в план», «Скопировать», «Не публиковать».
+ * В LinkedIn платформа ничего не отправляет: в назначенное время кандидат публикует сам.
+ */
+export function DraftEditor({
+  draft,
+  onChanged,
+  onPlaced,
+}: {
+  readonly draft: LinkedinDraft;
+  readonly onChanged: () => void;
+  readonly onPlaced: (scheduledAt: string) => void;
+}) {
+  const [text, setText] = useState(draft.text);
+  const dirty = text !== draft.text;
+  const actions = useDraftActions(draft, text, { onChanged, onPlaced });
+  const { save, on } = actions;
   const edit = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value);
-    setSave('idle');
+    actions.setSave('idle');
   };
-  const saveText = () =>
-    void run({ text }, () => {
-      setSave('done');
-      onChanged();
-    });
 
   return (
     <section className="lead" aria-labelledby="po-title">
       <h2 className="po-name" id="po-title">
         {draft.topic}
       </h2>
-      <Actions
-        text={text}
-        dirty={dirty}
-        onSave={saveText}
-        onReject={() => void run({ status: 'rejected' }, onChanged)}
-      />
+      <Actions text={text} dirty={dirty} busy={save === 'busy'} on={on} />
       <label className="vh" htmlFor="po-text">
         Текст поста
       </label>
       <textarea className="lk-edit" id="po-text" rows={4} value={text} onChange={edit} />
-      <SaveStatus save={save} dirty={dirty} onRetry={() => last.current()} />
+      <SaveStatus save={save} dirty={dirty} onRetry={actions.retry} />
     </section>
   );
 }

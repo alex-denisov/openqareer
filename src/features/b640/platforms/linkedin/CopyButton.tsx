@@ -13,7 +13,12 @@ async function writeText(text: string): Promise<boolean> {
 }
 
 /** «Скопировать»: значок меняется на галочку на 2 с, подтверждение — тостом; на площадку ничего не уходит. */
-export function CopyButton({ text, label, caption, className = 'icon-btn li-copy' }: {
+export function CopyButton({
+  text,
+  label,
+  caption,
+  className,
+}: {
   readonly text: string;
   readonly label: string;
   /** Есть — кнопка с подписью вместо значка. */
@@ -23,11 +28,18 @@ export function CopyButton({ text, label, caption, className = 'icon-btn li-copy
   const toast = useToast();
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   async function copy() {
     const ok = await writeText(text);
-    toast.show({ text: ok ? 'Скопировано' : 'Не удалось скопировать. Выделите текст и скопируйте вручную' });
+    toast.show({
+      text: ok ? 'Скопировано' : 'Не удалось скопировать. Выделите текст и скопируйте вручную',
+    });
     if (!ok) return;
     setDone(true);
     if (timer.current) clearTimeout(timer.current);
@@ -36,7 +48,7 @@ export function CopyButton({ text, label, caption, className = 'icon-btn li-copy
 
   return (
     <button
-      className={caption ? 'btn is-primary' : className}
+      className={className ?? (caption ? 'btn is-primary' : 'icon-btn li-copy')}
       type="button"
       aria-label={`Скопировать: ${label}`}
       onClick={() => void copy()}

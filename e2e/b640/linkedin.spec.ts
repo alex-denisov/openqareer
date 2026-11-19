@@ -77,7 +77,13 @@ const draft = (index: number, kind: 'post' | 'comment', status: string) => ({
 
 async function mock(
   page: Page,
-  options: { connected?: boolean; drafts?: unknown[]; failFirst?: boolean } = {},
+  options: {
+    connected?: boolean;
+    drafts?: unknown[];
+    feed?: unknown[];
+    queue?: unknown[];
+    failFirst?: boolean;
+  } = {},
 ): Promise<void> {
   await mockSignedInCabinet(page, { cabinetB640: true });
   await page
@@ -90,6 +96,18 @@ async function mock(
   await page.route('**/api/v1/candidate/resume', (route) =>
     route.fulfill({ json: { data: studio } }),
   );
+  const page20 = (items: unknown[]) => ({ items, total: items.length, offset: 0, limit: 20 });
+  await page.route('**/api/v1/candidate/b640/linkedin/rhythm', (route) =>
+    route.fulfill({
+      json: { data: { postsPerWeek: 1, days: ['fri'], time: '10:00', timezone: 'Europe/Moscow' } },
+    }),
+  );
+  await page.route('**/api/v1/candidate/b640/linkedin/queue?*', (route) =>
+    route.fulfill({ json: { data: page20(options.queue ?? []) } }),
+  );
+  await page.route('**/api/v1/candidate/b640/linkedin/feed-posts?*', (route) =>
+    route.fulfill({ json: { data: page20(options.feed ?? []) } }),
+  );
   let failed = !options.failFirst;
   await page.route('**/api/v1/candidate/drafts?*', (route) => {
     if (!failed) {
@@ -99,6 +117,16 @@ async function mock(
     return route.fulfill({ json: { data: options.drafts ?? [] } });
   });
 }
+
+const feedPost = (index: number) => ({
+  draftId: `f${index}`,
+  postUrl: null,
+  postExcerpt: `Пост ${index}`,
+  comment: `Комментарий ${index}`,
+  state: 'draft',
+  createdAt: '2026-11-18T10:00:00.000Z',
+  scheduledAt: null,
+});
 
 const publications = [
   draft(1, 'post', 'draft'),
@@ -138,7 +166,8 @@ test.describe('B664: LinkedIn нового кабинета', () => {
     await mock(page, { drafts: publications });
     await page.goto(POSTS, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#po-text')).toHaveValue('Текст черновика 1', { timeout: 15_000 });
-    await expect(page.getByRole('button', { name: /Одобрить|план/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Одобрить и поставить в план' })).toBeVisible();
+    await expect(page.getByText('не больше 1 поста в неделю')).toBeVisible();
     await expectGates(page);
   });
 
@@ -153,16 +182,17 @@ test.describe('B664: LinkedIn нового кабинета', () => {
   });
 
   test('лента: пустое состояние «Новых постов нет»', async ({ page }) => {
-    await mock(page, { drafts: [draft(1, 'post', 'draft')] });
+    await mock(page);
     await page.goto(FEED, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.vl-empty-t')).toHaveText('Новых постов нет', { timeout: 15_000 });
     await expectGates(page);
   });
 
   test('лента: черновик комментария с «Скопировать»', async ({ page }) => {
-    await mock(page, { drafts: [draft(1, 'comment', 'draft')] });
+    await mock(page, { feed: [feedPost(1)] });
     await page.goto(FEED, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.lk-card')).toHaveCount(1, { timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Скопировать/ })).toBeVisible();
   });
 
@@ -177,9 +207,13 @@ test.describe('B664: LinkedIn нового кабинета', () => {
       ['posts', POSTS, 'a03b', true, publications],
       ['published', PUBLISHED, 'a03p', true, publications],
       ['feed-empty', FEED, 'a05', true, []],
-      ['feed', FEED, 'a05', true, [draft(1, 'comment', 'draft'), draft(2, 'comment', 'draft')]],
+      ['feed', FEED, 'a05', true, []],
     ] as const) {
-      await mock(page, { connected, drafts: [...drafts] });
+      await mock(page, {
+        connected,
+        drafts: [...drafts],
+        feed: name === 'feed' ? [feedPost(1), feedPost(2)] : [],
+      });
       for (const theme of ['light', 'dark'] as const) {
         await page.goto(path, { waitUntil: 'domcontentloaded' });
         await page.evaluate((value) => window.localStorage.setItem('oq_b640_theme', value), theme);

@@ -3,15 +3,17 @@ import { buildNodePath } from '../../routes';
 import type { SectionProps } from '../../sections';
 import type { LinkedinDraft } from '../../../today/linkedinDraftApi';
 import { PlatformRetry } from '../PlatformRetry';
+import { formatSlot } from '../format';
 import { LinkedinList } from './LinkedinList';
 import { LinkedinNav } from './LinkedinNav';
 import { draftDate, draftTag, visibleDrafts } from './linkedinModel';
 import { useLinkedinDrafts } from './useLinkedinDrafts';
+import { useLinkedinPlan } from './useLinkedinPlan';
 
-function Item({ draft }: { readonly draft: LinkedinDraft }) {
+function Item({ draft, slot }: { readonly draft: LinkedinDraft; readonly slot?: string }) {
   const post = draft.kind === 'post';
   const tag = draftTag(draft.status);
-  const date = draftDate(draft);
+  const date = draftDate(draft) ?? formatSlot(slot);
   return (
     <li className="li-pub">
       <Link className="li-pub-a" to={buildNodePath(post ? 'a03b' : 'a05')}>
@@ -26,7 +28,13 @@ function Item({ draft }: { readonly draft: LinkedinDraft }) {
   );
 }
 
-function List({ drafts }: { readonly drafts: readonly LinkedinDraft[] }) {
+function List({
+  drafts,
+  slots,
+}: {
+  readonly drafts: readonly LinkedinDraft[];
+  readonly slots: ReadonlyMap<string, string>;
+}) {
   return (
     <>
       <div className="list-head">
@@ -44,7 +52,7 @@ function List({ drafts }: { readonly drafts: readonly LinkedinDraft[] }) {
         <LinkedinList
           items={drafts}
           listClassName="li-pubs"
-          renderItem={(draft) => <Item draft={draft} />}
+          renderItem={(draft) => <Item draft={draft} slot={slots.get(draft.id)} />}
         />
       ) : (
         <div className="vl-empty" role="status">
@@ -58,6 +66,7 @@ function List({ drafts }: { readonly drafts: readonly LinkedinDraft[] }) {
 /** Узел a03p: посты и комментарии одним списком по 20. */
 export function PublishedScreen({ node }: SectionProps) {
   const load = useLinkedinDrafts();
+  const { plan } = useLinkedinPlan();
   return (
     <div className="page two" data-b640-node={node.code} data-b640-section={node.section}>
       <LinkedinNav node="a03p" />
@@ -66,7 +75,9 @@ export function PublishedScreen({ node }: SectionProps) {
         {load.state === 'error' ? (
           <PlatformRetry text="Не удалось загрузить публикации" onRetry={load.retry} />
         ) : null}
-        {load.state === 'ready' ? <List drafts={visibleDrafts(load.data)} /> : null}
+        {load.state === 'ready' ? (
+          <List drafts={visibleDrafts(load.data)} slots={plan.slots} />
+        ) : null}
       </div>
       <div className="col" />
     </div>
