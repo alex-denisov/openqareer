@@ -304,6 +304,35 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     return route.fallback();
   });
+  // B671: лента нового кабинета — те же события в форме нового маршрута.
+  await page.route(`${API}/b640/notifications**`, (route) => {
+    const url = new URL(route.request().url());
+    const unreadCount = notes.filter((item) => item.readAt === null).length;
+    const later = Boolean(url.searchParams.get('cursor'));
+    const source = later
+      ? Array.from({ length: 20 }, (_, index) =>
+          note(100 + index, { title: `Раннее событие ${index + 1}`, createdAt: OLD, readAt: OLD }),
+        )
+      : notes;
+    const items = source.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      category: 'responses',
+      important: false,
+      title: item.title,
+      company: null,
+      role: null,
+      eventAt: null,
+      createdAt: item.createdAt,
+      readAt: item.readAt,
+      sourceType: 'application',
+      sourceId: new URL(item.action.href, 'https://x.invalid').searchParams.get(
+        'notificationSource',
+      ),
+    }));
+    const nextCursor = !later && mocks.hasMore ? '20' : null;
+    return route.fulfill({ json: { data: { items, pinned: [], unreadCount, nextCursor } } });
+  });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
   return calls;
