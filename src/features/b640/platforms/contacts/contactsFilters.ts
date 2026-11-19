@@ -64,7 +64,7 @@ export function kindLabel(kind: ContactKind, filters: ContactFilters): string {
   return count > 0 ? `${KIND_LABELS[kind]} · ${count}` : KIND_LABELS[kind];
 }
 
-const DAY = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Moscow' });
+const DAY = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: '2-digit', timeZone: 'Europe/Moscow' });
 
 /** Метка статуса в строке: «не писали», «писали 12.11», «ответил». */
 export function statusTag(status: B640ContactStatus): { readonly cls: string; readonly text: string } {
