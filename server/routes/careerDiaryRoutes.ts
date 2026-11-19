@@ -1,5 +1,6 @@
 import { registerCareerDiaryEntryRoutes } from './careerDiaryEntryRoutes';
 import { registerCareerDiaryCardRoutes } from './careerDiaryCardRoutes';
+import { registerCareerDiaryPeopleRoutes } from './careerDiaryPeopleRoutes';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { evaluateCareerGoalRisk } from '../../shared/careerDiary';
@@ -641,6 +642,7 @@ export function registerCareerDiaryRoutes(app: FastifyInstance, deps: RouteDeps)
   registerCareerDiaryEntryRoutes(app, deps);
   // B684: цель с показателями и шаги адаптации — свои маршруты, закрыты флагом B640.
   registerCareerDiaryCardRoutes(app, deps);
+  registerCareerDiaryPeopleRoutes(app, deps);
   const readLimit = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const writeLimit = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   const base = '/api/v1/candidate/career-diary';
