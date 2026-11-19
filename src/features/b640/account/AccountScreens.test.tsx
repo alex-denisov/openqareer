@@ -24,13 +24,16 @@ const api = vi.hoisted(() => ({
   updateNotificationPreference: vi.fn(),
   startTelegramLink: vi.fn(),
   disconnectTelegram: vi.fn(),
+  getTelegramLinkState: vi.fn(),
   getAccountCapabilityConsents: vi.fn(),
   getCandidateBillingSummary: vi.fn(),
   getPendingAccountEmailChange: vi.fn(),
   getResumeStudio: vi.fn(),
   requestAccountEmailChange: vi.fn(),
   verifyAccountEmailChange: vi.fn(),
+  getHhSessionState: vi.fn(),
 }));
+vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -49,6 +52,7 @@ vi.mock('../../account/notificationPreferencesApi', () => ({
   startTelegramLink: api.startTelegramLink,
   disconnectTelegram: api.disconnectTelegram,
 }));
+vi.mock('./telegramStateApi', () => ({ getTelegramLinkState: api.getTelegramLinkState }));
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
 }));
@@ -147,8 +151,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.getAccount.mockResolvedValue(account);
   api.getConnections.mockResolvedValue([hh, linkedin]);
+  api.getHhSessionState.mockResolvedValue({ expired: false, since: null });
   api.getNotificationPreferences.mockResolvedValue(events);
   api.getNotificationChannelStatus.mockResolvedValue(channels(false));
+  api.getTelegramLinkState.mockResolvedValue({ state: 'none', expiresAt: null, username: null });
   api.getAccountCapabilityConsents.mockResolvedValue([
     { id: 'c1', capability: 'profile_activity', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: null },
     { id: 'c2', capability: 'digital_footprint', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: '2026-11-05' },
@@ -255,6 +261,20 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-pop')).toBeNull();
     expect(root.querySelector('.set-h')?.textContent).toBe('Подключено 1 из 4');
     expect(root.querySelector('.cn-off')).toBeNull();
+  });
+
+  it('B690: вход в hh.ru истёк — в строке hh предупреждение вместо «подключено»', async () => {
+    api.getHhSessionState.mockResolvedValue({ expired: true, since: '2026-11-19T10:00:00.000Z' });
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const warn = root.querySelector('.set-row.cn-row .set-v.is-warn');
+    expect(warn?.textContent).toBe('вход истёк');
+    expect(warn?.querySelector('.ico')).not.toBeNull();
+    // Признак не прочитался — строка остаётся как была.
+    api.getHhSessionState.mockRejectedValue(new Error('сеть'));
+    view?.unmount();
+    const again = await open(<ConnectionsScreen node={node('n03')} />);
+    expect(again.querySelector('.set-v.is-warn')).toBeNull();
+    expect(again.querySelectorAll('.set-row.cn-row .set-v')[1]?.textContent).toBe('подключено');
   });
 
   it('«Оставить» закрывает подтверждение без запроса', async () => {
@@ -367,6 +387,41 @@ describe('n02 «Уведомления»', () => {
     await settle();
     expect(api.disconnectTelegram).toHaveBeenCalled();
     expect(root.querySelector('a.sw-gate')).not.toBeNull();
+  });
+
+  it('B690: подключённый Telegram показан с именем, устаревшая ссылка видна после перезагрузки', async () => {
+    api.getNotificationChannelStatus.mockResolvedValue(channels(true));
+    api.getTelegramLinkState.mockResolvedValue({ state: 'connected', expiresAt: null, username: '@msokolova_dev' });
+    const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+    expect(root.querySelector('p.set-res[role=status] span')?.textContent).toBe('Telegram · @msokolova_dev');
+    view?.unmount();
+    api.getNotificationChannelStatus.mockResolvedValue(channels(false));
+    api.getTelegramLinkState.mockResolvedValue({ state: 'expired', expiresAt: null, username: null });
+    const again = await open(<NotificationSettingsScreen node={node('n02')} />);
+    expect(again.querySelector('p.set-res.is-err span')?.textContent).toBe('Ссылка устарела');
+    expect(again.textContent).toContain('Получить новую');
+  });
+
+  it('B690: подтверждение в боте приходит с сервера вместе с именем', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      api.startTelegramLink.mockResolvedValue({
+        startUrl: 'https://t.me/openqareer_bot?start=code',
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      });
+      const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+      click(root.querySelector('a.sw-gate'));
+      await settle();
+      api.getTelegramLinkState.mockResolvedValue({ state: 'connected', expiresAt: null, username: '@msokolova_dev' });
+      api.getNotificationChannelStatus.mockResolvedValue(channels(true));
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+      });
+      await settle();
+      expect(root.querySelector('p.set-res[role=status] span')?.textContent).toBe('Telegram · @msokolova_dev');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('канала Telegram нет — колонки и строки о нём нет', async () => {

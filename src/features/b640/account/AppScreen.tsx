@@ -8,7 +8,9 @@ import { SegControl } from '../kit/SegControl';
 import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import type { B640Theme } from '../theme';
+import type { AppMoneyCurrency } from '../../../../shared/b640AppPreferences';
 import { appBuildLine } from './appBuild';
+import { getAppPreferences, saveAppPreferences } from './appPreferencesApi';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 
 const THEMES: ReadonlyArray<{ value: B640Theme; label: string }> = [
@@ -22,8 +24,20 @@ async function loadTimezone(): Promise<string> {
   return account.profile.timezone ?? DEFAULT_ACCOUNT_TIMEZONE;
 }
 
+const CURRENCIES: ReadonlyArray<{ value: AppMoneyCurrency; label: string }> = [
+  { value: 'RUB', label: '₽' },
+  { value: 'USD', label: '$' },
+  { value: 'EUR', label: '€' },
+  { value: 'AED', label: 'AED' },
+];
+
+/** Тема меняется сразу на этом устройстве и запоминается за кандидатом для других. */
 function ThemeRow() {
-  const { theme, setTheme } = useShell();
+  const { theme, setTheme: applyTheme } = useShell();
+  const setTheme = (next: B640Theme) => {
+    applyTheme(next);
+    void saveAppPreferences({ theme: next }).catch(() => undefined);
+  };
   return (
     <li className="set-row is-stack">
       <div className="set-l">
@@ -83,6 +97,37 @@ function TimezoneRow() {
   );
 }
 
+/** B593: валюта, в которой «Вакансии» показывают суммы; сбой возвращает прежнюю. */
+function CurrencyRow() {
+  const load = useLoad(getAppPreferences);
+  const [failed, setFailed] = useState(false);
+  const current = load.state === 'ready' ? (load.data.moneyCurrency ?? 'RUB') : 'RUB';
+  async function choose(moneyCurrency: AppMoneyCurrency) {
+    if (load.state !== 'ready') return;
+    const previous = load.data;
+    setFailed(false);
+    load.replace({ ...previous, moneyCurrency });
+    try {
+      await saveAppPreferences({ moneyCurrency });
+    } catch {
+      load.replace(previous);
+      setFailed(true);
+    }
+  }
+  return (
+    <li className="set-row">
+      <div className="set-l">
+        <span className="set-t">Валюта зарплат</span>
+        {failed ? <ErrorLine text="Не сохранилось" /> : null}
+        {load.state === 'error' ? <ErrorLine text="Не загрузилось" onRetry={load.retry} /> : null}
+      </div>
+      <div className="set-r">
+        <SegControl label="Валюта зарплат" name="b640-money" variant="sec-seg" value={current} options={CURRENCIES} onChange={(value) => void choose(value)} />
+      </div>
+    </li>
+  );
+}
+
 type CheckResult = 'latest' | 'available' | null;
 
 /** «Обновления» — только в приложении: версия и проверка с результатом на месте. */
@@ -128,6 +173,7 @@ export function AppScreen({ node }: { readonly node: B640Node }) {
         <ul className="set-list">
           <ThemeRow />
           <TimezoneRow />
+          <CurrencyRow />
         </ul>
       </section>
       {isTauriEnvironment() ? <Updates /> : null}

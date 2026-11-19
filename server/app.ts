@@ -1,5 +1,6 @@
 import { profilePhotoReader } from './routes/authorRoutes';
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
+import { warmRoleSnapshots } from './routes/roleSnapshotWarm';
 import { warmMatchedList } from './routes/matchedListWarm';
 import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
@@ -66,7 +67,9 @@ import {
   registerCandidateDraftRoutes,
   type CandidateDraftRouteDeps,
 } from './routes/candidateDraftRoutes';
+import { registerB640LinkedinJournalRoutes } from './routes/b640LinkedinJournalRoutes';
 import { registerB640LinkedinQueueRoutes } from './routes/b640LinkedinQueueRoutes';
+import { registerB640LinkedinProfileRoutes } from './routes/b640LinkedinProfileRoutes';
 import { registerB640FeedPostRoutes } from './routes/b640FeedPostRoutes';
 import { SqliteCandidateDraftRepository } from './candidate/sqliteCandidateDraftRepository';
 import {
@@ -87,6 +90,7 @@ import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { buildKpiExtractor } from './providers/kpiExtractor';
 import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { currentVacancyFitProfileValidator } from './domain/vacancyFitProfileStamp';
 import { VacancyMechanicsRuntime } from './domain/vacancyMechanicsRuntime';
@@ -117,6 +121,7 @@ interface BuildAppOptions {
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
+  kpiExtractor?: RouteDeps['kpiExtractor'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
@@ -338,6 +343,8 @@ async function registerApiRoutes(
   registerCandidateActionRoutes(app, deps);
   registerCandidateDraftRoutes(app, deps);
   registerB640LinkedinQueueRoutes(app, deps);
+  registerB640LinkedinProfileRoutes(app, deps);
+  registerB640LinkedinJournalRoutes(app, deps);
   registerB640FeedPostRoutes(app, deps);
   registerBillingRoutes(app, deps);
   registerQuotaRoutes(app, deps);
@@ -468,9 +475,11 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
   deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.((candidateId, log) =>
     rebuildCampaignRoles(deps, candidateId, { log }),
   );
-  deps.matchedPoolPrecompute?.setListWarmer?.((candidateId, log) =>
-    warmMatchedList(deps, candidateId, log),
-  );
+  deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
+    // Roles first (prod 19.11): the list answers from its sealed copy, «Карьера» had nothing.
+    await warmRoleSnapshots(deps, candidateId, log);
+    await warmMatchedList(deps, candidateId, log);
+  });
   return deps;
 }
 
@@ -533,12 +542,23 @@ function createCandidateDraftDeps(
   options: BuildAppOptions,
 ): Pick<
   CandidateDraftRouteDeps,
-  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel' | 'experienceFactRewriter'
+  | 'candidateDraftRepository'
+  | 'linkedinDraftWriter'
+  | 'skillQuizModel'
+  | 'experienceFactRewriter'
+  | 'kpiExtractor'
 > {
   const { config } = options;
   return {
     skillQuizModel: options.skillQuizModel,
     experienceFactRewriter: options.experienceFactRewriter,
+    kpiExtractor:
+      options.kpiExtractor ??
+      buildKpiExtractor({
+        providerCredentials: config.providerCredentials,
+        vertex: config.vertex,
+        vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'kpiImport'),
+      }),
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),

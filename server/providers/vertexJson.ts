@@ -11,6 +11,8 @@ export interface VertexJsonRequest {
   readonly answerTokens: number;
   /** JSON schema of the answer; without it the model picks the shape itself. */
   readonly responseSchema?: unknown;
+  /** Изображения к сообщению кандидата (B686: фото слайда), base64 без префикса. */
+  readonly images?: readonly { readonly mimeType: string; readonly data: string }[];
 }
 
 /**
@@ -42,7 +44,17 @@ export class VertexJsonClient {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: request.system }] },
-          contents: [{ role: 'user', parts: [{ text: request.user }] }],
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: request.user },
+                ...(request.images ?? []).map((image) => ({
+                  inlineData: { mimeType: image.mimeType, data: image.data },
+                })),
+              ],
+            },
+          ],
           generationConfig: {
             responseMimeType: 'application/json',
             ...(request.responseSchema ? { responseJsonSchema: request.responseSchema } : {}),
@@ -56,7 +68,8 @@ export class VertexJsonClient {
     const body = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
     };
-    const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
+    const text =
+      body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
     if (!text) throw new Error('vertex returned no text');
     return text;
   }

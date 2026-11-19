@@ -75,6 +75,17 @@ describe('format: строка вакансии B640', () => {
     expect(view.title).toContain('курс ЦБ на 10.11');
   });
 
+  it('B593: дирхамы по курсу ЦБ — «≈», исходная сумма и курс дирхама в подсказке', () => {
+    const rates = { date: '2026-11-10', rubPerUnit: { USD: 91, EUR: 99, AED: 24.8 } };
+    const view = moneyView(item({ salary: { from: 6000, to: 7000, currency: 'USD' } }), {
+      currency: 'AED',
+      rates,
+    });
+    expect(view.text).toBe('≈ 22–26 тыс. AED');
+    expect(view.title).toContain('В вакансии $6–7 тыс.');
+    expect(view.title).toContain('1 AED = 24,8 ₽');
+  });
+
   it('нет курса или «Как в вакансии» — исходная сумма без «≈»', () => {
     const usd = item({ salary: { from: 6000, to: 7000, currency: 'USD' } });
     expect(moneyView(usd, { currency: 'RUB', rates: undefined }).text).toBe('$6–7 тыс.');

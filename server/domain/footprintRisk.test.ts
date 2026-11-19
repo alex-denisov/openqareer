@@ -324,8 +324,74 @@ describe('buildFootprintRiskSummary', () => {
     );
   });
 
+  it('путь удаления: запрос и итог проверки идут в находку; «удалено» снимает её из «стоит убрать» (B382)', () => {
+    const sent = finding({
+      id: 'sent',
+      kind: 'breach',
+      removal: { requestedAt: '2026-11-11T10:00:00.000Z' },
+    });
+    const gone = finding({
+      id: 'gone',
+      kind: 'breach',
+      removal: {
+        requestedAt: '2026-11-11T10:00:00.000Z',
+        checkedAt: '2026-11-12T10:00:00.000Z',
+        result: 'removed',
+      },
+    });
+    const summary = buildFootprintRiskSummary(audit([sent, gone]), []);
+    const byId = new Map(summary.items.map((item) => [item.id, item]));
+    expect(byId.get('sent')).toMatchObject({
+      resolved: false,
+      removal: { requestedAt: '2026-11-11T10:00:00.000Z' },
+    });
+    expect(byId.get('gone')).toMatchObject({ resolved: true, removal: { result: 'removed' } });
+    expect(summary.toRemove).toBe(1);
+  });
+
   it('ссылку отдаёт только http(s)', () => {
     const summary = buildFootprintRiskSummary(audit([finding({ url: 'javascript:alert(1)' })]), []);
     expect(summary.items[0].url).toBeNull();
+  });
+
+  it('B645 p02: одна страница — одна находка; счёт после склейки', () => {
+    const detail = 'Открытая страница найдена по нику; владение нужно подтвердить.';
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({ title: 'Duolingo', url: 'https://www.duolingo.com/profile/adenisov', detail }),
+        finding({ title: 'Duolingo', url: 'https://duolingo.com/profile/adenisov/', detail }),
+        finding({ title: 'Duolingo', url: 'https://duolingo.com/profile/a.denisov', detail }),
+      ]),
+      [],
+    );
+    expect(summary.total).toBe(2);
+    expect(summary.items.map((item) => item.detail)).toEqual([
+      `duolingo.com/profile/adenisov · ${detail}`,
+      `duolingo.com/profile/a.denisov · ${detail}`,
+    ]);
+  });
+
+  it('B645 p02: из двух копий остаётся разобранная', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({ title: 'Topcoder', url: 'https://topcoder.com/members/ad' }),
+        finding({
+          title: 'Topcoder',
+          url: 'https://topcoder.com/members/ad',
+          checklistMark: 'account_kept',
+        }),
+      ]),
+      [],
+    );
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0].resolved).toBe(true);
+  });
+
+  it('B645 p02: адрес уже в описании — второй раз не пишем', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([finding({ url: 'https://site.test/u/x', detail: 'Страница site.test/u/x открыта' })]),
+      [],
+    );
+    expect(summary.items[0].detail).toBe('Страница site.test/u/x открыта');
   });
 });

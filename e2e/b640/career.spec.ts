@@ -9,6 +9,23 @@ const node = (page: Page, code: string) =>
   page.locator(`[data-b640-node="${code}"]:not([data-b640-state]), [data-b640-state="${code}"]`);
 const desk = (page: Page) => page.viewportSize()!.width >= 768;
 
+/** B645 s09: строка источников под зарплатой не выходит за свою ячейку. */
+async function expectWageNotesInsideCells(page: Page): Promise<void> {
+  const overflow = await page.locator('.c9-table td .c9-n').evaluateAll((notes) =>
+    notes
+      .map((note) => {
+        const cell = note.closest('td')!.getBoundingClientRect();
+        // Блок занимает ширину ячейки; вылезает текст — меряем его диапазон.
+        const range = document.createRange();
+        range.selectNodeContents(note);
+        const box = range.getBoundingClientRect();
+        return { text: note.textContent, over: Math.round(box.right - cell.right) };
+      })
+      .filter((row) => row.over > 0),
+  );
+  expect(overflow).toEqual([]);
+}
+
 test.describe('B653: «Карьера» — роли и условия поиска', () => {
   test('S9: роль поиска, проверка навыков, роли по профилю, «Показать все»; гейты', async ({
     page,
@@ -24,6 +41,7 @@ test.describe('B653: «Карьера» — роли и условия поис�
     const list = desk(page) ? screen.locator('.c9-table tbody tr') : screen.locator('.c9-acc');
     await expect(list).toHaveCount(3);
     await expect(screen.getByText('Показаны 3 из 5')).toBeVisible();
+    if (desk(page)) await expectWageNotesInsideCells(page);
     await expectGates(page);
     // Гейты меняют размер окна: курсор мог остаться над ⓘ, и подсказка закрывает строки.
     await page.mouse.move(0, 0);
@@ -33,6 +51,8 @@ test.describe('B653: «Карьера» — роли и условия поис�
       await expect(list.first()).toContainText('380–520 тыс. ₽hh.ru, 96 вакансий, 10.11');
       await expect(list.first()).toContainText('роль поиска');
       await expect(list.last()).toContainText('нет данных о зарплатах');
+      await expect(list.nth(2)).toContainText('Открытый API, Страница вакансий, hh.ru');
+      await expectWageNotesInsideCells(page);
     }
   });
 

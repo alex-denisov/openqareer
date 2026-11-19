@@ -48,6 +48,7 @@ export const CURRENCY_OPTIONS: ReadonlyArray<{
   { code: 'RUB', label: '₽', aria: 'рубли' },
   { code: 'USD', label: '$', aria: 'доллары' },
   { code: 'EUR', label: '€', aria: 'евро' },
+  { code: 'AED', label: 'AED', aria: 'дирхамы' },
   { code: 'ORIG', label: 'Как в вакансии' },
 ];
 
@@ -79,7 +80,8 @@ export function dateLabel(id: DateId): string {
 }
 
 export function currencySymbol(currency: MoneyCurrency): string {
-  return currency === 'ORIG' || currency === 'RUB' ? '₽' : currency === 'USD' ? '$' : '€';
+  if (currency === 'ORIG' || currency === 'RUB') return '₽';
+  return currency === 'USD' ? '$' : currency === 'EUR' ? '€' : 'AED';
 }
 
 function currencyWord(currency: MoneyCurrency): string {
