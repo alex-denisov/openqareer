@@ -13,6 +13,22 @@ CREATE TABLE IF NOT EXISTS candidate_relocation_places (
 ) STRICT;
 `;
 
+/**
+ * Удаление списка мест вместе с данными о переезде (отзыв согласия, удаление
+ * анкеты). Вызывается внутри транзакции анкеты; таблицы может ещё не быть.
+ */
+export function deleteRelocationPlacesRow(database: DatabaseSync, candidateId: string): void {
+  const table = database
+    .prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_relocation_places'",
+    )
+    .get();
+  if (table)
+    database
+      .prepare('DELETE FROM candidate_relocation_places WHERE candidate_id = ?')
+      .run(candidateId);
+}
+
 export interface SavedRelocationPlaces {
   readonly saved: boolean;
   readonly places: readonly RelocationPlaceChoice[];
@@ -60,11 +76,5 @@ export class SqliteRelocationPlacesRepository {
       )
       .run(candidateId, JSON.stringify(places), now);
     return { saved: true, places, updatedAt: now };
-  }
-
-  remove(candidateId: string): void {
-    this.database
-      .prepare('DELETE FROM candidate_relocation_places WHERE candidate_id = ?')
-      .run(candidateId);
   }
 }

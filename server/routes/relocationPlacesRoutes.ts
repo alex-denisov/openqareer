@@ -21,6 +21,7 @@ import { csrfError, hasSafeMutationOrigin, sendError, withDeps } from './helpers
 type BoundDeps = RouteDeps & { readonly places: SqliteRelocationPlacesRepository };
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
+const EMPTY_PLACES = { saved: false, places: [], updatedAt: null } as const;
 const CITIES_TTL_MS = 15 * 60 * 1000;
 const citiesCache = new Map<string, { readonly at: number; readonly rows: RussianCityRow[] }>();
 
@@ -37,10 +38,11 @@ function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyRep
 const getPlaces: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
-  // Отзыв согласия удаляет данные о переезде: без согласия список мест не хранится.
-  if (!deps.candidateStore.relocationQuestionnaireRepo.getConsent(candidateId).granted)
-    deps.places.remove(candidateId);
-  return { data: deps.places.read(candidateId), meta: { requestId: request.id } };
+  // Чтение ничего не пишет: без согласия список не показывается, а удаляется он
+  // в транзакции отзыва согласия (SqliteRelocationQuestionnaireRepository).
+  const granted = deps.candidateStore.relocationQuestionnaireRepo.getConsent(candidateId).granted;
+  const data = granted ? deps.places.read(candidateId) : EMPTY_PLACES;
+  return { data, meta: { requestId: request.id } };
 };
 
 const putPlaces: Handler = async (deps, request, reply) => {

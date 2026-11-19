@@ -99,6 +99,18 @@ function addEntries(databasePath: string, slug: string, count: number) {
   database.close();
 }
 
+function placeRows(databasePath: string, candidateId: string): number {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const row = database
+      .prepare('SELECT count(*) AS count FROM candidate_relocation_places WHERE candidate_id = ?')
+      .get(candidateId) as { count: number };
+    return row.count;
+  } finally {
+    database.close();
+  }
+}
+
 const BODY = {
   places: [
     { kind: 'country', code: 'RS', skipped: [] },
@@ -117,7 +129,7 @@ describe('B672 relocation places routes', () => {
   });
 
   it('keeps chosen places with skipped sections between visits, after consent', async () => {
-    const { app, candidateStore, id } = await setup();
+    const { app, candidateStore, id, databasePath } = await setup();
     expect((await call(app, 'GET', PATH, 'token-flagged')).json().data).toEqual({
       saved: false,
       places: [],
@@ -137,13 +149,29 @@ describe('B672 relocation places routes', () => {
     expect(read.places).toEqual(BODY.places);
     expect(typeof read.updatedAt).toBe('string');
     candidateStore.relocationQuestionnaireRepo.revokeConsent(id, new Date().toISOString());
+    expect(placeRows(databasePath, id)).toBe(0);
     expect((await call(app, 'GET', PATH, 'token-flagged')).json().data.saved).toBe(false);
-    candidateStore.relocationQuestionnaireRepo.grantConsent(
-      id,
-      RELOCATION_CONSENT_VERSION,
-      new Date().toISOString(),
-    );
-    expect((await call(app, 'GET', PATH, 'token-flagged')).json().data.saved).toBe(false);
+  });
+
+  it('GET without consent writes nothing: a stored list stays until consent is revoked', async () => {
+    const { app, candidateStore, id, databasePath } = await setup();
+    const now = new Date().toISOString();
+    candidateStore.relocationQuestionnaireRepo.grantConsent(id, RELOCATION_CONSENT_VERSION, now);
+    expect((await call(app, 'PUT', PATH, 'token-flagged', BODY)).statusCode).toBe(200);
+    // Согласие снято в обход отзыва: строка списка лежит, а согласия нет.
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare('UPDATE relocation_questionnaire_consents SET revoked_at = ? WHERE candidate_id = ?')
+      .run(now, id);
+    database.close();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const read = (await call(app, 'GET', PATH, 'token-flagged')).json().data;
+      expect(read).toEqual({ saved: false, places: [], updatedAt: null });
+      expect(placeRows(databasePath, id)).toBe(1);
+    }
+    candidateStore.relocationQuestionnaireRepo.grantConsent(id, RELOCATION_CONSENT_VERSION, now);
+    candidateStore.relocationQuestionnaireRepo.revokeConsent(id, new Date().toISOString());
+    expect(placeRows(databasePath, id)).toBe(0);
   });
 
   it('rejects a foreign city, a repeated place and an unknown section', async () => {
