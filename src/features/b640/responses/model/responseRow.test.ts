@@ -10,8 +10,22 @@ function row(overrides: Partial<ApplicationView>) {
 }
 
 describe('B656: строка отклика', () => {
-  it('черновик зовёт проверить письмо', () => {
+  it('B723: письмо одобрено, отклик не отправлен — зовёт отправить, как «Сегодня»', () => {
     const view = row({ stage: 'saved', updatedAt: '2026-11-11T10:00:00.000Z' });
+    expect(view.tag).toEqual({ tone: 'part', label: 'письмо одобрено' });
+    expect(view.next).toBe('Отправьте отклик');
+    expect(view.event).toBe('письмо одобрено 11.11');
+    expect(view.sent).toBe('не отправлен');
+    expect(view.action).toEqual({ kind: 'letter', label: 'Отправить', short: 'Отправить', icon: 'send' });
+    expect(view.yours).toBe(true);
+  });
+
+  it('черновик зовёт проверить письмо', () => {
+    const view = row({
+      stage: 'saved',
+      updatedAt: '2026-11-11T10:00:00.000Z',
+      materials: { coverLetter: false, resume: false },
+    });
     expect(view.tag).toEqual({ tone: 'part', label: 'Черновик' });
     expect(view.next).toBe('Проверьте и отправьте');
     expect(view.event).toBe('черновик сохранён 11.11');
