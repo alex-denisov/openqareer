@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { B640ContactState } from '../../shared/b640Contacts';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
-import { CANDIDATE_CONTACT_STATUS_TABLE } from './sqliteSchema';
+import { CANDIDATE_CONTACT_STATUS_TABLE } from './contactStatusSchema';
 
 export interface StoredContactStatus {
   readonly state: Exclude<B640ContactState, 'none'>;
