@@ -6,7 +6,7 @@ import {
 } from '../../shared/b640Vacancies';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
 import { sortMatchedByColumn, type ColumnSortKey } from '../vacancies/matchedColumnSort';
-import { matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
+import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 import {
   matchedVacanciesQuerySchema,
   type MatchedVacancyFilters,
@@ -94,7 +94,7 @@ async function readList(
     context.targetLevel,
     context.geography,
   );
-  const sourceRegistry = matchedVacancySourceRegistry(deps.multiSourceEngine.getSources?.() ?? []);
+  const { registry: sourceRegistry } = cachedMatchedSourceRegistry(deps.multiSourceEngine);
   const { list } = await readMatchedList(
     {
       ...context,
