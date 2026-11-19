@@ -153,6 +153,7 @@ export function SendStep(props: SendStepProps) {
   const applicationId = approved.applicationId;
   return (
     <HhSendStep
+      vacancyId={vacancyId}
       hhVacancyId={hhVacancyId}
       head={head}
       applicationId={applicationId}
