@@ -416,6 +416,10 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   /** B552: fit analysis of the first matched vacancy, also served by its /fit route. */
   readonly firstVacancyFitView?: VacancyFitView;
   readonly vacancyInitialFilters?: VacanciesScreenState;
+  /** B645: роли поиска из «Карьеры» в meta.campaign списка подборки. */
+  readonly vacancyCampaignRoles?: readonly string[];
+  /** B645: число частых требований роли поиска, которых нет в профиле (строка «Проверить N навыков»). */
+  readonly roleSkillGap?: number;
   readonly savedVacanciesCount?: number;
   readonly companyCount?: number;
   readonly companyDirectory?: Omit<MockCandidateCompanyOptions, 'companyCount'>;
@@ -2567,6 +2571,17 @@ export async function mockSignedInCabinet(
     if (options.firstVacancyFitView && /\/candidate\/vacancies\/[^/]+\/fit$/u.test(path)) {
       return route.fulfill({ json: { data: options.firstVacancyFitView } });
     }
+    if (path.endsWith('/candidate/role-skill-demand') && options.roleSkillGap !== undefined) {
+      const skills = Array.from({ length: options.roleSkillGap }, (_, index) => ({
+        skill: `Навык ${index + 1}`,
+        inProfile: false,
+      }));
+      return route.fulfill({
+        json: {
+          data: { state: 'ready', roles: [{ roleTitle: 'Руководитель разработки', skills }] },
+        },
+      });
+    }
     if (path.endsWith('/candidate/matched-vacancies')) {
       const offset = Number(url.searchParams.get('offset') ?? 0);
       const page = withFirstFitView(
@@ -2583,6 +2598,14 @@ export async function mockSignedInCabinet(
           meta: {
             ...page.meta,
             ...(options.vacancyFacets ? { facets: options.vacancyFacets } : {}),
+            ...(options.vacancyCampaignRoles
+              ? {
+                  campaign: {
+                    roles: { value: options.vacancyCampaignRoles, origin: 'explicit' },
+                    regions: { value: [], origin: 'default' },
+                  },
+                }
+              : {}),
             ...(offset === 0 && options.vacancyInitialFilters
               ? { initialFilters: options.vacancyInitialFilters }
               : {}),

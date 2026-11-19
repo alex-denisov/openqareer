@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { readSkillGap } from '../../career/careerApi';
 import { skillCheckPath } from '../../career/skillCheckModel';
 import { Icon, Link } from '../../kit';
@@ -12,15 +12,16 @@ export function skillLineText(count: number): string {
 function useSkillGap(roles: readonly string[]): number {
   const [gap, setGap] = useState(0);
   const key = roles.join('\n');
+  const titles = useMemo(() => (key ? key.split('\n') : []), [key]);
   useEffect(() => {
     let alive = true;
-    void readSkillGap(roles).then((value) => {
+    void readSkillGap(titles).then((value) => {
       if (alive) setGap(value);
     });
     return () => {
       alive = false;
     };
-  }, [key]);
+  }, [titles]);
   return gap;
 }
 

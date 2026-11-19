@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { pluralRu } from '../format';
@@ -8,6 +9,17 @@ export const REVIEW_PARAM = 'mode=review';
 
 function reviewPath(): string {
   return `${buildNodePath('s07')}?${REVIEW_PARAM}`;
+}
+
+/** Переход по ссылке «Помочь выбрать» (v09) включает режим, как только подборка прочитана. */
+export function useReviewDeepLink(rows: number, start: () => void): void {
+  const opened = useRef(false);
+  useEffect(() => {
+    if (opened.current || rows === 0) return;
+    if (!window.location.search.includes(REVIEW_PARAM)) return;
+    opened.current = true;
+    start();
+  }, [rows, start]);
 }
 
 /** «Помочь выбрать»: ссылка на режим списка v09 (состояние узла s07); нажатие включает режим на месте. */
