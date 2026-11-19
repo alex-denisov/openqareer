@@ -18,12 +18,15 @@ export function CopyButton({
   label,
   caption,
   className,
+  onCopied,
 }: {
   readonly text: string;
   readonly label: string;
   /** Есть — кнопка с подписью вместо значка. */
   readonly caption?: string;
   readonly className?: string;
+  /** Вызывается после удачной записи в буфер. */
+  readonly onCopied?: () => void;
 }) {
   const toast = useToast();
   const [done, setDone] = useState(false);
@@ -41,6 +44,7 @@ export function CopyButton({
       text: ok ? 'Скопировано' : 'Не удалось скопировать. Выделите текст и скопируйте вручную',
     });
     if (!ok) return;
+    onCopied?.();
     setDone(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setDone(false), DONE_MS);
