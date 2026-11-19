@@ -302,24 +302,20 @@ export class AuthServiceCore implements SessionAuth {
       return null;
     }
 
+    return this.issueSession(user, clientDeviceId);
+  }
+
+  /** Новая скользящая сессия пользователя; B401: её же выдаёт вход после кода второго фактора. */
+  protected issueSession(user: UserRow, clientDeviceId?: string): { principal: AuthPrincipal; sessionToken: string } {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
     storeAuthSession(
       this.database,
-      {
-        userId: user.id,
-        tokenHash: hashToken(sessionToken),
-        expiresAt,
-        now,
-        clientDeviceId,
-      },
+      { userId: user.id, tokenHash: hashToken(sessionToken), expiresAt, now, clientDeviceId },
       this.sessionLog,
     );
-    return {
-      principal: this.principalForRow(user),
-      sessionToken,
-    };
+    return { principal: this.principalForRow(user), sessionToken };
   }
 
   authenticate(sessionToken: string): AuthPrincipal | null {
