@@ -19,6 +19,11 @@
   .fa-done .actions { flex-wrap: wrap; }
   .fa-done .actions > .btn.is-primary { flex: 1 1 100%; justify-content: center; }
 }
+
+/* B720: на 390 низ страницы не уходит под закреплённую панель действия и нижнюю навигацию. */
+@media (max-width: 767px) {
+  body:has(.act-dock.is-auto) main { padding-block-end: calc(var(--career-target-min) * 2 + 2 * var(--career-space-2) + var(--career-border-width) + var(--career-space-4)); }
+}
 </style>
 </head>
 <body data-active="settings" data-title="Вход и безопасность" data-crumbs="Аккаунт|n00-akkaunt-razdely;Вход и безопасность" data-template="settings" data-crumbs-desk="0">
