@@ -1,0 +1,69 @@
+/* Профиль LinkedIn (a03): только то, чего нет в стилях макета; атрибут style в кабинете запрещён. */
+@layer b640.sections {
+  .b640 .li-cur,
+  .b640 .li-offer .li-new {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+  .b640 .li-paste {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+  .b640 .li-paste .actions {
+    margin: 0;
+  }
+  .b640 .li-field {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding: var(--career-space-3);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-ctl);
+    background: var(--career-bg);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-sm);
+    resize: vertical;
+  }
+  .b640 .li-field:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: var(--career-focus-offset);
+  }
+  .b640 .li-field[aria-invalid='true'] {
+    border-color: var(--career-danger);
+  }
+  .b640 .li-facts {
+    display: grid;
+    gap: var(--career-space-1);
+    margin: 0;
+    padding: 0;
+    padding-inline-start: var(--career-space-4);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    list-style: disc;
+    max-inline-size: var(--career-measure);
+  }
+  .b640 .li-pasted {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    min-block-size: var(--career-target-min);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+  .b640 .li-pasted .ico {
+    inline-size: var(--career-icon-sm);
+    block-size: var(--career-icon-sm);
+    color: var(--career-accent);
+  }
+  @media (max-width: 767px) {
+    .b640 .li-offer-a {
+      flex-wrap: wrap;
+    }
+    .b640 .li-pasted {
+      margin-inline-start: auto;
+    }
+  }
+  /* «Сейчас · …» и «Обновить» в одну строку. */
+  .b640 .li-cur-h { display: flex; align-items: center; justify-content: space-between; gap: var(--career-space-3); }
+}

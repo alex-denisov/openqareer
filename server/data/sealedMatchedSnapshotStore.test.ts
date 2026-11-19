@@ -32,6 +32,8 @@ describe('SealedMatchedSnapshotStore', () => {
 
     expect(store.read('one', 'campaign')?.text).toBe('"campaign"');
     expect(store.read('one', 'role-cto')?.text).toBe('"cto"');
+    expect(store.keys('one')).toEqual(['role-coo', 'role-cto', 'campaign']);
+    expect(store.keys('nobody')).toEqual([]);
   });
 
   it('holds at most 24 profiles of a candidate, dropping the oldest', () => {

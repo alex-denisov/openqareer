@@ -23,6 +23,7 @@ import { reviewHhResumes } from '../domain/hhResumeReview';
 import { cachedEdits, editsCacheKey, hhEditsInput, rememberEdits, selectedWithSections } from './hhResumeEditsInput';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
+import { resolveHhLoginNotice } from './b640HhSessionState';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -144,6 +145,8 @@ const putResumes: Handler = async (deps, request, reply) => {
     readAt: new Date().toISOString(),
   };
   deps.hh.saveSnapshot(candidateId, snapshot);
+  // B690: резюме прочитаны в окне hh.ru — вход жив, уведомление «вход истёк» больше не нужно.
+  resolveHhLoginNotice(deps, request, candidateId);
   const { contents: _contents, ...visible } = snapshot;
   return { data: visible, meta: { requestId: request.id } };
 };

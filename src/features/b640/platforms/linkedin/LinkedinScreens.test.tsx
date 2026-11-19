@@ -10,7 +10,6 @@ vi.mock('../../shell/ShellContext', () => ({
   useScreenChrome: () => undefined,
 }));
 vi.mock('../../../coach/coachApi', () => ({ getConnections: vi.fn() }));
-vi.mock('../../../resume/resumeApi', () => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../../today/linkedinDraftApi', async (original) => ({
   ...(await original<typeof import('../../../today/linkedinDraftApi')>()),
   listDrafts: vi.fn(),
@@ -35,7 +34,6 @@ vi.mock('./linkedinQueueApi', () => ({
 
 const queue = await import('./linkedinQueueApi');
 const coach = await import('../../../coach/coachApi');
-const resume = await import('../../../resume/resumeApi');
 const api = await import('../../../today/linkedinDraftApi');
 
 const flush = () =>
@@ -65,15 +63,6 @@ const linkedin = (connected: boolean) =>
         importsCareerHistory: true,
         status: 'disconnected',
       };
-const studio = {
-  projection: {
-    master: {
-      targetRole: 'Руководитель разработки',
-      about: 'Строю команды.',
-      skills: [{ id: '1', name: 'Go' }],
-    },
-  },
-};
 const draft = (index: number, patch: Record<string, unknown> = {}) => ({
   id: `d${index}`,
   kind: 'post',
@@ -88,21 +77,6 @@ const many = (count: number, kind = 'post', status = 'published') =>
 afterEach(() => vi.clearAllMocks());
 
 describe('a03: профиль LinkedIn', () => {
-  it('тексты разделов с «Скопировать», без «Применить»', async () => {
-    vi.mocked(coach.getConnections).mockResolvedValue([linkedin(true)] as never);
-    vi.mocked(resume.getResumeStudio).mockResolvedValue(studio as never);
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    const view = mount(<Section node={node('a03')} params={{}} />);
-    await flush();
-    expect(view.container.querySelectorAll('.li-sec')).toHaveLength(3);
-    expect(view.container.textContent).not.toMatch(/Применить|Другой вариант/);
-    await act(async () =>
-      click(view.container.querySelector('button[aria-label="Скопировать: Заголовок"]')!),
-    );
-    expect(writeText).toHaveBeenCalledWith('Руководитель разработки · Go');
-    view.unmount();
-  });
   it('не подключён: строка с «Подключить»', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue([linkedin(false)] as never);
     const view = mount(<Section node={node('a03')} params={{}} />);

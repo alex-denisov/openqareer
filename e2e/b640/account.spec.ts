@@ -78,6 +78,15 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
       await route.fulfill({ json: { data: { emailAvailable: true, telegram, mandatory: {} } } });
       return true;
     }
+    if (pathname.endsWith('/telegram/state')) {
+      // B690: бот «подтверждает» при следующем чтении состояния, имя приходит с ним.
+      if (state.linkIssued) state.telegram = true;
+      const data = state.telegram
+        ? { state: 'connected', expiresAt: null, username: '@msokolova_dev' }
+        : { state: 'none', expiresAt: null, username: null };
+      await route.fulfill({ json: { data } });
+      return true;
+    }
     if (pathname.endsWith('/telegram/link')) {
       calls.linkRequests += 1;
       state.linkIssued = true;
@@ -168,6 +177,19 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
     await expect(page).toHaveURL(/\/app\/account\/notifications$/u);
   });
 
+  test('n03: вход в hh.ru истёк — предупреждение в строке hh', async ({ page }) => {
+    await openAccount(page, '/app/account/connections');
+    await page.route('**/api/v1/candidate/b640/hh/session', (route) =>
+      route.fulfill({ json: { data: { expired: true, since: '2026-11-19T10:00:00.000Z' } } }),
+    );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const screen = page.locator('[data-b640-node="n03"]');
+    const hh = screen.locator('.cn-row').nth(1);
+    await expect(hh.locator('.set-v.is-warn')).toHaveText('вход истёк');
+    await expect(hh.getByRole('button', { name: 'Отключить hh.ru' })).toBeVisible();
+    await expectGates(page);
+  });
+
   test('n02: переключатель сохраняется, Telegram привязывается на месте', async ({ page }) => {
     const calls = await openAccount(page, '/app/account/notifications');
     const screen = page.locator('[data-b640-node="n02"]');
@@ -192,7 +214,7 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       'https://t.me/openqareer_bot?start=mock-code',
     );
     await expectGates(page);
-    const linked = screen.locator('p.set-res', { hasText: 'Telegram подключён' });
+    const linked = screen.locator('p.set-res', { hasText: 'Telegram · @msokolova_dev' });
     await expect(linked).toBeVisible({ timeout: 10_000 });
     await expect(screen.getByRole('switch', { name: 'Ответы: Telegram' })).toBeVisible();
     await linked.getByRole('button', { name: 'Отвязать' }).click();

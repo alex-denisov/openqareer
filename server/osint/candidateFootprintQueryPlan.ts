@@ -4,6 +4,7 @@ import { isNamedEmployer, partitionEmployers } from '../../shared/employerLabel'
 import type { FootprintAdapterId } from '../../shared/candidateFootprint';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import { MAIGRET_SITES } from './adapters/maigretSiteCatalogue';
+import { isYoutubeUrl } from './adapters/youtubeAdapter';
 
 export type { FootprintAdapterId } from '../../shared/candidateFootprint';
 export type FootprintQueryKind = 'username' | 'email' | 'profile_url' | 'name' | 'work_context';
@@ -288,8 +289,16 @@ function extractUsernamesAndLinks(draft: ResumeDraft): {
   return { usernames: [...usernames], links: allLinks };
 }
 
+const MAX_YOUTUBE_LINKS = 3;
+
+function linkPreview(link: string): string {
+  return `Проверить архив публичной страницы ${link}`;
+}
+
 export interface BuildFootprintQueryPlanOptions {
   readonly manualEmployers?: readonly string[];
+  /** B668: проверка канала YouTube через Data API — только кандидатам с флагом B640. */
+  readonly youtube?: boolean;
 }
 
 export function buildCandidateFootprintQueryPlan(
@@ -301,9 +310,18 @@ export function buildCandidateFootprintQueryPlan(
   addUsernameItems(plan, usernames);
   addIdentityItems(plan, draft, usernames.length > 0, options?.manualEmployers);
   for (const link of links) {
-    addItem(plan, 'wayback', 'profile_url', `Проверить архив публичной страницы ${link}`, link, {
+    addItem(plan, 'wayback', 'profile_url', linkPreview(link), link, {
       profileUrl: link,
     });
+  }
+  if (options?.youtube) {
+    // Квота API общая на всех кандидатов: не больше трёх каналов за проверку.
+    for (const link of links.filter(isYoutubeUrl).slice(0, MAX_YOUTUBE_LINKS)) {
+      // Та же строка, что у ссылки: в «Данных для поиска» это одна строка на ссылку.
+      addItem(plan, 'youtube', 'profile_url', linkPreview(link), link, {
+        profileUrl: link,
+      });
+    }
   }
   return plan;
 }

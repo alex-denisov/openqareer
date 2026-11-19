@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
-import {
-  disconnectTelegram,
-  getNotificationChannelStatus,
-  startTelegramLink,
-} from '../../account/notificationPreferencesApi';
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
+import { disconnectTelegram, startTelegramLink } from '../../account/notificationPreferencesApi';
+import { getTelegramLinkState, type TelegramServerState } from './telegramStateApi';
 
 /** Привязка Telegram: нет, ждём подтверждения в боте, ссылка устарела, подключён. */
 export type TelegramLinkState =
   | { readonly step: 'idle' }
   | { readonly step: 'waiting'; readonly startUrl: string; readonly expiresAt: number }
   | { readonly step: 'expired' }
-  | { readonly step: 'connected' };
+  | { readonly step: 'connected'; readonly username: string | null };
 
 export interface TelegramLink {
   readonly state: TelegramLinkState;
@@ -33,16 +30,23 @@ export function safeBotUrl(value: string): string | null {
   }
 }
 
-/** Пока ждём подтверждения, состояние канала перечитывается; срок ссылки сверяется с часами. */
+/** Состояние с сервера поверх локального: подключён с именем или ссылка устарела. */
+function fromServer(server: TelegramServerState | null): TelegramLinkState | null {
+  if (server?.state === 'connected') return { step: 'connected', username: server.username };
+  if (server?.state === 'expired') return { step: 'expired' };
+  return null;
+}
+
+/** Пока ждём подтверждения, состояние перечитывается; срок ссылки сверяется с часами. */
 function useConfirmation(state: TelegramLinkState, onChange: (next: TelegramLinkState) => void) {
   useEffect(() => {
     if (state.step !== 'waiting') return undefined;
     let active = true;
     const check = async () => {
       if (Date.now() >= state.expiresAt) return onChange({ step: 'expired' });
-      const status = await getNotificationChannelStatus().catch(() => null);
+      const next = fromServer(await getTelegramLinkState().catch(() => null));
       // Ответ мог прийти после отвязки или ухода с экрана.
-      if (active && status?.telegram.connected) onChange({ step: 'connected' });
+      if (active && next) onChange(next);
     };
     const timer = setInterval(() => void check(), POLL_MS);
     return () => {
@@ -52,11 +56,29 @@ function useConfirmation(state: TelegramLinkState, onChange: (next: TelegramLink
   }, [state, onChange]);
 }
 
+/** При открытии экрана: имя подключённого и устаревшая ссылка видны и после перезагрузки. */
+function useServerState(setOwn: Dispatch<SetStateAction<TelegramLinkState | null>>) {
+  useEffect(() => {
+    let active = true;
+    getTelegramLinkState()
+      .then((server) => {
+        const next = fromServer(server);
+        // Кандидат мог уже нажать «Подключить»: его действие главнее прочитанного.
+        if (active && next) setOwn((current) => current ?? next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [setOwn]);
+}
+
 export function useTelegramLink(connected: boolean, onConnectionChange: () => void): TelegramLink {
   const [own, setOwn] = useState<TelegramLinkState | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const state: TelegramLinkState = own ?? (connected ? { step: 'connected' } : { step: 'idle' });
+  const state: TelegramLinkState = own ?? (connected ? { step: 'connected', username: null } : { step: 'idle' });
+  useServerState(setOwn);
 
   const change = useCallback(
     (next: TelegramLinkState) => {

@@ -10,6 +10,7 @@ import {
 import { NotificationCursorError } from '../data/sqliteNotificationRepository';
 import type { NotificationPreferenceKey } from '../data/notificationPolicy';
 import { NotificationDeliveryProcessor } from '../notifications/notificationDelivery';
+import { forgetTelegramUsername, registerTelegramLinkStateRoutes, rememberTelegramUsername } from './telegramLinkStateRoutes';
 import {
   buildNotificationEmailSender,
   buildNotificationTelegramSender,
@@ -271,6 +272,7 @@ const handleUnlinkTelegram: Handler = async (deps, request, reply) => {
   );
   if (!candidate) return undefined;
   const disconnected = notificationRepositoryFor(deps).unlinkTelegramChat(candidate.id);
+  forgetTelegramUsername(deps, request.log, candidate.id);
   return { data: { connected: false, disconnected }, meta: { requestId: request.id } };
 };
 
@@ -302,6 +304,7 @@ async function handleTelegramWebhook(
     opaqueTokenHash('telegram-link-v1', match[1]!),
     chatId,
   );
+  if (candidateId) rememberTelegramUsername(deps, request.log, candidateId, update.data.message.from?.username);
   if (candidateId && deps.config.telegramBotToken) {
     try {
       await buildNotificationTelegramSender(deps.config.telegramBotToken)({
@@ -384,6 +387,7 @@ export function registerNotificationRoutes(app: FastifyInstance, deps: RouteDeps
   registerInboxRoutes(app, deps);
   registerChannelRoutes(app, deps);
   registerExternalChannelRoutes(app, deps);
+  registerTelegramLinkStateRoutes(app, deps);
 }
 
 function registerInboxRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -449,6 +453,8 @@ const telegramUpdateSchema = z
     message: z
       .object({
         text: z.string().max(200).optional(),
+        // B690: имя отправителя для «Telegram · @имя»; чужая форма поля — имени нет.
+        from: z.object({ username: z.unknown().optional() }).passthrough().optional().catch(undefined),
         chat: z.object({
           id: z.union([z.number().int().safe(), z.string().regex(/^-?[0-9]{1,20}$/u)]),
         }),
