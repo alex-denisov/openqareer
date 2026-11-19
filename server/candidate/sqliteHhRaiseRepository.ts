@@ -121,12 +121,23 @@ export class SqliteHhRaiseRepository {
     return rows.map(toRow);
   }
 
-  /** B690: когда поднятие последний раз упёрлось в страницу входа hh.ru; `null` — не упиралось. */
-  latestLoggedOutAt(candidateId: string): string | null {
-    const row = this.database
-      .prepare(`SELECT MAX(last_result_at) AS at FROM hh_raise_schedules WHERE candidate_id = ? AND pause_reason = 'logged_out'`)
+  /**
+   * B690: отметки входа hh.ru по расписаниям кандидата: последнее удачное поднятие (вход жив)
+   * и упоры в страницу входа после `aliveAfter` — первый и последний.
+   */
+  loginMarks(candidateId: string, aliveAfter: string | null): { raisedAt: string | null; loggedOutFrom: string | null } {
+    const raised = this.database
+      .prepare('SELECT MAX(last_raised_at) AS at FROM hh_raise_schedules WHERE candidate_id = ?')
       .get(candidateId) as { at: string | null } | undefined;
-    return row?.at ?? null;
+    const raisedAt = raised?.at ?? null;
+    const alive = [aliveAfter, raisedAt].filter((at): at is string => at !== null).sort().at(-1) ?? '';
+    const out = this.database
+      .prepare(
+        `SELECT MIN(last_result_at) AS at FROM hh_raise_schedules
+         WHERE candidate_id = ? AND pause_reason = 'logged_out' AND last_result_at > ?`,
+      )
+      .get(candidateId, alive) as { at: string | null } | undefined;
+    return { raisedAt, loggedOutFrom: out?.at ?? null };
   }
 
   hasOpenTask(candidateId: string, resumeId: string): boolean {

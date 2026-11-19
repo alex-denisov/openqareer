@@ -230,7 +230,7 @@ export class SqliteNotificationRepository {
       .get(candidateId, sourceType, now) !== undefined;
   }
 
-  /** B690: причина ушла — непрочитанные уведомления источника и их неотправленные доставки снимаются. */
+  /** B690: причина ушла — непрочитанные уведомления источника снимаются вместе с их доставками. */
   withdrawUnreadFromSource(candidateId: string, sourceType: string): number {
     const unread = `SELECT id FROM candidate_notifications WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL`;
     this.database

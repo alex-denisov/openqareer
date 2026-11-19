@@ -11,22 +11,24 @@ export interface HhSessionExpiry {
 }
 
 /**
- * B690: вход в hh.ru истёк, если поднятие упёрлось в страницу входа позже, чем кандидат
- * последний раз читал резюме в окне hh.ru. Новое чтение резюме — это новый вход, признак уходит сам.
+ * B690: вход в hh.ru истёк, если поднятие упёрлось в страницу входа позже, чем вход последний раз
+ * был жив: кандидат читал резюме в окне hh.ru или поднятие прошло. `since` — первый упор с тех пор.
  */
 export function hhSessionExpiry(
   raise: SqliteHhRaiseRepository,
   hh: SqliteHhSessionRepository,
   candidateId: string,
 ): HhSessionExpiry {
-  const at = raise.latestLoggedOutAt(candidateId);
   const readAt = hh.getSnapshot(candidateId)?.readAt ?? null;
-  if (!at || (readAt !== null && readAt >= at)) return { expired: false, since: null };
-  return { expired: true, since: at };
+  const { loggedOutFrom } = raise.loginMarks(candidateId, readAt);
+  return loggedOutFrom ? { expired: true, since: loggedOutFrom } : { expired: false, since: null };
 }
 
-/** Одно непрочитанное уведомление на всё время, пока вход истёк; повторные отказы его не множат. */
-export function noteHhLoginExpired(deps: RouteDeps, request: FastifyRequest, candidateId: string, at: string): void {
+/**
+ * Одно уведомление на всё время, пока вход истёк: ключ — начало этого периода, так что повтор
+ * после сбоя записи не плодит дубль, а прочитанное не возвращается при следующих отказах.
+ */
+export function noteHhLoginExpired(deps: RouteDeps, request: FastifyRequest, candidateId: string, since: string): void {
   try {
     if (notificationRepositoryFor(deps).hasUnreadFromSource(candidateId, HH_SESSION_SOURCE)) return;
   } catch (error) {
@@ -37,7 +39,7 @@ export function noteHhLoginExpired(deps: RouteDeps, request: FastifyRequest, can
     kind: 'delivery_error',
     sourceType: HH_SESSION_SOURCE,
     sourceId: 'hh',
-    idempotencyKey: `${HH_SESSION_SOURCE}:${at}`,
+    idempotencyKey: `${HH_SESSION_SOURCE}:${since}`,
   });
 }
 

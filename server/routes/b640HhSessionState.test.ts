@@ -24,6 +24,8 @@ async function setup() {
   const raise = new SqliteHhRaiseRepository({ databasePath: harness.databasePath });
   const notes = new SqliteNotificationRepository({ databasePath: harness.databasePath });
   closers.push(async () => { raise.close(); notes.close(); });
+  const put = (url: string) =>
+    harness.app.inject({ method: 'PUT', url, headers: { authorization: `Bearer ${harness.tokens['flagged.test']}` } });
   const send = (method: 'PUT' | 'POST', url: string, payload: unknown) =>
     harness.app.inject({ method, url, payload: payload as object, headers: { authorization: `Bearer ${harness.tokens['flagged.test']}` } });
   const candidateId = harness.candidateIds['flagged.test'];
@@ -34,7 +36,7 @@ async function setup() {
     const task = (await send('POST', `${RAISE}/claim`, {})).json().data.task;
     return send('POST', `${RAISE}/${task.taskId}/result`, { outcome });
   }
-  return { ...harness, send, unread, raiseWith };
+  return { ...harness, send, put, unread, raiseWith };
 }
 
 describe('B690: вход в hh.ru истёк', () => {
@@ -81,6 +83,23 @@ describe('B690: вход в hh.ru истёк', () => {
     const relogin = await ctx.send('PUT', '/api/v1/candidate/hh/resumes', { resumes: RESUMES, selected: null });
     expect(relogin.statusCode).toBe(200);
     expect((await ctx.get(SESSION, 'flagged.test')).json().data).toEqual({ expired: false, since: null });
+    expect(ctx.unread()).toHaveLength(0);
+  });
+
+  it('a read notice does not come back on the next refusal of the same expiry', async () => {
+    const ctx = await setup();
+    await ctx.raiseWith('logged_out');
+    const [notice] = ctx.unread();
+    await ctx.put(`/api/v1/candidate/notifications/${notice?.id}/read`);
+    await ctx.raiseWith('logged_out', 'def456');
+    expect(ctx.unread()).toHaveLength(0);
+  });
+
+  it('a successful raise on another resume means the login is alive: not expired, notice removed', async () => {
+    const ctx = await setup();
+    await ctx.raiseWith('logged_out');
+    await ctx.raiseWith('ok', 'def456');
+    expect((await ctx.get(SESSION, 'flagged.test')).json().data.expired).toBe(false);
     expect(ctx.unread()).toHaveLength(0);
   });
 

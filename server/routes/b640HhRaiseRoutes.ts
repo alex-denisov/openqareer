@@ -130,16 +130,15 @@ const postResult: Handler = (stores, candidateId, request, reply) => {
   const now = new Date();
   const task = stores.raise.finish(candidateId, params.data.taskId, now.toISOString());
   if (!task) return sendError(reply, request, 409, 'hh_raise_task_closed', 'Это задание закрыто или чужое.', false);
-  const wasExpired = hhSessionExpiry(stores.raise, stores.hh, candidateId).expired;
   const row = stores.raise.patchSchedule(candidateId, task.resumeId, applyOutcome(body.data.outcome, now), now.toISOString());
-  noteLoginChange(stores, request, candidateId, body.data.outcome, wasExpired);
+  noteLoginChange(stores, request, candidateId, body.data.outcome);
   return answer(request, viewOf(true, task.resumeId, row));
 };
 
 /** B690: первый упор в страницу входа — уведомление; удачное поднятие — вход жив, уведомление снято. */
-function noteLoginChange(stores: Stores, request: FastifyRequest, candidateId: string, outcome: string, wasExpired: boolean) {
+function noteLoginChange(stores: Stores, request: FastifyRequest, candidateId: string, outcome: string) {
   if (outcome === 'ok') return resolveHhLoginNotice(stores.deps, request, candidateId);
-  if (outcome !== 'logged_out' || wasExpired) return undefined;
+  if (outcome !== 'logged_out') return undefined;
   const { since } = hhSessionExpiry(stores.raise, stores.hh, candidateId);
   return since ? noteHhLoginExpired(stores.deps, request, candidateId, since) : undefined;
 }
