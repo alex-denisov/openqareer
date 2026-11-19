@@ -8,6 +8,7 @@ import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQ
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
+import { ChoiceField } from './ChoiceField';
 import {
   getQuestionnaire,
   markQuestionnaireSubmitted,
@@ -91,25 +92,18 @@ interface AnswerFieldProps {
   readonly state: QuestionnaireState;
 }
 
+function isChoice(question: QuestionnaireQuestion): boolean {
+  return question.kind === 'choice' && Boolean(question.options?.length);
+}
+
 /** Поле ответа: у вопроса с вариантами — выбор из них, иначе свободный текст. */
 function AnswerField({ fieldId, question, value, state }: AnswerFieldProps) {
-  if (question.kind === 'choice' && question.options?.length) {
+  if (isChoice(question)) {
     const pick = (next: string) => {
       state.setAnswer(question.id, next);
       state.save({ ...state.draft, [question.id]: next });
     };
-    return (
-      <select id={fieldId} value={value} onChange={(event) => pick(event.currentTarget.value)}>
-        <option value="">Выберите ответ</option>
-        {/* Сохранённый ответ, которого уже нет среди вариантов, не теряется молча. */}
-        {value && !question.options.includes(value) ? <option value={value}>{value}</option> : null}
-        {question.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    );
+    return <ChoiceField fieldId={fieldId} question={question} value={value} onPick={pick} />;
   }
   return (
     <textarea
@@ -142,11 +136,13 @@ function Question({ question, suggestion, state }: QuestionProps) {
         ) : null}
         {question.required ? null : <span className="tag src">необязательный</span>}
       </div>
-      {/* Вопрос с выбором — поле набора (`pf-f`), как в остальных формах кабинета. */}
-      <div className={question.kind === 'choice' ? 'field pf-f' : 'field'}>
-        <label className="vh" htmlFor={fieldId}>
-          {`Ваш ответ: ${question.text}`}
-        </label>
+      <div className="field">
+        {/* У вопроса с выбором название несёт сама группа вариантов. */}
+        {isChoice(question) ? null : (
+          <label className="vh" htmlFor={fieldId}>
+            {`Ваш ответ: ${question.text}`}
+          </label>
+        )}
         <AnswerField fieldId={fieldId} question={question} value={value} state={state} />
       </div>
     </li>

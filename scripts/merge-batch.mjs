@@ -24,6 +24,10 @@ import {
   IN_BATCH_LABEL,
   READY_LABEL,
   cancelledOnlyRuns,
+  inheritParentChecks,
+  isOwnMainMerge,
+  shouldNoticeStuck,
+  stuckMarker,
   creditDecision,
   deferStacked,
   parseGhJson,
@@ -76,7 +80,7 @@ function act(what, fn) {
 
 function listPrs() {
   const fields =
-    'number,title,headRefName,headRefOid,labels,isDraft,mergeable,baseRefName,statusCheckRollup';
+    'number,title,headRefName,headRefOid,labels,isDraft,mergeable,baseRefName,statusCheckRollup,isCrossRepository';
   const prs = ghJson(
     'pr',
     'list',
@@ -108,8 +112,108 @@ function listPrs() {
       '--jq',
       '[.[].filename]',
     );
-    return { ...pr, touchesWorkflows: files.some((f) => f.startsWith('.github/workflows/')) };
+    const withFiles = {
+      ...pr,
+      touchesWorkflows: files.some((f) => f.startsWith('.github/workflows/')),
+    };
+    return rejectReason(withFiles) === null ? withFiles : resolveBotHead(withFiles);
   });
+}
+
+function headCommit(sha) {
+  const c = ghJson(
+    'api',
+    `repos/${repo()}/commits/${sha}`,
+    '--jq',
+    '{author: .author.login, message: .commit.message, parents: [.parents[].sha], date: .commit.committer.date, tree: .commit.tree.sha}',
+  );
+  return c;
+}
+
+/**
+ * The author name can be spoofed, so trust the merge only by content: the
+ * second parent is on main and the tree is exactly the merge of its parents,
+ * i.e. the commit adds nothing beyond main.
+ */
+function isPureMainMerge(commit) {
+  const [head, mainSide] = commit.parents;
+  try {
+    git('fetch', '-q', 'origin', head, mainSide, 'main');
+    git('merge-base', '--is-ancestor', mainSide, 'origin/main');
+    return git('merge-tree', '--write-tree', head, mainSide) === commit.tree;
+  } catch {
+    return false;
+  }
+}
+
+function lightChecksOf(sha) {
+  return ghJson(
+    'api',
+    `repos/${repo()}/commits/${sha}/check-runs?per_page=100`,
+    '--jq',
+    '[.check_runs[] | {name, status: (.status | ascii_upcase), conclusion: ((.conclusion // "") | ascii_upcase), completedAt: .completed_at, startedAt: .started_at, detailsUrl: .details_url}]',
+  );
+}
+
+/**
+ * Head is our merge of main: its pull_request run waits for approval
+ * (action_required, bot actor). Approve it, and meanwhile borrow the PR
+ * head's green light run so the PR is not dropped from the queue.
+ */
+function resolveBotHead(pr) {
+  try {
+    const commit = headCommit(pr.headRefOid);
+    const withDate = { ...pr, headDate: commit.date };
+    if (pr.isCrossRepository || !isOwnMainMerge(commit) || !isPureMainMerge(commit))
+      return withDate;
+    approveWaitingRuns(pr);
+    const out = inheritParentChecks(withDate, commit, lightChecksOf(commit.parents[0]));
+    if (out.inheritedFrom)
+      log(
+        `#${pr.number}: head is our main merge; light run of ${out.inheritedFrom.slice(0, 8)} counts`,
+      );
+    return out;
+  } catch (err) {
+    log(`#${pr.number}: could not inspect head ${pr.headRefOid.slice(0, 8)}: ${err.message}`);
+    return pr;
+  }
+}
+
+function approveWaitingRuns(pr) {
+  const ids = ghJson(
+    'api',
+    `repos/${repo()}/actions/runs?head_sha=${pr.headRefOid}&status=action_required`,
+    '--jq',
+    '[.workflow_runs[].id]',
+  );
+  for (const id of ids ?? [])
+    act(`approve waiting run ${id} of #${pr.number}`, () => {
+      try {
+        gh('api', '-X', 'POST', `repos/${repo()}/actions/runs/${id}/approve`);
+      } catch (err) {
+        log(`#${pr.number}: approve ${id} failed: ${err.message}`);
+      }
+    });
+}
+
+/** One comment per head on a merge-ready PR the batcher has skipped for an hour. */
+function noticeStuck(pr, reason) {
+  if (!pr.headDate) return;
+  const ageMin = (Date.now() - Date.parse(pr.headDate)) / 60000;
+  const marker = stuckMarker(pr.headRefOid);
+  const check = { reason, ageMin, alreadyNoticed: false };
+  if (!shouldNoticeStuck(check)) return;
+  const seen = ghText(
+    'api',
+    `repos/${repo()}/issues/${pr.number}/comments?per_page=100`,
+    '--jq',
+    `[.[].body | select(contains("${marker}"))] | length`,
+  );
+  if (!shouldNoticeStuck({ ...check, alreadyNoticed: seen !== '0' })) return;
+  comment(
+    pr,
+    `Групповое слияние: PR с меткой merge-ready не берётся в группу больше ${Math.round(ageMin)} мин. Причина: ${reason}.\n${marker}`,
+  );
 }
 
 /** main + each PR via --no-ff merge; conflicting PRs are dropped. */
@@ -375,6 +479,7 @@ async function runBatch() {
     if (why !== 'no merge-ready label') log(`#${pr.number} ${why ?? 'ready'} — ${pr.title}`);
     if (why?.includes('CANCELLED') && (pr.labels ?? []).some((l) => l.name === READY_LABEL))
       rerunCancelled(pr);
+    if (why && (pr.labels ?? []).some((l) => l.name === READY_LABEL)) noticeStuck(pr, why);
   }
   const { take: candidates, deferred } = deferStacked(selectCandidates(prs), isAncestor);
   for (const { pr, on } of deferred) log(`#${pr.number} waits: stacked on #${on}`);

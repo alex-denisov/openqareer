@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { mockAdaptation, type AdaptationCalls } from './adaptationFixture';
+import { DUTIES, openStart } from './adaptationStartFixture';
 import { expectGates } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -56,6 +57,34 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await expect
       .poll(() => calls.people.map((call) => call.path))
       .toEqual(['/workplaces/w1/people/p4/meeting']);
+  });
+
+  test('d01g–d01i: форма старта, компания из откликов подставляет должность и обязанности', async ({
+    page,
+  }) => {
+    const created = await openStart(page);
+    const screen = page.locator('[data-b640-node="d01"]');
+    await expect(screen.locator('h2.lead-title')).toHaveText(
+      'Чтобы собрать план, укажите, куда вы выходите',
+    );
+    await expectGates(page);
+    const company = page.getByRole('combobox', { name: 'Компания' });
+    await company.fill('Вект');
+    await expect(page.getByRole('option')).toHaveCount(2);
+    await company.press('ArrowDown');
+    await company.press('Enter');
+    await expect(company).toHaveValue('Вектор Банк');
+    await expect(page.getByLabel('Должность')).toHaveValue('Руководитель разработки');
+    await expect(page.getByLabel('Что от вас ждут')).toHaveValue(DUTIES.join('\n'));
+    await page.getByLabel('День выхода').fill('2026-12-01');
+    await page.getByRole('button', { name: 'Собрать план' }).click();
+    await expect.poll(() => created.length).toBe(1);
+    expect(created[0]).toEqual({
+      company: 'Вектор Банк',
+      title: 'Руководитель разработки',
+      startDate: '2026-12-01',
+      expectations: DUTIES.join('\n'),
+    });
   });
 
   test('d01e: письмо копируется и отмечается отправленным; d04: итоги и тексты', async ({

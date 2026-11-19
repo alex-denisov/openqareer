@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   diaryWeekStart,
   type CareerDiaryEntry,
@@ -10,10 +10,12 @@ import { StatusLine } from '../kit/ResultLine';
 import { useToast } from '../kit/Toast';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
+import { useShell } from '../shell/ShellContext';
 import { createEntry, deleteEntry } from './diaryApi';
 import { KINDS, groupByWeek, nearestDue, today, weekNumber, weekdayDate } from './model';
 import { RetryButton } from './parts';
-import { QuickEntry } from './QuickEntry';
+import { DiarySideStart, DiaryStart, WRITE_PARAM } from './EntriesStart';
+import { QUICK_ENTRY_INPUT_ID, QuickEntry } from './QuickEntry';
 import { useDiaryContext } from './useDiaryContext';
 import { useEntries, type EntriesApi, type Feed } from './useEntries';
 import { WeekSection } from './WeekSection';
@@ -126,6 +128,7 @@ function FeedView({
   const day = today();
   const currentWeek = diaryWeekStart(day) ?? day;
   const start = origin ?? oldestDate(feed.items);
+  if (feed.items.length === 0 && !filtered) return null;
   return (
     <>
       {groupByWeek(feed.items, feed.summaries, currentWeek).map((group) => (
@@ -139,11 +142,7 @@ function FeedView({
           onDelete={onDelete}
         />
       ))}
-      {feed.items.length === 0 ? (
-        <p className="vl-empty">
-          {filtered ? 'Записей такого типа пока нет.' : 'Здесь появятся ваши записи.'}
-        </p>
-      ) : null}
+      {feed.items.length === 0 ? <p className="vl-empty">Записей такого типа пока нет.</p> : null}
       {feed.nextCursor ? (
         <div className="vl-foot ct-foot">
           <Button icon="down" busy={loadingMore} onClick={api.loadMore}>
@@ -162,6 +161,21 @@ function FeedView({
   );
 }
 
+/** d00a: записей нет — один лид «С чего начнём дневник?». */
+function BlankDiary(props: {
+  readonly node: B640Node;
+  readonly context: ReturnType<typeof useDiaryContext>;
+  readonly day: string;
+}) {
+  return (
+    <div className="page" data-b640-node={props.node.code} data-b640-section={props.node.section}>
+      <div className="col">
+        <DiaryStart workplace={props.context.workplace} day={props.day} />
+      </div>
+    </div>
+  );
+}
+
 /** Экран d00 «Записи»: быстрая запись, фильтр по типу, лента по неделям. */
 export function EntriesScreen({ node }: { readonly node: B640Node }) {
   const [kind, setKind] = useState<CareerDiaryEntryKind | null>(null);
@@ -170,12 +184,19 @@ export function EntriesScreen({ node }: { readonly node: B640Node }) {
   const remove = useRemoveEntry(feed);
   const next = nearestDue(context.goals, today());
   const { state } = feed;
+  const day = today();
+  const writing = new URLSearchParams(useShell().search).get(WRITE_PARAM) === '1';
+  const blank = state.state === 'ready' && state.feed.items.length === 0 && kind === null;
+  useEffect(() => {
+    if (writing) document.getElementById(QUICK_ENTRY_INPUT_ID)?.focus();
+  }, [writing]);
+  if (blank && !writing) return <BlankDiary node={node} context={context} day={day} />;
   return (
     <div className="page two dn-page" data-b640-node={node.code} data-b640-section={node.section}>
       <div className="col">
         <QuickEntry kind={kind ?? 'note'} onCreated={feed.put} />
         <NextMobile goal={next} />
-        <KindChips kind={kind} onPick={setKind} />
+        {blank ? null : <KindChips kind={kind} onPick={setKind} />}
         {state.state === 'loading' ? <StatusLine state="wait" text="Загружаем записи" /> : null}
         {state.state === 'error' ? (
           <StatusLine
@@ -199,6 +220,7 @@ export function EntriesScreen({ node }: { readonly node: B640Node }) {
       </div>
       <div className="col">
         <NextSide goal={next} />
+        <DiarySideStart context={context} day={day} />
       </div>
     </div>
   );

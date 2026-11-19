@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
+import { expectLastActionReachable } from './lastActionReachable';
 
 const SHOTS = process.env.B640_SHOTS;
 const API = '**/api/v1/candidate';
@@ -304,6 +305,35 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     return route.fallback();
   });
+  // B671: лента нового кабинета — те же события в форме нового маршрута.
+  await page.route(`${API}/b640/notifications**`, (route) => {
+    const url = new URL(route.request().url());
+    const unreadCount = notes.filter((item) => item.readAt === null).length;
+    const later = Boolean(url.searchParams.get('cursor'));
+    const source = later
+      ? Array.from({ length: 20 }, (_, index) =>
+          note(100 + index, { title: `Раннее событие ${index + 1}`, createdAt: OLD, readAt: OLD }),
+        )
+      : notes;
+    const items = source.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      category: 'responses',
+      important: false,
+      title: item.title,
+      company: null,
+      role: null,
+      eventAt: null,
+      createdAt: item.createdAt,
+      readAt: item.readAt,
+      sourceType: 'application',
+      sourceId: new URL(item.action.href, 'https://x.invalid').searchParams.get(
+        'notificationSource',
+      ),
+    }));
+    const nextCursor = !later && mocks.hasMore ? '20' : null;
+    return route.fulfill({ json: { data: { items, pinned: [], unreadCount, nextCursor } } });
+  });
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
   return calls;
@@ -406,6 +436,15 @@ test.describe('B650: «Сегодня» на данных в форме прод
     await expect(screen.getByText('сам не опубликуется')).toHaveCount(0);
     await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expectGates(page);
+  });
+
+  test('B720: последнее действие не под закреплённой панелью', async ({ page }) => {
+    await openCabinet(page, '/app/today', { prodDay: true });
+    await expect(page.locator('[data-b640-node="s03"] .lead')).toBeVisible({ timeout: 15_000 });
+    await expectLastActionReachable(page);
+    // Приёмка мерила и на низком окне: последнее действие у самой панели.
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 569 });
+    await expectLastActionReachable(page);
   });
 
   test('первый ответ оборвался по ожиданию: экран дочитывает сам, ошибки нет', async ({ page }) => {

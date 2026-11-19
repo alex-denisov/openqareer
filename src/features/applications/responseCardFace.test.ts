@@ -89,9 +89,18 @@ describe('responseNextStep', () => {
         whoseTurn: 'candidate',
       }).text,
     ).toBe('Повторить отклик');
+    // B723: письмо привязано к отклику только одобрением — дальше отправка, как на «Сегодня».
     expect(responseNextStep({ ...base, stage: 'saved', whoseTurn: 'candidate' }).text).toBe(
-      'Одобрить письмо',
+      'Отправить отклик',
     );
+    expect(
+      responseNextStep({
+        ...base,
+        stage: 'saved',
+        whoseTurn: 'candidate',
+        materials: { coverLetter: false, resume: true },
+      }).text,
+    ).toBe('Собрать письмо');
   });
 
   it('never says the letter is missing on a sent response', () => {

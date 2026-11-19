@@ -577,7 +577,7 @@ export class SqliteCareerDiaryRepository {
         existing.title !== input.title ||
         existing.startDate !== input.startDate ||
         existing.endDate !== (input.endDate ?? null) ||
-        existing.sourceExperienceId !== (input.sourceExperienceId ?? null)
+        existing.sourceExperienceId !== (input.sourceExperienceId ?? null) || (existing.expectations ?? null) !== (input.expectations || null)
       ) throw new CareerDiaryIdempotencyConflictError();
       return existing;
     }
@@ -588,7 +588,7 @@ export class SqliteCareerDiaryRepository {
       title: input.title,
       startDate: input.startDate,
       endDate: input.endDate ?? null,
-      sourceExperienceId: input.sourceExperienceId ?? null,
+      sourceExperienceId: input.sourceExperienceId ?? null, expectations: input.expectations || null,
       status: input.endDate ? 'archived' : 'active',
       isPrimary,
       createdAt: now,

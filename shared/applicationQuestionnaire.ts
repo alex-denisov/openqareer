@@ -16,6 +16,8 @@ export interface QuestionnaireQuestion {
   readonly kind: QuestionnaireQuestionKind;
   /** Варианты ответа у вопроса с выбором. */
   readonly options?: readonly string[];
+  /** B703: у вопроса с выбором можно отметить несколько вариантов; ответ — по варианту на строку. */
+  readonly multiple?: boolean;
 }
 
 export interface QuestionnaireAnswer {

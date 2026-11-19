@@ -41,7 +41,7 @@ function WeekSummary({
       </details>
     );
   }
-  if (!current) return null;
+  if (!current || group.entries.length === 0) return null;
   return (
     <div className="actions dn-week-act">
       <Link className="btn is-sm" to={link}>
