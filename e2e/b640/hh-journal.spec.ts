@@ -72,6 +72,7 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
   test('hh.ru не подключён: строка площадки с «Подключить»', async ({ page }) => {
     await mockHh(page, false);
     await page.goto(HH_PATH, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('[data-b640-node="a11"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.src-title')).toContainText('hh.ru');
     await page.getByRole('link', { name: 'Подключить hh.ru' }).click();
     await expect(page).toHaveURL(/\/app\/account\/connections/);
@@ -104,6 +105,7 @@ test.describe('B664: hh.ru и журнал нового кабинета', () =>
 
   test('снимки для сверки с макетом', async ({ page }, testInfo) => {
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
+    test.setTimeout(150_000);
     mkdirSync('.s13-shots', { recursive: true });
     const desktop = testInfo.project.name === 'desktop-1440';
     for (const [name, path, node, connected] of [
