@@ -126,6 +126,8 @@ const CATALOG_LISTINGS_SQL = `SELECT place_slug, max(place_label) AS place_label
          HAVING count(*) >= 3
           ORDER BY count DESC, place_slug ASC, role_slug ASC`;
 const CATALOG_TOTALS_SLICE_PAUSE_MS = 50;
+/** Prod 19.11: the coldest selection seen took 45 s; the snapshot waits, no request does. */
+const SNAPSHOT_READ_TIMEOUT_MS = 120_000;
 
 export interface CatalogTotalsSliceOptions {
   readonly sliceRows?: number;
@@ -386,6 +388,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Newest `stored_at` this process gave each source (see nextSliceTimestamp). */
   private readonly lastSliceAt = new Map<string, number>();
   private matchReader?: MatchRowReader;
+  /**
+   * Prod 19.11: one candidate's selection read 2.5 GB of pages, 20-45 s on a cold cache. It has its
+   * own reader with a budget that lets it finish; the snapshot, not the HTTP request, waits for it.
+   */
+  private snapshotReader?: MatchRowReader;
   private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
   private readonly writeBudgetMs: number;
@@ -875,7 +882,6 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (limit <= 0) return [];
     const window = freshnessWindow(options?.nowMs);
     const preferRemote = Boolean(candidate.preferredRemote);
-    this.matchReader ??= new VacancyMatchReader(this.databasePath);
 
     const semanticFunctions = candidate.semanticRoleFunctions?.length
       ? candidate.semanticRoleFunctions
@@ -889,7 +895,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         preferRemote,
         semanticLimit,
       );
-      const rows = await this.readMatchRows(query, false);
+      const rows = await this.readSnapshotRows(query, false);
       // B702: thousands of payloads parsed in one piece held the loop seconds on a cold read.
       const parsed = await mapYielding(rows, (row) => parseVacancy(row.payload));
       return parsed.filter((item): item is UnifiedVacancy => Boolean(item));
@@ -901,7 +907,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     for (const phase of terms.length ? [terms, []] : [[]]) {
       if (results.length >= limit) break;
       const query = this.matchQuery(phase, seenIds, window, preferRemote, limit - results.length);
-      const rows = await this.readMatchRows(query, phase.length > 0);
+      const rows = await this.readSnapshotRows(query, phase.length > 0);
       const parsed = await mapYielding(rows, (row) => parseVacancy(row.payload));
       for (const item of parsed) {
         if (item && !seenIds.has(item.id)) {
@@ -948,17 +954,28 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     if (this.databasePath === ':memory:') return;
     const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
     if (reader instanceof VacancyMatchReader) reader.warm();
+    const snapshots = this.snapshotRowReader();
+    if (snapshots instanceof VacancyMatchReader) snapshots.warm();
+  }
+
+  /** An injected stand-in (tests) answers the snapshot reads too. */
+  private snapshotRowReader(): MatchRowReader {
+    this.snapshotReader ??=
+      this.matchReader && !(this.matchReader instanceof VacancyMatchReader)
+        ? this.matchReader
+        : new VacancyMatchReader(this.databasePath, SNAPSHOT_READ_TIMEOUT_MS);
+    return this.snapshotReader;
   }
 
   /** Роль, которой нет ни в одной записи, заставляет обойти весь пул — на
    * проде это ~20 с, дольше бюджета читателя. Такой отказ фазы по терминам
    * не отменяет подбор: кандидат получает свежие записи из фазы дополнения,
    * а отказ самой фазы дополнения остаётся отказом чтения. */
-  private async readMatchRows(
+  private async readSnapshotRows(
     query: { sql: string; params: SQLInputValue[] },
     termPhase: boolean,
   ): Promise<{ payload: string }[]> {
-    const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
+    const reader = this.snapshotRowReader();
     try {
       return await reader.read(query.sql, query.params);
     } catch (error) {
@@ -3254,6 +3271,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   close(): void {
     this.matchReader?.close();
+    if (this.snapshotReader !== this.matchReader) this.snapshotReader?.close();
     try {
       this.database.close();
     } catch {
