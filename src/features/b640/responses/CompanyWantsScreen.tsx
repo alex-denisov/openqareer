@@ -58,15 +58,27 @@ function nextStepLabel(company: CandidateCompanyOpportunity): string | null {
  * Строка компании: статус, «вакансии · знакомые» и следующий шаг. Пока подборка догружается
  * (`pending`), число вакансий не показывается, чтобы не написать «нет вакансий» раньше времени.
  */
-export function companyWantFace(company: CandidateCompanyOpportunity, pending = false): CompanyWantFace {
-  const brief = [vacanciesBrief(company, pending), contactsBrief(company)].filter(Boolean).join(' · ');
+export function companyWantFace(
+  company: CandidateCompanyOpportunity,
+  pending = false,
+): CompanyWantFace {
+  const brief = [vacanciesBrief(company, pending), contactsBrief(company)]
+    .filter(Boolean)
+    .join(' · ');
   const step = nextStepLabel(company);
   if (company.hasNewVacancies) {
-    return { tag: { tone: 'ok', label: 'новые вакансии' }, brief, actionLabel: 'Смотреть вакансии', actionNode: 's07' };
+    return {
+      tag: { tone: 'ok', label: 'новые вакансии' },
+      brief,
+      actionLabel: 'Смотреть вакансии',
+      actionNode: 's07',
+    };
   }
   const action = { actionLabel: step ?? 'Найти путь', actionNode: 'a02' } as const;
-  if (company.wantStage === 'waiting') return { tag: { tone: 'part', label: 'жду вакансию' }, brief, ...action };
-  if (company.wantStage === 'path') return { tag: { tone: 'miss', label: 'ищу путь' }, brief, ...action };
+  if (company.wantStage === 'waiting')
+    return { tag: { tone: 'part', label: 'жду вакансию' }, brief, ...action };
+  if (company.wantStage === 'path')
+    return { tag: { tone: 'miss', label: 'ищу путь' }, brief, ...action };
   return { tag: { tone: '', label: 'хочу' }, brief, ...action };
 }
 
@@ -153,7 +165,7 @@ function CompanyRow({ company, pending }: CompanyRowProps) {
         {face.brief}
       </span>
       <span className="cw-act">
-        <Link className="btn is-sm cw-ib" to={path} aria-label={`${face.actionLabel}: ${company.name}`}>
+        <Link className="btn cw-ib" to={path} aria-label={`${face.actionLabel}: ${company.name}`}>
           {face.actionLabel}
         </Link>
       </span>
@@ -290,7 +302,11 @@ function WantsList({ wants, page }: WantsListProps) {
       ) : (
         <ul className="cw-rows cw-list" aria-label="Компании">
           {items.map((company) => (
-            <CompanyRow company={company} key={company.key} pending={page.vacanciesPending === true} />
+            <CompanyRow
+              company={company}
+              key={company.key}
+              pending={page.vacanciesPending === true}
+            />
           ))}
         </ul>
       )}

@@ -204,7 +204,10 @@ test.describe('B673: доход и ожидания на «Профиле» (s01
     ).toHaveCount(0);
 
     await job.getByRole('button', { name: 'Изменить' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Доход и ожидания' });
+    const dialog = page.getByRole('dialog', { name: 'Доход сейчас' });
+    // Ожидания живут в «Условиях поиска», в карточке работы и окне их нет (B645 s01).
+    await expect(job.getByText('Ожидания')).toHaveCount(0);
+    await expect(dialog.getByLabel('Ожидания, ₽ в месяц на руки')).toHaveCount(0);
     await expectGates(page);
     await dialog.getByLabel('Доход сейчас, ₽ в месяц на руки').fill('много');
     await dialog.getByRole('button', { name: 'Сохранить' }).click();
@@ -212,20 +215,18 @@ test.describe('B673: доход и ожидания на «Профиле» (s01
     expect(calls.incomePuts).toHaveLength(0);
 
     await dialog.getByLabel('Доход сейчас, ₽ в месяц на руки').fill('440 000');
-    await dialog.getByLabel('Ожидания, ₽ в месяц на руки').fill('500000');
     await dialog.getByRole('button', { name: 'Сохранить' }).click();
     await expect(dialog).toHaveCount(0);
     await expect(job.getByText('440 000 ₽ на руки', { exact: true })).toBeVisible();
-    await expect(job.getByText('от 500 000 ₽ на руки')).toBeVisible();
-    expect(calls.incomePuts).toEqual([{ current: 440000, expected: 500000 }]);
+    expect(calls.incomePuts).toEqual([{ current: 440000, expected: null }]);
   });
 
   test('сохранённый доход показан при открытии', async ({ page }) => {
     await openCabinet(page, '/app/profile', { income: { current: 440000, expected: null } });
     const job = node(page, 's01').locator('#sec-exp .job').first();
     await expect(job.getByText('440 000 ₽ на руки')).toBeVisible();
-    // Не указаны команда и ожидания.
-    await expect(job.getByText('Не указано')).toHaveCount(2);
+    // Не указана команда; строки «Ожидания» в карточке нет.
+    await expect(job.getByText('Не указано')).toHaveCount(1);
   });
 });
 

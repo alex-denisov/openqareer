@@ -1,15 +1,39 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { B640HhRaiseState } from '../../../../../shared/b640HhRaise';
 import { openHhSignIn } from '../../apply/hh/hhDesktop';
-import { Button, StatusLine, Switch } from '../../kit';
+import { Button, StatusLine } from '../../kit';
 import { getHhRaise, retryHhRaise, setHhRaiseEnabled } from './hhRaiseApi';
 import { lineOf } from './hhRaiseText';
 
-const TITLE_ID = 'hh-raise-title';
+const SWITCH_ID = 'hh-up';
+
+interface RaiseSwitchProps {
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly onChange: (enabled: boolean) => void;
+}
+
+/** Строка макета a11 `.hh-sw`: подпись слева, переключатель справа. */
+function RaiseSwitch({ checked, disabled, onChange }: RaiseSwitchProps) {
+  return (
+    <div className="hh-sw">
+      <label htmlFor={SWITCH_ID}>Автоподнятие резюме</label>
+      <input
+        className="sw"
+        id={SWITCH_ID}
+        type="checkbox"
+        role="switch"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+      />
+    </div>
+  );
+}
 
 /**
- * B699: состояние автоподнятия резюме hh.ru и переключатель. Монтируется на экране
- * платформы hh.ru (раздел «Платформы»); пока там заглушка, подключается при его сборке.
+ * B699: переключатель «Автоподнятие резюме» по макету a11 (`.hh-sw`) и тихая строка состояния
+ * под ним. Монтируется в шапке экрана hh.ru (a11), когда hh.ru подключён.
  */
 export function HhRaiseStatus() {
   const [view, setView] = useState<B640HhRaiseState | null>(null);
@@ -43,16 +67,12 @@ export function HhRaiseStatus() {
   const retry = <Button size="sm" busy={busy} onClick={() => change(() => retryHhRaise(view.resumeId ?? undefined))}>Повторить</Button>;
   const signIn = <Button size="sm" onClick={() => void openHhSignIn()}>Войти</Button>;
   return (
-    <div>
-      <div className="set-row">
-        <span className="set-t" id={TITLE_ID}>Поднимать резюме в поиске hh.ru</span>
-        <Switch
-          labelledBy={TITLE_ID}
-          checked={view.enabled}
-          disabled={busy}
-          onChange={(enabled) => void change(() => setHhRaiseEnabled(enabled, view.resumeId ?? undefined))}
-        />
-      </div>
+    <>
+      <RaiseSwitch
+        checked={view.enabled}
+        disabled={busy}
+        onChange={(enabled) => void change(() => setHhRaiseEnabled(enabled, view.resumeId ?? undefined))}
+      />
       {line.state === 'off' ? null : (
         <StatusLine
           state={line.state}
@@ -61,6 +81,6 @@ export function HhRaiseStatus() {
         />
       )}
       {failed ? <StatusLine state="err" text="Не получилось, попробуйте ещё раз" /> : null}
-    </div>
+    </>
   );
 }

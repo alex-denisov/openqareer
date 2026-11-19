@@ -214,6 +214,48 @@ export interface FootprintCalls {
   readonly reviews: Array<{ id: string; review: string }>;
   readonly granted: string[];
   revoked: number;
+  /** B382: «Письмо отправлено» и «Проверить находку» по id находки. */
+  readonly removals: string[];
+  readonly rechecks: string[];
+}
+
+type Removal = { requestedAt?: string; checkedAt?: string; result?: string };
+
+/** Сводка с сохранённым путём удаления: «удалено» снимает находку из «стоит убрать». */
+function withRemovals(data: ReturnType<typeof caseSummary>, removals: Map<string, Removal>) {
+  const items = data.items.map((entry) => {
+    const removal = removals.get(entry.id);
+    if (!removal) return entry;
+    const resolved = removal.result === 'removed';
+    return { ...entry, removal, resolved, action: resolved ? null : entry.action };
+  });
+  return { ...data, items };
+}
+
+async function mockRemoval(
+  page: Page,
+  calls: FootprintCalls,
+  removals: Map<string, Removal>,
+  recheckResult: string,
+): Promise<void> {
+  await page.route(`${API}/candidate/footprint/findings/*/removal-request`, (route) => {
+    const id = route.request().url().split('/').at(-2) ?? '';
+    calls.removals.push(id);
+    const removal = { ...removals.get(id), requestedAt: '2026-11-18T09:00:00.000Z' };
+    removals.set(id, removal);
+    return route.fulfill({ json: { data: { findingId: id, removal } } });
+  });
+  await page.route(`${API}/candidate/footprint/findings/*/recheck`, (route) => {
+    const id = route.request().url().split('/').at(-2) ?? '';
+    calls.rechecks.push(id);
+    const removal = {
+      ...removals.get(id),
+      checkedAt: '2026-11-19T09:00:00.000Z',
+      result: recheckResult,
+    };
+    removals.set(id, removal);
+    return route.fulfill({ json: { data: { findingId: id, removal } } });
+  });
 }
 
 /** Кабинет под флагом с моками маршрутов следа; состояние меняется вызовами экрана. */
@@ -221,8 +263,17 @@ export async function openFootprint(
   page: Page,
   path: string,
   initial: FootprintCase,
+  recheckResult = 'removed',
 ): Promise<FootprintCalls> {
-  const calls: FootprintCalls = { started: [], reviews: [], granted: [], revoked: 0 };
+  const calls: FootprintCalls = {
+    started: [],
+    reviews: [],
+    granted: [],
+    revoked: 0,
+    removals: [],
+    rechecks: [],
+  };
+  const removals = new Map<string, Removal>();
   let kind = initial;
   let granted = initial !== 'fresh';
   await mockSignedInCabinet(page, { cabinetB640: true });
@@ -239,8 +290,9 @@ export async function openFootprint(
     }),
   );
   await page.route(`${API}/candidate/footprint/risks`, (route) =>
-    route.fulfill({ json: { data: caseSummary(kind) } }),
+    route.fulfill({ json: { data: withRemovals(caseSummary(kind), removals) } }),
   );
+  await mockRemoval(page, calls, removals, recheckResult);
   await page.route(`${API}/candidate/footprint/start`, (route) => {
     calls.started.push(route.request().postDataJSON());
     kind = 'checking';
