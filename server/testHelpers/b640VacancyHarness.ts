@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs';
+import type { CoverLetterWriter } from '../providers/coverLetterWriter';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildApp } from '../app';
@@ -62,6 +63,8 @@ export interface HarnessOptions {
   readonly logLines?: string[];
   /** Дополнительные методы подставного движка пула (getVacancy, getActiveCluster). */
   readonly engine?: Record<string, unknown>;
+  /** Подставной писатель писем: реальных вызовов моделей в тестах нет. */
+  readonly coverLetterWriter?: CoverLetterWriter;
 }
 
 const PASSWORD = 'candidate-password-for-tests';
@@ -106,7 +109,7 @@ export async function createB640Harness(options: HarnessOptions) {
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
-    multiSourceVacancyEngine: engine as never, serveStatic: false,
+    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
     ...(options.logLines ? { logDestination: { write: (line: string) => { options.logLines?.push(line); } } } : {}),
   });
   const get = (url: string, user?: HarnessUser) =>
