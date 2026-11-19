@@ -30,17 +30,20 @@ export const HH_SELECTORS = {
     salary: '[data-qa="vacancy-salary"]',
     responseButtonTop: '[data-qa="vacancy-response-link-top"]',
     responseButtonBottom: '[data-qa="vacancy-response-link-bottom"]',
-    alreadyAppliedBadge: '[data-qa="vacancy-response-already-applied"]',
+    alreadyAppliedBadge: '[data-qa="vacancy-response-link-view-topic"]',
   },
   apply: {
-    popup: '[data-qa="vacancy-response-popup"]',
-    resumeRadio: '[data-qa="vacancy-response-popup__resume-item"]',
-    letterToggle: '[data-qa="vacancy-response-popup__letter-toggle"]',
-    letterTextarea: '[data-qa="vacancy-response-popup__letter-textarea"]',
+    // B708: re-taken from hh.ru bundles 19.11.2026; the modal has no data-qa of its own.
+    popup: '#RESPONSE_MODAL_FORM_ID, [data-qa="response-popup-close"]',
+    resumeRadio: 'input[name="resumeId"]',
+    letterToggle: '[data-qa="add-cover-letter"], [data-qa="vacancy-response-letter-toggle"]',
+    letterTextarea:
+      'textarea[data-qa="vacancy-response-popup-form-letter-input"], [data-qa="vacancy-response-popup-form-letter-input"] textarea',
     submitButton: '[data-qa="vacancy-response-submit-popup"]',
     relocationConfirm: '[data-qa="relocation-warning-confirm"]',
     questionnaireWarning: '[data-qa="vacancy-response-questionnaire"]',
-    success: '[data-qa="vacancy-response-success"]',
+    success:
+      '[data-qa="vacancy-response-success-standard-notification"], [data-qa="vacancy-response-link-view-topic"]',
   },
   /**
    * `/applicant/resumes` card structure, confirmed live on 2026-08-16: the card
