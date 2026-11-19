@@ -7,6 +7,7 @@ import { isConditionsView } from './careerPaths';
 import { CompareView } from './CompareView';
 import { ConditionsScreen } from './ConditionsScreen';
 import { RolesLoad } from './RolesScreen';
+import { ProfessionScreen } from './ProfessionScreen';
 import { SkillCheckScreen } from './SkillCheckScreen';
 
 /** Вход раздела «Карьера»: экран по коду узла (см. ../README.md). */
@@ -22,6 +23,7 @@ export default function Section({ node }: SectionProps) {
       </RolesLoad>
     );
   }
+  if (node.code === 's11') return <ProfessionScreen node={node} />;
   if (node.code === 'c04') return <SkillCheckScreen node={node} />;
   return <NodeStub node={node} />;
 }

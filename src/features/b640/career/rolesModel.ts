@@ -29,6 +29,8 @@ export interface RoleRow {
   readonly lacks: string | null;
   /** Итог проверки навыков; `null` — проверка не пройдена. */
   readonly check: RoleCheck | null;
+  /** Все частые требования роли: по ним ищется промежуточная роль (S11). */
+  readonly requirements: readonly string[];
 }
 
 const NO_WAGE = 'нет данных о зарплатах';
@@ -87,6 +89,7 @@ function rowOf(
     origin: originOf(role, search),
     confirms: listOf(model.confirmedItems),
     lacks: listOf(model.missingItems),
+    requirements: [...model.confirmedItems, ...model.missingItems].map((item) => item.text),
     check:
       model.status === 'hypothesis'
         ? null
@@ -108,6 +111,7 @@ function searchOnlyRow(title: string): RoleRow {
     confirms: null,
     lacks: null,
     check: null,
+    requirements: [],
   };
 }
 
