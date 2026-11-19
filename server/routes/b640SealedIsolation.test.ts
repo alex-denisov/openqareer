@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createB640Harness, poolItem, type PoolRow } from '../testHelpers/b640VacancyHarness';
+import { timeBudget } from '../../shared/testing/timeBudget';
 import { forgetMatchedListsForTests } from './matchedVacancyList';
 
 const NEW = '/api/v1/candidate/b640/matched-vacancies';
@@ -13,19 +14,41 @@ afterEach(async () => {
 });
 
 const ROWS: PoolRow[] = [
-  { id: 'cluster-1', title: 'Яблоко', company: 'Бета', location: 'Москва', observedAt: '2026-10-03T00:00:00.000Z', salaryFrom: 300_000 },
-  { id: 'cluster-2', title: 'арбуз', company: 'Альфа', location: 'Санкт-Петербург', observedAt: '2026-10-01T00:00:00.000Z', salaryFrom: 100_000 },
+  {
+    id: 'cluster-1',
+    title: 'Яблоко',
+    company: 'Бета',
+    location: 'Москва',
+    observedAt: '2026-10-03T00:00:00.000Z',
+    salaryFrom: 300_000,
+  },
+  {
+    id: 'cluster-2',
+    title: 'арбуз',
+    company: 'Альфа',
+    location: 'Санкт-Петербург',
+    observedAt: '2026-10-01T00:00:00.000Z',
+    salaryFrom: 100_000,
+  },
   { id: 'cluster-3', title: 'Банан', company: 'Гамма', isRemote: true, salaryFrom: 200_000 },
   { id: 'cluster-4', title: 'Яблоко', company: 'Дельта', location: 'Казань' },
 ];
 const POOL = ROWS.map(poolItem);
 
 const workspace = (by: 'fit' | 'money', dir: 'desc' | 'asc') => ({
-  resumeText: '', resumeSource: 'text' as const, targetDirection: '', regions: [],
-  currentSituation: '', constraints: '', urgency: 'exploring' as const, vacancySort: { by, dir },
+  resumeText: '',
+  resumeSource: 'text' as const,
+  targetDirection: '',
+  regions: [],
+  currentSituation: '',
+  constraints: '',
+  urgency: 'exploring' as const,
+  vacancySort: { by, dir },
 });
 
-async function setup(saved: { by: 'fit' | 'money'; dir: 'desc' | 'asc' } = { by: 'fit', dir: 'desc' }) {
+async function setup(
+  saved: { by: 'fit' | 'money'; dir: 'desc' | 'asc' } = { by: 'fit', dir: 'desc' },
+) {
   const lines: string[] = [];
   const harness = await createB640Harness({ pool: () => POOL, logLines: lines });
   closers.push(harness.close);
@@ -34,22 +57,42 @@ async function setup(saved: { by: 'fit' | 'money'; dir: 'desc' | 'asc' } = { by:
   const sealedRow = () => {
     const database = new DatabaseSync(harness.databasePath, { readOnly: true });
     try {
-      return database.prepare('SELECT candidate_id, built_at, cipher FROM sealed_matched_lists WHERE candidate_id = ?').get(id);
+      return database
+        .prepare(
+          'SELECT candidate_id, built_at, cipher FROM sealed_matched_lists WHERE candidate_id = ?',
+        )
+        .get(id);
     } finally {
       database.close();
     }
   };
-  const ids = (body: string): string[] => JSON.parse(body).data.map((r: { cluster: { id: string } }) => r.cluster.id);
+  const ids = (body: string): string[] =>
+    JSON.parse(body).data.map((r: { cluster: { id: string } }) => r.cluster.id);
   const user = 'flagged.test' as const;
   const lastServed = (): unknown =>
-    lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1)?.listServed;
+    lines
+      .map((line) => JSON.parse(line))
+      .filter((line) => line.msg === 'matched-vacancies-timing')
+      .at(-1)?.listServed;
   return { ...harness, lastServed, id, sealedRow, ids, user };
 }
 
-const within = <T,>(work: Promise<T>, ms: number, what: string): Promise<T> =>
-  Promise.race([work, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${what}: no answer in ${ms} ms (cold read)`)), ms))]);
+const within = <T>(work: Promise<T>, ms: number, what: string): Promise<T> =>
+  Promise.race([
+    work,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${what}: no answer in ${ms} ms (cold read)`)), ms),
+    ),
+  ]);
 
-const FILTERS = ['role=Инженер данных', 'region=eu', 'level=ic', 'source=src', 'remote=1', 'place=Москва'];
+const FILTERS = [
+  'role=Инженер данных',
+  'region=eu',
+  'level=ic',
+  'source=src',
+  'remote=1',
+  'place=Москва',
+];
 
 describe('B674: filters never reseal the list', () => {
   it('keeps the sealed row byte for byte for each filter and their mix', async () => {
@@ -69,7 +112,7 @@ describe('B674: filters never reseal the list', () => {
     for (const query of FILTERS) await h.get(`${NEW}?${query}`, h.user);
     forgetMatchedListsForTests();
     h.hangPool(true);
-    const again = await within(h.get(OLD, h.user), 3000, 'old route');
+    const again = await within(h.get(OLD, h.user), timeBudget(3000), 'old route');
     expect(h.ids(again.body)).toEqual(first);
     expect(h.lastServed()).toBe('sealed');
   });
@@ -91,11 +134,16 @@ describe('B674: the new route leaves what the old route reads', () => {
     expect(before).toBeTruthy();
     for (const sort of SORTS) {
       for (const direction of ['asc', 'desc']) {
-        expect((await h.get(`${NEW}?sort=${sort}&direction=${direction}`, h.user)).statusCode).toBe(200);
+        expect((await h.get(`${NEW}?sort=${sort}&direction=${direction}`, h.user)).statusCode).toBe(
+          200,
+        );
       }
     }
     expect(h.sealedRow()).toEqual(before);
-    expect(h.candidates.getCandidateWorkspace(h.id)?.vacancySort).toEqual({ by: 'fit', dir: 'desc' });
+    expect(h.candidates.getCandidateWorkspace(h.id)?.vacancySort).toEqual({
+      by: 'fit',
+      dir: 'desc',
+    });
   });
 
   it('lets the old route answer from the sealed list, same ids, after the new one', async () => {
@@ -104,7 +152,7 @@ describe('B674: the new route leaves what the old route reads', () => {
     for (const sort of SORTS) await h.get(`${NEW}?sort=${sort}&direction=asc`, h.user);
     forgetMatchedListsForTests();
     h.hangPool(true);
-    const again = await within(h.get(OLD, h.user), 3000, 'old route');
+    const again = await within(h.get(OLD, h.user), timeBudget(3000), 'old route');
     expect(h.ids(again.body)).toEqual(first);
     expect(h.lastServed()).toBe('sealed');
   });
@@ -120,11 +168,16 @@ describe('B674: the new route leaves what the old route reads', () => {
 
   it('orders by fit for an account that remembered money', async () => {
     const fitAccount = await setup({ by: 'fit', dir: 'desc' });
-    const expected = fitAccount.ids((await fitAccount.get(`${NEW}?sort=fit`, fitAccount.user)).body);
+    const expected = fitAccount.ids(
+      (await fitAccount.get(`${NEW}?sort=fit`, fitAccount.user)).body,
+    );
     const money = await setup({ by: 'money', dir: 'desc' });
     const byFit = money.ids((await money.get(`${NEW}?sort=fit`, money.user)).body);
     expect(byFit).toEqual(expected);
-    expect(money.candidates.getCandidateWorkspace(money.id)?.vacancySort).toEqual({ by: 'money', dir: 'desc' });
+    expect(money.candidates.getCandidateWorkspace(money.id)?.vacancySort).toEqual({
+      by: 'money',
+      dir: 'desc',
+    });
   });
 });
 
@@ -135,7 +188,7 @@ describe('B702: a new process answers the first read of the new route from the s
     await h.get(OLD, h.user);
     forgetMatchedListsForTests();
     h.hangPool(true);
-    const cold = await within(h.get(`${NEW}?sort=fit`, h.user), 3000, 'new route');
+    const cold = await within(h.get(`${NEW}?sort=fit`, h.user), timeBudget(3000), 'new route');
     expect(cold.statusCode).toBe(200);
     expect(h.ids(cold.body)).toEqual(h.ids(built.body));
     expect(JSON.parse(cold.body).meta.total).toBe(JSON.parse(built.body).meta.total);

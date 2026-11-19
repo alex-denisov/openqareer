@@ -32,6 +32,7 @@ const STEP_NODE: Readonly<Partial<Record<CareerDiaryAdaptationStepId, string>>> 
   first_two_weeks: 'd01b',
   first_meeting: 'd01c',
   people_map: 'd01d',
+  day_30_check: 'd01e',
   settling: 'd01f',
 };
 const STEP_CLASS = { done: 'done', active: 'now', ahead: '' } as const;
