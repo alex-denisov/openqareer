@@ -98,16 +98,13 @@ describe('B640 offer routes: responses summary', () => {
     expect(data.autoApplicationIds).toEqual([a.id]);
   });
 
-  it('filters the id list by origin', async () => {
+  it('a response taken off the auto queue counts as manual', async () => {
     const { send, application, queueAuto } = await setup();
     const a = application('flagged.test', 'applied');
-    queueAuto('flagged.test', a.id);
-    application('flagged.test', 'applied');
-    const auto = (await send('GET', `${BASE}/responses/summary?origin=auto`, 'flagged.test')).json().data;
-    expect(auto.autoApplicationIds).toEqual([a.id]);
-    const man = (await send('GET', `${BASE}/responses/summary?origin=manual`, 'flagged.test')).json().data;
-    expect(man.autoApplicationIds).toEqual([]);
-    expect((await send('GET', `${BASE}/responses/summary?origin=zzz`, 'flagged.test')).statusCode).toBe(400);
+    queueAuto('flagged.test', a.id, 'removed');
+    const data = (await send('GET', `${BASE}/responses/summary`, 'flagged.test')).json().data;
+    expect(data.autoApplicationIds).toEqual([]);
+    expect(data.counts.manual).toMatchObject({ applied: 1 });
   });
 });
 

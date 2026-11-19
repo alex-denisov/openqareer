@@ -21,7 +21,6 @@ const taxSchema = z
   .object({ taxPercent: z.number().min(0).max(B640_TAX_PERCENT_MAX).nullable() })
   .strict();
 const decisionSchema = z.object({ decision: z.enum(B640_OFFER_DECISIONS) }).strict();
-const originSchema = z.object({ origin: z.enum(['auto', 'manual']).optional() });
 const applicationIdSchema = z.string().trim().min(1).max(120);
 
 interface Ctx {
@@ -75,12 +74,8 @@ function invalidBody(request: FastifyRequest, reply: FastifyReply): FastifyReply
 const getSummary: Handler = async (ctx, request, reply) => {
   const candidateId = candidateOf(ctx, request, reply);
   if (!candidateId) return reply;
-  const query = originSchema.safeParse(request.query ?? {});
-  if (!query.success) return sendError(reply, request, 400, 'invalid_query', 'Неверный параметр origin.', false);
   const applications = ctx.deps.candidateStore.listApplications(candidateId);
-  const summary = summarizeResponses(applications, ctx.choices.autoApplicationIds(candidateId));
-  const data =
-    query.data.origin === 'manual' ? { ...summary, autoApplicationIds: [] } : summary;
+  const data = summarizeResponses(applications, ctx.choices.autoApplicationIds(candidateId));
   reply.header('Cache-Control', 'no-store');
   return { data, meta: { requestId: request.id } };
 };

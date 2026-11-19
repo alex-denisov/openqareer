@@ -67,7 +67,8 @@ export class SqliteB640OfferChoiceRepository {
       .prepare(
         `INSERT INTO b640_offer_choices (application_id, candidate_id, tax_percent, updated_at)
          VALUES (?, ?, ?, ?)
-         ON CONFLICT (application_id) DO UPDATE SET tax_percent = excluded.tax_percent, updated_at = excluded.updated_at`,
+         ON CONFLICT (application_id) DO UPDATE SET tax_percent = excluded.tax_percent, updated_at = excluded.updated_at
+         WHERE b640_offer_choices.candidate_id = excluded.candidate_id`,
       )
       .run(applicationId, candidateId, taxPercent, now);
   }
@@ -83,7 +84,8 @@ export class SqliteB640OfferChoiceRepository {
         `INSERT INTO b640_offer_choices (application_id, candidate_id, decision, decided_at, updated_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (application_id) DO UPDATE SET
-           decision = excluded.decision, decided_at = excluded.decided_at, updated_at = excluded.updated_at`,
+           decision = excluded.decision, decided_at = excluded.decided_at, updated_at = excluded.updated_at
+         WHERE b640_offer_choices.candidate_id = excluded.candidate_id`,
       )
       .run(applicationId, candidateId, decision, now, now);
   }
