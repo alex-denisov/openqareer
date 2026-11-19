@@ -333,7 +333,8 @@ describe('resumeExport', () => {
 
     expect(text).toContain('Автоматизировала развёртывание Kubernetes-сервисов.');
     expect(text).toContain('Менеджер продаж | Example Retail');
-    expect(text).not.toContain('Вела переговоры с партнёрами.');
+    // B713: a place without a literal match keeps its bullets.
+    expect(text).toContain('- Вела переговоры с партнёрами.');
     expect(text).toContain('GraphQL');
     expect(text).toContain('GraphQL - не найдено в мастер-резюме');
     expect(resumeTargetedExportFileName(doc, 'pdf')).toBe('resume-targeted-anna-primer.pdf');
