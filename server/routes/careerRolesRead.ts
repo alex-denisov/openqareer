@@ -2,10 +2,13 @@ import type { FastifyRequest } from 'fastify';
 import type { ProposedRole } from '../../shared/roleProposals';
 import { readCampaign } from './campaignContext';
 import { masterResumeDocument, withResumeCoverage } from './careerRoleResumeCoverage';
+import { countRolesLikeTheList } from './careerRoleCounts';
 import { careerRolesWithCandidateChoices } from './careerRoleSync';
 import type { RouteDeps } from './deps';
 import { conditionsMarketCount, finishMatchedVacancies } from './matchedVacancyRoutes';
-import { readRoleContext, type RoleContext } from './vacancyRoleContext';
+import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
+import { campaignLevelWindow } from '../vacancies/titleParse/candidateRoleFunctions';
+import { dropOutsideLevelGate } from '../vacancies/storedVacancyLevels';
 
 export interface CareerRolesRead {
   readonly context: RoleContext;
@@ -33,12 +36,23 @@ export async function readCareerRoleContext(
     deps.candidateStore,
     candidateId,
   );
+  // B726: число роли — строки, которые откроет «Вакансии по роли»: список «Подборки» после
+  // ворот уровня, тот же признак роли, за 30 дней подписи «по подборке за 30 дней».
+  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, targetRoles);
+  const shown = dropOutsideLevelGate(
+    listed,
+    campaignLevelWindow(targetRoles, targetLevel),
+    targetLevel,
+    (key) => deps.titleParseStore.getByKey(key),
+  );
+  const roles = countRolesLikeTheList(
+    careerRolesWithCandidateChoices(deps, candidateId, context, listed),
+    shown,
+    { skills: context.confirmedSkills, now: new Date() },
+  );
   return {
     context,
-    roles: withResumeCoverage(
-      careerRolesWithCandidateChoices(deps, candidateId, context, listed),
-      masterResumeDocument(deps, candidateId),
-    ),
+    roles: withResumeCoverage(roles, masterResumeDocument(deps, candidateId)),
     conditionsCount: conditionsMarketCount(context.matched, listed, targetRoles, campaign),
   };
 }
