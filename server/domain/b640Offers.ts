@@ -1,7 +1,4 @@
-import {
-  APPLICATION_STAGES,
-  type ApplicationStage,
-} from '../../shared/applicationStage';
+import { APPLICATION_STAGES, type ApplicationStage } from '../../shared/applicationStage';
 import type {
   B640OfferDeadline,
   B640OfferDecision,
@@ -70,7 +67,10 @@ export function buildOfferView(input: OfferViewInput): B640OfferView {
 }
 
 const emptyCounts = (): Record<ApplicationStage, number> =>
-  Object.fromEntries(APPLICATION_STAGES.map((stage) => [stage, 0])) as Record<ApplicationStage, number>;
+  Object.fromEntries(APPLICATION_STAGES.map((stage) => [stage, 0])) as Record<
+    ApplicationStage,
+    number
+  >;
 
 /** Отклики по текущему этапу: все, автоотклики и ручные отдельно. */
 export function summarizeResponses(

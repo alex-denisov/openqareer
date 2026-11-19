@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildOfferView,
-  netFromGross,
-  offerDeadline,
-  summarizeResponses,
-} from './b640Offers';
+import { buildOfferView, netFromGross, offerDeadline, summarizeResponses } from './b640Offers';
 
 const NOW = new Date('2026-11-19T15:00:00Z');
 
@@ -55,10 +50,21 @@ describe('buildOfferView', () => {
     });
   });
   it('is all null without choice and salary', () => {
-    const view = buildOfferView({ applicationId: 'a2', terms: {}, respondBy: null, choice: null, now: NOW });
+    const view = buildOfferView({
+      applicationId: 'a2',
+      terms: {},
+      respondBy: null,
+      choice: null,
+      now: NOW,
+    });
     expect(view).toMatchObject({
       gross: { amount: null, period: null, currency: null },
-      taxPercent: null, net: null, daysLeft: null, deadline: null, decision: null, decidedAt: null,
+      taxPercent: null,
+      net: null,
+      daysLeft: null,
+      deadline: null,
+      decision: null,
+      decidedAt: null,
     });
   });
 });

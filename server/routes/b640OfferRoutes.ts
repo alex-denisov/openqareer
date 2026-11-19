@@ -64,7 +64,14 @@ function offerView(ctx: Ctx, candidateId: string, applicationId: string): B640Of
 }
 
 function offerNotFound(request: FastifyRequest, reply: FastifyReply): FastifyReply {
-  return sendError(reply, request, 404, 'offer_not_found', 'Оффер по этому отклику не найден.', false);
+  return sendError(
+    reply,
+    request,
+    404,
+    'offer_not_found',
+    'Оффер по этому отклику не найден.',
+    false,
+  );
 }
 
 function invalidBody(request: FastifyRequest, reply: FastifyReply): FastifyReply {
@@ -101,7 +108,9 @@ const getOffers: Handler = async (ctx, request, reply) => {
 const putTax: Handler = async (ctx, request, reply) => {
   const candidateId = candidateOf(ctx, request, reply);
   if (!candidateId) return reply;
-  const id = applicationIdSchema.safeParse((request.params as { applicationId: string }).applicationId);
+  const id = applicationIdSchema.safeParse(
+    (request.params as { applicationId: string }).applicationId,
+  );
   const body = taxSchema.safeParse(request.body);
   if (!id.success || !body.success) return invalidBody(request, reply);
   if (!offerView(ctx, candidateId, id.data)) return offerNotFound(request, reply);
@@ -112,7 +121,9 @@ const putTax: Handler = async (ctx, request, reply) => {
 const putDecision: Handler = async (ctx, request, reply) => {
   const candidateId = candidateOf(ctx, request, reply);
   if (!candidateId) return reply;
-  const id = applicationIdSchema.safeParse((request.params as { applicationId: string }).applicationId);
+  const id = applicationIdSchema.safeParse(
+    (request.params as { applicationId: string }).applicationId,
+  );
   const body = decisionSchema.safeParse(request.body);
   if (!id.success || !body.success) return invalidBody(request, reply);
   if (!offerView(ctx, candidateId, id.data)) return offerNotFound(request, reply);

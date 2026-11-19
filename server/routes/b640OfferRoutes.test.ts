@@ -13,17 +13,30 @@ afterEach(async () => {
 async function setup() {
   const h = await createB640Harness({ pool: () => [] });
   closers.push(h.close);
-  const send = (method: 'GET' | 'PUT' | 'POST', url: string, user?: HarnessUser, payload?: unknown) =>
+  const send = (
+    method: 'GET' | 'PUT' | 'POST',
+    url: string,
+    user?: HarnessUser,
+    payload?: unknown,
+  ) =>
     h.app.inject({
       method,
       url,
       ...(payload === undefined ? {} : { payload: payload as object }),
-      headers: { ...(user ? { authorization: `Bearer ${h.tokens[user]}` } : {}), origin: 'http://localhost:3000' },
+      headers: {
+        ...(user ? { authorization: `Bearer ${h.tokens[user]}` } : {}),
+        origin: 'http://localhost:3000',
+      },
     });
   const application = (user: HarnessUser, stage: ApplicationStage, n = randomUUID()) =>
     h.candidates.createApplication(h.candidateIds[user], {
       stage,
-      manualVacancy: { title: 'CTO', company: `Co ${n}`, url: `https://example.test/${n}`, source: 'other' },
+      manualVacancy: {
+        title: 'CTO',
+        company: `Co ${n}`,
+        url: `https://example.test/${n}`,
+        source: 'other',
+      },
     });
   const offer = (user: HarnessUser, respondBy: string | null = null) => {
     const app = application(user, 'offer');
@@ -73,7 +86,9 @@ describe('B640 offer routes: flag', () => {
     expect(old.statusCode).toBe(200);
     expect(old.json().data).toMatchObject({ applicationId: own.id, respondBy: '2026-12-01' });
     expect(JSON.stringify(old.json())).not.toContain('taxPercent');
-    expect((await send('GET', '/api/v1/candidate/applications/funnel', 'plain.test')).statusCode).toBe(200);
+    expect(
+      (await send('GET', '/api/v1/candidate/applications/funnel', 'plain.test')).statusCode,
+    ).toBe(200);
     expect(candidateIds['plain.test']).toBeTruthy();
   });
 });
@@ -123,7 +138,11 @@ describe('B640 offer routes: offers, tax, decision', () => {
     expect(data[0]).toMatchObject({
       applicationId: mine.id,
       gross: { amount: 200000, period: 'month', currency: 'RUB' },
-      taxPercent: null, net: null, daysLeft: 1, deadline: 'soon', decision: null,
+      taxPercent: null,
+      net: null,
+      daysLeft: 1,
+      deadline: 'soon',
+      decision: null,
     });
   });
 
@@ -143,7 +162,13 @@ describe('B640 offer routes: offers, tax, decision', () => {
   it('validates the tax body', async () => {
     const { send, offer } = await setup();
     const url = `${BASE}/offers/${offer('flagged.test').id}/tax`;
-    for (const body of [{ taxPercent: -1 }, { taxPercent: 61 }, { taxPercent: '13' }, {}, { taxPercent: 5, x: 1 }]) {
+    for (const body of [
+      { taxPercent: -1 },
+      { taxPercent: 61 },
+      { taxPercent: '13' },
+      {},
+      { taxPercent: 5, x: 1 },
+    ]) {
       expect((await send('PUT', url, 'flagged.test', body)).statusCode).toBe(400);
     }
   });
@@ -158,8 +183,13 @@ describe('B640 offer routes: offers, tax, decision', () => {
     expect(accepted.json().data.offer).toMatchObject({ decision: 'accepted' });
     expect(accepted.json().data.offer.decidedAt).toBeTruthy();
     const declined = await send('PUT', url, 'flagged.test', { decision: 'declined' });
-    expect(declined.json().data).toMatchObject({ proposeStatus: null, offer: { decision: 'declined' } });
-    expect((await send('GET', `${BASE}/offers`, 'flagged.test')).json().data[0].decision).toBe('declined');
+    expect(declined.json().data).toMatchObject({
+      proposeStatus: null,
+      offer: { decision: 'declined' },
+    });
+    expect((await send('GET', `${BASE}/offers`, 'flagged.test')).json().data[0].decision).toBe(
+      'declined',
+    );
     expect((await send('PUT', url, 'flagged.test', { decision: 'maybe' })).statusCode).toBe(400);
   });
 
@@ -167,7 +197,9 @@ describe('B640 offer routes: offers, tax, decision', () => {
     const { send, offer, application } = await setup();
     const own = offer('flagged.test');
     await send('PUT', '/api/v1/candidate/status', 'flagged.test', { status: 'working' });
-    const result = await send('PUT', `${BASE}/offers/${own.id}/decision`, 'flagged.test', { decision: 'accepted' });
+    const result = await send('PUT', `${BASE}/offers/${own.id}/decision`, 'flagged.test', {
+      decision: 'accepted',
+    });
     expect(result.json().data.proposeStatus).toBeNull();
     const status = (await send('GET', '/api/v1/candidate/status', 'flagged.test')).json().data;
     expect(status.current?.status ?? status.status).toBe('working');
@@ -177,7 +209,9 @@ describe('B640 offer routes: offers, tax, decision', () => {
   it('keeps the status untouched on acceptance', async () => {
     const { send, offer } = await setup();
     const own = offer('flagged.test');
-    await send('PUT', `${BASE}/offers/${own.id}/decision`, 'flagged.test', { decision: 'accepted' });
+    await send('PUT', `${BASE}/offers/${own.id}/decision`, 'flagged.test', {
+      decision: 'accepted',
+    });
     const status = (await send('GET', '/api/v1/candidate/status', 'flagged.test')).json().data;
     expect(status.current?.status ?? 'job_search').not.toBe('working');
   });
@@ -187,7 +221,10 @@ describe('B640 offer routes: offers, tax, decision', () => {
     const foreign = offer('other.test');
     const bare = application('flagged.test', 'applied');
     for (const id of [foreign.id, bare.id, 'nope']) {
-      for (const [suffix, body] of [['tax', { taxPercent: 10 }], ['decision', { decision: 'accepted' }]] as const) {
+      for (const [suffix, body] of [
+        ['tax', { taxPercent: 10 }],
+        ['decision', { decision: 'accepted' }],
+      ] as const) {
         const response = await send('PUT', `${BASE}/offers/${id}/${suffix}`, 'flagged.test', body);
         expect(response.statusCode).toBe(404);
         expect(response.json().error.code).toBe('offer_not_found');
