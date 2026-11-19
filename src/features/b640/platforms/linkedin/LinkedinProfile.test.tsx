@@ -81,7 +81,48 @@ describe('a03: разделы профиля LinkedIn', () => {
     expect(root.textContent).toContain('вставлено вами 19 ноября');
     expect(root.querySelector('.li-new')!.textContent).toContain('Engineering Manager');
     expect(root.querySelectorAll('.li-facts li')).toHaveLength(2);
+    // B645: факты свёрнуты по умолчанию и не занимают места больше самого предложения.
+    const facts = root.querySelector<HTMLDetailsElement>('details.li-facts-d')!;
+    expect(facts.open).toBe(false);
+    expect(facts.querySelector('summary')!.textContent).toBe('Из каких фактов · 2');
     expect(root.textContent).not.toMatch(/Применить|Другой вариант/);
+    view.unmount();
+  });
+
+  it('B645: «Опыт» по местам работы — у каждого места своё предложение и «Скопировать»', async () => {
+    const fact = (id: string, text: string) => ({ id, text });
+    const experience = {
+      ...empty,
+      suggestion: {
+        text: 'Финтех Лаб · Руководитель\nГруппа из 9 человек.\n\nСфера · Бэкенд\nВела шлюз.',
+        facts: [fact('d1', 'Группа из 9 человек'), fact('d2', 'Вела шлюз')],
+        items: [
+          { id: 'e1', label: 'Финтех Лаб · Руководитель', text: 'Группа из 9 человек.', facts: [fact('d1', 'Группа из 9 человек')] },
+          { id: 'e2', label: 'Сфера · Бэкенд', text: 'Вела шлюз.', facts: [fact('d2', 'Вела шлюз')] },
+        ],
+      },
+    };
+    const view = await open(profile({ experience }));
+    const section = view.container.querySelector('#ls-experience')!.closest('section')!;
+    expect([...section.querySelectorAll('.li-rec-l')].map((node) => node.textContent)).toEqual(
+      expect.arrayContaining(['Финтех Лаб · Руководитель', 'Сфера · Бэкенд']),
+    );
+    expect([...section.querySelectorAll('.li-new')].map((node) => node.textContent)).toEqual(['Группа из 9 человек.', 'Вела шлюз.']);
+    expect(button(section, 'Скопировать: Финтех Лаб · Руководитель')).not.toBeNull();
+    expect(button(section, 'Скопировать: Сфера · Бэкенд')).not.toBeNull();
+    expect(section.querySelectorAll('details.li-facts-d')).toHaveLength(2);
+    view.unmount();
+  });
+
+  it('B645: «Навыки» одной строкой, без повторного списка фактов', async () => {
+    const skills = {
+      ...empty,
+      suggestion: { text: 'Go · Kubernetes', facts: [{ id: 's1', text: 'Go' }, { id: 's2', text: 'Kubernetes' }] },
+    };
+    const view = await open(profile({ skills }));
+    const section = view.container.querySelector('#ls-skills')!.closest('section')!;
+    expect(section.querySelector('.li-new')!.textContent).toBe('Go · Kubernetes');
+    expect(section.querySelector('.li-facts')).toBeNull();
     view.unmount();
   });
   it('без «сейчас»: поле вставки, «Сохранить» кладёт текст на место', async () => {

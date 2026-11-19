@@ -23,9 +23,18 @@ export interface LinkedinSectionCurrent {
   readonly source: LinkedinCurrentSource;
   readonly capturedAt: string;
 }
+/** B645: предложение по одному месту работы в «Опыте» — «Компания · Роль» и две-три фразы. */
+export interface LinkedinSectionItem {
+  readonly id: string;
+  readonly label: string;
+  readonly text: string;
+  readonly facts: readonly LinkedinSectionFact[];
+}
 export interface LinkedinSectionSuggestion {
   readonly text: string;
   readonly facts: readonly LinkedinSectionFact[];
+  /** Только у «Опыта»: по месту работы, на экране — отдельным предложением. */
+  readonly items?: readonly LinkedinSectionItem[];
 }
 export interface LinkedinSectionView {
   readonly current: LinkedinSectionCurrent | null;

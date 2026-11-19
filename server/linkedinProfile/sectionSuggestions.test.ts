@@ -46,7 +46,7 @@ describe('B692: навыки', () => {
     const result = buildSectionSuggestions({
       memory: [mem('m-proposed', 'x', 'proposed'), mem('m-ok', 'y')], draft: draft({ skills }),
     });
-    expect(result.skills?.text).toBe('Python\nGo');
+    expect(result.skills?.text).toBe('Python · Go');
     expect(result.skills?.facts.map((f) => f.text)).toEqual(['Python', 'Go']);
   });
 });
@@ -77,9 +77,35 @@ describe('B692: «О себе» и опыт', () => {
       place({ id: 'e2', title: 'Разработчик', employer: 'Ozon', bulletMemoryIds: ['b2'] }),
     ];
     const result = buildSectionSuggestions({ memory, draft: draft({ experience }) }).experience;
-    expect(result?.text).toBe('Руководитель разработки — Яндекс (2019 — 2022)\nОтвечал за найм\n• Запустил платформу для 12 команд');
+    expect(result?.items).toEqual([
+      {
+        id: 'e1',
+        label: 'Яндекс · Руководитель разработки',
+        text: 'Отвечал за найм. Запустил платформу для 12 команд.',
+        facts: [
+          { id: 'resume:experience:e1', text: 'Руководитель разработки — Яндекс (2019 — 2022)' },
+          { id: 'd1', text: 'Отвечал за найм' },
+          { id: 'b1', text: 'Запустил платформу для 12 команд' },
+        ],
+      },
+    ]);
+    expect(result?.text).toBe('Яндекс · Руководитель разработки\nОтвечал за найм. Запустил платформу для 12 команд.');
     expect(result?.text).not.toMatch(/Ozon|40/u);
     expect(result?.facts.map((f) => f.id)).toEqual(['resume:experience:e1', 'd1', 'b1']);
+  });
+  it('B645: опыт по местам работы — у каждого места своё короткое предложение, не больше трёх фраз', () => {
+    const memory = ['d1', 'b1', 'b2', 'b3', 'd2'].map((id) => mem(id, `Факт ${id}`));
+    const experience = [
+      place({ descriptionMemoryId: 'd1', bulletMemoryIds: ['b1', 'b2', 'b3'] }),
+      place({ id: 'e2', title: 'Разработчик', employer: 'Ozon', descriptionMemoryId: 'd2' }),
+    ];
+    const result = buildSectionSuggestions({ memory, draft: draft({ experience }) }).experience;
+    expect(result?.items?.map((item) => [item.label, item.text])).toEqual([
+      ['Яндекс · Руководитель разработки', 'Факт d1. Факт b1. Факт b2.'],
+      ['Ozon · Разработчик', 'Факт d2.'],
+    ]);
+    expect(result?.items?.[0]?.facts.map((f) => f.id)).toEqual(['resume:experience:e1', 'd1', 'b1', 'b2']);
+    expect(result?.text.split('\n\n')).toHaveLength(2);
   });
 });
 
