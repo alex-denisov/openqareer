@@ -42,11 +42,15 @@ export type PinnedFetch = (request: PinnedRequest) => Promise<PinnedResponse>;
 export interface PinnedFetchOptions {
   readonly resolve?: ResolveAll;
   readonly isPublicAddress?: (address: string) => boolean;
+  /** Тишина на сокете дольше этого срока обрывает запрос. */
   readonly timeoutMs?: number;
+  /** B719: общий срок запроса целиком — сервер, отдающий по байту, не держит его дольше. */
+  readonly deadlineMs?: number;
   readonly maxBodyBytes?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const DEADLINE_PER_TIMEOUT = 2;
 const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
 /** Не передаются дальше: служебные заголовки соединения и сжатие (тело отдаётся браузеру распакованным). */
 const DROPPED_REQUEST_HEADERS = new Set([
@@ -121,6 +125,7 @@ interface SendSettings {
   readonly lookup: LookupFunction;
   readonly isPublicAddress: (address: string) => boolean;
   readonly timeoutMs: number;
+  readonly deadlineMs: number;
   readonly maxBodyBytes: number;
   readonly agentFor: (protocol: string) => Agent | false;
   readonly track?: (request: ClientRequest) => void;
@@ -168,21 +173,33 @@ function sendPinned(request: PinnedRequest, settings: SendSettings): Promise<Pin
       timeout: settings.timeoutMs,
     });
     settings.track?.(outgoing);
+    let incoming: IncomingMessage | undefined;
+    const deadline = setTimeout(() => {
+      const error = new Error('deadline');
+      incoming?.destroy(error);
+      outgoing.destroy(error);
+    }, settings.deadlineMs);
+    deadline.unref();
+    outgoing.on('close', () => clearTimeout(deadline));
     outgoing.on('timeout', () => outgoing.destroy(new Error('timeout')));
     outgoing.on('error', reject);
-    outgoing.on('response', (incoming) =>
-      readResponse(incoming, settings.maxBodyBytes, resolve, reject),
-    );
+    outgoing.on('response', (response) => {
+      incoming = response;
+      response.on('end', () => clearTimeout(deadline));
+      readResponse(response, settings.maxBodyBytes, resolve, reject);
+    });
     outgoing.end(request.body ?? undefined);
   });
 }
 
 function baseSettings(options: PinnedFetchOptions) {
   const isPublicAddress = options.isPublicAddress ?? defaultIsPublicAddress;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   return {
     lookup: pinnedLookup(options.resolve ?? defaultResolve, isPublicAddress),
     isPublicAddress,
-    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    timeoutMs,
+    deadlineMs: options.deadlineMs ?? timeoutMs * DEADLINE_PER_TIMEOUT,
     maxBodyBytes: options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
   };
 }
