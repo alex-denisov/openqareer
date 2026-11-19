@@ -226,7 +226,10 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(page.locator('.cw-row')).toHaveCount(4);
     await expect(page.locator('.cw-row').first().locator('.tag')).toHaveText('новые вакансии');
     await expect(
-      page.locator('.cw-row').first().getByRole('link', { name: /Смотреть вакансии/u }),
+      page
+        .locator('.cw-row')
+        .first()
+        .getByRole('link', { name: /Смотреть вакансии/u }),
     ).toHaveAttribute('href', '/app/vacancies');
     await expect(page.locator('.cw-row a[href^="/app/vacancies/companies"]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Жду вакансию · 1' }).click();
