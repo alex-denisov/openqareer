@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   creditDecision,
+  parseGhJson,
   rejectReason,
   resolveRound,
   selectCandidates,
@@ -162,5 +163,15 @@ describe('creditDecision / statusDescription', () => {
     expect(statusDescription({ position: 1, size: 3, tipTree: 'f'.repeat(40) })).toContain(
       'not deployed alone',
     );
+  });
+});
+
+describe('parseGhJson', () => {
+  it('parses objects and empty output', () => {
+    expect(parseGhJson('{"behind":0}\n')).toEqual({ behind: 0 });
+    expect(parseGhJson('')).toBeNull();
+  });
+  it('rejects a bare sha with a clear message (scalar --jq is read as text)', () => {
+    expect(() => parseGhJson('4ef6a1b2c3\n')).toThrow(/read scalar --jq output as text/);
   });
 });

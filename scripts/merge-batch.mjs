@@ -24,6 +24,7 @@ import {
   IN_BATCH_LABEL,
   READY_LABEL,
   creditDecision,
+  parseGhJson,
   rejectReason,
   resolveRound,
   selectCandidates,
@@ -58,7 +59,9 @@ function sh(cmd, argv, opts = {}) {
 const WT = mkdtempSync(join(tmpdir(), 'merge-batch-'));
 const git = (...a) => sh('git', ['-C', WT, ...a]);
 const gh = (...a) => sh('gh', a);
-const ghJson = (...a) => JSON.parse(gh(...a) || 'null');
+const ghJson = (...a) => parseGhJson(gh(...a));
+// A bare value from --jq (a sha) is plain text, not JSON.
+const ghText = (...a) => gh(...a).trim();
 const repo = () =>
   process.env.GITHUB_REPOSITORY || ghJson('repo', 'view', '--json', 'nameWithOwner').nameWithOwner;
 
@@ -224,7 +227,7 @@ async function headAfterUpdate(pr) {
   );
   for (let i = 0; i < 20; i += 1) {
     await sleep(3000);
-    const sha = ghJson('api', `repos/${repo()}/pulls/${pr.number}`, '--jq', '.head.sha');
+    const sha = ghText('api', `repos/${repo()}/pulls/${pr.number}`, '--jq', '.head.sha');
     if (sha !== cur.head.sha) return sha;
   }
   throw new Error(`update-branch of #${pr.number} did not land`);
@@ -244,7 +247,7 @@ async function mergeGroup(members, run) {
     }
     try {
       const head = await headAfterUpdate(pr);
-      const headTree = ghJson('api', `repos/${repo()}/commits/${head}`, '--jq', '.commit.tree.sha');
+      const headTree = ghText('api', `repos/${repo()}/commits/${head}`, '--jq', '.commit.tree.sha');
       const d = creditDecision({ headTree, expectedTree: pr.tree });
       if (!d.credit) throw new Error(d.reason);
       gh(

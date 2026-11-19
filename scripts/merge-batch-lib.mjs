@@ -104,3 +104,14 @@ export function statusDescription({ position, size, tipTree }) {
     ? `Batch of ${size}: this tree was fully verified`
     : `Batch of ${size}, step ${position}: batch tip ${tipTree.slice(0, 12)} verified; this tree is not deployed alone`;
 }
+
+/** gh output that must be JSON; a bare string (e.g. a sha from --jq) is a caller bug. */
+export function parseGhJson(out) {
+  const text = (out ?? '').trim();
+  if (text === '') return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`gh returned non-JSON (${text.slice(0, 40)}); read scalar --jq output as text`);
+  }
+}
