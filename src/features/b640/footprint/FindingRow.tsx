@@ -7,7 +7,7 @@ import {
   addCandidateFootprintFindingToProfile,
   reviewCandidateFootprintFinding,
 } from './footprintApi';
-import { ACTION_ICON, levelTag, opensRemovalPath } from './footprintModel';
+import { ACTION_ICON, confirmsOwner, levelTag, opensRemovalPath } from './footprintModel';
 import { reportFailure } from './reportFailure';
 import { announceFootprintChanged } from './useFootprint';
 
@@ -74,10 +74,34 @@ function AddToProfile({ findingId }: { readonly findingId: string }) {
   );
 }
 
+/** B727: страница найдена по нику — открыть её и сказать «не моё», если ник чужой. */
+function OwnerActions({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
+  const review = useReview(onChanged);
+  const { findingId, url, action } = item;
+  if (!url || !action) return null;
+  return (
+    <div className="fp-acts">
+      <a className="btn is-sm" href={url} rel="noopener noreferrer" target="_blank"
+        aria-label={`${action.label}: ${item.title}, откроется в новой вкладке`}>
+        <Icon name={ACTION_ICON[action.kind]} />
+        {action.label}
+      </a>
+      {findingId ? (
+        <button className="row-act" type="button" disabled={review.busy}
+          onClick={() => void review.mark(findingId, 'not_self', 'Отмечено: это не ваша страница')}>
+          Это не моё
+        </button>
+      ) : null}
+      {review.error ? <StatusLine state="err" text={review.error} /> : null}
+    </div>
+  );
+}
+
 function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
   const review = useReview(onChanged);
   const { action, findingId } = item;
   if (!action) return null;
+  if (confirmsOwner(item)) return <OwnerActions item={item} onChanged={onChanged} />;
   return (
     <div className="fp-acts">
       {action.kind === 'add_to_profile' && findingId ? <AddToProfile findingId={findingId} /> : null}

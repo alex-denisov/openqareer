@@ -34,10 +34,28 @@ const CHECK: FootprintRiskAction = { kind: 'check_now', label: 'Проверит
 const HIDE: FootprintRiskAction = { kind: 'hide', label: 'Скрыть' };
 const ADD: FootprintRiskAction = { kind: 'add_to_profile', label: 'В профиль' };
 const FIX: FootprintRiskAction = { kind: 'ask_to_fix', label: 'Попросить исправить' };
+const CONFIRM: FootprintRiskAction = { kind: 'confirm_owner', label: 'Проверить' };
 
 const NEEDS_CHECK: Rule = { category: 'needs_check', level: 'important', action: CHECK };
 const STALE: Rule = { category: 'stale_profile', level: 'low', action: HIDE };
 const USEFUL: Rule = { category: 'useful_evidence', level: 'useful', action: ADD };
+const OWNER_UNKNOWN: Rule = { category: 'needs_check', level: 'important', action: CONFIRM };
+
+/** Поиск по нику: находит открытую страницу, но не знает, чья она. */
+const NICK_SEARCH = new Set(['sherlock', 'maigret']);
+
+/**
+ * B727: страница по нику, которую кандидат не подтвердил, — «Нужно проверить сейчас», а не
+ * «Полезные доказательства»: чужой профиль с тем же ником доказательством не считается.
+ */
+function ownerUnconfirmed(finding: CandidateFootprintFinding): boolean {
+  return (
+    finding.kind === 'profile' &&
+    NICK_SEARCH.has(finding.adapter) &&
+    finding.review === 'unreviewed' &&
+    finding.checklistMark === undefined
+  );
+}
 
 /** Категория, уровень и действие по виду находки. Неизвестный вид — «нужно проверить». */
 function ruleFor(finding: CandidateFootprintFinding): Rule {
@@ -53,6 +71,7 @@ function ruleFor(finding: CandidateFootprintFinding): Rule {
       return STALE;
     case 'profile':
       if (finding.staleAccount) return STALE;
+      if (ownerUnconfirmed(finding)) return OWNER_UNKNOWN;
       return unsure ? NEEDS_CHECK : USEFUL;
     case 'mention':
       return unsure ? NEEDS_CHECK : USEFUL;
@@ -74,10 +93,14 @@ function cleanTitle(title: string): string {
     .trim();
 }
 
+/** Просьба без действия: подтверждает кандидат кнопками строки (B727). */
+const OWNER_REQUEST = /;\s*владение нужно подтвердить(?=[.!?]?$)/u;
+
 /** Описание без предложений, где назван инструмент или способ поиска. */
 function cleanDetail(detail: string): string {
   return detail
     .split(/(?<=[.!?])\s+/u)
+    .map((sentence) => sentence.replace(OWNER_REQUEST, ''))
     .filter((sentence) => !sentence.match(TOOL_NAMES))
     .join(' ')
     .trim();
