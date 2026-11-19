@@ -24,6 +24,8 @@ const storedSnapshotSchema = z.object({
   subject: z.string().nullable().optional(),
   body: z.string(),
   variantId: z.string().nullable().optional(),
+  language: z.enum(['en', 'ru']).optional(),
+  tone: z.enum(['executive', 'confident', 'technical']).optional(),
   /** С B711 снимок помнит привязанное резюме; у прежних снимков поля нет. */
   resume: attachedResumeSchema.nullable().optional(),
 });
@@ -39,6 +41,9 @@ export interface StoredLetterApproval {
   readonly body: string;
   /** Какой вариант письма одобрен; `null` — первое письмо или снимок до B711. */
   readonly variantId: string | null;
+  /** Язык и тон одобренного письма (B645): экран показывает их после перезагрузки; `null` — нет в снимке. */
+  readonly language: 'en' | 'ru' | null;
+  readonly tone: 'executive' | 'confident' | 'technical' | null;
 }
 
 function readSnapshot(deps: RouteDeps, candidateId: string, document: StoredCandidateDocument) {
@@ -78,6 +83,8 @@ export function latestLetterApproval(
       subject: snapshot.subject ?? null,
       body: snapshot.body,
       variantId: snapshot.variantId ?? null,
+      language: snapshot.language ?? null,
+      tone: snapshot.tone ?? null,
     };
   }
   return null;
@@ -103,7 +110,8 @@ export function approvedLetterApplicationIds(deps: RouteDeps, candidateId: strin
   for (const document of recentApprovalDocuments(deps, candidateId)) {
     const snapshot = readSnapshot(deps, candidateId, document);
     if (!snapshot || ids.has(snapshot.applicationId)) continue;
-    if (deps.candidateStore.getApplication(candidateId, snapshot.applicationId)) ids.add(snapshot.applicationId);
+    if (deps.candidateStore.getApplication(candidateId, snapshot.applicationId))
+      ids.add(snapshot.applicationId);
   }
   return [...ids];
 }

@@ -116,5 +116,13 @@ export function useVariantApproval(
     reset();
     release();
   }, [reset, release]);
-  return { ...letter, approval: { ...approval, reset: resetAndRelease } };
+  // B645: после перезагрузки черновика нет — язык и тон одобренного письма берутся из снимка.
+  const shown =
+    approval.saved && approval.saved.documentId === restored?.documentId ? restored : null;
+  return {
+    ...letter,
+    language: shown?.language ?? letter.language,
+    tone: shown?.tone ?? letter.tone,
+    approval: { ...approval, reset: resetAndRelease },
+  };
 }

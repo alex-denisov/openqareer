@@ -67,9 +67,16 @@ function StepTabs({ step, done, hasForm, onStep }: TabsProps) {
 }
 
 /** Левая колонка: текст вакансии, под которую идёт отклик. */
-function VacancyColumn({ vacancyId, head }: { readonly vacancyId: string; readonly head: ApplyHead }) {
+function VacancyColumn({
+  vacancyId,
+  head,
+}: {
+  readonly vacancyId: string;
+  readonly head: ApplyHead;
+}) {
   const detail = useVacancyDetail(vacancyId, true);
-  const text = detail.status === 'ready' ? detail.detail.description || detail.detail.summary || '' : '';
+  const text =
+    detail.status === 'ready' ? detail.detail.description || detail.detail.summary || '' : '';
   return (
     <div className="col vac-col">
       <section className="mod" aria-labelledby="vp-title">
@@ -77,16 +84,27 @@ function VacancyColumn({ vacancyId, head }: { readonly vacancyId: string; readon
           <h3 className="mod-title" id="vp-title">
             {head.title}
           </h3>
-          {head.source ? <InfoTip label="Источник" text={`Текст вакансии: ${head.source}.`} /> : null}
+          {head.source ? (
+            <InfoTip label="Источник" text={`Текст вакансии: ${head.source}.`} />
+          ) : null}
         </div>
         {detail.status === 'loading' || detail.status === 'idle' ? (
           <p className="ls-state" role="status">
             Загружаем текст вакансии…
           </p>
         ) : null}
-        {detail.status === 'failed' ? <StatusLine state="err" text="Текст вакансии не загрузился" /> : null}
+        {detail.status === 'failed' ? (
+          <StatusLine state="err" text="Текст вакансии не загрузился" />
+        ) : null}
         {text ? (
-          <div className="letter full vac-text" aria-label="Текст вакансии">
+          // B645: длинный текст прокручивается внутри карточки и не растягивает страницу.
+          <div
+            className="letter full vac-text"
+            role="region"
+            aria-label="Текст вакансии"
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки текста с клавиатуры.
+            tabIndex={0}
+          >
             {paragraphs(text).map((line, index) => (
               <div key={`${index}-${line.slice(0, 24)}`}>{line}</div>
             ))}
@@ -138,7 +156,8 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: Bod
 }
 
 function EditorBody(props: BodyProps) {
-  const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen, onResumeOk } = props;
+  const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen, onResumeOk } =
+    props;
   return (
     <>
       <VacancyColumn vacancyId={vacancyId} head={head} />
@@ -155,7 +174,12 @@ function EditorBody(props: BodyProps) {
           </div>
         ) : null}
         <div hidden={step !== 'letter'}>
-          <LetterStep letter={letter} variants={variants} head={head} onSend={() => setStep('send')} />
+          <LetterStep
+            letter={letter}
+            variants={variants}
+            head={head}
+            onSend={() => setStep('send')}
+          />
         </div>
       </div>
     </>
@@ -243,7 +267,8 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
     body: {
       vacancyId: target.vacancyId,
       head,
-      sourceType: target.application?.vacancy?.source ?? cluster?.sources[0]?.sourceName ?? 'manual',
+      sourceType:
+        target.application?.vacancy?.source ?? cluster?.sources[0]?.sourceName ?? 'manual',
       step: shown,
       setStep,
       letter,
@@ -295,7 +320,8 @@ function ApplyFlow(props: FlowProps) {
 /** Отклика ещё нет: название, компания и ссылка берутся из подбора. */
 function FromPool({ target }: { readonly target: ApplyTarget }) {
   const pool = useMatchedPool();
-  const cluster = pool.matched.find((item) => item.cluster.id === target.vacancyId)?.cluster ?? null;
+  const cluster =
+    pool.matched.find((item) => item.cluster.id === target.vacancyId)?.cluster ?? null;
   return <ApplyFlow target={target} cluster={cluster} />;
 }
 
