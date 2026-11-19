@@ -9,7 +9,8 @@ import { SORT_COLUMNS, type SortKey, type SortState } from './sortModel';
 
 export interface FilterSheetProps extends PaneProps, HiddenChipProps {
   readonly open: boolean;
-  readonly shown: number;
+  /** `null` — подборка ещё читается и число неполное (B728). */
+  readonly shown: number | null;
   readonly sort: SortState;
   readonly onSort: (key: SortKey) => void;
   readonly onClose: () => void;
@@ -106,7 +107,7 @@ export function FilterSheet(props: FilterSheetProps) {
                 <div className="vt-sheet-head">
                   <h2 id={titleId}>Фильтры</h2>
                   <button className="btn is-primary vt-sheet-go" type="button" onClick={onClose}>
-                    Показать {props.shown}
+                    {props.shown === null ? 'Показать' : `Показать ${props.shown}`}
                   </button>
                   <button className="icon-btn" type="button" aria-label="Закрыть фильтры" onClick={onClose}>
                     <Icon name="close" />

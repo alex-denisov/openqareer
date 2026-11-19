@@ -14,7 +14,7 @@ import {
   type FilterKind,
   type ListFilters,
 } from './filterModel';
-import { buildOptions, type FilterOptions } from './filterOptions';
+import { buildOptions, listCount, type FilterOptions } from './filterOptions';
 import {
   useServerSortedList,
   type ServerListStatus,
@@ -146,11 +146,15 @@ function useListRows(input: RowsInput): DerivedRows {
       ),
     [base, filters, currency, rates, now, sortState, serverMode],
   );
-  const options = useMemo(() => buildOptions(poolBase, pool.facets, now), [poolBase, pool.facets, now]);
+  const options = useMemo(
+    () => buildOptions(poolBase, pool.facets, now, pool.complete),
+    [poolBase, pool.facets, now, pool.complete],
+  );
   const narrowed = isNarrowed(filters);
   // Серверный итог уже без скрытых в этой сессии (их вычел список порций), пул — нет.
   const known = serverMode && server.total > 0 ? server.total : pool.total - hidden.size;
-  const count = narrowed || pool.complete ? all.length : Math.max(known, all.length);
+  const counted = listCount({ narrowed, complete: pool.complete, serverMode, known, filtered: all.length });
+  const { count } = counted;
   const visible = serverMode ? all : visibleSlice(all, shown);
   const foot = serverFoot({
     narrowed,
@@ -167,7 +171,7 @@ function useListRows(input: RowsInput): DerivedRows {
     count,
     blockers,
     more,
-    countKnown: !serverMode || foot.countKnown,
+    countKnown: counted.countKnown && (!serverMode || foot.countKnown),
   };
 }
 
