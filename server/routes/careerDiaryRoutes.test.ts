@@ -317,6 +317,41 @@ describe('career diary API (B456)', () => {
     }
   });
 
+  it('d01: keeps «Что от вас ждут» with the workplace and caps its length', async () => {
+    const { app, candidateStore, first } = await createApi();
+    try {
+      const expectations = 'Руководить командой из 25 человек.\nВыстроить поставку: релиз раз в две недели.';
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/career-diary/workplaces',
+        headers: auth(first),
+        payload: { company: 'Вектор Банк', title: 'Руководитель разработки', startDate: '2026-12-01', expectations },
+      });
+      expect(created.statusCode).toBe(201);
+      const id = created.json().data.id as string;
+      expect(created.json().data.expectations).toBe(expectations);
+      const read = await app.inject({ method: 'GET', url: '/api/v1/candidate/career-diary/workplaces/' + id, headers: auth(first) });
+      expect(read.json().data.expectations).toBe(expectations);
+      const patched = await app.inject({
+        method: 'PATCH',
+        url: '/api/v1/candidate/career-diary/workplaces/' + id,
+        headers: auth(first),
+        payload: { expectations: null },
+      });
+      expect(patched.json().data.expectations).toBeNull();
+      const tooLong = await app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/career-diary/workplaces',
+        headers: auth(first),
+        payload: { company: 'Вектор Банк', title: 'CTO', startDate: '2026-12-01', expectations: 'а'.repeat(1501) },
+      });
+      expect(tooLong.statusCode).toBe(400);
+    } finally {
+      await app.close();
+      candidateStore.close();
+    }
+  });
+
   it('round-trips adaptation planning in the candidate-scoped workplace payload', async () => {
     const { app, candidateStore, first, second } = await createApi();
     try {

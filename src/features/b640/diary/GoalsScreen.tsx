@@ -10,6 +10,7 @@ import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { listGoalCards } from './diaryApi';
+import { useRoleTitle } from './roleTitle';
 import { GoalItem } from './GoalItem';
 import { HORIZONS, goalsLead, quarterLabel } from './goalsModel';
 import { today } from './model';
@@ -56,13 +57,23 @@ function AddActions() {
   );
 }
 
-/** Пусто (d02c): вопрос о целях и пример для роли. */
+/** Примеры без привязки к профессии: роль кандидата может быть любой. */
+const GOAL_EXAMPLES = [
+  { title: 'Выполнить план квартала', measure: '% от плана' },
+  { title: 'Закрыть вакансии в команду', measure: 'закрыто по плану найма' },
+  { title: 'Сократить срок ключевого процесса', measure: 'дней от начала до результата' },
+] as const;
+
+/** Пусто (d02c): вопрос о целях в роли кандидата и пример. */
 function NoGoals() {
+  const role = useRoleTitle();
   return (
     <section className="lead" aria-labelledby="gc-t">
       <div className="lead-head">
         <h2 className="lead-title gc-title" id="gc-t">
-          Какие у вас цели на этот квартал?
+          {role
+            ? `Какие цели в роли «${role}» в первом квартале?`
+            : 'Какие у вас цели на этот квартал?'}
         </h2>
         <InfoTip
           label="Пояснение"
@@ -81,18 +92,12 @@ function NoGoals() {
       </div>
       <div className="ghost" aria-label="Пример целей">
         <p className="ghost-cap">Пример</p>
-        <p className="gc-ex">
-          <strong>Выпускать релиз за неделю</strong>
-          <span className="row-sub"> · срок релиза в днях</span>
-        </p>
-        <p className="gc-ex">
-          <strong>Закрыть вакансии в команду</strong>
-          <span className="row-sub"> · закрыто по плану найма</span>
-        </p>
-        <p className="gc-ex">
-          <strong>Выполнять план выручки отдела</strong>
-          <span className="row-sub"> · выручка за квартал</span>
-        </p>
+        {GOAL_EXAMPLES.map((example) => (
+          <p className="gc-ex" key={example.title}>
+            <strong>{example.title}</strong>
+            <span className="row-sub"> · {example.measure}</span>
+          </p>
+        ))}
       </div>
     </section>
   );

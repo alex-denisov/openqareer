@@ -112,6 +112,14 @@ function staticSteps(plan) {
   return steps;
 }
 
+// Локально тесты делят машину с другими сессиями: без лимита vitest и Playwright
+// берут все ядра (19.11 хук pre-push довёл Mac до load 500). В CI лимита нет.
+const LOCAL_WORKERS = 2;
+export function localWorkerLimit(tool, env = process.env) {
+  if (env.CI) return [];
+  return tool === 'vitest' ? [`--maxWorkers=${LOCAL_WORKERS}`] : [`--workers=${LOCAL_WORKERS}`];
+}
+
 function e2eSteps(plan) {
   if (!plan.specs.length) return [];
   const steps = [];
@@ -119,7 +127,11 @@ function e2eSteps(plan) {
     steps.push(['build:fast', 'npm', ['run', 'build:fast']]);
   const specs = plan.specs.map((s) => `e2e/${s}.spec.ts`);
   for (const project of plan.projects)
-    steps.push([`e2e ${project}`, bin('playwright'), ['test', ...specs, `--project=${project}`]]);
+    steps.push([
+      `e2e ${project}`,
+      bin('playwright'),
+      ['test', ...specs, `--project=${project}`, ...localWorkerLimit('playwright')],
+    ]);
   return steps;
 }
 
@@ -159,6 +171,7 @@ async function main() {
       ...plan.unitTargets,
       '--run',
       '--passWithNoTests',
+      ...localWorkerLimit('vitest'),
     ]);
     if (r.code !== 0) return r.code;
   }
