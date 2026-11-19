@@ -33,7 +33,10 @@ export default defineConfig({
   workers,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'line' : 'list',
+  // CI also writes JSON so the flaky collector can list retry passes.
+  reporter: process.env.CI
+    ? [['line'], ['json', { outputFile: 'reports/playwright.json' }]]
+    : 'list',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     reducedMotion: 'reduce',
