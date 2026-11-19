@@ -178,7 +178,7 @@ export function CompanyListScreen() {
   const list = useCompanyList();
   const all = list.counts?.all;
   return (
-    <div className="page" data-b640-node="v10" data-b640-section="vacancies">
+    <div className="page" data-b640-node="v10" data-b640-section="companies">
       <section className="col col-wide co-list" aria-labelledby="co-title">
         <h2 className="co-h" id="co-title">
           {list.query.relocation ? (

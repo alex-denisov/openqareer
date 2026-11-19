@@ -29,12 +29,9 @@ function Notice({ card }: { readonly card: CompanyCard }) {
 
 type LoadedCard = CompanyCard & { readonly details: NonNullable<CompanyCard['details']> };
 
-/** Обёртка состояния макета (`.st-in`): блок с отступом, строка по ширине содержимого. */
-const WANT_WRAP = { display: 'block', marginBlock: 'var(--career-space-2)' } as const;
-
 function WantLine({ busy, onCancel }: { readonly busy: boolean; readonly onCancel: () => void }) {
   return (
-    <div style={WANT_WRAP}>
+    <div className="co-want">
       <p className="co-wantline" role="status">
         <Icon name="check" />
         <span>В списке «Хочу»</span> ·{' '}
@@ -123,7 +120,7 @@ export function CompanyScreen({ companyId }: { readonly companyId: string }) {
   const name = card.details?.company.name;
   useScreenChrome({ title: name, crumb: name });
   return (
-    <div className="page" data-b640-node="v10b" data-b640-section="vacancies">
+    <div className="page" data-b640-node="v10b" data-b640-section="companies">
       {card.load === 'ready' && card.details ? (
         <Loaded card={{ ...card, details: card.details }} companyId={companyId} />
       ) : (
