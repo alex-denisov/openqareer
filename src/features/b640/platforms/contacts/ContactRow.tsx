@@ -1,18 +1,32 @@
-import type { CandidateConnectionContact } from '../../../outreach/connectionContactsApi';
+import type { B640Contact } from '../../../../../shared/b640Contacts';
 import { Icon } from '../../kit';
+import { statusTag } from './contactsFilters';
 import { workLine } from './contactsModel';
 
-/** Строка контакта (a02): имя, должность и компания, как вы знакомы. */
-export function ContactRow({ contact }: { readonly contact: CandidateConnectionContact }) {
-  const how = contact.relationship.trim();
+/** Мишень имени 24 px, как у ссылки в макете (`.ct-row a.ct-n`); токен отступа. */
+const NAME_BOX = { display: 'block', minBlockSize: 'var(--career-space-6)' } as const;
+
+export interface ContactRowProps {
+  readonly contact: B640Contact;
+}
+
+/** Строка контакта (a02): имя, должность и компания, метка статуса, путь знакомства. Статус меняется в письме. */
+export function ContactRow({ contact }: ContactRowProps) {
+  const tag = statusTag(contact.status);
+  const note = contact.linkNote?.trim();
   return (
     <li className="row ct-row ct-row2">
-      <span className="row-title ct-n">{contact.fullName}</span>
+      <div className="row-title ct-n" style={NAME_BOX}>
+        {contact.fullName}
+      </div>
       <div className="row-sub ct-w">{workLine(contact)}</div>
-      {how ? (
+      <div className="ct-tags">
+        <span className={tag.cls}>{tag.text}</span>
+      </div>
+      {note ? (
         <div className="row-sub ct-p">
           <Icon name="path" />
-          {how}
+          {note}
         </div>
       ) : null}
     </li>

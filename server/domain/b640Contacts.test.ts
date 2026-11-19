@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { candidateCompanyKey } from './candidateCompanies';
 import { buildB640ContactList, type B640ContactSource } from './b640Contacts';
 
-const base = { roleTitle: '', source: 'linkedin_import' as const, relationship: 'Контакт', workplaces: [], knowsRecruiterIds: [], updatedAt: '2026-11-01T00:00:00.000Z' };
+const base = { roleTitle: 'Рекрутер', source: 'linkedin_import' as const, relationship: 'Контакт', workplaces: [], knowsRecruiterIds: [], updatedAt: '2026-11-01T00:00:00.000Z' };
 const contact = (over: Partial<B640ContactSource> & { id: string; fullName: string }): B640ContactSource =>
   ({ companyName: 'Ромашка', ...base, ...over }) as B640ContactSource;
 const query = { offset: 0, limit: 20, search: '', company: [], link: [], status: [], sort: 'name' as const };
@@ -64,7 +64,7 @@ describe('B697: список контактов', () => {
     const selectionKeys = new Set([candidateCompanyKey('Бета')]);
     const ids = (sort: 'selection' | 'recent' | 'name') =>
       buildB640ContactList(input(contacts, { statuses, selectionKeys }), { ...query, sort }).items.map((item) => item.id);
-    expect(ids('selection')).toEqual(['b', 'c', 'a']);
+    expect(ids('selection')).toEqual(['b', 'a', 'c']);
     expect(ids('recent')).toEqual(['c', 'a', 'b']);
     expect(ids('name')).toEqual(['b', 'c', 'a']);
     const replied = buildB640ContactList(input(contacts, { statuses }), { ...query, status: ['replied'] });
@@ -78,5 +78,41 @@ describe('B697: список контактов', () => {
     const page = buildB640ContactList(input(contacts), { ...query, limit: 2 });
     expect(page).toMatchObject({ total: 3, offset: 0, nextOffset: 2 });
     expect(page.items).toHaveLength(2);
+  });
+
+  it('B645: в списке только те, кто нанимает; знакомство ищется по всем контактам', () => {
+    const list = buildB640ContactList(
+      input([
+        contact({ id: 'admin', fullName: 'Irfan Ahmed', roleTitle: 'Senior Linux Administrator', knowsRecruiterIds: ['r'] }),
+        contact({ id: 'r', fullName: 'Роман', roleTitle: 'Технический рекрутер' }),
+      ]),
+      query,
+    );
+    expect(list.items.map((item) => item.id)).toEqual(['r']);
+    expect(list.total).toBe(1);
+    expect(list.items[0]).toMatchObject({ link: 'intro', linkNote: 'общий знакомый: Irfan Ahmed' });
+  });
+
+  it('B645: по умолчанию — компании подборки, затем компания, рекрутеры раньше руководителей', () => {
+    const list = buildB640ContactList(
+      input(
+        [
+          contact({ id: 'cto-b', fullName: 'Ада', companyName: 'Бета', roleTitle: 'CTO' }),
+          contact({ id: 'cto-g', fullName: 'Павел', companyName: 'Гринкод', roleTitle: 'CTO' }),
+          contact({ id: 'hr-g', fullName: 'Яна', companyName: 'Гринкод', roleTitle: 'HR-партнёр' }),
+        ],
+        { selectionKeys: new Set([candidateCompanyKey('Гринкод')]) },
+      ),
+      { ...query, sort: 'selection' as const },
+    );
+    expect(list.items.map((item) => item.id)).toEqual(['hr-g', 'cto-g', 'cto-b']);
+  });
+
+  it('B645: текст импорта по умолчанию не выдаётся за путь знакомства', () => {
+    const list = buildB640ContactList(
+      input([contact({ id: 'm', fullName: 'Мира', source: 'manual', relationship: 'Контакт из импортированного списка LinkedIn' })]),
+      query,
+    );
+    expect(list.items[0]).toMatchObject({ link: 'none', linkNote: null });
   });
 });
