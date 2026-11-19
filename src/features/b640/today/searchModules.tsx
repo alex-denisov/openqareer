@@ -2,7 +2,13 @@ import { Button, Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import type { TodayDay } from './useTodayDay';
 import { ActionLink, BlockError, BlockSkeleton, LeadActions } from './parts';
-import { applicationsSummary, queueAction, type TodayAction } from './todayModel';
+import {
+  applicationsSummary,
+  leadText,
+  moreTitle,
+  queueAction,
+  type TodayAction,
+} from './todayModel';
 
 const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const VACANCIES_ACTION = {
@@ -37,6 +43,8 @@ export function NextActionModule({
 }) {
   if (!today.snapshot) return <TodayDayFallback today={today} />;
   const [first] = actions(today);
+  const firstItem = today.snapshot.queue[0];
+  const detail = firstItem ? leadText(firstItem) : null;
   if (!first) {
     return (
       <section className="lead" aria-labelledby="today-next">
@@ -59,6 +67,7 @@ export function NextActionModule({
         {first.title}
       </h2>
       {first.sub ? <p className="lead-sub">{first.sub}</p> : null}
+      {detail ? <p className="lead-text">{detail}</p> : null}
       {lead ? (
         <LeadActions primary={first} />
       ) : (
@@ -100,7 +109,7 @@ export function MoreActionsModule({ today }: { readonly today: TodayDay }) {
   return (
     <section className="mod" aria-labelledby="today-more">
       <h3 className="mod-title" id="today-more">
-        {`Ещё дел: ${total - 1}`}
+        {moreTitle(total - 1)}
       </h3>
       <ul className="rows exp-rows">
         {rest.map((action, index) => (

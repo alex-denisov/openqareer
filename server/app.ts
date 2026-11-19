@@ -52,6 +52,7 @@ import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContact
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
+import { SqliteAccountDeletionStore } from './auth/accountDeletionStore';
 import { SqliteNetworkIndexRepository } from './data/sqliteNetworkIndexRepository';
 import { SqliteCompanyDirectoryRepository } from './data/sqliteCompanyDirectoryRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
@@ -129,6 +130,7 @@ interface BuildAppOptions {
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   searchConsentRepo?: SqliteSearchConsentRepository;
   capabilityConsentStore?: SqliteCapabilityConsentStore;
+  accountDeletionStore?: SqliteAccountDeletionStore;
   candidateCompanyWantsRepo?: SqliteCandidateCompanyWantsRepository;
   networkIndexRepo?: SqliteNetworkIndexRepository;
   companyDirectoryRepo?: SqliteCompanyDirectoryRepository;
@@ -380,6 +382,9 @@ function createCandidateRepositories(options: BuildAppOptions) {
     capabilityConsentStore:
       options.capabilityConsentStore ??
       new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
+    accountDeletionStore:
+      options.accountDeletionStore ??
+      new SqliteAccountDeletionStore({ databasePath: config.databasePath }),
     networkIndexRepo:
       options.networkIndexRepo ??
       new SqliteNetworkIndexRepository({ databasePath: config.databasePath }),
@@ -563,16 +568,17 @@ function attachMarketSalaryStore(
 function closeOwnedCandidateRepos(
   options: Pick<
     BuildAppOptions,
-    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo'
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo' | 'accountDeletionStore'
   >,
   deps: Pick<
     RouteDeps,
-    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo'
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo' | 'accountDeletionStore'
   >,
 ): void {
   if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
   if (!options.networkIndexRepo) deps.networkIndexRepo?.close();
   if (!options.companyDirectoryRepo) deps.companyDirectoryRepo?.close();
+  if (!options.accountDeletionStore) deps.accountDeletionStore?.close();
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
