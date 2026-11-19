@@ -224,6 +224,9 @@ test.describe('B645: карточка вакансии — способы отк
     await expect(ways.nth(1)).toContainText('hh.ru — письмо и ваше резюме');
     await expect(ways.nth(2)).toContainText('Сайт компании — анкета из 3 вопросов');
     const about = page.locator('.v4-about-co');
+    // На 390 «О компании» свёрнута, на 1440 раскрыта: раскрываем, если свёрнута.
+    if (!(await about.evaluate((node) => (node as HTMLDetailsElement).open)))
+      await about.locator('summary').click();
     await expect(about).toContainText('Банки');
     await expect(about).toContainText('Алина Громова · технический рекрутер');
     await expect(about.getByRole('link', { name: 'Откликнуться напрямую' })).toBeVisible();
