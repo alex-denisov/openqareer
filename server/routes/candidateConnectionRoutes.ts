@@ -453,7 +453,8 @@ async function handleGetConnectionCircles(
       'Вакансия не найдена в текущей подборке.',
       false,
     );
-  return connectionCirclesResponse(deps, repository, candidate.id, matched, request);
+  const response = await connectionCirclesResponse(deps, repository, candidate.id, matched, request.log);
+  return { ...response, meta: { requestId: request.id } };
 }
 
 /** A vacancy of the candidate's selection, or of a wanted company's pool list. */
@@ -466,15 +467,16 @@ export async function findCandidateVacancy(
   return matched.find((item) => item.cluster.id === vacancyId) ?? wantedPoolVacancy(deps, candidateId, vacancyId);
 }
 
-async function connectionCirclesResponse(
+/** Круги знакомых одной вакансии: вкладка вакансии и люди компании (B677). */
+export function buildVacancyCircles(
   deps: RouteDeps,
   repository: ConnectionRepository,
   candidateId: string,
   matched: MatchedVacancyItem,
-  request: FastifyRequest,
+  log: FastifyRequest['log'],
 ) {
   const stored = connectionRecords(repository, candidateId);
-  ensureMemberNetwork(deps, candidateId, stored, readConnectionMetadata, request.log);
+  ensureMemberNetwork(deps, candidateId, stored, readConnectionMetadata, log);
   const importReceipt = readImportReceipt(stored);
   const contacts = stored.flatMap((record) => toDomainConnection(record) ?? []);
   const recruiters = repository
@@ -493,15 +495,20 @@ async function connectionCirclesResponse(
     recruiters,
     contacts,
     linkedinContactsImported: importReceipt !== null,
-    platformMembers: platformMembersAt(deps, candidateId, matched.cluster.canonicalCompany, request.log),
+    platformMembers: platformMembersAt(deps, candidateId, matched.cluster.canonicalCompany, log),
   });
+  return { circles: built.circles, importReceipt, snapshot };
+}
+
+async function connectionCirclesResponse(...[deps, repository, candidateId, matched, log]: Parameters<typeof buildVacancyCircles>) {
+  const { circles, importReceipt, snapshot } = buildVacancyCircles(deps, repository, candidateId, matched, log);
   return {
     data: {
       vacancyId: matched.cluster.id,
       companyKey: candidateCompanyKey(matched.cluster.canonicalCompany),
       companyName: matched.cluster.canonicalCompany,
       vacancyTitle: matched.cluster.canonicalTitle,
-      circles: built.circles,
+      circles,
       resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
       linkedinImport: importReceipt
         ? {
@@ -511,7 +518,6 @@ async function connectionCirclesResponse(
           }
         : { state: 'unknown', importedAt: null, importedCount: null },
     },
-    meta: { requestId: request.id },
   };
 }
 

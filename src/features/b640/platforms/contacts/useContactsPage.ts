@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { B640Contact, B640ContactFacets, B640ContactList, B640ContactState } from '../../../../../shared/b640Contacts';
-import { listB640Contacts } from './contactsApi';
+import { listB640Contacts, listB640ContactsRetrying } from './contactsApi';
 import { moveStatusFacets } from './contactsFilters';
 import { appendContacts } from './contactsModel';
 import type { Criteria } from './useContacts';
@@ -20,7 +20,7 @@ export function useContactsPage(criteria: Criteria) {
   useEffect(() => {
     const current = ++generation.current;
     setLoad('loading');
-    listB640Contacts({ ...criteria, offset: 0 })
+    listB640ContactsRetrying({ ...criteria, offset: 0 })
       .then((first) => {
         if (current !== generation.current) return;
         setPage(first);

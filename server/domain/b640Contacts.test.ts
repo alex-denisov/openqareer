@@ -115,4 +115,19 @@ describe('B697: список контактов', () => {
     );
     expect(list.items[0]).toMatchObject({ link: 'none', linkNote: null });
   });
+
+  it('B645 a02: имя без эмодзи, компания вместо человека не попадает, должность до « | » или « at »', () => {
+    const list = buildB640ContactList(
+      input([
+        contact({ id: 'a', fullName: '🟠Ирена Иванова' }),
+        contact({ id: 'b', fullName: "3G AGENT Co., Ltd (ASEAN) We're specializing in Recruitment", roleTitle: 'Recruitment' }),
+        contact({ id: 'c', fullName: 'Олег', roleTitle: 'CPO at Positive Technologies | AppSec Product Portfolio $50M+' }),
+      ]),
+      query,
+    );
+    expect(list.items.map((item) => [item.id, item.fullName, item.roleTitle])).toEqual([
+      ['a', 'Ирена Иванова', 'Рекрутер'],
+      ['c', 'Олег', 'CPO'],
+    ]);
+  });
 });

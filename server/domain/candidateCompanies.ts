@@ -62,10 +62,10 @@ export function buildCandidateCompanyRows(input: {
   );
 }
 
-export function sortCandidateCompanyRows(
-  rows: readonly CandidateCompanyOpportunity[],
+export function sortCandidateCompanyRows<T extends CandidateCompanyOpportunity>(
+  rows: readonly T[],
   sort: 'default' | 'contacts' | 'alphabetical',
-): CandidateCompanyOpportunity[] {
+): T[] {
   const byName = (a: CandidateCompanyOpportunity, b: CandidateCompanyOpportunity) =>
     a.name.localeCompare(b.name, 'ru') || a.key.localeCompare(b.key);
   if (sort === 'alphabetical') return [...rows].sort(byName);
@@ -83,11 +83,11 @@ export function sortCandidateCompanyRows(
   );
 }
 
-export function filterCandidateCompanyRows(
-  rows: readonly CandidateCompanyOpportunity[],
+export function filterCandidateCompanyRows<T extends CandidateCompanyOpportunity>(
+  rows: readonly T[],
   filter: 'all' | 'want' | 'contacts' | 'recruiter',
   search = '',
-): CandidateCompanyOpportunity[] {
+): T[] {
   const query = search.trim().toLocaleLowerCase('ru-RU');
   return rows.filter((company) => {
     if (filter === 'want' && !company.want) return false;
