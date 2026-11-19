@@ -76,8 +76,11 @@ async function sealedApp(rows = pool(40)) {
     });
     expect(response.statusCode).toBe(200);
     const timing = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
-    const body = response.json() as { data: { cluster: { id: string } }[]; meta: { total: number } };
-    return { timing, ids: body.data.map((item) => item.cluster.id), total: body.meta.total };
+    const body = response.json() as {
+      data: { cluster: { id: string } }[];
+      meta: { total: number; facets?: { filtered?: { dates?: unknown } } };
+    };
+    return { timing, ids: body.data.map((item) => item.cluster.id), total: body.meta.total, facets: body.meta.facets };
   };
   const logged = (message: string) => lines.map((line) => JSON.parse(line)).filter((line) => line.msg === message);
   return { app, candidateStore, candidate, engine, read, logged };
@@ -311,6 +314,16 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     await read();
     forgetMatchedListsForTests();
     expect((await read()).timing).toMatchObject({ listServed: 'sealed', sealedRows: 40 });
+  });
+
+  it('the sealed answer counts the «Дата» periods like the built one (B729)', async () => {
+    const { read } = await sealedApp();
+    const built = await read('offset=0&tz=Europe/Moscow');
+    forgetMatchedListsForTests();
+    const sealed = await read('offset=0&tz=Europe/Moscow');
+    expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
+    expect(sealed.facets?.filtered?.dates).toBeDefined();
+    expect(sealed.facets?.filtered).toEqual(built.facets?.filtered);
   });
 
   it('an older build does not replace a newer one', async () => {

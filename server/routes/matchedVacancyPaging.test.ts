@@ -4,6 +4,8 @@ import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { apps, config, noSessions, stores, successProvider } from '../appTestHarness';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
+import { dateFacet, filteredFacetsOf } from '../../shared/listFilterFacets';
+import { startOfDayIn } from './careerRoleCounts';
 
 /**
  * Страницы одного чтения приходят из одного снимка (B211, PRB-023).
@@ -233,6 +235,47 @@ describe('чтение подбора страницами', () => {
     const remote = (await get('remote=1&source=mena-jobs')).json();
     expect(remote.meta.total).toBe(10);
     expect(remote.meta.facets.total).toBe(40);
+  });
+
+  it('числа «Даты», «Формата» и «Локаций» — по отобранной выдаче, день по поясу кандидата (B729)', async () => {
+    const day = 86_400_000;
+    const items = pool('b729', 40).map((item, index) => ({
+      ...item,
+      cluster: {
+        ...item.cluster,
+        canonicalLocation: index < 30 ? (index % 2 ? 'Berlin' : 'Munich') : 'Dubai',
+        isRemote: index % 5 === 0,
+        workFormat: index % 3 === 0 ? ('hybrid' as const) : undefined,
+        firstObservedAt: new Date(Date.now() - index * 4 * day).toISOString(),
+        sources: [
+          {
+            sourceId: index < 30 ? 'eu-jobs' : 'mena-jobs',
+            sourceName: 'Работа',
+            sourceType: 'direct' as const,
+            sourceUrl: '',
+            observedAt: new Date(Date.now() - index * 3 * day).toISOString(),
+          },
+        ],
+      },
+    }));
+    const { app, authorization } = await createPagingApp(undefined, items);
+    const get = (query: string) =>
+      app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`, headers: { authorization } });
+    const first = (await get('source=eu-jobs&tz=Asia/Tokyo')).json();
+    const shown = items.slice(0, 30);
+    const { observed, ...counts } = filteredFacetsOf(shown);
+    expect(first.meta.total).toBe(30);
+    expect(first.meta.facets.filtered).toEqual({
+      ...counts,
+      dates: dateFacet(observed, startOfDayIn(new Date(), 'Asia/Tokyo')),
+    });
+    expect(first.meta.facets.filtered.dates.find((d: { id: string }) => d.id === '30').count).toBe(11);
+    const badZone = (await get('source=eu-jobs&tz=Mars/Base')).json();
+    expect(badZone.meta.facets.filtered.dates).toEqual(
+      dateFacet(observed, startOfDayIn(new Date(), 'UTC')),
+    );
+    const later = (await get('source=eu-jobs&tz=Asia/Tokyo&offset=20')).json();
+    expect(later.meta.facets).toBeUndefined();
   });
 
   it('сводка охватывает снимок, фильтры применяются до страницы и значения проверяются', async () => {

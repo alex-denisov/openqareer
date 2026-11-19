@@ -13,7 +13,7 @@ export const SEALED_MATCHED_LIST_PAGES = 5;
 export const SEALED_MATCHED_LIST_MAX_BYTES = 512_000;
 
 /** Raise when the shape of a row or the order of a list changes: an older row is then not served. */
-export const SEALED_MATCHED_LIST_VERSION = 1;
+export const SEALED_MATCHED_LIST_VERSION = 2;
 
 export interface SealedPage {
   readonly offset: number;
@@ -28,6 +28,8 @@ export interface SealedMatchedList {
   readonly pageOffsets: readonly number[];
   readonly pages: readonly SealedPage[];
   readonly facets: MatchedList['facets'];
+  /** B729 (version 2): moments the rows appeared, for the «Дата» counts in the candidate's zone. */
+  readonly filteredObserved?: readonly number[];
   readonly campaignWithHypotheses: MatchedList['campaignWithHypotheses'];
 }
 
@@ -48,6 +50,7 @@ export function sealedListText(list: MatchedList, choice: string): string | unde
     pageOffsets: list.pageOffsets,
     pages: firstPages(list.filtered, list.pageOffsets),
     facets: list.facets,
+    filteredObserved: list.filteredObserved,
     campaignWithHypotheses: list.campaignWithHypotheses,
   };
   const text = JSON.stringify(sealed);

@@ -1,4 +1,7 @@
 import { getCurrencyRates } from '../currency/cbrRates';
+import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
+import { dateFacet } from '../../shared/listFilterFacets';
+import { careerTimeZone, startOfDayIn } from './careerRoleCounts';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readSortedFilters } from './matchedVacancySort';
@@ -121,6 +124,7 @@ function buildMatchedResponse(
     data,
     page,
     facets: filters.offset === 0 ? list.facets : undefined,
+    filteredObserved: list.filteredObserved,
     ...fitWorkIds(list.filtered, filters.offset, fitLimit),
     campaignWithHypotheses: list.campaignWithHypotheses,
     listCached: served !== 'built',
@@ -133,7 +137,7 @@ function buildMatchedResponse(
 type ShownPage = Pick<
   ReturnType<typeof buildMatchedResponse>,
   'data' | 'page' | 'facets' | 'campaignWithHypotheses' | 'listCached' | 'pageAndExplanationsMs' | 'titleParseAndLevelsMs'
-> & { readonly listServed: StaleListServed | 'sealed' };
+> & { readonly listServed: StaleListServed | 'sealed'; readonly filteredObserved?: readonly number[] };
 
 function logMatchedTiming(
   request: FastifyRequest,
@@ -329,6 +333,7 @@ function matchedVacancyResponse(
   requestId: string,
   targetLevel: ReturnType<typeof readTargetLevel>,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
+  timeZone = 'UTC',
 ) {
   return {
     data: response.data,
@@ -341,9 +346,25 @@ function matchedVacancyResponse(
       ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
       campaign: campaignMeta(response.campaignWithHypotheses),
       candidateLevel: targetLevel ?? null,
-      ...(response.facets ? { facets: response.facets } : {}),
+      ...(response.facets
+        ? { facets: withFilteredDates(response.facets, response.filteredObserved, timeZone) }
+        : {}),
     },
   };
+}
+
+/**
+ * B729: числа периодов «Даты» по всей выдаче. Граница дня — по поясу кандидата и на момент
+ * ответа, поэтому они не хранятся со списком, а считаются здесь из моментов появления строк.
+ */
+function withFilteredDates(
+  facets: MatchedVacancyFacets,
+  observed: readonly number[] | undefined,
+  timeZone: string,
+): MatchedVacancyFacets {
+  if (!facets.filtered || !observed) return facets;
+  const dates = dateFacet(observed, startOfDayIn(new Date(), timeZone));
+  return { ...facets, filtered: { ...facets.filtered, dates } };
 }
 
 /** B546: the page carries the estimate the maintenance process computed. */
@@ -435,6 +456,7 @@ async function sealedResponse(
       ...(page.offset === 0 ? { pageOffsets: sealed.pageOffsets } : {}),
     },
     facets: page.offset === 0 ? sealed.facets : undefined,
+    filteredObserved: sealed.filteredObserved,
     campaignWithHypotheses: sealed.campaignWithHypotheses,
     listCached: true,
     listServed: 'sealed',
@@ -473,7 +495,7 @@ async function answerFromSealedList(
   rebuildBehindSealedList(backgroundDeps, candidateId, request.query, request.log);
   const { mode, cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } = startTiming;
   logMatchedTiming(request, mode, cold, candidateCampaignMs, sealedReadMs, response, requestStartedAt, { beforeCampaignMs, sealedReadMs, sealedRows: sealed.total });
-  return matchedVacancyResponse(response, request.id, targetLevel, read.sort);
+  return matchedVacancyResponse(response, request.id, targetLevel, read.sort, careerTimeZone(request.query));
 }
 
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
@@ -527,7 +549,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     { beforeCampaignMs, ...setupSteps, ...readSteps, ...page.steps },
   );
 
-  return matchedVacancyResponse(page.response, request.id, targetLevel, sort);
+  return matchedVacancyResponse(page.response, request.id, targetLevel, sort, careerTimeZone(request.query));
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
