@@ -61,4 +61,10 @@ export class SqliteRelocationPlacesRepository {
       .run(candidateId, JSON.stringify(places), now);
     return { saved: true, places, updatedAt: now };
   }
+
+  remove(candidateId: string): void {
+    this.database
+      .prepare('DELETE FROM candidate_relocation_places WHERE candidate_id = ?')
+      .run(candidateId);
+  }
 }

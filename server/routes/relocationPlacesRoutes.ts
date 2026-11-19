@@ -37,6 +37,9 @@ function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyRep
 const getPlaces: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
+  // Отзыв согласия удаляет данные о переезде: без согласия список мест не хранится.
+  if (!deps.candidateStore.relocationQuestionnaireRepo.getConsent(candidateId).granted)
+    deps.places.remove(candidateId);
   return { data: deps.places.read(candidateId), meta: { requestId: request.id } };
 };
 

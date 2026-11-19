@@ -136,6 +136,14 @@ describe('B672 relocation places routes', () => {
     expect(read.saved).toBe(true);
     expect(read.places).toEqual(BODY.places);
     expect(typeof read.updatedAt).toBe('string');
+    candidateStore.relocationQuestionnaireRepo.revokeConsent(id, new Date().toISOString());
+    expect((await call(app, 'GET', PATH, 'token-flagged')).json().data.saved).toBe(false);
+    candidateStore.relocationQuestionnaireRepo.grantConsent(
+      id,
+      RELOCATION_CONSENT_VERSION,
+      new Date().toISOString(),
+    );
+    expect((await call(app, 'GET', PATH, 'token-flagged')).json().data.saved).toBe(false);
   });
 
   it('rejects a foreign city, a repeated place and an unknown section', async () => {
