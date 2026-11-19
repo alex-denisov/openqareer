@@ -72,7 +72,7 @@ describe('v10b: карточка компании', () => {
     expect(view.container.querySelector('#co-name')!.textContent).toContain('Ладога Банк');
     expect(view.container.querySelector('.lead-text')!.textContent).toBe('Москва · Банки');
     const row = view.container.querySelector('.co-vrow')!;
-    expect(row.querySelector('a.row-title')!.getAttribute('href')).toBe('/app/vacancies/cl-1');
+    expect(row.querySelector('div.row-title')!.textContent).toBe('Руководитель разработки');
     expect(row.querySelector('.row-sub')!.textContent).toMatch(/480.*580.*гибрид · 11\.11/u);
     expect(row.querySelector('.vt-fit')!.textContent).toContain('86');
     expect(view.container.querySelector('.more-n summary')!.textContent).toBe('Другие вакансии компании · 1');

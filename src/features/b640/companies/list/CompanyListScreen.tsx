@@ -11,12 +11,35 @@ import { useCompanyList, type CompanyList } from './useCompanyList';
 
 const PAGE = 20;
 
+/** Пустой результат по месту (v10g): сортировать и быстро фильтровать нечего. */
+const isEmptyPlace = (list: CompanyList): boolean =>
+  list.load === 'ready' && list.items.length === 0 && list.query.relocation;
+
+function SortField({ list }: { readonly list: CompanyList }) {
+  const current = SORT_OPTIONS.find((option) => option.id === list.query.sort);
+  const pick = (label: string) => {
+    const option = SORT_OPTIONS.find((item) => item.label === label);
+    if (option) list.setSort(option.id as CandidateCompanySort);
+  };
+  return (
+    <div className="field co-sort ls-f">
+      <label className="vh" htmlFor="co-sort">Сортировка</label>
+      <select id="co-sort" value={current?.label} onChange={(event) => pick(event.target.value)}>
+        {SORT_OPTIONS.map((option) => (
+          <option key={option.id}>{option.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function Tools({ list }: { readonly list: CompanyList }) {
-  const all = list.counts?.all ?? list.total;
+  const bare = isEmptyPlace(list);
+  const all = bare ? list.total : (list.counts?.all ?? list.total);
   return (
     <div className="co-tools">
       <div className="field co-q">
-        <label className="vh" htmlFor="co-q">{`Поиск среди ${formatCount(all)} компаний`}</label>
+        <label className="vh" htmlFor="co-q">{bare ? 'Поиск среди компаний' : `Поиск среди ${formatCount(all)} компаний`}</label>
         <input
           id="co-q"
           type="text"
@@ -26,20 +49,7 @@ function Tools({ list }: { readonly list: CompanyList }) {
           onChange={(event) => list.setSearch(event.target.value)}
         />
       </div>
-      <div className="field co-sort ls-f">
-        <label className="vh" htmlFor="co-sort">Сортировка</label>
-        <select
-          id="co-sort"
-          value={list.query.sort}
-          onChange={(event) => list.setSort(event.target.value as CandidateCompanySort)}
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {bare ? null : <SortField list={list} />}
       <FiltersButton place={list.query} cities={list.cities} onChange={list.setPlace} />
     </div>
   );
@@ -47,7 +57,7 @@ function Tools({ list }: { readonly list: CompanyList }) {
 
 function Chips({ list }: { readonly list: CompanyList }) {
   const chips = filterChips(list.counts);
-  if (!chips.length) return null;
+  if (!chips.length || isEmptyPlace(list)) return null;
   const pick = (id: CandidateCompanyFilter) => list.setFilter(list.query.filter === id ? 'all' : id);
   return (
     <div className="chips" role="group" aria-label="Быстрые фильтры">
@@ -82,6 +92,9 @@ function Foot({ list }: { readonly list: CompanyList }) {
   if (left <= 0) return null;
   return (
     <>
+      <p className="vl-cut">
+        <span>{`ещё ${formatCount(list.items.length % PAGE || PAGE)} в этой порции`}</span>
+      </p>
       <div className="vl-foot">
         <Button icon="down" busy={list.moreBusy} onClick={() => void list.loadMore()}>
           <span>

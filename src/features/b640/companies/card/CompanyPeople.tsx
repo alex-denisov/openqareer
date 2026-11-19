@@ -14,7 +14,7 @@ const ACTION_LABELS: Readonly<Record<B640CompanyPerson['nextStep'], string>> = {
 };
 
 function PersonRow({ person }: { readonly person: B640CompanyPerson }) {
-  const title = person.platformMember ? 'Участник платформы' : (person.name ?? 'Без имени');
+  const title = person.platformMember ? (person.roleTitle ?? 'Участник платформы') : (person.name ?? 'Без имени');
   const role = person.platformMember ? 'имя скрыто' : person.roleTitle;
   return (
     <li className="row co-person">

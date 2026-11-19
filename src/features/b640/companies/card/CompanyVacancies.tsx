@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ApplicationStage } from '../../../../../shared/applicationStage';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../../kit';
@@ -21,10 +22,30 @@ const PAGE = 20;
 const ENV = { currency: 'RUB', noRole: false } as const;
 const FIT_TIP = 'Совпадение требований вакансии с подтверждённым опытом профиля.';
 
-/** «480–580 тыс. ₽ · гибрид · 11.11» — без пустых частей. */
-export function vacancySub(item: MatchedVacancyItem): string {
-  const money = moneyView(item, { currency: 'RUB' }).text;
-  return [money, rowFormat(item).toLocaleLowerCase('ru-RU'), rowDate(item)].filter(Boolean).join(' · ');
+/** Деньги, формат и дата строки вакансии; пустая часть выпадает. */
+function vacancyParts(item: MatchedVacancyItem) {
+  return {
+    money: moneyView(item, { currency: 'RUB' }).text,
+    format: rowFormat(item).toLocaleLowerCase('ru-RU'),
+    date: rowDate(item),
+  };
+}
+
+/** «480–580 тыс. ₽ · гибрид · 11.11»: деньги и дата — числа, формат — обычный текст. */
+function RoleSub({ item }: { readonly item: MatchedVacancyItem }) {
+  const { money, format, date } = vacancyParts(item);
+  const parts: ReactNode[] = [
+    money ? <span className="num" key="money">{money}</span> : null,
+    format || null,
+    date ? <span className="num" key="date">{date}</span> : null,
+  ].filter(Boolean);
+  return <div className="row-sub">{parts.flatMap((part, index) => (index ? [' · ', part] : [part]))}</div>;
+}
+
+/** «320–380 тыс. ₽ · 09.11» — другие вакансии: деньги и дата. */
+function othersSub(item: MatchedVacancyItem): string {
+  const { money, date } = vacancyParts(item);
+  return [money, date].filter(Boolean).join(' · ');
 }
 
 function RoleRow({ item, stage }: { readonly item: MatchedVacancyItem; readonly stage: ApplicationStage | undefined }) {
@@ -32,10 +53,8 @@ function RoleRow({ item, stage }: { readonly item: MatchedVacancyItem; readonly 
   return (
     <li className="row co-vrow">
       <div className="co-vmain">
-        <Link className="row-title" to={buildNodePath('v04', { vacancyId: item.cluster.id })}>
-          {item.cluster.canonicalTitle}
-        </Link>
-        <div className="row-sub num">{vacancySub(item)}</div>
+        <div className="row-title">{item.cluster.canonicalTitle}</div>
+        <RoleSub item={item} />
       </div>
       <span className="co-vfit">
         <FitCell item={item} env={ENV} />
@@ -59,16 +78,14 @@ function Others({ others, total }: { readonly others: readonly MatchedVacancyIte
     <details className="more-n">
       <summary>
         <Icon name="down" />
-        <span className="num">{`Другие вакансии компании · ${formatCount(total)}`}</span>
+        {`Другие вакансии компании · ${formatCount(total)}`}
       </summary>
       <ul className="rows">
         {others.map((item) => (
           <li className="row" key={item.cluster.id}>
             <div>
-              <Link className="row-title" to={buildNodePath('v04', { vacancyId: item.cluster.id })}>
-                {item.cluster.canonicalTitle}
-              </Link>
-              <div className="row-sub num">{vacancySub(item)}</div>
+              <div className="row-title">{item.cluster.canonicalTitle}</div>
+              <div className="row-sub num">{othersSub(item)}</div>
             </div>
           </li>
         ))}

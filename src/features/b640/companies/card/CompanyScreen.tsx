@@ -5,6 +5,7 @@ import { useScreenChrome } from '../../shell/ShellContext';
 import { companyAbout } from '../format';
 import { WantButton } from '../list/CompanyRow';
 import { RetryLine } from '../RetryLine';
+import { writeToLabel } from '../writeTo';
 import { useCompanyWant, type CompanyWant } from '../useCompanyWant';
 import { CompanyPeople } from './CompanyPeople';
 import { CompanyVacancies } from './CompanyVacancies';
@@ -28,15 +29,20 @@ function Notice({ card }: { readonly card: CompanyCard }) {
 
 type LoadedCard = CompanyCard & { readonly details: NonNullable<CompanyCard['details']> };
 
+/** Обёртка состояния макета (`.st-in`): блок с отступом, строка по ширине содержимого. */
+const WANT_WRAP = { display: 'block', marginBlock: 'var(--career-space-2)' } as const;
+
 function WantLine({ busy, onCancel }: { readonly busy: boolean; readonly onCancel: () => void }) {
   return (
-    <p className="co-wantline" role="status">
-      <Icon name="check" />
-      <span>В списке «Хочу»</span> ·{' '}
-      <button className="row-act" type="button" disabled={busy} onClick={onCancel}>
-        Отменить
-      </button>
-    </p>
+    <div style={WANT_WRAP}>
+      <p className="co-wantline" role="status">
+        <Icon name="check" />
+        <span>В списке «Хочу»</span> ·{' '}
+        <button className="row-act" type="button" disabled={busy} onClick={onCancel}>
+          Отменить
+        </button>
+      </p>
+    </div>
   );
 }
 
@@ -63,7 +69,7 @@ function Head({ card, want, known }: HeadProps) {
           {known ? (
             <Link className="btn is-primary" to={buildNodePath('o02', { responseId: known.vacancyId })}>
               <Icon name="send" />
-              Написать знакомому
+              {writeToLabel(known.name ?? '')}
             </Link>
           ) : null}
           {company.want ? null : (

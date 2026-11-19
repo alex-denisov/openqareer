@@ -41,7 +41,13 @@ const company = (
   relocation: index % 3 === 0 ? { sourceLabel: 'hh.ru', readAt: '2026-11-10' } : null,
 });
 
-const vacancy = (id: string, title: string, percent?: number) => ({
+const vacancy = (
+  id: string,
+  title: string,
+  salary: readonly [number, number],
+  seen: string,
+  percent?: number,
+) => ({
   cluster: {
     id,
     canonicalTitle: title,
@@ -49,13 +55,13 @@ const vacancy = (id: string, title: string, percent?: number) => ({
     canonicalLocation: 'Москва',
     isRemote: false,
     workFormat: 'hybrid',
-    salary: { from: 480000, to: 580000, currency: 'RUR' },
+    salary: { from: salary[0], to: salary[1], currency: 'RUR' },
     skills: [],
     descriptionSummary: '',
     primaryUrl: '',
     sources: [],
-    firstObservedAt: '2026-11-11T09:00:00.000Z',
-    lastSeenAt: '2026-11-11T09:00:00.000Z',
+    firstObservedAt: seen,
+    lastSeenAt: seen,
     status: 'active',
     vacanciesCount: 1,
   },
@@ -82,37 +88,42 @@ const vacancy = (id: string, title: string, percent?: number) => ({
   },
 });
 
+const person = (id: string, circle: 1 | 2 | 3, fields: Record<string, unknown>) => ({
+  id,
+  circle,
+  name: null,
+  roleTitle: null,
+  evidence: null,
+  vacancyId: 'cluster-0',
+  platformMember: false,
+  ...fields,
+});
+
 const PEOPLE = [
-  {
-    id: 'p1',
-    circle: 1,
+  person('p1', 1, {
     name: 'Роман Ефимов',
     roleTitle: 'руководитель группы платежей',
-    evidence: 'Общее место работы: «Сфера Платежи», 2018–2021',
+    evidence: 'общее место работы в вашем резюме: «Сфера Платежи», 2018–2021',
     nextStep: 'write_known_contact',
-    vacancyId: 'cluster-0',
-    platformMember: false,
-  },
-  {
-    id: 'p2',
-    circle: 2,
-    name: null,
-    roleTitle: null,
-    evidence: 'Знаком с участником платформы — тот согласен представлять кандидатов',
+  }),
+  person('p2', 2, {
+    name: 'Наталья Седова',
+    roleTitle: 'директор по разработке',
+    evidence: 'Знакома с вашим контактом Роман Ефимов · импорт контактов LinkedIn, 10.11',
     nextStep: 'ask_for_introduction',
-    vacancyId: 'cluster-0',
+  }),
+  person('p3', 2, {
+    roleTitle: 'Руководитель платформы',
+    evidence: 'Знаком с участником openqareer — тот согласен представлять кандидатов',
+    nextStep: 'ask_for_introduction',
     platformMember: true,
-  },
-  {
-    id: 'p3',
-    circle: 3,
+  }),
+  person('p4', 3, {
     name: 'Алина Громова',
     roleTitle: 'технический рекрутер',
-    evidence: 'Холодный отклик по вакансии; ничего не отправлено.',
+    evidence: 'рекрутер вакансии на hh.ru, 11.11',
     nextStep: 'cold_application',
-    vacancyId: 'cluster-0',
-    platformMember: false,
-  },
+  }),
 ];
 
 const COMPANIES = NAMES.map(company);
@@ -134,12 +145,12 @@ async function mockCompanies(page: Page): Promise<void> {
       json: {
         data: {
           items,
-          total: narrowed ? items.length : 132,
+          total: narrowed ? items.length : 122,
           offset: 0,
           limit: 20,
           sort: 'default',
           filter: filter ?? 'all',
-          filterCounts: { all: 132, want: wants.size, contacts: 5, recruiter: 4, relocation: 4 },
+          filterCounts: { all: 132, want: wants.size, contacts: 5, recruiter: 4, relocation: 9 },
           linkedin: {
             status: 'connected',
             importedAt: '2026-11-10T09:00:00.000Z',
@@ -158,19 +169,32 @@ async function mockCompanies(page: Page): Promise<void> {
     });
   });
   await page.route(`**/api/v1/candidate/b640/companies/${KEY}/people?*`, (route) =>
-    route.fulfill({ json: { data: { items: PEOPLE, total: 3, offset: 0, nextOffset: null } } }),
+    route.fulfill({ json: { data: { items: PEOPLE, total: 4, offset: 0, nextOffset: null } } }),
   );
   await page.route(`**/api/v1/candidate/b640/companies/${KEY}?*`, (route) =>
     route.fulfill({
       json: {
         data: {
           company: { ...COMPANIES[3]!, want: wants.has(KEY) },
-          roleVacancies: [vacancy('cluster-0', 'Руководитель разработки', 86)],
+          roleVacancies: [
+            vacancy(
+              'cluster-0',
+              'Руководитель разработки',
+              [480000, 580000],
+              '2026-11-11T09:00:00.000Z',
+              86,
+            ),
+          ],
           roleTotal: 1,
           roleNextOffset: null,
           otherVacancies: [
-            vacancy('cluster-8', 'Руководитель группы QA'),
-            vacancy('cluster-9', 'Аналитик данных'),
+            vacancy(
+              'cluster-8',
+              'Руководитель группы QA',
+              [320000, 380000],
+              '2026-11-09T09:00:00.000Z',
+            ),
+            vacancy('cluster-9', 'Аналитик данных', [220000, 280000], '2026-11-06T09:00:00.000Z'),
           ],
           otherTotal: 2,
           applications: {},
@@ -213,9 +237,9 @@ test.describe('B655/B677: «Компании и люди» нового каби
       'Хочу · 2',
       'Есть контакты в сети · 5',
       'Рекрутер известен · 4',
-      'Релокация · 4',
+      'Релокация · 9',
     ]);
-    await expect(page.locator('.vl-foot')).toContainText('Показать ещё 20 · осталось 122');
+    await expect(page.locator('.vl-foot')).toContainText('Показать ещё 20 · осталось 112');
   });
 
   test('найти компанию, отметить «Хочу» и отменить', async ({ page }) => {
@@ -235,8 +259,13 @@ test.describe('B655/B677: «Компании и люди» нового каби
     await expect(page.locator('.co-vrow')).toHaveCount(1);
     await expect(page.locator('.co-vrow .vt-fit')).toContainText('86');
     await expect(page.locator('.more-n summary')).toHaveText('Другие вакансии компании · 2');
-    await expect(page.locator('.co-person .tag')).toHaveText(['круг 1', 'круг 2', 'круг 3']);
-    await expect(page.locator('.co-person').nth(1)).toContainText('Участник платформы');
+    await expect(page.locator('.co-person .tag')).toHaveText([
+      'круг 1',
+      'круг 2',
+      'круг 2',
+      'круг 3',
+    ]);
+    await expect(page.locator('.co-person').nth(2)).toContainText('имя скрыто');
     await page.getByRole('button', { name: 'Хочу в компанию: Ладога Банк' }).click();
     await expect(page.locator('.co-wantline')).toContainText('В списке «Хочу»');
     await page.locator('.co-wantline .row-act').click();

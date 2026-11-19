@@ -23,6 +23,7 @@ function Contacts({ count }: { readonly count: number | null }) {
 /** Кнопка «Хочу в компанию»; отмеченная — «Хочу» с галочкой. */
 export function WantButton({ company, busy, onWant, small = true }: CompanyRowProps & { readonly small?: boolean }) {
   const classes = ['btn', small ? 'is-sm' : '', 'co-want', company.want ? 'is-on' : ''].filter(Boolean).join(' ');
+  const label = company.want ? 'Хочу' : 'Хочу в компанию';
   return (
     <button
       className={classes}
@@ -34,7 +35,7 @@ export function WantButton({ company, busy, onWant, small = true }: CompanyRowPr
       onClick={() => onWant({ key: company.key, name: company.name, want: company.want })}
     >
       <Icon name={company.want ? 'check' : 'building'} />
-      <span>{company.want ? 'Хочу' : 'Хочу в компанию'}</span>
+      {small ? <span>{label}</span> : label}
     </button>
   );
 }
