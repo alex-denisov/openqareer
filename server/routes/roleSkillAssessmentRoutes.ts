@@ -18,6 +18,7 @@ import type { ResumeEvidenceImport } from '../data/candidateStore';
 import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
+import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
 import { readTargetLevel } from './vacancyRoleContext';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
@@ -417,6 +418,7 @@ export async function readRoleSnapshot(
   deps: RouteDeps,
   candidateId: string,
   roleTitle: string,
+  options: MatchedPoolReadOptions = {},
 ): Promise<MatchedRoleSnapshot> {
   const targetRoles = [roleTitle];
   const { confirmedSkills } = readMatchProfile(deps.candidateStore, candidateId);
@@ -428,6 +430,8 @@ export async function readRoleSnapshot(
       confirmedSkills,
       targetRoles,
       targetLevel,
+      undefined,
+      options,
     );
     return { state: 'matched', vacancies };
   } catch {

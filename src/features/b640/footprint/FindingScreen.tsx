@@ -1,8 +1,9 @@
 import type { FootprintRiskItem } from '../../../../shared/footprintRisk';
 import { FOOTPRINT_CATEGORY_TITLES } from '../../../../shared/footprintRisk';
-import { Button, Icon, Link, StatusLine, useToast } from '../kit';
+import { Icon, Link, StatusLine, useToast } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
+import { FindingDock, RemovalDoneLine } from './FindingDock';
 import { useReview } from './FindingRow';
 import { FootprintLoad, StartPage, hasSummary } from './FootprintScreen';
 import {
@@ -12,10 +13,8 @@ import {
   mailtoHref,
   openRisks,
   pageAttrs,
-  shortDate,
 } from './footprintModel';
 import type { FootprintData } from './useFootprint';
-import { repeatIds, useStartSearch } from './useStartSearch';
 import { reportFailure } from './reportFailure';
 
 interface ViewProps {
@@ -108,25 +107,6 @@ function ExternalRow({ item }: { readonly item: FootprintRiskItem }) {
   );
 }
 
-/** «Проверено DD.MM · Проверить снова»: новая проверка, ход виден в «Цифровом следе». */
-function RecheckDock({ data }: { readonly data: FootprintData }) {
-  const { navigate } = useShell();
-  const repeat = useStartSearch(data, () => navigate(buildNodePath('p02')));
-  const checked = shortDate(data.summary.checkedAt);
-  return (
-    <>
-      {repeat.error ? <StatusLine state="err" text={repeat.error} /> : null}
-      <div className="fp-dock fp-dock-ico">
-        {checked ? <span className="fp-dock-d">Проверено <span className="num">{checked}</span></span> : null}
-        <Button variant="primary" icon="refresh" busy={repeat.busy}
-          onClick={() => void repeat.start(repeatIds(data))}>
-          Проверить снова
-        </Button>
-      </div>
-    </>
-  );
-}
-
 function Finding({ data, item, reload }: ViewProps) {
   const { navigate } = useShell();
   useScreenChrome({ crumb: item.title });
@@ -145,7 +125,7 @@ function Finding({ data, item, reload }: ViewProps) {
       <QuietRow item={item} onDone={toSummary} />
       <Letter item={item} />
       <ExternalRow item={item} />
-      <RecheckDock data={data} />
+      <FindingDock data={data} item={item} reload={reload} />
     </section>
   );
 }
@@ -173,6 +153,7 @@ export function FindingScreen({ node, findingId }: { readonly node: B640Node; re
         const item = data.summary.items.find((entry) => entry.id === findingId);
         return (
           <div className="page pf" {...pageAttrs(node)}>
+            {item ? <RemovalDoneLine item={item} /> : null}
             <div className="col">
               {item ? <Finding data={data} item={item} reload={reload} /> : <Missing />}
             </div>

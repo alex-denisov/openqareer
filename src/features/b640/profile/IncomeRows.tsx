@@ -37,37 +37,6 @@ function AmountField({ id, label, placeholder, value, invalid, onChange }: Field
   );
 }
 
-interface IncomeFieldsProps {
-  readonly current: string;
-  readonly expected: string;
-  readonly invalid: { readonly current: boolean; readonly expected: boolean };
-  readonly onCurrent: (value: string) => void;
-  readonly onExpected: (value: string) => void;
-}
-
-function IncomeFields({ current, expected, invalid, onCurrent, onExpected }: IncomeFieldsProps) {
-  return (
-    <>
-      <AmountField
-        id="inc-now"
-        label="Доход сейчас, ₽ в месяц на руки"
-        placeholder="Например: 440 000"
-        value={current}
-        invalid={invalid.current}
-        onChange={onCurrent}
-      />
-      <AmountField
-        id="inc-want"
-        label="Ожидания, ₽ в месяц на руки"
-        placeholder="Например: 500 000"
-        value={expected}
-        invalid={invalid.expected}
-        onChange={onExpected}
-      />
-    </>
-  );
-}
-
 interface DialogProps {
   readonly income: ProfileIncome;
   readonly onClose: () => void;
@@ -76,34 +45,33 @@ interface DialogProps {
 
 const text = (value: number | null) => (value === null ? '' : String(value));
 
-/** Поля окна, их проверка и сохранение. */
+/**
+ * Поле окна, проверка и сохранение. Ожидания здесь не правятся — они в «Условиях поиска»
+ * (B645 s01); сохранённое значение уходит без изменений.
+ */
 function useIncomeForm(income: ProfileIncome, onSaved: (income: ProfileIncome) => void) {
   const [current, setCurrent] = useState(text(income.current));
-  const [expected, setExpected] = useState(text(income.expected));
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const amounts = { current: incomeAmount(current), expected: incomeAmount(expected) };
+  const amount = incomeAmount(current);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setChecked(true);
-    if (busy || amounts.current === 'invalid' || amounts.expected === 'invalid') return;
+    if (busy || amount === 'invalid') return;
     setBusy(true);
     setError(null);
     try {
-      onSaved(await saveIncome({ current: amounts.current, expected: amounts.expected }));
+      onSaved(await saveIncome({ current: amount, expected: income.expected }));
     } catch (reason) {
       setError(apiErrorMessage(reason, 'Не удалось сохранить. Нажмите ещё раз.'));
       setBusy(false);
     }
   }
 
-  const invalid = {
-    current: checked && amounts.current === 'invalid',
-    expected: checked && amounts.expected === 'invalid',
-  };
-  return { current, expected, invalid, busy, error, setCurrent, setExpected, submit };
+  const invalid = checked && amount === 'invalid';
+  return { current, invalid, busy, error, setCurrent, submit };
 }
 
 function IncomeDialog({ income, onClose, onSaved }: DialogProps) {
@@ -114,7 +82,7 @@ function IncomeDialog({ income, onClose, onSaved }: DialogProps) {
     <Dialog
       open
       onClose={onClose}
-      title="Доход и ожидания"
+      title="Доход сейчас"
       footer={
         <>
           <Button variant="quiet" icon="close" onClick={onClose}>
@@ -132,12 +100,13 @@ function IncomeDialog({ income, onClose, onSaved }: DialogProps) {
         noValidate
         onSubmit={(event) => void submit(event)}
       >
-        <IncomeFields
-          current={form.current}
-          expected={form.expected}
+        <AmountField
+          id="inc-now"
+          label="Доход сейчас, ₽ в месяц на руки"
+          placeholder="Например: 440 000"
+          value={form.current}
           invalid={form.invalid}
-          onCurrent={form.setCurrent}
-          onExpected={form.setExpected}
+          onChange={form.setCurrent}
         />
         {error ? <StatusLine state="err" text={error} /> : null}
       </form>
@@ -145,23 +114,18 @@ function IncomeDialog({ income, onClose, onSaved }: DialogProps) {
   );
 }
 
-function Amount({
-  value,
-  prefix = '',
-}: {
-  readonly value: number | null;
-  readonly prefix?: string;
-}) {
+function Amount({ value }: { readonly value: number | null }) {
   const label = incomeLabel(value);
   return label ? (
-    <span className="rec-text num">{`${prefix}${label}`}</span>
+    <span className="rec-text num">{label}</span>
   ) : (
     <span className="rec-text dim">Не указано</span>
   );
 }
 
 /**
- * Строки «Доход сейчас» и «Ожидания» у нынешнего места работы (B673).
+ * Строка «Доход сейчас» у нынешнего места работы (B673). «Ожидания» — в «Условиях поиска»
+ * (B645 s01), в карточке работы их нет.
  * Числа видит только кандидат; правка — в окне, результат сразу в строке.
  */
 export function IncomeRows({ initial }: { readonly initial: ProfileIncome }) {
@@ -181,10 +145,6 @@ export function IncomeRows({ initial }: { readonly initial: ProfileIncome }) {
             Изменить
           </button>
         </span>
-      </dd>
-      <dt>Ожидания</dt>
-      <dd className="rec">
-        <Amount value={income.expected} prefix="от " />
       </dd>
       {open ? (
         <IncomeDialog

@@ -16,7 +16,17 @@ function summaryDay(periodTo: string): string {
 }
 
 function Items({ results }: { readonly results: CareerDiaryResults90 }) {
-  if (results.items.length === 0) return <p className="mod-text">Целей с замерами за 90 дней нет</p>;
+  if (results.items.length === 0) {
+    // Без целей итогов нет: одно действие ведёт туда, где их задают (B645, 19.11).
+    return (
+      <>
+        <p className="mod-text">Целей с замерами за 90 дней нет</p>
+        <div className="actions">
+          <Link className="btn is-primary" to={buildNodePath('d02')}>Задать цели</Link>
+        </div>
+      </>
+    );
+  }
   return (
     <ul className="rows exp-rows">
       {results.items.map((item) => (
@@ -53,10 +63,11 @@ function Lead({ results }: { readonly results: CareerDiaryResults90 }) {
 
 function Talk({ results }: { readonly results: CareerDiaryResults90 }) {
   return (
-    <section className="mod" aria-labelledby="rs-raise">
-      <h3 className="mod-title" id="rs-raise">Для разговора об итоговой оценке</h3>
+    <section className="mod" {...(results.talkText ? { 'aria-labelledby': 'rs-raise' } : { 'aria-label': 'Что дальше' })}>
+      {/* Без текста заголовок не показывается: пустой блок «для разговора» вводит в заблуждение. */}
       {results.talkText ? (
         <>
+          <h3 className="mod-title" id="rs-raise">Для разговора об итоговой оценке</h3>
           <p className="dn-quote">{results.talkText}</p>
           <CopyText text={results.talkText} />
         </>

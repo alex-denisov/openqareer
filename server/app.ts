@@ -1,5 +1,6 @@
 import { profilePhotoReader } from './routes/authorRoutes';
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
+import { warmRoleSnapshots } from './routes/roleSnapshotWarm';
 import { warmMatchedList } from './routes/matchedListWarm';
 import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
@@ -470,9 +471,10 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
   deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.((candidateId, log) =>
     rebuildCampaignRoles(deps, candidateId, { log }),
   );
-  deps.matchedPoolPrecompute?.setListWarmer?.((candidateId, log) =>
-    warmMatchedList(deps, candidateId, log),
-  );
+  deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
+    await warmMatchedList(deps, candidateId, log);
+    await warmRoleSnapshots(deps, candidateId, log);
+  });
   return deps;
 }
 
