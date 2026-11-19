@@ -27,7 +27,7 @@ async function setup(flag = true) {
 async function enable(app: App, cookie: string) {
   const started = await post(app, `${BASE}/setup`, {}, cookie);
   const secret = started.json().data.secret as string;
-  const enabled = await post(app, `${BASE}/enable`, { code: totpAt(secret, unixNow()) }, cookie);
+  const enabled = await post(app, `${BASE}/enable`, { code: totpAt(secret, unixNow()), password: PASSWORD }, cookie);
   clock('2026-11-19T10:01:00.000Z');
   return { secret, backupCodes: enabled.json().data.backupCodes as string[] };
 }
@@ -53,7 +53,12 @@ describe('B401: двухфакторная защита — маршруты', (
     const { app, cookie } = await setup();
     const started = (await post(app, `${BASE}/setup`, {}, cookie)).json().data;
     expect(started.otpauthUrl).toMatch(/^otpauth:\/\/totp\//u);
-    expect((await post(app, `${BASE}/enable`, { code: '000000' }, cookie)).statusCode).toBe(400);
+    expect((await post(app, `${BASE}/enable`, { code: '000000', password: PASSWORD }, cookie)).statusCode).toBe(400);
+    // Верный код без пароля или с чужим паролем защиту не включает.
+    const secret = started.secret as string;
+    expect((await post(app, `${BASE}/enable`, { code: totpAt(secret, unixNow()) }, cookie)).statusCode).toBe(400);
+    const stranger = await post(app, `${BASE}/enable`, { code: totpAt(secret, unixNow()), password: 'not-the-password' }, cookie);
+    expect(stranger.json().error.code).toBe('current_password_invalid');
     expect((await app.inject({ method: 'GET', url: BASE, headers: { cookie } })).json().data).toEqual({ enabled: false, backupCodesLeft: 0 });
   });
 

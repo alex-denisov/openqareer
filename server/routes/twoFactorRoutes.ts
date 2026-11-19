@@ -10,7 +10,8 @@ import { closeTwoFactorStoreFor, twoFactorStoreFor } from './twoFactorAccess';
 
 const code = z.string().trim().min(6).max(32);
 const loginStepSchema = z.object({ challenge: z.string().max(200), code }).strict();
-const enableSchema = z.object({ code }).strict();
+/** Включение — с паролем: по чужой сессии защиту не включить и владельца не запереть. */
+const enableSchema = z.object({ code, password: z.string().min(1).max(256) }).strict();
 /** Код или пароль: потерявший телефон отключает защиту паролем. */
 const proofSchema = z
   .object({ code: code.optional(), password: z.string().min(1).max(256).optional() })
@@ -70,10 +71,17 @@ const postSetup: AccountHandler = (deps, principal, request, reply) => {
   return answer(request, { secret, otpauthUrl: otpauthUrl(secret, principal.email ?? principal.username) });
 };
 
-const postEnable: AccountHandler = (deps, principal, request, reply) => {
+const postEnable: AccountHandler = async (deps, principal, request, reply) => {
   const body = enableSchema.safeParse(request.body);
   if (!body.success) return refuseCheck(reply, request, 'invalid');
-  const result = twoFactorStoreFor(deps).confirmSetup(principal.userId, body.data.code, new Date());
+  const store = twoFactorStoreFor(deps);
+  const now = new Date();
+  if (store.isLocked(principal.userId, now)) return refuseCheck(reply, request, 'locked');
+  if (!(await deps.authService.passwordMatches?.(principal.userId, body.data.password))) {
+    store.noteFailure(principal.userId, now);
+    return sendError(reply, request, 400, 'current_password_invalid', 'Пароль указан неверно.', false);
+  }
+  const result = store.confirmSetup(principal.userId, body.data.code, now);
   if (result.status === 'enabled') return answer(request, { enabled: true, backupCodes: result.backupCodes });
   if (result.status === 'no_setup') {
     return sendError(reply, request, 409, 'two_factor_setup_missing', 'Начните подключение заново.', false);
