@@ -3,8 +3,8 @@ import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { CampaignMetaView } from '../../../coach/matchedVacancyApi';
 import { BarPart } from '../Bar';
-import type { MoneyCurrency } from '../format';
-import { moneyLines } from './moneyLines';
+import { usePreferredMoneyCurrency } from '../../account/usePreferredMoneyCurrency';
+import { moneyLines, targetMoneyCurrency } from './moneyLines';
 import { moneyScale } from './moneyScale';
 import { SrcTip } from './SrcTip';
 
@@ -14,17 +14,11 @@ export interface MoneyBlockProps {
   readonly campaign: CampaignMetaView | undefined;
 }
 
-const CURRENCIES: readonly MoneyCurrency[] = ['RUB', 'USD', 'EUR', 'ORIG'];
-
-function targetCurrency(campaign: CampaignMetaView | undefined): MoneyCurrency {
-  const code = campaign?.salaryCurrency?.toUpperCase();
-  return CURRENCIES.find((value) => value === code) ?? 'RUB';
-}
-
 /** «Деньги»: сумма, при пересчёте — исходная и курс; шкала рынка и вилки, если есть оценка рынка. */
 export function MoneyBlock({ item, rates, campaign }: MoneyBlockProps) {
   const titleId = useId();
-  const lines = moneyLines(item, rates, targetCurrency(campaign));
+  const preferred = usePreferredMoneyCurrency();
+  const lines = moneyLines(item, rates, targetMoneyCurrency(preferred, campaign?.salaryCurrency));
   if (!lines) return null;
   const market = item.explanation.marketSalary;
   const scale = market ? moneyScale(market, item.cluster.salary, rates) : null;

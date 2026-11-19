@@ -4,6 +4,14 @@ import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { moneyView, type MoneyCurrency } from '../format';
 
+const TARGETS: readonly MoneyCurrency[] = ['RUB', 'USD', 'EUR', 'ORIG'];
+
+/** B593: валюта, в которой показываем суммы: выбор в «Приложении», затем валюта условий, иначе рубли. */
+export function targetMoneyCurrency(preferred: string | null, conditions: string | undefined): MoneyCurrency {
+  const code = (preferred ?? conditions)?.toUpperCase();
+  return TARGETS.find((value) => value === code) ?? 'RUB';
+}
+
 export interface MoneyLines {
   /** Крупная сумма. */
   readonly big: string;

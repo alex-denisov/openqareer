@@ -33,6 +33,8 @@ const api = vi.hoisted(() => ({
   getDeletion: vi.fn(),
   requestDeletion: vi.fn(),
   restoreAccount: vi.fn(),
+  getAppPreferences: vi.fn(),
+  saveAppPreferences: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
@@ -51,6 +53,10 @@ vi.mock('../../automation/automationApi', () => ({
   getCandidateAutomation: api.getAutomation,
   pauseCandidateAutomation: api.pauseAutomation,
   resumeCandidateAutomation: api.resumeAutomation,
+}));
+vi.mock('./appPreferencesApi', () => ({
+  getAppPreferences: api.getAppPreferences,
+  saveAppPreferences: api.saveAppPreferences,
 }));
 vi.mock('./accountDeletionApi', () => ({
   getAccountDeletion: api.getDeletion,
@@ -151,6 +157,8 @@ const button = (root: Element, text: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
+  api.saveAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
   api.getAccount.mockResolvedValue({ profile: { timezone: 'Europe/Samara' }, sessions: [] });
   api.getConsents.mockResolvedValue([
     { id: 'c1', capability: 'digital_footprint', versionId: 'v', grantedAt: '2026-11-01', revokedAt: null },
@@ -358,7 +366,7 @@ describe('n06 «Приложение»', () => {
   it('тема и часовой пояс; настроек без механики и обновлений в браузере нет', async () => {
     api.updateAccountProfile.mockResolvedValue({});
     const root = await open(<AppScreen node={node('n06')} />);
-    const themes = [...root.querySelectorAll('.seg-ctl.sec-seg label')];
+    const themes = [...root.querySelectorAll('.seg-ctl.sec-seg[aria-label="Тема"] label')];
     expect(themes.map((item) => item.textContent)).toEqual(['Как в системе', 'Светлая', 'Тёмная']);
     click(themes[2].querySelector('input'));
     expect(setTheme).toHaveBeenCalledWith('dark');
@@ -370,7 +378,27 @@ describe('n06 «Приложение»', () => {
     });
     await settle();
     expect(api.updateAccountProfile).toHaveBeenCalledWith({ timezone: 'Europe/Moscow' });
-    expect(root.textContent).not.toMatch(/Язык|Валюта|Обновлени|строке меню|Запуск при входе/u);
+    expect(api.saveAppPreferences).toHaveBeenCalledWith({ theme: 'dark' });
+    expect(root.textContent).not.toMatch(/Язык|Обновлени|строке меню|Запуск при входе/u);
+  });
+
+  it('B593: валюта зарплат сохраняется; сбой возвращает прежнюю и показывает строку', async () => {
+    api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: 'USD' });
+    const root = await open(<AppScreen node={node('n06')} />);
+    const group = root.querySelector('[role=radiogroup][aria-label="Валюта зарплат"]') as HTMLElement;
+    const options = [...group.querySelectorAll('label')];
+    expect(options.map((item) => item.textContent)).toEqual(['₽', '$', '€']);
+    expect((options[1].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    api.saveAppPreferences.mockResolvedValueOnce({ theme: null, moneyCurrency: 'EUR' });
+    click(options[2].querySelector('input'));
+    await settle();
+    expect(api.saveAppPreferences).toHaveBeenLastCalledWith({ moneyCurrency: 'EUR' });
+    expect((options[2].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    api.saveAppPreferences.mockRejectedValueOnce(new Error('сеть'));
+    click(options[0].querySelector('input'));
+    await settle();
+    expect((options[2].querySelector('input') as HTMLInputElement).checked).toBe(true);
+    expect(root.querySelector('.set-res.is-err')?.textContent).toContain('Не сохранилось');
   });
 });
 
