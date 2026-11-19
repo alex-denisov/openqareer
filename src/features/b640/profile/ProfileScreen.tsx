@@ -21,6 +21,8 @@ import { PROFILE_CHANGED } from './ExperienceEditScreen';
 import { IncomeRows } from './IncomeRows';
 import { getIncome, type ProfileIncome } from './profileExtrasApi';
 import { getStatus } from './statusChoice';
+import { ProfileAside, TermsRowMobile } from './ProfileAside';
+import { loadTerms, type ProfileTerms } from './profileAsideApi';
 
 function loadProfile(): Promise<ResumeStudioView> {
   return getResumeStudio();
@@ -178,32 +180,28 @@ function EmptyProfile() {
   );
 }
 
-function Filled({ view, draft, income }: ExperienceProps) {
+interface FilledProps extends ExperienceProps {
+  readonly terms: Load<ProfileTerms>;
+}
+
+function Filled({ view, draft, income, terms }: FilledProps) {
   return (
     <>
       <div className="col">
         <Experience view={view} draft={draft} income={income} />
         <Lists draft={draft} />
       </div>
-      <div className="col">
-        <section className="mod links-mod" aria-labelledby="ln-t">
-          <h3 className="mod-title" id="ln-t">
-            Связи
-          </h3>
-          <Link className="row-act" to={buildNodePath('p11')}>
-            Посмотреть
-          </Link>
-        </section>
-      </div>
+      <ProfileAside draft={draft} terms={terms} />
     </>
   );
 }
 
-/** s01 «Профиль»: шапка, статус, опыт и разделы-списки. */
+/** s01 «Профиль»: шапка, статус, опыт и разделы-списки; справа условия, связи, вопросы и резюме. */
 export function ProfileScreen({ node }: { readonly node: B640Node }) {
   const profile = useLoad(loadProfile);
   const status = useLoad(getStatus);
   const income = useLoad(getIncome);
+  const terms = useLoad(loadTerms);
   const reload = profile.retry;
   // Правку отменили из тоста, пока профиль открыт: показываем, что на сервере.
   useEffect(() => {
@@ -233,11 +231,13 @@ export function ProfileScreen({ node }: { readonly node: B640Node }) {
         <>
           {draft ? <Head draft={draft} /> : null}
           <StatusRow status={status} />
+          {draft ? <TermsRowMobile terms={terms} /> : null}
           {draft ? (
             <Filled
               view={profile.data}
               draft={draft}
               income={income.state === 'ready' ? income.data : null}
+              terms={terms}
             />
           ) : (
             <EmptyProfile />
