@@ -35,29 +35,49 @@ interface Base {
   readonly net?: boolean;
 }
 
-const NUM = String.raw`\d{1,3}(?:[   ,]\d{3})+(?!\d)|\d+(?:[.,]\d+)?`;
+const NUM = String.raw`\d{1,3}(?:[ \u00a0\u202f,]\d{3})+(?!\d)|\d+(?:[.,]\d+)?`;
 const MULT = String.raw`\s*(?<mult>k|K|тыс\.?|млн\.?|million|mln)(?![a-zа-яё])`;
 const CUR_AFTER = String.raw`\s*(?<post>₽|руб(?:\.|л[а-яё]*)?|RUB|USD|EUR|евро|долл[а-яё]*|\$|€)`;
-const MONEY_RE = new RegExp(String.raw`(?:(?<pre>\$|€|₽|USD|EUR|RUB)\s*)?(?<num>${NUM})(?:${MULT})?(?:${CUR_AFTER})?`, 'giu');
+const MONEY_RE = new RegExp(
+  String.raw`(?:(?<pre>\$|€|₽|USD|EUR|RUB)\s*)?(?<num>${NUM})(?:${MULT})?(?:${CUR_AFTER})?`,
+  'giu',
+);
 
 const BONUS_RE = /прем|бонус|bonus/iu;
 const ONE_TIME_RE = /sign-on|signing|welcome|one-time|разов|приветствен|подъ[её]мн/iu;
 const PROBATION_RE = /испытательн|probation/iu;
-const RANGE_RE = /(?:^|\s)от\s+\d[\d\s]*.{0,20}?\sдо\s+\d|вилк|\brange\b|\bbetween\b|\d\s*[–—]\s*\d/iu;
+const RANGE_RE =
+  /(?:^|\s)от\s+\d[\d\s]*.{0,20}?\sдо\s+\d|вилк|\brange\b|\bbetween\b|\d\s*[–—]\s*\d/iu;
 const YEAR_RE = /в год|годов|\bper year\b|\bannual|\bannually\b|\/year|\bp\.a\./iu;
 const NET_RE = /на руки|чистыми|после (?:вычета|налог)|\bnet\b/iu;
 const GROSS_RE = /до (?:вычета|налог|уплаты)|\bgross\b|брутто/iu;
 const START_RE = /выход|приступ|начало работы|\bstart|first day/iu;
 const RESPOND_RE = /ответ|\brespond|\breply|let us know|\bconfirm|\bdecision|срок ответа/iu;
-const BENEFIT_RE = /дмс|страхов|спорт|фитнес|обучени|пенси|компенсац|benefit|insurance|\bgym\b|401\(k\)|pension|wellness/iu;
+const BENEFIT_RE =
+  /дмс|страхов|спорт|фитнес|обучени|пенси|компенсац|benefit|insurance|\bgym\b|401\(k\)|pension|wellness/iu;
 
 const WORD_MONTHS: Readonly<Record<string, number>> = {
-  один: 1, одного: 1, два: 2, двух: 2, три: 3, трёх: 3, трех: 3, четыре: 4, четырёх: 4,
-  пять: 5, шесть: 6, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6,
+  один: 1,
+  одного: 1,
+  два: 2,
+  двух: 2,
+  три: 3,
+  трёх: 3,
+  трех: 3,
+  четыре: 4,
+  четырёх: 4,
+  пять: 5,
+  шесть: 6,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
 };
 
 function toNumber(raw: string): number {
-  if (/^\d{1,3}(?:[   ,]\d{3})+$/u.test(raw)) return Number(raw.replace(/\D/gu, ''));
+  if (/^\d{1,3}(?:[ \u00a0\u202f,]\d{3})+$/u.test(raw)) return Number(raw.replace(/\D/gu, ''));
   return Number(raw.replace(',', '.'));
 }
 
@@ -111,7 +131,12 @@ function findBase(sentences: readonly string[]): Base | null {
     const segment = sentence.slice(0, cut);
     const net = NET_RE.test(segment) ? true : GROSS_RE.test(segment) ? false : undefined;
     const period = YEAR_RE.test(segment) ? 'year' : 'month';
-    return { amount: money.amount, period, currency: money.currency, ...(net === undefined ? {} : { net }) };
+    return {
+      amount: money.amount,
+      period,
+      currency: money.currency,
+      ...(net === undefined ? {} : { net }),
+    };
   }
   return null;
 }
@@ -119,9 +144,13 @@ function findBase(sentences: readonly string[]): Base | null {
 function bonusFrom(segment: string, base: Base | null): number | undefined {
   const monthly = base ? (base.period === 'year' ? base.amount / 12 : base.amount) : null;
   const percent = /(\d+(?:[.,]\d+)?)\s*%/u.exec(segment);
-  if (percent) return monthly === null ? undefined : Math.round((monthly * 12 * toNumber(percent[1] ?? '')) / 100);
+  if (percent)
+    return monthly === null
+      ? undefined
+      : Math.round((monthly * 12 * toNumber(percent[1] ?? '')) / 100);
   const salaries = /(\d+(?:[.,]\d+)?)\s*(?:оклад|monthly salar|salaries)/iu.exec(segment);
-  if (salaries) return monthly === null ? undefined : Math.round(monthly * toNumber(salaries[1] ?? ''));
+  if (salaries)
+    return monthly === null ? undefined : Math.round(monthly * toNumber(salaries[1] ?? ''));
   return findMoney(segment)[0]?.amount;
 }
 
@@ -142,7 +171,9 @@ function probationMonths(sentence: string): number | undefined {
   return months !== undefined && months >= 1 && months <= 12 ? months : undefined;
 }
 
-function findProbation(sentences: readonly string[]): Pick<ParsedOfferLetter, 'probationPeriodMonths' | 'probationSalary'> {
+function findProbation(
+  sentences: readonly string[],
+): Pick<ParsedOfferLetter, 'probationPeriodMonths' | 'probationSalary'> {
   const sentence = sentences.find((item) => PROBATION_RE.test(item));
   if (!sentence) return {};
   const months = probationMonths(sentence);
@@ -160,12 +191,45 @@ function findFormat(text: string): ParsedOfferFormat | undefined {
   return undefined;
 }
 
-const RU_MONTH_RE = /(\d{1,2})\s+(янв|фев|мар|апр|ма[йя]|июн|июл|авг|сен|окт|ноя|дек)[а-яё]*(?:\s+(\d{4}))?/iu;
-const RU_MONTHS = ['янв', 'фев', 'мар', 'апр', 'ма', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-const EN_MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const RU_MONTH_RE =
+  /(\d{1,2})\s+(янв|фев|мар|апр|ма[йя]|июн|июл|авг|сен|окт|ноя|дек)[а-яё]*(?:\s+(\d{4}))?/iu;
+const RU_MONTHS = [
+  'янв',
+  'фев',
+  'мар',
+  'апр',
+  'ма',
+  'июн',
+  'июл',
+  'авг',
+  'сен',
+  'окт',
+  'ноя',
+  'дек',
+];
+const EN_MONTHS = [
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'may',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'oct',
+  'nov',
+  'dec',
+];
 const EN_MONTH = String.raw`(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?`;
-const EN_MD_RE = new RegExp(String.raw`\b${EN_MONTH}\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?`, 'iu');
-const EN_DM_RE = new RegExp(String.raw`\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?${EN_MONTH}(?:,?\s+(\d{4}))?`, 'iu');
+const EN_MD_RE = new RegExp(
+  String.raw`\b${EN_MONTH}\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?`,
+  'iu',
+);
+const EN_DM_RE = new RegExp(
+  String.raw`\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?${EN_MONTH}(?:,?\s+(\d{4}))?`,
+  'iu',
+);
 const NUMERIC_DATE_RE = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?\b/u;
 
 function isoDate(day: number, month: number, year: number | null, now: Date): string | undefined {
@@ -182,19 +246,35 @@ function findDate(sentence: string, now: Date): string | undefined {
   const year = (raw: string | undefined) => (raw ? Number(raw) : null);
   const ru = RU_MONTH_RE.exec(sentence);
   if (ru) {
-    const month = RU_MONTHS.findIndex((prefix) => (ru[2] ?? '').toLowerCase().startsWith(prefix)) + 1;
+    const month =
+      RU_MONTHS.findIndex((prefix) => (ru[2] ?? '').toLowerCase().startsWith(prefix)) + 1;
     return isoDate(Number(ru[1]), month, year(ru[3]), now);
   }
   const md = EN_MD_RE.exec(sentence);
-  if (md) return isoDate(Number(md[2]), EN_MONTHS.indexOf((md[1] ?? '').toLowerCase()) + 1, year(md[3]), now);
+  if (md)
+    return isoDate(
+      Number(md[2]),
+      EN_MONTHS.indexOf((md[1] ?? '').toLowerCase()) + 1,
+      year(md[3]),
+      now,
+    );
   const dm = EN_DM_RE.exec(sentence);
-  if (dm) return isoDate(Number(dm[1]), EN_MONTHS.indexOf((dm[2] ?? '').toLowerCase()) + 1, year(dm[3]), now);
+  if (dm)
+    return isoDate(
+      Number(dm[1]),
+      EN_MONTHS.indexOf((dm[2] ?? '').toLowerCase()) + 1,
+      year(dm[3]),
+      now,
+    );
   const numeric = NUMERIC_DATE_RE.exec(sentence);
   if (numeric) return isoDate(Number(numeric[1]), Number(numeric[2]), year(numeric[3]), now);
   return undefined;
 }
 
-function findDates(sentences: readonly string[], now: Date): Pick<ParsedOfferLetter, 'startDate' | 'respondBy'> {
+function findDates(
+  sentences: readonly string[],
+  now: Date,
+): Pick<ParsedOfferLetter, 'startDate' | 'respondBy'> {
   let startDate: string | undefined;
   let respondBy: string | undefined;
   for (const sentence of sentences) {
@@ -209,7 +289,8 @@ function findBenefits(sentences: readonly string[]): readonly string[] {
   for (const sentence of sentences) {
     const listed = /^(?:benefits|perks|бенефиты|льготы|соцпакет)\s*[:—-]\s*(.+)$/iu.exec(sentence);
     const body = listed?.[1] ?? (BENEFIT_RE.test(sentence) ? sentence : null);
-    if (!body || findMoney(body).length > 0 || PROBATION_RE.test(body) || BONUS_RE.test(body)) continue;
+    if (!body || findMoney(body).length > 0 || PROBATION_RE.test(body) || BONUS_RE.test(body))
+      continue;
     const parts = body.split(/\s*[,;]\s*(?:and\s+)?|\s+(?:и|and)\s+/iu).map((part) => part.trim());
     items.push(...parts.filter(Boolean));
   }
