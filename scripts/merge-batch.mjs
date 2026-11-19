@@ -228,6 +228,48 @@ async function headAfterUpdate(pr) {
     '{behind: .behind_by}',
   );
   if (compare.behind === 0) return cur.head.sha;
+  // A local merge pushed with GITHUB_TOKEN starts no workflow run. The REST
+  // update-branch made a bot "synchronize" event whose Verify run died at
+  // startup ("workflow file issue") and hung a red cross on the PR.
+  const pushed = pushMainInto(pr, cur);
+  return pushed ?? (await apiUpdateBranch(pr, cur));
+}
+
+/** main merged into the PR head and pushed fast-forward; null if GitHub refuses the push. */
+function pushMainInto(pr, cur) {
+  git('fetch', '-q', 'origin', cur.head.sha, 'main');
+  git('checkout', '-q', '--detach', cur.head.sha);
+  try {
+    git(
+      'merge',
+      '-q',
+      '--no-ff',
+      '--no-edit',
+      '-m',
+      `Merge branch 'main' into ${cur.head.ref}`,
+      'origin/main',
+    );
+  } catch {
+    git('merge', '--abort');
+    throw Object.assign(new Error(`main does not merge into #${pr.number} cleanly`), {
+      needsRebase: true,
+    });
+  }
+  const sha = git('rev-parse', 'HEAD');
+  try {
+    // Not forced: a branch that moved since cur.head.sha rejects the push.
+    git('push', '-q', 'origin', `${sha}:refs/heads/${cur.head.ref}`);
+    return sha;
+  } catch (err) {
+    // E.g. main brought .github/workflows changes; GITHUB_TOKEN has no workflows scope.
+    log(
+      `#${pr.number}: push of the update refused (${err.message.split('\n')[0]}); using update-branch`,
+    );
+    return null;
+  }
+}
+
+async function apiUpdateBranch(pr, cur) {
   try {
     gh(
       'api',
