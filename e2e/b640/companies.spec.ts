@@ -280,12 +280,31 @@ test.describe('B655/B677: «Компании и люди» нового каби
     await expect(page.locator('.co-person').nth(2)).toContainText('имя скрыто');
     // B645: на 390 действия шапки закреплены над нижней навигацией, на 1440 — в шапке.
     const mobile = (page.viewportSize()?.width ?? 1440) < 768;
-    await expect(page.locator('.co-head .actions')).toHaveCount(mobile ? 0 : 1);
-    await expect(page.locator('.act-dock')).toHaveCount(mobile ? 1 : 0);
+    const headWant = page.locator('.co-head .co-head-acts .co-want');
+    const dockWant = page.locator('.co-head .act-dock .co-want');
+    await expect(mobile ? dockWant : headWant).toBeVisible();
+    await expect(mobile ? headWant : dockWant).toBeHidden();
     if (mobile) {
       const dock = await page.locator('.act-dock').boundingBox();
       const nav = await page.locator('.bottomnav').boundingBox();
       if (dock && nav) expect(dock.y + dock.height).toBeLessThanOrEqual(nav.y + 1);
+      // Кнопки панели по ширине текста и у правого края, а не на всю ширину.
+      const want = await dockWant.boundingBox();
+      if (dock && want) {
+        expect(want.width).toBeLessThan(dock.width * 0.7);
+        expect(Math.abs(want.x + want.width - (dock.x + dock.width))).toBeLessThan(24);
+      }
+    } else {
+      // На 1440 «Хочу в компанию» в шапке справа от названия, на одной высоте с ним.
+      const head = await page.locator('.co-head').boundingBox();
+      const title = await page.locator('#co-name').boundingBox();
+      const want = await headWant.boundingBox();
+      expect(head && title && want).toBeTruthy();
+      if (head && title && want) {
+        expect(want.x).toBeGreaterThan(title.x + 200);
+        expect(want.y).toBeGreaterThanOrEqual(head.y);
+        expect(want.y + want.height).toBeLessThanOrEqual(head.y + head.height);
+      }
     }
     await page.getByRole('button', { name: 'Хочу в компанию: Ладога Банк' }).click();
     await expect(page.locator('.co-wantline')).toContainText('В списке «Хочу»');

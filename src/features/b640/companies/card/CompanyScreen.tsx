@@ -1,5 +1,5 @@
 import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
-import { ActionDock, Icon, InfoTip, Link, StatusLine, useIsMobile } from '../../kit';
+import { ActionDock, Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
 import { companyAbout } from '../format';
@@ -73,10 +73,10 @@ function HeadActions({ card, want, known }: HeadProps) {
   );
 }
 
-/** На 390 действия шапки закреплены над нижней навигацией, как в макете; на 1440 — справа от названия. */
+/** На 1440 действия шапки справа от названия, на 390 — в закреплённой панели над навигацией.
+ *  Рендерятся оба блока, ширину переключает CSS: так шапка не зависит от того, успел ли сработать медиазапрос в JS. */
 function Head(props: HeadProps) {
   const { company } = props.card.details;
-  const mobile = useIsMobile();
   const facts = [company.location, company.industry].filter(Boolean).join(' · ');
   const about = companyAbout(company);
   const hasActions = Boolean(props.known) || !company.want;
@@ -87,12 +87,12 @@ function Head(props: HeadProps) {
         {about ? <InfoTip label="О компании" text={about} /> : null}
       </h2>
       {facts ? <p className="lead-text">{facts}</p> : null}
-      {hasActions && !mobile ? (
-        <div className="actions">
+      {hasActions ? (
+        <div className="actions co-head-acts">
           <HeadActions {...props} />
         </div>
       ) : null}
-      {hasActions && mobile ? <ActionDock primary={<HeadActions {...props} />} /> : null}
+      {hasActions ? <ActionDock primary={<HeadActions {...props} />} /> : null}
       {props.want.failed ? <RetryLine text="Не удалось сохранить отметку" onRetry={props.want.retry} /> : null}
     </section>
   );
