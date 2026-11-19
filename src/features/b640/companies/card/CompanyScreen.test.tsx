@@ -142,6 +142,46 @@ describe('v10b: карточка компании', () => {
     view.unmount();
   });
 
+  it('B645: знакомых нет, вакансия одна — «Откликнуться на вакансию» ведёт в её карточку', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    const action = view.container.querySelector<HTMLAnchorElement>('.co-ppl-next a.btn')!;
+    expect(action.textContent).toBe('Откликнуться на вакансию');
+    expect(action.getAttribute('href')).toBe('/app/vacancies/cl-1');
+    expect(action.classList.contains('is-primary')).toBe(false);
+    view.unmount();
+  });
+
+  it('B645: знакомых нет, вакансий несколько — переход к «Вакансиям по вашим ролям» на этой же карточке', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card({}, [vacancy('cl-1', 'Руководитель'), vacancy('cl-2', 'Тимлид')]));
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    const heading = view.container.querySelector<HTMLElement>('#co-vac')!;
+    const scrolled = vi.fn();
+    heading.scrollIntoView = scrolled;
+    const action = view.container.querySelector<HTMLButtonElement>('.co-ppl-next button')!;
+    expect(action.textContent).toBe('Откликнуться на вакансию');
+    click(action);
+    expect(scrolled).toHaveBeenCalled();
+    expect(document.activeElement).toBe(heading);
+    view.unmount();
+  });
+
+  it('B645: знакомых и вакансий нет — «Найти рекрутера» в «Контактах» по этой компании', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card({}, []));
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    const action = view.container.querySelector<HTMLAnchorElement>('.co-ppl-next a.btn')!;
+    expect(action.textContent).toBe('Найти рекрутера');
+    expect(action.getAttribute('href')).toBe('/app/profile/contacts?company=%D0%9B%D0%B0%D0%B4%D0%BE%D0%B3%D0%B0%20%D0%91%D0%B0%D0%BD%D0%BA');
+    expect(view.container.textContent).toContain('Знакомых в компании не нашли');
+    view.unmount();
+  });
+
   it('«Хочу в компанию» → строка «В списке «Хочу»» с «Отменить»', async () => {
     vi.mocked(api.getB640Company).mockResolvedValue(card());
     people([]);

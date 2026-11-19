@@ -7,7 +7,7 @@ import { WantButton } from '../list/CompanyRow';
 import { RetryLine } from '../RetryLine';
 import { writeToLabel } from '../writeTo';
 import { useCompanyWant, type CompanyWant } from '../useCompanyWant';
-import { CompanyPeople } from './CompanyPeople';
+import { CompanyPeople, type PeopleNext } from './CompanyPeople';
 import { CompanyVacancies } from './CompanyVacancies';
 import { useCompany, type CompanyCard } from './useCompany';
 import { usePeople } from './usePeople';
@@ -98,6 +98,13 @@ function Head(props: HeadProps) {
   );
 }
 
+function peopleNext(card: LoadedCard): PeopleNext {
+  const only = card.vacancies[0];
+  if (card.details.roleTotal === 1 && only) return { kind: 'vacancy', vacancyId: only.cluster.id };
+  if (card.details.roleTotal > 1) return { kind: 'vacancies' };
+  return { kind: 'recruiter', company: card.details.company.name };
+}
+
 function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly companyId: string }) {
   const { company } = card.details;
   const want = useCompanyWant(card.markWant);
@@ -122,7 +129,7 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
           moreFailed={card.moreFailed}
           onMore={() => void card.loadMore()}
         />
-        <CompanyPeople state={people} />
+        <CompanyPeople state={people} next={peopleNext(card)} />
       </div>
     </>
   );
