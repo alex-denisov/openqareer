@@ -65,6 +65,7 @@ import {
   registerCandidateDraftRoutes,
   type CandidateDraftRouteDeps,
 } from './routes/candidateDraftRoutes';
+import { registerB640LinkedinQueueRoutes } from './routes/b640LinkedinQueueRoutes';
 import { SqliteCandidateDraftRepository } from './candidate/sqliteCandidateDraftRepository';
 import {
   buildLinkedinDraftWriter,
@@ -333,6 +334,7 @@ async function registerApiRoutes(
   registerCapabilityConsentRoutes(app, deps);
   registerCandidateActionRoutes(app, deps);
   registerCandidateDraftRoutes(app, deps);
+  registerB640LinkedinQueueRoutes(app, deps);
   registerBillingRoutes(app, deps);
   registerQuotaRoutes(app, deps);
 }
