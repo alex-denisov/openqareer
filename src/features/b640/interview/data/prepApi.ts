@@ -5,7 +5,12 @@ import { apiFetch, readDataObject } from '../../../coach/apiClient';
 import { getDecisionProfile } from '../../../coach/decisionProfileApi';
 import { generateInterviewPrepBrief } from '../../../interview/interviewPrepEngine';
 import { getStarStories } from '../../../interview/starStoriesApi';
-import { pickNextResponse, type PrepParagraph, type PrepQuestion } from '../model/prepModel';
+import {
+  pickNextResponse,
+  prepVacancy,
+  type PrepParagraph,
+  type PrepQuestion,
+} from '../model/prepModel';
 
 export interface SalaryFloor {
   readonly amount: number;
@@ -59,22 +64,22 @@ export async function putStarPrep(
   return (await readDataObject<StarPrepView>(response)).paragraphs;
 }
 
-/** Отклик по адресу; `next` — ближайшее интервью. `null` — откликов с интервью нет. */
-export async function loadPrep(responseId: string, signal: AbortSignal): Promise<PrepData | null> {
+/** Отклик по адресу; `next` — ближайшее интервью. `null` — такого отклика нет. */
+export async function findResponse(
+  responseId: string,
+  signal: AbortSignal,
+): Promise<ApplicationView | null> {
   const pool = await listApplicationsPool({}, signal);
-  const response =
-    responseId === 'next'
-      ? pickNextResponse(pool.items, new Date())
-      : (pool.items.find((item) => item.id === responseId) ?? null);
+  return responseId === 'next'
+    ? pickNextResponse(pool.items, new Date())
+    : (pool.items.find((item) => item.id === responseId) ?? null);
+}
+
+/** Подготовка к интервью отклика; `null` — откликов с интервью нет. */
+export async function loadPrep(responseId: string, signal: AbortSignal): Promise<PrepData | null> {
+  const response = await findResponse(responseId, signal);
   if (!response) return null;
-  const brief = generateInterviewPrepBrief({
-    vacancy: {
-      id: response.id,
-      title: response.vacancy?.title ?? '',
-      company: response.vacancy?.company ?? undefined,
-    },
-    facts: [],
-  });
+  const brief = generateInterviewPrepBrief({ vacancy: prepVacancy(response), facts: [] });
   const [prep, stories, floor] = await Promise.all([
     getStarPrep(response.id, signal),
     optional(() => getStarStories(signal)),

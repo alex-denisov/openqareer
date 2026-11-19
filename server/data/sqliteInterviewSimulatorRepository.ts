@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { InterviewSession } from '../domain/interviewSimulator';
 import type { SealedText } from './sealedText';
 import { interviewSessionAssociatedData } from './interviewSimulatorSchema';
+import { SqliteInterviewReviewHelpfulRepository } from './sqliteInterviewReviewHelpfulRepository';
 
 interface InterviewSessionRow {
   readonly candidate_id: string;
@@ -14,10 +15,15 @@ interface InterviewSessionRow {
 }
 
 export class SqliteInterviewSimulatorRepository {
+  /** B681: «разбор помог» по вопросу тренировки нового кабинета. */
+  readonly reviewHelpful: SqliteInterviewReviewHelpfulRepository;
+
   constructor(
     private readonly database: DatabaseSync,
     private readonly sealedText: SealedText,
-  ) {}
+  ) {
+    this.reviewHelpful = new SqliteInterviewReviewHelpfulRepository(database);
+  }
 
   getCurrent(candidateId: string): InterviewSession | null {
     const row = this.database

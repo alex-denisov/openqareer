@@ -27,10 +27,10 @@ interface RecipientProps {
   readonly options: readonly RecipientOption[];
 }
 
-/** «Кому»: работодателю напрямую или через знакомого. Один адресат — выбора нет. */
+/** «Кому»: работодателю напрямую или через знакомого. Строка видна и при одном адресате (B645). */
 function Recipient({ letter, options }: RecipientProps) {
   const id = useId();
-  if (options.length < 2) return null;
+  if (options.length === 0) return null;
   const value = letter.circle.selectedPathId ?? COLD_RECIPIENT;
   return (
     <div className="lt-to">
@@ -200,7 +200,12 @@ function DraftFailure({ letter }: { readonly letter: LetterScreenState }) {
       state="err"
       text="Письмо не собралось"
       action={
-        <Button size="sm" variant="primary" icon="repeat" onClick={circles.error ? circles.retry : draft.retry}>
+        <Button
+          size="sm"
+          variant="primary"
+          icon="repeat"
+          onClick={circles.error ? circles.retry : draft.retry}
+        >
           Повторить
         </Button>
       }

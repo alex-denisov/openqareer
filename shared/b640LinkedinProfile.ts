@@ -1,36 +1,63 @@
-/** B692: разделы профиля LinkedIn «сейчас» и предложения по ним. На LinkedIn ничего не отправляется. */
-export const LINKEDIN_SECTIONS = ['headline', 'about', 'experience', 'skills'] as const;
+/**
+ * B692/B645 (a03): разделы профиля LinkedIn — «сейчас» из импорта LinkedIn и предложения по ним.
+ * На LinkedIn ничего не отправляется: кандидат копирует текст сам и отмечает «Выполнено».
+ */
+export const LINKEDIN_SECTIONS = [
+  'headline',
+  'about',
+  'experience',
+  'education',
+  'courses',
+  'skills',
+  'languages',
+] as const;
 export type LinkedinSection = (typeof LINKEDIN_SECTIONS)[number];
 
-export const LINKEDIN_CURRENT_SOURCES = ['archive', 'pdf', 'paste'] as const;
-export type LinkedinCurrentSource = (typeof LINKEDIN_CURRENT_SOURCES)[number];
-
-/** Заголовок и «О себе» — лимиты LinkedIn; опыт и навыки — разумный потолок на весь раздел. */
-export const LINKEDIN_SECTION_LIMITS: Readonly<Record<LinkedinSection, number>> = {
-  headline: 220,
-  about: 2600,
-  experience: 8000,
-  skills: 2000,
-};
+/** Лимиты LinkedIn на заголовок и «О себе»; на навыки — сколько LinkedIn принимает. */
+export const LINKEDIN_HEADLINE_MAX = 220;
+export const LINKEDIN_ABOUT_MAX = 2600;
 export const LINKEDIN_SKILLS_MAX = 50;
+/**
+ * Вариантов у предложения не больше трёх, считая первый (решение владельца 12.11 по генерации):
+ * первый бесплатно, «Предложить заново» — ещё два; квоты тарифа это не тратит.
+ */
+export const LINKEDIN_VARIANTS_MAX = 3;
 
-export interface LinkedinSectionFact {
+/**
+ * Ключ предложения: раздел или место работы `experience:<id>`. По нему ставится «Выполнено»
+ * и просится другой вариант.
+ */
+export const LINKEDIN_OFFER_KEY = /^(headline|about|skills|experience:[A-Za-z0-9_.:-]{1,120})$/u;
+
+export interface LinkedinOffer {
+  readonly key: string;
+  /** Все варианты по порядку, первый — исходное предложение; на экране листаются «Вариант N из 3». */
+  readonly variants: readonly string[];
+  /** Кандидат вставил текст в LinkedIn и отметил «Выполнено». */
+  readonly doneAt: string | null;
+}
+
+/** Место работы в «Опыте»: «Компания · Должность», что сейчас и предложение. */
+export interface LinkedinPlace {
   readonly id: string;
-  readonly text: string;
+  readonly label: string;
+  readonly current: string | null;
+  readonly offer: LinkedinOffer | null;
 }
-export interface LinkedinSectionCurrent {
-  readonly text: string;
-  readonly source: LinkedinCurrentSource;
-  readonly capturedAt: string;
-}
-export interface LinkedinSectionSuggestion {
-  readonly text: string;
-  readonly facts: readonly LinkedinSectionFact[];
-}
+
 export interface LinkedinSectionView {
-  readonly current: LinkedinSectionCurrent | null;
-  readonly suggestion: LinkedinSectionSuggestion | null;
-  readonly copiedAt: string | null;
-  readonly pastedAt: string | null;
+  readonly id: LinkedinSection;
+  /** Короткая строка из импорта LinkedIn; у «Опыта» — по местам работы в `places`. */
+  readonly current: string | null;
+  readonly offer: LinkedinOffer | null;
+  readonly places?: readonly LinkedinPlace[];
 }
-export type LinkedinProfileView = Readonly<Record<LinkedinSection, LinkedinSectionView>>;
+
+export type LinkedinProfileView =
+  | { readonly kind: 'no_import' }
+  | { readonly kind: 'ready'; readonly sections: readonly LinkedinSectionView[] };
+
+/** `POST …/linkedin/profile/done`: отметить «Выполнено» сразу несколько предложений. */
+export interface LinkedinDoneResult {
+  readonly done: Readonly<Record<string, string>>;
+}

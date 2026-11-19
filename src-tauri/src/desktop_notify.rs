@@ -525,7 +525,7 @@ pub fn configure_tray(app: &mut App) -> tauri::Result<()> {
         .default_window_icon()
         .cloned()
         .expect("default app icon is configured");
-    TrayIconBuilder::with_id("openqareer-tray")
+    TrayIconBuilder::with_id(crate::device_settings::TRAY_ID)
         .icon(icon)
         .icon_as_template(cfg!(target_os = "macos"))
         .menu(&menu)
@@ -554,7 +554,7 @@ pub fn configure_tray(app: &mut App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn show_main_window(app: &AppHandle) {
+pub(crate) fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         if let Err(reason) = bring_window_to_front(app, &window) {
             eprintln!("[desktop-notify] show_main_window: {reason}");

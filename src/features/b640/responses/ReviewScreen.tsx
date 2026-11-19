@@ -19,7 +19,9 @@ import { buildNodePath } from '../routes';
 import { getRejectionReview, saveReviewFeedback } from './data/rejectionReviewApi';
 import { useAsync } from './data/useAsync';
 import { longDate, pluralRu } from './model/responseRow';
+import { checksBasis } from './model/reviewChecks';
 import { guessLine, recommendationText, reviewTitle } from './model/reviewText';
+import { ReviewChecks, ReviewThreshold } from './ReviewChecks';
 
 /** Ширина полосы шагами по 5 %: атрибут `style` в кабинете запрещён. */
 export function meterStep(value: number, total: number): number {
@@ -122,8 +124,7 @@ function OtherSteps({ steps }: { readonly steps: readonly RejectionRecommendatio
 }
 
 type Vote =
-  | { readonly kind: 'idle' | 'busy' | 'done' }
-  | { readonly kind: 'error'; readonly text: string };
+  { readonly kind: 'idle' | 'busy' | 'done' } | { readonly kind: 'error'; readonly text: string };
 
 /** «Разбор помог?»: ответ сохраняется, результат остаётся на месте. */
 function Helped({ initial }: { readonly initial: boolean | null }) {
@@ -139,7 +140,10 @@ function Helped({ initial }: { readonly initial: boolean | null }) {
         setVote({ kind: 'done' });
       })
       .catch((reason: unknown) =>
-        setVote({ kind: 'error', text: apiErrorMessage(reason, 'Ответ не сохранился. Повторите.') }),
+        setVote({
+          kind: 'error',
+          text: apiErrorMessage(reason, 'Ответ не сохранился. Повторите.'),
+        }),
       );
   }
 
@@ -149,10 +153,20 @@ function Helped({ initial }: { readonly initial: boolean | null }) {
         Разбор помог?
       </h3>
       <div className="actions">
-        <Button icon="check" aria-pressed={helped === true} busy={busy} onClick={() => answer(true)}>
+        <Button
+          icon="check"
+          aria-pressed={helped === true}
+          busy={busy}
+          onClick={() => answer(true)}
+        >
           Да
         </Button>
-        <Button icon="close" aria-pressed={helped === false} busy={busy} onClick={() => answer(false)}>
+        <Button
+          icon="close"
+          aria-pressed={helped === false}
+          busy={busy}
+          onClick={() => answer(false)}
+        >
           Нет
         </Button>
       </div>
@@ -189,12 +203,17 @@ function ReviewLead({ review }: { readonly review: RejectionReview }) {
         </h2>
         <InfoTip
           label="Откуда числа"
-          text={`Ваши отправленные отклики: ${review.sentCount}, отказов: ${review.rejectedCount}. Требования — из текста вакансий, факты — из вашего профиля. Порог для выводов — ${review.threshold} откликов.`}
+          text={
+            low && review.checks
+              ? checksBasis(review.checks, review.threshold)
+              : `Ваши отправленные отклики: ${review.sentCount}, отказов: ${review.rejectedCount}. Требования — из текста вакансий, факты — из вашего профиля. Порог для выводов — ${review.threshold} откликов.`
+          }
         />
       </div>
       {low ? <DataMeter review={review} /> : null}
       {step && !low ? <p className="lead-text">{recommendationText(step).why}</p> : null}
-      <LeadAction step={step} />
+      {/* B645: при малых данных главное действие — в первой из трёх проверок, как в O7c. */}
+      {low && review.checks ? <ReviewChecks checks={review.checks} /> : <LeadAction step={step} />}
     </section>
   );
 }
@@ -208,6 +227,7 @@ function Review({ review }: { readonly review: RejectionReview }) {
         <RejectedList items={review.rejections} />
       </div>
       <div className="col">
+        {!ready && review.checks ? <ReviewThreshold threshold={review.threshold} /> : null}
         {ready ? <OtherSteps steps={review.recommendations} /> : null}
         {ready && review.firstStep ? <Helped initial={review.helped} /> : null}
       </div>

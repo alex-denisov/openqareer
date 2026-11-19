@@ -203,3 +203,124 @@ describe('лента уведомлений с флагом B640', () => {
     expect(item).toMatchObject({ kind: 'employer_reply', title: 'Есть ответ работодателя' });
   });
 });
+
+const PREF = `${PATH}/preferences/invitations`;
+
+function replyAt(fixture: Fixture, company: string, stage: 'responded' | 'interview') {
+  const created = fixture.candidateStore.createApplication(fixture.id, {
+    stage: 'applied',
+    manualVacancy: {
+      title: 'Backend',
+      company,
+      url: `https://example.test/${company}`,
+      source: 'manual',
+    },
+  });
+  const moved = fixture.candidateStore.patchApplication(fixture.id, created.id, {
+    expectedVersion: created.version,
+    stage,
+  });
+  return fixture.notifications.recordEvent(fixture.id, {
+    kind: 'employer_reply',
+    sourceType: 'application',
+    sourceId: created.id,
+    idempotencyKey: `employer-reply:${created.id}:${moved.version}`,
+    invitation: stage === 'interview',
+  });
+}
+
+describe('B671: ключ «Приглашения»', () => {
+  it('без флага GET и PUT отвечают 404', async () => {
+    const { app } = await setup();
+    expect((await call(app, 'GET', PREF, plain)).statusCode).toBe(404);
+    expect(
+      (await call(app, 'PUT', PREF, plain, { app: true, email: true, telegram: true })).statusCode,
+    ).toBe(404);
+  });
+
+  it('без сохранённого ключа отдаёт значения «Ответов» и ничего не пишет', async () => {
+    const fixture = await setup();
+    fixture.notifications.setPreference(fixture.id, 'ev-reply', { app: true, email: false });
+    const response = await call(fixture.app, 'GET', PREF, flagged);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({
+      key: 'ev-invitation',
+      app: true,
+      email: false,
+      telegram: true,
+    });
+    expect(fixture.notifications.getInvitationPreference(fixture.id).stored).toBe(false);
+  });
+
+  it('PUT проверяет тело и сохраняет ключ', async () => {
+    const fixture = await setup();
+    for (const body of [
+      {},
+      { app: true, email: true },
+      { app: 'yes', email: true, telegram: true },
+      { app: true, email: true, telegram: true, extra: 1 },
+    ]) {
+      const response = await call(fixture.app, 'PUT', PREF, flagged, body);
+      expect(response.statusCode, JSON.stringify(body)).toBe(400);
+      expect(response.json().error.code).toBe('invalid_preference');
+    }
+    const saved = await call(fixture.app, 'PUT', PREF, flagged, {
+      app: false,
+      email: true,
+      telegram: false,
+    });
+    expect(saved.json().data).toEqual({
+      key: 'ev-invitation',
+      app: false,
+      email: true,
+      telegram: false,
+    });
+    expect((await call(fixture.app, 'GET', PREF, flagged)).json().data.app).toBe(false);
+  });
+
+  it('лента: приглашения по своему ключу, ответы — по «Ответам»', async () => {
+    const fixture = await setup();
+    replyAt(fixture, 'Вектор', 'interview');
+    replyAt(fixture, 'Гринкод', 'responded');
+    await call(fixture.app, 'PUT', PREF, flagged, { app: false, email: true, telegram: true });
+    let data = (await call(fixture.app, 'GET', PATH, flagged)).json().data;
+    expect([...data.pinned, ...data.items].map((item: { kind: string }) => item.kind)).toEqual([
+      'employer_reply',
+    ]);
+    expect(data.unreadCount).toBe(1);
+    fixture.notifications.setPreference(fixture.id, 'ev-reply', { app: false, email: true });
+    await call(fixture.app, 'PUT', PREF, flagged, { app: true, email: true, telegram: true });
+    data = (await call(fixture.app, 'GET', PATH, flagged)).json().data;
+    expect([...data.pinned, ...data.items].map((item: { kind: string }) => item.kind)).toEqual([
+      'interview_invitation',
+    ]);
+    expect(data.unreadCount).toBe(1);
+  });
+
+  it('почта приглашения идёт по ключу «Приглашения», ответа — по «Ответам»', async () => {
+    const fixture = await setup();
+    await call(fixture.app, 'PUT', PREF, flagged, { app: true, email: false, telegram: false });
+    const invitation = replyAt(fixture, 'Вектор', 'interview')!;
+    const reply = replyAt(fixture, 'Гринкод', 'responded')!;
+    const claimed = fixture.notifications.claimDueDeliveries(
+      new Date(Date.now() + 60_000).toISOString(),
+      10,
+    );
+    expect(claimed.map((item) => [item.notificationId, item.channel])).toEqual([
+      [reply.id, 'email'],
+    ]);
+    expect(
+      fixture.notifications.isDeliveryEnabled(fixture.id, 'email', 'employer_reply', invitation.id),
+    ).toBe(false);
+    expect(
+      fixture.notifications.isDeliveryEnabled(fixture.id, 'email', 'employer_reply', reply.id),
+    ).toBe(true);
+  });
+
+  it('удаление данных кандидата снимает ключ', async () => {
+    const fixture = await setup();
+    await call(fixture.app, 'PUT', PREF, flagged, { app: false, email: false, telegram: false });
+    fixture.notifications.deleteByCandidate(fixture.id);
+    expect(fixture.notifications.getInvitationPreference(fixture.id).stored).toBe(false);
+  });
+});
