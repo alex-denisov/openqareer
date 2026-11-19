@@ -8,19 +8,77 @@ const PATH = '/app/profile/contacts';
 const TOTAL = 1500;
 const PAGE = 20;
 
-const PEOPLE = [
-  ['Анна Ветрова', 'руководитель найма', 'Гринкод', 'знакомы через Игоря Шаталова', 'intro'],
-  ['Павел Ким', 'CTO', 'Гринкод', 'ответил на ваш комментарий 10.11', 'direct'],
-  ['Елена Сафина', 'HR-партнёр', 'Гринкод', 'общих знакомых нет', 'none'],
+const PEOPLE: ReadonlyArray<readonly [string, string, string, string, string, string]> = [
+  [
+    'Анна Ветрова',
+    'руководитель найма',
+    'Гринкод',
+    'знакомы через Игоря Шаталова',
+    'intro',
+    'none',
+  ],
+  ['Павел Ким', 'CTO', 'Гринкод', 'ответил на ваш комментарий 10.11', 'direct', 'replied'],
+  ['Елена Сафина', 'HR-партнёр', 'Гринкод', 'общих знакомых нет', 'none', 'none'],
+  ['Игорь Нестеров', 'руководитель платформы', 'Гринкод', 'общих знакомых нет', 'none', 'none'],
   [
     'Дмитрий Лаптев',
     'технический рекрутер',
     'Вектор Банк',
     'работали вместе в «Сфере Платежи», 2018–2021',
     'direct',
+    'written',
   ],
-  ['Сергей Белов', 'CTO', 'Арка Холдинг', 'знакомы через Игоря Шаталова', 'intro'],
-] as const;
+  [
+    'Ксения Орлова',
+    'руководитель направления разработки',
+    'Вектор Банк',
+    'общих знакомых нет',
+    'none',
+    'none',
+  ],
+  ['Сергей Белов', 'CTO', 'Арка Холдинг', 'знакомы через Игоря Шаталова', 'intro', 'none'],
+  ['Ольга Миронова', 'руководитель найма', 'Арка Холдинг', 'общих знакомых нет', 'none', 'none'],
+  [
+    'Роман Ефимов',
+    'руководитель группы платежей',
+    'Ладога Банк',
+    'работали вместе в «Сфере Платежи», 2018–2021',
+    'direct',
+    'none',
+  ],
+  ['Алина Громова', 'технический рекрутер', 'Ладога Банк', 'общих знакомых нет', 'none', 'none'],
+  ['Елена Кравец', 'партнёр по подбору', 'Маркет Софт', 'общих знакомых нет', 'none', 'none'],
+  ['Андрей Соболев', 'CTO', 'Маркет Софт', 'общих знакомых нет', 'none', 'none'],
+  [
+    'Максим Орехов',
+    'руководитель направления',
+    'Т-Технологии',
+    'знакомы через Дмитрия Лаптева',
+    'intro',
+    'none',
+  ],
+  ['Виктория Ланская', 'рекрутер', 'Т-Технологии', 'общих знакомых нет', 'none', 'written'],
+  [
+    'Кирилл Зуев',
+    'руководитель разработки',
+    'Сбыт Онлайн',
+    'общих знакомых нет',
+    'none',
+    'replied',
+  ],
+  ['Наталья Дубова', 'HR-директор', 'Карго Тех', 'общих знакомых нет', 'none', 'none'],
+  [
+    'Мария Ершова',
+    'технический рекрутер',
+    'Гринатом',
+    'знакомы через Игоря Шаталова',
+    'intro',
+    'none',
+  ],
+  ['Олег Сафронов', 'руководитель найма', 'Гринатом', 'общих знакомых нет', 'none', 'none'],
+  ['Тимур Алиев', 'CTO', 'Грин Лаб', 'общих знакомых нет', 'none', 'none'],
+  ['Светлана Ковалёва', 'рекрутер', 'Медиа Плюс', 'общих знакомых нет', 'none', 'none'],
+];
 
 interface Item {
   id: string;
@@ -34,13 +92,17 @@ interface Item {
 }
 
 const item = (index: number, states: Map<string, Item['status']>): Item => {
-  const [fullName, roleTitle, companyName, linkNote, link] = PEOPLE[index % PEOPLE.length]!;
+  const [fullName, roleTitle, companyName, linkNote, link, state] = PEOPLE[index % PEOPLE.length]!;
   const id = `c${index}`;
-  const status =
-    states.get(id) ??
-    (index % 7 === 1
-      ? { state: 'replied', at: '2026-11-10T09:00:00.000Z' }
-      : { state: 'none', at: null });
+  const status = states.get(id) ?? {
+    state,
+    at:
+      state === 'none'
+        ? null
+        : fullName === 'Виктория Ланская'
+          ? '2026-11-05T09:00:00.000Z'
+          : '2026-11-10T09:00:00.000Z',
+  };
   return {
     id,
     fullName,
@@ -130,7 +192,7 @@ async function open(page: Page, mode: Mode) {
 test.describe('B697: «Контакты» нового кабинета (a02)', () => {
   test('список: заголовок, 20 строк, метки и «Показать ещё»', async ({ page }) => {
     await open(page, 'list');
-    await expect(page.locator('#ct-title')).toHaveText(/1\s500 контактов/u);
+    await expect(page.locator('#ct-title')).toHaveText(/1\s500 человек, которые нанимают/u);
     await expect(page.locator('li.ct-row')).toHaveCount(20);
     await expect(page.locator('li.ct-row .tag.ok').first()).toHaveText('ответил');
     await expect(page.locator('li.ct-row').first().locator('.ct-p')).toHaveText(
@@ -160,7 +222,7 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
       .getByLabel(/Вектор Банк/u)
       .check();
     await expect(page.locator('.vt-chip')).toHaveText('Вектор Банк');
-    await expect(page.locator('#ct-title')).toHaveText(/300 контактов/u);
+    await expect(page.locator('#ct-title')).toHaveText(/300 человек, которые нанимают/u);
     expect(
       calls.requests.some((query) =>
         query.includes('company=%D0%92%D0%B5%D0%BA%D1%82%D0%BE%D1%80'),
@@ -168,23 +230,7 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     ).toBe(true);
     await page.getByRole('button', { name: 'Сбросить всё' }).click();
     await expect(page.locator('.vt-chip')).toHaveCount(0);
-    await expect(page.locator('#ct-title')).toHaveText(/1\s500 контактов/u);
-  });
-
-  test('смена статуса: метка, тост «Отменить»', async ({ page }) => {
-    const calls = await open(page, 'list');
-    const row = page.locator('li.ct-row').first();
-    await row.getByRole('button', { name: /Статус:/u }).click();
-    await page.getByRole('menuitemradio', { name: 'Писали', exact: true }).click();
-    await expect(row.locator('.tag.part')).toHaveText('писали 12.11');
-    await expect(page.locator('.va-snack')).toContainText('писали');
-    await page.getByRole('button', { name: 'Отменить' }).click();
-    await expect(row.locator('.tag')).toHaveText('не писали');
-    expect(calls.puts).toEqual([
-      { id: 'c0', state: 'written' },
-      { id: 'c0', state: 'none' },
-    ]);
-    await expectGates(page);
+    await expect(page.locator('#ct-title')).toHaveText(/1\s500 человек, которые нанимают/u);
   });
 
   test('390: «Фильтры» открывает лист', async ({ page }, testInfo) => {

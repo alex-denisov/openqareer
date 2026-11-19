@@ -1,8 +1,8 @@
-import { InfoTip, PagedList, StatusLine } from '../../kit';
+import { Icon, PagedList, StatusLine } from '../../kit';
+import { useShell } from '../../shell/ShellContext';
 import { ContactRow } from './ContactRow';
 import { ContactsControls } from './ContactsControls';
-import { contactsTitle, importedOn } from './contactsModel';
-import { useContactStatus } from './useContactStatus';
+import { formatCount } from './contactsModel';
 import { useContacts, type ContactsState } from './useContacts';
 
 function RetryLine({ onRetry }: { readonly onRetry: () => void }) {
@@ -19,17 +19,25 @@ function RetryLine({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function sourceNote(importedAt: string | null): string {
-  const date = importedOn(importedAt);
-  return date ? `Знакомые из вашей сети LinkedIn, обновлено ${date}` : 'Знакомые из вашей сети LinkedIn';
-}
-
 function Empty() {
+  const { navigate } = useShell();
   return (
     <section className="lead col-wide" aria-labelledby="ct-empty">
-      <h2 className="lead-title" id="ct-empty">Контакты</h2>
+      <h2 className="lead-title" id="ct-empty">
+        Контакты
+      </h2>
       <div className="vl-empty" role="status">
         <p className="vl-empty-t">Связей пока нет</p>
+        <div className="actions">
+          <button
+            className="btn is-primary"
+            type="button"
+            onClick={() => navigate('/app/profile/linkedin')}
+          >
+            <Icon name="refresh" />
+            Обновить из LinkedIn
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -47,7 +55,6 @@ function NothingFound({ onReset }: { readonly onReset: () => void }) {
 }
 
 function Rows({ state }: { readonly state: ContactsState }) {
-  const status = useContactStatus(state.patchStatus);
   const { criteria } = state;
   if (state.load === 'loading') return <StatusLine state="wait" text="Загружаем контакты…" />;
   if (state.load === 'error') return <RetryLine onRetry={state.retry} />;
@@ -59,9 +66,7 @@ function Rows({ state }: { readonly state: ContactsState }) {
       total={state.total}
       onLoadMore={state.loadMore}
       listClassName="rows exp-rows ct-rows"
-      renderItem={(contact) => (
-        <ContactRow contact={contact} busy={status.pending.has(contact.id)} failedTo={status.failed[contact.id]} onChange={status.change} />
-      )}
+      renderItem={(contact) => <ContactRow contact={contact} />}
     />
   );
 }
@@ -72,9 +77,8 @@ function List({ state }: { readonly state: ContactsState }) {
       <section className="col ct-list" aria-labelledby="ct-title">
         <div className="list-head">
           <h2 id="ct-title">
-            <span className="num">{contactsTitle(state.total)}</span>
+            <span className="num">{formatCount(state.total)}</span> человек, которые нанимают
           </h2>
-          <InfoTip label="Откуда контакты" text={sourceNote(state.importedAt)} />
         </div>
         <ContactsControls state={state} />
         <Rows state={state} />

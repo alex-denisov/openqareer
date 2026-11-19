@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { B640_CONTACT_SEARCH_MAX, type B640ContactSort } from '../../../../../shared/b640Contacts';
+import { B640_CONTACT_SEARCH_MAX } from '../../../../../shared/b640Contacts';
 import { ContactFilterBar, ContactChips } from './ContactFilters';
 import { ContactSheet } from './ContactSheet';
 import { SORT_OPTIONS, type ContactKind } from './contactsFilters';
@@ -10,6 +10,10 @@ export function ContactsControls({ state }: { readonly state: ContactsState }) {
   const [openKind, setOpenKind] = useState<ContactKind | null>(null);
   const [sheet, setSheet] = useState(false);
   const { criteria, facets, total } = state;
+  const onSort = (label: string) => {
+    const next = SORT_OPTIONS.find((option) => option.label === label);
+    if (next) state.setSort(next.id);
+  };
   const pane = { filters: criteria.filters, facets, onChange: state.setFilters };
   return (
     <>
@@ -35,9 +39,9 @@ export function ContactsControls({ state }: { readonly state: ContactsState }) {
           <label className="vh" htmlFor="ct-sort">
             Сортировка
           </label>
-          <select id="ct-sort" value={criteria.sort} onChange={(event) => state.setSort(event.target.value as B640ContactSort)}>
+          <select id="ct-sort" value={SORT_OPTIONS.find((option) => option.id === criteria.sort)?.label} onChange={(event) => onSort(event.target.value)}>
             {SORT_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
+              <option key={option.id} value={option.label}>
                 {option.label}
               </option>
             ))}
