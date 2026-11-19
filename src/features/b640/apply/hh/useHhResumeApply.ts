@@ -13,7 +13,7 @@ export type HhApplyState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'applying' }
   | { readonly kind: 'applied' }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed'; readonly message: string; readonly retry: boolean };
 
 const FAILURE_TEXT: Readonly<Record<string, string>> = {
   not_signed_in: 'Войдите в hh.ru в окне приложения и нажмите ещё раз.',
@@ -24,8 +24,12 @@ const FAILURE_TEXT: Readonly<Record<string, string>> = {
   other_resumes_ticked:
     'На hh.ru это место работы отмечено и другими резюме: изменение задело бы их. Скопируйте текст и вставьте на hh.ru.',
   original_locked: 'hh.ru не даёт убрать прежнее место из этого резюме. Скопируйте текст и вставьте на hh.ru.',
+  new_place_left:
+    'Новое место добавилось в резюме, а прежнее место осталось. Откройте резюме на hh.ru и снимите у прежнего места галочку этого резюме.',
   saved_unconfirmed: 'hh.ru сохранил правку, но проверить её не получилось. Откройте резюме на hh.ru и посмотрите раздел.',
 };
+/** После этих отказов повтор добавил бы второе новое место. */
+const NO_RETRY: ReadonlySet<string> = new Set(['new_place_left']);
 const FAILURE_DEFAULT = 'Не получилось изменить резюме на hh.ru. Скопируйте текст и вставьте на hh.ru.';
 
 function placeKnown(edit: HhResumeEdit): boolean {
@@ -69,14 +73,15 @@ export function useHhResumeApply(resumeId: string): HhResumeApply {
       try {
         const report = await applyHhResumeEditInSession(input);
         if (report.outcome !== 'applied') {
-          set(edit.id, { kind: 'failed', message: failureText(report.failureCode) });
+          const code = report.failureCode ?? '';
+          set(edit.id, { kind: 'failed', message: failureText(code), retry: !NO_RETRY.has(code) });
           return false;
         }
         forgetReadResumes();
         set(edit.id, { kind: 'applied' });
         return true;
       } catch {
-        set(edit.id, { kind: 'failed', message: FAILURE_DEFAULT });
+        set(edit.id, { kind: 'failed', message: FAILURE_DEFAULT, retry: true });
         return false;
       }
     },

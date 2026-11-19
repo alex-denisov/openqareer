@@ -162,7 +162,7 @@ pub(crate) async fn open_editor(app: &AppHandle, url: &str) -> Result<tauri::Web
         .ok_or_else(|| "session_window_missing".to_string())
 }
 
-fn pause_ms() -> u64 {
+pub(crate) fn pause_ms() -> u64 {
     let (low, high) = SKILL_PAUSE_MS;
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

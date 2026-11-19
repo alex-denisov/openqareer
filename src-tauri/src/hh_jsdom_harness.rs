@@ -45,6 +45,11 @@ fn jsdom_path() -> Option<PathBuf> {
 
 pub(crate) fn run(html: &str, path: &str, setup: &str, scripts: &[String]) -> Option<Value> {
     let Some(jsdom) = jsdom_path() else {
+        // In CI a missing jsdom must fail the run, not skip every script test silently.
+        assert!(
+            std::env::var_os("CI").is_none(),
+            "jsdom missing in CI: run `npm ci` before `cargo test`"
+        );
         eprintln!("jsdom missing: run `npm ci` in the repository root");
         return None;
     };

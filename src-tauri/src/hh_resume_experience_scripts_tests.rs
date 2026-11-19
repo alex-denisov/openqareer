@@ -140,9 +140,10 @@ fn copies_the_original_into_a_new_place_ticked_only_here_and_unticks_the_origina
     scripts.extend(polled(cancel_script(), 2));
     scripts.extend(polled(add_script(), 3));
     scripts.extend(polled(fill_script(&fields(), NOW, HASH), 8));
-    scripts.extend(polled(item_save_script(), 2));
+    scripts.extend(polled(item_save_script(HASH), 2));
     scripts.extend(polled(untick_script(&place()), 2));
     scripts.extend(polled(page_save_script(), 2));
+    scripts.push("(function(){window.__oqStale=0;return {code:'reloaded'};})()".to_string());
     scripts.push(read_back_script(&place(), NOW));
     let Some(out) = run(&list(""), PATH, PAGE, &scripts) else {
         return;
@@ -160,7 +161,7 @@ fn copies_the_original_into_a_new_place_ticked_only_here_and_unticks_the_origina
     assert_eq!(got[18], "unticked");
     assert_eq!(got[20], "saved");
     assert_eq!(
-        out["results"][21],
+        out["results"][22],
         json!({"code": "read", "added": true, "originalTicked": false})
     );
     let clicked = clicks(&out);
@@ -275,4 +276,55 @@ fn page_text_is_never_executed() {
         return;
     };
     assert_eq!(last_code(&out), "0");
+}
+
+#[test]
+fn checks_the_ticks_again_right_before_saving_the_place() {
+    let mut scripts = polled(add_script(), 3);
+    scripts.extend(polled(fill_script(&fields(), NOW, HASH), 8));
+    scripts.push(
+        "(function(){document.querySelector('input[name=\"def456\"]').checked=true;return {code:'ticked'};})()"
+            .to_string(),
+    );
+    scripts.push(item_save_script(HASH));
+    let Some(out) = run(&list(""), PATH, PAGE, &scripts) else {
+        return;
+    };
+    assert_eq!(codes(&out)[10], "filled");
+    assert_eq!(last_code(&out), "other_resumes_ticked");
+    assert!(!clicks(&out)
+        .iter()
+        .any(|c| c == "modal-edit-list-item-save"));
+}
+
+#[test]
+fn does_not_fill_or_save_a_form_it_did_not_open() {
+    let html = format!("{}<div id=\"stray\"></div>", list(""));
+    let setup = format!(
+        "{PAGE}document.getElementById('modal').innerHTML = form(5, empty, window.__ticks);"
+    );
+    let scripts = [fill_script(&fields(), NOW, HASH), item_save_script(HASH)];
+    let Some(out) = run(&html, PATH, &setup, &scripts) else {
+        return;
+    };
+    assert_eq!(codes(&out), ["form_missing", "form_missing"]);
+}
+
+#[test]
+fn every_step_waits_until_the_page_was_reloaded() {
+    let Some(out) = run(
+        &list(""),
+        PATH,
+        "window.__oqStale = 1;",
+        &[
+            locate_script(&place()),
+            add_script(),
+            item_save_script(HASH),
+            read_back_script(&place(), NOW),
+        ],
+    ) else {
+        return;
+    };
+    assert_eq!(codes(&out), ["waiting", "waiting", "waiting", "waiting"]);
+    assert!(clicks(&out).is_empty());
 }

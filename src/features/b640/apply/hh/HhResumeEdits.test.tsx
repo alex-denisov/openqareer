@@ -86,6 +86,16 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     expect(row!.textContent).not.toContain('Изменено на hh.ru');
   });
 
+  it('если новое место уже сохранилось, а прежнее осталось, повтор не предлагается: он добавил бы второе место', async () => {
+    desktop.applyHhResumeEditInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'new_place_left' });
+    render();
+    const row = [...document.querySelectorAll('.hh2-r')].find((item) => item.textContent?.includes('Лютик'));
+    click([...row!.querySelectorAll('button')].find((item) => item.textContent?.trim() === 'Применить')!);
+    await settle();
+    expect(row!.textContent).toContain('прежнее место');
+    expect([...row!.querySelectorAll('button')].some((item) => item.textContent?.trim() === 'Применить')).toBe(false);
+  });
+
   it('«Применить» переносит один раздел и показывает, что hh.ru его принял', async () => {
     render();
     click(buttons('Применить')[2]!);

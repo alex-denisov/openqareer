@@ -69,7 +69,7 @@ fn object(value: &impl Serialize) -> String {
 /// Shared helpers: normalised text, the cards, the open form and its fields.
 fn helpers() -> String {
     format!(
-        "if(!signedIn())return {{code:'not_signed_in'}};\
+        "if(window.__oqStale)return {{code:'waiting'}};if(!signedIn())return {{code:'not_signed_in'}};\
 var norm=function(s){{return String(s||'').replace(/\\s+/g,' ').trim().toLowerCase();}};\
 var st=window.__oqExp=window.__oqExp||{{}};\
 var inCard=function(c,qa){{var e=c.querySelector('[data-qa=\"'+qa+'\"]');return e?norm(e.textContent):'';}};\
@@ -87,6 +87,23 @@ var KEY={key};",
         card = literal(HH_EXP_CARD),
         field = literal(HH_EXP_FIELD),
         key = DESCRIPTION_KEY_CHARS,
+    )
+}
+
+/// The resume ticks of the open place form: every checked box in the form
+/// (the whole modal, not one block of it) except «по настоящее время» must be
+/// this resume. Answers `null` when only this resume is ticked.
+fn ticks_check(resume_id: &str) -> String {
+    format!(
+        "var H={hash};var tickCode=function(){{var c=fld('company-input',form());if(!c||!q({label}))return 'waiting';\
+var area=c;while(area&&!area.querySelector({save}))area=area.parentElement;if(!area)return 'waiting';\
+var ticks=area.querySelectorAll('input[type=\"checkbox\"]'),mine=false;\
+for(var t=0;t<ticks.length;t++){{var qa=ticks[t].getAttribute('data-qa')||'';\
+if(!ticks[t].checked||qa.indexOf('now-checkbox')>=0)continue;if(ticks[t].name===H)mine=true;\
+else return 'other_resumes_ticked';}}return mine?null:'resume_not_ticked';}};",
+        hash = literal(resume_id),
+        label = literal(HH_EXP_RESUMES_LABEL),
+        save = literal(HH_EXP_ITEM_SAVE),
     )
 }
 
@@ -170,7 +187,7 @@ st.addNew=1;bs[k].click();break;}}}}}}return {{code:'waiting'}};",
 /// Never touches a resume tick: another resume ticked is a stop.
 pub fn fill_script(fields: &PlaceFields, text: &str, resume_id: &str) -> String {
     wrap(&format!(
-        "{helpers}var V={fields},T={text},H={hash};var i=form();if(i===null)return {{code:'form_missing'}};\
+        "{helpers}{ticks}var V={fields},T={text};var i=form();if(i===null||!st.added)return {{code:'form_missing'}};\
 var setv=function(name,v){{var e=fld(name,i);if(!e)return false;if(e.value===v)return true;\
 st.typed=st.typed||{{}};if((st.typed[name]=(st.typed[name]||0)+1)>3)return false;\
 var proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;\
@@ -190,29 +207,26 @@ var now=fld('now-checkbox',i);\
 if(V.now){{if(!now)return {{code:'waiting'}};if(!now.checked&&!st.now){{st.now=1;now.click();}}ok=ok&&now.checked;}}\
 else{{if(now&&now.checked)return {{code:'now_mismatch'}};ok=ok&&setv('dateend-year-input',V.endYear)&&month('dateend-month-input',V.endMonth);}}\
 ok=setv('responsibilities-input',T)&&ok;\
-var label=q({label});if(!label)return {{code:'waiting'}};var area=label;\
-for(var n=0;n<5&&area&&!area.querySelector('input[type=\"checkbox\"]');n++)area=area.parentElement;\
-if(!area)return {{code:'waiting'}};var ticks=area.querySelectorAll('input[type=\"checkbox\"]'),mine=false;\
-for(var t=0;t<ticks.length;t++){{if(!ticks[t].checked)continue;if(ticks[t].name===H)mine=true;\
-else return {{code:'other_resumes_ticked'}};}}\
-if(!mine)return {{code:'resume_not_ticked'}};\
-if(!ok||q('[aria-invalid=\"true\"]'))return {{code:'waiting'}};return {{code:'filled'}};",
+var tc=tickCode();if(tc==='waiting'){{st.ticksOk=0;return {{code:'waiting'}};}}if(tc)return {{code:tc}};\
+st.ticksOk=(st.ticksOk||0)+1;\
+if(!ok||st.ticksOk<2||q('[aria-invalid=\"true\"]'))return {{code:'waiting'}};return {{code:'filled'}};",
         helpers = helpers(),
+        ticks = ticks_check(resume_id),
         fields = object(fields),
         text = literal(text),
-        hash = literal(resume_id),
-        label = literal(HH_EXP_RESUMES_LABEL),
     ))
 }
 
-/// Polled: saves the new place once; done when its form closes.
-pub fn item_save_script() -> String {
+/// Polled: saves the new place once, checking the resume ticks again right
+/// before the click; done when its form closes.
+pub fn item_save_script(resume_id: &str) -> String {
     wrap(&format!(
-        "{helpers}if(form()===null)return {{code:st.itemSaved?'item_saved':'form_missing'}};\
-if(q('[aria-invalid=\"true\"]'))return {{code:'field_invalid'}};\
-if(!st.itemSaved){{var b=q({save});if(!b)return {{code:'waiting'}};if(locked(b))return {{code:'waiting'}};\
+        "{helpers}{ticks}if(form()===null)return {{code:st.itemSaved?'item_saved':'form_missing'}};\
+if(!st.added)return {{code:'form_missing'}};if(q('[aria-invalid=\"true\"]'))return {{code:'field_invalid'}};\
+if(!st.itemSaved){{var tc=tickCode();if(tc)return {{code:tc}};var b=q({save});if(!b)return {{code:'waiting'}};if(locked(b))return {{code:'waiting'}};\
 st.itemSaved=1;b.click();}}return {{code:'waiting'}};",
         helpers = helpers(),
+        ticks = ticks_check(resume_id),
         save = literal(HH_EXP_ITEM_SAVE),
     ))
 }
@@ -243,7 +257,13 @@ st.pageSaved=location.pathname;b.click();return {{code:'waiting'}};",
     ))
 }
 
-/// Reads the list back on a freshly opened page: the new place ticked, the original not.
+/// Marks the page and reloads it. Every script waits while the mark is there,
+/// so a run never starts on, or reads back, a DOM an earlier step changed.
+pub fn reload_script() -> String {
+    wrap("window.__oqStale=1;location.reload();return {code:'reloading'};")
+}
+
+/// Reads the list back on a reloaded page: the new place ticked, the original not.
 pub fn read_back_script(place: &PlaceKey, text: &str) -> String {
     wrap(&format!(
         "{helpers}{matcher}if(cards().length===0)return {{code:'waiting'}};\
@@ -254,11 +274,6 @@ originalTicked:was?ticked(matches(was)):true}};",
         matcher = matcher(place),
         text = literal(text),
     ))
-}
-
-/// Clears what an earlier run on the same page left behind.
-pub fn reset_script() -> String {
-    wrap("window.__oqExp={};return {code:'reset'};")
 }
 
 #[cfg(test)]
