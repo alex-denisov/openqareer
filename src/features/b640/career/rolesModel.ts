@@ -133,20 +133,20 @@ export interface SearchStrip {
   readonly count: string | null;
 }
 
-/** Полоса «Роль поиска»: первая роль, «и ещё N», число вакансий по ним. */
+/** Полоса «Роль поиска»: первая роль, «и ещё N», число вакансий выбора — то же, что в списке. */
 export function searchStrip(
-  rows: readonly RoleRow[],
-  searchTitles: readonly string[],
+  titles: readonly string[],
+  total: number | null,
 ): SearchStrip | null {
-  const [first] = searchTitles;
+  const [first] = titles;
   if (!first) return null;
-  const more = searchTitles.length - 1;
-  const total = rows
-    .filter((row) => row.origin === 'search')
-    .reduce((sum, row) => sum + (row.vacancies ?? 0), 0);
+  const more = titles.length - 1;
   return {
     title: more > 0 ? `${first} и ещё ${more}` : first,
-    count: total > 0 ? `${formatVacancyCount(total)} · по подборке за 30 дней` : null,
+    count:
+      total !== null && total > 0
+        ? `${formatVacancyCount(total)} · по подборке за 30 дней`
+        : null,
   };
 }
 

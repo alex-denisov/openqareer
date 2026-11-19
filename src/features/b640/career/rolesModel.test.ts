@@ -130,10 +130,8 @@ describe('buildRoleRows', () => {
 });
 
 describe('searchStrip', () => {
-  const rows = buildRoleRows(ROLES, ['Руководитель разработки'], []);
-
-  it('одна роль: название и число вакансий', () => {
-    expect(searchStrip(rows, ['Руководитель разработки'])).toEqual({
+  it('одна роль: название и число вакансий выбора', () => {
+    expect(searchStrip(['Руководитель разработки'], 64)).toEqual({
       title: 'Руководитель разработки',
       count: '64 вакансии · по подборке за 30 дней',
     });
@@ -141,18 +139,18 @@ describe('searchStrip', () => {
 
   it('несколько ролей: первая и «ещё N»', () => {
     expect(
-      searchStrip(rows, ['Руководитель разработки', 'Директор по разработке', 'Head of Platform'])
+      searchStrip(['Руководитель разработки', 'Директор по разработке', 'Head of Platform'], 912)
         ?.title,
     ).toBe('Руководитель разработки и ещё 2');
   });
 
   it('роль не выбрана — null', () => {
-    expect(searchStrip(rows, [])).toBeNull();
+    expect(searchStrip([], 10)).toBeNull();
   });
 
-  it('без числа вакансий подпись пустая', () => {
-    const own = buildRoleRows([], ['Архитектор'], []);
-    expect(searchStrip(own, ['Архитектор'])?.count).toBeNull();
+  it('число не прочитано или ноль — подпись пустая', () => {
+    expect(searchStrip(['Архитектор'], null)?.count).toBeNull();
+    expect(searchStrip(['Архитектор'], 0)?.count).toBeNull();
   });
 });
 

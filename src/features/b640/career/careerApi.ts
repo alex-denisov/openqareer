@@ -15,6 +15,7 @@ import {
   type CandidateStatusId,
 } from '../../../../shared/candidateStatus';
 import { getStatus } from '../profile/statusChoice';
+import { readSelectionTotal } from '../vacancies/list/selectionCount';
 import { buildRoleRows, type RoleRow } from './rolesModel';
 
 /** Всё, что нужно вкладке «Роли»: строки ролей, роли поиска и пробелы в навыках. */
@@ -22,6 +23,8 @@ export interface RolesData {
   readonly rows: readonly RoleRow[];
   readonly searchTitles: readonly string[];
   readonly campaign: CampaignMetaView;
+  /** Число вакансий выбора: единый расчёт со списком «Вакансии»; `null` — не прочитано. */
+  readonly selectionTotal: number | null;
 }
 
 /** Полоса «Проверьте N навыков»: роль поиска, проверку которой можно начать. */
@@ -85,6 +88,12 @@ function withLacks(
   });
 }
 
+/** Строка «Проверить N навыков» в «Вакансиях» (s07): тот же счёт, что у полосы во вкладке «Роли». */
+export async function readSkillGap(searchTitles: readonly string[]): Promise<number> {
+  const [ready, demand] = await Promise.all([readyRole(searchTitles), readDemand()]);
+  return ready ? gapOf(demand, ready) : 0;
+}
+
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
     getRoleHypotheses(signal),
@@ -97,6 +106,7 @@ export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
     rows: withLacks(buildRoleRows(roles, searchTitles, checked), demand),
     searchTitles,
     campaign,
+    selectionTotal: searchTitles.length > 0 ? await readSelectionTotal(searchTitles, signal) : null,
   };
 }
 
