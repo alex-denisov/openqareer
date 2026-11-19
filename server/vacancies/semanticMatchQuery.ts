@@ -3,6 +3,7 @@ import type { FunctionCode } from '../../shared/roleTaxonomy';
 import type { FreshnessWindow } from './vacancyPoolQuery';
 import type { MatchGeography } from './matchGeography';
 import type { GradeRange } from './titleParse/gradeRange';
+import { SEMANTIC_COVER_INDEX } from './semanticCoverIndex';
 
 /**
  * Смысловой подбор (B267 S3, план §5): равенство по индексу
@@ -27,6 +28,8 @@ export interface SemanticMatchQueryInput {
   readonly window: FreshnessWindow;
   readonly preferRemote: boolean;
   readonly limit: number;
+  /** B725: покрывающий индекс уже построен обслуживанием (`semanticCoverIndex`). */
+  readonly coverIndex?: boolean;
 }
 
 const ALIVE = 'i.expired = 0';
@@ -50,6 +53,7 @@ const STALE_SEMANTIC_DATE_SLACK_MS = 30 * 24 * 60 * 60 * 1000;
  * если `product` есть среди функций ролей кандидата.
  */
 function buildFunctionBranch(
+  index: string,
   levelFilter: string,
   excludedFunctionFilter: string,
   geographyFilter: string,
@@ -59,7 +63,7 @@ function buildFunctionBranch(
   return `SELECT *, ROW_NUMBER() OVER (ORDER BY ${placeOrder}p DESC) AS place FROM (
     SELECT s.id AS id, s.published_ms AS p, i.is_remote AS remote,
       ${isTargetFunction ? 1 : 0} AS target
-    FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
+    FROM vacancy_semantic s INDEXED BY ${index}
     JOIN vacancy_pool_index i ON i.id = s.id
     WHERE s.function_code = ? ${levelFilter} ${excludedFunctionFilter} ${geographyFilter}
       AND s.published_ms BETWEEN ? AND ? AND i.published_ms BETWEEN ? AND ?
@@ -189,7 +193,9 @@ const GRADE_FILTER = `AND NOT EXISTS (SELECT 1 FROM vacancy_grade g
 // остаётся видимым и ранжируется объяснением, а не исчезает до того, как кандидат сможет его прочитать.
 function levelFilterOf(input: SemanticMatchQueryInput, specialistTitles: number): string {
   const specialists = Array.from({ length: specialistTitles }, () => 'instr(s.title_key, ?) > 0');
-  const named = specialists.length ? ` OR (s.level_rank < ? AND (${specialists.join(' OR ')}))` : '';
+  const named = specialists.length
+    ? ` OR (s.level_rank < ? AND (${specialists.join(' OR ')}))`
+    : '';
   const level =
     input.levelRank === null
       ? ''
@@ -222,9 +228,11 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const queryFunctionCodes = queryFunctionCodesFor(input.functionCodes);
   const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
   const remoteSelectionOrder = input.preferRemote ? `${remoteOrder} DESC, ` : '';
+  const index = input.coverIndex ? SEMANTIC_COVER_INDEX : 'vacancy_semantic_match';
   const branches = queryFunctionCodes
     .map((code) =>
       buildFunctionBranch(
+        index,
         levelFilterOf(input, specialistTitlesOf(input, code).length),
         excludedFunctionFilter,
         geography.sql,

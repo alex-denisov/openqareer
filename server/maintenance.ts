@@ -59,6 +59,7 @@ import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
+import { scheduleSemanticCoverIndex } from './vacancies/semanticCoverIndex';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
 import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
 import {
@@ -382,6 +383,8 @@ try {
   scheduleMarketSalaryEstimateJob(semanticDatabase, log);
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   scheduleRemoteScopeBackfill(semanticDatabase, log);
+  // B725: покрывающий индекс подбора — один раз, вне старта веб-процесса.
+  scheduleSemanticCoverIndex(semanticDatabase, log);
   // B627 / B643-9: домен, карьеры и ATS без модели (решение владельца 11.11), ≤480 компаний в сутки.
   if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1')
     scheduleSiteDiscovery(semanticDatabase, log);
