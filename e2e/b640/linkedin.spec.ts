@@ -54,11 +54,13 @@ async function mock(
   await page.route('**/api/v1/candidate/connections', (route) =>
     route.fulfill({ json: { data: [linkedin(options.connected ?? true)] } }),
   );
-  const noSection = { current: null, suggestion: null, copiedAt: null, pastedAt: null };
+  // B645 a03: без импорта LinkedIn — `no_import`; с импортом — семь разделов без предложений.
+  const ids = ['headline', 'about', 'experience', 'education', 'courses', 'skills', 'languages'];
+  const sections = ids.map((id) => ({ id, current: `${id}: сейчас`, offer: null }));
   await page.route('**/api/v1/candidate/b640/linkedin/profile', (route) =>
     route.fulfill({
       json: {
-        data: { headline: noSection, about: noSection, experience: noSection, skills: noSection },
+        data: options.connected === false ? { kind: 'no_import' } : { kind: 'ready', sections },
       },
     }),
   );
@@ -100,21 +102,29 @@ const publications = [
 ];
 
 test.describe('B664: LinkedIn нового кабинета', () => {
-  test('профиль: четыре раздела с полем вставки, без «Применить»', async ({ page }) => {
+  test('профиль: семь разделов из импорта, без полей вставки и «Применить»', async ({ page }) => {
     await mock(page);
     await page.goto(PROFILE, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a03"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('.li-sec-t')).toHaveText(['Заголовок', 'О себе', 'Опыт', 'Навыки']);
+    await expect(page.locator('.li-sec-t')).toHaveText([
+      'Заголовок',
+      'О себе',
+      'Опыт',
+      'Образование',
+      'Курсы и сертификаты',
+      'Навыки',
+      'Языки',
+    ]);
     await expect(page.getByRole('button', { name: /Применить/ })).toHaveCount(0);
-    await expect(page.getByLabel('Вставьте текущий текст раздела')).toHaveCount(4);
+    await expect(page.locator('textarea')).toHaveCount(0);
     await expectGates(page);
   });
 
-  test('LinkedIn не подключён: строка с «Подключить»', async ({ page }) => {
+  test('без импорта LinkedIn: строка с «Импортировать из LinkedIn»', async ({ page }) => {
     await mock(page, { connected: false });
     await page.goto(PROFILE, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.src-title')).toContainText('LinkedIn', { timeout: 15_000 });
-    await page.getByRole('link', { name: 'Подключить LinkedIn' }).click();
+    await page.getByRole('link', { name: 'Импортировать из LinkedIn' }).click();
     await expect(page).toHaveURL(/\/app\/account\/connections/);
   });
 

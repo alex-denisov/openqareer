@@ -22,7 +22,9 @@ async function setup() {
     const now = new Date().toISOString();
     db.prepare(`INSERT INTO candidate_drafts VALUES (?, ?, ?, 't', NULL, ?, 'draft', '2026-11-19', ?, ?)`)
       .run(id, h.candidateIds[user], kind, text, now, now);
-    db.prepare('INSERT INTO candidate_draft_workflow VALUES (?, ?, ?, ?, ?)').run(id, h.candidateIds[user], now, publishedAt, now);
+    // Публикация не раньше одобрения (CHECK): отметка, снятая до `now`, отстаёт на миллисекунду.
+    const published = publishedAt !== null && publishedAt < now ? now : publishedAt;
+    db.prepare('INSERT INTO candidate_draft_workflow VALUES (?, ?, ?, ?, ?)').run(id, h.candidateIds[user], now, published, now);
     db.close();
   };
   const contact = (id: string, fullName: string, user: HarnessUser = 'flagged.test') =>

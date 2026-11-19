@@ -113,6 +113,29 @@ describe('B640 offer routes: responses summary', () => {
     expect(data.autoApplicationIds).toEqual([a.id]);
   });
 
+  it('lists drafts whose letter is approved, only for own live applications', async () => {
+    const { send, application, candidates, candidateIds } = await setup();
+    const approve = (user: 'flagged.test' | 'other.test', applicationId: string) =>
+      candidates.saveDocumentAndLinkApplicationMaterial(candidateIds[user], applicationId, 'cover_letter', {
+        kind: 'cover_letter',
+        source: 'generated',
+        fileName: `approved-letter-${randomUUID()}.json`,
+        mimeType: 'application/json',
+        contentBase64: Buffer.from(
+          JSON.stringify({ vacancyId: 'v1', applicationId, approvedAt: '2026-11-19T08:00:00Z', body: 'Текст' }),
+          'utf8',
+        ).toString('base64'),
+        extractedText: 'Текст',
+        parseStatus: 'not_applicable',
+      });
+    const approved = application('flagged.test', 'saved');
+    application('flagged.test', 'saved');
+    approve('flagged.test', approved.id);
+    approve('other.test', application('other.test', 'saved').id);
+    const data = (await send('GET', `${BASE}/responses/summary`, 'flagged.test')).json().data;
+    expect(data.approvedLetterIds).toEqual([approved.id]);
+  });
+
   it('a response taken off the auto queue counts as manual', async () => {
     const { send, application, queueAuto } = await setup();
     const a = application('flagged.test', 'applied');
@@ -191,6 +214,19 @@ describe('B640 offer routes: offers, tax, decision', () => {
       'declined',
     );
     expect((await send('PUT', url, 'flagged.test', { decision: 'maybe' })).statusCode).toBe(400);
+  });
+
+  it('clears the decision back to «Думаю» with decision null (B658)', async () => {
+    const { send, offer } = await setup();
+    const own = offer('flagged.test');
+    const url = `${BASE}/offers/${own.id}/decision`;
+    await send('PUT', url, 'flagged.test', { decision: 'accepted' });
+    const cleared = await send('PUT', url, 'flagged.test', { decision: null });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().data).toMatchObject({
+      proposeStatus: null,
+      offer: { decision: null, decidedAt: null },
+    });
   });
 
   it('does not propose working when the status is already working, and changes nothing itself', async () => {

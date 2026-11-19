@@ -1,70 +1,97 @@
-import { useState } from 'react';
-import type {
-  LinkedinSection,
-  LinkedinSectionSuggestion,
-} from '../../../../../shared/b640LinkedinProfile';
+import { useEffect, useRef, useState } from 'react';
+import { LINKEDIN_VARIANTS_MAX, type LinkedinOffer } from '../../../../../shared/b640LinkedinProfile';
+import { CoachApiError } from '../../../coach/apiClient';
 import { Icon } from '../../kit';
-import { formatDay } from '../format';
 import { CopyButton } from './CopyButton';
 import { LiError } from './LiError';
-import { markSectionCopied, markSectionPasted, type SectionMarks } from './linkedinProfileApi';
-import { LINKEDIN_OWN_PROFILE_URL } from './profileSectionModel';
+import { requestOfferVariant } from './linkedinProfileApi';
 
-type Mark = 'copied' | 'pasted';
+type Busy = 'done' | 'variant' | null;
 
 interface SectionOfferProps {
-  readonly section: LinkedinSection;
-  readonly title: string;
-  readonly suggestion: LinkedinSectionSuggestion;
-  readonly pastedAt: string | null;
-  readonly onMarks: (marks: SectionMarks) => void;
+  readonly offer: LinkedinOffer;
+  /** Название в подписях кнопок: раздел или «Компания» места работы. */
+  readonly label: string;
+  readonly onDone: (key: string) => Promise<void>;
+  readonly onVariant: (offer: LinkedinOffer) => void;
+  /** Идёт «Отметить все выполненными»: варианты на это время не просятся. */
+  readonly locked?: boolean;
 }
 
-function Facts({ suggestion }: { readonly suggestion: LinkedinSectionSuggestion }) {
-  if (!suggestion.facts.length) return null;
+/** «‹ Вариант 2 из 3 ›»: у единственного текста листать нечего. */
+function VariantSwitch({ label, index, total, onSelect }: {
+  readonly label: string;
+  readonly index: number;
+  readonly total: number;
+  readonly onSelect: (index: number) => void;
+}) {
+  if (total < 2) return null;
   return (
-    <ul className="li-facts" aria-label="Факты, на которых построено предложение">
-      {suggestion.facts.map((fact) => (
-        <li key={fact.id}>{fact.text}</li>
-      ))}
-    </ul>
+    <div className="var-sw" role="group" aria-label={`Варианты: ${label}`}>
+      <button className="icon-btn" type="button" aria-label="Предыдущий вариант" disabled={index === 0} onClick={() => onSelect(index - 1)}>
+        <Icon name="left" />
+      </button>
+      <span className="num">{`Вариант ${index + 1} из ${LINKEDIN_VARIANTS_MAX}`}</span>
+      <button className="icon-btn" type="button" aria-label="Следующий вариант" disabled={index >= total - 1} onClick={() => onSelect(index + 1)}>
+        <Icon name="right" />
+      </button>
+    </div>
   );
 }
 
-function useMarks(section: LinkedinSection, onMarks: (marks: SectionMarks) => void) {
-  const [busy, setBusy] = useState<Mark | null>(null);
-  const [failed, setFailed] = useState<Mark | null>(null);
-  async function mark(kind: Mark) {
+/** Показанный вариант: по умолчанию последний; новый вариант сразу на экране. */
+function useShownVariant(offer: LinkedinOffer) {
+  const total = offer.variants.length;
+  const [picked, setPicked] = useState({ total, index: total - 1 });
+  const index = picked.total === total ? picked.index : total - 1;
+  return { index, text: offer.variants[index] ?? '', select: (next: number) => setPicked({ total, index: next }) };
+}
+
+const VARIANT_FAILED = 'Не получилось предложить другой вариант';
+const DONE_FAILED = 'Не удалось сохранить отметку';
+
+function errorText(error: unknown, fallback: string): string {
+  // Варианты кончились или ещё готовятся — сервер говорит своими словами.
+  const own = error instanceof CoachApiError && ['variant_limit_reached', 'variant_in_progress'].includes(error.code);
+  return own ? error.message : fallback;
+}
+
+function useOfferActions({ offer, onDone, onVariant }: SectionOfferProps) {
+  const [busy, setBusy] = useState<Busy>(null);
+  const [failed, setFailed] = useState<{ readonly kind: Exclude<Busy, null>; readonly text: string } | null>(null);
+  async function run(kind: Exclude<Busy, null>) {
     setBusy(kind);
     setFailed(null);
     try {
-      onMarks(await (kind === 'copied' ? markSectionCopied : markSectionPasted)(section));
-    } catch {
-      setFailed(kind);
+      if (kind === 'done') await onDone(offer.key);
+      else onVariant(await requestOfferVariant(offer.key));
+    } catch (error) {
+      setFailed({ kind, text: errorText(error, kind === 'done' ? DONE_FAILED : VARIANT_FAILED) });
     } finally {
       setBusy(null);
     }
   }
-  return { busy, failed, mark };
+  return { busy, failed, run };
 }
 
-function PastedControl({
-  title,
-  pastedAt,
-  busy,
-  onPasted,
-}: {
-  readonly title: string;
-  readonly pastedAt: string | null;
+function DoneControl({ offer, label, textId, busy, onDone }: {
+  readonly offer: LinkedinOffer;
+  readonly label: string;
+  readonly textId: string;
   readonly busy: boolean;
-  readonly onPasted: () => void;
+  readonly onDone: () => void;
 }) {
-  if (pastedAt) {
-    const day = formatDay(pastedAt);
+  const status = useRef<HTMLSpanElement>(null);
+  const pressed = useRef(false);
+  // Фокус с исчезнувшей кнопки — на отметку, а не в начало страницы.
+  useEffect(() => {
+    if (offer.doneAt && pressed.current) status.current?.focus();
+  }, [offer.doneAt]);
+  if (offer.doneAt) {
     return (
-      <span className="li-pasted" role="status">
+      <span className="li-done" role="status" tabIndex={-1} ref={status}>
         <Icon name="check" />
-        {day ? `Вставлено ${day}` : 'Вставлено'}
+        Выполнено
       </span>
     );
   }
@@ -72,45 +99,54 @@ function PastedControl({
     <button
       className="btn is-sm"
       type="button"
-      aria-label={`Вставлено: ${title}`}
+      aria-label={`Выполнено: ${label}`}
+      aria-describedby={textId}
       aria-busy={busy || undefined}
       disabled={busy}
-      onClick={onPasted}
+      onClick={() => {
+        pressed.current = true;
+        onDone();
+      }}
     >
       <Icon name="check" />
-      Вставлено
+      Выполнено
     </button>
   );
 }
 
-/** Предложение раздела: «Скопировать», «Открыть в LinkedIn», «Вставлено»; на LinkedIn ничего не уходит. */
-export function SectionOffer({ section, title, suggestion, pastedAt, onMarks }: SectionOfferProps) {
-  const { busy, failed, mark } = useMarks(section, onMarks);
+/**
+ * Предложение по разделу (a03): «Скопировать», «Предложить заново», «Выполнено». На LinkedIn ничего
+ * не уходит: кандидат вставляет текст сам и подтверждает «Выполнено».
+ */
+export function SectionOffer(props: SectionOfferProps) {
+  const { offer, label } = props;
+  const { busy, failed, run } = useOfferActions(props);
+  const shown = useShownVariant(offer);
+  const left = Math.max(0, LINKEDIN_VARIANTS_MAX - offer.variants.length);
+  const textId = `li-new-${offer.key.replace(/[^A-Za-z0-9_-]/gu, '-')}`;
   return (
     <>
       <div className="li-offer">
-        <p className="li-new">{suggestion.text}</p>
+        <p className="li-new" id={textId} aria-live="polite">
+          {shown.text}
+        </p>
         <div className="li-offer-a">
-          <CopyButton text={suggestion.text} label={title} onCopied={() => void mark('copied')} />
-          <a
-            className="icon-btn"
-            href={LINKEDIN_OWN_PROFILE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Открыть в LinkedIn: ${title}`}
+          <VariantSwitch label={label} index={shown.index} total={offer.variants.length} onSelect={shown.select} />
+          <CopyButton text={shown.text} label={label} />
+          <button
+            className="icon-btn li-alt"
+            type="button"
+            aria-label={`Другой вариант: ${label} · осталось ${left}`}
+            aria-busy={busy === 'variant' || undefined}
+            disabled={busy !== null || props.locked === true || left === 0}
+            onClick={() => void run('variant')}
           >
-            <Icon name="out" />
-          </a>
-          <PastedControl
-            title={title}
-            pastedAt={pastedAt}
-            busy={busy === 'pasted'}
-            onPasted={() => void mark('pasted')}
-          />
+            <Icon name="refresh" />
+          </button>
+          <DoneControl offer={offer} label={label} textId={textId} busy={busy === 'done'} onDone={() => void run('done')} />
         </div>
       </div>
-      <Facts suggestion={suggestion} />
-      {failed ? <LiError text="Не удалось сохранить отметку" onRetry={() => void mark(failed)} /> : null}
+      {failed ? <LiError text={failed.text} onRetry={() => void run(failed.kind)} /> : null}
     </>
   );
 }

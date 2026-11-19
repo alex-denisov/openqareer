@@ -6,6 +6,7 @@ import {
   paragraphsFromStory,
   pickNextResponse,
   prepHeadline,
+  prepVacancy,
   replaceQuestionParagraphs,
   type PrepParagraph,
 } from './prepModel';
@@ -114,5 +115,36 @@ describe('formatInterviewWhen', () => {
   it('shows the day and the local time', () => {
     expect(formatInterviewWhen('2026-11-12T12:00:00Z', 'Europe/Moscow')).toBe('12 ноября, 15:00');
     expect(formatInterviewWhen(null, 'Europe/Moscow')).toBeNull();
+  });
+});
+
+describe('prepVacancy (B635)', () => {
+  it('отдаёт движку вопросов описание, сохранённое в отклике', () => {
+    expect(
+      prepVacancy({
+        id: 'r-1',
+        vacancy: {
+          title: 'Go-разработчик',
+          company: 'Арка Пэй',
+          url: '',
+          source: 'hh',
+          description: 'Платежи на Go и Kafka.',
+        },
+      }),
+    ).toEqual({
+      id: 'r-1',
+      title: 'Go-разработчик',
+      company: 'Арка Пэй',
+      descriptionSummary: 'Платежи на Go и Kafka.',
+    });
+  });
+
+  it('у старого отклика без описания — только должность и компания', () => {
+    expect(prepVacancy({ id: 'r-2', vacancy: null })).toEqual({
+      id: 'r-2',
+      title: '',
+      company: undefined,
+      descriptionSummary: undefined,
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { pluralRu } from '../../../../../shared/pluralRu';
 import { STAR_FIELDS, type StarStoryView } from '../../../../../shared/starStories';
+import type { VacancyApplicationSnapshot } from '../../../../../shared/vacancyApplication';
 
 /** Абзац подготовки (`/applications/:id/star-prep`): ответ на вопрос по полю STAR. */
 export interface PrepParagraph {
@@ -112,4 +113,28 @@ export function formatInterviewWhen(iso: string | null, timeZone?: string): stri
     timeZone,
   }).format(date);
   return `${day}, ${time}`;
+}
+
+/** Вакансия отклика для движка вопросов подготовки. */
+export interface PrepVacancy {
+  readonly id: string;
+  readonly title: string;
+  readonly company: string | undefined;
+  readonly descriptionSummary: string | undefined;
+}
+
+/**
+ * B635: вопросы строятся по описанию, сохранённому в отклике на момент отклика,
+ * поэтому стек и тип роли берутся из текста вакансии. У старых откликов описания нет.
+ */
+export function prepVacancy(response: {
+  readonly id: string;
+  readonly vacancy: VacancyApplicationSnapshot | null | undefined;
+}): PrepVacancy {
+  return {
+    id: response.id,
+    title: response.vacancy?.title ?? '',
+    company: response.vacancy?.company ?? undefined,
+    descriptionSummary: response.vacancy?.description ?? undefined,
+  };
 }
