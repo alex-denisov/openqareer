@@ -112,10 +112,13 @@ export function draftsOfKind(
 }
 
 /** Черновик, с которого начинается экран постов: первый, ещё не опубликованный. */
-export function currentPostDraft(drafts: readonly LinkedinDraft[]): LinkedinDraft | null {
-  return (
-    draftsOfKind(drafts, 'post').find(
-      (draft) => draft.status === 'draft' || draft.status === 'copied',
-    ) ?? null
+export function currentPostDraft(
+  drafts: readonly LinkedinDraft[],
+  preferredId?: string | null,
+): LinkedinDraft | null {
+  const open = draftsOfKind(drafts, 'post').filter(
+    (draft) => draft.status === 'draft' || draft.status === 'copied',
   );
+  // Пост из ссылки «Сегодня» (?post=id) — первым, иначе первый неопубликованный (B645 s03).
+  return open.find((draft) => draft.id === preferredId) ?? open[0] ?? null;
 }

@@ -4,7 +4,7 @@ import { Icon, InfoTip, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import { BlockError } from '../today/parts';
 import { useLoad, type Load } from '../today/useLoad';
-import { nextQuestion } from './partTwoModel';
+import { nextQuestion, questionCount } from './partTwoModel';
 import {
   loadLinksTotal,
   loadVersions,
@@ -114,7 +114,7 @@ function UnknownsModule({ draft }: { readonly draft: ResumeDraft }) {
       <div className="actions">
         <Link className="btn is-primary" to={buildNodePath('p09')}>
           <Icon name="chat" />
-          {answerLabel(1)}
+          {answerLabel(questionCount(draft))}
         </Link>
       </div>
     </section>

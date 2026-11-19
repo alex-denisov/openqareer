@@ -9,6 +9,7 @@ import {
   readMatchProfile,
   setMatchedRecentTitlesReader,
   setMatchedSnapshotFailureLog,
+  setMatchedSnapshotStore,
 } from './matchedPoolContext';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
 
@@ -77,6 +78,8 @@ export class MatchedPoolPrecompute {
         'matched-snapshot-rebuild-failed',
       ),
     );
+    const sealedSnapshots = options.candidateStore.sealedMatchedLists?.snapshots;
+    if (sealedSnapshots) setMatchedSnapshotStore(options.engine, sealedSnapshots);
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
     this.now = options.now ?? Date.now;
   }
