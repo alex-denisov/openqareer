@@ -49,6 +49,8 @@ export function responseFixtures(): Stub[] {
       appliedAt: null,
       whoseTurn: 'candidate',
       updatedAt: iso(1),
+      // Черновик: письмо ещё не одобрено, к отклику не привязано (B723).
+      materials: { coverLetter: false, resume: false },
     }),
     application('a-failed', 'Руководитель платформы', 'Карта Технологии', {
       deliveryReceipt: { kind: 'failure_note', value: 'Не доставлено: нужен вход в hh.ru' },

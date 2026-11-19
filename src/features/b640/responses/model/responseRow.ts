@@ -106,6 +106,10 @@ type Face = Pick<ResponseRow, 'tag' | 'next' | 'event' | 'action' | 'yours' | 'r
 const LETTER_ACTION: ResponseRowAction = {
   kind: 'letter', label: 'Проверить письмо', short: 'Проверить', icon: 'file',
 };
+/** Письмо одобрено, отклик не отправлен (B723): к шагу отправки на странице письма. */
+const SEND_ACTION: ResponseRowAction = {
+  kind: 'letter', label: 'Отправить', short: 'Отправить', icon: 'send',
+};
 const RESEND_ACTION: ResponseRowAction = {
   kind: 'letter', label: 'Отправить ещё раз', short: 'Повторить', icon: 'send',
 };
@@ -210,10 +214,32 @@ function closedFace(application: ApplicationView): Face {
   };
 }
 
+/** Колонка «Отправлен» у неотправленного: черновик или одобренное письмо (B723). */
+function savedLabel(application: ApplicationView): string | null {
+  if (application.stage !== 'saved') return null;
+  return application.materials.coverLetter ? 'не отправлен' : 'черновик';
+}
+
+/**
+ * Письмо привязывается к отклику только одобрением (B717/B723): это уже не черновик,
+ * следующий шаг — отправить, как на «Сегодня».
+ */
+function approvedFace(application: ApplicationView): Face {
+  return {
+    tag: { tone: 'part', label: 'письмо одобрено' },
+    next: 'Отправьте отклик',
+    event: withDate('письмо одобрено', dotDate(application.updatedAt)),
+    action: SEND_ACTION,
+    yours: true,
+    remind: false,
+    urgency: 0,
+  };
+}
+
 function face(application: ApplicationView, now: Date, failure: string | null): Face {
   switch (application.stage) {
     case 'saved':
-      return {
+      return application.materials.coverLetter ? approvedFace(application) : {
         tag: { tone: 'part', label: 'Черновик' },
         next: 'Проверьте и отправьте',
         event: withDate('черновик сохранён', dotDate(application.updatedAt)),
@@ -265,7 +291,7 @@ export function buildResponseRow(application: ApplicationView, now: Date = new D
     id: application.id,
     role: vacancy?.title?.trim() || 'Без названия',
     company: company || (vacancy?.companyHidden ? 'Компания скрыта' : 'Компания не указана'),
-    sent: application.stage === 'saved' ? 'черновик' : (shortDate(sentIso) ?? ''),
+    sent: savedLabel(application) ?? (shortDate(sentIso) ?? ''),
     sentAt: parse(sentIso)?.getTime() ?? 0,
     failure,
     ...face(application, now, failure),

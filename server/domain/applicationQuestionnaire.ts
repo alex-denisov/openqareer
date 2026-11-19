@@ -50,7 +50,9 @@ function toQuestion(raw: unknown): QuestionnaireQuestion | null {
   if (TEXT_TYPES.has(field.type)) return { ...base, kind: 'text' };
   if (!CHOICE_TYPES.has(field.type)) return null;
   const options = optionLabels(field.values);
-  return options.length > 0 ? { ...base, kind: 'choice', options } : null;
+  if (options.length === 0) return null;
+  const choice = { ...base, kind: 'choice' as const, options };
+  return field.type === 'multi_value_multi_select' ? { ...choice, multiple: true } : choice;
 }
 
 /**

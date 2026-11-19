@@ -47,6 +47,18 @@ describe('B641: вопросы Greenhouse', () => {
     ]);
   });
 
+  it('B703: вопрос с несколькими ответами помечен multiple, с одним — без пометки', () => {
+    const choice = (type: string) => ({
+      label: 'Which stacks?',
+      required: true,
+      fields: [{ name: 'question_9', type, values: [{ label: 'Go', value: 1 }, { label: 'Rust', value: 2 }] }],
+    });
+    expect(parseGreenhouseQuestions({ questions: [choice('multi_value_multi_select')] })).toEqual([
+      { id: 'question_9', text: 'Which stacks?', required: true, kind: 'choice', options: ['Go', 'Rust'], multiple: true },
+    ]);
+    expect(parseGreenhouseQuestions({ questions: [choice('multi_value_single_select')] })[0]).not.toHaveProperty('multiple');
+  });
+
   it('вопрос с небезопасным идентификатором отбрасывается', () => {
     const field = (name: string) => ({ label: 'Q', required: false, fields: [{ name, type: 'input_text' }] });
     expect(
