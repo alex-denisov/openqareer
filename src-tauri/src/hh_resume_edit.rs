@@ -13,11 +13,12 @@ use crate::connector_session::{
 };
 use crate::hh_apply::{on_hh, wait_for, RunningGuard};
 use crate::hh_resume_edit_scripts::{
-    block_of, edit_path, field_script, read_field_script, read_skills_script, save_script,
-    saved_script, skill_script, HH_EDIT_ABOUT, HH_EDIT_TITLE,
+    block_of, edit_path, field_script, read_field_script, read_skills_script, reset_script,
+    save_script, saved_script, skill_script, HH_EDIT_ABOUT, HH_EDIT_TITLE,
 };
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 const TITLE_MAX_CHARS: usize = 100;
@@ -28,6 +29,8 @@ const STEP_POLL: Duration = Duration::from_millis(500);
 const FIELD_WAIT: Duration = Duration::from_secs(10);
 const SKILL_WAIT: Duration = Duration::from_secs(6);
 const SAVE_WAIT: Duration = Duration::from_secs(20);
+/// No two resume edits closer than this, even when the cabinet asks in a loop.
+const EDIT_MIN_GAP: Duration = Duration::from_secs(4);
 /// A person adds skills one by one; so does the script, with a pause between.
 const SKILL_PAUSE_MS: (u64, u64) = (900, 1_800);
 
@@ -103,6 +106,11 @@ pub fn validate_request(request: &HhResumeEditRequest) -> Result<(), String> {
     }
 }
 
+/// The text exactly as a textarea holds it (React's textarea keeps `\n` only).
+pub fn field_text(value: &str) -> String {
+    value.trim().replace("\r\n", "\n")
+}
+
 fn normalized(value: &str) -> String {
     value
         .split_whitespace()
@@ -124,7 +132,7 @@ pub fn read_back_matches(request: &HhResumeEditRequest, read: &ReadBack) -> bool
         _ => read
             .value
             .as_deref()
-            .is_some_and(|value| value.trim().replace("\r\n", "\n") == request.text.trim()),
+            .is_some_and(|value| field_text(value) == field_text(&request.text)),
     }
 }
 
@@ -178,7 +186,7 @@ async fn fill(
         "title" => expect(
             wait_for(
                 window,
-                &field_script(path, HH_EDIT_TITLE, request.text.trim()),
+                &field_script(path, HH_EDIT_TITLE, &field_text(&request.text)),
                 FIELD_WAIT,
             )
             .await,
@@ -188,7 +196,7 @@ async fn fill(
         "about" => expect(
             wait_for(
                 window,
-                &field_script(path, HH_EDIT_ABOUT, request.text.trim()),
+                &field_script(path, HH_EDIT_ABOUT, &field_text(&request.text)),
                 FIELD_WAIT,
             )
             .await,
@@ -208,27 +216,87 @@ async fn fill(
     }
 }
 
-async fn read_back(window: &tauri::Webview, script: &str) -> Option<ReadBack> {
+/// The section as hh.ru shows it again; `Err` is the page's own answer (captcha, sign-in).
+async fn read_back(window: &tauri::Webview, script: &str) -> Result<ReadBack, String> {
     let deadline = tokio::time::Instant::now() + FIELD_WAIT;
     loop {
         match eval_json(window, script).await {
             Ok(raw) => {
-                let parsed = serde_json::from_str::<ReadBack>(&raw).ok()?;
+                let parsed = serde_json::from_str::<ReadBack>(&raw)
+                    .map_err(|_| "read_back_failed".to_string())?;
                 if parsed.code == "read" {
-                    return Some(parsed);
+                    return Ok(parsed);
                 }
                 if parsed.code != "waiting" {
-                    return None;
+                    return Err(parsed.code);
                 }
             }
-            Err(error) if !is_transient_eval_error(&error) => return None,
+            Err(error) if !is_transient_eval_error(&error) => return Err("read_back_failed".into()),
             Err(_) => {}
         }
         if tokio::time::Instant::now() >= deadline {
-            return None;
+            return Err("read_back_failed".into());
         }
         tokio::time::sleep(STEP_POLL).await;
     }
+}
+
+/// What the candidate sees when hh.ru took the save but its page cannot be read back.
+pub fn read_back_report(
+    request: &HhResumeEditRequest,
+    read: Result<ReadBack, String>,
+) -> HhResumeEditReport {
+    match read {
+        Ok(read) if read_back_matches(request, &read) => HhResumeEditReport::applied(),
+        Ok(_) => HhResumeEditReport::failed("not_kept"),
+        Err(_) => HhResumeEditReport::failed("saved_unconfirmed"),
+    }
+}
+
+/// Keeps edits a person's pace apart, whoever asks for them.
+static LAST_EDIT: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn wait_before_next_edit() -> Duration {
+    let mut last = LAST_EDIT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let now = Instant::now();
+    let wait = last
+        .map(|at| EDIT_MIN_GAP.saturating_sub(now.duration_since(at)))
+        .unwrap_or_default();
+    *last = Some(now + wait);
+    wait
+}
+
+/// Opens the editor page fresh: flags of an earlier run on the same page are cleared.
+async fn open_clean_editor(app: &AppHandle, url: &str) -> Result<Option<tauri::Webview>, String> {
+    let window = open_editor(app, url).await?;
+    if !on_hh(&window) {
+        return Ok(None);
+    }
+    let _ = eval_json(&window, &reset_script()).await;
+    Ok(Some(window))
+}
+
+/// Presses «Сохранить» and waits for hh.ru to leave the editor; `Err` carries the failure code.
+async fn save(window: &tauri::Webview, path: &str) -> Result<(), String> {
+    let clicked = wait_for(window, &save_script(path), FIELD_WAIT).await;
+    if clicked != "save_clicked" {
+        return Err(if clicked == "timeout" {
+            "save_unavailable".into()
+        } else {
+            clicked
+        });
+    }
+    let saved = wait_for(window, &saved_script(path), SAVE_WAIT).await;
+    if saved != "saved" {
+        return Err(if saved == "timeout" {
+            "no_confirmation".into()
+        } else {
+            saved
+        });
+    }
+    Ok(())
 }
 
 pub async fn run_hh_resume_edit(
@@ -240,43 +308,30 @@ pub async fn run_hh_resume_edit(
     let Some(_running) = RunningGuard::take() else {
         return Ok(HhResumeEditReport::failed("hh_busy"));
     };
+    tokio::time::sleep(wait_before_next_edit()).await;
     let path = edit_path(&request.resume_id, block);
     let url = editor_url(&request.resume_id, block);
-    let window = open_editor(app, &url).await?;
-    if !on_hh(&window) {
+    let Some(window) = open_clean_editor(app, &url).await? else {
         return Ok(HhResumeEditReport::failed("target_redirect_rejected"));
-    }
+    };
     if let Err(code) = fill(&window, &request, &path).await {
         return Ok(HhResumeEditReport::failed(&code));
     }
-    let clicked = wait_for(&window, &save_script(&path), FIELD_WAIT).await;
-    if clicked != "save_clicked" {
-        return Ok(HhResumeEditReport::failed(if clicked == "timeout" {
-            "save_unavailable"
-        } else {
-            &clicked
-        }));
+    if let Err(code) = save(&window, &path).await {
+        return Ok(HhResumeEditReport::failed(&code));
     }
-    let saved = wait_for(&window, &saved_script(&path), SAVE_WAIT).await;
-    if saved != "saved" {
-        return Ok(HhResumeEditReport::failed(if saved == "timeout" {
-            "no_confirmation"
-        } else {
-            &saved
-        }));
-    }
-    let window = open_editor(app, &url).await?;
+    let Some(window) = open_clean_editor(app, &url).await? else {
+        return Ok(HhResumeEditReport::failed("saved_unconfirmed"));
+    };
     let script = match request.section.as_str() {
         "title" => read_field_script(&path, HH_EDIT_TITLE),
         "about" => read_field_script(&path, HH_EDIT_ABOUT),
         _ => read_skills_script(&path),
     };
-    let read = read_back(&window, &script).await;
-    Ok(match read {
-        Some(read) if read_back_matches(&request, &read) => HhResumeEditReport::applied(),
-        Some(_) => HhResumeEditReport::failed("not_kept"),
-        None => HhResumeEditReport::failed("read_back_failed"),
-    })
+    Ok(read_back_report(
+        &request,
+        read_back(&window, &script).await,
+    ))
 }
 
 #[cfg(test)]
@@ -346,6 +401,33 @@ mod tests {
             &chips(&["sql", "kubernetes", "dbt"])
         ));
         assert!(!read_back_matches(&skills, &chips(&["sql", "kubernetes"])));
+    }
+
+    #[test]
+    fn a_save_hh_did_not_show_back_is_reported_as_unconfirmed() {
+        let title = request("title", "COO", &[]);
+        assert_eq!(
+            read_back_report(&title, Err("captcha".into())),
+            HhResumeEditReport::failed("saved_unconfirmed")
+        );
+        let windows = request("about", "Строка\r\nвторая", &[]);
+        let shown = ReadBack {
+            code: "read".into(),
+            value: Some("Строка\nвторая".into()),
+            values: vec![],
+        };
+        assert_eq!(
+            read_back_report(&windows, Ok(shown)),
+            HhResumeEditReport::applied()
+        );
+    }
+
+    #[test]
+    fn keeps_edits_apart_even_when_asked_in_a_loop() {
+        let first = wait_before_next_edit();
+        let second = wait_before_next_edit();
+        assert!(first <= EDIT_MIN_GAP);
+        assert!(second > first && second <= EDIT_MIN_GAP * 2);
     }
 
     #[test]

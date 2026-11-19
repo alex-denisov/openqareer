@@ -6,8 +6,10 @@ import { click, mount, type Mounted } from '../../kit/testDom';
 
 const desktop = vi.hoisted(() => ({ applyHhResumeEditInSession: vi.fn() }));
 const reading = vi.hoisted(() => ({ forgetReadResumes: vi.fn() }));
+const pace = vi.hoisted(() => ({ pauseBetweenEdits: vi.fn(async () => undefined) }));
 vi.mock('./hhDesktop', () => desktop);
 vi.mock('./hhResumeReading', () => reading);
+vi.mock('./hhEditPace', () => pace);
 
 const { HhResumeEdits } = await import('./HhResumeEdits');
 
@@ -69,6 +71,7 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     await settle();
     await settle();
     expect(desktop.applyHhResumeEditInSession.mock.calls.map(([input]) => input.section)).toEqual(['title', 'skills', 'about']);
+    expect(pace.pauseBetweenEdits).toHaveBeenCalledTimes(2);
   });
 
   it('отказ hh.ru — понятная строка под правкой, остальные разделы не трогаем', async () => {

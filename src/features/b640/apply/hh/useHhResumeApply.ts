@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { HhResumeEdit } from '../../../../../shared/hhCandidateSession';
 import { applyHhResumeEditInSession, type HhResumeEditInput } from './hhDesktop';
+import { pauseBetweenEdits } from './hhEditPace';
 import { forgetReadResumes } from './hhResumeReading';
 
 /**
@@ -19,6 +20,7 @@ const FAILURE_TEXT: Readonly<Record<string, string>> = {
   hh_busy: 'Окно hh.ru занято другим действием. Нажмите ещё раз через минуту.',
   field_locked: 'hh.ru не даёт менять этот раздел сейчас. Скопируйте текст и вставьте на hh.ru.',
   field_invalid: 'hh.ru не принял текст. Скопируйте его и поправьте на hh.ru.',
+  saved_unconfirmed: 'hh.ru сохранил правку, но проверить её не получилось. Откройте резюме на hh.ru и посмотрите раздел.',
 };
 const FAILURE_DEFAULT = 'Не получилось изменить резюме на hh.ru. Скопируйте текст и вставьте на hh.ru.';
 
@@ -69,8 +71,10 @@ export function useHhResumeApply(resumeId: string): HhResumeApply {
   );
   const applyAll = useCallback(
     async (edits: readonly HhResumeEdit[]) => {
-      for (const edit of edits.filter(canApply)) {
-        // По одной правке: окно hh.ru одно; после отказа площадки остальные не трогаем.
+      const queue = edits.filter(canApply);
+      for (const [index, edit] of queue.entries()) {
+        // По одной правке с паузой: окно hh.ru одно; после отказа площадки остальные не трогаем.
+        if (index > 0) await pauseBetweenEdits();
         if (!(await apply(edit))) return;
       }
     },

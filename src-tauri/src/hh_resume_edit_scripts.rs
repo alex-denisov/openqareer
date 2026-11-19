@@ -66,6 +66,12 @@ if(location.pathname!=={path})return {{code:'editor_missing'}};",
     )
 }
 
+/// Clears what an earlier run on the same page left behind (the page is not reloaded
+/// when the window is already on it).
+pub fn reset_script() -> String {
+    wrap("window.__oqSaved=0;window.__oqSkill=null;return {code:'reset'};")
+}
+
 /// Polled: puts `value` into the title input or the «О себе» textarea.
 pub fn field_script(path: &str, selector: &str, value: &str) -> String {
     wrap(&format!(

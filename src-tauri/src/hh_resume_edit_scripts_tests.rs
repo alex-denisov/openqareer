@@ -182,6 +182,25 @@ fn stops_on_another_page_or_without_sign_in() {
 }
 
 #[test]
+fn a_fresh_run_on_the_same_page_presses_save_again() {
+    let path = edit_path(HASH, "position");
+    let html = format!(r#"<input data-qa="resume-edit-title-suggest">{SAVE}"#);
+    let Some(out) = run(
+        &html,
+        &path,
+        "",
+        &[save_script(&path), reset_script(), save_script(&path)],
+    ) else {
+        return;
+    };
+    assert_eq!(codes(&out), ["save_clicked", "reset", "save_clicked"]);
+    assert_eq!(
+        clicks(&out),
+        ["resume-partial-edit-save", "resume-partial-edit-save"]
+    );
+}
+
+#[test]
 fn saved_once_hh_leaves_the_editor() {
     let path = edit_path(HASH, "keySkills");
     let Some(out) = run(
