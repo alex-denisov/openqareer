@@ -11,16 +11,30 @@ const PEOPLE = [
   ['Анна Ветрова', 'руководитель найма', 'Гринкод', 'знакомы через Игоря Шаталова'],
   ['Павел Ким', 'CTO', 'Гринкод', 'ответил на ваш комментарий 10.11'],
   ['Елена Сафина', 'HR-партнёр', 'Гринкод', ''],
-  ['Дмитрий Лаптев', 'технический рекрутер', 'Вектор Банк', 'работали вместе в «Сфере Платежи», 2018–2021'],
+  [
+    'Дмитрий Лаптев',
+    'технический рекрутер',
+    'Вектор Банк',
+    'работали вместе в «Сфере Платежи», 2018–2021',
+  ],
   ['Сергей Белов', 'CTO', 'Арка Холдинг', 'знакомы через Игоря Шаталова'],
 ] as const;
 
 const contact = (index: number) => {
   const [fullName, roleTitle, companyName, relationship] = PEOPLE[index % PEOPLE.length]!;
   return {
-    id: `c${index}`, fullName, roleTitle, companyName, relationship, strength: 'weak', linkedinUrl: null,
-    workplaces: [], knowsRecruiterIds: [], source: 'linkedin_import',
-    createdAt: '2026-11-10T09:00:00.000Z', updatedAt: '2026-11-10T09:00:00.000Z',
+    id: `c${index}`,
+    fullName,
+    roleTitle,
+    companyName,
+    relationship,
+    strength: 'weak',
+    linkedinUrl: null,
+    workplaces: [],
+    knowsRecruiterIds: [],
+    source: 'linkedin_import',
+    createdAt: '2026-11-10T09:00:00.000Z',
+    updatedAt: '2026-11-10T09:00:00.000Z',
   };
 };
 
@@ -36,13 +50,22 @@ async function mockContacts(page: Page, mode: Mode): Promise<void> {
     }
     const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? 0);
     const total = mode === 'empty' ? 0 : TOTAL;
-    const items = Array.from({ length: Math.max(0, Math.min(100, total - offset)) }, (_, i) => contact(offset + i));
+    const items = Array.from({ length: Math.max(0, Math.min(100, total - offset)) }, (_, i) =>
+      contact(offset + i),
+    );
     return route.fulfill({
       json: {
         data: {
-          items, total, offset, limit: 100,
+          items,
+          total,
+          offset,
+          limit: 100,
           nextOffset: offset + 100 < total ? offset + 100 : null,
-          linkedinImport: { state: 'imported', importedAt: '2026-11-10T09:00:00.000Z', importedCount: total },
+          linkedinImport: {
+            state: 'imported',
+            importedAt: '2026-11-10T09:00:00.000Z',
+            importedCount: total,
+          },
         },
       },
     });
@@ -83,7 +106,11 @@ test.describe('B664: «Контакты» нового кабинета (a02)', 
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
     mkdirSync('.s13-shots', { recursive: true });
     const desktop = testInfo.project.name === 'desktop-1440';
-    for (const [name, mode] of [['contacts', 'list'], ['contacts-empty', 'empty'], ['contacts-error', 'error']] as const) {
+    for (const [name, mode] of [
+      ['contacts', 'list'],
+      ['contacts-empty', 'empty'],
+      ['contacts-error', 'error'],
+    ] as const) {
       await mockContacts(page, mode);
       for (const theme of ['light', 'dark'] as const) {
         await page.goto(PATH, { waitUntil: 'domcontentloaded' });
@@ -94,7 +121,10 @@ test.describe('B664: «Контакты» нового кабинета (a02)', 
         if (mode === 'list') await expect(page.locator('li.ct-row')).toHaveCount(20);
         for (const width of desktop ? [1440, 1176] : [390]) {
           await page.setViewportSize({ width, height: desktop ? 900 : 844 });
-          await page.screenshot({ path: `.s13-shots/${name}-${width}-${theme}.png`, fullPage: true });
+          await page.screenshot({
+            path: `.s13-shots/${name}-${width}-${theme}.png`,
+            fullPage: true,
+          });
         }
       }
     }
