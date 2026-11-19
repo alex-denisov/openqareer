@@ -9,6 +9,7 @@ export interface DiaryCalls {
   measurements: unknown[];
   goals: unknown[];
   archived: unknown[];
+  kpi: unknown[];
 }
 
 function isoDay(offsetDays: number): string {
@@ -133,6 +134,49 @@ const HISTORY = [7, 9, 11, 14].map((value, index) => ({
   createdAt: '',
 }));
 
+const kpiRow = (id: string, title: string, target: string, horizon: string, weight: number) => ({
+  id,
+  title,
+  target,
+  targetValue: null,
+  unit: '',
+  dueDate: null,
+  horizon,
+  weight,
+  setBy: 'manager',
+  quote: '',
+});
+const KPI_DRAFT = {
+  id: 'kpi-1',
+  sourceKind: 'text',
+  sourceName: null,
+  createdAt: `${TODAY}T09:00:00.000Z`,
+  rows: [
+    kpiRow('r1', 'Срок релиза', '7 дней', 'quarter', 30),
+    kpiRow('r2', 'Закрыто вакансий', '2 шт.', 'quarter', 30),
+    kpiRow('r3', 'Инциденты после релиза', '2 в месяц', 'quarter', 20),
+    kpiRow('r4', 'Релизы без отката', '95 %', 'year', 20),
+  ],
+  weightSum: 100,
+  acceptedGoalIds: [],
+  sourceStored: true,
+};
+
+function handleKpi(route: Route, calls: DiaryCalls, path: string, method: string) {
+  const body = method === 'GET' ? null : (route.request().postDataJSON() as unknown);
+  if (path === '/kpi-imports' && method === 'POST') {
+    calls.kpi.push(body);
+    return route.fulfill({ status: 201, json: { data: KPI_DRAFT } });
+  }
+  if (path.endsWith('/accept')) {
+    calls.kpi.push(body);
+    return route.fulfill({ status: 201, json: { data: { goalIds: ['goal-1', 'goal-2'] } } });
+  }
+  if (path.endsWith('/source'))
+    return route.fulfill({ json: { data: { ...KPI_DRAFT, sourceStored: false } } });
+  return route.fulfill({ json: { data: KPI_DRAFT } });
+}
+
 function weekDraft(weekStart: string, items: ReturnType<typeof entries>) {
   const week = items.filter((item) => item.weekStart === weekStart);
   return {
@@ -169,6 +213,7 @@ async function handle(
       },
     });
   }
+  if (path.startsWith('/kpi-imports')) return handleKpi(route, calls, path, method);
   if (path === '/goal-cards' && method === 'GET')
     return route.fulfill({ json: { data: { items: CARDS, archived: ARCHIVED } } });
   if (path === '/goal-cards' && method === 'POST') {
@@ -242,6 +287,7 @@ export async function mockDiary(page: Page): Promise<DiaryCalls> {
     measurements: [],
     goals: [],
     archived: [],
+    kpi: [],
   };
   const state = { items: entries() };
   await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls, state));
