@@ -41,12 +41,11 @@ function actionFace(item: TodayQueueItem): ActionFace {
     return { label: 'Подготовиться', shortLabel: 'Готовиться', icon: 'play', path };
   }
   if (item.kind === 'linkedin_post') {
-    return {
-      label: 'Открыть пост',
-      shortLabel: 'Открыть',
-      icon: 'linkedin',
-      path: buildNodePath('a03b'),
-    };
+    // Id черновика в адресе: a03b открывает этот пост, а не первый (B645 s03).
+    const path = item.draftId
+      ? `${buildNodePath('a03b')}?post=${encodeURIComponent(item.draftId)}`
+      : buildNodePath('a03b');
+    return { label: 'Открыть пост', shortLabel: 'Открыть', icon: 'linkedin', path };
   }
   if (item.kind === 'new_vacancy' || item.kind === 'shortlist') {
     const path = item.clusterId
@@ -67,11 +66,30 @@ function actionFace(item: TodayQueueItem): ActionFace {
 }
 
 /**
- * Подпись строки. У поста — только площадка: служебную приписку очереди
- * («сам не опубликуется») кандидату не показываем.
+ * Подпись строки. У поста — площадка и готовность черновика, как в макете;
+ * служебную приписку очереди («сам не опубликуется») кандидату не показываем.
  */
 function actionSub(item: TodayQueueItem): string {
-  return item.kind === 'linkedin_post' ? 'LinkedIn' : queueDesktopSubtitle(item);
+  return item.kind === 'linkedin_post' ? 'LinkedIn · черновик готов' : queueDesktopSubtitle(item);
+}
+
+/** Заголовок модуля остальных дел: «Ещё 3 дела». */
+export function moreTitle(count: number): string {
+  return `Ещё ${pluralRu(count, ['дело', 'дела', 'дел'])}`;
+}
+
+/**
+ * Подробность главного дела (p.lead-text макета): вакансия, место и деньги.
+ * У поста подробности нет — тема уже в заголовке.
+ */
+export function leadText(item: TodayQueueItem): string | null {
+  if (item.kind === 'linkedin_post') return null;
+  const salary = item.salary ? formatCompensationCompact(item.salary) : null;
+  // Вакансия уже в заголовке («Ваш ход: …», «Новая вакансия: …») — второй раз её не пишем.
+  const title = queueActionTitle(item).includes(item.title) ? null : item.title.trim();
+  const parts = [title, item.location?.trim(), salary === 'не указана' ? null : salary];
+  const text = parts.filter(Boolean).join(' · ');
+  return text || null;
 }
 
 /** Строка очереди дня: что сделать и куда ведёт кнопка в новом кабинете. */

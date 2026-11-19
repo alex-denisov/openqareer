@@ -30,6 +30,7 @@ import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStor
 import type { RouteDeps } from './deps';
 import { createAutomationPausePort } from '../candidate/automationPausePort';
 import { registerCandidateStatusRoutes } from './candidateStatusRoutes';
+import { registerAccountDeletionRoutes } from './accountDeletionRoutes';
 import {
   authenticateCandidate,
   authenticateSession,
@@ -754,9 +755,12 @@ export function registerCandidateAutomationRoutes(app: FastifyInstance, deps: Ro
   app.post('/api/v1/candidate/automation/stop-companies/import-rejections', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, withDeps(bound, importRejectedCompanies));
   registerCandidateAutomationScheduleRoutes(app, bound);
   // B665: статус кандидата ставит ту же паузу; свои маршруты закрыты флагом B640.
+  const automationPause = createAutomationPausePort(automationRepository, deps.candidateActionRepository);
+  // B689: удаление аккаунта ставит ту же паузу и снимает её при возврате.
+  registerAccountDeletionRoutes(app, { ...deps, automationPause });
   registerCandidateStatusRoutes(app, {
     ...deps,
-    automationPause: createAutomationPausePort(automationRepository, deps.candidateActionRepository),
+    automationPause,
     // B691: сигналы «Сегодня» отличают свои отклики кандидата от автооткликов.
     autoAppliedApplicationIds: (candidateId) => autoAppliedApplicationIds(automationRepository, candidateId),
   });

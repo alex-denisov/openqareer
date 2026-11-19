@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { forgetMemberNetwork } from './networkIndexFeed';
 import { connectNativeOnly, resolveNativeImportMode, type NativeImportMode } from './nativeImportMode';
 import { materializeManualResumeEvidence } from './manualResumeEvidence';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   buildMemoryPage,
@@ -306,24 +306,33 @@ function messageThread(company?: string, vacancy?: string) {
   return company ? { kind: 'company' as const, id: company } : undefined;
 }
 
+/**
+ * Стирает данные кандидата. Зовут немедленное удаление и (B689) обход
+ * отсроченных удалений, у которого нет запроса, — поэтому журнал передаётся.
+ */
+export function purgeCandidateAccount(deps: RouteDeps, candidateId: string, log: FastifyBaseLogger): void {
+  const { candidateStore, candidateReputationRepo, recruiterContactsRepo } = deps;
+  cancelFootprintRunForCandidate(candidateId);
+  deps.capabilityConsentStore?.deleteForCandidate(candidateId);
+  forgetMemberNetwork(deps, candidateId, log);
+  notificationRepositoryFor(deps).deleteByCandidate(candidateId);
+  candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidateId);
+  candidateReputationRepo?.deleteAuditsByCandidateId(candidateId);
+  forgetOwnVacancies(deps, candidateId);
+  deps.vacancyMechanics?.deleteCandidate(candidateId);
+  deps.multiSourceEngine.forgetHhTextRoleTarget(candidateId);
+  candidateStore.deleteCandidate(candidateId);
+  recruiterContactsRepo?.deleteContactsByCandidateId(candidateId);
+  recruiterContactsRepo?.deleteJobsByCandidateId(candidateId);
+  deps.accountDeletionStore?.remove(candidateId);
+}
+
 const handleDeleteCandidate: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, candidateReputationRepo, recruiterContactsRepo, config } =
-    deps;
+  const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  cancelFootprintRunForCandidate(candidate.id);
-  deps.capabilityConsentStore?.deleteForCandidate(candidate.id);
-  forgetMemberNetwork(deps, candidate.id, request.log);
-  notificationRepositoryFor(deps).deleteByCandidate(candidate.id);
-  candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
-  candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
-  forgetOwnVacancies(deps, candidate.id);
-  deps.vacancyMechanics?.deleteCandidate(candidate.id);
-  deps.multiSourceEngine.forgetHhTextRoleTarget(candidate.id);
-  candidateStore.deleteCandidate(candidate.id);
-  recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
-  recruiterContactsRepo?.deleteJobsByCandidateId(candidate.id);
+  purgeCandidateAccount(deps, candidate.id, request.log);
   return reply.code(204).send();
 };
 

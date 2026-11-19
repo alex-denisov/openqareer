@@ -53,6 +53,19 @@ test.describe('B653 C06: «Релокация»', () => {
       'href',
       '/app/vacancies/companies?relocation=true',
     );
+    // Главное действие — одна кнопка в полосе act-dock, как в макете c06 (B645);
+    // на 390 во всю ширину поля. «Изменить места» — вторичная ссылка.
+    const dock = screen.locator('.act-dock');
+    await expect(dock.getByRole('button')).toHaveText(['Уточнить: кто едет и бюджет']);
+    await expect(screen.locator('.lead .row-act', { hasText: 'Изменить места' })).toBeVisible();
+    const button = await dock.getByRole('button').boundingBox();
+    if ((page.viewportSize()?.width ?? 0) < 768) {
+      expect(Math.round(button?.width ?? 0)).toBe(358);
+    } else {
+      const bar = await dock.boundingBox();
+      expect(Math.round(bar?.width ?? 0)).toBe(1080);
+      expect(Math.round(button?.width ?? 0)).toBeGreaterThanOrEqual(260);
+    }
     await expectGates(page);
   });
 
@@ -103,7 +116,7 @@ test.describe('B653 C06: «Релокация»', () => {
       relocationProfile: profile,
     });
     await screenOf(page)
-      .getByRole('button', { name: 'Уточнить, кто едет' })
+      .getByRole('button', { name: 'Уточнить: кто едет и бюджет' })
       .click({ timeout: 15_000 });
     const dialog = page.getByRole('dialog', { name: 'Кто едет' });
     await dialog.getByRole('button', { name: 'Я и партнёр' }).click();
