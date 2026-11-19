@@ -15,8 +15,24 @@ function plural(count: number, [one, few, many]: readonly [string, string, strin
 export const vacanciesLabel = (count: number): string =>
   `${count} ${plural(count, ['вакансия', 'вакансии', 'вакансий'])}`;
 
-export const placesTitle = (count: number): string =>
-  `${count} ${plural(count, ['страна', 'страны', 'стран'])}, куда можно уехать`;
+const countries = (count: number): string =>
+  `${count} ${plural(count, ['страна', 'страны', 'стран'])}`;
+const cities = (count: number): string =>
+  `${count} ${plural(count, ['город', 'города', 'городов'])} России`;
+
+/** Заголовок C06: страны, города России или оба вместе. */
+export function placesTitle(countryCount: number, cityCount = 0): string {
+  if (cityCount === 0) return `${countries(countryCount)}, куда можно уехать`;
+  if (countryCount === 0) return `${cities(cityCount)}, куда можно уехать`;
+  const total = countryCount + cityCount;
+  return `${total} ${plural(total, ['место', 'места', 'мест'])}, куда можно уехать: ${countries(countryCount)} и ${cities(cityCount)}`;
+}
+
+const thousands = (amount: number): number => Math.round(amount / 1000);
+
+/** Вилка города России в тысячах рублей. */
+export const cityRange = (low: number, high: number): string =>
+  `Вилка в городе: ${thousands(low)}–${thousands(high)} тыс. ₽`;
 
 export const cityName = (slug: string): string => russianCityName(slug, slug);
 
@@ -65,6 +81,14 @@ export function workRight(fit: CountryFitEvaluation): WorkRight {
     scenarioId: FALLBACK,
   };
 }
+
+/** Город России: работа по найму на месте, визы нет. */
+export const cityRight = (): WorkRight => ({
+  tag: 'ok',
+  text: 'Право работать: есть · без визы',
+  mode: 'без визы',
+  scenarioId: 'domestic_market',
+});
 
 export interface TaxLine {
   readonly label: string;

@@ -11,6 +11,8 @@ export interface CostEditProps {
   /** Нет согласия на данные о переезде: сохранить нельзя. */
   readonly blocked: boolean;
   readonly onSave: (key: CostKey, amount: number) => void;
+  /** Раздел не про кандидата: не входит в остаток и не просит суммы. */
+  readonly onSkip: (key: CostKey) => void;
   readonly onCancel: () => void;
 }
 
@@ -44,6 +46,41 @@ function parseAmount(text: string): number | null {
   return text.trim() !== '' && Number.isFinite(amount) && amount >= 0 ? Math.round(amount) : null;
 }
 
+function EditActions(props: {
+  readonly busy: boolean;
+  readonly blocked: boolean;
+  readonly canSave: boolean;
+  readonly onSave: () => void;
+  readonly onSkip: () => void;
+  readonly onCancel: () => void;
+}) {
+  return (
+    <div className="actions">
+      <Button
+        variant="primary"
+        size="sm"
+        icon="check"
+        busy={props.busy}
+        disabled={!props.canSave || props.blocked}
+        onClick={props.onSave}
+      >
+        Сохранить
+      </Button>
+      <Button
+        variant="quiet"
+        size="sm"
+        disabled={props.busy || props.blocked}
+        onClick={props.onSkip}
+      >
+        Не про меня
+      </Button>
+      <Button variant="quiet" size="sm" onClick={props.onCancel}>
+        Отмена
+      </Button>
+    </div>
+  );
+}
+
 /** Сумма раздела трат на месте строки: выбор раздела (при добавлении), сумма, «Сохранить». */
 export function RelocationCostEdit(props: CostEditProps) {
   const id = useId();
@@ -67,21 +104,12 @@ export function RelocationCostEdit(props: CostEditProps) {
           onChange={(event) => setText(event.target.value)}
         />
       </div>
-      <div className="actions">
-        <Button
-          variant="primary"
-          size="sm"
-          icon="check"
-          busy={props.busy}
-          disabled={amount === null || props.blocked}
-          onClick={() => amount !== null && props.onSave(key, amount)}
-        >
-          Сохранить
-        </Button>
-        <Button variant="quiet" size="sm" onClick={props.onCancel}>
-          Отмена
-        </Button>
-      </div>
+      <EditActions
+        {...props}
+        canSave={amount !== null}
+        onSave={() => amount !== null && props.onSave(key, amount)}
+        onSkip={() => props.onSkip(key)}
+      />
       {props.failed ? (
         <StatusLine state="err" text="Сумма не сохранилась. Попробуйте ещё раз." />
       ) : null}

@@ -23,13 +23,18 @@ const BASIS = 'Оценка кандидата';
 
 export type ScenarioCountry = RelocationScenarioInput['countryCode'];
 
-/** Последний сохранённый расчёт каждой страны: в нём траты по разделам. */
+/** Ключ расчёта места: страна целиком, а в России — каждый город отдельно. */
+export const scenarioKey = (countryCode: string, city: string): string =>
+  countryCode === 'RU' ? `RU:${city}` : countryCode;
+
+/** Последний сохранённый расчёт каждого места: в нём траты по разделам. */
 export async function latestScenarios(): Promise<ReadonlyMap<string, SavedRelocationScenario>> {
   const page = await listRelocationScenarios();
   const latest = new Map<string, SavedRelocationScenario>();
   for (const item of page.items) {
-    const current = latest.get(item.input.countryCode);
-    if (!current || current.createdAt < item.createdAt) latest.set(item.input.countryCode, item);
+    const key = scenarioKey(item.input.countryCode, item.input.city);
+    const current = latest.get(key);
+    if (!current || current.createdAt < item.createdAt) latest.set(key, item);
   }
   return latest;
 }

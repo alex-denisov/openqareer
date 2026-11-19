@@ -43,4 +43,23 @@ describe('relocationCostsModel', () => {
     expect(summary.remaining).toBe(424_022 - 210_000);
     expect(summary.startCash).toBe(150_000 + 120_000 + 3 * 210_000);
   });
+
+  it('counts a section marked «Не про меня» as done and leaves it out of the remainder', () => {
+    const values: CostValues = {
+      rent: 85_000,
+      utilities: 9_000,
+      food: 40_000,
+      transport: 4_000,
+      insurance: 3_000,
+      other: 5_000,
+    };
+    const skipped = ['education', 'moving', 'deposit'] as const;
+    const summary = costsSummary(values, 276_000, skipped);
+    expect(summary.missing).toBe(0);
+    expect(summary.remaining).toBe(276_000 - 146_000);
+    expect(summary.startCash).toBe(3 * 146_000);
+    expect(costsSummary({ ...values, education: 20_000 }, 276_000, skipped).remaining).toBe(
+      276_000 - 146_000,
+    );
+  });
 });

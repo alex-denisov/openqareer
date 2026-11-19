@@ -1,12 +1,35 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateCountryFit } from '../../../../shared/countryFit';
-import { placesTitle, placeTaxes, workRight, cityName } from './relocationModel';
+import {
+  cityRange,
+  cityRight,
+  placesTitle,
+  placeTaxes,
+  workRight,
+  cityName,
+} from './relocationModel';
 
 describe('relocationModel', () => {
   it('counts countries in the title', () => {
     expect(placesTitle(1)).toBe('1 страна, куда можно уехать');
     expect(placesTitle(3)).toBe('3 страны, куда можно уехать');
     expect(placesTitle(5)).toBe('5 стран, куда можно уехать');
+  });
+
+  it('counts countries and Russian cities together when both are chosen', () => {
+    expect(placesTitle(3, 2)).toBe('5 мест, куда можно уехать: 3 страны и 2 города России');
+    expect(placesTitle(0, 1)).toBe('1 город России, куда можно уехать');
+    expect(placesTitle(1, 5)).toBe('6 мест, куда можно уехать: 1 страна и 5 городов России');
+  });
+
+  it('names the city range in thousands and the right to work without a visa', () => {
+    expect(cityRange(270_000, 370_000)).toBe('Вилка в городе: 270–370 тыс. ₽');
+    expect(cityRight()).toEqual({
+      tag: 'ok',
+      text: 'Право работать: есть · без визы',
+      mode: 'без визы',
+      scenarioId: 'domestic_market',
+    });
   });
 
   it('names the right to work and the way in from the country rules', () => {

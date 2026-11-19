@@ -5,17 +5,27 @@ import type { CountryPay, RelocationPlace } from './relocationApi';
 import type { ScenarioCountry } from './relocationCostsApi';
 import type { Family } from './relocationCostsModel';
 import { RelocationCosts } from './RelocationCosts';
-import { cityName, formatMoney, placeTaxes, vacanciesLabel, workRight } from './relocationModel';
+import type { CostKey } from './relocationCostsModel';
+import {
+  cityName,
+  cityRange,
+  cityRight,
+  formatMoney,
+  placeTaxes,
+  vacanciesLabel,
+  workRight,
+} from './relocationModel';
 
 type ReadyPay = Extract<CountryPay, { state: 'ready' }>;
 
 const dateLabel = (iso: string): string =>
   new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 
-function payTip(pay: ReadyPay): string {
+function payTip(place: RelocationPlace, pay: ReadyPay): string {
   const sources = pay.sources.length > 0 ? `, ${pay.sources.join(', ')}` : '';
   const rate = pay.rateDate ? ` Курс ЦБ на ${dateLabel(pay.rateDate)}.` : '';
-  return `Доход до налогов — середина вилок ${pay.sampleSize} вакансий страны${sources}, на ${dateLabel(pay.observedAt)}.${rate}`;
+  const where = place.kind === 'city' ? 'города' : 'страны';
+  return `Доход до налогов — середина вилок ${pay.sampleSize} вакансий ${where}${sources}, на ${dateLabel(pay.observedAt)}.${rate}`;
 }
 
 function Taxes({ place, pay }: { readonly place: RelocationPlace; readonly pay: ReadyPay }) {
@@ -29,7 +39,7 @@ function Taxes({ place, pay }: { readonly place: RelocationPlace; readonly pay: 
           <div className={line.minus ? 'rl-line is-minus' : 'rl-line'} key={line.label}>
             <dt>
               {line.label}
-              {line.minus ? null : <InfoTip label="Источник" text={payTip(pay)} />}
+              {line.minus ? null : <InfoTip label="Источник" text={payTip(place, pay)} />}
             </dt>
             <dd className="rl-amt num">
               {line.minus ? '−' : ''}
@@ -46,6 +56,8 @@ function Taxes({ place, pay }: { readonly place: RelocationPlace; readonly pay: 
   );
 }
 
+const rightOf = (place: RelocationPlace) => (place.fit ? workRight(place.fit) : cityRight());
+
 function netLine(place: RelocationPlace): string {
   if (place.pay.state === 'error') return 'Зарплаты не прочитались';
   if (place.pay.state === 'thin') return 'Зарплаты: мало данных';
@@ -60,6 +72,8 @@ export interface RowContext {
   readonly family: Family | null;
   readonly onWho: () => void;
   readonly onConsent: () => void;
+  readonly skipped: readonly CostKey[];
+  readonly onSkip: (section: CostKey, skip: boolean) => Promise<void>;
 }
 
 function Costs({
@@ -73,16 +87,16 @@ function Costs({
 }) {
   const taxes = placeTaxes(place.code, pay.median);
   if (!taxes) return null;
-  const city = pay.city ? cityName(pay.city) : place.name;
+  const city = place.kind === 'city' ? place.name : pay.city ? cityName(pay.city) : place.name;
   return (
     <RelocationCosts
       target={{
         countryCode: place.code as ScenarioCountry,
-        countryName: place.name,
+        countryName: place.kind === 'city' ? 'Россия' : place.name,
         city,
         currency: taxes.currency,
         grossMonthly: pay.median,
-        scenarioId: workRight(place.fit).scenarioId,
+        scenarioId: rightOf(place).scenarioId,
         family: context.family,
       }}
       net={taxes.net}
@@ -90,8 +104,17 @@ function Costs({
       questionnaire={context.questionnaire}
       onWho={context.onWho}
       onConsent={context.onConsent}
+      skipped={context.skipped}
+      onSkip={context.onSkip}
     />
   );
+}
+
+function subLine(place: RelocationPlace): string {
+  if (place.kind === 'city')
+    return place.pay.state === 'ready' ? cityRange(place.pay.low, place.pay.high) : '';
+  const city = place.pay.state === 'error' ? null : place.pay.city;
+  return [city ? cityName(city) : null, rightOf(place).mode].filter(Boolean).join(' · ');
 }
 
 export function RelocationRow({
@@ -103,18 +126,19 @@ export function RelocationRow({
   readonly open: boolean;
   readonly context: RowContext;
 }) {
-  const right = workRight(place.fit);
-  const city = place.pay.state === 'error' ? null : place.pay.city;
-  const sub = [city ? cityName(city) : null, right.mode].filter(Boolean).join(' · ');
+  const right = rightOf(place);
+  const sub = subLine(place);
   const vacancies = place.pay.state === 'error' ? null : place.pay.vacancies;
   const main = (
     <span className="rl-main">
       <span className="row-title">{place.name}</span>
       {sub ? <span className="row-sub">{sub}</span> : null}
       <span className="row-sub num">{netLine(place)}</span>
-      <span className="row-sub">
-        <span className={`tag ${right.tag}`}>{right.text}</span>
-      </span>
+      {place.kind === 'country' ? (
+        <span className="row-sub">
+          <span className={`tag ${right.tag}`}>{right.text}</span>
+        </span>
+      ) : null}
     </span>
   );
   const meta = vacancies ? <span className="row-meta num">{vacanciesLabel(vacancies)}</span> : null;

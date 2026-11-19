@@ -65,10 +65,19 @@ export interface CostsSummary {
   readonly startCash: number | null;
 }
 
-export function costsSummary(values: CostValues, net: number): CostsSummary {
-  const filled = (section: CostSection) => values[section.key] !== undefined;
+/** Остаток и старт; раздел «Не про меня» считается заполненным и в сумму не входит. */
+export function costsSummary(
+  values: CostValues,
+  net: number,
+  skipped: readonly CostKey[] = [],
+): CostsSummary {
+  const isSkipped = (section: CostSection) => skipped.includes(section.key);
+  const filled = (section: CostSection) => isSkipped(section) || values[section.key] !== undefined;
   const sum = (sections: readonly CostSection[]) =>
-    sections.reduce((total, section) => total + (values[section.key] ?? 0), 0);
+    sections.reduce(
+      (total, section) => total + (isSkipped(section) ? 0 : (values[section.key] ?? 0)),
+      0,
+    );
   const monthlySections = COST_SECTIONS.filter((section) => !section.once);
   const onceSections = COST_SECTIONS.filter((section) => section.once);
   const monthly = sum(monthlySections);

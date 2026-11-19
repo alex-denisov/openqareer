@@ -68,6 +68,7 @@ export interface CareerCalls {
   readonly scenarios: unknown[];
   readonly family: unknown[];
   readonly consents: unknown[];
+  readonly places: unknown[];
 }
 
 export interface CareerOptions {
@@ -86,6 +87,11 @@ export interface CareerOptions {
   readonly relocationCompanies?: number;
   readonly relocationProfile?: unknown;
   readonly relocationConsent?: boolean;
+  /** B672: сохранённый список мест; без него — страны из анкеты. */
+  readonly relocationPlaces?: readonly unknown[];
+  readonly relocationCities?: readonly unknown[];
+  /** Вилка города России по названию. */
+  readonly relocationCityPay?: Readonly<Record<string, unknown>>;
 }
 
 function campaign(roles: string[]) {
@@ -129,6 +135,7 @@ export async function openCareer(
     scenarios: [],
     family: [],
     consents: [],
+    places: [],
   };
   let roles = options.searchRoles ?? ['Руководитель разработки'];
   let profile: Record<string, unknown> = {
@@ -242,10 +249,31 @@ export async function openCareer(
     return route.fulfill({ json: { data: { goal } } });
   });
   await page.route(`${API}/candidate/career/relocation/pay**`, (route) => {
-    const code = new URL(route.request().url()).searchParams.get('country') ?? '';
+    const params = new URL(route.request().url()).searchParams;
+    const city = params.get('city');
+    if (city)
+      return route.fulfill({
+        json: { data: options.relocationCityPay?.[city] ?? { state: 'thin' } },
+      });
+    const code = params.get('country') ?? '';
     const pay = options.relocationPay?.[code] ?? { state: 'thin', vacancies: 0, city: null };
     return route.fulfill({ json: { data: pay } });
   });
+  let places = options.relocationPlaces;
+  await page.route(`${API}/candidate/career/relocation/places`, (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as { places: unknown[] };
+      calls.places.push(body.places);
+      places = body.places;
+    }
+    const data = places
+      ? { saved: true, places, updatedAt: '2026-11-19T09:00:00.000Z' }
+      : { saved: false, places: [], updatedAt: null };
+    return route.fulfill({ json: { data } });
+  });
+  await page.route(`${API}/candidate/career/relocation/cities`, (route) =>
+    route.fulfill({ json: { data: { cities: options.relocationCities ?? [] } } }),
+  );
   await page.route(`${API}/candidate/relocation-questionnaire`, (route) =>
     route.fulfill({
       json: {

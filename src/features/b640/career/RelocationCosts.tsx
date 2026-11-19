@@ -16,19 +16,26 @@ import { ConsentCheck, useConsentGate } from './RelocationWhoDialog';
 
 type Editing = { readonly kind: 'edit'; readonly key: CostKey } | { readonly kind: 'add' } | null;
 
-function useCosts(
-  target: CostsTarget,
-  scenario: SavedRelocationScenario | undefined,
-  questionnaire: RelocationQuestionnaireResponse | null,
-  onConsent: () => void,
-) {
+interface CostsProps {
+  readonly target: CostsTarget;
+  readonly net: number;
+  readonly scenario: SavedRelocationScenario | undefined;
+  readonly questionnaire: RelocationQuestionnaireResponse | null;
+  readonly onWho: () => void;
+  readonly onConsent: () => void;
+  readonly skipped: readonly CostKey[];
+  readonly onSkip: (section: CostKey, skip: boolean) => Promise<void>;
+}
+
+function useCosts(props: CostsProps) {
+  const { target, scenario, questionnaire, onConsent } = props;
   const [saved, setSaved] = useState(scenario);
   const [values, setValues] = useState<CostValues>(() => costValues(scenario));
   const [editing, setEditing] = useState<Editing>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const consent = useConsentGate(questionnaire);
-  const save = async (key: CostKey, amount: number) => {
+  const run = async (work: () => Promise<void>) => {
     setBusy(true);
     setFailed(false);
     try {
@@ -36,9 +43,7 @@ function useCosts(
         await consent.ensure();
         onConsent();
       }
-      const next = { ...values, [key]: amount };
-      setSaved(await saveCosts(target, next, saved));
-      setValues(next);
+      await work();
       setEditing(null);
     } catch {
       setFailed(true);
@@ -46,23 +51,33 @@ function useCosts(
       setBusy(false);
     }
   };
+  const save = (key: CostKey, amount: number) =>
+    run(async () => {
+      const next = { ...values, [key]: amount };
+      setSaved(await saveCosts(target, next, saved));
+      setValues(next);
+      if (props.skipped.includes(key)) await props.onSkip(key, false);
+    });
+  const skip = (key: CostKey) => run(() => props.onSkip(key, true));
   const open = (next: Editing) => {
     setEditing(next);
     setFailed(false);
   };
-  return { values, editing, busy, failed, consent, save, open };
+  return { values, editing, busy, failed, consent, save, skip, open, skipped: props.skipped };
 }
 
 function Summary({
   values,
   net,
   currency,
+  skipped,
 }: {
   readonly values: CostValues;
   readonly net: number;
   readonly currency: string;
+  readonly skipped: readonly CostKey[];
 }) {
-  const summary = costsSummary(values, net);
+  const summary = costsSummary(values, net, skipped);
   if (summary.remaining === null) return null;
   return (
     <dl className="rl-calc" aria-label="Итог трат">
@@ -84,17 +99,24 @@ type Costs = ReturnType<typeof useCosts>;
 
 function CostRow(props: {
   readonly section: (typeof COST_SECTIONS)[number];
-  readonly amount: number;
+  /** `null` — раздел «Не про меня». */
+  readonly amount: number | null;
   readonly currency: string;
   readonly onEdit: () => void;
 }) {
+  const once = props.section.once ? '' : ' в месяц';
   return (
     <li className="rl-cost">
       <span className="rl-cost-t">{props.section.label}</span>
       <span className="rl-cost-a">
-        <button className="rl-cost-v num" type="button" onClick={props.onEdit}>
-          {formatMoney(props.amount, props.currency)}
-          {props.section.once ? '' : ' в месяц'}
+        <button
+          className={props.amount === null ? 'row-act' : 'rl-cost-v num'}
+          type="button"
+          onClick={props.onEdit}
+        >
+          {props.amount === null
+            ? 'Не про меня'
+            : `${formatMoney(props.amount, props.currency)}${once}`}
         </button>
       </span>
     </li>
@@ -116,7 +138,10 @@ function AddRow({ missing, onAdd }: { readonly missing: number; readonly onAdd: 
 }
 
 function CostList({ costs, target }: { readonly costs: Costs; readonly target: CostsTarget }) {
-  const missing = COST_SECTIONS.filter((section) => costs.values[section.key] === undefined);
+  const isSkipped = (key: CostKey) => costs.skipped.includes(key);
+  const missing = COST_SECTIONS.filter(
+    (section) => costs.values[section.key] === undefined && !isSkipped(section.key),
+  );
   const edit = (sections: typeof COST_SECTIONS, initial?: number) => (
     <RelocationCostEdit
       sections={sections}
@@ -126,6 +151,7 @@ function CostList({ costs, target }: { readonly costs: Costs; readonly target: C
       failed={costs.failed}
       blocked={!costs.consent.accepted}
       onSave={(key, amount) => void costs.save(key, amount)}
+      onSkip={(key) => void costs.skip(key)}
       onCancel={() => costs.open(null)}
     />
   );
@@ -133,11 +159,12 @@ function CostList({ costs, target }: { readonly costs: Costs; readonly target: C
   return (
     <ul className="rl-costs" aria-label={`Траты: ${target.countryName}`}>
       {COST_SECTIONS.map((section) => {
-        const amount = costs.values[section.key];
+        const skipped = isSkipped(section.key);
+        const amount = skipped ? null : costs.values[section.key];
         if (amount === undefined) return null;
         const editing = costs.editing?.kind === 'edit' && costs.editing.key === section.key;
         return editing ? (
-          <Fragment key={section.key}>{edit([section], amount)}</Fragment>
+          <Fragment key={section.key}>{edit([section], amount ?? undefined)}</Fragment>
         ) : (
           <CostRow
             key={section.key}
@@ -157,16 +184,9 @@ function CostList({ costs, target }: { readonly costs: Costs; readonly target: C
 }
 
 /** «Кто едет» и траты страны по разделам; итог — когда заполнены все разделы. */
-export function RelocationCosts(props: {
-  readonly target: CostsTarget;
-  readonly net: number;
-  readonly scenario: SavedRelocationScenario | undefined;
-  readonly questionnaire: RelocationQuestionnaireResponse | null;
-  readonly onWho: () => void;
-  readonly onConsent: () => void;
-}) {
+export function RelocationCosts(props: CostsProps) {
   const { target } = props;
-  const costs = useCosts(target, props.scenario, props.questionnaire, props.onConsent);
+  const costs = useCosts(props);
   return (
     <>
       <p className="rl-who">
@@ -183,7 +203,12 @@ export function RelocationCosts(props: {
           onChange={costs.consent.setAccepted}
         />
       ) : null}
-      <Summary values={costs.values} net={props.net} currency={target.currency} />
+      <Summary
+        values={costs.values}
+        net={props.net}
+        currency={target.currency}
+        skipped={props.skipped}
+      />
     </>
   );
 }
