@@ -89,9 +89,11 @@ function withLacks(
 }
 
 /** Строка «Проверить N навыков» в «Вакансиях» (s07): тот же счёт, что у полосы во вкладке «Роли». */
-export async function readSkillGap(searchTitles: readonly string[]): Promise<number> {
+export async function readSkillGap(
+  searchTitles: readonly string[],
+): Promise<{ readonly gap: number; readonly role: string | null }> {
   const [ready, demand] = await Promise.all([readyRole(searchTitles), readDemand()]);
-  return ready ? gapOf(demand, ready) : 0;
+  return ready ? { gap: gapOf(demand, ready), role: ready.title } : { gap: 0, role: null };
 }
 
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
