@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
+import { LADOGA_ID, mockLadoga, type LadogaOptions } from './vacancyCardFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 const CARD_PATH = '/app/vacancies/cluster-0';
@@ -192,5 +193,66 @@ test.describe('B654: карточка вакансии нового кабине
         });
       }
     }
+  });
+});
+
+async function openLadoga(page: Page, options: LadogaOptions = {}): Promise<void> {
+  await mockSignedInCabinet(page, { cabinetB640: true, firstVacancyFitView: FIT_VIEW });
+  await page.route('**/api/v1/candidate/b640/application-quota', (route) =>
+    route.fulfill({
+      json: { data: { plan: 'free', limit: 10, used: 7, remaining: 3, renewsAt: null }, meta: {} },
+    }),
+  );
+  await page.route('**/api/v1/candidate/vacancies/*/detail', (route) =>
+    route.fulfill({ json: { data: DETAIL } }),
+  );
+  await mockLadoga(page, options);
+  await page.goto(`/app/vacancies/${LADOGA_ID}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-b640-node="v04"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.v4-head .lead-title')).toHaveText('Руководитель разработки');
+}
+
+test.describe('B645: карточка вакансии — способы отклика, компания, знакомые', () => {
+  test('все модули на месте и в порядке макета', async ({ page }) => {
+    await openLadoga(page);
+    const ways = page.locator('.ha-item');
+    await expect(ways).toHaveCount(3);
+    await expect(ways.nth(0)).toContainText('Через знакомого — Роман Ефимов');
+    await expect(ways.nth(0)).toContainText('Рекомендуем');
+    await expect(ways.nth(0)).toContainText('1-й круг · ваша связь в LinkedIn');
+    await expect(ways.nth(0).getByRole('button', { name: 'Написать Роману' })).toBeVisible();
+    await expect(ways.nth(1)).toContainText('hh.ru — письмо и ваше резюме');
+    await expect(ways.nth(2)).toContainText('Сайт компании — анкета из 3 вопросов');
+    const about = page.locator('.v4-about-co');
+    await expect(about).toContainText('Банки');
+    await expect(about).toContainText('Алина Громова · технический рекрутер');
+    await expect(about.getByRole('link', { name: 'Откликнуться напрямую' })).toBeVisible();
+    await expect(about.locator('.v4-co-more')).toContainText('Ещё 2 вакансии · 3 знакомых');
+    await expect(page.locator('.v4-money')).toContainText('Ваши ожидания внутри вилки');
+    const order = [
+      '.v4-money',
+      '.v4-about-co',
+      '.v4-fold:has-text("Знакомые в компании · 3")',
+      '.v4-fold:has-text("Письмо и резюме")',
+    ];
+    const tops: number[] = [];
+    for (const selector of order) {
+      const box = await page.locator(selector).first().boundingBox();
+      tops.push(box?.y ?? -1);
+    }
+    expect(tops.every((top, index) => top >= 0 && (index === 0 || top > tops[index - 1]!))).toBe(
+      true,
+    );
+  });
+
+  test('знакомых нет: «Как откликнуться» остаётся с hh.ru и сайтом', async ({ page }) => {
+    await openLadoga(page, { noPeople: true });
+    const ways = page.locator('.ha-item');
+    await expect(ways).toHaveCount(2);
+    await expect(ways.nth(0)).toContainText('hh.ru');
+    await expect(ways.nth(1)).toContainText('Сайт компании');
+    await expect(page.getByText('Через знакомого')).toHaveCount(0);
+    await expect(page.locator('.v4-fold-s', { hasText: 'Знакомые в компании' })).toHaveCount(0);
+    await expect(page.locator('.v4-about-co')).toContainText('Алина Громова');
   });
 });
