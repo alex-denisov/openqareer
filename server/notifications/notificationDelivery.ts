@@ -57,6 +57,7 @@ export class NotificationDeliveryProcessor {
         delivery.candidateId,
         delivery.channel,
         delivery.notification.kind,
+        delivery.notificationId,
       )
     ) {
       this.skip(delivery, now, result);

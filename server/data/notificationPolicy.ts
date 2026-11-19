@@ -37,6 +37,8 @@ export interface NotificationEventInput {
   readonly sourceType: string;
   readonly sourceId: string;
   readonly createdAt?: string;
+  /** B671: ответ работодателя — приглашение или оффер; доставка идёт по ключу «Приглашения», если он сохранён. */
+  readonly invitation?: boolean;
 }
 
 export interface NotificationItem {

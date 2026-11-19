@@ -201,6 +201,28 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(count).toHaveText(String(before));
   });
 
+  test('B728: число у периода «Даты» = число списка после выбора', async ({ page }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies');
+    await page.getByRole('button', { name: 'Дата', exact: true }).click();
+    const counts = page.locator('.vt-pop .vt-opt .vt-opt-n');
+    // Числа появляются, когда подборка дочитана, — у всех периодов сразу и больше не меняются.
+    await expect(counts).toHaveCount(4);
+    const numbers = (await counts.allInnerTexts()).map((text) => Number.parseInt(text, 10));
+    const index = numbers.findIndex((value) => value > 0);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const expected = numbers[index]!;
+    await page
+      .locator('.vt-pop .vt-opt')
+      .nth(index + 1)
+      .getByRole('radio')
+      .check();
+    const show = page.locator('.vt-pop-foot .btn.is-primary');
+    await expect(show).toHaveText(new RegExp(`^Показать ${expected} `));
+    await show.click();
+    await expect(page.locator('.vl-count .num')).toHaveText(String(expected));
+  });
+
   test('вкладка «Роли» показывает роли с числом вакансий', async ({ page }, testInfo) => {
     test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
     await openCabinet(page, '/app/vacancies');

@@ -101,6 +101,7 @@ describe('модель «Аккаунта»', () => {
 
   it('строки настроек: все события сервера, подписи простым языком', () => {
     expect(NOTIFICATION_ROWS.map((row) => row.key)).toEqual([
+      'ev-invitation',
       'ev-reply',
       'ev-reminder',
       'ev-approval',
@@ -109,6 +110,7 @@ describe('модель «Аккаунта»', () => {
       'ev-weekly-digest',
     ]);
     expect(NOTIFICATION_ROWS.map((row) => row.label)).toEqual([
+      'Приглашения',
       'Ответы',
       'Напоминания',
       'Письмо на одобрение',
