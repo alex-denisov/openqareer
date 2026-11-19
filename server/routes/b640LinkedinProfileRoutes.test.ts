@@ -95,6 +95,9 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     const again = await post(`${BASE}/done`, { keys: ['headline'] }, 'flagged.test');
     expect(again.json().data.done.headline).toBe(at);
     expect((sectionOf((await h.get(BASE, 'flagged.test')).json(), 'headline').offer as { doneAt: string }).doneAt).toBe(at);
+    // Места работы нет в импорте — отметка не пишется.
+    expect((await post(`${BASE}/done`, { keys: ['experience:ghost', 'about'] }, 'flagged.test')).json().data.done)
+      .toEqual({ about: expect.any(String) });
     for (const payload of [{}, { keys: [] }, { keys: ['nope'] }, { keys: ['about'], at: 'x' }]) {
       expect((await post(`${BASE}/done`, payload, 'flagged.test')).statusCode).toBe(400);
     }
@@ -125,6 +128,19 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     expect(sectionOf((await h.get(BASE, 'flagged.test')).json(), 'skills').offer).toMatchObject({ text: 'SQL · Python', variantsLeft: 3 });
     expect((await post(`${BASE}/offers/education/variant`, {}, 'flagged.test')).statusCode).toBe(400);
     expect((await post(`${BASE}/offers/experience:nope/variant`, {}, 'flagged.test')).statusCode).toBe(404);
+  });
+
+  it('два запроса варианта сразу — второй 409, вариант один; падение после списания не съедает квоту', async () => {
+    let finish: (value: { text: string; factIds: string[] }) => void = () => undefined;
+    const linkedinVariant = vi.fn(() => new Promise<{ text: string; factIds: string[] }>((resolve) => { finish = resolve; }));
+    const { h, post } = await setup({ rewrite: async () => null, linkedinVariant });
+    const first = post(`${BASE}/offers/skills/variant`, {}, 'flagged.test');
+    await vi.waitFor(() => expect(linkedinVariant).toHaveBeenCalledTimes(1));
+    const second = await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test');
+    expect([second.statusCode, second.json().error.code]).toEqual([409, 'variant_in_progress']);
+    finish({ text: 'Python · SQL', factIds: [] });
+    expect((await first).statusCode).toBe(200);
+    expect(sectionOf((await h.get(BASE, 'flagged.test')).json(), 'skills').offer).toMatchObject({ variantsLeft: 2 });
   });
 
   it('данные кандидата уходят вместе с ним', async () => {

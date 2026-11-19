@@ -45,14 +45,18 @@ export class LinkedinSectionRepository {
     return variants;
   }
 
-  /** Новый вариант становится предложением; прежняя отметка «Выполнено» к нему не относится. */
-  addVariant(candidateId: string, key: string, text: string): void {
-    const position = (this.getVariants(candidateId).get(key)?.length ?? 0) + 1;
-    this.database
-      .prepare('INSERT INTO candidate_linkedin_offer_variants (candidate_id, offer_key, position, text, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(candidateId, key, position, text, this.now());
+  /**
+   * Новый вариант становится предложением; прежняя отметка «Выполнено» к нему не относится.
+   * Потолок проверяется в самой вставке: `false` — вариантов уже `max`.
+   */
+  addVariant(candidateId: string, key: string, text: string, max: number): boolean {
+    const inserted = this.database.prepare(`INSERT INTO candidate_linkedin_offer_variants (candidate_id, offer_key, position, text, created_at)
+      SELECT ?, ?, COUNT(*) + 1, ?, ? FROM candidate_linkedin_offer_variants WHERE candidate_id = ? AND offer_key = ?
+      HAVING COUNT(*) < ?`).run(candidateId, key, text, this.now(), candidateId, key, max);
+    if (Number(inserted.changes) === 0) return false;
     this.database
       .prepare('UPDATE candidate_linkedin_section_events SET pasted_at = NULL WHERE candidate_id = ? AND section = ?')
       .run(candidateId, key);
+    return true;
   }
 }

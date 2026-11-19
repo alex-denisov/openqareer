@@ -27,6 +27,7 @@ export const LINKEDIN_VARIANT_QUOTA: QuotaKey = 'applications';
 const offerKey = z.string().regex(LINKEDIN_OFFER_KEY);
 const keySchema = z.object({ key: offerKey });
 const doneSchema = z.object({ keys: z.array(offerKey).min(1).max(60) }).strict();
+const LIMIT_TEXT = 'Других вариантов больше не будет.';
 const ok = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
 
 function candidateOf(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply): string | null {
@@ -40,7 +41,14 @@ function candidateOf(deps: RouteDeps, request: FastifyRequest, reply: FastifyRep
 interface Profile {
   readonly input: SuggestionInput;
   readonly suggestions: SectionSuggestions;
+  readonly currentAbout?: string;
   readonly view: LinkedinProfileView;
+}
+
+/** Ключи, которые у кандидата вообще бывают: разделы с предложениями и места работы из импорта. */
+function knownKeys(deps: RouteDeps, candidateId: string): Set<string> {
+  const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft;
+  return new Set(['headline', 'about', 'skills', ...(draft?.experience ?? []).map((place) => `experience:${place.id}`)]);
 }
 
 async function loadProfile(deps: RouteDeps, repo: LinkedinSectionRepository, candidateId: string): Promise<Profile> {
@@ -55,7 +63,8 @@ async function loadProfile(deps: RouteDeps, repo: LinkedinSectionRepository, can
     buildSectionSuggestions(input), input, current.lines.about ?? undefined, deps.experienceFactRewriter, LINKEDIN_REWRITE_BUDGET_MS,
   );
   const marks: OfferMarks = { done: repo.getDone(candidateId), variants: repo.getVariants(candidateId) };
-  return { input, suggestions, view: { kind: 'ready', sections: profileSections(current, suggestions, marks) } };
+  const view: LinkedinProfileView = { kind: 'ready', sections: profileSections(current, suggestions, marks) };
+  return { input, suggestions, currentAbout: current.lines.about ?? undefined, view };
 }
 
 function registerView(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
@@ -68,7 +77,10 @@ function registerView(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSecti
     if (!candidateId) return reply;
     const body = doneSchema.safeParse(request.body);
     if (!body.success) return sendError(reply, request, 400, 'invalid_offer', 'Не те предложения для отметки.', false);
-    return ok(request, { done: Object.fromEntries(repo.markDone(candidateId, body.data.keys)) });
+    // Чужие ключи не пишутся: отмечается только то, что у кандидата есть.
+    const known = knownKeys(deps, candidateId);
+    const keys = body.data.keys.filter((key) => known.has(key));
+    return ok(request, { done: Object.fromEntries(repo.markDone(candidateId, keys)) });
   });
 }
 
@@ -77,17 +89,39 @@ async function newVariant(
   repo: LinkedinSectionRepository,
   candidateId: string,
   key: string,
-): Promise<{ readonly offer: LinkedinOffer } | { readonly error: 'missing' | 'unavailable' }> {
+): Promise<{ readonly offer: LinkedinOffer } | { readonly error: 'missing' | 'unavailable' | 'limit' }> {
   const profile = await loadProfile(deps, repo, candidateId);
   if (profile.view.kind !== 'ready') return { error: 'missing' };
   const marks: OfferMarks = { done: repo.getDone(candidateId), variants: repo.getVariants(candidateId) };
-  const variantRequest = linkedinVariantRequest(key, profile.input, shownTexts(key, profile.suggestions, marks));
+  const avoid = shownTexts(key, profile.suggestions, marks);
+  const variantRequest = linkedinVariantRequest(key, profile.input, avoid, profile.currentAbout);
   if (!variantRequest) return { error: 'missing' };
-  const output = await deps.experienceFactRewriter?.linkedinVariant?.(variantRequest).catch(() => null);
+  const writer = deps.experienceFactRewriter;
+  const output = writer?.linkedinVariant ? await writer.linkedinVariant(variantRequest).catch(() => null) : null;
   const text = output ? checkLinkedinVariant(variantRequest, output) : null;
   if (!text) return { error: 'unavailable' };
-  repo.addVariant(candidateId, key, text);
+  if (!repo.addVariant(candidateId, key, text, LINKEDIN_VARIANTS_MAX)) return { error: 'limit' };
   return { offer: offerOf(key, null, { done: new Map(), variants: repo.getVariants(candidateId) })! };
+}
+
+/** Один вариант за раз на ключ кандидата: иначе два запроса делят одну единицу квоты. */
+const inFlight = new Set<string>();
+
+async function chargedVariant(
+  deps: RouteDeps,
+  repo: LinkedinSectionRepository,
+  candidateId: string,
+  key: string,
+  unitKey: string,
+): ReturnType<typeof newVariant> {
+  try {
+    const result = await newVariant(deps, repo, candidateId, key);
+    if (!('offer' in result)) releaseTariffQuota(deps, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey);
+    return result;
+  } catch (error) {
+    releaseTariffQuota(deps, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey);
+    throw error;
+  }
 }
 
 function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
@@ -97,17 +131,24 @@ function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSe
     const params = keySchema.safeParse(request.params);
     if (!params.success) return sendError(reply, request, 400, 'invalid_offer', 'Нет такого предложения.', false);
     const { key } = params.data;
-    const used = repo.getVariants(candidateId).get(key)?.length ?? 0;
-    if (used >= LINKEDIN_VARIANTS_MAX) {
-      return sendError(reply, request, 409, 'variant_limit_reached', 'Других вариантов больше не будет.', false);
+    const lock = `${candidateId}:${key}`;
+    if (inFlight.has(lock)) {
+      return sendError(reply, request, 409, 'variant_in_progress', 'Другой вариант уже готовится.', true);
     }
+    const used = repo.getVariants(candidateId).get(key)?.length ?? 0;
+    if (used >= LINKEDIN_VARIANTS_MAX) return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);
     const unitKey = `linkedin-variant:${key}:${used + 1}`;
     if (!requireTariffQuota(deps, request, reply, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey)) return reply;
-    const result = await newVariant(deps, repo, candidateId, key);
-    if ('offer' in result) return ok(request, result.offer);
-    releaseTariffQuota(deps, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey);
-    if (result.error === 'missing') return sendError(reply, request, 404, 'offer_not_found', 'Нет такого предложения.', false);
-    return sendError(reply, request, 503, 'variant_unavailable', 'Не получилось предложить другой вариант. Попробуйте ещё раз.', true);
+    inFlight.add(lock);
+    try {
+      const result = await chargedVariant(deps, repo, candidateId, key, unitKey);
+      if ('offer' in result) return ok(request, result.offer);
+      if (result.error === 'missing') return sendError(reply, request, 404, 'offer_not_found', 'Нет такого предложения.', false);
+      if (result.error === 'limit') return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);
+      return sendError(reply, request, 503, 'variant_unavailable', 'Не получилось предложить другой вариант. Попробуйте ещё раз.', true);
+    } finally {
+      inFlight.delete(lock);
+    }
   });
 }
 

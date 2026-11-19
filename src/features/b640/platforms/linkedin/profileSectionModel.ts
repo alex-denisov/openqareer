@@ -25,6 +25,8 @@ export function pendingKeys(sections: readonly LinkedinSectionView[]): string[] 
 /** «Изменить 4 раздела из 7»: раздел считается, пока в нём есть невыполненное предложение. */
 export function changeTitle(sections: readonly LinkedinSectionView[]): string {
   const pending = sections.filter((section) => sectionOffers(section).some((offer) => !offer.doneAt)).length;
+  // Предложений нет вовсе (модель не ответила) — это не «всё выполнено».
+  if (!sections.some((section) => sectionOffers(section).length > 0)) return 'Предложений пока нет';
   if (pending === 0) return 'Все предложения выполнены';
   return `Изменить ${pluralRu(pending, ['раздел', 'раздела', 'разделов'])} из ${sections.length}`;
 }

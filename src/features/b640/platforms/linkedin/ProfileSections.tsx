@@ -13,6 +13,7 @@ const PLACES_VISIBLE = 2;
 interface OfferHandlers {
   readonly onDone: (key: string) => Promise<void>;
   readonly onVariant: (offer: LinkedinOffer) => void;
+  readonly locked: boolean;
 }
 
 function Place({ place, handlers }: { readonly place: LinkedinPlace; readonly handlers: OfferHandlers }) {
@@ -82,6 +83,7 @@ function useProfile(initial: readonly LinkedinSectionView[]) {
   const handlers: OfferHandlers = {
     onDone: (key) => done([key]),
     onVariant: (offer) => setSections((previous) => withOffer(previous, offer)),
+    locked: allBusy,
   };
   async function doneAll() {
     setAllBusy(true);

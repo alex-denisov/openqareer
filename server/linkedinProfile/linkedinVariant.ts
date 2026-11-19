@@ -49,8 +49,10 @@ export function linkedinVariantRequest(
   key: string,
   input: SuggestionInput,
   avoid: readonly string[],
+  currentAbout?: string,
 ): LinkedinVariantRequest | null {
-  const base = linkedinRewriteRequest(input, undefined);
+  // Язык — как у первого текста: по нынешнему «О себе» из импорта, иначе по фактам.
+  const base = linkedinRewriteRequest(input, currentAbout);
   const language = base?.language ?? textLanguage(avoid.join(' ')) ?? 'ru';
   const common = { language, targetRole: input.draft?.targetRole?.trim() ?? '', avoid };
   if (key === 'headline') {

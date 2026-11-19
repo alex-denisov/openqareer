@@ -125,6 +125,13 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('.li-err')!.textContent).toContain('Квота «Отклики» на тарифе кончилась');
   });
 
+  it('предложений нет вовсе — не «всё выполнено» и без «Отметить все»', async () => {
+    const bare = sections().map((section) => ({ ...section, offer: null, ...(section.places ? { places: [] } : {}) }));
+    const root = (await open({ kind: 'ready', sections: bare })).container;
+    expect(title(root)).toBe('Предложений пока нет');
+    expect(root.querySelector('.li-all')).toBeNull();
+  });
+
   it('вариантов не осталось — «Предложить заново» недоступна', async () => {
     const root = (await open({ kind: 'ready', sections: sections({ skills: { offer: offer('skills', 'Go', { variantsLeft: 0 }) } }) })).container;
     expect(root.querySelector<HTMLButtonElement>('[aria-label="Другой вариант: Навыки · осталось 0"]')!.disabled).toBe(true);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { LinkedinOffer } from '../../../../../shared/b640LinkedinProfile';
 import { CoachApiError } from '../../../coach/apiClient';
 import { Icon } from '../../kit';
@@ -14,6 +14,8 @@ interface SectionOfferProps {
   readonly label: string;
   readonly onDone: (key: string) => Promise<void>;
   readonly onVariant: (offer: LinkedinOffer) => void;
+  /** Идёт «Отметить все выполненными»: варианты на это время не просятся. */
+  readonly locked?: boolean;
 }
 
 const VARIANT_FAILED = 'Не получилось предложить другой вариант';
@@ -43,22 +45,40 @@ function useOfferActions({ offer, onDone, onVariant }: SectionOfferProps) {
   return { busy, failed, run };
 }
 
-function DoneControl({ offer, textId, busy, onDone }: {
+function DoneControl({ offer, label, textId, busy, onDone }: {
   readonly offer: LinkedinOffer;
+  readonly label: string;
   readonly textId: string;
   readonly busy: boolean;
   readonly onDone: () => void;
 }) {
+  const status = useRef<HTMLSpanElement>(null);
+  const pressed = useRef(false);
+  // Фокус с исчезнувшей кнопки — на отметку, а не в начало страницы.
+  useEffect(() => {
+    if (offer.doneAt && pressed.current) status.current?.focus();
+  }, [offer.doneAt]);
   if (offer.doneAt) {
     return (
-      <span className="li-done" role="status">
+      <span className="li-done" role="status" tabIndex={-1} ref={status}>
         <Icon name="check" />
         Выполнено
       </span>
     );
   }
   return (
-    <button className="btn is-sm" type="button" aria-describedby={textId} aria-busy={busy || undefined} disabled={busy} onClick={onDone}>
+    <button
+      className="btn is-sm"
+      type="button"
+      aria-label={`Выполнено: ${label}`}
+      aria-describedby={textId}
+      aria-busy={busy || undefined}
+      disabled={busy}
+      onClick={() => {
+        pressed.current = true;
+        onDone();
+      }}
+    >
       <Icon name="check" />
       Выполнено
     </button>
@@ -76,7 +96,7 @@ export function SectionOffer(props: SectionOfferProps) {
   return (
     <>
       <div className="li-offer">
-        <p className="li-new" id={textId}>
+        <p className="li-new" id={textId} aria-live="polite">
           {offer.text}
         </p>
         <div className="li-offer-a">
@@ -86,12 +106,12 @@ export function SectionOffer(props: SectionOfferProps) {
             type="button"
             aria-label={`Другой вариант: ${label} · осталось ${offer.variantsLeft}`}
             aria-busy={busy === 'variant' || undefined}
-            disabled={busy !== null || offer.variantsLeft === 0}
+            disabled={busy !== null || props.locked === true || offer.variantsLeft === 0}
             onClick={() => void run('variant')}
           >
             <Icon name="refresh" />
           </button>
-          <DoneControl offer={offer} textId={textId} busy={busy === 'done'} onDone={() => void run('done')} />
+          <DoneControl offer={offer} label={label} textId={textId} busy={busy === 'done'} onDone={() => void run('done')} />
         </div>
       </div>
       {failed ? <LiError text={failed.text} onRetry={() => void run(failed.kind)} /> : null}
