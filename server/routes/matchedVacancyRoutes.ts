@@ -184,7 +184,7 @@ const fitFailureLog = (request: FastifyRequest) => (rows: number) => (error: unk
   );
 
 /** B580: on Free a page past the first 300 rows is counted card by card, when opened. */
-function startShownPageFit(
+export function startShownPageFit(
   deps: RouteDeps,
   candidateId: string,
   data: readonly MatchedVacancyItem[],

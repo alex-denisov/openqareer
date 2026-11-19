@@ -101,6 +101,7 @@ import { readCatalogSalaryStats } from './catalogSalaryStatsStore';
 import { readCatalogChipCounts, readCatalogChipKeys } from './catalogChipStore';
 import type { ChipCounts } from './catalogChips';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
+import { mapYielding } from './mapYielding';
 
 const CATALOG_TOTALS_SLICE_ROWS = 20_000;
 const CATALOG_ACTIVE_CLUSTERS_SQL = `SELECT coalesce(sum(json_extract(cluster_json, '$.status') = 'active'), 0) AS active FROM vacancy_clusters`;
@@ -889,12 +890,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         semanticLimit,
       );
       const rows = await this.readMatchRows(query, false);
-      const results: UnifiedVacancy[] = [];
-      for (const row of rows) {
-        const item = parseVacancy(row.payload);
-        if (item) results.push(item);
-      }
-      return results;
+      // B702: thousands of payloads parsed in one piece held the loop seconds on a cold read.
+      const parsed = await mapYielding(rows, (row) => parseVacancy(row.payload));
+      return parsed.filter((item): item is UnifiedVacancy => Boolean(item));
     }
 
     const terms = extractMatchTerms(candidate);
@@ -904,8 +902,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       if (results.length >= limit) break;
       const query = this.matchQuery(phase, seenIds, window, preferRemote, limit - results.length);
       const rows = await this.readMatchRows(query, phase.length > 0);
-      for (const row of rows) {
-        const item = parseVacancy(row.payload);
+      const parsed = await mapYielding(rows, (row) => parseVacancy(row.payload));
+      for (const item of parsed) {
         if (item && !seenIds.has(item.id)) {
           results.push(item);
           seenIds.add(item.id);
