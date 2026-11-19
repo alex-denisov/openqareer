@@ -210,7 +210,7 @@ export function OffersScreen() {
   const [saved] = useState(takeSavedFlash);
   useScreenChrome({ rootData: { mtight: '1' } });
   return (
-    <div className="page two" data-b640-node="o06" data-b640-section="responses">
+    <div className="page two" data-b640-node="o06" data-b640-section="offers">
       {saved ? (
         <div className="col-wide">
           <StatusLine state="ok" text="Условия сохранены" />

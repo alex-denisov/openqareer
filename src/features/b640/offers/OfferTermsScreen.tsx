@@ -191,7 +191,7 @@ export function OfferTermsScreen({ offerId }: { readonly offerId: string }) {
   return (
     <>
       <StepTabs offerId={offerId} />
-      <div className="page two" data-b640-node="o06a" data-b640-section="responses">
+      <div className="page two" data-b640-node="o06a" data-b640-section="offers">
         {card ? <ContextHead card={card} /> : null}
         <section className="lead col-wide of-paste" aria-labelledby="op-t">
           <h2 className="lead-title is-long" id="op-t">
