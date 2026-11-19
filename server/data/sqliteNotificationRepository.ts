@@ -23,6 +23,7 @@ const RETENTION_MS = NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1_000;
 interface NotificationRow {
   id: string;
   event_kind: NotificationEventKind;
+  source_type?: string;
   source_id: string;
   created_at: string;
   expires_at: string;
@@ -146,7 +147,7 @@ export class SqliteNotificationRepository {
     const cursor = options.cursor ? decodeCursor(options.cursor) : null;
     const rows = this.database
       .prepare(
-        `SELECT n.id, n.event_kind, n.source_id, n.created_at, n.expires_at, n.read_at
+        `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notifications n
          WHERE n.candidate_id = ? AND n.expires_at > ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
@@ -217,6 +218,28 @@ export class SqliteNotificationRepository {
       .prepare('DELETE FROM candidate_notifications WHERE candidate_id = ? AND id = ?')
       .run(candidateId, row.id);
     return true;
+  }
+
+  /** B690: есть ли непрочитанное уведомление этого источника — повтор не нужен. */
+  hasUnreadFromSource(candidateId: string, sourceType: string, now = new Date().toISOString()): boolean {
+    return this.database
+      .prepare(
+        `SELECT 1 FROM candidate_notifications
+         WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL AND expires_at > ? LIMIT 1`,
+      )
+      .get(candidateId, sourceType, now) !== undefined;
+  }
+
+  /** B690: причина ушла — непрочитанные уведомления источника снимаются вместе с их доставками. */
+  withdrawUnreadFromSource(candidateId: string, sourceType: string): number {
+    const unread = `SELECT id FROM candidate_notifications WHERE candidate_id = ? AND source_type = ? AND read_at IS NULL`;
+    this.database
+      .prepare(`DELETE FROM candidate_notification_deliveries WHERE notification_id IN (${unread})`)
+      .run(candidateId, sourceType);
+    const result = this.database
+      .prepare(`DELETE FROM candidate_notifications WHERE id IN (${unread})`)
+      .run(candidateId, sourceType);
+    return Number(result.changes);
   }
 
   markRead(candidateId: string, notificationId: string, now = new Date().toISOString()): boolean {
@@ -402,7 +425,7 @@ export class SqliteNotificationRepository {
       ).run(now, now, staleAt);
       const rows = this.database.prepare(
         `SELECT d.notification_id, d.candidate_id, d.channel, d.attempts,
-                n.id, n.event_kind, n.source_id, n.created_at, n.expires_at, n.read_at
+                n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notification_deliveries d
          JOIN candidate_notifications n ON n.id = d.notification_id AND n.candidate_id = d.candidate_id
          WHERE d.status = 'pending' AND d.next_attempt_at <= ? AND n.expires_at > ?
@@ -579,7 +602,7 @@ export class SqliteNotificationRepository {
   private readByIdempotencyKey(candidateId: string, key: string): NotificationRow | undefined {
     return this.database
       .prepare(
-        `SELECT id, event_kind, source_id, created_at, expires_at, read_at
+        `SELECT id, event_kind, source_type, source_id, created_at, expires_at, read_at
          FROM candidate_notifications WHERE candidate_id = ? AND idempotency_key = ?`,
       )
       .get(candidateId, key) as NotificationRow | undefined;
@@ -592,6 +615,7 @@ export class SqliteNotificationRepository {
       createdAt: row.created_at,
       readAt: row.read_at,
       sourceId: row.source_id,
+      sourceType: row.source_type,
     });
   }
 }
