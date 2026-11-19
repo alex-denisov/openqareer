@@ -114,6 +114,20 @@ describe('B728: число «Даты» — только по дочитанно
     expect(counts(false)).toEqual([undefined, undefined, undefined, undefined, undefined]);
   });
 
+  it('«Формат» и «Локации» — те же правила: значения сразу, числа после дочитывания', () => {
+    const rows = [
+      makeItem({ id: 'r', location: 'Москва' }),
+      makeItem({ id: 's', location: 'Москва' }),
+    ];
+    const done = buildOptions(rows, undefined, NOW, true);
+    const reading = buildOptions(rows, undefined, NOW, false);
+    expect(done.locations).toEqual([{ id: 'Москва', label: 'Москва', count: 2 }]);
+    expect(reading.locations).toEqual([{ id: 'Москва', label: 'Москва' }]);
+    expect(done.formats.every((option) => typeof option.count === 'number')).toBe(true);
+    expect(reading.formats.map((option) => option.id)).toEqual(done.formats.map((option) => option.id));
+    expect(reading.formats.every((option) => option.count === undefined)).toBe(true);
+  });
+
   it('с «Датой» до конца чтения число списка не известно; после — равно строкам', () => {
     const partial = { narrowed: true, complete: false, serverMode: false, known: 266, filtered: 169 };
     expect(listCount(partial)).toEqual({ count: 169, countKnown: false });

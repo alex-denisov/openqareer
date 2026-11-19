@@ -41,9 +41,13 @@ function locationOptions(items: readonly MatchedVacancyItem[]): readonly FilterO
   ].sort(byCount);
 }
 
+/** Значение без числа: пока подборка читается, число по загруженным строкам меньше настоящего. */
+const withoutCount = ({ id, label }: FilterOption): FilterOption => ({ id, label });
+
 /**
  * Значения фильтров с числом вакансий; роли берёт сервер, остальное считается по загруженным.
- * Число «Даты» — только по дочитанной подборке (B728): до конца чтения оно меньше настоящего.
+ * Числа «Локаций», «Формата» и «Даты» — только по дочитанной подборке (B728): до конца чтения
+ * они меньше настоящих. Сами значения видны сразу.
  */
 export function buildOptions(
   items: readonly MatchedVacancyItem[],
@@ -53,12 +57,13 @@ export function buildOptions(
 ): FilterOptions {
   const formatCount = (id: string) => items.filter((item) => vacancyFormat(item) === id).length;
   const dateContext = { currency: 'RUB' as const, now };
+  const counted = (options: readonly FilterOption[]) => (complete ? options : options.map(withoutCount));
   return {
     roles: (facets?.roles ?? [])
       .map((entry) => ({ id: entry.role, label: entry.role, count: entry.count }))
       .sort(byCount),
-    locations: locationOptions(items),
-    formats: FORMAT_IDS.map((id) => ({ id, label: formatLabel(id), count: formatCount(id) })),
+    locations: counted(locationOptions(items)),
+    formats: counted(FORMAT_IDS.map((id) => ({ id, label: formatLabel(id), count: formatCount(id) }))),
     money: [],
     dates: DATE_OPTIONS.map((option) => ({
       id: option.id,
