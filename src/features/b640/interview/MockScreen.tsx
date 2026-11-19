@@ -107,7 +107,7 @@ export function MockScreen({ responseId }: { readonly responseId: string }) {
   return (
     <>
       <PrepSteps responseId={response?.id ?? responseId} current="prep" />
-      <div className="page two" data-b640-node="i02" data-b640-section="responses">
+      <div className="page two" data-b640-node="i02" data-b640-section="interview">
         {response ? <InterviewHead response={response} /> : null}
         {data ? <Body load={data} onSession={onSession} reload={reload} /> : null}
         {!data && state.status === 'error' ? (
