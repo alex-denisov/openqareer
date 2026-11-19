@@ -46,6 +46,8 @@ export interface NotificationItem {
   readonly createdAt: string;
   readonly readAt: string | null;
   readonly action: { readonly label: string; readonly href: string };
+  /** B690: только у уведомлений о входе в площадку; у остальных поля нет. */
+  readonly source?: typeof HH_SESSION_SOURCE;
 }
 
 export interface NotificationPage {
@@ -93,17 +95,29 @@ export function notificationPreferenceKey(kind: NotificationEventKind): Notifica
   return EVENT_PREFERENCE[kind];
 }
 
+/** B690: источник уведомления «вход в hh.ru истёк»; вид — `delivery_error`, подача — своя. */
+export const HH_SESSION_SOURCE = 'hh_session';
+
 export function presentNotification(
-  input: { readonly id: string; readonly kind: NotificationEventKind; readonly createdAt: string; readonly readAt: string | null; readonly sourceId: string },
+  input: {
+    readonly id: string;
+    readonly kind: NotificationEventKind;
+    readonly createdAt: string;
+    readonly readAt: string | null;
+    readonly sourceId: string;
+    readonly sourceType?: string;
+  },
 ): NotificationItem {
+  const base = { id: input.id, kind: input.kind, createdAt: input.createdAt, readAt: input.readAt };
+  if (input.sourceType === HH_SESSION_SOURCE) {
+    return {
+      ...base,
+      title: 'Вход в hh.ru истёк',
+      action: { label: 'Войти снова', href: '/app/account/connections' },
+      source: HH_SESSION_SOURCE,
+    };
+  }
   const presentation = EVENT_PRESENTATION[input.kind];
   const href = new URLSearchParams({ view: presentation.view, notificationSource: input.sourceId });
-  return {
-    id: input.id,
-    kind: input.kind,
-    title: presentation.title,
-    createdAt: input.createdAt,
-    readAt: input.readAt,
-    action: { label: presentation.action, href: `/app?${href.toString()}` },
-  };
+  return { ...base, title: presentation.title, action: { label: presentation.action, href: `/app?${href.toString()}` } };
 }

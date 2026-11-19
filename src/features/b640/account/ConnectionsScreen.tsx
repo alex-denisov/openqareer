@@ -16,6 +16,7 @@ import { useToast } from '../kit/Toast';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { useShell } from '../shell/ShellContext';
+import { getHhSessionState } from './hhSessionApi';
 import { connectedCount, connectionLine, PLATFORM_NAME, updatedLine } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 
@@ -23,14 +24,21 @@ interface Connections {
   readonly platforms: readonly CandidateConnection[];
   /** Канал Telegram; `null` — состояние не прочиталось или канала нет. */
   readonly telegram: NotificationChannelStatus['telegram'] | null;
+  /** B690: вход в hh.ru истёк; признак не прочитался — считаем, что нет. */
+  readonly hhExpired: boolean;
 }
 
 async function loadConnections(): Promise<Connections> {
-  const [platforms, channels] = await Promise.all([
+  const [platforms, channels, hhSession] = await Promise.all([
     getConnections(),
     getNotificationChannelStatus().catch(() => null),
+    getHhSessionState().catch(() => null),
   ]);
-  return { platforms, telegram: channels?.telegram.available ? channels.telegram : null };
+  return {
+    platforms,
+    telegram: channels?.telegram.available ? channels.telegram : null,
+    hhExpired: hhSession?.expired === true,
+  };
 }
 
 type Platform = CandidateConnection['platform'];
@@ -64,6 +72,7 @@ function useDismiss(open: boolean, close: () => void) {
 interface PlatformRowProps {
   readonly connection: CandidateConnection;
   readonly onDisconnected: () => void;
+  readonly expired?: boolean;
 }
 
 interface ConfirmProps {
@@ -192,12 +201,19 @@ function PlatformActions({ connection, onDisconnected }: PlatformRowProps) {
   );
 }
 
-function PlatformRow({ connection, onDisconnected }: PlatformRowProps) {
+function PlatformRow({ connection, onDisconnected, expired }: PlatformRowProps) {
   return (
     <li className="set-row cn-row">
       <div className="set-l">
         <span className="set-t">{PLATFORM_NAME[connection.platform]}</span>
-        <span className="set-v">{connectionLine(connection)}</span>
+        {expired ? (
+          <span className="set-v is-warn">
+            <Icon name="warn" />
+            вход истёк
+          </span>
+        ) : (
+          <span className="set-v">{connectionLine(connection)}</span>
+        )}
       </div>
       {connection.status === 'connected' ? (
         <PlatformActions connection={connection} onDisconnected={onDisconnected} />
@@ -249,7 +265,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
       </SettingsPage>
     );
   }
-  const { platforms, telegram } = load.data;
+  const { platforms, telegram, hhExpired } = load.data;
   const count = connectedCount({
     emailVerified: session.emailVerified === true,
     connections: platforms,
@@ -272,6 +288,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
             <PlatformRow
               key={connection.platform}
               connection={connection}
+              expired={connection.platform === 'hh' && connection.status === 'connected' && hhExpired}
               onDisconnected={() => disconnected(connection.platform)}
             />
           ))}
