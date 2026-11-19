@@ -122,8 +122,13 @@ const postPerson: Handler = async (deps, request, reply) => {
   const parsed = personInputSchema.safeParse(request.body);
   if (!parsed.success) return invalid(reply, request);
   const key = idSchema.safeParse(request.headers['idempotency-key']);
-  const id = key.success ? key.data : randomUUID();
-  if (deps.people().get(at.candidate, at.workplace.id, id)) return ok(deps, request, at);
+  if (!key.success) {
+    return sendError(reply, request, 400, 'idempotency_key_required', 'Повторите действие.', false);
+  }
+  const id = key.data;
+  const owner = deps.people().workplaceOf(at.candidate, id);
+  if (owner === at.workplace.id) return ok(deps, request, at);
+  if (owner) return conflict(reply, request, 'idempotency_key_conflict', 'Повторите действие.');
   if (deps.people().count(at.candidate, at.workplace.id) >= PEOPLE_MAX) {
     return conflict(reply, request, 'career_diary_people_full', 'На карте уже 100 строк.');
   }
@@ -145,7 +150,7 @@ function personAt(deps: Bound, request: FastifyRequest, reply: FastifyReply) {
 function closeMeeting(deps: Bound, at: Scope, person: CareerDiaryPerson, metOn: string): void {
   const id = meetingTaskId(person.id);
   const task = planOf(at.workplace)?.tasks.find((item) => item.id === id);
-  if (!task || task.completed) return;
+  if (!task || task.completed || meetingBlocked(at, person)) return;
   savePlan(deps, at, (tasks) =>
     tasks.map((item) => (item.id === id ? { ...item, completed: true, dueDate: metOn } : item)),
   );

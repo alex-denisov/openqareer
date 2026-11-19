@@ -81,6 +81,8 @@ describe('withMeetingTask / withoutTask', () => {
     expect(moved).toHaveLength(2);
     expect(moved[1]).toMatchObject({ id, dueDate: '2026-12-20', stage: 'days_1_30' });
     expect(withoutTask(moved, id)).toEqual([other]);
+    const named = withMeetingTask([], person('p2', { name: 'Илья', role: '', group: 'Команда' }), '2027-01-08', '2026-12-01');
+    expect(named[0]!.title).toBe('Встреча: Команда');
   });
 });
 

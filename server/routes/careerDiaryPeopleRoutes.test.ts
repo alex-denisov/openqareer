@@ -56,7 +56,7 @@ async function setup() {
     () => candidateStore.close(),
     () => app.close(),
   );
-  return { app, databasePath: config.databasePath };
+  return { app, databasePath: config.databasePath, candidateStore, sessions };
 }
 
 function call(app: App, method: Method, url: string, token?: string, payload?: unknown, key = randomUUID()) {
@@ -225,5 +225,35 @@ describe('B685: карта людей', () => {
     database.close();
     expect(rows).toHaveLength(1);
     expect(JSON.stringify(rows)).not.toContain('Лаврова');
+  });
+
+  it('ключ обязателен; тот же ключ на другом месте работы — 409, чужая строка не меняется', { timeout: SLOW }, async () => {
+    const { app } = await setup();
+    const first = await workplace(app, flagged);
+    const second = await workplace(app, flagged);
+    const noKey = await app.inject({
+      method: 'POST',
+      url: people(first),
+      headers: { authorization: `Bearer ${flagged}`, origin: 'http://localhost:3000' },
+      payload: BOSS,
+    });
+    expect(noKey.statusCode).toBe(400);
+    const key = randomUUID();
+    await call(app, 'POST', people(first), flagged, BOSS, key);
+    const reused = await call(app, 'POST', people(second), flagged, TESTS, key);
+    expect(reused.statusCode).toBe(409);
+    const kept = await call(app, 'GET', people(first), flagged);
+    expect(kept.json().data.groups[0].people[0].role).toBe(BOSS.role);
+  });
+
+  it('удаление кандидата удаляет его карту людей', { timeout: SLOW }, async () => {
+    const { app, databasePath, candidateStore, sessions } = await setup();
+    const id = await workplace(app, flagged);
+    await add(app, id, BOSS);
+    expect(candidateStore.deleteCandidate(sessions.get(flagged)!.candidate!.id)).toBe(true);
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    const rows = database.prepare('SELECT COUNT(*) AS n FROM career_diary_people').get() as { n: number };
+    database.close();
+    expect(rows.n).toBe(0);
   });
 });

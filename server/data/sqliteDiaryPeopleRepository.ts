@@ -72,6 +72,14 @@ export class SqliteDiaryPeopleRepository {
     return row ? this.open(candidateId, row) : null;
   }
 
+  /** Место работы, где у кандидата уже есть строка с этим номером; `null` — номера нет. */
+  workplaceOf(candidateId: string, personId: string): string | null {
+    const row = this.database
+      .prepare('SELECT workplace_id FROM career_diary_people WHERE candidate_id = ? AND person_id = ?')
+      .get(candidateId, personId) as { workplace_id: string } | undefined;
+    return row?.workplace_id ?? null;
+  }
+
   count(candidateId: string, workplaceId: string): number {
     const row = this.database
       .prepare('SELECT COUNT(*) AS total FROM career_diary_people WHERE candidate_id = ? AND workplace_id = ?')
@@ -87,7 +95,8 @@ export class SqliteDiaryPeopleRepository {
            (candidate_id, person_id, workplace_id, payload_cipher, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(candidate_id, person_id) DO UPDATE SET
-           payload_cipher = excluded.payload_cipher, updated_at = excluded.updated_at`,
+           payload_cipher = excluded.payload_cipher, updated_at = excluded.updated_at
+         WHERE career_diary_people.workplace_id = excluded.workplace_id`,
       )
       .run(
         candidateId,

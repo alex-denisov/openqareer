@@ -57,8 +57,9 @@ export function stageForDate(startDate: string, date: string): CareerDiaryAdapta
   return day <= 60 ? 'days_31_60' : 'days_61_90';
 }
 
+/** Подпись задачи без имени: план читает консультант, имена коллег туда не уходят. */
 function label(person: CareerDiaryPerson): string {
-  return person.name || person.role || `${person.group}, ${person.headcount} чел.`;
+  return person.role || person.group;
 }
 
 /** План с задачей встречи на `date`: новая задача в конце или прежняя с новой датой. */
