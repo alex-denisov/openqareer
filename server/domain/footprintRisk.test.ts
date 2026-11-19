@@ -324,6 +324,27 @@ describe('buildFootprintRiskSummary', () => {
     );
   });
 
+  it('путь удаления: запрос и итог проверки идут в находку; «удалено» снимает её из «стоит убрать» (B382)', () => {
+    const sent = finding({ id: 'sent', kind: 'breach', removal: { requestedAt: '2026-11-11T10:00:00.000Z' } });
+    const gone = finding({
+      id: 'gone',
+      kind: 'breach',
+      removal: {
+        requestedAt: '2026-11-11T10:00:00.000Z',
+        checkedAt: '2026-11-12T10:00:00.000Z',
+        result: 'removed',
+      },
+    });
+    const summary = buildFootprintRiskSummary(audit([sent, gone]), []);
+    const byId = new Map(summary.items.map((item) => [item.id, item]));
+    expect(byId.get('sent')).toMatchObject({
+      resolved: false,
+      removal: { requestedAt: '2026-11-11T10:00:00.000Z' },
+    });
+    expect(byId.get('gone')).toMatchObject({ resolved: true, removal: { result: 'removed' } });
+    expect(summary.toRemove).toBe(1);
+  });
+
   it('ссылку отдаёт только http(s)', () => {
     const summary = buildFootprintRiskSummary(audit([finding({ url: 'javascript:alert(1)' })]), []);
     expect(summary.items[0].url).toBeNull();

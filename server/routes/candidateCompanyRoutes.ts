@@ -42,7 +42,7 @@ import {
   withDeps,
 } from './helpers';
 
-const pageQuerySchema = z.object({
+export const pageQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().default(0),
   limit: z.coerce.number().int().positive().max(20).default(20),
   sort: z.enum(['default', 'contacts', 'alphabetical']).default('default'),
@@ -328,7 +328,7 @@ export async function companyContext(
   };
 }
 
-function filterCounts(rows: CandidateCompanyContext['rows']) {
+export function filterCounts(rows: CandidateCompanyContext['rows']) {
   const knownContacts = rows.filter((row) => row.contactsCount !== null);
   return {
     all: rows.length,

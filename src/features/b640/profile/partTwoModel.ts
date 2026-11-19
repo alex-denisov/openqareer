@@ -22,6 +22,11 @@ export function nextQuestion(draft: ResumeDraft): ProfileQuestion | null {
   return { entryId: entry.id, employer, text: `Сколько человек было в команде ${place}?` };
 }
 
+/** Сколько вопросов о профиле осталось: по месту работы без размера команды. */
+export function questionCount(draft: ResumeDraft): number {
+  return draft.experience.filter((item) => !item.teamSize).length;
+}
+
 const MAX_TEAM_SIZE = 100_000;
 
 /** Размер команды из ответа; `null` — ответ не число. */

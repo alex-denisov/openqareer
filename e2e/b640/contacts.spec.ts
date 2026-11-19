@@ -115,7 +115,7 @@ const item = (index: number, states: Map<string, Item['status']>): Item => {
   };
 };
 
-type Mode = 'list' | 'empty' | 'error' | 'flaky';
+type Mode = 'list' | 'empty' | 'error' | 'flaky' | 'nocompany';
 
 const FACETS = {
   companies: [
@@ -147,7 +147,10 @@ async function mockContacts(page: Page, mode: Mode) {
     requests.push(url.search);
     if (mode === 'error' || (mode === 'flaky' && !failed)) {
       failed = true;
-      return route.fulfill({ status: 500, json: { error: { code: 'internal', message: 'x' } } });
+      return route.fulfill({
+        status: 500,
+        json: { error: { code: 'internal', message: 'x', retryable: false } },
+      });
     }
     const q = url.searchParams;
     const search = (q.get('search') ?? '').toLowerCase();
@@ -161,7 +164,11 @@ async function mockContacts(page: Page, mode: Mode) {
           : TOTAL;
     const items = Array.from({ length: Math.max(0, Math.min(PAGE, filtered - offset)) }, (_, i) =>
       item(offset + i, states),
-    ).map((entry) => (companies.length > 0 ? { ...entry, companyName: companies[0]! } : entry));
+    )
+      .map((entry) => (companies.length > 0 ? { ...entry, companyName: companies[0]! } : entry))
+      .map((entry) =>
+        mode === 'nocompany' && entry.id === 'c3' ? { ...entry, companyName: '' } : entry,
+      );
     return route.fulfill({
       json: {
         data: {
@@ -254,6 +261,48 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     await expect(page.getByRole('alert')).toContainText('Контакты не загрузились');
     await page.getByRole('button', { name: 'Повторить' }).click();
     await expect(page.locator('li.ct-row')).toHaveCount(20);
+  });
+
+  test('имя открывает панель «Черновик» под строкой', async ({ page }) => {
+    await open(page, 'nocompany');
+    await page.route('**/api/v1/candidate/b640/contact-messages', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            id: 'm1',
+            kind: 'ask_introduction',
+            text: 'Анна, добрый день!',
+            recipient: { name: 'Анна Ветрова', linkedinUrl: null },
+            createdAt: '2026-11-12T12:00:00.000Z',
+          },
+        },
+      }),
+    );
+    const row = page.locator('li.ct-row').first();
+    const name = row.locator('a.row-title.ct-n');
+    await expect(name).toHaveText('Анна Ветрова');
+    await expect(name).toHaveAttribute('href', `${PATH}#write-c0`);
+    await name.click();
+    await expect(page).toHaveURL(new RegExp(`${PATH}$`, 'u'));
+    await expect(row.getByText('Черновик', { exact: true })).toBeVisible();
+    await expect(row.locator('textarea')).toHaveValue('Анна, добрый день!');
+    await expect(name).toHaveAttribute('aria-expanded', 'true');
+    await name.click();
+    await expect(row.locator('.lk-inline')).toHaveCount(0);
+    const noCompany = page.locator('li.ct-row').nth(3);
+    await expect(noCompany.locator('a.row-title.ct-n')).toHaveCount(1);
+  });
+
+  test('компания в подписи ведёт на карточку компании (v10b)', async ({ page }) => {
+    await open(page, 'list');
+    const company = page.locator('li.ct-row').first().locator('.ct-w a');
+    await expect(company).toHaveText('Гринкод');
+    await expect(company).toHaveAttribute(
+      'href',
+      `/app/vacancies/companies/${encodeURIComponent('гринкод')}`,
+    );
+    await company.click();
+    await expect(page).toHaveURL(/\/app\/vacancies\/companies\//u);
   });
 
   test('снимки для сверки с макетом', async ({ page }, testInfo) => {

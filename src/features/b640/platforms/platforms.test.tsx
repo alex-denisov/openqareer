@@ -12,10 +12,12 @@ vi.mock('../shell/ShellContext', () => ({
 vi.mock('../../coach/coachApi', () => ({ getConnections: vi.fn() }));
 vi.mock('../../applications/applicationsApi', () => ({ getCandidateActionUsage: vi.fn() }));
 vi.mock('../../automation/automationApi', () => ({ listCandidateAutomationJournal: vi.fn() }));
+vi.mock('./hh/hhRaiseApi', () => ({ getHhRaise: vi.fn(), setHhRaiseEnabled: vi.fn(), retryHhRaise: vi.fn() }));
 
 const coach = await import('../../coach/coachApi');
 const apps = await import('../../applications/applicationsApi');
 const auto = await import('../../automation/automationApi');
+const raise = await import('./hh/hhRaiseApi');
 
 const flush = () => act(async () => { await Promise.resolve(); await new Promise((resolve) => setTimeout(resolve, 0)); });
 const node = (code: string) => {
@@ -39,15 +41,22 @@ const journal = (list: unknown[], total = list.length) => ({
 afterEach(() => vi.clearAllMocks());
 
 describe('a11: hh.ru', () => {
-  it('подключён: цифры из учёта, без автоподнятия, выбора резюме и аналитики', async () => {
+  it('подключён: «Автоподнятие резюме» по макету, цифры из учёта, без выбора резюме и аналитики', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('connected')] as never);
+    vi.mocked(raise.getHhRaise).mockResolvedValue({
+      connected: true, resumeId: 'abc', enabled: false, everyHours: 4,
+      lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null,
+    } as never);
     vi.mocked(apps.getCandidateActionUsage).mockResolvedValue({ usage: { hhBoostsCount: 1, lastHhBoostAt: '2026-11-16T09:40:00Z' } } as never);
     const view = mount(<Section node={node('a11')} params={{}} />);
     await flush();
     expect(view.container.querySelector('[data-b640-node="a11"]')).not.toBeNull();
     expect(view.container.textContent).toContain('Последнее поднятие');
-    expect(view.container.querySelector('select, [role="switch"]')).toBeNull();
-    expect(view.container.textContent).not.toMatch(/Просмотры|Приглашения|Автоподнятие/);
+    const sw = view.container.querySelector<HTMLInputElement>('.hh-sw input#hh-up[role="switch"]');
+    expect(sw?.checked).toBe(false);
+    expect(view.container.querySelector('.hh-sw label[for="hh-up"]')!.textContent).toBe('Автоподнятие резюме');
+    expect(view.container.querySelector('select')).toBeNull();
+    expect(view.container.textContent).not.toMatch(/Просмотры|Приглашения/);
     expect(view.container.querySelectorAll('button')).toHaveLength(1);
     view.unmount();
   });
