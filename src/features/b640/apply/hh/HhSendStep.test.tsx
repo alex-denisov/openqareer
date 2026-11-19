@@ -204,4 +204,26 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(api.getHhResumeEdits).not.toHaveBeenCalled();
     expect(view!.container.textContent).not.toContain('правк');
   });
+
+  it('B716: «Я уже откликнулся» — отметка без окна hh.ru, отклик уходит из черновиков', async () => {
+    const onSent = await render();
+    click(button('Я уже откликнулся'));
+    await settle();
+    expect(onSent).toHaveBeenCalledTimes(1);
+    expect(api.startHhApply).not.toHaveBeenCalled();
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
+    const text = view!.container.textContent ?? '';
+    expect(text).toContain('Отклик отмечен как отправленный');
+    expect(text).not.toContain('Отправить отклик');
+  });
+
+  it('B716: отметка не сохранилась — строка ошибки, отправка остаётся', async () => {
+    const onSent = vi.fn().mockRejectedValue(new Error('Сеть недоступна'));
+    await render(onSent);
+    click(button('Я уже откликнулся'));
+    await settle();
+    const text = view!.container.textContent ?? '';
+    expect(text).toContain('Отметка не сохранилась');
+    expect(text).toContain('Отправить отклик');
+  });
 });

@@ -25,8 +25,9 @@ const STORED = {
   variantId: 'variant-2',
 };
 
-function letterOf(pitch: unknown): LetterScreenState {
+function letterOf(pitch: unknown, circlesError = ''): LetterScreenState {
   return {
+    circles: { data: null, loading: false, error: circlesError, retry: vi.fn() },
     circle: { circle: 3 },
     tone: 'executive',
     language: 'auto',
@@ -42,8 +43,8 @@ function letterOf(pitch: unknown): LetterScreenState {
   } as unknown as LetterScreenState;
 }
 
-function variantsOf(ready: boolean, restore = vi.fn()): LetterVariantsState {
-  return { ready, restore, selected: null, selectedId: null } as unknown as LetterVariantsState;
+function variantsOf(settled: boolean, restore = vi.fn()): LetterVariantsState {
+  return { settled, restore, selected: null, selectedId: null } as unknown as LetterVariantsState;
 }
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
@@ -97,5 +98,13 @@ describe('useVariantApproval: одобрение переживает уход �
     const view = await mount(letterOf({ emailPitch: {} }), variantsOf(true, restore));
     expect(restore).not.toHaveBeenCalled();
     expect(view.get().approval.saved).toBeNull();
+  });
+
+  it('B716: круги связей не загрузились, черновик не просили — одобренное письмо всё равно встаёт', async () => {
+    api.readLatestLetterApproval.mockResolvedValue(STORED);
+    const restore = vi.fn();
+    const view = await mount(letterOf(null, 'Сеть недоступна'), variantsOf(true, restore));
+    expect(restore).toHaveBeenCalledWith('variant-2', 'Одобренный второй вариант.');
+    expect(view.get().approval.saved).toMatchObject({ applicationId: 'app-1' });
   });
 });
