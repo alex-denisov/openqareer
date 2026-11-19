@@ -37,7 +37,8 @@ const pause = (pace: ReadPace) =>
 
 /** Текст для сверки — начало резюме; целиком страница сохраняется только у выбранного. */
 export function forReview(content: HhResumeContent): HhResumeContent {
-  return { ...content, text: content.text.slice(0, HH_REVIEW_TEXT_MAX_LENGTH) };
+  const { sections: _sections, ...rest } = content;
+  return { ...rest, text: content.text.slice(0, HH_REVIEW_TEXT_MAX_LENGTH) };
 }
 
 export async function readResumesForReview(
