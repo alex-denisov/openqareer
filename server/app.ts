@@ -89,6 +89,7 @@ import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { buildKpiExtractor } from './providers/kpiExtractor';
 import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { currentVacancyFitProfileValidator } from './domain/vacancyFitProfileStamp';
 import { VacancyMechanicsRuntime } from './domain/vacancyMechanicsRuntime';
@@ -119,6 +120,7 @@ interface BuildAppOptions {
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
+  kpiExtractor?: RouteDeps['kpiExtractor'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
@@ -538,12 +540,23 @@ function createCandidateDraftDeps(
   options: BuildAppOptions,
 ): Pick<
   CandidateDraftRouteDeps,
-  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel' | 'experienceFactRewriter'
+  | 'candidateDraftRepository'
+  | 'linkedinDraftWriter'
+  | 'skillQuizModel'
+  | 'experienceFactRewriter'
+  | 'kpiExtractor'
 > {
   const { config } = options;
   return {
     skillQuizModel: options.skillQuizModel,
     experienceFactRewriter: options.experienceFactRewriter,
+    kpiExtractor:
+      options.kpiExtractor ??
+      buildKpiExtractor({
+        providerCredentials: config.providerCredentials,
+        vertex: config.vertex,
+        vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'kpiImport'),
+      }),
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),

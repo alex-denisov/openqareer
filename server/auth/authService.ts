@@ -388,6 +388,25 @@ export class AuthService extends AuthServiceCore {
     return updated ? { principal: updated, sessionToken } : null;
   }
 
+  /** B401: сессия после второго фактора; заблокированный или удалённый пользователь её не получит. */
+  issueSessionForUser(userId: string, clientDeviceId?: string): { principal: AuthPrincipal; sessionToken: string } | null {
+    const user = this.findUserById(userId);
+    if (!user || user.blocked_at) return null;
+    return this.issueSession(user, clientDeviceId);
+  }
+
+  /** B401: пароль вместо кода, чтобы отключить защиту или получить новые коды. */
+  async passwordMatches(userId: string, password: string): Promise<boolean> {
+    const user = this.findUserById(userId);
+    if (!user) return false;
+    try {
+      await this.validateCurrentPassword(user, password);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async validateCurrentPassword(row: UserRow, password: string): Promise<void> {
     const salt = Buffer.from(row.password_salt, 'base64');
     const expected = Buffer.from(row.password_hash, 'base64');

@@ -684,7 +684,8 @@ describe('today queue order and copy (block 0 mockup)', () => {
     expect(snapshot.queue[2]).toMatchObject({
       kind: 'candidate_turn',
       material: 'cover_letter',
-      eyebrow: 'Черновик, ничего не отправлено',
+      // B717: письмо привязывается к отклику только одобрением — это не черновик.
+      eyebrow: 'Письмо одобрено, ничего не отправлено',
     });
   });
 });
