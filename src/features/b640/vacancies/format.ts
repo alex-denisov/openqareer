@@ -8,7 +8,7 @@ import { vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
 import { vacancyFormat } from '../../vacancies/vacancyScreenCriteria';
 
 /** Валюта показа денег: рубли, доллары, евро или «Как в вакансии». */
-export type MoneyCurrency = 'RUB' | 'USD' | 'EUR' | 'ORIG';
+export type MoneyCurrency = 'RUB' | 'USD' | 'EUR' | 'AED' | 'ORIG';
 
 export interface MoneyOptions {
   readonly currency: MoneyCurrency;
@@ -102,15 +102,19 @@ function splitRouble(text: string): MoneyView {
   return text.endsWith(' ₽') ? { text, amount: text.slice(0, -2), unit: '₽' } : { text };
 }
 
-function ratesNote(rates: CurrencyRates): string {
+const RATE_SIGN: Readonly<Record<string, string>> = { USD: '$', EUR: '€', AED: 'AED' };
+
+/** Курс ЦБ к рублю: доллар и евро всегда, дирхам — когда в нём показываем. */
+function ratesNote(rates: CurrencyRates, target: MoneyCurrency): string {
   const [, month, day] = rates.date.split('-');
-  const pairs = (['USD', 'EUR'] as const)
+  const codes = target === 'AED' ? ['USD', 'EUR', 'AED'] : ['USD', 'EUR'];
+  const pairs = codes
     .filter((code) => rates.rubPerUnit[code] !== undefined)
     .map((code) => {
       const rate = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(
         rates.rubPerUnit[code],
       );
-      return `1 ${code === 'USD' ? '$' : '€'} = ${rate} ₽`;
+      return `1 ${RATE_SIGN[code]} = ${rate} ₽`;
     });
   return `курс ЦБ на ${day}.${month}${pairs.length > 0 ? `: ${pairs.join(', ')}` : ''}`;
 }
@@ -136,7 +140,7 @@ export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): Mone
   if (converted === original) return splitRouble(original);
   return {
     ...splitRouble(`≈ ${converted}`),
-    title: `В вакансии ${original}; ${ratesNote(options.rates)}`,
+    title: `В вакансии ${original}; ${ratesNote(options.rates, target)}`,
   };
 }
 
