@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type {
   LinkedinSection,
+  LinkedinSectionFact,
   LinkedinSectionSuggestion,
 } from '../../../../../shared/b640LinkedinProfile';
 import { Icon } from '../../kit';
@@ -20,14 +21,18 @@ interface SectionOfferProps {
   readonly onMarks: (marks: SectionMarks) => void;
 }
 
-function Facts({ suggestion }: { readonly suggestion: LinkedinSectionSuggestion }) {
-  if (!suggestion.facts.length) return null;
+/** B645: факты под предложением свёрнуты — в длинных разделах они длиннее самого предложения. */
+function Facts({ facts }: { readonly facts: readonly LinkedinSectionFact[] }) {
+  if (!facts.length) return null;
   return (
-    <ul className="li-facts" aria-label="Факты, на которых построено предложение">
-      {suggestion.facts.map((fact) => (
-        <li key={fact.id}>{fact.text}</li>
-      ))}
-    </ul>
+    <details className="li-facts-d">
+      <summary>{`Из каких фактов · ${facts.length}`}</summary>
+      <ul className="li-facts" aria-label="Факты, на которых построено предложение">
+        {facts.map((fact) => (
+          <li key={fact.id}>{fact.text}</li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -83,33 +88,72 @@ function PastedControl({
   );
 }
 
-/** Предложение раздела: «Скопировать», «Открыть в LinkedIn», «Вставлено»; на LinkedIn ничего не уходит. */
+function OpenLink({ title }: { readonly title: string }) {
+  return (
+    <a
+      className="icon-btn"
+      href={LINKEDIN_OWN_PROFILE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Открыть в LinkedIn: ${title}`}
+    >
+      <Icon name="out" />
+    </a>
+  );
+}
+
+interface OfferBlockProps {
+  readonly text: string;
+  readonly label: string;
+  readonly onCopied: () => void;
+  readonly children?: ReactNode;
+}
+
+/** Текст предложения и действия справа от него. */
+function OfferBlock({ text, label, onCopied, children }: OfferBlockProps) {
+  return (
+    <div className="li-offer">
+      <p className="li-new">{text}</p>
+      <div className="li-offer-a">
+        <CopyButton text={text} label={label} onCopied={onCopied} />
+        <OpenLink title={label} />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Предложение раздела: «Скопировать», «Открыть в LinkedIn», «Вставлено»; на LinkedIn ничего не уходит.
+ * «Опыт» — по месту работы; у «Навыков» список фактов повторил бы само предложение и не показывается.
+ */
 export function SectionOffer({ section, title, suggestion, pastedAt, onMarks }: SectionOfferProps) {
   const { busy, failed, mark } = useMarks(section, onMarks);
+  const pasted = (
+    <PastedControl title={title} pastedAt={pastedAt} busy={busy === 'pasted'} onPasted={() => void mark('pasted')} />
+  );
+  const copied = () => void mark('copied');
   return (
     <>
-      <div className="li-offer">
-        <p className="li-new">{suggestion.text}</p>
-        <div className="li-offer-a">
-          <CopyButton text={suggestion.text} label={title} onCopied={() => void mark('copied')} />
-          <a
-            className="icon-btn"
-            href={LINKEDIN_OWN_PROFILE_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Открыть в LinkedIn: ${title}`}
-          >
-            <Icon name="out" />
-          </a>
-          <PastedControl
-            title={title}
-            pastedAt={pastedAt}
-            busy={busy === 'pasted'}
-            onPasted={() => void mark('pasted')}
-          />
-        </div>
-      </div>
-      <Facts suggestion={suggestion} />
+      {suggestion.items?.length ? (
+        <>
+          {suggestion.items.map((item) => (
+            <div className="li-item" key={item.id}>
+              <p className="li-rec-l">{item.label}</p>
+              <OfferBlock text={item.text} label={item.label} onCopied={copied} />
+              <Facts facts={item.facts} />
+            </div>
+          ))}
+          <div className="li-offer-a">{pasted}</div>
+        </>
+      ) : (
+        <>
+          <OfferBlock text={suggestion.text} label={title} onCopied={copied}>
+            {pasted}
+          </OfferBlock>
+          {section === 'skills' ? null : <Facts facts={suggestion.facts} />}
+        </>
+      )}
       {failed ? <LiError text="Не удалось сохранить отметку" onRetry={() => void mark(failed)} /> : null}
     </>
   );

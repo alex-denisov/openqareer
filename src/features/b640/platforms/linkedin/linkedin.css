@@ -43,6 +43,25 @@
     list-style: disc;
     max-inline-size: var(--career-measure);
   }
+  /* B645: «Из каких фактов · N» — свёрнутый список под предложением. */
+  .b640 .li-facts-d > summary {
+    inline-size: fit-content;
+    min-block-size: var(--career-target-min);
+    display: flex;
+    align-items: center;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    cursor: pointer;
+  }
+  .b640 .li-facts-d[open] > summary {
+    min-block-size: 0;
+    margin-block-end: var(--career-space-1);
+  }
+  /* «Опыт» по местам работы: подпись места, предложение и факты одной группой. */
+  .b640 .li-item {
+    display: grid;
+    gap: var(--career-space-2);
+  }
   .b640 .li-pasted {
     display: inline-flex;
     align-items: center;

@@ -1,6 +1,6 @@
 import {
   LINKEDIN_SECTION_LIMITS, LINKEDIN_SKILLS_MAX,
-  type LinkedinSection, type LinkedinSectionFact, type LinkedinSectionSuggestion,
+  type LinkedinSection, type LinkedinSectionFact, type LinkedinSectionItem, type LinkedinSectionSuggestion,
 } from '../../shared/b640LinkedinProfile';
 import type { ResumeDraft } from '../domain/resumeDraft';
 
@@ -81,7 +81,7 @@ function suggestSkills(input: SuggestionInput): LinkedinSectionSuggestion | null
   const skills = usableSkills(input).slice(0, LINKEDIN_SKILLS_MAX);
   if (skills.length === 0) return null;
   return {
-    text: skills.map((skill) => skill.name).join('\n'),
+    text: skills.map((skill) => skill.name).join(' · '),
     facts: skills.map((skill) => ({ id: `resume:skill:${skill.id}`, text: skill.name })),
   };
 }
@@ -109,23 +109,35 @@ function suggestAbout(input: SuggestionInput): LinkedinSectionSuggestion | null 
   return text.length <= limit && numbersAreGrounded(text, kept) ? { text, facts: kept } : null;
 }
 
+/** Фраз в предложении по одному месту работы: в макете их две-три. */
+const PLACE_SENTENCES = 3;
+
+function experienceItem(
+  place: ResumeDraft['experience'][number],
+  byId: ReadonlyMap<string, SuggestionMemory>,
+): LinkedinSectionItem | null {
+  const header = placeLine(place);
+  const description = place.descriptionMemoryId ? byId.get(place.descriptionMemoryId) : undefined;
+  const bullets = place.bulletMemoryIds.flatMap((id) => byId.get(id) ?? []);
+  const used = [...(description ? [description] : []), ...bullets].slice(0, PLACE_SENTENCES);
+  if (!header || used.length === 0) return null;
+  const facts = [
+    { id: `resume:experience:${place.id}`, text: header },
+    ...used.map((memory) => ({ id: memory.id, text: memory.statement.trim() })),
+  ];
+  const text = used.map((memory) => sentence(memory.statement)).join(' ');
+  if (!numbersAreGrounded(text, facts)) return null;
+  return { id: place.id, label: `${place.employer!.trim()} · ${place.title!.trim()}`, text, facts };
+}
+
 function suggestExperience(input: SuggestionInput): LinkedinSectionSuggestion | null {
   const byId = new Map(input.memory.filter(isConfirmed).map((memory) => [memory.id, memory]));
-  const blocks: string[] = [];
-  const facts: LinkedinSectionFact[] = [];
-  for (const place of (input.draft?.experience ?? []).slice(0, EXPERIENCE_PLACES)) {
-    const header = placeLine(place);
-    const description = place.descriptionMemoryId ? byId.get(place.descriptionMemoryId) : undefined;
-    const bullets = place.bulletMemoryIds.flatMap((id) => byId.get(id) ?? []);
-    if (!header || (!description && bullets.length === 0)) continue;
-    const lines = [header, ...(description ? [description.statement.trim()] : []), ...bullets.map((b) => `• ${b.statement.trim()}`)];
-    blocks.push(lines.join('\n'));
-    facts.push({ id: `resume:experience:${place.id}`, text: header },
-      ...[...(description ? [description] : []), ...bullets].map((m) => ({ id: m.id, text: m.statement.trim() })));
-  }
-  const text = blocks.join('\n\n');
-  const fits = text.length > 0 && text.length <= LINKEDIN_SECTION_LIMITS.experience;
-  return fits && numbersAreGrounded(text, facts) ? { text, facts } : null;
+  const items = (input.draft?.experience ?? [])
+    .slice(0, EXPERIENCE_PLACES)
+    .flatMap((place) => experienceItem(place, byId) ?? []);
+  const text = items.map((item) => `${item.label}\n${item.text}`).join('\n\n');
+  if (text.length === 0 || text.length > LINKEDIN_SECTION_LIMITS.experience) return null;
+  return { text, facts: items.flatMap((item) => item.facts), items };
 }
 
 /** B692: предложения по разделам профиля LinkedIn только из подтверждённых фактов и данных черновика резюме. */

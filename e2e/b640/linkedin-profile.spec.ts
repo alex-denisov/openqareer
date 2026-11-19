@@ -22,8 +22,40 @@ const initial = {
     pastedAt: null,
   },
   about: none,
-  experience: none,
-  skills: none,
+  experience: {
+    ...none,
+    suggestion: {
+      text: 'Финтех Лаб · Руководитель группы разработки\nГруппа из 9 человек.\n\nСфера Платежи · Руководитель группы бэкенда\nВела бэкенд платёжного шлюза.',
+      facts: [],
+      items: [
+        {
+          id: 'e1',
+          label: 'Финтех Лаб · Руководитель группы разработки',
+          text: 'Группа из 9 человек, 6 из них наняла сама. Релиз раз в 3 дня вместо 2 недель.',
+          facts: [
+            { id: 'd1', text: 'Группа из 9 человек, 6 из них наняла сама' },
+            { id: 'b1', text: 'Релиз раз в 3 дня вместо 2 недель' },
+          ],
+        },
+        {
+          id: 'e2',
+          label: 'Сфера Платежи · Руководитель группы бэкенда',
+          text: 'Вела бэкенд платёжного шлюза для интернет-магазинов.',
+          facts: [{ id: 'd2', text: 'Вела бэкенд платёжного шлюза для интернет-магазинов' }],
+        },
+      ],
+    },
+  },
+  skills: {
+    ...none,
+    suggestion: {
+      text: 'Go · Kubernetes · PostgreSQL · Управление командой',
+      facts: ['Go', 'Kubernetes', 'PostgreSQL', 'Управление командой'].map((text, i) => ({
+        id: `s${i}`,
+        text,
+      })),
+    },
+  },
 };
 
 async function mock(page: Page, options: { failRead?: boolean; failSave?: boolean } = {}) {
@@ -100,6 +132,34 @@ test.describe('B692: профиль LinkedIn по разделам', () => {
     await expect(headline.locator('.li-facts li')).toHaveCount(2);
     await expect(page.getByRole('button', { name: /Применить/ })).toHaveCount(0);
     await expect(page.getByLabel('Вставьте текущий текст раздела')).toHaveCount(3);
+    expect(await noOverflow(page)).toBe(true);
+    await expectGates(page);
+  });
+
+  test('B645: «Опыт» по местам работы, «Навыки» одной строкой, факты свёрнуты', async ({
+    page,
+  }) => {
+    await mock(page);
+    await open(page);
+    const experience = page.locator('.li-sec').nth(2);
+    await expect(experience.locator('.li-item')).toHaveCount(2);
+    await expect(experience.locator('.li-item .li-rec-l')).toHaveText([
+      'Финтех Лаб · Руководитель группы разработки',
+      'Сфера Платежи · Руководитель группы бэкенда',
+    ]);
+    await expect(
+      experience.getByRole('button', {
+        name: 'Скопировать: Сфера Платежи · Руководитель группы бэкенда',
+      }),
+    ).toBeVisible();
+    await expect(experience.locator('.li-facts').first()).toBeHidden();
+    await experience.getByText('Из каких фактов · 2').click();
+    await expect(experience.locator('.li-facts').first()).toBeVisible();
+    const skills = page.locator('.li-sec').nth(3);
+    await expect(skills.locator('.li-new')).toHaveText(
+      'Go · Kubernetes · PostgreSQL · Управление командой',
+    );
+    await expect(skills.locator('.li-facts')).toHaveCount(0);
     expect(await noOverflow(page)).toBe(true);
     await expectGates(page);
   });
