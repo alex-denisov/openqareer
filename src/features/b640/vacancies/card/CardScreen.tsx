@@ -219,6 +219,7 @@ function LoadedCard({ vacancyId, item, data }: LoadedCardProps) {
             sourceName={sourceName(item)}
             companyPath={companyPath}
             onBack={back}
+            onSwitch={setCompose}
           />
         ) : (
           <CardBody

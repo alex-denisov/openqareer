@@ -23,6 +23,8 @@ export interface ComposeViewProps {
   readonly companyPath: string;
   /** «Не отправлять» и «Отправил»: назад к карточке. */
   readonly onBack: () => void;
+  /** Имя в «Кто нанимает»: черновик этому человеку. */
+  readonly onSwitch: (action: ComposeAction) => void;
 }
 
 /** Полное имя в дательном падеже нужно макету («Роману Ефимову»): склоняем обе части. */
@@ -110,6 +112,7 @@ function LeftColumn({ item, data, action, onBack }: ComposeViewProps) {
           <InfoTip label="Где пересеклись" text={[company, evidence].filter(Boolean).join(' · ')} />
         </h2>
         <MessageDraft
+          key={JSON.stringify(action.message.target)}
           target={action.message.target}
           kind={action.message.kind}
           recipientName={action.recipient}
@@ -145,7 +148,7 @@ function AboutCompany(props: Pick<ComposeViewProps, 'data' | 'item'>) {
   );
 }
 
-function RightColumn({ item, data, companyPath }: ComposeViewProps) {
+function RightColumn({ item, data, companyPath, vacancyId, onSwitch }: ComposeViewProps) {
   const lines = moneyLines(item, data.rates, useTargetCurrency(data.campaign));
   return (
     <div className="col">
@@ -166,6 +169,8 @@ function RightColumn({ item, data, companyPath }: ComposeViewProps) {
           people={data.people?.items ?? []}
           recruiter={data.recruiter}
           companyPath={companyPath}
+          vacancyId={vacancyId}
+          onWrite={onSwitch}
         />
       </Fold>
     </div>

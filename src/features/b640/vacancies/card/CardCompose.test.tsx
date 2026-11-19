@@ -101,4 +101,19 @@ describe('карточка вакансии: «Написать» открыва
     expect(root.textContent).toContain('Через знакомого — Роман Ефимов');
     expect(byText(root, 'button', 'Написать')).toBeNull();
   });
+
+  it('имя в «Кто нанимает» — ссылка: переключает черновик на этого человека (макет: имя ведёт к письму)', () => {
+    people = [
+      roman({ kind: 'known_contact', target: { contactId: 'c-p1' } }),
+      { ...roman({ kind: 'ask_introduction', target: { contactId: 'c-via' } }), id: 'p2', circle: 2, name: 'Ольга Ким' },
+    ];
+    view = mount(<CardScreen vacancyId="v1" />);
+    const root = view.container;
+    click(byText(root, 'button', 'Написать Роману'));
+    const olga = byText(root, '.hire-row a.row-title', 'Ольга Ким');
+    expect(olga).not.toBeNull();
+    click(olga);
+    expect(root.querySelector('h2.lead-title')?.textContent).toContain('Написать Ольге Ким');
+    expect(root.querySelector('.lk-inline')?.textContent).toContain('Черновик');
+  });
 });
