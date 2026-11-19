@@ -64,7 +64,8 @@ describe('parseOfferLetter: ten real letter formats', () => {
   });
 
   it('5. a salary range is not turned into one number', () => {
-    const text = 'Вилка по позиции — от 400 000 до 480 000 ₽ в месяц, окончательная сумма после финального интервью. Удалёнка.';
+    const text =
+      'Вилка по позиции — от 400 000 до 480 000 ₽ в месяц, окончательная сумма после финального интервью. Удалёнка.';
     expect(parseOfferLetter(text, NOW)).toEqual({ format: 'remote' });
   });
 
@@ -112,7 +113,8 @@ describe('parseOfferLetter: ten real letter formats', () => {
   });
 
   it('10. Russian salary in millions per year without a currency word stays in rubles', () => {
-    const text = 'Годовой доход — 7,2 млн до налогов. Испытательный срок — два месяца. Компенсация обучения и ДМС.';
+    const text =
+      'Годовой доход — 7,2 млн до налогов. Испытательный срок — два месяца. Компенсация обучения и ДМС.';
     expect(parseOfferLetter(text, NOW)).toEqual({
       baseSalary: 7_200_000,
       salaryPeriod: 'year',
