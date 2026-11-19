@@ -59,7 +59,12 @@ export interface MatchedSnapshotStore {
   read(candidateId: string, profileKey: string): PersistedMatchedSnapshot | null;
   write(candidateId: string, profileKey: string, snapshot: PersistedMatchedSnapshot): void;
   delete(candidateId: string): void;
+  /** Profiles stored for a candidate, for loading them all when a process starts. */
+  keys(candidateId: string): string[];
 }
+
+/** A snapshot of the previous process stays an answer this long; a rebuild runs behind it. */
+const STORED_MAX_AGE_MS = 24 * 60 * 60_000;
 
 const WAIT_EXPIRED = Symbol('wait-expired');
 
@@ -68,6 +73,8 @@ interface Snapshot {
   readonly storedAt: number;
   /** The shared-write count this list was read after; an older count marks it stale. */
   readonly poolWrites: number;
+  /** Read from the store: after a deploy it is the only answer that does not wait. */
+  readonly stored?: boolean;
 }
 
 export interface MatchedPoolSnapshotsOptions {
@@ -202,7 +209,8 @@ export class MatchedPoolSnapshots {
     const stored = this.entries.get(key) ?? this.loadStored(candidateId, profileKey, key);
     const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
     if (stored && this.isCurrent(stored, age)) return stored.items;
-    if (stored && age < this.maxAgeMs && !options.awaitRebuild) {
+    const servable = age < (stored?.stored ? STORED_MAX_AGE_MS : this.maxAgeMs);
+    if (stored && servable && !options.awaitRebuild) {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
@@ -218,9 +226,27 @@ export class MatchedPoolSnapshots {
       items: persisted.items,
       storedAt: persisted.storedAt,
       poolWrites: this.poolWrites,
+      stored: true,
     };
     this.entries.set(key, snapshot);
     return snapshot;
+  }
+
+  /**
+   * Prod 19.11: eleven role reads after a deploy each opened a 1 MB seal on the event loop, and
+   * the screen waited up to 3.8 s in the queue. Loaded one at a time before anyone reads.
+   */
+  async preload(candidateIds: readonly string[]): Promise<number> {
+    let loaded = 0;
+    for (const candidateId of candidateIds) {
+      for (const profileKey of this.guard(() => this.store?.keys(candidateId)) ?? []) {
+        const key = this.key(candidateId, profileKey);
+        if (this.entries.has(key)) continue;
+        if (this.loadStored(candidateId, profileKey, key)) loaded += 1;
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    }
+    return loaded;
   }
 
   private guard<T>(action: () => T): T | undefined {
