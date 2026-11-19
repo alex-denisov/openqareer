@@ -27,45 +27,6 @@ const linkedin = (connected: boolean) =>
         status: 'disconnected',
       };
 
-const asr = (value: string) => ({ value, memoryId: 'm', sourceMessageIds: [], reviewFlags: [] });
-
-const studio = {
-  draft: null,
-  savedAt: null,
-  evidenceFreshness: { fresh: true },
-  projection: {
-    master: {
-      kind: 'master',
-      targetRole: 'Engineering Manager · платёжная платформа',
-      about:
-        'Руковожу разработкой платёжной платформы «Финтех Лаб»: 9 человек, релиз раз в 3 дня вместо 2 недель, перевод на Kubernetes без остановки сервиса. Ищу роль руководителя разработки в финтехе.',
-      skills: [
-        'Go',
-        'Kubernetes',
-        'PostgreSQL',
-        'Управление командой',
-        'Найм разработчиков',
-        'Платёжные системы',
-      ].map((name) => ({ id: name, name })),
-      experience: [
-        {
-          id: 'e1',
-          employer: asr('Финтех Лаб'),
-          title: asr('Руководитель группы разработки'),
-          description: asr('Группа из 9 человек, 6 из них наняла сама.'),
-          bullets: [asr('Релиз раз в 3 дня вместо 2 недель.')],
-        },
-      ],
-      education: [],
-      languages: [],
-      unknowns: [],
-    },
-    germanyVariant: {},
-    evidenceSnapshot: [],
-    excludedEvidenceIds: [],
-  },
-};
-
 const draft = (index: number, kind: 'post' | 'comment', status: string) => ({
   id: `d${index}`,
   kind,
@@ -93,8 +54,13 @@ async function mock(
   await page.route('**/api/v1/candidate/connections', (route) =>
     route.fulfill({ json: { data: [linkedin(options.connected ?? true)] } }),
   );
-  await page.route('**/api/v1/candidate/resume', (route) =>
-    route.fulfill({ json: { data: studio } }),
+  const noSection = { current: null, suggestion: null, copiedAt: null, pastedAt: null };
+  await page.route('**/api/v1/candidate/b640/linkedin/profile', (route) =>
+    route.fulfill({
+      json: {
+        data: { headline: noSection, about: noSection, experience: noSection, skills: noSection },
+      },
+    }),
   );
   const page20 = (items: unknown[]) => ({ items, total: items.length, offset: 0, limit: 20 });
   await page.route('**/api/v1/candidate/b640/linkedin/rhythm', (route) =>
@@ -134,14 +100,13 @@ const publications = [
 ];
 
 test.describe('B664: LinkedIn нового кабинета', () => {
-  test('профиль: тексты и «Скопировать», без «Применить»', async ({ page }) => {
+  test('профиль: четыре раздела с полем вставки, без «Применить»', async ({ page }) => {
     await mock(page);
     await page.goto(PROFILE, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a03"]')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.li-sec-t')).toHaveText(['Заголовок', 'О себе', 'Опыт', 'Навыки']);
     await expect(page.getByRole('button', { name: /Применить/ })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Скопировать: Заголовок' }).click();
-    await expect(page.getByText('Скопировано')).toBeVisible();
+    await expect(page.getByLabel('Вставьте текущий текст раздела')).toHaveCount(4);
     await expectGates(page);
   });
 
