@@ -366,8 +366,8 @@ describe('buildFootprintRiskSummary', () => {
     );
     expect(summary.total).toBe(2);
     expect(summary.items.map((item) => item.detail)).toEqual([
-      `duolingo.com/profile/adenisov · ${detail}`,
-      `duolingo.com/profile/a.denisov · ${detail}`,
+      'duolingo.com/profile/adenisov · Открытая страница найдена по нику.',
+      'duolingo.com/profile/a.denisov · Открытая страница найдена по нику.',
     ]);
   });
 
@@ -394,4 +394,50 @@ describe('buildFootprintRiskSummary', () => {
     );
     expect(summary.items[0].detail).toBe('Страница site.test/u/x открыта');
   });
+
+  describe('B727: страница по нику без подтверждения — «Нужно проверить сейчас»', () => {
+    const nick = (overrides: Partial<CandidateFootprintFinding> = {}) =>
+      finding({
+        title: 'Duolingo',
+        url: 'https://www.duolingo.com/profile/alexey_denisov',
+        detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
+        review: 'unreviewed',
+        ...overrides,
+      });
+
+    it('важно, «Проверить» открывает страницу, полезные её не считают', () => {
+      const summary = buildFootprintRiskSummary(audit([nick(), finding({ title: 'GitHub' })]), []);
+      const item = summary.items.find((entry) => entry.title === 'Duolingo');
+      expect(item).toMatchObject({
+        category: 'needs_check',
+        level: 'important',
+        action: { kind: 'confirm_owner', label: 'Проверить' },
+        url: 'https://www.duolingo.com/profile/alexey_denisov',
+      });
+      expect(summary.categories.find((entry) => entry.id === 'useful_evidence')?.count).toBe(1);
+      expect(summary.categories.find((entry) => entry.id === 'needs_check')?.count).toBe(1);
+    });
+
+    it('строка без «владение нужно подтвердить» — действие уже в кнопке', () => {
+      const [item] = buildFootprintRiskSummary(audit([nick()]), []).items;
+      expect(item!.detail).toBe('duolingo.com/profile/alexey_denisov · Открытая страница найдена по нику.');
+    });
+
+    it('подтверждённая или добавленная в профиль — остаётся полезной', () => {
+      const summary = buildFootprintRiskSummary(
+        audit([
+          nick({ review: 'confirmed_self' }),
+          nick({ url: 'https://profiles.topcoder.com/alexey_denisov', checklistMark: 'added_to_profile' }),
+        ]),
+        [],
+      );
+      expect(summary.items.map((entry) => entry.category)).toEqual(['useful_evidence', 'useful_evidence']);
+    });
+
+    it('«Это не моё» — находка уходит из сводки', () => {
+      const summary = buildFootprintRiskSummary(audit([nick({ review: 'not_self' })]), []);
+      expect(summary.items).toEqual([]);
+    });
+  });
 });
+

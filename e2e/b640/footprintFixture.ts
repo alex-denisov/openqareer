@@ -138,6 +138,20 @@ const USEFUL = [
   ),
 ];
 
+/** B727: страница по нику без подтверждения — «Нужно проверить», «Проверить» открывает её. */
+export const NICK_URL = 'https://www.duolingo.com/profile/alexey_denisov';
+const NICK = {
+  ...item(
+    7,
+    'needs_check',
+    'important',
+    'Duolingo',
+    'duolingo.com/profile/alexey_denisov · Открытая страница найдена по нику.',
+    ['confirm_owner', 'Проверить'],
+  ),
+  url: NICK_URL,
+};
+
 const TITLES: Record<string, string> = {
   personal_data: 'Личные данные открыты',
   needs_check: 'Нужно проверить сейчас',
@@ -174,11 +188,13 @@ function summary(state: string, items: ReturnType<typeof item>[], headline: stri
   };
 }
 
-export type FootprintCase = 'fresh' | 'ready' | 'nothing' | 'checking' | 'failed';
+export type FootprintCase = 'fresh' | 'ready' | 'nothing' | 'checking' | 'failed' | 'nick';
 
 function caseSummary(kind: FootprintCase) {
   if (kind === 'ready') return summary('ready', [...RISKY, ...USEFUL], '6 находок, 4 стоит убрать');
   if (kind === 'nothing') return summary('ready', USEFUL, '2 находки, ничего рискового');
+  if (kind === 'nick')
+    return summary('ready', [...RISKY, NICK, ...USEFUL], '7 находок, 5 стоит убрать');
   if (kind === 'checking') return summary('checking', [], null);
   if (kind === 'failed') return summary('failed', [], null);
   return summary('not_checked', [], null);
@@ -229,6 +245,13 @@ function withRemovals(data: ReturnType<typeof caseSummary>, removals: Map<string
     const resolved = removal.result === 'removed';
     return { ...entry, removal, resolved, action: resolved ? null : entry.action };
   });
+  return { ...data, items };
+}
+
+/** «Это не моё» (B727): как на сервере, отвергнутая находка уходит из сводки. */
+function withoutRejected(data: ReturnType<typeof caseSummary>, calls: FootprintCalls) {
+  const last = new Map(calls.reviews.map((entry) => [entry.id, entry.review]));
+  const items = data.items.filter((entry) => last.get(entry.findingId ?? '') !== 'not_self');
   return { ...data, items };
 }
 
@@ -290,7 +313,9 @@ export async function openFootprint(
     }),
   );
   await page.route(`${API}/candidate/footprint/risks`, (route) =>
-    route.fulfill({ json: { data: withRemovals(caseSummary(kind), removals) } }),
+    route.fulfill({
+      json: { data: withoutRejected(withRemovals(caseSummary(kind), removals), calls) },
+    }),
   );
   await mockRemoval(page, calls, removals, recheckResult);
   await page.route(`${API}/candidate/footprint/start`, (route) => {
