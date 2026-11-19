@@ -69,6 +69,8 @@ function publicEdit(draft: HhEditDraft, now: string): HhResumeEdit {
     id: draft.id,
     section: draft.section,
     ...(draft.place ? { place: draft.place } : {}),
+    ...(draft.employer ? { employer: draft.employer } : {}),
+    ...(draft.position ? { position: draft.position } : {}),
     was: draft.was,
     now,
     ...(draft.added ? { added: draft.added } : {}),

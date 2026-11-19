@@ -5,8 +5,9 @@ import { pauseBetweenEdits } from './hhEditPace';
 import { forgetReadResumes } from './hhResumeReading';
 
 /**
- * B678, срез 3: правка раздела переносится в резюме hh.ru в окне кандидата. Опыт по местам — только
- * копированием: место работы на hh.ru общее для всех резюме, правка изменила бы его везде.
+ * B678, срезы 3–4: правка раздела переносится в резюме hh.ru в окне кандидата. Место работы на hh.ru
+ * общее для всех резюме, поэтому правка опыта — новое место с галочкой только этого резюме; у исходного
+ * снимается галочка этого резюме, его текст не меняется. Без работодателя и должности — только копирование.
  */
 export type HhApplyState =
   | { readonly kind: 'idle' }
@@ -20,17 +21,29 @@ const FAILURE_TEXT: Readonly<Record<string, string>> = {
   hh_busy: 'Окно hh.ru занято другим действием. Нажмите ещё раз через минуту.',
   field_locked: 'hh.ru не даёт менять этот раздел сейчас. Скопируйте текст и вставьте на hh.ru.',
   field_invalid: 'hh.ru не принял текст. Скопируйте его и поправьте на hh.ru.',
+  other_resumes_ticked:
+    'На hh.ru это место работы отмечено и другими резюме: изменение задело бы их. Скопируйте текст и вставьте на hh.ru.',
+  original_locked: 'hh.ru не даёт убрать прежнее место из этого резюме. Скопируйте текст и вставьте на hh.ru.',
   saved_unconfirmed: 'hh.ru сохранил правку, но проверить её не получилось. Откройте резюме на hh.ru и посмотрите раздел.',
 };
 const FAILURE_DEFAULT = 'Не получилось изменить резюме на hh.ru. Скопируйте текст и вставьте на hh.ru.';
 
+function placeKnown(edit: HhResumeEdit): boolean {
+  return Boolean(edit.employer?.trim() && edit.position?.trim() && edit.was.trim());
+}
+
 export function canApply(edit: HhResumeEdit): boolean {
-  return edit.section === 'title' || edit.section === 'about' || (edit.section === 'skills' && (edit.added?.length ?? 0) > 0);
+  if (edit.section === 'skills') return (edit.added?.length ?? 0) > 0;
+  if (edit.section === 'experience') return placeKnown(edit);
+  return true;
 }
 
 export function editInput(resumeId: string, edit: HhResumeEdit): HhResumeEditInput | null {
   if (!canApply(edit)) return null;
   if (edit.section === 'skills') return { resumeId, section: 'skills', text: '', skills: edit.added ?? [] };
+  if (edit.section === 'experience') {
+    return { resumeId, section: 'experience', employer: edit.employer ?? '', position: edit.position ?? '', was: edit.was, text: edit.now };
+  }
   return { resumeId, section: edit.section === 'title' ? 'title' : 'about', text: edit.now, skills: [] };
 }
 

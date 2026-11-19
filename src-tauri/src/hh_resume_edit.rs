@@ -57,13 +57,13 @@ pub struct HhResumeEditReport {
 }
 
 impl HhResumeEditReport {
-    fn applied() -> Self {
+    pub(crate) fn applied() -> Self {
         Self {
             outcome: "applied".into(),
             failure_code: None,
         }
     }
-    fn failed(code: &str) -> Self {
+    pub(crate) fn failed(code: &str) -> Self {
         Self {
             outcome: "failed".into(),
             failure_code: Some(code.to_string()),
@@ -71,7 +71,7 @@ impl HhResumeEditReport {
     }
 }
 
-fn plain_line(value: &str, max: usize) -> bool {
+pub(crate) fn plain_line(value: &str, max: usize) -> bool {
     let trimmed = value.trim();
     !trimmed.is_empty() && trimmed.chars().count() <= max && !trimmed.contains(['\n', '\r'])
 }
@@ -148,7 +148,7 @@ pub fn editor_url(resume_id: &str, block: &str) -> String {
     format!("https://hh.ru{}", edit_path(resume_id, block))
 }
 
-async fn open_editor(app: &AppHandle, url: &str) -> Result<tauri::Webview, String> {
+pub(crate) async fn open_editor(app: &AppHandle, url: &str) -> Result<tauri::Webview, String> {
     let label = session_window_label("hh").ok_or("unsupported_platform")?;
     let page = SessionWindowRequest {
         platform: "hh".into(),
@@ -256,7 +256,7 @@ pub fn read_back_report(
 /// Keeps edits a person's pace apart, whoever asks for them.
 static LAST_EDIT: Mutex<Option<Instant>> = Mutex::new(None);
 
-fn wait_before_next_edit() -> Duration {
+pub(crate) fn wait_before_next_edit() -> Duration {
     let mut last = LAST_EDIT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
