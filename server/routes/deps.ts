@@ -76,6 +76,8 @@ export interface RouteDeps {
   resumeStructurer?: ResumeStructurer;
   /** Пункты резюме из фактов беседы (29.10); без ключа блок консультанта не появляется. */
   experienceFactRewriter?: import('../providers/experienceFactRewriter').ExperienceFactRewriter;
+  /** B686: разбор KPI для дневника; без ключей и Vertex разбор отвечает отказом. */
+  kpiExtractor?: import('../providers/kpiExtractor').KpiExtractor;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */

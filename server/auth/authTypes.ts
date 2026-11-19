@@ -194,6 +194,10 @@ export interface SessionAuth {
   isUsernameTaken(username: string): boolean;
   authenticate(sessionToken: string): AuthPrincipal | null;
   logout(sessionToken: string): void;
+  /** B401: сессия после второго фактора. */
+  issueSessionForUser?(userId: string, clientDeviceId?: string): { principal: AuthPrincipal; sessionToken: string } | null;
+  /** B401: пароль вместо кода при отключении защиты и выдаче новых кодов. */
+  passwordMatches?(userId: string, password: string): Promise<boolean>;
   verifyEmail?(sessionToken: string, code: string): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   resendEmailVerification?(sessionToken: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
   changeUnverifiedEmail?(sessionToken: string, email: string, currentPassword: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
