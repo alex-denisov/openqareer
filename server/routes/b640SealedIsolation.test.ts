@@ -127,3 +127,27 @@ describe('B674: the new route leaves what the old route reads', () => {
     expect(money.candidates.getCandidateWorkspace(money.id)?.vacancySort).toEqual({ by: 'money', dir: 'desc' });
   });
 });
+
+describe('B702: a new process answers the first read of the new route from the sealed list', () => {
+  it('answers sort=fit within 3 s while the pool hangs, same rows and total as the built list', async () => {
+    const h = await setup();
+    const built = await h.get(`${NEW}?sort=fit`, h.user);
+    await h.get(OLD, h.user);
+    forgetMatchedListsForTests();
+    h.hangPool(true);
+    const cold = await within(h.get(`${NEW}?sort=fit`, h.user), 3000, 'new route');
+    expect(cold.statusCode).toBe(200);
+    expect(h.ids(cold.body)).toEqual(h.ids(built.body));
+    expect(JSON.parse(cold.body).meta.total).toBe(JSON.parse(built.body).meta.total);
+    expect(JSON.parse(cold.body).meta.facets).toEqual(JSON.parse(built.body).meta.facets);
+  });
+
+  it('a page past the sealed rows or another sort is built as before', async () => {
+    const h = await setup();
+    await h.get(OLD, h.user);
+    forgetMatchedListsForTests();
+    const company = await h.get(`${NEW}?sort=company&direction=asc`, h.user);
+    expect(company.statusCode).toBe(200);
+    expect(h.ids(company.body)).toEqual(['cluster-2', 'cluster-1', 'cluster-3', 'cluster-4']);
+  });
+});
