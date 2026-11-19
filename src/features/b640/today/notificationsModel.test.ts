@@ -29,6 +29,12 @@ describe('b640 уведомления: действие события', () => {
     });
   });
 
+  it('B690: «вход в hh.ru истёк» ведёт в «Подключения»', () => {
+    expect(
+      notificationAction(note({ kind: 'delivery_error', source: 'hh_session', title: 'Вход в hh.ru истёк' })),
+    ).toEqual({ label: 'Войти снова', path: '/app/account/connections' });
+  });
+
   it('без источника ответ ведёт в список откликов', () => {
     const action = notificationAction(
       note({ action: { label: 'x', href: '/app?view=responses' } }),

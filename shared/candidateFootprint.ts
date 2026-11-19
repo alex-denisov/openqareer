@@ -1,7 +1,7 @@
 import type { FootprintFinding } from '../server/osint/adapters/footprintAdapter';
 import type { FootprintRemoval } from './footprintRemoval';
 
-export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa';
+export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa' | 'youtube';
 export type FootprintReview = 'unreviewed' | 'confirmed_self' | 'not_self' | 'hidden';
 export type FootprintChecklistMark =
   | 'password_changed'

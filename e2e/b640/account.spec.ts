@@ -177,6 +177,19 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
     await expect(page).toHaveURL(/\/app\/account\/notifications$/u);
   });
 
+  test('n03: вход в hh.ru истёк — предупреждение в строке hh', async ({ page }) => {
+    await openAccount(page, '/app/account/connections');
+    await page.route('**/api/v1/candidate/b640/hh/session', (route) =>
+      route.fulfill({ json: { data: { expired: true, since: '2026-11-19T10:00:00.000Z' } } }),
+    );
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const screen = page.locator('[data-b640-node="n03"]');
+    const hh = screen.locator('.cn-row').nth(1);
+    await expect(hh.locator('.set-v.is-warn')).toHaveText('вход истёк');
+    await expect(hh.getByRole('button', { name: 'Отключить hh.ru' })).toBeVisible();
+    await expectGates(page);
+  });
+
   test('n02: переключатель сохраняется, Telegram привязывается на месте', async ({ page }) => {
     const calls = await openAccount(page, '/app/account/notifications');
     const screen = page.locator('[data-b640-node="n02"]');
