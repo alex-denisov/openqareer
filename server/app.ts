@@ -472,8 +472,9 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
     rebuildCampaignRoles(deps, candidateId, { log }),
   );
   deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
-    await warmMatchedList(deps, candidateId, log);
+    // Roles first (prod 19.11): the list answers from its sealed copy, «Карьера» had nothing.
     await warmRoleSnapshots(deps, candidateId, log);
+    await warmMatchedList(deps, candidateId, log);
   });
   return deps;
 }
