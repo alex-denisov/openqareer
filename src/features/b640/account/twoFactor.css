@@ -33,7 +33,7 @@
     list-style: none;
     border: var(--career-border-width) solid var(--career-line);
     border-radius: var(--career-radius-sm);
-    background: var(--career-surface-2, var(--career-surface));
+    background: var(--career-surface);
   }
   .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-2); }
   @media (max-width: 767px) {
