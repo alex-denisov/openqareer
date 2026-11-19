@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 const SIGNED = '[data-qa^="mainmenu_applicantProfile"]';
-const source = readFileSync(join(__dirname, 'hh_raise_page.js'), 'utf8').replace(
+const source = readFileSync(join(__dirname, 'hh_raise_page.js'), 'utf8').replaceAll(
   '__SIGNED_IN_SELECTOR__',
   JSON.stringify(SIGNED),
 );
