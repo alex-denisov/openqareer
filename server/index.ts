@@ -1,4 +1,7 @@
 import { buildApp } from './app';
+import { DatabaseSync } from 'node:sqlite';
+import { candidateFlagLookup, queueDueRaises } from './candidate/hhRaiseQueue';
+import { SqliteHhRaiseRepository } from './candidate/sqliteHhRaiseRepository';
 import { captureCpuProfileOnSignal } from './observability/cpuProfileOnSignal';
 import { readServerConfig } from './config';
 import { scheduleLandingStatsRefresh } from './landing/landingStatsSchedule';
@@ -285,6 +288,7 @@ let recruiterIntelligenceTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
 let matchedPoolPrecomputeTimer: NodeJS.Timeout | undefined;
+let hhRaiseQueueTimer: NodeJS.Timeout | undefined;
 let linkedinPoolSessionExpiryTimer: NodeJS.Timeout | undefined;
 let linkedinPoolSessionExpiryRetryTimer: NodeJS.Timeout | undefined;
 
@@ -395,6 +399,7 @@ async function shutdown(signal: string): Promise<void> {
   if (recruiterIntelligenceTimer) clearInterval(recruiterIntelligenceTimer);
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
+  if (hhRaiseQueueTimer) clearInterval(hhRaiseQueueTimer);
   if (matchedPoolPrecomputeTimer) clearInterval(matchedPoolPrecomputeTimer);
   if (linkedinPoolSessionExpiryTimer) clearInterval(linkedinPoolSessionExpiryTimer);
   if (linkedinPoolSessionExpiryRetryTimer) clearTimeout(linkedinPoolSessionExpiryRetryTimer);
@@ -474,6 +479,17 @@ try {
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
   retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
   retentionSweepTimer.unref();
+  // B699: только ставит поднятия резюме в очередь кандидатам с флагом; в hh не ходит.
+  const hhRaiseRepository = new SqliteHhRaiseRepository({ databasePath: config.databasePath });
+  const hhRaiseFlag = candidateFlagLookup(new DatabaseSync(config.databasePath, { readOnly: true }), config);
+  hhRaiseQueueTimer = setInterval(() => {
+    try {
+      queueDueRaises(hhRaiseRepository, new Date(), hhRaiseFlag);
+    } catch (error) {
+      app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'hh-raise-queue-failed');
+    }
+  }, 60_000);
+  hhRaiseQueueTimer.unref();
   // Expired LinkedIn bearer cookies are removed at most fifteen minutes after li_at expiry.
   linkedinPoolSessionExpiryTimer = setInterval(runLinkedinPoolSessionExpiryPurge, 15 * 60 * 1_000);
   linkedinPoolSessionExpiryTimer.unref();
