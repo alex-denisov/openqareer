@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerReportedSeoBotObservability, reportedBot, seoSurface } from './reportedSeoBots';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const names = ['YandexBot', 'YandexAdditional', 'GPTBot', 'OAI-SearchBot', 'ChatGPT-User', 'Google-Extended', 'Googlebot', 'ClaudeBot', 'Claude-SearchBot', 'Claude-User', 'PerplexityBot'];
 afterEach(() => vi.useRealTimers());
@@ -82,5 +83,5 @@ describe('response aggregation lifecycle', () => {
     await app.inject({ url: '/faq', headers: { 'user-agent': 'GPTBot' } });
     await app.close();
     expect(reports(log)[1]).toMatchObject({ complete: true, overflowResponses: 0 });
-  }, 30_000);
+  }, timeBudget(30_000));
 });

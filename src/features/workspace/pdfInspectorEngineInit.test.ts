@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 // The engine is handed pre-fetched bytes now that the 4.8 MB `.wasm` arrives in
 // parts (PRB-013, B176). If wasm-bindgen ever stops accepting a buffer, PDF
@@ -17,5 +18,5 @@ describe('pdf inspector engine initialisation', () => {
 
     expect(typeof module.processPdf).toBe('function');
     expect(typeof module.version()).toBe('string');
-  }, 30_000);
+  }, timeBudget(30_000));
 });

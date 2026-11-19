@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { takeMassRecountSlot } from '../data/massRecountDaily';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 const DAY_ONE = Date.parse('2026-11-04T10:00:00.000Z');
 const DAY_TWO = Date.parse('2026-11-05T00:00:30.000Z');
@@ -50,7 +51,7 @@ describe('mass recount ceiling per UTC day (prod 01-02.11: $9.9 and $13.4 a day)
     const reset = (runtime.database.prepare(`SELECT COUNT(*) AS n FROM vacancy_fit_queue WHERE status='pending' AND attempts=0`).get() as { n: number }).n;
     const kept = (runtime.database.prepare(`SELECT COUNT(*) AS n FROM vacancy_fit_queue WHERE status='failed' AND attempts=3`).get() as { n: number }).n;
     expect([reset, kept]).toEqual([10000, FAILED - 10000]);
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('writes one info line per kind at every start, also at zero, and a warning at the ceiling', () => {
     const runtime = setup();
@@ -67,7 +68,7 @@ describe('mass recount ceiling per UTC day (prod 01-02.11: $9.9 and $13.4 a day)
     const again = options(DAY_ONE + 1000);
     runtime.requeueAfterParserUpgrade(again);
     expect(again.log.info.mock.calls.map(([line]) => line).join('\n')).toMatch(/kind=fit requeued=0 remaining=7000 limit=5000/u);
-  }, 60_000);
+  }, timeBudget(60_000));
 
   it('the background refresh of counted rows stops at its ceiling; the count survives a new connection', () => {
     const runtime = setup();

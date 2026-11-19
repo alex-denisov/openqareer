@@ -12,6 +12,7 @@ import {
   setListingHistory,
 } from './seo/catalogSitemapSchedule';
 import { buildSitemapFiles } from './seo/sitemapXml';
+import { timeBudget } from '../shared/testing/timeBudget';
 
 afterEach(() => resetCatalogSitemaps());
 
@@ -382,7 +383,7 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/listings-1.xml</loc>');
     expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/jobs-1.xml</loc>');
     expect(response.body).not.toContain('<urlset');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('serves each child file and keeps deep pages and unsalaried cards out', async () => {
     const app = await appWithPool([
@@ -417,13 +418,13 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
 
     const all = statics.body + listings.body + jobs.body;
     expect(all).not.toContain('/vacancies/page/');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('answers 404 for a job file that does not exist', async () => {
     const app = await appWithPool([vacancy(1, { salary: SALARY })]);
     const response = await app.inject({ method: 'GET', url: '/sitemaps/jobs-7.xml' });
     expect(response.statusCode).toBe(404);
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('serves the files written by the maintenance process when they are loaded', async () => {
     setCatalogSitemaps(
@@ -440,7 +441,7 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     expect(index.body).not.toContain('jobs-1.xml');
     const listings = await app.inject({ method: 'GET', url: '/sitemaps/listings-1.xml' });
     expect(listings.body).toContain('/vacancies/moscow');
-  }, 20_000);
+  }, timeBudget(20_000));
 
   it('marks a card outside the indexable set noindex, follow and drops its JobPosting', async () => {
     const app = await appWithPool([
