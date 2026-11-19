@@ -5,6 +5,7 @@ import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { RouteDeps } from '../routes/deps';
 import { buildApp } from '../app';
 import { config, noSessions } from '../appTestHarness';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 describe('MatchedPoolPrecompute (C60)', () => {
   const item = (id: string) => ({ cluster: { id } }) as unknown as MatchedVacancyItem;
@@ -247,7 +248,7 @@ describe('MatchedPoolPrecompute (C60)', () => {
       await work;
 
       expect(health.statusCode).toBe(200);
-      expect(healthElapsedMs).toBeLessThan(100);
+      expect(healthElapsedMs).toBeLessThan(timeBudget(100));
     } finally {
       await app.close();
     }

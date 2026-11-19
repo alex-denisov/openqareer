@@ -8,6 +8,7 @@ import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacan
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
+import { timeBudget } from '../../shared/testing/timeBudget';
 
 /**
  * B221 — движок не держит копию пула в куче. Доказательство: то, что попало в
@@ -232,7 +233,7 @@ describe('B221 · чистый запуск без кучи и предсуще�
     expect(restartedEngine.clusterRebuildCount).toBe(0);
     expect(reclusterSpy).not.toHaveBeenCalled();
     expect(iterateSpy).not.toHaveBeenCalled();
-    expect(elapsedMs).toBeLessThan(500);
+    expect(elapsedMs).toBeLessThan(timeBudget(500));
   });
 
   it('старт без сохранённых кластеров при наличии вакансий запускает первичное сведение и сохраняет их', async () => {

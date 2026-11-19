@@ -1,0 +1,40 @@
+/* «Карьера»: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  @media (max-width: 767px) {
+    /* S10: две кнопки закреплены над нижней навигацией — последний блок («Назвать свою роль»)
+       не уходит под них. */
+    div.b640:has(main .r2-actions > .is-primary) #career-main {
+      padding-block-end: calc(
+        var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px) + 2 *
+          var(--career-target-min) + var(--career-space-8)
+      );
+    }
+  }
+  /* S9c: подвал окна «Роли поиска» переносит длинную главную кнопку (в макете `pf-df rs-foot`). */
+  .b640 .rs-dlg .pf-df {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  /* C10: ошибка поля «Зарплата от» — как у полей профиля (`.pf-f small.is-err`). */
+  .b640 .cc-edit .field small.is-err {
+    display: flex;
+    gap: var(--career-space-1);
+    align-items: center;
+    color: var(--career-danger);
+    font-weight: 600;
+  }
+  /* C10: найденные места под полем «География». */
+  .b640 .cc-opts {
+    display: grid;
+    gap: var(--career-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* C4: на 1440 и 1176 главная кнопка «Ответить» первой, как в макете; на 390 полоса закреплена. */
+  @media (min-width: 768px) {
+    .b640 .lead > .m-commit > .row-act {
+      order: 1;
+    }
+  }
+}

@@ -7,6 +7,7 @@ import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
 import { VACANCY_POOL_INDEX_TABLE } from '../../data/sqliteSchema';
 import { PLACEMENT_TABLES } from '../placement/placementSchema';
 import { CoverageReport, decodeCursor, encodeCursor } from './coverageReport';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 function openDb(path = ':memory:'): DatabaseSync {
   const db = new DatabaseSync(path);
@@ -174,12 +175,12 @@ describe('CoverageReport', () => {
       expect(totals.totalCompanies).toBeGreaterThan(160_000);
       expect(page.items.length).toBeGreaterThan(0);
       // Target is 1 s; a machine that is already overloaded gets a 3x allowance.
-      const budgetMs = loadavg()[0] > cpus().length ? 3000 : 1000;
+      const budgetMs = timeBudget(loadavg()[0] > cpus().length ? 3000 : 1000);
       expect(totalsMs).toBeLessThan(budgetMs);
       expect(listMs).toBeLessThan(budgetMs * 1.5);
       db.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  }, 60_000);
+  }, timeBudget(60_000));
 });

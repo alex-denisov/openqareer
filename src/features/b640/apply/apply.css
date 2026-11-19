@@ -20,4 +20,25 @@
   .b640 .cv-page > p { margin: 0 0 var(--career-space-2); }
   /* B704: лист выбора резюме без подвала — «Прочитать снова» под строкой, отступ до края окна. */
   .b640 .hh2-sheet .pf-db:last-child { padding-block-end: var(--career-dlg-pad, var(--career-space-6)); }
+  /* B678: сверка резюме с вакансией справа от названия; длинный список недостающего переносится. */
+  .b640 .hh2-st {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--career-space-1);
+    max-inline-size: 22rem;
+    min-inline-size: 0;
+  }
+  /* B678: строки текста раздела hh.ru одна под другой, как на hh.ru. */
+  .b640 .hh2-line { display: block; }
+  /* B678: отказ hh.ru применить правку — под строкой правки, текст остаётся для копирования. */
+  .b640 .hh2-err {
+    margin: var(--career-space-2) 0 0;
+    padding: var(--career-space-2) var(--career-space-3);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-danger-soft);
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+  }
 }

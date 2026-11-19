@@ -7,6 +7,10 @@
 export const HH_RESUMES_MAX = 20;
 export const HH_RESUME_TITLE_MAX_LENGTH = 300;
 export const HH_RESUME_TEXT_MAX_LENGTH = 40_000;
+/** B678: для сверки хватает начала резюме; так снимок с пятью резюме укладывается в предел тела запроса. */
+export const HH_REVIEW_TEXT_MAX_LENGTH = 8_000;
+/** B678: сколько резюме сверяется за одно открытие листа — страницы hh.ru читаются по одной. */
+export const HH_REVIEW_RESUMES_MAX = 5;
 
 /** Идентификатор резюме hh.ru — из ссылки карточки резюме. */
 export const HH_RESUME_ID = /^[A-Za-z0-9]{1,64}$/u;
@@ -20,18 +24,78 @@ export interface HhResumeSummary {
   readonly updatedLabel?: string;
 }
 
+/** B678: место работы в резюме hh.ru так, как его показывает страница резюме. */
+export interface HhResumePlace {
+  readonly employer: string;
+  readonly title: string;
+  readonly period: string;
+  readonly text: string;
+}
+
+/** B678: разделы резюме hh.ru, которые платформа предлагает поправить. */
+export interface HhResumeSections {
+  readonly title: string;
+  readonly about: string;
+  readonly skills: readonly string[];
+  readonly places: readonly HhResumePlace[];
+}
+
+export const HH_SECTION_PLACES_MAX = 30;
+export const HH_SECTION_TEXT_MAX_LENGTH = 4_000;
+export const HH_SECTION_SKILLS_MAX = 100;
+
 /** Содержимое резюме так, как его показывает hh.ru: заголовок и текст страницы. */
 export interface HhResumeContent {
   readonly id: string;
   readonly title: string;
   readonly text: string;
+  /** B678: разделы выбранного резюме; у прежних снимков их нет. */
+  readonly sections?: HhResumeSections;
+}
+
+export type HhResumeEditSection = 'title' | 'experience' | 'skills' | 'about';
+
+/** B678: правка раздела резюме hh.ru «было → станет». */
+export interface HhResumeEdit {
+  readonly id: string;
+  readonly section: HhResumeEditSection;
+  /** Место работы и период — у правок опыта. */
+  readonly place?: string;
+  /** Работодатель и должность места, как их показал hh.ru: по ним приложение находит исходное место (срез 4). */
+  readonly employer?: string;
+  readonly position?: string;
+  readonly was: string;
+  readonly now: string;
+  /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */
+  readonly added?: readonly string[];
 }
 
 export interface HhResumeSnapshot {
   readonly resumes: readonly HhResumeSummary[];
   /** Резюме, которым кандидат откликается. */
   readonly selected: HhResumeContent | null;
+  /** B678: прочитанное содержимое остальных резюме списка — для сверки с вакансией. */
+  readonly contents?: readonly HhResumeContent[];
   readonly readAt: string;
+}
+
+export type HhResumeFitStatus = 'fits' | 'gaps' | 'unread';
+
+/** B678: сверка одного резюме hh.ru с требованиями вакансии. */
+export interface HhResumeFit {
+  readonly resumeId: string;
+  readonly title: string;
+  /** «подходит» — есть все требования, «не хватает» — есть пропуски, «unread» — содержимое не читали. */
+  readonly status: HhResumeFitStatus;
+  readonly matched: readonly string[];
+  readonly missing: readonly string[];
+}
+
+export interface HhResumeReview {
+  readonly requirements: readonly string[];
+  readonly resumes: readonly HhResumeFit[];
+  /** Резюме, которое лучше подходит вакансии; `null` — ни одно не прочитано. */
+  readonly recommendedId: string | null;
 }
 
 export const HH_APPLY_OUTCOMES = ['sent', 'questionnaire', 'failed'] as const;

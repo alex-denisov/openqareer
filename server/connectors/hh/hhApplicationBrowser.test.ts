@@ -4,6 +4,7 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 import { expect as expectPage } from '@playwright/test';
 import type { ConnectorRequest } from '../connectorHarness';
 import { HhApplicationBrowserSession } from './hhApplicationBrowser';
+import { timeBudget } from '../../../shared/testing/timeBudget';
 
 describe('hh.ru candidate-scoped application browser session', { timeout: 35_000 }, () => {
   const fixedNow = '2026-08-14T15:00:00.000Z';
@@ -25,7 +26,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
 
   afterAll(async () => {
     await browser?.close();
-  }, 30_000);
+  }, timeBudget(30_000));
 
   async function createSession(html = fixture) {
     context = await browser.newContext();
@@ -315,7 +316,7 @@ describe('hh.ru candidate-scoped application browser session', { timeout: 35_000
       status: 'paused',
       diagnostic: { reason: 'hh_target_mismatch' },
     });
-  }, 30000);
+  }, timeBudget(30000));
 
   it('never reports completion without a bounded DOM confirmation reference', async () => {
     const noReference = fixture.replace(' data-response-id="synthetic-response-42"', '');

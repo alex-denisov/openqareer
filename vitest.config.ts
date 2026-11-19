@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { timeBudget } from './shared/testing/timeBudget';
 
 export default defineConfig({
   // Mirrors `vite.config.ts`: components read these at module scope
@@ -9,7 +10,8 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify(process.env.OPENQAREER_COMMIT_SHA ?? ''),
   },
   test: {
-    testTimeout: 15_000,
+    // B718: локально тайм-аут ×5 (хост делят несколько сессий), в CI прежние 15 с.
+    testTimeout: timeBudget(15_000),
     exclude: [
       '**/e2e/**',
       // Agent worktrees hold a second checkout of this repo; running their
