@@ -83,12 +83,12 @@ afterEach(() => {
 });
 
 describe('d01 план адаптации', () => {
-  it('день из 90, этап с задачей, шаги без «Проверки на 30-й день»; отметка задачи сохраняет план', async () => {
+  it('день из 90, этап с задачей, шаги вместе с «Проверкой на 30-й день»; отметка задачи сохраняет план', async () => {
     api.savePlan.mockResolvedValue({ ...WORKPLACE, planning: { adaptationPlan: PLAN } });
     const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
     expect(page.querySelector('#pl-title')?.textContent).toBe('День 34 из 90: цель — познакомиться с командой');
     expect(page.textContent).toContain('2 человека · 1 без встречи');
-    expect(page.textContent).not.toContain('Проверка на 30-й день');
+    expect(page.textContent).toContain('Проверка на 30-й день');
     click(page.querySelector('[aria-label="Готово: Доступы к почте"]'));
     await settle();
     expect(api.savePlan).toHaveBeenCalledWith('w1', expect.objectContaining({ tasks: [expect.objectContaining({ id: 't1', completed: true })] }));
