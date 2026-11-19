@@ -50,14 +50,14 @@ export function fallbackContactMessage(facts: ContactMessageFacts): string {
   const company = facts.vacancyCompany || facts.recipientCompany;
   const greeting = name ? `${name}, здравствуйте!` : 'Здравствуйте!';
   if (facts.kind === 'recruiter') {
-    const title = facts.vacancyTitle ? `вакансия «${facts.vacancyTitle}»${company ? ` в ${company}` : ''}` : 'ваша вакансия';
-    return `${greeting} Меня заинтересовала ${title}. Готов коротко рассказать о своём опыте и ответить на вопросы. Удобно ли вам обсудить?`;
+    const title = facts.vacancyTitle ? `вакансия «${facts.vacancyTitle}»${company ? ` в компании «${company}»` : ''}` : 'ваша вакансия';
+    return `${greeting} Меня заинтересовала ${title}. Могу коротко рассказать о своём опыте и ответить на вопросы. Удобно ли вам обсудить?`;
   }
   if (facts.kind === 'ask_introduction') {
-    const where = company ? ` в ${company}` : '';
-    return `${greeting} Я сейчас в поиске${role}. Не могли бы вы представить меня тому, кто занимается наймом${where}? Буду благодарен, а материалы для знакомства пришлю.`;
+    const where = company ? ` в компании «${company}»` : '';
+    return `${greeting} Я сейчас в поиске${role}. Не могли бы вы представить меня тому, кто занимается наймом${where}? Материалы для знакомства пришлю, заранее спасибо!`;
   }
-  return `${greeting} Давно не общались. Я сейчас в поиске${role}. Если знаете, где ищут такого специалиста, или готовы подсказать, к кому обратиться, буду очень благодарен.`;
+  return `${greeting} Давно не общались. Я сейчас в поиске${role}. Если знаете, где ищут такого специалиста, или подскажете, к кому обратиться, — заранее спасибо!`;
 }
 
 function digitGroups(text: string): string[] {
