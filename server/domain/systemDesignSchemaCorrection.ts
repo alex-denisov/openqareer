@@ -17,7 +17,12 @@ export type SchemaCorrection =
   | { readonly op: 'remove_link'; readonly from: string; readonly to: string };
 
 export type SchemaCorrectionError =
-  'unknown_node' | 'unknown_link' | 'self_link' | 'duplicate_link' | 'too_many_links';
+  | 'unknown_node'
+  | 'duplicate_node'
+  | 'unknown_link'
+  | 'self_link'
+  | 'duplicate_link'
+  | 'too_many_links';
 
 export type SchemaCorrectionResult =
   | { readonly ok: true; readonly schema: SystemDesignSchema }
