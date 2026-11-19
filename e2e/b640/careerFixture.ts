@@ -162,6 +162,10 @@ export async function openCareer(
   };
   let stop = [{ company: 'Гринкод', origin: 'manual' }];
   await mockSignedInCabinet(page, { cabinetB640: true });
+  // Полоса «Роль поиска» берёт число из того же итога, что список «Вакансии» (единый счётчик s07).
+  await page.route(`${API}/candidate/b640/matched-vacancies*`, (route) =>
+    route.fulfill({ json: { data: [], meta: { total: 64, nextOffset: null } } }),
+  );
   await page.route(`${API}/candidate/role-hypotheses`, (route) =>
     route.fulfill({ json: { data: ROLES } }),
   );
