@@ -38,7 +38,23 @@
       q('[data-qa="captcha"],#captcha,.captcha-container') ||
       /(captcha|robot|робот|проверка)/i.test(document.title) ||
       /(подтвердите[^.]{0,80}(?:робот|человек)|captcha)/i.test(text.slice(0, 2000));
-    var hhMarker = q(hhMarkerSelector) || path === '/applicant/resumes';
+    // Below 1020 px hh.ru hides the profile menu and shows one mobile menu
+    // button to every visitor (B709); its initial state still says who it is.
+    var hhApplicantState = function () {
+      if (typeof document.getElementById !== 'function') return false;
+      var state = document.getElementById('HH-Lux-InitialState');
+      if (!state) return false;
+      try {
+        var raw = (state.content && state.content.textContent) || state.textContent || '';
+        return JSON.parse(raw).userType === 'applicant';
+      } catch (error) {
+        return false;
+      }
+    };
+    var hhMarker =
+      q(hhMarkerSelector) ||
+      path === '/applicant/resumes' ||
+      (platform === 'hh' && hhApplicantState());
     var linkedinMarker = q(
       'a[href*="/logout"],a[href*="/m/logout"],[data-view-name="navigation-profile"],[data-test-id="nav-profile"],[data-test-global-nav-me],a[href*="/in/"][aria-label],.global-nav__me-photo,button[aria-label="Me"],button[aria-label="Вы"],button[aria-label*="Me" i],button[aria-label*="Профиль" i]',
     );

@@ -6,16 +6,19 @@
     <main>
       <h1 data-qa="vacancy-title">Инженер</h1>
       <button data-qa="vacancy-response-link-top" id="open">Откликнуться</button>
-      <div data-qa="vacancy-response-popup" id="popup" hidden>
-        <label data-qa="vacancy-response-popup__resume-item" data-resume-id="resume-1">
-          <input type="radio" name="resume" value="resume-1">
+      <div role="dialog" id="popup" hidden>
+        <button data-qa="response-popup-close" type="button">×</button>
+        <form id="RESPONSE_MODAL_FORM_ID">
+        <label>
+          <input type="radio" name="resumeId" value="resume-1">
           <span>Резюме кандидата</span>
         </label>
-        <button data-qa="vacancy-response-popup__letter-toggle" id="toggle">Добавить письмо</button>
-        <textarea data-qa="vacancy-response-popup__letter-textarea" id="letter" hidden></textarea>
-        <button data-qa="vacancy-response-submit-popup" id="submit">Отправить</button>
+        <button data-qa="add-cover-letter" id="toggle" type="button">Добавить письмо</button>
+        <textarea data-qa="vacancy-response-popup-form-letter-input" id="letter" hidden></textarea>
+        </form>
+        <button data-qa="vacancy-response-submit-popup" id="submit" type="button">Отправить</button>
       </div>
-      <div data-qa="vacancy-response-success" id="success" data-response-id="response-123" hidden>Отклик отправлен</div>
+      <div data-qa="vacancy-response-success-standard-notification" id="success" data-response-id="response-123" hidden>Отклик отправлен</div>
     </main>
     <script>
       document.querySelector('#open').addEventListener('click', () => document.querySelector('#popup').hidden = false);
