@@ -6,6 +6,7 @@ const api = vi.hoisted(() => ({
   updateCampaignRoles: vi.fn(),
   getCheckedRoles: vi.fn(),
   getRoleSkillDemand: vi.fn(),
+  getCurrentRoleSkillAssessment: vi.fn(),
   changeCareerRole: vi.fn(),
 }));
 
@@ -14,7 +15,10 @@ vi.mock('../../coach/matchedVacancyApi', () => ({
   getCandidateCampaign: api.getCandidateCampaign,
   updateCampaignRoles: api.updateCampaignRoles,
 }));
-vi.mock('../../skills/roleSkillAssessmentApi', () => ({ getCheckedRoles: api.getCheckedRoles }));
+vi.mock('../../skills/roleSkillAssessmentApi', () => ({
+  getCheckedRoles: api.getCheckedRoles,
+  getCurrentRoleSkillAssessment: api.getCurrentRoleSkillAssessment,
+}));
 vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getRoleSkillDemand }));
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
 
@@ -30,6 +34,7 @@ beforeEach(() => {
   api.getRoleHypotheses.mockResolvedValue([]);
   api.getCheckedRoles.mockResolvedValue([]);
   api.getCandidateCampaign.mockResolvedValue(campaign(['Аналитик']));
+  api.getCurrentRoleSkillAssessment.mockResolvedValue({ state: 'ready', roleTitle: 'Аналитик', skills: [] });
 });
 
 describe('loadRoles', () => {
@@ -50,8 +55,40 @@ describe('loadRoles', () => {
     });
     const data = await loadRoles(new AbortController().signal);
     expect(data.skillGap).toBe(2);
+    expect(data.skillRole).toBe('Аналитик');
     expect(data.searchTitles).toEqual(['Аналитик']);
     expect(data.rows.map((row) => row.title)).toEqual(['Аналитик']);
+  });
+
+  it('полоса берёт первую роль поиска, у которой проверка готова (B645 s09)', async () => {
+    api.getCandidateCampaign.mockResolvedValue(campaign(['VP', 'COO', 'IT Director']));
+    api.getCurrentRoleSkillAssessment.mockImplementation(async (role: string) =>
+      role === 'VP'
+        ? { state: 'insufficient_requirements', roleTitle: 'VP', collecting: false }
+        : { state: 'ready', roleTitle: role, skills: [{ name: 'X' }, { name: 'Y' }] },
+    );
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+    const data = await loadRoles(new AbortController().signal);
+    expect(data.skillRole).toBe('COO');
+    expect(data.skillGap).toBe(2);
+    expect(api.getCurrentRoleSkillAssessment).toHaveBeenCalledTimes(2);
+  });
+
+  it('ни одна роль поиска не готова — полосы нет', async () => {
+    api.getCurrentRoleSkillAssessment.mockResolvedValue({ state: 'insufficient_requirements', roleTitle: 'Аналитик' });
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [{ roleTitle: 'Аналитик', skills: [{ name: 'SQL', inProfile: false }] }] });
+    const data = await loadRoles(new AbortController().signal);
+    expect(data.skillGap).toBe(0);
+    expect(data.skillRole).toBeNull();
+  });
+
+  it('«Чего не хватает» без данных роли — первый навык из вакансий, которого нет в профиле (B645 s10)', async () => {
+    api.getRoleSkillDemand.mockResolvedValue({
+      state: 'ready',
+      roles: [{ roleTitle: 'Аналитик', skills: [{ name: 'Excel', inProfile: true }, { name: 'Работа с ВЭД', inProfile: false }] }],
+    });
+    const data = await loadRoles(new AbortController().signal);
+    expect(data.rows[0]!.lacks).toBe('Работа с ВЭД');
   });
 
   it('требования не прочитались — полосы нет, экран читается', async () => {
