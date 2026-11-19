@@ -76,8 +76,10 @@ export function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }
 
 export function MoneyCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   const money = moneyView(item, { currency: env.currency, rates: env.rates });
+  const salary = item.cluster.salary;
+  const unset = salary?.from === undefined && salary?.to === undefined;
   return (
-    <span className="vt-main num" title={money.title}>
+    <span className={`vt-main num${unset ? ' is-none' : ''}`} title={money.title}>
       {money.amount ?? money.text}
       {money.unit ? <span className="vt-cur"> {money.unit}</span> : null}
     </span>

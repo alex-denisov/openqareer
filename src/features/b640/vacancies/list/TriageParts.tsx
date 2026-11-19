@@ -1,18 +1,30 @@
-import { Icon } from '../../kit';
+import { Icon, Link } from '../../kit';
+import { buildNodePath } from '../../routes';
 import { pluralRu } from '../format';
 import type { CurrentQuestion } from './triageModel';
 
+/** Признак режима «Помочь выбрать» в адресе подборки (v09 — состояние s07). */
+export const REVIEW_PARAM = 'mode=review';
+
+function reviewPath(): string {
+  return `${buildNodePath('s07')}?${REVIEW_PARAM}`;
+}
+
+/** «Помочь выбрать»: ссылка на режим списка v09 (состояние узла s07); нажатие включает режим на месте. */
 export function ReviewButton({ active, onClick }: { active: boolean; onClick: () => void }) {
   return (
-    <button
+    <Link
       className="btn va-review"
-      type="button"
+      to={reviewPath()}
       aria-current={active ? 'true' : undefined}
-      onClick={onClick}
+      onClick={(event) => {
+        event.preventDefault();
+        onClick();
+      }}
     >
       <Icon name="chat" />
       Помочь выбрать
-    </button>
+    </Link>
   );
 }
 

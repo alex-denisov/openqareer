@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { poolFilterQuery } from '../b640Api';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
@@ -16,11 +16,12 @@ import {
   MoreFoot,
   SortError,
 } from './ListParts';
+import { SkillLine } from './SkillLine';
 import { TableBlock } from './TableBlock';
 import { OwnAddButton, OwnVacancyPanel } from './OwnVacancyPanel';
 import { OwnRows } from './OwnRows';
 import { TriagePanel } from './TriagePanel';
-import { ReviewButton } from './TriageParts';
+import { ReviewButton, REVIEW_PARAM } from './TriageParts';
 import type { RowEnv, RowPick } from './VacancyRow';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { useHiddenSection, type HiddenSection } from './useHiddenSection';
@@ -162,6 +163,15 @@ export function ListScreen() {
   const { clearResult } = triage;
   const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
   useEffect(() => clearResult(), [listAction, clearResult]);
+  // Переход по ссылке «Помочь выбрать» (v09) сразу включает режим, когда подборка прочитана.
+  const reviewOpened = useRef(false);
+  const startReview = triage.start;
+  useEffect(() => {
+    if (reviewOpened.current || list.all.length === 0) return;
+    if (!window.location.search.includes(REVIEW_PARAM)) return;
+    reviewOpened.current = true;
+    startReview();
+  }, [list.all.length, startReview]);
   const env = { currency: list.currency, rates: list.rates, noRole: list.noRole };
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';
@@ -184,6 +194,7 @@ export function ListScreen() {
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
         />
+        <SkillLine roles={pool.campaign?.roles.value ?? []} />
         <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {waiting ? <LoadingLine /> : null}

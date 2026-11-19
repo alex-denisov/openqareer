@@ -14,6 +14,7 @@ import {
   type FilterKind,
   type ListFilters,
 } from './filterModel';
+import { defaultRoles } from './defaultRoles';
 import { buildOptions, listCount, type FilterOptions } from './filterOptions';
 import {
   useServerSortedList,
@@ -76,12 +77,15 @@ function useServerRoles(
   const sent = useRef('');
   const seeded = useRef(false);
   const initial = pool.initialFilters;
+  const campaign = pool.campaign;
   useEffect(() => {
-    if (seeded.current || !initial) return;
+    if (seeded.current || (!initial && !campaign)) return;
     seeded.current = true;
-    sent.current = initial.roles.join('\n');
-    if (initial.roles.length > 0) seed(initial.roles);
-  }, [initial, seed]);
+    // Сервер уже отдал подборку с сохранёнными ролями; роли «Карьеры» подборку ещё не сузили.
+    sent.current = (initial?.roles ?? []).join('\n');
+    const start = defaultRoles(initial?.roles, campaign?.roles);
+    if (start.length > 0) seed(start);
+  }, [initial, campaign, seed]);
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;
