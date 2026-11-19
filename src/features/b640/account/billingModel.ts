@@ -78,7 +78,10 @@ function applicationsLine(id: CandidateCurrentPlanId): string {
 export function subscriptionLine(summary: CandidateBillingSummary): string {
   const { currentPlan, subscription } = summary;
   const price = planPrice(summary, currentPlan);
-  if (currentPlan === 'free' || !subscription || !price) return applicationsLine(currentPlan);
+  if (currentPlan === 'free') return applicationsLine(currentPlan);
+  // Платный тариф без подписки подключён вручную: строка говорит, откуда он.
+  if (!subscription) return `${applicationsLine(currentPlan)} · подключён без оплаты`;
+  if (!price) return applicationsLine(currentPlan);
   const until = day(subscription.currentPeriodEndsAt);
   return until ? `${price} в месяц · до ${until}` : `${price} в месяц`;
 }
