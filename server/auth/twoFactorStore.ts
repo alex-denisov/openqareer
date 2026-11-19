@@ -13,6 +13,15 @@ const CHALLENGE_MS = 5 * 60_000;
 const BACKUP_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
 
 export type TwoFactorCheck = 'ok' | 'invalid' | 'locked';
+/**
+ * Попытки считаются отдельно: на шаге входа (`login`) и в открытой сессии (`session`). Знающий только
+ * пароль исчерпает попытки входа, но не запрёт владельцу отключение, новые коды и смену пароля.
+ */
+export type AttemptScope = 'login' | 'session';
+const COUNTERS = {
+  login: { count: 'failed_count', since: 'failed_since' },
+  session: { count: 'session_failed_count', since: 'session_failed_since' },
+} as const;
 export type ConfirmResult =
   | { readonly status: 'enabled'; readonly backupCodes: readonly string[] }
   | { readonly status: 'invalid' | 'locked' | 'no_setup' };
@@ -24,6 +33,8 @@ interface FactorRow {
   last_step: number;
   failed_count: number;
   failed_since: string | null;
+  session_failed_count: number;
+  session_failed_since: string | null;
 }
 
 function backupCode(): string {
@@ -65,6 +76,10 @@ export class TwoFactorStore {
     return createHmac('sha256', this.backupKey).update(`${userId}\0${code.trim().toLowerCase()}`).digest('hex');
   }
 
+  hasPendingSetup(userId: string): boolean {
+    return Boolean(this.row(userId)?.pending_cipher);
+  }
+
   isEnabled(userId: string): boolean {
     return Boolean(this.row(userId)?.enabled_at);
   }
@@ -92,34 +107,33 @@ export class TwoFactorStore {
   confirmSetup(userId: string, code: string, now: Date): ConfirmResult {
     const row = this.row(userId);
     if (!row?.pending_cipher) return { status: 'no_setup' };
-    if (this.locked(row, now)) return { status: 'locked' };
+    if (this.locked(row, now, 'session')) return { status: 'locked' };
     const secret = this.sealed.open(row.pending_cipher, this.scope(userId));
     const step = matchTotp(secret, code, Math.floor(now.getTime() / 1000));
     if (step === null) {
-      this.recordFailure(userId, row, now);
+      this.recordFailure(userId, row, now, 'session');
       return { status: 'invalid' };
     }
     this.database
       .prepare(
         `UPDATE user_two_factor SET secret_cipher = pending_cipher, pending_cipher = NULL, enabled_at = ?,
-           last_step = ?, failed_count = 0, failed_since = NULL, updated_at = ? WHERE user_id = ?`,
+           last_step = ?, session_failed_count = 0, session_failed_since = NULL, updated_at = ? WHERE user_id = ?`,
       )
       .run(now.toISOString(), step, now.toISOString(), userId);
     return { status: 'enabled', backupCodes: this.regenerateBackupCodes(userId) };
   }
 
   /** Код приложения или резервный код. Неверный считается попыткой; после пяти — пауза 15 минут. */
-  verify(userId: string, code: string, now: Date): TwoFactorCheck {
+  verify(userId: string, code: string, now: Date, scope: AttemptScope): TwoFactorCheck {
     const row = this.row(userId);
     if (!row?.enabled_at || !row.secret_cipher) return 'invalid';
-    if (this.locked(row, now)) return 'locked';
+    if (this.locked(row, now, scope)) return 'locked';
     if (this.acceptTotp(userId, row, code, now) || this.acceptBackup(userId, code, now)) {
-      this.database
-        .prepare('UPDATE user_two_factor SET failed_count = 0, failed_since = NULL WHERE user_id = ?')
-        .run(userId);
+      const { count, since } = COUNTERS[scope];
+      this.database.prepare(`UPDATE user_two_factor SET ${count} = 0, ${since} = NULL WHERE user_id = ?`).run(userId);
       return 'ok';
     }
-    this.recordFailure(userId, row, now);
+    this.recordFailure(userId, row, now, scope);
     return 'invalid';
   }
 
@@ -145,27 +159,36 @@ export class TwoFactorStore {
   }
 
   /** Попытки исчерпаны: ни код, ни пароль до конца паузы не принимаются. */
-  isLocked(userId: string, now: Date): boolean {
+  isLocked(userId: string, now: Date, scope: AttemptScope): boolean {
     const row = this.row(userId);
-    return row ? this.locked(row, now) : false;
+    return row ? this.locked(row, now, scope) : false;
   }
 
-  /** Неверный пароль вместо кода — такая же попытка. */
-  noteFailure(userId: string, now: Date): void {
+  /** Неверный пароль вместо кода — такая же попытка. Без строки защиты считать нечего: вызывающий проверяет её раньше. */
+  noteFailure(userId: string, now: Date, scope: AttemptScope): void {
     const row = this.row(userId);
-    if (row) this.recordFailure(userId, row, now);
+    if (row) this.recordFailure(userId, row, now, scope);
   }
 
-  private locked(row: FactorRow, now: Date): boolean {
-    if (row.failed_count < MAX_FAILURES || !row.failed_since) return false;
-    return now.getTime() - Date.parse(row.failed_since) < LOCK_MS;
+  private locked(row: FactorRow, now: Date, scope: AttemptScope): boolean {
+    const { count, since } = COUNTERS[scope];
+    const started = row[since];
+    if (row[count] < MAX_FAILURES || !started) return false;
+    return now.getTime() - Date.parse(started) < LOCK_MS;
   }
 
-  private recordFailure(userId: string, row: FactorRow, now: Date): void {
-    const stale = !row.failed_since || now.getTime() - Date.parse(row.failed_since) >= LOCK_MS;
+  private recordFailure(userId: string, row: FactorRow, now: Date, scope: AttemptScope): void {
+    const { count, since } = COUNTERS[scope];
+    const started = row[since];
+    const stale = !started || now.getTime() - Date.parse(started) >= LOCK_MS;
     this.database
-      .prepare('UPDATE user_two_factor SET failed_count = ?, failed_since = ? WHERE user_id = ?')
-      .run(stale ? 1 : row.failed_count + 1, stale ? now.toISOString() : row.failed_since, userId);
+      .prepare(`UPDATE user_two_factor SET ${count} = ?, ${since} = ? WHERE user_id = ?`)
+      .run(stale ? 1 : row[count] + 1, stale ? now.toISOString() : started, userId);
+  }
+
+  /** Пароль сменён или сброшен: начатые входы по старому паролю больше не завершить. */
+  dropChallenges(userId: string): void {
+    this.database.prepare('DELETE FROM two_factor_login_challenges WHERE user_id = ?').run(userId);
   }
 
   /** Восемь новых кодов; прежние перестают действовать. Показываются один раз — здесь. */

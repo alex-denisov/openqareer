@@ -58,8 +58,8 @@ describe('B401: двухфакторная защита — хранилище',
     const raw = JSON.stringify(db.prepare('SELECT * FROM user_two_factor_backup_codes').all());
     db.close();
     for (const code of codes) expect(raw).not.toContain(code);
-    expect(store.verify('u1', codes[0], at(60))).toBe('ok');
-    expect(store.verify('u1', codes[0], at(61))).toBe('invalid');
+    expect(store.verify('u1', codes[0], at(60), 'login')).toBe('ok');
+    expect(store.verify('u1', codes[0], at(61), 'login')).toBe('invalid');
     expect(store.status('u1').backupCodesLeft).toBe(7);
   });
 
@@ -67,20 +67,20 @@ describe('B401: двухфакторная защита — хранилище',
     const { store } = setup();
     const { secret } = enable(store);
     const code = totpAt(secret, unix(at(60)));
-    expect(store.verify('u1', code, at(60))).toBe('ok');
-    expect(store.verify('u1', code, at(65))).toBe('invalid');
+    expect(store.verify('u1', code, at(60), 'login')).toBe('ok');
+    expect(store.verify('u1', code, at(65), 'login')).toBe('invalid');
     // Код установки тоже израсходован.
-    expect(store.verify('u1', totpAt(secret, unix(T0)), at(10))).toBe('invalid');
-    expect(store.verify('u1', totpAt(secret, unix(at(90))), at(90))).toBe('ok');
+    expect(store.verify('u1', totpAt(secret, unix(T0)), at(10), 'login')).toBe('invalid');
+    expect(store.verify('u1', totpAt(secret, unix(at(90))), at(90), 'login')).toBe('ok');
   });
 
   it('locks after 5 wrong codes for 15 minutes; a right code then is refused', () => {
     const { store } = setup();
     const { secret } = enable(store);
-    for (let i = 0; i < 5; i += 1) expect(store.verify('u1', '123456', at(60 + i))).toBe('invalid');
-    expect(store.verify('u1', totpAt(secret, unix(at(70))), at(70))).toBe('locked');
+    for (let i = 0; i < 5; i += 1) expect(store.verify('u1', '123456', at(60 + i), 'login')).toBe('invalid');
+    expect(store.verify('u1', totpAt(secret, unix(at(70))), at(70), 'login')).toBe('locked');
     const later = at(60 + 15 * 60 + 1);
-    expect(store.verify('u1', totpAt(secret, unix(later)), later)).toBe('ok');
+    expect(store.verify('u1', totpAt(secret, unix(later)), later, 'login')).toBe('ok');
   });
 
   it('new backup codes replace the old ones; disabling clears everything', () => {
@@ -88,8 +88,8 @@ describe('B401: двухфакторная защита — хранилище',
     const { codes } = enable(store);
     const fresh = store.regenerateBackupCodes('u1');
     expect(fresh).toHaveLength(8);
-    expect(store.verify('u1', codes[1], at(60))).toBe('invalid');
-    expect(store.verify('u1', fresh[1], at(61))).toBe('ok');
+    expect(store.verify('u1', codes[1], at(60), 'login')).toBe('invalid');
+    expect(store.verify('u1', fresh[1], at(61), 'login')).toBe('ok');
     store.disable('u1');
     expect(store.status('u1')).toEqual({ enabled: false, backupCodesLeft: 0 });
   });
@@ -112,6 +112,6 @@ describe('B401: двухфакторная защита — хранилище',
     const { store } = setup();
     enable(store);
     expect(store.isEnabled('u2')).toBe(false);
-    expect(store.verify('u2', '123456', T0)).toBe('invalid');
+    expect(store.verify('u2', '123456', T0, 'login')).toBe('invalid');
   });
 });

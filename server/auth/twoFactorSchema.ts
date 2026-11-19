@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS user_two_factor (
   last_step INTEGER NOT NULL DEFAULT -1,
   failed_count INTEGER NOT NULL DEFAULT 0,
   failed_since TEXT,
+  session_failed_count INTEGER NOT NULL DEFAULT 0,
+  session_failed_since TEXT,
   updated_at TEXT NOT NULL
 ) STRICT;
 CREATE TABLE IF NOT EXISTS user_two_factor_backup_codes (

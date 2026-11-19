@@ -123,5 +123,35 @@ describe('B401: двухфакторная защита — маршруты', (
     const challenge = (await login(app, 'candidate.test', PASSWORD)).response.json().data.challenge;
     const locked = await post(app, '/api/v1/auth/login/two-factor', { challenge, code: totpAt(secret, unixNow()) });
     expect(locked.statusCode).toBe(429);
+    // Знающий только пароль не запирает владельца в открытой сессии: отключение кодом проходит.
+    const off = await post(app, `${BASE}/disable`, { code: totpAt(secret, unixNow()) }, cookie);
+    expect(off.json().data).toEqual({ enabled: false, backupCodesLeft: 0 });
+  });
+
+  it('enable without a started setup does not check the password at all', async () => {
+    const { app, cookie } = await setup();
+    const wrong = await post(app, `${BASE}/enable`, { code: '123456', password: 'not-the-password' }, cookie);
+    expect(wrong.json().error.code).toBe('two_factor_setup_missing');
+  });
+
+  it('change password checks the password before the code: a wrong password does not spend the code', async () => {
+    const { app, cookie } = await setup();
+    const { secret } = await enable(app, cookie);
+    const code = totpAt(secret, unixNow());
+    const wrong = await post(app, '/api/v1/account/password', { currentPassword: 'not-the-password', newPassword: 'another-password-for-tests', twoFactorCode: code }, cookie);
+    expect(wrong.json().error.code).toBe('current_password_invalid');
+    const right = await post(app, '/api/v1/account/password', { currentPassword: PASSWORD, newPassword: 'another-password-for-tests', twoFactorCode: code }, cookie);
+    expect(right.statusCode).toBe(200);
+  });
+
+  it('a password change drops login steps started with the old password', async () => {
+    const { app, cookie } = await setup();
+    const { secret } = await enable(app, cookie);
+    const pending = (await login(app, 'candidate.test', PASSWORD)).response.json().data.challenge;
+    const changed = await post(app, '/api/v1/account/password', { currentPassword: PASSWORD, newPassword: 'another-password-for-tests', twoFactorCode: totpAt(secret, unixNow()) }, cookie);
+    expect(changed.statusCode).toBe(200);
+    clock('2026-11-19T10:02:00.000Z');
+    const late = await post(app, '/api/v1/auth/login/two-factor', { challenge: pending, code: totpAt(secret, unixNow()) });
+    expect(late.statusCode).toBe(401);
   });
 });

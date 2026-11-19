@@ -410,11 +410,24 @@ async function handleUpdateProfile(deps: RouteDeps, request: FastifyRequest, rep
   }
 }
 
-/** B401: при включённой защите смена пароля требует код приложения или резервный код. */
-function passwordChangeSecondFactor(deps: RouteDeps, userId: string, code: string | undefined) {
+type SecondFactorRefusal = { readonly status: number; readonly code: string; readonly message: string };
+
+/**
+ * B401: при включённой защите смена пароля требует код приложения или резервный код. Пароль
+ * проверяется раньше кода: неверный пароль не тратит код и не считается попыткой кода.
+ */
+async function passwordChangeSecondFactor(
+  deps: RouteDeps,
+  userId: string,
+  currentPassword: string,
+  code: string | undefined,
+): Promise<SecondFactorRefusal | null> {
   const store = twoFactorStoreFor(deps);
   if (!store.isEnabled(userId)) return null;
-  const check = code ? store.verify(userId, code, new Date()) : 'invalid';
+  if (!(await deps.authService.passwordMatches?.(userId, currentPassword))) {
+    return { status: 400, code: 'current_password_invalid', message: 'Текущий пароль указан неверно.' };
+  }
+  const check = code ? store.verify(userId, code, new Date(), 'session') : 'invalid';
   if (check === 'ok') return null;
   return check === 'locked'
     ? { status: 429, code: 'two_factor_locked', message: 'Слишком много попыток. Попробуйте через 15 минут.' }
@@ -430,7 +443,7 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
   const body = passwordChangeSchema.parse(request.body);
-  const secondFactor = passwordChangeSecondFactor(deps, principal.userId, body.twoFactorCode);
+  const secondFactor = await passwordChangeSecondFactor(deps, principal.userId, body.currentPassword, body.twoFactorCode);
   if (secondFactor) return sendError(reply, request, secondFactor.status, secondFactor.code, secondFactor.message, false);
   try {
     const authenticated =
@@ -442,6 +455,7 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
     if (!authenticated) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
+    twoFactorStoreFor(deps).dropChallenges(principal.userId);
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
     return {
       data: publicPrincipal(authenticated.principal, deps.config),
@@ -661,6 +675,7 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
   try {
     const authenticated = await deps.authService.resetPassword?.(body.token, body.newPassword);
     if (!authenticated) throw new AuthInvalidResetTokenError();
+    twoFactorStoreFor(deps).dropChallenges(authenticated.principal.userId);
     const gated = twoFactorLoginGate(deps, request, reply, authenticated, clientDeviceIdFrom(request) ?? null);
     if (gated) return gated;
     setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);

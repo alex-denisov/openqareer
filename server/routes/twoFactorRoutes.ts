@@ -36,7 +36,7 @@ async function postLoginStep(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const now = new Date();
   const challenge = store.readChallenge(body.data.challenge, now);
   if (!challenge) return sendError(reply, request, 401, 'two_factor_challenge_expired', 'Войдите заново.', false);
-  const check = store.verify(challenge.userId, body.data.code, now);
+  const check = store.verify(challenge.userId, body.data.code, now, 'login');
   if (check !== 'ok') {
     store.failChallenge(body.data.challenge);
     return refuseCheck(reply, request, check);
@@ -76,9 +76,13 @@ const postEnable: AccountHandler = async (deps, principal, request, reply) => {
   if (!body.success) return refuseCheck(reply, request, 'invalid');
   const store = twoFactorStoreFor(deps);
   const now = new Date();
-  if (store.isLocked(principal.userId, now)) return refuseCheck(reply, request, 'locked');
+  // Сначала — начато ли подключение: без строки защиты неверный пароль некуда считать.
+  if (!store.hasPendingSetup(principal.userId)) {
+    return sendError(reply, request, 409, 'two_factor_setup_missing', 'Начните подключение заново.', false);
+  }
+  if (store.isLocked(principal.userId, now, 'session')) return refuseCheck(reply, request, 'locked');
   if (!(await deps.authService.passwordMatches?.(principal.userId, body.data.password))) {
-    store.noteFailure(principal.userId, now);
+    store.noteFailure(principal.userId, now, 'session');
     return sendError(reply, request, 400, 'current_password_invalid', 'Пароль указан неверно.', false);
   }
   const result = store.confirmSetup(principal.userId, body.data.code, now);
@@ -103,12 +107,12 @@ async function proven(deps: RouteDeps, principal: AuthPrincipal, request: Fastif
   }
   const now = new Date();
   if (body.data.code) {
-    const check = store.verify(principal.userId, body.data.code, now);
+    const check = store.verify(principal.userId, body.data.code, now, 'session');
     return check === 'ok' || refused(refuseCheck(reply, request, check));
   }
-  if (store.isLocked(principal.userId, now)) return refused(refuseCheck(reply, request, 'locked'));
+  if (store.isLocked(principal.userId, now, 'session')) return refused(refuseCheck(reply, request, 'locked'));
   if (await deps.authService.passwordMatches?.(principal.userId, body.data.password as string)) return true;
-  store.noteFailure(principal.userId, now);
+  store.noteFailure(principal.userId, now, 'session');
   return refused(sendError(reply, request, 400, 'current_password_invalid', 'Пароль указан неверно.', false));
 }
 
