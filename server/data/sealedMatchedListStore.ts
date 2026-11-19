@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { SealedMatchedSnapshotStore } from './sealedMatchedSnapshotStore';
 import type { SealedText } from './sealedText';
 
 export const SEALED_MATCHED_LIST_SCHEMA = `
@@ -28,11 +29,15 @@ const roundMs = (ms: number): number => Number(ms.toFixed(2));
  * dropping the table loses nothing, and the row goes with the candidate through the foreign key.
  */
 export class SealedMatchedListStore {
+  /** Prod 19.11: the selection snapshot under the list, kept between processes the same way. */
+  readonly snapshots: SealedMatchedSnapshotStore;
+
   constructor(
     private readonly database: DatabaseSync,
     private readonly sealedText: SealedText,
   ) {
     this.database.exec(SEALED_MATCHED_LIST_SCHEMA);
+    this.snapshots = new SealedMatchedSnapshotStore(database, sealedText);
   }
 
   read(candidateId: string, builtAfter: number): SealedMatchedListRow | null {

@@ -389,8 +389,20 @@ test.describe('B650: «Сегодня» на данных в форме прод
     );
     await expect(screen.locator('.lead .lead-sub')).toContainText('ответа нет 47 дней');
     await expect(screen.locator('.s5-prog')).toContainText('13 откликов → 1 интервью → 1 оффер');
+    // Подробность лида — вакансия, как p.lead-text макета (B645 s03).
+    await expect(screen.locator('.lead .lead-text')).toHaveText(
+      'Director of Engineering, AI Functions',
+    );
     await expect(screen.locator('.ev-row')).toHaveCount(2);
-    await expect(screen.locator('.ev-row .row-sub').first()).toHaveText('LinkedIn');
+    await expect(screen.locator('#today-more')).toHaveText('Ещё 2 дела');
+    await expect(screen.locator('.ev-row .row-sub')).toHaveText([
+      'LinkedIn · черновик готов',
+      'LinkedIn · черновик готов',
+    ]);
+    // Каждый пост открывает свой черновик (B645 s03).
+    const posts = screen.locator('.ev-row a');
+    await expect(posts.nth(0)).toHaveAttribute('href', '/app/profile/linkedin/posts?post=draft-1');
+    await expect(posts.nth(1)).toHaveAttribute('href', '/app/profile/linkedin/posts?post=draft-2');
     await expect(screen.getByText('сам не опубликуется')).toHaveCount(0);
     await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expectGates(page);
