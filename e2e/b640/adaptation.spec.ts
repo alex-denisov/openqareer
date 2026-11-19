@@ -8,6 +8,12 @@ const SHOTS = process.env.B640_SHOTS;
 
 async function openNode(page: Page, path: string, node: string): Promise<AdaptationCalls> {
   await mockSignedInCabinet(page, { cabinetB640: true });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: async () => undefined },
+      configurable: true,
+    });
+  });
   const calls = await mockAdaptation(page);
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.locator(`.b640 [data-b640-node="${node}"]`)).toBeVisible({ timeout: 15_000 });
@@ -52,6 +58,27 @@ test.describe('B663: «Дневник» — адаптация', () => {
       .toEqual(['/workplaces/w1/people/p4/meeting']);
   });
 
+  test('d01e: письмо копируется и отмечается отправленным; d04: итоги и тексты', async ({
+    page,
+  }) => {
+    const calls = await openNode(page, '/app/diary/adaptation/day-30', 'd01e');
+    const check = page.locator('[data-b640-node="d01e"]');
+    await expect(check.locator('#d30-title')).toHaveText('Проверка на 30‑й день: один сигнал');
+    await expect(check.locator('.fact')).toHaveCount(3);
+    await expectGates(page);
+    await check.getByRole('button', { name: 'Попросить встречу' }).click();
+    await check.getByRole('button', { name: 'Отметить, что отправили' }).click();
+    await expect.poll(() => calls.checks.map((call) => call.method)).toEqual(['PUT']);
+    await expect(check.getByText(/Письмо отправлено/u)).toBeVisible();
+
+    await page.goto('/app/diary/results');
+    const results = page.locator('[data-b640-node="d04"]');
+    await expect(results.locator('.row')).toHaveCount(3);
+    await expect(results.locator('.tag.part')).toHaveText('отстаёт');
+    await expect(results.getByRole('button', { name: 'Скопировать' })).toHaveCount(2);
+    await expectGates(page);
+  });
+
   test('снимки адаптации: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {
     test.skip(
       !SHOTS || testInfo.project.name !== 'desktop-1440',
@@ -66,6 +93,8 @@ test.describe('B663: «Дневник» — адаптация', () => {
       ['d01c', '/app/diary/adaptation/manager-meeting'],
       ['d01d', '/app/diary/adaptation/people'],
       ['d01f', '/app/diary/adaptation/settling'],
+      ['d01e', '/app/diary/adaptation/day-30'],
+      ['d04', '/app/diary/results'],
     ] as const;
     for (const theme of ['light', 'dark']) {
       await page.addInitScript(

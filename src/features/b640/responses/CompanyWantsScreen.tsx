@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type {
   CandidateCompanyOpportunity,
   CandidateCompanyWantPage,
@@ -7,7 +7,7 @@ import type {
 import { DEFAULT_COMPANY_WANT_QUERY, getCompanyWantPage } from '../../applications/companyWantsApi';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { setCandidateCompanyWantByName } from '../../vacancies/candidateCompaniesApi';
-import { Button, Icon, InfoTip, Link, ResultLine, StatusLine } from '../kit';
+import { Button, InfoTip, Link, ResultLine, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useAsync, type AsyncState } from './data/useAsync';
 import { longDate, pluralRu, type TagTone } from './model/responseRow';
@@ -31,31 +31,43 @@ export interface CompanyWantFace {
   readonly tag: { readonly tone: TagTone; readonly label: string };
   readonly brief: string;
   readonly actionLabel: string;
+  /** Куда ведёт следующий шаг: подборка или контакты (страница компании v10b ещё заглушка). */
+  readonly actionNode: 's07' | 'a02';
 }
 
-/** Строка компании: статус, «вакансии · знакомые» и подпись действия. */
-export function companyWantFace(company: CandidateCompanyOpportunity): CompanyWantFace {
-  const vacancies =
-    company.vacancyCount > 0
-      ? `${company.vacancyCount} ${pluralRu(company.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}`
-      : 'нет вакансий';
-  const contacts =
-    company.contactsCount === null
-      ? null
-      : company.contactsCount > 0
-        ? `${company.contactsCount} ${pluralRu(company.contactsCount, ['знакомый', 'знакомых', 'знакомых'])}`
-        : 'знакомых нет';
-  const brief = [vacancies, contacts].filter(Boolean).join(' · ');
+function vacanciesBrief(company: CandidateCompanyOpportunity, pending: boolean): string | null {
+  if (pending) return null;
+  return company.vacancyCount > 0
+    ? `${company.vacancyCount} ${pluralRu(company.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}`
+    : 'нет вакансий';
+}
+
+function contactsBrief(company: CandidateCompanyOpportunity): string | null {
+  if (company.contactsCount === null) return null;
+  return company.contactsCount > 0
+    ? `${company.contactsCount} ${pluralRu(company.contactsCount, ['знакомый', 'знакомых', 'знакомых'])}`
+    : 'знакомых нет';
+}
+
+function nextStepLabel(company: CandidateCompanyOpportunity): string | null {
+  const text = company.nextStep?.text.trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : null;
+}
+
+/**
+ * Строка компании: статус, «вакансии · знакомые» и следующий шаг. Пока подборка догружается
+ * (`pending`), число вакансий не показывается, чтобы не написать «нет вакансий» раньше времени.
+ */
+export function companyWantFace(company: CandidateCompanyOpportunity, pending = false): CompanyWantFace {
+  const brief = [vacanciesBrief(company, pending), contactsBrief(company)].filter(Boolean).join(' · ');
+  const step = nextStepLabel(company);
   if (company.hasNewVacancies) {
-    return { tag: { tone: 'ok', label: 'новые вакансии' }, brief, actionLabel: 'Смотреть вакансии' };
+    return { tag: { tone: 'ok', label: 'новые вакансии' }, brief, actionLabel: 'Смотреть вакансии', actionNode: 's07' };
   }
-  if (company.wantStage === 'waiting') {
-    return { tag: { tone: 'part', label: 'жду вакансию' }, brief, actionLabel: 'Открыть компанию' };
-  }
-  if (company.wantStage === 'path') {
-    return { tag: { tone: 'miss', label: 'ищу путь' }, brief, actionLabel: 'Найти путь' };
-  }
-  return { tag: { tone: '', label: 'хочу' }, brief, actionLabel: 'Открыть компанию' };
+  const action = { actionLabel: step ?? 'Найти путь', actionNode: 'a02' } as const;
+  if (company.wantStage === 'waiting') return { tag: { tone: 'part', label: 'жду вакансию' }, brief, ...action };
+  if (company.wantStage === 'path') return { tag: { tone: 'miss', label: 'ищу путь' }, brief, ...action };
+  return { tag: { tone: '', label: 'хочу' }, brief, ...action };
 }
 
 function headline(page: CandidateCompanyWantPage): string {
@@ -117,25 +129,32 @@ function AddCompanyForm({ primary, onAdded }: AddFormProps) {
   );
 }
 
-function CompanyRow({ company }: { readonly company: CandidateCompanyOpportunity }) {
-  const face = companyWantFace(company);
-  const path = buildNodePath('v10b', { companyId: company.key });
+interface CompanyRowProps {
+  readonly company: CandidateCompanyOpportunity;
+  readonly pending: boolean;
+}
+
+function CompanyRow({ company, pending }: CompanyRowProps) {
+  const face = companyWantFace(company, pending);
+  const path = buildNodePath(face.actionNode);
   return (
     <li className="cw-row">
-      <Link className="cw-co" to={path}>
+      <span className="cw-co">
         <b>{company.name}</b>
         {company.industry ? <span className="cw-ind"> · {company.industry}</span> : null}
-      </Link>
+      </span>
       <span className="cw-st">
         <span className={`tag ${face.tag.tone}`}>{face.tag.label}</span>
       </span>
       <span className="cw-brief num">
         {company.industry ? <span className="cw-ind-m">{company.industry} · </span> : null}
+        {pending ? <span className="cw-wait" aria-hidden="true" /> : null}
+        {pending && face.brief ? ' · ' : null}
         {face.brief}
       </span>
       <span className="cw-act">
-        <Link className="icon-btn btn cw-ib" to={path} aria-label={`${face.actionLabel}: ${company.name}`}>
-          <Icon name="right" />
+        <Link className="btn is-sm cw-ib" to={path} aria-label={`${face.actionLabel}: ${company.name}`}>
+          {face.actionLabel}
         </Link>
       </span>
     </li>
@@ -154,6 +173,29 @@ interface WantsState {
   readonly onAdded: (name: string) => void;
 }
 
+/** Паузы перезапроса: нарастают, в сумме не больше минуты. */
+const PENDING_DELAYS_MS = [2_000, 4_000, 8_000, 16_000, 30_000] as const;
+
+/** Пауза перед перезапросом номер `attempt`; null — минута вышла, больше не спрашиваем. */
+export function pendingRefreshDelay(attempt: number): number | null {
+  return PENDING_DELAYS_MS[attempt] ?? null;
+}
+
+/** Подборка догружается: счётчики вакансий перезапрашиваются сами, без кнопки (B645). */
+function usePendingRefresh(state: AsyncState<CandidateCompanyWantPage>, reload: () => void): void {
+  const [tries, setTries] = useState(0);
+  const pending = state.status === 'ready' && state.data.vacanciesPending === true;
+  useEffect(() => {
+    const delay = pending ? pendingRefreshDelay(tries) : null;
+    if (delay === null) return undefined;
+    const timer = setTimeout(() => {
+      setTries((value) => value + 1);
+      reload();
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [pending, tries, reload]);
+}
+
 function useCompanyWantsList(): WantsState {
   const [stage, setStage] = useState<CandidateCompanyWantStageFilter>('all');
   const [extra, setExtra] = useState<readonly CandidateCompanyOpportunity[]>([]);
@@ -164,6 +206,7 @@ function useCompanyWantsList(): WantsState {
     [stage],
   );
   const { state, reload } = useAsync(load, 'Компании не загрузились.');
+  usePendingRefresh(state, reload);
   return {
     stage,
     state,
@@ -247,7 +290,7 @@ function WantsList({ wants, page }: WantsListProps) {
       ) : (
         <ul className="cw-rows cw-list" aria-label="Компании">
           {items.map((company) => (
-            <CompanyRow company={company} key={company.key} />
+            <CompanyRow company={company} key={company.key} pending={page.vacanciesPending === true} />
           ))}
         </ul>
       )}
@@ -298,7 +341,14 @@ export function CompanyWantsScreen() {
                 aria-pressed={wants.stage === chip.id}
                 onClick={() => wants.pickStage(chip.id)}
               >
-                {`${chip.label} · ${chip.count(page)}`}
+                {chip.id === 'new' && page.vacanciesPending ? (
+                  <>
+                    {`${chip.label} · `}
+                    <span className="cw-wait is-num" aria-hidden="true" />
+                  </>
+                ) : (
+                  `${chip.label} · ${chip.count(page)}`
+                )}
               </button>
             ))}
           </div>
