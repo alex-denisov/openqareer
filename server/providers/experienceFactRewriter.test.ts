@@ -122,3 +122,42 @@ describe('QueuedExperienceFactRewriter', () => {
     expect(built?.provenance?.model).toBe('gpt-5.6-luna');
   });
 });
+
+describe('B645: тексты профиля LinkedIn', () => {
+  const linkedin = {
+    language: 'ru' as const,
+    targetRole: 'Руководитель разработки',
+    aboutFacts: [{ id: 'm1', text: 'Вёл команду из 9 человек' }],
+    places: [],
+  };
+  const reply = { about: { text: 'Строю инженерные команды: последняя выросла до 9 человек.', factIds: ['m1'] }, places: [] };
+
+  it('просит строгий JSON с промптом пересказа и читает ответ', async () => {
+    const { create, client } = clientAnswering(JSON.stringify(reply));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(rewriter.linkedinProfile(linkedin)).resolves.toEqual(reply);
+    const sent = create.mock.calls[0]![0];
+    expect(sent.response_format.json_schema).toMatchObject({ name: 'linkedin_profile_rewrite', strict: true });
+    expect(sent.messages[0].content).toContain('Пиши заново, своими словами');
+    expect(sent.messages[1].content).toContain('Вёл команду из 9 человек');
+  });
+
+  it('очередь пропускает упавшую и пустую ступень', async () => {
+    const failures: string[] = [];
+    const stage = (model: string, result: () => Promise<unknown>) => ({
+      provenance: { model, promptRevision: 'r' },
+      rewrite: async () => null,
+      linkedinProfile: vi.fn(result) as never,
+    });
+    const queue = new QueuedExperienceFactRewriter(
+      [
+        stage('a', () => Promise.reject(new Error('timeout'))),
+        stage('b', () => Promise.resolve({ about: { text: ' ', factIds: [] }, places: [] })),
+        stage('c', () => Promise.resolve(reply)),
+      ],
+      (model) => failures.push(model),
+    );
+    await expect(queue.linkedinProfile(linkedin)).resolves.toEqual(reply);
+    expect(failures).toEqual(['a', 'b']);
+  });
+});

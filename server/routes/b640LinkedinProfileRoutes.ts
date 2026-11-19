@@ -5,6 +5,7 @@ import {
   type LinkedinProfileView, type LinkedinSection, type LinkedinSectionView,
 } from '../../shared/b640LinkedinProfile';
 import { LinkedinSectionRepository } from '../linkedinProfile/linkedinSectionRepository';
+import { LINKEDIN_REWRITE_BUDGET_MS, rewrittenSuggestions } from '../linkedinProfile/linkedinRewrite';
 import { buildSectionSuggestions } from '../linkedinProfile/sectionSuggestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -36,10 +37,14 @@ function context(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply, 
   return { candidateId: principal.candidate.id, section: params.data.section };
 }
 
-function buildView(deps: RouteDeps, repo: LinkedinSectionRepository, candidateId: string): LinkedinProfileView {
+async function buildView(deps: RouteDeps, repo: LinkedinSectionRepository, candidateId: string): Promise<LinkedinProfileView> {
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
-  const suggestions = buildSectionSuggestions({ memory: snapshot.memory, draft: snapshot.resume?.draft });
+  const input = { memory: snapshot.memory, draft: snapshot.resume?.draft };
   const current = repo.getCurrent(candidateId);
+  // B645: «О себе» и «Опыт» — пересказ моделью; без её принятого ответа предложения по ним нет.
+  const suggestions = await rewrittenSuggestions(
+    buildSectionSuggestions(input), input, current.get('about')?.text, deps.experienceFactRewriter, LINKEDIN_REWRITE_BUDGET_MS,
+  );
   const events = repo.getEvents(candidateId);
   const entries = LINKEDIN_SECTIONS.map((section): [LinkedinSection, LinkedinSectionView] => [section, {
     current: current.get(section) ?? null,
@@ -53,7 +58,7 @@ function buildView(deps: RouteDeps, repo: LinkedinSectionRepository, candidateId
 function registerCurrent(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
   app.get(BASE, READ_LIMIT, async (request, reply) => {
     const ctx = context(deps, request, reply, false);
-    return ctx ? ok(request, buildView(deps, repo, ctx.candidateId)) : reply;
+    return ctx ? ok(request, await buildView(deps, repo, ctx.candidateId)) : reply;
   });
   app.put(`${BASE}/:section/current`, WRITE_LIMIT, async (request, reply) => {
     const ctx = context(deps, request, reply, true);

@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { clearLinkedinRewriteCache } from '../linkedinProfile/linkedinRewrite';
 import { createB640Harness, type HarnessUser } from '../testHelpers/b640VacancyHarness';
 
 const BASE = '/api/v1/candidate/b640/linkedin/profile';
@@ -14,8 +15,8 @@ const memory = [
   { id: 'm2', status: 'proposed', statement: 'Увеличил выручку в 5 раз', domain: 'outcome', sensitive: false },
 ];
 
-async function setup() {
-  const h = await createB640Harness({ pool: () => [] });
+async function setup(experienceFactRewriter?: unknown) {
+  const h = await createB640Harness({ pool: () => [], ...(experienceFactRewriter ? { experienceFactRewriter } : {}) });
   closers.push(h.close);
   const real = h.candidates.getSnapshot.bind(h.candidates);
   vi.spyOn(h.candidates, 'getSnapshot').mockImplementation((id: string) => {
@@ -49,10 +50,27 @@ describe('B692: профиль LinkedIn по разделам', () => {
       current: null, copiedAt: null, pastedAt: null,
       suggestion: { text: 'Инженер данных', facts: [{ id: 'resume:targetRole', text: 'Целевая роль: Инженер данных' }] },
     });
-    expect(body.data.about.suggestion.text).toBe('Инженер данных. Вёл команду из 9 человек.');
-    expect(body.data.about.suggestion.facts.map((f: { id: string }) => f.id)).toEqual(['resume:targetRole', 'm1']);
+    // B645: без переписчика факты не становятся предложением «О себе» как есть.
+    expect(body.data.about.suggestion).toBeNull();
     expect(JSON.stringify(body.data)).not.toMatch(/5 раз/u);
     expect(body.data.skills.suggestion).toBeNull();
+  });
+
+  it('B645: «О себе» — пересказ модели на подтверждённых фактах, неподтверждённые ей не уходят', async () => {
+    clearLinkedinRewriteCache();
+    const linkedinProfile = vi.fn(async () => ({
+      about: { text: 'Строю и веду инженерные команды: последняя выросла до 9 человек.', factIds: ['m1'] },
+      places: [],
+    }));
+    const { h } = await setup({ rewrite: async () => null, linkedinProfile });
+    const body = (await h.get(BASE, 'flagged.test')).json();
+    expect(body.data.about.suggestion).toEqual({
+      text: 'Строю и веду инженерные команды: последняя выросла до 9 человек.',
+      facts: [{ id: 'm1', text: 'Вёл команду из 9 человек' }],
+    });
+    const request = JSON.stringify(linkedinProfile.mock.calls[0]);
+    expect(request).toContain('Вёл команду из 9 человек');
+    expect(request).not.toMatch(/5 раз/u);
   });
 
   it('PUT current сохраняет вставленный текст, виден только своему кандидату', async () => {
