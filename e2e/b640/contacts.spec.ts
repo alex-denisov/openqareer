@@ -12,26 +12,55 @@ const PEOPLE = [
   ['Анна Ветрова', 'руководитель найма', 'Гринкод', 'знакомы через Игоря Шаталова', 'intro'],
   ['Павел Ким', 'CTO', 'Гринкод', 'ответил на ваш комментарий 10.11', 'direct'],
   ['Елена Сафина', 'HR-партнёр', 'Гринкод', 'общих знакомых нет', 'none'],
-  ['Дмитрий Лаптев', 'технический рекрутер', 'Вектор Банк', 'работали вместе в «Сфере Платежи», 2018–2021', 'direct'],
+  [
+    'Дмитрий Лаптев',
+    'технический рекрутер',
+    'Вектор Банк',
+    'работали вместе в «Сфере Платежи», 2018–2021',
+    'direct',
+  ],
   ['Сергей Белов', 'CTO', 'Арка Холдинг', 'знакомы через Игоря Шаталова', 'intro'],
 ] as const;
 
 interface Item {
-  id: string; fullName: string; roleTitle: string; companyName: string; link: string;
-  linkNote: string | null; status: { state: string; at: string | null }; inSelection: boolean;
+  id: string;
+  fullName: string;
+  roleTitle: string;
+  companyName: string;
+  link: string;
+  linkNote: string | null;
+  status: { state: string; at: string | null };
+  inSelection: boolean;
 }
 
 const item = (index: number, states: Map<string, Item['status']>): Item => {
   const [fullName, roleTitle, companyName, linkNote, link] = PEOPLE[index % PEOPLE.length]!;
   const id = `c${index}`;
-  const status = states.get(id) ?? (index % 7 === 1 ? { state: 'replied', at: '2026-11-10T09:00:00.000Z' } : { state: 'none', at: null });
-  return { id, fullName, roleTitle, companyName, link, linkNote, status, inSelection: index % 5 < 3 };
+  const status =
+    states.get(id) ??
+    (index % 7 === 1
+      ? { state: 'replied', at: '2026-11-10T09:00:00.000Z' }
+      : { state: 'none', at: null });
+  return {
+    id,
+    fullName,
+    roleTitle,
+    companyName,
+    link,
+    linkNote,
+    status,
+    inSelection: index % 5 < 3,
+  };
 };
 
 type Mode = 'list' | 'empty' | 'error' | 'flaky';
 
 const FACETS = {
-  companies: [{ name: 'Гринкод', count: 900 }, { name: 'Вектор Банк', count: 300 }, { name: 'Арка Холдинг', count: 300 }],
+  companies: [
+    { name: 'Гринкод', count: 900 },
+    { name: 'Вектор Банк', count: 300 },
+    { name: 'Арка Холдинг', count: 300 },
+  ],
   link: { direct: 600, intro: 600, none: 300 },
   status: { none: 1300, written: 100, replied: 100 },
 };
@@ -62,14 +91,28 @@ async function mockContacts(page: Page, mode: Mode) {
     const search = (q.get('search') ?? '').toLowerCase();
     const companies = q.getAll('company');
     const offset = Number(q.get('offset') ?? 0);
-    const filtered = mode === 'empty' || search === 'нет такого' || q.getAll('status').includes('written') ? 0 : companies.length > 0 ? 300 : TOTAL;
-    const items = Array.from({ length: Math.max(0, Math.min(PAGE, filtered - offset)) }, (_, i) => item(offset + i, states))
-      .map((entry) => (companies.length > 0 ? { ...entry, companyName: companies[0]! } : entry));
+    const filtered =
+      mode === 'empty' || search === 'нет такого' || q.getAll('status').includes('written')
+        ? 0
+        : companies.length > 0
+          ? 300
+          : TOTAL;
+    const items = Array.from({ length: Math.max(0, Math.min(PAGE, filtered - offset)) }, (_, i) =>
+      item(offset + i, states),
+    ).map((entry) => (companies.length > 0 ? { ...entry, companyName: companies[0]! } : entry));
     return route.fulfill({
       json: {
         data: {
-          items, total: filtered, offset, nextOffset: offset + PAGE < filtered ? offset + PAGE : null, facets: FACETS,
-          linkedinImport: { state: 'imported', importedAt: '2026-11-10T09:00:00.000Z', importedCount: TOTAL },
+          items,
+          total: filtered,
+          offset,
+          nextOffset: offset + PAGE < filtered ? offset + PAGE : null,
+          facets: FACETS,
+          linkedinImport: {
+            state: 'imported',
+            importedAt: '2026-11-10T09:00:00.000Z',
+            importedCount: TOTAL,
+          },
         },
       },
     });
@@ -90,7 +133,9 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     await expect(page.locator('#ct-title')).toHaveText(/1\s500 контактов/u);
     await expect(page.locator('li.ct-row')).toHaveCount(20);
     await expect(page.locator('li.ct-row .tag.ok').first()).toHaveText('ответил');
-    await expect(page.locator('li.ct-row').first().locator('.ct-p')).toHaveText('знакомы через Игоря Шаталова');
+    await expect(page.locator('li.ct-row').first().locator('.ct-p')).toHaveText(
+      'знакомы через Игоря Шаталова',
+    );
     await page.getByRole('button', { name: /Показать ещё/ }).click();
     await expect(page.locator('li.ct-row')).toHaveCount(40);
     await expectGates(page);
@@ -110,10 +155,17 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     test.skip(testInfo.project.name !== 'desktop-1440', 'поповер — на широких экранах');
     const calls = await open(page, 'list');
     await page.locator('.vt-fbtn', { hasText: 'Компания' }).click();
-    await page.locator('#pop-company').getByLabel(/Вектор Банк/u).check();
+    await page
+      .locator('#pop-company')
+      .getByLabel(/Вектор Банк/u)
+      .check();
     await expect(page.locator('.vt-chip')).toHaveText('Вектор Банк');
     await expect(page.locator('#ct-title')).toHaveText(/300 контактов/u);
-    expect(calls.requests.some((query) => query.includes('company=%D0%92%D0%B5%D0%BA%D1%82%D0%BE%D1%80'))).toBe(true);
+    expect(
+      calls.requests.some((query) =>
+        query.includes('company=%D0%92%D0%B5%D0%BA%D1%82%D0%BE%D1%80'),
+      ),
+    ).toBe(true);
     await page.getByRole('button', { name: 'Сбросить всё' }).click();
     await expect(page.locator('.vt-chip')).toHaveCount(0);
     await expect(page.locator('#ct-title')).toHaveText(/1\s500 контактов/u);
@@ -128,7 +180,10 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     await expect(page.locator('.va-snack')).toContainText('писали');
     await page.getByRole('button', { name: 'Отменить' }).click();
     await expect(row.locator('.tag')).toHaveText('не писали');
-    expect(calls.puts).toEqual([{ id: 'c0', state: 'written' }, { id: 'c0', state: 'none' }]);
+    expect(calls.puts).toEqual([
+      { id: 'c0', state: 'written' },
+      { id: 'c0', state: 'none' },
+    ]);
     await expectGates(page);
   });
 
@@ -159,7 +214,11 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
     mkdirSync('.s13-shots', { recursive: true });
     const desktop = testInfo.project.name === 'desktop-1440';
-    for (const [name, mode] of [['contacts', 'list'], ['contacts-empty', 'empty'], ['contacts-error', 'error']] as const) {
+    for (const [name, mode] of [
+      ['contacts', 'list'],
+      ['contacts-empty', 'empty'],
+      ['contacts-error', 'error'],
+    ] as const) {
       await mockContacts(page, mode);
       for (const theme of ['light', 'dark'] as const) {
         await page.goto(PATH, { waitUntil: 'domcontentloaded' });
@@ -170,7 +229,10 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
         if (mode === 'list') await expect(page.locator('li.ct-row')).toHaveCount(20);
         for (const width of desktop ? [1440, 1176] : [390]) {
           await page.setViewportSize({ width, height: desktop ? 900 : 844 });
-          await page.screenshot({ path: `.s13-shots/${name}-${width}-${theme}.png`, fullPage: true });
+          await page.screenshot({
+            path: `.s13-shots/${name}-${width}-${theme}.png`,
+            fullPage: true,
+          });
         }
       }
     }
@@ -178,7 +240,10 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
       await mockContacts(page, 'list');
       await page.goto(PATH, { waitUntil: 'domcontentloaded' });
       await page.locator('.vt-fbtn', { hasText: 'Компания' }).click();
-      await page.screenshot({ path: '.s13-shots/contacts-filter-company-1440-light.png', fullPage: true });
+      await page.screenshot({
+        path: '.s13-shots/contacts-filter-company-1440-light.png',
+        fullPage: true,
+      });
     }
   });
 });
