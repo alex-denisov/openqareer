@@ -18,6 +18,7 @@ const person = (overrides: Partial<B640CompanyPerson>): B640CompanyPerson => ({
   nextStep: 'write_known_contact',
   vacancyId: 'v',
   platformMember: false,
+  message: { kind: 'known_contact', target: { contactId: 'c-p' } },
   ...overrides,
 });
 

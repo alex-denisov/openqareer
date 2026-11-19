@@ -67,6 +67,13 @@ const person = (
   nextStep: circle === 1 ? 'write_known_contact' : 'ask_for_introduction',
   vacancyId: LADOGA_ID,
   platformMember: name === null,
+  message:
+    name === null
+      ? null
+      : {
+          kind: circle === 1 ? 'known_contact' : 'ask_introduction',
+          target: { contactId: `c-${id}` },
+        },
 });
 
 const PEOPLE = [
