@@ -4,12 +4,14 @@ import { Button, Icon, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { AutomationBar } from './AutomationBar';
+import { useAutoApplicationIds } from './data/responseSummaryApi';
 import { useAsync, type AsyncState } from './data/useAsync';
 import {
   DEFAULT_SORT,
   STAGE_CHIPS,
   chipCounts,
   filterRows,
+  markAuto,
   sortRows,
   type ListedResponse,
   type SortKey,
@@ -122,13 +124,15 @@ interface ListState {
 function useResponsesList(): ListState {
   const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
   const { state, reload, setData } = useAsync(load, 'Отклики не загрузились.');
+  const autoIds = useAutoApplicationIds();
   const all = useMemo<readonly ListedResponse[]>(() => {
     const now = new Date();
-    return (state.data ?? []).map((application) => ({
+    const rows = (state.data ?? []).map((application) => ({
       application,
       row: buildResponseRow(application, now),
     }));
-  }, [state.data]);
+    return markAuto(rows, autoIds);
+  }, [state.data, autoIds]);
   const onChanged = useCallback(
     (next: ApplicationView) =>
       setData((items) => items.map((item) => (item.id === next.id ? next : item))),
