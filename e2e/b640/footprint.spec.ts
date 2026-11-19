@@ -110,11 +110,45 @@ test.describe('B652: «Цифровой след»', () => {
   test('«Проверить снова» с находки: новый поиск и ход виден в «Цифровом следе»', async ({
     page,
   }) => {
-    const calls = await openFootprint(page, `/app/profile/footprint/findings/${fid(4)}`, 'ready');
+    const calls = await openFootprint(
+      page,
+      `/app/profile/footprint/findings/${encodeURIComponent('mismatch:m1')}`,
+      'ready',
+    );
     await node(page, 'f03b').getByRole('button', { name: 'Проверить снова' }).click();
     await expect(node(page, 'f01').locator('progress.pf-prog')).toBeVisible();
     expect(calls.started).toHaveLength(1);
     expect(calls.granted).toEqual([]);
+  });
+
+  test('B382 путь удаления: «Письмо отправлено» → «Проверить находку» → «Удалено»; гейты', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, `/app/profile/footprint/findings/${fid(1)}`, 'ready');
+    const finding = node(page, 'f03b');
+    const dock = finding.locator('.fp-dock');
+    await dock.getByRole('button', { name: 'Письмо отправлено' }).click();
+    await expect(dock.getByText('Письмо отправлено 18.11')).toBeVisible();
+    expect(calls.removals).toEqual([fid(1)]);
+    await expectGates(page);
+    await dock.getByRole('button', { name: 'Проверить находку' }).click();
+    await expect(
+      finding.getByRole('status').filter({ hasText: 'Удалено · проверено 19.11' }),
+    ).toBeVisible();
+    expect(calls.rechecks).toEqual([fid(1)]);
+    await expectGates(page);
+  });
+
+  test('B382: находка ещё на месте — итог проверки у кнопки, проверить можно снова', async ({
+    page,
+  }) => {
+    await openFootprint(page, `/app/profile/footprint/findings/${fid(2)}`, 'ready', 'still_there');
+    const dock = node(page, 'f03b').locator('.fp-dock');
+    await dock.getByRole('button', { name: 'Письмо отправлено' }).click();
+    await dock.getByRole('button', { name: 'Проверить находку' }).click();
+    await expect(dock.getByText('Ещё на месте · проверено 19.11')).toBeVisible();
+    await expect(dock.getByRole('button', { name: 'Проверить находку' })).toBeEnabled();
+    await expect(page.getByText(/Удалено · проверено/u)).toHaveCount(0);
   });
 
   test('F4: рискового нет — честная строка и «Искать со ссылками»', async ({ page }) => {
