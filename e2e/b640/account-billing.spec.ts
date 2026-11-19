@@ -159,6 +159,7 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     const screen = page.locator('[data-b640-node="n06"]');
     await expect(screen.locator('.set-row .set-t')).toHaveText([
       'Тема',
+      'Язык',
       'Часовой пояс',
       'Валюта зарплат',
     ]);
@@ -167,11 +168,14 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'dark');
     await screen.getByRole('radio', { name: 'Светлая' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'light');
-    await expect(screen.getByRole('combobox')).toHaveValue('Europe/Moscow');
+    await expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveValue('ru');
+    await expect(screen.getByRole('combobox', { name: 'Часовой пояс' })).toHaveValue(
+      'Europe/Moscow',
+    );
     await screen.getByRole('radio', { name: '$' }).check();
     await expect.poll(() => saved.at(-1)).toEqual({ moneyCurrency: 'USD' });
     expect(saved.slice(0, 2)).toEqual([{ theme: 'dark' }, { theme: 'light' }]);
-    await expect(screen).not.toContainText(/Язык|Обновлени/u);
+    await expect(screen).not.toContainText(/Обновлени/u);
   });
 
   test('t03: подписка, автопродление с подтверждением, заявка на консультанта', async ({

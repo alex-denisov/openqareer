@@ -1,15 +1,13 @@
 import { useId, useState } from 'react';
 import { COMMON_TIMEZONES, DEFAULT_ACCOUNT_TIMEZONE, formatTimezoneDisplay } from '../../../../shared/timezoneUtils';
-import { desktopUpdater } from '../../appUpdate/useDesktopUpdater';
 import { getAccount, updateAccountProfile } from '../../coach/coachApi';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
-import { ResultLine } from '../kit/ResultLine';
 import { SegControl } from '../kit/SegControl';
 import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import type { B640Theme } from '../theme';
 import type { AppMoneyCurrency } from '../../../../shared/b640AppPreferences';
-import { appBuildLine } from './appBuild';
+import { DeviceSettingsSection } from './DeviceSettingsSection';
 import { getAppPreferences, saveAppPreferences } from './appPreferencesApi';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 
@@ -45,6 +43,25 @@ function ThemeRow() {
       </div>
       <div className="set-r">
         <SegControl label="Тема" name="b640-theme" variant="sec-seg" value={theme} options={THEMES} onChange={setTheme} />
+      </div>
+    </li>
+  );
+}
+
+/** Язык интерфейса: пока один — русский, как в макете n06. */
+function LanguageRow() {
+  const labelId = useId();
+  return (
+    <li className="set-row">
+      <div className="set-l">
+        <span className="set-t" id={labelId}>
+          Язык
+        </span>
+      </div>
+      <div className="set-r">
+        <select className="sec-sel" aria-labelledby={labelId} defaultValue="ru">
+          <option value="ru">Русский</option>
+        </select>
       </div>
     </li>
   );
@@ -128,43 +145,7 @@ function CurrencyRow() {
   );
 }
 
-type CheckResult = 'latest' | 'available' | null;
-
-/** «Обновления» — только в приложении: версия и проверка с результатом на месте. */
-function Updates() {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<CheckResult>(null);
-  async function check() {
-    setBusy(true);
-    await desktopUpdater.check();
-    setResult(desktopUpdater.getStatus().state === 'available' ? 'available' : 'latest');
-    setBusy(false);
-  }
-  return (
-    <div className="only-desk sec-grp">
-      <section className="set-group" aria-label="Обновления">
-        <h3 className="set-h">Обновления</h3>
-        <ul className="set-list">
-          <li className="set-row">
-            <div className="set-l">
-              <span className="set-t">{appBuildLine(__APP_VERSION__, __APP_COMMIT__, __APP_BUILD_DATE__)}</span>
-              {result ? (
-                <ResultLine text={result === 'available' ? 'Есть новая версия' : 'У вас последняя версия'} />
-              ) : null}
-            </div>
-            <div className="set-r">
-              <button className="btn is-sm" type="button" disabled={busy} aria-busy={busy || undefined} onClick={() => void check()}>
-                Проверить обновления
-              </button>
-            </div>
-          </li>
-        </ul>
-      </section>
-    </div>
-  );
-}
-
-/** n06 «Приложение»: тема, часовой пояс; в приложении — обновления. */
+/** n06 «Приложение»: тема, язык, часовой пояс, валюта; в приложении — настройки этого компьютера (B722). */
 export function AppScreen({ node }: { readonly node: B640Node }) {
   return (
     <SettingsPage node={node} heading="Приложение">
@@ -172,11 +153,12 @@ export function AppScreen({ node }: { readonly node: B640Node }) {
         <h3 className="set-h">Интерфейс</h3>
         <ul className="set-list">
           <ThemeRow />
+          <LanguageRow />
           <TimezoneRow />
           <CurrencyRow />
         </ul>
       </section>
-      {isTauriEnvironment() ? <Updates /> : null}
+      {isTauriEnvironment() ? <DeviceSettingsSection /> : null}
     </SettingsPage>
   );
 }
