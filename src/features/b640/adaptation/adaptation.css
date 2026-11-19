@@ -1,0 +1,28 @@
+@layer b640.sections {
+  .b640 .gb-f .ap-note {
+    box-sizing: border-box;
+    inline-size: 100%;
+    min-block-size: calc(var(--career-target-min) * 2);
+    padding: var(--career-space-2) var(--career-space-3);
+    border-radius: var(--career-radius-ctl);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    background: var(--career-bg);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-sm);
+    resize: vertical;
+  }
+  .b640 .gb-f .ap-note:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: 2px;
+  }
+  .b640 .ap-row-end {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    justify-self: end;
+  }
+  .b640 .dn-task .icon-btn {
+    flex: none;
+  }
+}
