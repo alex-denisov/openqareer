@@ -41,6 +41,15 @@ interface Cursor {
   readonly id: string;
 }
 
+export interface NotificationFeedRow {
+  readonly id: string;
+  readonly kind: NotificationEventKind;
+  readonly sourceType: string;
+  readonly sourceId: string;
+  readonly createdAt: string;
+  readonly readAt: string | null;
+}
+
 export type NotificationDeliveryChannel = 'email' | 'telegram';
 
 export interface ClaimedNotificationDelivery {
@@ -179,6 +188,50 @@ export class SqliteNotificationRepository {
       items: pageRows.map((row) => this.toItem(row)),
       unreadCount: unread.count,
       nextCursor: hasMore && last ? encodeCursor(last) : null,
+    };
+  }
+
+  /**
+   * B671: все неистёкшие уведомления кандидата (не больше `max`, новые первыми) с
+   * источником и число непрочитанных. Только чтение: без сдвига курсора и без очистки.
+   */
+  listForFeed(
+    candidateId: string,
+    options: { readonly max: number; readonly now: string },
+  ): { readonly rows: NotificationFeedRow[]; readonly unreadCount: number } {
+    const enabled = `COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
+             WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1`;
+    const rows = this.database
+      .prepare(
+        `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.read_at
+         FROM candidate_notifications n
+         WHERE n.candidate_id = ? AND n.expires_at > ? AND ${enabled}
+         ORDER BY n.created_at DESC, n.id DESC LIMIT ?`,
+      )
+      .all(candidateId, options.now, options.max) as unknown as {
+      id: string;
+      event_kind: NotificationEventKind;
+      source_type: string;
+      source_id: string;
+      created_at: string;
+      read_at: string | null;
+    }[];
+    const unread = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM candidate_notifications n
+         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND ${enabled}`,
+      )
+      .get(candidateId, options.now) as { count: number };
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        kind: row.event_kind,
+        sourceType: row.source_type,
+        sourceId: row.source_id,
+        createdAt: row.created_at,
+        readAt: row.read_at,
+      })),
+      unreadCount: unread.count,
     };
   }
 

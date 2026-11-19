@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Фото Марины Соколовой">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#c9d6d2"/><stop offset="1" stop-color="#9fb3ae"/></linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a3b2c"/><stop offset="1" stop-color="#3f281e"/></linearGradient>
+  </defs>
+  <rect width="96" height="96" fill="url(#bg)"/>
+  <path d="M22 96c2-18 13-27 26-27s24 9 26 27z" fill="#2f4a5a"/>
+  <path d="M41 62h14v10c0 4-3 7-7 7s-7-3-7-7z" fill="#e2b79c"/>
+  <path d="M27 50c-2-20 6-33 21-33s23 13 21 33c-1 9-4 15-8 18l-2-20H37l-2 20c-4-3-7-9-8-18z" fill="url(#hair)"/>
+  <ellipse cx="48" cy="45" rx="14" ry="17" fill="#eec3a8"/>
+  <path d="M34 40c3-10 9-14 17-13 6 1 10 5 11 11-6-2-14-3-20-7-2 4-5 7-8 9z" fill="url(#hair)"/>
+  <ellipse cx="42.5" cy="46" rx="1.6" ry="1.9" fill="#3a2a22"/><ellipse cx="53.5" cy="46" rx="1.6" ry="1.9" fill="#3a2a22"/>
+  <path d="M44 55c2.4 1.8 5.6 1.8 8 0" stroke="#b9776a" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+</svg>

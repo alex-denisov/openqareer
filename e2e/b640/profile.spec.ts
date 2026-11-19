@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { expectGates } from './gates';
+import { expectLastActionReachable } from './lastActionReachable';
 
 const SHOTS = process.env.B640_SHOTS;
 const API = '**/api/v1/candidate';
@@ -302,6 +303,13 @@ test.describe('B651: «Профиль» (s01)', () => {
     await page.goBack();
     await node(page, 's01').getByRole('link', { name: 'Сменить' }).click();
     await expect(page).toHaveURL(/\/app\/profile\/status$/u);
+  });
+
+  test('B720: последняя ссылка правой колонки не под закреплённой панелью', async ({ page }) => {
+    await openCabinet(page, '/app/profile', { aside: true });
+    await expect(node(page, 's01').locator('.phead')).toBeVisible({ timeout: 15_000 });
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 390, height: 569 });
+    await expectLastActionReachable(page);
   });
 
   test('правая колонка: условия, связи, чего мы не знаем, резюме под роль (B645); гейты', async ({

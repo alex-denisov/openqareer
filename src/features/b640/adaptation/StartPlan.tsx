@@ -3,7 +3,10 @@ import { createCareerDiaryAdaptationPlan } from '../../diary/careerDiaryPlanning
 import { ActionDock } from '../kit/ActionDock';
 import { Button } from '../kit/Button';
 import { StatusLine } from '../kit/ResultLine';
-import { createWorkplace, savePlan } from './adaptationApi';
+import { fetchVacancyDetail } from '../../vacancies/vacancyDetailApi';
+import { createWorkplace, savePlan, type NewWorkplace } from './adaptationApi';
+import { CompanyField } from './CompanyField';
+import { dutiesFromVacancy, EXPECTATIONS_MAX, type CompanySuggestion } from './responseCompanies';
 
 export function Field(props: {
   readonly id: string;
@@ -12,10 +15,12 @@ export function Field(props: {
   readonly type?: 'text' | 'date';
   readonly placeholder?: string;
   readonly error?: string;
+  /** Ширина поля по макету: `gb-name` — длинное, `gb-date` — дата. */
+  readonly className?: string;
   readonly onChange: (value: string) => void;
 }) {
   return (
-    <div className="gb-f">
+    <div className={props.className ? `gb-f ${props.className}` : 'gb-f'}>
       <label htmlFor={props.id}>{props.label}</label>
       <input
         id={props.id}
@@ -31,10 +36,11 @@ export function Field(props: {
   );
 }
 
-const EMPTY = { company: '', title: '', startDate: '' };
+const EMPTY = { company: '', title: '', startDate: '', expectations: '' };
 type Draft = typeof EMPTY;
+type Errors = Partial<Record<keyof Draft, string>>;
 
-function errorsOf(draft: Draft): Partial<Record<keyof Draft, string>> {
+function errorsOf(draft: Draft): Errors {
   return {
     ...(draft.company.trim() ? {} : { company: 'Укажите компанию' }),
     ...(draft.title.trim() ? {} : { title: 'Укажите должность' }),
@@ -42,13 +48,34 @@ function errorsOf(draft: Draft): Partial<Record<keyof Draft, string>> {
   };
 }
 
-/** Нет места работы: компания, должность и день выхода — и план 30-60-90 готов. */
-export function StartWorkplace({ onDone }: { readonly onDone: () => void }) {
+function workplaceInput(draft: Draft): NewWorkplace {
+  const expectations = draft.expectations.trim();
+  return {
+    company: draft.company.trim(),
+    title: draft.title.trim(),
+    startDate: draft.startDate,
+    ...(expectations ? { expectations } : {}),
+  };
+}
+
+/** Состояние формы: черновик, ошибки, отправка и подстановка из отклика. */
+function useStartForm(onDone: () => void) {
   const [draft, setDraft] = useState<Draft>(EMPTY);
-  const [errors, setErrors] = useState<Partial<Record<keyof Draft, string>>>({});
+  const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
-  const set = (key: keyof Draft) => (value: string) => setDraft({ ...draft, [key]: value });
+  const set = (key: keyof Draft) => (value: string) => setDraft((current) => ({ ...current, [key]: value }));
+  // Обязанности вакансии кладутся, только если кандидат ещё ничего не написал сам.
+  const pick = (item: CompanySuggestion) => {
+    setDraft((current) => ({ ...current, company: item.company, title: current.title.trim() ? current.title : item.title }));
+    if (!item.clusterId) return;
+    fetchVacancyDetail(item.clusterId)
+      .then((detail) => {
+        const duties = dutiesFromVacancy(detail);
+        setDraft((current) => (current.expectations.trim() || !duties ? current : { ...current, expectations: duties }));
+      })
+      .catch(() => undefined);
+  };
   async function submit(event: FormEvent) {
     event.preventDefault();
     const found = errorsOf(draft);
@@ -57,7 +84,7 @@ export function StartWorkplace({ onDone }: { readonly onDone: () => void }) {
     setBusy(true);
     setFailed(false);
     try {
-      const workplace = await createWorkplace({ ...draft, company: draft.company.trim(), title: draft.title.trim() });
+      const workplace = await createWorkplace(workplaceInput(draft));
       await savePlan(workplace.id, createCareerDiaryAdaptationPlan(workplace, new Date().toISOString()));
       onDone();
     } catch {
@@ -65,15 +92,38 @@ export function StartWorkplace({ onDone }: { readonly onDone: () => void }) {
       setBusy(false);
     }
   }
+  return { draft, errors, busy, failed, set, pick, submit };
+}
+
+/** d01g: места работы нет — компания, должность, день выхода и что от вас ждут. */
+export function StartWorkplace({ onDone }: { readonly onDone: () => void }) {
+  const { draft, errors, busy, failed, set, pick, submit } = useStartForm(onDone);
   return (
-    <form className="gb-form" onSubmit={(event) => void submit(event)} aria-labelledby="ap-start">
-      <h2 className="lead-title" id="ap-start">План первых 90 дней на новом месте</h2>
-      <Field id="ap-company" label="Компания" value={draft.company} error={errors.company} onChange={set('company')} />
-      <Field id="ap-title" label="Должность" value={draft.title} error={errors.title} onChange={set('title')} />
-      <Field id="ap-start-date" label="День выхода" type="date" value={draft.startDate} error={errors.startDate} onChange={set('startDate')} />
-      {failed ? <StatusLine state="err" text="План не создался, попробуйте ещё раз" /> : null}
-      <ActionDock kind="commit" primary={<Button variant="primary" type="submit" busy={busy}>Начать план</Button>} />
-    </form>
+    <>
+      <section className="lead" aria-labelledby="ap-start">
+        <h2 className="lead-title is-long" id="ap-start">Чтобы собрать план, укажите, куда вы выходите</h2>
+      </section>
+      <form className="gb-form" onSubmit={(event) => void submit(event)} aria-labelledby="ap-start">
+        <CompanyField value={draft.company} error={errors.company} onChange={set('company')} onPick={pick} />
+        <Field id="ap-title" label="Должность" className="gb-name" value={draft.title} error={errors.title} onChange={set('title')} />
+        <Field id="ap-start-date" label="День выхода" className="gb-date" type="date" value={draft.startDate} error={errors.startDate} onChange={set('startDate')} />
+        <div className="gb-f gb-long">
+          <label htmlFor="ap-expectations">Что от вас ждут</label>
+          <textarea
+            id="ap-expectations"
+            rows={5}
+            maxLength={EXPECTATIONS_MAX}
+            value={draft.expectations}
+            onChange={(event) => set('expectations')(event.currentTarget.value)}
+          />
+        </div>
+        {failed ? <StatusLine state="err" text="План не создался, попробуйте ещё раз" /> : null}
+        <ActionDock
+          kind="commit"
+          primary={<Button variant="primary" type="submit" icon="path" busy={busy}>Собрать план</Button>}
+        />
+      </form>
+    </>
   );
 }
 
