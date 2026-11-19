@@ -179,6 +179,11 @@ export async function openCareer(
       },
     }),
   );
+  // Проверка навыков готова для любой роли: полоса «Проверьте» берёт первую роль поиска.
+  await page.route(`${API}/candidate/role-skill-assessments/current*`, (route) => {
+    const role = new URL(route.request().url()).searchParams.get('role') ?? '';
+    return route.fulfill({ json: { data: { state: 'ready', roleTitle: role, skills: [] } } });
+  });
   await page.route(`${API}/candidate/role-skill-demand`, (route) =>
     route.fulfill({
       json: {
