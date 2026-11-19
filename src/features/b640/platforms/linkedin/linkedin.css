@@ -20,6 +20,10 @@
     color: var(--career-accent);
   }
   @media (max-width: 767px) {
+    /* Листание вариантов и действия не помещаются в строку 390 — переносятся. */
+    .b640 .li-offer-a {
+      flex-wrap: wrap;
+    }
     .b640 .li-done {
       margin-inline-start: auto;
     }

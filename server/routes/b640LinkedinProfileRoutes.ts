@@ -6,7 +6,6 @@ import {
   type LinkedinOffer,
   type LinkedinProfileView,
 } from '../../shared/b640LinkedinProfile';
-import type { QuotaKey } from '../billing/tariffQuotas';
 import { LinkedinSectionRepository } from '../linkedinProfile/linkedinSectionRepository';
 import { LINKEDIN_REWRITE_BUDGET_MS, rewrittenSuggestions } from '../linkedinProfile/linkedinRewrite';
 import { checkLinkedinVariant, linkedinVariantRequest } from '../linkedinProfile/linkedinVariant';
@@ -16,13 +15,12 @@ import { buildSectionSuggestions, type SectionSuggestions, type SuggestionInput 
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError } from './helpers';
-import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 
 const BASE = '/api/v1/candidate/b640/linkedin/profile';
 const READ_LIMIT = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
 const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
-/** B645 п. 6 (решение владельца 19.11): «Предложить заново» идёт в квоту генераций тарифа. */
-export const LINKEDIN_VARIANT_QUOTA: QuotaKey = 'applications';
+/** Сохранённых вариантов «Предложить заново» — всего три с первым (без квоты тарифа, решение 12.11/19.11). */
+const STORED_VARIANTS_MAX = LINKEDIN_VARIANTS_MAX - 1;
 
 const offerKey = z.string().regex(LINKEDIN_OFFER_KEY);
 const keySchema = z.object({ key: offerKey });
@@ -100,29 +98,13 @@ async function newVariant(
   const output = writer?.linkedinVariant ? await writer.linkedinVariant(variantRequest).catch(() => null) : null;
   const text = output ? checkLinkedinVariant(variantRequest, output) : null;
   if (!text) return { error: 'unavailable' };
-  if (!repo.addVariant(candidateId, key, text, LINKEDIN_VARIANTS_MAX)) return { error: 'limit' };
-  return { offer: offerOf(key, null, { done: new Map(), variants: repo.getVariants(candidateId) })! };
+  if (!repo.addVariant(candidateId, key, text, STORED_VARIANTS_MAX)) return { error: 'limit' };
+  const base = avoid.length > (marks.variants.get(key)?.length ?? 0) ? avoid[0] : null;
+  return { offer: offerOf(key, base, { done: new Map(), variants: repo.getVariants(candidateId) })! };
 }
 
-/** Один вариант за раз на ключ кандидата: иначе два запроса делят одну единицу квоты. */
+/** Один вариант за раз на ключ кандидата: иначе два запроса обходят потолок вариантов. */
 const inFlight = new Set<string>();
-
-async function chargedVariant(
-  deps: RouteDeps,
-  repo: LinkedinSectionRepository,
-  candidateId: string,
-  key: string,
-  unitKey: string,
-): ReturnType<typeof newVariant> {
-  try {
-    const result = await newVariant(deps, repo, candidateId, key);
-    if (!('offer' in result)) releaseTariffQuota(deps, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey);
-    return result;
-  } catch (error) {
-    releaseTariffQuota(deps, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey);
-    throw error;
-  }
-}
 
 function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
   app.post(`${BASE}/offers/:key/variant`, WRITE_LIMIT, async (request, reply) => {
@@ -136,12 +118,10 @@ function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSe
       return sendError(reply, request, 409, 'variant_in_progress', 'Другой вариант уже готовится.', true);
     }
     const used = repo.getVariants(candidateId).get(key)?.length ?? 0;
-    if (used >= LINKEDIN_VARIANTS_MAX) return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);
-    const unitKey = `linkedin-variant:${key}:${used + 1}`;
-    if (!requireTariffQuota(deps, request, reply, candidateId, LINKEDIN_VARIANT_QUOTA, unitKey)) return reply;
+    if (used >= STORED_VARIANTS_MAX) return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);
     inFlight.add(lock);
     try {
-      const result = await chargedVariant(deps, repo, candidateId, key, unitKey);
+      const result = await newVariant(deps, repo, candidateId, key);
       if ('offer' in result) return ok(request, result.offer);
       if (result.error === 'missing') return sendError(reply, request, 404, 'offer_not_found', 'Нет такого предложения.', false);
       if (result.error === 'limit') return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);

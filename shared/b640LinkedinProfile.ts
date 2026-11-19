@@ -17,7 +17,10 @@ export type LinkedinSection = (typeof LINKEDIN_SECTIONS)[number];
 export const LINKEDIN_HEADLINE_MAX = 220;
 export const LINKEDIN_ABOUT_MAX = 2600;
 export const LINKEDIN_SKILLS_MAX = 50;
-/** «Предложить заново» — не больше трёх раз на одно предложение. */
+/**
+ * Вариантов у предложения не больше трёх, считая первый (решение владельца 12.11 по генерации):
+ * первый бесплатно, «Предложить заново» — ещё два; квоты тарифа это не тратит.
+ */
 export const LINKEDIN_VARIANTS_MAX = 3;
 
 /**
@@ -28,9 +31,8 @@ export const LINKEDIN_OFFER_KEY = /^(headline|about|skills|experience:[A-Za-z0-9
 
 export interface LinkedinOffer {
   readonly key: string;
-  readonly text: string;
-  /** Сколько раз ещё можно «Предложить заново». */
-  readonly variantsLeft: number;
+  /** Все варианты по порядку, первый — исходное предложение; на экране листаются «Вариант N из 3». */
+  readonly variants: readonly string[];
   /** Кандидат вставил текст в LinkedIn и отметил «Выполнено». */
   readonly doneAt: string | null;
 }

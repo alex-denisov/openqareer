@@ -6,12 +6,7 @@ import { expectGates } from './gates';
 const PROFILE = '/app/profile/linkedin';
 const API = '**/api/v1/candidate/b640/linkedin/profile';
 
-const offer = (key: string, text: string, variantsLeft = 3) => ({
-  key,
-  text,
-  variantsLeft,
-  doneAt: null,
-});
+const offer = (key: string, text: string) => ({ key, variants: [text], doneAt: null });
 const place = (id: string, label: string, current: string, text?: string) => ({
   id,
   label,
@@ -80,7 +75,6 @@ const READY = {
 interface MockOptions {
   readonly view?: unknown;
   readonly failRead?: boolean;
-  readonly quotaOver?: boolean;
 }
 
 async function mock(page: Page, options: MockOptions = {}) {
@@ -103,19 +97,18 @@ async function mock(page: Page, options: MockOptions = {}) {
     });
   });
   await page.route(`${API}/offers/*/variant`, (route) =>
-    options.quotaOver
-      ? route.fulfill({
-          status: 402,
-          json: {
-            error: {
-              code: 'quota_exhausted',
-              message: 'Квота «Отклики с резюме и письмом» на тарифе Free кончилась',
-            },
-          },
-        })
-      : route.fulfill({
-          json: { data: offer('headline', 'Руководитель разработки · финтех · Go, Kubernetes', 2) },
-        }),
+    route.fulfill({
+      json: {
+        data: {
+          key: 'headline',
+          variants: [
+            'Engineering Manager · платёжная платформа · Go, Kotlin, Kubernetes',
+            'Руководитель разработки · финтех · Go, Kubernetes',
+          ],
+          doneAt: null,
+        },
+      },
+    }),
   );
 }
 
@@ -160,7 +153,7 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
       0,
     );
     await expect(
-      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 3' }),
+      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }),
     ).toBeVisible();
     const experience = page.locator('.li-sec').nth(2);
     await expect(experience.locator(':scope > .li-rec .li-rec-l')).toHaveText([
@@ -193,30 +186,24 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
     await expect(page.locator('.li-all')).toHaveCount(0);
   });
 
-  test('«Скопировать» и «Предложить заново»', async ({ page }) => {
+  test('«Скопировать», «Предложить заново» и листание «Вариант N из 3»', async ({ page }) => {
     await mock(page);
     await open(page);
     await page.getByRole('button', { name: 'Скопировать: Заголовок' }).click();
     await expect(page.getByText('Скопировано')).toBeVisible();
-    await page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 3' }).click();
+    await page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }).click();
     await expect(page.locator('#li-new-headline')).toHaveText(
       'Руководитель разработки · финтех · Go, Kubernetes',
     );
+    const variants = page.getByRole('group', { name: 'Варианты: Заголовок' });
+    await expect(variants).toContainText('Вариант 2 из 3');
+    await variants.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(page.locator('#li-new-headline')).toContainText('Engineering Manager');
+    await expect(variants).toContainText('Вариант 1 из 3');
     await expect(
-      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }),
+      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 1' }),
     ).toBeVisible();
     expect(await noOverflow(page)).toBe(true);
-  });
-
-  test('квота тарифа кончилась — сообщение сервера на месте, предложение остаётся', async ({
-    page,
-  }) => {
-    await mock(page, { quotaOver: true });
-    await open(page);
-    await page.getByRole('button', { name: 'Другой вариант: Навыки · осталось 3' }).click();
-    const skills = page.locator('.li-sec').nth(5);
-    await expect(skills.getByRole('alert')).toContainText('на тарифе Free кончилась');
-    await expect(skills.locator('.li-new')).toContainText('Найм разработчиков');
   });
 
   test('без импорта LinkedIn — «Импортировать из LinkedIn», разделов нет', async ({ page }) => {

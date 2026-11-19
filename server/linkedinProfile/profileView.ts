@@ -13,17 +13,11 @@ export interface OfferMarks {
   readonly variants: ReadonlyMap<string, readonly string[]>;
 }
 
-/** Предложение по ключу: последний вариант «Предложить заново», иначе первый текст. */
+/** Предложение по ключу: первый текст и варианты «Предложить заново», всего не больше трёх. */
 export function offerOf(key: string, base: string | null | undefined, marks: OfferMarks): LinkedinOffer | null {
-  const variants = marks.variants.get(key) ?? [];
-  const text = variants.at(-1) ?? base;
-  if (!text) return null;
-  return {
-    key,
-    text,
-    variantsLeft: Math.max(0, LINKEDIN_VARIANTS_MAX - variants.length),
-    doneAt: marks.done.get(key) ?? null,
-  };
+  const variants = [...(base ? [base] : []), ...(marks.variants.get(key) ?? [])].slice(0, LINKEDIN_VARIANTS_MAX);
+  if (variants.length === 0) return null;
+  return { key, variants, doneAt: marks.done.get(key) ?? null };
 }
 
 function places(current: ProfileCurrent, suggestions: SectionSuggestions, marks: OfferMarks): LinkedinPlace[] {
