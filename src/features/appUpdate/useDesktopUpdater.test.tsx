@@ -25,9 +25,10 @@ afterEach(() => {
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-async function launched() {
+async function launched(autoInstall = false) {
   const result = { current: null as unknown as ReturnType<typeof useDesktopUpdater> };
   const updater = createDesktopUpdater();
+  updater.setAutoInstall(autoInstall);
   updater.start();
   function Probe() {
     result.current = useDesktopUpdater(updater);
@@ -74,6 +75,22 @@ describe('useDesktopUpdater', () => {
     expect(result.current.status).toMatchObject({ state: 'error', modal: 'none' });
     expect(result.current.status.errorMessage).toMatch(/Подпись/u);
     expect(bridge.relaunch).not.toHaveBeenCalled();
+  });
+
+  it('B722: with automatic updates on, a found update downloads by itself and waits for a restart', async () => {
+    bridge.checkForUpdate.mockResolvedValue({ status: 'available', version: '1.0.2', currentVersion: '1.0.1' });
+    bridge.downloadAndInstall.mockResolvedValue({ status: 'installed' });
+    const { result } = await launched(true);
+    expect(bridge.downloadAndInstall).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toMatchObject({ state: 'ready', modal: 'none' });
+    expect(bridge.relaunch).not.toHaveBeenCalled();
+  });
+
+  it('B722: with automatic updates off, a found update only waits for the candidate', async () => {
+    bridge.checkForUpdate.mockResolvedValue({ status: 'available', version: '1.0.2', currentVersion: '1.0.1' });
+    const { result } = await launched(false);
+    expect(bridge.downloadAndInstall).not.toHaveBeenCalled();
+    expect(result.current.status.state).toBe('available');
   });
 
   it('keeps quiet when the feed is unreachable', async () => {

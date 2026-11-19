@@ -49,6 +49,7 @@ import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAss
 import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
 import { MIGRATION_49 as MIGRATION_INTERVIEW_SIMULATOR } from '../interviewSimulatorSchema';
 import { COMPANY_DIRECTORY_MIGRATION } from '../companyDirectorySchema';
+import { MIGRATION_INTERVIEW_REVIEW_HELPFUL } from '../interviewReviewHelpfulSchema';
 
 export const MIGRATIONS = [
   MIGRATION_1,
@@ -106,6 +107,8 @@ export const MIGRATIONS = [
   SEO_GOAL_MIGRATION,
   MIGRATION_TARIFF_QUOTAS,
   COMPANY_DIRECTORY_MIGRATION,
+  // B681: только новая таблица «разбор помог».
+  MIGRATION_INTERVIEW_REVIEW_HELPFUL,
 ] as const;
 
 export function applyMigrations(

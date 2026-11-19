@@ -41,4 +41,14 @@
     color: var(--career-text);
     font-size: var(--career-text-sm);
   }
+  /* B645: абзацы письма в карточке «Сопроводительное письмо» — как в тексте. */
+  .b640 .cb-item .cb-t { white-space: pre-line; }
+  /* B645: длинный текст вакансии прокручивается внутри и не растягивает страницу. */
+  @media (min-width: 768px) {
+    .b640 .vac-col .vac-text {
+      max-block-size: calc(100dvh - var(--career-space-8) * 5);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+  }
 }

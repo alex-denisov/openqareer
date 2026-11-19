@@ -27,7 +27,10 @@ export const STAGE_CHIPS: readonly { readonly id: StageChip; readonly label: str
 ];
 
 /** Отмечает автоотклики по списку сервера (B680). */
-export function markAuto(items: readonly ListedResponse[], autoIds: ReadonlySet<string>): readonly ListedResponse[] {
+export function markAuto(
+  items: readonly ListedResponse[],
+  autoIds: ReadonlySet<string>,
+): readonly ListedResponse[] {
   return items.map((item) => ({ ...item, auto: autoIds.has(item.application.id) }));
 }
 
@@ -46,7 +49,13 @@ function chipOf(application: ApplicationView): Exclude<StageChip, 'auto'> {
 }
 
 export function chipCounts(items: readonly ListedResponse[]): Record<StageChip, number> {
-  const counts: Record<StageChip, number> = { active: 0, interview: 0, offer: 0, archive: 0, auto: 0 };
+  const counts: Record<StageChip, number> = {
+    active: 0,
+    interview: 0,
+    offer: 0,
+    archive: 0,
+    auto: 0,
+  };
   return items.reduce(
     (acc, item) => ({
       ...acc,
@@ -64,7 +73,9 @@ export function filterRows(
   const stages = chips.filter((chip) => chip !== 'auto');
   const autoOnly = chips.includes('auto');
   return items.filter(
-    (item) => (!autoOnly || item.auto === true) && (stages.length === 0 || stages.includes(chipOf(item.application))),
+    (item) =>
+      (!autoOnly || item.auto === true) &&
+      (stages.length === 0 || stages.includes(chipOf(item.application))),
   );
 }
 
@@ -103,10 +114,14 @@ export function sortRows(
 }
 
 export interface FunnelSummary {
+  /** B645: числа воронки — только ручные отклики; автоотклики считаются отдельно. */
   readonly sent: number;
-  /** B680: из отправленных — автооткликами. */
+  /** B680: отправлено автооткликами. */
   readonly auto: number;
+  /** B645: ответы компаний на автоотклики. */
+  readonly autoResponded: number;
   readonly responded: number;
+  /** B645: интервью и офферы — по текущей стадии, как чипы экрана «Отклики». */
   readonly interview: number;
   readonly offer: number;
   /** Компании, которым можно напомнить о себе. */
@@ -118,40 +133,67 @@ export interface FunnelSummary {
   readonly sources: readonly SourceBreakdownItem[];
 }
 
-function sum(items: readonly SourceBreakdownItem[], pick: (item: SourceBreakdownItem) => number): number {
+function sum(
+  items: readonly SourceBreakdownItem[],
+  pick: (item: SourceBreakdownItem) => number,
+): number {
   return items.reduce((total, item) => total + pick(item), 0);
 }
 
-/** Площадки словами кандидата: внутренние коды источников сливаются в «Сайт компании». */
-function byPlatform(sources: readonly SourceBreakdownItem[]): readonly SourceBreakdownItem[] {
+/** Площадка словами кандидата: внутренние коды источников сливаются в «Сайт компании». */
+function platformLabel(source: string): string {
+  const platform = platformOf(source);
+  return platform.site ? 'Сайт компании' : platform.label;
+}
+
+function countStage(
+  items: readonly ListedResponse[],
+  label: string,
+  stage: ApplicationView['stage'],
+): number {
+  return items.filter(
+    (item) =>
+      item.application.stage === stage &&
+      platformLabel(item.application.vacancy?.source ?? 'other') === label,
+  ).length;
+}
+
+/** Отклики по площадкам: отправлено и ответили — по истории, интервью и офферы — по текущей стадии. */
+function byPlatform(
+  sources: readonly SourceBreakdownItem[],
+  items: readonly ListedResponse[],
+): readonly SourceBreakdownItem[] {
   const groups = new Map<string, SourceBreakdownItem>();
   for (const source of sources) {
-    const platform = platformOf(source.source);
-    const label = platform.site ? 'Сайт компании' : platform.label;
+    const label = platformLabel(source.source);
     const known = groups.get(label);
     groups.set(label, {
       source: label,
       sourceLabel: label,
       total: (known?.total ?? 0) + source.total,
       responded: (known?.responded ?? 0) + source.responded,
-      interview: (known?.interview ?? 0) + source.interview,
-      offer: (known?.offer ?? 0) + source.offer,
+      interview: countStage(items, label, 'interview'),
+      offer: countStage(items, label, 'offer'),
     });
   }
   return [...groups.values()].sort((a, b) => b.total - a.total);
 }
 
 export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
-  const sentItems = items.filter((item) => item.application.stage !== 'saved');
+  const sentAll = items.filter((item) => item.application.stage !== 'saved');
+  const autoItems = sentAll.filter((item) => item.auto === true);
+  const sentItems = sentAll.filter((item) => item.auto !== true);
   const analytics = computePipelineAnalytics(sentItems.map((item) => item.application));
-  const sources = byPlatform(analytics.sources);
+  const autoAnalytics = computePipelineAnalytics(autoItems.map((item) => item.application));
+  const sources = byPlatform(analytics.sources, sentItems);
   const first = sentItems.reduce<number | null>(
     (min, item) => (min === null || item.row.sentAt < min ? item.row.sentAt : min),
     null,
   );
   return {
     sent: sentItems.length,
-    auto: sentItems.filter((item) => item.auto === true).length,
+    auto: autoItems.length,
+    autoResponded: sum(autoAnalytics.sources, (source) => source.responded),
     responded: sum(sources, (source) => source.responded),
     interview: sum(sources, (source) => source.interview),
     offer: sum(sources, (source) => source.offer),
@@ -180,7 +222,12 @@ const STAGE_EVENTS: Partial<Record<ApplicationView['stage'], { icon: IconName; t
   archived: { icon: 'down', title: 'В архиве' },
 };
 
-function event(icon: IconName, title: string, iso: string | null | undefined, note: string | null = null): TimelineEvent[] {
+function event(
+  icon: IconName,
+  title: string,
+  iso: string | null | undefined,
+  note: string | null = null,
+): TimelineEvent[] {
   const at = iso ? new Date(iso).getTime() : Number.NaN;
   const when = shortDate(iso);
   return Number.isNaN(at) || !when ? [] : [{ icon, title, note, when, at }];
@@ -189,7 +236,10 @@ function event(icon: IconName, title: string, iso: string | null | undefined, no
 /**
  * «Что было» по отклику: только события, у которых известна дата. Свежие сверху.
  */
-export function timeline(application: ApplicationView, now: Date = new Date()): readonly TimelineEvent[] {
+export function timeline(
+  application: ApplicationView,
+  now: Date = new Date(),
+): readonly TimelineEvent[] {
   if (application.stage === 'saved') return [];
   const via = viaPlatform(platformOf(application.vacancy?.source));
   const receipt = application.deliveryReceipt ?? null;

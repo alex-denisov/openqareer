@@ -30,13 +30,21 @@ const MARKS: readonly Mark[] = [
 ];
 
 const STAGE_ORDER: readonly ApplicationStage[] = [
-  'saved', 'applied', 'responded', 'interview', 'offer', 'rejected', 'archived',
+  'saved',
+  'applied',
+  'responded',
+  'interview',
+  'offer',
+  'rejected',
+  'archived',
 ];
 
 /** Что можно отметить дальше: только стадии после текущей. */
 export function marksFor(stage: ApplicationStage): readonly Mark[] {
-  if (stage === 'rejected' || stage === 'archived') return [];
-  if (stage === 'saved') return MARKS.filter((mark) => mark.stage === 'archived');
+  if (stage === 'archived') return [];
+  // B645: черновик и отказ можно только убрать в архив.
+  if (stage === 'saved' || stage === 'rejected')
+    return MARKS.filter((mark) => mark.stage === 'archived');
   const at = STAGE_ORDER.indexOf(stage);
   return MARKS.filter((mark) => STAGE_ORDER.indexOf(mark.stage) > at);
 }

@@ -41,4 +41,6 @@ export interface B640ResponseSummary {
     readonly manual: B640StageCounts;
   };
   readonly autoApplicationIds: readonly string[];
+  /** Отклики с одобренным письмом: черновик показывает то же, что экран письма (B645). */
+  readonly approvedLetterIds: readonly string[];
 }

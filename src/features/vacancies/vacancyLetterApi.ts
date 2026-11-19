@@ -156,6 +156,9 @@ export interface StoredLetterApproval extends ApprovedVacancyLetterResult {
   readonly subject: string | null;
   readonly body: string;
   readonly variantId: string | null;
+  /** Язык и тон одобренного письма (B645); `null` — в старом снимке их нет. */
+  readonly language?: LetterLanguage | null;
+  readonly tone?: LetterTone | null;
 }
 
 /** Последнее одобренное письмо вакансии; `null` — письмо ещё не одобряли. */

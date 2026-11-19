@@ -9,6 +9,9 @@ async function open(page: Page, path: string, node: string, options: OffersMockO
   return mock;
 }
 
+const LETTER =
+  'Здравствуйте, Марина! Рады предложить вам должность руководителя разработки. Оклад 520 000 ₽ в месяц на руки. Первые 3 месяца — испытательный срок, оклад на нём 500 000 ₽. Годовая премия до 2 окладов. Формат: гибрид, 2 дня в офисе. ДМС со стоматологией и оплата спорта. Выход 1 декабря. Просим ответить до 14 ноября.';
+
 const cell = (page: Page, row: string, company: string) =>
   page
     .locator('table.cmp tr', { has: page.locator('th', { hasText: row }) })
@@ -117,6 +120,42 @@ test.describe('B658: «Офферы» нового кабинета', () => {
     await expect(page.getByLabel('Срок ответа')).toHaveValue('20.11.2026');
     await page.getByRole('button', { name: 'Повторить' }).click();
     await expect(page.getByText('Условия сохранены')).toBeVisible();
+  });
+
+  test('письмо с оффером: разбор подставляет поля в рамке, правка снимает рамку, дата выхода сохраняется (B646)', async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(new Date('2026-11-10T09:00:00Z'));
+    const mock = await open(page, '/app/responses/offers/o-green', 'o06a');
+    await page.getByRole('button', { name: 'Разобрать текст' }).click();
+    await expect(page.getByRole('alert')).toHaveText('Вставьте текст письма с оффером.');
+    await page.getByLabel('Вставить текст письма с оффером').fill(LETTER);
+    await page.getByRole('button', { name: 'Разобрать текст' }).click();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Подставили из письма' }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Оклад', { exact: true })).toHaveValue('520 000');
+    await expect(page.getByLabel('Валюта')).toHaveValue('RUB');
+    await expect(page.getByLabel('Налог, %')).toHaveValue('0');
+    await expect(page.getByLabel('Годовой бонус / премия')).toHaveValue('1 040 000');
+    await expect(page.getByLabel('Формат работы')).toHaveValue('hybrid');
+    await expect(page.getByLabel('Срок ответа')).toHaveValue('14.11.2026');
+    await expect(page.getByLabel('Бенефиты (через запятую)')).toHaveValue(
+      'ДМС со стоматологией, оплата спорта',
+    );
+    await expect(page.locator('.of-f.is-letter')).toHaveCount(10);
+    await expectGates(page);
+    await page.getByLabel('Оклад', { exact: true }).fill('530 000');
+    await expect(page.locator('.of-f.is-letter')).toHaveCount(9);
+    await expect(
+      page.locator('.of-f', { has: page.getByLabel('Оклад', { exact: true }) }).locator('.of-src'),
+    ).toHaveText('с ваших слов');
+    await page.getByRole('button', { name: 'Сохранить условия' }).click();
+    await expect(page.getByText('Условия сохранены')).toBeVisible();
+    const put = mock.calls.find((call) => call.startsWith('PUT offer o-green')) ?? '';
+    expect(put).toContain('"baseSalary":530000');
+    expect(put).toContain('"startDate":"2026-12-01"');
+    expect(mock.calls).toContain('PUT tax o-green {"taxPercent":0}');
   });
 
   test('офферов нет: одна строка, «Добавить оффер» заводит оффер вне откликов', async ({
