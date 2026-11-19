@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Быстрая локальная проверка по изменениям относительно origin/main.
 //   npm run check:changed [-- --base origin/main] [--no-e2e] [--dry]
-// Порядок: eslint (кэш) + prettier (кэш) + tsc (инкрементально) параллельно,
+// Порядок: eslint (кэш) + prettier (кэш) + tsgo (инкрементально; tsc остаётся в `npm run build`) параллельно,
 // затем затронутые unit-тесты (vitest related), затем затронутые e2e-спеки
 // по e2e/impact-map.json (сборка без tsc — типы уже проверены шагом выше).
 // CI остаётся строгим: полный lint, tsc, все тесты и `npm run build` с tsc.
@@ -100,13 +100,13 @@ function staticSteps(plan) {
     steps.push(['prettier', bin('prettier'), ['--cache', '--check', ...plan.formatFiles]]);
   if (plan.typecheck)
     steps.push([
-      'tsc',
-      bin('tsc'),
+      'tsgo',
+      bin('tsgo'),
       [
         '--noEmit',
         '--incremental',
         '--tsBuildInfoFile',
-        'node_modules/.cache/tsc/tsconfig.tsbuildinfo',
+        'node_modules/.cache/tsgo/tsconfig.tsbuildinfo',
       ],
     ]);
   return steps;
