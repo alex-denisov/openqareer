@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TodayQueueItem } from '../../today/todayApi';
+import { queueMobileSubtitle } from '../../today/todayFormat';
 import {
   applicationsSummary,
   funnelLine,
@@ -24,18 +25,31 @@ function item(overrides: Partial<TodayQueueItem>): TodayQueueItem {
 }
 
 describe('b640 today: действие строки очереди', () => {
-  it('письмо на одобрение ведёт к письму отклика', () => {
+  it('B717: одобренное письмо зовёт отправить отклик, а не одобрить ещё раз', () => {
     const action = queueAction(
-      item({ material: 'cover_letter', applicationId: 'a1', eyebrow: 'черновик' }),
+      item({
+        material: 'cover_letter',
+        applicationId: 'a1',
+        eyebrow: 'Письмо одобрено, ничего не отправлено',
+      }),
     );
     expect(action).toMatchObject({
-      title: 'Одобрить письмо в «Гринкод»',
-      sub: 'черновик',
-      label: 'Проверить письмо',
-      shortLabel: 'Проверить',
-      icon: 'file',
+      title: 'Отправить отклик в «Гринкод»',
+      sub: 'Письмо одобрено, ничего не отправлено',
+      label: 'Отправить',
+      shortLabel: 'Отправить',
+      icon: 'send',
       path: '/app/responses/a1/letter',
     });
+    expect(queueAction(item({ material: 'cover_letter', applicationId: 'a1' })).sub).toBe(
+      'Письмо одобрено',
+    );
+    expect(queueMobileSubtitle(item({ material: 'cover_letter' }), false)).toBe(
+      'Письмо одобрено, ждёт отправки',
+    );
+    expect(queueAction(item({ material: 'cover_letter', company: null })).title).toBe(
+      'Отправить отклик',
+    );
   });
 
   it('интервью ведёт к подготовке; без отклика — к ближайшему интервью', () => {

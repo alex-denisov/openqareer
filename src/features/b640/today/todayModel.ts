@@ -55,7 +55,8 @@ function actionFace(item: TodayQueueItem): ActionFace {
   }
   if (item.material === 'cover_letter' && item.applicationId) {
     const path = buildNodePath('o02', { responseId: item.applicationId });
-    return { label: 'Проверить письмо', shortLabel: 'Проверить', icon: 'file', path };
+    // Письмо одобрено (B717): кнопка ведёт к шагу отправки на странице письма.
+    return { label: 'Отправить', shortLabel: 'Отправить', icon: 'send', path };
   }
   return {
     label: 'Открыть отклик',
