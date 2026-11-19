@@ -1,3 +1,4 @@
+import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
 import { Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
@@ -39,7 +40,14 @@ function WantLine({ busy, onCancel }: { readonly busy: boolean; readonly onCance
   );
 }
 
-function Head({ card, want }: { readonly card: LoadedCard; readonly want: CompanyWant }) {
+interface HeadProps {
+  readonly card: LoadedCard;
+  readonly want: CompanyWant;
+  /** Знакомый из круга 1: главное действие шапки — написать ему. */
+  readonly known: B640CompanyPerson | undefined;
+}
+
+function Head({ card, want, known }: HeadProps) {
   const { company } = card.details;
   const facts = [company.location, company.industry].filter(Boolean).join(' · ');
   const about = companyAbout(company);
@@ -50,14 +58,22 @@ function Head({ card, want }: { readonly card: LoadedCard; readonly want: Compan
         {about ? <InfoTip label="О компании" text={about} /> : null}
       </h2>
       {facts ? <p className="lead-text">{facts}</p> : null}
-      {company.want ? null : (
+      {company.want && !known ? null : (
         <div className="actions">
+          {known ? (
+            <Link className="btn is-primary" to={buildNodePath('o02', { responseId: known.vacancyId })}>
+              <Icon name="send" />
+              Написать знакомому
+            </Link>
+          ) : null}
+          {company.want ? null : (
           <WantButton
             company={company}
             busy={want.busyKey === company.key}
             small={false}
             onWant={(target) => void want.toggle(target)}
           />
+          )}
         </div>
       )}
       {want.failed ? <RetryLine text="Не удалось сохранить отметку" onRetry={want.retry} /> : null}
@@ -78,7 +94,7 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
         />
       ) : null}
       <div className="col col-wide">
-        <Head card={card} want={want} />
+        <Head card={card} want={want} known={people.people.find((person) => person.circle === 1 && person.name)} />
         <CompanyVacancies
           vacancies={card.vacancies}
           total={card.details.roleTotal}

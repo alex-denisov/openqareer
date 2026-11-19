@@ -73,11 +73,11 @@ describe('B677: люди компании', () => {
   it('один человек — одна строка в ближайшем круге; участники платформы без имени', () => {
     const first = circlePeople(
       [{ paths: [path('p1', 2, 'Анна Иванова')], platformMembers: { members: [{}] } }] as never,
-      'v1',
+      { id: 'v1', title: 'Роль' },
     );
     const second = circlePeople(
       [{ paths: [path('p2', 1, 'анна иванова '), path('p3', 3, 'Олег')] }] as never,
-      'v2',
+      { id: 'v2', title: 'Роль' },
     );
     const merged = mergePeople([...first, ...second]);
     expect(merged.map((p) => [p.id, p.circle])).toEqual([
@@ -98,9 +98,10 @@ describe('B677: люди компании', () => {
             ],
           },
         ] as never,
-        'v3',
+        { id: 'v3', title: 'Роль' },
       ),
     ).toEqual([]);
+    expect(merged.find((p) => p.id === 'p3')?.evidence).toBe('Рекрутер вакансии «Роль»');
     expect(member).toMatchObject({ name: null, roleTitle: null, circle: 2, vacancyId: 'v1' });
   });
 });

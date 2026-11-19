@@ -29,8 +29,9 @@ const PLATFORM_MEMBER_EVIDENCE =
 /** Люди из кругов одной вакансии: пути с именами и участники платформы без имён. */
 export function circlePeople(
   circles: readonly ConnectionCircleResult[],
-  vacancyId: string,
+  vacancy: { readonly id: string; readonly title: string },
 ): B640CompanyPerson[] {
+  const vacancyId = vacancy.id;
   const people: B640CompanyPerson[] = [];
   for (const circle of circles) {
     // Холодный путь без рекрутера ведёт к самой компании, а не к человеку — в списке людей его нет.
@@ -42,7 +43,8 @@ export function circlePeople(
         circle: path.circle,
         name: path.recipient.fullName,
         roleTitle: path.recipient.roleTitle,
-        evidence: path.evidence[0] ?? null,
+        evidence:
+          path.circle === 3 ? `Рекрутер вакансии «${vacancy.title}»` : (path.evidence[0] ?? null),
         nextStep: path.nextStep,
         vacancyId,
         platformMember: false,
@@ -103,7 +105,9 @@ async function companyPeople(
   return mergePeople(
     companyVacancies(pool, companyKey)
       .slice(0, PEOPLE_VACANCY_LIMIT)
-      .flatMap((item) => circlePeople(circlesOf(item), item.cluster.id)),
+      .flatMap((item) =>
+        circlePeople(circlesOf(item), { id: item.cluster.id, title: item.cluster.canonicalTitle }),
+      ),
   );
 }
 

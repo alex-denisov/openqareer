@@ -59,7 +59,7 @@ function Others({ others, total }: { readonly others: readonly MatchedVacancyIte
     <details className="more-n">
       <summary>
         <Icon name="down" />
-        Другие вакансии компании · <span className="num">{formatCount(total)}</span>
+        <span className="num">{`Другие вакансии компании · ${formatCount(total)}`}</span>
       </summary>
       <ul className="rows">
         {others.map((item) => (
