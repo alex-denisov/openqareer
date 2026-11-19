@@ -10,7 +10,10 @@ const DAY = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
 export function formatWhen(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : WHEN.format(date);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = WHEN.formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${pick('day')} ${pick('month')}, ${pick('hour')}:${pick('minute')}`;
 }
 
 /** «10 ноября»; пусто, если дата не читается. */
