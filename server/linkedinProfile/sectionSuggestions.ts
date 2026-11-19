@@ -1,8 +1,27 @@
-import {
-  LINKEDIN_SECTION_LIMITS, LINKEDIN_SKILLS_MAX,
-  type LinkedinSection, type LinkedinSectionFact, type LinkedinSectionSuggestion,
-} from '../../shared/b640LinkedinProfile';
+import { LINKEDIN_HEADLINE_MAX, LINKEDIN_SKILLS_MAX } from '../../shared/b640LinkedinProfile';
 import type { ResumeDraft } from '../domain/resumeDraft';
+
+/**
+ * Факт, на котором стоит предложение. Остаётся на сервере: по нему проверяется текст (B645 —
+ * строки фактов на экране нет), наружу уходит только сам текст.
+ */
+export interface LinkedinSectionFact {
+  readonly id: string;
+  readonly text: string;
+}
+/** Предложение по одному месту работы в «Опыте». */
+export interface LinkedinSectionItem {
+  readonly id: string;
+  readonly label: string;
+  readonly text: string;
+  readonly facts: readonly LinkedinSectionFact[];
+}
+export interface SectionSuggestion {
+  readonly text: string;
+  readonly facts: readonly LinkedinSectionFact[];
+  readonly items?: readonly LinkedinSectionItem[];
+}
+export type SuggestedSection = 'headline' | 'about' | 'experience' | 'skills';
 
 export interface SuggestionMemory {
   readonly id: string;
@@ -15,7 +34,7 @@ export interface SuggestionInput {
   readonly memory: readonly SuggestionMemory[];
   readonly draft: Pick<ResumeDraft, 'targetRole' | 'experience' | 'skills'> | null | undefined;
 }
-export type SectionSuggestions = Readonly<Record<LinkedinSection, LinkedinSectionSuggestion | null>>;
+export type SectionSuggestions = Readonly<Record<SuggestedSection, SectionSuggestion | null>>;
 
 const HEADLINE_SKILLS = 4;
 const NUMBER = /\d+(?:[.,]\d+)?/gu;
@@ -27,7 +46,7 @@ export function numbersAreGrounded(text: string, facts: readonly LinkedinSection
   return normalize(text).every((number) => allowed.has(number));
 }
 
-function usableSkills(input: SuggestionInput): { id: string; name: string }[] {
+export function usableSkills(input: SuggestionInput): { id: string; name: string }[] {
   const status = new Map(input.memory.map((memory) => [memory.id, memory.status]));
   const seen = new Set<string>();
   return (input.draft?.skills ?? []).flatMap((skill) => {
@@ -49,7 +68,7 @@ function placeLine(place: ResumeDraft['experience'][number]): string | null {
   return `${place.title.trim()} — ${place.employer.trim()}${period}`;
 }
 
-function suggestHeadline(input: SuggestionInput): LinkedinSectionSuggestion | null {
+function suggestHeadline(input: SuggestionInput): SectionSuggestion | null {
   const role = input.draft?.targetRole?.trim() ?? '';
   const skills = usableSkills(input).slice(0, HEADLINE_SKILLS).map((skill) => skill.name);
   if (!role && skills.length === 0) return null;
@@ -57,7 +76,7 @@ function suggestHeadline(input: SuggestionInput): LinkedinSectionSuggestion | nu
   // Черновик по умолчанию «не текущий»: «Ex-» только при явной дате окончания.
   const employer = last && last.current === false && last.endDate?.trim() ? last.employer?.trim() : undefined;
   const tokens = [...(role ? [role] : []), ...skills, ...(employer ? [`Ex-${employer}`] : [])];
-  const limit = LINKEDIN_SECTION_LIMITS.headline;
+  const limit = LINKEDIN_HEADLINE_MAX;
   while (tokens.length > 1 && tokens.join(' | ').length > limit) tokens.pop();
   const text = tokens.join(' | ').slice(0, limit).trimEnd();
   const kept = new Set(tokens);
@@ -71,7 +90,7 @@ function suggestHeadline(input: SuggestionInput): LinkedinSectionSuggestion | nu
   return { text, facts };
 }
 
-function suggestSkills(input: SuggestionInput): LinkedinSectionSuggestion | null {
+function suggestSkills(input: SuggestionInput): SectionSuggestion | null {
   const skills = usableSkills(input).slice(0, LINKEDIN_SKILLS_MAX);
   if (skills.length === 0) return null;
   return {

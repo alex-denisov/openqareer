@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CoachApiError } from '../../../coach/apiClient';
 import { click, mount } from '../../kit/testDom';
 import { nodeByCode } from '../../routes';
 import Section from '../index';
@@ -9,15 +10,12 @@ vi.mock('../../shell/ShellContext', () => ({
   useShell: () => ({ navigate: () => undefined }),
   useScreenChrome: () => undefined,
 }));
-vi.mock('../../../coach/coachApi', () => ({ getConnections: vi.fn() }));
 vi.mock('./linkedinProfileApi', () => ({
   getLinkedinProfile: vi.fn(),
-  saveSectionCurrent: vi.fn(),
-  markSectionCopied: vi.fn(),
-  markSectionPasted: vi.fn(),
+  markOffersDone: vi.fn(),
+  requestOfferVariant: vi.fn(),
 }));
 
-const coach = await import('../../../coach/coachApi');
 const api = await import('./linkedinProfileApi');
 
 const flush = () =>
@@ -30,193 +28,112 @@ const node = () => {
   if (!found) throw new Error('a03');
   return found;
 };
-const empty = { current: null, suggestion: null, copiedAt: null, pastedAt: null };
-const profile = (patch: Record<string, unknown> = {}) => ({
-  headline: {
-    current: { text: 'Руковожу группой', source: 'paste', capturedAt: '2026-11-19T10:00:00Z' },
-    suggestion: {
-      text: 'Engineering Manager · платёжная платформа',
-      facts: [
-        { id: 'f1', text: 'Группа из 9 человек' },
-        { id: 'f2', text: 'Релиз раз в 3 дня' },
-      ],
-    },
-    copiedAt: null,
-    pastedAt: null,
-  },
-  about: empty,
-  experience: empty,
-  skills: empty,
-  ...patch,
+const offer = (key: string, text: string, patch: Record<string, unknown> = {}) => ({ key, text, variantsLeft: 3, doneAt: null, ...patch });
+const place = (id: string, label: string, withOffer = false) => ({
+  id, label, current: `${label}: сейчас`, offer: withOffer ? offer(`experience:${id}`, `${label}: пересказ`) : null,
 });
-const connected = [{ platform: 'linkedin', status: 'imported' }];
+const sections = (patch: Record<string, unknown> = {}) => [
+  { id: 'headline', current: 'Руковожу группой', offer: offer('headline', 'Engineering Manager · платёжная платформа') },
+  { id: 'about', current: 'Руковожу группой разработки.', offer: offer('about', 'Руковожу разработкой платёжной платформы.') },
+  { id: 'experience', current: null, offer: null, places: [place('e1', 'Финтех Лаб · Тимлид', true), place('e2', 'Сфера · Бэкенд'), place('e3', 'Альфа · Разработчик', true)] },
+  { id: 'education', current: 'МГТУ им. Баумана · 2009 — 2014', offer: null },
+  { id: 'courses', current: null, offer: null },
+  { id: 'skills', current: 'Go · Kotlin', offer: offer('skills', 'Go · Kubernetes') },
+  { id: 'languages', current: 'Русский — родной', offer: null },
+].map((section) => ({ ...section, ...((patch as Record<string, object>)[section.id] ?? {}) }));
 
-async function open(view = profile()) {
-  vi.mocked(coach.getConnections).mockResolvedValue(connected as never);
+// Поиск по id в jsdom идёт по всему документу: прежние экраны снимаются после каждого теста.
+const mounts: Array<ReturnType<typeof mount>> = [];
+
+async function open(view: unknown = { kind: 'ready', sections: sections() }) {
   vi.mocked(api.getLinkedinProfile).mockResolvedValue(view as never);
   const mounted = mount(<Section node={node()} params={{}} />);
+  mounts.push(mounted);
   await flush();
   return mounted;
 }
-const button = (root: HTMLElement, label: string) =>
-  root.querySelector<HTMLElement>(`[aria-label="${label}"]`) ??
-  [...root.querySelectorAll('button')].find((item) => item.textContent?.includes(label)) ??
-  null;
-function type(area: HTMLTextAreaElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-  act(() => {
-    setter.call(area, value);
-    area.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-}
+const byText = (root: HTMLElement, selector: string, text: string) =>
+  [...root.querySelectorAll<HTMLElement>(selector)].find((item) => item.textContent?.includes(text)) ?? null;
+const title = (root: HTMLElement) => root.querySelector('#li-title')!.textContent;
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  for (const mounted of mounts.splice(0)) mounted.unmount();
+  vi.clearAllMocks();
+});
 
-describe('a03: разделы профиля LinkedIn', () => {
-  it('«Сейчас» с источником и датой, предложение с фактами, без «Применить»', async () => {
-    const view = await open();
-    const root = view.container;
-    expect(root.querySelectorAll('.li-sec')).toHaveLength(4);
-    expect(root.querySelector('.li-cur')!.textContent).toBe('Руковожу группой');
-    expect(root.textContent).toContain('вставлено вами 19 ноября');
-    expect(root.querySelector('.li-new')!.textContent).toContain('Engineering Manager');
-    expect(root.querySelectorAll('.li-facts li')).toHaveLength(2);
-    // B645: факты свёрнуты по умолчанию и не занимают места больше самого предложения.
-    const facts = root.querySelector<HTMLDetailsElement>('details.li-facts-d')!;
-    expect(facts.open).toBe(false);
-    expect(facts.querySelector('summary')!.textContent).toBe('Из каких фактов · 2');
-    expect(root.textContent).not.toMatch(/Применить|Другой вариант/);
-    view.unmount();
+describe('a03: профиль LinkedIn по макету', () => {
+  it('семь разделов; «сейчас» из импорта; ни полей вставки, ни строки фактов', async () => {
+    const root = (await open()).container;
+    expect([...root.querySelectorAll('.li-sec-t')].map((item) => item.textContent)).toEqual([
+      'Заголовок', 'О себе', 'Опыт', 'Образование', 'Курсы и сертификаты', 'Навыки', 'Языки',
+    ]);
+    expect(title(root)).toBe('Изменить 4 раздела из 7');
+    expect(root.querySelector('textarea, .li-facts, .li-facts-d')).toBeNull();
+    expect(byText(root, 'button', 'Сохранить')).toBeNull();
+    expect(byText(root, 'button', 'Применить')).toBeNull();
+    expect(byText(root, '#ls-courses ~ .li-rec .li-cur', 'В импорте LinkedIn этого раздела нет')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Другой вариант: Заголовок · осталось 3"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Скопировать: Навыки"]')).not.toBeNull();
   });
 
-  it('B645: «Опыт» по местам работы — у каждого места своё предложение и «Скопировать»', async () => {
-    const fact = (id: string, text: string) => ({ id, text });
-    const experience = {
-      ...empty,
-      suggestion: {
-        text: 'Финтех Лаб · Руководитель\nГруппа из 9 человек.\n\nСфера · Бэкенд\nВела шлюз.',
-        facts: [fact('d1', 'Группа из 9 человек'), fact('d2', 'Вела шлюз')],
-        items: [
-          { id: 'e1', label: 'Финтех Лаб · Руководитель', text: 'Группа из 9 человек.', facts: [fact('d1', 'Группа из 9 человек')] },
-          { id: 'e2', label: 'Сфера · Бэкенд', text: 'Вела шлюз.', facts: [fact('d2', 'Вела шлюз')] },
-        ],
-      },
-    };
-    const view = await open(profile({ experience }));
-    const section = view.container.querySelector('#ls-experience')!.closest('section')!;
-    expect([...section.querySelectorAll('.li-rec-l')].map((node) => node.textContent)).toEqual(
-      expect.arrayContaining(['Финтех Лаб · Руководитель', 'Сфера · Бэкенд']),
-    );
-    expect([...section.querySelectorAll('.li-new')].map((node) => node.textContent)).toEqual(['Группа из 9 человек.', 'Вела шлюз.']);
-    expect(button(section, 'Скопировать: Финтех Лаб · Руководитель')).not.toBeNull();
-    expect(button(section, 'Скопировать: Сфера · Бэкенд')).not.toBeNull();
-    expect(section.querySelectorAll('details.li-facts-d')).toHaveLength(2);
-    view.unmount();
+  it('«Опыт» как в «Профиле»: два места на виду, остальные под «Ещё N мест работы»', async () => {
+    const root = (await open()).container;
+    const more = root.querySelector('.li-sec details.more-n')!;
+    expect(more.querySelector('summary')!.textContent).toBe('Ещё 1 место работы · Альфа');
+    expect(more.querySelectorAll('.li-rec')).toHaveLength(1);
+    expect(root.querySelectorAll('.li-sec .li-rec-l')[0]!.textContent).toBe('Финтех Лаб · Тимлид');
   });
 
-  it('B645: «Навыки» одной строкой, без повторного списка фактов', async () => {
-    const skills = {
-      ...empty,
-      suggestion: { text: 'Go · Kubernetes', facts: [{ id: 's1', text: 'Go' }, { id: 's2', text: 'Kubernetes' }] },
-    };
-    const view = await open(profile({ skills }));
-    const section = view.container.querySelector('#ls-skills')!.closest('section')!;
-    expect(section.querySelector('.li-new')!.textContent).toBe('Go · Kubernetes');
-    expect(section.querySelector('.li-facts')).toBeNull();
-    view.unmount();
-  });
-  it('без «сейчас»: поле вставки, «Сохранить» кладёт текст на место', async () => {
-    const view = await open(profile({ about: { ...empty } }));
-    const root = view.container;
-    const areas = root.querySelectorAll('textarea');
-    expect(areas).toHaveLength(3);
-    const saved = { text: 'Строю команды', source: 'paste', capturedAt: '2026-11-19T11:00:00Z' };
-    vi.mocked(api.saveSectionCurrent).mockResolvedValue(saved as never);
-    type(areas[0], 'Строю команды');
-    await act(async () => click(button(root, 'Сохранить: О себе')));
-    expect(api.saveSectionCurrent).toHaveBeenCalledWith('about', 'Строю команды');
-    expect(root.querySelectorAll('textarea')).toHaveLength(2);
-    expect(root.textContent).toContain('Строю команды');
-    view.unmount();
-  });
-  it('ошибка сохранения — под полем, текст остаётся', async () => {
-    const view = await open(profile({ about: { ...empty } }));
-    const root = view.container;
-    vi.mocked(api.saveSectionCurrent).mockRejectedValue(new Error('Вставьте текст раздела'));
-    type(root.querySelector('textarea')!, 'abc');
-    await act(async () => click(button(root, 'Сохранить: О себе')));
-    expect(root.querySelector('[role="alert"]')!.textContent).toContain('Вставьте текст раздела');
-    expect(root.querySelector('textarea')!.value).toBe('abc');
-    view.unmount();
-  });
-  it('«Скопировать» копирует и отмечает', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-    vi.mocked(api.markSectionCopied).mockResolvedValue({
-      copiedAt: '2026-11-19T12:00:00Z',
-      pastedAt: null,
-    } as never);
-    const view = await open();
-    await act(async () => click(button(view.container, 'Скопировать: Заголовок')));
-    expect(writeText).toHaveBeenCalledWith('Engineering Manager · платёжная платформа');
-    expect(api.markSectionCopied).toHaveBeenCalledWith('headline');
-    view.unmount();
-  });
-  it('«Открыть в LinkedIn» — ссылка в новой вкладке', async () => {
-    const view = await open();
-    const link = view.container.querySelector<HTMLAnchorElement>('a[aria-label="Открыть в LinkedIn: Заголовок"]')!;
-    expect(link.getAttribute('href')).toBe('https://www.linkedin.com/in/me/');
-    expect(link.target).toBe('_blank');
-    expect(link.rel).toContain('noopener');
-    view.unmount();
-  });
-  it('«Вставлено» ставит метку на месте кнопки', async () => {
-    vi.mocked(api.markSectionPasted).mockResolvedValue({
-      copiedAt: null,
-      pastedAt: '2026-11-19T12:30:00Z',
-    } as never);
-    const view = await open();
-    await act(async () => click(button(view.container, 'Вставлено: Заголовок')));
-    expect(api.markSectionPasted).toHaveBeenCalledWith('headline');
-    expect(button(view.container, 'Вставлено: Заголовок')).toBeNull();
-    expect(view.container.textContent).toContain('Вставлено 19 ноября');
-    view.unmount();
-  });
-  it('ошибка метки — на месте, с «Повторить»', async () => {
-    vi.mocked(api.markSectionPasted).mockRejectedValue(new Error('x'));
-    const view = await open();
-    await act(async () => click(button(view.container, 'Вставлено: Заголовок')));
-    expect(view.container.querySelector('[role="alert"]')!.textContent).toContain('Повторить');
-    view.unmount();
-  });
-  it('раздел без предложения показывает только «Сейчас»', async () => {
-    const view = await open(profile({ headline: { ...profile().headline, suggestion: null } }));
-    expect(view.container.querySelector('.li-offer')).toBeNull();
-    expect(view.container.querySelector('.li-cur')).not.toBeNull();
-    view.unmount();
-  });
-  it('«Обновить» открывает поле с прежним текстом, сохранение возвращает «Сейчас»', async () => {
-    vi.mocked(api.saveSectionCurrent).mockResolvedValue({ text: 'Руковожу платформой', source: 'paste', capturedAt: '2026-11-20T10:00:00Z' } as never);
-    const view = await open();
-    click(button(view.container, 'Обновить: Заголовок'));
+  it('«Выполнено» убирает раздел из счёта; «Опыт» считается, пока есть невыполненное место', async () => {
+    vi.mocked(api.markOffersDone).mockImplementation(async (keys) => ({
+      done: Object.fromEntries(keys.map((key) => [key, '2026-11-19T10:00:00Z'])),
+    }));
+    const root = (await open()).container;
+    click(byText(root, '#ls-headline ~ .li-rec button', 'Выполнено'));
     await flush();
-    const area = view.container.querySelector<HTMLTextAreaElement>('#li-paste-headline')!;
-    expect(area.value).toBe('Руковожу группой');
-    type(area, 'Руковожу платформой');
+    expect(api.markOffersDone).toHaveBeenCalledWith(['headline']);
+    expect(title(root)).toBe('Изменить 3 раздела из 7');
+    expect(root.querySelector('#ls-headline ~ .li-rec .li-done')!.textContent).toBe('Выполнено');
+    click(byText(root, '.li-sec button', 'Выполнено'));
     await flush();
-    click(button(view.container, 'Сохранить: Заголовок'));
-    await flush();
-    expect(api.saveSectionCurrent).toHaveBeenCalledWith('headline', 'Руковожу платформой');
-    expect(view.container.querySelector('#li-paste-headline')).toBeNull();
-    expect(view.container.querySelector('.li-cur')!.textContent).toBe('Руковожу платформой');
-    view.unmount();
+    expect(title(root)).toBe('Изменить 2 раздела из 7');
   });
-  it('ошибка чтения — «Повторить»', async () => {
-    vi.mocked(coach.getConnections).mockResolvedValue(connected as never);
-    vi.mocked(api.getLinkedinProfile).mockRejectedValue(new Error('x'));
-    const view = mount(<Section node={node()} params={{}} />);
+
+  it('«Отметить все выполненными» отмечает все оставшиеся и прячется', async () => {
+    vi.mocked(api.markOffersDone).mockImplementation(async (keys) => ({
+      done: Object.fromEntries(keys.map((key) => [key, '2026-11-19T10:00:00Z'])),
+    }));
+    const root = (await open()).container;
+    click(byText(root, '.li-all button', 'Отметить все выполненными'));
     await flush();
-    expect(view.container.querySelector('[role="alert"]')!.textContent).toContain('Повторить');
-    view.unmount();
+    expect(api.markOffersDone).toHaveBeenCalledWith(['headline', 'about', 'experience:e1', 'experience:e3', 'skills']);
+    expect(title(root)).toBe('Все предложения выполнены');
+    expect(root.querySelector('.li-all')).toBeNull();
+  });
+
+  it('«Предложить заново» ставит новый вариант на место; ошибка квоты — словами сервера', async () => {
+    vi.mocked(api.requestOfferVariant).mockResolvedValueOnce(offer('skills', 'Kubernetes · Go', { variantsLeft: 2 }) as never);
+    const root = (await open()).container;
+    click(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 3"]'));
+    await flush();
+    expect(api.requestOfferVariant).toHaveBeenCalledWith('skills');
+    expect(root.querySelector('#li-new-skills')!.textContent).toBe('Kubernetes · Go');
+    expect(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 2"]')).not.toBeNull();
+    vi.mocked(api.requestOfferVariant).mockRejectedValueOnce(new CoachApiError('Квота «Отклики» на тарифе кончилась', 'quota_exhausted', false));
+    click(root.querySelector('[aria-label="Другой вариант: О себе · осталось 3"]'));
+    await flush();
+    expect(root.querySelector('.li-err')!.textContent).toContain('Квота «Отклики» на тарифе кончилась');
+  });
+
+  it('вариантов не осталось — «Предложить заново» недоступна', async () => {
+    const root = (await open({ kind: 'ready', sections: sections({ skills: { offer: offer('skills', 'Go', { variantsLeft: 0 }) } }) })).container;
+    expect(root.querySelector<HTMLButtonElement>('[aria-label="Другой вариант: Навыки · осталось 0"]')!.disabled).toBe(true);
+  });
+
+  it('без импорта LinkedIn — «Импортировать из LinkedIn», разделов нет', async () => {
+    const root = (await open({ kind: 'no_import' })).container;
+    expect(root.querySelector('.li-sec')).toBeNull();
+    const link = byText(root, 'a.btn', 'Импортировать из LinkedIn')!;
+    expect(link.getAttribute('href')).toBe('/app/account/connections');
   });
 });

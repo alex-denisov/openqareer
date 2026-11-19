@@ -1,160 +1,100 @@
-import { useState, type ReactNode } from 'react';
-import type {
-  LinkedinSection,
-  LinkedinSectionFact,
-  LinkedinSectionSuggestion,
-} from '../../../../../shared/b640LinkedinProfile';
+import { useState } from 'react';
+import type { LinkedinOffer } from '../../../../../shared/b640LinkedinProfile';
+import { CoachApiError } from '../../../coach/apiClient';
 import { Icon } from '../../kit';
-import { formatDay } from '../format';
 import { CopyButton } from './CopyButton';
 import { LiError } from './LiError';
-import { markSectionCopied, markSectionPasted, type SectionMarks } from './linkedinProfileApi';
-import { LINKEDIN_OWN_PROFILE_URL } from './profileSectionModel';
+import { requestOfferVariant } from './linkedinProfileApi';
 
-type Mark = 'copied' | 'pasted';
+type Busy = 'done' | 'variant' | null;
 
 interface SectionOfferProps {
-  readonly section: LinkedinSection;
-  readonly title: string;
-  readonly suggestion: LinkedinSectionSuggestion;
-  readonly pastedAt: string | null;
-  readonly onMarks: (marks: SectionMarks) => void;
+  readonly offer: LinkedinOffer;
+  /** Название в подписях кнопок: раздел или «Компания» места работы. */
+  readonly label: string;
+  readonly onDone: (key: string) => Promise<void>;
+  readonly onVariant: (offer: LinkedinOffer) => void;
 }
 
-/** B645: факты под предложением свёрнуты — в длинных разделах они длиннее самого предложения. */
-function Facts({ facts }: { readonly facts: readonly LinkedinSectionFact[] }) {
-  if (!facts.length) return null;
-  return (
-    <details className="li-facts-d">
-      <summary>{`Из каких фактов · ${facts.length}`}</summary>
-      <ul className="li-facts" aria-label="Факты, на которых построено предложение">
-        {facts.map((fact) => (
-          <li key={fact.id}>{fact.text}</li>
-        ))}
-      </ul>
-    </details>
-  );
+const VARIANT_FAILED = 'Не получилось предложить другой вариант';
+const DONE_FAILED = 'Не удалось сохранить отметку';
+
+function errorText(error: unknown, fallback: string): string {
+  // Кончилась квота тарифа или варианты — сервер сам говорит, что и где взять ещё.
+  const own = error instanceof CoachApiError && ['quota_exhausted', 'variant_limit_reached'].includes(error.code);
+  return own ? error.message : fallback;
 }
 
-function useMarks(section: LinkedinSection, onMarks: (marks: SectionMarks) => void) {
-  const [busy, setBusy] = useState<Mark | null>(null);
-  const [failed, setFailed] = useState<Mark | null>(null);
-  async function mark(kind: Mark) {
+function useOfferActions({ offer, onDone, onVariant }: SectionOfferProps) {
+  const [busy, setBusy] = useState<Busy>(null);
+  const [failed, setFailed] = useState<{ readonly kind: Exclude<Busy, null>; readonly text: string } | null>(null);
+  async function run(kind: Exclude<Busy, null>) {
     setBusy(kind);
     setFailed(null);
     try {
-      onMarks(await (kind === 'copied' ? markSectionCopied : markSectionPasted)(section));
-    } catch {
-      setFailed(kind);
+      if (kind === 'done') await onDone(offer.key);
+      else onVariant(await requestOfferVariant(offer.key));
+    } catch (error) {
+      setFailed({ kind, text: errorText(error, kind === 'done' ? DONE_FAILED : VARIANT_FAILED) });
     } finally {
       setBusy(null);
     }
   }
-  return { busy, failed, mark };
+  return { busy, failed, run };
 }
 
-function PastedControl({
-  title,
-  pastedAt,
-  busy,
-  onPasted,
-}: {
-  readonly title: string;
-  readonly pastedAt: string | null;
+function DoneControl({ offer, textId, busy, onDone }: {
+  readonly offer: LinkedinOffer;
+  readonly textId: string;
   readonly busy: boolean;
-  readonly onPasted: () => void;
+  readonly onDone: () => void;
 }) {
-  if (pastedAt) {
-    const day = formatDay(pastedAt);
+  if (offer.doneAt) {
     return (
-      <span className="li-pasted" role="status">
+      <span className="li-done" role="status">
         <Icon name="check" />
-        {day ? `Вставлено ${day}` : 'Вставлено'}
+        Выполнено
       </span>
     );
   }
   return (
-    <button
-      className="btn is-sm"
-      type="button"
-      aria-label={`Вставлено: ${title}`}
-      aria-busy={busy || undefined}
-      disabled={busy}
-      onClick={onPasted}
-    >
+    <button className="btn is-sm" type="button" aria-describedby={textId} aria-busy={busy || undefined} disabled={busy} onClick={onDone}>
       <Icon name="check" />
-      Вставлено
+      Выполнено
     </button>
   );
 }
 
-function OpenLink({ title }: { readonly title: string }) {
-  return (
-    <a
-      className="icon-btn"
-      href={LINKEDIN_OWN_PROFILE_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Открыть в LinkedIn: ${title}`}
-    >
-      <Icon name="out" />
-    </a>
-  );
-}
-
-interface OfferBlockProps {
-  readonly text: string;
-  readonly label: string;
-  readonly onCopied: () => void;
-  readonly children?: ReactNode;
-}
-
-/** Текст предложения и действия справа от него. */
-function OfferBlock({ text, label, onCopied, children }: OfferBlockProps) {
-  return (
-    <div className="li-offer">
-      <p className="li-new">{text}</p>
-      <div className="li-offer-a">
-        <CopyButton text={text} label={label} onCopied={onCopied} />
-        <OpenLink title={label} />
-        {children}
-      </div>
-    </div>
-  );
-}
-
 /**
- * Предложение раздела: «Скопировать», «Открыть в LinkedIn», «Вставлено»; на LinkedIn ничего не уходит.
- * «Опыт» — по месту работы; у «Навыков» список фактов повторил бы само предложение и не показывается.
+ * Предложение по разделу (a03): «Скопировать», «Предложить заново», «Выполнено». На LinkedIn ничего
+ * не уходит: кандидат вставляет текст сам и подтверждает «Выполнено».
  */
-export function SectionOffer({ section, title, suggestion, pastedAt, onMarks }: SectionOfferProps) {
-  const { busy, failed, mark } = useMarks(section, onMarks);
-  const pasted = (
-    <PastedControl title={title} pastedAt={pastedAt} busy={busy === 'pasted'} onPasted={() => void mark('pasted')} />
-  );
-  const copied = () => void mark('copied');
+export function SectionOffer(props: SectionOfferProps) {
+  const { offer, label } = props;
+  const { busy, failed, run } = useOfferActions(props);
+  const textId = `li-new-${offer.key.replace(/[^A-Za-z0-9_-]/gu, '-')}`;
   return (
     <>
-      {suggestion.items?.length ? (
-        <>
-          {suggestion.items.map((item) => (
-            <div className="li-item" key={item.id}>
-              <p className="li-rec-l">{item.label}</p>
-              <OfferBlock text={item.text} label={item.label} onCopied={copied} />
-              <Facts facts={item.facts} />
-            </div>
-          ))}
-          <div className="li-offer-a">{pasted}</div>
-        </>
-      ) : (
-        <>
-          <OfferBlock text={suggestion.text} label={title} onCopied={copied}>
-            {pasted}
-          </OfferBlock>
-          {section === 'skills' ? null : <Facts facts={suggestion.facts} />}
-        </>
-      )}
-      {failed ? <LiError text="Не удалось сохранить отметку" onRetry={() => void mark(failed)} /> : null}
+      <div className="li-offer">
+        <p className="li-new" id={textId}>
+          {offer.text}
+        </p>
+        <div className="li-offer-a">
+          <CopyButton text={offer.text} label={label} />
+          <button
+            className="icon-btn li-alt"
+            type="button"
+            aria-label={`Другой вариант: ${label} · осталось ${offer.variantsLeft}`}
+            aria-busy={busy === 'variant' || undefined}
+            disabled={busy !== null || offer.variantsLeft === 0}
+            onClick={() => void run('variant')}
+          >
+            <Icon name="refresh" />
+          </button>
+          <DoneControl offer={offer} textId={textId} busy={busy === 'done'} onDone={() => void run('done')} />
+        </div>
+      </div>
+      {failed ? <LiError text={failed.text} onRetry={() => void run(failed.kind)} /> : null}
     </>
   );
 }

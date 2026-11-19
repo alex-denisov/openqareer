@@ -160,4 +160,22 @@ describe('B645: тексты профиля LinkedIn', () => {
     await expect(queue.linkedinProfile(linkedin)).resolves.toEqual(reply);
     expect(failures).toEqual(['a', 'b']);
   });
+
+  it('B645: другой вариант — своя схема и промпт; очередь пропускает пустой ответ', async () => {
+    const variant = { target: 'about', language: 'ru', targetRole: 'CTO', facts: [{ id: 'm1', text: 'Вёл команду из 9 человек' }], avoid: ['Старый'] } as const;
+    const answer = { text: 'Новый вариант', factIds: ['m1'] };
+    const { create, client } = clientAnswering(JSON.stringify(answer));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(rewriter.linkedinVariant(variant)).resolves.toEqual(answer);
+    const sent = create.mock.calls[0]![0];
+    expect(sent.response_format.json_schema).toMatchObject({ name: 'linkedin_profile_variant', strict: true });
+    expect(sent.messages[1].content).toContain('Старый');
+    const failures: string[] = [];
+    const stage = (model: string, result: unknown) => ({
+      provenance: { model, promptRevision: 'r' }, rewrite: async () => null, linkedinVariant: vi.fn(async () => result) as never,
+    });
+    const queue = new QueuedExperienceFactRewriter([stage('a', { text: ' ', factIds: [] }), stage('b', answer)], (model) => failures.push(model));
+    await expect(queue.linkedinVariant(variant)).resolves.toEqual(answer);
+    expect(failures).toEqual(['a']);
+  });
 });

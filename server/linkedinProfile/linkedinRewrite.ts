@@ -5,14 +5,17 @@
  * как предложение не показываются.
  */
 import { z } from 'zod';
+import { LINKEDIN_ABOUT_MAX } from '../../shared/b640LinkedinProfile';
+import { textLanguage, type ProfileLanguage } from '../domain/profileLanguage';
 import {
-  LINKEDIN_SECTION_LIMITS,
+  numbersAreGrounded,
   type LinkedinSectionFact,
   type LinkedinSectionItem,
-  type LinkedinSectionSuggestion,
-} from '../../shared/b640LinkedinProfile';
-import { textLanguage, type ProfileLanguage } from '../domain/profileLanguage';
-import { numbersAreGrounded, type SectionSuggestions, type SuggestionInput, type SuggestionMemory } from './sectionSuggestions';
+  type SectionSuggestion,
+  type SectionSuggestions,
+  type SuggestionInput,
+  type SuggestionMemory,
+} from './sectionSuggestions';
 
 export const LINKEDIN_REWRITE_PROMPT_REVISION = 'linkedin-profile-rewrite-2026-11-19';
 /** Сколько ждёт чтение профиля; не успевший ответ дописывается в кэш для следующего открытия. */
@@ -21,7 +24,7 @@ export const LINKEDIN_REWRITE_BUDGET_MS = 20_000;
 const ABOUT_FACTS = 12;
 const PLACES = 6;
 const PLACE_FACTS = 8;
-const ABOUT_MAX = Math.min(1500, LINKEDIN_SECTION_LIMITS.about);
+const ABOUT_MAX = Math.min(1500, LINKEDIN_ABOUT_MAX);
 const PLACE_MAX = 450;
 const PLACE_SENTENCES = 3;
 const COPY_MIN = 20;
@@ -41,7 +44,7 @@ export interface LinkedinRewriteRequest {
   readonly places: readonly LinkedinRewritePlace[];
 }
 
-const answerText = z.object({ text: z.string().max(4000), factIds: z.array(z.string().max(200)).max(40) });
+export const answerText = z.object({ text: z.string().max(4000), factIds: z.array(z.string().max(200)).max(40) });
 export const linkedinRewriteOutputSchema = z.object({
   about: answerText.nullable(),
   places: z.array(answerText.extend({ id: z.string().max(200) })).max(20),
@@ -91,14 +94,14 @@ function copiesSource(text: string, facts: readonly LinkedinSectionFact[]): bool
   });
 }
 
-interface CheckRule {
+export interface CheckRule {
   readonly allowed: readonly LinkedinSectionFact[];
   readonly max: number;
   readonly maxSentences?: number;
   readonly noFirstPerson?: boolean;
 }
 
-function checkedText(answer: z.infer<typeof answerText>, rule: CheckRule, language: ProfileLanguage): { text: string; facts: LinkedinSectionFact[] } | null {
+export function checkedText(answer: z.infer<typeof answerText>, rule: CheckRule, language: ProfileLanguage): { text: string; facts: LinkedinSectionFact[] } | null {
   const text = answer.text.replace(/\s+/gu, ' ').trim();
   const byId = new Map(rule.allowed.map((item) => [item.id, item]));
   const facts = [...new Set(answer.factIds)].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
@@ -111,6 +114,9 @@ function checkedText(answer: z.infer<typeof answerText>, rule: CheckRule, langua
   return valid ? { text, facts } : null;
 }
 
+export const ABOUT_RULE = { max: ABOUT_MAX } as const;
+export const PLACE_RULE = { max: PLACE_MAX, maxSentences: PLACE_SENTENCES, noFirstPerson: true } as const;
+
 export interface CheckedLinkedinRewrite {
   readonly about: { readonly text: string; readonly facts: readonly LinkedinSectionFact[] } | null;
   readonly places: ReadonlyMap<string, { readonly text: string; readonly facts: readonly LinkedinSectionFact[] }>;
@@ -118,11 +124,11 @@ export interface CheckedLinkedinRewrite {
 
 /** Каждый текст опирается только на свои факты, без новых чисел, без копии источника, на языке профиля. */
 export function checkLinkedinRewrite(request: LinkedinRewriteRequest, output: LinkedinRewriteOutput): CheckedLinkedinRewrite {
-  const about = output.about ? checkedText(output.about, { allowed: request.aboutFacts, max: ABOUT_MAX }, request.language) : null;
+  const about = output.about ? checkedText(output.about, { ...ABOUT_RULE, allowed: request.aboutFacts }, request.language) : null;
   const places = new Map<string, { text: string; facts: LinkedinSectionFact[] }>();
   for (const answer of output.places) {
     const place = request.places.find((item) => item.id === answer.id);
-    const rule = { allowed: place?.facts ?? [], max: PLACE_MAX, maxSentences: PLACE_SENTENCES, noFirstPerson: true };
+    const rule = { ...PLACE_RULE, allowed: place?.facts ?? [] };
     const checked = place && !places.has(place.id) ? checkedText(answer, rule, request.language) : null;
     if (checked) places.set(answer.id, checked);
   }
@@ -154,7 +160,7 @@ async function withinBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
-function experienceOf(request: LinkedinRewriteRequest, checked: CheckedLinkedinRewrite): LinkedinSectionSuggestion | null {
+function experienceOf(request: LinkedinRewriteRequest, checked: CheckedLinkedinRewrite): SectionSuggestion | null {
   const items: LinkedinSectionItem[] = request.places.flatMap((place) => {
     const text = checked.places.get(place.id);
     return text ? [{ id: place.id, label: `${place.employer} · ${place.title}`, text: text.text, facts: text.facts }] : [];

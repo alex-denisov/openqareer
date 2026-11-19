@@ -126,7 +126,7 @@ describe('B645: предложения после переписывания', (
 
   it('ответ не успел за отведённое время — без предложения, следующий запрос берёт готовый ответ из кэша', async () => {
     let finish: (value: typeof GOOD) => void = () => undefined;
-    const rewriter: LinkedinRewriter = { linkedinProfile: vi.fn(() => new Promise((resolve) => { finish = resolve; })) };
+    const rewriter: LinkedinRewriter = { linkedinProfile: vi.fn(() => new Promise<typeof GOOD>((resolve) => { finish = resolve; })) };
     expect((await rewrittenSuggestions(base, INPUT, undefined, rewriter, 10)).experience).toBeNull();
     finish(GOOD);
     await Promise.resolve();
