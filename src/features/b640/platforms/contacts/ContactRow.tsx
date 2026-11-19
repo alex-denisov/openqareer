@@ -1,5 +1,7 @@
 import type { B640Contact } from '../../../../../shared/b640Contacts';
-import { Icon } from '../../kit';
+import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
+import { Icon, Link } from '../../kit';
+import { buildNodePath } from '../../routes';
 import { statusTag } from './contactsFilters';
 import { workLine } from './contactsModel';
 
@@ -8,28 +10,36 @@ const NAME_BOX = { display: 'block', minBlockSize: 'var(--career-space-6)' } as 
 
 export interface ContactRowProps {
   readonly contact: B640Contact;
-  /** Имя — ссылка на письмо: «Написать» или «Попросить представить». */
-  readonly onWrite: (contact: B640Contact) => void;
 }
 
-/** Строка контакта (a02): имя, должность и компания, метка статуса, путь знакомства. Имя открывает письмо; статус меняется отметкой «Отправил». */
-export function ContactRow({ contact, onWrite }: ContactRowProps) {
+/** Имя ведёт на карточку компании (v10b); без компании — просто текст. */
+function Name({ contact }: ContactRowProps) {
+  const key = companyLookupKey(contact.companyName);
+  if (!key) {
+    return (
+      <div className="row-title ct-n" style={NAME_BOX}>
+        {contact.fullName}
+      </div>
+    );
+  }
+  return (
+    <Link
+      className="row-title ct-n"
+      style={NAME_BOX}
+      to={buildNodePath('v10b', { companyId: key })}
+    >
+      {contact.fullName}
+    </Link>
+  );
+}
+
+/** Строка контакта (a02): имя-ссылка на компанию, должность и компания, метка статуса, путь знакомства. */
+export function ContactRow({ contact }: ContactRowProps) {
   const tag = statusTag(contact.status);
   const note = contact.linkNote?.trim();
   return (
     <li className="row ct-row ct-row2">
-      <a
-        className="row-title ct-n"
-        href="#write"
-        role="button"
-        style={NAME_BOX}
-        onClick={(event) => {
-          event.preventDefault();
-          onWrite(contact);
-        }}
-      >
-        {contact.fullName}
-      </a>
+      <Name contact={contact} />
       <div className="row-sub ct-w">{workLine(contact)}</div>
       <div className="ct-tags">
         <span className={tag.cls}>{tag.text}</span>

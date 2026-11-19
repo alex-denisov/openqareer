@@ -3,8 +3,8 @@ import type {
   B640ContactMessageApproval,
   B640ContactMessageKind,
   B640ContactMessageSent,
-} from '../../../../../shared/b640ContactMessage';
-import { apiFetch, readData } from '../../../coach/apiClient';
+} from '../../../../shared/b640ContactMessage';
+import { apiFetch, readData } from '../../coach/apiClient';
 
 const BASE = '/api/v1/candidate/b640/contact-messages';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -17,15 +17,19 @@ export type {
   B640ContactMessageSent,
 };
 
-/** Черновик сообщения контакту; платформа ничего не отправляет. */
+/** Кому пишем: знакомый из сети или рекрутёр вакансии (нужны оба поля). */
+export type B640MessageTarget =
+  { readonly contactId: string } | { readonly recruiterId: string; readonly vacancyId: string };
+
+/** Черновик сообщения; платформа ничего не отправляет. Каждый вызов — новый вариант текста. */
 export async function createB640ContactMessage(
-  contactId: string,
+  target: B640MessageTarget,
   kind: B640ContactMessageKind,
 ): Promise<B640ContactMessage> {
   const response = await apiFetch(BASE, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ contactId, kind }),
+    body: JSON.stringify({ ...target, kind }),
   });
   return readData<B640ContactMessage>(response);
 }

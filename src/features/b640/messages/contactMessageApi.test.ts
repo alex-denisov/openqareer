@@ -7,8 +7,8 @@ import {
 } from './contactMessageApi';
 
 const fetchMock = vi.fn();
-vi.mock('../../../coach/apiClient', async (original) => ({
-  ...(await original<typeof import('../../../coach/apiClient')>()),
+vi.mock('../../coach/apiClient', async (original) => ({
+  ...(await original<typeof import('../../coach/apiClient')>()),
   apiFetch: (...args: unknown[]) => fetchMock(...args),
 }));
 
@@ -19,11 +19,21 @@ const ok = (data: unknown, status = 200) => ({ ok: true, status, json: async () 
 describe('contactMessageApi', () => {
   it('создаёт черновик: contactId и вид сообщения', async () => {
     fetchMock.mockResolvedValue(ok({ id: 'm1' }, 201));
-    await createB640ContactMessage('c7', 'ask_introduction');
+    await createB640ContactMessage({ contactId: 'c7' }, 'ask_introduction');
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/candidate/b640/contact-messages');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body)).toEqual({ contactId: 'c7', kind: 'ask_introduction' });
+  });
+
+  it('для рекрутёра шлёт recruiterId и vacancyId', async () => {
+    fetchMock.mockResolvedValue(ok({ id: 'm2' }, 201));
+    await createB640ContactMessage({ recruiterId: 'r1', vacancyId: 'v1' }, 'recruiter');
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({
+      recruiterId: 'r1',
+      vacancyId: 'v1',
+      kind: 'recruiter',
+    });
   });
 
   it('правка шлёт только текст', async () => {

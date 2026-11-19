@@ -115,7 +115,7 @@ const item = (index: number, states: Map<string, Item['status']>): Item => {
   };
 };
 
-type Mode = 'list' | 'empty' | 'error' | 'flaky';
+type Mode = 'list' | 'empty' | 'error' | 'flaky' | 'nocompany';
 
 const FACETS = {
   companies: [
@@ -161,7 +161,11 @@ async function mockContacts(page: Page, mode: Mode) {
           : TOTAL;
     const items = Array.from({ length: Math.max(0, Math.min(PAGE, filtered - offset)) }, (_, i) =>
       item(offset + i, states),
-    ).map((entry) => (companies.length > 0 ? { ...entry, companyName: companies[0]! } : entry));
+    )
+      .map((entry) => (companies.length > 0 ? { ...entry, companyName: companies[0]! } : entry))
+      .map((entry) =>
+        mode === 'nocompany' && entry.id === 'c3' ? { ...entry, companyName: '' } : entry,
+      );
     return route.fulfill({
       json: {
         data: {
@@ -182,88 +186,8 @@ async function mockContacts(page: Page, mode: Mode) {
   return { requests, puts };
 }
 
-const SENT_AT = '2026-11-12T12:03:00.000Z';
-const ROMAN_DRAFT =
-  'Роман, добрый день! Мы работали вместе в «Сфере Платежи». Вижу у Ладога Банка вакансию «Руководитель разработки» — подскажете, кто её ведёт и удобно ли передать моё резюме?';
-const INTRO_DRAFT =
-  'Игорь, привет! 12 ноября у меня интервью в Арка Холдинг на «Руководителя платформы». Ты знаешь Сергея Белова — удобно ли нас познакомить до встречи?';
-
-interface MessageCalls {
-  created: Array<{ contactId: string; kind: string }>;
-  edits: string[];
-  approvals: number;
-  sent: number;
-}
-
-/** Письмо контакту (B698): сервер подставляется; «createFailures» — сколько первых черновиков упадёт. */
-async function mockMessages(page: Page, createFailures = 0): Promise<MessageCalls> {
-  const calls: MessageCalls = { created: [], edits: [], approvals: 0, sent: 0 };
-  let failures = createFailures;
-  await page.addInitScript(() => {
-    const w = window as unknown as { __opened: string[]; __copied: string[] };
-    w.__opened = [];
-    w.__copied = [];
-    window.open = (url) => {
-      w.__opened.push(String(url));
-      return null;
-    };
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: async (text: string) => void w.__copied.push(text) },
-    });
-  });
-  await page.route('**/api/v1/candidate/b640/contact-messages**', (route) => {
-    const request = route.request();
-    const path = new URL(request.url()).pathname;
-    const message = (text: string, kind: string) => ({
-      id: 'm1',
-      kind,
-      text,
-      recipient: { name: 'Роман Ефимов', linkedinUrl: 'https://www.linkedin.com/in/roman-efimov' },
-      createdAt: SENT_AT,
-    });
-    if (request.method() === 'POST' && path.endsWith('/contact-messages')) {
-      const body = request.postDataJSON() as { contactId: string; kind: string };
-      if (failures > 0) {
-        failures -= 1;
-        return route.fulfill({ status: 500, json: { error: { code: 'internal', message: 'x' } } });
-      }
-      calls.created.push(body);
-      const text = body.kind === 'ask_introduction' ? INTRO_DRAFT : ROMAN_DRAFT;
-      return route.fulfill({ status: 201, json: { data: message(text, body.kind) } });
-    }
-    if (request.method() === 'PUT') {
-      const { text } = request.postDataJSON() as { text: string };
-      calls.edits.push(text);
-      return route.fulfill({ json: { data: message(text, 'known_contact') } });
-    }
-    if (path.endsWith('/approve')) {
-      calls.approvals += 1;
-      return route.fulfill({
-        json: {
-          data: {
-            ...message(calls.edits.at(-1) ?? ROMAN_DRAFT, 'known_contact'),
-            state: 'approved',
-            approvedAt: SENT_AT,
-            openUrl: 'https://www.linkedin.com/in/roman-efimov',
-          },
-        },
-      });
-    }
-    calls.sent += 1;
-    return route.fulfill({
-      json: { data: { ...message(ROMAN_DRAFT, 'known_contact'), state: 'sent', sentAt: SENT_AT } },
-    });
-  });
-  return calls;
-}
-
-const windowLog = (page: Page, key: '__opened' | '__copied') =>
-  page.evaluate((name) => (window as unknown as Record<string, string[]>)[name], key);
-
-async function open(page: Page, mode: Mode, beforeGoto?: () => Promise<void>) {
+async function open(page: Page, mode: Mode) {
   const calls = await mockContacts(page, mode);
-  await beforeGoto?.();
   await page.goto(PATH, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('[data-b640-node="a02"]')).toBeVisible({ timeout: 15_000 });
   return calls;
@@ -336,6 +260,26 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     await expect(page.locator('li.ct-row')).toHaveCount(20);
   });
 
+  test('имя ведёт на карточку компании (v10b)', async ({ page }) => {
+    await open(page, 'list');
+    const name = page.locator('li.ct-row').first().locator('a.row-title.ct-n');
+    await expect(name).toHaveText('Анна Ветрова');
+    await expect(name).toHaveAttribute(
+      'href',
+      `/app/vacancies/companies/${encodeURIComponent('гринкод')}`,
+    );
+    await name.click();
+    await expect(page).toHaveURL(/\/app\/vacancies\/companies\//u);
+  });
+
+  test('у контакта без компании имя — не ссылка', async ({ page }) => {
+    await open(page, 'nocompany');
+    const row = page.locator('li.ct-row').nth(3);
+    await expect(row.locator('.ct-n')).toHaveText('Игорь Нестеров');
+    await expect(row.locator('a')).toHaveCount(0);
+    await expect(page.locator('li.ct-row').first().locator('a.ct-n')).toHaveCount(1);
+  });
+
   test('снимки для сверки с макетом', async ({ page }, testInfo) => {
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
     mkdirSync('.s13-shots', { recursive: true });
@@ -371,63 +315,5 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
         fullPage: true,
       });
     }
-  });
-});
-
-test.describe('B698: письмо контакту из «Контактов»', () => {
-  test('имя → черновик → правка → «Скопировать и открыть» → «Отправил» → «писали»', async ({
-    page,
-  }) => {
-    let calls!: MessageCalls;
-    await open(page, 'list', async () => {
-      calls = await mockMessages(page);
-    });
-    const row = page.locator('li.ct-row', { hasText: 'Роман Ефимов' }).first();
-    await expect(row.locator('.tag')).toHaveText('не писали');
-    await row.locator('a.row-title.ct-n').click();
-    const dialog = page.getByRole('dialog', { name: 'Написать: Роман Ефимов' });
-    const draft = dialog.getByLabel('Черновик');
-    await expect(draft).toHaveValue(ROMAN_DRAFT);
-    expect(calls.created).toEqual([{ contactId: 'c8', kind: 'known_contact' }]);
-    await draft.fill('Роман, добрый день! Подскажете, кто ведёт вакансию?');
-    await dialog.getByRole('button', { name: 'Скопировать и открыть' }).click();
-    await expect(dialog.getByRole('button', { name: 'Отправил' })).toBeVisible();
-    expect(calls.edits).toEqual(['Роман, добрый день! Подскажете, кто ведёт вакансию?']);
-    expect(await windowLog(page, '__opened')).toEqual(['https://www.linkedin.com/in/roman-efimov']);
-    expect(await windowLog(page, '__copied')).toEqual([
-      'Роман, добрый день! Подскажете, кто ведёт вакансию?',
-    ]);
-    expect(calls.sent).toBe(0);
-    await dialog.getByRole('button', { name: 'Отправил' }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(row.locator('.tag')).toHaveText('писали 12.11');
-    expect(calls.sent).toBe(1);
-  });
-
-  test('связь через знакомого: «Попросить представить»', async ({ page }) => {
-    let calls!: MessageCalls;
-    await open(page, 'list', async () => {
-      calls = await mockMessages(page);
-    });
-    await page.locator('li.ct-row').first().locator('a.row-title.ct-n').click();
-    const dialog = page.getByRole('dialog', { name: 'Попросить представить: Анна Ветрова' });
-    await expect(dialog.getByLabel('Черновик')).toHaveValue(INTRO_DRAFT);
-    expect(calls.created).toEqual([{ contactId: 'c0', kind: 'ask_introduction' }]);
-    await dialog.getByRole('button', { name: 'Не отправлять' }).click();
-    await expect(dialog).toHaveCount(0);
-    expect(calls.approvals).toBe(0);
-  });
-
-  test('черновик не получился: ошибка на месте и «Повторить»', async ({ page }) => {
-    let calls!: MessageCalls;
-    await open(page, 'list', async () => {
-      calls = await mockMessages(page, 1);
-    });
-    await page.locator('li.ct-row').first().locator('a.row-title.ct-n').click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('alert')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Повторить' }).click();
-    await expect(dialog.getByLabel('Черновик')).toHaveValue(INTRO_DRAFT);
-    expect(calls.created).toHaveLength(1);
   });
 });

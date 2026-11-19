@@ -234,4 +234,17 @@ describe('a02: контакты', () => {
     expect(sheet.textContent).toContain('Статус');
     view.unmount();
   });
+  it('имя — ссылка на карточку компании; без компании — обычный текст', async () => {
+    list.mockResolvedValueOnce(
+      page([contact(1, { companyName: 'Грин-Код' }), contact(2, { companyName: '' })], 2, null),
+    );
+    const view = screen();
+    await flush();
+    const names = view.container.querySelectorAll<HTMLElement>('.ct-n');
+    expect(names[0]!.tagName).toBe('A');
+    expect(names[0]!.getAttribute('href')).toBe(
+      `/app/vacancies/companies/${encodeURIComponent('гринкод')}`,
+    );
+    expect(names[1]!.tagName).toBe('DIV');
+  });
 });
