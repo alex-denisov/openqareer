@@ -5,6 +5,7 @@ export interface AdaptationCalls {
   readonly plans: unknown[];
   readonly details: unknown[];
   readonly people: Array<{ method: string; path: string; body: unknown }>;
+  readonly checks: Array<{ method: string; body: unknown }>;
 }
 
 const START = '2026-12-01';
@@ -266,6 +267,38 @@ export const PEOPLE = {
   ],
 };
 
+export const CHECK = {
+  workplaceId: 'w1',
+  dueOn: '2026-12-30',
+  sentOn: null,
+  facts: [
+    { area: 'team', label: 'Команда', value: 'Встречи с 11 из 13 человек' },
+    { area: 'result', label: 'Результат', value: 'Срок релиза: 14 → 7 дней' },
+    { area: 'plan', label: 'План', value: 'Задачи первого месяца: 6 из 7' },
+  ],
+  signal: { area: 'team', text: 'Без встречи — 2 человека' },
+  letter:
+    '30 минут на этой неделе? Подвожу итоги первого месяца: встречи с 11 из 13 человек; срок релиза: 14 → 7 дней; задачи первого месяца: 6 из 7. Нужен ваш совет: без встречи — 2 человека. Как вы оцениваете мой старт?',
+};
+export const RESULTS = {
+  workplaceId: 'w1',
+  periodFrom: START,
+  periodTo: '2027-02-28',
+  items: [
+    { goalId: 'g1', title: 'Срок релиза', line: 'с 14 до 5 дней', status: 'done' },
+    { goalId: 'g2', title: 'Нанять 2 разработчиков', line: 'с 0 до 2 чел.', status: 'done' },
+    {
+      goalId: 'g3',
+      title: 'Инциденты после релиза',
+      line: 'с 6 до 3 в месяц, цель — 2',
+      status: 'behind',
+    },
+  ],
+  resumeText: 'Руководитель разработки: за первые 90 дней — срок релиза, нанять 2 разработчиков.',
+  talkText:
+    'За 90 дней 2 из 3 целей достигнуто, 1 в работе. Прошу зафиксировать критерии итоговой оценки и обсудить ожидания на следующий квартал.',
+};
+
 function handle(route: Route, calls: AdaptationCalls) {
   const request = route.request();
   const method = request.method();
@@ -287,6 +320,12 @@ function handle(route: Route, calls: AdaptationCalls) {
       json: { data: method === 'PATCH' ? { ...VIEW, ...(body as object) } : VIEW },
     });
   }
+  if (path === '/workplaces/w1/day-30' || path === '/workplaces/w1/day-30/sent') {
+    if (method !== 'GET') calls.checks.push({ method, body });
+    const sentOn = method === 'PUT' ? (body as { sentOn: string }).sentOn : null;
+    return route.fulfill({ json: { data: { ...CHECK, sentOn } } });
+  }
+  if (path === '/workplaces/w1/results-90') return route.fulfill({ json: { data: RESULTS } });
   if (path.startsWith('/workplaces/w1/people')) {
     if (method !== 'GET') calls.people.push({ method, path, body });
     return route.fulfill({ status: method === 'POST' ? 201 : 200, json: { data: PEOPLE } });
@@ -295,7 +334,7 @@ function handle(route: Route, calls: AdaptationCalls) {
 }
 
 export async function mockAdaptation(page: Page): Promise<AdaptationCalls> {
-  const calls: AdaptationCalls = { plans: [], details: [], people: [] };
+  const calls: AdaptationCalls = { plans: [], details: [], people: [], checks: [] };
   await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls));
   return calls;
 }

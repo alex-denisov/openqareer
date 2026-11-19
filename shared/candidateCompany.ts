@@ -118,6 +118,8 @@ export interface CandidateCompanyWantPage {
   readonly limit: number;
   readonly counts: CandidateCompanyWantCounts;
   readonly industries: readonly string[];
+  /** B645: the selection was not read in time; vacancy counts follow on a repeat request. */
+  readonly vacanciesPending?: boolean;
 }
 
 /** Compact row for selection by filter, export and bulk actions. */
