@@ -102,7 +102,8 @@ function safeUrl(value: string | null | undefined): string | null {
 
 function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
   const rule = ruleFor(finding);
-  const resolved = finding.checklistMark !== undefined;
+  // Отметка чек-листа или подтверждённое удаление (B382) — находка разобрана.
+  const resolved = finding.checklistMark !== undefined || finding.removal?.result === 'removed';
   return {
     id: finding.id,
     category: rule.category,
@@ -116,6 +117,7 @@ function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
     action: resolved ? null : rule.action,
     findingId: finding.id,
     mismatch: null,
+    ...(finding.removal ? { removal: finding.removal } : {}),
   };
 }
 

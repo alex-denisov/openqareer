@@ -1,3 +1,4 @@
+import type { FootprintRemoval } from './footprintRemoval';
 /**
  * B667: сводка цифрового следа глазами работодателя. Пять категорий макета,
  * у каждой находки — уровень словом и одно действие. Составного балла нет.
@@ -45,6 +46,8 @@ export interface FootprintRiskItem {
   /** Находка следа, к которой относится расхождение; `null` — страница не среди находок. */
   readonly findingId: string | null;
   readonly mismatch: FootprintRiskMismatch | null;
+  /** B382: запрос на удаление и итог повторной проверки; нет — запроса не было. */
+  readonly removal?: FootprintRemoval;
 }
 
 export interface FootprintRiskCategory {
