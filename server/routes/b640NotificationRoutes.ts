@@ -22,16 +22,19 @@ const querySchema = z
   })
   .strict();
 
-/** Один проход по откликам кандидата вместо запроса на каждое уведомление. */
+/**
+ * Отклики из уведомлений, по одному чтению на отклик. `getApplication` только
+ * читает; `listApplications` переносит старые отклики и пишет в базу — на GET нельзя.
+ */
 function applicationContexts(
   deps: RouteDeps,
   candidateId: string,
   needed: ReadonlySet<string>,
 ): Map<string, B640ApplicationContext> {
   const contexts = new Map<string, B640ApplicationContext>();
-  if (needed.size === 0) return contexts;
-  for (const application of deps.candidateStore.listApplications(candidateId)) {
-    if (!needed.has(application.id)) continue;
+  for (const id of needed) {
+    const application = deps.candidateStore.getApplication(candidateId, id);
+    if (!application) continue;
     const receipt = application.deliveryReceipt;
     contexts.set(application.id, {
       stage: application.stage,
