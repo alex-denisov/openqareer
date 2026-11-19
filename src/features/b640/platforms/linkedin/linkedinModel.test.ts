@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import type { LinkedinDraft } from '../../../today/linkedinDraftApi';
 import type { ResumeDocument } from '../../../resume/resumeTypes';
-import { buildHeadline, buildProfileSections, currentPostDraft, draftsOfKind } from './linkedinModel';
+import {
+  buildHeadline,
+  buildProfileSections,
+  currentPostDraft,
+  draftsOfKind,
+} from './linkedinModel';
 
-const doc = (patch: Record<string, unknown>) => ({ targetRole: null, about: null, skills: [], ...patch }) as unknown as ResumeDocument;
-const draft = (id: string, kind: 'post' | 'comment', status: LinkedinDraft['status']): LinkedinDraft => ({
-  id, kind, status, topic: id, text: 'т',
+const doc = (patch: Record<string, unknown>) =>
+  ({ targetRole: null, about: null, skills: [], ...patch }) as unknown as ResumeDocument;
+const draft = (
+  id: string,
+  kind: 'post' | 'comment',
+  status: LinkedinDraft['status'],
+): LinkedinDraft => ({
+  id,
+  kind,
+  status,
+  topic: id,
+  text: 'т',
 });
 
 describe('linkedinModel', () => {
@@ -18,10 +32,37 @@ describe('linkedinModel', () => {
   it('пустые разделы не попадают в список', () => {
     const sections = buildProfileSections(doc({ about: ' Обо мне ', skills: [] }));
     expect(sections.map((section) => section.id)).toEqual(['about']);
-    expect(sections[0]!.text).toBe('Обо мне');
+    expect(sections[0]!.records).toEqual([{ label: null, text: 'Обо мне' }]);
+  });
+  it('опыт: запись на место работы с подписью «компания · должность»', () => {
+    const asr = (value: string) => ({
+      value,
+      memoryId: 'm',
+      sourceMessageIds: [],
+      reviewFlags: [],
+    });
+    const experience = [
+      {
+        id: 'e1',
+        employer: asr('Финтех Лаб'),
+        title: asr('Руководитель'),
+        description: asr('Группа из 9 человек.'),
+        bullets: [asr('Релиз раз в 3 дня.')],
+      },
+      { id: 'e2', employer: asr('Пусто'), title: null, bullets: [] },
+    ];
+    const sections = buildProfileSections(doc({ experience }));
+    expect(sections.map((section) => section.id)).toEqual(['experience']);
+    expect(sections[0]!.records).toEqual([
+      { label: 'Финтех Лаб · Руководитель', text: 'Группа из 9 человек. Релиз раз в 3 дня.' },
+    ]);
   });
   it('отклонённые черновики скрыты, посты и комментарии разделены', () => {
-    const all = [draft('a', 'post', 'draft'), draft('b', 'comment', 'draft'), draft('c', 'post', 'rejected')];
+    const all = [
+      draft('a', 'post', 'draft'),
+      draft('b', 'comment', 'draft'),
+      draft('c', 'post', 'rejected'),
+    ];
     expect(draftsOfKind(all, 'post').map((item) => item.id)).toEqual(['a']);
     expect(draftsOfKind(all, 'comment').map((item) => item.id)).toEqual(['b']);
   });

@@ -7,10 +7,15 @@ const ABOUT_MAX = 2600;
 const HEADLINE_SKILLS = 4;
 const SKILLS_MAX = 50;
 
-export interface ProfileSection {
-  readonly id: 'headline' | 'about' | 'skills';
-  readonly title: string;
+export interface ProfileRecord {
+  readonly label: string | null;
   readonly text: string;
+}
+
+export interface ProfileSection {
+  readonly id: 'headline' | 'about' | 'experience' | 'skills';
+  readonly title: string;
+  readonly records: readonly ProfileRecord[];
 }
 
 function skillNames(document: ResumeDocument, limit: number): string[] {
@@ -27,14 +32,35 @@ export function buildHeadline(document: ResumeDocument): string {
   return parts.join(' · ').slice(0, HEADLINE_MAX);
 }
 
+function experienceRecords(document: ResumeDocument): readonly ProfileRecord[] {
+  return (document.experience ?? []).flatMap((job) => {
+    const parts = [job.description?.value, ...job.bullets.map((bullet) => bullet.value)]
+      .map((part) => (part ?? '').trim())
+      .filter(Boolean);
+    const label = [job.employer?.value, job.title?.value].filter(Boolean).join(' · ');
+    return parts.length ? [{ label: label || null, text: parts.join(' ') }] : [];
+  });
+}
+
+const single = (text: string): readonly ProfileRecord[] => (text ? [{ label: null, text }] : []);
+
 /** Разделы профиля с готовым текстом для вставки; пустые разделы не показываем. */
 export function buildProfileSections(document: ResumeDocument): readonly ProfileSection[] {
   const sections: ProfileSection[] = [
-    { id: 'headline', title: 'Заголовок', text: buildHeadline(document) },
-    { id: 'about', title: 'О себе', text: (document.about ?? '').trim().slice(0, ABOUT_MAX) },
-    { id: 'skills', title: 'Навыки', text: skillNames(document, SKILLS_MAX).join(' · ') },
+    { id: 'headline', title: 'Заголовок', records: single(buildHeadline(document)) },
+    {
+      id: 'about',
+      title: 'О себе',
+      records: single((document.about ?? '').trim().slice(0, ABOUT_MAX)),
+    },
+    { id: 'experience', title: 'Опыт', records: experienceRecords(document) },
+    {
+      id: 'skills',
+      title: 'Навыки',
+      records: single(skillNames(document, SKILLS_MAX).join(' · ')),
+    },
   ];
-  return sections.filter((section) => section.text.length > 0);
+  return sections.filter((section) => section.records.length > 0);
 }
 
 export interface PublicationTag {
@@ -45,7 +71,7 @@ export interface PublicationTag {
 const TAGS: Readonly<Record<Exclude<LinkedinDraftStatus, 'rejected'>, PublicationTag>> = {
   draft: { label: 'черновик', className: 'tag part' },
   copied: { label: 'скопирован', className: 'tag part' },
-  approved: { label: 'одобрен', className: 'tag' },
+  approved: { label: 'в очереди', className: 'tag' },
   published: { label: 'опубликован', className: 'tag ok' },
 };
 
@@ -58,16 +84,38 @@ export function draftTag(status: LinkedinDraftStatus): PublicationTag {
   return status === 'rejected' ? TAGS.draft : TAGS[status];
 }
 
-/** Дата строки: когда опубликован или одобрен; у черновика даты нет. */
+/** Дата строки: только когда опубликован; срока публикации у черновика и очереди в данных нет. */
 export function draftDate(draft: LinkedinDraft): string | null {
-  return formatDay(draft.publishedAt ?? draft.approvedAt);
+  return draft.status === 'published' ? formatDay(draft.publishedAt) : null;
 }
 
-export function draftsOfKind(drafts: readonly LinkedinDraft[], kind: LinkedinDraft['kind']): readonly LinkedinDraft[] {
+/** «3 поста»: число постов, к которым готов комментарий. */
+export function postsCount(count: number): string {
+  const tail = count % 100;
+  const last = count % 10;
+  const word =
+    tail >= 11 && tail <= 14
+      ? 'постов'
+      : last === 1
+        ? 'пост'
+        : last >= 2 && last <= 4
+          ? 'поста'
+          : 'постов';
+  return `${count} ${word}`;
+}
+
+export function draftsOfKind(
+  drafts: readonly LinkedinDraft[],
+  kind: LinkedinDraft['kind'],
+): readonly LinkedinDraft[] {
   return visibleDrafts(drafts).filter((draft) => draft.kind === kind);
 }
 
 /** Черновик, с которого начинается экран постов: первый, ещё не опубликованный. */
 export function currentPostDraft(drafts: readonly LinkedinDraft[]): LinkedinDraft | null {
-  return draftsOfKind(drafts, 'post').find((draft) => draft.status === 'draft' || draft.status === 'copied') ?? null;
+  return (
+    draftsOfKind(drafts, 'post').find(
+      (draft) => draft.status === 'draft' || draft.status === 'copied',
+    ) ?? null
+  );
 }

@@ -27,6 +27,8 @@ const linkedin = (connected: boolean) =>
         status: 'disconnected',
       };
 
+const asr = (value: string) => ({ value, memoryId: 'm', sourceMessageIds: [], reviewFlags: [] });
+
 const studio = {
   draft: null,
   savedAt: null,
@@ -34,10 +36,26 @@ const studio = {
   projection: {
     master: {
       kind: 'master',
-      targetRole: 'Руководитель разработки платёжной платформы',
-      about: 'Руковожу разработкой платёжной платформы: 9 человек, релиз раз в 3 дня.',
-      skills: ['Go', 'Kotlin', 'PostgreSQL', 'Kubernetes'].map((name) => ({ id: name, name })),
-      experience: [],
+      targetRole: 'Engineering Manager · платёжная платформа',
+      about:
+        'Руковожу разработкой платёжной платформы «Финтех Лаб»: 9 человек, релиз раз в 3 дня вместо 2 недель, перевод на Kubernetes без остановки сервиса. Ищу роль руководителя разработки в финтехе.',
+      skills: [
+        'Go',
+        'Kubernetes',
+        'PostgreSQL',
+        'Управление командой',
+        'Найм разработчиков',
+        'Платёжные системы',
+      ].map((name) => ({ id: name, name })),
+      experience: [
+        {
+          id: 'e1',
+          employer: asr('Финтех Лаб'),
+          title: asr('Руководитель группы разработки'),
+          description: asr('Группа из 9 человек, 6 из них наняла сама.'),
+          bullets: [asr('Релиз раз в 3 дня вместо 2 недель.')],
+        },
+      ],
       education: [],
       languages: [],
       unknowns: [],
@@ -92,7 +110,7 @@ test.describe('B664: LinkedIn нового кабинета', () => {
     await mock(page);
     await page.goto(PROFILE, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a03"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('.li-sec-t')).toHaveText(['Заголовок', 'О себе', 'Навыки']);
+    await expect(page.locator('.li-sec-t')).toHaveText(['Заголовок', 'О себе', 'Опыт', 'Навыки']);
     await expect(page.getByRole('button', { name: /Применить/ })).toHaveCount(0);
     await page.getByRole('button', { name: 'Скопировать: Заголовок' }).click();
     await expect(page.getByText('Скопировано')).toBeVisible();
