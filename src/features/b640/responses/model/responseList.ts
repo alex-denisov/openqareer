@@ -11,19 +11,27 @@ import { longDate, shortDate, type ResponseRow } from './responseRow';
 export interface ListedResponse {
   readonly application: ApplicationView;
   readonly row: ResponseRow;
+  /** B680: отклик отправлен автооткликом. */
+  readonly auto?: boolean;
 }
 
-/** Чипы стадий над списком. «Авто» появится вместе с признаком автоотклика (B680). */
-export type StageChip = 'active' | 'interview' | 'offer' | 'archive';
+/** Чипы над списком: стадии и «Авто» (B680) — признак автоотклика, он сужает выбранные стадии. */
+export type StageChip = 'active' | 'interview' | 'offer' | 'archive' | 'auto';
 
 export const STAGE_CHIPS: readonly { readonly id: StageChip; readonly label: string }[] = [
   { id: 'active', label: 'В работе' },
   { id: 'interview', label: 'Интервью' },
   { id: 'offer', label: 'Офферы' },
   { id: 'archive', label: 'Архив' },
+  { id: 'auto', label: 'Авто' },
 ];
 
-function chipOf(application: ApplicationView): StageChip {
+/** Отмечает автоотклики по списку сервера (B680). */
+export function markAuto(items: readonly ListedResponse[], autoIds: ReadonlySet<string>): readonly ListedResponse[] {
+  return items.map((item) => ({ ...item, auto: autoIds.has(item.application.id) }));
+}
+
+function chipOf(application: ApplicationView): Exclude<StageChip, 'auto'> {
   switch (application.stage) {
     case 'interview':
       return 'interview';
@@ -38,9 +46,13 @@ function chipOf(application: ApplicationView): StageChip {
 }
 
 export function chipCounts(items: readonly ListedResponse[]): Record<StageChip, number> {
-  const counts: Record<StageChip, number> = { active: 0, interview: 0, offer: 0, archive: 0 };
+  const counts: Record<StageChip, number> = { active: 0, interview: 0, offer: 0, archive: 0, auto: 0 };
   return items.reduce(
-    (acc, item) => ({ ...acc, [chipOf(item.application)]: acc[chipOf(item.application)] + 1 }),
+    (acc, item) => ({
+      ...acc,
+      [chipOf(item.application)]: acc[chipOf(item.application)] + 1,
+      auto: acc.auto + (item.auto ? 1 : 0),
+    }),
     counts,
   );
 }
@@ -49,8 +61,11 @@ export function filterRows(
   items: readonly ListedResponse[],
   chips: readonly StageChip[],
 ): readonly ListedResponse[] {
-  if (chips.length === 0) return items;
-  return items.filter((item) => chips.includes(chipOf(item.application)));
+  const stages = chips.filter((chip) => chip !== 'auto');
+  const autoOnly = chips.includes('auto');
+  return items.filter(
+    (item) => (!autoOnly || item.auto === true) && (stages.length === 0 || stages.includes(chipOf(item.application))),
+  );
 }
 
 export type SortKey = 'role' | 'company' | 'stage' | 'next' | 'sent';
@@ -89,6 +104,8 @@ export function sortRows(
 
 export interface FunnelSummary {
   readonly sent: number;
+  /** B680: из отправленных — автооткликами. */
+  readonly auto: number;
   readonly responded: number;
   readonly interview: number;
   readonly offer: number;
@@ -134,6 +151,7 @@ export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
   );
   return {
     sent: sentItems.length,
+    auto: sentItems.filter((item) => item.auto === true).length,
     responded: sum(sources, (source) => source.responded),
     interview: sum(sources, (source) => source.interview),
     offer: sum(sources, (source) => source.offer),
