@@ -93,10 +93,9 @@ export async function getMatchedVacancyPage(
   signal?: AbortSignal,
   filters?: VacanciesScreenState,
 ): Promise<MatchedVacancyPage> {
-  const response = await apiFetch(
-    `/api/v1/candidate/matched-vacancies?${matchedVacancyQuery(offset, filters)}`,
-    { signal },
-  );
+  const zone = offset === 0 ? candidateTimeZone() : undefined;
+  const query = matchedVacancyQuery(offset, filters) + (zone ? `&tz=${encodeURIComponent(zone)}` : '');
+  const response = await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal });
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -139,6 +138,15 @@ export async function getMatchedVacancyPage(
     ...(envelope.meta?.initialFilters ? { initialFilters: envelope.meta.initialFilters } : {}),
     ...(isVacancySort(envelope.meta?.sort) ? { sort: envelope.meta.sort } : {}),
   };
+}
+
+/** B729: числа «Даты» первой страницы считаются от начала дня кандидата. */
+function candidateTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function matchedVacancyQuery(offset: number, filters?: VacanciesScreenState): string {

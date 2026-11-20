@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import type { FastifyRequest } from 'fastify';
+import { filteredFacetsOf } from '../../shared/listFilterFacets';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
 import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
@@ -115,6 +116,8 @@ export interface MatchedList {
     catalogSummary?: ReturnType<typeof matchedCatalogSummary>;
   };
   readonly campaignWithHypotheses: ReturnType<typeof readCampaign>;
+  /** B729: моменты появления строк выдачи — для чисел «Даты» по поясу кандидата на ответе. */
+  readonly filteredObserved: readonly number[];
   readonly prepareMs: number;
   readonly prepareRows: number;
   readonly listMs: number;
@@ -284,11 +287,14 @@ function* matchedListSteps(input: MatchedListInput) {
   yield;
   const pageOffsets = yield* matchedPagePlanSteps(filtered);
   const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
+  const { observed, ...filteredCounts } = filteredFacetsOf(filtered);
+  const withFiltered = { ...facets, filtered: filteredCounts };
   return {
     filtered,
     pageOffsets,
-    facets: catalogSummary ? { ...facets, catalogSummary } : facets,
+    facets: catalogSummary ? { ...withFiltered, catalogSummary } : withFiltered,
     campaignWithHypotheses,
+    filteredObserved: observed,
   };
 }
 
