@@ -35,6 +35,12 @@ export interface SealedMatchedList {
    */
   readonly leanPages?: readonly SealedPage[];
   readonly facets: MatchedList['facets'];
+  /**
+   * B729: moments the rows appeared, for the «Дата» counts in the candidate's zone. Optional, so
+   * the version stays: a list sealed before it answers without them, and the rebuild behind that
+   * answer seals one with them (no cold first read after the deploy, PRB-055).
+   */
+  readonly filteredObserved?: readonly number[];
   readonly campaignWithHypotheses: MatchedList['campaignWithHypotheses'];
 }
 
@@ -68,6 +74,7 @@ export function sealedListText(list: MatchedList, choice: string): string | unde
     pages: firstPages(list.filtered, list.pageOffsets),
     leanPages: firstLeanPages(list.filtered),
     facets: list.facets,
+    filteredObserved: list.filteredObserved,
     campaignWithHypotheses: list.campaignWithHypotheses,
   };
   // One pass over the sizes: each lean page costs its own text and a comma.
