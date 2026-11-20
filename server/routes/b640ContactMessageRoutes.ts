@@ -8,6 +8,7 @@ import {
   type B640ContactMessage,
   type B640ContactMessageApproval,
   type B640ContactMessageSent,
+  type B640SentContactMessage,
 } from '../../shared/b640ContactMessage';
 import { SqliteContactMessageRepository, type StoredContactMessage } from '../data/sqliteContactMessageRepository';
 import { SqliteContactStatusRepository } from '../data/sqliteContactStatusRepository';
@@ -33,6 +34,7 @@ const createSchema = z
   .refine((body) => (body.contactId === undefined) !== (body.recruiterId === undefined));
 const editSchema = z.object({ text: z.string().trim().min(1).max(B640_CONTACT_MESSAGE_EDIT_MAX) }).strict();
 const listSchema = z.object({ contactId: idSchema });
+const sentSchema = z.object({ vacancyId: idSchema });
 
 interface Stores {
   readonly messages: SqliteContactMessageRepository;
@@ -201,6 +203,21 @@ function listMessages(deps: RouteDeps, stores: Stores, request: FastifyRequest, 
   return { data: { items }, meta: { requestId: request.id } };
 }
 
+function listSent(deps: RouteDeps, stores: Stores, request: FastifyRequest, reply: FastifyReply) {
+  const candidate = session(deps, request, reply);
+  if (!candidate) return reply;
+  const query = sentSchema.safeParse(request.query ?? {});
+  if (!query.success) return sendError(reply, request, 400, 'invalid_query', 'Нужна вакансия.', false);
+  const items: B640SentContactMessage[] = stores.messages
+    .listSentForVacancy(candidate.id, query.data.vacancyId, B640_CONTACT_MESSAGE_LIST_MAX)
+    .flatMap((message) =>
+      message.sentAt
+        ? [{ id: message.id, kind: message.kind, recipientName: message.recipientName, sentAt: message.sentAt }]
+        : [],
+    );
+  return { data: { items }, meta: { requestId: request.id } };
+}
+
 /** B698: сообщение знакомому или рекрутёру — подготовка, правка, одобрение, отметка «Отправил»; за флагом B640. */
 export function registerB640ContactMessageRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const stores: Stores = {
@@ -214,6 +231,7 @@ export function registerB640ContactMessageRoutes(app: FastifyInstance, deps: Rou
   const limit = (max: number) => ({ config: { rateLimit: { max, timeWindow: '1 hour' } } });
   app.post(BASE, limit(120), withDeps(deps, (d, request, reply) => createMessage(d, stores, request, reply)));
   app.get(BASE, limit(600), withDeps(deps, (d, request, reply) => listMessages(d, stores, request, reply)));
+  app.get(`${BASE}/sent`, limit(600), withDeps(deps, (d, request, reply) => listSent(d, stores, request, reply)));
   app.put(`${BASE}/:id`, limit(600), withDeps(deps, (d, request, reply) => editMessage(d, stores, request, reply)));
   app.post(`${BASE}/:id/approve`, limit(600), withDeps(deps, (d, request, reply) => approveMessage(d, stores, request, reply)));
   app.post(`${BASE}/:id/sent`, limit(600), withDeps(deps, (d, request, reply) => sentMessage(d, stores, request, reply)));

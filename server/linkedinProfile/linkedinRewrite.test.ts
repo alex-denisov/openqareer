@@ -93,6 +93,18 @@ describe('B645: проверка ответа модели', () => {
     expect(checked.places.size).toBe(0);
   });
 
+  it('B692: ссылка, почта и markdown-ссылка в тексте модели не принимаются', () => {
+    const texts = [
+      'Owned the backend of a payment gateway, see https://evil.example for details.',
+      'Owned the backend of a payment gateway; write to hire@evil.example any time.',
+      'Owned the backend of a [payment gateway](evil.example) serving online shops.',
+    ];
+    for (const text of texts) {
+      const answer = { about: null, places: [{ id: 'e2', text, factIds: ['d2'] }] };
+      expect(checkLinkedinRewrite(request, answer).places.size).toBe(0);
+    }
+  });
+
   it('больше трёх фраз у места и язык не тот — не принимается', () => {
     const long = { about: null, places: [{ id: 'e2', text: 'Owned it. Built it. Ran it. Grew it for online shops.', factIds: ['d2'] }] };
     expect(checkLinkedinRewrite(request, long).places.size).toBe(0);
@@ -122,6 +134,22 @@ describe('B645: предложения после переписывания', (
     const result = await rewrittenSuggestions(base, INPUT, undefined, empty, 1000);
     expect(result.about).toBeNull();
     expect(result.experience).toBeNull();
+  });
+
+  it('B692: сбой модели помнится минуту — повторные открытия её не вызывают, потом попытка снова', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-20T08:00:00Z'));
+      const failing: LinkedinRewriter = { linkedinProfile: vi.fn(async () => null) };
+      await rewrittenSuggestions(base, INPUT, undefined, failing, 1000);
+      await rewrittenSuggestions(base, INPUT, undefined, failing, 1000);
+      expect(failing.linkedinProfile).toHaveBeenCalledTimes(1);
+      vi.setSystemTime(new Date('2026-11-20T08:01:01Z'));
+      await rewrittenSuggestions(base, INPUT, undefined, failing, 1000);
+      expect(failing.linkedinProfile).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('ответ не успел за отведённое время — без предложения, следующий запрос берёт готовый ответ из кэша', async () => {

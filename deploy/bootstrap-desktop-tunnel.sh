@@ -14,6 +14,7 @@ readonly CLIENT_KEY="/etc/openqareer/desktop-tunnel-client-ed25519"
 readonly SINGBOX_DIR="/etc/sing-box"
 readonly SINGBOX_CONFIG="$SINGBOX_DIR/openqareer-desktop.json"
 readonly PROXY_SECRET="$SINGBOX_DIR/openqareer-desktop-proxy.env"
+readonly EGRESS_UPSTREAM="$SINGBOX_DIR/openqareer-egress-upstream.env"
 readonly CADDY_FILE="/etc/caddy/Caddyfile"
 readonly TEMP_DIR="$(mktemp -d)"
 
@@ -80,11 +81,27 @@ upsert_env_value OPENQAREER_DESKTOP_TUNNEL_SSH_HOST_KEY_BASE64 "$ssh_host_key_ba
 remove_env_value OPENQAREER_DESKTOP_TUNNEL_SSH_HOST_KEY
 upsert_env_value OPENQAREER_DESKTOP_TUNNEL_PROXY_USERNAME "$proxy_username"
 upsert_env_value OPENQAREER_DESKTOP_TUNNEL_PROXY_PASSWORD "$proxy_password"
+upsert_env_value OPENQAREER_LINKEDIN_PROXY_URL http://127.0.0.1:11888
 for obsolete in UUID SERVER_NAME REALITY_PUBLIC_KEY REALITY_SHORT_ID PATH; do
   remove_env_value "OPENQAREER_DESKTOP_TUNNEL_${obsolete}"
 done
 
-sed -e "s|__USERNAME__|$proxy_username|g" -e "s|__PASSWORD__|$proxy_password|g" > "$TEMP_DIR/sing-box.json" <<'JSON'
+# B625: LinkedIn traffic leaves via the relay node of
+# deploy/bootstrap-linkedin-egress-node.sh when its upstream file exists
+# (SERVER, PORT, KEY; root-only). Rollback: delete the file and rerun.
+if [[ -f "$EGRESS_UPSTREAM" ]]; then
+  egress_server="$(awk -F= '$1 == "SERVER" { print $2; exit }' "$EGRESS_UPSTREAM")"
+  egress_port="$(awk -F= '$1 == "PORT" { print $2; exit }' "$EGRESS_UPSTREAM")"
+  egress_key="$(awk -F= '$1 == "KEY" { sub(/^KEY=/, ""); print; exit }' "$EGRESS_UPSTREAM")"
+  linkedin_outbound="{ \"type\": \"shadowsocks\", \"tag\": \"linkedin-out\", \"server\": \"$egress_server\", \"server_port\": $egress_port, \"method\": \"2022-blake3-aes-128-gcm\", \"password\": \"$egress_key\" }"
+else
+  linkedin_outbound='{ "type": "direct", "tag": "linkedin-out" }'
+fi
+
+# 18081: desktop candidates over SSH, authenticated, LinkedIn-only.
+# 11888: server LinkedIn pool (Chromium cannot send proxy auth), loopback only;
+#        LinkedIn goes to linkedin-out, anything else the page loads goes direct.
+sed -e "s|__USERNAME__|$proxy_username|g" -e "s|__PASSWORD__|$proxy_password|g" -e "s|__LINKEDIN_OUT__|$linkedin_outbound|g" > "$TEMP_DIR/sing-box.json" <<'JSON'
 {
   "log": { "level": "warn", "timestamp": true },
   "inbounds": [{
@@ -93,15 +110,23 @@ sed -e "s|__USERNAME__|$proxy_username|g" -e "s|__PASSWORD__|$proxy_password|g" 
     "listen": "127.0.0.1",
     "listen_port": 18081,
     "users": [{ "username": "__USERNAME__", "password": "__PASSWORD__" }]
+  }, {
+    "type": "http",
+    "tag": "pool-http-in",
+    "listen": "127.0.0.1",
+    "listen_port": 11888
   }],
-  "outbounds": [{ "type": "direct", "tag": "direct-out" }, { "type": "block", "tag": "block-out" }],
+  "outbounds": [__LINKEDIN_OUT__, { "type": "direct", "tag": "direct-out" }, { "type": "block", "tag": "block-out" }],
   "route": {
     "rules": [{
       "domain_suffix": [
         "linkedin.com", "licdn.com", "lnkd.in", "linkedin.cn",
         "microsoft.com", "microsoftonline.com", "live.com",
-        "google.com", "gstatic.com", "recaptcha.net"
+        "google.com", "gstatic.com", "recaptcha.net", "ipinfo.io"
       ],
+      "outbound": "linkedin-out"
+    }, {
+      "inbound": ["pool-http-in"],
       "outbound": "direct-out"
     }],
     "final": "block-out",
@@ -145,8 +170,11 @@ systemctl restart openqareer-desktop-tunnel.service
 sleep 1
 systemctl is-active --quiet openqareer-desktop-tunnel.service
 ss -lnt | grep -q '127.0.0.1:18081'
+ss -lnt | grep -q '127.0.0.1:11888'
 
 # Exercise the same sing-box SSH -> restricted HTTP chain the desktop uses.
+# Not /login: since 11.2026 Cloudflare answers any curl there with 403 on
+# every IP (prod, relay, owner's Mac), so it proves nothing about the chain.
 sed -e "s|__HOST_KEY__|$ssh_host_key|g" -e "s|__USERNAME__|$proxy_username|g" -e "s|__PASSWORD__|$proxy_password|g" > "$TEMP_DIR/preflight.json" <<'JSON'
 {
   "log": { "level": "debug" },
@@ -162,7 +190,7 @@ JSON
 /usr/local/bin/sing-box run -c "$TEMP_DIR/preflight.json" > "$TEMP_DIR/preflight.log" 2>&1 &
 preflight_pid=$!
 sleep 1
-if ! curl --fail --silent --show-error --max-time 15 --proxy http://127.0.0.1:11887 https://www.linkedin.com/login --output /dev/null; then
+if ! curl --fail --silent --show-error --max-time 15 --proxy http://127.0.0.1:11887 https://www.linkedin.com/ --output /dev/null; then
   sed -n '1,120p' "$TEMP_DIR/preflight.log" >&2
   exit 1
 fi
@@ -194,4 +222,5 @@ if grep -q '# openqareer-desktop-tunnel-begin' "$CADDY_FILE"; then
   curl --fail --silent --show-error --max-time 10 https://openqareer.com/health > /dev/null
 fi
 
-printf 'desktop_tunnel=ready transport=restricted-ssh sing_box=%s\n' "$VERSION"
+egress_ip="$(curl --fail --silent --max-time 15 --proxy http://127.0.0.1:11888 https://ipinfo.io/ip || true)"
+printf 'desktop_tunnel=ready transport=restricted-ssh sing_box=%s linkedin_egress_ip=%s\n' "$VERSION" "${egress_ip:-unknown}"

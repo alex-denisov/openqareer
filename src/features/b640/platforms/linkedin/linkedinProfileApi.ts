@@ -16,6 +16,6 @@ export const getLinkedinProfile = () => call<LinkedinProfileView>(BASE);
 /** «Выполнено»: кандидат сам вставил тексты в LinkedIn; на LinkedIn ничего не уходит. */
 export const markOffersDone = (keys: readonly string[]) => call<LinkedinDoneResult>(`${BASE}/done`, post({ keys }));
 
-/** «Предложить заново»: другой вариант одного предложения, в счёт квоты тарифа. */
+/** «Предложить заново»: другой вариант одного предложения; квоты тарифа не тратит, всего три варианта с первым. */
 export const requestOfferVariant = (key: string) =>
   call<LinkedinOffer>(`${BASE}/offers/${encodeURIComponent(key)}/variant`, post());

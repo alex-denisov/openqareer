@@ -2,7 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AutomationPausePort } from './automationPausePort';
 import { createAutomationPausePort } from './automationPausePort';
-import { changeCandidateStatus, readCandidateStatus } from './candidateStatusService';
+import {
+  changeCandidateStatus,
+  readCandidateStatus,
+  revertCandidateStatus,
+} from './candidateStatusService';
 import { SqliteCandidateActionRepository } from './sqliteCandidateActionRepository';
 import { SqliteCandidateAutomationRepository } from './sqliteCandidateAutomationRepository';
 import { SqliteCandidateStatusRepository } from './sqliteCandidateStatusRepository';
@@ -51,6 +55,30 @@ describe('changeCandidateStatus', () => {
     expect(result.applied).toEqual({ pauseAutoApply: false });
     expect(spy.pause).not.toHaveBeenCalled();
     expect(automation.getSettings('alice').pausedUntil).toBe(earlier);
+  });
+});
+
+describe('revertCandidateStatus (B665)', () => {
+  it('«Вернуть прежний» — второй шаг в «Истории изменений», первый остаётся', () => {
+    const { repository, automationPause } = setup();
+    const changeLog = { record: vi.fn(), markReverted: vi.fn() };
+    const deps = { repository, automationPause, changeLog };
+    const from = { ...input, to: { status: 'job_search' as const, targetProfession: null } };
+    changeCandidateStatus(deps, from);
+    changeCandidateStatus(deps, { ...input, now: new Date(now.getTime() + 60_000) });
+    const later = new Date(now.getTime() + 120_000);
+    const state = revertCandidateStatus(deps, 'alice', later);
+    expect(state.current.status).toBe('job_search');
+    expect(changeLog.markReverted).not.toHaveBeenCalled();
+    const steps = changeLog.record.mock.calls.map(([entry]) => [entry.previous, entry.applied, entry.label]);
+    expect(steps.slice(1)).toEqual([
+      ['Ищу работу', 'Работаю', steps[1][2]],
+      ['Работаю', 'Ищу работу', 'Возврат прежнего статуса'],
+    ]);
+    expect(changeLog.record.mock.calls[2][0]).toMatchObject({
+      actor: 'candidate',
+      createdAt: later.toISOString(),
+    });
   });
 });
 
