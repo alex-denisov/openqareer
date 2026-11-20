@@ -9,7 +9,7 @@ import { textLanguage, type ProfileLanguage } from '../domain/profileLanguage';
 import { ABOUT_RULE, answerText, checkedText, linkedinRewriteRequest, PLACE_RULE, type CheckRule } from './linkedinRewrite';
 import { usableSkills, type LinkedinSectionFact, type SuggestionInput } from './sectionSuggestions';
 
-export const LINKEDIN_VARIANT_PROMPT_REVISION = 'linkedin-profile-variant-2026-11-19';
+export const LINKEDIN_VARIANT_PROMPT_REVISION = 'linkedin-profile-variant-2026-11-20';
 
 export type LinkedinVariantTarget = 'headline' | 'about' | 'place' | 'skills';
 export interface LinkedinVariantRequest {

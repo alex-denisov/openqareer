@@ -45,7 +45,7 @@ const sections = (patch: Record<string, unknown> = {}) => [
 // Поиск по id в jsdom идёт по всему документу: прежние экраны снимаются после каждого теста.
 const mounts: Array<ReturnType<typeof mount>> = [];
 
-async function open(view: unknown = { kind: 'ready', sections: sections() }) {
+async function open(view: unknown = { kind: 'ready', sections: sections(), rewriting: false }) {
   vi.mocked(api.getLinkedinProfile).mockResolvedValue(view as never);
   const mounted = mount(<Section node={node()} params={{}} />);
   mounts.push(mounted);
@@ -59,6 +59,35 @@ const title = (root: HTMLElement) => root.querySelector('#li-title')!.textConten
 afterEach(() => {
   for (const mounted of mounts.splice(0)) mounted.unmount();
   vi.clearAllMocks();
+});
+
+describe('a03: холодный вход (B645)', () => {
+  it('пока пересказ готовится — разделы на экране, строка ожидания, экран перечитывается сам', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const pending = { kind: 'ready', sections: sections({ about: { offer: null } }), rewriting: true };
+      const ready = { kind: 'ready', sections: sections(), rewriting: false };
+      vi.mocked(api.getLinkedinProfile).mockResolvedValueOnce(pending as never).mockResolvedValue(ready as never);
+      const mounted = mount(<Section node={node()} params={{}} />);
+      mounts.push(mounted);
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      const root = mounted.container;
+      expect(root.querySelectorAll('.li-sec-t')).toHaveLength(7);
+      expect(root.textContent).toContain('Готовим тексты для «О себе» и «Опыта»');
+      expect(byText(root, '.li-new', 'Руковожу разработкой платёжной платформы.')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000);
+      });
+      expect(api.getLinkedinProfile).toHaveBeenCalledTimes(2);
+      expect(root.textContent).not.toContain('Готовим тексты');
+      expect(byText(root, '.li-new', 'Руковожу разработкой платёжной платформы.')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('a03: профиль LinkedIn по макету', () => {
