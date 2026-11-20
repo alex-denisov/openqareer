@@ -18,6 +18,10 @@ const proofSchema = z
   .strict()
   .refine((value) => Boolean(value.code) !== Boolean(value.password));
 
+/** B401: из сессии «войти как кандидат» защита входа и пароль не меняются. */
+export const IMPERSONATED_CODE = 'impersonated_session';
+export const IMPERSONATED_MESSAGE = 'Это может сделать только сам кандидат.';
+
 const LOCKED = 'Слишком много попыток. Попробуйте через 15 минут.';
 const answer = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
 
@@ -50,11 +54,15 @@ async function postLoginStep(deps: RouteDeps, request: FastifyRequest, reply: Fa
 
 type AccountHandler = (deps: RouteDeps, principal: AuthPrincipal, request: FastifyRequest, reply: FastifyReply) => unknown;
 
-function account(deps: RouteDeps, handler: AccountHandler) {
+function account(deps: RouteDeps, handler: AccountHandler, changesProtection = false) {
   return withDeps(deps, async (routeDeps, request, reply) => {
     const principal = requireCabinetB640(request, reply, routeDeps);
     if (!principal) return reply;
     reply.header('Cache-Control', 'no-store');
+    // Администратор вошёл своей сессией и своей 2FA: защиту кандидата он не меняет.
+    if (changesProtection && principal.impersonatedBy) {
+      return sendError(reply, request, 403, IMPERSONATED_CODE, IMPERSONATED_MESSAGE, false);
+    }
     return handler(routeDeps, principal, request, reply);
   });
 }
@@ -139,8 +147,8 @@ export function registerTwoFactorRoutes(app: FastifyInstance, deps: RouteDeps): 
   );
   const base = '/api/v1/account/two-factor';
   app.get(base, account(deps, getStatus));
-  app.post(`${base}/setup`, account(deps, postSetup));
-  app.post(`${base}/enable`, account(deps, postEnable));
-  app.post(`${base}/disable`, account(deps, postDisable));
-  app.post(`${base}/backup-codes`, account(deps, postBackupCodes));
+  app.post(`${base}/setup`, account(deps, postSetup, true));
+  app.post(`${base}/enable`, account(deps, postEnable, true));
+  app.post(`${base}/disable`, account(deps, postDisable, true));
+  app.post(`${base}/backup-codes`, account(deps, postBackupCodes, true));
 }

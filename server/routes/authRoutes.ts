@@ -57,6 +57,7 @@ import {
   toRegistrationFingerprintLog,
 } from '../auth/registrationAntiAbuse';
 import type { EmailVerificationDeliveryFailure } from '../auth/emailVerification';
+import { IMPERSONATED_CODE, IMPERSONATED_MESSAGE } from './twoFactorRoutes';
 import { defaultPasswordResetRequestRateLimiter } from '../auth/passwordResetRequestLimiter';
 
 function registrationValidationError(
@@ -442,6 +443,7 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  if (principal.impersonatedBy) return sendError(reply, request, 403, IMPERSONATED_CODE, IMPERSONATED_MESSAGE, false);
   const body = passwordChangeSchema.parse(request.body);
   const secondFactor = await passwordChangeSecondFactor(deps, principal.userId, body.currentPassword, body.twoFactorCode);
   if (secondFactor) return sendError(reply, request, secondFactor.status, secondFactor.code, secondFactor.message, false);
