@@ -3,6 +3,7 @@ import {
   requestPasswordReset,
   resetPassword,
   CoachApiError,
+  TwoFactorRequiredError,
 } from '../coach/coachApi';
 import { getPasswordError } from '../../../shared/accountValidation';
 import { AuthCardHeader, AuthInputField } from './AuthPageComponents';
@@ -220,7 +221,10 @@ async function submitResetPassword({
     onSessionChange?.(session);
     onNavigate('/app');
   } catch (reason) {
-    if (reason instanceof CoachApiError && reason.code === 'password_reset_invalid') {
+    if (reason instanceof TwoFactorRequiredError) {
+      // B401: пароль сменён, но сессию выдаёт только вход с кодом из приложения.
+      onNavigate('/login');
+    } else if (reason instanceof CoachApiError && reason.code === 'password_reset_invalid') {
       onInvalidToken();
     } else {
       setError(

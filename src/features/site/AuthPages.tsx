@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { preloadCareerWorkspaceShell } from '../shell/careerWorkspaceLoader';
-import { login, register, CoachApiError, type AuthUser } from '../coach/coachApi';
+import { login, register, CoachApiError, TwoFactorRequiredError, type AuthUser } from '../coach/coachApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { AuthCardHeader, AuthInputField } from './AuthPageComponents';
+import { TwoFactorLoginStep } from './TwoFactorLoginStep';
 
 export { AuthCardHeader, AuthInputField };
 export type { AuthInputFieldProps } from './AuthPageComponents';
@@ -28,12 +29,31 @@ export interface AuthPageProps {
   embedded?: boolean;
 }
 
+type SignedIn = (user: AuthUser) => void;
+
+/** Куда ведёт вход: подтверждение почты, админка или запрошенная страница. */
+function signedInHandler({ onNavigate, onSessionChange, nextPath }: AuthPageProps & { nextPath: string }): SignedIn {
+  return (user) => {
+    onSessionChange?.(user);
+    const destination =
+      user.emailVerified === false
+        ? '/verify-email'
+        : user.role === 'admin' && nextPath === '/app'
+          ? '/admin'
+          : nextPath;
+    onNavigate(destination);
+  };
+}
+
 function useLoginForm({
-  onNavigate,
-  onSessionChange,
-  nextPath,
   bootstrapPending = false,
-}: AuthPageProps & { nextPath: string }) {
+  onSignedIn,
+  onTwoFactor,
+}: {
+  readonly bootstrapPending?: boolean;
+  readonly onSignedIn: SignedIn;
+  readonly onTwoFactor: (challenge: string) => void;
+}) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(bootstrapPending);
@@ -50,17 +70,11 @@ function useLoginForm({
 
     setBusy(true);
     try {
-      const user = await login(identifier.trim(), password);
-      onSessionChange?.(user);
-      const destination =
-        user.emailVerified === false
-          ? '/verify-email'
-          : user.role === 'admin' && nextPath === '/app'
-            ? '/admin'
-            : nextPath;
-      onNavigate(destination);
+      onSignedIn(await login(identifier.trim(), password));
     } catch (err) {
-      if (err instanceof CoachApiError) {
+      if (err instanceof TwoFactorRequiredError) {
+        onTwoFactor(err.challenge);
+      } else if (err instanceof CoachApiError) {
         setError(err.message);
         if (err.fields) setFieldErrors(err.fields);
       } else {
@@ -116,11 +130,16 @@ function LoginFormFields({
 
 function LoginForm({
   onNavigate,
-  onSessionChange,
-  nextPath,
   bootstrapPending = false,
-}: AuthPageProps & { nextPath: string }) {
-  const form = useLoginForm({ onNavigate, onSessionChange, nextPath, bootstrapPending });
+  onSignedIn,
+  onTwoFactor,
+}: {
+  readonly onNavigate: (path: string) => void;
+  readonly bootstrapPending?: boolean;
+  readonly onSignedIn: SignedIn;
+  readonly onTwoFactor: (challenge: string) => void;
+}) {
+  const form = useLoginForm({ bootstrapPending, onSignedIn, onTwoFactor });
   const forgotBtn = (
     <button
       type="button"
@@ -154,6 +173,41 @@ function LoginForm({
   );
 }
 
+function LoginLinks({ onNavigate }: { readonly onNavigate: (path: string) => void }) {
+  return (
+    <div className="auth-links">
+      <span>
+        Ещё нет аккаунта?{' '}
+        <button type="button" onClick={() => onNavigate('/signup')}>
+          Зарегистрироваться
+        </button>
+      </span>
+      {!isTauriEnvironment() ? (
+        <button type="button" onClick={() => onNavigate('/')}>
+          ← Вернуться на главную
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function TwoFactorStep({
+  onBack,
+  ...step
+}: React.ComponentProps<typeof TwoFactorLoginStep> & { readonly onBack: () => void }) {
+  return (
+    <>
+      <TwoFactorLoginStep {...step} />
+      <div className="auth-links">
+        <button type="button" onClick={onBack}>
+          ← Войти с другим аккаунтом
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** B401: если пароль принят, а защита включена, та же карточка просит код из приложения. */
 export function LoginPage({
   onNavigate,
   onSessionChange,
@@ -163,43 +217,43 @@ export function LoginPage({
   embedded = false,
 }: AuthPageProps) {
   const Container = embedded ? 'div' : 'main';
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [restartNotice, setRestartNotice] = useState<string | null>(null);
+  const onSignedIn = signedInHandler({ onNavigate, onSessionChange, nextPath });
   return (
     <Container className="auth-page-container">
-      {bootstrapPending ? (
-        <p className="auth-notice" role="status">
-          Загружаем форму…
-        </p>
-      ) : null}
+      {bootstrapPending ? <p className="auth-notice" role="status">Загружаем форму…</p> : null}
       <div className="auth-card" {...(bootstrapPending ? { inert: '' } : {})}>
         <AuthCardHeader
           title="Вход в кабинет"
-          subtitle="Введите ваш email или логин для доступа к профилю"
+          subtitle={challenge ? undefined : 'Введите ваш email или логин для доступа к профилю'}
           onNavigate={onNavigate}
         />
-        {notice ? (
-          <p className="auth-notice" role="status">
-            {notice}
-          </p>
-        ) : null}
-        <LoginForm
-          onNavigate={onNavigate}
-          onSessionChange={onSessionChange}
-          nextPath={nextPath}
-          bootstrapPending={bootstrapPending}
-        />
-        <div className="auth-links">
-          <span>
-            Ещё нет аккаунта?{' '}
-            <button type="button" onClick={() => onNavigate('/signup')}>
-              Зарегистрироваться
-            </button>
-          </span>
-          {!isTauriEnvironment() ? (
-            <button type="button" onClick={() => onNavigate('/')}>
-              ← Вернуться на главную
-            </button>
-          ) : null}
-        </div>
+        {challenge ? (
+          <TwoFactorStep
+            challenge={challenge}
+            onSignedIn={onSignedIn}
+            onRestart={(text) => {
+              setChallenge(null);
+              setRestartNotice(text);
+            }}
+            onBack={() => setChallenge(null)}
+          />
+        ) : (
+          <>
+            {(restartNotice ?? notice) ? <p className="auth-notice" role="status">{restartNotice ?? notice}</p> : null}
+            <LoginForm
+              onNavigate={onNavigate}
+              bootstrapPending={bootstrapPending}
+              onSignedIn={onSignedIn}
+              onTwoFactor={(next) => {
+                setRestartNotice(null);
+                setChallenge(next);
+              }}
+            />
+            <LoginLinks onNavigate={onNavigate} />
+          </>
+        )}
       </div>
     </Container>
   );
@@ -410,11 +464,7 @@ export function SignupPage({
   const Container = embedded ? 'div' : 'main';
   return (
     <Container className="auth-page-container">
-      {bootstrapPending ? (
-        <p className="auth-notice" role="status">
-          Загружаем форму…
-        </p>
-      ) : null}
+      {bootstrapPending ? <p className="auth-notice" role="status">Загружаем форму…</p> : null}
       <div className="auth-card" {...(bootstrapPending ? { inert: '' } : {})}>
         <AuthCardHeader
           title="Создать аккаунт"

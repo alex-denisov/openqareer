@@ -19,6 +19,8 @@ import { ZodError } from 'zod';
 import { performance } from 'node:perf_hooks';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
+import { buildLeanMatchedPage, leanPageOffsets } from '../vacancies/leanMatchedPage';
+import { cabinetB640Enabled } from '../auth/cabinetB640Access';
 import {
   finishMatchedRows,
   readMatchedList,
@@ -28,6 +30,7 @@ import {
 } from './matchedVacancyList';
 import { rebuildBehindSealedList } from './matchedListWarm';
 import type { SealedMatchedList, SealedPage } from './sealedMatchedList';
+import { sealedLeanPage } from './sealedLeanPage';
 import type { StaleListServed } from './staleListCache';
 import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 import {
@@ -52,7 +55,7 @@ import {
   matchedOrderChoiceKeys,
 } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
-import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
+import { authenticateCandidateSession, candidatePlan, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
 import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
@@ -113,9 +116,13 @@ function buildMatchedResponse(
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
   fitLimit: number,
+  lean = false,
 ) {
   const pageAndExplanationsStartedAt = performance.now();
-  const page = buildMatchedVacancyPage(list.filtered, filters.offset, undefined, list.pageOffsets);
+  // B725: the B640 list takes lean rows of 20; the old cabinet keeps its byte-cut pages.
+  const page = lean
+    ? buildLeanMatchedPage(list.filtered, filters.offset)
+    : buildMatchedVacancyPage(list.filtered, filters.offset, undefined, list.pageOffsets);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt), titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
     titleParseStore.getByKey(key),
@@ -286,6 +293,7 @@ async function readMatchedPage(
   read: MatchedPageRead,
   log: FastifyRequest['log'],
   fitLimit: number,
+  lean = false,
 ) {
   // The profile reads before this ran in one piece with the request start (prod 03.11).
   await yieldToEventLoop();
@@ -317,6 +325,7 @@ async function readMatchedPage(
       read.titleParseStore,
       read.filters,
       fitLimit,
+      lean,
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
     readSteps: {
@@ -344,7 +353,8 @@ function matchedVacancyResponse(
       offset: response.page.offset,
       nextOffset: response.page.nextOffset,
       ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
-      campaign: campaignMeta(response.campaignWithHypotheses),
+      // B725: 25 КБ кампании на каждой из 154 страниц; клиент читает её только с первой.
+      ...(response.page.offset === 0 ? { campaign: campaignMeta(response.campaignWithHypotheses) } : {}),
       candidateLevel: targetLevel ?? null,
       ...(response.facets
         ? { facets: withFilteredDates(response.facets, response.filteredObserved, timeZone) }
@@ -387,11 +397,11 @@ async function finishMatchedPage(
   backgroundDeps: RouteDeps,
   candidateId: string,
   orderedPage: ReturnType<typeof buildMatchedResponse>,
-  context: { readonly offset: number; readonly fitLimit: number; readonly request: FastifyRequest },
+  context: { readonly offset: number; readonly fitLimit: number; readonly request: FastifyRequest; readonly lean: boolean },
 ) {
   await yieldToEventLoop();
   const fitViewsStartedAt = performance.now();
-  const shown = await withShownPageFitViews(deps, candidateId, orderedPage.data);
+  const shown = await withShownPageFitViews(deps, candidateId, orderedPage.data, context.lean);
   const fitViewsMs = elapsedMs(fitViewsStartedAt);
   const salaryStartedAt = performance.now();
   const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
@@ -427,6 +437,7 @@ interface SealedRead {
   readonly targetRoles: string[];
   readonly campaign: ReturnType<typeof readCampaign>;
   readonly sort: VacancySort;
+  readonly lean: boolean;
   readonly startTiming: {
     readonly mode: 'legacy' | 'semantic';
     readonly cold: boolean;
@@ -443,9 +454,11 @@ async function sealedResponse(
   sealed: SealedMatchedList,
   page: SealedPage,
   targetLevel: ReturnType<typeof readTargetLevel>,
+  lean: boolean,
 ): Promise<ShownPage> {
   const levels = addStoredVacancyLevels([...page.items], targetLevel, (key) => deps.titleParseStore.getByKey(key));
-  const shown = await withShownPageFitViews(deps, candidateId, levels);
+  const shown = await withShownPageFitViews(deps, candidateId, levels, lean);
+  const pageOffsets = lean ? leanPageOffsets(sealed.total) : sealed.pageOffsets;
   return {
     data: withMarketSalary(deps, shown),
     page: {
@@ -453,7 +466,7 @@ async function sealedResponse(
       total: sealed.total,
       offset: page.offset,
       nextOffset: page.nextOffset,
-      ...(page.offset === 0 ? { pageOffsets: sealed.pageOffsets } : {}),
+      ...(page.offset === 0 ? { pageOffsets } : {}),
     },
     facets: page.offset === 0 ? sealed.facets : undefined,
     filteredObserved: sealed.filteredObserved,
@@ -481,14 +494,16 @@ async function answerFromSealedList(
   let page: SealedPage | undefined;
   try {
     sealed = readSealedMatchedList({ ...read, candidateStore: deps.candidateStore, targetLevel, geography, order });
-    page = sealed?.pages.find(({ offset }) => offset === filters.offset);
+    page = !sealed ? undefined
+      : read.lean ? sealedLeanPage(sealed, filters.offset)
+      : sealed.pages.find(({ offset }) => offset === filters.offset);
   } catch (error) {
     // A row that does not open is a cold read, not a failed one.
     request.log.warn({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'matched-list-unseal-failed');
   }
   if (!sealed || !page) return undefined;
   const sealedReadMs = elapsedMs(startedAt);
-  const response = await sealedResponse(deps, candidateId, sealed, page, targetLevel);
+  const response = await sealedResponse(deps, candidateId, sealed, page, targetLevel, read.lean);
   // The list is not read again by itself: a row with no result has to be queued from this answer.
   // Only the shown page: the sweeps of `startFitWork` open the stored results, and the next read has them.
   startShownPageFit(backgroundDeps, candidateId, response.data, page.offset, selectionFitLimit(candidatePlan(deps, candidateId)), request);
@@ -498,13 +513,23 @@ async function answerFromSealedList(
   return matchedVacancyResponse(response, request.id, targetLevel, read.sort, careerTimeZone(request.query));
 }
 
+/** B725: a B640 account reads this pool only from the new list; the old cabinet never shows it one. */
+function readsLeanRows(
+  session: NonNullable<ReturnType<typeof authenticateCandidateSession>>,
+  config: RouteDeps['config'],
+): boolean {
+  const { candidate, principal } = session;
+  return principal?.candidate?.id === candidate.id && cabinetB640Enabled(config, principal.username);
+}
+
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
   const deps = withRequestScopedCandidateReads(backgroundDeps), requestStartedAt = performance.now();
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const cold = !observedMatchEngines.has(multiSourceEngine);
   observedMatchEngines.add(multiSourceEngine);
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
+  const session = authenticateCandidateSession(request, reply, candidateStore, authService, config);
+  if (!session) return undefined;
+  const { candidate } = session, lean = readsLeanRows(session, config);
   const { filters, sort } = readSortedFilters(deps, candidate.id, request.query);
   const { offset } = filters;
   // B725: 74 тыс. источников досок — реестр на минуту, а не на каждую страницу.
@@ -522,7 +547,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   }
 
   const startTiming = { mode: config.matchMode ?? 'legacy', cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } as const;
-  const sealedAnswer = await answerFromSealedList(deps, backgroundDeps, { candidateId: candidate.id, filters, confirmedSkills, targetRoles, campaign, sort, startTiming }, request);
+  const sealedAnswer = await answerFromSealedList(deps, backgroundDeps, { candidateId: candidate.id, filters, confirmedSkills, targetRoles, campaign, sort, lean, startTiming }, request);
   if (sealedAnswer) return sealedAnswer;
 
   const { targetLevel, fitLimit, order, ...setupSteps } = await prepareMatchedRead(deps, candidate.id, targetRoles, sort, request.log);
@@ -535,9 +560,9 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
       order,
     },
     request.log,
-    fitLimit,
+    fitLimit, lean,
   );
-  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request });
+  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request, lean });
   logMatchedTiming(
     request,
     config.matchMode ?? 'legacy',

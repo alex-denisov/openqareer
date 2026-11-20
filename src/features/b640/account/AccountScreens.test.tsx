@@ -36,6 +36,7 @@ const api = vi.hoisted(() => ({
   getHhSessionState: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
+vi.mock('./twoFactorApi', () => ({ getTwoFactorStatus: async () => ({ enabled: false, backupCodesLeft: 0 }) }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -454,18 +455,19 @@ describe('n02 «Уведомления»', () => {
 });
 
 describe('n04 «Вход и безопасность»', () => {
-  it('разделы по макету; двухфакторной защиты и входа по отпечатку нет', async () => {
+  it('разделы по макету; двухфакторная защита выключена, входа по отпечатку нет', async () => {
     const root = await open(<SecurityScreen node={node('n04')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
       'Почта и имя',
       'Вход',
       'Устройства · 2',
     ]);
-    expect(root.textContent).not.toMatch(/Двухфакторная|Touch ID|Face ID/u);
+    expect(root.textContent).not.toMatch(/Touch ID|Face ID/u);
     const values = [...root.querySelectorAll('.set-row .set-v')].map((item) => item.textContent);
     expect(values).toEqual([
       'm.sokolova@mail.test · подтверждена',
       'Марина Соколова',
+      'выключена',
       'сейчас · эта сессия',
       '3 ноября',
     ]);
