@@ -4,6 +4,7 @@ import type { CareerDiaryPeopleMap, CareerDiaryPersonInput } from '../../../../s
 import { apiFetch, readData } from '../../coach/apiClient';
 import type {
   CareerDiaryAdaptationPlan,
+  CareerDiaryAdaptationStepDraft,
   CareerDiaryWorkplaceWithPlanning,
 } from '../../diary/careerDiaryPlanning';
 
@@ -40,6 +41,15 @@ export interface NewWorkplace {
 
 export function createWorkplace(input: NewWorkplace): Promise<CareerDiaryWorkplaceWithPlanning> {
   return read(`${ROOT}/workplaces`, send('POST', input));
+}
+
+/** d01: шаги плана из «Что от вас ждут»; null — собрать план из шаблона. */
+export async function generateSteps(id: string): Promise<readonly CareerDiaryAdaptationStepDraft[] | null> {
+  const result = await read<{ steps: readonly CareerDiaryAdaptationStepDraft[] | null }>(
+    `${place(id)}/adaptation-steps`,
+    send('POST'),
+  );
+  return result.steps;
 }
 
 export function savePlan(id: string, plan: CareerDiaryAdaptationPlan): Promise<CareerDiaryWorkplaceWithPlanning> {

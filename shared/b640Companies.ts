@@ -55,6 +55,14 @@ export interface B640CompanyPerson {
   /** Вакансия, к которой ведёт действие строки. */
   readonly vacancyId: string;
   readonly platformMember: boolean;
+  /** Кому и о чём черновик сообщения (B698); у участника платформы без имени — `null`. */
+  readonly message: B640PersonMessage | null;
+}
+
+/** Адресат черновика: знакомый из сети или рекрутёр вакансии; тот же вид, что у POST /messages. */
+export interface B640PersonMessage {
+  readonly kind: 'known_contact' | 'ask_introduction' | 'recruiter';
+  readonly target: { readonly contactId: string } | { readonly recruiterId: string; readonly vacancyId: string };
 }
 
 export interface B640CompanyPeoplePage {

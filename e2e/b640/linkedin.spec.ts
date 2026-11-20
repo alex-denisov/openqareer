@@ -60,7 +60,10 @@ async function mock(
   await page.route('**/api/v1/candidate/b640/linkedin/profile', (route) =>
     route.fulfill({
       json: {
-        data: options.connected === false ? { kind: 'no_import' } : { kind: 'ready', sections },
+        data:
+          options.connected === false
+            ? { kind: 'no_import' }
+            : { kind: 'ready', sections, rewriting: false },
       },
     }),
   );

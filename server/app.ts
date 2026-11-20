@@ -29,7 +29,7 @@ import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { RoleNamer } from './providers/roleNamer';
 import { RoleNamingFailureLog } from './providers/roleNamingFailureLog';
-import type { CoverLetterWriter } from './providers/coverLetterWriter';
+import { COVER_LETTER_VERTEX_TIMEOUT_MS, type CoverLetterWriter } from './providers/coverLetterWriter';
 import type { SessionAuth } from './auth/authService';
 import type { VacancySample } from './domain/vacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
@@ -76,6 +76,7 @@ import {
   buildLinkedinDraftWriter,
   type LinkedinDraftWriter,
 } from './providers/linkedinDraftWriter';
+import { buildAdaptationStepsWriter, type AdaptationStepsWriter } from './providers/adaptationStepsWriter';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 import { SqliteCandidateCompanyWantsRepository } from './data/sqliteCandidateCompanyWantsRepository';
 import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes';
@@ -127,6 +128,7 @@ interface BuildAppOptions {
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
   skillQuizModel?: RouteDeps['skillQuizModel'];
   coverLetterWriter?: CoverLetterWriter;
+  adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
   /** Инъекция нужна тестам; в runtime стор открывает общую базу пула. */
@@ -446,7 +448,8 @@ function assembleRouteDeps(
     resumeStructurer,
     roleNamer,
     campaignRoleModel,
-    coverLetterWriter,
+    // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
+    coverLetterWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor
@@ -536,6 +539,20 @@ function registerBillingRenewalScheduler(
     timer.unref();
   });
   return () => { if (timer) clearInterval(timer); };
+}
+
+/** d01: шаги плана из «Что от вас ждут» на цепочке и таймауте Vertex письма. */
+function createAdaptationStepsWriter(config: BuildAppOptions['config']): AdaptationStepsWriter {
+  return buildAdaptationStepsWriter({
+    providerCredentials: config.providerCredentials,
+    vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(
+      config.vertex,
+      config.databasePath,
+      'adaptationSteps',
+      COVER_LETTER_VERTEX_TIMEOUT_MS,
+    ),
+  });
 }
 
 function createCandidateDraftDeps(
