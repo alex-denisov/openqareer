@@ -7,8 +7,24 @@ import type { CampaignMetaView } from '../../../coach/matchedVacancyApi';
 import { getRecruiterContacts } from '../../../vacancies/recruiterContactsApi';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
 import { useMatchedPool } from '../../../vacancies/useMatchedPool';
-import { getVacancyConnectionCircles, type VacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
+import {
+  getVacancyConnectionCircles,
+  type VacancyConnectionCircles,
+} from '../../../vacancies/vacancyLetterApi';
+import type { HhResumeFitStatus } from '../../../../../shared/hhCandidateSession';
+import type { B640CompanyPeoplePage } from '../../../../../shared/b640Companies';
+import type { ApplicationQuestionnaire } from '../../../../../shared/applicationQuestionnaire';
+import { getDecisionProfile } from '../../../coach/coachApi';
+import { getQuestionnaire } from '../../apply/data/questionnaireApi';
+import { getHhResumeReview, getHhResumes } from '../../apply/hh/hhSessionApi';
+import {
+  getB640Company,
+  getB640CompanyPeople,
+  type CompanyCard,
+} from '../../companies/companiesApi';
+import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { getVacancyCard } from '../b640Api';
+import type { Expectation } from './moneyScale';
 import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
 
 export type CardLoad = 'loading' | 'ready' | 'missing' | 'failed';
@@ -22,6 +38,16 @@ export interface CardData {
   /** Первый найденный рекрутёр; необязательный блок: нет данных — нет блока. */
   readonly recruiter: RecruiterContact | undefined;
   readonly circles: VacancyConnectionCircles | undefined;
+  /** Карточка компании B677: отрасль, город, число вакансий. */
+  readonly company: CompanyCard | undefined;
+  readonly people: B640CompanyPeoplePage | undefined;
+  readonly questionnaire: ApplicationQuestionnaire | undefined;
+  /** Ожидания из профиля («Зарплата от»). */
+  readonly expectation: Expectation | undefined;
+  /** Название выбранного резюме hh.ru. */
+  readonly hhResumeTitle: string | null | undefined;
+  /** Подходит ли выбранное резюме hh.ru вакансии (B678). */
+  readonly hhResumeFit: HhResumeFitStatus | undefined;
   readonly reload: () => void;
 }
 
@@ -52,7 +78,10 @@ const GONE_CODES: ReadonlySet<string> = new Set(['vacancy_not_found', 'vacancy_g
  * B715: вакансии нет в загруженной подборке (ссылка hh.ru из «Своей вакансии», вакансия после
  * отклика, прямой адрес) — карточка читает её отдельно по тому же id.
  */
-function useSingleVacancy(vacancyId: string, enabled: boolean): { readonly read: SingleRead | undefined; readonly retry: () => void } {
+function useSingleVacancy(
+  vacancyId: string,
+  enabled: boolean,
+): { readonly read: SingleRead | undefined; readonly retry: () => void } {
   const [read, setRead] = useState<SingleRead>();
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -74,10 +103,21 @@ function useSingleVacancy(vacancyId: string, enabled: boolean): { readonly read:
 }
 
 /** Сбой подборки не решает за карточку: отдельное чтение отвечает, есть ли вакансия. */
-function cardLoad(item: MatchedVacancyItem | undefined, poolLoading: boolean, single: SingleRead | undefined): CardLoad {
+function cardLoad(
+  item: MatchedVacancyItem | undefined,
+  poolLoading: boolean,
+  single: SingleRead | undefined,
+): CardLoad {
   if (item) return 'ready';
   if (poolLoading || !single || single.state === 'loading') return 'loading';
   return single.state === 'failed' ? 'failed' : 'missing';
+}
+
+function expectationOf(
+  amount: number | undefined,
+  currency: string | undefined,
+): Expectation | undefined {
+  return amount && amount > 0 ? { amount, currency: currency ?? 'RUB' } : undefined;
 }
 
 export function useCardData(vacancyId: string): CardData {
@@ -89,6 +129,20 @@ export function useCardData(vacancyId: string): CardData {
   const item = pooled ?? (single.read?.state === 'ready' ? single.read.item : undefined);
   const contacts = useOptional(() => getRecruiterContacts(vacancyId), vacancyId);
   const circles = useOptional(() => getVacancyConnectionCircles(vacancyId), vacancyId);
+  const company = item?.cluster.canonicalCompany ?? '';
+  const companyId = company ? companyLookupKey(company) || company : '';
+  const companyCard = useOptional(
+    () => (companyId ? getB640Company(companyId) : Promise.resolve(undefined)),
+    companyId,
+  );
+  const people = useOptional(
+    () => (companyId ? getB640CompanyPeople(companyId) : Promise.resolve(undefined)),
+    companyId,
+  );
+  const questionnaire = useOptional(() => getQuestionnaire(vacancyId), vacancyId);
+  const profile = useOptional(() => getDecisionProfile(), 'profile');
+  const hhResumes = useOptional(() => getHhResumes(), 'hh');
+  const hhReview = useOptional(() => getHhResumeReview(vacancyId), vacancyId);
   const reloadPool = pool.refresh;
   const reload = useCallback(() => {
     reloadPool?.();
@@ -102,6 +156,13 @@ export function useCardData(vacancyId: string): CardData {
     links,
     recruiter: contacts?.contacts.find((contact) => contact.fullName.trim() !== ''),
     circles,
+    company: companyCard,
+    people,
+    questionnaire,
+    expectation: expectationOf(profile?.salaryFloor, profile?.salaryCurrency),
+    hhResumeTitle: hhResumes === undefined ? undefined : (hhResumes?.selected?.title ?? null),
+    hhResumeFit: hhReview?.resumes.find((entry) => entry.resumeId === hhResumes?.selected?.id)
+      ?.status,
     reload,
   };
 }

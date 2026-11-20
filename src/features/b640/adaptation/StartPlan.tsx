@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { createCareerDiaryAdaptationPlan } from '../../diary/careerDiaryPlanning';
+import type { CareerDiaryWorkplace } from '../../../../shared/careerDiary';
+import { createCareerDiaryAdaptationPlan, createCareerDiaryAdaptationPlanFromSteps } from '../../diary/careerDiaryPlanning';
 import { ActionDock } from '../kit/ActionDock';
 import { Button } from '../kit/Button';
 import { StatusLine } from '../kit/ResultLine';
 import { fetchVacancyDetail } from '../../vacancies/vacancyDetailApi';
-import { createWorkplace, savePlan, type NewWorkplace } from './adaptationApi';
+import { createWorkplace, generateSteps, savePlan, type NewWorkplace } from './adaptationApi';
 import { CompanyField } from './CompanyField';
 import { dutiesFromVacancy, EXPECTATIONS_MAX, type CompanySuggestion } from './responseCompanies';
 
@@ -58,6 +59,17 @@ function workplaceInput(draft: Draft): NewWorkplace {
   };
 }
 
+const STEPS_MIN = 3;
+
+/** d01: план из обязанностей, если модель разложила их; иначе — шаблон. Путь кандидату не виден. */
+async function buildPlan(workplace: CareerDiaryWorkplace, hasExpectations: boolean) {
+  const createdAt = new Date().toISOString();
+  const steps = hasExpectations ? await generateSteps(workplace.id).catch(() => null) : null;
+  return steps && steps.length >= STEPS_MIN
+    ? createCareerDiaryAdaptationPlanFromSteps(workplace, steps, createdAt)
+    : createCareerDiaryAdaptationPlan(workplace, createdAt);
+}
+
 /** Состояние формы: черновик, ошибки, отправка и подстановка из отклика. */
 function useStartForm(onDone: () => void) {
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -85,7 +97,7 @@ function useStartForm(onDone: () => void) {
     setFailed(false);
     try {
       const workplace = await createWorkplace(workplaceInput(draft));
-      await savePlan(workplace.id, createCareerDiaryAdaptationPlan(workplace, new Date().toISOString()));
+      await savePlan(workplace.id, await buildPlan(workplace, Boolean(draft.expectations.trim())));
       onDone();
     } catch {
       setFailed(true);

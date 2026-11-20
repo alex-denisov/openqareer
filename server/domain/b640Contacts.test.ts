@@ -41,6 +41,16 @@ describe('B697: список контактов', () => {
     expect(list.items.find((item) => item.id === 'x')).toMatchObject({ link: 'intro', linkNote: 'общий знакомый: Игорь Шаталов' });
   });
 
+  it('B645: обрывок заголовка вместо компании — строка без компании, в фасет не идёт', () => {
+    const contacts = [
+      contact({ id: 'a', fullName: 'Анна Ким', companyName: 'Альфа' }),
+      contact({ id: 'b', fullName: 'Борис', companyName: 'кибербезопасности' }),
+    ];
+    const list = buildB640ContactList(input(contacts), query);
+    expect(list.items.find((item) => item.id === 'b')?.companyName).toBe('');
+    expect(list.facets.companies).toEqual([{ name: 'Альфа', count: 1 }]);
+  });
+
   it('поиск без регистра, фильтры, фасеты по поиску без своего фильтра', () => {
     const contacts = [
       contact({ id: 'a', fullName: 'Анна Ким', companyName: 'Альфа' }),

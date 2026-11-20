@@ -46,7 +46,7 @@ function vacancy(id: string, title: string, percent?: number): MatchedVacancyIte
 
 const person = (patch: Partial<B640CompanyPerson>): B640CompanyPerson => ({
   id: 'p', circle: 3, name: 'Алина Громова', roleTitle: 'технический рекрутер', evidence: 'рекрутер вакансии на hh.ru, 11.11',
-  nextStep: 'cold_application', vacancyId: 'cl-1', platformMember: false, ...patch,
+  nextStep: 'cold_application', vacancyId: 'cl-1', platformMember: false, message: null, ...patch,
 });
 
 function card(patch: Partial<B640CompanyItem> = {}, roles = [vacancy('cl-1', 'Руководитель разработки', 86)]): CompanyCard {

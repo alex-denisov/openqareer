@@ -1,4 +1,5 @@
 import { registerCareerDiaryEntryRoutes } from './careerDiaryEntryRoutes';
+import { registerAdaptationStepsRoutes } from './adaptationStepsRoutes';
 import { registerCareerDiaryCardRoutes } from './careerDiaryCardRoutes';
 import { registerCareerDiaryPeopleRoutes } from './careerDiaryPeopleRoutes';
 import { registerCareerDiaryCheckpointRoutes } from './careerDiaryCheckpointRoutes';
@@ -647,6 +648,7 @@ export function registerCareerDiaryRoutes(app: FastifyInstance, deps: RouteDeps)
   registerCareerDiaryCardRoutes(app, deps);
   registerCareerDiaryPeopleRoutes(app, deps);
   registerCareerDiaryCheckpointRoutes(app, deps);
+  registerAdaptationStepsRoutes(app, deps);
   const readLimit = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const writeLimit = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   const base = '/api/v1/candidate/career-diary';

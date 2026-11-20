@@ -58,7 +58,7 @@ export function listEntries(
 }
 
 export function createEntry(input: CareerDiaryEntryInput): Promise<CareerDiaryEntry> {
-  return read(`${ROOT}/entries`, json('POST', input));
+  return read(`${ROOT}/entries`, json('POST', input, true));
 }
 
 export function updateEntry(

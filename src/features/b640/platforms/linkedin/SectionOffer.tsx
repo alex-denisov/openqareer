@@ -52,7 +52,7 @@ const DONE_FAILED = 'Не удалось сохранить отметку';
 
 function errorText(error: unknown, fallback: string): string {
   // Варианты кончились или ещё готовятся — сервер говорит своими словами.
-  const own = error instanceof CoachApiError && ['variant_limit_reached', 'variant_in_progress'].includes(error.code);
+  const own = error instanceof CoachApiError && ['variant_limit_reached', 'variant_in_progress', 'variant_attempts_exhausted'].includes(error.code);
   return own ? error.message : fallback;
 }
 

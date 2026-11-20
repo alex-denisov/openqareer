@@ -195,12 +195,22 @@ describe('a02: контакты', () => {
     view.unmount();
   });
 
-  it('пустая строка пути не выводится', async () => {
-    list.mockResolvedValue(page([contact(1, { linkNote: null })], 1, null));
+  it('B645: связи нет — третья строка «общих знакомых нет», как в макете', async () => {
+    list.mockResolvedValue(page([contact(1, { linkNote: null, link: 'none' })], 1, null));
     const view = screen();
     await flush();
-    expect(view.container.querySelector('.ct-p')).toBeNull();
+    expect(view.container.querySelector('.ct-p')!.textContent).toBe('общих знакомых нет');
     view.unmount();
+  });
+
+  it('B645: число людей согласовано со словом и глаголом', async () => {
+    for (const [total, text] of [[773, '773 человека, которые нанимают'], [1, '1 человек, который нанимает'], [21, '21 человек, который нанимает'], [5, '5 человек, которые нанимают']] as const) {
+      list.mockResolvedValue(page([contact(1)], total, null));
+      const view = screen();
+      await flush();
+      expect(view.container.querySelector('#ct-title')!.textContent).toBe(text);
+      view.unmount();
+    }
   });
 
   it('связей нет — одна строка пустого состояния без панели', async () => {
