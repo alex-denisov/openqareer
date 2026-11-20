@@ -57,6 +57,33 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     expect(mock.calls.some((call) => call.includes('"rejected"'))).toBe(true);
   });
 
+  test('B698: сообщение знакомому после «Отправил» видно в «Что было» отклика', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses', 'o01');
+    await page.route('**/api/v1/candidate/b640/contact-messages/sent?*', (route) => {
+      const vacancyId = new URL(route.request().url()).searchParams.get('vacancyId');
+      const items =
+        vacancyId === 'cluster-a-interview'
+          ? [
+              {
+                id: 'm1',
+                kind: 'known_contact',
+                recipientName: 'Роман Ефимов',
+                sentAt: '2026-11-06T09:00:00.000Z',
+              },
+            ]
+          : [];
+      return route.fulfill({ json: { data: { items } } });
+    });
+    await row(page, 'a-interview')
+      .getByRole('button', { name: /Руководитель платформы/u })
+      .click();
+    const history = page.locator('#otklik-a-interview .od-was');
+    await expect(history).toContainText('Написали знакомому');
+    await expect(history).toContainText('Роман Ефимов');
+  });
+
   test('напоминание компании: текст готов, отметка «Я напомнил»', async ({ page }) => {
     const mock = await open(page, '/app/responses/a-silent', 'o01c');
     const detail = page.locator('#otklik-a-silent');

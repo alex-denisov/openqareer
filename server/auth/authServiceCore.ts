@@ -330,6 +330,7 @@ export class AuthServiceCore implements SessionAuth {
          WHERE sessions.token_hash = ? AND sessions.expires_at > ? AND users.blocked_at IS NULL`,
       )
       .get(hashToken(sessionToken), now) as UserRow | undefined;
+    const impersonatedBy = row ? this.sessionImpersonator(sessionToken) : null;
     if (!row) {
       return null;
     }
@@ -337,7 +338,15 @@ export class AuthServiceCore implements SessionAuth {
     this.database
       .prepare('UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?')
       .run(now, slidTo, hashToken(sessionToken));
-    return this.principalForRow(row);
+    const principal = this.principalForRow(row);
+    return impersonatedBy ? { ...principal, impersonatedBy } : principal;
+  }
+
+  private sessionImpersonator(sessionToken: string): string | null {
+    const session = this.database
+      .prepare('SELECT impersonated_by FROM sessions WHERE token_hash = ?')
+      .get(hashToken(sessionToken)) as { impersonated_by: string | null } | undefined;
+    return session?.impersonated_by ?? null;
   }
 
   logout(sessionToken: string): void {
@@ -408,7 +417,13 @@ export class AuthServiceCore implements SessionAuth {
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
     storeAuthSession(
       this.database,
-      { userId: user.id, tokenHash: hashToken(sessionToken), expiresAt, now },
+      {
+        userId: user.id,
+        tokenHash: hashToken(sessionToken),
+        expiresAt,
+        now,
+        impersonatedBy: actorPrincipal?.userId ?? 'admin',
+      },
       this.sessionLog,
     );
 

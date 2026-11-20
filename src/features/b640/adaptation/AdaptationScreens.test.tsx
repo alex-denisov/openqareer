@@ -17,6 +17,7 @@ const api = vi.hoisted(() => ({
   getPeople: vi.fn(),
   savePlan: vi.fn(),
   createWorkplace: vi.fn(),
+  generateSteps: vi.fn(),
   patchAdaptation: vi.fn(),
   addPerson: vi.fn(),
   updatePerson: vi.fn(),
@@ -27,6 +28,11 @@ vi.mock('./adaptationApi', () => api);
 const responsesApi = vi.hoisted(() => ({ listApplicationsPool: vi.fn(), fetchVacancyDetail: vi.fn() }));
 vi.mock('../../applications/applicationsApi', () => ({ listApplicationsPool: responsesApi.listApplicationsPool }));
 vi.mock('../../vacancies/vacancyDetailApi', () => ({ fetchVacancyDetail: responsesApi.fetchVacancyDetail }));
+const STEPS = [
+  { title: 'Познакомиться с командой', description: 'Встречи один на один.', stage: 'days_1_30', category: 'people', basis: 'Руководить командой из 25 человек' },
+  { title: 'Разобрать поставку', description: 'Где теряется время.', stage: 'days_31_60', category: 'delivery', basis: 'Выстроить поставку' },
+  { title: 'Запустить еженедельный релиз', description: 'Первый релиз.', stage: 'days_61_90', category: 'delivery', basis: 'Выстроить поставку' },
+];
 const RESPONSES = [
   { clusterId: 'cl-bank', stage: 'applied', createdAt: '2026-11-12T09:00:00.000Z', appliedAt: '2026-11-12T09:00:00.000Z', offer: null, vacancy: { title: 'Руководитель разработки', company: 'Вектор Банк', url: '', source: 'hh' } },
   { clusterId: 'cl-tel', stage: 'applied', createdAt: '2026-11-05T09:00:00.000Z', appliedAt: '2026-11-05T09:00:00.000Z', offer: null, vacancy: { title: 'Технический директор', company: 'Вектор Телеком', url: '', source: 'hh' } },
@@ -125,12 +131,14 @@ describe('d01 план адаптации', () => {
     await settle();
     expect(api.createWorkplace).toHaveBeenCalledWith({ company: 'Норма', title: 'руководитель разработки', startDate: '2026-12-01' });
     expect(api.savePlan).toHaveBeenCalledWith('w1', expect.objectContaining({ status: 'active', tasks: expect.any(Array) }));
+    expect(api.generateSteps).not.toHaveBeenCalled();
   });
 
   it('d01h/d01i: компания из откликов подставляет должность и обязанности вакансии', async () => {
     api.getOverview.mockResolvedValue({ primaryWorkplace: null });
     api.createWorkplace.mockResolvedValue({ ...WORKPLACE, planning: null });
     api.savePlan.mockResolvedValue({});
+    api.generateSteps.mockResolvedValue(STEPS);
     const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
     const company = page.querySelector('#ap-company') as HTMLInputElement;
     expect(company.getAttribute('role')).toBe('combobox');
@@ -163,6 +171,29 @@ describe('d01 план адаптации', () => {
       company: 'Вектор Банк', title: 'Руководитель разработки', startDate: '2026-12-01',
       expectations: 'Руководить командой из 25 человек\nВыстроить поставку',
     });
+    expect(api.generateSteps).toHaveBeenCalledWith('w1');
+    const saved = api.savePlan.mock.calls.at(-1)?.[1];
+    expect(saved.tasks.map((task: { title: string; stage: string }) => [task.title, task.stage])).toEqual(
+      STEPS.map((step) => [step.title, step.stage]),
+    );
+  });
+
+  it('d01: модель не ответила — план из шаблона, без ошибки и без следа пути', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    api.createWorkplace.mockResolvedValue({ ...WORKPLACE, planning: null });
+    api.savePlan.mockResolvedValue({});
+    api.generateSteps.mockRejectedValue(new Error('502'));
+    const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
+    typeInto(page.querySelector('#ap-company'), 'Норма');
+    typeInto(page.querySelector('#ap-title'), 'CTO');
+    typeInto(page.querySelector('#ap-start-date'), '2026-12-01');
+    typeInto(page.querySelector('#ap-expectations'), 'Руководить командой');
+    click(button(page, 'Собрать план'));
+    await settle();
+    const saved = api.savePlan.mock.calls.at(-1)?.[1];
+    expect(saved.tasks.length).toBeGreaterThan(STEPS.length);
+    expect(saved.tasks.every((task: { source: string }) => task.source === 'template')).toBe(true);
+    expect(page.querySelector('[role=alert]')).toBeNull();
   });
 
   it('d01h: подстановка не затирает то, что кандидат уже написал, и молчит без откликов', async () => {

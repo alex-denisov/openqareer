@@ -3,6 +3,7 @@ import type {
   B640ContactMessageApproval,
   B640ContactMessageKind,
   B640ContactMessageSent,
+  B640SentContactMessage,
 } from '../../../../shared/b640ContactMessage';
 import { apiFetch, readData } from '../../coach/apiClient';
 
@@ -15,6 +16,7 @@ export type {
   B640ContactMessageApproval,
   B640ContactMessageKind,
   B640ContactMessageSent,
+  B640SentContactMessage,
 };
 
 /** Кому пишем: знакомый из сети или рекрутёр вакансии (нужны оба поля). */
@@ -56,4 +58,13 @@ export async function approveB640ContactMessage(id: string): Promise<B640Contact
 export async function markB640ContactMessageSent(id: string): Promise<B640ContactMessageSent> {
   const response = await apiFetch(messageUrl(id, '/sent'), { method: 'POST' });
   return readData<B640ContactMessageSent>(response);
+}
+
+/** Отправленные по вакансии (без текста) — для «Что было» в отклике. */
+export async function listB640SentMessages(
+  vacancyId: string,
+  signal?: AbortSignal,
+): Promise<readonly B640SentContactMessage[]> {
+  const response = await apiFetch(`${BASE}/sent?vacancyId=${encodeURIComponent(vacancyId)}`, { signal });
+  return (await readData<{ readonly items: readonly B640SentContactMessage[] }>(response)).items;
 }

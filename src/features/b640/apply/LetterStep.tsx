@@ -226,8 +226,11 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
   const options = recipientOptions(circles.data?.circles ?? [], head.source);
   // B716: одобренное письмо — свой текст с сервера; пересборка черновика ему не нужна.
   const saved = Boolean(approval.saved);
-  const pending = !saved && (circles.loading || (draft.loading && !draft.pitch));
-  const failed = !saved && (circles.error || draft.error);
+  // B724: после «Изменить письмо» в поле одобренный (или исправленный) текст — его не прячем,
+  // пока черновик собирается или если он не собрался.
+  const kept = !saved && draft.text.trim() !== '';
+  const pending = !saved && !kept && (circles.loading || (draft.loading && !draft.pitch));
+  const failed = !saved && Boolean(circles.error || draft.error);
   return (
     <section className="lead" aria-labelledby="lt-title">
       <h2 className="lead-title is-long" id="lt-title">
@@ -240,8 +243,8 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
           Собираем письмо…
         </p>
       ) : null}
-      {!pending && failed ? <DraftFailure letter={letter} /> : null}
-      {!pending && !failed ? (
+      {!pending && failed && !kept ? <DraftFailure letter={letter} /> : null}
+      {!pending && (!failed || kept) ? (
         <>
           {approval.saved ? null : <VariantSwitch variants={variants} />}
           <textarea
@@ -255,6 +258,8 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
             <p className="ls-state" role="status">
               Пересобираем письмо…
             </p>
+          ) : failed ? (
+            <DraftFailure letter={letter} />
           ) : (
             <Approval letter={letter} variants={variants} onSend={onSend} />
           )}

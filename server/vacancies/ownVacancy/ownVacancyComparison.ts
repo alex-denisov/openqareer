@@ -4,7 +4,8 @@ import type { OwnVacancyRecord } from '../../data/sqliteOwnVacancyStore';
 import { fitFailure } from '../../domain/vacancyMechanicsRuntime';
 import { labelVacancyRequirement } from '../../domain/vacancyRequirementLabel';
 import { extractVacancyRequirements } from '../../domain/vacancyRequirements';
-import type { VacancyFitInput } from '../../domain/vacancyFit';
+import { isSkillRequirement, type VacancyFitInput } from '../../domain/vacancyFit';
+import type { VacancyRequirement } from '../../domain/vacancyRequirements';
 import type { RouteDeps } from '../../routes/deps';
 import { vacancyFitContext } from '../../routes/vacancyFitContext';
 
@@ -26,6 +27,14 @@ function fitInput(deps: RouteDeps, candidateId: string, record: OwnVacancyRecord
   return vacancyFitContext(deps, candidateId, target(record), requirements);
 }
 
+/**
+ * Требования для раскрытия: подпись для строки, а признак навыка — тот, по которому их считает
+ * расчёт (прод 18.11: «4 из 4», а строк две — длинное предложение считалось, но не показывалось).
+ */
+export function shownOwnRequirements(requirements: readonly VacancyRequirement[]): VacancyRequirement[] {
+  return requirements.map((item) => ({ ...labelVacancyRequirement(item), skill: isSkillRequirement(item) }));
+}
+
 export function startOwnVacancyComparison(deps: RouteDeps, candidateId: string, record: OwnVacancyRecord): void {
   const input = fitInput(deps, candidateId, record);
   if (input.requirements.length > 0) deps.vacancyMechanics?.fit.enqueue(input);
@@ -43,7 +52,7 @@ function jobState(state: string | undefined): VacancyFitView['state'] {
 
 function fitView(deps: RouteDeps, candidateId: string, record: OwnVacancyRecord): VacancyFitView {
   const input = fitInput(deps, candidateId, record);
-  const requirements = input.requirements.map(labelVacancyRequirement);
+  const requirements = shownOwnRequirements(input.requirements);
   const runtime = deps.vacancyMechanics;
   if (input.requirements.length === 0) return { state: 'no_requirements', requirements };
   if (!runtime) return { state: 'not_requested', requirements };
