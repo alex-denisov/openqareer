@@ -203,12 +203,12 @@ describe('a02: контакты', () => {
     view.unmount();
   });
 
-  it('B645: число людей согласовано со словом', async () => {
-    for (const [total, text] of [[773, '773 человека'], [1, '1 человек'], [5, '5 человек']] as const) {
+  it('B645: число людей согласовано со словом и глаголом', async () => {
+    for (const [total, text] of [[773, '773 человека, которые нанимают'], [1, '1 человек, который нанимает'], [21, '21 человек, который нанимает'], [5, '5 человек, которые нанимают']] as const) {
       list.mockResolvedValue(page([contact(1)], total, null));
       const view = screen();
       await flush();
-      expect(view.container.querySelector('#ct-title')!.textContent).toBe(`${text}, которые нанимают`);
+      expect(view.container.querySelector('#ct-title')!.textContent).toBe(text);
       view.unmount();
     }
   });

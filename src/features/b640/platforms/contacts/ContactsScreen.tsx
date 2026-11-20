@@ -92,7 +92,7 @@ function List({ state }: { readonly state: ContactsState }) {
         <div className="list-head">
           <h2 id="ct-title">
             <span className="num">{formatCount(state.total)}</span>{' '}
-            {pluralRu(state.total, 'человек', 'человека', 'человек')}, которые нанимают
+            {pluralRu(state.total, 'человек, который нанимает', 'человека, которые нанимают', 'человек, которые нанимают')}
           </h2>
         </div>
         <ContactsControls state={state} />
