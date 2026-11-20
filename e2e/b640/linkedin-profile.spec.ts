@@ -17,6 +17,7 @@ const place = (id: string, label: string, current: string, text?: string) => ({
 /** Макет a03: семь разделов, «сейчас» из импорта LinkedIn, предложения у четырёх. */
 const READY = {
   kind: 'ready',
+  rewriting: false,
   sections: [
     {
       id: 'headline',

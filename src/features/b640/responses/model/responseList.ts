@@ -1,4 +1,8 @@
 import { deliveryState } from '../../../../../shared/applicationStage';
+import type {
+  B640ContactMessageKind,
+  B640SentContactMessage,
+} from '../../../../../shared/b640ContactMessage';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import {
   computePipelineAnalytics,
@@ -233,12 +237,26 @@ function event(
   return Number.isNaN(at) || !when ? [] : [{ icon, title, note, when, at }];
 }
 
+/** B698: сообщение, которое кандидат отметил «Отправил», — в «Что было» с именем получателя. */
+const MESSAGE_EVENTS: Record<B640ContactMessageKind, { icon: IconName; title: string }> = {
+  known_contact: { icon: 'chat', title: 'Написали знакомому' },
+  ask_introduction: { icon: 'handshake', title: 'Попросили представить' },
+  recruiter: { icon: 'chat', title: 'Написали рекрутёру' },
+};
+
+const messageEvents = (messages: readonly B640SentContactMessage[]): TimelineEvent[] =>
+  messages.flatMap((message) => {
+    const shown = MESSAGE_EVENTS[message.kind];
+    return event(shown.icon, shown.title, message.sentAt, message.recipientName);
+  });
+
 /**
  * «Что было» по отклику: только события, у которых известна дата. Свежие сверху.
  */
 export function timeline(
   application: ApplicationView,
   now: Date = new Date(),
+  messages: readonly B640SentContactMessage[] = [],
 ): readonly TimelineEvent[] {
   if (application.stage === 'saved') return [];
   const via = viaPlatform(platformOf(application.vacancy?.source));
@@ -259,6 +277,7 @@ export function timeline(
         ? event('mic', 'Интервью прошло', iso)
         : event('calendar', 'Интервью назначено', iso),
     ),
+    ...messageEvents(messages),
   ];
   return [...events].sort((a, b) => b.at - a.at);
 }
