@@ -1,7 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { B640CompanyPeoplePage, B640CompanyPerson } from '../../shared/b640Companies';
-import { candidateCompanyKey, type ConnectionCircleResult } from '../domain/candidateCompanies';
+import type { B640CompanyPeoplePage, B640CompanyPerson, B640PersonMessage } from '../../shared/b640Companies';
+import {
+  candidateCompanyKey,
+  type ConnectionCirclePath,
+  type ConnectionCircleResult,
+} from '../domain/candidateCompanies';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readB640PoolRows } from './b640MatchedVacancyRoutes';
 import { findCompanyRow } from './b640CompanyModel';
@@ -26,6 +30,24 @@ const COMPANY_RECIPIENT = 'vacancy:';
 const PLATFORM_MEMBER_EVIDENCE =
   'Знаком с участником платформы — тот согласен представлять кандидатов';
 
+/** Prefix of a 1st-circle path whose recipient is the candidate's own contact, not a recruiter. */
+const OWN_CONTACT_PATH = 'circle-1:contact:';
+
+/** Who the draft goes to: the contact itself, the go-between of the 2nd circle, or the recruiter. */
+function messageOf(path: ConnectionCirclePath, vacancyId: string): B640PersonMessage {
+  const recruiter = { recruiterId: path.recipient.id, vacancyId };
+  if (path.circle === 2) {
+    const via = path.path.length > 2 ? path.path[1] : undefined;
+    return via ? { kind: 'ask_introduction', target: { contactId: via.id } } : { kind: 'recruiter', target: recruiter };
+  }
+  if (path.circle === 1) {
+    return path.id.startsWith(OWN_CONTACT_PATH)
+      ? { kind: 'known_contact', target: { contactId: path.recipient.id } }
+      : { kind: 'known_contact', target: recruiter };
+  }
+  return { kind: 'recruiter', target: recruiter };
+}
+
 /** Люди из кругов одной вакансии: пути с именами и участники платформы без имён. */
 export function circlePeople(
   circles: readonly ConnectionCircleResult[],
@@ -48,6 +70,7 @@ export function circlePeople(
         nextStep: path.nextStep,
         vacancyId,
         platformMember: false,
+        message: messageOf(path, vacancyId),
       });
     }
     (circle.platformMembers?.members ?? []).forEach((_member, index) =>
@@ -60,6 +83,7 @@ export function circlePeople(
         nextStep: 'ask_for_introduction',
         vacancyId,
         platformMember: true,
+        message: null,
       }),
     );
   }

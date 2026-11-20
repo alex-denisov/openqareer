@@ -65,10 +65,13 @@ function Name({ contact, open, onToggle }: Omit<ContactRowProps, 'onSent'>) {
   );
 }
 
+const NO_LINK = 'общих знакомых нет';
+
 /** Строка контакта (a02): имя открывает черновик, должность и компания, метка статуса, путь знакомства. */
 export function ContactRow({ contact, open, onToggle, onSent }: ContactRowProps) {
   const tag = statusTag(contact.status);
-  const note = contact.linkNote?.trim();
+  // B645: третья строка есть всегда — путь знакомства или «общих знакомых нет», как в макете.
+  const note = contact.linkNote?.trim() || NO_LINK;
   return (
     <li className="row ct-row ct-row2">
       <Name contact={contact} open={open} onToggle={onToggle} />
@@ -76,12 +79,10 @@ export function ContactRow({ contact, open, onToggle, onSent }: ContactRowProps)
       <div className="ct-tags">
         <span className={tag.cls}>{tag.text}</span>
       </div>
-      {note ? (
-        <div className="row-sub ct-p">
-          <Icon name="path" />
-          {note}
-        </div>
-      ) : null}
+      <div className="row-sub ct-p">
+        <Icon name="path" />
+        {note}
+      </div>
       {open ? (
         <div id={panelId(contact.id)} className="ct-write">
           <MessageDraft

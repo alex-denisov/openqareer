@@ -66,7 +66,10 @@ export function feedSubtitle(item: B640Notification, now: Date, timeZone: string
   return [
     item.role,
     item.eventAt ? eventLabel(item.eventAt, timeZone) : null,
-    notificationWhen(item.createdAt, now, timeZone) || null,
+    // B671: время события — само время записи (подборка): дату второй раз не пишем.
+    item.eventAt === item.createdAt
+      ? null
+      : notificationWhen(item.createdAt, now, timeZone) || null,
   ]
     .filter(Boolean)
     .join(' · ');

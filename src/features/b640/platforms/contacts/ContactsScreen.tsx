@@ -3,6 +3,7 @@ import { Icon, PagedList, StatusLine } from '../../kit';
 import { useShell } from '../../shell/ShellContext';
 import { ContactRow } from './ContactRow';
 import { ContactsControls } from './ContactsControls';
+import { pluralRu } from '../../vacancies/format';
 import { formatCount } from './contactsModel';
 import { useContacts, type ContactsState } from './useContacts';
 import './contacts.css';
@@ -90,7 +91,8 @@ function List({ state }: { readonly state: ContactsState }) {
       <section className="col ct-list" aria-labelledby="ct-title">
         <div className="list-head">
           <h2 id="ct-title">
-            <span className="num">{formatCount(state.total)}</span> человек, которые нанимают
+            <span className="num">{formatCount(state.total)}</span>{' '}
+            {pluralRu(state.total, 'человек, который нанимает', 'человека, которые нанимают', 'человек, которые нанимают')}
           </h2>
         </div>
         <ContactsControls state={state} />

@@ -215,7 +215,12 @@ describe('candidate status routes with the B640 flag', () => {
     expect(data.history).toHaveLength(1);
     expect(await pausedUntil(app, flagged)).toBeNull();
     const entries = await profileHistory(app, flagged);
-    expect(entries.find((entry) => entry.appliedText === 'Работаю')?.revertedAt).toBeTruthy();
+    // B665: «История изменений» — журнал: смена остаётся, возврат — свой шаг.
+    expect(entries.find((entry) => entry.appliedText === 'Работаю')?.revertedAt).toBeNull();
+    expect(entries.find((entry) => entry.label === 'Возврат прежнего статуса')).toMatchObject({
+      previousText: 'Работаю',
+      appliedText: 'Присматриваюсь',
+    });
   });
 
   it('keeps a pause the candidate changed after the status change', async () => {

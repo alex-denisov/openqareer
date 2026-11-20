@@ -96,6 +96,7 @@ const person = (id: string, circle: 1 | 2 | 3, fields: Record<string, unknown>) 
   evidence: null,
   vacancyId: 'cluster-0',
   platformMember: false,
+  message: null,
   ...fields,
 });
 

@@ -138,13 +138,35 @@ function cleaned(value: string | null | undefined): string | null {
   return trimmed ? trimmed : null;
 }
 
+/** «Chief Operating Officer и ещё 10» — как роль поиска в «Карьере». */
+export function searchRoleLabel(roles: readonly string[]): string | null {
+  const named = roles.map((role) => role.trim()).filter(Boolean);
+  if (named.length === 0) return null;
+  return named.length === 1 ? named[0] : `${named[0]} и ещё ${named.length - 1}`;
+}
+
+/**
+ * B671: у подборки «Новые вакансии по вашей роли» нет отклика — роль берётся из роли поиска,
+ * время события — когда подборка пришла.
+ */
+function eventAtOf(
+  kind: B640NotificationKind,
+  row: B640NotificationSource,
+  application: B640ApplicationContext | undefined,
+): string | null {
+  if (kind === 'interview_invitation') return application?.interviewAt ?? null;
+  return kind === 'new_vacancies_by_role' ? row.createdAt : null;
+}
+
 export function classifyB640Notification(
   row: B640NotificationSource,
   application: B640ApplicationContext | undefined,
   newestReplies: ReadonlySet<string>,
+  searchRole: string | null = null,
 ): B640Notification {
   const kind = classifyKind(row, application, newestReplies);
   const company = cleaned(application?.company);
+  const role = kind === 'new_vacancies_by_role' ? cleaned(searchRole) : cleaned(application?.role);
   return {
     id: row.id,
     kind,
@@ -152,8 +174,8 @@ export function classifyB640Notification(
     important: row.readAt === null && IMPORTANT_KINDS.has(kind),
     title: titleFor(kind, company, row),
     company,
-    role: cleaned(application?.role),
-    eventAt: kind === 'interview_invitation' ? (application?.interviewAt ?? null) : null,
+    role,
+    eventAt: eventAtOf(kind, row, application),
     createdAt: row.createdAt,
     readAt: row.readAt,
     sourceType: row.sourceType,
@@ -174,6 +196,8 @@ export interface BuildB640FeedInput {
    * свой сохранённый ключ и репозиторий отдал ответы без фильтра по «Ответам».
    */
   readonly inApp?: { readonly replies: boolean; readonly invitations: boolean };
+  /** B671: роль поиска кандидата — для «Новые вакансии по вашей роли». */
+  readonly searchRole?: string | null;
 }
 
 const INVITATION_KINDS: ReadonlySet<B640NotificationKind> = new Set([
@@ -194,6 +218,7 @@ export function buildB640NotificationFeed(input: BuildB640FeedInput): B640Notifi
       row,
       row.sourceType === 'application' ? input.applications.get(row.sourceId) : undefined,
       newestReplies,
+      input.searchRole ?? null,
     ),
   );
   const classified = all.filter((item) => shownInApp(item, input.inApp));

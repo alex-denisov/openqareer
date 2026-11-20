@@ -4,11 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CareerDiaryGoalRisk, CareerDiaryGoalRiskStatus } from '../../shared/careerDiary';
 import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { cardRisk } from '../domain/careerDiaryCardRisk';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -283,6 +285,23 @@ describe('B684: цель с показателями под флагом', () =>
     expect(indicator.latestMeasurement).toMatchObject({ value: 5, measuredAt: '2027-01-03' });
     // Риск считает прежнее правило дневника: здесь важно, что он пересчитан по замеру.
     expect(indicator.risk.rule).not.toBe('measurement_required');
+    // Прод 20.11: у цели с замеренным показателем шапка показывала «нет замера».
+    expect(again.risk.status).toBe(indicator.risk.status);
+    expect(again.risk.explanation).toBe(indicator.risk.explanation);
+  });
+
+  it('риск цели с показателями берётся из показателей: отставание сильнее остальных', () => {
+    const risk = (status: CareerDiaryGoalRiskStatus, explanation: string = status) =>
+      ({ status, rule: 'linear_progress_v1', explanation }) as CareerDiaryGoalRisk;
+    const own = risk('unknown', 'Замеров пока нет');
+    expect(cardRisk(own, [])).toBe(own);
+    expect(cardRisk(own, [risk('unknown'), risk('unknown')])).toEqual(risk('unknown'));
+    expect(cardRisk(own, [risk('on_track'), risk('unknown')]).status).toBe('on_track');
+    expect(cardRisk(own, [risk('achieved'), risk('on_track')]).status).toBe('on_track');
+    expect(cardRisk(own, [risk('achieved'), risk('achieved')]).status).toBe('achieved');
+    expect(cardRisk(own, [risk('on_track'), risk('at_risk', 'отстаёт')])).toEqual(
+      risk('at_risk', 'отстаёт'),
+    );
   });
 
   it('повтор с тем же ключом не плодит цели, с другими данными — отказ', async () => {
