@@ -7,6 +7,7 @@ import { extractVacancyPage } from './extractVacancyPage';
 import { isClosedSite } from './closedSites';
 import { takeLinkReadSlot } from './linkReadLimit';
 import { readVacancyPage } from './pageReader';
+import { ownVacancyFromText } from './ownVacancyText';
 import { ownVacancySummary, startOwnVacancyComparison } from './ownVacancyComparison';
 
 /** B676: своя вакансия по ссылке (одно чтение одной страницы) или по вставленному тексту. */
@@ -17,12 +18,6 @@ export type OwnVacancySource = { readonly link: string } | { readonly text: stri
 
 function normalizeText(text: string): string {
   return text.replace(/\r\n?/gu, '\n').replace(/[ \t]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim();
-}
-
-function fromText(text: string): NewOwnVacancy {
-  const clean = normalizeText(text);
-  const title = clean.split('\n').map((line) => line.trim()).find(Boolean) ?? '';
-  return { title: title.slice(0, OWN_VACANCY_TITLE_MAX), company: null, location: null, workFormat: null, url: null, text: clean };
 }
 
 type LinkOutcome = { readonly vacancy: NewOwnVacancy } | { readonly result: OwnVacancyCreateResult };
@@ -62,7 +57,7 @@ export async function createOwnVacancy(
   source: OwnVacancySource,
 ): Promise<OwnVacancyCreateResult> {
   if (store.count(candidateId) >= OWN_VACANCY_MAX) return { outcome: 'limit' };
-  const outcome: LinkOutcome = 'text' in source ? { vacancy: fromText(source.text) } : await fromLink(deps, candidateId, source.link);
+  const outcome: LinkOutcome = 'text' in source ? { vacancy: ownVacancyFromText(source.text) } : await fromLink(deps, candidateId, source.link);
   if ('result' in outcome) return outcome.result;
   const record = store.create(candidateId, outcome.vacancy);
   startOwnVacancyComparison(deps, candidateId, record);

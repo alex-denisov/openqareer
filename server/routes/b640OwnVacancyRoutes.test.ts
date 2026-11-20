@@ -168,6 +168,19 @@ describe('GET и DELETE own-vacancies', () => {
     expect((await h.send('GET', `${BASE}/own-${crypto.randomUUID()}`, 'flagged.test')).statusCode).toBe(404);
     expect((await h.send('GET', `${BASE}/not-an-id`, 'flagged.test')).statusCode).toBe(404);
   });
+  it('B676: текст одной строкой — требования, название, компания и город', async () => {
+    const h = await setup();
+    const flat = 'Руководитель отдела аналитики — Компания: Альфа. Город: Москва. Удалённо. ' +
+      'Требования: SQL; Python; умение договариваться с заказчиками внутри компании. Мы предлагаем: ДМС.';
+    const { vacancy } = (await createText(h, flat)).json().data;
+    expect(vacancy).toMatchObject({ title: 'Руководитель отдела аналитики', company: 'Альфа', location: 'Москва', workFormat: 'remote' });
+    const detail = (await h.send('GET', `${BASE}/${vacancy.id}`, 'flagged.test')).json().data;
+    const shown = detail.fit.requirements.filter((item: { skill?: boolean }) => item.skill !== false);
+    // Каждое требование, которое считает «N из M», — строка раскрытия (прод 18.11: «4 из 4», строк две).
+    expect(shown.map((item: { text: string }) => item.text)).toEqual([
+      'SQL', 'Python', 'умение договариваться с заказчиками внутри компании.',
+    ]);
+  });
   it('деталь: текст с абзацами и вид сравнения с профилем без процента', async () => {
     const h = await setup();
     const { id } = (await createText(h)).json().data.vacancy;
