@@ -1,3 +1,4 @@
+import { leanFitView } from '../vacancies/leanMatchedPage';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
@@ -417,16 +418,20 @@ export async function withShownPageFitViews(
   deps: RouteDeps,
   candidateId: string,
   items: readonly MatchedVacancyItem[],
+  lean = false,
 ): Promise<MatchedVacancyItem[]> {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return [...items];
+  // B725: the lean row of the B640 list skips the points and lists, not just leaves them out.
+  const shape = lean ? leanFitView : compactFitView;
+  const explain = lean ? explanationWithLeanFitView : explanationWithFitView;
   const context = createVacancyFitContextReader(deps, candidateId);
   const geoBlocks = createGeoBlocker(deps, candidateId);
   return mapYielding(items, (item) => {
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const view = runtime.view(context(target, []));
-    const fitView = compactFitView(
+    const fitView = shape(
       geoBlocks(
         target,
         textStillLoading(
@@ -438,8 +443,15 @@ export async function withShownPageFitViews(
         ),
       ),
     );
-    return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };
+    return { ...item, explanation: explain(item.explanation, fitView) };
   });
+}
+
+/** The lean row: the fit view and the requirement count, no point lists or summary sentence. */
+function explanationWithLeanFitView(explanation: Explanation, fitView: VacancyFitView): Explanation {
+  const coverage = fitView.result?.coverage;
+  if (!coverage || coverage.total === 0) return { ...explanation, fitView };
+  return { ...explanation, fitView, requirements: { matched: coverage.matched, total: coverage.total } };
 }
 
 type Explanation = MatchedVacancyItem['explanation'];
