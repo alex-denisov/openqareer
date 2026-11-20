@@ -67,6 +67,7 @@ describe('B677: люди компании', () => {
     id,
     circle,
     recipient: { id: `contact:${id}`, fullName, roleTitle: 'CTO' },
+    path: [],
     evidence: ['Работали вместе в X'],
     nextStep: 'write_known_contact',
   });

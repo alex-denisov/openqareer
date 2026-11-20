@@ -410,6 +410,24 @@ test.describe('B657: единый экран отклика', () => {
     expect(mock.calls.filter((call) => call.startsWith('pitch'))).toEqual([]);
   });
 
+  test('«Изменить письмо», а черновик не собрался — одобренный текст остаётся в поле (B724)', async ({
+    page,
+  }) => {
+    const body = 'Одобренный текст письма для Гринкода.';
+    const mock = await open(page, '/app/responses/a-draft/letter', {
+      approvedBody: body,
+      failPitch: 1,
+    });
+    await page.getByRole('button', { name: 'Изменить письмо' }).click();
+    await expect.poll(() => mock.calls.filter((call) => call.startsWith('pitch')).length).toBe(1);
+    await expect(page.getByText('Письмо не собралось')).toBeVisible();
+    await expect(page.getByLabel('Текст письма')).toHaveValue(body);
+    await expect(page.getByText('Собираем письмо…')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Повторить' }).click();
+    await expect(page.getByText('Письмо не собралось')).toHaveCount(0);
+    await expect(page.getByLabel('Текст письма')).toHaveValue(body);
+  });
+
   test('путь с шапкой контекста: на 390 скрыт, шаги под верхней полосой (B721)', async ({
     page,
   }, testInfo) => {

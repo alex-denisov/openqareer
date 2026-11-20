@@ -2,7 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 import { mockAdaptation, type AdaptationCalls } from './adaptationFixture';
-import { DUTIES, openStart } from './adaptationStartFixture';
+import { DUTIES, openStart, STEPS } from './adaptationStartFixture';
 import { expectGates } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -62,7 +62,7 @@ test.describe('B663: «Дневник» — адаптация', () => {
   test('d01g–d01i: форма старта, компания из откликов подставляет должность и обязанности', async ({
     page,
   }) => {
-    const created = await openStart(page);
+    const { created, plans } = await openStart(page);
     const screen = page.locator('[data-b640-node="d01"]');
     await expect(screen.locator('h2.lead-title')).toHaveText(
       'Чтобы собрать план, укажите, куда вы выходите',
@@ -85,6 +85,11 @@ test.describe('B663: «Дневник» — адаптация', () => {
       startDate: '2026-12-01',
       expectations: DUTIES.join('\n'),
     });
+    await expect.poll(() => plans.length).toBe(1);
+    const saved = plans[0] as { planning: { adaptationPlan: { tasks: { title: string }[] } } };
+    expect(saved.planning.adaptationPlan.tasks.map((task) => task.title)).toEqual(
+      STEPS.map((step) => step.title),
+    );
   });
 
   test('d01e: письмо копируется и отмечается отправленным; d04: итоги и тексты', async ({

@@ -171,6 +171,30 @@ export function createCareerDiaryAdaptationPlan(
   idFactory: () => string = () => crypto.randomUUID(),
 ): CareerDiaryAdaptationPlan {
   const templates = createDefaultExecutiveOnboarding(workplace.company, workplace.title).tasks;
+  const steps = templates.map((task) => ({
+    title: task.title,
+    description: task.description,
+    stage: stageForOnboardingTask(task.stage),
+    category: task.category,
+  }));
+  return createCareerDiaryAdaptationPlanFromSteps(workplace, steps, createdAt, idFactory);
+}
+
+/** Шаг будущего плана: из шаблона или из обязанностей «Что от вас ждут» (d01). */
+export interface CareerDiaryAdaptationStepDraft {
+  readonly title: string;
+  readonly description: string;
+  readonly stage: CareerDiaryAdaptationStage;
+  readonly category: OnboardingTask['category'];
+}
+
+/** План из готовых шагов; срок шага — конец его этапа. Происхождение шага кандидату не показывается. */
+export function createCareerDiaryAdaptationPlanFromSteps(
+  workplace: CareerDiaryWorkplace,
+  steps: readonly CareerDiaryAdaptationStepDraft[],
+  createdAt: string,
+  idFactory: () => string = () => crypto.randomUUID(),
+): CareerDiaryAdaptationPlan {
   return {
     id: idFactory(),
     workplaceId: workplace.id,
@@ -178,19 +202,16 @@ export function createCareerDiaryAdaptationPlan(
     createdAt,
     status: 'active',
     closedAt: null,
-    tasks: templates.map((task) => {
-      const stage = stageForOnboardingTask(task.stage);
-      return {
-        id: idFactory(),
-        title: task.title,
-        description: task.description,
-        stage,
-        category: task.category,
-        dueDate: stageDueDate(workplace.startDate, stage),
-        completed: false,
-        source: 'template',
-      };
-    }),
+    tasks: steps.map((step) => ({
+      id: idFactory(),
+      title: step.title,
+      description: step.description,
+      stage: step.stage,
+      category: step.category,
+      dueDate: stageDueDate(workplace.startDate, step.stage),
+      completed: false,
+      source: 'template',
+    })),
   };
 }
 

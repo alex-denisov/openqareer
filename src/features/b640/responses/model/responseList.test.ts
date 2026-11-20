@@ -130,6 +130,24 @@ describe('B656: что было', () => {
     expect(events[0].when).toBe('11 нояб.');
   });
 
+  it('B698: отправленные знакомому и рекрутёру сообщения — в «Что было» с именем', () => {
+    const events = timeline(
+      application({ stage: 'applied', appliedAt: '2026-11-04T10:00:00.000Z' }),
+      NOW,
+      [
+        { id: 'm1', kind: 'known_contact', recipientName: 'Роман Ефимов', sentAt: '2026-11-06T09:00:00.000Z' },
+        { id: 'm2', kind: 'ask_introduction', recipientName: 'Игорь Шаталов', sentAt: '2026-11-05T09:00:00.000Z' },
+        { id: 'm3', kind: 'recruiter', recipientName: 'Мария Ли', sentAt: '2026-11-07T09:00:00.000Z' },
+      ],
+    );
+    expect(events.map((event) => [event.title, event.note])).toEqual([
+      ['Написали рекрутёру', 'Мария Ли'],
+      ['Написали знакомому', 'Роман Ефимов'],
+      ['Попросили представить', 'Игорь Шаталов'],
+      ['Отправлен через hh.ru', null],
+    ]);
+  });
+
   it('у черновика событий отправки нет', () => {
     expect(timeline(application({ stage: 'saved', appliedAt: null }), NOW)).toEqual([]);
   });
