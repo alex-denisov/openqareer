@@ -112,14 +112,20 @@ export interface FormProps<T> {
   readonly onCancel: () => void;
 }
 
+/** B401: при включённой защите смена пароля подтверждается кодом из приложения. */
+function PasswordCodeField(props: { readonly value: string; readonly onChange: (value: string) => void; readonly error?: string }) {
+  return <Field label="Код из приложения-аутентификатора" autoComplete="one-time-code" {...props} />;
+}
+
 /** N4b: смена пароля. Новый пароль набирается дважды и сверяется до отправки. */
-export function PasswordForm({ onDone, onCancel }: FormProps<void>) {
+export function PasswordForm({ onDone, onCancel, needsCode = false }: FormProps<void> & { readonly needsCode?: boolean }) {
+  const [code, setCode] = useState('');
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [repeat, setRepeat] = useState('');
   const mismatch = repeat.length > 0 && repeat !== next;
   const { busy, failure, submit } = useSubmit(
-    () => changePassword({ currentPassword: current, newPassword: next }),
+    () => changePassword({ currentPassword: current, newPassword: next, ...(needsCode ? { twoFactorCode: code.trim() } : {}) }),
     () => onDone(),
     'Пароль не сохранился',
   );
@@ -127,7 +133,7 @@ export function PasswordForm({ onDone, onCancel }: FormProps<void>) {
     <FormShell
       submitLabel="Сохранить пароль"
       busy={busy}
-      canSubmit={Boolean(current && next && repeat) && !mismatch}
+      canSubmit={Boolean(current && next && repeat && (!needsCode || code.trim())) && !mismatch}
       error={failure && Object.keys(failure.fields).length === 0 ? failure.message : null}
       onSubmit={submit}
       onCancel={onCancel}
@@ -156,6 +162,7 @@ export function PasswordForm({ onDone, onCancel }: FormProps<void>) {
         onChange={setRepeat}
         error={mismatch ? 'Пароли не совпадают' : undefined}
       />
+      {needsCode ? <PasswordCodeField value={code} onChange={setCode} error={failure?.fields.twoFactorCode} /> : null}
     </FormShell>
   );
 }
