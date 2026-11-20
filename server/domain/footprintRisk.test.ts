@@ -434,6 +434,18 @@ describe('buildFootprintRiskSummary', () => {
       expect(summary.items.map((entry) => entry.category)).toEqual(['useful_evidence', 'useful_evidence']);
     });
 
+    it('«стоит убрать» не считает страницы, владелец которых не подтверждён (B645 p02)', () => {
+      const pages = Array.from({ length: 7 }, (_, index) =>
+        nick({ url: `https://site${index}.test/alexey_denisov` }),
+      );
+      expect(buildFootprintRiskSummary(audit(pages), []).headline).toBe('7 находок');
+      const mixed = buildFootprintRiskSummary(
+        audit([...pages.slice(0, 2), finding({ title: 'Телефон', category: 'personal_data' } as never)]),
+        [],
+      );
+      expect(mixed.toRemove).toBe(mixed.items.filter((item) => item.action?.kind !== 'confirm_owner' && item.level !== 'useful').length);
+    });
+
     it('«Это не моё» — находка уходит из сводки', () => {
       const summary = buildFootprintRiskSummary(audit([nick({ review: 'not_self' })]), []);
       expect(summary.items).toEqual([]);
