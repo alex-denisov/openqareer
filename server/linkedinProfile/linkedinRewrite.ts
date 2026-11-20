@@ -20,6 +20,8 @@ import {
 export const LINKEDIN_REWRITE_PROMPT_REVISION = 'linkedin-profile-rewrite-2026-11-20';
 /** Сколько ждёт чтение профиля; не успевший ответ дописывается в кэш для следующего открытия. */
 export const LINKEDIN_REWRITE_BUDGET_MS = 20_000;
+/** B645: экран a03 не ждёт модель дольше этого — разделы сразу, пересказ дочитывается следующим запросом. */
+export const LINKEDIN_VIEW_WAIT_MS = 2_000;
 
 const ABOUT_FACTS = 12;
 const PLACES = 6;
@@ -169,9 +171,12 @@ export function clearLinkedinRewriteCache(): void {
   failedAt.clear();
 }
 
-async function withinBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | null> {
+const LATE = Symbol('late');
+
+/** Ответ к сроку или `LATE`: сам вызов не отменяется и дописывает кэш в фоне. */
+async function withinBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | typeof LATE> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), budgetMs); });
+  const late = new Promise<typeof LATE>((resolve) => { timer = setTimeout(() => resolve(LATE), budgetMs); });
   return Promise.race([promise, late]).finally(() => clearTimeout(timer));
 }
 
@@ -185,6 +190,9 @@ function experienceOf(request: LinkedinRewriteRequest, checked: CheckedLinkedinR
   return { text, facts: items.flatMap((item) => item.facts), items };
 }
 
+/** `rewriting` — модель ещё пишет «О себе» и «Опыт»: ответ придёт в кэш, его отдаст следующее чтение. */
+export type RewrittenSuggestions = SectionSuggestions & { readonly rewriting: boolean };
+
 /** «О себе» и «Опыт» — только принятые тексты модели; заголовок и навыки остаются как были. */
 export async function rewrittenSuggestions(
   base: SectionSuggestions,
@@ -192,13 +200,15 @@ export async function rewrittenSuggestions(
   currentAbout: string | undefined,
   rewriter: LinkedinRewriter | undefined,
   budgetMs: number,
-): Promise<SectionSuggestions> {
+): Promise<RewrittenSuggestions> {
   const request = linkedinRewriteRequest(input, currentAbout);
   const call = rewriter?.linkedinProfile?.bind(rewriter);
-  const output = request && call ? await withinBudget(cachedRewrite({ linkedinProfile: call }, request), budgetMs) : null;
+  const answer = request && call ? await withinBudget(cachedRewrite({ linkedinProfile: call }, request), budgetMs) : null;
+  const output = answer === LATE ? null : answer;
   const checked = request && output ? checkLinkedinRewrite(request, output) : null;
   return {
     ...base,
+    rewriting: answer === LATE,
     about: checked?.about ? { text: checked.about.text, facts: [...checked.about.facts] } : null,
     experience: request && checked ? experienceOf(request, checked) : null,
   };

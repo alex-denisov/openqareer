@@ -7,7 +7,7 @@ import {
   type LinkedinProfileView,
 } from '../../shared/b640LinkedinProfile';
 import { LinkedinSectionRepository } from '../linkedinProfile/linkedinSectionRepository';
-import { LINKEDIN_REWRITE_BUDGET_MS, rewrittenSuggestions } from '../linkedinProfile/linkedinRewrite';
+import { LINKEDIN_REWRITE_BUDGET_MS, LINKEDIN_VIEW_WAIT_MS, rewrittenSuggestions } from '../linkedinProfile/linkedinRewrite';
 import { checkLinkedinVariant, linkedinVariantRequest } from '../linkedinProfile/linkedinVariant';
 import { profileCurrent } from '../linkedinProfile/profileCurrent';
 import { offerOf, profileSections, shownTexts, type OfferMarks } from '../linkedinProfile/profileView';
@@ -54,7 +54,13 @@ function knownKeys(deps: RouteDeps, candidateId: string): Set<string> {
   return new Set(['headline', 'about', 'skills', ...(draft?.experience ?? []).map((place) => `experience:${place.id}`)]);
 }
 
-async function loadProfile(deps: RouteDeps, repo: LinkedinSectionRepository, candidateId: string): Promise<Profile> {
+/** `waitMs`: экран ждёт модель коротко, «Предложить заново» — до полного бюджета (ему нужен первый вариант). */
+async function loadProfile(
+  deps: RouteDeps,
+  repo: LinkedinSectionRepository,
+  candidateId: string,
+  waitMs: number = LINKEDIN_REWRITE_BUDGET_MS,
+): Promise<Profile> {
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const draft = snapshot.resume?.draft;
   const input = { memory: snapshot.memory, draft };
@@ -63,17 +69,19 @@ async function loadProfile(deps: RouteDeps, repo: LinkedinSectionRepository, can
   const current = profileCurrent(draft, new Map(snapshot.memory.map((memory) => [memory.id, memory.statement])));
   // B645: «О себе» и «Опыт» — пересказ моделью; без её принятого ответа первого предложения по ним нет.
   const suggestions = await rewrittenSuggestions(
-    buildSectionSuggestions(input), input, current.lines.about ?? undefined, deps.experienceFactRewriter, LINKEDIN_REWRITE_BUDGET_MS,
+    buildSectionSuggestions(input), input, current.lines.about ?? undefined, deps.experienceFactRewriter, waitMs,
   );
   const marks: OfferMarks = { done: repo.getDone(candidateId), variants: repo.getVariants(candidateId) };
-  const view: LinkedinProfileView = { kind: 'ready', sections: profileSections(current, suggestions, marks) };
+  const view: LinkedinProfileView = {
+    kind: 'ready', sections: profileSections(current, suggestions, marks), rewriting: suggestions.rewriting,
+  };
   return { input, suggestions, currentAbout: current.lines.about ?? undefined, view };
 }
 
 function registerView(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
   app.get(BASE, READ_LIMIT, async (request, reply) => {
     const candidateId = candidateOf(deps, request, reply);
-    return candidateId ? ok(request, (await loadProfile(deps, repo, candidateId)).view) : reply;
+    return candidateId ? ok(request, (await loadProfile(deps, repo, candidateId, LINKEDIN_VIEW_WAIT_MS)).view) : reply;
   });
   app.post(`${BASE}/done`, WRITE_LIMIT, async (request, reply) => {
     const candidateId = candidateOf(deps, request, reply);

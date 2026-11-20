@@ -55,7 +55,12 @@ export interface LinkedinSectionView {
 
 export type LinkedinProfileView =
   | { readonly kind: 'no_import' }
-  | { readonly kind: 'ready'; readonly sections: readonly LinkedinSectionView[] };
+  | {
+      readonly kind: 'ready';
+      readonly sections: readonly LinkedinSectionView[];
+      /** Пересказ «О себе» и «Опыта» ещё пишется: клиент перечитывает экран, пока не станет false. */
+      readonly rewriting: boolean;
+    };
 
 /** `POST …/linkedin/profile/done`: отметить «Выполнено» сразу несколько предложений. */
 export interface LinkedinDoneResult {

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { LinkedinProfileView } from '../../../../../shared/b640LinkedinProfile';
 import { Icon, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -32,12 +33,41 @@ function NoImport() {
   );
 }
 
-function Body({ load }: { readonly load: ReturnType<typeof useLoad<LinkedinProfileView>> }) {
+type ProfileLoad = ReturnType<typeof useLoad<LinkedinProfileView>>;
+
+/** Пересказ «О себе» и «Опыта» пишется в фоне: перечитываем экран, пока сервер не скажет, что готово. */
+const REWRITE_POLL_MS = 4_000;
+const REWRITE_POLLS_MAX = 15;
+
+function useRewriteRefresh(load: ProfileLoad): void {
+  const polls = useRef(0);
+  const rewriting = load.state === 'ready' && load.data.kind === 'ready' && load.data.rewriting;
+  const { retry } = load;
+  // Каждый новый ответ сервера — повод решить заново, ждать ли ещё.
+  const data = load.state === 'ready' ? load.data : null;
+  useEffect(() => {
+    if (!rewriting || polls.current >= REWRITE_POLLS_MAX) return undefined;
+    const timer = setTimeout(() => {
+      polls.current += 1;
+      retry();
+    }, REWRITE_POLL_MS);
+    return () => clearTimeout(timer);
+  }, [rewriting, retry, data]);
+}
+
+function Body({ load }: { readonly load: ProfileLoad }) {
   if (load.state === 'loading') return <StatusLine state="wait" text="Загружаем LinkedIn…" />;
   if (load.state === 'error')
     return <PlatformRetry text="Не удалось загрузить LinkedIn" onRetry={load.retry} />;
   if (load.data.kind === 'no_import') return <NoImport />;
-  return <ProfileSections initial={load.data.sections} />;
+  const { rewriting, sections } = load.data;
+  return (
+    <>
+      {rewriting ? <StatusLine state="wait" text="Готовим тексты для «О себе» и «Опыта»…" /> : null}
+      {/* Готовый пересказ приходит новым чтением: разделы собираются заново с ним. */}
+      <ProfileSections key={rewriting ? 'rewriting' : 'ready'} initial={sections} />
+    </>
+  );
 }
 
 function Next() {
@@ -59,6 +89,7 @@ function Next() {
 /** Узел a03 и его состояние a03n: семь разделов из импорта LinkedIn или «Импортировать из LinkedIn». */
 export function ProfileScreen({ node }: SectionProps) {
   const load = useLoad(getLinkedinProfile);
+  useRewriteRefresh(load);
   const connected = load.state === 'ready' && load.data.kind === 'ready';
   // Признак макета a03: плотные строки на 390; у a03n его нет.
   useScreenChrome({ rootData: connected ? { mtight: '1' } : {} });
