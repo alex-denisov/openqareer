@@ -259,10 +259,12 @@ function categoryOf(
   };
 }
 
-function headlineOf(total: number, toRemove: number): string {
+/** «Стоит убрать» — только находки с действием удаления; страницы «Проверить» ждут кандидата (B645 p02). */
+function headlineOf(total: number, toRemove: number, unconfirmed: number): string {
   if (total === 0) return 'Ничего рискового';
   const found = pluralRu(total, ['находка', 'находки', 'находок']);
-  return toRemove > 0 ? `${found}, ${toRemove} стоит убрать` : `${found}, ничего рискового`;
+  if (toRemove > 0) return `${found}, ${toRemove} стоит убрать`;
+  return unconfirmed > 0 ? found : `${found}, ничего рискового`;
 }
 
 const STATE: Record<CandidateFootprintAudit['state'], FootprintRiskState> = {
@@ -286,7 +288,9 @@ export function buildFootprintRiskSummary(
     ...findings.map(findingItem),
     ...(audit ? discrepancies.map((discrepancy) => mismatchItem(discrepancy, findings)) : []),
   ].sort((a, b) => (LEVEL_RANK.get(a.level) ?? 0) - (LEVEL_RANK.get(b.level) ?? 0));
-  const toRemove = items.filter((item) => item.level !== 'useful' && !item.resolved).length;
+  const open = items.filter((item) => item.level !== 'useful' && !item.resolved);
+  const unconfirmed = open.filter((item) => item.action?.kind === CONFIRM.kind).length;
+  const toRemove = open.length - unconfirmed;
   // «Идёт проверка» верим, только если она и правда идёт: оборванную показываем сорванной.
   const stalled = audit?.state === 'pending' && options.checkRunning === false;
   const state = !audit ? 'not_checked' : stalled ? 'failed' : STATE[audit.state];
@@ -295,7 +299,7 @@ export function buildFootprintRiskSummary(
     checkedAt: audit?.completedAt ?? null,
     total: items.length,
     toRemove,
-    headline: state === 'ready' ? headlineOf(items.length, toRemove) : null,
+    headline: state === 'ready' ? headlineOf(items.length, toRemove, unconfirmed) : null,
     categories: FOOTPRINT_RISK_CATEGORIES.map((id) => categoryOf(id, items)),
     items,
   };
