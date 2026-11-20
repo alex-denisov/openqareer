@@ -19,6 +19,11 @@ import { VertexJsonClient } from './vertexJson';
  */
 export const KPI_ANSWER_TOKENS = 6_000;
 const KPI_STAGE_TIMEOUT_MS = 60_000;
+/**
+ * Vertex получает схему отдельным полем, chat-completions — только `json_object`: без схемы
+ * в тексте модели угадывали форму ответа и все ответы были `invalid_answer` (прод 20.11).
+ */
+const CHAT_SCHEMA_LINE = `Ответ — один JSON-объект по схеме: ${JSON.stringify(KPI_MODEL_JSON_SCHEMA)}`;
 
 export interface KpiExtractInput {
   readonly text: string;
@@ -79,7 +84,7 @@ function stageOf(
       const answer = await requestChatJson(
         route,
         {
-          system,
+          system: `${system}\n${CHAT_SCHEMA_LINE}`,
           user: userMessage(input),
           maxTokens: KPI_ANSWER_TOKENS,
           timeoutMs: KPI_STAGE_TIMEOUT_MS,
