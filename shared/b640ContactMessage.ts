@@ -38,3 +38,11 @@ export interface B640ContactMessageSent extends B640ContactMessage {
   readonly state: 'sent';
   readonly sentAt: string;
 }
+
+/** `GET .../sent?vacancyId=`: `data.items` — отправленные по вакансии для «Что было» в отклике; без текста. */
+export interface B640SentContactMessage {
+  readonly id: string;
+  readonly kind: B640ContactMessageKind;
+  readonly recipientName: string;
+  readonly sentAt: string;
+}

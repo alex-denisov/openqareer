@@ -8,6 +8,7 @@ import {
   careerDiaryAdaptationPhase,
   careerDiaryQuarter,
   createCareerDiaryAdaptationPlan,
+  createCareerDiaryAdaptationPlanFromSteps,
   summarizeCareerDiaryQuarter,
   setCareerDiaryAdaptationTaskCompleted,
 } from './careerDiaryPlanning';
@@ -147,6 +148,24 @@ describe('career diary adaptation plan', () => {
     expect(new Set(plan.tasks.map((task) => task.id)).size).toBe(plan.tasks.length);
     expect(adaptationPlanProgress(plan)).toEqual({ completed: 0, total: plan.tasks.length });
     expect(adaptationPlanProgress(plan, 'prep').total).toBeGreaterThan(0);
+  });
+
+  it('d01: builds a plan from ready steps with the stage end as the due date, marked like the template', () => {
+    let id = 0;
+    const plan = createCareerDiaryAdaptationPlanFromSteps(
+      workplace,
+      [
+        { title: 'Познакомиться с командой', description: 'Встречи.', stage: 'days_1_30', category: 'people' },
+        { title: 'Запустить релиз', description: 'Цикл.', stage: 'days_61_90', category: 'delivery' },
+      ],
+      '2026-12-06T12:00:00.000Z',
+      () => `s-${++id}`,
+    );
+    expect(plan.id).toBe('s-1');
+    expect(plan.tasks.map((task) => [task.id, task.title, task.dueDate, task.source, task.completed])).toEqual([
+      ['s-2', 'Познакомиться с командой', '2026-12-06', 'template', false],
+      ['s-3', 'Запустить релиз', '2027-02-04', 'template', false],
+    ]);
   });
 
   it('adds candidate tasks, records completion, and closes the plan', () => {
