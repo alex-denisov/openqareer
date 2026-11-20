@@ -7,6 +7,7 @@ import { onPlatform, platformOf } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
 import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
+import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
 import {
   marksFor,
@@ -43,7 +44,8 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
 const INTERVIEW_SCREENS_READY = false;
 
 function History({ application }: { readonly application: ApplicationView }) {
-  const events = timeline(application);
+  const messages = useSentMessages(application.clusterId);
+  const events = timeline(application, new Date(), messages);
   if (events.length === 0) return null;
   const rest = events.slice(1);
   return (

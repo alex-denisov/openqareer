@@ -98,6 +98,18 @@ export class SqliteContactMessageRepository {
     return rows.map(toMessage);
   }
 
+  /** Отправленные по вакансии, свежие сверху: «Что было» в отклике. */
+  listSentForVacancy(candidateId: string, vacancyId: string, limit: number): StoredContactMessage[] {
+    const rows = this.database
+      .prepare(
+        `SELECT * FROM candidate_contact_messages
+         WHERE candidate_id = ? AND vacancy_id = ? AND state = 'sent' AND sent_at IS NOT NULL
+         ORDER BY sent_at DESC, rowid DESC LIMIT ?`,
+      )
+      .all(candidateId, vacancyId, limit) as unknown as Row[];
+    return rows.map(toMessage);
+  }
+
   /** Правка до отправки; одобрение сбрасывается, потому что текст изменился. */
   updateText(candidateId: string, id: string, text: string): boolean {
     return this.database
