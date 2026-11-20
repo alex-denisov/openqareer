@@ -19,6 +19,10 @@ export function ensureSessionDeviceHashSchema(database: DatabaseSync): void {
   if (!columns.some((column) => column.name === 'device_id_hash')) {
     database.exec('ALTER TABLE sessions ADD COLUMN device_id_hash TEXT;');
   }
+  // B401: сессия, открытая администратором «войти как кандидат», — id администратора.
+  if (!columns.some((column) => column.name === 'impersonated_by')) {
+    database.exec('ALTER TABLE sessions ADD COLUMN impersonated_by TEXT;');
+  }
   database.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS sessions_user_device
      ON sessions(user_id, device_id_hash)
@@ -34,6 +38,7 @@ export function storeAuthSession(
     expiresAt: Date;
     now: Date;
     clientDeviceId?: string;
+    impersonatedBy?: string;
   },
   log?: SessionDeletionLog,
 ): void {
@@ -53,8 +58,8 @@ export function storeAuthSession(
     database
       .prepare(
         `INSERT INTO sessions
-          (token_hash, user_id, expires_at, created_at, last_seen_at, device_id_hash)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (token_hash, user_id, expires_at, created_at, last_seen_at, device_id_hash, impersonated_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.tokenHash,
@@ -63,6 +68,7 @@ export function storeAuthSession(
         input.now.toISOString(),
         input.now.toISOString(),
         deviceIdHash,
+        input.impersonatedBy ?? null,
       );
     database.exec('COMMIT');
   } catch (error) {
