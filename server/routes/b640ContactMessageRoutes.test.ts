@@ -57,7 +57,7 @@ async function setup(modelBody: string | undefined = 'Анна, привет! Д
 describe('B698: без флага', () => {
   it('все маршруты отвечают 404, прежний маршрут контактов работает', async () => {
     const { send, seed } = await setup();
-    for (const [method, url] of [['POST', BASE], ['GET', `${BASE}?contactId=a`], ['PUT', `${BASE}/x`], ['POST', `${BASE}/x/approve`], ['POST', `${BASE}/x/sent`]] as const) {
+    for (const [method, url] of [['POST', BASE], ['GET', `${BASE}?contactId=a`], ['GET', `${BASE}/sent?vacancyId=c1`], ['PUT', `${BASE}/x`], ['POST', `${BASE}/x/approve`], ['POST', `${BASE}/x/sent`]] as const) {
       expect((await send(method, url, 'plain.test', { contactId: 'a', kind: 'known_contact', text: 'x' })).statusCode).toBe(404);
       expect((await send(method, url, undefined, {})).statusCode).toBe(404);
     }
@@ -166,5 +166,25 @@ describe('B698: правка, одобрение, отправка', () => {
     expect(list.data.items[0].kind).toBe('ask_introduction');
     expect((await send('GET', `${BASE}?contactId=anna`, 'other.test')).json().data.items).toEqual([]);
     expect((await send('GET', BASE, 'flagged.test')).statusCode).toBe(400);
+  });
+});
+
+describe('B698: отправленные по вакансии — для «Что было» в отклике', () => {
+  it('GET /sent?vacancyId= отдаёт только отправленные этой вакансии и только своему кандидату, без текста', async () => {
+    const { send, draft, seed } = await setup();
+    const sentId = (await draft({ contactId: 'anna', vacancyId: 'c1', kind: 'known_contact' })).json().data.id as string;
+    await send('POST', `${BASE}/${sentId}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${sentId}/sent`, 'flagged.test');
+    await seed('ivan', { fullName: 'Иван Петров', companyName: 'Гамма' });
+    await send('POST', BASE, 'flagged.test', { contactId: 'ivan', vacancyId: 'c1', kind: 'ask_introduction' });
+    const list = await send('GET', `${BASE}/sent?vacancyId=c1`, 'flagged.test');
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data.items).toEqual([
+      { id: sentId, kind: 'known_contact', recipientName: 'Анна Ким', sentAt: expect.any(String) },
+    ]);
+    expect((await send('GET', `${BASE}/sent?vacancyId=c2`, 'flagged.test')).json().data.items).toEqual([]);
+    expect((await send('GET', `${BASE}/sent?vacancyId=c1`, 'other.test')).json().data.items).toEqual([]);
+    expect((await send('GET', `${BASE}/sent`, 'flagged.test')).statusCode).toBe(400);
+    expect((await send('GET', `${BASE}/sent?vacancyId=a%20b`, 'flagged.test')).statusCode).toBe(400);
   });
 });
