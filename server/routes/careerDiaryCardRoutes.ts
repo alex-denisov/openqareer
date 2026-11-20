@@ -24,6 +24,7 @@ import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsReposito
 import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
 import { careerDiaryPlanningSchema } from '../domain/careerDiaryAdaptation';
 import { buildAdaptationView } from '../domain/careerDiaryAdaptationView';
+import { cardRisk } from '../domain/careerDiaryCardRisk';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
 import type { RouteDeps } from './deps';
@@ -43,10 +44,13 @@ type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) =
 
 const BASE = '/api/v1/candidate/career-diary';
 const idSchema = z.string().uuid();
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).refine((value) => {
-  const time = Date.parse(`${value}T00:00:00.000Z`);
-  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
-});
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u)
+  .refine((value) => {
+    const time = Date.parse(`${value}T00:00:00.000Z`);
+    return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
+  });
 const note = z.string().trim().max(DIARY_NOTE_MAX);
 const weightSchema = z.number().min(0).max(100);
 const valueSchema = z.union([z.number().finite(), z.boolean(), z.string().trim().min(1).max(500)]);
@@ -73,7 +77,11 @@ const cardSchema = z
   .strict()
   .refine((card) => card.dueDate >= card.startDate);
 const detailsPatchSchema = z
-  .object({ setBy: z.enum(GOAL_SETTERS), agreedOn: dateSchema.nullable(), weight: weightSchema.nullable() })
+  .object({
+    setBy: z.enum(GOAL_SETTERS),
+    agreedOn: dateSchema.nullable(),
+    weight: weightSchema.nullable(),
+  })
   .partial()
   .strict()
   .refine((patch) => Object.keys(patch).length > 0);
@@ -94,7 +102,10 @@ const adaptationPatchSchema = z
         .strict()
         .nullable(),
     ),
-    stages: z.object(Object.fromEntries(ADAPTATION_STAGES.map((stage) => [stage, stageGoalSchema]))).partial().strict(),
+    stages: z
+      .object(Object.fromEntries(ADAPTATION_STAGES.map((stage) => [stage, stageGoalSchema])))
+      .partial()
+      .strict(),
     probation: z.object({ endsOn: dateSchema.nullable(), reviewer: note.nullable() }).strict(),
     firstMeeting: z
       .object({
@@ -116,11 +127,26 @@ const adaptationPatchSchema = z
   .refine((patch) => Object.keys(patch).length > 0);
 
 function invalid(reply: FastifyReply, request: FastifyRequest, fields?: Record<string, string>) {
-  return sendError(reply, request, 400, 'invalid_career_diary_input', 'Проверьте данные карьерного дневника.', false, fields);
+  return sendError(
+    reply,
+    request,
+    400,
+    'invalid_career_diary_input',
+    'Проверьте данные карьерного дневника.',
+    false,
+    fields,
+  );
 }
 
 function missing(reply: FastifyReply, request: FastifyRequest) {
-  return sendError(reply, request, 404, 'career_diary_record_not_found', 'Запись дневника не найдена.', false);
+  return sendError(
+    reply,
+    request,
+    404,
+    'career_diary_record_not_found',
+    'Запись дневника не найдена.',
+    false,
+  );
 }
 
 function candidateId(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): string | null {
@@ -142,9 +168,18 @@ function routeId(request: FastifyRequest, reply: FastifyReply, name: string): st
 
 const today = (): string => new Date().toISOString().slice(0, 10);
 
-function summarize(deps: BoundDeps, candidate: string, goal: CareerDiaryGoal): CareerDiaryGoalSummary {
-  const latestMeasurement = deps.candidateStore.careerDiaryRepo.listMeasurements(candidate, goal.id)[0] ?? null;
-  return { ...goal, latestMeasurement, risk: evaluateCareerGoalRisk(goal, latestMeasurement, today()) };
+function summarize(
+  deps: BoundDeps,
+  candidate: string,
+  goal: CareerDiaryGoal,
+): CareerDiaryGoalSummary {
+  const latestMeasurement =
+    deps.candidateStore.careerDiaryRepo.listMeasurements(candidate, goal.id)[0] ?? null;
+  return {
+    ...goal,
+    latestMeasurement,
+    risk: evaluateCareerGoalRisk(goal, latestMeasurement, today()),
+  };
 }
 
 /** Цели верхнего уровня с показателями внутри; цель без родителя в списке — тоже верхняя. */
@@ -156,13 +191,21 @@ function goalCards(deps: BoundDeps, candidate: string): CareerDiaryGoalCard[] {
   const details = deps.details().goalDetails(candidate);
   return goals
     .filter((goal) => goal.parentGoalId === null || !ids.has(goal.parentGoalId))
-    .map((goal) => ({
-      ...summarize(deps, candidate, goal),
-      details: details.get(goal.id) ?? DEFAULT_GOAL_DETAILS,
-      indicators: goals
+    .map((goal) => {
+      const own = summarize(deps, candidate, goal);
+      const indicators = goals
         .filter((child) => child.parentGoalId === goal.id)
-        .map((child) => summarize(deps, candidate, child)),
-    }));
+        .map((child) => summarize(deps, candidate, child));
+      return {
+        ...own,
+        risk: cardRisk(
+          own.risk,
+          indicators.map((indicator) => indicator.risk),
+        ),
+        details: details.get(goal.id) ?? DEFAULT_GOAL_DETAILS,
+        indicators,
+      };
+    });
 }
 
 function cardOf(deps: BoundDeps, candidate: string, goalId: string): CareerDiaryGoalCard | null {
@@ -185,7 +228,12 @@ const listCards: Handler = async (deps, request, reply) => {
  * («Срок релиза, дней» у цели «Выпускать релиз за неделю»). Сама цель несёт значения первого
  * показателя, чтобы читаться прежними экранами, которые уже знают цели с разбиением.
  */
-function createCard(deps: BoundDeps, candidate: string, input: CareerDiaryGoalCardInput, key: string): string {
+function createCard(
+  deps: BoundDeps,
+  candidate: string,
+  input: CareerDiaryGoalCardInput,
+  key: string,
+): string {
   const repo = deps.candidateStore.careerDiaryRepo;
   const shared = {
     type: input.type ?? ('operational' as const),
@@ -193,7 +241,10 @@ function createCard(deps: BoundDeps, candidate: string, input: CareerDiaryGoalCa
     startDate: input.startDate,
     dueDate: input.dueDate,
   };
-  const inputs: CareerDiaryGoalInput[] = input.indicators.map((indicator) => ({ ...shared, ...indicator }));
+  const inputs: CareerDiaryGoalInput[] = input.indicators.map((indicator) => ({
+    ...shared,
+    ...indicator,
+  }));
   const now = new Date().toISOString();
   const goal = repo.createGoal(candidate, { ...inputs[0], title: input.title }, now, key);
   repo.splitGoal(candidate, goal.id, inputs, now);
@@ -214,7 +265,14 @@ const postCard: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const key = idSchema.safeParse(request.headers['idempotency-key']);
   if (!key.success) {
-    return sendError(reply, request, 400, 'idempotency_key_required', 'Для создания записи передайте Idempotency-Key в формате UUID.', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'idempotency_key_required',
+      'Для создания записи передайте Idempotency-Key в формате UUID.',
+      false,
+    );
   }
   const parsed = cardSchema.safeParse(request.body);
   if (!parsed.success) return invalid(reply, request);
@@ -226,7 +284,14 @@ const postCard: Handler = async (deps, request, reply) => {
       .send({ data: cardOf(deps, candidate, goalId), meta: { requestId: request.id } });
   } catch (error) {
     if (!(error instanceof CareerDiaryIdempotencyConflictError)) throw error;
-    return sendError(reply, request, 409, 'idempotency_key_reused', 'Ключ идемпотентности уже использован с другими данными.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'idempotency_key_reused',
+      'Ключ идемпотентности уже использован с другими данными.',
+      false,
+    );
   }
 };
 
@@ -250,7 +315,10 @@ const patchCard: Handler = async (deps, request, reply) => {
   if (!goalId) return undefined;
   const parsed = detailsPatchSchema.safeParse(request.body);
   if (!parsed.success) return invalid(reply, request);
-  const card = changeDetails(deps, candidate, goalId, (details) => ({ ...details, ...parsed.data }));
+  const card = changeDetails(deps, candidate, goalId, (details) => ({
+    ...details,
+    ...parsed.data,
+  }));
   return card ? { data: card, meta: { requestId: request.id } } : missing(reply, request);
 };
 
@@ -277,7 +345,9 @@ const restoreCard: Handler = async (deps, request, reply) => {
 
 /** Задачи прежнего плана места работы; `null` — плана нет или он не разобран. */
 function planTasks(workplace: object) {
-  const planning = careerDiaryPlanningSchema.safeParse((workplace as { planning?: unknown }).planning);
+  const planning = careerDiaryPlanningSchema.safeParse(
+    (workplace as { planning?: unknown }).planning,
+  );
   return planning.success ? (planning.data.adaptationPlan?.tasks ?? null) : null;
 }
 
@@ -302,7 +372,11 @@ const getAdaptation: Handler = async (deps, request, reply) => {
 };
 
 /** Цели из правки, которых у кандидата нет. */
-function unknownGoals(deps: BoundDeps, candidate: string, patch: z.infer<typeof adaptationPatchSchema>): boolean {
+function unknownGoals(
+  deps: BoundDeps,
+  candidate: string,
+  patch: z.infer<typeof adaptationPatchSchema>,
+): boolean {
   const referenced = [
     ...Object.values(patch.tasks ?? {}).map((task) => task?.goalId ?? null),
     ...Object.values(patch.stages ?? {}).map((stage) => stage?.goalId ?? null),
@@ -349,7 +423,8 @@ const patchAdaptation: Handler = async (deps, request, reply) => {
   if (Object.keys(patch.tasks ?? {}).some((id) => !known.has(id))) {
     return invalid(reply, request, { tasks: 'Такой задачи в плане нет.' });
   }
-  if (unknownGoals(deps, candidate, patch)) return invalid(reply, request, { goalId: 'Такой цели нет.' });
+  if (unknownGoals(deps, candidate, patch))
+    return invalid(reply, request, { goalId: 'Такой цели нет.' });
   const current = deps.details().adaptationDetails(candidate, workplaceId);
   const next: CareerDiaryAdaptationDetails = {
     ...current,
@@ -361,7 +436,10 @@ const patchAdaptation: Handler = async (deps, request, reply) => {
   return { data: adaptationView(deps, candidate, workplaceId), meta: { requestId: request.id } };
 };
 
-export function registerCareerDiaryCardRoutes(app: FastifyInstance, deps: CareerDiaryCardRouteDeps): void {
+export function registerCareerDiaryCardRoutes(
+  app: FastifyInstance,
+  deps: CareerDiaryCardRouteDeps,
+): void {
   // Хранилище открывается при первом запросе под флагом: без флага база не трогается.
   let repository = deps.diaryDetailsRepository ?? null;
   const details = () => {
@@ -386,7 +464,11 @@ export function registerCareerDiaryCardRoutes(app: FastifyInstance, deps: Career
 }
 
 /** B686: загрузка KPI создаёт цели тем же путём, что и форма цели. */
-function registerKpiRoutes(app: FastifyInstance, deps: CareerDiaryCardRouteDeps, bound: BoundDeps): void {
+function registerKpiRoutes(
+  app: FastifyInstance,
+  deps: CareerDiaryCardRouteDeps,
+  bound: BoundDeps,
+): void {
   let imports = deps.kpiImportRepository ?? null;
   const kpiImports = () => {
     imports ??= new SqliteKpiImportRepository({

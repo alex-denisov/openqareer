@@ -26,6 +26,8 @@ import type {
 
 export const STATUS_HISTORY_SECTION = 'status';
 const STATUS_HISTORY_LABEL = 'Статус';
+/** B665: «История изменений» — журнал: возврат — свой шаг, прежняя смена остаётся как была. */
+const STATUS_REVERT_LABEL = 'Возврат прежнего статуса';
 
 export interface CandidateStatusDeps {
   readonly repository: SqliteCandidateStatusRepository;
@@ -186,7 +188,21 @@ export function revertCandidateStatus(
   if (latest.applied.autoApplyPause) {
     deps.automationPause.restore(candidateId, latest.applied.autoApplyPause);
   }
-  deps.changeLog.markReverted(candidateId, latest.id, revertedAt);
+  deps.changeLog.record({
+    id: randomUUID(),
+    candidateId,
+    actor: 'candidate',
+    section: STATUS_HISTORY_SECTION,
+    itemId: null,
+    label: STATUS_REVERT_LABEL,
+    previous: titleOf(choiceOf(latest)),
+    applied: titleOf({
+      status: latest.previousStatus,
+      targetProfession: latest.previousTargetProfession,
+    }),
+    commandId: null,
+    createdAt: revertedAt,
+  });
   return readCandidateStatus(deps, candidateId, now);
 }
 
