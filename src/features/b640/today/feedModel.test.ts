@@ -43,6 +43,13 @@ describe('B671 лента уведомлений', () => {
     ).toBe('Руководитель платформы · 9 ноября');
   });
 
+  it('время события совпадает с временем записи — дата не повторяется (B671)', () => {
+    const at = '2026-11-09T07:05:00.000Z';
+    expect(feedSubtitle(item({ role: 'COO и ещё 10', eventAt: at, createdAt: at }), NOW, TZ)).toBe(
+      'COO и ещё 10 · 9 ноября, 10:05',
+    );
+  });
+
   it('действие ведёт к отклику, подключениям или подборке', () => {
     expect(feedAction(item({}))).toEqual({ label: 'Ответить', path: '/app/responses/app-7' });
     expect(feedAction(item({ kind: 'offer' }))).toEqual({
