@@ -17,7 +17,7 @@ import {
   type SuggestionMemory,
 } from './sectionSuggestions';
 
-export const LINKEDIN_REWRITE_PROMPT_REVISION = 'linkedin-profile-rewrite-2026-11-19';
+export const LINKEDIN_REWRITE_PROMPT_REVISION = 'linkedin-profile-rewrite-2026-11-20';
 /** Сколько ждёт чтение профиля; не успевший ответ дописывается в кэш для следующего открытия. */
 export const LINKEDIN_REWRITE_BUDGET_MS = 20_000;
 
@@ -82,6 +82,9 @@ export function linkedinRewriteRequest(input: SuggestionInput, currentAbout: str
   return { language, targetRole: input.draft?.targetRole?.trim() ?? '', aboutFacts, places };
 }
 
+/** B692: ссылка, почта или markdown-ссылка в тексте профиля — признак внедрённой инструкции, а не пересказа фактов. */
+const LINK_LIKE = /https?:\/\/|www\.|\S@\S|\]\(/iu;
+
 const flat = (text: string) => text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const sentences = (text: string) => text.split(/[.!?…]+(?=\s|$)/u).filter((part) => part.trim()).length;
 
@@ -106,7 +109,7 @@ export function checkedText(answer: z.infer<typeof answerText>, rule: CheckRule,
   const byId = new Map(rule.allowed.map((item) => [item.id, item]));
   const facts = [...new Set(answer.factIds)].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
   const valid =
-    text.length > 0 && text.length <= rule.max && facts.length > 0 && facts.length === new Set(answer.factIds).size
+    text.length > 0 && text.length <= rule.max && !LINK_LIKE.test(text) && facts.length > 0 && facts.length === new Set(answer.factIds).size
     && (rule.maxSentences === undefined || sentences(text) <= rule.maxSentences)
     && !(rule.noFirstPerson && FIRST_PERSON.test(text))
     && (textLanguage(text) ?? language) === language
@@ -136,15 +139,26 @@ export function checkLinkedinRewrite(request: LinkedinRewriteRequest, output: Li
 }
 
 const CACHE_LIMIT = 200;
+/** B692: после сбоя модели минуту отвечаем без неё — открытия экрана не жгут вызовы. */
+const FAILURE_PAUSE_MS = 60_000;
 const cache = new Map<string, Promise<LinkedinRewriteOutput | null>>();
+const failedAt = new Map<string, number>();
 
 function cachedRewrite(rewriter: Required<LinkedinRewriter>, request: LinkedinRewriteRequest): Promise<LinkedinRewriteOutput | null> {
   const key = `${LINKEDIN_REWRITE_PROMPT_REVISION}:${JSON.stringify(request)}`;
   const known = cache.get(key);
   if (known) return known;
+  const failed = failedAt.get(key);
+  if (failed !== undefined && Date.now() - failed < FAILURE_PAUSE_MS) return Promise.resolve(null);
+  failedAt.delete(key);
   const pending = rewriter.linkedinProfile(request).catch(() => null);
-  // Неудача не кэшируется: следующее открытие попробует снова.
-  void pending.then((output) => { if (!output) cache.delete(key); });
+  // Неудача не кэшируется как ответ: после паузы следующее открытие попробует снова.
+  void pending.then((output) => {
+    if (output) return;
+    cache.delete(key);
+    if (failedAt.size >= CACHE_LIMIT) failedAt.delete(failedAt.keys().next().value!);
+    failedAt.set(key, Date.now());
+  });
   if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value!);
   cache.set(key, pending);
   return pending;
@@ -152,6 +166,7 @@ function cachedRewrite(rewriter: Required<LinkedinRewriter>, request: LinkedinRe
 
 export function clearLinkedinRewriteCache(): void {
   cache.clear();
+  failedAt.clear();
 }
 
 async function withinBudget<T>(promise: Promise<T>, budgetMs: number): Promise<T | null> {

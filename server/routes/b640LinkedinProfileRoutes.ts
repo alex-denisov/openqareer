@@ -19,6 +19,11 @@ import { sendError } from './helpers';
 const BASE = '/api/v1/candidate/b640/linkedin/profile';
 const READ_LIMIT = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
 const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
+/** B692: каждый запрос варианта — вызов модели; строже общего лимита записи. */
+const VARIANT_LIMIT = { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } };
+/** B692: неудачных вызовов модели на кандидата за час — успешные и так ограничены тремя вариантами. */
+const VARIANT_FAILURES_MAX = 5;
+const HOUR_MS = 60 * 60 * 1000;
 /** Сохранённых вариантов «Предложить заново» — всего три с первым (без квоты тарифа, решение 12.11/19.11). */
 const STORED_VARIANTS_MAX = LINKEDIN_VARIANTS_MAX - 1;
 
@@ -106,13 +111,32 @@ async function newVariant(
 /** Один вариант за раз на ключ кандидата: иначе два запроса обходят потолок вариантов. */
 const inFlight = new Set<string>();
 
+/** Неудачные вызовы модели по кандидатам за последний час (в памяти процесса). */
+function failureLog() {
+  const failures = new Map<string, readonly number[]>();
+  const recent = (candidateId: string, now: number) =>
+    (failures.get(candidateId) ?? []).filter((at) => now - at < HOUR_MS);
+  return {
+    exhausted: (candidateId: string) => recent(candidateId, Date.now()).length >= VARIANT_FAILURES_MAX,
+    add: (candidateId: string) => {
+      const now = Date.now();
+      failures.set(candidateId, [...recent(candidateId, now), now]);
+    },
+  };
+}
+
 function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
-  app.post(`${BASE}/offers/:key/variant`, WRITE_LIMIT, async (request, reply) => {
+  const failures = failureLog();
+  app.post(`${BASE}/offers/:key/variant`, VARIANT_LIMIT, async (request, reply) => {
     const candidateId = candidateOf(deps, request, reply);
     if (!candidateId) return reply;
     const params = keySchema.safeParse(request.params);
     if (!params.success) return sendError(reply, request, 400, 'invalid_offer', 'Нет такого предложения.', false);
     const { key } = params.data;
+    if (!knownKeys(deps, candidateId).has(key)) return sendError(reply, request, 404, 'offer_not_found', 'Нет такого предложения.', false);
+    if (failures.exhausted(candidateId)) {
+      return sendError(reply, request, 429, 'variant_attempts_exhausted', 'Не получилось предложить другой вариант. Попробуйте позже.', true);
+    }
     const lock = `${candidateId}:${key}`;
     if (inFlight.has(lock)) {
       return sendError(reply, request, 409, 'variant_in_progress', 'Другой вариант уже готовится.', true);
@@ -125,6 +149,7 @@ function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSe
       if ('offer' in result) return ok(request, result.offer);
       if (result.error === 'missing') return sendError(reply, request, 404, 'offer_not_found', 'Нет такого предложения.', false);
       if (result.error === 'limit') return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);
+      failures.add(candidateId);
       return sendError(reply, request, 503, 'variant_unavailable', 'Не получилось предложить другой вариант. Попробуйте ещё раз.', true);
     } finally {
       inFlight.delete(lock);

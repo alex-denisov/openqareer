@@ -129,6 +129,19 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     expect((await post(`${BASE}/offers/experience:nope/variant`, {}, 'flagged.test')).statusCode).toBe(404);
   });
 
+  it('B692: неизвестное место работы — 404 без вызова модели; после 5 сбоев за час — 429 без вызова модели', async () => {
+    const linkedinVariant = vi.fn(async () => ({ text: 'Rust · SQL', factIds: [] }));
+    const { post } = await setup({ rewrite: async () => null, linkedinVariant });
+    expect((await post(`${BASE}/offers/experience:nope/variant`, {}, 'flagged.test')).statusCode).toBe(404);
+    expect(linkedinVariant).not.toHaveBeenCalled();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      expect((await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test')).statusCode).toBe(503);
+    }
+    const blocked = await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test');
+    expect([blocked.statusCode, blocked.json().error.code]).toEqual([429, 'variant_attempts_exhausted']);
+    expect(linkedinVariant).toHaveBeenCalledTimes(5);
+  });
+
   it('два запроса варианта сразу — второй 409, вариант один', async () => {
     let finish: (value: { text: string; factIds: string[] }) => void = () => undefined;
     const linkedinVariant = vi.fn(() => new Promise<{ text: string; factIds: string[] }>((resolve) => { finish = resolve; }));
