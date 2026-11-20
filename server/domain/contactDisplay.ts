@@ -27,3 +27,18 @@ export function shortRoleTitle(value: string): string {
   const atWord = cut.slice(0, Math.max(cut.lastIndexOf(' '), 1));
   return `${atWord.trimEnd()}…`;
 }
+
+/** B645 a02: признаки обрывка заголовка LinkedIn вместо названия компании. */
+const COMPANY_MAX = 80;
+const STARTS_LOWER_CYRILLIC = /^[а-яё]/u;
+const HEADLINE_NOISE = /[@#]|\p{Extended_Pictographic}|\p{Emoji_Presentation}|[\u{1F300}-\u{1FAFF}]|\.\s+\S|telegram|контакт/iu;
+
+/**
+ * Название компании или '' для обрывка заголовка («компании ЛАНИТ», «разработке», «РА🔹Контакты»).
+ * Русское название начинается с заглавной или кавычки; латинское может быть строчным (hh.ru, iSpring).
+ */
+export function plausibleCompanyName(value: string): string {
+  const name = value.trim();
+  if (!name || name.length > COMPANY_MAX) return '';
+  return STARTS_LOWER_CYRILLIC.test(name) || HEADLINE_NOISE.test(name) ? '' : name;
+}
