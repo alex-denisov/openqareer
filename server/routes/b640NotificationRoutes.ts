@@ -2,8 +2,10 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   buildB640NotificationFeed,
+  searchRoleLabel,
   type B640ApplicationContext,
 } from '../domain/b640Notifications';
+import { readCampaign } from './campaignContext';
 import { sessionCandidate } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -49,6 +51,16 @@ function applicationContexts(
 
 type FeedQuery = z.infer<typeof querySchema>;
 
+/** B671: роль поиска нужна только ленте с подборками «Новые вакансии по вашей роли». */
+function searchRoleOf(
+  deps: RouteDeps,
+  candidateId: string,
+  rows: readonly { readonly kind: string }[],
+): string | null {
+  if (!rows.some((row) => row.kind === 'new_vacancies_by_role')) return null;
+  return searchRoleLabel(readCampaign(deps.candidateStore, candidateId).roles.value);
+}
+
 function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
   const repository = notificationRepositoryFor(deps);
   const invitation = repository.getInvitationPreference(candidateId);
@@ -71,6 +83,7 @@ function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
     category: query.category,
     offset: query.cursor,
     limit: query.limit,
+    searchRole: searchRoleOf(deps, candidateId, stored.rows),
   });
 }
 

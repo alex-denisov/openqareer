@@ -1,3 +1,4 @@
+import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -156,6 +157,25 @@ describe('лента уведомлений с флагом B640', () => {
       'new_vacancies_by_role',
     ]);
     expect(vacancies.unreadCount).toBe(2);
+  });
+
+  it('«Новые вакансии по вашей роли» несут роль поиска и время подборки (B671)', async () => {
+    const fixture = await setup();
+    fixture.candidateStore.saveResumeDraft(
+      fixture.id,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
+      [],
+    );
+    fixture.notifications.recordEvent(fixture.id, {
+      kind: 'new_vacancies_by_role',
+      sourceType: 'matched_vacancy_batch',
+      sourceId: 'batch-1',
+      idempotencyKey: 'new-vacancies:batch-1',
+    });
+    const [item] = (await call(fixture.app, 'GET', `${PATH}?category=vacancies`, flagged)).json()
+      .data.items;
+    expect(item).toMatchObject({ kind: 'new_vacancies_by_role', role: 'Инженер данных' });
+    expect(item.eventAt).toBe(item.createdAt);
   });
 
   it('неверный запрос — 400 invalid_query', async () => {

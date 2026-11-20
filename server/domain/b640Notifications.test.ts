@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  searchRoleLabel,
   buildB640NotificationFeed,
   type B640ApplicationContext,
   type B640NotificationSource,
@@ -37,6 +38,7 @@ function feed(
     category?: 'all' | 'invitations' | 'responses' | 'vacancies';
     offset?: number;
     limit?: number;
+    searchRole?: string | null;
   } = {},
 ) {
   return buildB640NotificationFeed({
@@ -46,6 +48,7 @@ function feed(
     category: options.category ?? 'all',
     offset: options.offset ?? 0,
     limit: options.limit ?? 20,
+    searchRole: options.searchRole,
   });
 }
 
@@ -160,6 +163,44 @@ describe('классификация уведомлений кабинета B64
     const result = feed([read], { 'app-1': application() });
     expect(result.pinned).toEqual([]);
     expect(result.items[0]?.important).toBe(false);
+  });
+});
+
+describe('B671: «Новые вакансии по вашей роли» — роль поиска и время подборки', () => {
+  it('роль — роль поиска кандидата, время — когда пришла подборка', () => {
+    const row = source({
+      kind: 'new_vacancies_by_role',
+      sourceType: 'matched_vacancy_batch',
+      sourceId: 'batch-1',
+      createdAt: '2026-11-18T17:54:53.869Z',
+    });
+    const [item] = feed([row], {}, { searchRole: 'Chief Operating Officer и ещё 10' }).items;
+    expect(item).toMatchObject({
+      kind: 'new_vacancies_by_role',
+      title: 'Новые вакансии по вашей роли',
+      role: 'Chief Operating Officer и ещё 10',
+      eventAt: '2026-11-18T17:54:53.869Z',
+    });
+  });
+
+  it('роль поиска не задана — роли нет, время есть', () => {
+    const row = source({ kind: 'new_vacancies_by_role', sourceType: 'matched_vacancy_batch' });
+    const [item] = feed([row]).items;
+    expect(item.role).toBeNull();
+    expect(item.eventAt).toBe(row.createdAt);
+  });
+
+  it('подпись роли поиска', () => {
+    expect(searchRoleLabel([])).toBeNull();
+    expect(searchRoleLabel([' COO '])).toBe('COO');
+    expect(searchRoleLabel(['COO', 'CTO', 'CIO'])).toBe('COO и ещё 2');
+  });
+
+  it('у прочих событий без отклика роль поиска не подставляется', () => {
+    const row = source({ kind: 'consultant_edits', sourceType: 'coach_turn' });
+    const [item] = feed([row], {}, { searchRole: 'COO' }).items;
+    expect(item.role).toBeNull();
+    expect(item.eventAt).toBeNull();
   });
 });
 
