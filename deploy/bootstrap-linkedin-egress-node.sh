@@ -34,6 +34,18 @@ readonly UNIT="/etc/systemd/system/openqareer-linkedin-egress.service"
 readonly TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf -- "$TEMP_DIR"' EXIT
 
+[[ "$PORT" =~ ^[0-9]{4,5}$ ]] || { printf 'EGRESS_PORT must be a port number\n' >&2; exit 1; }
+# The VM is shared: the DROP chain below would cut off anyone else on PORT.
+port_owner="$(ss -lntpH "sport = :$PORT" | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2 || true)"
+if [[ -n "$port_owner" && "$port_owner" != "$(systemctl show -p MainPID --value openqareer-linkedin-egress.service)" ]]; then
+  printf 'port %s is used by another process (pid %s)\n' "$PORT" "$port_owner" >&2
+  exit 1
+fi
+# A sing-box binary or /etc/sing-box owned by another service would be changed below.
+for unit in $(grep -l '/usr/local/bin/sing-box\|/etc/sing-box' /etc/systemd/system/*.service 2>/dev/null); do
+  [[ "$unit" == "$UNIT" ]] || { printf '%s also uses sing-box; stop\n' "$unit" >&2; exit 1; }
+done
+
 if [[ "$(/usr/local/bin/sing-box version 2>/dev/null | awk 'NR==1 { print $3 }')" != "$VERSION" ]]; then
   curl --fail --location --silent --show-error "$DOWNLOAD_URL" --output "$TEMP_DIR/$ARCHIVE"
   printf '%s  %s\n' "$ARCHIVE_SHA" "$TEMP_DIR/$ARCHIVE" | sha256sum --check --status
