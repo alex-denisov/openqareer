@@ -68,4 +68,12 @@ describe('своя вакансия из вставленного текста (
     expect(title.endsWith(' ')).toBe(false);
     expect(title).toMatch(/вакансии$|название$|длинное$|Очень$/u);
   });
+
+  it('длинные серии пробелов и точек разбираются за линейное время', () => {
+    const hostile = `Инженер ${' '.repeat(15_000)}x${'.'.repeat(15_000)}y Требования: SQL; ${' \t'.repeat(5_000)}Python`;
+    const startedAt = performance.now();
+    const parsed = ownVacancyFromText(hostile);
+    expect(performance.now() - startedAt).toBeLessThan(200);
+    expect(parsed.text).not.toMatch(/ {2}/u);
+  });
 });

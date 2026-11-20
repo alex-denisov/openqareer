@@ -26,10 +26,15 @@ const COMPANY_LINE = /^(?:компания|работодатель|company|empl
 const LOCATION_LINE = /^(?:город|локация|место работы|location|city)\s*[:：]\s*(.+)$/iu;
 const REMOTE = /удал[её]нн|удал[её]нка|remote/iu;
 
+/**
+ * A run of spaces becomes one first: every later pattern then meets at most one blank in a row,
+ * so a 30 000-character paste of blanks or dots cannot make the matching quadratic.
+ */
 function normalize(text: string): string {
   return text
     .replace(/\r\n?/gu, '\n')
-    .replace(/[ \t]+\n/gu, '\n')
+    .replace(/[^\S\n]+/gu, ' ')
+    .replace(/ \n/gu, '\n')
     .replace(/\n{3,}/gu, '\n\n')
     .trim();
 }
@@ -61,13 +66,21 @@ export function structureVacancyText(text: string): string {
     .join('\n');
 }
 
+/** Trailing characters of a set, by a loop: `[...]+$` backtracks on a long run inside a line. */
+function trimEndOf(text: string, characters: string): string {
+  let end = text.length;
+  while (end > 0 && characters.includes(text[end - 1])) end -= 1;
+  return text.slice(0, end);
+}
+
 /** Первая фраза первой строки без поля после тире; длинная — по последнему слову. */
 function titleOf(lines: readonly string[]): string {
   const first = lines.find((line) => !COMPANY_LINE.test(line) && !LOCATION_LINE.test(line)) ?? '';
-  const phrase = first
-    .split(/\s+[—–|]\s+|(?<=[^\s.]{2})\.\s/u)[0]
-    .replace(/[\s.—–|]+$/u, '')
-    .trim();
+  const phrase = first.split(/\s+[—–|]\s+|(?<=[^\s.]{2})\.\s/u)[0].trim();
+  return shortTitle(trimEndOf(phrase, ' .—–|'));
+}
+
+function shortTitle(phrase: string): string {
   if (phrase.length <= TITLE_SOFT_MAX) return phrase.slice(0, OWN_VACANCY_TITLE_MAX);
   const cut = phrase.slice(0, TITLE_SOFT_MAX);
   const space = cut.lastIndexOf(' ');
@@ -76,11 +89,9 @@ function titleOf(lines: readonly string[]): string {
 
 function fieldOf(lines: readonly string[], pattern: RegExp): string | null {
   for (const line of lines) {
-    const value = pattern
-      .exec(line)?.[1]
-      ?.replace(/[.;\s]+$/u, '')
-      .trim();
-    if (value) return value.slice(0, OWN_VACANCY_TITLE_MAX);
+    const value = pattern.exec(line)?.[1]?.trim();
+    const field = value ? trimEndOf(value, ' .;') : '';
+    if (field) return field.slice(0, OWN_VACANCY_TITLE_MAX);
   }
   return null;
 }

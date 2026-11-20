@@ -17,7 +17,8 @@ export class OwnVacancyReadBusy extends Error {}
 export type OwnVacancySource = { readonly link: string } | { readonly text: string };
 
 function normalizeText(text: string): string {
-  return text.replace(/\r\n?/gu, '\n').replace(/[ \t]+\n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim();
+  // A run of blanks becomes one first: `[ \t]+\n` alone backtracks on a long run (B676).
+  return text.replace(/\r\n?/gu, '\n').replace(/[^\S\n]+/gu, ' ').replace(/ \n/gu, '\n').replace(/\n{3,}/gu, '\n\n').trim();
 }
 
 type LinkOutcome = { readonly vacancy: NewOwnVacancy } | { readonly result: OwnVacancyCreateResult };
