@@ -17,6 +17,26 @@ import {
   type FactRewriteModelOutput,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
+import {
+  linkedinRewriteOutputSchema,
+  type LinkedinRewriteOutput,
+  type LinkedinRewriteRequest,
+} from '../linkedinProfile/linkedinRewrite';
+import {
+  LINKEDIN_REWRITE_INSTRUCTIONS,
+  LINKEDIN_REWRITE_JSON_SCHEMA,
+  linkedinRewriteUserMessage,
+} from '../linkedinProfile/linkedinRewritePrompt';
+import {
+  linkedinVariantOutputSchema,
+  type LinkedinVariantOutput,
+  type LinkedinVariantRequest,
+} from '../linkedinProfile/linkedinVariant';
+import {
+  LINKEDIN_VARIANT_INSTRUCTIONS,
+  LINKEDIN_VARIANT_JSON_SCHEMA,
+  linkedinVariantUserMessage,
+} from '../linkedinProfile/linkedinVariantPrompt';
 import { MODEL_CHAINS, resolveChain } from './modelChains';
 import type { VertexConfig } from './vertexAi';
 import { VertexJsonClient } from './vertexJson';
@@ -36,6 +56,9 @@ export interface ExperienceFactRewriter {
   rewrite(request: FactRewriteRequest): Promise<FactRewriteModelOutput | null>;
   /** Translates waiting bullets into their profile's language; `null` when no stage could. */
   translate?(request: BulletTranslationRequest): Promise<BulletTranslationOutput | null>;
+  /** B645: «О себе» и «Опыт» для LinkedIn пересказом подтверждённых фактов; `null` — ни одна ступень не смогла. */
+  linkedinProfile?(request: LinkedinRewriteRequest): Promise<LinkedinRewriteOutput | null>;
+  linkedinVariant?(request: LinkedinVariantRequest): Promise<LinkedinVariantOutput | null>;
   readonly provenance?: Readonly<{ model: string; promptRevision: string }>;
 }
 
@@ -93,6 +116,28 @@ export class LlmExperienceFactRewriter implements ExperienceFactRewriter {
       BULLET_TRANSLATION_JSON_SCHEMA,
     );
     return readJsonAnswer(content, bulletTranslationOutputSchema);
+  }
+
+  async linkedinProfile(request: LinkedinRewriteRequest): Promise<LinkedinRewriteOutput | null> {
+    if (request.aboutFacts.length === 0 && request.places.length === 0) return null;
+    const content = await this.complete(
+      LINKEDIN_REWRITE_INSTRUCTIONS,
+      linkedinRewriteUserMessage(request),
+      'linkedin_profile_rewrite',
+      LINKEDIN_REWRITE_JSON_SCHEMA,
+    );
+    return readJsonAnswer(content, linkedinRewriteOutputSchema);
+  }
+
+  async linkedinVariant(request: LinkedinVariantRequest): Promise<LinkedinVariantOutput | null> {
+    if (request.facts.length === 0) return null;
+    const content = await this.complete(
+      LINKEDIN_VARIANT_INSTRUCTIONS,
+      linkedinVariantUserMessage(request),
+      'linkedin_profile_variant',
+      LINKEDIN_VARIANT_JSON_SCHEMA,
+    );
+    return readJsonAnswer(content, linkedinVariantOutputSchema);
   }
 
   private async complete(
@@ -190,6 +235,43 @@ export class QueuedExperienceFactRewriter implements ExperienceFactRewriter {
     }
     return null;
   }
+
+  linkedinProfile(request: LinkedinRewriteRequest): Promise<LinkedinRewriteOutput | null> {
+    return firstLinkedinAnswer(this.stages, request, this.onStageFailure);
+  }
+
+  async linkedinVariant(request: LinkedinVariantRequest): Promise<LinkedinVariantOutput | null> {
+    for (const stage of this.stages) {
+      if (!stage.linkedinVariant) continue;
+      try {
+        const output = await stage.linkedinVariant(request);
+        if (output?.text.trim()) return output;
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
+      } catch (error) {
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', error);
+      }
+    }
+    return null;
+  }
+}
+
+/** Ступени по очереди: ответ без «О себе» и без мест — неудача ступени. */
+async function firstLinkedinAnswer(
+  stages: readonly ExperienceFactRewriter[],
+  request: LinkedinRewriteRequest,
+  onStageFailure: (model: string, error: unknown) => void,
+): Promise<LinkedinRewriteOutput | null> {
+  for (const stage of stages) {
+    if (!stage.linkedinProfile) continue;
+    try {
+      const output = await stage.linkedinProfile(request);
+      if (output && (output.about?.text.trim() || output.places.length > 0)) return output;
+      onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
+    } catch (error) {
+      onStageFailure(stage.provenance?.model ?? 'unknown', error);
+    }
+  }
+  return null;
 }
 
 export function buildExperienceFactRewriter(config: {

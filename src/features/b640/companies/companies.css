@@ -6,4 +6,19 @@
     display: block;
     margin-block: var(--career-space-2);
   }
+
+  /* Шапка карточки (v10b): на 390 действия только в закреплённой панели, по ширине текста и у правого края,
+     «Хочу в компанию» над главным действием, как в макете. */
+  @media (max-width: 767px) {
+    .b640 .co-head > .co-head-acts {
+      display: none;
+    }
+    .b640 .co-head .act-dock {
+      flex-direction: column-reverse;
+      align-items: flex-end;
+    }
+    .b640 .co-head .act-dock > .btn {
+      flex: 0 0 auto;
+    }
+  }
 }

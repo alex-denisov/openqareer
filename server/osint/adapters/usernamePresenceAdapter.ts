@@ -197,7 +197,7 @@ function presenceFinding(
     kind: 'profile',
     url: url.href,
     title: site.name,
-    detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
+    detail: 'Открытая страница найдена по нику.',
     match: 'likely_self',
     observedAt: now().toISOString(),
     receipt: { method: 'GET', source: site.name, query: `username=${username}` },

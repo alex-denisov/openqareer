@@ -42,7 +42,8 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(page).toHaveURL(/\/app\/responses\/a-interview$/u);
     const detail = page.locator('#otklik-a-interview');
     await expect(detail.getByRole('heading', { name: 'Что дальше' })).toBeVisible();
-    await expect(detail.getByRole('link', { name: 'Подготовиться к интервью' })).toBeVisible();
+    // B645: раздел «Интервью» ещё заглушка — ссылок в него нет.
+    await expect(detail.locator('a[href*="/interview"], a[href*="/debrief"]')).toHaveCount(0);
     await expect(detail.getByText('Интервью назначено')).toBeVisible();
     await expect(detail.getByLabel('Ваша заметка')).toHaveValue(
       'Спросить про размер команды платформы.',
@@ -54,6 +55,33 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(detail.getByText('Отмечено: отказ').first()).toBeVisible();
     await expect(row(page, 'a-interview').locator('.tag')).toHaveText('отказ');
     expect(mock.calls.some((call) => call.includes('"rejected"'))).toBe(true);
+  });
+
+  test('B698: сообщение знакомому после «Отправил» видно в «Что было» отклика', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses', 'o01');
+    await page.route('**/api/v1/candidate/b640/contact-messages/sent?*', (route) => {
+      const vacancyId = new URL(route.request().url()).searchParams.get('vacancyId');
+      const items =
+        vacancyId === 'cluster-a-interview'
+          ? [
+              {
+                id: 'm1',
+                kind: 'known_contact',
+                recipientName: 'Роман Ефимов',
+                sentAt: '2026-11-06T09:00:00.000Z',
+              },
+            ]
+          : [];
+      return route.fulfill({ json: { data: { items } } });
+    });
+    await row(page, 'a-interview')
+      .getByRole('button', { name: /Руководитель платформы/u })
+      .click();
+    const history = page.locator('#otklik-a-interview .od-was');
+    await expect(history).toContainText('Написали знакомому');
+    await expect(history).toContainText('Роман Ефимов');
   });
 
   test('напоминание компании: текст готов, отметка «Я напомнил»', async ({ page }) => {
@@ -132,10 +160,31 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page, { only: ['modal_fit'] });
   });
 
-  test('без согласий на автоотклики строки нет, список работает', async ({ page }) => {
-    await open(page, '/app/responses', 'o01', { automation: false });
+  test('без согласий строка есть: включение открывает лист с согласием (B645)', async ({
+    page,
+  }) => {
+    const mock = await open(page, '/app/responses', 'o01', { automation: false });
     await expect(page.locator('tr.ot-row')).toHaveCount(7);
-    await expect(page.getByRole('group', { name: 'Автоотклики' })).toHaveCount(0);
+    const bar = page.getByRole('group', { name: 'Автоотклики' });
+    await expect(bar.getByRole('switch', { name: 'Автоотклики' })).not.toBeChecked();
+    await bar.getByRole('switch', { name: 'Автоотклики' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Настроить автоотклики' });
+    await sheet.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(sheet.getByText('Отметьте согласие, чтобы включить автоотклики.')).toBeVisible();
+    expect(mock.calls.some((call) => call.includes('/enable'))).toBe(false);
+    await sheet.getByRole('checkbox', { name: /Разрешаю готовить отклики/u }).check();
+    await sheet.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(sheet).toBeHidden();
+    await expect(bar.getByRole('switch', { name: 'Автоотклики' })).toBeChecked();
+  });
+
+  test('«Откликнулся сам — добавить» ведёт к своей вакансии (B645)', async ({ page }) => {
+    await open(page, '/app/responses', 'o01');
+    await expect(page.getByRole('link', { name: 'Откликнулся сам — добавить' })).toHaveAttribute(
+      'href',
+      '/app/vacancies?own=1',
+    );
+    await expect(page.getByRole('button', { name: 'Авто', exact: true })).toBeVisible();
   });
 
   test('откликов нет: одна строка и путь к вакансиям', async ({ page }) => {
@@ -168,6 +217,14 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page);
   });
 
+  test('воронка: автоотклики не входят в числа и названы в подсказке (B645)', async ({ page }) => {
+    await open(page, '/app/responses/funnel', 'o01e', { autoIds: ['a-interview'] });
+    await expect(page.locator('.fv-mini')).toContainText('5 отправлено');
+    await expect(page.locator('.fv-mini')).toContainText('0 интервью');
+    await expect(page.getByRole('button', { name: 'Что не входит в числа' })).toBeVisible();
+    await expect(page.getByText(/не входят 1 автоотклик и 1 ответ на них/u)).toBeAttached();
+  });
+
   test('разбор отказов: мало данных, отказ с догадкой, первый шаг', async ({ page }) => {
     await open(page, '/app/responses/review', 'o07');
     await expect(
@@ -181,6 +238,20 @@ test.describe('B656: «Отклики» нового кабинета', () => {
       '/app/responses',
     );
     await expect(page.getByRole('heading', { name: 'Разбор помог?' })).toHaveCount(0);
+    // B645, O7c: три проверки и путь к 20 откликам.
+    await expect(
+      page.getByRole('heading', { name: 'Три проверки, которым данные не нужны' }),
+    ).toBeVisible();
+    await expect(page.getByText('Незавершённых откликов — 3 из 6.')).toBeVisible();
+    await expect(
+      page.getByText(/В 2 из 6 вакансий верх вилки ниже ваших 500 000 ₽\./u),
+    ).toBeVisible();
+    await expect(page.getByText('4 из 6 откликов — позже 10 дней после публикации.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Что будет при 20 откликах' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Посмотреть вакансии' })).toHaveAttribute(
+      'href',
+      '/app/vacancies',
+    );
     await expectGates(page);
   });
 

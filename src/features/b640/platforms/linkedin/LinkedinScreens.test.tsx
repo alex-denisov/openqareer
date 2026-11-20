@@ -9,7 +9,6 @@ vi.mock('../../shell/ShellContext', () => ({
   useShell: () => ({ navigate: () => undefined }),
   useScreenChrome: () => undefined,
 }));
-vi.mock('../../../coach/coachApi', () => ({ getConnections: vi.fn() }));
 vi.mock('../../../today/linkedinDraftApi', async (original) => ({
   ...(await original<typeof import('../../../today/linkedinDraftApi')>()),
   listDrafts: vi.fn(),
@@ -17,6 +16,8 @@ vi.mock('../../../today/linkedinDraftApi', async (original) => ({
   listDraftTopics: vi.fn(),
   createDraft: vi.fn(),
 }));
+
+vi.mock('./linkedinProfileApi', () => ({ getLinkedinProfile: vi.fn() }));
 
 vi.mock('./linkedinQueueApi', () => ({
   getRhythm: vi.fn().mockResolvedValue({
@@ -33,7 +34,7 @@ vi.mock('./linkedinQueueApi', () => ({
 }));
 
 const queue = await import('./linkedinQueueApi');
-const coach = await import('../../../coach/coachApi');
+const profileApi = await import('./linkedinProfileApi');
 const api = await import('../../../today/linkedinDraftApi');
 
 const flush = () =>
@@ -46,23 +47,6 @@ const node = (code: string) => {
   if (!found) throw new Error(code);
   return found;
 };
-const linkedin = (connected: boolean) =>
-  connected
-    ? {
-        platform: 'linkedin',
-        available: true,
-        capabilities: [],
-        importsCareerHistory: true,
-        status: 'imported',
-        importedAt: '2026-11-01T10:00:00Z',
-      }
-    : {
-        platform: 'linkedin',
-        available: true,
-        capabilities: [],
-        importsCareerHistory: true,
-        status: 'disconnected',
-      };
 const draft = (index: number, patch: Record<string, unknown> = {}) => ({
   id: `d${index}`,
   kind: 'post',
@@ -77,16 +61,16 @@ const many = (count: number, kind = 'post', status = 'published') =>
 afterEach(() => vi.clearAllMocks());
 
 describe('a03: профиль LinkedIn', () => {
-  it('не подключён: строка с «Подключить»', async () => {
-    vi.mocked(coach.getConnections).mockResolvedValue([linkedin(false)] as never);
+  it('без импорта LinkedIn: строка с «Импортировать из LinkedIn»', async () => {
+    vi.mocked(profileApi.getLinkedinProfile).mockResolvedValue({ kind: 'no_import' });
     const view = mount(<Section node={node('a03')} params={{}} />);
     await flush();
-    expect(view.container.querySelector('a[aria-label="Подключить LinkedIn"]')).not.toBeNull();
+    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain('Импортировать из LinkedIn');
     expect(view.container.querySelector('.li-sec')).toBeNull();
     view.unmount();
   });
   it('ошибка чтения: «Повторить» на месте', async () => {
-    vi.mocked(coach.getConnections).mockRejectedValue(new Error('x'));
+    vi.mocked(profileApi.getLinkedinProfile).mockRejectedValue(new Error('x'));
     const view = mount(<Section node={node('a03')} params={{}} />);
     await flush();
     expect(view.container.querySelector('[role="alert"]')!.textContent).toContain('Повторить');

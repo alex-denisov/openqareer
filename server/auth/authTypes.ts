@@ -44,6 +44,8 @@ export interface AuthPrincipal {
   emailVerified?: boolean;
   emailVerificationEmailSent?: boolean;
   emailVerificationResendAfterSeconds?: number;
+  /** B401: сессию открыл администратор «войти как кандидат»; защиту входа она не меняет. */
+  impersonatedBy?: string;
 }
 
 export interface RegistrationProfile {

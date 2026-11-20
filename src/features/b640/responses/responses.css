@@ -32,4 +32,16 @@
     vertical-align: middle;
   }
   .b640 .cw-wait.is-num { inline-size: 2ch; }
+  /* B645: длинная должность — не больше двух строк, строка таблицы не растёт; полное название в title. */
+  .b640 .ot-c-role .vt-toggle span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
+  /* B645: «Настроить» — кнопка, в макете ссылка; без отступа браузера по вертикали. */
+  .b640 .ot-auto-b { padding-block: 0; }
+  /* B645: строка чисел воронки — высотой с кнопку подсказки, как в макете, и без неё. */
+  .b640 .fv-mini { min-block-size: var(--career-target-min); }
 }

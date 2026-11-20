@@ -6,7 +6,7 @@ import { readSortedFilters } from './matchedVacancySort';
 import { readTargetLevel } from './vacancyRoleContext';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import { readMatchedSnapshot, readMatchProfile } from '../vacancies/matchedPoolContext';
-import { matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
+import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 
 interface WarmLog {
   info(fields: Record<string, unknown>, message: string): void;
@@ -57,7 +57,7 @@ export async function warmMatchedList(
     candidateId,
     titleParseStore,
     filters,
-    sourceRegistry: matchedVacancySourceRegistry(engine.getSources?.() ?? []),
+    sourceRegistry: cachedMatchedSourceRegistry(engine).registry,
     order: withWantedCompanyOrder(deps, candidateId, sort, orderLog, 'background', targetRoles),
     ...(typeof engine.getCatalogTotals === 'function'
       ? { catalogTotals: () => engine.getCatalogTotals!() }

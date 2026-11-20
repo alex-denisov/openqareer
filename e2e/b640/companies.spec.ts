@@ -280,12 +280,31 @@ test.describe('B655/B677: «Компании и люди» нового каби
     await expect(page.locator('.co-person').nth(2)).toContainText('имя скрыто');
     // B645: на 390 действия шапки закреплены над нижней навигацией, на 1440 — в шапке.
     const mobile = (page.viewportSize()?.width ?? 1440) < 768;
-    await expect(page.locator('.co-head .actions')).toHaveCount(mobile ? 0 : 1);
-    await expect(page.locator('.act-dock')).toHaveCount(mobile ? 1 : 0);
+    const headWant = page.locator('.co-head .co-head-acts .co-want');
+    const dockWant = page.locator('.co-head .act-dock .co-want');
+    await expect(mobile ? dockWant : headWant).toBeVisible();
+    await expect(mobile ? headWant : dockWant).toBeHidden();
     if (mobile) {
       const dock = await page.locator('.act-dock').boundingBox();
       const nav = await page.locator('.bottomnav').boundingBox();
       if (dock && nav) expect(dock.y + dock.height).toBeLessThanOrEqual(nav.y + 1);
+      // Кнопки панели по ширине текста и у правого края, а не на всю ширину.
+      const want = await dockWant.boundingBox();
+      if (dock && want) {
+        expect(want.width).toBeLessThan(dock.width * 0.7);
+        expect(Math.abs(want.x + want.width - (dock.x + dock.width))).toBeLessThan(24);
+      }
+    } else {
+      // На 1440 «Хочу в компанию» в шапке справа от названия, на одной высоте с ним.
+      const head = await page.locator('.co-head').boundingBox();
+      const title = await page.locator('#co-name').boundingBox();
+      const want = await headWant.boundingBox();
+      expect(head && title && want).toBeTruthy();
+      if (head && title && want) {
+        expect(want.x).toBeGreaterThan(title.x + 200);
+        expect(want.y).toBeGreaterThanOrEqual(head.y);
+        expect(want.y + want.height).toBeLessThanOrEqual(head.y + head.height);
+      }
     }
     await page.getByRole('button', { name: 'Хочу в компанию: Ладога Банк' }).click();
     await expect(page.locator('.co-wantline')).toContainText('В списке «Хочу»');
@@ -341,5 +360,112 @@ test.describe('B655/B677: «Компании и люди» нового каби
         }
       }
     }
+  });
+});
+
+/** Карточка без знакомых: вакансий по ролям `roles` штук (0 — ни одной). */
+async function openWithoutPeople(page: Page, roles: number): Promise<void> {
+  await mockCompanies(page);
+  await page.route(`**/api/v1/candidate/b640/companies/${KEY}/people?*`, (route) =>
+    route.fulfill({ json: { data: { items: [], total: 0, offset: 0, nextOffset: null } } }),
+  );
+  await page.route(`**/api/v1/candidate/b640/companies/${KEY}?*`, (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          company: { ...COMPANIES[3]!, want: false },
+          roleVacancies: Array.from({ length: roles }, (_, i) =>
+            vacancy(
+              `cluster-${i}`,
+              `Руководитель ${i}`,
+              [480000, 580000],
+              '2026-11-11T09:00:00.000Z',
+              80,
+            ),
+          ),
+          roleTotal: roles,
+          roleNextOffset: null,
+          otherVacancies: [],
+          otherTotal: 0,
+          applications: {},
+        },
+      },
+    }),
+  );
+  await page.goto(`${LIST_PATH}/${KEY}`, { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-b640-node="v10b"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Знакомых в компании не нашли')).toBeVisible();
+}
+
+/** Кнопка видна целиком и не закрыта закреплённой панелью или навигацией (проверка B645 на 390). */
+async function expectNotCovered(page: Page, selector: string): Promise<void> {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const free = await page.locator(selector).evaluate((node) => {
+    node.scrollIntoView({ block: 'nearest' });
+    const box = node.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && node.contains(hit));
+  });
+  expect(free).toBe(true);
+}
+
+test.describe('B645: «Люди компании» без знакомых — следующий шаг по данным', () => {
+  test('одна вакансия — «Откликнуться на вакансию» ведёт в её карточку', async ({ page }) => {
+    await openWithoutPeople(page, 1);
+    const action = page.locator('.co-ppl-next .btn');
+    await expect(action).toHaveText('Откликнуться на вакансию');
+    await expect(action).not.toHaveClass(/is-primary/u);
+    await expectNotCovered(page, '.co-ppl-next .btn');
+    await action.click();
+    await expect(page).toHaveURL(/\/app\/vacancies\/cluster-0$/u);
+  });
+
+  test('несколько вакансий — переход к «Вакансиям по вашим ролям» на этой же карточке', async ({
+    page,
+  }) => {
+    await openWithoutPeople(page, 3);
+    await expectNotCovered(page, '.co-ppl-next .btn');
+    await page.locator('.co-ppl-next .btn').click();
+    await expect(page.locator('#co-vac')).toBeFocused();
+    await expect(page.locator('#co-vac')).toBeInViewport();
+    await expect(page).toHaveURL(new RegExp(`${LIST_PATH}/${KEY}$`, 'u'));
+  });
+
+  test('вакансий нет — «Найти рекрутера» открывает «Контакты» по этой компании', async ({
+    page,
+  }) => {
+    await openWithoutPeople(page, 0);
+    const action = page.locator('.co-ppl-next .btn');
+    await expect(action).toHaveText('Найти рекрутера');
+    await expectNotCovered(page, '.co-ppl-next .btn');
+    await page.route('**/api/v1/candidate/b640/contacts?*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            items: [],
+            total: 0,
+            offset: 0,
+            nextOffset: null,
+            facets: {
+              company: [],
+              link: { direct: 0, intro: 0, none: 0 },
+              status: { none: 0, written: 0, replied: 0 },
+            },
+            linkedinImport: {
+              state: 'imported',
+              importedAt: '2026-11-10T09:00:00.000Z',
+              importedCount: 0,
+            },
+          },
+        },
+      }),
+    );
+    const request = page.waitForRequest('**/api/v1/candidate/b640/contacts?*');
+    await action.click();
+    expect(new URL((await request).url()).searchParams.getAll('company')).toEqual(['Ладога Банк']);
+    await expect(page.locator('[data-b640-node="a02"]')).toBeVisible();
+    // В компании никого — не пустой экран: строка и «Сбросить всё».
+    await expect(page.locator('.vl-empty-t')).toHaveText('Никого не нашли');
+    await expect(page.locator('.vl-empty .btn')).toHaveText('Сбросить всё');
   });
 });

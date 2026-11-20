@@ -20,6 +20,8 @@ const api = vi.hoisted(() => ({
   revokeAccountSession: vi.fn(),
   revokeOtherSessions: vi.fn(),
   getNotificationPreferences: vi.fn(),
+  getInvitationPreference: vi.fn(),
+  putInvitationPreference: vi.fn(),
   getNotificationChannelStatus: vi.fn(),
   updateNotificationPreference: vi.fn(),
   startTelegramLink: vi.fn(),
@@ -34,6 +36,7 @@ const api = vi.hoisted(() => ({
   getHhSessionState: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
+vi.mock('./twoFactorApi', () => ({ getTwoFactorStatus: async () => ({ enabled: false, backupCodesLeft: 0 }) }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -53,6 +56,11 @@ vi.mock('../../account/notificationPreferencesApi', () => ({
   disconnectTelegram: api.disconnectTelegram,
 }));
 vi.mock('./telegramStateApi', () => ({ getTelegramLinkState: api.getTelegramLinkState }));
+vi.mock('./invitationPreferenceApi', () => ({
+  INVITATION_KEY: 'ev-invitation',
+  getInvitationPreference: api.getInvitationPreference,
+  putInvitationPreference: api.putInvitationPreference,
+}));
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
 }));
@@ -153,6 +161,7 @@ beforeEach(() => {
   api.getConnections.mockResolvedValue([hh, linkedin]);
   api.getHhSessionState.mockResolvedValue({ expired: false, since: null });
   api.getNotificationPreferences.mockResolvedValue(events);
+  api.getInvitationPreference.mockResolvedValue({ key: 'ev-invitation', app: true, email: true, telegram: true });
   api.getNotificationChannelStatus.mockResolvedValue(channels(false));
   api.getTelegramLinkState.mockResolvedValue({ state: 'none', expiresAt: null, username: null });
   api.getAccountCapabilityConsents.mockResolvedValue([
@@ -303,11 +312,24 @@ describe('n02 «Уведомления»', () => {
       'Почта',
       'Telegram',
     ]);
-    expect(root.querySelectorAll('.set-mx:not(.is-head)')).toHaveLength(6);
+    expect(root.querySelectorAll('.set-mx:not(.is-head)')).toHaveLength(7);
+    expect(root.querySelector('.set-mx:not(.is-head) .set-t')?.textContent).toBe('Приглашения');
     const reply = root.querySelector('input[aria-label="Ответы: Приложение"]') as HTMLInputElement;
     expect(reply.checked).toBe(true);
     expect((root.querySelector('input[aria-label="Итоги недели: Приложение"]') as HTMLInputElement).checked).toBe(false);
-    expect(root.textContent).not.toMatch(/Приглашения|Как часто|название компании/u);
+    expect(root.textContent).not.toMatch(/Как часто|название компании/u);
+  });
+
+  it('«Приглашения» сохраняются своим маршрутом, прежний ключ не трогают', async () => {
+    api.putInvitationPreference.mockResolvedValueOnce({ key: 'ev-invitation', app: true, email: false, telegram: true });
+    const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+    const input = () => root.querySelector('input[aria-label="Приглашения: Почта"]') as HTMLInputElement;
+    expect(input().checked).toBe(true);
+    click(input());
+    await settle();
+    expect(api.putInvitationPreference).toHaveBeenCalledWith({ app: true, email: false, telegram: true });
+    expect(api.updateNotificationPreference).not.toHaveBeenCalled();
+    expect(input().checked).toBe(false);
   });
 
   it('переключатель сохраняется сразу; сбой возвращает значение и показан на месте', async () => {
@@ -433,18 +455,19 @@ describe('n02 «Уведомления»', () => {
 });
 
 describe('n04 «Вход и безопасность»', () => {
-  it('разделы по макету; двухфакторной защиты и входа по отпечатку нет', async () => {
+  it('разделы по макету; двухфакторная защита выключена, входа по отпечатку нет', async () => {
     const root = await open(<SecurityScreen node={node('n04')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
       'Почта и имя',
       'Вход',
       'Устройства · 2',
     ]);
-    expect(root.textContent).not.toMatch(/Двухфакторная|Touch ID|Face ID/u);
+    expect(root.textContent).not.toMatch(/Touch ID|Face ID/u);
     const values = [...root.querySelectorAll('.set-row .set-v')].map((item) => item.textContent);
     expect(values).toEqual([
       'm.sokolova@mail.test · подтверждена',
       'Марина Соколова',
+      'выключена',
       'сейчас · эта сессия',
       '3 ноября',
     ]);

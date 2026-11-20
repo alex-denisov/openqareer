@@ -46,40 +46,17 @@ describe('B692: навыки', () => {
     const result = buildSectionSuggestions({
       memory: [mem('m-proposed', 'x', 'proposed'), mem('m-ok', 'y')], draft: draft({ skills }),
     });
-    expect(result.skills?.text).toBe('Python\nGo');
+    expect(result.skills?.text).toBe('Python · Go');
     expect(result.skills?.facts.map((f) => f.text)).toEqual(['Python', 'Go']);
   });
 });
 
-describe('B692: «О себе» и опыт', () => {
-  it('только подтверждённые факты; предложенные, чувствительные и пробелы отбрасываются', () => {
-    const memory = [
-      mem('m1', 'Вёл команду из 9 человек'), mem('m2', 'Сократил релиз до 3 дней', 'corrected'),
-      mem('m3', 'Увеличил выручку в 5 раз', 'proposed'), { ...mem('m4', 'Болел 2 года'), sensitive: true },
-      mem('m5', 'Нет опыта в Rust', 'confirmed', 'gap'),
-    ];
-    const about = buildSectionSuggestions({ memory, draft: draft() }).about;
-    expect(about?.text).toBe('Head of Engineering. Вёл команду из 9 человек. Сократил релиз до 3 дней.');
-    expect(about?.facts.map((f) => f.id)).toEqual(['resume:targetRole', 'm1', 'm2']);
-    expect(about?.text).not.toMatch(/5 раз|Болел|Rust/u);
-    expect(numbersAreGrounded(about?.text ?? '', about?.facts ?? [])).toBe(true);
-  });
-  it('нет подтверждённых фактов — предложения нет', () => {
-    const memory = [mem('m3', 'Увеличил выручку в 5 раз', 'proposed')];
-    const result = buildSectionSuggestions({ memory, draft: draft() });
+describe('B645: «О себе» и «Опыт»', () => {
+  it('склейкой фактов не строятся — их пишет модель пересказом', () => {
+    const memory = [mem('d1', 'Отвечал за найм'), mem('b1', 'Запустил платформу для 12 команд')];
+    const result = buildSectionSuggestions({ memory, draft: draft({ experience: [place({ descriptionMemoryId: 'd1', bulletMemoryIds: ['b1'] })] }) });
     expect(result.about).toBeNull();
     expect(result.experience).toBeNull();
-  });
-  it('опыт: места с подтверждённым описанием; без подтверждённого — места нет в тексте', () => {
-    const memory = [mem('b1', 'Запустил платформу для 12 команд'), mem('b2', 'Снизил расходы на 40 %', 'proposed'), mem('d1', 'Отвечал за найм')];
-    const experience = [
-      place({ bulletMemoryIds: ['b1', 'b2'], descriptionMemoryId: 'd1' }),
-      place({ id: 'e2', title: 'Разработчик', employer: 'Ozon', bulletMemoryIds: ['b2'] }),
-    ];
-    const result = buildSectionSuggestions({ memory, draft: draft({ experience }) }).experience;
-    expect(result?.text).toBe('Руководитель разработки — Яндекс (2019 — 2022)\nОтвечал за найм\n• Запустил платформу для 12 команд');
-    expect(result?.text).not.toMatch(/Ozon|40/u);
-    expect(result?.facts.map((f) => f.id)).toEqual(['resume:experience:e1', 'd1', 'b1']);
   });
 });
 

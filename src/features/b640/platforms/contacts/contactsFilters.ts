@@ -16,6 +16,14 @@ export interface ContactFilters {
 
 export const EMPTY_FILTERS: ContactFilters = { company: [], link: [], status: [] };
 
+const COMPANY_MAX = 180;
+
+/** B645: «Найти рекрутера» с карточки компании приходит с `?company=<название>` — фильтр с первого запроса. */
+export function filtersFromSearch(search: string): ContactFilters {
+  const company = new URLSearchParams(search).get('company')?.trim().slice(0, COMPANY_MAX);
+  return company ? { ...EMPTY_FILTERS, company: [company] } : EMPTY_FILTERS;
+}
+
 export const KIND_LABELS: Readonly<Record<ContactKind, string>> = { company: 'Компания', link: 'Связь', status: 'Статус' };
 export const KINDS: readonly ContactKind[] = ['company', 'link', 'status'];
 

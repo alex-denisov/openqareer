@@ -1,4 +1,3 @@
-import { getConnections, type CandidateConnection } from '../../../coach/coachApi';
 import type { LinkedinProfileView } from '../../../../../shared/b640LinkedinProfile';
 import { Icon, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -11,20 +10,8 @@ import { getLinkedinProfile } from './linkedinProfileApi';
 import { ProfileSections } from './ProfileSections';
 import './linkedin.css';
 
-type ProfileData =
-  { readonly kind: 'off' } | { readonly kind: 'on'; readonly profile: LinkedinProfileView };
-
-function isOn(connections: readonly CandidateConnection[]): boolean {
-  const linkedin = connections.find((item) => item.platform === 'linkedin');
-  return linkedin !== undefined && linkedin.status !== 'disconnected';
-}
-
-async function loadProfile(): Promise<ProfileData> {
-  if (!isOn(await getConnections())) return { kind: 'off' };
-  return { kind: 'on', profile: await getLinkedinProfile() };
-}
-
-function NotConnected() {
+/** a03n: импорта LinkedIn нет — разделов не показываем, ручной вставки нет (решение владельца 19.11). */
+function NoImport() {
   return (
     <ul className="src-list li-off" aria-label="Площадка">
       <li className="src is-next">
@@ -33,11 +20,11 @@ function NotConnected() {
         </span>
         <div className="src-main">
           <h2 className="src-title">
-            LinkedIn<span className="vh"> не подключён</span>
+            LinkedIn<span className="vh"> не импортирован</span>
           </h2>
         </div>
-        <Link className="btn is-primary" to={buildNodePath('n03')} aria-label="Подключить LinkedIn">
-          Подключить
+        <Link className="btn is-primary" to={buildNodePath('n03')}>
+          Импортировать из LinkedIn
           <Icon name="right" />
         </Link>
       </li>
@@ -45,12 +32,12 @@ function NotConnected() {
   );
 }
 
-function Body({ load }: { readonly load: ReturnType<typeof useLoad<ProfileData>> }) {
+function Body({ load }: { readonly load: ReturnType<typeof useLoad<LinkedinProfileView>> }) {
   if (load.state === 'loading') return <StatusLine state="wait" text="Загружаем LinkedIn…" />;
   if (load.state === 'error')
     return <PlatformRetry text="Не удалось загрузить LinkedIn" onRetry={load.retry} />;
-  if (load.data.kind === 'off') return <NotConnected />;
-  return <ProfileSections initial={load.data.profile} />;
+  if (load.data.kind === 'no_import') return <NoImport />;
+  return <ProfileSections initial={load.data.sections} />;
 }
 
 function Next() {
@@ -69,10 +56,10 @@ function Next() {
   );
 }
 
-/** Узел a03 и его состояние a03n: «Сейчас» и предложение по разделам или «LinkedIn не подключён». */
+/** Узел a03 и его состояние a03n: семь разделов из импорта LinkedIn или «Импортировать из LinkedIn». */
 export function ProfileScreen({ node }: SectionProps) {
-  const load = useLoad(loadProfile);
-  const connected = load.state === 'ready' && load.data.kind === 'on';
+  const load = useLoad(getLinkedinProfile);
+  const connected = load.state === 'ready' && load.data.kind === 'ready';
   // Признак макета a03: плотные строки на 390; у a03n его нет.
   useScreenChrome({ rootData: connected ? { mtight: '1' } : {} });
   return (

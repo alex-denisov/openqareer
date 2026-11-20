@@ -130,7 +130,7 @@ function TableRow({ row, open, next, detailId, onToggle }: RowProps) {
           aria-controls={open ? detailId : undefined}
           onClick={() => onToggle(row.id)}
         >
-          <span>{row.role}</span>
+          <span title={row.role}>{row.role}</span>
           <Icon name="down" className="vt-chev" />
         </button>
         <span className="ot-sub">

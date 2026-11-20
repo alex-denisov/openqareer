@@ -7,6 +7,7 @@ import { onPlatform, platformOf } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
 import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
+import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
 import {
   marksFor,
@@ -36,8 +37,15 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
   );
 }
 
+/**
+ * Экраны раздела «Интервью» (i01, i04) пока заглушки: кнопки «Подготовиться» и «Рассказать,
+ * как прошло» вели в тупик (B645). Включить, когда раздел подключён в `interview/index.tsx`.
+ */
+const INTERVIEW_SCREENS_READY = false;
+
 function History({ application }: { readonly application: ApplicationView }) {
-  const events = timeline(application);
+  const messages = useSentMessages(application.clusterId);
+  const events = timeline(application, new Date(), messages);
   if (events.length === 0) return null;
   const rest = events.slice(1);
   return (
@@ -180,7 +188,7 @@ function NextActions({ item, actions, draft }: ActionsProps) {
           </Button>
         </>
       ) : null}
-      {application.stage === 'interview' ? (
+      {INTERVIEW_SCREENS_READY && application.stage === 'interview' ? (
         <Link
           className="btn is-primary"
           to={buildNodePath(interviewAhead ? 'i01' : 'i04', { responseId: application.id })}

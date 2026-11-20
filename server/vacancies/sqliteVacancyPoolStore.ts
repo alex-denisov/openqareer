@@ -38,6 +38,7 @@ import {
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
 import { buildSemanticMatchQuery } from './semanticMatchQuery';
+import { hasSemanticCoverIndex } from './semanticCoverIndex';
 import {
   storedHhSampleByRole,
   storedHhSampleByText,
@@ -414,6 +415,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Раз увидели строку в `vacancy_semantic` — считаем таблицу наполненной насовсем:
    * обслуживатель её не опустошает, а лишний запрос на каждого кандидата не нужен. */
   private semanticTableSeenReady = false;
+  private semanticCoverIndexSeen = false;
   /** Докуда дошло обогащение управленческими навыками по описаниям (B307). */
   private descriptionSkillsCursor = 0;
   /** Позиция прохода очистки сирот (B535): сначала кластеры, потом карточки. */
@@ -825,7 +827,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       window,
       preferRemote,
       limit,
+      coverIndex: this.isSemanticCoverIndexReady(),
     });
+  }
+
+  /** B725: индекс строит обслуживание; до того подбор идёт по прежнему. */
+  private isSemanticCoverIndexReady(): boolean {
+    this.semanticCoverIndexSeen ||= hasSemanticCoverIndex(this.database);
+    return this.semanticCoverIndexSeen;
   }
 
   queryMatchCandidates(

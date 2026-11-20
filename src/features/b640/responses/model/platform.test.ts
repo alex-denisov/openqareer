@@ -29,4 +29,13 @@ describe('название площадки для кандидата', () => {
     expect(onPlatform(platformOf('hh'))).toBe('на hh.ru');
     expect(sendFrom(platformOf('hh'))).toBe('с hh.ru');
   });
+
+  it('коды сбора «src-…» называются по-человечески (B645)', () => {
+    expect(platformOf('src-hh-search').label).toBe('hh.ru');
+    expect(platformOf('src-indeed').label).toBe('Indeed');
+    expect(platformOf('src-himalayas-api').label).toBe('Himalayas');
+    expect(platformOf('src-linkedin-jobs').label).toBe('LinkedIn');
+    expect(platformOf('src-remotive').label).toBe('Remotive');
+    expect(platformOf('src-ats-greenhouse')).toEqual({ label: 'сайт компании', site: true });
+  });
 });

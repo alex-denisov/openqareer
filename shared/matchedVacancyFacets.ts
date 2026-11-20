@@ -1,4 +1,5 @@
 import type { CandidateRegion } from '../src/features/workspace/candidateRegions';
+import type { MatchedFilteredFacets } from './listFilterFacets';
 
 export const MATCHED_VACANCY_FACET_LEVELS = [
   'ic',
@@ -63,4 +64,9 @@ export interface MatchedVacancyFacets {
    */
   readonly places?: readonly MatchedVacancyPlaceFacet[];
   readonly sourceGroups?: readonly MatchedVacancySourceGroup[];
+  /**
+   * B729: числа «Даты», «Формата» и «Локаций» по отобранной выдаче (после фильтров запроса).
+   * Клиент показывает их, пока дочитывает пул. `dates` считаются на ответе по `?tz=`.
+   */
+  readonly filtered?: MatchedFilteredFacets;
 }

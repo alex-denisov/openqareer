@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   REJECTION_NOTE_MAX_LENGTH,
   REJECTION_REASONS,
+  REJECTION_REVIEW_MIN_SAMPLE,
   type RejectionGuess,
 } from '../../shared/rejectionReview';
 import { SqliteRejectionReviewRepository } from '../candidate/sqliteRejectionReviewRepository';
@@ -12,6 +13,11 @@ import {
   rejectedForReview,
   type RejectionReviewApplication,
 } from '../domain/rejectionReview';
+import {
+  buildReviewChecks,
+  type ReviewCheckApplication,
+  type SalaryFloor,
+} from '../domain/rejectionReviewChecks';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -68,6 +74,37 @@ function guessFor(
   }
 }
 
+type StoredView = ReturnType<RouteDeps['candidateStore']['listApplications']>[number];
+
+/** Вилка и дата публикации из пула; вакансии там нет — `null`, проверка её не считает. */
+function checkApplication(deps: BoundDeps, application: StoredView): ReviewCheckApplication {
+  const sourceId = application.clusterId?.replace(/^cluster-/u, '');
+  const vacancy = sourceId ? deps.multiSourceEngine.getVacancy?.(sourceId) : undefined;
+  return {
+    stage: application.stage,
+    appliedAt: application.appliedAt ?? null,
+    publishedAt: vacancy?.publishedAt ?? null,
+    salaryTo: vacancy?.salary?.to ?? null,
+    salaryCurrency: vacancy?.salary?.currency ?? null,
+  };
+}
+
+function salaryFloorOf(deps: BoundDeps, candidate: string): SalaryFloor | null {
+  const profile = deps.candidateStore.decisionProfileRepo?.get(candidate) ?? null;
+  const amount = profile?.salaryFloor;
+  return amount && amount > 0 ? { amount, currency: profile?.salaryCurrency ?? 'RUB' } : null;
+}
+
+/** B645: проверки «Мало данных» — только пока откликов меньше порога. */
+function lowDataChecks(deps: BoundDeps, candidate: string, stored: readonly StoredView[]) {
+  const sent = stored.filter((application) => application.stage !== 'saved');
+  if (sent.length >= REJECTION_REVIEW_MIN_SAMPLE) return undefined;
+  return buildReviewChecks(
+    sent.map((application) => checkApplication(deps, application)),
+    salaryFloorOf(deps, candidate),
+  );
+}
+
 const getReview: Handler = async (deps, request, reply) => {
   const candidate = candidateId(deps, request, reply);
   if (!candidate) return reply;
@@ -86,15 +123,14 @@ const getReview: Handler = async (deps, request, reply) => {
       guessFor(deps, request, candidate, clusters.get(application.id) ?? null),
     ]),
   );
-  return {
-    data: buildRejectionReview({
-      applications,
-      guesses,
-      reasons: deps.review.reasons(candidate),
-      helped: deps.review.helped(candidate),
-    }),
-    meta: { requestId: request.id },
-  };
+  const review = buildRejectionReview({
+    applications,
+    guesses,
+    reasons: deps.review.reasons(candidate),
+    helped: deps.review.helped(candidate),
+  });
+  const checks = lowDataChecks(deps, candidate, stored);
+  return { data: checks ? { ...review, checks } : review, meta: { requestId: request.id } };
 };
 
 const putReason: Handler = async (deps, request, reply) => {
@@ -103,14 +139,28 @@ const putReason: Handler = async (deps, request, reply) => {
   const id = (request.params as { id: string }).id;
   const parsed = reasonSchema.safeParse(request.body ?? {});
   if (id.length > APPLICATION_ID_MAX_LENGTH || !parsed.success) {
-    return sendError(reply, request, 400, 'invalid_rejection_reason', 'Выберите причину из списка.', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_rejection_reason',
+      'Выберите причину из списка.',
+      false,
+    );
   }
   const application = deps.candidateStore.getApplication(candidate, id);
   if (!application) {
     return sendError(reply, request, 404, 'application_not_found', 'Отклик не найден.', false);
   }
   if (application.stage !== 'rejected') {
-    return sendError(reply, request, 409, 'application_not_rejected', 'Причину отмечают у отказа.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'application_not_rejected',
+      'Причину отмечают у отказа.',
+      false,
+    );
   }
   const saved = deps.review.saveReason({
     candidateId: candidate,
@@ -127,7 +177,14 @@ const putFeedback: Handler = async (deps, request, reply) => {
   if (!candidate) return reply;
   const parsed = feedbackSchema.safeParse(request.body ?? {});
   if (!parsed.success) {
-    return sendError(reply, request, 400, 'invalid_review_feedback', 'Ответьте «да» или «нет».', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_review_feedback',
+      'Ответьте «да» или «нет».',
+      false,
+    );
   }
   deps.review.saveHelped(candidate, parsed.data.helped, new Date().toISOString());
   return { data: { helped: parsed.data.helped }, meta: { requestId: request.id } };
@@ -152,9 +209,5 @@ export function registerRejectionReviewRoutes(
     write,
     withDeps(bound, putFeedback),
   );
-  app.put(
-    '/api/v1/candidate/applications/:id/rejection-reason',
-    write,
-    withDeps(bound, putReason),
-  );
+  app.put('/api/v1/candidate/applications/:id/rejection-reason', write, withDeps(bound, putReason));
 }

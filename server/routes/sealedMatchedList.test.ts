@@ -76,8 +76,11 @@ async function sealedApp(rows = pool(40)) {
     });
     expect(response.statusCode).toBe(200);
     const timing = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
-    const body = response.json() as { data: { cluster: { id: string } }[]; meta: { total: number } };
-    return { timing, ids: body.data.map((item) => item.cluster.id), total: body.meta.total };
+    const body = response.json() as {
+      data: { cluster: { id: string } }[];
+      meta: { total: number; facets?: { filtered?: { dates?: unknown } } };
+    };
+    return { timing, ids: body.data.map((item) => item.cluster.id), total: body.meta.total, facets: body.meta.facets };
   };
   const logged = (message: string) => lines.map((line) => JSON.parse(line)).filter((line) => line.msg === message);
   return { app, candidateStore, candidate, engine, read, logged };
@@ -313,6 +316,30 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect((await read()).timing).toMatchObject({ listServed: 'sealed', sealedRows: 40 });
   });
 
+  it('the sealed answer counts the «Дата» periods like the built one (B729)', async () => {
+    const { read } = await sealedApp();
+    const built = await read('offset=0&tz=Europe/Moscow');
+    forgetMatchedListsForTests();
+    const sealed = await read('offset=0&tz=Europe/Moscow');
+    expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
+    expect(sealed.facets?.filtered?.dates).toBeDefined();
+    expect(sealed.facets?.filtered).toEqual(built.facets?.filtered);
+  });
+
+  it('a list sealed before B729 still answers, only without the «Дата» counts', async () => {
+    const { read, candidateStore, candidate } = await sealedApp();
+    await read('offset=0&tz=Europe/Moscow');
+    const stored = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    const { filteredObserved: _observed, ...old } = JSON.parse(stored.text);
+    const { filtered: _filtered, ...oldFacets } = old.facets;
+    candidateStore.sealedMatchedLists.write(candidate.id, stored.builtAt + 1, JSON.stringify({ ...old, facets: oldFacets }));
+    forgetMatchedListsForTests();
+    const sealed = await read('offset=0&tz=Europe/Moscow');
+    expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
+    expect(sealed.total).toBe(40);
+    expect(sealed.facets?.filtered).toBeUndefined();
+  });
+
   it('an older build does not replace a newer one', async () => {
     const { candidateStore, candidate } = await sealedApp();
     candidateStore.sealedMatchedLists.write(candidate.id, 2_000, 'newer');
@@ -330,6 +357,67 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const huge = { filtered: pool(1), pageOffsets: [0], facets: { huge: 'x'.repeat(SEALED_MATCHED_LIST_MAX_BYTES) }, campaignWithHypotheses: {} } as never;
     expect(sealedListText(huge, 'c')).toBeUndefined();
     expect(sealedListText(list([]), 'c')).toBeUndefined();
+  });
+
+  it('B725: the lean variant keeps the first 5 pages of 20 lean rows, and gives way first over the limit', () => {
+    const list = (rows: MatchedVacancyItem[]) =>
+      ({ filtered: rows, pageOffsets: rows.map((_, index) => index), facets: {}, campaignWithHypotheses: {} }) as never;
+    const sealed = JSON.parse(sealedListText(list(pool(130)), 'c')!);
+    expect(sealed.leanPages.map((page: { offset: number }) => page.offset)).toEqual([0, 20, 40, 60, 80]);
+    expect(sealed.leanPages[0].items).toHaveLength(20);
+    expect(sealed.leanPages[0].items[0].cluster.descriptionSummary).toBe('');
+
+    // ~25 KB a row: the usual 5 pages of one row fit, the lean pages of 20 do not all fit.
+    const wide = Array.from({ length: 100 }, (_, index) => ({
+      ...row(`w-${index}`),
+      explanation: { ...row(`w-${index}`).explanation, summary: 'ж'.repeat(12_000) },
+    })) as MatchedVacancyItem[];
+    const trimmed = JSON.parse(sealedListText(list(wide), 'c')!);
+    expect(trimmed.pages).toHaveLength(5);
+    expect(trimmed.leanPages.length).toBeLessThan(5);
+  });
+
+  it('B725: a B640 account is answered from the lean sealed pages', async () => {
+    const { createB640Harness, poolItem } = await import('../testHelpers/b640VacancyHarness');
+    // ~2.6 KB a row: a byte page of 40 KB holds fewer than 20, so only the lean pages give 20.
+    const rows = Array.from({ length: 45 }, (_, index) => {
+      const item = poolItem({ id: `v-${index}`, title: `Инженер ${index}`, company: 'К' });
+      return { ...item, explanation: { ...item.explanation, summary: 'с'.repeat(1_300) } } as MatchedVacancyItem;
+    });
+    const lines: string[] = [];
+    const harness = await createB640Harness({ pool: () => rows, logLines: lines });
+    try {
+      const url = '/api/v1/candidate/matched-vacancies?offset=20';
+      const live = (await harness.get(url, 'flagged.test')).json();
+      await vi.waitFor(() => expect(lines.some((line) => line.includes('matched-list-sealed'))).toBe(true));
+      forgetMatchedListsForTests();
+      const sealed = (await harness.get(url, 'flagged.test')).json();
+      const timing = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
+      expect(timing.listServed).toBe('sealed');
+      expect(sealed.data).toHaveLength(20);
+      expect(sealed.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        live.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+      const first = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
+      expect(first.meta.pageOffsets).toEqual([0, 20, 40]);
+
+      // A row sealed before B725 has no lean pages: the first lean page comes from its usual ones.
+      const id = harness.candidateIds['flagged.test'];
+      const stored = harness.candidates.sealedMatchedLists.read(id, 0)!;
+      const { leanPages: _lean, ...older } = JSON.parse(stored.text);
+      harness.candidates.sealedMatchedLists.write(id, Date.now(), JSON.stringify(older));
+      forgetMatchedListsForTests();
+      const fromUsual = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
+      const lastTiming = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
+      expect(lastTiming.listServed).toBe('sealed');
+      expect(fromUsual.data).toHaveLength(20);
+      expect(fromUsual.data.map((item: { cluster: { id: string } }) => item.cluster.id)).toEqual(
+        first.data.map((item: { cluster: { id: string } }) => item.cluster.id),
+      );
+      expect(fromUsual.meta.pageOffsets).toEqual([0, 20, 40]);
+    } finally {
+      await harness.close();
+    }
   });
 
   it('the switch off stops the write', async () => {

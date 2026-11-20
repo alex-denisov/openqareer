@@ -76,7 +76,7 @@ const emptyCounts = (): Record<ApplicationStage, number> =>
 export function summarizeResponses(
   applications: readonly { readonly id: string; readonly stage: ApplicationStage }[],
   autoIds: ReadonlySet<string>,
-): B640ResponseSummary {
+): Omit<B640ResponseSummary, 'approvedLetterIds'> {
   const all = emptyCounts();
   const auto = emptyCounts();
   const manual = emptyCounts();

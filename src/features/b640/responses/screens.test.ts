@@ -27,6 +27,7 @@ function company(overrides: Partial<CandidateCompanyOpportunity>): CandidateComp
 }
 
 const DRAFT: AutomationDraft = {
+  consent: false,
   roles: ['Руководитель разработки'],
   platforms: ['hh', 'linkedin'],
   dayLimit: '30',
@@ -36,7 +37,9 @@ const DRAFT: AutomationDraft = {
 
 describe('B656: «Хочу в компанию»', () => {
   it('новые вакансии важнее стадии', () => {
-    const face = companyWantFace(company({ hasNewVacancies: true, vacancyCount: 2, contactsCount: 1, wantStage: 'waiting' }));
+    const face = companyWantFace(
+      company({ hasNewVacancies: true, vacancyCount: 2, contactsCount: 1, wantStage: 'waiting' }),
+    );
     expect(face.tag).toEqual({ tone: 'ok', label: 'новые вакансии' });
     expect(face.brief).toBe('2 вакансии · 1 знакомый');
   });
@@ -80,10 +83,22 @@ describe('B656: «Хочу в компанию»', () => {
 
 describe('B656: отметка ответа', () => {
   it('предлагает только стадии после текущей', () => {
-    expect(marksFor('applied').map((mark) => mark.stage)).toEqual(['responded', 'interview', 'offer', 'rejected', 'archived']);
-    expect(marksFor('interview').map((mark) => mark.stage)).toEqual(['offer', 'rejected', 'archived']);
+    expect(marksFor('applied').map((mark) => mark.stage)).toEqual([
+      'responded',
+      'interview',
+      'offer',
+      'rejected',
+      'archived',
+    ]);
+    expect(marksFor('interview').map((mark) => mark.stage)).toEqual([
+      'offer',
+      'rejected',
+      'archived',
+    ]);
     expect(marksFor('saved').map((mark) => mark.stage)).toEqual(['archived']);
-    expect(marksFor('rejected')).toEqual([]);
+    // B645: отказ убирается в архив из раскрытого отклика.
+    expect(marksFor('rejected').map((mark) => mark.stage)).toEqual(['archived']);
+    expect(marksFor('archived')).toEqual([]);
   });
 });
 
@@ -99,6 +114,8 @@ describe('B656: настройки автооткликов', () => {
     expect(validateAutomationDraft({ ...DRAFT, dayLimit: '51' }, true)).toMatch(/Лимит/u);
     expect(validateAutomationDraft({ ...DRAFT, dayLimit: '1' }, true)).toMatch(/Лимит/u);
     expect(validateAutomationDraft({ ...DRAFT, pauseUntil: '2000-01-01' }, true)).toMatch(/паузы/u);
+    expect(validateAutomationDraft(DRAFT, true, true)).toMatch(/согласие/u);
+    expect(validateAutomationDraft({ ...DRAFT, consent: true }, true, true)).toBeNull();
   });
 });
 

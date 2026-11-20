@@ -1,0 +1,44 @@
+/* B401: двухфакторная защита в n04 — подключение (n04d) и резервные коды (n04e). */
+@layer b640.sections {
+  .b640 .fa-setup {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--career-space-4);
+    align-items: start;
+    grid-column: 1 / -1;
+  }
+  .b640 .fa-fields { display: grid; gap: var(--career-space-3); }
+  .b640 .fa-l { color: var(--career-text-soft); font-size: var(--career-text-xs); font-weight: 600; }
+  .b640 .fa-qr {
+    inline-size: 10rem;
+    block-size: 10rem;
+    border-radius: var(--career-radius-sm);
+    border: var(--career-border-width) solid var(--career-line);
+  }
+  .b640 .fa-key { display: flex; align-items: center; gap: var(--career-space-2); }
+  .b640 .fa-key code,
+  .b640 .fa-codes code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: var(--career-text-sm);
+    color: var(--career-text);
+    white-space: nowrap;
+  }
+  .b640 .fa-codes {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--career-space-2) var(--career-space-4);
+    margin: 0;
+    padding: var(--career-space-3) var(--career-space-4);
+    list-style: none;
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-surface);
+  }
+  .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-2); }
+  @media (max-width: 767px) {
+    .b640 .fa-setup { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+    .b640 .fa-codes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .b640 .fa-done .fa-bar { flex-direction: column; align-items: stretch; }
+  }
+}
