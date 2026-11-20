@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { KPI_MODEL_JSON_SCHEMA } from '../domain/kpiImport';
 import { buildKpiExtractor } from './kpiExtractor';
 import type { VertexConfig } from './vertexAi';
 
@@ -71,6 +72,19 @@ describe('buildKpiExtractor', () => {
     expect(answer?.rows[0]?.title).toBe('Закрыто вакансий');
     expect(failures).toEqual(['vertex:gemini-test']);
     expect(chatCalls[0]).toContain('/chat/completions');
+  });
+
+  it('ступень chat-completions получает схему ответа (прод 20.11: без неё invalid_answer)', async () => {
+    let system = '';
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      system = JSON.parse(String(init?.body)).messages[0].content;
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(ANSWER) } }] }),
+      );
+    }) as unknown as typeof fetch;
+    const extractor = buildKpiExtractor({ providerCredentials: { openai: 'sk-test' }, fetchImpl })!;
+    await extractor.extract({ text: '2 вакансии закрыть', today: '2026-11-19' });
+    expect(system).toContain(JSON.stringify(KPI_MODEL_JSON_SCHEMA));
   });
 
   it('фото уходит только в Vertex, картинкой в сообщении', async () => {
