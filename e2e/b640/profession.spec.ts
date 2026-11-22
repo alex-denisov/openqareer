@@ -84,6 +84,17 @@ test.describe('B669: «Карьера» при «Меняю профессию»
     await expect(screen.locator('.s11-metric')).toHaveCount(0);
   });
 
+  test('B741: проверка навыков не готова — шаг без кнопки «Проверить»', async ({ page }) => {
+    await openCareer(page, '/app/career', {
+      ...CHANGING,
+      assessmentState: 'insufficient_requirements',
+    });
+    const screen = node(page, 's11');
+    await expect(screen.getByText('Проверка навыков профессии')).toBeVisible();
+    await expect(screen.getByText('2 из 4 требований')).toBeVisible();
+    await expect(screen.getByRole('link', { name: 'Проверить' })).toHaveCount(0);
+  });
+
   test('профессия не выбрана — ведёт к выбору статуса', async ({ page }) => {
     await openCareer(page, '/app/career', { status: 'changing_profession' });
     const screen = node(page, 's11');

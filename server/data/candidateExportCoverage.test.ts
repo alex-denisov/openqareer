@@ -19,20 +19,47 @@ function fileStore() {
   return { databasePath, store: createStore(databasePath) };
 }
 
-/** Таблицы базы кандидата: со столбцом `candidate_id` или ссылкой на `candidates`. */
+const OWNER_TABLES = new Set(['candidates']);
+
+/**
+ * Таблицы базы кандидата: со столбцом `candidate_id` или со ссылкой на таблицу кандидата,
+ * в том числе через другие таблицы (`users` → `billing_*`, `applications` → `application_offers`).
+ */
 function candidateTables(databasePath: string): string[] {
   const database = new DatabaseSync(databasePath);
   try {
-    const tables = database
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-      .all() as Array<{ name: string }>;
-    return tables
-      .map(({ name }) => name)
-      .filter((name) => {
-        const columns = database.prepare(`PRAGMA table_info("${name}")`).all() as Array<{ name: string }>;
-        const links = database.prepare(`PRAGMA foreign_key_list("${name}")`).all() as Array<{ table: string }>;
-        return columns.some((column) => column.name === 'candidate_id') || links.some((link) => link.table === 'candidates');
-      });
+    const names = (
+      database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as Array<{
+        name: string;
+      }>
+    ).map(({ name }) => name);
+    const links = new Map(
+      names.map((name) => [
+        name,
+        (database.prepare(`PRAGMA foreign_key_list("${name}")`).all() as Array<{ table: string }>).map(
+          (link) => link.table,
+        ),
+      ]),
+    );
+    const owned = new Set(
+      names.filter((name) =>
+        (database.prepare(`PRAGMA table_info("${name}")`).all() as Array<{ name: string }>).some(
+          (column) => column.name === 'candidate_id',
+        ),
+      ),
+    );
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const name of names) {
+        if (owned.has(name) || OWNER_TABLES.has(name)) continue;
+        if ((links.get(name) ?? []).some((table) => owned.has(table) || OWNER_TABLES.has(table))) {
+          owned.add(name);
+          grew = true;
+        }
+      }
+    }
+    return [...owned].sort();
   } finally {
     database.close();
   }
@@ -55,7 +82,7 @@ function declaredCandidateTables(): string[] {
     );
     for (const statement of statements) {
       const table = /^CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)/i.exec(statement)?.[1];
-      if (table && /candidate_id|REFERENCES\s+candidates/i.test(statement)) tables.add(table);
+      if (table && /candidate_id|REFERENCES\s+(?:candidates|users|applications)\b/i.test(statement)) tables.add(table);
     }
   }
   return [...tables];

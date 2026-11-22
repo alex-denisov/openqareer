@@ -46,7 +46,10 @@ export class SqliteQuestionnaireRepository {
   private readonly ownsDatabase: boolean;
   private readonly sealedText: SealedText;
 
-  constructor(options: DatabaseSync | { databasePath: string; encryptionKey: Buffer }, key?: Buffer) {
+  constructor(
+    options: DatabaseSync | { databasePath: string; encryptionKey: Buffer },
+    key?: Buffer,
+  ) {
     this.ownsDatabase = !(options instanceof DatabaseSync);
     this.database =
       options instanceof DatabaseSync ? options : new DatabaseSync(options.databasePath);
@@ -79,6 +82,17 @@ export class SqliteQuestionnaireRepository {
     }
   }
 
+  /** B738: все анкеты кандидата с ответами — для выгрузки данных. */
+  exportAll(candidateId: string): StoredQuestionnaire[] {
+    const rows = this.database
+      .prepare(
+        `SELECT vacancy_id, form_url, questions_json, answers_cipher, read_at, submitted_at
+         FROM application_questionnaires WHERE candidate_id = ? ORDER BY read_at, vacancy_id`,
+      )
+      .all(candidateId) as unknown as Row[];
+    return rows.map((row) => this.toStored(candidateId, row));
+  }
+
   get(candidateId: string, vacancyId: string): StoredQuestionnaire | null {
     const row = this.database
       .prepare(
@@ -86,7 +100,10 @@ export class SqliteQuestionnaireRepository {
          FROM application_questionnaires WHERE candidate_id = ? AND vacancy_id = ?`,
       )
       .get(candidateId, vacancyId) as unknown as Row | undefined;
-    if (!row) return null;
+    return row ? this.toStored(candidateId, row) : null;
+  }
+
+  private toStored(candidateId: string, row: Row): StoredQuestionnaire {
     return {
       vacancyId: row.vacancy_id,
       formUrl: row.form_url,
@@ -101,7 +118,11 @@ export class SqliteQuestionnaireRepository {
   saveQuestions(
     candidateId: string,
     vacancyId: string,
-    input: { readonly questions: readonly QuestionnaireQuestion[]; readonly formUrl: string | null; readonly readAt: string },
+    input: {
+      readonly questions: readonly QuestionnaireQuestion[];
+      readonly formUrl: string | null;
+      readonly readAt: string;
+    },
   ): void {
     this.database
       .prepare(
@@ -116,7 +137,11 @@ export class SqliteQuestionnaireRepository {
   }
 
   /** false — анкеты у кандидата по этой вакансии нет. */
-  saveAnswers(candidateId: string, vacancyId: string, answers: readonly QuestionnaireAnswer[]): boolean {
+  saveAnswers(
+    candidateId: string,
+    vacancyId: string,
+    answers: readonly QuestionnaireAnswer[],
+  ): boolean {
     const cipher =
       answers.length > 0
         ? this.sealedText.seal(JSON.stringify(answers), this.scope(candidateId, vacancyId))
