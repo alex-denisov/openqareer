@@ -1,3 +1,4 @@
+import { pluralRu } from '../../../../../shared/pluralRu';
 import { scoreInterviewAnswerWithQuotes } from '../../../../../server/domain/interviewAnswerReview';
 import {
   extractSystemDesignSchema,
@@ -45,6 +46,11 @@ export function practiceChoice(
 }
 
 /** Сколько целых минут осталось от начала тренировки. */
+/** «1 минута», «3 минуты», «33 минуты», «45 минут». */
+export function minutesLabel(minutes: number): string {
+  return pluralRu(minutes, ['минута', 'минуты', 'минут']);
+}
+
 export function minutesLeft(startedAt: string, limitMinutes: number, now: number): number {
   const spent = (now - Date.parse(startedAt)) / 60_000;
   // Часы сервера впереди часов браузера дают «46 из 45»: больше лимита не показываем.
