@@ -17,7 +17,6 @@ export type CandidateTableCoverage =
   | { readonly internal: string }
   | { readonly gap: string };
 
-const GAP_PROFILE = 'история и производные профиля: в выгрузку пока не входят';
 const GAP_ACCOUNT = 'учётная запись и кабинет: в выгрузку пока не входят';
 const GAP_AUTOMATION = 'автоотклики и hh.ru: в выгрузку пока не входят';
 const GAP_CONTENT = 'черновики, посты, тексты и LinkedIn: в выгрузку пока не входят';
@@ -133,20 +132,20 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_notification_preferences: { export: 'notifications' },
   candidate_notification_telegram_chats: { export: 'notifications' },
   candidate_notification_telegram_preferences: { export: 'notifications' },
-  candidate_resume_versions: { gap: GAP_PROFILE },
-  candidate_media: { gap: GAP_PROFILE },
-  profile_change_log: { gap: GAP_PROFILE },
-  profile_revisions: { gap: GAP_PROFILE },
-  profile_revision_experience_links: { gap: GAP_PROFILE },
-  candidate_career_vector: { gap: GAP_PROFILE },
-  candidate_decision_profile: { gap: GAP_PROFILE },
-  candidate_goal_markers: { gap: GAP_PROFILE },
-  candidate_import_walks: { gap: GAP_PROFILE },
-  candidate_interview_design_schemas: { gap: GAP_PROFILE },
-  candidate_interview_review_helpful: { gap: GAP_PROFILE },
-  skill_quiz_attempts: { gap: GAP_PROFILE },
-  consultant_rejections: { gap: GAP_PROFILE },
-  consultant_summaries: { gap: GAP_PROFILE },
+  candidate_resume_versions: { export: 'profileHistory' },
+  candidate_media: { export: 'profileHistory' },
+  profile_change_log: { export: 'profileHistory' },
+  profile_revisions: { export: 'profileHistory' },
+  profile_revision_experience_links: { export: 'profileHistory' },
+  candidate_career_vector: { export: 'profileHistory' },
+  candidate_decision_profile: { export: 'profileHistory' },
+  candidate_goal_markers: { export: 'profileHistory' },
+  candidate_import_walks: { export: 'profileHistory' },
+  candidate_interview_design_schemas: { export: 'profileHistory' },
+  candidate_interview_review_helpful: { export: 'profileHistory' },
+  skill_quiz_attempts: { export: 'profileHistory' },
+  consultant_rejections: { export: 'profileHistory' },
+  consultant_summaries: { export: 'consultantConversations' },
   users: { gap: GAP_ACCOUNT },
   billing_invoices: { gap: GAP_ACCOUNT },
   career_partner_assignments: { gap: GAP_ACCOUNT },
