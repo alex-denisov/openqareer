@@ -50,6 +50,7 @@ import {
   renderGoneDocument,
   renderVacancyDocument,
 } from '../vacancies/vacancyCatalogDocument';
+import { readCatalogRedirect } from '../seo/catalogRedirectReader';
 import { archivePageDecision, readCatalogArchiveCard } from '../seo/catalogArchive';
 import type { CatalogArchiveCard } from '../seo/catalogArchive';
 import type { CatalogEntry } from '../vacancies/vacancyCatalogPage';
@@ -418,6 +419,13 @@ function ruSummaryReader(deps: RouteDeps): RuSummaryReader {
   return (card) => readCatalogRuSummary(deps.config.databasePath, card);
 }
 
+/** B752: ключ страницы, переехавшей к куску разбитого кластера, — 301 на её новый адрес. */
+function redirectMovedVacancy(deps: RouteDeps, reply: FastifyReply, key: string): boolean {
+  const moved = readCatalogRedirect(deps.config.databasePath, key);
+  if (moved) void reply.redirect(moved, 301);
+  return moved !== undefined;
+}
+
 async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const key = parseVacancyPath(request.url);
   const projected = key ? deps.multiSourceEngine.getPublicCatalogEntry(key) : undefined;
@@ -447,6 +455,7 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
       renderGoneDocument(buildCatalogPageFromEntries([projected], 1, 1)),
     );
   }
+  if (key && redirectMovedVacancy(deps, reply, key)) return reply;
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const found = key ? clusters.find((cluster) => vacancyKey(cluster.id) === key) : undefined;
   // Кластер несёт только первые 300 знаков описания. Полный текст лежит у
