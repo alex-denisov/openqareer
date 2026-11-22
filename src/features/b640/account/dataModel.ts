@@ -49,6 +49,8 @@ export interface AutomationState {
   readonly pausedUntil: string | null;
   /** Аварийная остановка: её снимают в «Откликах», не здесь. */
   readonly emergencyPaused: boolean;
+  /** B695: ждущие посты очереди LinkedIn; их напоминания останавливает та же пауза. */
+  readonly scheduledPosts: number;
 }
 
 export interface AutomationLine {
@@ -57,9 +59,12 @@ export interface AutomationLine {
   readonly action: 'stop' | 'resume' | null;
 }
 
-/** Строка «Автоотклики»: идут, остановлены или выключены. */
+/**
+ * Строка «Автоотклики, комментарии в LinkedIn»: идут, остановлены или выключены. Остановить есть что,
+ * если включены автоотклики или в очереди LinkedIn ждут посты (B695).
+ */
 export function automationLine(state: AutomationState, now: Date = new Date()): AutomationLine {
-  if (!state.enabled) return { text: 'выключены', action: null };
+  if (!state.enabled && state.scheduledPosts === 0) return { text: 'выключены', action: null };
   const until = state.pausedUntil ? new Date(state.pausedUntil) : null;
   const paused = until !== null && until.getTime() > now.getTime();
   if (state.emergencyPaused) return { text: 'остановлены', action: null };
