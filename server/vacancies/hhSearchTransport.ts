@@ -256,8 +256,11 @@ export function buildEgressTransport(config: EgressTransportConfig): HhSearchTra
 export function buildHhPageFetcher(
   env: NodeJS.ProcessEnv = process.env,
   onFetch?: (event: HhFetchEvent) => void,
+  /** Прямой путь из потока выборки (B756); замеры тогда приходят из него. */
+  directTransport?: HhSearchTransport,
 ): HhSearchTransport {
-  const direct = onFetch ? createDirectHhTransport({ onFetch }) : directHhTransport;
+  const direct =
+    directTransport ?? (onFetch ? createDirectHhTransport({ onFetch }) : directHhTransport);
   const egress = readEgressConfig(env);
   if (!egress) return direct;
   return directThenFallback(direct, buildEgressTransport(egress));
