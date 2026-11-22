@@ -72,12 +72,13 @@ function baseProps(
         available: false,
       },
     ],
+    // B740: сервер отдаёт готовность по кодам шагов.
     sourceAvailability: {
-      sherlock: true,
-      maigret: true,
-      hibp: false,
-      wayback: true,
-      exa: false, youtube: false,
+      nickname: true,
+      nickname_extended: true,
+      leaks: false,
+      archive: true,
+      web: false,
     },
     consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.2' },
     audit: null,

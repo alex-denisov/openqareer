@@ -183,6 +183,119 @@ describe('MaintenanceWorker · чистка пула в фоне (B759)', () => 
   });
 });
 
+/** Отметка, которую проход сам двигает: как таблица `maintenance_store_pass_state`. */
+function liveMark(lastMs: number | null) {
+  let last = lastMs;
+  return {
+    lastFinishedMs: () => last,
+    markFinished: (ms: number) => {
+      last = ms;
+    },
+  };
+}
+
+describe('MaintenanceWorker · чистка по расписанию, а не только на старте (B759)', () => {
+  const HOUR = 60 * 60 * 1_000;
+
+  it('после прохода следующий — через 6 ч от отметки, без рестарта', async () => {
+    vi.useFakeTimers({ now: Date.parse('2026-11-23T00:00:00Z') });
+    let calls = 0;
+    const worker = new MaintenanceWorker({
+      engine: engineWith(async () => {
+        calls += 1;
+        return { backfillWindows: 0 };
+      }),
+      log: silentLog(),
+      storePassMark: liveMark(null),
+      intervals: ONLY_STORE_PASS,
+    });
+    await worker.restore();
+    startOnlyStorePass(worker);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(STORE_PASS_MIN_GAP_MS - 1_000);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toBe(2);
+    await worker.stop();
+  });
+
+  it('свежая отметка — проход ждёт её 6 ч, а не следующего рестарта', async () => {
+    vi.useFakeTimers({ now: Date.parse('2026-11-23T00:00:00Z') });
+    let calls = 0;
+    const log = silentLog();
+    const worker = new MaintenanceWorker({
+      engine: engineWith(async () => {
+        calls += 1;
+        return { backfillWindows: 0 };
+      }),
+      log,
+      // Отметка три часа назад: до следующего прохода — ещё три.
+      storePassMark: liveMark(Date.now() - 3 * HOUR),
+      intervals: ONLY_STORE_PASS,
+    });
+    await worker.restore();
+    startOnlyStorePass(worker);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toBe(0);
+    expect(log.entries.some((entry) => entry.msg === 'maintenance-store-pass-skipped')).toBe(true);
+    await vi.advanceTimersByTimeAsync(3 * HOUR - 2_000);
+    expect(calls).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(calls).toBe(1);
+    await worker.stop();
+  });
+
+  it('после stop новых проходов нет', async () => {
+    vi.useFakeTimers({ now: Date.parse('2026-11-23T00:00:00Z') });
+    let calls = 0;
+    const worker = new MaintenanceWorker({
+      engine: engineWith(async () => {
+        calls += 1;
+        return { backfillWindows: 0 };
+      }),
+      log: silentLog(),
+      storePassMark: liveMark(null),
+      intervals: ONLY_STORE_PASS,
+    });
+    await worker.restore();
+    startOnlyStorePass(worker);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await worker.stop();
+    await vi.advanceTimersByTimeAsync(2 * STORE_PASS_MIN_GAP_MS);
+    expect(calls).toBe(1);
+  });
+
+  it('долгий проход не запускается второй раз поверх себя', async () => {
+    vi.useFakeTimers({ now: Date.parse('2026-11-23T00:00:00Z') });
+    let calls = 0;
+    let release: () => void = () => undefined;
+    const worker = new MaintenanceWorker({
+      engine: engineWith(() => {
+        calls += 1;
+        return new Promise((resolve) => {
+          release = () => resolve({ backfillWindows: 0 });
+        });
+      }),
+      log: silentLog(),
+      storePassMark: liveMark(null),
+      intervals: ONLY_STORE_PASS,
+    });
+    await worker.restore();
+    startOnlyStorePass(worker);
+    await vi.advanceTimersByTimeAsync(1_000);
+    // Проход идёт дольше срока между проходами: второй не начинается, пока первый не кончится.
+    await vi.advanceTimersByTimeAsync(2 * STORE_PASS_MIN_GAP_MS);
+    expect(calls).toBe(1);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(STORE_PASS_MIN_GAP_MS);
+    expect(calls).toBe(2);
+    release();
+    await worker.stop();
+  });
+});
+
 describe('MaintenanceWorker · срок остановки (B759)', () => {
   it('ждёт волну не дольше 60 с: отмену слышит только обход hh, дольше ждать незачем', () => {
     expect(DEFAULT_STOP_GRACE_MS).toBe(60_000);

@@ -4,6 +4,7 @@ import {
   kpiWeightSum,
   type CareerDiaryKpiAcceptRow,
   type CareerDiaryKpiImport,
+  type CareerDiaryKpiRow,
 } from '../../../../shared/careerDiaryKpi';
 import { longDate } from './goalsModel';
 
@@ -17,6 +18,8 @@ export interface KpiDraftRow {
   readonly setBy: CareerDiaryGoalSetter | '';
   readonly dueDate: string | null;
   readonly ok: boolean;
+  /** B742: вклад кварталов из источника; уходит в цель, только пока срок — год. */
+  readonly quarterTargets: CareerDiaryKpiRow['quarterTargets'];
 }
 
 export type KpiAcceptResult =
@@ -36,6 +39,7 @@ export function draftRows(draft: CareerDiaryKpiImport): KpiDraftRow[] {
     setBy: row.setBy ?? '',
     dueDate: row.dueDate,
     ok: true,
+    quarterTargets: row.quarterTargets ?? null,
   }));
 }
 
@@ -72,6 +76,7 @@ function accepted(row: KpiDraftRow, today: string): CareerDiaryKpiAcceptRow | nu
     horizon: row.horizon,
     weight: parseWeight(row.weight),
     setBy: row.setBy,
+    quarterTargets: row.horizon === 'year' ? (row.quarterTargets ?? null) : null,
   };
 }
 

@@ -93,6 +93,7 @@ export function removePerson(id: string, personId: string): Promise<CareerDiaryP
   return read(`${place(id)}/people/${encodeURIComponent(personId)}`, send('DELETE'));
 }
 
-export function scheduleMeeting(id: string, personId: string, date: string): Promise<CareerDiaryPeopleMap> {
-  return read(`${place(id)}/people/${encodeURIComponent(personId)}/meeting`, send('PUT', { date }));
+export function scheduleMeeting(id: string, personId: string, date: string, topic = ''): Promise<CareerDiaryPeopleMap> {
+  const body = { date, topic: topic.trim() || null };
+  return read(`${place(id)}/people/${encodeURIComponent(personId)}/meeting`, send('PUT', body));
 }

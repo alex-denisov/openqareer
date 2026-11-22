@@ -24,9 +24,13 @@ export interface CareerDiaryPersonInput {
   readonly lastMetOn: string | null;
 }
 
+export const MEETING_TOPIC_MAX = 120;
+
 export interface CareerDiaryPersonMeeting {
   readonly taskId: string;
   readonly date: string;
+  /** B742: о чём встреча («Цели года»); прежние встречи без темы. */
+  readonly topic?: string | null;
 }
 
 export interface CareerDiaryPerson extends CareerDiaryPersonInput {
@@ -55,6 +59,10 @@ export interface CareerDiaryPeopleMap {
   /** Людей, с которыми не было и не назначено встречи. */
   readonly withoutMeeting: number;
   /** Ближайшая назначенная встреча. */
-  readonly nextMeeting: { readonly personId: string; readonly date: string } | null;
+  readonly nextMeeting: {
+    readonly personId: string;
+    readonly date: string;
+    readonly topic: string | null;
+  } | null;
   readonly groups: readonly CareerDiaryPeopleGroup[];
 }

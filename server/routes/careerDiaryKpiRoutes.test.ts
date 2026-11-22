@@ -36,6 +36,7 @@ const modelRow = (title: string, quote: string, targetValue: number, weight: num
   weight,
   setBy: 'manager' as const,
   quote,
+  quarterTargets: null,
 });
 const ANSWER: KpiModelAnswer = {
   sourceText: '',
@@ -284,7 +285,7 @@ describe('B686: загрузка KPI под флагом', () => {
     ]);
     expect(cards.find((card: { title: string }) => card.title === 'Срок релиза')).toMatchObject({
       dueDate: '2027-01-31',
-      details: { setBy: 'manager', weight: 50 },
+      details: { setBy: 'manager', weight: 50, quarterTargets: null },
     });
 
     // Прод 22.11: id вида `kpi:<импорт>:<n>` не проходил проверку uuid — замер и удаление 400.
@@ -295,6 +296,20 @@ describe('B686: загрузка KPI под флагом', () => {
       measuredAt: '2026-11-20',
     });
     expect(measured.statusCode, measured.body).toBe(201);
+  });
+
+  it('B742: вклад кварталов годовой строки уходит в детали цели', async () => {
+    const { app } = await setup(extractorOf(ANSWER));
+    const draft = (await call(app, 'POST', KPI, flagged, { kind: 'text', text: TEXT })).json().data;
+    const quarterTargets = [
+      { quarter: 1, value: 85 },
+      { quarter: 2, value: 88 },
+    ];
+    const rows = [{ ...ACCEPT_ROW, horizon: 'year', weight: 100, quarterTargets }];
+    const accepted = await call(app, 'POST', `${KPI}/${draft.id}/accept`, flagged, { rows });
+    expect(accepted.statusCode, accepted.body).toBe(201);
+    const [card] = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data.items;
+    expect(card.details.quarterTargets).toEqual(quarterTargets);
   });
 
   it('цель, принятая до правки с id `kpi:…`, замеряется и удаляется', async () => {

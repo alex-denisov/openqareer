@@ -21,12 +21,14 @@ import {
 } from '../../shared/careerDiaryCards';
 import { CareerDiaryIdempotencyConflictError } from '../data/sqliteCareerDiaryRepository';
 import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
+import { SqliteGoalTaskSuggestionRepository } from '../data/sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
 import { careerDiaryPlanningSchema } from '../domain/careerDiaryAdaptation';
 import { buildAdaptationView } from '../domain/careerDiaryAdaptationView';
 import { cardRisk } from '../domain/careerDiaryCardRisk';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
+import { registerCareerDiaryTaskSuggestionRoutes } from './careerDiaryTaskSuggestionRoutes';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
@@ -38,6 +40,7 @@ import { sendError, withDeps } from './helpers';
 export type CareerDiaryCardRouteDeps = RouteDeps & {
   readonly diaryDetailsRepository?: SqliteDiaryDetailsRepository;
   readonly kpiImportRepository?: SqliteKpiImportRepository;
+  readonly taskSuggestionRepository?: SqliteGoalTaskSuggestionRepository;
 };
 type BoundDeps = RouteDeps & { readonly details: () => SqliteDiaryDetailsRepository };
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -53,6 +56,19 @@ const dateSchema = z
   });
 const note = z.string().trim().max(DIARY_NOTE_MAX);
 const weightSchema = z.number().min(0).max(100);
+const quarterTargetsSchema = z
+  .array(
+    z
+      .object({
+        quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+        value: z.number().finite(),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(4)
+  .refine((items) => new Set(items.map((item) => item.quarter)).size === items.length)
+  .transform((items) => [...items].sort((a, b) => a.quarter - b.quarter));
 const valueSchema = z.union([z.number().finite(), z.boolean(), z.string().trim().min(1).max(500)]);
 const indicatorSchema = z
   .object({
@@ -72,6 +88,7 @@ const cardSchema = z
     setBy: z.enum(GOAL_SETTERS),
     agreedOn: dateSchema.nullish(),
     weight: weightSchema.nullish(),
+    quarterTargets: quarterTargetsSchema.nullish(),
     indicators: z.array(indicatorSchema).min(1).max(GOAL_INDICATORS_MAX),
   })
   .strict()
@@ -81,6 +98,7 @@ const detailsPatchSchema = z
     setBy: z.enum(GOAL_SETTERS),
     agreedOn: dateSchema.nullable(),
     weight: weightSchema.nullable(),
+    quarterTargets: quarterTargetsSchema.nullable(),
   })
   .partial()
   .strict()
@@ -254,6 +272,7 @@ function createCard(
       agreedOn: input.agreedOn ?? null,
       weight: input.weight ?? null,
       archive: null,
+      quarterTargets: input.quarterTargets ?? null,
     };
     deps.details().saveGoalDetail(candidate, goal.id, details);
   }
@@ -461,6 +480,22 @@ export function registerCareerDiaryCardRoutes(
   app.get(`${BASE}/workplaces/:workplaceId/adaptation`, read, withDeps(bound, getAdaptation));
   app.patch(`${BASE}/workplaces/:workplaceId/adaptation`, write, withDeps(bound, patchAdaptation));
   registerKpiRoutes(app, deps, bound);
+  registerCareerDiaryTaskSuggestionRoutes(app, {
+    ...deps,
+    goalCard: (candidate, goalId) => cardOf(bound, candidate, goalId),
+    goalTasks: (candidate, goalId) => goalPlanTasks(bound, candidate, goalId),
+  });
+}
+
+/** Задачи цели в плане основного места работы; `null` — основного места нет, задаче негде жить. */
+function goalPlanTasks(deps: BoundDeps, candidate: string, goalId: string) {
+  const primary = deps.candidateStore.careerDiaryRepo
+    .listWorkplaces(candidate)
+    .find((workplace) => workplace.isPrimary && workplace.status === 'active');
+  const view = primary ? adaptationView(deps, candidate, primary.id) : null;
+  return view
+    ? view.stages.flatMap((stage) => stage.tasks).filter((task) => task.goalId === goalId)
+    : null;
 }
 
 /** B686: загрузка KPI создаёт цели тем же путём, что и форма цели. */

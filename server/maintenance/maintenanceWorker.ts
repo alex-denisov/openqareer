@@ -16,7 +16,7 @@ import {
   type SourceSyncOutcome,
 } from '../vacancies/multiSourceVacancyEngine';
 import { timedStep } from './stepTiming';
-import { runStorePass, STORE_PASS_DELAY_MS } from './storePass';
+import { nextStorePassDelayMs, runStorePass, STORE_PASS_DELAY_MS } from './storePass';
 import type { StorePassMark } from './storePassMark';
 
 export { STORE_PASS_MIN_GAP_MS } from './storePass';
@@ -249,6 +249,8 @@ export class MaintenanceWorker {
     startedAt: Date.now(),
   };
   private stopped = false;
+  /** B759: идёт фоновая чистка — второй проход поверх неё не начинается. */
+  private storePassRunning = false;
 
   constructor(options: {
     engine: MaintenanceEngine;
@@ -814,10 +816,32 @@ export class MaintenanceWorker {
     this.scheduleStorePass();
   }
 
-  /** B759: чистка пула — после первых волн, не на старте. */
-  private scheduleStorePass(): void {
-    const delayMs = this.intervals.storePassDelayMs ?? STORE_PASS_DELAY_MS;
-    this.timers.push(setTimeout(() => void this.runStorePass(), delayMs));
+  /**
+   * B759: чистка пула — после первых волн, не на старте, и дальше раз в 6 ч от отметки:
+   * без рестарта она тоже идёт. Следующий проход ставится, только когда текущий кончился.
+   */
+  private scheduleStorePass(
+    delayMs = this.intervals.storePassDelayMs ?? STORE_PASS_DELAY_MS,
+  ): void {
+    if (this.stopped) return;
+    const timer = setTimeout(() => {
+      const index = this.timers.indexOf(timer);
+      if (index >= 0) this.timers.splice(index, 1);
+      void this.runScheduledStorePass();
+    }, delayMs);
+    this.timers.push(timer);
+  }
+
+  private async runScheduledStorePass(): Promise<void> {
+    if (this.stopped || this.storePassRunning) return;
+    this.storePassRunning = true;
+    try {
+      await this.runStorePass();
+    } finally {
+      this.storePassRunning = false;
+    }
+    const last = this.storePassMark?.lastFinishedMs() ?? null;
+    this.scheduleStorePass(nextStorePassDelayMs(last, this.now()));
   }
 
   /**

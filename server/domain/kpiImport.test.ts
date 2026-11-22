@@ -18,7 +18,59 @@ const row = (patch: Partial<KpiModelRow>): KpiModelRow => ({
   weight: 30,
   setBy: 'manager',
   quote: '2 вакансии закрыть до 28.02, вес 30 %',
+  quarterTargets: null,
   ...patch,
+});
+
+describe('B742: вклад кварталов годовой строки', () => {
+  const YEAR =
+    'Год: 95 % релизов без отката, по кварталам I — 85 %, II — 88 %, III — 92 %, IV — 95 %.';
+  const year = (patch: Partial<KpiModelRow>) =>
+    row({
+      title: 'Релизы без отката',
+      target: '95 %',
+      targetValue: 95,
+      unit: '%',
+      horizon: 'year',
+      weight: null,
+      quote: YEAR,
+      ...patch,
+    });
+
+  it('остаются только кварталы, чьи значения есть в цитате; по порядку', () => {
+    const [kept] = groundKpiRows(
+      [
+        year({
+          quarterTargets: [
+            { quarter: 2, value: 88 },
+            { quarter: 1, value: 85 },
+            { quarter: 3, value: 91 },
+          ],
+        }),
+      ],
+      YEAR,
+    );
+    expect(kept?.quarterTargets).toEqual([
+      { quarter: 1, value: 85 },
+      { quarter: 2, value: 88 },
+    ]);
+  });
+
+  it('не годовая строка и пустой список — null', () => {
+    const quarter = groundKpiRows(
+      [year({ horizon: 'quarter', quarterTargets: [{ quarter: 1, value: 85 }] })],
+      YEAR,
+    );
+    expect(quarter[0]?.quarterTargets).toBeNull();
+    expect(groundKpiRows([year({ quarterTargets: [] })], YEAR)[0]?.quarterTargets).toBeNull();
+  });
+
+  it('ответ модели без поля кварталов читается как null', () => {
+    const answer = parseKpiModelAnswer(
+      JSON.stringify({ sourceText: '', rows: [{ ...year({}), quarterTargets: undefined }] }),
+    );
+    expect(answer?.rows[0]?.quarterTargets).toBeNull();
+  });
 });
 
 describe('groundKpiRows: ничего не додумывается', () => {
