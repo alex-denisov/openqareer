@@ -129,6 +129,8 @@ interface BuildAppOptions {
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
   skillQuizModel?: RouteDeps['skillQuizModel'];
+  /** B734: русские названия навыков проверки роли. */
+  skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
   adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
@@ -467,7 +469,7 @@ function assembleRouteDeps(
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
-    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}), ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}),
+    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}), ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}), ...(options.skillNameTranslator ? { skillNameTranslator: options.skillNameTranslator } : {}),
     ...services,
   };
 }

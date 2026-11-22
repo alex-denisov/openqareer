@@ -178,6 +178,24 @@ describe('лента уведомлений с флагом B640', () => {
     expect(item.eventAt).toBe(item.createdAt);
   });
 
+  it('роль поиска на английском показывается по-русски (B737)', async () => {
+    const fixture = await setup();
+    fixture.candidateStore.saveResumeDraft(
+      fixture.id,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Chief Operating Officer' },
+      [],
+    );
+    fixture.notifications.recordEvent(fixture.id, {
+      kind: 'new_vacancies_by_role',
+      sourceType: 'matched_vacancy_batch',
+      sourceId: 'batch-2',
+      idempotencyKey: 'new-vacancies:batch-2',
+    });
+    const [item] = (await call(fixture.app, 'GET', `${PATH}?category=vacancies`, flagged)).json()
+      .data.items;
+    expect(item.role).toBe('Операционный директор (COO)');
+  });
+
   it('неверный запрос — 400 invalid_query', async () => {
     const { app } = await setup();
     for (const query of [
@@ -342,5 +360,45 @@ describe('B671: ключ «Приглашения»', () => {
     await call(fixture.app, 'PUT', PREF, flagged, { app: false, email: false, telegram: false });
     fixture.notifications.deleteByCandidate(fixture.id);
     expect(fixture.notifications.getInvitationPreference(fixture.id).stored).toBe(false);
+  });
+});
+
+const DELIVERY = `${PATH}/preferences/delivery`;
+
+describe('n02: «Как часто» и «Не показывать название компании»', () => {
+  it('без флага GET и PUT отвечают 404', async () => {
+    const { app } = await setup();
+    expect((await call(app, 'GET', DELIVERY, plain)).statusCode).toBe(404);
+    expect(
+      (await call(app, 'PUT', DELIVERY, plain, { frequency: 'daily', hideCompany: true })).statusCode,
+    ).toBe(404);
+  });
+
+  it('без выбора — сразу и с названием; чтение ничего не пишет', async () => {
+    const fixture = await setup();
+    const response = await call(fixture.app, 'GET', DELIVERY, flagged);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({ frequency: 'immediate', hideCompany: false });
+  });
+
+  it('PUT проверяет тело и сохраняет выбор', async () => {
+    const fixture = await setup();
+    for (const body of [
+      {},
+      { frequency: 'hourly', hideCompany: false },
+      { frequency: 'daily', hideCompany: 'yes' },
+      { frequency: 'daily', hideCompany: true, extra: 1 },
+    ]) {
+      const response = await call(fixture.app, 'PUT', DELIVERY, flagged, body);
+      expect(response.statusCode, JSON.stringify(body)).toBe(400);
+      expect(response.json().error.code).toBe('invalid_preference');
+    }
+    const saved = await call(fixture.app, 'PUT', DELIVERY, flagged, {
+      frequency: 'weekly',
+      hideCompany: true,
+    });
+    expect(saved.json().data).toEqual({ frequency: 'weekly', hideCompany: true });
+    expect(fixture.notifications.getDeliverySettings(fixture.id)).toEqual({ frequency: 'weekly', hideCompany: true });
+    expect((await call(fixture.app, 'GET', DELIVERY, flagged)).json().data.frequency).toBe('weekly');
   });
 });

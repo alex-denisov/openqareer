@@ -297,6 +297,8 @@ function semanticDateColumns(vacancy: UnifiedVacancy): SQLInputValue[] {
  * локальный бенч давал 0,3 мс и не считается. 100 строк — с запасом вдвое.
  */
 export const DEFAULT_POOL_WRITE_CHUNK = 100;
+/** Площадок на один запрос состояний по списку — ниже предела параметров SQLite. */
+const SOURCE_STATE_ID_CHUNK = 500;
 /**
  * PRB-041 (prod 03.11): a 100-row hh upsert held the write lock 21 s and the web process
  * waited 15 s for it. A transaction commits once it has worked this long, so a web write
@@ -1078,16 +1080,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     }));
   }
 
-  loadSourceStates(): StoredSourceState[] {
-    const rows = this.database
-      .prepare(
-        `SELECT source_id, last_sync_at, last_status, last_error_message,
-                items_found_total, items_active_total, observations,
-                sync_requested_at, sync_started_at
-           FROM vacancy_source_state`,
-      )
-      .all() as unknown as SourceStateRow[];
-    return rows.map((row) => ({
+  loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[] {
+    return this.readSourceStateRows(sourceIds).map((row) => ({
       sourceId: row.source_id,
       ...(row.last_sync_at ? { lastSyncAt: row.last_sync_at } : {}),
       ...(row.last_status && SOURCE_STATUSES.has(row.last_status)
@@ -1102,6 +1096,26 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         ? {}
         : { observations: parseObservations(row.observations) as SourceObservations }),
     }));
+  }
+
+  /**
+   * B736: на проде 76 275 состояний и 55 МБ наблюдений — полное чтение занимало
+   * 4,5 с. Страница админки читает только свои площадки по первичному ключу.
+   */
+  private readSourceStateRows(sourceIds?: readonly string[]): SourceStateRow[] {
+    const columns = `SELECT source_id, last_sync_at, last_status, last_error_message,
+                items_found_total, items_active_total, observations,
+                sync_requested_at, sync_started_at
+           FROM vacancy_source_state`;
+    if (!sourceIds) return this.database.prepare(columns).all() as unknown as SourceStateRow[];
+    const unique = [...new Set(sourceIds)];
+    const rows: SourceStateRow[] = [];
+    for (let start = 0; start < unique.length; start += SOURCE_STATE_ID_CHUNK) {
+      const chunk = unique.slice(start, start + SOURCE_STATE_ID_CHUNK);
+      const sql = `${columns} WHERE source_id IN (${chunk.map(() => '?').join(', ')})`;
+      rows.push(...(this.database.prepare(sql).all(...chunk) as unknown as SourceStateRow[]));
+    }
+    return rows;
   }
 
   /**

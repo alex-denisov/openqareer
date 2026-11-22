@@ -1,3 +1,4 @@
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -5,6 +6,7 @@ import {
   searchRoleLabel,
   type B640ApplicationContext,
 } from '../domain/b640Notifications';
+import { registerB640DeliverySettingsRoutes } from './b640DeliverySettingsRoutes';
 import { readCampaign } from './campaignContext';
 import { sessionCandidate } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -58,7 +60,10 @@ function searchRoleOf(
   rows: readonly { readonly kind: string }[],
 ): string | null {
   if (!rows.some((row) => row.kind === 'new_vacancies_by_role')) return null;
-  return searchRoleLabel(readCampaign(deps.candidateStore, candidateId).roles.value);
+  // B737: роль поиска хранится английским названием онтологии, кандидату — по-русски.
+  return searchRoleLabel(
+    readCampaign(deps.candidateStore, candidateId).roles.value.map(roleTitleRu),
+  );
 }
 
 function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
@@ -222,4 +227,5 @@ export function registerB640NotificationRoutes(app: FastifyInstance, deps: Route
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
     withDeps(deps, writeInvitationPreference),
   );
+  registerB640DeliverySettingsRoutes(app, deps);
 }

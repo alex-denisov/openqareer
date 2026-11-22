@@ -3,6 +3,7 @@ import type { CareerDiaryWorkplace } from '../../../../shared/careerDiary';
 import { createCareerDiaryAdaptationPlan, createCareerDiaryAdaptationPlanFromSteps } from '../../diary/careerDiaryPlanning';
 import { ActionDock } from '../kit/ActionDock';
 import { Button } from '../kit/Button';
+import { DateInput } from '../kit/DateInput';
 import { StatusLine } from '../kit/ResultLine';
 import { fetchVacancyDetail } from '../../vacancies/vacancyDetailApi';
 import { createWorkplace, generateSteps, savePlan, type NewWorkplace } from './adaptationApi';
@@ -23,16 +24,22 @@ export function Field(props: {
   return (
     <div className={props.className ? `gb-f ${props.className}` : 'gb-f'}>
       <label htmlFor={props.id}>{props.label}</label>
-      <input
-        id={props.id}
-        type={props.type ?? 'text'}
-        value={props.value}
-        maxLength={200}
-        placeholder={props.placeholder}
-        aria-invalid={props.error ? true : undefined}
-        onChange={(event) => props.onChange(event.currentTarget.value)}
-      />
-      {props.error ? <p className="va-err" role="alert">{props.error}</p> : null}
+      {props.type === 'date' ? (
+        <DateInput id={props.id} value={props.value} error={props.error} onChange={props.onChange} />
+      ) : (
+        <>
+          <input
+            id={props.id}
+            type="text"
+            value={props.value}
+            maxLength={200}
+            placeholder={props.placeholder}
+            aria-invalid={props.error ? true : undefined}
+            onChange={(event) => props.onChange(event.currentTarget.value)}
+          />
+          {props.error ? <p className="va-err" role="alert">{props.error}</p> : null}
+        </>
+      )}
     </div>
   );
 }

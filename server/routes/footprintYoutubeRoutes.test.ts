@@ -113,28 +113,71 @@ describe('B668: канал YouTube в «Данных для поиска»', () 
     const data = await plan(app, 'token-plain');
     expect(data.plan.some((item) => item.adapterId === 'youtube')).toBe(false);
     expect(Object.keys(data.sourceAvailability)).toEqual([
-      'sherlock', 'maigret', 'hibp', 'wayback', 'exa',
+      'sherlock',
+      'maigret',
+      'hibp',
+      'wayback',
+      'exa',
     ]);
   });
 
-  it('с флагом и ключом — пункт канала YouTube доступен; Instagram остаётся ссылкой', async () => {
+  it('с флагом и ключом — у ссылки YouTube есть доступная проверка канала; Instagram остаётся ссылкой', async () => {
     const { app } = await setup('fixture-key');
     const data = await plan(app, 'token-flagged');
-    const youtube = data.plan.filter((item) => item.adapterId === 'youtube');
-    expect(youtube).toEqual([
-      expect.objectContaining({
-        preview: 'Проверить архив публичной страницы https://www.youtube.com/@msokolova',
-        available: true,
-      }),
-    ]);
-    expect(data.sourceAvailability.youtube).toBe(true);
-    expect(data.plan.some((item) => item.adapterId === 'youtube' && item.preview.includes('instagram'))).toBe(false);
+    // Та же строка, что у ссылки: архив страницы и проверка канала.
+    const youtube = data.plan.filter((item) => item.preview.includes('youtube.com'));
+    expect(youtube.map((item) => item.available)).toEqual([true, true]);
+    expect(data.plan.filter((item) => item.preview.includes('instagram'))).toHaveLength(1);
   });
 
-  it('с флагом без ключа — пункт есть, но не доступен (источник не подключён)', async () => {
+  it('с флагом без ключа — проверка канала есть, но не доступна (источник не подключён)', async () => {
     const { app } = await setup();
     const data = await plan(app, 'token-flagged');
-    expect(data.plan.find((item) => item.adapterId === 'youtube')).toMatchObject({ available: false });
-    expect(data.sourceAvailability.youtube).toBe(false);
+    const youtube = data.plan.filter((item) => item.preview.includes('youtube.com'));
+    expect(youtube.map((item) => item.available)).toEqual([true, false]);
+  });
+});
+
+/** B740: экран B640 не называет инструменты поиска — ни в тексте, ни в ответе. */
+describe('B740: ответы цифрового следа без названий инструментов', () => {
+  const TOOLS =
+    /sherlock|maigret|hibp|wayback|\bexa\b|exiftool|youtube_api|adapterId|sourceAvailability/iu;
+
+  it('с флагом план, аудит и находки без названий инструментов', async () => {
+    const { app, saveAudit } = await setup('fixture-key');
+    saveAudit('flagged', [
+      {
+        id: 'f-1',
+        adapter: 'maigret',
+        kind: 'profile',
+        url: 'https://github.com/msokolova',
+        title: 'GitHub',
+        detail: 'Открытая страница найдена по нику.',
+        match: 'likely_self',
+        observedAt: '2026-11-11T09:00:00.000Z',
+        receipt: { method: 'maigret', source: 'maigret', query: 'msokolova' },
+        sources: ['sherlock', 'maigret'],
+        receipts: [{ method: 'sherlock', source: 'sherlock', query: 'msokolova' }],
+        automatedMatch: 'likely_self',
+        review: 'unreviewed',
+      },
+    ]);
+    const response = await app.inject({
+      method: 'GET',
+      url: PLAN,
+      headers: { authorization: 'Bearer token-flagged' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toMatch(TOOLS);
+    const data = response.json().data;
+    expect(data.plan.length).toBeGreaterThan(0);
+    expect(data.audit.findings[0]).toMatchObject({ id: 'f-1', title: 'GitHub' });
+  });
+
+  it('без флага ответ прежний', async () => {
+    const { app } = await setup('fixture-key');
+    const data = await plan(app, 'token-plain');
+    expect(data.plan.every((item) => typeof item.adapterId === 'string')).toBe(true);
+    expect(data.sourceAvailability).toBeDefined();
   });
 });
