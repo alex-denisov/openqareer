@@ -10,4 +10,8 @@
   .b640 .co-ppl-next > .row-sub {
     margin: 0;
   }
+  /* Черновик сообщения человеку — под строкой на всю ширину, как в «Контактах». */
+  .b640 .co-people .co-person > .co-write {
+    grid-column: 1 / -1;
+  }
 }

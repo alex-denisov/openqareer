@@ -1,9 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
-import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
+import {
+  authenticateCandidate,
+  csrfError,
+  hasSafeMutationOrigin,
+  sendError,
+  withDeps,
+} from './helpers';
 import { isoDateField } from './isoDateField';
-import { recordNotificationFromSource } from './notificationRepositoryAccess';
+import {
+  notificationRepositoryFor,
+  recordNotificationFromSource,
+} from './notificationRepositoryAccess';
+import { ApplicationNotFoundError } from '../data/store/errors';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -76,6 +86,48 @@ const handlePatchInterview: Handler = async (deps, request, reply) => {
   return { data: patched, meta: { requestId: request.id } };
 };
 
+type InterviewRemoval = 'deleted' | 'missing' | 'foreign';
+
+function removeOwnInterview(
+  deps: RouteDeps,
+  candidateId: string,
+  params: { id: string; iid: string },
+): InterviewRemoval {
+  try {
+    const removed = deps.candidateStore.deleteApplicationInterview?.(
+      candidateId,
+      params.id,
+      params.iid,
+    );
+    return removed ? 'deleted' : 'missing';
+  } catch (error) {
+    if (error instanceof ApplicationNotFoundError) return 'foreign';
+    throw error;
+  }
+}
+
+/**
+ * Тестовое или ошибочное интервью снимается вместе с напоминанием, которое ещё не ушло;
+ * ушедшее остаётся в истории уведомлений.
+ */
+const handleDeleteInterview: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const params = request.params as { id: string; iid: string };
+  const removal = removeOwnInterview(deps, candidate.id, params);
+  // Отклик свой: снять неушедшее напоминание и при повторе, если прошлый раз оборвался после
+  // удаления интервью (хранилища разные, общей транзакции нет). Фильтр по кандидату.
+  if (removal !== 'foreign') {
+    notificationRepositoryFor(deps).withdrawUnsentFromSource(candidate.id, 'interview', params.iid);
+  }
+  if (removal !== 'deleted') {
+    return sendError(reply, request, 404, 'interview_not_found', 'Интервью не найдено.', false);
+  }
+  return { data: { interviewId: params.iid, deleted: true }, meta: { requestId: request.id } };
+};
+
 /** `POST/PATCH /applications/:id/interviews[/:iid]` (B251, S2, architecture.md §3–4). */
 export function registerApplicationInterviewRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.post(
@@ -87,5 +139,10 @@ export function registerApplicationInterviewRoutes(app: FastifyInstance, deps: R
     '/api/v1/candidate/applications/:id/interviews/:iid',
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handlePatchInterview),
+  );
+  app.delete(
+    '/api/v1/candidate/applications/:id/interviews/:iid',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, handleDeleteInterview),
   );
 }
