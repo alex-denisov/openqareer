@@ -1,12 +1,7 @@
 import type { SmmAgent } from './smmAgent';
 import { isPostDue, mskDayStart } from './smmSchedule';
 import type { SmmPost, SmmStore } from './smmStore';
-import {
-  TelegramApiError,
-  type SmmTelegram,
-  type TelegramMessage,
-  type TelegramUpdate,
-} from './smmTelegram';
+import type { SmmTelegram, TelegramMessage, TelegramUpdate } from './smmTelegram';
 import { fetchThreadsPost, findThreadsUrl } from './smmThreadsLink';
 
 const OFFSET_KEY = 'telegram_offset';
@@ -14,20 +9,8 @@ const PENDING_KEY = 'pending_action';
 const MESSAGE_POST_PREFIX = 'msg_post:';
 const METRICS_PATTERN =
   /\d[\d\s.,]*\s*(к|k|тыс)?\s*(просмотр|лайк|views|охват|репост|коммент|подпис|переход)/i;
-const RETRY_MS = 5_000;
-const RETRY_MAX_MS = 5 * 60_000;
-const CONFLICT_RETRY_MS = 60_000;
 const SCHEDULE_RETRY_MS = 30 * 60_000;
 const SCHEDULE_RETRY_MAX_MS = 4 * 60 * 60_000;
-
-/** 409 (второй опрос) и 429 (лимит Telegram) ждут минуту; прочие сбои — 5 с, 10 с … до 5 минут, с разбросом. */
-export function pollRetryDelayMs(error: unknown, failures: number): number {
-  if (error instanceof TelegramApiError && (error.status === 409 || error.status === 429)) {
-    return CONFLICT_RETRY_MS;
-  }
-  const base = Math.min(RETRY_MS * 2 ** Math.max(0, failures - 1), RETRY_MAX_MS);
-  return Math.round(base * (0.8 + Math.random() * 0.4));
-}
 
 export const SMM_BUTTONS = {
   accept: 'Принять',
@@ -67,7 +50,6 @@ function errorName(error: unknown): string {
 
 export class SmmBot {
   private generating = false;
-  private running = false;
   private scheduleFailures = 0;
   private scheduleRetryAfterMs = 0;
 
@@ -315,37 +297,18 @@ export class SmmBot {
     await telegram.send(chatId, answer ?? 'Модели сейчас не отвечают, повторите через минуту.');
   }
 
-  /** Длинный опрос Bot API; offset хранится в базе, чтобы выкат не повторял обработку. */
-  async poll(): Promise<void> {
-    const { store, telegram, log } = this.deps;
-    this.running = true;
-    let failures = 0;
-    while (this.running) {
-      try {
-        // Всё, что может бросить (в том числе чтение базы), — внутри try: цикл не должен ронять процесс API.
-        const offset = Number(store.getState(OFFSET_KEY) ?? '0');
-        const updates = await telegram.getUpdates(offset);
-        failures = 0;
-        for (const update of updates) {
-          store.setState(OFFSET_KEY, String(update.update_id + 1));
-          await this.handle(update).catch((error: unknown) =>
-            log('smm-update-failed', { error: errorName(error) }),
-          );
-        }
-      } catch (error) {
-        failures += 1;
-        log('smm-poll-failed', {
-          error: errorName(error),
-          status: error instanceof TelegramApiError ? error.status : null,
-        });
-        await new Promise((resolve) =>
-          setTimeout(resolve, pollRetryDelayMs(error, failures)).unref?.(),
-        );
-      }
+  /**
+   * B732: обновление с общего вебхука бота. Номер последнего хранится в базе, поэтому
+   * повтор Telegram (ответ не дошёл) и выкат не обрабатывают одно обновление дважды.
+   */
+  async receive(update: TelegramUpdate): Promise<void> {
+    const { store, log } = this.deps;
+    try {
+      if (update.update_id < Number(store.getState(OFFSET_KEY) ?? '0')) return;
+      store.setState(OFFSET_KEY, String(update.update_id + 1));
+      await this.handle(update);
+    } catch (error) {
+      log('smm-update-failed', { error: errorName(error) });
     }
-  }
-
-  stop(): void {
-    this.running = false;
   }
 }
