@@ -257,6 +257,22 @@ if [[ "$PUBLIC_KEY_FILE" == "--caddy-only" ]]; then
   install_caddy_configuration
   exit 0
 fi
+# B759: maintenance and the mechanics worker run from their own release links,
+# which openqareer-activate moves only when their code fingerprint changes. A
+# missing link starts at the current release; an existing one is left alone.
+ensure_worker_links() {
+  local link_name target
+  target="$(readlink "$RELEASE_ROOT/current")"
+  [[ -n "$target" ]] || fail "current release is missing"
+  for link_name in maintenance mechanics; do
+    if [[ ! -L "$RELEASE_ROOT/$link_name" ]]; then
+      ln -s "$target" "$RELEASE_ROOT/$link_name"
+      chown -h "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/$link_name"
+      printf 'openqareer-bootstrap: %s -> %s\n' "$link_name" "$target"
+    fi
+  done
+}
+
 # B649-6: only the three units. Installs a unit whose file differs, reloads,
 # verifies and restarts just the changed ones; a repeat run changes nothing.
 install_units_only() {
@@ -280,6 +296,7 @@ install_units_only() {
     printf 'openqareer-bootstrap: units unchanged\n'
     return 0
   fi
+  ensure_worker_links
   systemctl daemon-reload
   for unit in "${changed[@]}"; do
     systemd-analyze verify "/etc/systemd/system/$unit"
@@ -390,6 +407,7 @@ systemctl restart "openqareer-static@$listen_port.service"
 expected_health="$(basename "$(readlink "$RELEASE_ROOT/current")")"
 wait_for_application_health "$expected_health" "$listen_port" ||
   fail "application service health failed after restart"
+ensure_worker_links
 systemctl restart openqareer-maintenance.service
 systemctl restart openqareer-vacancy-mechanics.service
 

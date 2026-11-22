@@ -5,6 +5,10 @@ readonly RELEASE_ROOT="${OPENQAREER_RELEASE_ROOT:-/srv/openqareer}"
 readonly SLOTS_LIB="${OPENQAREER_SLOTS_LIB:-/usr/local/lib/openqareer/openqareer-slots.sh}"
 readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
+# B759: обслуживание и воркер соответствия работают со своих ссылок на релиз и
+# перезапускаются, только когда отпечаток их кода (с источниками схемы) другой.
+readonly MAINTENANCE_LINK=maintenance
+readonly MECHANICS_LINK=mechanics
 
 fail() {
   printf 'openqareer-activate: %s\n' "$1" >&2
@@ -149,37 +153,77 @@ else
   retire_slot "$next_port" "$live_port"
 fi
 
-# Обслуживатель пула (B230) перезапускается после того, как HTTP подтвердил
-# релиз. Он не участвует в /health, поэтому один только health-check не может
-# подтвердить production readiness. Нельзя оставить новый HTTP-релиз с
-# остановленным или неактивным worker-ом: это будет частично выкачанный батч.
-if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
-  ! systemctl is-active --quiet "$MAINTENANCE_SERVICE"; then
-  fail "maintenance service is not active after release restart; check journalctl -u $MAINTENANCE_SERVICE"
-fi
+# Обслуживатель пула (B230) и воркер соответствия (B523/B524) не участвуют в
+# /health. Нельзя оставить новый HTTP-релиз с остановленным или неактивным
+# worker-ом: это будет частично выкачанный батч.
+#
+# B759: перезапуск — только при другом отпечатке кода. Процесс работает с
+# ссылки $RELEASE_ROOT/<ссылка>, а не с current, поэтому без перезапуска он
+# дальше читает свой релиз целиком. Юнит, установленный до B759 (ExecStart на
+# current), перезапускается всегда, как раньше.
+fingerprint_in() {
+  tr -d '\r\n' < "$1/$2" 2>/dev/null || true
+}
 
-# Воркер соответствия (B523/B524) читает тот же релиз; хост без юнита
-# (до bootstrap) пропускается, установленный обязан подняться.
-if systemctl cat "$MECHANICS_SERVICE" >/dev/null 2>&1; then
-  if ! sudo -n /usr/bin/systemctl restart "$MECHANICS_SERVICE" ||
-    ! systemctl is-active --quiet "$MECHANICS_SERVICE"; then
-    fail "vacancy mechanics service is not active after release restart; check journalctl -u $MECHANICS_SERVICE"
+unit_runs_from_link() {
+  local exec_start
+  exec_start="$(systemctl show -p ExecStart --value "$1" 2>/dev/null || true)"
+  [[ "$exec_start" == *"$RELEASE_ROOT/$2/"* ]]
+}
+
+# refresh_worker <юнит> <ссылка> <файл отпечатка>: печатает kept или restarted.
+refresh_worker() {
+  local -r service="$1" link_name="$2" fingerprint_file="$3"
+  local next_fingerprint running_target running_fingerprint
+  next_fingerprint="$(fingerprint_in "$release_dir" "$fingerprint_file")"
+  running_target="$(readlink "$link_name" 2>/dev/null || true)"
+  running_fingerprint=""
+  [[ -z "$running_target" ]] ||
+    running_fingerprint="$(fingerprint_in "$RELEASE_ROOT/$running_target" "$fingerprint_file")"
+  if [[ -n "$next_fingerprint" && "$next_fingerprint" == "$running_fingerprint" ]] &&
+    unit_runs_from_link "$service" "$link_name" &&
+    systemctl is-active --quiet "$service"; then
+    printf 'kept'
+    return 0
   fi
+  local -r previous_target="$running_target"
+  atomic_link "releases/$release_sha" "$link_name"
+  # Вывод перезапуска — в stderr: stdout функции — только её итог.
+  if ! sudo -n /usr/bin/systemctl restart "$service" >&2 ||
+    ! systemctl is-active --quiet "$service"; then
+    [[ -z "$previous_target" ]] || atomic_link "$previous_target" "$link_name"
+    return 1
+  fi
+  printf 'restarted'
+}
+
+maintenance_state="$(refresh_worker "$MAINTENANCE_SERVICE" "$MAINTENANCE_LINK" maintenance.fingerprint)" ||
+  fail "maintenance service is not active after release restart; check journalctl -u $MAINTENANCE_SERVICE"
+
+# Хост без юнита воркера соответствия (до bootstrap) пропускается, установленный обязан подняться.
+mechanics_state=none
+if systemctl cat "$MECHANICS_SERVICE" >/dev/null 2>&1; then
+  mechanics_state="$(refresh_worker "$MECHANICS_SERVICE" "$MECHANICS_LINK" vacancy-mechanics.fingerprint)" ||
+    fail "vacancy mechanics service is not active after release restart; check journalctl -u $MECHANICS_SERVICE"
 fi
 
 rm -f -- "$archive"
 
 current_target="$(readlink current)"
 previous_target="$(readlink previous 2>/dev/null || true)"
+# Релиз, с которого работает не перезапущенный процесс, не удаляется (B759).
+maintenance_target="$(readlink "$MAINTENANCE_LINK" 2>/dev/null || true)"
+mechanics_target="$(readlink "$MECHANICS_LINK" 2>/dev/null || true)"
 while IFS= read -r stale_dir; do
   relative_dir="releases/$(basename "$stale_dir")"
-  if [[ "$relative_dir" != "$current_target" && "$relative_dir" != "$previous_target" ]]; then
-    rm -rf -- "$stale_dir"
-  fi
+  case "$relative_dir" in
+    "$current_target" | "$previous_target" | "$maintenance_target" | "$mechanics_target") ;;
+    *) rm -rf -- "$stale_dir" ;;
+  esac
 done < <(find releases -regextype posix-extended -mindepth 1 -maxdepth 1 \
   -type d -regex '.*/[0-9a-f]{40}' -printf '%T@ %p\n' |
   sort -rn | awk 'NR > 5 {print $2}')
 
-printf 'release=%s health=ok port=%s reserve=%s previous=%s\n' \
+printf 'release=%s health=ok port=%s reserve=%s previous=%s maintenance=%s mechanics=%s\n' \
   "$release_sha" "$next_port" "$([[ "$reserve" == "1" ]] && printf '%s' "$live_port" || printf none)" \
-  "${old_target:-none}"
+  "${old_target:-none}" "$maintenance_state" "$mechanics_state"
