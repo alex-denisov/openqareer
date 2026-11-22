@@ -56,6 +56,7 @@ import {
 import { isValidTimezone } from '../../shared/timezoneUtils';
 import {
   ensureSessionDeviceHashSchema,
+  labelSessionDevice,
   storeAuthSession,
   type SessionDeletionLog,
 } from './sessionRepository';
@@ -457,6 +458,12 @@ export class AuthServiceCore implements SessionAuth {
     return adminListAudit(this.database, query);
   }
 
+  /** B754: название устройства сессии, если его ещё нет. */
+  labelSession(sessionToken: string, label: string): void {
+    if (!sessionToken) return;
+    labelSessionDevice(this.database, hashToken(sessionToken), label);
+  }
+
   getAccount(sessionToken: string): AccountSnapshot | null {
     const principal = this.authenticate(sessionToken);
     if (!principal) return null;
@@ -465,7 +472,7 @@ export class AuthServiceCore implements SessionAuth {
     const currentTokenHash = hashToken(sessionToken);
     const sessions = this.database
       .prepare(
-        `SELECT token_hash, expires_at, created_at, last_seen_at, device_id_hash
+        `SELECT token_hash, expires_at, created_at, last_seen_at, device_id_hash, device_label
          FROM sessions
          WHERE user_id = ? AND expires_at > ?
          ORDER BY last_seen_at DESC, created_at DESC`,
@@ -488,6 +495,7 @@ export class AuthServiceCore implements SessionAuth {
         createdAt: session.created_at,
         lastSeenAt: session.last_seen_at,
         expiresAt: session.expires_at,
+        deviceLabel: session.device_label ?? null,
       })),
     };
   }
