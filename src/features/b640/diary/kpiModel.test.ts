@@ -78,6 +78,7 @@ describe('kpiModel', () => {
           horizon: 'quarter',
           weight: 50,
           setBy: 'manager',
+          quarterTargets: null,
         },
         {
           title: 'Закрыто вакансий',
@@ -87,6 +88,7 @@ describe('kpiModel', () => {
           horizon: 'quarter',
           weight: 50,
           setBy: 'manager',
+          quarterTargets: null,
         },
       ],
     });
@@ -133,5 +135,17 @@ describe('d02l на 390: строка списка и ⓘ веса', () => {
     expect(weightNote(rows.map((item) => ({ ...item, weight: '' })))).toBe(
       'Замеры вносятся в карточке цели.',
     );
+  });
+});
+
+describe('B742: вклад кварталов из черновика в цель', () => {
+  it('годовая строка передаёт кварталы; сменили срок на квартал — кварталов нет', () => {
+    const quarterTargets = [{ quarter: 1 as const, value: 85 }];
+    const [first] = draftRows(draft([row({ horizon: 'year', weight: 100, quarterTargets })]));
+    expect(first?.quarterTargets).toEqual(quarterTargets);
+    const yearRows = acceptRows([first!], '2027-01-03');
+    expect('rows' in yearRows && yearRows.rows[0]?.quarterTargets).toEqual(quarterTargets);
+    const quarterRows = acceptRows([{ ...first!, horizon: 'quarter' }], '2027-01-03');
+    expect('rows' in quarterRows && quarterRows.rows[0]?.quarterTargets).toBeNull();
   });
 });

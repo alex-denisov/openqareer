@@ -8,6 +8,7 @@ import type {
   CareerDiaryGoalArchive,
   CareerDiaryGoalCard,
   CareerDiaryGoalSetter,
+  CareerDiaryQuarterTarget,
 } from '../../../../shared/careerDiaryCards';
 import { shortDate } from './model';
 
