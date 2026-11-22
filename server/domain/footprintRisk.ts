@@ -35,6 +35,8 @@ const HIDE: FootprintRiskAction = { kind: 'hide', label: 'Скрыть' };
 const ADD: FootprintRiskAction = { kind: 'add_to_profile', label: 'В профиль' };
 const FIX: FootprintRiskAction = { kind: 'ask_to_fix', label: 'Попросить исправить' };
 const CONFIRM: FootprintRiskAction = { kind: 'confirm_owner', label: 'Проверить' };
+/** «Проверить» ждёт кандидата и в «стоит убрать» не идёт (B645 p02). */
+const REVIEW_KINDS: ReadonlySet<string> = new Set([CHECK.kind, CONFIRM.kind]);
 
 const NEEDS_CHECK: Rule = { category: 'needs_check', level: 'important', action: CHECK };
 const STALE: Rule = { category: 'stale_profile', level: 'low', action: HIDE };
@@ -289,7 +291,7 @@ export function buildFootprintRiskSummary(
     ...(audit ? discrepancies.map((discrepancy) => mismatchItem(discrepancy, findings)) : []),
   ].sort((a, b) => (LEVEL_RANK.get(a.level) ?? 0) - (LEVEL_RANK.get(b.level) ?? 0));
   const open = items.filter((item) => item.level !== 'useful' && !item.resolved);
-  const unconfirmed = open.filter((item) => item.action?.kind === CONFIRM.kind).length;
+  const unconfirmed = open.filter((item) => REVIEW_KINDS.has(item.action?.kind ?? '')).length;
   const toRemove = open.length - unconfirmed;
   // «Идёт проверка» верим, только если она и правда идёт: оборванную показываем сорванной.
   const stalled = audit?.state === 'pending' && options.checkRunning === false;
