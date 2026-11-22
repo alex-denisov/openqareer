@@ -16,6 +16,7 @@ import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentR
 import { toExportedSourceConnection } from './store/exportedSourceConnection';
 import { createTrackerExport, type TrackerExportSources, type TrackerExportStore } from './trackerExport';
 import { exportNotifications, type NotificationExportStore } from './notificationExport';
+import { exportProfileHistory, type ProfileHistoryExportStore } from './profileHistoryExport';
 import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
@@ -54,8 +55,8 @@ interface CandidateExportDependencies {
   readonly interviewSimulatorRepo: Pick<SqliteInterviewSimulatorRepository, 'getCurrent'>;
 }
 
-/** Хранилище глазами выгрузки: методы трекера и уведомлений. */
-export type OwnStorageStore = TrackerExportStore & NotificationExportStore;
+/** Хранилище глазами выгрузки: методы трекера, уведомлений и истории профиля. */
+export type OwnStorageStore = TrackerExportStore & NotificationExportStore & ProfileHistoryExportStore;
 
 export function createSqliteCandidateStoreExportMethods(
   dependencies: CandidateExportDependencies,
@@ -84,6 +85,7 @@ export function createSqliteCandidateStoreExportMethods(
         notificationDeliverySettings: dependencies.readDeliverySettings(candidateId),
         tracker: exportTracker(candidateId),
         notifications: exportNotifications(database, dependencies.ownStorage.store, candidateId),
+        profileHistory: exportProfileHistory(dependencies.ownStorage, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
