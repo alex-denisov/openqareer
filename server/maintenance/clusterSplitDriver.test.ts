@@ -24,14 +24,17 @@ function probes(overrides: Partial<Parameters<typeof runClusterSplitDriver>[0]> 
   const sleep = vi.fn(async () => undefined);
   let calls = 0;
   const step = vi.fn(() => stepResult(++calls > 2));
+  const dropClusterSnapshot = vi.fn();
   return {
     log,
     checkpoint,
     sleep,
     step,
+    dropClusterSnapshot,
     options: {
       config: readClusterSplitConfig({ CLUSTER_SPLIT_ENABLED: '1' }),
       step,
+      dropClusterSnapshot,
       checkpoint,
       sleep,
       log,
@@ -70,6 +73,22 @@ describe('cluster split driver (B752)', () => {
     expect(await runClusterSplitDriver(options)).toEqual({ steps: 3, reason: 'completed' });
     expect(checkpoint).toHaveBeenCalledTimes(3);
     expect(sleep).toHaveBeenCalledWith(2_000);
+  });
+
+  it('drops the engine cluster snapshot right after every step, before any pause', async () => {
+    const order: string[] = [];
+    const { options } = probes({
+      step: vi.fn(() => {
+        order.push('step');
+        return stepResult(order.length > 4);
+      }),
+      dropClusterSnapshot: () => order.push('drop'),
+      sleep: async () => {
+        order.push('sleep');
+      },
+    });
+    await runClusterSplitDriver(options);
+    expect(order).toEqual(['step', 'drop', 'sleep', 'step', 'drop', 'sleep', 'step', 'drop']);
   });
 
   it.each([

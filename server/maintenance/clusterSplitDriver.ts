@@ -49,6 +49,11 @@ interface DriverLog {
 export interface ClusterSplitDriverOptions {
   readonly config: ClusterSplitConfig;
   readonly step: () => ClusterSplitStepResult;
+  /**
+   * Сбросить копию кластеров движка в памяти: старые пути держат весь пул и
+   * могли бы записать основателя назад со снятыми источниками.
+   */
+  readonly dropClusterSnapshot: () => void;
   readonly checkpoint: () => void;
   readonly sleep: (ms: number) => Promise<void>;
   readonly log: DriverLog;
@@ -79,6 +84,7 @@ export async function runClusterSplitDriver(
   while (!options.isStopped()) {
     const result = options.step();
     steps += 1;
+    options.dropClusterSnapshot();
     options.checkpoint();
     if (result.completed) {
       options.log.info({ steps }, 'cluster_split_completed');
@@ -109,6 +115,7 @@ export function startClusterSplit(input: {
   readonly config: ClusterSplitConfig;
   readonly log: DriverLog;
   readonly isStopped: () => boolean;
+  readonly dropClusterSnapshot: () => void;
 }): Promise<ClusterSplitDriverReport> {
   const histogram = monitorEventLoopDelay({ resolution: 20 });
   histogram.enable();
@@ -116,6 +123,7 @@ export function startClusterSplit(input: {
   return runClusterSplitDriver({
     config: input.config,
     step: () => splitClustersStep(input.db, { log: logStep }),
+    dropClusterSnapshot: input.dropClusterSnapshot,
     checkpoint: () => input.db.exec('PRAGMA wal_checkpoint(TRUNCATE)'),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: input.log,

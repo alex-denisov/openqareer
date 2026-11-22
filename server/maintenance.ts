@@ -396,6 +396,7 @@ try {
         config: clusterSplitConfig,
         log,
         isStopped: () => shuttingDown,
+        dropClusterSnapshot: () => composed.engine.dropClusterSnapshot(),
       }).catch((error: unknown) =>
         log.error({ message: (error as Error).message }, 'cluster_split_failed'),
       );
