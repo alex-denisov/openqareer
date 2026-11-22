@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { CareerDiaryGoalCard } from '../../../../shared/careerDiaryCards';
 import { Icon } from '../kit/Icon';
 import { buildNodePath } from '../routes';
@@ -10,6 +11,37 @@ import {
   riskTag,
   staleFlag,
 } from './goalsModel';
+import { GoalTransferDialog } from './GoalTransfer';
+
+/** Достигнутая цель: «в Итоги и в профиль» — «Перенести» один раз, дальше «Перенесено». */
+function AchievedFlag({ card }: { readonly card: CareerDiaryGoalCard }) {
+  const [moved, setMoved] = useState(Boolean(card.details.transfer));
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <p className="dn-flag is-done">
+        <Icon name="trophy" />
+        {'Достигнута → в Итоги и в профиль · '}
+        {moved ? (
+          <span>Перенесено</span>
+        ) : (
+          <button className="row-act" type="button" onClick={() => setOpen(true)}>
+            Перенести
+          </button>
+        )}
+      </p>
+      <GoalTransferDialog
+        card={card}
+        open={open}
+        onClose={() => setOpen(false)}
+        onDone={() => {
+          setOpen(false);
+          setMoved(true);
+        }}
+      />
+    </>
+  );
+}
 
 export interface GoalItemProps {
   readonly card: CareerDiaryGoalCard;
@@ -46,15 +78,7 @@ export function GoalItem({ card, now }: GoalItemProps) {
         })}
       </ul>
       {quarters ? <p className="row-sub">{quarters}</p> : null}
-      {card.risk.status === 'achieved' ? (
-        <p className="dn-flag is-done">
-          <Icon name="trophy" />
-          {'Достигнута → в Итоги и в профиль · '}
-          <Link className="row-act" to={buildNodePath('d04')}>
-            Перенести
-          </Link>
-        </p>
-      ) : null}
+      {card.risk.status === 'achieved' ? <AchievedFlag card={card} /> : null}
       {stale ? (
         <p className="dn-flag">
           <Icon name="warn" />
