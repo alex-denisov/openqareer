@@ -456,14 +456,16 @@ export class ConsultantHistoryStore {
   export(candidateId: string): ConsultantConversationExport[] {
     this.ensureLegacyHistory(candidateId);
     const rows = this.database
-      .prepare('SELECT id, stage, opened_at, last_message_at, closed_at, message_count, first_user_message_id FROM consultant_conversations WHERE candidate_id = ? AND closed_at IS NOT NULL ORDER BY opened_at, id')
+      .prepare('SELECT id, stage, opened_at, last_message_at, closed_at, message_count, first_user_message_id FROM consultant_conversations WHERE candidate_id = ? ORDER BY opened_at, id')
       .all(candidateId) as unknown as ConversationRow[];
+    // B738: every conversation, the open one and a continued one too; `open` marks it not closed yet.
     return rows.map((row) => {
       const versions = this.database
         .prepare('SELECT id, message_count, version, summary_cipher, created_at FROM consultant_summaries WHERE candidate_id = ? AND conversation_id = ? ORDER BY version')
         .all(candidateId, row.id) as unknown as Array<Pick<SummaryRow, 'id' | 'message_count' | 'version' | 'summary_cipher' | 'created_at'>>;
       return {
         ...this.summaryView(candidateId, row),
+        open: row.closed_at === null,
         messages: this.readMessages(candidateId, row.id),
         summaries: versions.map((summary) => ({
           version: summary.version,

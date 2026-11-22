@@ -315,6 +315,8 @@ export interface ConsultantConversationDetail extends ConsultantConversationSumm
 }
 
 export interface ConsultantConversationExport extends ConsultantConversationDetail {
+  /** B738: the conversation is not closed yet (open now or continued); its summaries may be older. */
+  readonly open: boolean;
   readonly summaries: Array<{
     readonly version: number;
     readonly messageCount: number;
