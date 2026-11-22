@@ -166,6 +166,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   b640_offer_choices: { gap: GAP_ACCOUNT },
   // B642: только тексты расшифровок (аудио не хранится); сегменты висят на записи.
   interview_recordings: { gap: 'записи интервью и их расшифровки: в выгрузку пока не входят' },
+  interview_interviewers: { gap: 'имя собеседника из разбора интервью: в выгрузку пока не входит' },
   candidate_auto_apply_consents: { gap: GAP_AUTOMATION },
   candidate_auto_apply_journal: { gap: GAP_AUTOMATION },
   candidate_auto_apply_queue: { gap: GAP_AUTOMATION },

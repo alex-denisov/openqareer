@@ -402,6 +402,8 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly candidateId?: string;
   /** B649: сервер включил этому аккаунту новый кабинет B640. */
   readonly cabinetB640?: boolean;
+  /** B642: сервер записывает разговоры (`features.interviewRecording`). */
+  readonly interviewRecording?: boolean;
   readonly initialSession?:
     | (Omit<AuthUser, 'role'> & {
         role: AuthUser['role'] | 'CareerPartner';
@@ -1701,7 +1703,14 @@ export async function mockSignedInCabinet(
               ? {
                   ...candidate,
                   emailVerified: true,
-                  ...(options.cabinetB640 ? { features: { cabinetB640: true } } : {}),
+                  ...(options.cabinetB640
+                    ? {
+                        features: {
+                          cabinetB640: true,
+                          ...(options.interviewRecording ? { interviewRecording: true } : {}),
+                        },
+                      }
+                    : {}),
                 }
               : options.initialSession,
         },
