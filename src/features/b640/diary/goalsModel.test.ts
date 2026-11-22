@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CareerDiaryGoalCard } from '../../../../shared/careerDiaryCards';
 import { cardInput, draftOf, emptyDraft, parseTarget, validate } from './goalForm';
 import {
+  archiveNote,
   formatValue,
   goalByline,
   goalsLead,
@@ -164,5 +165,23 @@ describe('форма цели', () => {
       setBy: 'manager',
       indicators: [{ id: 'i1', title: 'Показатель i1', now: '14', target: '7' }],
     });
+  });
+});
+
+describe('архив целей: ⓘ «Почему в архиве»', () => {
+  it('дата и причина одной строкой; точка не удваивается', () => {
+    const archive = {
+      archivedAt: '2026-12-22T09:00:00.000Z',
+      reason: 'банк меняет платформу сборки',
+    };
+    expect(archiveNote(archive, '2027-01-03')).toBe(
+      'Убрана в архив 22 декабря 2026. Причина: банк меняет платформу сборки.',
+    );
+    expect(archiveNote({ ...archive, reason: 'Отменена директором.' }, '2026-12-30')).toBe(
+      'Убрана в архив 22 декабря. Причина: Отменена директором.',
+    );
+    expect(archiveNote({ ...archive, archivedAt: '' }, '2026-12-30')).toBe(
+      'Убрана в архив. Причина: банк меняет платформу сборки.',
+    );
   });
 });
