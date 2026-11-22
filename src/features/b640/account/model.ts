@@ -109,9 +109,13 @@ const CHANNEL_PLACE: Readonly<Record<NotificationChannel, string>> = {
   telegram: 'в Telegram',
 };
 
-/** «В приложении и на почту» в списке разделов. */
-export function notificationsSummary(preferences: readonly NotificationChannelPreference[]): string {
+/** «В приложении и на почту» в списке разделов; не привязанный Telegram не называем. */
+export function notificationsSummary(
+  preferences: readonly NotificationChannelPreference[],
+  telegramConnected = true,
+): string {
   const places = (Object.keys(CHANNEL_PLACE) as NotificationChannel[])
+    .filter((channel) => channel !== 'telegram' || telegramConnected)
     .filter((channel) => preferences.some((item) => item[channel]))
     .map((channel) => CHANNEL_PLACE[channel]);
   if (places.length === 0) return 'Выключены';

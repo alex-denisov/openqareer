@@ -167,3 +167,20 @@ describe('campaignMeta salary currency', () => {
     expect(meta.salaryCurrency).toBe('RUB');
   });
 });
+
+/** B737: роль поиска — ключ на английском; кандидату её показывают по-русски. */
+describe('campaignMeta titlesRu', () => {
+  it('gives the Russian name of each search role that has one', () => {
+    const store = storeFor(
+      workspace([], {
+        roles: ['Chief Operating Officer', 'Директор по чудесам'],
+        regions: [],
+        revision: 1,
+        updatedAt: '2026-11-22T00:00:00.000Z',
+      } as CandidateWorkspaceState['campaign']),
+    );
+    const meta = campaignMeta(readCampaign(store, 'c1'));
+    expect(meta.roles.value).toEqual(['Chief Operating Officer', 'Директор по чудесам']);
+    expect(meta.titlesRu).toEqual({ 'Chief Operating Officer': 'Операционный директор (COO)' });
+  });
+});

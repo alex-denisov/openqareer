@@ -26,7 +26,7 @@ import type {
   CareerDiaryKpiImport,
   CareerDiaryKpiImportInput,
 } from '../../../../shared/careerDiaryKpi';
-import { apiFetch, readData } from '../../coach/apiClient';
+import { apiFetch, readData, throwApiError } from '../../coach/apiClient';
 
 /** Клиент маршрутов дневника B683/B684 для экранов раздела (все под флагом B640). */
 const ROOT = '/api/v1/candidate/career-diary';
@@ -68,8 +68,12 @@ export function updateEntry(
   return read(`${ROOT}/entries/${encodeURIComponent(entryId)}`, json('PATCH', patch));
 }
 
+/** Удаление отвечает 204 без тела: читать конверт нельзя, достаточно статуса. */
 export async function deleteEntry(entryId: string): Promise<void> {
-  await read(`${ROOT}/entries/${encodeURIComponent(entryId)}`, { method: 'DELETE' });
+  const response = await apiFetch(`${ROOT}/entries/${encodeURIComponent(entryId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) await throwApiError(response);
 }
 
 export function getWeek(weekStart: string): Promise<CareerDiaryWeekDraft> {

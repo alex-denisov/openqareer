@@ -1,3 +1,4 @@
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -228,10 +229,13 @@ describe('B726: число роли «Карьеры» равно строкам
     const xray = (
       roles.json().data as Array<{
         title: string;
+        titleRu?: string;
         confirmation: { state: string; sampleSize?: number };
       }>
     ).find((role) => role.title === 'Xray Technician');
     expect(xray).toBeDefined();
+    // B737: строка роли несёт русское название для показа; ключом остаётся title.
+    expect(xray?.titleRu).toBe(roleTitleRu('Xray Technician'));
 
     const list = await app.inject({
       method: 'GET',

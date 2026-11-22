@@ -1,5 +1,8 @@
 import { getAccountCapabilityConsents } from '../../account/accountCapabilityConsentApi';
-import { getNotificationPreferences } from '../../account/notificationPreferencesApi';
+import {
+  getNotificationChannelStatus,
+  getNotificationPreferences,
+} from '../../account/notificationPreferencesApi';
 import { getAccount, getConnections } from '../../coach/coachApi';
 import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
 import { getResumeStudio } from '../../resume/resumeApi';
@@ -33,14 +36,16 @@ const valueOf = <T,>(result: PromiseSettledResult<T>): T | null =>
   result.status === 'fulfilled' ? result.value : null;
 
 async function loadSummaries(): Promise<Summaries> {
-  const [account, connections, preferences, consents, billing, profile] = await Promise.allSettled([
-    getAccount(),
-    getConnections(),
-    getNotificationPreferences(),
-    getAccountCapabilityConsents(),
-    getCandidateBillingSummary(),
-    getResumeStudio(),
-  ]);
+  const [account, connections, preferences, channels, consents, billing, profile] =
+    await Promise.allSettled([
+      getAccount(),
+      getConnections(),
+      getNotificationPreferences(),
+      getNotificationChannelStatus(),
+      getAccountCapabilityConsents(),
+      getCandidateBillingSummary(),
+      getResumeStudio(),
+    ]);
   const sessions = valueOf(account)?.sessions;
   const links = valueOf(connections);
   const events = valueOf(preferences);
@@ -49,7 +54,10 @@ async function loadSummaries(): Promise<Summaries> {
   return {
     security: sessions ? securitySummary(sessions.length) : null,
     connections: links ? connectionsSummary(links) : null,
-    notifications: events ? notificationsSummary(events) : null,
+    // Канал не прочитался — Telegram не называем: лучше недосказать, чем пообещать лишнее.
+    notifications: events
+      ? notificationsSummary(events, valueOf(channels)?.telegram.connected === true)
+      : null,
     consents: granted ? consentsSummary(granted.length) : null,
     plan: plan ? PLAN_NAME[plan] : null,
     photoMediaId: valueOf(profile)?.draft?.candidate.photoMediaId ?? null,

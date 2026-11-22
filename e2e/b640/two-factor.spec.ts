@@ -7,7 +7,8 @@ import { expectGates } from './gates';
 // из приложения и с резервным кодом. Сервер подменён: протокол проверяют
 // server/auth/twoFactorRoutes.test.ts, здесь — путь кандидата по экранам.
 
-const SECRET = 'JBSWY3DPEHPK3PXPK4ZQ7XWM';
+// Как настоящий секрет: 20 байт base32 = 32 символа, 8 групп (generateTotpSecret).
+const SECRET = 'JBSWY3DPEHPK3PXPK4ZQ7XWMABCDEFGH';
 const APP_CODE = '123456';
 const CODES = [
   'k7m2p-x9qtr',
@@ -110,14 +111,31 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
   await expect(
     screen.getByRole('img', { name: 'QR-код для приложения-аутентификатора' }),
   ).toBeVisible();
-  await expect(screen.locator('.fa-key code')).toHaveText('JBSW Y3DP EHPK 3PXP K4ZQ 7XWM');
+  await expect(screen.locator('.fa-key .fa-key-line')).toHaveText([
+    'JBSW Y3DP EHPK 3PXP',
+    'K4ZQ 7XWM ABCD EFGH',
+  ]);
   await expectGates(page);
+  // n04d (B645, 22.11): ключ и кнопки не уходят за край, страница без прокрутки вбок.
+  const overflow = await page.evaluate(() => ({
+    page: document.documentElement.scrollWidth - window.innerWidth,
+    copy:
+      document.querySelector('.fa-key .icon-btn')!.getBoundingClientRect().right -
+      window.innerWidth,
+  }));
+  expect(overflow.page).toBeLessThanOrEqual(0);
+  expect(overflow.copy).toBeLessThanOrEqual(0);
   await screen.getByLabel('Код из приложения-аутентификатора').fill(APP_CODE);
   await screen.getByLabel('Текущий пароль').fill('secret-password');
   await screen.getByRole('button', { name: 'Включить' }).click();
 
   await expect(screen.locator('.fa-codes code')).toHaveText(CODES);
   await expectGates(page);
+  // n04e (B645, 22.11): зоны клика «Скачать» и «Готово» не перекрываются.
+  const download = (await screen.getByRole('button', { name: 'Скачать' }).boundingBox())!;
+  const done = (await screen.getByRole('button', { name: 'Готово' }).boundingBox())!;
+  const apart = done.x >= download.x + download.width || done.y >= download.y + download.height;
+  expect(apart).toBe(true);
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(stored).not.toContain(CODES[0]);
   await screen.getByRole('button', { name: 'Готово' }).click();
@@ -126,6 +144,9 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
 
   await screen.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await expect.poll(() => server.signedIn).toBe(false);
+  // Выход уводит на «/» полной загрузкой документа (граница аналитики, App.tsx):
+  // `goto('/login')` поверх незавершённого перехода падал с net::ERR_ABORTED.
+  await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'domcontentloaded' });
 
   await signInWith(page, APP_CODE);
   await signInWith(page, CODES[2]);

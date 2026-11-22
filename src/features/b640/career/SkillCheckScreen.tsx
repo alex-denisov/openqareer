@@ -4,7 +4,12 @@ import { buildNodePath, type B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { pageAttrs } from './careerPaths';
-import { CASE_CRITERIA_LABELS, caseEyebrow, dialogueEyebrow, runSkillRows } from './skillCheckModel';
+import {
+  CASE_CRITERIA_LABELS,
+  caseEyebrow,
+  dialogueEyebrow,
+  runSkillRows,
+} from './skillCheckModel';
 import { SkillQuestion } from './SkillQuestion';
 import { SkillResult } from './SkillResult';
 import { SkillStart } from './SkillStart';
@@ -12,14 +17,16 @@ import { SkillSuggestions } from './SkillSuggestions';
 import { useSkillCheck, type SkillCheck } from './useSkillCheck';
 import { loadSkillRoles } from './careerApi';
 import { useLoad } from '../today/useLoad';
+import { RoleTitlesProvider, useRoleLabel } from './roleLabelContext';
 
 function SkillList({ run }: { readonly run: RoleSkillAssessmentRun }) {
+  const label = useRoleLabel();
   const rows = runSkillRows(run);
   return (
     <details className="more-n">
       <summary>
         <Icon name="down" />
-        Навыки роли «{run.roleTitle}» · {rows.length}
+        Навыки роли «{label(run.roleTitle)}» · {rows.length}
       </summary>
       <ul className="rows exp-rows">
         {rows.map((row) => (
@@ -52,11 +59,12 @@ function ProfileAdded({ check }: { readonly check: SkillCheck }) {
 }
 
 function Done({ run }: { readonly run: RoleSkillAssessmentRun }) {
+  const label = useRoleLabel();
   return (
     <section className="lead" aria-labelledby="sk-title">
       <h2 className="lead-title is-long" id="sk-title">
-        Проверка роли «{run.roleTitle}» пройдена · подтверждено {run.readiness.confirmedCount} из{' '}
-        {run.skills.length}
+        Проверка роли «{label(run.roleTitle)}» пройдена · подтверждено{' '}
+        {run.readiness.confirmedCount} из {run.skills.length}
       </h2>
       <div className="actions">
         <Link className="btn is-primary" to={buildNodePath('s09')}>
@@ -237,5 +245,9 @@ export function SkillCheckScreen({ node }: { readonly node: B640Node }) {
     );
   const titles = roles.state === 'ready' ? roles.data.searchTitles : [];
   const role = param ?? (roles.state === 'ready' ? (roles.data.ready ?? titles[0]) : undefined);
-  return <CheckPage key={role ?? ''} node={node} role={role} searchTitles={titles} />;
+  return (
+    <RoleTitlesProvider titlesRu={roles.state === 'ready' ? roles.data.titlesRu : undefined}>
+      <CheckPage key={role ?? ''} node={node} role={role} searchTitles={titles} />
+    </RoleTitlesProvider>
+  );
 }
