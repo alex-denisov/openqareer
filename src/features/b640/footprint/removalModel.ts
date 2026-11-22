@@ -33,3 +33,44 @@ export function removalNote(removal: FootprintRemoval | undefined): string | nul
 export function removalDone(removal: FootprintRemoval | undefined): string | null {
   return removal?.result === 'removed' ? shortDate(removal.checkedAt ?? null) : null;
 }
+
+const CHECK_TEXT = {
+  removed: 'удалено',
+  still_there: 'ещё на месте',
+  unclear: 'сайт не ответил',
+} as const;
+
+export interface RemovalRequestLine {
+  readonly id: string;
+  readonly title: string;
+  readonly date: string;
+}
+
+export interface ChecksStatus {
+  /** «телефон из объявления: удалено» — итог последней проверки находки; `null` — проверок не было. */
+  readonly lastCheck: string | null;
+  /** Запросы сайтам, ещё не закрытые подтверждённым удалением. */
+  readonly requests: readonly RemovalRequestLine[];
+}
+
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLocaleLowerCase('ru-RU') + text.slice(1);
+}
+
+/** B645 p02 «Проверки и запросы»: итог последней проверки и отправленные запросы. */
+export function checksStatus(items: readonly FootprintRiskItem[]): ChecksStatus {
+  const checked = items
+    .filter((item) => item.removal?.checkedAt && item.removal.result)
+    .sort((a, b) => (b.removal?.checkedAt ?? '').localeCompare(a.removal?.checkedAt ?? ''))[0];
+  const result = checked?.removal?.result;
+  const requests = items.flatMap((item) => {
+    const date = shortDate(item.removal?.requestedAt ?? null);
+    return date && item.removal?.result !== 'removed'
+      ? [{ id: item.id, title: item.title, date }]
+      : [];
+  });
+  return {
+    lastCheck: checked && result ? `${lowerFirst(checked.title)}: ${CHECK_TEXT[result]}` : null,
+    requests,
+  };
+}

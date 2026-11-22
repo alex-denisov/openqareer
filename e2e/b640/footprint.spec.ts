@@ -160,6 +160,12 @@ test.describe('B652: «Цифровой след»', () => {
     ).toBeVisible();
     expect(calls.rechecks).toEqual([fid(1)]);
     await expectGates(page);
+    // B645 p02: итог проверки — в «Проверках и запросах» сводки.
+    await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
+    const checks = page.locator('section', { has: page.locator('#fp-sum') });
+    await expect(checks.getByRole('heading', { name: 'Проверки и запросы' })).toBeVisible();
+    await expect(checks.locator('dd').first()).toContainText(/ · .+: удалено$/u);
+    await expect(checks.getByText('Жалоба отправлена')).toHaveCount(0);
   });
 
   test('B382: находка ещё на месте — итог проверки у кнопки, проверить можно снова', async ({
@@ -172,6 +178,12 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(dock.getByText('Ещё на месте · проверено 19.11')).toBeVisible();
     await expect(dock.getByRole('button', { name: 'Проверить находку' })).toBeEnabled();
     await expect(page.getByText(/Удалено · проверено/u)).toHaveCount(0);
+    // B645 p02: запрос не закрыт удалением — строка «Жалоба отправлена» в сводке.
+    await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
+    const checks = page.locator('section', { has: page.locator('#fp-sum') });
+    await expect(checks.locator('dd').first()).toContainText(/: ещё на месте$/u);
+    await expect(checks.locator('dt', { hasText: 'Жалоба отправлена' })).toHaveCount(1);
+    await expect(checks.locator('dd').nth(1)).toContainText(/ — сайту 18\.11$/u);
   });
 
   test('F4: рискового нет — честная строка и «Искать со ссылками»', async ({ page }) => {
