@@ -7,6 +7,7 @@ import { addDays, dayLabel } from './adaptationModel';
 import { AdaptationGate } from './AdaptationGate';
 import { getResults90 } from './checkpointsApi';
 import { CopyText } from './CopyText';
+import { TransferBar, useAchievedCards } from './ResultsTransfer';
 import { useCheckpoint } from './useCheckpoint';
 
 /** День итогов — 91-й день на новом месте, с годом: «1 марта 2027». */
@@ -15,7 +16,7 @@ function summaryDay(periodTo: string): string {
   return `${dayLabel(day)} ${day.slice(0, 4)}`;
 }
 
-function Items({ results }: { readonly results: CareerDiaryResults90 }) {
+function Items({ results, moved }: { readonly results: CareerDiaryResults90; readonly moved: ReadonlySet<string> }) {
   if (results.items.length === 0) {
     // Без целей итогов нет: одно действие ведёт туда, где их задают (B645, 19.11).
     return (
@@ -36,6 +37,7 @@ function Items({ results }: { readonly results: CareerDiaryResults90 }) {
             <div className="row-sub">{item.line}</div>
           </div>
           {item.status === 'behind' ? <span className="tag part">отстаёт</span> : null}
+          {moved.has(item.goalId) ? <span className="tag ok">Перенесено</span> : null}
         </li>
       ))}
     </ul>
@@ -43,12 +45,15 @@ function Items({ results }: { readonly results: CareerDiaryResults90 }) {
 }
 
 function Lead({ results }: { readonly results: CareerDiaryResults90 }) {
+  const { cards, replace } = useAchievedCards(results.items);
+  const moved = new Set(cards.filter((card) => card.details.transfer).map((card) => card.id));
   return (
     <>
       <section className="lead" aria-labelledby="rs-title">
         <h2 className="lead-title is-long" id="rs-title">Итоги 90 дней</h2>
         <p className="lead-sub">{summaryDay(results.periodTo)}</p>
-        <Items results={results} />
+        <TransferBar cards={cards} onDone={replace} />
+        <Items results={results} moved={moved} />
       </section>
       {results.resumeText ? (
         <section className="mod" aria-labelledby="rs-cv">

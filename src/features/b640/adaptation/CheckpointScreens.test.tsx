@@ -24,6 +24,8 @@ const api = vi.hoisted(() => ({
 vi.mock('./adaptationApi', () => api);
 const checks = vi.hoisted(() => ({ getDay30: vi.fn(), markDay30Sent: vi.fn(), unmarkDay30Sent: vi.fn(), getResults90: vi.fn() }));
 vi.mock('./checkpointsApi', () => checks);
+const diary = vi.hoisted(() => ({ listGoalCards: vi.fn() }));
+vi.mock('../diary/diaryApi', () => diary);
 const writeText = vi.fn();
 
 const session = { username: 'f.test', role: 'candidate', isTest: true, candidateId: 'c', features: { cabinetB640: true }, emailVerified: true } as AuthUser;
@@ -69,6 +71,7 @@ beforeEach(() => {
   api.getWorkplace.mockResolvedValue({ ...WORKPLACE, planning: { adaptationPlan: PLAN } });
   api.getAdaptation.mockResolvedValue(VIEW);
   api.getPeople.mockResolvedValue(PEOPLE);
+  diary.listGoalCards.mockResolvedValue({ items: [], archived: [] });
   writeText.mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 });
@@ -124,7 +127,7 @@ describe('d01e проверка на 30-й день', () => {
 });
 
 describe('d04 итоги 90 дней', () => {
-  it('цели со статусами, тексты для резюме и разговора копируются; кнопки «в профиль» нет', async () => {
+  it('цели со статусами, тексты для резюме и разговора копируются', async () => {
     checks.getResults90.mockResolvedValue({
       workplaceId: 'w1', periodFrom: '2026-12-01', periodTo: '2027-02-28',
       items: [
@@ -137,7 +140,6 @@ describe('d04 итоги 90 дней', () => {
     const page = await open(<ResultsScreen node={nodeByCode('d04')!} />);
     expect(page.querySelector('#rs-title')?.textContent).toBe('Итоги 90 дней');
     expect(page.textContent).toContain('отстаёт');
-    expect(page.textContent).not.toContain('Добавить в профиль');
     const copies = [...page.querySelectorAll('button')].filter((item) => item.textContent?.includes('Скопировать'));
     expect(copies).toHaveLength(2);
     click(copies[0]!);

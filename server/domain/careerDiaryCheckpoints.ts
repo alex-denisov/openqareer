@@ -6,6 +6,9 @@ import type {
   CareerDiaryResults90,
 } from '../../shared/careerDiaryCheckpoints';
 import type { CareerDiaryPeopleMap } from '../../shared/careerDiaryPeople';
+import { withoutEmployerFigures } from '../../shared/employerFigures';
+
+export { withoutEmployerFigures };
 
 const DAY_MS = 86_400_000;
 
@@ -134,20 +137,6 @@ export function buildDay30Check(input: Day30Input): CareerDiaryDay30Check {
     letter: `30 минут на этой неделе? ${summary}${ask}Как вы оцениваете мой старт?`,
     sentOn: input.sentOn,
   };
-}
-
-/**
- * Убирает из текста цифры работодателя: деньги, проценты, крупные суммы и предлог перед ними.
- * Счёт людей и штук остаётся — это не внутренние показатели.
- */
-export function withoutEmployerFigures(text: string): string {
-  const unit = String.raw`(?:%|процент\p{L}*|percent|млн\.?|млрд\.?|миллион\p{L}*|миллиард\p{L}*|тыс\p{L}*\.?|k|m|bn|₽|руб\p{L}*\.?|usd|eur|евро|долл\p{L}*\.?|\$|€)(?![\p{L}\d])`;
-  const money = String.raw`(?:₽|руб\p{L}*\.?|usd|eur|евро|долл\p{L}*\.?|\$|€)`;
-  const figure = new RegExp(
-    String.raw`(?:(?<=^|\s)(?:до|на|с|в|по|от)\s+)?[-+$€]?\d[\d\s.,]*\s*${unit}(?:\s*${money}(?![\p{L}\d]))?`,
-    'giu',
-  );
-  return text.replace(figure, '').replace(/\s+,/gu, ',').replace(/\s{2,}/gu, ' ').replace(/[\s,]+$/u, '').trim();
 }
 
 function itemOf(track: GoalTrack, asOf: string): CareerDiaryResultItem {
