@@ -86,17 +86,22 @@ const handlePatchInterview: Handler = async (deps, request, reply) => {
   return { data: patched, meta: { requestId: request.id } };
 };
 
-function deletedOwnInterview(
+type InterviewRemoval = 'deleted' | 'missing' | 'foreign';
+
+function removeOwnInterview(
   deps: RouteDeps,
   candidateId: string,
   params: { id: string; iid: string },
-): boolean {
+): InterviewRemoval {
   try {
-    return (
-      deps.candidateStore.deleteApplicationInterview?.(candidateId, params.id, params.iid) ?? false
+    const removed = deps.candidateStore.deleteApplicationInterview?.(
+      candidateId,
+      params.id,
+      params.iid,
     );
+    return removed ? 'deleted' : 'missing';
   } catch (error) {
-    if (error instanceof ApplicationNotFoundError) return false;
+    if (error instanceof ApplicationNotFoundError) return 'foreign';
     throw error;
   }
 }
@@ -111,10 +116,15 @@ const handleDeleteInterview: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const params = request.params as { id: string; iid: string };
-  if (!deletedOwnInterview(deps, candidate.id, params)) {
+  const removal = removeOwnInterview(deps, candidate.id, params);
+  // Отклик свой: снять неушедшее напоминание и при повторе, если прошлый раз оборвался после
+  // удаления интервью (хранилища разные, общей транзакции нет). Фильтр по кандидату.
+  if (removal !== 'foreign') {
+    notificationRepositoryFor(deps).withdrawUnsentFromSource(candidate.id, 'interview', params.iid);
+  }
+  if (removal !== 'deleted') {
     return sendError(reply, request, 404, 'interview_not_found', 'Интервью не найдено.', false);
   }
-  notificationRepositoryFor(deps).withdrawUnsentFromSource(candidate.id, 'interview', params.iid);
   return { data: { interviewId: params.iid, deleted: true }, meta: { requestId: request.id } };
 };
 

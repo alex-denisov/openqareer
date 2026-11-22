@@ -162,9 +162,12 @@ const deleteOffer: Handler = async (ctx, request, reply) => {
     (request.params as { applicationId: string }).applicationId,
   );
   if (!id.success) return invalidBody(request, reply);
-  if (!deletedOwnOffer(ctx.deps.candidateStore, candidateId, id.data))
-    return offerNotFound(request, reply);
+  const store = ctx.deps.candidateStore;
+  if (!ownOffer(store, candidateId, id.data)) return offerNotFound(request, reply);
+  // Выбор первым: оборвись удаление посередине, оффер останется с «Думаю», а не новый оффер
+  // унаследует прежнее «Принял» (хранилища разные, общей транзакции нет).
   ctx.choices.delete(candidateId, id.data);
+  if (!deletedOwnOffer(store, candidateId, id.data)) return offerNotFound(request, reply);
   return { data: { applicationId: id.data, deleted: true }, meta: { requestId: request.id } };
 };
 

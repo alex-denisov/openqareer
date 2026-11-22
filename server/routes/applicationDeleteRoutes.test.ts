@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CandidateStore } from '../data/candidateStore';
 import { createB640Harness, type HarnessUser } from '../testHelpers/b640VacancyHarness';
 
 const APPS = '/api/v1/candidate/applications';
@@ -181,6 +182,32 @@ describe('DELETE интервью: тестовое или ошибочное и
     expect(
       sql(`SELECT id FROM candidate_notifications WHERE source_id = ?`, interviewId),
     ).toHaveLength(1);
+  });
+
+  it('повторный DELETE доснимает напоминание, если интервью уже удалено', async () => {
+    const { send, application, sql, candidates, candidateIds } = await setup();
+    const own = application('flagged.test');
+    const created = await send('POST', `${APPS}/${own.id}/interviews`, 'flagged.test', {
+      round: 1,
+      scheduledAt: inWeek(),
+    });
+    const interviewId = created.json().data.id as string;
+    (candidates as CandidateStore).deleteApplicationInterview?.(
+      candidateIds['flagged.test'],
+      own.id,
+      interviewId,
+    );
+
+    const again = await send(
+      'DELETE',
+      `${APPS}/${own.id}/interviews/${interviewId}`,
+      'flagged.test',
+    );
+
+    expect(again.statusCode).toBe(404);
+    expect(sql(`SELECT id FROM candidate_notifications WHERE source_id = ?`, interviewId)).toEqual(
+      [],
+    );
   });
 
   it('чужое и несуществующее интервью — 404, чужое остаётся', async () => {
