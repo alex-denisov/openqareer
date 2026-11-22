@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
 import { ActionDock, Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -7,7 +8,7 @@ import { WantButton } from '../list/CompanyRow';
 import { RetryLine } from '../RetryLine';
 import { writeToLabel } from '../writeTo';
 import { useCompanyWant, type CompanyWant } from '../useCompanyWant';
-import { CompanyPeople, type PeopleNext } from './CompanyPeople';
+import { CompanyPeople, personRowId, type PeopleNext } from './CompanyPeople';
 import { CompanyVacancies } from './CompanyVacancies';
 import { useCompany, type CompanyCard } from './useCompany';
 import { usePeople } from './usePeople';
@@ -48,18 +49,20 @@ interface HeadProps {
   readonly want: CompanyWant;
   /** Знакомый из круга 1: главное действие шапки — написать ему. */
   readonly known: B640CompanyPerson | undefined;
+  /** Открыть черновик знакомому в его строке «Людей компании». */
+  readonly onWrite: (person: B640CompanyPerson) => void;
 }
 
 /** «Написать <имя>» знакомому из круга 1 и «Хочу в компанию», пока компании нет в списке «Хочу». */
-function HeadActions({ card, want, known }: HeadProps) {
+function HeadActions({ card, want, known, onWrite }: HeadProps) {
   const { company } = card.details;
   return (
     <>
       {known ? (
-        <Link className="btn is-primary" to={buildNodePath('o02', { responseId: known.vacancyId })}>
+        <button className="btn is-primary" type="button" onClick={() => onWrite(known)}>
           <Icon name="send" />
           {writeToLabel(known.name ?? '')}
-        </Link>
+        </button>
       ) : null}
       {company.want ? null : (
         <WantButton
@@ -109,6 +112,13 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
   const { company } = card.details;
   const want = useCompanyWant(card.markWant);
   const people = usePeople(companyId, true);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const onToggle = (personId: string) => setOpenId((current) => (current === personId ? null : personId));
+  const onWrite = (person: B640CompanyPerson) => {
+    setOpenId(person.id);
+    document.getElementById(personRowId(person.id))?.scrollIntoView({ block: 'center' });
+  };
+  const known = people.people.find((person) => person.circle === 1 && person.name && person.message);
   return (
     <>
       {company.want ? (
@@ -118,7 +128,7 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
         />
       ) : null}
       <div className="col col-wide">
-        <Head card={card} want={want} known={people.people.find((person) => person.circle === 1 && person.name)} />
+        <Head card={card} want={want} known={known} onWrite={onWrite} />
         <CompanyVacancies
           vacancies={card.vacancies}
           total={card.details.roleTotal}
@@ -129,7 +139,7 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
           moreFailed={card.moreFailed}
           onMore={() => void card.loadMore()}
         />
-        <CompanyPeople state={people} next={peopleNext(card)} />
+        <CompanyPeople state={people} next={peopleNext(card)} draft={{ openId, onToggle }} />
       </div>
     </>
   );

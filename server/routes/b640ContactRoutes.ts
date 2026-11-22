@@ -63,7 +63,7 @@ export function contactSources(repository: ConnectionRepository, candidateId: st
   return { contacts, receipt: readImportReceipt(records) };
 }
 
-function candidateWorkplaces(deps: RouteDeps, candidateId: string) {
+export function candidateWorkplaces(deps: RouteDeps, candidateId: string) {
   const experience = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
   return experience.flatMap((item) =>
     item.employer?.trim()
