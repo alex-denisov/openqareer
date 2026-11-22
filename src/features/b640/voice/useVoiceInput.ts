@@ -8,6 +8,7 @@ import {
 } from '../interview/data/recordingBridge';
 import type { ComposerDictation } from '../kit/Composer';
 import { beginAppDictation, finishAppDictation } from './appDictation';
+import { interviewRecordingEnabled } from './recordingFeature';
 
 /** `mic` — нет доступа к микрофону; `speech` — запись не распознана. */
 export type VoiceFailure = 'mic' | 'speech' | null;
@@ -31,8 +32,10 @@ function useAppSupport(): boolean {
   useEffect(() => {
     if (!APP_MIC_ONLY_READY || !canRecordInApp()) return undefined;
     let alive = true;
-    void recordingPermissions()
-      .then((found) => alive && setSupported(found.supported))
+    // Диктовка в .app идёт через запись B642: нет записи на сервере — нет и голоса.
+    void interviewRecordingEnabled()
+      .then(async (on) => on && (await recordingPermissions()).supported)
+      .then((found) => alive && setSupported(found))
       .catch(() => alive && setSupported(false));
     return () => {
       alive = false;

@@ -74,9 +74,10 @@ async function open(
   first: Analysis,
   after: Analysis = 'ready',
   withRecording = true,
+  recordingOn = true,
 ) {
   await page.clock.setFixedTime(new Date(PREP_NOW));
-  await mockPrep(page);
+  await mockPrep(page, { interviewRecording: recordingOn });
   const calls: string[] = [];
   await page.route('**/api/v1/candidate/applications/r-arka/debrief**', async (route) => {
     const method = route.request().method();
@@ -139,5 +140,21 @@ test.describe('B751: «Загрузка записи» (I4c)', () => {
     await expect(page.getByLabel('Имя собеседника')).toHaveValue('Ирина Петрова');
     await expect(page.getByRole('link', { name: 'Записать интервью' })).toHaveCount(0);
     await expectGates(page);
+  });
+});
+
+test.describe('B642: запись разговоров выключена на сервере (до редакции 1.3)', () => {
+  test('экраны разбора не открываются и сервер разбора не зовётся', async ({ page }) => {
+    const calls = await open(
+      page,
+      '/app/responses/r-arka/debrief',
+      'i04',
+      'ready',
+      'ready',
+      true,
+      false,
+    );
+    await expect(page.getByRole('heading', { name: 'Что спросили и как прошло' })).toHaveCount(0);
+    expect(calls).toEqual([]);
   });
 });

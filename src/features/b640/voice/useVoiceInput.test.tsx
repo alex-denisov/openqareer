@@ -15,6 +15,7 @@ const dictation = vi.hoisted(() => ({
   finishAppDictation: vi.fn(),
 }));
 vi.mock('./appDictation', () => dictation);
+vi.mock('./recordingFeature', () => ({ interviewRecordingEnabled: async () => true }));
 vi.mock('../consultant/useDictation', () => ({
   speechSupported: () => false,
   useDictation: () => ({

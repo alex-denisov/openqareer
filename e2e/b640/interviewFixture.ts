@@ -8,6 +8,8 @@ export interface PrepMockOptions {
   readonly noInterview?: boolean;
   /** Откликов нет вовсе. */
   readonly noResponses?: boolean;
+  /** B642: сервер записывает разговоры — экраны разбора I4 открыты. */
+  readonly interviewRecording?: boolean;
   /** Сколько первых сохранений ответа ответить ошибкой 500. */
   readonly failPrep?: number;
   /** Компании нет в данных платформы — карточка отвечает 404. */
@@ -193,6 +195,7 @@ export async function mockPrep(page: Page, options: PrepMockOptions = {}): Promi
   };
   await mockSignedInCabinet(page, {
     cabinetB640: true,
+    interviewRecording: options.interviewRecording ?? false,
     billing: { initialPlan: 'pro' },
     applicationHandler: (route, path) => handleApplications(route, path, state, options, calls),
   });
