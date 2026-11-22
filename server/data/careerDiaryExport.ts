@@ -10,6 +10,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { SqliteDiaryCheckpointRepository } from './sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from './sqliteDiaryDetailsRepository';
 import { SqliteDiaryPeopleRepository } from './sqliteDiaryPeopleRepository';
+import { SqliteGoalTaskSuggestionRepository } from './sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from './sqliteKpiImportRepository';
 import { whenTableExists } from './exportTableReader';
 
@@ -17,8 +18,8 @@ type DetailsExport = ReturnType<SqliteDiaryDetailsRepository['exportAll']>;
 
 /**
  * B689: всё, что кандидат записал в «Дневник» помимо записей, итогов недель, практик
- * интервью и заявок на адаптацию (у них свои ключи выгрузки). Счётчик попыток разбора KPI
- * не входит: в нём только время попыток.
+ * интервью и заявок на адаптацию (у них свои ключи выгрузки). Счётчики попыток разбора KPI
+ * и подсказок задач не входят: в них только время попыток.
  */
 export interface CareerDiaryExport {
   readonly goals: CareerDiaryGoal[];
@@ -31,6 +32,7 @@ export interface CareerDiaryExport {
   readonly checkpoints: ReturnType<SqliteDiaryCheckpointRepository['exportAll']>;
   readonly people: ReturnType<SqliteDiaryPeopleRepository['exportAll']>;
   readonly kpiImports: ReturnType<SqliteKpiImportRepository['exportAll']>;
+  readonly taskSuggestions: ReturnType<SqliteGoalTaskSuggestionRepository['exportAll']>;
 }
 
 export interface CareerDiaryExportSources {
@@ -42,6 +44,24 @@ export interface CareerDiaryExportSources {
   readonly checkpoints: Pick<SqliteDiaryCheckpointRepository, 'exportAll'>;
   readonly people: Pick<SqliteDiaryPeopleRepository, 'exportAll'>;
   readonly kpiImports: Pick<SqliteKpiImportRepository, 'exportAll'>;
+  readonly taskSuggestions: Pick<SqliteGoalTaskSuggestionRepository, 'exportAll'>;
+}
+
+/** Читатель списка кандидата из таблицы, которой может ещё не быть: пока её нет, выгрузка пуста. */
+function listExporter<Item>(
+  database: DatabaseSync,
+  table: string,
+  open: () => { exportAll(candidateId: string): Item[] },
+): { exportAll(candidateId: string): Item[] } {
+  return {
+    exportAll: whenTableExists(
+      database,
+      table,
+      open,
+      (repository, candidateId) => repository.exportAll(candidateId),
+      () => [],
+    ),
+  };
 }
 
 /**
@@ -64,33 +84,14 @@ export function createCareerDiaryExportSources(
         () => ({ goals: [], adaptation: [] }),
       ),
     },
-    checkpoints: {
-      exportAll: whenTableExists(
-        database,
-        'career_diary_checkpoints',
-        () => new SqliteDiaryCheckpointRepository(database, encryptionKey),
-        (repository, candidateId) => repository.exportAll(candidateId),
-        () => [],
-      ),
-    },
-    people: {
-      exportAll: whenTableExists(
-        database,
-        'career_diary_people',
-        () => new SqliteDiaryPeopleRepository(database, encryptionKey),
-        (repository, candidateId) => repository.exportAll(candidateId),
-        () => [],
-      ),
-    },
-    kpiImports: {
-      exportAll: whenTableExists(
-        database,
-        'career_diary_kpi_imports',
-        () => new SqliteKpiImportRepository(database, encryptionKey),
-        (repository, candidateId) => repository.exportAll(candidateId),
-        () => [],
-      ),
-    },
+    checkpoints: listExporter(database, 'career_diary_checkpoints', () => new SqliteDiaryCheckpointRepository(database, encryptionKey)),
+    people: listExporter(database, 'career_diary_people', () => new SqliteDiaryPeopleRepository(database, encryptionKey)),
+    kpiImports: listExporter(database, 'career_diary_kpi_imports', () => new SqliteKpiImportRepository(database, encryptionKey)),
+    taskSuggestions: listExporter(
+      database,
+      'career_diary_task_suggestions',
+      () => new SqliteGoalTaskSuggestionRepository(database, encryptionKey),
+    ),
   };
 }
 
@@ -128,5 +129,6 @@ export function exportCareerDiary(
     checkpoints: sources.checkpoints.exportAll(candidateId),
     people: sources.people.exportAll(candidateId),
     kpiImports: sources.kpiImports.exportAll(candidateId),
+    taskSuggestions: sources.taskSuggestions.exportAll(candidateId),
   };
 }

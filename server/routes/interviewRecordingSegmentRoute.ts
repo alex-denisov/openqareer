@@ -3,11 +3,20 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import type { AudioFormat } from '../providers/whisperTranscriber';
+import type { StoredRecording } from '../data/sqliteInterviewRecordingRepository';
 import { recordingRuntimeFor } from '../recordings/recordingRuntime';
 import { recordingTokenMatches } from '../recordings/recordingToken';
 
 export const MAX_SEGMENT_BYTES = 25 * 1024 * 1024;
-const ALLOWED_TYPES = new Set(['audio/mp4', 'audio/aac', 'audio/m4a']);
+/** Формат для Whisper по типу файла: .app шлёт AAC в mp4, загрузка с сайта — WAV (B751). */
+const AUDIO_FORMATS: Readonly<Record<string, AudioFormat>> = {
+  'audio/mp4': 'm4a',
+  'audio/aac': 'm4a',
+  'audio/m4a': 'm4a',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+};
 
 const intField = (max: number) =>
   z
@@ -17,7 +26,7 @@ const intField = (max: number) =>
     .pipe(z.number().int().min(0).max(max));
 
 const segmentFields = z.object({
-  track: z.enum(['mic', 'system']),
+  track: z.enum(['mic', 'system', 'upload']),
   segment: intField(2_000),
   startedAt: z.string().max(40).datetime({ offset: true }),
   durationMs: intField(3_600_000),
@@ -75,6 +84,14 @@ function uploadFailure(reply: FastifyReply, request: FastifyRequest, error: unkn
   throw error;
 }
 
+/** Дорожки .app — у записи из приложения, `upload` — только у загруженного файла, `mic` — у диктовки. */
+function trackFits(recording: StoredRecording, track: string): boolean {
+  if (recording.source === 'upload') return track === 'upload';
+  // Диктовка — только голос кандидата.
+  if (recording.source === 'dictation') return track === 'mic';
+  return track !== 'upload';
+}
+
 async function handleSegment(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const recordingId = (request.params as { recordingId: string }).recordingId;
   const { repository, service } = recordingRuntimeFor(deps, request.log);
@@ -106,7 +123,8 @@ async function handleSegment(deps: RouteDeps, request: FastifyRequest, reply: Fa
     release();
   }
   const fields = segmentFields.safeParse(upload.fields);
-  if (!fields.success || !upload.file || !ALLOWED_TYPES.has(upload.file.mimetype)) {
+  const format = upload.file ? AUDIO_FORMATS[upload.file.mimetype] : undefined;
+  if (!fields.success || !upload.file || !format || !trackFits(recording, fields.data.track)) {
     return invalid(reply, request);
   }
   const { track, segment, startedAt, durationMs } = fields.data;
@@ -117,7 +135,7 @@ async function handleSegment(deps: RouteDeps, request: FastifyRequest, reply: Fa
     startedAt,
     durationMs,
   });
-  if (isNew) service.enqueue({ recordingId, track, segment, audio: upload.file.data });
+  if (isNew) service.enqueue({ recordingId, track, segment, format, audio: upload.file.data });
   return reply.code(202).send({
     data: { recordingId, track, segment, status: 'accepted' },
     meta: { requestId: request.id },

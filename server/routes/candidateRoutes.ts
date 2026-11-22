@@ -70,6 +70,7 @@ import {
   memoryReviewSchema,
   resumeImportSchema,
 } from './schemas';
+import { toPublicFootprint } from './footprintPublicView';
 
 export type Handler = (
   deps: RouteDeps,
@@ -352,7 +353,10 @@ const handleExportCandidate: Handler = async (
       // Keep the singular key for clients that have not migrated yet.
       reputationAudit:
         candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
-      footprintAudits: candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
+      // B740: инструменты поиска остаются на сервере — в выгрузке коды шагов.
+      footprintAudits: toPublicFootprint(
+        candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
+      ),
     },
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };

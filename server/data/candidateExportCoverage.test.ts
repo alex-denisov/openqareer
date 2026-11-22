@@ -7,6 +7,7 @@ import { CANDIDATE_TABLE_COVERAGE } from './candidateExportCoverage';
 import { SqliteDiaryCheckpointRepository } from './sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from './sqliteDiaryDetailsRepository';
 import { SqliteDiaryPeopleRepository } from './sqliteDiaryPeopleRepository';
+import { SqliteGoalTaskSuggestionRepository } from './sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from './sqliteKpiImportRepository';
 import { createCandidate, createStore, directories } from './sqliteTestHarness';
 
@@ -151,6 +152,9 @@ function seedDiary(store: ReturnType<typeof createStore>, databasePath: string, 
   const kpi = new SqliteKpiImportRepository(options);
   kpi.create(candidateId, 'text', { name: null, mimeType: 'text/plain', content: `KPI ${tag}` }, []);
   kpi.close();
+  const suggestions = new SqliteGoalTaskSuggestionRepository(options);
+  suggestions.create(candidateId, goal.id, `hash-${tag}`, { text: `Подсказка ${tag}`, dueDate: '2027-01-12' });
+  suggestions.close();
   return { goalId: goal.id, workplaceId: workplace.id };
 }
 
@@ -187,7 +191,7 @@ describe('B689: выгрузка данных покрывает все табл
     const created = database
       .prepare(
         `SELECT name FROM sqlite_master WHERE name IN
-         ('career_diary_people', 'career_diary_kpi_imports', 'career_diary_checkpoints', 'career_diary_goal_details')`,
+         ('career_diary_people', 'career_diary_kpi_imports', 'career_diary_task_suggestions', 'career_diary_checkpoints', 'career_diary_goal_details')`,
       )
       .all();
     database.close();
@@ -229,6 +233,7 @@ describe('B689: выгрузка данных покрывает все табл
     expect(diary.people).toMatchObject([{ workplaceId, person: { name: 'Человек своя' } }]);
     expect(diary.checkpoints).toEqual([{ workplaceId, kind: 'day30', mark: { sentOn: '2026-12-03' } }]);
     expect(diary.kpiImports).toMatchObject([{ sourceKind: 'text', source: { content: 'KPI своя' } }]);
+    expect(diary.taskSuggestions).toMatchObject([{ goalId, text: 'Подсказка своя', dueDate: '2027-01-12', status: 'open' }]);
     expect(JSON.stringify(exported)).not.toContain('чужая');
     // Прежние ключи на месте.
     expect(exported.careerDiaryEntries).toEqual({ entries: [], weekSummaries: [] });

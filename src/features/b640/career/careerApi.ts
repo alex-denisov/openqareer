@@ -108,7 +108,7 @@ export async function readSkillGap(
 
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
-    getRoleHypotheses(signal),
+    getRoleHypotheses(signal, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
     getCandidateCampaign(signal),
     getCheckedRoles(signal),
     readDemand(),
