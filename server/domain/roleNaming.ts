@@ -28,7 +28,7 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 6;
+export const ROLE_NAMING_PROMPT_VERSION = 7;
 
 export function roleNamingInstructions(language: RoleNameLanguage): string {
   return [
@@ -53,7 +53,9 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
     'Для каждой роли дай titleRu всегда русской формулировкой вакансии —',
     'как эту должность пишут в русских вакансиях; аббревиатуры из названия',
     '(COO, CTO, AI, IT) оставь, остальное переведи (AI Consultant → AI-консультант,',
-    'Transformation Director → Директор по трансформации). Если title уже',
+    'Transformation Director → Директор по трансформации, Head of IT Operations →',
+    'Руководитель ИТ-эксплуатации: Operations — эксплуатация сервисов, не инфраструктура).',
+    'Если title уже',
     'по-русски, повтори его в titleRu.',
     'Название компании, продукта, подразделения или бренда из фактов — не роль:',
     'работодатель кандидата никогда не становится названием должности.',
@@ -87,7 +89,8 @@ export const ROLE_TITLE_TRANSLATION_INSTRUCTIONS = [
   'Переведи названия должностей так, как их пишут в русских вакансиях.',
   'titleRu всегда русской формулировкой вакансии; аббревиатуры (COO, CTO, AI, IT)',
   'оставь латиницей, остальное переведи (AI Consultant → AI-консультант,',
-  'IT Operations Director → Директор по ИТ-операциям). Не добавляй слов,',
+  'Head of IT Operations → Руководитель ИТ-эксплуатации: Operations — эксплуатация',
+  'сервисов, не инфраструктура). Не добавляй слов,',
   'которых нет в названии.',
   'Ответ — только JSON: {"titles":[{"title":"…","titleRu":"…"}]}, title без изменений.',
 ].join('\n');
