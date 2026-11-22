@@ -21,7 +21,8 @@ export type {
 
 /** Кому пишем: знакомый из сети или рекрутёр вакансии (нужны оба поля). */
 export type B640MessageTarget =
-  { readonly contactId: string } | { readonly recruiterId: string; readonly vacancyId: string };
+  | { readonly contactId: string; readonly vacancyId?: string; readonly alsoVacancyId?: string }
+  | { readonly recruiterId: string; readonly vacancyId: string };
 
 /** Черновик сообщения; платформа ничего не отправляет. Каждый вызов — новый вариант текста. */
 export async function createB640ContactMessage(

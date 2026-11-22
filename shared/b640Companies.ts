@@ -62,7 +62,17 @@ export interface B640CompanyPerson {
 /** Адресат черновика: знакомый из сети или рекрутёр вакансии; тот же вид, что у POST /messages. */
 export interface B640PersonMessage {
   readonly kind: 'known_contact' | 'ask_introduction' | 'recruiter';
-  readonly target: { readonly contactId: string } | { readonly recruiterId: string; readonly vacancyId: string };
+  readonly target: B640ContactTarget | { readonly recruiterId: string; readonly vacancyId: string };
+}
+
+/**
+ * Знакомый из сети. B698: из карточки компании — с вакансией строки и ещё одной вакансией
+ * компании, чтобы сообщение было про эту компанию.
+ */
+export interface B640ContactTarget {
+  readonly contactId: string;
+  readonly vacancyId?: string;
+  readonly alsoVacancyId?: string;
 }
 
 export interface B640CompanyPeoplePage {
