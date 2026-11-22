@@ -1,5 +1,5 @@
 import { useEffect, useId } from 'react';
-import { useDictation } from '../consultant/useDictation';
+import { useVoiceInput } from '../voice/useVoiceInput';
 import { Icon, InfoTip, useToast } from '../kit';
 
 const TIP = 'Ответ остаётся у вас — в профиль попадёт только итог.';
@@ -13,7 +13,7 @@ export interface SkillAnswerFieldProps {
 /** Поле ответа с диктовкой: сказанное дописывается к тексту. */
 export function SkillAnswerField({ value, onChange, disabled }: SkillAnswerFieldProps) {
   const id = useId();
-  const dictation = useDictation(onChange);
+  const dictation = useVoiceInput(onChange);
   const toast = useToast();
   useEffect(() => {
     if (dictation.denied) toast.show({ text: 'Нет доступа к микрофону' });
