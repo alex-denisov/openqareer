@@ -4,14 +4,14 @@ import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sql
 import { DatabaseSync } from 'node:sqlite';
 import type { VacancyFitFailure, VacancyFitResult, VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
-import { SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
+import { FIT_INPUT_TOO_LARGE, SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
 import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
 import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
-import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, BulkInputTooLarge, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import {
   addMassRecount, ensureMassRecountTable, massRecountAllowance, massRecountLimit, massRecountQueued, takeMassRecountSlot, utcDay,
@@ -44,6 +44,7 @@ const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
   requirements_failed: 'requirements',
   requirements_wait_timeout: 'requirements',
   profile_changed: 'profile_changed',
+  [FIT_INPUT_TOO_LARGE]: 'too_large',
 };
 interface AssessmentOutcome {
   staleProfile: boolean;
@@ -55,8 +56,11 @@ interface AssessmentOutcome {
   invalid: boolean;
   /** The stage of the chain that gave the answer: the row records it (04.11). */
   answeredBy: string | null;
+  /** B757: the request fits no stage's per-call ceiling even with fewer facts: settled for good. */
+  tooLarge: boolean;
 }
 function assessmentFailure(outcome: AssessmentOutcome): string {
+  if (outcome.tooLarge) return FIT_INPUT_TOO_LARGE;
   return outcome.staleProfile
     ? 'profile_changed'
     : outcome.invalid
@@ -301,7 +305,7 @@ export class VacancyMechanicsRuntime {
       this.pauseForChannel();
       this.waitForChannel(job);
     } else if (hasClient && result.reason === 'assessment_unavailable' && !outcome.returned) {
-      this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && job.attempts < 3);
+      this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && !outcome.tooLarge && job.attempts < 3);
     } else if (this.fit.complete(job, result, undefined, resolved, outcome.answeredBy)) this.stats.completed += 1;
   }
 
@@ -311,7 +315,7 @@ export class VacancyMechanicsRuntime {
     runId: string,
     resolved: VacancyFitInput,
   ) {
-    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false, answeredBy: null };
+    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false, answeredBy: null, tooLarge: false };
     const base = client
       ? createVacancyFitAssessor({
           complete: async (request) => {
@@ -340,6 +344,10 @@ export class VacancyMechanicsRuntime {
               }
               if (error instanceof BulkChannelUnavailable) {
                 outcome.channelDown = true;
+                throw error;
+              }
+              if (error instanceof BulkInputTooLarge) {
+                outcome.tooLarge = true;
                 throw error;
               }
               // The model answered, but not with the assessment shape: not an outage.

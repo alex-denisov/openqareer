@@ -25,7 +25,7 @@ export interface VacancyFitPoint {
   readonly status: VacancyFitRequirementAssessment['status'];
 }
 export type VacancyFitFailure =
-  'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
+  'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'too_large' | 'other';
 /** 02.11 audit: no per-quote cap, adjacent area unknown, location evidence only for location conditions, job-board soft-skill tags dropped. */
 export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-9';
 /** Shown while the current version is calculated, so a version bump never hides a known percent. */
