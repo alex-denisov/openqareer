@@ -53,9 +53,11 @@ const articleLinks: LinkReaderDeps = { readPage: async () => ({ ok: true, html: 
 function setup(replies: Array<string | null> = [VALID], links?: LinkReaderDeps) {
   const store = new SmmStore(new DatabaseSync(':memory:'));
   const prompts: ChatTurn[][] = [];
+  const budgets: unknown[] = [];
   const model: SmmModel = {
-    async complete(turns, accept) {
+    async complete(turns, accept, budget) {
       prompts.push([...turns]);
+      budgets.push(budget);
       const next = replies.length > 1 ? replies.shift() : replies[0];
       return next && (!accept || accept(next)) ? next : null;
     },
@@ -88,7 +90,7 @@ function setup(replies: Array<string | null> = [VALID], links?: LinkReaderDeps) 
     autopost: true,
     links,
   });
-  return { store, bot, sent, prompts };
+  return { store, bot, sent, prompts, budgets };
 }
 
 const message = (text: string, extra: Record<string, unknown> = {}): TelegramUpdate => ({
@@ -163,6 +165,12 @@ describe('SmmBot', () => {
     expect(task).toContain('«Почему отклик читают за шесть секунд», автор Иван Петров');
     expect(task).toContain('Тема владельца: отказы без причины');
     expect(task).not.toContain('habr.com');
+  });
+
+  it('a link: the breakdown call gets a larger budget with low reasoning', async () => {
+    const { bot, budgets } = setup([EXAMPLE], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    expect(budgets.at(-1)).toEqual({ outputTokens: 16_000, reasoningEffort: 'low' });
   });
 
   it('a link: breakdown first, then each variant waits for the owner with its own buttons', async () => {

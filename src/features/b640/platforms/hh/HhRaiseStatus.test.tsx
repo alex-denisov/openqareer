@@ -33,8 +33,11 @@ afterEach(() => { view?.unmount(); view = null; });
 
 describe('B699: состояние автоподнятия', () => {
   it('тихая строка: когда поднято и когда следующее', async () => {
-    await show({ lastRaisedAt: '2026-11-19T09:40:00Z', nextRaiseAt: '2026-11-19T13:50:00Z', lastResult: { status: 'ok', reason: null, at: '' } });
-    expect(text()).toContain(`Резюме поднято · ${time('2026-11-19T09:40:00Z')}, следующее ≈ ${time('2026-11-19T13:50:00Z')}`);
+    // Следующий подъём впереди: прошедшее время строка не показывает (B699, прод 22.11).
+    const last = new Date(Date.now() - 3_600_000).toISOString();
+    const next = new Date(Date.now() + 3 * 3_600_000).toISOString();
+    await show({ lastRaisedAt: last, nextRaiseAt: next, lastResult: { status: 'ok', reason: null, at: '' } });
+    expect(text()).toContain(`Резюме поднято · ${time(last)}, следующее ≈ ${time(next)}`);
     expect(button('Повторить')).toBeNull();
   });
 

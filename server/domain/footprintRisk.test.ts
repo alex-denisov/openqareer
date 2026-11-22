@@ -387,6 +387,45 @@ describe('buildFootprintRiskSummary', () => {
     expect(summary.items[0].resolved).toBe(true);
   });
 
+  it('B668: находка о самой странице важнее её копии в архиве', () => {
+    const archived = (stamp: string) =>
+      finding({
+        adapter: 'wayback',
+        title: 'Архивная копия',
+        url: `https://web.archive.org/web/${stamp}/https://www.youtube.com/@Google`,
+      });
+    const summary = buildFootprintRiskSummary(
+      audit([
+        archived('20240101000000'),
+        archived('20250101000000'),
+        finding({
+          adapter: 'youtube',
+          title: 'Канал YouTube @Google',
+          url: 'https://www.youtube.com/@Google',
+          detail: 'Канал по вашей ссылке существует',
+        }),
+      ]),
+      [],
+    );
+    expect(summary.items.map((item) => item.title)).toEqual(['Канал YouTube @Google']);
+  });
+
+  it('B668: разобранная архивная копия остаётся важнее неразобранной страницы', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({
+          adapter: 'wayback',
+          url: 'https://web.archive.org/web/2024/https://site.test/page',
+          checklistMark: 'account_kept',
+        }),
+        finding({ url: 'https://site.test/page' }),
+      ]),
+      [],
+    );
+    expect(summary.items).toHaveLength(1);
+    expect(summary.items[0].resolved).toBe(true);
+  });
+
   it('B645 p02: адрес уже в описании — второй раз не пишем', () => {
     const summary = buildFootprintRiskSummary(
       audit([finding({ url: 'https://site.test/u/x', detail: 'Страница site.test/u/x открыта' })]),

@@ -2,7 +2,15 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
-import { B640_THEME_KEY, B640_THEMES, readStoredTheme, useB640Theme, type B640Theme, type B640ThemeState } from './theme';
+import {
+  B640_THEME_KEY,
+  B640_THEMES,
+  readStoredTheme,
+  useB640Theme,
+  useDocumentTheme,
+  type B640Theme,
+  type B640ThemeState,
+} from './theme';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -76,5 +84,56 @@ describe('B593: тема кандидата с сервера при запус�
     await settle();
     expect(failed.state.current?.theme).toBe('dark');
     failed.unmount();
+  });
+});
+
+describe('B593: цвет полосы браузера (theme-color) по действующей теме', () => {
+  function mediaStub() {
+    const listeners = new Set<() => void>();
+    const media = {
+      matches: false,
+      addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    };
+    window.matchMedia = (() => media) as unknown as typeof window.matchMedia;
+    return { fire: () => listeners.forEach((listener) => listener()) };
+  }
+
+  function mount(root: HTMLElement, theme: B640Theme) {
+    const host = document.createElement('div');
+    const react = createRoot(host);
+    function Probe({ value }: { readonly value: B640Theme }) {
+      useDocumentTheme(root, value);
+      return null;
+    }
+    act(() => react.render(<Probe value={theme} />));
+    return {
+      rerender: (value: B640Theme) => act(() => react.render(<Probe value={value} />)),
+      unmount: () => act(() => react.unmount()),
+    };
+  }
+
+  it('полоса браузера берёт фон кабинета, следует за сменой темы и системы, после выхода — прежняя', () => {
+    const media = mediaStub();
+    const meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    meta.content = '#090d12';
+    document.head.append(meta);
+    const root = document.createElement('div');
+    document.body.append(root);
+    root.style.backgroundColor = 'rgb(250, 251, 251)';
+    const view = mount(root, 'light');
+    expect(meta.content).toBe('rgb(250, 251, 251)');
+    root.style.backgroundColor = 'rgb(20, 24, 28)';
+    view.rerender('dark');
+    expect(meta.content).toBe('rgb(20, 24, 28)');
+    view.rerender('system');
+    root.style.backgroundColor = 'rgb(250, 251, 251)';
+    act(() => media.fire());
+    expect(meta.content).toBe('rgb(250, 251, 251)');
+    view.unmount();
+    expect(meta.content).toBe('#090d12');
+    meta.remove();
+    root.remove();
   });
 });
