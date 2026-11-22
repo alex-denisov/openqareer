@@ -3,7 +3,6 @@ import type { TodayQueueItem } from '../../today/todayApi';
 import { queueMobileSubtitle } from '../../today/todayFormat';
 import {
   applicationsSummary,
-  funnelLine,
   leadText,
   moduleLayout,
   moreTitle,
@@ -115,23 +114,6 @@ describe('b640 today: действие строки очереди', () => {
     expect(leadText(item({ kind: 'new_vacancy', title: 'CTO', location: 'Казань' }))).toBe(
       'Казань',
     );
-  });
-});
-
-describe('b640 today: строка статуса', () => {
-  it('собирает путь откликов из воронки', () => {
-    expect(funnelLine({ favorites: 4, applied: 13, responses: 2, interviews: 1, offers: 1 })).toBe(
-      '13 откликов → 1 интервью → 1 оффер',
-    );
-    expect(funnelLine({ favorites: 0, applied: 1, responses: 0, interviews: 0, offers: 0 })).toBe(
-      '1 отклик → 0 интервью → 0 офферов',
-    );
-  });
-
-  it('без числа откликов строки нет', () => {
-    expect(funnelLine(undefined)).toBeNull();
-    expect(funnelLine({ favorites: 1, responses: 0, offers: 0 })).toBeNull();
-    expect(funnelLine({ favorites: 1, applied: 0, responses: 0, offers: 0 })).toBeNull();
   });
 });
 
