@@ -224,6 +224,39 @@ describe('d02a «Цель»', () => {
       expect.objectContaining({ value: 1, note: null }),
     );
     click(button(page, 'Кандидатов в финале'));
+    expect(page.querySelector('.gt-num')?.textContent).toBe('0 из 2');
+  });
+
+  it('B684: без замеров — исходное значение и строка «старт» в истории', async () => {
+    api.listMeasurements.mockResolvedValue({
+      items: [
+        {
+          id: 'm2',
+          goalId: 'i1',
+          value: 1,
+          measuredAt: '2026-10-20',
+          note: 'финал',
+          source: 'candidate_entered',
+          createdAt: '',
+        },
+      ],
+      nextCursor: null,
+    });
+    const page = await open(<GoalCardScreen node={nodeByCode('d02a')!} goalId="g1" />);
+    expect(page.querySelector('.gt-hist-l')?.textContent).toBe('Замеры · 2');
+    const cells = [...page.querySelectorAll('.gt-hist tbody tr')].map((row) =>
+      [...row.querySelectorAll('td')].map((cell) => cell.textContent),
+    );
+    expect(cells[0]).toEqual(['1 октября', '0 из 2', 'старт', '']);
+    expect(cells[1]?.slice(1)).toEqual(['1 из 2', 'вы', 'финал']);
+  });
+
+  it('B684: исходного значения нет и замеров нет — «не внесено»', async () => {
+    api.listGoalCards.mockResolvedValue({
+      items: [{ ...hiring, indicators: [summary('i3', { baselineValue: null })] }],
+      archived: [],
+    });
+    const page = await open(<GoalCardScreen node={nodeByCode('d02a')!} goalId="g1" />);
     expect(page.querySelector('.gt-num')?.textContent).toBe('не внесено');
   });
 
