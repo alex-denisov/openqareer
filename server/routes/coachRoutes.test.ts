@@ -593,7 +593,12 @@ describe('Coach Stage Routes (B340)', () => {
     const detail = await app.inject({ method: 'GET', url: `/api/v1/candidate/consultant-history/${conversationId}`, headers });
     expect(detail.statusCode).toBe(200);
     expect(detail.json().data.messages).toHaveLength(2);
-    expect(store.exportCandidate(candidate.id).consultantConversations).toHaveLength(1);
+    // B738: the export carries the open conversation too, marked open.
+    const exported = store.exportCandidate(candidate.id).consultantConversations;
+    expect(exported.map((conversation) => [conversation.id === conversationId, conversation.open])).toEqual(
+      expect.arrayContaining([[true, false], [false, true]]),
+    );
+    expect(exported).toHaveLength(2);
 
     expect((await sendTurn(thirdKey, thirdMessageId, 'career', 'Продолжим с учётом прежней беседы.')).statusCode).toBe(200);
     const thirdInput = replyCalls(coachProvider.createTurn)[3]?.[0] as CoachTurnInput | undefined;
