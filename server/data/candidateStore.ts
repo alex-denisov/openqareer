@@ -149,6 +149,7 @@ export interface CandidateExport extends CandidateSnapshot {
   notificationDeliverySettings: import('./notificationDeliverySettings').DeliverySettings;
   /** B738 · 1: отклики с событиями, собеседованиями и оффером, анкеты, отказы, действия. */
   tracker: import('./trackerExport').TrackerExport;
+  notifications: import('./notificationExport').NotificationExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
