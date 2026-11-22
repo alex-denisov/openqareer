@@ -1,4 +1,4 @@
-import { Link } from '../kit';
+import { Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import { CtxHead } from '../shell/CtxHead';
 import type { DebriefData } from './data/debriefApi';
@@ -19,6 +19,7 @@ export function RecordSteps(props: {
           to={buildNodePath(source, { responseId })}
           aria-current={current === 'source' ? 'page' : undefined}
         >
+          {current === 'voices' ? <Icon name="check" /> : null}
           Запись или файл
         </Link>
         <Link

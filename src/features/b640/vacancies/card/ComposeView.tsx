@@ -20,7 +20,8 @@ export interface ComposeViewProps {
   readonly data: CardData;
   readonly action: ComposeAction;
   readonly sourceName: string;
-  readonly companyPath: string;
+  /** `null` — у вакансии нет компании: ссылки на её карточку нет. */
+  readonly companyPath: string | null;
   /** «Не отправлять» и «Отправил»: назад к карточке. */
   readonly onBack: () => void;
   /** Имя в «Кто нанимает»: черновик этому человеку. */

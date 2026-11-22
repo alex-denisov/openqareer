@@ -63,8 +63,27 @@ function cleanEmployer(raw: string): string {
   return value;
 }
 
+/** Формат работы в той же строке «🏢 …» — не работодатель («🏢 офис»). */
+const WORK_FORMAT = /^(?:офис|удал[её]нк\S*|удал[её]нно|гибрид\S*|office|remote|hybrid|on-?site)$/iu;
+
+/**
+ * B756 22.11: каналы-боты пишут работодателя строкой «🏢 Компания · 📍 Город» без слова
+ * «Компания»; пустая компания на проде роняла «Вакансии» у кандидата.
+ */
+function readEmojiLabelledEmployer(lines: string[]): string {
+  for (const line of lines) {
+    const match = line.match(/^\u{1F3E2}\uFE0F?\s*([^·•|]+)/u);
+    if (!match) continue;
+    const value = cleanEmployer(match[1]!);
+    if (value && !WORK_FORMAT.test(value)) return value;
+  }
+  return '';
+}
+
 /** `Компания: X` — the one form the channels do label, on its own line or mid-sentence. */
 function readLabelledEmployer(lines: string[]): string {
+  const emoji = readEmojiLabelledEmployer(lines);
+  if (emoji) return emoji;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const own = line.match(/^(?:компания|company|работодатель|клиент|заказчик|о\s+компании|about\s+(?:the\s+)?company)\s*[:\-—]\s*(.+)$/iu);
