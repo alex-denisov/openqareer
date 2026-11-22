@@ -25,6 +25,7 @@ const ICONS: Record<NotificationEventKind, ElementType> = {
   import_completed: CheckCircle,
   employer_reply: EnvelopeSimple,
   delivery_error: WarningCircle,
+  post_reminder: LinkedinLogo,
 };
 
 export function NotificationGlyph({ kind }: { readonly kind: NotificationEventKind }) {

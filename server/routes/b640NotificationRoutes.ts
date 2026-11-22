@@ -61,8 +61,9 @@ function searchRoleOf(
 ): string | null {
   if (!rows.some((row) => row.kind === 'new_vacancies_by_role')) return null;
   // B737: роль поиска хранится английским названием онтологии, кандидату — по-русски.
+  const campaign = readCampaign(deps.candidateStore, candidateId);
   return searchRoleLabel(
-    readCampaign(deps.candidateStore, candidateId).roles.value.map(roleTitleRu),
+    campaign.roles.value.map((title) => roleTitleRu(title, campaign.ownTitlesRu)),
   );
 }
 

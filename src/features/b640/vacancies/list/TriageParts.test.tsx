@@ -3,11 +3,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
 import { ReviewButton, TriageBar, TriageError, TriageQuestion, TriageStatus } from './TriageParts';
 
-describe('кнопка «Помочь выбрать»', () => {
+vi.mock('../../shell/ShellContext', () => ({
+  useShell: () => ({ navigate: () => undefined }),
+}));
+
+describe('ссылка «Помочь выбрать»', () => {
   it('в обычном режиме без aria-current, в режиме — aria-current="true"', () => {
     const off = mount(<ReviewButton active={false} onClick={vi.fn()} />);
-    const button = off.container.querySelector('button.btn.va-review')!;
+    const button = off.container.querySelector('a.btn.va-review')!;
     expect(button.textContent).toBe('Помочь выбрать');
+    expect(button.getAttribute('href')).toBe('/app/vacancies?mode=review');
     expect(button.getAttribute('aria-current')).toBeNull();
     off.unmount();
     const on = mount(<ReviewButton active onClick={vi.fn()} />);

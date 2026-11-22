@@ -301,3 +301,61 @@ describe('объяснение гипотезы (28.10)', () => {
     );
   });
 });
+
+describe('B747: один навык не бывает и подтверждён, и недостающим', () => {
+  const decisions = { acceptedTitle: null, offersDismissed: [] };
+
+  it('одно название в требованиях дважды (с разной сверкой) — только в подтверждённых', () => {
+    const role = mapProposedRoleToCareerRole(
+      observed({
+        repeatedRequirements: [
+          'Операционная эффективность',
+          'операционная  эффективность ',
+          'Kafka',
+        ],
+        matchedRequirementNames: ['Операционная эффективность'],
+      }),
+      decisions,
+    );
+    expect(role.confirmedItems.map((item) => item.text)).toEqual(['Операционная эффективность']);
+    expect(role.missingItems.map((item) => item.text)).toEqual(['Kafka']);
+  });
+
+  it('ё и е, неразрывный пробел и совместимые знаки — одно название', () => {
+    const role = mapProposedRoleToCareerRole(
+      observed({
+        repeatedRequirements: [
+          'Управление командой',
+          'Управление командой',
+          'Объём бюджета',
+          'Объем бюджета',
+        ],
+        matchedRequirementNames: ['Управление командой', 'Объём бюджета'],
+      }),
+      decisions,
+    );
+    expect(role.confirmedItems.map((item) => item.text)).toEqual([
+      'Управление командой',
+      'Объём бюджета',
+    ]);
+    expect(role.missingItems).toEqual([]);
+  });
+
+  it('навык из проверки снимает такое же название из недостающих при отличии в ё и пробелах', () => {
+    const role = mapProposedRoleToCareerRole(
+      {
+        ...observed({
+          repeatedRequirements: ['Операционная эффективность', 'Kafka'],
+          matchedRequirementNames: [],
+        }),
+        title: 'COO',
+      },
+      {
+        ...decisions,
+        checkedTitles: ['COO'],
+        checkedSkills: { COO: ['Операционная эффективность'] },
+      },
+    );
+    expect(role.missingItems.map((item) => item.text)).toEqual(['Kafka']);
+  });
+});

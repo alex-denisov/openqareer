@@ -36,6 +36,8 @@ import {
 /** Роль, названная моделью по резюме, вместе с опорой на факты. */
 export interface NamedRole {
   readonly title: string;
+  /** B748: проверенное русское название от модели; ключом остаётся `title`. */
+  readonly titleRu?: string;
   /** Почему модель её назвала — своими словами, без чисел. */
   readonly reason: string;
   readonly evidenceRefs: readonly string[];
@@ -202,6 +204,7 @@ export function proposeRoles(input: {
         {
           id: careerRoleId(role.title),
           title: role.title.trim(),
+          ...(role.titleRu ? { titleRu: role.titleRu } : {}),
           origin: 'model',
           reason: role.reason.trim(),
           evidenceRefs: role.evidenceRefs,
