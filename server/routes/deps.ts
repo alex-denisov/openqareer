@@ -86,6 +86,8 @@ export interface RouteDeps {
   experienceFactRewriter?: import('../providers/experienceFactRewriter').ExperienceFactRewriter;
   /** B686: разбор KPI для дневника; без ключей и Vertex разбор отвечает отказом. */
   kpiExtractor?: import('../providers/kpiExtractor').KpiExtractor;
+  /** B743 · 2: подсказка следующей задачи по цели; без ключей подсказок в карточке цели нет. */
+  goalTaskSuggester?: import('../providers/goalTaskSuggester').GoalTaskSuggester;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */

@@ -64,6 +64,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   career_diary_people: { export: 'careerDiary' },
   career_diary_kpi_imports: { export: 'careerDiary' },
   career_diary_kpi_attempts: { internal: 'время попыток разбора KPI для предела, без содержимого' },
+  career_diary_task_suggestions: { export: 'careerDiary' },
+  career_diary_task_suggestion_attempts: { internal: 'время вызовов модели для подсказок задач, без содержимого' },
   // Трекер откликов (B738 · 1).
   applications: { export: 'tracker' },
   application_contacts: { export: 'tracker' },
