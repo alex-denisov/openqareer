@@ -84,20 +84,46 @@ interface RoleEvidence {
   readonly requirementsNote: string;
 }
 
+/**
+ * B747: одно требование не бывает и подтверждённым, и недостающим. Названия
+ * сравниваются без регистра, ё/е, неразрывных и двойных пробелов.
+ */
+function skillKey(text: string): string {
+  return text
+    .normalize('NFKC')
+    .toLocaleLowerCase('ru')
+    .replace(/ё/gu, 'е')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+/** Требования без повторов по ключу; из повторов показывается сверенное название. */
+function uniqueSkills(names: readonly string[], matched: ReadonlySet<string>): string[] {
+  const byKey = new Map<string, string>();
+  for (const name of names) {
+    const key = skillKey(name);
+    const seen = byKey.get(key);
+    if (seen === undefined || (!matched.has(skillKey(seen)) && matched.has(key)))
+      byKey.set(key, name);
+  }
+  return [...byKey.values()];
+}
+
 function readEvidence(proposed: ProposedRole): RoleEvidence {
   const conf = proposed.confirmation;
   if (conf.state === 'observed') {
-    const matched = new Set(conf.matchedRequirementNames ?? []);
+    const matched = new Set((conf.matchedRequirementNames ?? []).map(skillKey));
+    const requirements = uniqueSkills(conf.repeatedRequirements, matched);
     const date = dayMonth(conf.observedTo);
     return {
       vacancyCount: conf.sampleSize,
       observedAt: conf.observedTo || null,
       sources: [...new Set(conf.sources.map((entry) => sourceLabel(entry.source)))],
-      confirmedItems: conf.repeatedRequirements
-        .filter((req) => matched.has(req))
+      confirmedItems: requirements
+        .filter((req) => matched.has(skillKey(req)))
         .map((text) => ({ text, source: 'profile' as const })),
-      missingItems: conf.repeatedRequirements
-        .filter((req) => !matched.has(req))
+      missingItems: requirements
+        .filter((req) => !matched.has(skillKey(req)))
         .map((req) => ({ text: req, isWarning: true, linkSection: SKILLS_SECTION })),
       requirementsNote: `Сверка с требованиями ${formatVacancyCount(conf.sampleSize)}${date ? `, ${date}` : ''}.`,
     };
@@ -130,7 +156,7 @@ function skillsConfirmedByCheck(
 /** Итог проверки навыков дополняет сверку с профилем: подтверждённое не числится недостающим. */
 function withCheckedSkills(evidence: RoleEvidence, checked: readonly string[]): RoleEvidence {
   if (checked.length === 0) return evidence;
-  const key = (text: string) => text.trim().toLocaleLowerCase('ru');
+  const key = skillKey;
   const fromCheck = new Set(checked.map(key));
   return {
     ...evidence,
