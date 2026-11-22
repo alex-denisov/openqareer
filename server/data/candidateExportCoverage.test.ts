@@ -134,7 +134,7 @@ function seedDiary(store: ReturnType<typeof createStore>, databasePath: string, 
   });
   const options = { databasePath, encryptionKey: KEY };
   const details = new SqliteDiaryDetailsRepository(options);
-  details.saveGoalDetail(candidateId, goal.id, { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null });
+  details.saveGoalDetail(candidateId, goal.id, { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null });
   details.saveAdaptationDetails(candidateId, workplace.id, {
     tasks: {},
     stages: {},
@@ -222,7 +222,7 @@ describe('B689: выгрузка данных покрывает все табл
     expect(diary.goals.map((goal) => goal.title)).toEqual(['Цель своя']);
     expect(diary.measurements.map((measurement) => [measurement.goalId, measurement.note])).toEqual([[goalId, 'Замер своя']]);
     expect(diary.goalDetails).toEqual([
-      { goalId, details: { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null } },
+      { goalId, details: { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null } },
     ]);
     expect(diary.weeklyReviews.map((review) => review.movedForward)).toEqual(['Неделя своя']);
     expect(diary.achievements.map((achievement) => achievement.situation)).toEqual(['Ситуация своя']);

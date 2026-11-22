@@ -326,6 +326,44 @@ describe('B684: цель с показателями под флагом', () =>
     expect(changed.json().error.code).toBe('idempotency_key_reused');
   });
 
+  it('B742: годовая цель хранит вклад кварталов; без вклада — null; неверный вклад — отказ', async () => {
+    const { app } = await setup();
+    const quarterTargets = [
+      { quarter: 1, value: 85 },
+      { quarter: 2, value: 88 },
+      { quarter: 3, value: 92 },
+      { quarter: 4, value: 95 },
+    ];
+    const year = { ...CARD, horizon: 'year', dueDate: '2027-11-30', quarterTargets };
+    const created = await call(app, 'POST', `${DIARY}/goal-cards`, flagged, year);
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().data.details.quarterTargets).toEqual(quarterTargets);
+
+    const plain = await call(app, 'POST', `${DIARY}/goal-cards`, flagged, CARD);
+    expect(plain.statusCode, plain.body).toBe(201);
+    expect(plain.json().data.details.quarterTargets).toBeNull();
+
+    const id = plain.json().data.id as string;
+    const patched = await call(app, 'PATCH', `${DIARY}/goal-cards/${id}`, flagged, {
+      quarterTargets: [{ quarter: 1, value: 10 }],
+    });
+    expect(patched.json().data.details.quarterTargets).toEqual([{ quarter: 1, value: 10 }]);
+
+    for (const bad of [
+      [{ quarter: 5, value: 1 }],
+      [
+        { quarter: 1, value: 1 },
+        { quarter: 1, value: 2 },
+      ],
+      [],
+    ]) {
+      const response = await call(app, 'PATCH', `${DIARY}/goal-cards/${id}`, flagged, {
+        quarterTargets: bad,
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
   it('старые цели читаются без потерь: без показателей и с деталями по умолчанию', async () => {
     const { app } = await setup();
     const goal = await legacyGoal(app, flagged, 'Встречи один на один');
@@ -338,7 +376,7 @@ describe('B684: цель с показателями под флагом', () =>
       unit: 'человек',
       targetValue: 9,
       indicators: [],
-      details: { setBy: 'self', agreedOn: null, weight: null, archive: null },
+      details: { setBy: 'self', agreedOn: null, weight: null, archive: null, quarterTargets: null },
     });
   });
 

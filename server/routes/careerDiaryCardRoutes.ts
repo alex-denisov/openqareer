@@ -56,6 +56,19 @@ const dateSchema = z
   });
 const note = z.string().trim().max(DIARY_NOTE_MAX);
 const weightSchema = z.number().min(0).max(100);
+const quarterTargetsSchema = z
+  .array(
+    z
+      .object({
+        quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+        value: z.number().finite(),
+      })
+      .strict(),
+  )
+  .min(1)
+  .max(4)
+  .refine((items) => new Set(items.map((item) => item.quarter)).size === items.length)
+  .transform((items) => [...items].sort((a, b) => a.quarter - b.quarter));
 const valueSchema = z.union([z.number().finite(), z.boolean(), z.string().trim().min(1).max(500)]);
 const indicatorSchema = z
   .object({
@@ -75,6 +88,7 @@ const cardSchema = z
     setBy: z.enum(GOAL_SETTERS),
     agreedOn: dateSchema.nullish(),
     weight: weightSchema.nullish(),
+    quarterTargets: quarterTargetsSchema.nullish(),
     indicators: z.array(indicatorSchema).min(1).max(GOAL_INDICATORS_MAX),
   })
   .strict()
@@ -84,6 +98,7 @@ const detailsPatchSchema = z
     setBy: z.enum(GOAL_SETTERS),
     agreedOn: dateSchema.nullable(),
     weight: weightSchema.nullable(),
+    quarterTargets: quarterTargetsSchema.nullable(),
   })
   .partial()
   .strict()
@@ -257,6 +272,7 @@ function createCard(
       agreedOn: input.agreedOn ?? null,
       weight: input.weight ?? null,
       archive: null,
+      quarterTargets: input.quarterTargets ?? null,
     };
     deps.details().saveGoalDetail(candidate, goal.id, details);
   }

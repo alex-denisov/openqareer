@@ -128,15 +128,17 @@ export function MeetingDialog({ people, chosen, onClose, onSave }: {
   readonly people: readonly CareerDiaryPersonView[];
   readonly chosen: string | null;
   readonly onClose: () => void;
-  readonly onSave: (personId: string, date: string) => Promise<void>;
+  readonly onSave: (personId: string, date: string, topic: string) => Promise<void>;
 }) {
   const [personId, setPersonId] = useState(chosen ?? people[0]?.id ?? '');
-  const [date, setDate] = useState(people.find((person) => person.id === chosen)?.meeting?.date ?? '');
+  const meeting = people.find((person) => person.id === chosen)?.meeting;
+  const [date, setDate] = useState(meeting?.date ?? '');
+  const [topic, setTopic] = useState(meeting?.topic ?? '');
   const [error, setError] = useState<string | undefined>();
   const { busy, failed, run } = useSave(onClose);
   function save() {
     setError(date ? undefined : 'Укажите день');
-    if (date && personId) void run(() => onSave(personId, date));
+    if (date && personId) void run(() => onSave(personId, date, topic));
   }
   const footer = (
     <>
@@ -153,6 +155,7 @@ export function MeetingDialog({ people, chosen, onClose, onSave }: {
         </select>
       </div>
       <Field id="mt-date" label="Когда" type="date" value={date} error={error} onChange={setDate} />
+      <Field id="mt-topic" label="Тема" value={topic} placeholder="Например: цели года" onChange={setTopic} />
       {failed ? <StatusLine state="err" text="Встреча не назначилась, попробуйте ещё раз" /> : null}
     </Dialog>
   );
