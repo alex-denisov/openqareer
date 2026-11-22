@@ -393,6 +393,12 @@ test.describe('B655/B677: «Компании и люди» нового каби
     await expect(row.locator('textarea')).toHaveCount(0);
     await expect(row.getByRole('button', { name: 'Написать знакомому' })).toHaveCount(0);
     await expect(row.locator('.co-sent')).toHaveText('писали 12.11');
+    // B645: метка по ширине текста и у левого края, как кнопка на её месте, и на 390 тоже.
+    const tag = await row.locator('.co-sent').boundingBox();
+    const box = await row.boundingBox();
+    expect(tag && box).toBeTruthy();
+    expect(tag!.width).toBeLessThan(140);
+    if (box!.width < 500) expect(tag!.x - box!.x).toBeLessThan(40);
   });
 
   test('релокация в городе без компаний — v10g и путь к удалённой работе', async ({ page }) => {
