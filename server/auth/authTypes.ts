@@ -230,6 +230,8 @@ export interface SessionAuth {
   ): 'revoked' | 'current' | 'not_found' | null;
   /** Server-only recipient lookup for queued candidate email delivery. */
   getCandidateEmail?(candidateId: string): string | null;
+  /** n02: пояс из «Приложения» для 09:00 сводки уведомлений; `null` — не выбран. */
+  getCandidateTimezone?(candidateId: string): string | null;
   /** B173: proof of which published documents the account accepted, and when. */
   recordLegalConsent?(input: {
     userId: string;
