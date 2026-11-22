@@ -59,6 +59,15 @@ describe('formFromCard', () => {
       source: 'с ваших слов',
     });
   });
+
+  it('turns a typed format into its list option, so the list shows no extra «гибрид» (B645 o06a)', () => {
+    const typed = (format: string) =>
+      formFromCard({ ...vector, terms: { ...vector.terms, format } });
+    expect(typed('гибрид').format).toBe('hybrid');
+    expect(typed(' Удалённо ').format).toBe('remote');
+    expect(typed('в офисе').format).toBe('office');
+    expect(typed('Гибрид, 2 дня в офисе').format).toBe('Гибрид, 2 дня в офисе');
+  });
 });
 
 describe('parseOfferForm', () => {
