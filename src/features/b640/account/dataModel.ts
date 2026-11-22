@@ -11,7 +11,7 @@ export interface ConsentRow {
 
 /** «Вы в поиске» (B263) — первая строка n05, как в макете; хранится отдельно от `me/consents`. */
 export const SEARCH_CONSENT_ROW = {
-  title: 'Вы в поиске',
+  title: '«Вы в поиске»',
   line: 'Разрешает искать рекрутеров и тёплые пути',
 } as const;
 
