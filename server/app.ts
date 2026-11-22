@@ -132,6 +132,8 @@ interface BuildAppOptions {
   /** B734: русские названия навыков проверки роли. */
   skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
+  /** B642: Whisper для записей собеседований; без подстановки — OpenRouter. */
+  recordingTranscriber?: RouteDeps['recordingTranscriber'];
   adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
@@ -282,7 +284,7 @@ async function createFastifyBase(
       reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
       reply.header(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id',
+        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id, X-Recording-Token',
       );
     }
     if (request.method === 'OPTIONS') {
@@ -453,7 +455,7 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter, recordingTranscriber: options.recordingTranscriber, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor

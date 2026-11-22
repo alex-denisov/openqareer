@@ -95,6 +95,8 @@ export interface RouteDeps {
   skillNameTranslator?: import('../providers/skillNameTranslator').SkillNameTranslator;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
+  /** B642: расшифровка сегмента записи; нет подстановки — Whisper на OpenRouter. */
+  recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** d01: шаги плана адаптации из «Что от вас ждут»; нет — план из шаблона. */
   adaptationStepsWriter?: import('../providers/adaptationStepsWriter').AdaptationStepsWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */

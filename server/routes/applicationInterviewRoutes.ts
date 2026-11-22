@@ -8,11 +8,13 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { registerInterviewRecordingRoutes } from './interviewRecordingRoutes';
 import { isoDateField } from './isoDateField';
 import {
   notificationRepositoryFor,
   recordNotificationFromSource,
 } from './notificationRepositoryAccess';
+import { recordingRuntimeFor } from '../recordings/recordingRuntime';
 import { ApplicationNotFoundError } from '../data/store/errors';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -130,6 +132,8 @@ const handleDeleteInterview: Handler = async (deps, request, reply) => {
   // Отклик свой: снять неушедшее напоминание и при повторе, если прошлый раз оборвался после
   // удаления интервью (хранилища разные, общей транзакции нет). Фильтр по кандидату.
   if (removal !== 'foreign') {
+    // B642: записи интервью (только тексты) уходят вместе с ним.
+    recordingRuntimeFor(deps, request.log).repository.deleteByInterview(candidate.id, params.iid);
     notificationRepositoryFor(deps).withdrawUnsentFromSource(candidate.id, 'interview', params.iid);
   }
   if (removal !== 'deleted') {
@@ -155,4 +159,5 @@ export function registerApplicationInterviewRoutes(app: FastifyInstance, deps: R
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handleDeleteInterview),
   );
+  registerInterviewRecordingRoutes(app, deps);
 }
