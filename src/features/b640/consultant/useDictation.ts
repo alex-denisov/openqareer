@@ -13,6 +13,19 @@ export function speechSupported(): boolean {
   return typeof (window as SpeechRecognitionScope).SpeechRecognition?.available === 'function';
 }
 
+/** Чем кончилась диктовка (I2): нет микрофона — кнопка гаснет, не распознали — строка с повтором. */
+export type DictationFailure = 'mic' | 'speech' | null;
+
+export interface FieldDictation extends ComposerDictation {
+  readonly failure: DictationFailure;
+}
+
+function failureOf(state: VoiceInputState): DictationFailure {
+  if (state === 'denied' || state === 'unsupported') return 'mic';
+  if (state === 'unrecognized' || state === 'error') return 'speech';
+  return null;
+}
+
 /** Строка о микрофоне гаснет сама через четыре секунды. */
 function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
   useEffect(() => {
@@ -23,7 +36,7 @@ function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
 }
 
 /** Диктовка в поле ввода: распознанный текст приходит в `onText` по мере речи. */
-export function useDictation(onText: (text: string) => void): ComposerDictation {
+export function useDictation(onText: (text: string) => void): FieldDictation {
   const [supported] = useState(speechSupported);
   const [state, setState] = useState<VoiceInputState>('idle');
   const [denied, setDenied] = useState(false);
@@ -70,6 +83,7 @@ export function useDictation(onText: (text: string) => void): ComposerDictation 
     recording: state === 'starting' || state === 'recording',
     settling: state === 'finishing',
     denied,
+    failure: failureOf(state),
     start,
     stop,
   };

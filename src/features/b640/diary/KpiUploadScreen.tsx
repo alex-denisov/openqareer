@@ -7,6 +7,7 @@ import {
 import { CoachApiError } from '../../coach/apiClient';
 import { ActionDock } from '../kit/ActionDock';
 import { Button } from '../kit/Button';
+import { Icon } from '../kit/Icon';
 import { InfoTip } from '../kit/InfoTip';
 import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
@@ -81,16 +82,35 @@ function useUpload() {
   return { busy, failure, submit, clear: () => setFailure(null) };
 }
 
-function FailureLine({ failure }: { readonly failure: Failure | null }) {
+interface FailureProps {
+  readonly failure: Failure | null;
+  /** Есть выбранный файл: в ошибке «Не нашли» — «Загрузить другой файл». */
+  readonly onOtherFile: (() => void) | null;
+}
+
+function FailureLine({ failure, onOtherFile }: FailureProps) {
   if (failure === 'none') {
     return (
       <StatusLine
         state="err"
         text="Не нашли показатели"
         action={
-          <Link className="row-act" to={buildNodePath('d02b')}>
-            Ввести вручную
-          </Link>
+          <>
+            <Link className="row-act" to={buildNodePath('d02b')}>
+              Ввести вручную
+            </Link>
+            {onOtherFile ? (
+              <button
+                className="icon-btn"
+                type="button"
+                aria-label="Загрузить другой файл"
+                title="Загрузить другой файл"
+                onClick={onOtherFile}
+              >
+                <Icon name="upload" />
+              </button>
+            ) : null}
+          </>
         }
       />
     );
@@ -202,13 +222,18 @@ export function KpiUploadScreen({ node }: { readonly node: B640Node }) {
   const [picked, setPicked] = useState<Picked | null>(null);
   const { busy, failure, submit, clear } = useUpload();
   const fieldError = failure ? FIELD_ERRORS[failure] : undefined;
+  const dropFile = () => (setPicked(null), clear());
   return (
-    <div className="page gb-page" data-b640-node={node.code} data-b640-section={node.section}>
+    <div
+      className="page gb-page kd-page"
+      data-b640-node={node.code}
+      data-b640-section={node.section}
+    >
       <div className="lead-head">
         <h2 className="lead-title" id="kd-title">
           Загрузите KPI — разберём на цели
         </h2>
-        <InfoTip label="Что мы берём" text={ABOUT} />
+        <InfoTip label="Источник" text={ABOUT} />
       </div>
       <form
         className="gb-form"
@@ -228,7 +253,7 @@ export function KpiUploadScreen({ node }: { readonly node: B640Node }) {
         {busy ? (
           <StatusLine state="wait" text="Разбираем KPI" />
         ) : (
-          <FailureLine failure={failure} />
+          <FailureLine failure={failure} onOtherFile={picked ? dropFile : null} />
         )}
         <ActionDock
           kind="commit"
