@@ -52,3 +52,13 @@ export async function acceptAgreement(applicationId: string, text: string): Prom
   });
   await readDataObject<object>(response);
 }
+
+/** Имя собеседника для расшифровки загруженного файла. */
+export async function saveInterviewerName(applicationId: string, name: string): Promise<void> {
+  const response = await apiFetch(debriefPath(applicationId, '/interviewer'), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  await readDataObject<object>(response);
+}

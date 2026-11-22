@@ -5,6 +5,7 @@ import { MockScreen } from './MockScreen';
 import { PracticeScreen } from './PracticeScreen';
 import { PrepScreen } from './PrepScreen';
 import { RecordScreen } from './RecordScreen';
+import { UploadScreen } from './UploadScreen';
 
 /** Вход раздела «Подготовка»: I1 — подготовка к интервью (I1d — интервью ещё не записано), I2 — пробное интервью, I3 — тренировка System Design. */
 export default function Section({ node, params }: SectionProps) {
@@ -24,7 +25,12 @@ export default function Section({ node, params }: SectionProps) {
 =======
     case 'i04b':
       return <RecordScreen key={params.responseId} responseId={params.responseId ?? 'next'} />;
+<<<<<<< HEAD
 >>>>>>> 443950ab3 (feat(b751): i04b — запись интервью в приложении по контракту D2: разрешения, индикатор, сбой с продолжением)
+=======
+    case 'i04c':
+      return <UploadScreen key={params.responseId} responseId={params.responseId ?? 'next'} />;
+>>>>>>> 3fef18444 (feat(b751): i04c — загрузка файла записи: моно 16 кГц, куски WAV по 5 минут, имя собеседника)
     default:
       return <NodeStub node={node} />;
   }
