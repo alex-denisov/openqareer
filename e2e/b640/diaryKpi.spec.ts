@@ -15,15 +15,52 @@ async function openKpi(page: Page, path: string, node: string): Promise<DiaryCal
 }
 
 test.describe('B686: «Дневник» — загрузка и проверка KPI', () => {
-  test('d02k → d02l → цели: текст разобран, строки приняты', async ({ page }) => {
+  test('d02k → d02l → цели: текст разобран, строки приняты', async ({ page }, testInfo) => {
     const calls = await openKpi(page, '/app/diary/goals/import', 'd02k');
     const upload = page.locator('[data-b640-node="d02k"]');
     await expectGates(page);
+    if (testInfo.project.name === 'desktop-1440') {
+      // B645: подпись и поле как в макете d02k — 20 px от шапки, подпись 14/600, поле 96 px.
+      const rect = (selector: string) =>
+        upload.locator(selector).evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return { top: box.top, bottom: box.bottom, height: box.height, size: style.fontSize };
+        });
+      const head = await rect('.lead-head');
+      const label = await rect('label[for="kd-text"]');
+      const field = await rect('#kd-text');
+      expect(Math.round(label.top - head.bottom)).toBe(20);
+      expect(label.size).toBe('14px');
+      expect(Math.round(field.top - label.bottom)).toBe(8);
+      expect(Math.round(field.height)).toBe(96);
+    }
     await upload.getByLabel('Текст').fill('Релиз — не дольше недели к концу января, вес 30 %.');
     await upload.getByRole('button', { name: 'Разобрать' }).click();
 
     const review = page.locator('[data-b640-node="d02l"]');
-    await expect(review.locator('.kp-tbl tbody tr')).toHaveCount(4);
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(review.locator('.kp-tbl')).toHaveCount(0);
+      await expect(review.locator('.kp-row')).toHaveCount(4);
+      const first = review.locator('.kp-row').first();
+      const title = (await first.locator('.kp-t').textContent()) ?? '';
+      const toggle = review.getByRole('switch', { name: `Верно: ${title}` });
+      const box = await first.locator('.kp-ok').boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      await toggle.click();
+      await expect(review.getByRole('button', { name: 'Принять 3' })).toBeVisible();
+      await toggle.click();
+      await first.locator('.kp-main').click();
+      const sheet = page.getByRole('dialog', { name: 'Показатель' });
+      await expect(sheet.getByLabel('Название')).toHaveValue(title);
+      await sheet.getByRole('button', { name: 'Готово' }).click();
+      await expect(sheet).toHaveCount(0);
+      await review.getByRole('button', { name: 'Ещё действия: показатели' }).click();
+      await expect(review.getByRole('menuitem', { name: 'Загрузить заново' })).toBeVisible();
+    } else {
+      await expect(review.locator('.kp-tbl tbody tr')).toHaveCount(4);
+    }
     await expectGates(page);
     await review.getByRole('button', { name: 'Принять 4' }).click();
     await expect(page.locator('[data-b640-node="d02"]')).toBeVisible();

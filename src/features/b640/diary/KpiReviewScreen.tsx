@@ -6,10 +6,12 @@ import { Icon } from '../kit/Icon';
 import { InfoTip } from '../kit/InfoTip';
 import { StatusLine } from '../kit/ResultLine';
 import { useToast } from '../kit/Toast';
+import { useIsMobile } from '../kit/useMediaQuery';
 import { buildNodePath, type B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import { Link } from '../shell/Link';
 import { acceptKpiImport, getKpiImport } from './diaryApi';
+import { KpiMobileList } from './KpiMobileList';
 import { KpiTable } from './KpiTable';
 import { KpiSourceDelete } from './KpiSourceDelete';
 import { acceptRows, draftRows, sourceLine, weightLine, type KpiDraftRow } from './kpiModel';
@@ -23,7 +25,7 @@ type Loaded =
   | { readonly state: 'ready'; readonly draft: CareerDiaryKpiImport };
 
 function useDraft(id: string | null): [Loaded, () => void] {
-  const [loaded, setLoaded] = useState<Loaded>(id ? { state: 'loading' } : { state: 'error' });
+  const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!id) return undefined;
@@ -68,12 +70,17 @@ function useAccept(draft: CareerDiaryKpiImport) {
 function ReviewForm({ draft }: { readonly draft: CareerDiaryKpiImport }) {
   const [rows, setRows] = useState<readonly KpiDraftRow[]>(() => draftRows(draft));
   const { busy, failed, errors, sum, accept } = useAccept(draft);
+  const mobile = useIsMobile();
   const chosen = rows.filter((row) => row.ok).length;
   const change = (id: string, patch: Partial<KpiDraftRow>) =>
     setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   return (
     <form className="kp-foot" onSubmit={(event) => (event.preventDefault(), void accept(rows))}>
-      <KpiTable rows={rows} errors={errors} onChange={change} />
+      {mobile ? (
+        <KpiMobileList draft={draft} rows={rows} errors={errors} onChange={change} />
+      ) : (
+        <KpiTable rows={rows} errors={errors} onChange={change} />
+      )}
       {sum ? (
         <p className="va-err" role="alert">
           {sum}
@@ -90,10 +97,12 @@ function ReviewForm({ draft }: { readonly draft: CareerDiaryKpiImport }) {
           </Button>
         }
         secondary={
-          <Link className="btn" to={buildNodePath('d02k')}>
-            <Icon name="repeat" />
-            Загрузить заново
-          </Link>
+          mobile ? undefined : (
+            <Link className="btn" to={buildNodePath('d02k')}>
+              <Icon name="repeat" />
+              Загрузить заново
+            </Link>
+          )
         }
       />
       <KpiSourceDelete draft={draft} />
@@ -121,11 +130,19 @@ function Lead({ draft }: { readonly draft: CareerDiaryKpiImport }) {
 
 /** Экран d02l «Проверьте, как мы поняли»: черновик из d02k правится и принимается целями. */
 export function KpiReviewScreen({ node }: { readonly node: B640Node }) {
-  const { search } = useShell();
-  const [loaded, retry] = useDraft(new URLSearchParams(search).get('import'));
+  const { search, navigate } = useShell();
+  const id = new URLSearchParams(search).get('import');
+  const [loaded, retry] = useDraft(id);
+  // Без черновика проверять нечего: прямая ссылка или «Назад» ведут на загрузку. Смотрим
+  // только адрес при открытии: после «Принять» экран уходит на d02 и теряет ?import.
+  const [missing] = useState(() => !id);
+  useEffect(() => {
+    if (missing) navigate(buildNodePath('d02k'));
+  }, [missing, navigate]);
+  const mobile = useIsMobile();
   return (
     <div className="page gb-page" data-b640-node={node.code} data-b640-section={node.section}>
-      {loaded.state === 'ready' ? <Lead draft={loaded.draft} /> : null}
+      {loaded.state === 'ready' && !mobile ? <Lead draft={loaded.draft} /> : null}
       {loaded.state === 'loading' ? <StatusLine state="wait" text="Загружаем показатели" /> : null}
       {loaded.state === 'error' ? (
         <StatusLine

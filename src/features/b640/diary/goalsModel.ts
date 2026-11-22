@@ -5,6 +5,7 @@ import type {
   CareerDiaryValue,
 } from '../../../../shared/careerDiary';
 import type {
+  CareerDiaryGoalArchive,
   CareerDiaryGoalCard,
   CareerDiaryGoalSetter,
 } from '../../../../shared/careerDiaryCards';
@@ -65,6 +66,16 @@ export function longDate(date: string, now: string): string {
   const [year, month, day] = date.slice(0, 10).split('-').map(Number);
   const tail = String(year) === now.slice(0, 4) ? '' : ` ${year}`;
   return `${day} ${MONTHS_GEN[(month ?? 1) - 1]}${tail}`;
+}
+
+/** ⓘ у цели в архиве: когда убрана и почему. */
+export function archiveNote(archive: CareerDiaryGoalArchive, now: string): string {
+  const reason = archive.reason.trim();
+  const end = /[.!?…]$/u.test(reason) ? '' : '.';
+  const day = /^\d{4}-\d{2}-\d{2}/u.test(archive.archivedAt)
+    ? ` ${longDate(archive.archivedAt, now)}`
+    : '';
+  return `Убрана в архив${day}. Причина: ${reason}${end}`;
 }
 
 /** «IV квартал 2026». */

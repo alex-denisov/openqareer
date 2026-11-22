@@ -88,7 +88,7 @@ const archived = {
     setBy: 'manager',
     agreedOn: null,
     weight: null,
-    archive: { archivedAt: '', reason: 'Банк меняет платформу' },
+    archive: { archivedAt: '2026-12-22T09:00:00.000Z', reason: 'Банк меняет платформу' },
   },
   indicators: [],
 };
@@ -160,6 +160,9 @@ describe('d02 «Цели и показатели»', () => {
     ).toEqual(['Закрыто вакансий', 'Кандидатов в финале']);
     expect(page.querySelectorAll('.dn-ind strong')[1]?.textContent).toBe('не внесено');
     expect(page.querySelector('.eyebrow')?.textContent).toBe('Архив · 1');
+    expect(page.querySelector('#kp-arch .tip-bubble')?.textContent).toMatch(
+      /^Убрана в архив \d+ [а-я]+( \d{4})?\. Причина: /u,
+    );
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {
@@ -213,6 +216,8 @@ describe('d02a «Цель»', () => {
     const page = await open(<GoalCardScreen node={nodeByCode('d02a')!} goalId="g1" />);
     expect(page.querySelector('.gt-h')?.textContent).toBe('Закрыть 2 вакансии в команду');
     expect(page.querySelector('.gt-num')?.textContent).toBe('0 из 2');
+    expect(page.querySelector('.gt-tag [aria-label="Почему отстаёт"]')).not.toBeNull();
+    expect(page.querySelector('#ga-p')?.textContent).toBe('Показатели рядом');
     api.recordMeasurement.mockResolvedValue({});
     click(button(page, 'Внести замер'));
     const dialog = document.querySelector('[role="dialog"]')!;
