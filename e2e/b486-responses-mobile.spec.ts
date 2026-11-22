@@ -230,15 +230,15 @@ test.describe('B486 mobile responses', () => {
     const button = await trigger.boundingBox();
     if (!search || !input || !button) throw new Error('панель поиска не отрисована');
 
-    expect(search.height).toBe(32);
-    expect(button.x - (search.x + search.width)).toBe(8);
-    expect(await trigger.evaluate((node) => getComputedStyle(node, '::before').height)).toBe(
-      '32px',
-    );
-    expect(input.height).toBe(44);
-    expect(input.y).toBe(search.y - 6);
-    expect(button.height).toBe(44);
-    expect(button.y).toBe(search.y - 6);
+    // Координаты дробные (130.003 против 130.0003): сверяем с допуском 0,5 px.
+    expect(search.height).toBeCloseTo(32, 0);
+    expect(button.x - (search.x + search.width)).toBeCloseTo(8, 0);
+    const before = await trigger.evaluate((node) => getComputedStyle(node, '::before').height);
+    expect(parseFloat(before)).toBeCloseTo(32, 0);
+    expect(input.height).toBeCloseTo(44, 0);
+    expect(input.y).toBeCloseTo(search.y - 6, 0);
+    expect(button.height).toBeCloseTo(44, 0);
+    expect(button.y).toBeCloseTo(search.y - 6, 0);
 
     const hitAt = (x: number, y: number) =>
       page.evaluate(

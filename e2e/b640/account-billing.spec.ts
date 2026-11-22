@@ -67,7 +67,13 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     const screen = page.locator('[data-b640-node="n05"]');
     await expect(screen.locator('.set-h').first()).toHaveText('На что вы дали согласие');
     await expect(screen.locator('.set-h').last()).toHaveText('Удаление аккаунта');
-    await expect(screen.getByRole('switch')).toHaveCount(3);
+    await expect(screen.getByRole('switch')).toHaveCount(4);
+    await expect(screen.locator('.set-group').first().locator('.set-t')).toHaveText([
+      'Вы в поиске',
+      'Цифровой след',
+      'Подключённый профиль',
+      'Отклики и подъём резюме',
+    ]);
     await expect(screen.getByRole('button', { name: 'Удалить аккаунт' })).toHaveText('Удалить');
     await expect(screen).not.toContainText(/пока недоступно/iu);
     await expectGates(page);
@@ -98,6 +104,38 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await screen.getByRole('button', { name: 'Вернуть аккаунт' }).click();
     await expect(screen.getByRole('button', { name: 'Удалить аккаунт' })).toBeVisible();
     expect(calls.restores).toBe(1);
+  });
+
+  test('n05: «Вы в поиске» даётся после текста согласия и отзывается переключателем', async ({
+    page,
+  }) => {
+    await openAccount(page, '/app/account/data');
+    const sent: unknown[] = [];
+    let granted = false;
+    await page.route('**/api/v1/candidate/search-consent', async (route) => {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON() as { granted: boolean };
+        sent.push(body);
+        granted = body.granted;
+      }
+      await route.fulfill({
+        json: { data: { consent: { granted, policyVersion: 'synthetic', updatedAt: '' } } },
+      });
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const toggle = page.getByRole('switch', { name: 'Вы в поиске' });
+    await expect(toggle).not.toBeChecked();
+    await toggle.click();
+    const dialog = page.getByRole('dialog', { name: 'Вы в поиске' });
+    await expect(dialog).toContainText('мы будем искать контакты нанимающих');
+    expect(sent).toEqual([]);
+    await expectGates(page);
+    await dialog.getByRole('button', { name: 'Дать согласие' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    expect(sent).toEqual([{ granted: true }, { granted: false }]);
   });
 
   test('n05: текст согласия показан до выдачи', async ({ page }) => {
@@ -164,6 +202,19 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
       'Валюта зарплат',
     ]);
     await expectGates(page);
+    // DESIGN.md: место нажатия не меньше 44×44, даже если видимая плашка 42 (макет).
+    // Нажимают подпись: в WebKit .app радио внутри не растягивается на неё.
+    await expect(screen.locator('.sec-seg label')).toHaveCount(7);
+    const targets = await screen.locator('.sec-seg label').evaluateAll((labels) =>
+      labels.map((label) => {
+        const box = label.getBoundingClientRect();
+        return { width: Math.round(box.width), height: Math.round(box.height) };
+      }),
+    );
+    for (const target of targets) {
+      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.height).toBeGreaterThanOrEqual(44);
+    }
     await screen.getByRole('radio', { name: 'Тёмная' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'dark');
     await screen.getByRole('radio', { name: 'Светлая' }).check();

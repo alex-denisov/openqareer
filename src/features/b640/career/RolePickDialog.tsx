@@ -33,7 +33,7 @@ function RoleOptions({
                 onChange={() => pick.toggle(row.title)}
               />
               <span className="vt-opt-t">
-                {row.title}
+                {row.label}
                 {row.wage ? <small className="rs-sub num">{row.wage}</small> : null}
               </span>
               <span className="vt-opt-n num">

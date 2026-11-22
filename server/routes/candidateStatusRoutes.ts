@@ -1,3 +1,4 @@
+import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CANDIDATE_STATUSES, TARGET_PROFESSION_MAX_LENGTH } from '../../shared/candidateStatus';
@@ -102,6 +103,16 @@ const previewStatus: Handler = async (deps, request, reply) => {
   return { data: { preview }, meta: { requestId: request.id } };
 };
 
+/**
+ * B669 (prod 22.11): «Карьера» при «Меняю профессию» читала срез профессии холодным — 12 с
+ * ожидания и «Не удалось прочитать вакансии профессии». Срез строится сразу после выбора;
+ * экран подхватывает уже идущее построение.
+ */
+function warmTargetProfession(deps: BoundDeps, candidateId: string, target: string | null): void {
+  if (!target?.trim()) return;
+  void readRoleSnapshot(deps, candidateId, target, { awaitRebuild: true });
+}
+
 const putStatus: Handler = async (deps, request, reply) => {
   const signed = signedIn(deps, request, reply);
   if (!signed) return reply;
@@ -115,6 +126,7 @@ const putStatus: Handler = async (deps, request, reply) => {
       now: new Date(),
       timezone: accountTimezone(deps, signed.userId),
     });
+    warmTargetProfession(deps, signed.candidate.id, result.state.current.targetProfession);
     return {
       data: { ...result.state, applied: result.applied },
       meta: { requestId: request.id },

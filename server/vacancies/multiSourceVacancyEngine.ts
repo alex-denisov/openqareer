@@ -598,8 +598,8 @@ export class MultiSourceVacancyEngine {
     }
   }
 
-  private restoreSourceStates(): void {
-    for (const state of this.pool.loadSourceStates()) {
+  private restoreSourceStates(sourceIds?: readonly string[]): void {
+    for (const state of this.pool.loadSourceStates(sourceIds)) {
       const source = this.sources.get(state.sourceId);
       if (!source) continue;
       source.lastSyncAt = state.lastSyncAt;
@@ -868,9 +868,12 @@ export class MultiSourceVacancyEngine {
     this.pool.forgetHhTextRoleTarget?.(candidateId);
   }
 
-  /** Refreshes only the bounded source-state registry; it never hydrates pool rows. */
-  public refreshPersistedSourceState(): void {
-    this.restoreSourceStates();
+  /**
+   * Refreshes only the bounded source-state registry; it never hydrates pool rows.
+   * With ids only those sources are re-read (B736: the admin page, not 76 000 rows).
+   */
+  public refreshPersistedSourceState(sourceIds?: readonly string[]): void {
+    this.restoreSourceStates(sourceIds);
   }
 
   public addOrUpdateSource(source: VacancySourceConfig): void {
