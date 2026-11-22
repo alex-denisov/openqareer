@@ -17,8 +17,8 @@ describe('cabinet B640 flag in auth responses (B649)', () => {
     const app = await appWithFlag();
     const candidate = await login(app, 'candidate.test', PASSWORD);
 
-    expect(candidate.response.json().data.features).toEqual({ cabinetB640: false });
-    expect((await me(app, candidate.cookie)).features).toEqual({ cabinetB640: false });
+    expect(candidate.response.json().data.features).toEqual({ cabinetB640: false, interviewRecording: false });
+    expect((await me(app, candidate.cookie)).features).toEqual({ cabinetB640: false, interviewRecording: false });
   });
 
   it('turns the flag on only for the listed sign-in name', async () => {
@@ -26,17 +26,17 @@ describe('cabinet B640 flag in auth responses (B649)', () => {
     const candidate = await login(app, 'candidate.test', PASSWORD);
     const admin = await login(app, 'admin.test', 'admin-password-for-tests');
 
-    expect(candidate.response.json().data.features).toEqual({ cabinetB640: true });
-    expect((await me(app, candidate.cookie)).features).toEqual({ cabinetB640: true });
-    expect(admin.response.json().data.features).toEqual({ cabinetB640: false });
-    expect((await me(app, admin.cookie)).features).toEqual({ cabinetB640: false });
+    expect(candidate.response.json().data.features).toEqual({ cabinetB640: true, interviewRecording: false });
+    expect((await me(app, candidate.cookie)).features).toEqual({ cabinetB640: true, interviewRecording: false });
+    expect(admin.response.json().data.features).toEqual({ cabinetB640: false, interviewRecording: false });
+    expect((await me(app, admin.cookie)).features).toEqual({ cabinetB640: false, interviewRecording: false });
   });
 
   it('turns the flag on for everyone with the wildcard', async () => {
     const app = await appWithFlag(['*']);
     const admin = await login(app, 'admin.test', 'admin-password-for-tests');
 
-    expect((await me(app, admin.cookie)).features).toEqual({ cabinetB640: true });
+    expect((await me(app, admin.cookie)).features).toEqual({ cabinetB640: true, interviewRecording: false });
   });
 
   it('never exposes the list of sign-in names', async () => {

@@ -31,6 +31,8 @@ export interface CareerPartnerCandidatePage {
 /** B649: возможности интерфейса в ответах входа и `/auth/me`. */
 export interface CabinetFeatures {
   readonly cabinetB640: boolean;
+  /** B642: запись и расшифровка разговоров включены на сервере. */
+  readonly interviewRecording: boolean;
 }
 
 export interface AuthPrincipal {

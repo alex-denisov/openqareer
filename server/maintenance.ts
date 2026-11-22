@@ -73,6 +73,8 @@ import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/link
 import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
 import { scheduleFreehireRepo } from './companyDirectory/freehire/freehireRepoSchedule';
 import { scheduleFreehirePages } from './companyDirectory/freehire/freehirePagesSchedule';
+import { shutdownMaintenance } from './maintenance/maintenanceShutdown';
+import { createStorePassMark } from './maintenance/storePassMark';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -149,8 +151,11 @@ const renderScriptPage = existsSync(siteRenderWorkerFile)
 const HH_FETCH_SUMMARY_MS = 5 * 60_000;
 const hhFetchSummary = createHhFetchSummary(log);
 setInterval(() => hhFetchSummary.flush(), HH_FETCH_SUMMARY_MS).unref();
+// B759: SIGTERM отменяет обход — курсор сохраняется по прочитанному, а не через минуту ожидания.
+const collection = new AbortController();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
+  signal: collection.signal,
   registerRequestedAts: true,
   linkedinBudget,
   linkedinFetch,
@@ -232,6 +237,8 @@ const titleModelParser = titleBulkRuntime.client
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
+  // B759: полная чистка пула не чаще раза в 6 ч, сколько бы рестартов ни было.
+  storePassMark: createStorePassMark(semanticDatabase),
   // Откат малой партии связи с ролью: OPENQAREER_ROLE_LINK_OFF=1 останавливает вызовы модели.
   ...(titleBulkRuntime.client && process.env.OPENQAREER_ROLE_LINK_OFF !== '1'
     ? { roleLink: new RoleLinkStep(semanticDatabase, titleBulkRuntime.client, log) }
@@ -314,37 +321,29 @@ let stopCatalogSearchEvidence: (() => void) | undefined;
 let stopLinkedinOrgResolver: (() => void) | undefined;
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
-async function shutdown(signal: string): Promise<void> {
-  if (shuttingDown) return;
+function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return Promise.resolve();
   shuttingDown = true;
-  stopSalaryMarketSnapshots?.();
-  stopCatalogRuSummaries?.();
-  stopOpenRouterBalance?.();
-  stopCatalogSearchEvidence?.();
-  stopLinkedinOrgResolver?.();
-  log.info({ signal }, 'maintenance-shutdown-started');
-  // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
-  // single restore can still take more than the old systemd stop window on
-  // production. Wait for it before closing the shared database; otherwise a
-  // deploy can interrupt restore between its chunks and close the connection
-  // underneath the still-running promise.
-  await restoreInFlight?.catch(() => undefined);
-  const { waveFinished } = await worker.stop();
-  if (!waveFinished) {
-    // Не закрываем SQLite, пока незавершённая волна ещё может вернуться из
-    // fetcher и записать результат. Процесс должен завершиться целиком, иначе
-    // следующий systemd restart получает закрытое соединение вместо честного
-    // fail-and-restart.
-    log.error({ signal }, 'maintenance-shutdown-forced');
-    process.exit(1);
-    return;
-  }
-  semanticDatabase.close();
-  titleBulkRuntime.close();
-  linkedinPoolRepository?.close();
-  composed.close();
-  log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
-  process.exit(0);
+  return shutdownMaintenance(signal, {
+    stopTimers: () => {
+      stopSalaryMarketSnapshots?.();
+      stopCatalogRuSummaries?.();
+      stopOpenRouterBalance?.();
+      stopCatalogSearchEvidence?.();
+      stopLinkedinOrgResolver?.();
+    },
+    abortCollection: () => collection.abort(),
+    stopWorker: () => worker.stop(),
+    startup: restoreInFlight,
+    closeStores: () => {
+      semanticDatabase.close();
+      titleBulkRuntime.close();
+      linkedinPoolRepository?.close();
+      composed.close();
+    },
+    log,
+    exit: (code) => process.exit(code),
+  });
 }
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));

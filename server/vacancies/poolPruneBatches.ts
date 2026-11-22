@@ -305,12 +305,34 @@ function drain<T>(steps: PruneSteps<T>): T {
   }
 }
 
+/** Как идёт чистка после готовности (B759): пауза между шагами и остановка процесса. */
+export interface PruneControl {
+  /** Пауза между шагами, мс: фоновая чистка не держит диск подряд. 0 — только уступка. */
+  readonly pauseMs?: number;
+  readonly shouldStop?: () => boolean;
+}
+
+/** Чистку прервала остановка процесса; удалённое до неё уже записано. */
+export class PrunePassStopped extends Error {
+  constructor() {
+    super('prune pass stopped');
+    this.name = 'PrunePassStopped';
+  }
+}
+
 /** Отпускает цикл событий на каждой границе шага: для чистки после готовности. */
-async function drainYielding<T>(steps: PruneSteps<T>): Promise<T> {
+async function drainYielding<T>(steps: PruneSteps<T>, control: PruneControl = {}): Promise<T> {
+  const pauseMs = Math.max(0, control.pauseMs ?? 0);
   for (;;) {
+    if (control.shouldStop?.()) {
+      steps.return(undefined as T);
+      throw new PrunePassStopped();
+    }
     const next = steps.next();
     if (next.done) return next.value;
-    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) =>
+      pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
+    );
   }
 }
 
@@ -328,8 +350,12 @@ export function prunePoolInBatchesAsync(
   knownSourceIds: readonly string[],
   oldestPublishedAt: string,
   limits: PruneLimits,
+  control?: PruneControl,
 ): Promise<PruneReport> {
-  return drainYielding(poolPruneSteps(database, knownSourceIds, oldestPublishedAt, limits));
+  return drainYielding(
+    poolPruneSteps(database, knownSourceIds, oldestPublishedAt, limits),
+    control,
+  );
 }
 
 interface ClusterPruneResult {
@@ -349,8 +375,9 @@ export function pruneClustersInBatchesAsync(
   database: DatabaseSync,
   cutoffMs: number,
   limits: PruneLimits,
+  control?: PruneControl,
 ): Promise<ClusterPruneResult> {
-  return drainYielding(clusterPruneSteps(database, cutoffMs, limits));
+  return drainYielding(clusterPruneSteps(database, cutoffMs, limits), control);
 }
 
 

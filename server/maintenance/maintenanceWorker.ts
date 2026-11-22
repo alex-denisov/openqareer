@@ -16,6 +16,10 @@ import {
   type SourceSyncOutcome,
 } from '../vacancies/multiSourceVacancyEngine';
 import { timedStep } from './stepTiming';
+import { runStorePass, STORE_PASS_DELAY_MS } from './storePass';
+import type { StorePassMark } from './storePassMark';
+
+export { STORE_PASS_MIN_GAP_MS } from './storePass';
 
 /** Тот же контракт, что у `fastify.log`: объект контекста, потом сообщение. */
 export interface MaintenanceLog {
@@ -35,6 +39,7 @@ export interface MaintenanceEngine {
   maintainStoreAsync(
     nowMs?: number,
     shouldStop?: () => boolean,
+    options?: { pauseMs?: number },
   ): Promise<{ backfillWindows: number }>;
   syncSource(sourceId: string): Promise<SourceSyncOutcome>;
   syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
@@ -89,6 +94,8 @@ export interface MaintenanceIntervals {
   readonly orphanClustersMs?: number;
   readonly linkedinPoolExecutorMs: number;
   readonly recruiterPurgeMs: number;
+  /** Через сколько после старта идёт фоновая чистка пула (B759). */
+  readonly storePassDelayMs?: number;
 }
 
 export interface MaintenanceLinkedinPoolExecutor {
@@ -126,12 +133,12 @@ export interface TitleModelStep {
 }
 
 /**
- * Сколько `stop()` ждёт текущую волну. Обход hh.ru (B219) — это часы, и он
- * возобновляется с сохранённого курсора, поэтому ждать его целиком нельзя:
- * после этого срока волна бросается, хранилища закрываются, процесс выходит.
- * `TimeoutStopSec` юнита — 300 с — страховка сверху для production restore.
+ * Сколько `stop()` ждёт текущую волну. Обход hh.ru (B219) — это часы; на
+ * остановке он получает отмену, сохраняет курсор по прочитанному и выходит
+ * (B759). Срок — запас на запросы, уже ушедшие к площадкам, внутри
+ * `TimeoutStopSec` юнита (300 с).
  */
-export const DEFAULT_STOP_GRACE_MS = 60_000;
+export const DEFAULT_STOP_GRACE_MS = 200_000;
 
 export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   manualSyncMs: 5 * 1_000,
@@ -151,6 +158,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   orphanClustersMs: 2 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
   recruiterPurgeMs: 24 * 60 * 60 * 1_000,
+  storePassDelayMs: STORE_PASS_DELAY_MS,
 };
 
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
@@ -220,6 +228,7 @@ export class MaintenanceWorker {
   /** B626: последний статус пропуска — пишем в журнал только смену причины. */
   private linkedinPoolSkipStatus: string | undefined;
   private readonly purgeRecruiters?: () => number;
+  private readonly storePassMark?: StorePassMark;
   private readonly now: () => number;
   private orphanRestUntil = 0;
   /** Время последнего расчёта итогов; `undefined`, пока не прочитано из базы. */
@@ -253,8 +262,10 @@ export class MaintenanceWorker {
     careersPrune?: CareersPruneTicker;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
+    storePassMark?: StorePassMark;
     now?: () => number;
   }) {
+    this.storePassMark = options.storePassMark;
     this.now = options.now ?? Date.now;
     this.engine = options.engine;
     this.titleParse = options.titleParse;
@@ -292,25 +303,20 @@ export class MaintenanceWorker {
       'maintenance-restored',
     );
     await this.backfillClusterKeys();
-    await this.maintainStore();
     return result;
   }
 
-  private async maintainStore(): Promise<void> {
-    const startedAt = Date.now();
-    try {
-      const { backfillWindows } = await this.engine.maintainStoreAsync(
-        Date.now(),
-        () => this.stopped,
-      );
-      this.log.info({ backfillWindows, ms: Date.now() - startedAt }, 'maintenance-store-pass');
-    } catch (error) {
-      // Чистка не условие работы: сбой виден в журнале, волны идут дальше.
-      this.log.error(
-        { errorName: (error as Error).name, message: (error as Error).message },
-        'maintenance-store-pass-failed',
-      );
-    }
+  /** Фоновая чистка пула (B759): `stop()` её дожидается, она сама прерывается. */
+  private runStorePass(): Promise<void> {
+    const pass = runStorePass({
+      maintainStoreAsync: (nowMs, shouldStop, options) =>
+        this.engine.maintainStoreAsync(nowMs, shouldStop, options),
+      ...(this.storePassMark ? { mark: this.storePassMark } : {}),
+      stopped: () => this.stopped,
+      now: this.now,
+      log: this.log,
+    });
+    return this.track(pass, 'maintenance-store-pass-failed', undefined);
   }
 
   /**
@@ -804,6 +810,13 @@ export class MaintenanceWorker {
     void timedStep('runManualSyncWave', () => this.runManualSyncWave())();
     void timedStep('runSyncWave', () => this.runSyncWave())();
     timedStep('refreshCatalogTotals', () => this.refreshCatalogTotals())();
+    this.scheduleStorePass();
+  }
+
+  /** B759: чистка пула — после первых волн, не на старте. */
+  private scheduleStorePass(): void {
+    const delayMs = this.intervals.storePassDelayMs ?? STORE_PASS_DELAY_MS;
+    this.timers.push(setTimeout(() => void this.runStorePass(), delayMs));
   }
 
   /**

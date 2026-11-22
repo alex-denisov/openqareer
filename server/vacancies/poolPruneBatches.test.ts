@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { pruneClustersInBatchesAsync } from './poolPruneBatches';
+import { PrunePassStopped, pruneClustersInBatchesAsync } from './poolPruneBatches';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
 import { STALE_CLUSTERS_SQL } from './poolPruneBatches';
 
@@ -259,6 +259,30 @@ describe('prune after readiness yields between transactions (B649-2)', () => {
     expect(pruneReports(events)).toEqual([
       expect.objectContaining({ scope: 'pool', removed: 25, transactions: 3 }),
     ]);
+  });
+
+  it('pauses between transactions when asked (B759: prune in the background)', async () => {
+    const { store, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    const startedAt = performance.now();
+    await store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z', { pauseMs: 25 });
+    expect(countOf(seed, 'vacancy_pool')).toBe(0);
+    // Three transactions, a pause after each step boundary: at least two pauses.
+    expect(performance.now() - startedAt).toBeGreaterThanOrEqual(45);
+  });
+
+  it('stops between transactions when the process stops (B759)', async () => {
+    const { store, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    let steps = 0;
+    const pending = store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z', {
+      shouldStop: () => {
+        steps += 1;
+        return steps > 1;
+      },
+    });
+    await expect(pending).rejects.toBeInstanceOf(PrunePassStopped);
+    expect(countOf(seed, 'vacancy_pool')).toBeGreaterThan(0);
   });
 
   it('keeps the half-loaded registry guard', async () => {

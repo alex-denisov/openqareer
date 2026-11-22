@@ -63,6 +63,23 @@ describe('consultant conversations: new and continued (B688)', () => {
     expect(store.listConsultantConversations(candidate.id).items.map((item) => item.id)).toEqual([second.id]);
   });
 
+  it('B738: a continued conversation stays in the export with its summary, marked open', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    ask(store, candidate.id, KEY_A, MSG_A, 'Про профиль', 'profile');
+    const first = store.currentConsultantConversation(candidate.id, 'profile')!;
+    store.closeConsultantConversation(candidate.id);
+    const [task] = store.listPendingConsultantSummaries(candidate.id);
+    expect(store.saveConsultantSummary(candidate.id, task!, output)).toBe(true);
+    store.resumeConsultantConversation(candidate.id, first.id);
+
+    const exported = store.exportCandidate(candidate.id).consultantConversations;
+    expect(exported).toHaveLength(1);
+    expect(exported[0]).toMatchObject({ id: first.id, closedAt: null, open: true });
+    expect(exported[0]?.summaries).toHaveLength(1);
+    expect(exported[0]?.messages.map((message) => message.id)).toContain(MSG_A);
+  });
+
   it('does not reopen an open or missing conversation', () => {
     const store = createStore();
     const candidate = createCandidate(store);
