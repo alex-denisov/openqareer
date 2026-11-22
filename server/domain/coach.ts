@@ -1,3 +1,4 @@
+import { CONSULTANT_REPLY_ACTIONS } from '../../shared/consultantReply';
 import {
   adaptationStageSchema,
   adaptationTaskSuggestionSchema,
@@ -439,6 +440,11 @@ export const coachTurnResultSchema = z.object({
     .preprocess(normalizeQuickReplies, z.array(z.string().min(2).max(40)).max(3))
     .optional(),
   actionProposals: z.array(careerActionProposalSchema).max(20).default([]),
+  /**
+   * B745: раздел кабинета, где делается совет консультанта; кнопку под репликой
+   * подписывает сервер из своего словаря. Прежние ходы без поля читаются как раньше.
+   */
+  nextSection: z.enum(CONSULTANT_REPLY_ACTIONS).nullable().optional(),
   /** 28.10: the consultant answered first; the expert/strategist analysis is `pending` until merged in. */
   analysis: z.enum(['pending', 'ready', 'failed']).optional(),
   /** When the background analysis started; a stale `pending` is read as failed (28.10). */
@@ -664,6 +670,9 @@ export const COACH_TURN_JSON_SCHEMA = {
       maxItems: 3,
       items: { type: 'string', minLength: 2, maxLength: 40 },
     },
+    nextSection: {
+      anyOf: [{ type: 'string', enum: CONSULTANT_REPLY_ACTIONS }, { type: 'null' }],
+    },
     actionProposals: {
       type: 'array',
       maxItems: 20,
@@ -777,6 +786,7 @@ export const COACH_TURN_JSON_SCHEMA = {
     'careerTrack',
     'actionProposals',
     'quickReplies',
+    'nextSection',
     'adaptationTask',
   ],
   additionalProperties: false,
