@@ -46,6 +46,15 @@ export function GoalItem({ card, now }: GoalItemProps) {
         })}
       </ul>
       {quarters ? <p className="row-sub">{quarters}</p> : null}
+      {card.risk.status === 'achieved' ? (
+        <p className="dn-flag is-done">
+          <Icon name="trophy" />
+          {'Достигнута → в Итоги и в профиль · '}
+          <Link className="row-act" to={buildNodePath('d04')}>
+            Перенести
+          </Link>
+        </p>
+      ) : null}
       {stale ? (
         <p className="dn-flag">
           <Icon name="warn" />

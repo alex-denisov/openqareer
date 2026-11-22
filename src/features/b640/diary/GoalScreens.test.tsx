@@ -189,6 +189,22 @@ describe('d02 «Цели и показатели»', () => {
     expect(none.querySelector('#kp-meet')).toBeNull();
   });
 
+  it('B742: достигнутая цель — «в Итоги и в профиль» и «Перенести» в d04', async () => {
+    const done = {
+      ...hiring,
+      id: 'g3',
+      risk: { status: 'achieved', rule: 'linear_progress_v1', explanation: '' },
+    };
+    api.listGoalCards.mockResolvedValue({ items: [hiring, done], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    const flags = [...page.querySelectorAll('.dn-goal')].map(
+      (goal) => goal.querySelector('.dn-flag.is-done')?.textContent ?? null,
+    );
+    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профиль · Перенести']);
+    const move = page.querySelector('.dn-flag.is-done a');
+    expect(move?.getAttribute('href')).toBe('/app/diary/results');
+  });
+
   it('горизонт «Год» без целей — строка пустого состояния', async () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     click(button(page, 'Год'));
