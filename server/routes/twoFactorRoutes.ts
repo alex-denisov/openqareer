@@ -5,7 +5,8 @@ import type { TwoFactorCheck } from '../auth/twoFactorStore';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
-import { csrfError, hasAllowedOrigin, publicPrincipal, sendError, setSessionCookie, withDeps } from './helpers';
+import { csrfError, hasAllowedOrigin, publicPrincipal, sendError, withDeps } from './helpers';
+import { startSession } from './sessionDevice';
 import { closeTwoFactorStoreFor, twoFactorStoreFor } from './twoFactorAccess';
 
 const code = z.string().trim().min(6).max(32);
@@ -48,7 +49,7 @@ async function postLoginStep(deps: RouteDeps, request: FastifyRequest, reply: Fa
   store.consumeChallenge(body.data.challenge);
   const authenticated = deps.authService.issueSessionForUser?.(challenge.userId, challenge.clientDeviceId ?? undefined) ?? null;
   if (!authenticated) return sendError(reply, request, 401, 'two_factor_challenge_expired', 'Войдите заново.', false);
-  setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+  startSession(deps, request, reply, authenticated.sessionToken);
   return answer(request, { ...publicPrincipal(authenticated.principal, deps.config), sessionToken: authenticated.sessionToken });
 }
 
