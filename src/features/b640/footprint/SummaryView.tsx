@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { FootprintRiskItem, FootprintRiskSummary } from '../../../../shared/footprintRisk';
 import { Button, Icon, InfoTip, Link, PagedList, StatusLine } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
@@ -8,6 +8,7 @@ import { dayMonth, findingsWord, levelTag, pageAttrs, shortDate } from './footpr
 import type { FootprintData } from './useFootprint';
 import { repeatIds, useStartSearch } from './useStartSearch';
 import { reportFailure } from './reportFailure';
+import { checksStatus } from './removalModel';
 
 const PAGE = 20;
 
@@ -85,13 +86,24 @@ function SummaryLead({ data, reload }: ViewProps) {
 function ChecksModule({ data, reload }: ViewProps) {
   const repeat = useStartSearch(data, reload);
   const checked = dayMonth(data.summary.checkedAt);
+  const status = checksStatus(data.summary.items);
   return (
     <section className="mod" aria-labelledby="fp-sum">
-      <h3 className="mod-title" id="fp-sum">Проверки</h3>
-      {checked ? (
+      <h3 className="mod-title" id="fp-sum">Проверки и запросы</h3>
+      {checked || status.requests.length > 0 ? (
         <dl className="kv">
-          <dt>Последняя проверка</dt>
-          <dd>{checked}</dd>
+          {checked ? (
+            <>
+              <dt>Последняя проверка</dt>
+              <dd>{[checked, status.lastCheck].filter(Boolean).join(' · ')}</dd>
+            </>
+          ) : null}
+          {status.requests.map((request) => (
+            <Fragment key={request.id}>
+              <dt>Жалоба отправлена</dt>
+              <dd>{`${request.title} — сайту ${request.date}`}</dd>
+            </Fragment>
+          ))}
         </dl>
       ) : null}
       {repeat.error ? <StatusLine state="err" text={repeat.error} /> : null}
