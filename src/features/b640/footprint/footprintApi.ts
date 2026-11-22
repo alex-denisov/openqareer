@@ -15,6 +15,22 @@ export {
   revokeAccountCapabilityConsent,
 } from '../../account/accountCapabilityConsentApi';
 
+/** B645 p02: «Это не проблема» у расхождения с резюме и её отмена. */
+export async function reviewFootprintMismatch(
+  mismatchId: string,
+  review: 'hidden' | 'unreviewed',
+): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/candidate/footprint/mismatches/${encodeURIComponent(mismatchId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ review }),
+    },
+  );
+  await readData<object>(response);
+}
+
 /** B667: сводка следа по пяти категориям риска (маршрут закрыт флагом B640). */
 export async function getFootprintRisks(): Promise<FootprintRiskSummary> {
   const response = await apiFetch('/api/v1/candidate/footprint/risks', { cache: 'no-store' });

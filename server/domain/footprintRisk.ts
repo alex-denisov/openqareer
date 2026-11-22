@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   CandidateFootprintAudit,
   CandidateFootprintFinding,
@@ -226,6 +227,19 @@ function linkedFinding(
   );
 }
 
+/**
+ * Ключ расхождения по содержанию: новая проверка резюме даёт тому же
+ * расхождению новый id, а отметка «Это не проблема» должна остаться (B645 p02).
+ */
+export function mismatchKey(discrepancy: ConsistencyDiscrepancy): string {
+  return createHash('sha256')
+    .update(
+      [discrepancy.field, discrepancy.externalValue, discrepancy.externalSource].join('\u0000'),
+    )
+    .digest('hex')
+    .slice(0, 24);
+}
+
 /** Расхождение с резюме привязываем к находке. */
 function mismatchItem(
   discrepancy: ConsistencyDiscrepancy,
@@ -253,6 +267,15 @@ function mismatchItem(
       foundValue: cleanTitle(discrepancy.externalValue),
     },
   };
+}
+
+/** Отмеченные «Это не проблема» уходят из сводки, как скрытые находки. */
+function openMismatches(
+  discrepancies: readonly ConsistencyDiscrepancy[],
+  audit: CandidateFootprintAudit,
+): ConsistencyDiscrepancy[] {
+  const hidden = new Set(audit.hiddenMismatches ?? []);
+  return discrepancies.filter((discrepancy) => !hidden.has(mismatchKey(discrepancy)));
 }
 
 const LEVEL_RANK = new Map(FOOTPRINT_RISK_LEVELS.map((level, index) => [level, index]));
@@ -304,7 +327,11 @@ export function buildFootprintRiskSummary(
   );
   const items = [
     ...findings.map(findingItem),
-    ...(audit ? discrepancies.map((discrepancy) => mismatchItem(discrepancy, findings)) : []),
+    ...(audit
+      ? openMismatches(discrepancies, audit).map((discrepancy) =>
+          mismatchItem(discrepancy, findings),
+        )
+      : []),
   ].sort((a, b) => (LEVEL_RANK.get(a.level) ?? 0) - (LEVEL_RANK.get(b.level) ?? 0));
   const open = items.filter((item) => item.level !== 'useful' && !item.resolved);
   const unconfirmed = open.filter((item) => REVIEW_KINDS.has(item.action?.kind ?? '')).length;
