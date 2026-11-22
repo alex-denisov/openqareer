@@ -115,7 +115,9 @@ describe('cluster split dry run (B752)', () => {
       piecesCreated: 1,
       catalogMoved: 1,
       skippedCandidateRef: 1,
+      redirects: 1,
     });
+    expect(counts.journalBytesEstimate).toBeGreaterThan(0);
     expect(counts.keysRewritten).toBeGreaterThan(0);
     expect(database.prepare('SELECT count(*) AS n FROM vacancy_clusters').get()).toEqual(before);
     store.close();
