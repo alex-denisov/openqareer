@@ -27,8 +27,22 @@ function buildIndex(): ReadonlyMap<string, string> {
 
 const INDEX = buildIndex();
 
+/**
+ * B748: роли, придуманные моделью, в онтологии нет. Их проверенные русские названия
+ * приходят с называнием ролей (и из его кэша) и живут здесь: название роли — не
+ * данные кандидата, одно на всех. Онтология важнее.
+ */
+const fromNaming = new Map<string, string>();
+
+export function rememberRoleTitlesRu(
+  roles: readonly { readonly title: string; readonly titleRu?: string }[],
+): void {
+  for (const role of roles) if (role.titleRu) fromNaming.set(keyOf(role.title), role.titleRu);
+}
+
 export function roleTitleRu(title: string): string {
-  return INDEX.get(keyOf(title)) ?? title;
+  const key = keyOf(title);
+  return INDEX.get(key) ?? fromNaming.get(key) ?? title;
 }
 
 /** Только названия, у которых есть русское: клиент показывает `titlesRu[title] ?? title`. */
