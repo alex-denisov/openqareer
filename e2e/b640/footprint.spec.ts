@@ -198,6 +198,10 @@ test.describe('B652: «Цифровой след»', () => {
     await screen.getByRole('button', { name: 'Оставить' }).click();
     expect(calls.revoked).toBe(0);
     await screen.locator('.revoke summary').click();
+    // Отзыв удаляет проверки и находки — диалог говорит это прямо.
+    await expect(screen.locator('.revoke-q')).toHaveText(
+      'Отозвать согласие? Проверки и находки удалятся.',
+    );
     await screen
       .getByRole('group', { name: 'Отозвать согласие?' })
       .getByRole('button', { name: 'Отозвать' })

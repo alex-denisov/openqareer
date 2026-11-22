@@ -8,7 +8,7 @@ const DENIED_TOAST_MS = 4000;
 // Макет рисует один исход сбоя диктовки (K3b): строка о микрофоне и возврат к тексту.
 const FAILED: readonly VoiceInputState[] = ['denied', 'unsupported', 'error'];
 
-function speechSupported(): boolean {
+export function speechSupported(): boolean {
   if (typeof window === 'undefined') return false;
   return typeof (window as SpeechRecognitionScope).SpeechRecognition?.available === 'function';
 }
