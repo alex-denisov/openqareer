@@ -78,6 +78,8 @@
     font-size: var(--career-text-sm);
   }
   .b640 .kp-tbl select {
+    inline-size: 100%;
+    min-inline-size: 0;
     min-block-size: var(--career-target-min);
     padding-inline: var(--career-space-2);
     border-radius: var(--career-radius-sm);
@@ -86,12 +88,6 @@
     color: var(--career-text);
     font: inherit;
     font-size: var(--career-text-sm);
-  }
-  .b640 .kp-tbl .kp-w {
-    inline-size: 5rem;
-  }
-  .b640 .kp-tbl .kp-t {
-    min-inline-size: 7.5rem;
   }
   .b640 .kp-foot {
     display: grid;

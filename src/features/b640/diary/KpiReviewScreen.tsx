@@ -89,20 +89,27 @@ function ReviewForm({ draft }: { readonly draft: CareerDiaryKpiImport }) {
       {failed ? (
         <StatusLine state="err" text="Цели не добавились" action={<RetryButton submit />} />
       ) : null}
+      {/* Как в макете d02l: сначала «Принять», за ней «Загрузить заново» (только 1440/1176). */}
       <ActionDock
         kind="commit"
         primary={
-          <Button variant="primary" icon="checkc" type="submit" busy={busy} disabled={chosen === 0}>
-            {`Принять ${chosen}`}
-          </Button>
-        }
-        secondary={
-          mobile ? undefined : (
-            <Link className="btn" to={buildNodePath('d02k')}>
-              <Icon name="repeat" />
-              Загрузить заново
-            </Link>
-          )
+          <>
+            <Button
+              variant="primary"
+              icon="checkc"
+              type="submit"
+              busy={busy}
+              disabled={chosen === 0}
+            >
+              {`Принять ${chosen}`}
+            </Button>
+            {mobile ? null : (
+              <Link className="btn" to={buildNodePath('d02k')}>
+                <Icon name="repeat" />
+                Загрузить заново
+              </Link>
+            )}
+          </>
         }
       />
       <KpiSourceDelete draft={draft} />
@@ -141,7 +148,7 @@ export function KpiReviewScreen({ node }: { readonly node: B640Node }) {
   }, [missing, navigate]);
   const mobile = useIsMobile();
   return (
-    <div className="page gb-page" data-b640-node={node.code} data-b640-section={node.section}>
+    <div className="page gb-page kd-page" data-b640-node={node.code} data-b640-section={node.section}>
       {loaded.state === 'ready' && !mobile ? <Lead draft={loaded.draft} /> : null}
       {loaded.state === 'loading' ? <StatusLine state="wait" text="Загружаем показатели" /> : null}
       {loaded.state === 'error' ? (

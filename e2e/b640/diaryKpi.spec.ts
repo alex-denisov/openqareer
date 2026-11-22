@@ -60,6 +60,19 @@ test.describe('B686: «Дневник» — загрузка и проверка
       await expect(review.getByRole('menuitem', { name: 'Загрузить заново' })).toBeVisible();
     } else {
       await expect(review.locator('.kp-tbl tbody tr')).toHaveCount(4);
+      if (testInfo.project.name === 'desktop-1440') {
+        // B645: таблица в колонке формы, как в макете d02l (438→1094), строки с y 262.
+        const geometry = await review.evaluate((root) => {
+          const box = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
+          return { table: box('.kp-tbl'), row: box('.kp-tbl tbody tr'), form: box('form') };
+        });
+        expect(geometry.table.left).toBe(438);
+        expect(geometry.table.right).toBeLessThanOrEqual(geometry.form.right);
+        expect(Math.round(geometry.table.top)).toBe(198);
+      }
+      const actions = review.locator('.m-commit > *');
+      await expect(actions.first()).toHaveText('Принять 4');
+      await expect(actions.nth(1)).toHaveText('Загрузить заново');
     }
     await expectGates(page);
     await review.getByRole('button', { name: 'Принять 4' }).click();
