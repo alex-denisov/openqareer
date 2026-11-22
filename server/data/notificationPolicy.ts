@@ -8,7 +8,9 @@ export type NotificationEventKind =
   | 'footprint_findings'
   | 'import_completed'
   | 'employer_reply'
-  | 'delivery_error';
+  | 'delivery_error'
+  /** B695: наступило время поста из очереди LinkedIn. */
+  | 'post_reminder';
 
 export type NotificationPreferenceKey =
   | 'ev-reply'
@@ -80,6 +82,7 @@ const EVENT_PRESENTATION: Record<NotificationEventKind, { title: string; action:
   import_completed: { title: 'Импорт профиля завершён', action: 'Открыть профиль', view: 'profile' },
   employer_reply: { title: 'Есть ответ работодателя', action: 'Напомнить рекрутеру', view: 'responses' },
   delivery_error: { title: 'Отклик не доставлен', action: 'Открыть отклик', view: 'responses' },
+  post_reminder: { title: 'Пора опубликовать пост', action: 'Открыть пост', view: 'profile' },
 };
 
 const EVENT_PREFERENCE: Record<NotificationEventKind, NotificationPreferenceKey | null> = {
@@ -93,6 +96,7 @@ const EVENT_PREFERENCE: Record<NotificationEventKind, NotificationPreferenceKey 
   import_completed: 'ev-weekly-digest',
   employer_reply: 'ev-reply',
   delivery_error: 'ev-delivery-error',
+  post_reminder: 'ev-reminder',
 };
 
 export function notificationPreferenceKey(kind: NotificationEventKind): NotificationPreferenceKey | null {
@@ -101,6 +105,9 @@ export function notificationPreferenceKey(kind: NotificationEventKind): Notifica
 
 /** B690: источник уведомления «вход в hh.ru истёк»; вид — `delivery_error`, подача — своя. */
 export const HH_SESSION_SOURCE = 'hh_session';
+
+/** B695: напоминание о посте ведёт в очередь постов нового кабинета (a03b). */
+export const LINKEDIN_POSTS_PATH = '/app/profile/linkedin/posts';
 
 export function presentNotification(
   input: {
@@ -122,6 +129,9 @@ export function presentNotification(
     };
   }
   const presentation = EVENT_PRESENTATION[input.kind];
+  if (input.kind === 'post_reminder') {
+    return { ...base, title: presentation.title, action: { label: presentation.action, href: LINKEDIN_POSTS_PATH } };
+  }
   const href = new URLSearchParams({ view: presentation.view, notificationSource: input.sourceId });
   return { ...base, title: presentation.title, action: { label: presentation.action, href: `/app?${href.toString()}` } };
 }
