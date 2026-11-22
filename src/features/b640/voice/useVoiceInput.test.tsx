@@ -68,9 +68,14 @@ afterEach(() => {
 });
 
 describe('голосовой ввод в .app без распознавания речи браузером', () => {
+  it('до B758 голос в .app не предлагается: запись взяла бы звук компьютера', async () => {
+    const state = await render();
+    expect(state().supported).toBe(false);
+    expect(bridge.recordingPermissions).not.toHaveBeenCalled();
+  });
+
   it('запись с микрофона, после «Стоп» текст дописывается к полю', async () => {
     const state = await render();
-    expect(state().supported).toBe(true);
     await act(async () => state().start('Мы'));
     expect(state().recording).toBe(true);
     await act(async () => state().stop());

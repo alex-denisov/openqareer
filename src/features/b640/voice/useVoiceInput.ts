@@ -18,12 +18,18 @@ export interface VoiceInput extends ComposerDictation {
 
 type AppPhase = 'idle' | 'listening' | 'transcribing';
 
+/**
+ * Запись .app пока берёт и звук компьютера, и доступ к экрану; для диктовки это не годится
+ * (решение 22.11). Включается вместе с режимом «только микрофон» B758.
+ */
+export const APP_MIC_ONLY_READY = false;
+
 const joined = (base: string, text: string) => [base.trimEnd(), text].filter(Boolean).join(' ');
 
 function useAppSupport(): boolean {
   const [supported, setSupported] = useState(false);
   useEffect(() => {
-    if (!canRecordInApp()) return undefined;
+    if (!APP_MIC_ONLY_READY || !canRecordInApp()) return undefined;
     let alive = true;
     void recordingPermissions()
       .then((found) => alive && setSupported(found.supported))
