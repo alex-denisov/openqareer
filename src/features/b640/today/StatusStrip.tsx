@@ -7,8 +7,6 @@ import { revertStatus } from './statusApi';
 
 export interface StatusStripProps {
   readonly status: CandidateStatusToday;
-  /** «13 откликов → 1 интервью → 1 оффер»; `null` — откликов ещё нет. */
-  readonly progress: string | null;
   /** Название статуса, к которому только что вернулись; `null` — возврата не было. */
   readonly revertedTitle: string | null;
   /** Статус вернули: экран запоминает название и перечитывает модули. */
@@ -19,16 +17,6 @@ type RevertState =
   | { readonly step: 'idle' }
   | { readonly step: 'busy' }
   | { readonly step: 'error'; readonly message: string };
-
-const SINCE_FORMAT = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
-
-/** «С 2 октября: 13 откликов → 1 интервью → 1 оффер»; без даты — только путь. */
-export function progressLine(since: string | null | undefined, progress: string): string {
-  const date = since ? new Date(since) : null;
-  return date && !Number.isNaN(date.getTime())
-    ? `С ${SINCE_FORMAT.format(date)}: ${progress}`
-    : progress;
-}
 
 interface UndoStripProps {
   readonly title: string;
@@ -60,9 +48,9 @@ function UndoStrip({ title, busy, error, onRevert }: UndoStripProps) {
 
 /**
  * Строка статуса над «Сегодня». Сразу после смены — «Вернуть прежний»
- * (до конца дня), дальше — статус, путь откликов и «Сменить».
+ * (до конца дня), дальше — статус и «Сменить» (макет s03: строки пути откликов нет).
  */
-export function StatusStrip({ status, progress, revertedTitle, onReverted }: StatusStripProps) {
+export function StatusStrip({ status, revertedTitle, onReverted }: StatusStripProps) {
   const [revert, setRevert] = useState<RevertState>({ step: 'idle' });
 
   async function handleRevert() {
@@ -96,7 +84,6 @@ export function StatusStrip({ status, progress, revertedTitle, onReverted }: Sta
         <span>
           Статус: <strong>{revertedTitle ?? status.title}</strong>
         </span>
-        {progress ? <span className="num">{progressLine(status.since, progress)}</span> : null}
         <Link className="row-act is-sm" to={buildNodePath('s02')}>
           Сменить
         </Link>

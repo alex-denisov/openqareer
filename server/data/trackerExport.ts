@@ -61,6 +61,13 @@ export interface OutreachRecord {
   readonly updatedAt: string;
 }
 
+export interface StagePromotion {
+  readonly interviewId: string;
+  readonly applicationId: string;
+  readonly fromStage: string;
+  readonly fromStageChangedAt: string;
+}
+
 export interface ActionBatch {
   readonly id: string;
   readonly status: string;
@@ -93,6 +100,8 @@ export interface TrackerExport {
   readonly rejectionReviewHelped: boolean | null;
   readonly actionBatches: ActionBatch[];
   readonly actionReceipts: Array<Omit<StoredActionReceipt, 'candidateId'>>;
+  /** Этап отклика до перехода в «Интервью», который создал собеседование */
+  readonly stagePromotions: StagePromotion[];
 }
 
 export interface TrackerExportSources {
@@ -153,6 +162,19 @@ function actionReceipts(database: DatabaseSync, candidateId: string): TrackerExp
             application_id AS applicationId, failure_code AS failureCode,
             executed_at AS executedAt, created_at AS createdAt
      FROM candidate_action_receipts WHERE candidate_id = ? ORDER BY executed_at, id`,
+    candidateId,
+  );
+}
+
+function stagePromotions(database: DatabaseSync, candidateId: string): StagePromotion[] {
+  return rows(
+    database,
+    'application_interview_stage_promotions',
+    `SELECT p.interview_id AS interviewId, p.application_id AS applicationId,
+            p.from_stage AS fromStage, p.from_stage_changed_at AS fromStageChangedAt
+     FROM application_interview_stage_promotions p
+     JOIN applications a ON a.id = p.application_id
+     WHERE a.candidate_id = ? ORDER BY p.application_id, p.interview_id`,
     candidateId,
   );
 }
@@ -223,6 +245,7 @@ export function createTrackerExport(sources: TrackerExportSources): (candidateId
       rejectionReviewHelped: rejections.helped,
       actionBatches: actionBatches(database, candidateId),
       actionReceipts: actionReceipts(database, candidateId),
+      stagePromotions: stagePromotions(database, candidateId),
     };
   };
 }

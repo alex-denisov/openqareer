@@ -1,18 +1,28 @@
 import type { ReactNode } from 'react';
 import { StatusLine } from '../kit/ResultLine';
-import type { B640Node } from '../routes';
+import { buildNodePath, type B640Node } from '../routes';
+import { useShell } from '../shell/ShellContext';
 import { StartTemplate, StartWorkplace } from './StartPlan';
 import { useAdaptation, type AdaptationData } from './useAdaptation';
 import './adaptation.css';
 
 export type AdaptationActions = ReturnType<typeof useAdaptation>;
 
+const GOAL_ID = /^[\w-]{1,80}$/u;
+
 /** d01g: форма старта — одна колонка, как в макете. */
 function EmptyStart({ node, onDone }: { readonly node: B640Node; readonly onDone: () => void }) {
+  // Пришли из «+ Задача» карточки цели: после формы — обратно к цели, в «Новую задачу».
+  const { search, navigate } = useShell();
+  const goalId = new URLSearchParams(search).get('goal');
+  const back = goalId && GOAL_ID.test(goalId) ? goalId : null;
+  const done = back
+    ? () => navigate(`${buildNodePath('d02a', { goalId: back })}?task=new`)
+    : onDone;
   return (
     <div className="page gb-page" data-b640-node={node.code} data-b640-section={node.section}>
       <div className="col">
-        <StartWorkplace onDone={onDone} />
+        <StartWorkplace onDone={done} />
       </div>
     </div>
   );

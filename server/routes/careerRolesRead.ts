@@ -3,7 +3,7 @@ import type { ProposedRole } from '../../shared/roleProposals';
 import { readCampaign } from './campaignContext';
 import { masterResumeDocument, withResumeCoverage } from './careerRoleResumeCoverage';
 import { careerTimeZone, countRolesLikeTheList } from './careerRoleCounts';
-import { careerRolesWithCandidateChoices } from './careerRoleSync';
+import { careerRolesWithCandidateChoices, withStoredTitlesRu } from './careerRoleSync';
 import type { RouteDeps } from './deps';
 import { conditionsMarketCount, finishMatchedVacancies } from './matchedVacancyRoutes';
 import { readRoleContext, readTargetLevel, type RoleContext } from './vacancyRoleContext';
@@ -57,7 +57,11 @@ export async function readCareerRoleContext(
   );
   return {
     context,
-    roles: withResumeCoverage(roles, masterResumeDocument(deps, candidateId)),
+    // B748: перевод, сохранённый прежним называнием, не теряется при новом.
+    roles: withStoredTitlesRu(
+      deps.candidateStore.getCandidateWorkspace(candidateId)?.campaign,
+      withResumeCoverage(roles, masterResumeDocument(deps, candidateId)),
+    ),
     conditionsCount: conditionsMarketCount(context.matched, listed, targetRoles, campaign),
   };
 }

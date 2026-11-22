@@ -28,7 +28,7 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 4;
+export const ROLE_NAMING_PROMPT_VERSION = 5;
 
 export function roleNamingInstructions(language: RoleNameLanguage): string {
   return [
@@ -51,7 +51,8 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
       : ['Названия ролей давай по-английски — так, как их пишут в вакансиях.']),
     'Каждая роль — короткое название должности (до 60 символов).',
     'Для каждой роли дай titleRu — как эту должность пишут в русских вакансиях;',
-    'аббревиатуры из названия (COO, CTO, AI, IT) сохрани. Если title уже по-русски,',
+    'аббревиатуры из названия (COO, CTO, AI, IT) сохрани, остальное переведи',
+    '(AI Consultant → AI-консультант). Если title уже по-русски,',
     'повтори его в titleRu.',
     'Название компании, продукта, подразделения или бренда из фактов — не роль:',
     'работодатель кандидата никогда не становится названием должности.',
@@ -80,8 +81,8 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
  */
 const CYRILLIC = /[а-яё]/iu;
 const TITLE_RU_MAX = 80;
-/** «ИТ» в русском названии — та же аббревиатура, что «IT». */
-const CYRILLIC_ABBREVIATIONS: Readonly<Record<string, string>> = { IT: 'ИТ' };
+/** «ИТ» и «ИИ» в русском названии — те же аббревиатуры, что «IT» и «AI». */
+const CYRILLIC_ABBREVIATIONS: Readonly<Record<string, string>> = { IT: 'ИТ', AI: 'ИИ' };
 
 /**
  * B748: русское название роли от модели берётся, только если оно правда русское,

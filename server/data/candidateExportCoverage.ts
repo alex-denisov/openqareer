@@ -85,6 +85,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   rejection_review_feedback: { export: 'tracker' },
   candidate_action_batches: { export: 'tracker' },
   candidate_action_receipts: { export: 'tracker' },
+  application_interview_stage_promotions: { export: 'tracker' },
   application_interviews: { export: 'tracker' },
   application_materials: { export: 'tracker' },
   application_offers: { export: 'tracker' },

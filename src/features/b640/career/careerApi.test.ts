@@ -124,6 +124,44 @@ describe('loadRoles', () => {
     expect(data.rows[0]!.lacks).toBe('Работа с ВЭД');
   });
 
+  it('B747: «Чего не хватает» не берёт навык, который уже подтверждает опыт роли', async () => {
+    api.getRoleHypotheses.mockResolvedValue([
+      {
+        id: 'r1',
+        title: 'Аналитик',
+        origin: 'model',
+        reason: null,
+        evidenceRefs: [],
+        family: null,
+        confirmation: {
+          state: 'observed',
+          sampleSize: 40,
+          observedFrom: '2026-10-11',
+          observedTo: '2026-11-10T09:00:00.000Z',
+          sources: [{ source: 'hh', count: 40 }],
+          repeatedRequirements: ['Excel', 'Операционная  эффективность'],
+          matchedRequirementNames: ['Excel', 'Операционная  эффективность'],
+        },
+      },
+    ]);
+    api.getRoleSkillDemand.mockResolvedValue({
+      state: 'ready',
+      roles: [
+        {
+          roleTitle: 'Аналитик',
+          skills: [
+            { name: 'Операционная эффективность', inProfile: false },
+            { name: 'BI', inProfile: false },
+          ],
+        },
+      ],
+    });
+    const data = await loadRoles(new AbortController().signal);
+    const row = data.rows.find((item) => item.title === 'Аналитик')!;
+    expect(row.confirms).toContain('Excel');
+    expect(row.lacks).toBe('BI');
+  });
+
   it('требования не прочитались — полосы нет, экран читается', async () => {
     api.getRoleSkillDemand.mockRejectedValue(new Error('сбой'));
     const data = await loadRoles(new AbortController().signal);
@@ -164,6 +202,28 @@ describe('readSkillGap (строка навыков в «Вакансиях», s
     );
     api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
     expect(await readSkillGap(['VP', 'COO'])).toEqual({ gap: 3, role: 'COO' });
+  });
+
+  it('B645: проверка роли уже пройдена (result) — строка о пробелах из спроса и ссылка на эту роль', async () => {
+    api.getCurrentRoleSkillAssessment.mockImplementation(async (role: string) =>
+      role === 'COO'
+        ? { state: 'result', run: { roleTitle: 'COO' } }
+        : { state: role === 'VP' ? 'run' : 'insufficient_requirements', roleTitle: role },
+    );
+    api.getRoleSkillDemand.mockResolvedValue({
+      state: 'ready',
+      roles: [{ roleTitle: 'COO', skills: [{ name: 'P&L', inProfile: false }, { name: 'Lean', inProfile: false }, { name: 'ITIL', inProfile: true }] }],
+    });
+    expect(await readSkillGap(['VP', 'CTO', 'COO'])).toEqual({ gap: 2, role: 'COO' });
+  });
+
+  it('готовая проверка важнее пройденной; у пройденной без данных спроса строки нет', async () => {
+    api.getCurrentRoleSkillAssessment.mockImplementation(async (role: string) =>
+      role === 'COO' ? { state: 'result', run: { roleTitle: 'COO' } } : { state: 'ready', roleTitle: role, skills: [{ name: 'X' }] },
+    );
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+    expect(await readSkillGap(['COO', 'CTO'])).toEqual({ gap: 1, role: 'CTO' });
+    expect(await readSkillGap(['COO'])).toEqual({ gap: 0, role: 'COO' });
   });
 
   it('ни одна роль не готова — строки нет', async () => {
