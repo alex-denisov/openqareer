@@ -35,7 +35,7 @@ const OUTCOME: DebriefOutcome = {
 
 function multipart(fields: Record<string, string>, file: { data: Buffer; type: string }) {
   const boundary = `----oq${randomUUID()}`;
-  const parts = Object.entries(fields).map(([name, value]) =>
+  const parts: Buffer[] = Object.entries(fields).map(([name, value]) =>
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
     ),
@@ -84,18 +84,33 @@ async function setup(outcomes: Array<DebriefOutcome | null> = [OUTCOME]) {
     round: 1,
     scheduledAt: '2026-11-20T10:00:00.000Z',
   });
-  const debrief = (tail = '', method: 'GET' | 'POST' | 'PUT' = 'GET', body?: object, who = user) =>
-    send(method, `/api/v1/candidate/applications/${application.id}/debrief${tail}`, who, body);
-  const record = async (source: 'app' | 'upload', track: string, type: string) => {
+  const debrief = (
+    tail = '',
+    method: 'GET' | 'POST' | 'PUT' = 'GET',
+    body?: object,
+    who: HarnessUser = user,
+  ) => send(method, `/api/v1/candidate/applications/${application.id}/debrief${tail}`, who, body);
+  const record = async (
+    source: 'app' | 'upload',
+    track: string,
+    type: string,
+    extra: { continues?: string; startedAt?: string } = {},
+  ) => {
     const created = await send(
       'POST',
       `/api/v1/candidate/applications/${application.id}/interviews/${interview.id}/recordings`,
       user,
-      { source },
+      { source, ...(extra.continues ? { continues: extra.continues } : {}) },
     );
+    if (created.statusCode !== 201) return { recordingId: '', segment: created };
     const rec = created.json().data as { recordingId: string; headers: Record<string, string> };
     const form = multipart(
-      { track, segment: '0', startedAt: '2026-11-20T10:00:00.000Z', durationMs: '30000' },
+      {
+        track,
+        segment: '0',
+        startedAt: extra.startedAt ?? '2026-11-20T10:00:00.000Z',
+        durationMs: '30000',
+      },
       { data: Buffer.from('RIFF-audio'.repeat(50)), type },
     );
     const segment = await h.app.inject({
@@ -207,5 +222,22 @@ describe('B751: разбор после интервью', () => {
     const rows = sql<{ name_cipher: string }>('SELECT name_cipher FROM interview_interviewers');
     expect(rows[0]?.name_cipher).not.toContain('Ирина');
     expect((await debrief('/agreements', 'POST', { text: '' })).statusCode).toBe(400);
+  });
+  it('«Продолжить» после сбоя .app: новая часть той же записи, реплики на общей шкале', async () => {
+    const { debrief, record, finished } = await setup();
+    const first = await record('app', 'mic', 'audio/mp4');
+    await finished(first.recordingId);
+    const second = await record('app', 'mic', 'audio/mp4', {
+      continues: first.recordingId,
+      startedAt: '2026-11-20T10:20:00.000Z',
+    });
+    expect(second.segment.statusCode).toBe(202);
+    await finished(second.recordingId);
+    const view = (await debrief()).json().data;
+    expect(view.recording).toMatchObject({ id: second.recordingId, status: 'ready' });
+    expect(view.transcript).toHaveLength(4);
+    expect(view.transcript[2].startMs).toBe(1_200_000);
+    const foreign = await record('app', 'mic', 'audio/mp4', { continues: randomUUID() });
+    expect(foreign.segment.statusCode).toBe(400);
   });
 });

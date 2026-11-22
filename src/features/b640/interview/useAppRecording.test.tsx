@@ -49,7 +49,7 @@ beforeEach(() => {
     screen: true,
   });
   bridge.startRecording.mockResolvedValue(CREATED);
-  bridge.resumeRecording.mockResolvedValue(undefined);
+  bridge.resumeRecording.mockResolvedValue({ ...CREATED, recordingId: 'rec-2' });
   bridge.stopRecording.mockResolvedValue(undefined);
   bridge.onRecordingState.mockImplementation(
     async (handler: (event: RecordingStateEvent) => void) => {
@@ -97,15 +97,15 @@ describe('useAppRecording (I4b)', () => {
     expect(bridge.startRecording).not.toHaveBeenCalled();
   });
 
-  it('a break mid-call: resume the same recording or save what is there', async () => {
+  it('a break mid-call: the next part continues the recording, stop closes it', async () => {
     const state = await render();
     await act(() => state().start());
     act(() => emit({ state: 'error', elapsedMs: 23 * 60_000, error: 'capture' }));
     expect(state().phase).toBe('stopped');
     await act(() => state().resume());
-    expect(bridge.resumeRecording).toHaveBeenCalledWith(CREATED);
+    expect(bridge.resumeRecording).toHaveBeenCalledWith('app-1', 'iv-1', CREATED);
     await act(() => state().stop());
-    expect(bridge.stopRecording).toHaveBeenCalledWith('rec-1');
+    expect(bridge.stopRecording).toHaveBeenCalledWith('rec-2');
     expect(state().phase).toBe('done');
   });
 });

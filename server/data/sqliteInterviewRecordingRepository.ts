@@ -9,7 +9,7 @@ import {
 
 /** `upload` — загруженный файл (B751): одна дорожка, голоса не разделены. */
 export type RecordingTrack = 'mic' | 'system' | 'upload';
-export type RecordingSource = 'app' | 'upload';
+export type RecordingSource = 'app' | 'upload' | 'dictation';
 export type SegmentStatus = 'pending' | 'done' | 'failed';
 
 export interface StoredRecording {
@@ -21,6 +21,8 @@ export interface StoredRecording {
   readonly tokenExpiresAt: string;
   readonly finishedAt: string | null;
   readonly source: RecordingSource;
+  /** Предыдущая часть: .app после сбоя начинает сегменты с нуля, поэтому продолжение — новая запись. */
+  readonly continuesId: string | null;
   readonly createdAt: string;
 }
 
@@ -40,6 +42,7 @@ export interface NewRecording {
   readonly tokenHash: string;
   readonly tokenExpiresAt: string;
   readonly source?: RecordingSource;
+  readonly continuesId?: string | null;
 }
 
 /** B751: разбор модели по одной расшифровке; `failed` — модель не ответила или ответ отклонён. */
@@ -66,6 +69,7 @@ interface RecordingRow {
   token_expires_at: string;
   finished_at: string | null;
   source: RecordingSource;
+  continues_id: string | null;
   created_at: string;
 }
 
@@ -88,6 +92,7 @@ function toRecording(row: RecordingRow): StoredRecording {
     tokenExpiresAt: row.token_expires_at,
     finishedAt: row.finished_at,
     source: row.source,
+    continuesId: row.continues_id,
     createdAt: row.created_at,
   };
 }
@@ -126,8 +131,8 @@ export class SqliteInterviewRecordingRepository {
     this.database
       .prepare(
         `INSERT INTO interview_recordings
-           (id, candidate_id, application_id, interview_id, token_hash, token_expires_at, status, created_at, source)
-         VALUES (?, ?, ?, ?, ?, ?, 'recording', ?, ?)`,
+           (id, candidate_id, application_id, interview_id, token_hash, token_expires_at, status, created_at, source, continues_id)
+         VALUES (?, ?, ?, ?, ?, ?, 'recording', ?, ?, ?)`,
       )
       .run(
         id,
@@ -138,6 +143,7 @@ export class SqliteInterviewRecordingRepository {
         input.tokenExpiresAt,
         now,
         input.source ?? 'app',
+        input.continuesId ?? null,
       );
     return id;
   }

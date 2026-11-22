@@ -42,17 +42,73 @@ export function transcriptHash(lines: readonly DebriefLine[]): string {
 const findingsData = (recordingId: string, hash: string) => `${recordingId}:debrief:${hash}`;
 const interviewerData = (interviewId: string) => `${interviewId}:interviewer`;
 
+type PartView = ReturnType<typeof buildRecordingView>;
+
 interface RecordingState {
   readonly recording: StoredRecording;
-  readonly view: ReturnType<typeof buildRecordingView>;
+  readonly view: Pick<PartView, 'status' | 'segments' | 'gaps' | 'transcript'>;
+}
+
+/** Части одной записи: последняя и те, продолжением которых она шла (новее — первой). */
+function partsOf(context: DebriefContext, latest: StoredRecording): StoredRecording[] {
+  const parts = [latest];
+  const seen = new Set([latest.id]);
+  let next = latest.continuesId;
+  while (next && !seen.has(next) && parts.length < 20) {
+    const part = context.repository.getOwned(latest.candidateId, next);
+    if (!part || part.interviewId !== latest.interviewId) break;
+    parts.push(part);
+    seen.add(part.id);
+    next = part.continuesId;
+  }
+  return parts;
+}
+
+function combinedStatus(views: readonly PartView[]): PartView['status'] {
+  const latest = views[0]!.status;
+  if (latest === 'recording' || views.some((v) => v.status === 'transcribing')) {
+    return latest === 'recording' ? 'recording' : 'transcribing';
+  }
+  return views.some((v) => v.status === 'ready') ? 'ready' : 'failed';
+}
+
+/** Реплики частей на общей шкале: отсчёт от начала самой ранней части. */
+function combinedTranscript(views: readonly PartView[]): PartView['transcript'] {
+  const starts = (v: PartView) => Math.min(...v.segments.map((seg) => Date.parse(seg.startedAt)));
+  const origin = Math.min(...views.filter((v) => v.segments.length > 0).map(starts));
+  return views
+    .filter((v) => v.transcript && v.segments.length > 0)
+    .flatMap((v) => {
+      const shift = starts(v) - origin;
+      return v.transcript!.map((line) => ({
+        ...line,
+        startMs: line.startMs + shift,
+        endMs: line.endMs + shift,
+      }));
+    })
+    .sort((a, b) => a.startMs - b.startMs);
 }
 
 function recordingState(context: DebriefContext, subject: DebriefSubject): RecordingState | null {
   const { repository, sealedText } = context;
   const recording = repository.latestForInterview(subject.candidateId, subject.interview.id);
   if (!recording) return null;
-  const view = buildRecordingView(sealedText, recording, repository.listSegments(recording.id));
-  return { recording, view };
+  const views = partsOf(context, recording).map((part) =>
+    buildRecordingView(sealedText, part, repository.listSegments(part.id)),
+  );
+  const status = combinedStatus(views);
+  const segments = views
+    .flatMap((v) => v.segments)
+    .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  return {
+    recording,
+    view: {
+      status,
+      segments,
+      gaps: views.flatMap((v) => v.gaps),
+      transcript: status === 'ready' ? combinedTranscript(views) : null,
+    },
+  };
 }
 
 function analysisOf(context: DebriefContext, state: RecordingState | null): DebriefAnalysis {
@@ -93,7 +149,7 @@ export function buildDebriefView(
       ? {
           id: state.recording.id,
           status: state.view.status,
-          source: state.recording.source,
+          source: state.recording.source === 'upload' ? 'upload' : 'app',
           startedAt: state.view.segments[0]?.startedAt ?? state.recording.createdAt,
           gaps: state.view.gaps.length,
         }

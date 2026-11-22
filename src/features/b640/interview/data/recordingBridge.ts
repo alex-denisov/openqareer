@@ -51,13 +51,24 @@ export async function requestRecordingPermissions(): Promise<RecordingPermission
   return granted ?? { supported: false, microphone: false, screen: false };
 }
 
-async function createRecording(applicationId: string, interviewId: string): Promise<CreatedRecording> {
+async function createRecording(
+  applicationId: string,
+  interviewId: string,
+  continues?: string,
+): Promise<CreatedRecording> {
   const path = `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/interviews/${encodeURIComponent(interviewId)}/recordings`;
-  return readDataObject<CreatedRecording>(await apiFetch(path, { method: 'POST' }));
+  const init: RequestInit = continues
+    ? {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ continues }),
+      }
+    : { method: 'POST' };
+  return readDataObject<CreatedRecording>(await apiFetch(path, init));
 }
 
-/** Начать (или после сбоя продолжить) запись в .app по уже созданной на сервере. */
-export async function resumeRecording(created: CreatedRecording): Promise<void> {
+/** Начать запись в .app по уже созданной на сервере. */
+async function launchRecording(created: CreatedRecording): Promise<void> {
   await invokeDesktopCommand('recording_start', {
     resourceId: created.recordingId,
     uploadUrl: created.uploadUrl,
@@ -71,16 +82,29 @@ export async function startRecording(
   interviewId: string,
 ): Promise<CreatedRecording> {
   const created = await createRecording(applicationId, interviewId);
-  await resumeRecording(created);
+  await launchRecording(created);
   return created;
 }
 
-/** Остановить в .app и закрыть запись на сервере: дальше идёт расшифровка. */
-export async function stopRecording(recordingId: string): Promise<void> {
-  const result = (await invokeDesktopCommand<StopResult>('recording_stop')) ?? {
-    segments: 0,
-    failed: 0,
-  };
+/**
+ * «Продолжить» после сбоя: .app начинает сегменты заново с нуля, поэтому прежняя часть
+ * закрывается, а продолжение — новая запись на сервере, связанная с прежней.
+ */
+export async function resumeRecording(
+  applicationId: string,
+  interviewId: string,
+  previous: CreatedRecording,
+): Promise<CreatedRecording> {
+  // Остановка дожидается отправки готовых сегментов; если захват уже закрыт сбоем — итог без счёта.
+  await stopRecording(previous.recordingId).catch(() =>
+    finishPart(previous.recordingId, { segments: 0, failed: 0 }),
+  );
+  const created = await createRecording(applicationId, interviewId, previous.recordingId);
+  await launchRecording(created);
+  return created;
+}
+
+async function finishPart(recordingId: string, result: StopResult): Promise<void> {
   const response = await apiFetch(
     `/api/v1/candidate/recordings/${encodeURIComponent(recordingId)}/finish`,
     {
@@ -90,6 +114,15 @@ export async function stopRecording(recordingId: string): Promise<void> {
     },
   );
   await readDataObject<object>(response);
+}
+
+/** Остановить в .app и закрыть запись на сервере: дальше идёт расшифровка. */
+export async function stopRecording(recordingId: string): Promise<void> {
+  const result = (await invokeDesktopCommand<StopResult>('recording_stop')) ?? {
+    segments: 0,
+    failed: 0,
+  };
+  await finishPart(recordingId, result);
 }
 
 /** Подписка на `recording://state`; возвращает отписку. */

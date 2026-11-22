@@ -32,7 +32,10 @@ CREATE TABLE IF NOT EXISTS interview_recording_segments (
 );
 `;
 
-/** B751: откуда запись: `app` — две дорожки .app, `upload` — файл без голосов. Колонка к таблице B642. */
+/**
+ * B751: откуда запись (`app` — две дорожки .app, `upload` — файл без голосов, `dictation` —
+ * диктовка ответа без интервью) и продолжением какой записи она идёт после сбоя .app.
+ */
 export function addRecordingSourceColumns(database: DatabaseSync): void {
   const columns = new Set(
     (database.prepare('PRAGMA table_info(interview_recordings)').all() as Array<{ name: string }>).map(
@@ -41,6 +44,9 @@ export function addRecordingSourceColumns(database: DatabaseSync): void {
   );
   if (!columns.has('source')) {
     database.exec("ALTER TABLE interview_recordings ADD COLUMN source TEXT NOT NULL DEFAULT 'app'");
+  }
+  if (!columns.has('continues_id')) {
+    database.exec('ALTER TABLE interview_recordings ADD COLUMN continues_id TEXT');
   }
 }
 

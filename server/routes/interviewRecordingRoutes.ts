@@ -28,7 +28,11 @@ const finishSchema = z.object({
 
 /** B751: `upload` — файл с сайта; без тела — запись .app. */
 const createSchema = z
-  .object({ source: z.enum(['app', 'upload']).optional() })
+  .object({
+    source: z.enum(['app', 'upload']).optional(),
+    /** «Продолжить» после сбоя .app: новая часть той же записи. */
+    continues: z.string().uuid().optional(),
+  })
   .optional()
   .nullable();
 
@@ -52,6 +56,12 @@ const handleCreate: Handler = async (deps, request, reply) => {
   if (!body.success) {
     return sendError(reply, request, 400, 'invalid_recording', 'Неверный источник записи.', false);
   }
+  const continues = body.data?.continues
+    ? repository.getOwned(candidate.id, body.data.continues)
+    : null;
+  if (body.data?.continues && continues?.interviewId !== params.iid) {
+    return sendError(reply, request, 400, 'invalid_recording', 'Неверный источник записи.', false);
+  }
   const issued = issueRecordingToken();
   const recordingId = repository.create({
     candidateId: candidate.id,
@@ -60,6 +70,7 @@ const handleCreate: Handler = async (deps, request, reply) => {
     tokenHash: issued.tokenHash,
     tokenExpiresAt: issued.expiresAt,
     source: body.data?.source ?? 'app',
+    continuesId: continues?.id ?? null,
   });
   return reply.code(201).send({
     data: {

@@ -76,6 +76,15 @@ async function beginRecording(
   return startRecording(applicationId, interviewId);
 }
 
+function nextPart(
+  applicationId: string,
+  interviewId: string | null,
+  previous: CreatedRecording | null,
+): Promise<CreatedRecording> {
+  if (!previous || !interviewId) return Promise.reject(new Error('no_interview'));
+  return resumeRecording(applicationId, interviewId, previous);
+}
+
 /** Запись интервью в .app (I4b): разрешения, старт, индикатор, сбой с продолжением, итог. */
 export function useAppRecording(applicationId: string, interviewId: string | null): AppRecording {
   const [phase, setPhase] = useState<AppRecordingPhase>('checking');
@@ -112,7 +121,7 @@ export function useAppRecording(applicationId: string, interviewId: string | nul
     guarded(
       'starting',
       async () => {
-        if (created) await resumeRecording(created);
+        setCreated(await nextPart(applicationId, interviewId, created));
         setPhase('recording');
       },
       'stopped',
