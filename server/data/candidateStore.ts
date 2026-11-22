@@ -143,6 +143,10 @@ export interface CandidateExport extends CandidateSnapshot {
     entries: import('../../shared/careerDiaryEntries').CareerDiaryEntry[];
     weekSummaries: import('../../shared/careerDiaryEntries').CareerDiaryWeekSummary[];
   };
+  /** B689: остальной дневник — цели, замеры, места работы с планом, люди, черновики KPI. */
+  careerDiary: import('./careerDiaryExport').CareerDiaryExport;
+  /** n02: как почта и Telegram присылают уведомления и скрыто ли название компании. */
+  notificationDeliverySettings: import('./notificationDeliverySettings').DeliverySettings;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
@@ -742,6 +746,12 @@ export interface CandidateStore extends ConsultantHistoryMethods {
   listApplicationOffers(
     candidateId: string,
   ): StoredApplicationOffer[];
+
+  /** `false`, если интервью нет; чужой отклик — `ApplicationNotFoundError`. */
+  deleteApplicationInterview?(candidateId: string, applicationId: string, interviewId: string): boolean;
+
+  /** `false`, если оффера нет; чужой отклик — `ApplicationNotFoundError`. */
+  deleteApplicationOffer?(candidateId: string, applicationId: string): boolean;
 
   listVacancySkips(candidateId: string): StoredVacancySkip[];
 
