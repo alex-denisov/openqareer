@@ -102,6 +102,14 @@ export const candidateWorkspaceSchema = z
           )
           .max(20)
           .optional(),
+        /**
+         * B748: проверенный русский перевод ролей поиска, сохранённых до него;
+         * значение, равное ключу, — перевод отвергнут, второй раз не спрашиваем.
+         */
+        roleTitlesRu: z
+          .record(z.string().min(1).max(200), z.string().trim().min(1).max(200))
+          .refine((value) => Object.keys(value).length <= 60)
+          .optional(),
       })
       .strict()
       .optional(),

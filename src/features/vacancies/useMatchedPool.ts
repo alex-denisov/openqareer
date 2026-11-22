@@ -45,8 +45,16 @@ interface PoolReaderSetters {
   readonly setFailureSourceLabel: Dispatch<SetStateAction<string | undefined>>;
 }
 
+export interface MatchedPoolOptions {
+  /**
+   * B645 s07: сколько страниц читать. Новый кабинет берёт одну страницу и число из ответа
+   * сервера, остальное — по запросу порциями сервера; без него читается вся подборка.
+   */
+  readonly pageLimit?: number;
+}
+
 /** One cabin-wide read; the owner screen can retry the bounded page sequence. */
-export function useMatchedPool(provided?: MatchedPool): MatchedPool {
+export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptions = {}): MatchedPool {
   // B589: the last unfiltered selection renders at once on a repeat visit.
   const [cached] = useState(() => (provided ? undefined : readCachedMatchedPool()));
   const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
@@ -79,7 +87,7 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   // Only the first read over a cached selection refreshes silently; a retry or
   // a filter change shows its own loading as before.
   const silentRead = useRef(Boolean(cached));
-  useMatchedPoolReader(initialPool, readAttempt, filters, silentRead, {
+  useMatchedPoolReader(initialPool, readAttempt, filters, silentRead, options.pageLimit, {
     setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
     setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
@@ -136,6 +144,7 @@ function useMatchedPoolReader(
   readAttempt: number,
   filters: VacanciesScreenState | undefined,
   silentRead: { current: boolean },
+  pageLimit: number | undefined,
   setters: PoolReaderSetters,
 ): void {
   const {
@@ -153,11 +162,12 @@ function useMatchedPoolReader(
   } = setters;
   useEffect(() => {
     if (provided) return;
-    return startPoolRead(setters, filters, readAttempt, silentRead);
+    return startPoolRead(setters, filters, readAttempt, silentRead, pageLimit);
   }, [
     provided,
     readAttempt,
     filters,
+    pageLimit,
     setMatched,
     setInitialFilters,
     setSort,
@@ -179,13 +189,14 @@ function startPoolRead(
   filters: VacanciesScreenState | undefined,
   readAttempt: number,
   silentRead: { current: boolean },
+  pageLimit: number | undefined,
 ): () => void {
   let active = true;
   const silent = silentRead.current && !filters && readAttempt === 0;
   silentRead.current = false;
   let finished = false;
   if (!silent) resetPoolRead(setters);
-  void loadMatchedPool(setters, () => active, filters, silent).finally(() => {
+  void loadMatchedPool(setters, () => active, filters, silent, pageLimit).finally(() => {
     finished = true;
     if (active) setters.setLoading(false);
   });
@@ -211,6 +222,7 @@ async function loadMatchedPool(
   isActive: () => boolean,
   filters?: VacanciesScreenState,
   silent = false,
+  pageLimit?: number,
 ): Promise<void> {
   // A silent refresh replaces the cached list in one step when the read is
   // done, so the table never shrinks to the first page and grows back (B589).
@@ -229,7 +241,7 @@ async function loadMatchedPool(
           }
           return page;
         }),
-      undefined,
+      pageLimit,
       (items, poolSize) => {
         if (!isActive()) return;
         lastPoolSize = poolSize;

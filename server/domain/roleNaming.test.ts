@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ROLE_TITLE_TRANSLATION_INSTRUCTIONS,
   ROLE_NAMING_JSON_SCHEMA,
   ROLE_NAMING_PROMPT_VERSION,
   checkedTitleRu,
@@ -85,7 +86,7 @@ describe('роль держится на направлении опыта (28.1
     const text = roleNamingInstructions('ru');
     expect(text).toContain('Не называй роль по одному упоминанию технологии или навыка');
     expect(text).toContain('место работы или минимум два факта');
-    expect(ROLE_NAMING_PROMPT_VERSION).toBe(6);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(7);
   });
 });
 
@@ -119,6 +120,12 @@ describe('B748: русское название роли от модели пр�
     const text = roleNamingInstructions('en');
     expect(text).toContain('AI Consultant');
     expect(text).toContain('AI-консультант');
+  });
+
+  it('Operations — эксплуатация, а не инфраструктура: пример в обеих инструкциях', () => {
+    expect(roleNamingInstructions('en')).toContain('Head of IT Operations →');
+    expect(roleNamingInstructions('en')).toContain('Руководитель ИТ-эксплуатации');
+    expect(ROLE_TITLE_TRANSLATION_INSTRUCTIONS).toContain('Руководитель ИТ-эксплуатации');
   });
 
   it('titleRu всегда русской формулировкой вакансии, аббревиатуры остаются', () => {
@@ -158,6 +165,6 @@ describe('B748: русское название роли от модели пр�
     expect(item.required).toContain('titleRu');
     expect(item.properties.titleRu).toEqual({ type: 'string' });
     expect(roleNamingInstructions('en')).toContain('titleRu');
-    expect(ROLE_NAMING_PROMPT_VERSION).toBe(6);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(7);
   });
 });

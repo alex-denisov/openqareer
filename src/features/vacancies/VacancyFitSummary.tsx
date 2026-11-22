@@ -17,6 +17,7 @@ const FAILURE_LABELS: Record<NonNullable<VacancyFitView['failure']>, string> = {
   model_invalid: 'Расчёт не завершился: ответ сервиса сравнения не прошёл проверку',
   requirements: 'Расчёт не завершился: требования вакансии не разобраны',
   profile_changed: 'Профиль изменился во время расчёта',
+  too_large: 'Не удалось посчитать',
   other: STATE_LABELS.failed,
 };
 const REASONS = {
