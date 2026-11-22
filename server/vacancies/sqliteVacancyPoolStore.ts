@@ -6,6 +6,7 @@ import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema'
 import {
   prunePoolInBatches,
   prunePoolInBatchesAsync,
+  type PruneControl,
   pruneClustersInBatches,
   pruneClustersInBatchesAsync,
   type PruneLimits,
@@ -1791,23 +1792,32 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /** То же, что `prune`, но отпускает цикл событий между транзакциями (B649-2). */
-  async pruneAsync(knownSourceIds: readonly string[], oldestPublishedAt: string): Promise<void> {
+  async pruneAsync(
+    knownSourceIds: readonly string[],
+    oldestPublishedAt: string,
+    control?: PruneControl,
+  ): Promise<void> {
     const report = await prunePoolInBatchesAsync(
       this.database,
       knownSourceIds,
       oldestPublishedAt,
       this.pruneLimits(),
+      control,
     );
     this.onWrite?.({ kind: 'prune', ...report });
   }
 
-  async pruneClustersBeforeAsync(oldestPublishedAt: string): Promise<number> {
+  async pruneClustersBeforeAsync(
+    oldestPublishedAt: string,
+    control?: PruneControl,
+  ): Promise<number> {
     const cutoffMs = Date.parse(oldestPublishedAt);
     if (!Number.isFinite(cutoffMs)) return 0;
     const { clusters, report } = await pruneClustersInBatchesAsync(
       this.database,
       cutoffMs,
       this.pruneLimits(),
+      control,
     );
     this.onWrite?.({ kind: 'prune', ...report });
     return clusters;

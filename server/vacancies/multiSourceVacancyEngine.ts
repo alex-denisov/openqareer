@@ -680,16 +680,20 @@ export class MultiSourceVacancyEngine {
   public async maintainStoreAsync(
     nowMs: number = Date.now(),
     shouldStop: () => boolean = () => false,
+    options: { pauseMs?: number } = {},
   ): Promise<{ backfillWindows: number }> {
     const oldestPublishedAt = new Date(
       nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
     const known = Array.from(this.sources.keys());
-    if (this.pool.pruneAsync) await this.pool.pruneAsync(known, oldestPublishedAt);
+    // B759: в фоне между транзакциями пауза, остановка процесса прерывает проход.
+    const pauseMs = Math.max(0, options.pauseMs ?? 0);
+    const control = { pauseMs, shouldStop };
+    if (this.pool.pruneAsync) await this.pool.pruneAsync(known, oldestPublishedAt, control);
     else this.pool.prune(known, oldestPublishedAt);
     if (shouldStop()) return { backfillWindows: 0 };
     if (this.pool.pruneClustersBeforeAsync) {
-      await this.pool.pruneClustersBeforeAsync(oldestPublishedAt);
+      await this.pool.pruneClustersBeforeAsync(oldestPublishedAt, control);
     } else {
       this.pruneClusters(oldestPublishedAt);
     }
@@ -697,7 +701,9 @@ export class MultiSourceVacancyEngine {
     while (this.pool.backfillWindowStep && !shouldStop()) {
       backfillWindows += 1;
       if (this.pool.backfillWindowStep().done) break;
-      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) =>
+        pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
+      );
     }
     return { backfillWindows };
   }
