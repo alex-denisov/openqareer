@@ -17,7 +17,6 @@ export type CandidateTableCoverage =
   | { readonly internal: string }
   | { readonly gap: string };
 
-const GAP_NOTIFICATIONS = 'уведомления и их настройки: в выгрузку пока не входят';
 const GAP_PROFILE = 'история и производные профиля: в выгрузку пока не входят';
 const GAP_ACCOUNT = 'учётная запись и кабинет: в выгрузку пока не входят';
 const GAP_AUTOMATION = 'автоотклики и hh.ru: в выгрузку пока не входят';
@@ -127,13 +126,13 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   matched_snapshot_seals: { internal: 'кэш подборки вакансий, пересчитывается' },
   sealed_matched_lists: { internal: 'кэш подборки вакансий, пересчитывается' },
   // Ещё не в выгрузке.
-  candidate_notifications: { gap: GAP_NOTIFICATIONS },
-  candidate_notification_deliveries: { gap: GAP_NOTIFICATIONS },
-  candidate_notification_invitation_events: { gap: GAP_NOTIFICATIONS },
-  candidate_notification_invitation_preferences: { gap: GAP_NOTIFICATIONS },
-  candidate_notification_preferences: { gap: GAP_NOTIFICATIONS },
-  candidate_notification_telegram_chats: { gap: GAP_NOTIFICATIONS },
-  candidate_notification_telegram_preferences: { gap: GAP_NOTIFICATIONS },
+  candidate_notifications: { export: 'notifications' },
+  candidate_notification_deliveries: { export: 'notifications' },
+  candidate_notification_invitation_events: { export: 'notifications' },
+  candidate_notification_invitation_preferences: { export: 'notifications' },
+  candidate_notification_preferences: { export: 'notifications' },
+  candidate_notification_telegram_chats: { export: 'notifications' },
+  candidate_notification_telegram_preferences: { export: 'notifications' },
   candidate_resume_versions: { gap: GAP_PROFILE },
   candidate_media: { gap: GAP_PROFILE },
   profile_change_log: { gap: GAP_PROFILE },

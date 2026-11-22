@@ -14,7 +14,8 @@ import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimula
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import { toExportedSourceConnection } from './store/exportedSourceConnection';
-import { createTrackerExport, type TrackerExportSources } from './trackerExport';
+import { createTrackerExport, type TrackerExportSources, type TrackerExportStore } from './trackerExport';
+import { exportNotifications, type NotificationExportStore } from './notificationExport';
 import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
@@ -40,7 +41,7 @@ interface CandidateExportDependencies {
     | 'listWorkplaces'
   >;
   /** B689/B738: само хранилище, его соединение и ключ — для дневника и трекера. */
-  readonly ownStorage: TrackerExportSources;
+  readonly ownStorage: TrackerExportSources & { readonly store: OwnStorageStore };
   readonly diaryEntryRepo: Pick<import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository, 'exportAll'>;
   readonly exportConsultantConversations: (
     candidateId: string,
@@ -52,6 +53,9 @@ interface CandidateExportDependencies {
   readonly starStoriesRepo: Pick<SqliteStarStoriesRepository, 'list'>;
   readonly interviewSimulatorRepo: Pick<SqliteInterviewSimulatorRepository, 'getCurrent'>;
 }
+
+/** Хранилище глазами выгрузки: методы трекера и уведомлений. */
+export type OwnStorageStore = TrackerExportStore & NotificationExportStore;
 
 export function createSqliteCandidateStoreExportMethods(
   dependencies: CandidateExportDependencies,
@@ -79,6 +83,7 @@ export function createSqliteCandidateStoreExportMethods(
         careerDiary: exportCareerDiary(careerDiary, candidateId),
         notificationDeliverySettings: dependencies.readDeliverySettings(candidateId),
         tracker: exportTracker(candidateId),
+        notifications: exportNotifications(database, dependencies.ownStorage.store, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
