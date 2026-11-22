@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createBulkLlmRuntime } from './bulkLlmRuntime';
 import { bulkOpenRouterLanes } from './bulkLlmConfig';
-import { BulkChannelUnavailable, CHANNEL_DOWN_ALERT_MS, type BulkLlmChannelEvent } from './bulkLlmClient';
+import {
+  BulkChannelUnavailable,
+  CHANNEL_DOWN_ALERT_MS,
+  type BulkLlmChannelEvent,
+} from './bulkLlmClient';
 import { MODEL_CHAINS } from './modelChains';
 
 const dirs: string[] = [];
@@ -91,12 +95,8 @@ describe('фон: Vertex первым, затем OpenRouter (решение в�
     ]);
   });
 
-  it('Vertex - первая ступень фоновой цепочки, за ним две ступени OpenRouter', () => {
-    expect(MODEL_CHAINS.bulk.map((stage) => stage.provider)).toEqual([
-      'vertex',
-      'openrouter',
-      'openrouter',
-    ]);
+  it('фоновая цепочка — две ступени OpenRouter, без Vertex (выключен решением владельца 20.11)', () => {
+    expect(MODEL_CHAINS.bulk.map((stage) => stage.provider)).toEqual(['openrouter', 'openrouter']);
   });
 
   it('deepseek-v4-flash — голова: ответил он, больше никто не зовётся', async () => {
@@ -116,7 +116,9 @@ describe('фон: Vertex первым, затем OpenRouter (решение в�
     expect(modelsCalled(transport)).toEqual([HEAD, HEAD, HEAD, GLM]);
     expect(pauses).toEqual([750, 1_500]);
     const firstHosts = transport.mock.calls.slice(0, 3).map(([, init]) => {
-      const body = JSON.parse(String(init?.body)) as { provider: { order: string[]; only: string[] } };
+      const body = JSON.parse(String(init?.body)) as {
+        provider: { order: string[]; only: string[] };
+      };
       expect(body.provider.only).toEqual(['streamlake/fp8', 'deepinfra/fp8', 'gmicloud/fp8']);
       return body.provider.order[0];
     });
@@ -172,9 +174,9 @@ describe('фон: Vertex первым, затем OpenRouter (решение в�
   it('негодный ответ оплачен: две попытки на ступень, не больше', async () => {
     const transport = openRouter({});
     const { runtime } = setup(transport);
-    await expect(
-      runtime.client!.complete({ ...req, accept: () => false }),
-    ).rejects.toThrow('Bulk answer rejected');
+    await expect(runtime.client!.complete({ ...req, accept: () => false })).rejects.toThrow(
+      'Bulk answer rejected',
+    );
     expect(modelsCalled(transport)).toEqual([HEAD, HEAD, GLM, GLM]);
     expect(rows(runtime).every((row) => row.status === 'settled')).toBe(true);
   });
@@ -194,11 +196,20 @@ describe('фон: Vertex первым, затем OpenRouter (решение в�
     const transport = vi.fn(async (url: string, init?: RequestInit) => {
       const model = (JSON.parse(String(init?.body)) as { model: string }).model;
       if (model !== HEAD) return answer(url, init);
-      return { ok: true, status: 200, json: async () => { throw Object.assign(new Error('t'), { name: 'TimeoutError' }); } } as unknown as Response;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw Object.assign(new Error('t'), { name: 'TimeoutError' });
+        },
+      } as unknown as Response;
     });
     const { runtime } = setup(transport as never);
     expect((await runtime.client!.complete(req)).model).toBe(GLM);
-    expect(rows(runtime)[0]).toMatchObject({ status: 'rejected', failure: 'openrouter_body_timeout' });
+    expect(rows(runtime)[0]).toMatchObject({
+      status: 'rejected',
+      failure: 'openrouter_body_timeout',
+    });
     expect(runtime.status().heldUsd).toBe(0);
   });
 
@@ -207,12 +218,16 @@ describe('фон: Vertex первым, затем OpenRouter (решение в�
     const answer = openRouter({});
     const transport = vi.fn(async (url: string, init?: RequestInit) => {
       calls += 1;
-      if (calls === 1) return Response.json({ error: { message: 'Provider returned error', code: 502 } });
+      if (calls === 1)
+        return Response.json({ error: { message: 'Provider returned error', code: 502 } });
       return answer(url, init);
     });
     const { runtime } = setup(transport as never);
     expect((await runtime.client!.complete(req)).model).toBe(HEAD);
-    expect(rows(runtime)[0]).toMatchObject({ status: 'rejected', failure: 'upstream: Provider returned error' });
+    expect(rows(runtime)[0]).toMatchObject({
+      status: 'rejected',
+      failure: 'upstream: Provider returned error',
+    });
     expect(runtime.status().heldUsd).toBe(0);
   });
 
@@ -294,6 +309,9 @@ describe('glm-5.3-flash и причина отказа (04.11)', () => {
     });
     const { runtime } = setup(transport as never);
     await expect(runtime.client!.complete(req)).rejects.toBeInstanceOf(BulkChannelUnavailable);
-    expect(rows(runtime).map((row) => row.failure)).toEqual(['openrouter_timeout', 'openrouter_timeout']);
+    expect(rows(runtime).map((row) => row.failure)).toEqual([
+      'openrouter_timeout',
+      'openrouter_timeout',
+    ]);
   });
 });
