@@ -7,7 +7,7 @@ import {
   type InterviewQuestionView,
   type InterviewSessionView,
 } from '../../interview/interviewSimulatorApi';
-import { useDictation } from '../consultant/useDictation';
+import { useVoiceInput } from '../voice/useVoiceInput';
 import { Button, Icon, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useShell } from '../shell/ShellContext';
@@ -145,7 +145,7 @@ export function MockQuestion(props: QuestionProps) {
   const [again, setAgain] = useState(false);
   const [empty, setEmpty] = useState(false);
   const actions = useQuestionActions(props);
-  const dictation = useDictation(setText);
+  const dictation = useVoiceInput(setText);
   const answered = Boolean(question.answer) && !again;
   async function answer() {
     setEmpty(!text.trim());
