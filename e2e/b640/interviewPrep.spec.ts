@@ -12,6 +12,9 @@ async function open(page: Page, path: string, node: string, options: PrepMockOpt
 
 const headline = (page: Page) => page.getByRole('heading', { level: 2 }).first();
 
+// Время интервью в строках — московское; CI работает в UTC.
+test.use({ timezoneId: 'Europe/Moscow' });
+
 test.describe('B659: «Подготовка к интервью» (I1)', () => {
   test('вкладка «Подготовка» находит ближайшее интервью: вопросы, готовность, «Спросите сами»', async ({
     page,
