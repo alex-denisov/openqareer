@@ -36,7 +36,7 @@ export interface SuggestionInput {
 }
 export type SectionSuggestions = Readonly<Record<SuggestedSection, SectionSuggestion | null>>;
 
-const HEADLINE_SKILLS = 4;
+const HEADLINE_SKILLS = 3;
 const NUMBER = /\d+(?:[.,]\d+)?/gu;
 
 /** Каждое число текста обязано стоять в одном из фактов: модель и склейка не добавляют цифр. */
@@ -68,23 +68,37 @@ function placeLine(place: ResumeDraft['experience'][number]): string | null {
   return `${place.title.trim()} — ${place.employer.trim()}${period}`;
 }
 
+/** Роль заголовка: целевая роль, иначе должность последнего места работы — это факт черновика. */
+function headlineRole(input: SuggestionInput): { text: string; fact: LinkedinSectionFact } | null {
+  const role = input.draft?.targetRole?.trim();
+  if (role) return { text: role, fact: { id: 'resume:targetRole', text: `Целевая роль: ${role}` } };
+  const last = input.draft?.experience[0];
+  const title = last?.title?.trim();
+  return last && title ? { text: title, fact: { id: `resume:experience:${last.id}`, text: placeLine(last) ?? title } } : null;
+}
+
+/** Заголовок фразой, как в макете a03: «роль · навыки через запятую», без списка через «|». */
 function suggestHeadline(input: SuggestionInput): SectionSuggestion | null {
-  const role = input.draft?.targetRole?.trim() ?? '';
+  const role = headlineRole(input);
+  if (!role) return null;
   const skills = usableSkills(input).slice(0, HEADLINE_SKILLS).map((skill) => skill.name);
-  if (!role && skills.length === 0) return null;
   const last = input.draft?.experience[0];
   // Черновик по умолчанию «не текущий»: «Ex-» только при явной дате окончания.
   const employer = last && last.current === false && last.endDate?.trim() ? last.employer?.trim() : undefined;
-  const tokens = [...(role ? [role] : []), ...skills, ...(employer ? [`Ex-${employer}`] : [])];
   const limit = LINKEDIN_HEADLINE_MAX;
-  while (tokens.length > 1 && tokens.join(' | ').length > limit) tokens.pop();
-  const text = tokens.join(' | ').slice(0, limit).trimEnd();
-  const kept = new Set(tokens);
-  const keptSkills = skills.filter((name) => kept.has(name));
+  const compose = (kept: readonly string[], ex: boolean) =>
+    [role.text, ...(kept.length ? [kept.join(', ')] : []), ...(ex && employer ? [`Ex-${employer}`] : [])].join(' · ');
+  let kept = skills;
+  let ex = Boolean(employer);
+  while (compose(kept, ex).length > limit && (ex || kept.length > 0)) {
+    if (ex) ex = false;
+    else kept = kept.slice(0, -1);
+  }
+  const text = compose(kept, ex).slice(0, limit).trimEnd();
   const facts: LinkedinSectionFact[] = [
-    ...(role ? [{ id: 'resume:targetRole', text: `Целевая роль: ${role}` }] : []),
-    ...(keptSkills.length ? [{ id: 'resume:skills', text: `Навыки: ${keptSkills.join(', ')}` }] : []),
-    ...(employer && last && kept.has(`Ex-${employer}`)
+    role.fact,
+    ...(kept.length ? [{ id: 'resume:skills', text: `Навыки: ${kept.join(', ')}` }] : []),
+    ...(ex && employer && last && role.fact.id !== `resume:experience:${last.id}`
       ? [{ id: `resume:experience:${last.id}`, text: placeLine(last) ?? employer }] : []),
   ];
   return { text, facts };

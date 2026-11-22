@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import { MIGRATION_45 } from './notificationSchema';
+import { widenNotificationKinds } from './notificationKindMigration';
 import { MIGRATION_46 } from './notificationDeliverySchema';
 import {
   MIGRATION_DELIVERY_SETTINGS,
@@ -97,6 +98,7 @@ const EVENT_PREFERENCE_SQL = `CASE n.event_kind
   WHEN 'import_completed' THEN 'ev-weekly-digest'
   WHEN 'employer_reply' THEN 'ev-reply'
   WHEN 'delivery_error' THEN 'ev-delivery-error'
+  WHEN 'post_reminder' THEN 'ev-reminder'
 END`;
 
 export class NotificationCursorError extends Error {
@@ -127,6 +129,7 @@ export class SqliteNotificationRepository {
       applySqliteBusyTimeout(this.database);
     }
     this.database.exec(MIGRATION_45);
+    widenNotificationKinds(this.database);
     this.database.exec(MIGRATION_46);
     this.database.exec(MIGRATION_INVITATION_PREFERENCE);
     this.database.exec(MIGRATION_DELIVERY_SETTINGS);
@@ -170,6 +173,7 @@ export class SqliteNotificationRepository {
     return row ? this.toItem(row) : null;
   }
 
+  /** Строки с `created_at` в будущем (напоминание B695 о посте) не видны до своего времени. */
   list(
     candidateId: string,
     options: { readonly limit: number; readonly cursor?: string; readonly now: string },
@@ -180,7 +184,7 @@ export class SqliteNotificationRepository {
       .prepare(
         `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.expires_at, n.read_at
          FROM candidate_notifications n
-         WHERE n.candidate_id = ? AND n.expires_at > ?
+         WHERE n.candidate_id = ? AND n.expires_at > ? AND n.created_at <= ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
              WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1
            AND (? IS NULL OR n.created_at < ? OR (n.created_at = ? AND n.id < ?))
@@ -188,6 +192,7 @@ export class SqliteNotificationRepository {
       )
       .all(
         candidateId,
+        options.now,
         options.now,
         cursor ? 1 : null,
         cursor?.createdAt ?? null,
@@ -200,11 +205,11 @@ export class SqliteNotificationRepository {
     const unread = this.database
       .prepare(
         `SELECT COUNT(*) AS count FROM candidate_notifications n
-         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ?
+         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND n.created_at <= ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
              WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1`,
       )
-      .get(candidateId, options.now) as { count: number };
+      .get(candidateId, options.now, options.now) as { count: number };
     const last = pageRows.at(-1);
     return {
       items: pageRows.map((row) => this.toItem(row)),
@@ -229,10 +234,10 @@ export class SqliteNotificationRepository {
       .prepare(
         `SELECT n.id, n.event_kind, n.source_type, n.source_id, n.created_at, n.read_at
          FROM candidate_notifications n
-         WHERE n.candidate_id = ? AND n.expires_at > ? AND ${enabled}
+         WHERE n.candidate_id = ? AND n.expires_at > ? AND n.created_at <= ? AND ${enabled}
          ORDER BY n.created_at DESC, n.id DESC LIMIT ?`,
       )
-      .all(candidateId, options.now, options.max) as unknown as {
+      .all(candidateId, options.now, options.now, options.max) as unknown as {
       id: string;
       event_kind: NotificationEventKind;
       source_type: string;
@@ -243,9 +248,9 @@ export class SqliteNotificationRepository {
     const unread = this.database
       .prepare(
         `SELECT COUNT(*) AS count FROM candidate_notifications n
-         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND ${enabled}`,
+         WHERE n.candidate_id = ? AND n.read_at IS NULL AND n.expires_at > ? AND n.created_at <= ? AND ${enabled}`,
       )
-      .get(candidateId, options.now) as { count: number };
+      .get(candidateId, options.now, options.now) as { count: number };
     return {
       rows: rows.map((row) => ({
         id: row.id,
@@ -360,11 +365,11 @@ export class SqliteNotificationRepository {
     const result = this.database
       .prepare(
         `UPDATE candidate_notifications AS n SET read_at = ?
-         WHERE candidate_id = ? AND read_at IS NULL AND expires_at > ?
+         WHERE candidate_id = ? AND read_at IS NULL AND expires_at > ? AND created_at <= ?
            AND COALESCE((SELECT p.app_enabled FROM candidate_notification_preferences p
              WHERE p.candidate_id = n.candidate_id AND p.preference_key = ${EVENT_PREFERENCE_SQL}), 1) = 1`,
       )
-      .run(now, candidateId, now);
+      .run(now, candidateId, now, now);
     return Number(result.changes);
   }
 

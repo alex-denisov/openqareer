@@ -1,6 +1,7 @@
 import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
 import { Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { MessageDraft } from '../../messages/MessageDraft';
+import { statusTag } from '../../platforms/contacts/contactsFilters';
 import { buildNodePath } from '../../routes';
 import { RetryLine } from '../RetryLine';
 import type { CompanyPeopleState } from './usePeople';
@@ -19,16 +20,37 @@ const ACTION_LABELS: Readonly<Record<B640CompanyPerson['nextStep'], string>> = {
 export interface PeopleDraft {
   readonly openId: string | null;
   readonly onToggle: (personId: string) => void;
+  /** Отмечено «Отправил» в этом визите: id человека → время отправки с сервера. */
+  readonly sent: ReadonlyMap<string, string>;
+  readonly onSent: (personId: string, sentAt: string) => void;
 }
 
-export const personRowId = (personId: string): string => `co-person-${personId.replace(/[^a-zA-Z0-9_-]/gu, '-')}`;
+export const personRowId = (personId: string): string =>
+  `co-person-${personId.replace(/[^a-zA-Z0-9_-]/gu, '-')}`;
 
-function PersonAction({ person, draft }: { readonly person: B640CompanyPerson; readonly draft: PeopleDraft }) {
+function PersonAction({
+  person,
+  draft,
+}: {
+  readonly person: B640CompanyPerson;
+  readonly draft: PeopleDraft;
+}) {
   const label = ACTION_LABELS[person.nextStep];
+  const sentAt = draft.sent.get(person.id);
+  if (sentAt) {
+    // B698: результат отправки виден в строке, как «писали ДД.ММ» в «Контактах».
+    const tag = statusTag({ state: 'written', at: sentAt });
+    return <span className={`co-sent ${tag.cls}`}>{tag.text}</span>;
+  }
   if (person.message && person.name) {
     const open = draft.openId === person.id;
     return (
-      <button className="btn" type="button" aria-expanded={open} onClick={() => draft.onToggle(person.id)}>
+      <button
+        className="btn"
+        type="button"
+        aria-expanded={open}
+        onClick={() => draft.onToggle(person.id)}
+      >
         {label}
       </button>
     );
@@ -41,8 +63,16 @@ function PersonAction({ person, draft }: { readonly person: B640CompanyPerson; r
   );
 }
 
-function PersonRow({ person, draft }: { readonly person: B640CompanyPerson; readonly draft: PeopleDraft }) {
-  const title = person.platformMember ? (person.roleTitle ?? 'Участник платформы') : (person.name ?? 'Без имени');
+function PersonRow({
+  person,
+  draft,
+}: {
+  readonly person: B640CompanyPerson;
+  readonly draft: PeopleDraft;
+}) {
+  const title = person.platformMember
+    ? (person.roleTitle ?? 'Участник платформы')
+    : (person.name ?? 'Без имени');
   const role = person.platformMember ? 'имя скрыто' : person.roleTitle;
   const open = draft.openId === person.id && person.message && person.name;
   return (
@@ -65,7 +95,7 @@ function PersonRow({ person, draft }: { readonly person: B640CompanyPerson; read
             target={person.message.target}
             kind={person.message.kind}
             recipientName={person.name}
-            onSent={() => undefined}
+            onSent={(sentAt) => draft.onSent(person.id, sentAt)}
             onClose={() => draft.onToggle(person.id)}
           />
         </div>
@@ -103,7 +133,10 @@ function NextStep({ next }: { readonly next: PeopleNext }) {
     );
   }
   return (
-    <Link className="btn" to={`${buildNodePath('a02')}?company=${encodeURIComponent(next.company)}`}>
+    <Link
+      className="btn"
+      to={`${buildNodePath('a02')}?company=${encodeURIComponent(next.company)}`}
+    >
       Найти рекрутера
     </Link>
   );
@@ -117,7 +150,8 @@ interface PeopleBodyProps {
 
 function PeopleBody({ state, next, draft }: PeopleBodyProps) {
   if (state.load === 'loading') return <StatusLine state="wait" text="Ищем знакомых в компании…" />;
-  if (state.load === 'error') return <RetryLine text="Не удалось загрузить людей компании" onRetry={state.retry} />;
+  if (state.load === 'error')
+    return <RetryLine text="Не удалось загрузить людей компании" onRetry={state.retry} />;
   if (state.people.length === 0) {
     return (
       <div className="co-ppl-next">

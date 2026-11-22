@@ -89,3 +89,27 @@ describe('replyExtrasOf (B688)', () => {
     expect(replyExtrasOf(result({}), memory)).toEqual({ actions: [], memoryIds: [] });
   });
 });
+
+describe('replyExtrasOf: nextSection (B745)', () => {
+  it('без предложений действие берётся из nextSection консультанта', () => {
+    const extras = replyExtrasOf(result({ nextSection: 'profile' }), memory);
+    expect(extras.actions).toEqual(['profile']);
+  });
+
+  it('предложения стратега важнее nextSection', () => {
+    const extras = replyExtrasOf(
+      result({
+        nextSection: 'profile',
+        actionProposals: [proposal('vacancies.search', ['memory:own-1'])],
+      }),
+      memory,
+    );
+    expect(extras.actions).toEqual(['vacancies']);
+  });
+
+  it('null, нет поля или неизвестный раздел — действий нет', () => {
+    expect(replyExtrasOf(result({ nextSection: null }), memory).actions).toEqual([]);
+    expect(replyExtrasOf(result({}), memory).actions).toEqual([]);
+    expect(replyExtrasOf(result({ nextSection: 'settings' }), memory).actions).toEqual([]);
+  });
+});
