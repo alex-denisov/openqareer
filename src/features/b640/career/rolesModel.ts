@@ -29,6 +29,8 @@ export interface RoleRow {
   readonly origin: RoleOrigin;
   /** Что из частых требований роли подтверждает опыт. */
   readonly confirms: string | null;
+  /** B747: все подтверждённые навыки целиком — в «Чего не хватает» их быть не может. */
+  readonly confirmedNames: readonly string[];
   /** Чего не хватает; `null` — пробелов нет. */
   readonly lacks: string | null;
   /** Итог проверки навыков; `null` — проверка не пройдена. */
@@ -94,6 +96,7 @@ function rowOf(
     vacancies: model.vacancyCount > 0 ? model.vacancyCount : null,
     origin: originOf(role, search),
     confirms: listOf(model.confirmedItems),
+    confirmedNames: model.confirmedItems.map((item) => item.text),
     lacks: listOf(model.missingItems),
     requirements: [...model.confirmedItems, ...model.missingItems].map((item) => item.text),
     check:
@@ -116,6 +119,7 @@ function searchOnlyRow(title: string, titlesRu: RoleTitlesRu): RoleRow {
     vacancies: null,
     origin: 'search',
     confirms: null,
+    confirmedNames: [],
     lacks: null,
     check: null,
     requirements: [],

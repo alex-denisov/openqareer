@@ -23,6 +23,7 @@ const row = (title: string, vacancies: number, requirements: string[]): RoleRow 
   vacancies,
   origin: 'experience',
   confirms: null,
+  confirmedNames: [],
   lacks: null,
   check: null,
   requirements,
