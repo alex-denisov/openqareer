@@ -22,7 +22,6 @@ const api = vi.hoisted(() => ({
   patchGoal: vi.fn(),
   patchGoalDetails: vi.fn(),
   getOverview: vi.fn(),
-  transferGoal: vi.fn(),
 }));
 vi.mock('./diaryApi', () => api);
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
@@ -95,28 +94,6 @@ const archived = {
   },
   indicators: [],
 };
-
-const EXPERIENCE = [
-  { id: 'e1', title: 'Руководитель разработки', employer: 'Вектор Банк', current: true },
-  { id: 'e2', title: 'Тимлид', employer: 'Лаб', current: false, endDate: '2025-12' },
-];
-
-/** Значение поля или выбора — так, как его меняет кандидат. */
-function editValue(element: Element | null, value: string): void {
-  const prototype =
-    element instanceof HTMLTextAreaElement
-      ? HTMLTextAreaElement.prototype
-      : element instanceof HTMLSelectElement
-        ? HTMLSelectElement.prototype
-        : HTMLInputElement.prototype;
-  const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-  act(() => {
-    setter?.call(element, value);
-    element?.dispatchEvent(
-      new Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }),
-    );
-  });
-}
 
 let view: Mounted | null = null;
 const navigate = vi.fn();
@@ -212,99 +189,20 @@ describe('d02 «Цели и показатели»', () => {
     expect(none.querySelector('#kp-meet')).toBeNull();
   });
 
-  it('B742: достигнутая цель — «Перенести» строкой под текущим местом работы', async () => {
-    const done = { ...hiring, id: 'g3', risk: { ...hiring.risk, status: 'achieved' } };
+  it('B742: достигнутая цель — «в Итоги и в профиль» и «Перенести» в d04', async () => {
+    const done = {
+      ...hiring,
+      id: 'g3',
+      risk: { status: 'achieved', rule: 'linear_progress_v1', explanation: '' },
+    };
     api.listGoalCards.mockResolvedValue({ items: [hiring, done], archived: [] });
-    api.getOverview.mockResolvedValue({ primaryWorkplace: { id: 'w1', sourceExperienceId: 'e1' } });
-    people.getPeople.mockResolvedValue({ nextMeeting: null, groups: [] });
-    resume.getResumeStudio.mockResolvedValue({ draft: { experience: EXPERIENCE } });
-    api.transferGoal.mockResolvedValue({ ...done, details: { ...done.details, transfer: {} } });
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     const flags = [...page.querySelectorAll('.dn-goal')].map(
       (goal) => goal.querySelector('.dn-flag.is-done')?.textContent ?? null,
     );
     expect(flags).toEqual([null, 'Достигнута → в Итоги и в профиль · Перенести']);
-    expect(api.transferGoal).not.toHaveBeenCalled();
-
-    click(button(page, 'Перенести'));
-    await settle();
-    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
-    expect(dialog.querySelector('h2')?.textContent).toBe('Строка в профиль');
-    expect((dialog.querySelector('select') as HTMLSelectElement).value).toBe('e1');
-    editValue(dialog.querySelector('textarea'), 'Закрыл 2 вакансии за квартал');
-    click(button(dialog, 'Добавить в профиль'));
-    await settle();
-    expect(api.transferGoal).toHaveBeenCalledWith('g3', {
-      experienceId: 'e1',
-      line: 'Закрыл 2 вакансии за квартал',
-    });
-    expect(page.querySelector('.dn-flag.is-done')?.textContent).toBe(
-      'Достигнута → в Итоги и в профиль · Перенесено',
-    );
-    expect(button(page, 'Перенести')).toBeNull();
-  });
-
-  it('B742: текущего места нет — выбрать из «Опыта», без выбора не отправляется', async () => {
-    const done = { ...hiring, id: 'g3', risk: { ...hiring.risk, status: 'achieved' } };
-    api.listGoalCards.mockResolvedValue({ items: [done], archived: [] });
-    resume.getResumeStudio.mockResolvedValue({
-      draft: { experience: EXPERIENCE.map((item) => ({ ...item, current: false })) },
-    });
-    api.transferGoal.mockResolvedValue(done);
-    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
-    click(button(page, 'Перенести'));
-    await settle();
-    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
-    const select = dialog.querySelector('select') as HTMLSelectElement;
-    expect(select.value).toBe('');
-    expect([...select.options].map((option) => option.textContent)).toEqual([
-      'Выберите место работы',
-      'Руководитель разработки, Вектор Банк',
-      'Тимлид, Лаб',
-    ]);
-    click(button(dialog, 'Добавить в профиль'));
-    await settle();
-    expect(api.transferGoal).not.toHaveBeenCalled();
-    expect(dialog.textContent).toContain('Выберите место работы');
-    editValue(select, 'e2');
-    click(button(dialog, 'Добавить в профиль'));
-    await settle();
-    expect(api.transferGoal).toHaveBeenCalledWith(
-      'g3',
-      expect.objectContaining({ experienceId: 'e2' }),
-    );
-  });
-
-  it('B742: в профиле нет мест работы — новое не создаём, ссылка в профиль', async () => {
-    const done = { ...hiring, id: 'g3', risk: { ...hiring.risk, status: 'achieved' } };
-    api.listGoalCards.mockResolvedValue({ items: [done], archived: [] });
-    resume.getResumeStudio.mockResolvedValue({ draft: { experience: [] } });
-    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
-    click(button(page, 'Перенести'));
-    await settle();
-    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
-    expect(dialog.textContent).toContain('В профиле нет мест работы');
-    expect(dialog.querySelector('select')).toBeNull();
-    expect(dialog.querySelector('a.btn')?.getAttribute('href')).toBe('/app/profile');
-    expect((button(dialog, 'Добавить в профиль') as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('B742: уже перенесена — «Перенесено» без повтора', async () => {
-    const done = {
-      ...hiring,
-      id: 'g3',
-      risk: { ...hiring.risk, status: 'achieved' },
-      details: {
-        ...hiring.details,
-        transfer: { experienceId: 'e1', memoryId: 'm', transferredAt: '' },
-      },
-    };
-    api.listGoalCards.mockResolvedValue({ items: [done], archived: [] });
-    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
-    expect(page.querySelector('.dn-flag.is-done')?.textContent).toBe(
-      'Достигнута → в Итоги и в профиль · Перенесено',
-    );
-    expect(button(page, 'Перенести')).toBeNull();
+    const move = page.querySelector('.dn-flag.is-done a');
+    expect(move?.getAttribute('href')).toBe('/app/diary/results');
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {

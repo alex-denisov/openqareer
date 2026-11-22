@@ -6,6 +6,7 @@ import {
   type CareerDiaryGoalCard,
   type CareerDiaryGoalTransfer,
 } from '../../shared/careerDiaryCards';
+import { hasEmployerFigures } from '../../shared/employerFigures';
 import type { CandidateStore } from '../data/candidateStore';
 import { CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import { sendError, withDeps } from './helpers';
@@ -20,7 +21,10 @@ const transferSchema = z
   .strict();
 
 export interface GoalTransferDeps {
-  readonly candidateStore: Pick<CandidateStore, 'addManualExperienceFact'>;
+  readonly candidateStore: Pick<
+    CandidateStore,
+    'addManualExperienceFact' | 'getSnapshot' | 'profileChangeLog'
+  >;
   readonly candidateId: (request: FastifyRequest, reply: FastifyReply) => string | null;
   readonly goalId: (request: FastifyRequest, reply: FastifyReply) => string | null;
   readonly cardOf: (candidate: string, goalId: string) => CareerDiaryGoalCard | null;
@@ -42,6 +46,8 @@ function factIdOf(candidate: string, goalId: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+const EMPLOYER_FIGURES_TEXT = 'Уберите из строки внутренние цифры работодателя.';
+
 const ok = (request: FastifyRequest, card: CareerDiaryGoalCard | null) => ({
   data: card,
   meta: { requestId: request.id },
@@ -57,6 +63,21 @@ function refuse(
   return sendError(reply, request, status, code, text, false);
 }
 
+/** Строка под местом работы и запись в журнале правок профиля: одна запись на одну строку. */
+function writeLine(
+  deps: GoalTransferDeps,
+  candidate: string,
+  memoryId: string,
+  input: z.infer<typeof transferSchema>,
+): void {
+  const { candidateStore } = deps;
+  const before = candidateStore.getSnapshot(candidate).resume?.draft;
+  candidateStore.addManualExperienceFact(candidate, memoryId, input.line, input.experienceId);
+  const after = candidateStore.getSnapshot(candidate).resume?.draft;
+  if (after)
+    candidateStore.profileChangeLog.recordDraftChanges(candidate, before, after, 'candidate');
+}
+
 async function transfer(deps: GoalTransferDeps, request: FastifyRequest, reply: FastifyReply) {
   const candidate = deps.candidateId(request, reply);
   if (!candidate) return undefined;
@@ -65,6 +86,10 @@ async function transfer(deps: GoalTransferDeps, request: FastifyRequest, reply: 
   const parsed = transferSchema.safeParse(request.body);
   if (!parsed.success) {
     return refuse(reply, request, 400, 'invalid_request', 'Проверьте строку для профиля.');
+  }
+  // Внутренние цифры работодателя в профиль не идут: строку кандидат правит сам.
+  if (hasEmployerFigures(parsed.data.line)) {
+    return refuse(reply, request, 422, 'employer_figures', EMPLOYER_FIGURES_TEXT);
   }
   const card = deps.cardOf(candidate, goalId);
   if (!card)
@@ -76,12 +101,7 @@ async function transfer(deps: GoalTransferDeps, request: FastifyRequest, reply: 
   }
   const memoryId = factIdOf(candidate, goalId);
   try {
-    deps.candidateStore.addManualExperienceFact(
-      candidate,
-      memoryId,
-      parsed.data.line,
-      parsed.data.experienceId,
-    );
+    writeLine(deps, candidate, memoryId, parsed.data);
   } catch (error) {
     if (!(error instanceof CandidateStoreConflictError)) throw error;
     return refuse(

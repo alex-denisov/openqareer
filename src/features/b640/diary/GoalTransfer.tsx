@@ -1,171 +1,157 @@
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import {
   GOAL_TRANSFER_LINE_MAX,
   type CareerDiaryGoalCard,
 } from '../../../../shared/careerDiaryCards';
-import { getResumeStudio } from '../../resume/resumeApi';
+import { withoutEmployerFigures } from '../../../../shared/employerFigures';
+import { apiErrorMessage } from '../../coach/apiClient';
 import { Button } from '../kit/Button';
 import { Dialog } from '../kit/Dialog';
 import { StatusLine } from '../kit/ResultLine';
-import { buildNodePath } from '../routes';
-import { Link } from '../shell/Link';
-import { getOverview, transferGoal } from './diaryApi';
-import { defaultPlace, placesOf, transferLine, type TransferPlace } from './transferModel';
+import { transferGoal } from './diaryApi';
+import { PlacePick, PlaceState, usePlaces } from './TransferPlaces';
+import { transferLine } from './transferModel';
 
-type Places =
-  | { readonly state: 'loading' }
-  | { readonly state: 'error' }
-  | {
-      readonly state: 'ready';
-      readonly places: readonly TransferPlace[];
-      readonly chosen: string | null;
-    };
+const SEND_FAILED = 'Строка не добавилась. Повторите.';
 
-/** Места работы из «Опыта» профиля и то, что выбрано по умолчанию. */
-async function loadPlaces(): Promise<Places> {
-  const [overview, studio] = await Promise.all([getOverview(), getResumeStudio()]);
-  const places = placesOf(studio.draft?.experience ?? []);
-  return {
-    state: 'ready',
-    places,
-    chosen: defaultPlace(places, overview.primaryWorkplace?.sourceExperienceId),
-  };
+/** Строка по умолчанию: результат цели без цифр работодателя; кандидат её правит. */
+export function defaultLine(card: CareerDiaryGoalCard): string {
+  return withoutEmployerFigures(transferLine(card));
 }
 
-function usePlaces(open: boolean, attempt: number): Places {
-  const [places, setPlaces] = useState<Places>({ state: 'loading' });
-  useEffect(() => {
-    if (!open) return undefined;
-    let active = true;
-    setPlaces({ state: 'loading' });
-    loadPlaces().then(
-      (loaded) => active && setPlaces(loaded),
-      () => active && setPlaces({ state: 'error' }),
-    );
-    return () => {
-      active = false;
-    };
-  }, [open, attempt]);
-  return places;
+interface RowState {
+  readonly line: string;
+  readonly selected: boolean;
+  readonly error: string | null;
 }
 
-interface PlacePickProps {
+type Rows = Readonly<Record<string, RowState>>;
+
+function initialRows(cards: readonly CareerDiaryGoalCard[], selected: boolean): Rows {
+  return Object.fromEntries(
+    cards.map((card) => [card.id, { line: defaultLine(card), selected, error: null }]),
+  );
+}
+
+interface LineRowProps {
   readonly id: string;
-  readonly places: readonly TransferPlace[];
-  readonly value: string;
-  readonly onChange: (id: string) => void;
+  readonly card: CareerDiaryGoalCard;
+  readonly row: RowState;
+  readonly busy: boolean;
+  readonly onChange: (patch: Partial<RowState>) => void;
 }
 
-function PlacePick({ id, places, value, onChange }: PlacePickProps) {
+/** Цель с галочкой и строкой, которую можно править; ошибка — прямо под строкой. */
+function LineRow({ id, card, row, busy, onChange }: LineRowProps) {
   return (
     <div className="field">
-      <label htmlFor={id}>Место работы</label>
-      <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
-        <option value="" disabled>
-          Выберите место работы
-        </option>
-        {places.map((place) => (
-          <option key={place.id} value={place.id}>
-            {place.label}
-          </option>
-        ))}
-      </select>
+      <div className="check">
+        <input
+          id={`${id}-c`}
+          type="checkbox"
+          checked={row.selected}
+          disabled={busy}
+          onChange={(event) => onChange({ selected: event.target.checked })}
+        />
+        <label htmlFor={`${id}-c`}>{card.title}</label>
+      </div>
+      <textarea
+        aria-label={`Строка в «Опыте»: ${card.title}`}
+        maxLength={GOAL_TRANSFER_LINE_MAX}
+        value={row.line}
+        disabled={busy}
+        onChange={(event) => onChange({ line: event.target.value, error: null })}
+      />
+      {row.error ? <StatusLine state="err" text={row.error} /> : null}
     </div>
   );
 }
 
 export interface GoalTransferDialogProps {
-  readonly card: CareerDiaryGoalCard;
-  readonly open: boolean;
+  /** Достигнутые цели, которых в профиле ещё нет. */
+  readonly cards: readonly CareerDiaryGoalCard[];
+  /** Все цели отмечены сразу; иначе кандидат отмечает сам. */
+  readonly preselected: boolean;
   readonly onClose: () => void;
+  /** Строка цели добавлена в профиль. */
   readonly onDone: (card: CareerDiaryGoalCard) => void;
 }
 
-function useTransfer(card: CareerDiaryGoalCard, onDone: GoalTransferDialogProps['onDone']) {
+/** Строки уходят по одной: у каждой своя ошибка, ушедшие остаются в профиле. */
+function useTransfer(props: GoalTransferDialogProps, initial: Rows) {
+  const [rows, setRows] = useState<Rows>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function send(experienceId: string, line: string) {
-    if (!line.trim()) return setError('Напишите строку для профиля');
-    if (!experienceId) return setError('Выберите место работы');
-    setBusy(true);
-    setError(null);
+  const patch = (id: string, change: Partial<RowState>) =>
+    setRows((current) => ({ ...current, [id]: { ...current[id]!, ...change } }));
+
+  async function sendOne(card: CareerDiaryGoalCard, place: string): Promise<boolean> {
+    const line = rows[card.id]!.line.trim();
+    if (!line) return fail(card.id, 'Напишите строку для профиля');
     try {
-      onDone(await transferGoal(card.id, { experienceId, line: line.trim() }));
-    } catch {
-      setError('Строка не добавилась. Повторите.');
-    } finally {
-      setBusy(false);
+      props.onDone(await transferGoal(card.id, { experienceId: place, line }));
+      return true;
+    } catch (reason) {
+      return fail(card.id, apiErrorMessage(reason, SEND_FAILED));
     }
   }
-  return { busy, error, send };
-}
-
-interface PlaceStateProps {
-  readonly places: Places;
-  readonly onRetry: () => void;
-}
-
-/** Места работы: ждём, не загрузились (с «Повторить») или их в профиле нет. */
-function PlaceState({ places, onRetry }: PlaceStateProps) {
-  if (places.state === 'loading') return <StatusLine state="wait" text="Загружаем места работы" />;
-  if (places.state === 'error') {
-    return (
-      <StatusLine
-        state="err"
-        text="Места работы не загрузились"
-        action={<Button onClick={onRetry}>Повторить</Button>}
-      />
-    );
+  function fail(id: string, message: string): false {
+    patch(id, { error: message });
+    return false;
   }
-  if (places.places.length > 0) return null;
-  return (
-    <StatusLine
-      state="err"
-      text="В профиле нет мест работы"
-      action={
-        <Link className="btn is-sm" to={buildNodePath('s01')}>
-          Открыть профиль
-        </Link>
-      }
-    />
-  );
+  async function send(place: string) {
+    if (!place) return setError('Выберите место работы');
+    setError(null);
+    setBusy(true);
+    let failed = false;
+    for (const card of props.cards.filter((item) => rows[item.id]?.selected)) {
+      failed = !(await sendOne(card, place)) || failed;
+    }
+    setBusy(false);
+    if (!failed) props.onClose();
+  }
+  return { rows, busy, error, patch, send };
 }
 
-/** «Перенести»: строка результата цели под местом работы в «Опыте» — только после «Добавить». */
-export function GoalTransferDialog({ card, open, onClose, onDone }: GoalTransferDialogProps) {
+/**
+ * «Строка в профиль»: строки результата достигнутых целей под местом работы в «Опыте» —
+ * только после «Добавить в профиль». Окно собирается заново при каждом открытии.
+ */
+export function GoalTransferDialog(props: GoalTransferDialogProps) {
   const id = useId();
   const [attempt, setAttempt] = useState(0);
-  const places = usePlaces(open, attempt);
-  const [line, setLine] = useState(() => transferLine(card));
+  const places = usePlaces(attempt);
   const [picked, setPicked] = useState('');
-  const transfer = useTransfer(card, onDone);
+  const transfer = useTransfer(props, initialRows(props.cards, props.preselected));
   const ready = places.state === 'ready' && places.places.length > 0 ? places : null;
   const place = picked || ready?.chosen || '';
+  const chosen = props.cards.filter((card) => transfer.rows[card.id]?.selected).length;
   const footer = (
     <>
-      <Button onClick={onClose}>Отмена</Button>
+      <Button onClick={props.onClose}>Отмена</Button>
       <Button
         variant="primary"
         icon="check"
         busy={transfer.busy}
-        disabled={!ready}
-        onClick={() => void transfer.send(place, line)}
+        disabled={!ready || chosen === 0}
+        onClick={() => void transfer.send(place)}
       >
         Добавить в профиль
       </Button>
     </>
   );
   return (
-    <Dialog open={open} onClose={onClose} title="Строка в профиль" footer={footer}>
-      <div className="field">
-        <label htmlFor={`${id}-l`}>Строка в «Опыте»</label>
-        <textarea
-          id={`${id}-l`}
-          maxLength={GOAL_TRANSFER_LINE_MAX}
-          value={line}
-          onChange={(event) => setLine(event.target.value)}
+    <Dialog open onClose={props.onClose} title="Строка в профиль" footer={footer}>
+      {props.cards.map((card) => (
+        <LineRow
+          key={card.id}
+          id={`${id}-${card.id}`}
+          card={card}
+          row={transfer.rows[card.id]!}
+          busy={transfer.busy}
+          onChange={(change) => transfer.patch(card.id, change)}
         />
-      </div>
+      ))}
       <PlaceState places={places} onRetry={() => setAttempt((value) => value + 1)} />
       {ready ? (
         <PlacePick id={`${id}-p`} places={ready.places} value={place} onChange={setPicked} />

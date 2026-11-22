@@ -16,6 +16,26 @@ async function openNode(page: Page, path: string, node: string): Promise<Adaptat
     });
   });
   const calls = await mockAdaptation(page);
+  await page.route(
+    (url) => url.pathname === '/api/v1/candidate/resume',
+    (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            draft: {
+              experience: [
+                {
+                  id: 'e1',
+                  title: 'Руководитель разработки',
+                  employer: 'Вектор Банк',
+                  current: true,
+                },
+              ],
+            },
+          },
+        },
+      }),
+  );
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   await expect(page.locator(`.b640 [data-b640-node="${node}"]`)).toBeVisible({ timeout: 15_000 });
   return calls;
@@ -111,6 +131,38 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await expect(results.locator('.tag.part')).toHaveText('отстаёт');
     await expect(results.getByRole('button', { name: 'Скопировать' })).toHaveCount(2);
     await expectGates(page);
+  });
+
+  test('d04: «Добавить в профиль» — кнопка и галочка, окно, строки уходят, повтора нет', async ({
+    page,
+  }) => {
+    const calls = await openNode(page, '/app/diary/results', 'd04');
+    const results = page.locator('[data-b640-node="d04"]');
+    const add = results.locator('.lead').getByRole('button', { name: 'Добавить в профиль' });
+    await expect(add).toBeVisible();
+    await expect(results.locator('#rs-all')).toBeChecked();
+    await expect(results.locator('.dn-all')).toContainText('Добавить в профиль все подтверждённые');
+    await expectGates(page);
+
+    await add.click();
+    const dialog = page.getByRole('dialog', { name: 'Строка в профиль' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator('textarea')).toHaveCount(2);
+    await expect(dialog.locator('select')).toHaveValue('e1');
+    await expectGates(page);
+    await dialog.locator('textarea').first().fill('Сократил срок релиза вдвое');
+    await dialog.getByRole('button', { name: 'Добавить в профиль' }).click();
+    await expect(dialog).toBeHidden();
+    expect(calls.transfers).toEqual([
+      { goalId: 'g1', body: { experienceId: 'e1', line: 'Сократил срок релиза вдвое' } },
+      {
+        goalId: 'g2',
+        body: { experienceId: 'e1', line: 'Нанять 2 разработчиков: с 0 до 2 чел.' },
+      },
+    ]);
+    await expect(results.locator('.row .tag.ok')).toHaveText(['Перенесено', 'Перенесено']);
+    await expect(add).toBeDisabled();
+    await expect(results.locator('#rs-all')).toHaveCount(0);
   });
 
   test('снимки адаптации: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {

@@ -222,7 +222,7 @@ describe('B689: выгрузка данных покрывает все табл
     expect(diary.goals.map((goal) => goal.title)).toEqual(['Цель своя']);
     expect(diary.measurements.map((measurement) => [measurement.goalId, measurement.note])).toEqual([[goalId, 'Замер своя']]);
     expect(diary.goalDetails).toEqual([
-      { goalId, details: { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null } },
+      { goalId, details: { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null, transfer: null } },
     ]);
     expect(diary.weeklyReviews.map((review) => review.movedForward)).toEqual(['Неделя своя']);
     expect(diary.achievements.map((achievement) => achievement.situation)).toEqual(['Ситуация своя']);

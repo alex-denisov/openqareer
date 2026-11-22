@@ -15,6 +15,7 @@ const cleanups: Array<() => Promise<void> | void> = [];
 const ORIGIN = 'http://localhost:3000';
 const DIARY = '/api/v1/candidate/career-diary';
 const flagged = 'token-flagged';
+const other = 'token-other';
 const LINE = 'Сократил срок релиза с 14 до 7 дней за квартал';
 
 afterEach(async () => {
@@ -26,7 +27,7 @@ async function setup() {
   const config = {
     ...baseConfig,
     databasePath: join(directory, 'test.sqlite'),
-    cabinetB640Usernames: ['flagged.test'],
+    cabinetB640Usernames: ['flagged.test', 'other.test'],
   };
   const candidateStore = new SqliteCandidateStore({
     databasePath: config.databasePath,
@@ -42,9 +43,17 @@ async function setup() {
     isTest: true,
     candidate,
   };
+  const stranger = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+  const strangerPrincipal: AuthPrincipal = {
+    ...principal,
+    userId: 'user-other',
+    username: 'other.test',
+    candidate: stranger,
+  };
   const authService: SessionAuth = {
     ...noSessions,
-    authenticate: (token: string) => (token === flagged ? principal : null),
+    authenticate: (token: string) =>
+      token === flagged ? principal : token === other ? strangerPrincipal : null,
   };
   candidateStore.saveResumeDraft(
     candidate.id,
@@ -78,12 +87,18 @@ async function setup() {
   return { app, candidateStore, candidateId: candidate.id };
 }
 
-function call(app: App, method: 'GET' | 'POST', url: string, payload?: unknown) {
+function call(
+  app: App,
+  method: 'GET' | 'POST',
+  url: string,
+  payload?: unknown,
+  token: string = flagged,
+) {
   return app.inject({
     method,
     url,
     headers: {
-      authorization: `Bearer ${flagged}`,
+      authorization: `Bearer ${token}`,
       origin: ORIGIN,
       'idempotency-key': randomUUID(),
     },
@@ -192,5 +207,60 @@ describe('B742: «Перенести» достигнутую цель в про
       null,
       null,
     ]);
+  });
+
+  it('журнал правок: одна запись «Опыт», повтор не меняет ни профиль, ни журнал', async () => {
+    const { app, candidateStore, candidateId } = await setup();
+    const id = await goal(app, true);
+    const log = () => candidateStore.profileChangeLog.list(candidateId, 0, 50);
+    expect(log().total).toBe(0);
+    const url = `${DIARY}/goal-cards/${id}/transfer`;
+    const first = await call(app, 'POST', url, { experienceId: 'e1', line: LINE });
+    expect(first.statusCode, first.body).toBe(200);
+    const entries = log().entries;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ section: 'experience', actor: 'candidate' });
+    const draft = candidateStore.getSnapshot(candidateId).resume?.draft;
+
+    const again = await call(app, 'POST', url, { experienceId: 'e1', line: LINE });
+    expect(again.statusCode).toBe(200);
+    expect(log().total).toBe(1);
+    expect(candidateStore.getSnapshot(candidateId).resume?.draft).toEqual(draft);
+  });
+
+  it.each(['Сократил срок релиза на 30 %', 'Сэкономил 12 млн ₽ на выкладке'])(
+    'внутренние цифры работодателя — 422, ничего не записано: %s',
+    async (line) => {
+      const { app, candidateStore, candidateId } = await setup();
+      const id = await goal(app, true);
+      const refused = await call(app, 'POST', `${DIARY}/goal-cards/${id}/transfer`, {
+        experienceId: 'e1',
+        line,
+      });
+      expect(refused.statusCode).toBe(422);
+      expect(refused.json().error).toMatchObject({
+        code: 'employer_figures',
+        message: 'Уберите из строки внутренние цифры работодателя.',
+      });
+      expect(bullets(candidateStore, candidateId)).toEqual([]);
+      expect(candidateStore.profileChangeLog.list(candidateId, 0, 50).total).toBe(0);
+      const cards = (await call(app, 'GET', `${DIARY}/goal-cards`)).json().data.items;
+      expect(cards[0].details.transfer).toBeNull();
+    },
+  );
+
+  it('чужая цель — 404, в профиле ничего нет', async () => {
+    const { app, candidateStore, candidateId } = await setup();
+    const id = await goal(app, true);
+    const foreign = await call(
+      app,
+      'POST',
+      `${DIARY}/goal-cards/${id}/transfer`,
+      { experienceId: 'e1', line: LINE },
+      other,
+    );
+    expect(foreign.statusCode).toBe(404);
+    expect(bullets(candidateStore, candidateId)).toEqual([]);
+    expect(candidateStore.profileChangeLog.list(candidateId, 0, 50).total).toBe(0);
   });
 });
