@@ -151,6 +151,22 @@ function reviewed(finding: CandidateFootprintFinding): boolean {
   return finding.checklistMark !== undefined || finding.removal !== undefined;
 }
 
+function isArchiveCopy(finding: CandidateFootprintFinding): boolean {
+  try {
+    return new URL(finding.url ?? '').hostname === 'web.archive.org';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Какую из находок одной страницы показать: разобранную кандидатом, затем находку о самой
+ * странице (B668: канал YouTube), затем копию из архива.
+ */
+function pageRank(finding: CandidateFootprintFinding): number {
+  return (reviewed(finding) ? 2 : 0) + (isArchiveCopy(finding) ? 0 : 1);
+}
+
 /**
  * Одна страница — одна находка (B645 p02): разные поиски находят один профиль по разным
  * адресам (www, косая черта). Находки без адреса не склеиваются.
@@ -164,7 +180,7 @@ function onePerPage(findings: readonly CandidateFootprintFinding[]): CandidateFo
     if (!page || !kept) {
       if (page) byPage.set(page, finding);
       unique.push(finding);
-    } else if (reviewed(finding) && !reviewed(kept)) {
+    } else if (pageRank(finding) > pageRank(kept)) {
       byPage.set(page, finding);
       unique[unique.indexOf(kept)] = finding;
     }
