@@ -2,7 +2,14 @@ import type { CareerDiaryGoalCard } from '../../../../shared/careerDiaryCards';
 import { Icon } from '../kit/Icon';
 import { buildNodePath } from '../routes';
 import { Link } from '../shell/Link';
-import { goalByline, indicatorView, indicatorsOf, riskTag, staleFlag } from './goalsModel';
+import {
+  goalByline,
+  indicatorView,
+  indicatorsOf,
+  quarterLine,
+  riskTag,
+  staleFlag,
+} from './goalsModel';
 
 export interface GoalItemProps {
   readonly card: CareerDiaryGoalCard;
@@ -13,6 +20,7 @@ export interface GoalItemProps {
 export function GoalItem({ card, now }: GoalItemProps) {
   const tag = riskTag(card.risk.status);
   const stale = staleFlag(card, now);
+  const quarters = quarterLine(card.details.quarterTargets, card.unit);
   return (
     <li className="dn-goal">
       <div className="dn-goal-h">
@@ -37,6 +45,7 @@ export function GoalItem({ card, now }: GoalItemProps) {
           );
         })}
       </ul>
+      {quarters ? <p className="row-sub">{quarters}</p> : null}
       {stale ? (
         <p className="dn-flag">
           <Icon name="warn" />

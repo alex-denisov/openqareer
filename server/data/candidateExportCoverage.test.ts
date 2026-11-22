@@ -133,7 +133,7 @@ function seedDiary(store: ReturnType<typeof createStore>, databasePath: string, 
   });
   const options = { databasePath, encryptionKey: KEY };
   const details = new SqliteDiaryDetailsRepository(options);
-  details.saveGoalDetail(candidateId, goal.id, { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null });
+  details.saveGoalDetail(candidateId, goal.id, { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null });
   details.saveAdaptationDetails(candidateId, workplace.id, {
     tasks: {},
     stages: {},
