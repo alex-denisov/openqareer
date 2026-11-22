@@ -99,6 +99,12 @@ describe('модель «Аккаунта»', () => {
     expect(notificationsSummary([row(true, true, true)])).toBe('В приложении, на почту и в Telegram');
   });
 
+  it('B690: Telegram не привязан — в подписи раздела его нет, хотя галочка сохранена', () => {
+    const row = (telegram: boolean) => ({ key: 'ev-reply' as const, app: true, email: true, telegram });
+    expect(notificationsSummary([row(true)], false)).toBe('В приложении и на почту');
+    expect(notificationsSummary([{ ...row(true), app: false, email: false }], false)).toBe('Выключены');
+  });
+
   it('строки настроек: все события сервера, подписи простым языком', () => {
     expect(NOTIFICATION_ROWS.map((row) => row.key)).toEqual([
       'ev-invitation',
