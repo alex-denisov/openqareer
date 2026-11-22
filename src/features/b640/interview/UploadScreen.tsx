@@ -6,6 +6,7 @@ import { loadDebrief, saveInterviewerName, type DebriefData } from './data/debri
 import { uploadErrorText, uploadInterviewFile } from './data/fileUpload';
 import { durationText } from './model/debriefModel';
 import { RecordSteps, SourceHead } from './RecordSteps';
+import { MeterFill } from './MeterFill';
 
 type UploadPhase =
   | { readonly kind: 'idle' }
@@ -90,7 +91,7 @@ function FileRow(props: {
             aria-valuemin={0}
             aria-valuemax={100}
           >
-            <i style={{ inlineSize: `${percent}%` }} />
+            <MeterFill percent={percent} />
           </span>
           <span className="num">
             {phase.kind === 'sending' ? `Загружаем · ${percent}\u00a0%` : 'Расшифровываем'}
@@ -132,10 +133,7 @@ function Interviewer({ data }: { readonly data: DebriefData }) {
         <StatusLine state="err" text="Имя не сохранилось. Попробуйте ещё раз." />
       ) : null}
       <div className="actions">
-        <Button
-          disabled={state === 'saving' || !name.trim()}
-          onClick={() => void save()}
-        >
+        <Button disabled={state === 'saving' || !name.trim()} onClick={() => void save()}>
           <Icon name="check" />
           Сохранить
         </Button>

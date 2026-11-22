@@ -7,6 +7,7 @@ import type {
 import { Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import { clock, durationText, shareParts, speakerLabel } from './model/debriefModel';
+import { MeterFill } from './MeterFill';
 
 const lineId = (ms: number) => `t-${Math.floor(ms / 1000)}`;
 
@@ -33,7 +34,7 @@ export function ShareLine({ metrics }: { readonly metrics: DebriefMetrics }) {
         <span className="num">{parts.interviewer}&nbsp;%</span> · {pace}
       </span>
       <span className="meter" role="img" aria-label={`Ваша доля речи ${parts.candidate} процентов`}>
-        <i style={{ inlineSize: `${parts.candidate}%` }} />
+        <MeterFill percent={parts.candidate} />
       </span>
     </div>
   );
