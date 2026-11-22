@@ -7,7 +7,8 @@ import type { ComposeAction } from './waysModel';
 export interface HireBlockProps {
   readonly company: string;
   readonly people: readonly B640CompanyPerson[];
-  readonly companyPath: string;
+  /** `null` — у вакансии нет компании: ссылки на её карточку нет. */
+  readonly companyPath: string | null;
   /** Рекрутёр вакансии: первой строкой, как в макете. */
   readonly recruiter?: RecruiterContact | undefined;
   readonly vacancyId: string;
@@ -111,10 +112,12 @@ export function HireBlock({
           ))}
         </ul>
       ) : null}
-      <Link className="row-act hire-card" to={companyPath}>
-        <Icon name="building" />
-        Вакансии и люди компании
-      </Link>
+      {companyPath ? (
+        <Link className="row-act hire-card" to={companyPath}>
+          <Icon name="building" />
+          Вакансии и люди компании
+        </Link>
+      ) : null}
     </section>
   );
 }
