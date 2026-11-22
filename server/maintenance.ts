@@ -47,6 +47,7 @@ import { logPoolWrites } from './maintenance/poolWriteLog';
 import { watchWriteHolds } from './observability/sqliteWriteHolds';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
+import { createHhFetchSummary } from './vacancies/hhFetchSummary';
 import { useFanDemand } from './vacancies/jobspyFan';
 import { SqliteVacancyDemandStore } from './vacancies/vacancyDemandStore';
 import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedule';
@@ -144,6 +145,10 @@ const renderScriptPage = existsSync(siteRenderWorkerFile)
         ),
       log: renderLog,
     });
+// B756: сбой hh.ru — строкой warn сразу, ответы — сводкой раз в 5 минут.
+const HH_FETCH_SUMMARY_MS = 5 * 60_000;
+const hhFetchSummary = createHhFetchSummary(log);
+setInterval(() => hhFetchSummary.flush(), HH_FETCH_SUMMARY_MS).unref();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   registerRequestedAts: true,
@@ -156,8 +161,7 @@ const composed = composeVacancyEngine({
   // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
   onPoolWrite: logPoolWrites(log),
   // B756: где стоит выборка hh.ru — соединение, тело или цикл событий процесса.
-  onHhFetch: (event) =>
-    event.status === 0 ? log.warn({ ...event }, 'hh_fetch') : log.info({ ...event }, 'hh_fetch'),
+  onHhFetch: (event) => hhFetchSummary.record(event),
   // HTTP ждёт запись на главном потоке: между транзакциями кластеров ему нужен зазор.
   clusterWritePause: pauseClusterWrite,
 });
