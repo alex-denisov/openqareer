@@ -7,6 +7,7 @@ import {
   indicatorView,
   indicatorsOf,
   quarterLine,
+  quarterTargetText,
   riskTag,
   staleFlag,
 } from './goalsModel';
@@ -14,13 +15,18 @@ import {
 export interface GoalItemProps {
   readonly card: CareerDiaryGoalCard;
   readonly now: string;
+  /** Вкладка «Квартал»: у годовой цели — цель этого квартала вместо годовой. */
+  readonly quarterView?: boolean;
 }
 
 /** Цель в списке (`li.dn-goal`): заголовок, метка, показатели и пометка о старом замере. */
-export function GoalItem({ card, now }: GoalItemProps) {
+export function GoalItem({ card, now, quarterView = false }: GoalItemProps) {
   const tag = riskTag(card.risk.status);
   const stale = staleFlag(card, now);
   const quarters = quarterLine(card.details.quarterTargets, card.unit);
+  const indicators = indicatorsOf(card);
+  const quarterTarget =
+    quarterView && indicators.length === 1 ? quarterTargetText(card, now) : null;
   return (
     <li className="dn-goal">
       <div className="dn-goal-h">
@@ -31,14 +37,15 @@ export function GoalItem({ card, now }: GoalItemProps) {
       </div>
       <div className="row-sub">{goalByline(card, now)}</div>
       <ul className="dn-inds">
-        {indicatorsOf(card).map((goal) => {
+        {indicators.map((goal) => {
           const view = indicatorView(goal);
+          const target = view.target && quarterTarget ? quarterTarget : view.target;
           return (
             <li className="dn-ind" key={view.id}>
               <span>{view.title}</span>
               <span className="num">
                 <strong>{view.value}</strong>
-                {view.target ? ` ${view.target}` : null}
+                {target ? ` ${target}` : null}
               </span>
               <span className="row-sub">{view.sub}</span>
             </li>
@@ -50,7 +57,7 @@ export function GoalItem({ card, now }: GoalItemProps) {
         <p className="dn-flag is-done">
           <Icon name="trophy" />
           {'Достигнута → в Итоги и в профиль'}
-          <Link className="btn is-quiet" to={buildNodePath('d04')}>
+          <Link className="btn is-quiet is-sm" to={buildNodePath('d04')}>
             Перенести
           </Link>
         </p>
