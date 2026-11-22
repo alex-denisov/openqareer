@@ -221,7 +221,7 @@ export class SqliteCandidateStore implements CandidateStore {
       this.transaction(operation),
     ));
     this.installLinkedInMethods();
-    this.installExportMethods();
+    this.installExportMethods(options.encryptionKey);
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
   }
 
@@ -236,7 +236,7 @@ export class SqliteCandidateStore implements CandidateStore {
     );
   }
 
-  private installExportMethods(): void {
+  private installExportMethods(encryptionKey: Buffer): void {
     Object.assign(
       this,
       createMemoryMethods({
@@ -250,6 +250,7 @@ export class SqliteCandidateStore implements CandidateStore {
       }),
       createSqliteCandidateStoreExportMethods({
         getSnapshot: (candidateId) => this.getSnapshot(candidateId),
+        readDeliverySettings: (candidateId) => this.notificationRepository.getDeliverySettings(candidateId),
         sourceConnections: this.sourceConnections,
         careerStrategyRepository: this.careerStrategyRepository,
         workPreferenceRepository: this.workPreferenceRepository,
@@ -259,14 +260,13 @@ export class SqliteCandidateStore implements CandidateStore {
           getProfile: (candidateId) => this.relocationQuestionnaireRepo.getProfile(candidateId),
           getConsent: (candidateId) => this.relocationQuestionnaireRepo.getConsent(candidateId),
         },
-        exportConsultantConversations: (candidateId) =>
-          this.exportConsultantConversations(candidateId),
+        exportConsultantConversations: (candidateId) => this.exportConsultantConversations(candidateId),
         exportExecutiveRequests: (candidateId) =>
           exportExecutiveRequests(this.database, this.sealedText, candidateId),
         roleSkillAssessments: this.roleSkillAssessments,
         starStoriesRepo: this.starStoriesRepo,
         interviewSimulatorRepo: this.interviewSimulatorRepo,
-        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo,
+        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo, careerDiaryDatabase: { database: this.database, encryptionKey },
       }),
     );
   }

@@ -12,9 +12,10 @@ function dative(first: string): string | undefined {
   return CONSONANT.test(first) ? `${first}у` : undefined;
 }
 
-/** «Написать Роману» — главное действие шапки карточки; без уверенного падежа — «знакомому». */
+/** «Написать Роману» — главное действие шапки карточки; латиницу не склоняем; без уверенного падежа — «знакомому». */
 export function writeToLabel(fullName: string): string {
   const first = fullName.trim().split(/\s+/)[0] ?? '';
+  if (/^[A-Za-z][A-Za-z'-]*$/.test(first)) return `Написать ${first}`;
   const form = /^[А-ЯЁа-яё-]+$/.test(first) ? dative(first) : undefined;
   return form ? `Написать ${form}` : FALLBACK;
 }

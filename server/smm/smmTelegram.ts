@@ -2,7 +2,6 @@
 
 const API = 'https://api.telegram.org';
 const REQUEST_TIMEOUT_MS = 15_000;
-export const POLL_TIMEOUT_S = 50;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 
 export interface InlineButton {
@@ -30,7 +29,6 @@ export interface TelegramUpdate {
 }
 
 export interface SmmTelegram {
-  getUpdates(offset: number): Promise<TelegramUpdate[]>;
   send(chatId: string, text: string, buttons?: readonly InlineButton[]): Promise<number | null>;
   answerCallback(callbackId: string, text: string): Promise<void>;
   clearButtons(chatId: string, messageId: number): Promise<void>;
@@ -75,12 +73,6 @@ export function createSmmTelegram(token: string, fetchImpl: typeof fetch = fetch
     telegramCall<T>(token, fetchImpl, method, body, timeoutMs);
 
   return {
-    getUpdates: (offset) =>
-      call<TelegramUpdate[]>(
-        'getUpdates',
-        { offset, timeout: POLL_TIMEOUT_S, allowed_updates: ['message', 'callback_query'] },
-        (POLL_TIMEOUT_S + 10) * 1_000,
-      ),
     async send(chatId, text, buttons) {
       const result = await call<{ message_id: number }>('sendMessage', {
         chat_id: chatId,

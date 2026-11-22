@@ -16,6 +16,11 @@ mod hh_resume_experience_scripts;
 mod hh_raise;
 mod linkedin_read_guard;
 mod network_probe;
+mod recording;
+mod recording_clock;
+#[cfg(target_os = "macos")]
+mod recording_macos;
+mod recording_upload;
 mod session_token_store;
 mod sidecar_lifecycle;
 mod tunnel_manager;
@@ -569,6 +574,7 @@ fn main() {
         .manage(device_settings::DeviceSettingsState::default())
         .setup(|app| {
             desktop_notify::configure_tray(app)?;
+            recording::purge_leftovers(app.handle());
             device_settings::load_on_startup(app.handle());
             Ok(())
         })
@@ -589,6 +595,7 @@ fn main() {
         .manage(app_state)
         .manage(CandidateSessionAccount::default())
         .manage(linkedin_read_guard::LinkedInReadGuardState::default())
+        .manage(recording::RecordingState::default())
         .invoke_handler(tauri::generate_handler![
             open_external_url,
             probe_network_status,
@@ -630,6 +637,10 @@ fn main() {
             desktop_notify::focus_main_window,
             device_settings::get_device_settings,
             device_settings::save_device_settings,
+            recording::recording_permissions,
+            recording::recording_request_permissions,
+            recording::recording_start,
+            recording::recording_stop,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenQareer desktop application");
@@ -658,6 +669,7 @@ fn main() {
         if !is_tunnel_cleanup_event(&event) {
             return;
         }
+        recording::abandon_on_exit(app_handle);
         let tunnel = app_handle.state::<AppState>().tunnel.clone();
         tauri::async_runtime::block_on(async move {
             let _ = tunnel.stop().await;

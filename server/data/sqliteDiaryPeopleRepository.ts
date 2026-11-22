@@ -32,14 +32,22 @@ interface Row {
 
 export class SqliteDiaryPeopleRepository {
   private readonly database: DatabaseSync;
+  private readonly ownsDatabase: boolean;
   private readonly sealedText: SealedText;
 
-  constructor(options: { databasePath: string; encryptionKey: Buffer }) {
-    this.database = new DatabaseSync(options.databasePath);
-    this.sealedText = new SealedText(options.encryptionKey);
+  /** Своё соединение по пути к базе или (B689, выгрузка) чужое соединение хранилища. */
+  constructor(options: DatabaseSync | { databasePath: string; encryptionKey: Buffer }, key?: Buffer) {
+    this.ownsDatabase = !(options instanceof DatabaseSync);
+    this.database = options instanceof DatabaseSync ? options : new DatabaseSync(options.databasePath);
+    const encryptionKey = options instanceof DatabaseSync ? key : options.encryptionKey;
+    if (!encryptionKey) throw new Error('diary_people_encryption_key_missing');
+    this.sealedText = new SealedText(encryptionKey);
     try {
-      applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
-      this.database.exec('PRAGMA journal_mode = WAL;');
+      // Чужое соединение (хранилища) живёт со своими настройками ожидания и журнала.
+      if (this.ownsDatabase) {
+        applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
+        this.database.exec('PRAGMA journal_mode = WAL;');
+      }
       this.database.exec(DIARY_PEOPLE_SCHEMA);
     } catch (error) {
       this.close();
@@ -48,7 +56,18 @@ export class SqliteDiaryPeopleRepository {
   }
 
   close(): void {
-    this.database.close();
+    if (this.ownsDatabase) this.database.close();
+  }
+
+  /** B689: все люди кандидата со всех мест работы — для выгрузки данных. */
+  exportAll(candidateId: string): Array<{ workplaceId: string; person: CareerDiaryPerson }> {
+    const rows = this.database
+      .prepare(
+        `SELECT person_id, workplace_id, payload_cipher FROM career_diary_people
+         WHERE candidate_id = ? ORDER BY workplace_id, created_at, rowid`,
+      )
+      .all(candidateId) as unknown as Array<Row & { readonly workplace_id: string }>;
+    return rows.map((row) => ({ workplaceId: row.workplace_id, person: this.open(candidateId, row) }));
   }
 
   /** Люди места работы в порядке добавления. */

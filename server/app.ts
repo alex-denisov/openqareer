@@ -119,6 +119,8 @@ interface BuildAppOptions {
   hhCrawlSettings?: import('./vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   /** Память и пауза опросов — админский маршрут, сторож памяти (B220). */
   runtimeMemory?: RouteDeps['runtimeMemory'];
+  /** B732: обновления SMM-чата с общего вебхука бота. */
+  smmTelegram?: RouteDeps['smmTelegram'];
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
@@ -127,6 +129,8 @@ interface BuildAppOptions {
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
   skillQuizModel?: RouteDeps['skillQuizModel'];
+  /** B734: русские названия навыков проверки роли. */
+  skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
   adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
@@ -465,7 +469,7 @@ function assembleRouteDeps(
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
-    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}),
+    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}), ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}), ...(options.skillNameTranslator ? { skillNameTranslator: options.skillNameTranslator } : {}),
     ...services,
   };
 }
