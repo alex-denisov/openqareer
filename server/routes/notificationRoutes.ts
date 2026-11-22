@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
+import { TELEGRAM_LINK_START, telegramUpdateRoute } from '../notifications/telegramUpdateRoute';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
 import {
   closeNotificationRepositoryFor,
@@ -293,12 +294,21 @@ async function handleTelegramWebhook(
       false,
     );
   }
+  const route = telegramUpdateRoute(request.body, deps.smmTelegram?.chatId ?? null);
+  if (route === 'smm') {
+    // Ответ Telegram сразу: SMM думает моделью дольше, чем вебхук ждёт, и сам пишет свои сбои.
+    deps.smmTelegram?.handle(request.body);
+    return { ok: true };
+  }
+  if (route === 'link') await linkTelegramChat(deps, request);
+  return { ok: true };
+}
+
+/** `/start <код>`: чат привязывается к кандидату, бот подтверждает привязку. */
+async function linkTelegramChat(deps: RouteDeps, request: FastifyRequest): Promise<void> {
   const update = telegramUpdateSchema.safeParse(request.body);
-  if (!update.success || !update.data.message?.text) return { ok: true };
-  const match = update.data.message.text.match(
-    /^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Za-z0-9_-]{40,64})$/u,
-  );
-  if (!match) return { ok: true };
+  const match = update.success ? update.data.message?.text?.match(TELEGRAM_LINK_START) : null;
+  if (!update.success || !update.data.message || !match) return;
   const chatId = String(update.data.message.chat.id);
   const candidateId = notificationRepositoryFor(deps).consumeTelegramLinkCode(
     opaqueTokenHash('telegram-link-v1', match[1]!),
@@ -322,7 +332,6 @@ async function handleTelegramWebhook(
       );
     }
   }
-  return { ok: true };
 }
 
 const unsubscribeQuerySchema = z
@@ -523,7 +532,23 @@ function createDeliveryProcessor(
       createUnsubscribeUrl(repository, publicBaseUrl, candidateId, deps.config.dataEncryptionKey),
     ...(emailConfig ? { sendEmail: buildNotificationEmailSender(emailConfig) } : {}),
     ...(botToken ? { sendTelegram: buildNotificationTelegramSender(botToken) } : {}),
+    resolveCompany: (candidateId, source) => applicationCompany(deps, candidateId, source),
+    resolveTimeZone: (candidateId) => deps.authService.getCandidateTimezone?.(candidateId) ?? null,
   });
+}
+
+/** n02: компания отклика для строки письма и Telegram; сбой чтения не мешает доставке. */
+function applicationCompany(
+  deps: RouteDeps,
+  candidateId: string,
+  source: { readonly type: string; readonly id: string },
+): string | null {
+  if (source.type !== 'application') return null;
+  try {
+    return deps.candidateStore.getApplication(candidateId, source.id)?.vacancy?.company ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function startDeliveryPoller(app: FastifyInstance, processor: NotificationDeliveryProcessor): void {

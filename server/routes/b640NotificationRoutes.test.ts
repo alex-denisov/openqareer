@@ -362,3 +362,43 @@ describe('B671: ключ «Приглашения»', () => {
     expect(fixture.notifications.getInvitationPreference(fixture.id).stored).toBe(false);
   });
 });
+
+const DELIVERY = `${PATH}/preferences/delivery`;
+
+describe('n02: «Как часто» и «Не показывать название компании»', () => {
+  it('без флага GET и PUT отвечают 404', async () => {
+    const { app } = await setup();
+    expect((await call(app, 'GET', DELIVERY, plain)).statusCode).toBe(404);
+    expect(
+      (await call(app, 'PUT', DELIVERY, plain, { frequency: 'daily', hideCompany: true })).statusCode,
+    ).toBe(404);
+  });
+
+  it('без выбора — сразу и с названием; чтение ничего не пишет', async () => {
+    const fixture = await setup();
+    const response = await call(fixture.app, 'GET', DELIVERY, flagged);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual({ frequency: 'immediate', hideCompany: false });
+  });
+
+  it('PUT проверяет тело и сохраняет выбор', async () => {
+    const fixture = await setup();
+    for (const body of [
+      {},
+      { frequency: 'hourly', hideCompany: false },
+      { frequency: 'daily', hideCompany: 'yes' },
+      { frequency: 'daily', hideCompany: true, extra: 1 },
+    ]) {
+      const response = await call(fixture.app, 'PUT', DELIVERY, flagged, body);
+      expect(response.statusCode, JSON.stringify(body)).toBe(400);
+      expect(response.json().error.code).toBe('invalid_preference');
+    }
+    const saved = await call(fixture.app, 'PUT', DELIVERY, flagged, {
+      frequency: 'weekly',
+      hideCompany: true,
+    });
+    expect(saved.json().data).toEqual({ frequency: 'weekly', hideCompany: true });
+    expect(fixture.notifications.getDeliverySettings(fixture.id)).toEqual({ frequency: 'weekly', hideCompany: true });
+    expect((await call(fixture.app, 'GET', DELIVERY, flagged)).json().data.frequency).toBe('weekly');
+  });
+});

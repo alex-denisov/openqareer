@@ -6,6 +6,7 @@ import {
   searchRoleLabel,
   type B640ApplicationContext,
 } from '../domain/b640Notifications';
+import { registerB640DeliverySettingsRoutes } from './b640DeliverySettingsRoutes';
 import { readCampaign } from './campaignContext';
 import { sessionCandidate } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -226,4 +227,5 @@ export function registerB640NotificationRoutes(app: FastifyInstance, deps: Route
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
     withDeps(deps, writeInvitationPreference),
   );
+  registerB640DeliverySettingsRoutes(app, deps);
 }

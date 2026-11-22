@@ -126,7 +126,7 @@ describe('d01 план адаптации', () => {
     expect([...page.querySelectorAll('.va-err')].map((item) => item.textContent)).toEqual(['Укажите компанию', 'Укажите должность', 'Укажите день выхода']);
     typeInto(page.querySelector('#ap-company'), 'Норма');
     typeInto(page.querySelector('#ap-title'), 'руководитель разработки');
-    typeInto(page.querySelector('#ap-start-date'), '2026-12-01');
+    typeInto(page.querySelector('#ap-start-date'), '01.12.2026');
     click(button(page, 'Собрать план'));
     await settle();
     expect(api.createWorkplace).toHaveBeenCalledWith({ company: 'Норма', title: 'руководитель разработки', startDate: '2026-12-01' });
@@ -164,7 +164,7 @@ describe('d01 план адаптации', () => {
     expect(responsesApi.fetchVacancyDetail).toHaveBeenCalledWith('cl-bank');
     const duties = page.querySelector('#ap-expectations') as HTMLTextAreaElement;
     expect(duties.value).toBe('Руководить командой из 25 человек\nВыстроить поставку');
-    typeInto(page.querySelector('#ap-start-date'), '2026-12-01');
+    typeInto(page.querySelector('#ap-start-date'), '01.12.2026');
     click(button(page, 'Собрать план'));
     await settle();
     expect(api.createWorkplace).toHaveBeenCalledWith({
@@ -186,7 +186,7 @@ describe('d01 план адаптации', () => {
     const page = await open(<PlanScreen node={nodeByCode('d01')!} />);
     typeInto(page.querySelector('#ap-company'), 'Норма');
     typeInto(page.querySelector('#ap-title'), 'CTO');
-    typeInto(page.querySelector('#ap-start-date'), '2026-12-01');
+    typeInto(page.querySelector('#ap-start-date'), '01.12.2026');
     typeInto(page.querySelector('#ap-expectations'), 'Руководить командой');
     click(button(page, 'Собрать план'));
     await settle();
@@ -226,7 +226,7 @@ describe('шаги, встреча и карта людей', () => {
   it('d01c: итоги первой встречи сохраняются в план', async () => {
     api.patchAdaptation.mockResolvedValue({ ...VIEW, firstMeeting: { heldOn: '2026-12-02', expectations: 'Релизы предсказуемые', successByDay90: '', measures: '', cadence: '', needsApproval: '', ownDecisions: '', manager: '' } });
     const page = await open(<MeetingScreen node={nodeByCode('d01c')!} />);
-    typeInto(page.querySelector('#mt-day'), '2026-12-02');
+    typeInto(page.querySelector('#mt-day'), '02.12.2026');
     typeInto(page.querySelector('#mt-expectations'), 'Релизы предсказуемые');
     click(button(page, 'Сохранить итоги'));
     await settle();
@@ -242,7 +242,7 @@ describe('шаги, встреча и карта людей', () => {
     click(button(page, 'Назначить встречу'));
     const dialog = document.querySelector('[role="dialog"]')!;
     typeInto(dialog.querySelector('#mt-person'), 'p2');
-    typeInto(dialog.querySelector('#mt-date'), '2027-01-08');
+    typeInto(dialog.querySelector('#mt-date'), '08.01.2027');
     click(button(dialog, 'Назначить'));
     await settle();
     expect(api.scheduleMeeting).toHaveBeenCalledWith('w1', 'p2', '2027-01-08');

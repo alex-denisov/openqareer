@@ -4,6 +4,7 @@ import { DIARY_NOTE_MAX } from '../../../../shared/careerDiaryCards';
 import { Button } from '../kit/Button';
 import { Dialog } from '../kit/Dialog';
 import { StatusLine } from '../kit/ResultLine';
+import { DateInput } from '../kit/DateInput';
 import { recordMeasurement } from './diaryApi';
 import { today } from './model';
 
@@ -100,13 +101,7 @@ export function MeasureDialog({ goal, onClose, onSaved }: MeasureDialogProps) {
       </div>
       <div className="field">
         <label htmlFor={`${id}-d`}>День замера</label>
-        <input
-          id={`${id}-d`}
-          type="date"
-          value={form.date}
-          max={today()}
-          onChange={(event) => form.setDate(event.target.value)}
-        />
+        <DateInput id={`${id}-d`} value={form.date} max={today()} onChange={form.setDate} />
       </div>
       <div className="field">
         <label htmlFor={`${id}-n`}>Комментарий</label>
