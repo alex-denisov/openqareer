@@ -215,10 +215,16 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
       expect(target.width).toBeGreaterThanOrEqual(44);
       expect(target.height).toBeGreaterThanOrEqual(44);
     }
+    const bar = page.locator('meta[name="theme-color"]');
     await screen.getByRole('radio', { name: 'Тёмная' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'dark');
+    await expect(bar).toHaveAttribute(
+      'content',
+      /^rgb\((?:[0-3]?\d), (?:[0-3]?\d), (?:[0-3]?\d)\)$/u,
+    );
     await screen.getByRole('radio', { name: 'Светлая' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'light');
+    await expect(bar).toHaveAttribute('content', /^rgb\(2[3-5]\d, 2[3-5]\d, 2[3-5]\d\)$/u);
     await expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveValue('ru');
     await expect(screen.getByRole('combobox', { name: 'Часовой пояс' })).toHaveValue(
       'Europe/Moscow',
