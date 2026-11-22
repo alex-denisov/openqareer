@@ -6,7 +6,6 @@ import {
   loadMemberVacancies,
   parseCluster,
   planClusterSplit,
-  tableExists,
 } from './clusterSplit';
 import { prepareCatalogProjectionStatements, writeCatalogEntry } from './catalogEntryWriter';
 import { journalClusterSplit } from './clusterSplitJournal';
