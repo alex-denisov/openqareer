@@ -32,7 +32,7 @@ import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 interface AccountData {
   /** Согласия, которые сейчас действуют. */
   readonly granted: readonly CandidateCapability[];
-  /** «Вы в поиске» (B263); `null` — не прочиталось, строки нет. */
+  /** «Вы в поиске» (B263); `null` — не прочиталось: строка с ошибкой и «Повторить». */
   readonly searchConsent: boolean | null;
   /** Автоотклики; `null` — состояние не прочиталось. */
   readonly automation: AutomationState | null;
@@ -282,9 +282,7 @@ function Sections({ data, load }: { readonly data: AccountData; readonly load: L
   return (
     <>
       <Group title="На что вы дали согласие">
-        {data.searchConsent === null ? null : (
-          <SearchConsentRow granted={data.searchConsent} onChanged={load.retry} />
-        )}
+        <SearchConsentRow granted={data.searchConsent} onChanged={load.retry} />
         {CONSENT_ROWS.map((row) => (
           <Consent
             key={row.capability}
