@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { GOAL_SETTERS, type CareerDiaryGoalCardInput } from '../../shared/careerDiaryCards';
 import {
@@ -257,7 +258,7 @@ const acceptImport: Handler = async (deps, request, reply) => {
   let goalIds: string[];
   try {
     goalIds = parsed.data.rows.map((row, index) =>
-      deps.createCard(candidate, cardInput(row), `kpi:${found.id}:${index}`),
+      deps.createCard(candidate, cardInput(row), kpiGoalId(found.id, index)),
     );
   } catch (error) {
     if (!(error instanceof CareerDiaryIdempotencyConflictError)) throw error;
@@ -266,6 +267,16 @@ const acceptImport: Handler = async (deps, request, reply) => {
   deps.kpiImports().markAccepted(candidate, found.id, goalIds);
   return reply.code(201).send({ data: { goalIds }, meta: { requestId: request.id } });
 };
+
+/**
+ * id цели из строки KPI: один и тот же на повторное «Принять» (идемпотентность) и в виде uuid,
+ * который ждут маршруты замеров и удаления. Прежний `kpi:<импорт>:<n>` они отклоняли (прод 22.11).
+ */
+function kpiGoalId(importId: string, index: number): string {
+  const hex = createHash('sha256').update(`kpi:${importId}:${index}`).digest('hex');
+  const variant = ((parseInt(hex[16]!, 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 
 const deleteSource: Handler = async (deps, request, reply) => {
   const candidate = candidateId(deps, request, reply);
