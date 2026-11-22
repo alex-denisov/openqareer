@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { pruneClustersInBatchesAsync, STALE_CLUSTERS_SQL } from './poolPruneBatches';
+import { pruneClustersInBatchesAsync } from './poolPruneBatches';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
+import { STALE_CLUSTERS_SQL } from './poolPruneBatches';
 
 const directories: string[] = [];
 const stores: SqliteVacancyPoolStore[] = [];
