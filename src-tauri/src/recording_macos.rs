@@ -63,7 +63,7 @@ pub fn is_supported() -> bool {
     NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(version)
 }
 
-fn audio_media_type() -> &'static NSString {
+pub(crate) fn audio_media_type() -> &'static NSString {
     // SAFETY: AVMediaTypeAudio is a constant NSString exported by AVFoundation.
     unsafe { AVMediaTypeAudio }.expect("AVFoundation exports AVMediaTypeAudio")
 }
@@ -149,6 +149,20 @@ pub struct OutputIvars {
     tracks: Mutex<[TrackWriter; 2]>,
 }
 
+impl OutputIvars {
+    /// Писатели дорожек для записи в `dir`; общие для ScreenCaptureKit и записи только микрофона.
+    pub(crate) fn new(dir: PathBuf, sink: SegmentSink) -> Self {
+        Self {
+            dir,
+            sink,
+            tracks: Mutex::new([
+                TrackWriter::new(Track::Mic),
+                TrackWriter::new(Track::System),
+            ]),
+        }
+    }
+}
+
 define_class!(
     #[unsafe(super(NSObject))]
     #[thread_kind = AnyThread]
@@ -178,22 +192,14 @@ define_class!(
 
 impl RecordingOutput {
     fn create(dir: PathBuf, sink: SegmentSink) -> Retained<Self> {
-        let ivars = OutputIvars {
-            dir,
-            sink,
-            tracks: Mutex::new([
-                TrackWriter::new(Track::Mic),
-                TrackWriter::new(Track::System),
-            ]),
-        };
-        let this = Self::alloc().set_ivars(ivars);
+        let this = Self::alloc().set_ivars(OutputIvars::new(dir, sink));
         // SAFETY: NSObject's init on a freshly allocated instance with ivars set.
         unsafe { msg_send![super(this), init] }
     }
 }
 
 impl OutputIvars {
-    fn on_sample(&self, track: Track, sample: &CMSampleBuffer) {
+    pub(crate) fn on_sample(&self, track: Track, sample: &CMSampleBuffer) {
         // SAFETY: the buffer is valid for the duration of the callback.
         let usable = unsafe { sample.is_valid() && sample.num_samples() > 0 };
         if !usable {
@@ -228,7 +234,7 @@ impl OutputIvars {
         }
     }
 
-    fn finish_all(&self) {
+    pub(crate) fn finish_all(&self) {
         let Ok(mut tracks) = self.tracks.lock() else {
             return;
         };
@@ -242,7 +248,7 @@ impl OutputIvars {
     }
 
     /// Бросает открытые куски без отправки: AVAssetWriter удаляет недописанный файл сам.
-    fn cancel_all(&self) {
+    pub(crate) fn cancel_all(&self) {
         let Ok(mut tracks) = self.tracks.lock() else {
             return;
         };
@@ -358,17 +364,23 @@ fn finish_file(file: OpenFile, track: Track, duration_ms: u64, sink: SegmentSink
     }
 }
 
-/// Идущая запись. ScreenCaptureKit и AVAssetWriter потокобезопасны для этих вызовов,
+/// Идущая запись: интервью через ScreenCaptureKit или только микрофон (B758).
+pub enum Capture {
+    Screen(ScreenCapture),
+    Mic(crate::recording_macos_mic::MicCapture),
+}
+
+/// Запись интервью. ScreenCaptureKit и AVAssetWriter потокобезопасны для этих вызовов,
 /// а доступ к писателям дорожек идёт под мьютексом.
-pub struct Capture {
+pub struct ScreenCapture {
     stream: Retained<SCStream>,
     output: Retained<RecordingOutput>,
     _queue: dispatch2::DispatchRetained<DispatchQueue>,
 }
 
 // SAFETY: SCStream start/stop and the output's mutex-guarded writers may be used from any
-// thread; Capture is only moved between the command threads, never shared without a lock.
-unsafe impl Send for Capture {}
+// thread; ScreenCapture is only moved between the command threads, never shared without a lock.
+unsafe impl Send for ScreenCapture {}
 
 fn wait_error(rx: &mpsc::Receiver<Option<String>>, what: &str) -> Result<(), String> {
     match rx.recv_timeout(SYSTEM_CALL_TIMEOUT) {
@@ -435,8 +447,21 @@ fn stream_config() -> Retained<SCStreamConfiguration> {
     }
 }
 
-/// Запускает запись в `dir`. Блокирует поток до ответа ScreenCaptureKit.
-pub fn start(dir: PathBuf, sink: SegmentSink) -> Result<Capture, String> {
+/// Запускает запись в `dir`. Блокирует поток до ответа системы.
+pub fn start(
+    dir: PathBuf,
+    sink: SegmentSink,
+    mode: crate::recording::RecordingMode,
+) -> Result<Capture, String> {
+    match mode {
+        crate::recording::RecordingMode::Meeting => start_screen(dir, sink).map(Capture::Screen),
+        crate::recording::RecordingMode::Mic => {
+            crate::recording_macos_mic::start(dir, sink).map(Capture::Mic)
+        }
+    }
+}
+
+fn start_screen(dir: PathBuf, sink: SegmentSink) -> Result<ScreenCapture, String> {
     let filter = first_display()?;
     let config = stream_config();
     // SAFETY: filter and config are valid; no delegate.
@@ -469,7 +494,7 @@ pub fn start(dir: PathBuf, sink: SegmentSink) -> Result<Capture, String> {
         output.ivars().cancel_all();
         return Err(error);
     }
-    Ok(Capture {
+    Ok(ScreenCapture {
         stream,
         output,
         _queue: queue,
@@ -488,13 +513,23 @@ fn stop_stream(stream: &SCStream) -> Result<(), String> {
 }
 
 pub fn stop(capture: Capture) -> Result<(), String> {
-    let stopped = stop_stream(&capture.stream);
-    capture.output.ivars().finish_all();
-    stopped
+    match capture {
+        Capture::Screen(capture) => {
+            let stopped = stop_stream(&capture.stream);
+            capture.output.ivars().finish_all();
+            stopped
+        }
+        Capture::Mic(capture) => crate::recording_macos_mic::stop(capture),
+    }
 }
 
 /// Выход из приложения посреди записи: остановить поток, недописанное не отправлять.
 pub fn abandon(capture: Capture) {
-    let _ = stop_stream(&capture.stream);
-    capture.output.ivars().cancel_all();
+    match capture {
+        Capture::Screen(capture) => {
+            let _ = stop_stream(&capture.stream);
+            capture.output.ivars().cancel_all();
+        }
+        Capture::Mic(capture) => crate::recording_macos_mic::abandon(capture),
+    }
 }
