@@ -47,7 +47,8 @@ export function practiceChoice(
 /** Сколько целых минут осталось от начала тренировки. */
 export function minutesLeft(startedAt: string, limitMinutes: number, now: number): number {
   const spent = (now - Date.parse(startedAt)) / 60_000;
-  return Math.max(0, Math.ceil(limitMinutes - spent - 1e-9));
+  // Часы сервера впереди часов браузера дают «46 из 45»: больше лимита не показываем.
+  return Math.min(limitMinutes, Math.max(0, Math.ceil(limitMinutes - spent - 1e-9)));
 }
 
 export interface LiveCriterion {

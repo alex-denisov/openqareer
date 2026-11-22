@@ -56,6 +56,8 @@ describe('I3b: ответ', () => {
     expect(minutesLeft(start, 45, Date.parse('2026-11-22T10:00:00.000Z'))).toBe(45);
     expect(minutesLeft(start, 45, Date.parse('2026-11-22T10:07:30.000Z'))).toBe(38);
     expect(minutesLeft(start, 45, Date.parse('2026-11-22T11:00:00.000Z'))).toBe(0);
+    // Часы сервера впереди часов браузера: больше лимита не показываем.
+    expect(minutesLeft(start, 45, Date.parse('2026-11-22T09:59:30.000Z'))).toBe(45);
   });
 
   it('критерии по мере ответа: прозвучало — с цитатой, нет — «Пока не звучало»', () => {
