@@ -23,6 +23,7 @@ const KIND_ACTION: Record<NotificationEventKind, NotificationAction> = {
   import_completed: { label: 'Открыть профиль', path: buildNodePath('s01') },
   employer_reply: { label: 'Открыть отклик', path: buildNodePath('o01') },
   delivery_error: { label: 'Открыть отклик', path: buildNodePath('o01') },
+  post_reminder: { label: 'Скопировать и открыть', path: buildNodePath('a03b') },
 };
 
 const HH_LOGIN_ACTION: NotificationAction = { label: 'Войти снова', path: buildNodePath('n03') };

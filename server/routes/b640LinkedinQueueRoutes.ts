@@ -1,14 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
-  LINKEDIN_QUEUE_PAGE_MAX, LINKEDIN_QUEUE_STATES, LINKEDIN_RHYTHM_DAYS, type LinkedinRhythm,
+  LINKEDIN_QUEUE_PAGE_MAX, LINKEDIN_QUEUE_STATES, LINKEDIN_RHYTHM_DAYS, type LinkedinQueueItem, type LinkedinRhythm,
 } from '../../shared/b640LinkedinQueue';
 import { DEFAULT_ACCOUNT_TIMEZONE, isValidTimezone } from '../../shared/timezoneUtils';
-import { LinkedinQueueRepository, type ChangeResult } from '../linkedinQueue/linkedinQueueRepository';
+import type { LinkedinQueueRepository, ChangeResult } from '../linkedinQueue/linkedinQueueRepository';
+import type { PostReminders } from '../linkedinQueue/postReminders';
 import { isLinkedinUrl } from '../linkedinQueue/linkedinUrl';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError } from './helpers';
+import { linkedinQueueFor, postRemindersFor } from './linkedinPostReminders';
 
 const BASE = '/api/v1/candidate/b640/linkedin';
 const MAX_AHEAD_MS = 366 * 86_400_000;
@@ -82,7 +84,7 @@ function registerRhythm(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQue
   });
 }
 
-function registerQueueRead(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQueueRepository): void {
+function registerQueueRead(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQueueRepository, reminders: PostReminders): void {
   app.get(`${BASE}/queue`, READ_LIMIT, async (request, reply) => {
     const ctx = context(deps, repo, request, reply);
     if (!ctx) return reply;
@@ -96,13 +98,16 @@ function registerQueueRead(app: FastifyInstance, deps: RouteDeps, repo: Linkedin
     const parsed = enqueueSchema.safeParse(request.body);
     if (!parsed.success) return bad(request, reply, 'invalid_queue_request', 'Проверьте черновик и время: оно должно быть в будущем.');
     const result = repo.enqueue(ctx.candidateId, parsed.data.draftId, parsed.data.at && new Date(parsed.data.at).toISOString(), repo.getRhythm(ctx.candidateId, ctx.timezone));
-    if (result.ok) return ok(request, result.item);
+    if (result.ok) {
+      reminders.schedule(ctx.candidateId, result.item);
+      return ok(request, result.item);
+    }
     const [status, code, message] = ENQUEUE_ERRORS[result.error];
     return sendError(reply, request, status, code, message, false);
   });
 }
 
-function registerItemChanges(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQueueRepository): void {
+function registerItemChanges(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQueueRepository, reminders: PostReminders): void {
   const item = (
     method: 'patch' | 'delete' | 'post', suffix: string, schema: z.ZodType | null,
     run: (ctx: Context, id: string, body: never) => ChangeResult,
@@ -114,23 +119,30 @@ function registerItemChanges(app: FastifyInstance, deps: RouteDeps, repo: Linked
     if (!params.success || !body.success) return bad(request, reply, 'invalid_queue_request', 'Проверьте время или ссылку на публикацию.');
     return changed(request, reply, run(ctx, params.data.id, body.data as never));
   });
-  item('patch', '', patchSchema, (ctx, id, body: { at: string }) => ctx.repo.reschedule(ctx.candidateId, id, new Date(body.at).toISOString()));
-  item('delete', '', null, (ctx, id) => ctx.repo.remove(ctx.candidateId, id));
-  item('post', '/published', publishedSchema, (ctx, id, body: { url?: string }) => ctx.repo.markPublished(ctx.candidateId, id, body.url ?? null));
+  // B695: перенос ставит напоминание на новое время, удаление и публикация снимают его.
+  const after = (result: ChangeResult, then: (item: LinkedinQueueItem) => void) => {
+    if (result.ok) then(result.item);
+    return result;
+  };
+  item('patch', '', patchSchema, (ctx, id, body: { at: string }) =>
+    after(ctx.repo.reschedule(ctx.candidateId, id, new Date(body.at).toISOString()), (moved) => reminders.schedule(ctx.candidateId, moved)));
+  item('delete', '', null, (ctx, id) => after(ctx.repo.remove(ctx.candidateId, id), () => reminders.withdraw(ctx.candidateId, id)));
+  item('post', '/published', publishedSchema, (ctx, id, body: { url?: string }) =>
+    after(ctx.repo.markPublished(ctx.candidateId, id, body.url ?? null), () => reminders.withdraw(ctx.candidateId, id)));
   item('post', '/reminded', remindedSchema, (ctx, id) => ctx.repo.markReminded(ctx.candidateId, id));
 }
 
 /**
  * B694/B695: ритм и очередь публикаций LinkedIn за флагом `cabinetB640`. Только наше хранение:
- * на LinkedIn ничего не уходит, фоновых задач нет. Когда время пришло, строка становится `due`,
- * клиент сам читает напоминания из `GET /queue?state=due`, кандидат публикует сам.
+ * на LinkedIn ничего не уходит. Когда время пришло, строка становится `due`, а уведомление
+ * `post_reminder` (записано заранее на это время) появляется в «Сегодня» и уходит в Telegram;
+ * кандидат публикует сам.
  */
 export function registerB640LinkedinQueueRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  const database = deps.candidateActionRepository?.getDatabase();
-  const hasDrafts = database?.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_drafts'").get();
-  if (!database || !hasDrafts) return;
-  const repo = new LinkedinQueueRepository(database);
+  const repo = linkedinQueueFor(deps);
+  const reminders = postRemindersFor(deps, app.log, repo);
+  if (!repo || !reminders) return;
   registerRhythm(app, deps, repo);
-  registerQueueRead(app, deps, repo);
-  registerItemChanges(app, deps, repo);
+  registerQueueRead(app, deps, repo, reminders);
+  registerItemChanges(app, deps, repo, reminders);
 }

@@ -177,6 +177,42 @@ describe('B694: очередь', () => {
     expect(resumed).toMatchObject({ total: 1, paused: false });
   });
 
+  it('B695: напоминание «Пора опубликовать пост» — на время строки, переносится, снимается при удалении, публикации и «Остановить всё»', async () => {
+    const { h, call, draft } = await setup();
+    const reminders = (user: HarnessUser = 'flagged.test') => {
+      const db = new DatabaseSync(h.databasePath);
+      try {
+        return db.prepare(`SELECT source_type, source_id, created_at FROM candidate_notifications
+          WHERE candidate_id = ? AND event_kind = 'post_reminder' ORDER BY created_at`).all(h.candidateIds[user]);
+      } finally { db.close(); }
+    };
+    draft('flagged.test', { id: 'd1' });
+    draft('flagged.test', { id: 'd2' });
+    draft('flagged.test', { id: 'c1', kind: 'comment' });
+    const first = (await call('POST', `${BASE}/queue`, { draftId: 'd1', at: future(2) })).json().data;
+    expect(reminders()).toEqual([{ source_type: 'linkedin_queue', source_id: first.id, created_at: first.scheduledAt }]);
+    await call('POST', `${BASE}/queue`, { draftId: 'c1', at: future(4) });
+    expect(reminders()).toHaveLength(1);
+
+    const moved = (await call('PATCH', `${BASE}/queue/${first.id}`, { at: future(3) })).json().data;
+    expect(reminders()).toEqual([{ source_type: 'linkedin_queue', source_id: first.id, created_at: moved.scheduledAt }]);
+
+    const second = (await call('POST', `${BASE}/queue`, { draftId: 'd2', at: future(5) })).json().data;
+    expect(reminders()).toHaveLength(2);
+    expect((await call('POST', '/api/v1/candidate/automation/pause', { days: 365 })).statusCode).toBe(200);
+    expect(reminders()).toEqual([]);
+    // На паузе перенос не ставит напоминание заново.
+    await call('PATCH', `${BASE}/queue/${second.id}`, { at: future(6) });
+    expect(reminders()).toEqual([]);
+    expect((await call('DELETE', '/api/v1/candidate/automation/pause', undefined)).statusCode).toBe(200);
+    expect(reminders().map((row) => (row as { source_id: string }).source_id).sort()).toEqual([first.id, second.id].sort());
+
+    await call('POST', `${BASE}/queue/${first.id}/published`, {});
+    await call('DELETE', `${BASE}/queue/${second.id}`, undefined);
+    expect(reminders()).toEqual([]);
+    expect(reminders('other.test')).toEqual([]);
+  });
+
   it('страницы: limit не больше 20, сортировка по времени', async () => {
     const { h, call, draft } = await setup();
     for (const [i, id] of ['a', 'b', 'c'].entries()) {

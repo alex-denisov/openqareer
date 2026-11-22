@@ -131,6 +131,13 @@ export class LinkedinQueueRepository {
     return nextFreeSlot({ rhythm, now: this.clock(), takenAt: rows.map((r) => r.scheduled_at), postsByWeek, respectWeeklyCap: kind === 'post' });
   }
 
+  /** B695: строки, которые ждут публикации (и наступившие), — им положено напоминание. */
+  waiting(candidateId: string): Array<Pick<LinkedinQueueItem, 'id' | 'kind' | 'scheduledAt'>> {
+    const rows = this.database.prepare("SELECT id, kind, scheduled_at FROM candidate_linkedin_queue WHERE candidate_id = ? AND state = 'queued' ORDER BY scheduled_at LIMIT 500")
+      .all(candidateId) as unknown as Array<{ id: string; kind: 'post' | 'comment'; scheduled_at: string }>;
+    return rows.map((row) => ({ id: row.id, kind: row.kind, scheduledAt: row.scheduled_at }));
+  }
+
   /** Меняет строку только в состоянии `queued` (в том числе наступившее `due`). */
   private updateQueued(candidateId: string, id: string, set: string, ...values: Array<string | null>): ChangeResult {
     const row = this.find(candidateId, id);

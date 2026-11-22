@@ -10,7 +10,8 @@ export type NotificationEventKind =
   | 'footprint_findings'
   | 'import_completed'
   | 'employer_reply'
-  | 'delivery_error';
+  | 'delivery_error'
+  | 'post_reminder';
 
 export interface CandidateNotification {
   readonly id: string;
