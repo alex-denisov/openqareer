@@ -28,7 +28,9 @@ export async function shutdownMaintenance(
   deps.stopTimers();
   deps.log.info({ signal }, 'maintenance-shutdown-started');
   deps.abortCollection();
-  const stopping = deps.stopWorker();
+  // B756: обработчик — сразу; отказ остановки волн, пока ждём стартовый проход, иначе
+  // становился необработанным и давал exit 1. Неудача остановки = волна не уложилась.
+  const stopping = deps.stopWorker().catch(() => ({ waveFinished: false }));
   await deps.startup?.catch(() => undefined);
   const { waveFinished } = await stopping;
   if (!waveFinished) {
