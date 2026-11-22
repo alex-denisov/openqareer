@@ -9,6 +9,7 @@ import {
   readlinkSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,6 +55,9 @@ case "$1" in
     if [[ "$prop" == NRestarts && -f "$STATE/restarting-$unit" ]]; then
       n="$(cat "$STATE/nrestarts-$unit" 2>/dev/null || echo 0)"; echo "$n"; echo $((n + 1)) > "$STATE/nrestarts-$unit"
     elif [[ "$prop" == MainPID ]]; then echo 4242
+    elif [[ "$prop" == ExecStart ]]; then
+      if [[ -f "$STATE/execstart-$unit" ]]; then cat "$STATE/execstart-$unit"
+      else echo "{ path=node ; argv[]=node $RELEASE_ROOT/current/main.mjs }"; fi
     else echo 0; fi ;;
   cat) exit 0 ;;
   is-active) [[ -f "$STATE/active/$3" ]] ;;
@@ -91,7 +95,14 @@ function makeHost(): Host {
   const root = join(base, 'srv');
   const state = join(base, 'state');
   const bin = join(base, 'bin');
-  for (const dir of [root, join(root, 'releases'), join(root, 'incoming'), state, join(state, 'active'), bin]) {
+  for (const dir of [
+    root,
+    join(root, 'releases'),
+    join(root, 'incoming'),
+    state,
+    join(state, 'active'),
+    bin,
+  ]) {
     mkdirSync(dir, { recursive: true });
   }
   for (const [name, body] of Object.entries(STUBS)) {
@@ -122,16 +133,55 @@ function makeHost(): Host {
   };
 }
 
-function addRelease(host: Host, sha: string): void {
+interface Fingerprints {
+  maintenance?: string;
+  mechanics?: string;
+}
+
+function writeFingerprints(dir: string, fingerprints: Fingerprints = {}): void {
+  if (fingerprints.maintenance) {
+    writeFileSync(join(dir, 'maintenance.fingerprint'), `${fingerprints.maintenance}\n`);
+  }
+  if (fingerprints.mechanics) {
+    writeFileSync(join(dir, 'vacancy-mechanics.fingerprint'), `${fingerprints.mechanics}\n`);
+  }
+}
+
+function addRelease(host: Host, sha: string, fingerprints?: Fingerprints): void {
   const dir = join(host.root, 'releases', sha);
   mkdirSync(dir, { recursive: true });
-  for (const file of ['index.html', 'server.mjs', 'maintenance.mjs']) writeFileSync(join(dir, file), '');
+  for (const file of ['index.html', 'server.mjs', 'maintenance.mjs'])
+    writeFileSync(join(dir, file), '');
   writeFileSync(join(dir, 'health'), `${sha}\n`);
+  writeFingerprints(dir, fingerprints);
+}
+
+const MAINTENANCE = 'openqareer-maintenance.service';
+const MECHANICS = 'openqareer-vacancy-mechanics.service';
+
+/** B759: workers already run from their own links on `sha`, units installed after bootstrap. */
+function workersOnLinks(host: Host, sha: string): void {
+  for (const [unit, linkName, file] of [
+    [MAINTENANCE, 'maintenance', 'maintenance.mjs'],
+    [MECHANICS, 'mechanics', 'vacancy-mechanics-worker.mjs'],
+  ] as const) {
+    symlinkSync(`releases/${sha}`, join(host.root, linkName));
+    writeFileSync(
+      join(host.state, `execstart-${unit}`),
+      `{ path=node ; argv[]=node ${host.root}/${linkName}/${file} }\n`,
+    );
+    writeFileSync(join(host.state, 'active', unit), '');
+  }
 }
 
 /** Host as it serves today: one instance live on `port`, Caddy pointed at it. */
-function serving(host: Host, sha: string, port: '3210' | '3211', options: { legacy?: boolean } = {}): void {
-  addRelease(host, sha);
+function serving(
+  host: Host,
+  sha: string,
+  port: '3210' | '3211',
+  options: { legacy?: boolean; fingerprints?: Fingerprints } = {},
+): void {
+  addRelease(host, sha, options.fingerprints);
   symlinkSync(`releases/${sha}`, join(host.root, 'current'));
   if (options.legacy) {
     writeFileSync(join(host.state, 'active', 'openqareer-static.service'), '');
@@ -149,13 +199,20 @@ function run(host: Host, script: string, args: string[] = []) {
 }
 
 const read = (path: string): string => (existsSync(path) ? readFileSync(path, 'utf8') : '');
-const isActive = (host: Host, unit: string): boolean => existsSync(join(host.state, 'active', unit));
+const isActive = (host: Host, unit: string): boolean =>
+  existsSync(join(host.state, 'active', unit));
 const link = (host: Host, name: string): string => readlinkSync(join(host.root, name));
 
-function stageArchive(host: Host, sha: string, options: { noReserve?: boolean } = {}): string {
+function stageArchive(
+  host: Host,
+  sha: string,
+  options: { noReserve?: boolean; fingerprints?: Fingerprints } = {},
+): string {
   const src = mkdtempSync(join(tmpdir(), 'oq-zdd-src-'));
-  for (const file of ['index.html', 'server.mjs', 'maintenance.mjs']) writeFileSync(join(src, file), '');
+  for (const file of ['index.html', 'server.mjs', 'maintenance.mjs'])
+    writeFileSync(join(src, file), '');
   if (options.noReserve) writeFileSync(join(src, 'no-warm-reserve'), '');
+  writeFingerprints(src, options.fingerprints);
   writeFileSync(join(src, 'health'), `${sha}\n`);
   const archive = join(host.root, 'incoming', `${sha}.tar.gz`);
   execFileSync('tar', ['-czf', archive, '-C', src, '.']);
@@ -178,7 +235,9 @@ describe('openqareer-rollback: возврат без простоя (B705)', () 
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('mode=instant');
     expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
-    expect(read(join(host.state, 'units.log'))).not.toContain('restart openqareer-static@3210.service');
+    expect(read(join(host.state, 'units.log'))).not.toContain(
+      'restart openqareer-static@3210.service',
+    );
     expect(link(host, 'current')).toBe(`releases/${SHA_A}`);
     expect(link(host, 'previous')).toBe(`releases/${SHA_B}`);
     expect(isActive(host, 'openqareer-static@3211.service')).toBe(false);
@@ -197,8 +256,12 @@ describe('openqareer-rollback: возврат без простоя (B705)', () 
     expect(link(host, 'slots/3210')).toBe(`../releases/${SHA_A}`);
     const units = read(join(host.state, 'units.log'));
     // Новый поднят и Caddy перезагружен раньше, чем остановлен прежний.
-    expect(units.indexOf('restart openqareer-static@3210.service')).toBeLessThan(units.indexOf('reload caddy'));
-    expect(units.indexOf('reload caddy')).toBeLessThan(units.indexOf('stop openqareer-static@3211.service'));
+    expect(units.indexOf('restart openqareer-static@3210.service')).toBeLessThan(
+      units.indexOf('reload caddy'),
+    );
+    expect(units.indexOf('reload caddy')).toBeLessThan(
+      units.indexOf('stop openqareer-static@3211.service'),
+    );
     expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
     expect(isActive(host, 'openqareer-static@3210.service')).toBe(true);
   });
@@ -372,7 +435,12 @@ describe('bootstrap.sh: sudoers покрывает каждый вызов sudo 
         .split('\n')
         .map((line) => line.replace('openqareer-deploy ALL=(root) NOPASSWD: ', '')),
     );
-    const scripts = ['openqareer-slots.sh', 'openqareer-activate', 'openqareer-rollback', 'openqareer-reserve-watch']
+    const scripts = [
+      'openqareer-slots.sh',
+      'openqareer-activate',
+      'openqareer-rollback',
+      'openqareer-reserve-watch',
+    ]
       .map((file) => readFileSync(join(DEPLOY, file), 'utf8'))
       .join('\n');
     for (const port of ['3210', '3211']) {
@@ -409,7 +477,9 @@ describe.runIf(isLinux)('openqareer-activate: выкат без простоя (
     expect(isActive(host, 'openqareer-static.service')).toBe(false);
     expect(isActive(host, 'openqareer-static@3211.service')).toBe(true);
     const units = read(join(host.state, 'units.log'));
-    expect(units.indexOf('reload caddy')).toBeLessThan(units.indexOf('disable openqareer-static.service'));
+    expect(units.indexOf('reload caddy')).toBeLessThan(
+      units.indexOf('disable openqareer-static.service'),
+    );
   });
 
   it('следующий выкат чередует порт и оставляет прежний экземпляр тёплым резервом (B705-2)', () => {
@@ -427,7 +497,9 @@ describe.runIf(isLinux)('openqareer-activate: выкат без простоя (
     expect(snippet).toContain('lb_policy first');
     expect(isActive(host, 'openqareer-static@3210.service')).toBe(true);
     expect(isActive(host, 'openqareer-static@3211.service')).toBe(true);
-    expect(read(join(host.state, 'units.log'))).toContain('restart openqareer-reserve@3210.service');
+    expect(read(join(host.state, 'units.log'))).toContain(
+      'restart openqareer-reserve@3210.service',
+    );
   });
 
   it('маркер no-warm-reserve в релизе — резерва нет, прежний гасится после переключения', () => {
@@ -442,7 +514,9 @@ describe.runIf(isLinux)('openqareer-activate: выкат без простоя (
     expect(read(host.snippet)).toBe('to 127.0.0.1:3210\n');
     expect(isActive(host, 'openqareer-static@3211.service')).toBe(false);
     const units = read(join(host.state, 'units.log'));
-    expect(units.indexOf('reload caddy')).toBeLessThan(units.indexOf('stop openqareer-static@3211.service'));
+    expect(units.indexOf('reload caddy')).toBeLessThan(
+      units.indexOf('stop openqareer-static@3211.service'),
+    );
     expect(units).not.toContain('openqareer-reserve@');
   });
 
@@ -474,5 +548,127 @@ describe.runIf(isLinux)('openqareer-activate: выкат без простоя (
     expect(read(host.snippet)).toBe('to 127.0.0.1:3211\n');
     expect(link(host, 'current')).toBe(`releases/${SHA_B}`);
     expect(isActive(host, 'openqareer-static@3210.service')).toBe(false);
+  });
+});
+
+describe.runIf(isLinux)(
+  'openqareer-activate: обслуживание перезапускается по отпечатку (B759, Linux)',
+  () => {
+    const SAME = { maintenance: '1'.repeat(64), mechanics: '2'.repeat(64) };
+    const restarts = (host: Host): string[] =>
+      read(join(host.state, 'units.log'))
+        .split('\n')
+        .filter((line) => line === `restart ${MAINTENANCE}` || line === `restart ${MECHANICS}`);
+
+    it('отпечатки те же — обслуживание и воркер не перезапускаются, ссылки на прежнем релизе', () => {
+      const host = makeHost();
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      workersOnLinks(host, SHA_B);
+      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME });
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain('maintenance=kept mechanics=kept');
+      expect(restarts(host)).toEqual([]);
+      expect(link(host, 'maintenance')).toBe(`releases/${SHA_B}`);
+      expect(link(host, 'mechanics')).toBe(`releases/${SHA_B}`);
+      expect(link(host, 'current')).toBe(`releases/${SHA_C}`);
+    });
+
+    it('отпечаток обслуживания другой — его ссылка на новом релизе и он перезапущен, воркер нет', () => {
+      const host = makeHost();
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      workersOnLinks(host, SHA_B);
+      const checksum = stageArchive(host, SHA_C, {
+        fingerprints: { ...SAME, maintenance: '3'.repeat(64) },
+      });
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain('maintenance=restarted mechanics=kept');
+      expect(restarts(host)).toEqual([`restart ${MAINTENANCE}`]);
+      expect(link(host, 'maintenance')).toBe(`releases/${SHA_C}`);
+      expect(link(host, 'mechanics')).toBe(`releases/${SHA_B}`);
+    });
+
+    it('юнит ещё смотрит на current (до bootstrap) — перезапуск всегда, как раньше', () => {
+      const host = makeHost();
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME });
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain('maintenance=restarted mechanics=restarted');
+      expect(restarts(host)).toEqual([`restart ${MAINTENANCE}`, `restart ${MECHANICS}`]);
+    });
+
+    it('в релизе нет отпечатка — перезапуск: без него совпадение не доказано', () => {
+      const host = makeHost();
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      workersOnLinks(host, SHA_B);
+      const checksum = stageArchive(host, SHA_C);
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.stdout).toContain('maintenance=restarted mechanics=restarted');
+    });
+
+    it('обслуживание не активно — перезапускается, хотя отпечаток тот же', () => {
+      const host = makeHost();
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      workersOnLinks(host, SHA_B);
+      rmSync(join(host.state, 'active', MAINTENANCE));
+      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME });
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.stdout).toContain('maintenance=restarted mechanics=kept');
+    });
+
+    it('чистка релизов не удаляет релиз, с которого работает обслуживание', () => {
+      const host = makeHost();
+      const oldest = '0'.repeat(40);
+      addRelease(host, oldest, SAME);
+      utimesSync(join(host.root, 'releases', oldest), 1, 1);
+      for (const sha of ['1', '2', '3', '4', '5'].map((digit) => digit.repeat(40))) {
+        addRelease(host, sha, SAME);
+      }
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      workersOnLinks(host, oldest);
+      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME });
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.stderr).toBe('');
+      expect(existsSync(join(host.root, 'releases', oldest))).toBe(true);
+      expect(link(host, 'maintenance')).toBe(`releases/${oldest}`);
+    });
+  },
+);
+
+describe('bootstrap.sh и юниты обслуживания (B759)', () => {
+  it('юниты запускают код со своих ссылок, а не с current', () => {
+    expect(read(join(DEPLOY, 'openqareer-maintenance.service'))).toContain(
+      'ExecStart=/opt/openqareer/node-v24.14.1-linux-x64/bin/node /srv/openqareer/maintenance/maintenance.mjs',
+    );
+    expect(read(join(DEPLOY, 'openqareer-vacancy-mechanics.service'))).toContain(
+      '/srv/openqareer/mechanics/vacancy-mechanics-worker.mjs',
+    );
+  });
+
+  it('bootstrap создаёт недостающие ссылки до перезапуска юнитов в обоих режимах', () => {
+    const bootstrap = read(join(DEPLOY, 'bootstrap.sh'));
+    const unitsOnly = /^install_units_only\(\) \{[\s\S]*?^\}/m.exec(bootstrap)?.[0] ?? '';
+    expect(unitsOnly.indexOf('ensure_worker_links')).toBeGreaterThan(-1);
+    expect(unitsOnly.indexOf('ensure_worker_links')).toBeLessThan(
+      unitsOnly.indexOf('systemctl restart'),
+    );
+    const tail = bootstrap.slice(bootstrap.lastIndexOf('ensure_worker_links'));
+    expect(tail.indexOf('systemctl restart openqareer-maintenance.service')).toBeGreaterThan(0);
+    const ensure = /^ensure_worker_links\(\) \{[\s\S]*?^\}/m.exec(bootstrap)?.[0] ?? '';
+    expect(ensure).toContain('if [[ ! -L "$RELEASE_ROOT/$link_name" ]]');
   });
 });

@@ -11,6 +11,7 @@ import {
   longDate,
   plural,
   quarterLabel,
+  quarterLine,
   riskTag,
   staleFlag,
 } from './goalsModel';
@@ -183,5 +184,17 @@ describe('архив целей: ⓘ «Почему в архиве»', () => {
     expect(archiveNote({ ...archive, archivedAt: '' }, '2026-12-30')).toBe(
       'Убрана в архив. Причина: банк меняет платформу сборки.',
     );
+  });
+});
+
+describe('B742: вклад кварталов годовой цели', () => {
+  it('строка по порядку кварталов с единицей; пусто — null', () => {
+    const targets = [
+      { quarter: 2, value: 88 },
+      { quarter: 1, value: 85 },
+    ] as const;
+    expect(quarterLine(targets, '%')).toBe('Вклад кварталов: I — 85 %, II — 88 %');
+    expect(quarterLine([{ quarter: 4, value: 2 }], 'шт.')).toBe('Вклад кварталов: IV — 2 шт.');
+    expect(quarterLine(null, '%')).toBeNull();
   });
 });

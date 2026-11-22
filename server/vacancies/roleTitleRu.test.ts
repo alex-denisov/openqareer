@@ -41,4 +41,8 @@ describe('B748: русские названия ролей, придуманны
     });
     expect(roleTitleRu('Head of Quantum Ops')).toBe('Head of Quantum Ops');
   });
+
+  it('Head of IT Operations — эксплуатация, а не инфраструктура (B748, 22.11)', () => {
+    expect(roleTitleRu('Head of IT Operations')).toBe('Руководитель ИТ-эксплуатации');
+  });
 });

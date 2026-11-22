@@ -1,5 +1,5 @@
 import type { CareerDiaryHorizon } from './careerDiary';
-import type { CareerDiaryGoalSetter } from './careerDiaryCards';
+import type { CareerDiaryGoalSetter, CareerDiaryQuarterTarget } from './careerDiaryCards';
 
 /**
  * B686: разбор KPI из текста, таблицы или фото слайда в черновик целей дневника B640.
@@ -34,6 +34,8 @@ export interface CareerDiaryKpiRow {
   readonly setBy: CareerDiaryGoalSetter | null;
   /** Фрагмент источника, из которого взята строка. */
   readonly quote: string;
+  /** B742: вклад кварталов годовой строки; нет в источнике или прежний черновик — null. */
+  readonly quarterTargets?: readonly CareerDiaryQuarterTarget[] | null;
 }
 
 export interface CareerDiaryKpiImport {
@@ -67,6 +69,7 @@ export interface CareerDiaryKpiAcceptRow {
   readonly horizon: CareerDiaryHorizon;
   readonly weight: number | null;
   readonly setBy: CareerDiaryGoalSetter;
+  readonly quarterTargets?: readonly CareerDiaryQuarterTarget[] | null;
 }
 
 export interface CareerDiaryKpiAcceptInput {

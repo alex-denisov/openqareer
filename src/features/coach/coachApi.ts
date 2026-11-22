@@ -67,6 +67,8 @@ export type {
 export interface AuthUserFeatures {
   /** Новый кабинет B640 вместо прежнего. */
   cabinetB640: boolean;
+  /** B642: запись и расшифровка разговоров включены на сервере. */
+  interviewRecording?: boolean;
 }
 
 export interface AuthUser {
@@ -839,8 +841,13 @@ export async function reviewMemories(
  * строятся, страница подбора вырезает ради байтового бюджета (INC-029), и в
  * браузере считать было не из чего. Ответ — до трёх ролей, сотни байт.
  */
-export async function getRoleHypotheses(signal?: AbortSignal): Promise<ProposedRole[]> {
-  const response = await apiFetch('/api/v1/candidate/role-hypotheses', { signal });
+export async function getRoleHypotheses(
+  signal?: AbortSignal,
+  /** Пояс кандидата: граница «за 30 дней» в числе роли — от его полуночи (B726). */
+  timeZone?: string,
+): Promise<ProposedRole[]> {
+  const query = timeZone ? `?${new URLSearchParams({ tz: timeZone })}` : '';
+  const response = await apiFetch(`/api/v1/candidate/role-hypotheses${query}`, { signal });
   if (!response.ok) {
     await throwApiError(response);
   }

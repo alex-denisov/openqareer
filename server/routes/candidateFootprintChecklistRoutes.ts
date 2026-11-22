@@ -17,6 +17,7 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { toPublicFootprint } from './footprintPublicView';
 
 const findingIdSchema = z.string().regex(/^[a-f0-9]{24}$/u);
 const markSchema = z
@@ -97,7 +98,7 @@ async function handleMarkFinding(
     context.finding.id,
     { checklistMark: parsed.data.mark },
   );
-  return { data: { audit }, meta: { requestId: request.id } };
+  return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
 }
 
 async function handleAddToProfile(
@@ -139,7 +140,7 @@ async function handleAddToProfile(
     finding.id,
     { checklistMark: 'added_to_profile', profileFactId: memoryId },
   );
-  return { data: { audit }, meta: { requestId: request.id } };
+  return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
 }
 
 async function handleMetadataCheck(

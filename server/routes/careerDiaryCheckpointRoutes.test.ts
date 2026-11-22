@@ -165,7 +165,7 @@ describe('B687: итоги 90 дней', () => {
     goal(candidateStore, candidate, 'Инциденты', [14, 10]);
     const old = goal(candidateStore, candidate, 'Старая цель', [14, 3]);
     const details = new SqliteDiaryDetailsRepository({ databasePath, encryptionKey: baseConfig.dataEncryptionKey });
-    details.saveGoalDetail(candidate, old, { setBy: 'self', agreedOn: null, weight: null, archive: { archivedAt: '2026-12-20T10:00:00.000Z', reason: 'Отменена' } });
+    details.saveGoalDetail(candidate, old, { setBy: 'self', agreedOn: null, weight: null, archive: { archivedAt: '2026-12-20T10:00:00.000Z', reason: 'Отменена' }, quarterTargets: null });
     details.close();
 
     const response = await call(app, 'GET', at(id, 'results-90'), flagged);
