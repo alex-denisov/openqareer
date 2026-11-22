@@ -68,7 +68,7 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
       .toEqual(['headline', 'about', 'experience', 'education', 'courses', 'skills', 'languages']);
     expect(sectionOf(body, 'headline')).toEqual({
       id: 'headline', current: 'Data engineer',
-      offer: { key: 'headline', variants: ['Инженер данных | SQL | Python'], doneAt: null },
+      offer: { key: 'headline', variants: ['Инженер данных · SQL, Python'], doneAt: null },
     });
     expect(sectionOf(body, 'skills').current).toBe('SQL · Python');
     // B645: без переписчика факты не становятся предложением «О себе» и «Опыта» как есть.

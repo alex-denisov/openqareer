@@ -1,4 +1,5 @@
 import {
+  isConsultantReplyAction,
   CONSULTANT_REPLY_MAX_ACTIONS,
   CONSULTANT_REPLY_MAX_LINKS,
   type ConsultantReplyAction,
@@ -44,17 +45,22 @@ function evidenceRefs(result: CoachTurnResult): string[] {
 
 /**
  * B688: действия и ссылки под ответом консультанта из уже проверенного результата хода.
- * Промпт и модель не меняются: шаги берутся из `actionProposals`, ссылки — из их
- * доказательств, и только на несекретные записи этого кандидата.
+ * Шаги берутся из `actionProposals`, а без них — из `nextSection` консультанта (B745);
+ * ссылки — из доказательств, и только на несекретные записи этого кандидата.
  */
 export function replyExtrasOf(
   result: CoachTurnResult,
   memory: readonly ReplyMemory[],
 ): Omit<ConsultantReplyExtras, 'messageId'> {
   const own = new Set(memory.filter((item) => !item.sensitive).map((item) => item.id));
-  const actions = unique(
+  const proposed = unique(
     result.actionProposals.flatMap((proposal) => ACTION_OF_KIND[proposal.kind] ?? []),
   ).slice(0, CONSULTANT_REPLY_MAX_ACTIONS);
+  // B745: в диалоге стратег не зовётся; раздел совета называет сам консультант.
+  const actions =
+    proposed.length > 0 || !isConsultantReplyAction(result.nextSection)
+      ? proposed
+      : [result.nextSection];
   const memoryIds = unique(
     evidenceRefs(result).flatMap((ref) => {
       const id = MEMORY_REF.exec(ref)?.[1];
