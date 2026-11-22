@@ -232,8 +232,10 @@ pub fn recording_permissions(state: State<'_, RecordingState>) -> Permissions {
 pub async fn recording_request_permissions(
     webview: tauri::Webview,
     state: State<'_, RecordingState>,
+    mode: Option<RecordingMode>,
 ) -> Result<Permissions, String> {
     require_app_page(&webview)?;
+    let screen = asks_screen(mode.unwrap_or_default());
     #[cfg(target_os = "macos")]
     {
         use crate::recording_macos as mac;
@@ -241,11 +243,20 @@ pub async fn recording_request_permissions(
             tauri::async_runtime::spawn_blocking(mac::request_microphone)
                 .await
                 .map_err(|e| e.to_string())?;
-            mac::request_screen();
-            state.screen_asked.store(true, Ordering::SeqCst);
+            if screen {
+                mac::request_screen();
+                state.screen_asked.store(true, Ordering::SeqCst);
+            }
         }
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = screen;
     Ok(current_permissions(&state))
+}
+
+/// Диктовка (`mode: 'mic'`) спрашивает только микрофон: окна «Запись экрана» нет.
+fn asks_screen(mode: RecordingMode) -> bool {
+    matches!(mode, RecordingMode::Meeting)
 }
 
 fn recordings_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -454,6 +465,17 @@ mod tests {
         serde_json::from_str(&format!(
             r#"{{"resourceId":"i-1","uploadUrl":"https://openqareer.com/api/v1/candidate/recordings/r-1/segments","headers":{{}}{extra}}}"#
         ))
+    }
+
+    #[test]
+    fn dictation_asks_only_the_microphone() {
+        assert!(!asks_screen(RecordingMode::Mic));
+        assert!(asks_screen(RecordingMode::Meeting));
+        assert!(asks_screen(
+            Option::<RecordingMode>::None.unwrap_or_default()
+        ));
+        let mode: Option<RecordingMode> = serde_json::from_str(r#""mic""#).unwrap();
+        assert_eq!(mode, Some(RecordingMode::Mic));
     }
 
     #[test]

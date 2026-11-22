@@ -11,6 +11,7 @@ import { searchRemotiveVacancies } from '../connectors/remotiveVacancySearch';
 import { HhCrawlCoordinator } from './hhCrawlCoordinator';
 import { createHhCrawlSettings, type SqliteHhCrawlSettings } from './hhCrawlSettings';
 import { buildHhPageFetcher, type HhFetchEvent } from './hhSearchTransport';
+import type { HhSearchTransport } from './hhSearchFetcher';
 import { HhTextRateController } from './hhTextRate';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { createHttpLinkProbe } from './linkLivenessProbe';
@@ -53,6 +54,8 @@ export interface ComposeVacancyEngineOptions {
   readonly onPoolWrite?: (event: PoolWriteEvent) => void;
   /** Каждая прямая выборка hh.ru: время до заголовков, тело, задержка цикла (B756). */
   readonly onHhFetch?: (event: HhFetchEvent) => void;
+  /** Прямая выборка hh.ru в своём потоке (B756): строка и замеры приходят сообщением. */
+  readonly hhDirect?: HhSearchTransport;
   /** Остановка процесса (B759): обход hh сохраняет курсор по прочитанному и выходит. */
   readonly signal?: AbortSignal;
   /** Ожидание между транзакциями записи кластеров: только у фонового процесса. */
@@ -139,7 +142,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
   // глубокого прохода переживает выкат (B214).
   const hhCrawlSettings = createHhCrawlSettings({ databasePath: options.databasePath });
-  const hhPageFetcher = buildHhPageFetcher(process.env, options.onHhFetch);
+  const hhPageFetcher = buildHhPageFetcher(process.env, options.onHhFetch, options.hhDirect);
   const hhCrawlCoordinator = new HhCrawlCoordinator(hhCrawlSettings, {
     fetchPage: hhPageFetcher,
     sleep: (ms) => abortableSleep(ms, options.signal),
