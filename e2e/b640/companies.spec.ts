@@ -106,6 +106,7 @@ const PEOPLE = [
     roleTitle: 'руководитель группы платежей',
     evidence: 'общее место работы в вашем резюме: «Сфера Платежи», 2018–2021',
     nextStep: 'write_known_contact',
+    message: { kind: 'known_contact', target: { contactId: 'c-roman' } },
   }),
   person('p2', 2, {
     name: 'Наталья Седова',
@@ -311,6 +312,35 @@ test.describe('B655/B677: «Компании и люди» нового каби
     await expect(page.locator('.co-wantline')).toContainText('В списке «Хочу»');
     await page.locator('.co-wantline .row-act').click();
     await expect(page.locator('.co-wantline')).toHaveCount(0);
+  });
+
+  test('«Написать» в шапке открывает черновик знакомому в его строке (B698)', async ({ page }) => {
+    await openList(page);
+    await page.route('**/api/v1/candidate/b640/contact-messages', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            id: 'm1',
+            kind: 'known_contact',
+            text: 'Роман, привет!',
+            recipient: { name: 'Роман Ефимов', linkedinUrl: null },
+            createdAt: '2026-11-12T12:00:00.000Z',
+          },
+        },
+      }),
+    );
+    await page.locator('a.co-nm', { hasText: 'Ладога Банк' }).click();
+    const mobile = (page.viewportSize()?.width ?? 1440) < 768;
+    const scope = page.locator(mobile ? '.co-head .act-dock' : '.co-head .co-head-acts');
+    await scope.getByRole('button', { name: /Роман/u }).click();
+    const row = page.locator('.co-person').first();
+    await expect(row.locator('textarea')).toHaveValue('Роман, привет!');
+    await expect(row.getByRole('button', { name: 'Написать знакомому' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await row.getByRole('button', { name: 'Написать знакомому' }).click();
+    await expect(row.locator('textarea')).toHaveCount(0);
   });
 
   test('релокация в городе без компаний — v10g и путь к удалённой работе', async ({ page }) => {

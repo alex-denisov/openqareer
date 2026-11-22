@@ -92,9 +92,9 @@ export async function getMatchedVacancyPage(
   offset = 0,
   signal?: AbortSignal,
   filters?: VacanciesScreenState,
+  part?: 'rows',
 ): Promise<MatchedVacancyPage> {
-  const zone = offset === 0 ? candidateTimeZone() : undefined;
-  const query = matchedVacancyQuery(offset, filters) + (zone ? `&tz=${encodeURIComponent(zone)}` : '');
+  const query = matchedPageQuery(offset, filters, part);
   const response = await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal });
   if (!response.ok) {
     await throwApiError(response);
@@ -108,7 +108,8 @@ export async function getMatchedVacancyPage(
       pageOffsets?: unknown;
       campaign?: CampaignMetaView;
       candidateLevel?: string | null;
-      initialFilters?: VacanciesScreenState; sort?: VacancySort;
+      initialFilters?: VacanciesScreenState;
+      sort?: VacancySort;
     };
   };
   if (!Array.isArray(envelope.data)) {
@@ -138,6 +139,37 @@ export async function getMatchedVacancyPage(
     ...(envelope.meta?.initialFilters ? { initialFilters: envelope.meta.initialFilters } : {}),
     ...(isVacancySort(envelope.meta?.sort) ? { sort: envelope.meta.sort } : {}),
   };
+}
+
+/**
+ * B725: фасеты фильтров подборки — отдельным запросом рядом со страницей 0 (`part=rows`).
+ * Прод 20.11: в них было 68 из 87 КБ первой страницы, и первая страница шла последней.
+ */
+export async function getMatchedVacancyFacets(
+  signal?: AbortSignal,
+  filters?: VacanciesScreenState,
+): Promise<MatchedVacancyFacets | undefined> {
+  const query = matchedPageQuery(0, filters, 'facets');
+  const response = await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal });
+  if (!response.ok) {
+    await throwApiError(response);
+  }
+  const envelope = (await response.json()) as { meta?: { facets?: MatchedVacancyFacets } };
+  return envelope.meta?.facets;
+}
+
+/** Страница 0 и фасеты несут пояс кандидата: от него считаются числа «Даты» (B729). */
+function matchedPageQuery(
+  offset: number,
+  filters: VacanciesScreenState | undefined,
+  part: 'rows' | 'facets' | undefined,
+): string {
+  const zone = offset === 0 ? candidateTimeZone() : undefined;
+  return (
+    matchedVacancyQuery(offset, filters) +
+    (zone ? `&tz=${encodeURIComponent(zone)}` : '') +
+    (part ? `&part=${part}` : '')
+  );
 }
 
 /** B729: числа «Даты» первой страницы считаются от начала дня кандидата. */

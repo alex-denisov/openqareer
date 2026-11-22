@@ -36,7 +36,7 @@ import {
 } from './apiClient';
 export { CoachApiError } from './apiClient';
 export type { MatchedVacancyPage } from './matchedVacancyApi';
-export { getMatchedVacancyPage, getMatchedVacancies } from './matchedVacancyApi';
+export { getMatchedVacancyFacets, getMatchedVacancyPage, getMatchedVacancies } from './matchedVacancyApi';
 export {
   getCandidate,
   getCandidateMessagePage,
