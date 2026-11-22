@@ -258,7 +258,7 @@
       "function": "it-ops",
       "family": "it-ops.leadership",
       "titleEn": "Head of IT Operations",
-      "titleRu": "Руководитель ИТ-инфраструктуры",
+      "titleRu": "Руководитель ИТ-эксплуатации",
       "levels": [
         "head"
       ],
@@ -270,6 +270,7 @@
           "Director of IT Operations"
         ],
         "ru": [
+          "Руководитель ИТ-эксплуатации",
           "Руководитель ИТ-инфраструктуры",
           "Начальник отдела эксплуатации"
         ]

@@ -1,4 +1,5 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
+import { ROLE_NAMING_PROMPT_VERSION } from '../domain/roleNaming';
 import type { RoleTitleTranslator } from '../providers/roleTitleRuRetry';
 import { roleTitleRu } from '../vacancies/roleTitleRu';
 import type { RouteDeps } from './deps';
@@ -14,6 +15,32 @@ export interface RoleTitleRuBackfillDeps {
 }
 
 const CYRILLIC = /[А-Яа-яЁё]/u;
+
+/**
+ * Версия, которой проверены переводы кампании: та же, что у промпта называния, — правка
+ * перевода (v7: Operations — эксплуатация, а не инфраструктура) поднимает её, и записанное
+ * прошлой версией пересчитывается один раз.
+ */
+export const ROLE_TITLES_RU_VERSION = ROLE_NAMING_PROMPT_VERSION;
+
+function allTitles(campaign: Campaign): string[] {
+  return [...campaign.roles, ...(campaign.careerRoles ?? []).map((role) => role.title)];
+}
+
+const stale = (campaign: Campaign): boolean => campaign.titlesRuVersion !== ROLE_TITLES_RU_VERSION;
+
+/** Пересчёт: все английские названия вне онтологии, уже переведённые тоже. */
+function recheckable(campaign: Campaign): string[] {
+  return [
+    ...new Set(
+      allTitles(campaign).filter((title) => !CYRILLIC.test(title) && roleTitleRu(title) === title),
+    ),
+  ];
+}
+
+function toAsk(campaign: Campaign): string[] {
+  return stale(campaign) ? recheckable(campaign) : untranslated(campaign);
+}
 
 /** Свои проверенные переводы кандидата: роли «Карьеры» и уже переведённые роли поиска. */
 function ownTitles(campaign: Campaign): Record<string, string> {
@@ -31,7 +58,7 @@ function ownTitles(campaign: Campaign): Record<string, string> {
 function untranslated(campaign: Campaign): string[] {
   const own = ownTitles(campaign);
   const tried = campaign.roleTitlesRu ?? {};
-  const titles = [...campaign.roles, ...(campaign.careerRoles ?? []).map((role) => role.title)];
+  const titles = allTitles(campaign);
   return [
     ...new Set(
       titles.filter(
@@ -47,19 +74,25 @@ function withTranslations(
   translated: Readonly<Record<string, string>>,
 ): Campaign {
   const career = new Set((campaign.careerRoles ?? []).map((role) => role.title));
+  const wanted = new Set(asked);
+  // Новый перевод заменяет записанный; отвергнутый проверкой оставляет прежний.
   const careerRoles = campaign.careerRoles?.map((role) => {
-    const titleRu = translated[role.title];
-    return titleRu && !role.titleRu ? { ...role, titleRu } : role;
+    const titleRu = wanted.has(role.title) ? translated[role.title] : undefined;
+    return titleRu && titleRu !== role.titleRu ? { ...role, titleRu } : role;
   });
   // Роль поиска хранит перевод в кампании; отвергнутое помечается английским,
   // чтобы его не спрашивали снова. Роль «Карьеры» хранит перевод у себя.
+  const careerRu = new Map((careerRoles ?? []).map((role) => [role.title, role.titleRu]));
   const marks = asked.flatMap((title) =>
-    career.has(title) && translated[title] ? [] : [[title, translated[title] ?? title] as const],
+    career.has(title) && careerRu.get(title)
+      ? []
+      : [[title, translated[title] ?? campaign.roleTitlesRu?.[title] ?? title] as const],
   );
   return {
     ...campaign,
     ...(careerRoles ? { careerRoles } : {}),
     roleTitlesRu: { ...campaign.roleTitlesRu, ...Object.fromEntries(marks) },
+    titlesRuVersion: ROLE_TITLES_RU_VERSION,
   };
 }
 
@@ -74,20 +107,30 @@ export async function backfillRoleTitlesRu(
   deps: RoleTitleRuBackfillDeps,
   candidateId: string,
 ): Promise<number> {
-  const campaign = deps.candidateStore.getCandidateWorkspace(candidateId)?.campaign;
+  const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
+  const campaign = workspace?.campaign;
   if (!campaign) return 0;
-  const asked = untranslated(campaign);
-  if (asked.length === 0) return 0;
+  const asked = toAsk(campaign);
+  if (asked.length === 0) {
+    // Пересчитывать нечего: версия ставится, чтобы следующий запуск не проверял снова.
+    if (stale(campaign)) {
+      deps.candidateStore.saveCandidateWorkspace(candidateId, {
+        ...workspace,
+        campaign: { ...campaign, titlesRuVersion: ROLE_TITLES_RU_VERSION },
+      });
+    }
+    return 0;
+  }
   const translated = await deps.translator.translateTitles(asked).catch(() => null);
   if (!translated) return 0;
   // Перевод шёл секунды: пишем поверх свежего чтения, а не того, что было до вызова.
-  const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
-  if (!workspace?.campaign) return 0;
-  const still = untranslated(workspace.campaign).filter((title) => asked.includes(title));
+  const fresh = deps.candidateStore.getCandidateWorkspace(candidateId);
+  if (!fresh?.campaign) return 0;
+  const still = toAsk(fresh.campaign).filter((title) => asked.includes(title));
   if (still.length === 0) return 0;
   deps.candidateStore.saveCandidateWorkspace(candidateId, {
-    ...workspace,
-    campaign: withTranslations(workspace.campaign, still, translated),
+    ...fresh,
+    campaign: withTranslations(fresh.campaign, still, translated),
   });
   return still.length;
 }
