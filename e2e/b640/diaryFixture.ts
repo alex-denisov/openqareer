@@ -10,6 +10,8 @@ export interface DiaryCalls {
   goals: unknown[];
   archived: unknown[];
   kpi: unknown[];
+  /** B743 · 2: ответы кандидата на подсказку задачи: `skip` или `accept` и id подсказки. */
+  suggestion: Array<{ action: string; id: string }>;
 }
 
 function isoDay(offsetDays: number): string {
@@ -214,6 +216,15 @@ async function handle(
     });
   }
   if (path.startsWith('/kpi-imports')) return handleKpi(route, calls, path, method);
+  // B743 · 2: подсказки задачи по умолчанию нет; спек, которому она нужна, ставит свой маршрут.
+  const suggestion = /^\/goal-cards\/[^/]+\/task-suggestion(?:\/([^/]+)\/(skip|accept))?$/u.exec(
+    path,
+  );
+  if (suggestion?.[1]) {
+    calls.suggestion.push({ action: suggestion[2]!, id: suggestion[1] });
+    return route.fulfill({ status: 204 });
+  }
+  if (suggestion) return route.fulfill({ json: { data: null } });
   if (path === '/goal-cards' && method === 'GET')
     return route.fulfill({ json: { data: { items: CARDS, archived: ARCHIVED } } });
   if (path === '/goal-cards' && method === 'POST') {
@@ -288,6 +299,7 @@ export async function mockDiary(page: Page): Promise<DiaryCalls> {
     goals: [],
     archived: [],
     kpi: [],
+    suggestion: [],
   };
   const state = { items: entries() };
   await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls, state));

@@ -64,6 +64,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   career_diary_people: { export: 'careerDiary' },
   career_diary_kpi_imports: { export: 'careerDiary' },
   career_diary_kpi_attempts: { internal: 'время попыток разбора KPI для предела, без содержимого' },
+  career_diary_task_suggestions: { export: 'careerDiary' },
+  career_diary_task_suggestion_attempts: { internal: 'время вызовов модели для подсказок задач, без содержимого' },
   // Трекер откликов (B738 · 1).
   applications: { export: 'tracker' },
   application_contacts: { export: 'tracker' },
@@ -166,6 +168,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   b640_offer_choices: { gap: GAP_ACCOUNT },
   // B642: только тексты расшифровок (аудио не хранится); сегменты висят на записи.
   interview_recordings: { gap: 'записи интервью и их расшифровки: в выгрузку пока не входят' },
+  interview_interviewers: { gap: 'имя собеседника из разбора интервью: в выгрузку пока не входит' },
   candidate_auto_apply_consents: { gap: GAP_AUTOMATION },
   candidate_auto_apply_journal: { gap: GAP_AUTOMATION },
   candidate_auto_apply_queue: { gap: GAP_AUTOMATION },

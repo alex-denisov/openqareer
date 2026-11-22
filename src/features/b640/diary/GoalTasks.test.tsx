@@ -15,6 +15,19 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../adaptation/adaptationApi', () => api);
 
+const suggestionApi = vi.hoisted(() => ({
+  getTaskSuggestion: vi.fn(),
+  acceptTaskSuggestion: vi.fn(),
+  skipTaskSuggestion: vi.fn(),
+}));
+vi.mock('./taskSuggestionApi', () => suggestionApi);
+
+const SUGGESTION = {
+  id: 's1',
+  text: 'Описание второй вакансии в повестку 14 января',
+  dueDate: '2027-01-12',
+};
+
 const task = (id: string, goalId: string | null, extra: Record<string, unknown> = {}) => ({
   id,
   title: `Задача ${id}`,
@@ -103,6 +116,9 @@ beforeEach(() => {
   api.getOverview.mockResolvedValue({ primaryWorkplace: { id: 'w1' } });
   api.getWorkplace.mockResolvedValue(workplace());
   api.getAdaptation.mockResolvedValue(viewOf(plan.tasks));
+  suggestionApi.getTaskSuggestion.mockResolvedValue(null);
+  suggestionApi.acceptTaskSuggestion.mockResolvedValue(undefined);
+  suggestionApi.skipTaskSuggestion.mockResolvedValue(undefined);
 });
 afterEach(() => {
   view?.unmount();
@@ -185,5 +201,91 @@ describe('B743: d02a «Задачи»', () => {
     await settle();
     await settle();
     expect(page.querySelectorAll('.gt-row')).toHaveLength(2);
+  });
+
+  describe('подсказка модели — последняя строка списка', () => {
+    beforeEach(() => suggestionApi.getTaskSuggestion.mockResolvedValue(SUGGESTION));
+
+    it('строка с текстом и двумя кнопками после задач', async () => {
+      const page = await open();
+      const rows = [...page.querySelectorAll('.gt-tasks > li')];
+      expect(rows).toHaveLength(3);
+      const last = rows.at(-1)!;
+      expect(last.className).toBe('gt-row gt-sugg');
+      expect(last.querySelector('.gt-sugg-t')?.textContent).toBe(SUGGESTION.text);
+      expect(last.querySelector('button.btn.is-sm')?.textContent).toBe('Добавить');
+      expect(last.querySelector('button.row-act')?.textContent).toBe('Пропустить');
+      expect(suggestionApi.getTaskSuggestion).toHaveBeenCalledWith('g1');
+    });
+
+    it('«Добавить»: задача в плане с этим сроком и привязкой к цели, затем «принято» серверу', async () => {
+      const page = await open();
+      api.savePlan.mockImplementation(async (_id: string, next: typeof plan) =>
+        workplace(next.tasks),
+      );
+      api.patchAdaptation.mockImplementation(
+        async (_id: string, body: { tasks: Record<string, unknown> }) => {
+          const [id] = Object.keys(body.tasks);
+          const added = { ...task(id!, 'g1'), title: SUGGESTION.text, dueDate: SUGGESTION.dueDate };
+          return viewOf([...plan.tasks, added]);
+        },
+      );
+      click(page.querySelector('.gt-sugg button.btn'));
+      await settle();
+      const saved = api.savePlan.mock.calls[0]![1] as typeof plan;
+      const created = saved.tasks.at(-1)!;
+      expect(created).toMatchObject({ title: SUGGESTION.text, dueDate: SUGGESTION.dueDate });
+      expect(api.patchAdaptation).toHaveBeenCalledWith('w1', {
+        tasks: { [created.id]: { goalId: 'g1' } },
+      });
+      expect(suggestionApi.acceptTaskSuggestion).toHaveBeenCalledWith('g1', 's1');
+      expect(suggestionApi.skipTaskSuggestion).not.toHaveBeenCalled();
+      expect(page.querySelector('.gt-sugg')).toBeNull();
+      expect([...page.querySelectorAll('.gt-row label')].map((item) => item.textContent)).toContain(
+        SUGGESTION.text,
+      );
+    });
+
+    it('«Добавить» не сохранилось: строка остаётся, серверу «принято» не уходит', async () => {
+      const page = await open();
+      api.savePlan.mockRejectedValue(new Error('down'));
+      click(page.querySelector('.gt-sugg button.btn'));
+      await settle();
+      expect(page.querySelector('.gt-sugg')).not.toBeNull();
+      expect(page.querySelector('.gt-sugg')?.textContent).toContain('Задача не добавилась');
+      expect(suggestionApi.acceptTaskSuggestion).not.toHaveBeenCalled();
+    });
+
+    it('«Пропустить»: серверу «пропущено», строка исчезает, задач не прибавилось', async () => {
+      const page = await open();
+      click(page.querySelector('.gt-sugg button.row-act'));
+      await settle();
+      expect(suggestionApi.skipTaskSuggestion).toHaveBeenCalledWith('g1', 's1');
+      expect(page.querySelector('.gt-sugg')).toBeNull();
+      expect(page.querySelectorAll('.gt-row')).toHaveLength(2);
+      expect(api.savePlan).not.toHaveBeenCalled();
+    });
+  });
+
+  it('подсказки нет — строки нет', async () => {
+    const page = await open();
+    expect(page.querySelector('.gt-sugg')).toBeNull();
+    expect(suggestionApi.getTaskSuggestion).toHaveBeenCalledTimes(1);
+  });
+
+  it('подсказка не загрузилась — строки и ошибки нет', async () => {
+    suggestionApi.getTaskSuggestion.mockRejectedValue(new Error('down'));
+    const page = await open();
+    expect(page.querySelector('.gt-sugg')).toBeNull();
+    expect(page.querySelector('[role="status"]')).toBeNull();
+    expect(page.querySelectorAll('.gt-row')).toHaveLength(2);
+  });
+
+  it('места работы нет — подсказку не запрашиваем', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    suggestionApi.getTaskSuggestion.mockResolvedValue(SUGGESTION);
+    const page = await open();
+    expect(page.querySelector('.gt-sugg')).toBeNull();
+    expect(suggestionApi.getTaskSuggestion).not.toHaveBeenCalled();
   });
 });

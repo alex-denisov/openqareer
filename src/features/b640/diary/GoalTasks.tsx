@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CareerDiaryAdaptationView } from '../../../../shared/careerDiaryCards';
 import {
   setCareerDiaryAdaptationTaskCompleted,
@@ -16,6 +16,7 @@ import { Icon } from '../kit/Icon';
 import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath } from '../routes';
 import { useShell } from '../shell/ShellContext';
+import { GoalTaskSuggestion, useGoalTaskSuggestion } from './GoalTaskSuggestion';
 import { goalTasks, taskWhen, withGoalTask, type NewGoalTask } from './goalTasksModel';
 
 interface Plan {
@@ -61,9 +62,11 @@ interface TaskRowsProps {
   readonly plan: Plan;
   readonly goalId: string;
   readonly onChanged: (plan: Plan) => void;
+  /** Подсказка модели: последняя строка списка. */
+  readonly suggestion: ReactNode;
 }
 
-function TaskRows({ plan, goalId, onChanged }: TaskRowsProps) {
+function TaskRows({ plan, goalId, onChanged, suggestion }: TaskRowsProps) {
   // Отметка видна сразу; не сохранилась — возвращается прежняя и строка ошибки.
   const [pending, setPending] = useState<{ id: string; completed: boolean } | null>(null);
   const [failed, setFailed] = useState(false);
@@ -85,7 +88,7 @@ function TaskRows({ plan, goalId, onChanged }: TaskRowsProps) {
       setPending(null);
     }
   }
-  if (tasks.length === 0) return <p className="vl-empty">Задач по цели нет.</p>;
+  if (tasks.length === 0 && !suggestion) return <p className="vl-empty">Задач по цели нет.</p>;
   return (
     <>
       <ul className="gt-tasks">
@@ -102,6 +105,7 @@ function TaskRows({ plan, goalId, onChanged }: TaskRowsProps) {
             <span className="gt-when num">{taskWhen(task)}</span>
           </li>
         ))}
+        {suggestion}
       </ul>
       {failed ? <StatusLine state="err" text="Отметка не сохранилась, повторите" /> : null}
     </>
@@ -143,6 +147,14 @@ function AddButton({ onClick }: { readonly onClick: () => void }) {
   );
 }
 
+/** Задача в план места работы и привязка к цели: один путь для «+ Задача» и подсказки. */
+async function addGoalTask(current: Plan, goalId: string, input: NewGoalTask): Promise<Plan> {
+  const { plan, taskId } = withGoalTask(current.workplace, input, new Date().toISOString());
+  const workplace = await savePlan(current.workplace.id, plan);
+  const view = await patchAdaptation(workplace.id, { tasks: { [taskId]: { goalId } } });
+  return { workplace, view };
+}
+
 /** d02a «Задачи»: задачи плана адаптации по этой цели, отметка и «+ Задача». */
 export function GoalTasks({ goalId }: { readonly goalId: string }) {
   const { navigate } = useShell();
@@ -150,15 +162,12 @@ export function GoalTasks({ goalId }: { readonly goalId: string }) {
   const [adding, setAdding] = useState(false);
   const startAdding = useCallback(() => setAdding(true), []);
   useOpenOnReturn(loaded.state === 'ready', startAdding);
+  const { suggestion, hide } = useGoalTaskSuggestion(goalId, loaded.state === 'ready');
   if (loaded.state === 'loading') return null;
   const ready = loaded.state === 'ready' ? loaded : null;
-  async function add(input: NewGoalTask) {
-    if (!ready) return;
-    const { plan, taskId } = withGoalTask(ready.workplace, input, new Date().toISOString());
-    const workplace = await savePlan(ready.workplace.id, plan);
-    const view = await patchAdaptation(workplace.id, { tasks: { [taskId]: { goalId } } });
-    setLoaded({ state: 'ready', workplace, view });
-  }
+  const add = async (input: NewGoalTask) => {
+    if (ready) setLoaded({ state: 'ready', ...(await addGoalTask(ready, goalId, input)) });
+  };
   // Места работы нет: задачам негде жить — «+ Задача» ведёт в форму места работы.
   const toWorkplace = () => navigate(`${buildNodePath('d01')}?goal=${encodeURIComponent(goalId)}`);
   return (
@@ -171,6 +180,16 @@ export function GoalTasks({ goalId }: { readonly goalId: string }) {
           plan={ready}
           goalId={goalId}
           onChanged={(plan) => setLoaded({ state: 'ready', ...plan })}
+          suggestion={
+            suggestion ? (
+              <GoalTaskSuggestion
+                goalId={goalId}
+                suggestion={suggestion}
+                onAdd={add}
+                onDone={hide}
+              />
+            ) : null
+          }
         />
       ) : null}
       {loaded.state === 'none' ? <p className="vl-empty">Задач по цели нет.</p> : null}

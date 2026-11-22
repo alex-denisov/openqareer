@@ -10,6 +10,7 @@ import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { toPublicFootprint } from './footprintPublicView';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -117,7 +118,8 @@ describe('GET /candidate/footprint/risks', () => {
     }
     const old = await get(app, '/api/v1/candidate/footprint', 'token-plain');
     expect(old.statusCode).toBe(200);
-    expect(old.json().data.audit.findings).toEqual(audit.findings);
+    // B740: прежний маршрут отдаёт те же находки, но шагами, без инструментов и квитанций.
+    expect(old.json().data.audit.findings).toEqual(toPublicFootprint(audit.findings));
   });
 
   it('пока проверки не было — честное «не проверяли», после пустой проверки — «Ничего рискового»', async () => {

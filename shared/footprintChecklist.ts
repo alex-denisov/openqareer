@@ -3,6 +3,7 @@
  * counted from the stored audit and the candidate's own marks — never assumed.
  */
 import type { CandidateFootprintAudit, CandidateFootprintFinding } from './candidateFootprint';
+import type { FootprintStepStatus } from './footprintSteps';
 
 export type FootprintChecklistItemId =
   'review' | 'leaks' | 'metadata' | 'old_accounts' | 'artifacts';
@@ -81,8 +82,10 @@ function leaksItem(audit: CandidateFootprintAudit): FootprintChecklistItem {
   const leaks = audit.findings.filter(
     (finding) => finding.kind === 'breach' && finding.review !== 'not_self',
   );
-  const hibpChecked = audit.adapterStatuses.some(
-    (status) => status.adapterId === 'hibp' && status.state === 'checked',
+  // B740: клиент получает состояния с кодом шага, а не с инструментом.
+  const steps = audit.adapterStatuses as unknown as readonly FootprintStepStatus[];
+  const hibpChecked = steps.some(
+    (status) => status.adapterId === 'leaks' && status.state === 'checked',
   );
   if (!leaks.length && !hibpChecked) return notDone('leaks', 'Утечки не проверялись');
   const pending = leaks.filter((finding) => finding.checklistMark !== 'password_changed');

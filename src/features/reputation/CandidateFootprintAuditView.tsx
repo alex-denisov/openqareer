@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   CandidateFootprintAudit,
   CandidateFootprintConsentState,
-  FootprintAdapterId,
   FootprintReview,
 } from '../../../shared/candidateFootprint';
+import type { FootprintStep } from '../../../shared/footprintSteps';
 import type { PublicFootprintQueryPlanItem } from '../../../server/osint/candidateFootprintQueryPlan';
 import { CAPABILITY_CONSENT_CURRENT_VERSION } from '../legal/capabilityConsents';
 import {
@@ -47,9 +47,9 @@ function useFootprintOperationGeneration() {
 function useCandidateFootprintPlanState(candidateId: string) {
   const [plan, setPlan] = useState<readonly PublicFootprintQueryPlanItem[]>([]);
   const [unidentifiedEmployers, setUnidentifiedEmployers] = useState<readonly string[]>([]);
-  const [sourceAvailability, setSourceAvailability] = useState<Record<FootprintAdapterId, boolean>>({
-    sherlock: true, maigret: true, hibp: false, wayback: true, exa: false, youtube: false,
-  });
+  const [sourceAvailability, setSourceAvailability] = useState<
+    Partial<Record<FootprintStep, boolean>>
+  >({ nickname: true, nickname_extended: true, leaks: false, archive: true, web: false });
   const [consent, setConsent] = useState<CandidateFootprintConsentState>(EMPTY_CONSENT);
   const [audit, setAudit] = useState<CandidateFootprintAudit | null>(null);
   const [loading, setLoading] = useState(true);

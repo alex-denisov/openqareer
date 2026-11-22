@@ -142,7 +142,7 @@ describe('B685: карта людей', () => {
 
     const planned = await call(app, 'PUT', `${people(id)}/${tests.id}/meeting`, flagged, { date: '2027-01-08' });
     expect(planned.statusCode, planned.body).toBe(200);
-    expect(planned.json().data.nextMeeting).toEqual({ personId: tests.id, date: '2027-01-08' });
+    expect(planned.json().data.nextMeeting).toEqual({ personId: tests.id, date: '2027-01-08', topic: null });
 
     const plan = await call(app, 'GET', `${DIARY}/workplaces/${id}/adaptation`, flagged);
     const step = plan.json().data.steps.find((item: { id: string }) => item.id === 'people_map');
@@ -153,6 +153,11 @@ describe('B685: карта людей', () => {
 
     const moved = await call(app, 'PUT', `${people(id)}/${tests.id}/meeting`, flagged, { date: '2026-12-20' });
     expect(moved.json().data.nextMeeting.date).toBe('2026-12-20');
+    // B742: тема встречи хранится вместе с ней и приходит в ближайшей встрече.
+    const topical = await call(app, 'PUT', `${people(id)}/${tests.id}/meeting`, flagged, { date: '2026-12-20', topic: ' Цели года ' });
+    expect(topical.json().data.nextMeeting).toEqual({ personId: tests.id, date: '2026-12-20', topic: 'Цели года' });
+    const tooLong = await call(app, 'PUT', `${people(id)}/${tests.id}/meeting`, flagged, { date: '2026-12-20', topic: 'т'.repeat(121) });
+    expect(tooLong.statusCode).toBe(400);
     const again = await call(app, 'GET', `${DIARY}/workplaces/${id}/adaptation`, flagged);
     const all = again.json().data.stages.flatMap((stage: { tasks: unknown[] }) => stage.tasks);
     expect(all).toHaveLength(1);

@@ -14,6 +14,12 @@ export interface CareerDiaryGoalArchive {
   readonly reason: string;
 }
 
+/** B742: вклад квартала в годовую цель — значение, к которому цель приходит к концу квартала. */
+export interface CareerDiaryQuarterTarget {
+  readonly quarter: 1 | 2 | 3 | 4;
+  readonly value: number;
+}
+
 export interface CareerDiaryGoalDetails {
   readonly setBy: CareerDiaryGoalSetter;
   /** День, когда о цели договорились. */
@@ -21,6 +27,8 @@ export interface CareerDiaryGoalDetails {
   /** Вес цели в оценке, 0–100. */
   readonly weight: number | null;
   readonly archive: CareerDiaryGoalArchive | null;
+  /** Вклад кварталов годовой цели по порядку; нет — null (так читаются прежние цели). */
+  readonly quarterTargets: readonly CareerDiaryQuarterTarget[] | null;
 }
 
 /** Цель одним ответом: сама цель, её поля из макета и показатели внутри. */
@@ -51,6 +59,7 @@ export interface CareerDiaryGoalCardInput {
   readonly setBy: CareerDiaryGoalSetter;
   readonly agreedOn?: string | null;
   readonly weight?: number | null;
+  readonly quarterTargets?: readonly CareerDiaryQuarterTarget[] | null;
   readonly indicators: readonly CareerDiaryIndicatorInput[];
 }
 
@@ -176,4 +185,5 @@ export const DEFAULT_GOAL_DETAILS: CareerDiaryGoalDetails = {
   agreedOn: null,
   weight: null,
   archive: null,
+  quarterTargets: null,
 };
