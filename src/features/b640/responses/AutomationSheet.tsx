@@ -8,6 +8,7 @@ import {
 } from '../../automation/automationApi';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, Dialog, Icon, Link, SegControl, StatusLine } from '../kit';
+import { DateInput } from '../kit/DateInput';
 import { buildNodePath } from '../routes';
 import {
   DAY_LIMIT_MAX,
@@ -194,12 +195,11 @@ function SheetFields({ id, draft, setDraft, roles, canSendAtOnce }: FieldsProps)
         <label className="au3-l" htmlFor={`${id}-pause`}>
           Пауза до <span className="au3-opt">необязательно</span>
         </label>
-        <input
+        <DateInput
           className="au3-in"
           id={`${id}-pause`}
-          type="date"
           value={draft.pauseUntil}
-          onChange={(event) => setDraft({ ...draft, pauseUntil: event.currentTarget.value })}
+          onChange={(pauseUntil) => setDraft({ ...draft, pauseUntil })}
         />
       </div>
     </>

@@ -53,7 +53,7 @@ test.describe('B662: «Дневник» — цели и показатели', (
     await form.getByRole('button', { name: 'Сохранить цель' }).click();
     await expect(form.locator('.va-err').first()).toHaveText('Назовите цель');
     await form.getByLabel('Название').fill('Сократить время ревью');
-    await form.getByLabel('Срок').fill('2099-03-31');
+    await form.getByLabel('Срок').fill('31.03.2099');
     await form.getByLabel('Показатель').first().fill('Время до ревью, часов');
     await form.getByLabel('Сейчас').first().fill('18');
     await form.getByLabel('Цель', { exact: true }).first().fill('4');
