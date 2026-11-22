@@ -85,7 +85,7 @@ describe('роль держится на направлении опыта (28.1
     const text = roleNamingInstructions('ru');
     expect(text).toContain('Не называй роль по одному упоминанию технологии или навыка');
     expect(text).toContain('место работы или минимум два факта');
-    expect(ROLE_NAMING_PROMPT_VERSION).toBe(4);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(5);
   });
 });
 
@@ -106,6 +106,19 @@ describe('B748: русское название роли от модели пр�
     expect(checkedTitleRu('Co-Founder', 'С'.repeat(81))).toBeNull();
     expect(checkedTitleRu('Co-Founder', '')).toBeNull();
     expect(checkedTitleRu('Co-Founder', undefined)).toBeNull();
+  });
+
+  it('«ИИ» в переводе — та же аббревиатура, что AI', () => {
+    expect(checkedTitleRu('AI Consultant', 'Консультант по ИИ')).toBe('Консультант по ИИ');
+    expect(checkedTitleRu('AI Solutions Architect', 'Архитектор ИИ-решений')).toBe(
+      'Архитектор ИИ-решений',
+    );
+  });
+
+  it('инструкция показывает перевод роли с AI: аббревиатура остаётся, остальное по-русски', () => {
+    const text = roleNamingInstructions('en');
+    expect(text).toContain('AI Consultant');
+    expect(text).toContain('AI-консультант');
   });
 
   it('русское название роли уже по-русски — перевод не нужен', () => {
@@ -137,6 +150,6 @@ describe('B748: русское название роли от модели пр�
     expect(item.required).toContain('titleRu');
     expect(item.properties.titleRu).toEqual({ type: 'string' });
     expect(roleNamingInstructions('en')).toContain('titleRu');
-    expect(ROLE_NAMING_PROMPT_VERSION).toBe(4);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(5);
   });
 });
