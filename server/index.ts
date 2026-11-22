@@ -199,7 +199,20 @@ const linkedinRemoteLogin = new LinkedinRemoteLoginService({
     warn: (fields, message) => app.log.warn(fields, message),
   },
 });
+// SMM-агент владельца (09.11): только на проде, где задан OPENQAREER_SMM_ENABLED=1.
+// B732: обновления своего чата он получает с общего вебхука бота, опроса Bot API нет.
+const smmConfig = process.env.OPENQAREER_SMM_ENABLED === '1' ? readSmmConfig(process.env) : null;
+const smmAssistant = smmConfig
+  ? startSmmAssistant({
+      databasePath: config.databasePath,
+      config: smmConfig,
+      getResumeCandidate: (candidateId) => candidateStore.getResumeCandidate(candidateId),
+      log: (event, detail = {}) =>
+        process.stdout.write(`${JSON.stringify({ level: 30, time: Date.now(), msg: event, ...detail })}\n`),
+    })
+  : null;
 const app = await buildApp({
+  ...(smmAssistant ? { smmTelegram: smmAssistant } : {}),
   config,
   coachProvider,
   bulkLlmRuntime,
@@ -432,17 +445,6 @@ try {
   scheduleCurrencyRatesRefresh(config.databasePath, scheduleLog);
   // Sitemap files written by the maintenance process; the HTTP path reads memory only.
   scheduleCatalogSitemapRefresh(config.databasePath, scheduleLog);
-  // SMM-агент владельца (09.11): только на проде, где задан OPENQAREER_SMM_ENABLED=1, —
-  // иначе настольное приложение с тем же токеном перебивало бы опрос Bot API (409).
-  const smmConfig = process.env.OPENQAREER_SMM_ENABLED === '1' ? readSmmConfig(process.env) : null;
-  if (smmConfig) {
-    startSmmAssistant({
-      databasePath: config.databasePath,
-      config: smmConfig,
-      getResumeCandidate: (candidateId) => candidateStore.getResumeCandidate(candidateId),
-      log: (event, detail = {}) => app.log.info(detail, event),
-    });
-  }
   // Сервер слушает и отвечает на /health мгновенно (<10 мс). Пул читается
   // из базы постранично, пополняет его обслуживатель (B230) — на этом цикле
   // событий ни восстановления, ни сведения, ни опросов нет.
