@@ -106,7 +106,10 @@ export function mergePeople(people: readonly B640CompanyPerson[]): B640CompanyPe
   return [...best.values()].sort((a, b) => a.circle - b.circle);
 }
 
-const CONTACT_CIRCLE: Readonly<Record<B640Contact['link'], 1 | 2 | 3>> = { direct: 1, intro: 2, none: 3 };
+/** Контакт из a02 — человек из списка кандидата, т. е. 1-й круг; 2-й — только путь через общего знакомого. */
+const CONTACT_CIRCLE: Readonly<Record<B640Contact['link'], 1 | 2>> = { direct: 1, intro: 2, none: 1 };
+/** Строка «как связаны» для контакта без пояснения — тот же текст, что у 1-го круга из вакансии. */
+const IMPORTED_CONTACT_EVIDENCE = 'Контакт из импортированного списка LinkedIn';
 
 /**
  * B645 v10b: люди компании из тех же контактов, что в «Контактах» (a02), с тем же сопоставлением
@@ -124,7 +127,7 @@ export function contactPeople(
       circle: CONTACT_CIRCLE[contact.link],
       name: contact.fullName,
       roleTitle: contact.roleTitle || null,
-      evidence: contact.linkNote,
+      evidence: contact.linkNote ?? IMPORTED_CONTACT_EVIDENCE,
       nextStep: contact.link === 'intro' ? 'ask_for_introduction' : 'write_known_contact',
       vacancyId,
       platformMember: false,

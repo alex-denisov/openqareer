@@ -42,7 +42,7 @@ describe('B645 v10b: люди компании — те же контакты, �
     roleTitle: 'Senior Recruiter', link: 'none', linkNote: null, status: { state: 'none', at: null }, inSelection: false, ...over,
   });
 
-  it('у компании без вакансий рекрутер из контактов попадает в людей с черновиком ему самому', () => {
+  it('у компании без вакансий рекрутер из контактов — ваш контакт 1-го круга со строкой «как связаны» и черновиком ему самому', () => {
     const people = contactPeople(
       [
         contact({ id: 'igor', fullName: 'Igor Siusiukov', companyName: 'Autodesk' }),
@@ -54,7 +54,7 @@ describe('B645 v10b: люди компании — те же контакты, �
       null,
     );
     expect(people.map((item) => [item.name, item.circle, item.nextStep, item.evidence])).toEqual([
-      ['Igor Siusiukov', 3, 'write_known_contact', null],
+      ['Igor Siusiukov', 1, 'write_known_contact', 'Контакт из импортированного списка LinkedIn'],
       ['Анна', 1, 'write_known_contact', 'работали вместе в «Сфере»'],
       ['Пётр', 2, 'ask_for_introduction', 'общий знакомый: Иван'],
     ]);

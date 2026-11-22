@@ -14,6 +14,11 @@ describe('writeToLabel', () => {
     expect(writeToLabel(name)).toBe(label);
   });
 
+  it('имя латиницей не склоняем — пишем как есть (B645: «Написать Anton»)', () => {
+    expect(writeToLabel('Anton Zhabolenko')).toBe('Написать Anton');
+    expect(writeToLabel('Igor Siusiukov')).toBe('Написать Igor');
+  });
+
   it('имя, которое не склоняем уверенно, — «знакомому»', () => {
     expect(writeToLabel('Любовь Седова')).toBe('Написать знакомому');
     expect(writeToLabel('Али')).toBe('Написать знакомому');
