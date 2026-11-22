@@ -21,6 +21,19 @@ export interface AdminSourcePage<T> {
   readonly nextOffset: number | null;
 }
 
+/**
+ * B736: сколько площадок страница освежает из базы. Карточка площадки со здоровьем и
+ * расписанием весит сотни байт, так что в бюджет 12 288 байт их входит заметно меньше
+ * ста: окно всегда накрывает всю страницу.
+ */
+export const ADMIN_SOURCE_WINDOW = 100;
+
+/** Площадки, которые может показать страница с этим смещением. */
+export function adminSourceWindow<T>(sorted: readonly T[], offset: number): readonly T[] {
+  const start = Math.max(0, Math.trunc(Number.isFinite(offset) ? offset : 0));
+  return sorted.slice(start, start + ADMIN_SOURCE_WINDOW);
+}
+
 export function buildAdminSourcePage<T, R = T>(
   all: readonly T[],
   offset: number,
