@@ -129,7 +129,10 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
 
   return {
     // B737: русское название для показа; `title` остаётся ключом выбора и проверки.
-    data: roles.map((role) => ({ ...role, titleRu: roleTitleRu(role.title) })),
+    data: roles.map((role) => ({
+      ...role,
+      titleRu: roleTitleRu(role.title, role.titleRu ? { [role.title]: role.titleRu } : {}),
+    })),
     meta: {
       requestId: request.id,
       poolSize: context.poolSize,

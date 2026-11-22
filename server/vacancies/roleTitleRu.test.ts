@@ -19,3 +19,26 @@ describe('B737: русское название роли поиска', () => {
     });
   });
 });
+
+describe('B748: русские названия ролей, придуманных моделью', () => {
+  it('онтология важнее; без онтологии — проверенный перевод этого кандидата; иначе исходное', () => {
+    const own = {
+      'Head of IT Service Management': 'Руководитель ИТ-сервиса (IT)',
+      COO: 'Директор по операциям (COO)',
+    };
+    expect(roleTitleRu('Head of IT Service Management', own)).toBe('Руководитель ИТ-сервиса (IT)');
+    expect(roleTitleRu('head of it service management ', own)).toBe('Руководитель ИТ-сервиса (IT)');
+    expect(roleTitleRu('COO', own)).toBe('Операционный директор (COO)');
+    expect(roleTitleRu('Co-Founder', own)).toBe('Co-Founder');
+    expect(roleTitlesRu(['Head of IT Service Management', 'Co-Founder'], own)).toEqual({
+      'Head of IT Service Management': 'Руководитель ИТ-сервиса (IT)',
+    });
+  });
+
+  it('перевод одного кандидата не виден другому: общего словаря нет', () => {
+    roleTitlesRu(['Head of Quantum Ops'], {
+      'Head of Quantum Ops': 'Руководитель квантовых операций',
+    });
+    expect(roleTitleRu('Head of Quantum Ops')).toBe('Head of Quantum Ops');
+  });
+});
