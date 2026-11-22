@@ -23,8 +23,10 @@ test.describe('B659: «Подготовка к интервью» (I1)', () => {
     await expect(headline(page)).toHaveText(/^Готов ответ на 1 вопрос из \d+$/u);
     const rows = page.locator('ul.exp-rows > li.row');
     await expect(rows.filter({ hasText: 'Ожидания по зарплате' })).toContainText(
-      'Ответ готов · от 500 000 ₽',
+      'Ответ готов · от 500 000 ₽ на руки, вилка вакансии не указана',
     );
+    await expect(page.getByText('Пробные интервью: осталось 27 из 30')).toBeVisible();
+    await expect(rows.filter({ hasText: 'Запись интервью для разбора' })).toHaveCount(0);
     await expect(rows.locator('.tag.part').first()).toHaveText('нужен ответ');
     await expect(page.getByRole('link', { name: 'Пробное интервью' })).toHaveAttribute(
       'href',
@@ -38,6 +40,18 @@ test.describe('B659: «Подготовка к интервью» (I1)', () => {
     await expect(
       page.getByRole('navigation', { name: 'Шаги' }).getByRole('link', { name: 'Подготовка' }),
     ).toHaveAttribute('aria-current', 'page');
+    await expectGates(page);
+  });
+
+  test('при записи разговоров — строка «Запись интервью для разбора» ведёт к загрузке', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses/r-arka/interview', 'i01', { interviewRecording: true });
+    const row = page.locator('ul.exp-rows > li.row', { hasText: 'Запись интервью для разбора' });
+    await expect(row.getByRole('link', { name: 'Как записать' })).toHaveAttribute(
+      'href',
+      '/app/responses/r-arka/debrief/upload',
+    );
     await expectGates(page);
   });
 
