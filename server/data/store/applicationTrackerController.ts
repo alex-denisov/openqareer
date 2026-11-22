@@ -204,6 +204,17 @@ export class ApplicationTrackerController {
     return patched;
   }
 
+  /** Чужой или несуществующий отклик — та же ошибка, что и у правки: маршрут отвечает 404. */
+  deleteInterview(candidateId: string, applicationId: string, interviewId: string): boolean {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.interviews.delete(applicationId, interviewId);
+  }
+
+  deleteOffer(candidateId: string, applicationId: string): boolean {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.offers.delete(applicationId);
+  }
+
   putOffer(
     candidateId: string,
     applicationId: string,
