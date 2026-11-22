@@ -10,8 +10,41 @@ export function clock(ms: number): string {
   return hours > 0 ? `${hours}:${rest}` : rest;
 }
 
+const SHORT_RECORDING_MS = 10 * 60_000;
+
+/** «3 с», «1 мин 20 с», «2 мин»; от 10 минут — «58 минут». */
 export function durationText(ms: number): string {
-  return pluralRu(Math.max(1, Math.round(ms / 60_000)), ['минута', 'минуты', 'минут']);
+  const seconds = Math.max(1, Math.round(ms / 1_000));
+  if (seconds < 60) return `${seconds}\u00a0с`;
+  if (ms < SHORT_RECORDING_MS) {
+    const rest = seconds % 60;
+    const minutes = `${Math.floor(seconds / 60)}\u00a0мин`;
+    return rest ? `${minutes} ${rest}\u00a0с` : minutes;
+  }
+  return pluralRu(Math.round(ms / 60_000), ['минута', 'минуты', 'минут']);
+}
+
+/** Строка под заголовком I4: «Арка Холдинг · интервью 12 ноября · с техническим директором». */
+export function debriefLeadSub(input: {
+  readonly company: string | undefined;
+  readonly scheduledAt: string | null;
+  readonly format: string | null;
+  readonly interviewerName: string | null;
+  readonly timeZone?: string;
+}): string {
+  const day =
+    input.scheduledAt && !Number.isNaN(Date.parse(input.scheduledAt))
+      ? new Intl.DateTimeFormat('ru-RU', {
+          day: 'numeric',
+          month: 'long',
+          timeZone: input.timeZone,
+        }).format(new Date(input.scheduledAt))
+      : null;
+  const who =
+    input.format?.trim() || (input.interviewerName ? `собеседник: ${input.interviewerName}` : null);
+  return [input.company?.trim() || null, day ? `интервью ${day}` : null, who]
+    .filter((part): part is string => Boolean(part))
+    .join(' · ');
 }
 
 export interface ShareParts {
