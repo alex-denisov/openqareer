@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>openqareer записывает ваш голос на собеседовании, чтобы разобрать его после встречи.</string>
+  <string>openqareer записывает ваш голос: на собеседовании — чтобы разобрать встречу, в ответах — чтобы вы могли диктовать текст.</string>
   <key>NSScreenCaptureUsageDescription</key>
   <string>openqareer записывает звук собеседника на собеседовании, чтобы разобрать его после встречи.</string>
 </dict>

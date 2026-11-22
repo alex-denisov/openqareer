@@ -20,6 +20,8 @@ mod recording;
 mod recording_clock;
 #[cfg(target_os = "macos")]
 mod recording_macos;
+#[cfg(target_os = "macos")]
+mod recording_macos_mic;
 mod recording_upload;
 mod session_token_store;
 mod sidecar_lifecycle;

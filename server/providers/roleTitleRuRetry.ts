@@ -28,7 +28,8 @@ const CYRILLIC = /[А-Яа-яЁё]/u;
 export class TitleRuRetryRoleNamer implements RoleNamer {
   /** Открыт наружу: по нему сборка называет ступени очереди. */
   readonly inner: RoleNamer;
-  private readonly translator: RoleTitleTranslator;
+  /** Открыт наружу: тем же проверенным переводом фоновый проход догоняет старые роли. */
+  readonly translator: RoleTitleTranslator;
   private readonly needsTranslation: (title: string) => boolean;
 
   constructor(options: TitleRuRetryOptions) {

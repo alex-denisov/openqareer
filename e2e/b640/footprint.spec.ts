@@ -119,8 +119,10 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(node(page, 'f03')).toBeVisible();
   });
 
-  test('расхождение с резюме: письмо просит исправить, отметок нет', async ({ page }) => {
-    await openFootprint(
+  test('расхождение с резюме: письмо просит исправить; «Это не проблема» без «Это не я»', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(
       page,
       `/app/profile/footprint/findings/${encodeURIComponent('mismatch:m1')}`,
       'ready',
@@ -128,6 +130,24 @@ test.describe('B652: «Цифровой след»', () => {
     const finding = node(page, 'f03b');
     await expect(finding.locator('.fp-letter')).toContainText('«руководитель группы разработки»');
     await expect(finding.getByRole('button', { name: 'Это не я' })).toHaveCount(0);
+    await finding.getByRole('button', { name: 'Это не проблема' }).click();
+    await expect.poll(() => calls.mismatches).toEqual([{ id: 'mismatch:m1', review: 'hidden' }]);
+  });
+
+  test('B645 p02: «Это не проблема» у расхождения — уходит из сводки, «Отменить» возвращает', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, '/app/profile/footprint', 'ready');
+    const screen = node(page, 'p02');
+    const row = screen.locator('li.fp-find', { hasText: 'Должность на сайте конференции' });
+    await expect(row.getByRole('link', { name: 'Попросить исправить' })).toBeVisible();
+    await row.getByRole('button', { name: 'Это не проблема' }).click();
+    await expect(row).toHaveCount(0);
+    expect(calls.mismatches).toEqual([{ id: 'mismatch:m1', review: 'hidden' }]);
+    await page.getByRole('button', { name: 'Отменить' }).click();
+    await expect(row).toBeVisible();
+    expect(calls.mismatches.at(-1)).toEqual({ id: 'mismatch:m1', review: 'unreviewed' });
+    await expectGates(page);
   });
 
   test('«Проверить снова» с находки: новый поиск и ход виден в «Цифровом следе»', async ({
@@ -160,6 +180,12 @@ test.describe('B652: «Цифровой след»', () => {
     ).toBeVisible();
     expect(calls.rechecks).toEqual([fid(1)]);
     await expectGates(page);
+    // B645 p02: итог проверки — в «Проверках и запросах» сводки.
+    await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
+    const checks = page.locator('section', { has: page.locator('#fp-sum') });
+    await expect(checks.getByRole('heading', { name: 'Проверки и запросы' })).toBeVisible();
+    await expect(checks.locator('dd').first()).toContainText(/ · Удалено: .+$/u);
+    await expect(checks.getByText('Жалоба отправлена')).toHaveCount(0);
   });
 
   test('B382: находка ещё на месте — итог проверки у кнопки, проверить можно снова', async ({
@@ -172,6 +198,12 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(dock.getByText('Ещё на месте · проверено 19.11')).toBeVisible();
     await expect(dock.getByRole('button', { name: 'Проверить находку' })).toBeEnabled();
     await expect(page.getByText(/Удалено · проверено/u)).toHaveCount(0);
+    // B645 p02: запрос не закрыт удалением — строка «Жалоба отправлена» в сводке.
+    await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
+    const checks = page.locator('section', { has: page.locator('#fp-sum') });
+    await expect(checks.locator('dd').first()).toContainText(/ · Ещё на месте: .+$/u);
+    await expect(checks.locator('dt', { hasText: 'Жалоба отправлена' })).toHaveCount(1);
+    await expect(checks.locator('dd').nth(1)).toContainText(/ — сайту 18\.11$/u);
   });
 
   test('F4: рискового нет — честная строка и «Искать со ссылками»', async ({ page }) => {
