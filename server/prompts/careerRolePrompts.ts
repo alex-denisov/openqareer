@@ -2,9 +2,9 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.4-2026-10-26',
-  career_strategist: 'career-strategist-v1.6-2026-10-26',
-  career_expert: 'career-expert-v1.4-2026-10-26',
+  career_consultant: 'career-consultant-v1.5-2026-11-22',
+  career_strategist: 'career-strategist-v1.7-2026-11-22',
+  career_expert: 'career-expert-v1.5-2026-11-22',
 };
 
 const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
@@ -105,6 +105,16 @@ const EXECUTION_BOUNDARY = `
   сервером после policy, consent, idempotency и receipt gates.
 `.trim();
 
+/** B735: без подборки консультант отвечал «вашего списка вакансий я не вижу». */
+const SELECTION_PROMPT = `
+ПОДБОРКА КАНДИДАТА
+- careerContext.selection — подборка кандидата: total вакансий и первые строки его
+  списка в том же порядке (title, company, salary, fitPercent — процент совпадения).
+- Когда кандидат спрашивает, какие вакансии смотреть, опирайся на эти строки и
+  называй их как в списке. Не говори, что списка нет, если selection передан.
+- Не придумывай вакансии, компании, зарплаты и проценты, которых нет в selection.
+`.trim();
+
 const CONSULTANT_SUMMARY_PROMPT = `
 ЗАДАЧА: ВЫЖИМКА ЗАКРЫТОЙ БЕСЕДЫ
 - Сожми только факты, решения и открытые вопросы, которые прямо есть в сообщениях.
@@ -141,5 +151,5 @@ export function careerInstructionsForRole(
       STRUCTURED_STAGE_PROMPT,
     ].join('\n\n');
   }
-  return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], EXECUTION_BOUNDARY].join('\n\n');
+  return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], SELECTION_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
 }
