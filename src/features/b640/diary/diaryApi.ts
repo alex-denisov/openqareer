@@ -113,6 +113,14 @@ export function archiveGoal(goalId: string, reason: string): Promise<CareerDiary
   return read(`${ROOT}/goal-cards/${encodeURIComponent(goalId)}/archive`, json('PUT', { reason }));
 }
 
+/** B742: строка результата достигнутой цели — под местом работы в «Опыте». */
+export function transferGoal(
+  goalId: string,
+  input: { readonly experienceId: string; readonly line: string },
+): Promise<CareerDiaryGoalCard> {
+  return read(`${ROOT}/goal-cards/${encodeURIComponent(goalId)}/transfer`, json('POST', input));
+}
+
 export function restoreGoal(goalId: string): Promise<CareerDiaryGoalCard> {
   return read(`${ROOT}/goal-cards/${encodeURIComponent(goalId)}/archive`, { method: 'DELETE' });
 }
