@@ -1,5 +1,9 @@
 import type { CareerDiaryOverview } from '../../../../shared/careerDiary';
-import type { CareerDiaryAdaptationDetails, CareerDiaryAdaptationView } from '../../../../shared/careerDiaryCards';
+import type {
+  CareerDiaryAdaptationDetails,
+  CareerDiaryAdaptationView,
+  CareerDiaryStoredTaskDetails,
+} from '../../../../shared/careerDiaryCards';
 import type { CareerDiaryPeopleMap, CareerDiaryPersonInput } from '../../../../shared/careerDiaryPeople';
 import { apiFetch, readData } from '../../coach/apiClient';
 import type {
@@ -60,7 +64,10 @@ export function getAdaptation(id: string): Promise<CareerDiaryAdaptationView> {
   return read(`${place(id)}/adaptation`);
 }
 
-export type AdaptationPatch = Partial<Omit<CareerDiaryAdaptationDetails, 'tasks'>>;
+/** Детали задач правятся по одной; `null` вместо задачи убирает её детали. */
+export type AdaptationPatch = Partial<Omit<CareerDiaryAdaptationDetails, 'tasks'>> & {
+  readonly tasks?: Readonly<Record<string, CareerDiaryStoredTaskDetails | null>>;
+};
 
 export function patchAdaptation(id: string, patch: AdaptationPatch): Promise<CareerDiaryAdaptationView> {
   return read(`${place(id)}/adaptation`, send('PATCH', patch));

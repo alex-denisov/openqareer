@@ -62,6 +62,104 @@ test.describe('B662: «Дневник» — цели и показатели', (
     expect(calls.goals).toEqual([expect.objectContaining({ title: 'Сократить время ревью' })]);
   });
 
+  test('B743: d02a «Задачи» — задачи цели из плана, отметка и «+ Задача»', async ({ page }) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    await mockDiary(page);
+    const task = (id: string, title: string, goalId: string | null, dueDate: string) => ({
+      id,
+      title,
+      description: '',
+      stage: 'days_1_30',
+      category: 'delivery',
+      dueDate,
+      completed: false,
+      source: 'candidate',
+    });
+    let tasks = [
+      task('t1', 'Финальное интервью, решение за 2 дня', 'goal-1', '2027-01-14'),
+      task('t2', 'Встреча с командой эксплуатации', null, '2027-01-12'),
+    ];
+    const links: Record<string, string> = { t1: 'goal-1' };
+    const saved: unknown[] = [];
+    const workplace = () => ({
+      id: 'w1',
+      company: 'Вектор Банк',
+      title: 'Руководитель разработки',
+      startDate: '2026-12-15',
+      planning: {
+        adaptationPlan: {
+          id: 'p1',
+          workplaceId: 'w1',
+          startDate: '2026-12-15',
+          createdAt: '2026-12-15T12:00:00.000Z',
+          status: 'active',
+          closedAt: null,
+          tasks,
+        },
+      },
+    });
+    const view = () => ({
+      workplaceId: 'w1',
+      startDate: '2026-12-15',
+      stages: [
+        {
+          stage: 'days_1_30',
+          tasks: tasks.map((item) => ({
+            ...item,
+            step: null,
+            group: null,
+            goalId: links[item.id] ?? null,
+          })),
+        },
+      ],
+    });
+    await page.route(/\/api\/v1\/candidate\/career-diary$/u, (route) =>
+      route.fulfill({ json: { data: { primaryWorkplace: { id: 'w1' }, summary: {} } } }),
+    );
+    await page.route('**/career-diary/workplaces/w1', async (route) => {
+      if (route.request().method() === 'PUT' || route.request().method() === 'PATCH') {
+        const body = route.request().postDataJSON() as {
+          planning?: { adaptationPlan?: { tasks: typeof tasks } };
+        };
+        saved.push(body);
+        if (body.planning?.adaptationPlan) tasks = body.planning.adaptationPlan.tasks;
+      }
+      await route.fulfill({ json: { data: workplace() } });
+    });
+    await page.route('**/career-diary/workplaces/w1/adaptation', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        const body = route.request().postDataJSON() as {
+          tasks: Record<string, { goalId: string }>;
+        };
+        for (const [id, details] of Object.entries(body.tasks)) links[id] = details.goalId;
+      }
+      await route.fulfill({ json: { data: view() } });
+    });
+    await page.goto('/app/diary/goals/goal-1', { waitUntil: 'domcontentloaded' });
+    const card = page.locator('[data-b640-node="d02a"]');
+    const section = card.locator('section[aria-labelledby="ga-k"]');
+    await expect(section.locator('.gt-row label')).toHaveText([
+      'Финальное интервью, решение за 2 дня',
+    ]);
+    await expect(section.locator('.gt-when')).toHaveText(['до 14 янв']);
+    await expectGates(page);
+    await section.getByLabel('Финальное интервью, решение за 2 дня').check();
+    await expect.poll(() => saved.length).toBe(1);
+    await expect(section.getByLabel('Финальное интервью, решение за 2 дня')).toBeChecked();
+
+    await section.getByRole('button', { name: 'Задача' }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Задача').fill('Созвон с отделом найма о воронке');
+    await dialog.getByLabel('Срок').fill('10.01.2027');
+    await dialog.getByRole('button', { name: 'Добавить' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(section.locator('.gt-row label')).toHaveText([
+      'Финальное интервью, решение за 2 дня',
+      'Созвон с отделом найма о воронке',
+    ]);
+    await expectGates(page);
+  });
+
   test('снимки целей: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {
     test.skip(
       !SHOTS || testInfo.project.name !== 'desktop-1440',
