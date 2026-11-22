@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { B640CompanyPeoplePage, B640CompanyPerson, B640PersonMessage } from '../../shared/b640Companies';
+import type { B640Contact } from '../../shared/b640Contacts';
+import { buildB640ContactList } from '../domain/b640Contacts';
 import {
   candidateCompanyKey,
   type ConnectionCirclePath,
@@ -11,6 +13,7 @@ import { readB640PoolRows } from './b640MatchedVacancyRoutes';
 import { findCompanyRow } from './b640CompanyModel';
 import { readB640ListContext, sessionCandidate } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { candidateWorkplaces, contactSources } from './b640ContactRoutes';
 import { buildVacancyCircles, connectionRepository } from './candidateConnectionRoutes';
 import { companyContext } from './candidateCompanyRoutes';
 import type { RouteDeps } from './deps';
@@ -103,6 +106,52 @@ export function mergePeople(people: readonly B640CompanyPerson[]): B640CompanyPe
   return [...best.values()].sort((a, b) => a.circle - b.circle);
 }
 
+const CONTACT_CIRCLE: Readonly<Record<B640Contact['link'], 1 | 2 | 3>> = { direct: 1, intro: 2, none: 3 };
+
+/**
+ * B645 v10b: люди компании из тех же контактов, что в «Контактах» (a02), с тем же сопоставлением
+ * компании по `candidateCompanyKey`. У компании без вакансий в подборке они — единственный источник.
+ */
+export function contactPeople(
+  contacts: readonly B640Contact[],
+  companyKey: string,
+  vacancyId: string | null,
+): B640CompanyPerson[] {
+  return contacts
+    .filter((contact) => contact.companyName && candidateCompanyKey(contact.companyName) === companyKey)
+    .map((contact) => ({
+      id: `contact:${contact.id}`,
+      circle: CONTACT_CIRCLE[contact.link],
+      name: contact.fullName,
+      roleTitle: contact.roleTitle || null,
+      evidence: contact.linkNote,
+      nextStep: contact.link === 'intro' ? 'ask_for_introduction' : 'write_known_contact',
+      vacancyId,
+      platformMember: false,
+      message: {
+        kind: contact.link === 'intro' ? 'ask_introduction' : 'known_contact',
+        target: { contactId: contact.id },
+      },
+    }));
+}
+
+/** Все контакты кандидата одной страницей — тот же разбор, что у списка a02. */
+function candidateContacts(
+  deps: RouteDeps,
+  repository: NonNullable<ReturnType<typeof connectionRepository>>,
+  candidateId: string,
+): readonly B640Contact[] {
+  const { contacts } = contactSources(repository, candidateId);
+  const input = {
+    contacts,
+    candidateWorkplaces: candidateWorkplaces(deps, candidateId),
+    statuses: new Map(),
+    selectionKeys: new Set<string>(),
+  };
+  const query = { offset: 0, limit: contacts.length, search: '', company: [], link: [], status: [], sort: 'name' } as const;
+  return buildB640ContactList(input, query).items;
+}
+
 function companyVacancies(
   pool: readonly MatchedVacancyItem[],
   companyKey: string,
@@ -126,13 +175,16 @@ async function companyPeople(
   const pool = (await readB640PoolRows(deps, request, candidateId, context, {})) ?? [];
   const circlesOf = (item: MatchedVacancyItem) =>
     buildVacancyCircles(deps, repository, candidateId, item, request.log).circles;
-  return mergePeople(
-    companyVacancies(pool, companyKey)
-      .slice(0, PEOPLE_VACANCY_LIMIT)
-      .flatMap((item) =>
-        circlePeople(circlesOf(item), { id: item.cluster.id, title: item.cluster.canonicalTitle }),
-      ),
+  const vacancies = companyVacancies(pool, companyKey).slice(0, PEOPLE_VACANCY_LIMIT);
+  const fromCircles = vacancies.flatMap((item) =>
+    circlePeople(circlesOf(item), { id: item.cluster.id, title: item.cluster.canonicalTitle }),
   );
+  const fromContacts = contactPeople(
+    candidateContacts(deps, repository, candidateId),
+    companyKey,
+    vacancies[0]?.cluster.id ?? null,
+  );
+  return mergePeople([...fromCircles, ...fromContacts]);
 }
 
 async function getPeople(backgroundDeps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

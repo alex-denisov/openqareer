@@ -19,6 +19,7 @@
     }
     .b640 .co-head .act-dock > .btn {
       flex: 0 0 auto;
+      padding-inline: var(--career-space-2);
     }
   }
 }

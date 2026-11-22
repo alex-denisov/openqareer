@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ConnectionCirclePath, ConnectionCircleResult } from '../domain/candidateCompanies';
-import { circlePeople } from './b640CompanyPeople';
+import type { B640Contact } from '../../shared/b640Contacts';
+import { candidateCompanyKey } from '../domain/candidateCompanies';
+import { circlePeople, contactPeople, mergePeople } from './b640CompanyPeople';
 
 const me = { id: 'cand', fullName: 'Кандидат', roleTitle: null, companyName: null, linkedinUrl: null };
 const person = (id: string, fullName: string) => ({ id, fullName, roleTitle: 'Рекрутер', companyName: 'Ромашка', linkedinUrl: null });
@@ -32,5 +34,46 @@ describe('B645 v04: у человека из кругов — кому и о ч�
       { kind: 'ask_introduction', target: { contactId: 'c-via' } },
       { kind: 'recruiter', target: { recruiterId: 'r-1', vacancyId: 'v-1' } },
     ]);
+  });
+});
+
+describe('B645 v10b: люди компании — те же контакты, что в «Контактах» по этой компании', () => {
+  const contact = (over: Partial<B640Contact> & Pick<B640Contact, 'id' | 'fullName' | 'companyName'>): B640Contact => ({
+    roleTitle: 'Senior Recruiter', link: 'none', linkNote: null, status: { state: 'none', at: null }, inSelection: false, ...over,
+  });
+
+  it('у компании без вакансий рекрутер из контактов попадает в людей с черновиком ему самому', () => {
+    const people = contactPeople(
+      [
+        contact({ id: 'igor', fullName: 'Igor Siusiukov', companyName: 'Autodesk' }),
+        contact({ id: 'anna', fullName: 'Анна', companyName: 'AUTODESK ', link: 'direct', linkNote: 'работали вместе в «Сфере»' }),
+        contact({ id: 'oleg', fullName: 'Олег', companyName: 'Ромашка' }),
+        contact({ id: 'pyotr', fullName: 'Пётр', companyName: 'Autodesk', link: 'intro', linkNote: 'общий знакомый: Иван' }),
+      ],
+      candidateCompanyKey('Autodesk'),
+      null,
+    );
+    expect(people.map((item) => [item.name, item.circle, item.nextStep, item.evidence])).toEqual([
+      ['Igor Siusiukov', 3, 'write_known_contact', null],
+      ['Анна', 1, 'write_known_contact', 'работали вместе в «Сфере»'],
+      ['Пётр', 2, 'ask_for_introduction', 'общий знакомый: Иван'],
+    ]);
+    expect(people.map((item) => item.message)).toEqual([
+      { kind: 'known_contact', target: { contactId: 'igor' } },
+      { kind: 'known_contact', target: { contactId: 'anna' } },
+      { kind: 'ask_introduction', target: { contactId: 'pyotr' } },
+    ]);
+    expect(people.every((item) => item.vacancyId === null && !item.platformMember)).toBe(true);
+  });
+
+  it('тот же человек из круга вакансии и из контактов — одна строка, ближний круг', () => {
+    const fromCircle = circlePeople(
+      [circle(1, [path({ id: 'circle-1:contact:igor', circle: 1, recipient: person('igor', 'Igor Siusiukov') })])],
+      { id: 'v-1', title: 'CTO' },
+    );
+    const fromContacts = contactPeople([contact({ id: 'igor', fullName: 'Igor Siusiukov', companyName: 'Ромашка' })], candidateCompanyKey('Ромашка'), 'v-1');
+    const merged = mergePeople([...fromCircle, ...fromContacts]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ circle: 1, vacancyId: 'v-1' });
   });
 });

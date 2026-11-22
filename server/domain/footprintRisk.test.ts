@@ -446,6 +446,17 @@ describe('buildFootprintRiskSummary', () => {
       expect(mixed.toRemove).toBe(mixed.items.filter((item) => item.action?.kind !== 'confirm_owner' && item.level !== 'useful').length);
     });
 
+    it('«стоит убрать» не считает и непроверенные страницы с «Проверить» (B645 p02)', () => {
+      const pages = Array.from({ length: 6 }, (_, index) =>
+        nick({ url: `https://site${index}.test/alexey_denisov` }),
+      );
+      const unsure = finding({ kind: 'mention', review: 'unreviewed', automatedMatch: 'unknown' } as never);
+      const summary = buildFootprintRiskSummary(audit([...pages, unsure]), []);
+      expect(summary.items.map((item) => item.action?.kind)).toContain('check_now');
+      expect(summary.toRemove).toBe(0);
+      expect(summary.headline).toBe('7 находок');
+    });
+
     it('«Это не моё» — находка уходит из сводки', () => {
       const summary = buildFootprintRiskSummary(audit([nick({ review: 'not_self' })]), []);
       expect(summary.items).toEqual([]);
