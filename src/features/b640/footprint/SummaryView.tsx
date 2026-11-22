@@ -108,7 +108,7 @@ function ChecksModule({ data, reload }: ViewProps) {
   );
 }
 
-/** «Отозвать» спрашивает подтверждение на месте: находки удалятся вместе с согласием. */
+/** «Отозвать» спрашивает подтверждение на месте: проверки и находки удалятся вместе с согласием. */
 function ConsentModule({ data, reload }: ViewProps) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -139,7 +139,7 @@ function ConsentModule({ data, reload }: ViewProps) {
           <span className="row-act">Отозвать</span>
         </summary>
         <div className="revoke-box" role="group" aria-label="Отозвать согласие?">
-          <p className="revoke-q">Отозвать согласие? Находки удалятся.</p>
+          <p className="revoke-q">Отозвать согласие? Проверки и находки удалятся.</p>
           {error ? <StatusLine state="err" text="Не удалось отозвать. Повторите." /> : null}
           <div className="actions">
             <Button variant="danger" busy={busy} onClick={() => void revoke()}>Отозвать</Button>

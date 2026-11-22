@@ -198,7 +198,7 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await expect(toggle).toBeChecked({ timeout: 15_000 });
     await toggle.click();
     const dialog = page.getByRole('dialog', { name: 'Отозвать согласие на цифровой след?' });
-    await expect(dialog).toContainText('Сохранённые находки удалятся.');
+    await expect(dialog).toContainText('Сохранённые проверки и находки удалятся.');
     await expectGates(page);
     await dialog.getByRole('button', { name: 'Отмена' }).click();
     await expect(toggle).toBeChecked();

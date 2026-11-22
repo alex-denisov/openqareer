@@ -29,7 +29,7 @@ export const CONSENT_ROWS: readonly ConsentRow[] = [
     // server/routes/capabilityConsentRoutes.ts: при отзыве удаляются проверки следа.
     revokeWarning: {
       title: 'Отозвать согласие на цифровой след?',
-      text: 'Сохранённые находки удалятся.',
+      text: 'Сохранённые проверки и находки удалятся.',
     },
   },
   {
