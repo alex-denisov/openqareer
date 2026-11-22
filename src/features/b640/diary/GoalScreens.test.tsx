@@ -26,6 +26,8 @@ const api = vi.hoisted(() => ({
 vi.mock('./diaryApi', () => api);
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../resume/resumeApi', () => resume);
+const people = vi.hoisted(() => ({ getPeople: vi.fn() }));
+vi.mock('../adaptation/adaptationApi', () => people);
 const toast = vi.hoisted(() => ({ show: vi.fn(), hide: vi.fn() }));
 vi.mock('../kit/Toast', () => ({ useToast: () => toast }));
 
@@ -163,6 +165,28 @@ describe('d02 «Цели и показатели»', () => {
     expect(page.querySelector('#kp-arch .tip-bubble')?.textContent).toMatch(
       /^Убрана в архив \d+ [а-я]+( \d{4})?\. Причина: /u,
     );
+  });
+
+  it('B742: ближайшая встреча с темой и «Подготовить встречу»; без встречи блока нет', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: { id: 'w1' } });
+    const person = { id: 'p1', name: 'Анна', role: 'директор', headcount: 1 };
+    people.getPeople.mockResolvedValue({
+      nextMeeting: { personId: 'p1', date: '2099-01-14', topic: 'цели года с директором' },
+      groups: [{ name: 'Руководитель', headcount: 1, people: [person] }],
+    });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(people.getPeople).toHaveBeenCalledWith('w1');
+    expect(page.querySelector('#kp-meet')?.textContent).toBe(
+      '14 января 2099 — цели года с директором',
+    );
+    const prepare = page.querySelector('#kp-meet + .actions a');
+    expect(prepare?.textContent).toBe('Подготовить встречу');
+    expect(prepare?.getAttribute('href')).toBe('/app/diary/adaptation/manager-meeting');
+
+    view?.unmount();
+    people.getPeople.mockResolvedValue({ nextMeeting: null, groups: [] });
+    const none = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(none.querySelector('#kp-meet')).toBeNull();
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {

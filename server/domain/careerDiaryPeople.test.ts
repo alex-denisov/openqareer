@@ -103,7 +103,7 @@ describe('buildPeopleMap', () => {
     const map = buildPeopleMap('w1', people, tasks);
     expect(map.total).toBe(13);
     expect(map.withoutMeeting).toBe(9);
-    expect(map.nextMeeting).toEqual({ personId: 'tests', date: '2027-01-08' });
+    expect(map.nextMeeting).toEqual({ personId: 'tests', date: '2027-01-08', topic: null });
     expect(map.groups.map((group) => [group.name, group.headcount])).toEqual([
       ['Руководитель', 1],
       ['Команда', 9],

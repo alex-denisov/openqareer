@@ -258,9 +258,10 @@ describe('шаги, встреча и карта людей', () => {
     const dialog = document.querySelector('[role="dialog"]')!;
     typeInto(dialog.querySelector('#mt-person'), 'p2');
     typeInto(dialog.querySelector('#mt-date'), '08.01.2027');
+    typeInto(dialog.querySelector('#mt-topic'), 'Цели года');
     click(button(dialog, 'Назначить'));
     await settle();
-    expect(api.scheduleMeeting).toHaveBeenCalledWith('w1', 'p2', '2027-01-08');
+    expect(api.scheduleMeeting).toHaveBeenCalledWith('w1', 'p2', '2027-01-08', 'Цели года');
     expect(page.querySelector('.lead-sub')?.textContent).toBe('2 человека · 0 без встречи');
   });
 });

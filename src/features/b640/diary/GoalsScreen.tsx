@@ -12,6 +12,7 @@ import { Link } from '../shell/Link';
 import { listGoalCards } from './diaryApi';
 import { useRoleTitle } from './roleTitle';
 import { GoalItem } from './GoalItem';
+import { GoalsMeeting } from './GoalsMeeting';
 import { HORIZONS, archiveNote, goalsLead, quarterLabel } from './goalsModel';
 import { today } from './model';
 import { RetryButton } from './parts';
@@ -211,6 +212,11 @@ export function GoalsScreen({ node }: { readonly node: B640Node }) {
           </>
         ) : null}
       </div>
+      {empty ? null : (
+        <div className="col">
+          <GoalsMeeting />
+        </div>
+      )}
     </div>
   );
 }
