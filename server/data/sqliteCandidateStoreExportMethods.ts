@@ -14,6 +14,8 @@ import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimula
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import { toExportedSourceConnection } from './store/exportedSourceConnection';
+import type { DatabaseSync } from 'node:sqlite';
+import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
 
@@ -27,7 +29,18 @@ interface CandidateExportDependencies {
     SqliteRelocationQuestionnaireRepository,
     'getProfile' | 'getConsent' | 'scenarios'
   >;
-  readonly careerDiaryRepo: Pick<import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository, 'exportInterviewPractices' | 'adaptationApplications'>;
+  readonly careerDiaryRepo: Pick<
+    import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository,
+    | 'exportInterviewPractices'
+    | 'adaptationApplications'
+    | 'listGoals'
+    | 'listMeasurements'
+    | 'listWeeklyReviewsPage'
+    | 'listAchievements'
+    | 'listWorkplaces'
+  >;
+  /** B689: соединение и ключ хранилища для деталей, людей, отметок и KPI дневника. */
+  readonly careerDiaryDatabase: { readonly database: DatabaseSync; readonly encryptionKey: Buffer };
   readonly diaryEntryRepo: Pick<import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository, 'exportAll'>;
   readonly exportConsultantConversations: (
     candidateId: string,
@@ -41,6 +54,8 @@ interface CandidateExportDependencies {
 export function createSqliteCandidateStoreExportMethods(
   dependencies: CandidateExportDependencies,
 ): CandidateExportMethod {
+  const { database, encryptionKey } = dependencies.careerDiaryDatabase;
+  const careerDiary = createCareerDiaryExportSources(database, encryptionKey, dependencies.careerDiaryRepo);
   return {
     exportCandidate(candidateId): CandidateExport {
       const snapshot = dependencies.getSnapshot(candidateId);
@@ -58,6 +73,7 @@ export function createSqliteCandidateStoreExportMethods(
         interviewPractices: dependencies.careerDiaryRepo.exportInterviewPractices(candidateId),
         adaptationApplications: dependencies.careerDiaryRepo.adaptationApplications.exportApplications(candidateId),
         careerDiaryEntries: dependencies.diaryEntryRepo.exportAll(candidateId),
+        careerDiary: exportCareerDiary(careerDiary, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {

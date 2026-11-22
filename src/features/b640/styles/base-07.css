@@ -64,6 +64,8 @@
   .b640 .seg-ctl.sec-seg { display: inline-flex; grid-template-columns: none; }
   .b640 .seg-ctl.sec-seg span { padding-inline: var(--career-space-3); white-space: nowrap; }
   .b640 .sec-sel { inline-size: 15rem; max-inline-size: 100%; min-block-size: var(--career-target-min); padding-inline: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
+  /* n06 (B645, 22.11): WebKit в .app рисовал нативное меню macOS высотой 24 px; своя форма и стрелка из двух градиентов, цвет по теме. */
+  .b640 .sec-sel { appearance: none; -webkit-appearance: none; block-size: var(--career-target-min); min-block-size: var(--career-target-min); padding-inline-end: calc(var(--career-space-3) * 2 + var(--career-space-2)); background-image: linear-gradient(45deg, transparent 50%, var(--career-text-dim) 50%), linear-gradient(135deg, var(--career-text-dim) 50%, transparent 50%); background-position: calc(100% - var(--career-space-3) - var(--career-space-1)) 50%, calc(100% - var(--career-space-3)) 50%; background-size: var(--career-space-1) var(--career-space-1); background-repeat: no-repeat; cursor: pointer; }
   .b640 .sec-sel:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
   @media (max-width: 767px) {
     .b640 .sec-row.is-stack { flex-wrap: wrap; padding-block: var(--career-space-3); }
