@@ -63,8 +63,11 @@ export class SqliteDiaryDetailsRepository {
     this.sealedText = new SealedText(encryptionKey);
     try {
       // Сначала ожидание чужой записи (как у остальных соединений HTTP), потом всё остальное.
-      applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
-      if (this.ownsDatabase) this.database.exec('PRAGMA journal_mode = WAL;');
+      // Чужое соединение (хранилища) живёт со своими настройками ожидания и журнала.
+      if (this.ownsDatabase) {
+        applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
+        this.database.exec('PRAGMA journal_mode = WAL;');
+      }
       this.database.exec(DIARY_DETAILS_SCHEMA);
     } catch (error) {
       this.close();
@@ -85,6 +88,20 @@ export class SqliteDiaryDetailsRepository {
         { ...DEFAULT_GOAL_DETAILS, ...this.open<CareerDiaryGoalDetails>('career_diary_goal_details', candidateId, row) },
       ]),
     );
+  }
+
+  /** B689: сохранённые детали целей и планов адаптации — для выгрузки данных. */
+  exportAll(candidateId: string): {
+    goals: Array<{ goalId: string; details: CareerDiaryGoalDetails }>;
+    adaptation: Array<{ workplaceId: string; details: CareerDiaryAdaptationDetails }>;
+  } {
+    return {
+      goals: [...this.goalDetails(candidateId)].map(([goalId, details]) => ({ goalId, details })),
+      adaptation: this.rows('career_diary_adaptation_details', candidateId).map((row) => ({
+        workplaceId: row.key,
+        details: this.adaptationDetails(candidateId, row.key),
+      })),
+    };
   }
 
   goalDetail(candidateId: string, goalId: string): CareerDiaryGoalDetails {

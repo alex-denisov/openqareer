@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createApplicationContactMethods, type ApplicationContactMethods } from './applicationContacts';
+import { createRecordRemoval } from './applicationRecordRemoval';
+import { queryInterviewSubject } from './interviewSubjectQuery';
 import {
   createApplicationEmployerReadMethods,
   type ApplicationEmployerReadMethods,
@@ -249,53 +251,6 @@ function createApplicationMutationMethods(
   };
 }
 
-function parseInterviewSnapshot(raw: string | null) {
-  if (!raw) return {};
-  try {
-    const snap = JSON.parse(raw) as { title?: string; company?: string };
-    return { vacancyTitle: snap.title, vacancyCompany: snap.company };
-  } catch {
-    return {};
-  }
-}
-
-function queryInterviewSubject(
-  database: DatabaseSync,
-  candidateId: string,
-  interviewId: string,
-) {
-  const row = database
-    .prepare(
-      `SELECT i.id, i.application_id, i.round, i.scheduled_at,
-              a.stage, a.vacancy_snapshot, a.cluster_id
-       FROM application_interviews i
-       JOIN applications a ON a.id = i.application_id
-       WHERE i.id = ? AND a.candidate_id = ?`,
-    )
-    .get(interviewId, candidateId) as
-    | {
-        id: string;
-        application_id: string;
-        round: number;
-        scheduled_at: string | null;
-        stage: string;
-        vacancy_snapshot: string | null;
-        cluster_id: string | null;
-      }
-    | undefined;
-  if (!row) return null;
-  const { vacancyTitle, vacancyCompany } = parseInterviewSnapshot(row.vacancy_snapshot);
-  return {
-    id: row.id,
-    applicationId: row.application_id,
-    round: row.round,
-    scheduledAt: row.scheduled_at,
-    stage: row.stage,
-    vacancyTitle,
-    vacancyCompany,
-  };
-}
-
 function createInterviewApplicationMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
@@ -407,6 +362,8 @@ export function createApplicationTrackerMethods(
     ...createApplicationOperationsMethods(requireCandidate, database),
     ...createApplicationContactMethods(database, sealedText, requireCandidate),
     ...createApplicationEmployerReadMethods(database, requireCandidate),
+    // Optional on `CandidateStore` (`deleteApplicationOffer?`), so the class declares nothing.
+    ...createRecordRemoval(tracker, requireCandidate),
   };
 }
 

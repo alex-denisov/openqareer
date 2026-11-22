@@ -3,7 +3,7 @@ import type { VacancySort } from '../../../shared/vacancySort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { getMatchedVacancyPage, getVacancySources } from '../coach/coachApi';
+import { getMatchedVacancyFacets, getMatchedVacancyPage, getVacancySources } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { collectMatchedPool, withDeadline } from './vacancyRead';
@@ -215,10 +215,11 @@ async function loadMatchedPool(
   // A silent refresh replaces the cached list in one step when the read is
   // done, so the table never shrinks to the first page and grows back (B589).
   let lastPoolSize = 0;
+  readMatchedFacets(setters, isActive, filters);
   try {
     const pool = await collectMatchedPool<MatchedVacancyItem>(
       (offset) =>
-        withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters)).then((page) => {
+        withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters, 'rows')).then((page) => {
           if (offset === 0 && isActive()) {
             if (page.facets) setters.setFacets(page.facets);
             if (page.initialFilters) setters.setInitialFilters(page.initialFilters);
@@ -256,6 +257,22 @@ async function loadMatchedPool(
       if (isActive()) setters.setFailureSourceLabel(label);
     });
   }
+}
+
+/**
+ * B725: фасеты идут своим запросом рядом со страницей 0. Их неудача не роняет список:
+ * фильтры остаются с прежними числами, а строки и счёт выдачи приходят своим чтением.
+ */
+function readMatchedFacets(
+  setters: PoolReaderSetters,
+  isActive: () => boolean,
+  filters?: VacanciesScreenState,
+): void {
+  withDeadline((signal) => getMatchedVacancyFacets(signal, filters))
+    .then((facets) => {
+      if (facets && isActive()) setters.setFacets(facets);
+    })
+    .catch(() => undefined);
 }
 
 async function failureSourceLabel(): Promise<string | undefined> {
