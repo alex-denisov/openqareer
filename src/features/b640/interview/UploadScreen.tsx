@@ -2,11 +2,12 @@ import { useCallback, useId, useState, type ChangeEvent } from 'react';
 import { Button, Icon, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
-import { loadDebrief, saveInterviewerName, type DebriefData } from './data/debriefApi';
+import { loadDebrief, saveInterviewerName, splitVoices, type DebriefData } from './data/debriefApi';
 import { uploadErrorText, uploadInterviewFile } from './data/fileUpload';
 import { durationText } from './model/debriefModel';
 import { RecordSteps, SourceHead } from './RecordSteps';
 import { MeterFill } from './MeterFill';
+import { useVoicesStep, VoicesBlock } from './UploadVoices';
 
 type UploadPhase =
   | { readonly kind: 'idle' }
@@ -17,7 +18,7 @@ type UploadPhase =
 const megabytes = (bytes: number) =>
   `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(bytes / 1_048_576)}\u00a0МБ`;
 
-function useUpload(data: DebriefData) {
+function useUpload(data: DebriefData, onSent: () => void) {
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<UploadPhase>({ kind: 'idle' });
   async function send(next: File) {
@@ -32,6 +33,7 @@ function useUpload(data: DebriefData) {
         (sent, total) => setPhase({ kind: 'sending', percent: Math.round((sent / total) * 100) }),
       );
       setPhase({ kind: 'sent', durationMs: result.durationMs });
+      onSent();
     } catch (error) {
       setPhase({ kind: 'failed', error: uploadErrorText(error) });
     }
@@ -147,60 +149,113 @@ function Interviewer({ data }: { readonly data: DebriefData }) {
   );
 }
 
-function UploadBody({ data }: { readonly data: DebriefData }) {
-  const upload = useUpload(data);
+function VoicesFailed(props: { readonly data: DebriefData; readonly onView: Replace }) {
+  const { data } = props;
+  const [busy, setBusy] = useState(false);
+  async function retry() {
+    setBusy(true);
+    try {
+      props.onView({ ...data, debrief: await splitVoices(data.response.id) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <StatusLine
+      state="err"
+      text="Голоса не разделились."
+      action={
+        <Button size="sm" disabled={busy} onClick={() => void retry()}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
+type Replace = (next: DebriefData) => void;
+
+function leadTitle(picking: boolean, hasFile: boolean): string {
+  if (picking) return 'Запись загружена — отметьте, кто говорит';
+  return hasFile ? 'Запись загружена' : 'Загрузите запись интервью';
+}
+
+function UploadLead(props: {
+  readonly data: DebriefData;
+  readonly upload: ReturnType<typeof useUpload>;
+  readonly picking: boolean;
+}) {
+  const { upload } = props;
+  const sent = upload.phase.kind === 'sent' && !props.picking;
+  return (
+    <section className="lead" aria-labelledby="ic-t">
+      <h2 className="lead-title is-long" id="ic-t">
+        {leadTitle(props.picking, Boolean(upload.file ?? props.data.debrief?.recording))}
+      </h2>
+      {upload.file ? (
+        <FileRow
+          file={upload.file}
+          phase={upload.phase}
+          onPick={(file) => void upload.send(file)}
+        />
+      ) : (
+        <div className="actions">
+          {/* Файл уже на сервере (экран открыли заново): выбор другого — тихой ссылкой, как в макете. */}
+          <FilePick
+            label={props.data.debrief?.recording ? 'Другой файл' : 'Выбрать файл'}
+            quiet={Boolean(props.data.debrief?.recording)}
+            onPick={(file) => void upload.send(file)}
+          />
+        </div>
+      )}
+      {upload.phase.kind === 'failed' ? <StatusLine state="err" text={upload.phase.error} /> : null}
+      {sent ? (
+        <div className="actions">
+          <Link className="btn" to={buildNodePath('i04', { responseId: props.data.response.id })}>
+            <Icon name="right" />К разбору
+          </Link>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function UploadBody(props: {
+  readonly data: DebriefData;
+  readonly reload: () => void;
+  readonly onView: Replace;
+}) {
+  const { data } = props;
+  const upload = useUpload(data, props.reload);
   if (!data.debrief) {
     return <StatusLine state="wait" text="Интервью по этому отклику ещё не записано." />;
   }
-  const sent = upload.phase.kind === 'sent';
+  const voices = data.debrief.recording?.source === 'upload' ? data.debrief.voices : null;
+  const picking = voices?.status === 'ready';
   return (
     <>
       <div className="col">
-        <section className="lead" aria-labelledby="ic-t">
-          <h2 className="lead-title is-long" id="ic-t">
-            {upload.file ? 'Запись загружена' : 'Загрузите запись интервью'}
-          </h2>
-          {upload.file ? (
-            <FileRow
-              file={upload.file}
-              phase={upload.phase}
-              onPick={(file) => void upload.send(file)}
-            />
-          ) : (
-            <div className="actions">
-              <FilePick label="Выбрать файл" onPick={(file) => void upload.send(file)} />
-            </div>
-          )}
-          {upload.phase.kind === 'failed' ? (
-            <StatusLine state="err" text={upload.phase.error} />
-          ) : null}
-          {sent ? (
-            <div className="actions">
-              <Link className="btn" to={buildNodePath('i04', { responseId: data.response.id })}>
-                <Icon name="right" />К разбору
-              </Link>
-            </div>
-          ) : null}
-        </section>
+        <UploadLead data={data} upload={upload} picking={picking} />
+        {picking ? <VoicesBlock data={data} /> : null}
+        {voices?.status === 'failed' ? <VoicesFailed data={data} onView={props.onView} /> : null}
       </div>
-      <div className="col">
-        <Interviewer data={data} />
-      </div>
+      <div className="col">{picking ? null : <Interviewer data={data} />}</div>
     </>
   );
 }
 
-/** «Загрузка записи» (I4c): файл без деления голосов, имя собеседника. */
+/** «Загрузка записи» (I4c): файл, «Чей голос» после расшифровки, имя собеседника. */
 export function UploadScreen({ responseId }: { readonly responseId: string }) {
   const load = useCallback((signal: AbortSignal) => loadDebrief(responseId, signal), [responseId]);
-  const { state } = useAsync(load, 'Загрузка не открылась.');
+  const { state, reload, replaceData } = useAsync(load, 'Загрузка не открылась.');
   const data = state.data;
+  useVoicesStep(data, reload, replaceData);
   return (
     <>
       <RecordSteps responseId={data?.response.id ?? responseId} current="voices" />
       <div className="page two" data-b640-node="i04c" data-b640-section="interview">
         {data ? <SourceHead data={data} /> : null}
-        {data ? <UploadBody data={data} /> : null}
+        {data ? <UploadBody data={data} reload={reload} onView={replaceData} /> : null}
         {state.status === 'error' && !data ? <StatusLine state="err" text={state.error} /> : null}
       </div>
     </>

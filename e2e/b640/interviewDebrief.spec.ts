@@ -143,6 +143,72 @@ test.describe('B751: «Загрузка записи» (I4c)', () => {
   });
 });
 
+const VOICES = {
+  status: 'ready',
+  candidate: null,
+  items: [
+    {
+      voice: 1,
+      sharePercent: 84,
+      quote: 'Мы перенесли кластеры и сократили счёт на тридцать процентов.',
+    },
+    { voice: 2, sharePercent: 16, quote: 'Расскажите, как вы снижали затраты на инфраструктуру.' },
+  ],
+};
+
+/** I4c после расшифровки файла: голоса ещё не разделены, POST делит, PUT подтверждает. */
+async function openVoices(page: Page) {
+  await page.clock.setFixedTime(new Date(PREP_NOW));
+  await mockPrep(page, { interviewRecording: true });
+  const calls: string[] = [];
+  await page.route('**/api/v1/candidate/applications/r-arka/debrief**', async (route) => {
+    const method = route.request().method();
+    const tail = new URL(route.request().url()).pathname.replace(/.*\/debrief/u, '');
+    calls.push(`${method} ${tail || '/'} ${route.request().postData() ?? ''}`.trim());
+    const voices =
+      tail === '/voices'
+        ? { ...VOICES, candidate: method === 'PUT' ? 2 : null }
+        : { status: 'none', candidate: null, items: [] };
+    await route.fulfill({ json: { data: { ...view('none'), voices } } });
+  });
+  await page.goto('/app/responses/r-arka/debrief/upload', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-b640-node="i04c"]')).toBeVisible({ timeout: 15_000 });
+  return calls;
+}
+
+test.describe('B642: «Чей голос» после расшифровки файла (I4c)', () => {
+  test('голоса делятся один раз; «Нет» — кандидат второй голос, имя у первого; подтверждение ведёт к разбору', async ({
+    page,
+  }) => {
+    const calls = await openVoices(page);
+    await expect(
+      page.getByRole('heading', { name: 'Запись загружена — отметьте, кто говорит' }),
+    ).toBeVisible();
+    const voices = page.locator('section.mod', { hasText: 'Чей голос' });
+    await expect(voices.locator('.ir-voice .row-title')).toHaveText([
+      'Голос 1 — это вы?',
+      'Голос 2 — интервьюер',
+    ]);
+    await expect(voices.locator('.ir-voice').first()).toContainText(
+      '84 % речи · «Мы перенесли кластеры',
+    );
+    await expect(voices.getByRole('button', { name: 'Да, это я' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expectGates(page);
+    await voices.getByRole('button', { name: 'Нет' }).click();
+    await expect(voices.locator('.ir-voice .row-title').nth(1)).toHaveText('Голос 2 — это вы');
+    await expect(voices.locator('.ir-voice').first().getByLabel('Имя собеседника')).toHaveValue(
+      'Ирина Петрова',
+    );
+    await voices.getByRole('button', { name: 'Подтвердить голоса' }).click();
+    await expect(page.locator('[data-b640-node="i04"]')).toBeVisible();
+    expect(calls.filter((call) => call.startsWith('POST /voices'))).toHaveLength(1);
+    expect(calls).toContain('PUT /voices {"candidate":2}');
+  });
+});
+
 test.describe('B642: запись разговоров выключена на сервере (до редакции 1.3)', () => {
   test('экраны разбора не открываются и сервер разбора не зовётся', async ({ page }) => {
     const calls = await open(

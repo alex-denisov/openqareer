@@ -8,7 +8,10 @@ import type {
 import { debriefMetrics, type DebriefFindings, type DebriefLine } from '../domain/interviewDebrief';
 import type { DebriefAnalysis, InterviewDebriefView } from '../domain/interviewDebriefView';
 import type { InterviewDebriefWriter } from '../providers/interviewDebriefWriter';
+import type { DebriefVoicesView } from '../domain/interviewDebriefView';
+import type { VoiceId } from '../domain/interviewVoices';
 import { buildRecordingView } from './recordingView';
+import { voicedTranscript, voicesHash } from './recordingVoices';
 
 /** B751: что нужно разбору — записи, ключ данных и цепочка письма. */
 export interface DebriefContext {
@@ -47,6 +50,9 @@ type PartView = ReturnType<typeof buildRecordingView>;
 interface RecordingState {
   readonly recording: StoredRecording;
   readonly view: Pick<PartView, 'status' | 'segments' | 'gaps' | 'transcript'>;
+  /** Расшифровка файла до деления по голосам; у записи .app — та же, что в `view`. */
+  readonly raw: PartView['transcript'];
+  readonly voices: DebriefVoicesView | null;
 }
 
 /** Части одной записи: последняя и те, продолжением которых она шла (новее — первой). */
@@ -100,13 +106,20 @@ function recordingState(context: DebriefContext, subject: DebriefSubject): Recor
   const segments = views
     .flatMap((v) => v.segments)
     .sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const raw = status === 'ready' ? combinedTranscript(views) : null;
+  const voiced =
+    raw && recording.source === 'upload'
+      ? voicedTranscript(context.repository, recording.id, raw)
+      : null;
   return {
     recording,
+    raw,
+    voices: voiced?.voices ?? null,
     view: {
       status,
       segments,
       gaps: views.flatMap((v) => v.gaps),
-      transcript: status === 'ready' ? combinedTranscript(views) : null,
+      transcript: voiced?.lines ?? raw,
     },
   };
 }
@@ -155,6 +168,7 @@ export function buildDebriefView(
         }
       : null,
     transcript,
+    voices: state?.voices ?? null,
     metrics: transcript.length > 0 ? debriefMetrics(transcript) : null,
     analysis: analysisOf(context, state),
     notes: subject.interview.debrief,
@@ -205,4 +219,33 @@ export function saveInterviewerName(
     subject.interview.id,
     trimmed ? context.sealedText.seal(trimmed, interviewerData(subject.interview.id)) : null,
   );
+}
+
+/** I4c: один вызов модели на расшифровку файла — голос каждой строки; сбой — «Повторить». */
+export async function labelDebriefVoices(
+  context: DebriefContext,
+  subject: DebriefSubject,
+): Promise<InterviewDebriefView> {
+  const state = recordingState(context, subject);
+  const raw = state?.raw ?? [];
+  if (!state || state.recording.source !== 'upload' || raw.length === 0) {
+    return buildDebriefView(context, subject);
+  }
+  if (state.voices?.status === 'ready') return buildDebriefView(context, subject);
+  const outcome = context.writer.labelVoices
+    ? await context.writer.labelVoices(raw).catch(() => null)
+    : null;
+  context.repository.saveVoices(state.recording.id, voicesHash(raw), outcome?.labels ?? null);
+  return buildDebriefView(context, subject);
+}
+
+/** «Подтвердить голоса»: `false` — делить ещё нечего. */
+export function confirmDebriefVoices(
+  context: DebriefContext,
+  subject: DebriefSubject,
+  candidate: VoiceId,
+): boolean {
+  const state = recordingState(context, subject);
+  if (!state || state.voices?.status !== 'ready') return false;
+  return context.repository.setCandidateVoice(state.recording.id, candidate);
 }
