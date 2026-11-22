@@ -45,7 +45,7 @@
     .b640 .fa-codes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     /* n04e на 390: «Скопировать коды» во всю ширину, ниже «Скачать» и «Готово». */
     .b640 .fa-fields { min-inline-size: min(100%, 18.4375rem); }
-    .b640 .fa-done .fa-bar > .actions { flex: 1 1 100%; }
-    .b640 .fa-done .fa-bar .btn.is-primary { flex: 1 1 100%; justify-content: center; }
+    .b640 .fa-done .fa-bar > .btn.is-primary { flex: 1 1 100%; justify-content: center; }
+    .b640 .fa-done-row .fa-bar > .btn { flex: 1 1 auto; justify-content: center; }
   }
 }

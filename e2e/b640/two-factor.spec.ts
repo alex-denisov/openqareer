@@ -146,15 +146,16 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
   const done = (await screen.getByRole('button', { name: 'Готово' }).boundingBox())!;
   const apart = done.x >= download.x + download.width || done.y >= download.y + download.height;
   expect(apart).toBe(true);
-  // B754: на 390 «Скопировать коды» во всю ширину, ниже «Скачать» и «Готово»; на 1440 один ряд.
+  // B754: «Скачать» — контурная кнопка в строке с «Готово», под «Скопировать коды», на 1440 и 390.
   expect(Math.round(download.height)).toBe(44);
   const copyCodes = (await screen.getByRole('button', { name: 'Скопировать коды' }).boundingBox())!;
   expect(Math.round(done.y)).toBe(Math.round(download.y));
+  expect(download.y).toBeGreaterThan(copyCodes.y);
+  await expect(screen.getByRole('button', { name: 'Скачать' })).toHaveClass(/\bbtn\b/u);
   if (testInfo.project.name === 'mobile-390') {
-    expect(download.y).toBeGreaterThan(copyCodes.y);
     expect(Math.round(copyCodes.width)).toBe(332);
   } else {
-    expect(Math.round(download.y)).toBe(Math.round(copyCodes.y));
+    expect(Math.round(download.width)).toBe(125);
   }
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(stored).not.toContain(CODES[0]);
