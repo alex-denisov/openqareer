@@ -2582,6 +2582,13 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    // B645 s07: подборка прочитана не целиком — порции по 20 в порядке столбца даёт сервер.
+    // Заглушка отдаёт те же строки по смещению; порядок столбцов здесь не моделируется.
+    if (path.endsWith('/candidate/b640/matched-vacancies')) {
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      const limit = Number(url.searchParams.get('limit')) || 20;
+      return route.fulfill({ json: matchedVacancyPage(offset, options.vacancyTotal, limit) });
+    }
     if (path.endsWith('/candidate/matched-vacancies')) {
       const offset = Number(url.searchParams.get('offset') ?? 0);
       const page = withFirstFitView(
