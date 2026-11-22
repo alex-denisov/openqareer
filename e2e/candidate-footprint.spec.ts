@@ -4,23 +4,24 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 import type {
   CandidateFootprintAudit,
   CandidateFootprintFinding,
-  FootprintAdapterId,
 } from '../shared/candidateFootprint';
+import type { FootprintStep } from '../shared/footprintSteps';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 
-const SOURCE_AVAILABILITY: Readonly<Record<FootprintAdapterId, boolean>> = {
-  sherlock: true,
-  maigret: true,
-  hibp: false,
-  wayback: true,
-  exa: true,
+// B740: сервер отдаёт коды шагов, инструменты поиска остаются на сервере.
+const SOURCE_AVAILABILITY: Readonly<Partial<Record<FootprintStep, boolean>>> = {
+  nickname: true,
+  nickname_extended: true,
+  leaks: false,
+  archive: true,
+  web: true,
 };
 
 const PLAN = [
   {
     id: 'aaaaaaaaaaaaaaaaaaaa',
-    adapterId: 'sherlock' as const,
+    adapterId: 'nickname' as const,
     kind: 'username' as const,
     preview: 'Проверить открытые профили под ником «maria-sokolova»',
     selectedByDefault: true,
@@ -28,7 +29,7 @@ const PLAN = [
   },
   {
     id: 'bbbbbbbbbbbbbbbbbbbb',
-    adapterId: 'wayback' as const,
+    adapterId: 'archive' as const,
     kind: 'profile_url' as const,
     preview: 'Проверить архив публичной страницы https://github.com/maria-sokolova',
     selectedByDefault: true,
@@ -36,7 +37,7 @@ const PLAN = [
   },
   {
     id: 'cccccccccccccccccccc',
-    adapterId: 'exa' as const,
+    adapterId: 'web' as const,
     kind: 'name' as const,
     preview: 'Искать открытые профили по имени «Мария Соколова»',
     selectedByDefault: true,
@@ -44,7 +45,7 @@ const PLAN = [
   },
   {
     id: 'eeeeeeeeeeeeeeeeeeee',
-    adapterId: 'exa' as const,
+    adapterId: 'web' as const,
     kind: 'work_context' as const,
     preview: 'Искать имя и работодателя «Analytical Engines»',
     selectedByDefault: true,
@@ -52,7 +53,7 @@ const PLAN = [
   },
   {
     id: 'ffffffffffffffffffff',
-    adapterId: 'exa' as const,
+    adapterId: 'web' as const,
     kind: 'work_context' as const,
     preview: 'Искать имя и город «London»',
     selectedByDefault: true,
@@ -60,7 +61,7 @@ const PLAN = [
   },
   {
     id: 'dddddddddddddddddddd',
-    adapterId: 'hibp' as const,
+    adapterId: 'leaks' as const,
     kind: 'email' as const,
     preview: 'Проверить утечки по почте m***@example.test (нужно согласие)',
     selectedByDefault: false,
@@ -70,7 +71,7 @@ const PLAN = [
 
 const SAMPLE_FINDING: CandidateFootprintFinding = {
   id: '111111111111111111111111',
-  adapter: 'sherlock',
+  adapter: 'nickname',
   kind: 'profile',
   url: 'https://github.com/maria-sokolova',
   title: 'GitHub',
@@ -79,7 +80,7 @@ const SAMPLE_FINDING: CandidateFootprintFinding = {
   observedAt: '2026-10-04T12:00:00.000Z',
   receipt: { method: 'GET', source: 'GitHub', query: 'username=maria-sokolova' },
   receipts: [{ method: 'GET', source: 'GitHub', query: 'username=maria-sokolova' }],
-  sources: ['sherlock'],
+  sources: ['nickname'],
   automatedMatch: 'likely_self',
   review: 'unreviewed',
 };
@@ -98,21 +99,21 @@ function audit(
     selectedQueryIds,
     adapterStatuses: [
       {
-        adapterId: 'sherlock',
+        adapterId: 'nickname',
         state: state === 'pending' ? 'pending' : 'checked',
         sourcesChecked: 20,
         findingsCount: findings.length,
       },
-      { adapterId: 'maigret', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
-      { adapterId: 'hibp', state: 'not_connected', sourcesChecked: 0, findingsCount: 0 },
+      { adapterId: 'nickname_extended', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
+      { adapterId: 'leaks', state: 'not_connected', sourcesChecked: 0, findingsCount: 0 },
       {
-        adapterId: 'wayback',
+        adapterId: 'archive',
         state: state === 'pending' ? 'pending' : 'checked',
         sourcesChecked: 1,
         findingsCount: 0,
       },
       {
-        adapterId: 'exa',
+        adapterId: 'web',
         state: state === 'pending' ? 'pending' : 'checked',
         sourcesChecked: 2,
         findingsCount: 0,

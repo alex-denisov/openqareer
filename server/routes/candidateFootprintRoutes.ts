@@ -2,7 +2,7 @@ import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
 import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
 import { cabinetB640Enabled } from './cabinetB640Flag';
 import { expandSameWording, mergeSameWording } from '../osint/footprintPlanWording';
-import { hideFootprintTools } from './footprintPublicView';
+import { hideFootprintTools, toPublicFootprint } from './footprintPublicView';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -62,9 +62,9 @@ function youtubeEnabled(deps: RouteDeps, request: FastifyRequest): boolean {
   return Boolean(principal && cabinetB640Enabled(deps.config, principal.username));
 }
 
-/** B740: с флагом B640 ответ без названий инструментов поиска. */
+/** B740: инструменты поиска только на сервере; экрану B640 не нужны и коды шагов. */
 function forViewer<T>(deps: RouteDeps, request: FastifyRequest, data: T): T {
-  return youtubeEnabled(deps, request) ? hideFootprintTools(data) : data;
+  return youtubeEnabled(deps, request) ? hideFootprintTools(data) : toPublicFootprint(data);
 }
 
 function getPlan(
