@@ -692,7 +692,8 @@
   .b640 .co-net { font-size: var(--career-text-xs); color: var(--career-text-soft); white-space: nowrap; }
     .b640 .co-act { grid-column: 4; grid-row: 1; }
     .b640 .co-people .co-person { grid-template-columns: minmax(0, 1fr) auto; }
-    .b640 .co-people .co-person > .btn { grid-column: 1 / -1; justify-self: start; }
+    .b640 .co-people .co-person > .btn,
+    .b640 .co-people .co-person > .co-sent { grid-column: 1 / -1; justify-self: start; }
   }
   .b640 .va-popwrap { position: relative; display: inline-flex; }
   .b640 .va-pop { position: absolute; z-index: 12; inset-block-start: calc(100% + var(--career-space-1)); inset-inline-end: 0; inline-size: 20rem; box-sizing: border-box; display: grid; gap: var(--career-space-3); padding: var(--career-space-4); text-align: start; white-space: normal; background: var(--career-surface-raised); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-md); }

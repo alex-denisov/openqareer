@@ -5,6 +5,7 @@ import {
   type CampaignMetaView,
 } from '../../coach/matchedVacancyApi';
 import { changeCareerRole } from '../../career-map/careerRoleApi';
+import { skillKey } from '../../career-map/roleHypothesisAdapter';
 import {
   getCheckedRoles,
   getCurrentRoleSkillAssessment,
@@ -49,7 +50,10 @@ async function readDemand(): Promise<readonly RoleSkillDemand[]> {
  * Первая роль поиска, у которой проверка навыков готова. Роль, требования которой
  * ещё не собраны или которых мало, в полосу не попадает: иначе «Проверить» ведёт в тупик.
  */
-async function readyRole(searchTitles: readonly string[]): Promise<{
+async function readyRole(
+  searchTitles: readonly string[],
+  orChecked = false,
+): Promise<{
   readonly title: string;
   readonly skills: number;
 } | null> {
@@ -59,9 +63,12 @@ async function readyRole(searchTitles: readonly string[]): Promise<{
   );
   const index = answers.findIndex((current) => current?.state === 'ready');
   const current = answers[index];
-  return current?.state === 'ready'
-    ? { title: searchTitles[index]!, skills: current.skills.length }
-    : null;
+  if (current?.state === 'ready') return { title: searchTitles[index]!, skills: current.skills.length };
+  if (!orChecked) return null;
+  // B645 s07: пройденная проверка — не тупик: ссылка ведёт к её результату и повтору,
+  // число — частые требования роли, которых нет в профиле (без данных спроса строки нет).
+  const checked = answers.findIndex((answer) => answer?.state === 'result');
+  return checked >= 0 ? { title: searchTitles[checked]!, skills: 0 } : null;
 }
 
 const demandOf = (demand: readonly RoleSkillDemand[], title: string) =>
@@ -83,7 +90,10 @@ function withLacks(
 ): readonly RoleRow[] {
   return rows.map((row) => {
     if (row.lacks) return row;
-    const missing = demandOf(demand, row.title)?.skills.find((skill) => !skill.inProfile);
+    const confirmed = new Set(row.confirmedNames.map(skillKey));
+    const missing = demandOf(demand, row.title)?.skills.find(
+      (skill) => !skill.inProfile && !confirmed.has(skillKey(skill.name)),
+    );
     return missing ? { ...row, lacks: missing.name } : row;
   });
 }
@@ -92,7 +102,7 @@ function withLacks(
 export async function readSkillGap(
   searchTitles: readonly string[],
 ): Promise<{ readonly gap: number; readonly role: string | null }> {
-  const [ready, demand] = await Promise.all([readyRole(searchTitles), readDemand()]);
+  const [ready, demand] = await Promise.all([readyRole(searchTitles, true), readDemand()]);
   return ready ? { gap: gapOf(demand, ready), role: ready.title } : { gap: 0, role: null };
 }
 

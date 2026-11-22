@@ -90,7 +90,7 @@ export function fallbackContactMessage(facts: ContactMessageFacts): string {
   }
   if (vacancies && company) {
     const open = facts.alsoVacancyTitle ? 'открыты вакансии' : 'открыта вакансия';
-    return `${greeting} Давно не общались. Вижу, что в «${company}» ${open} ${vacancies}. Я сейчас в поиске${role}. Не порекомендуете меня или не подскажете, кто нанимает на эту роль? Заранее спасибо!`;
+    return `${greeting} Давно не общались. Вижу, что в «${company}» ${open} ${vacancies}. Я сейчас в поиске${role}. Не порекомендуете меня или не подскажете, кто нанимает на ${facts.alsoVacancyTitle ? 'эти роли' : 'эту роль'}? Заранее спасибо!`;
   }
   return `${greeting} Давно не общались. Я сейчас в поиске${role}. Если знаете, где ищут такого специалиста, или подскажете, к кому обратиться, — заранее спасибо!`;
 }
@@ -99,14 +99,23 @@ function digitGroups(text: string): string[] {
   return text.match(/\d+/gu) ?? [];
 }
 
+export type ModelMessageRejection = 'empty' | 'too_long' | 'new_digits';
+
+/** B753: почему текст модели не принят — в журнал вместо молчаливого запасного текста. */
+export function modelMessageRejection(text: string | undefined, knownText: string): ModelMessageRejection | null {
+  const body = text?.trim().replace(/\r\n?/gu, '\n');
+  if (!body) return 'empty';
+  if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
+  return digitGroups(body).every((group) => knownText.includes(group)) ? null : 'new_digits';
+}
+
 /**
  * Текст модели принимаем, только если он непустой, в пределе длины и не вводит чисел, которых нет
  * в профиле или данных запроса; иначе вызывающий берёт запасной текст.
  */
 export function acceptModelMessage(text: string | undefined, knownText: string): string | null {
-  const body = text?.trim().replace(/\r\n?/gu, '\n');
-  if (!body || body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return null;
-  return digitGroups(body).every((group) => knownText.includes(group)) ? body : null;
+  if (modelMessageRejection(text, knownText)) return null;
+  return text!.trim().replace(/\r\n?/gu, '\n');
 }
 
 /** Только https и сам linkedin.com, без логина в адресе; всё остальное — null. */

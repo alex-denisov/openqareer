@@ -1,6 +1,7 @@
 import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
 import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
 import { cabinetB640Enabled } from './cabinetB640Flag';
+import { expandSameWording, mergeSameWording } from '../osint/footprintPlanWording';
 import { hideFootprintTools } from './footprintPublicView';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -135,7 +136,8 @@ async function handleGetFootprintPlan(
     deps, candidate.id, manualEmployers, youtubeEnabled(deps, request),
   );
   const data = {
-      plan,
+      // B668: экран B640 не различает способы проверки — одна строка на формулировку.
+      plan: youtubeEnabled(deps, request) ? mergeSameWording(plan) : plan,
       unidentifiedEmployers,
       sourceAvailability,
       consent: {
@@ -202,13 +204,16 @@ function validateSelectedQueryIds(
   selectedQueryIds: readonly string[],
   manualEmployers: readonly string[] | undefined,
   youtube: boolean,
-): { valid: boolean; unavailable: boolean } {
+): { valid: boolean; unavailable: boolean; ids: readonly string[] } {
   const { plan } = getPlan(deps, candidateId, manualEmployers, youtube);
-  const selected = new Set(selectedQueryIds);
+  // B668: строка экрана B640 — все проверки с её формулировкой.
+  const ids = youtube ? expandSameWording(plan, selectedQueryIds) : selectedQueryIds;
+  const selected = new Set(ids);
   const matches = plan.filter((item) => selected.has(item.id));
   return {
     valid: matches.length === selected.size,
     unavailable: matches.some((item) => !item.available),
+    ids,
   };
 }
 
@@ -254,7 +259,7 @@ async function handleStartFootprintAudit(
     return sendError(reply, request, 409, 'source_not_connected', 'Один из выбранных источников не подключён.', false);
   }
   return launchFootprintRun(
-    deps, request, reply, candidate.id, userId, parsed.data.selectedQueryIds,
+    deps, request, reply, candidate.id, userId, selected.ids,
     new Date().toISOString(), parsed.data.manualEmployers,
   );
 }

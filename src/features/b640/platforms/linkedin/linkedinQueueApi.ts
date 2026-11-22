@@ -36,6 +36,15 @@ export const getRhythm = () => request<LinkedinRhythm>(`${BASE}/rhythm`);
 
 export const listQueue = (limit = 20) => request<LinkedinQueuePage>(`${BASE}/queue?limit=${limit}`);
 
+const queueTotal = (state: 'queued' | 'due') =>
+  request<LinkedinQueuePage>(`${BASE}/queue?state=${state}&limit=1`).then((page) => page.total);
+
+/** B695: сколько постов ждёт в очереди LinkedIn (по расписанию и уже пора) — их тоже останавливает n05. */
+export const countScheduledPosts = async (): Promise<number> => {
+  const [queued, due] = await Promise.all([queueTotal('queued'), queueTotal('due')]);
+  return queued + due;
+};
+
 /** Одобренный черновик встаёт в первый свободный слот ритма; на LinkedIn ничего не уходит. */
 export const enqueueDraft = (draftId: string) =>
   request<{ readonly scheduledAt: string }>(`${BASE}/queue`, post({ draftId }));
