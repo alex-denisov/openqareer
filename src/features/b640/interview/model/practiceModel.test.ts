@@ -3,6 +3,7 @@ import {
   addBlock,
   blockCountTitle,
   liveCriteria,
+  minutesLabel,
   minutesLeft,
   moveBlock,
   practiceChoice,
@@ -18,6 +19,21 @@ import {
 const ANSWER =
   'Требования: 2 000 платежей в секунду, пики нагрузки. Приложение шлёт запрос в шлюз API, ' +
   'шлюз кладёт платёж в очередь, сервис платежей пишет в базу PostgreSQL.';
+
+describe('minutesLabel: согласование «минута / минуты / минут»', () => {
+  it('склоняет по числу', () => {
+    expect([1, 2, 4, 5, 11, 21, 33, 45].map(minutesLabel)).toEqual([
+      '1 минута',
+      '2 минуты',
+      '4 минуты',
+      '5 минут',
+      '11 минут',
+      '21 минута',
+      '33 минуты',
+      '45 минут',
+    ]);
+  });
+});
 
 describe('I3a: задача и выбор тренировки', () => {
   it('пункты задачи — предложения условия, без пустых', () => {
@@ -56,6 +72,8 @@ describe('I3b: ответ', () => {
     expect(minutesLeft(start, 45, Date.parse('2026-11-22T10:00:00.000Z'))).toBe(45);
     expect(minutesLeft(start, 45, Date.parse('2026-11-22T10:07:30.000Z'))).toBe(38);
     expect(minutesLeft(start, 45, Date.parse('2026-11-22T11:00:00.000Z'))).toBe(0);
+    // Часы сервера впереди часов браузера: больше лимита не показываем.
+    expect(minutesLeft(start, 45, Date.parse('2026-11-22T09:59:30.000Z'))).toBe(45);
   });
 
   it('критерии по мере ответа: прозвучало — с цитатой, нет — «Пока не звучало»', () => {

@@ -1,4 +1,5 @@
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { sourceMemberKey } from './vacancyDeduplicator';
 
 /**
  * Кластер после ухода вакансий (01.11): снятый не трогается повторно, ушедший источник
@@ -11,7 +12,7 @@ export function expireClusterSources(
   if (cluster.status === 'archived') return cluster;
   const isGone = (s: VacancyCluster['sources'][number]) =>
     Boolean(
-      (s.externalId && goneSet.has(s.externalId)) || (s.sourceUrl && goneSet.has(s.sourceUrl)),
+      goneSet.has(sourceMemberKey(s) ?? '') || (s.sourceUrl && goneSet.has(s.sourceUrl)),
     );
   const byId = goneSet.has(cluster.id.replace(/^cluster-/, ''));
   const remaining = cluster.sources.filter((s) => !isGone(s));

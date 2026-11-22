@@ -12,7 +12,7 @@ import { Link } from '../shell/Link';
 import { listGoalCards } from './diaryApi';
 import { useRoleTitle } from './roleTitle';
 import { GoalItem } from './GoalItem';
-import { HORIZONS, goalsLead, quarterLabel } from './goalsModel';
+import { HORIZONS, archiveNote, goalsLead, quarterLabel } from './goalsModel';
 import { today } from './model';
 import { RetryButton } from './parts';
 import './diary.css';
@@ -115,7 +115,7 @@ function Archive({ cards }: { readonly cards: readonly CareerDiaryGoalCard[] }) 
         <h3 className="mod-title" id={index === 0 ? 'kp-arch' : undefined} key={card.id}>
           <Link to={buildNodePath('d02a', { goalId: card.id })}>{card.title}</Link>
           {card.details.archive ? (
-            <InfoTip label="Почему в архиве" text={card.details.archive.reason} />
+            <InfoTip label="Почему в архиве" text={archiveNote(card.details.archive, today())} />
           ) : null}
         </h3>
       ))}

@@ -34,14 +34,26 @@ export function PrepSteps(props: { readonly responseId: string; readonly current
   );
 }
 
+/** «Руководитель платформы · Арка Холдинг». */
+export function interviewTitle(response: ApplicationView): string {
+  return [response.vacancy?.title, response.vacancy?.company].filter(Boolean).join(' · ');
+}
+
+/** Когда и как пройдёт встреча: «12 ноября, 15:00», «видеозвонок с техническим директором». */
+export function interviewMeta(response: ApplicationView): readonly string[] {
+  const when = formatInterviewWhen(response.nearestInterview?.scheduledAt ?? null);
+  const format = response.nearestInterview?.format?.trim();
+  return [when, format].filter((item): item is string => Boolean(item));
+}
+
 /** Шапка контекста: над каким интервью идёт работа. */
 export function InterviewHead({ response }: { readonly response: ApplicationView }) {
-  const when = formatInterviewWhen(response.nearestInterview?.scheduledAt ?? null);
+  const meta = interviewMeta(response);
   return (
     <CtxHead
       kind="Интервью"
-      title={[response.vacancy?.title, response.vacancy?.company].filter(Boolean).join(' · ')}
-      meta={when ? [when] : undefined}
+      title={interviewTitle(response)}
+      meta={meta.length > 0 ? meta : undefined}
       open={{
         path: buildNodePath('o01c', { responseId: response.id }),
         label: 'Открыть: интервью',
