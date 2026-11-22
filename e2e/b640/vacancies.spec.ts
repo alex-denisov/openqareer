@@ -186,6 +186,38 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expectGates(page);
   });
 
+  test('B760: строки подборки не ждут чтения рабочего пространства', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    // Рабочее пространство нужно только прежней оболочке: новый кабинет его не ждёт.
+    let workspaceAnswered = false;
+    await page.route('**/api/v1/candidate/workspace', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+      workspaceAnswered = true;
+      return route.fallback();
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible({ timeout: 3_000 });
+    expect(workspaceAnswered).toBe(false);
+  });
+  test('B760: код кабинета грузится рядом с /auth/me на устройстве, где кабинет уже открывался', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/vacancies');
+    let authAnswered = false;
+    let chunkBeforeAuth = false;
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      authAnswered = true;
+      return route.fallback();
+    });
+    page.on('request', (request) => {
+      if (/\/assets\/CabinetB640-[^/]+\.js$/u.test(request.url()) && !authAnswered) chunkBeforeAuth = true;
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible();
+    expect(chunkBeforeAuth).toBe(true);
+  });
   test('фильтр локаций меняет число вакансий, «Сбросить всё» возвращает', async ({
     page,
   }, testInfo) => {
