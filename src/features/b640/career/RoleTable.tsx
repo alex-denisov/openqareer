@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Icon, InfoTip, Link } from '../kit';
-import { buildNodePath } from '../routes';
+import { roleVacanciesPath } from './careerPaths';
 import { ORIGIN_LABEL, type RoleRow } from './rolesModel';
 
 const SHOWN = 3;
@@ -28,7 +28,7 @@ function GoLink({ row }: { readonly row: RoleRow }) {
   return (
     <Link
       className="btn is-quiet c9-go"
-      to={buildNodePath('s07')}
+      to={roleVacanciesPath(row.title)}
       aria-label={`Вакансии по роли «${row.label}»`}
     >
       <Icon name="search" />
