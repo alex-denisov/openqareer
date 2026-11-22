@@ -68,11 +68,16 @@ async function createRecording(
 }
 
 /** Начать запись в .app по уже созданной на сервере. */
-export async function launchRecording(created: CreatedRecording): Promise<void> {
+export async function launchRecording(
+  created: CreatedRecording,
+  mode?: 'mic',
+): Promise<void> {
+  // `mic` (B758, #930): только микрофон, без доступа к экрану; без режима — встреча, две дорожки.
   await invokeDesktopCommand('recording_start', {
     resourceId: created.recordingId,
     uploadUrl: created.uploadUrl,
     headers: created.headers,
+    ...(mode ? { mode } : {}),
   });
 }
 

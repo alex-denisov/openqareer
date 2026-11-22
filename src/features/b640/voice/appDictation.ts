@@ -21,7 +21,7 @@ interface DictationView {
 export async function beginAppDictation(): Promise<CreatedRecording> {
   const response = await apiFetch('/api/v1/candidate/dictations', { method: 'POST' });
   const created = await readDataObject<CreatedRecording>(response);
-  await launchRecording(created);
+  await launchRecording(created, 'mic');
   return created;
 }
 

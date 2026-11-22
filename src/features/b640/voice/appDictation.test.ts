@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { finishAppDictation } from './appDictation';
+import { beginAppDictation, finishAppDictation } from './appDictation';
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn(), readDataObject: vi.fn() }));
 vi.mock('../../coach/apiClient', () => api);
@@ -18,6 +18,14 @@ beforeEach(() => {
 });
 
 describe('диктовка .app: текст после расшифровки, запись удаляется', () => {
+  it('запись без интервью, только микрофон (режим B758)', async () => {
+    const created = { recordingId: 'd-0', uploadUrl: 'https://x/segments', headers: {} };
+    views(created);
+    await expect(beginAppDictation()).resolves.toEqual(created);
+    expect(api.apiFetch).toHaveBeenCalledWith('/api/v1/candidate/dictations', { method: 'POST' });
+    expect(bridge.launchRecording).toHaveBeenCalledWith(created, 'mic');
+  });
+
   it('ждёт расшифровку и склеивает реплики', async () => {
     views(
       { status: 'transcribing', transcript: null },
