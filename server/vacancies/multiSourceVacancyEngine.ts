@@ -1447,7 +1447,9 @@ export class MultiSourceVacancyEngine {
     if (pending) return pending;
     const load = this.loadAndStoreVacancyDescription(existing);
     this.descriptionLoads.set(id, load);
-    void load.finally(() => this.descriptionLoads.delete(id));
+    // B756 22.11: голый `finally` давал второе обещание без обработчика, и любая
+    // ошибка загрузки роняла процесс обслуживания (exit 1); ошибку видит вызывающий.
+    load.finally(() => this.descriptionLoads.delete(id)).catch(() => undefined);
     return load;
   }
 
@@ -1490,7 +1492,12 @@ export class MultiSourceVacancyEngine {
   private retireArchivedVacancy(vacancy: UnifiedVacancy): VacancyDescriptionLoadResult {
     // Только индекс: handleExpiredVacancies грузит все кластеры и в HTTP-процессе
     // выбивал память (heap OOM на проде 29.09). Кластер сведёт воркер обслуживания.
-    this.pool.markExpired([vacancy.id], new Date().toISOString());
+    try {
+      this.pool.markExpired([vacancy.id], new Date().toISOString());
+    } catch {
+      // B756: база занята дольше busy_timeout — снять запись на следующем такте, как запись текста.
+      return { vacancy, unavailable: true, status: 'failed' };
+    }
     return { vacancy, unavailable: true, status: 'skipped' };
   }
 
