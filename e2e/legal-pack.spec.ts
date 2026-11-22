@@ -1,6 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { LEGAL_PACK_VERSION } from '../shared/legalRegistry';
 
 /**
  * B173 — the documents are only useful if a candidate (and a crawler) can
@@ -22,7 +21,7 @@ test.describe('published legal pack', () => {
 
       expect(response?.status()).toBe(200);
       await expect(page.getByRole('heading', { level: 1, name: doc.heading })).toBeVisible();
-      await expect(page.locator('.legal-meta')).toContainText(`Редакция ${LEGAL_PACK_VERSION}`);
+      await expect(page.locator('.legal-meta')).toContainText('Редакция 1.2');
 
       const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
       expect(canonical).toBe(`https://openqareer.com/legal/${doc.slug}`);

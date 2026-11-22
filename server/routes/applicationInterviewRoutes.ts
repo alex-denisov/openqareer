@@ -14,7 +14,7 @@ import {
   notificationRepositoryFor,
   recordNotificationFromSource,
 } from './notificationRepositoryAccess';
-import { recordingRuntimeFor } from '../recordings/recordingRuntime';
+import { closeRecordingRuntime, recordingRuntimeFor } from '../recordings/recordingRuntime';
 import { ApplicationNotFoundError } from '../data/store/errors';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -159,5 +159,8 @@ export function registerApplicationInterviewRoutes(app: FastifyInstance, deps: R
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handleDeleteInterview),
   );
-  registerInterviewRecordingRoutes(app, deps);
+  // B642: до редакции 1.3 юридических документов маршрутов записи нет; удаление интервью
+  // всё равно стирает его записи, поэтому хранилище закрывается при остановке в любом случае.
+  if (deps.config.interviewRecordingEnabled) registerInterviewRecordingRoutes(app, deps);
+  else app.addHook('onClose', () => closeRecordingRuntime(deps));
 }

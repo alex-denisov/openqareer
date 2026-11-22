@@ -375,3 +375,46 @@ describe('B642: удаление и чужие записи', () => {
     expect((await send('GET', url, 'flagged.test')).statusCode).toBe(200);
   });
 });
+
+describe('B642: флаг записи разговоров (до редакции 1.3)', () => {
+  it('выключен — маршрутов записи нет, в /auth/me interviewRecording: false', async () => {
+    const h = await createB640Harness({ pool: () => [], interviewRecording: false });
+    closers.push(h.close);
+    const headers = {
+      authorization: `Bearer ${h.tokens['flagged.test']}`,
+      origin: 'http://localhost:3000',
+    };
+    const app = h.candidates.createApplication(h.candidateIds['flagged.test'], {
+      stage: 'interview',
+      manualVacancy: {
+        title: 'CTO',
+        company: 'Ко',
+        url: 'https://example.test/x',
+        source: 'other',
+      },
+    });
+    const iv = h.candidates.createApplicationInterview(h.candidateIds['flagged.test'], app.id, {
+      round: 1,
+    });
+    const id = randomUUID();
+    const calls = [
+      ['POST', `/api/v1/candidate/applications/${app.id}/interviews/${iv.id}/recordings`],
+      ['POST', `/api/v1/candidate/recordings/${id}/segments`],
+      ['GET', `/api/v1/candidate/recordings/${id}`],
+      ['POST', `/api/v1/candidate/recordings/${id}/finish`],
+      ['DELETE', `/api/v1/candidate/recordings/${id}`],
+    ] as const;
+    for (const [method, url] of calls) {
+      const res = await h.app.inject({ method, url, headers });
+      expect(res.statusCode, `${method} ${url}`).toBe(404);
+    }
+    const me = await h.app.inject({ method: 'GET', url: '/api/v1/auth/me', headers });
+    expect(me.json().data.features).toEqual({ cabinetB640: true, interviewRecording: false });
+    const removed = await h.app.inject({
+      method: 'DELETE',
+      url: `/api/v1/candidate/applications/${app.id}/interviews/${iv.id}`,
+      headers,
+    });
+    expect(removed.statusCode).toBe(200);
+  });
+});
