@@ -84,9 +84,12 @@ function uploadFailure(reply: FastifyReply, request: FastifyRequest, error: unkn
   throw error;
 }
 
-/** Дорожки .app — у записи из приложения, `upload` — только у загруженного файла. */
+/** Дорожки .app — у записи из приложения, `upload` — только у загруженного файла, `mic` — у диктовки. */
 function trackFits(recording: StoredRecording, track: string): boolean {
-  return recording.source === 'upload' ? track === 'upload' : track !== 'upload';
+  if (recording.source === 'upload') return track === 'upload';
+  // Диктовка — только голос кандидата.
+  if (recording.source === 'dictation') return track === 'mic';
+  return track !== 'upload';
 }
 
 async function handleSegment(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

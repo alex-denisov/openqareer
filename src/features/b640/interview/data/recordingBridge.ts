@@ -68,7 +68,7 @@ async function createRecording(
 }
 
 /** Начать запись в .app по уже созданной на сервере. */
-async function launchRecording(created: CreatedRecording): Promise<void> {
+export async function launchRecording(created: CreatedRecording): Promise<void> {
   await invokeDesktopCommand('recording_start', {
     resourceId: created.recordingId,
     uploadUrl: created.uploadUrl,

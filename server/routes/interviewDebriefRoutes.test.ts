@@ -241,3 +241,37 @@ describe('B751: разбор после интервью', () => {
     expect(foreign.segment.statusCode).toBe(400);
   });
 });
+
+describe('B751: диктовка в .app', () => {
+  it('запись без интервью, только дорожка mic; в разбор интервью не попадает', async () => {
+    const { h, debrief } = await setup();
+    const created = await h.app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/dictations',
+      headers: {
+        authorization: `Bearer ${h.tokens['flagged.test']}`,
+        origin: 'http://localhost:3000',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const rec = created.json().data as { recordingId: string; headers: Record<string, string> };
+    const segment = (track: string) => {
+      const form = multipart(
+        { track, segment: '0', startedAt: '2026-11-20T10:00:00.000Z', durationMs: '5000' },
+        { data: Buffer.from('AAC'.repeat(100)), type: 'audio/mp4' },
+      );
+      return h.app.inject({
+        method: 'POST',
+        url: `/api/v1/candidate/recordings/${rec.recordingId}/segments`,
+        payload: form.body,
+        headers: {
+          'content-type': form.type,
+          'x-recording-token': rec.headers['X-Recording-Token']!,
+        },
+      });
+    };
+    expect((await segment('system')).statusCode).toBe(400);
+    expect((await segment('mic')).statusCode).toBe(202);
+    expect((await debrief()).json().data.recording).toBeNull();
+  });
+});

@@ -42,6 +42,25 @@ function notFound(reply: FastifyReply, request: FastifyRequest): FastifyReply {
   return sendError(reply, request, 404, 'recording_not_found', 'Запись не найдена.', false);
 }
 
+/** Адрес приёма сегментов и ключ записи — их .app передаёт в `recording_start`. */
+function sendCreated(
+  reply: FastifyReply,
+  request: FastifyRequest,
+  config: RouteDeps['config'],
+  recordingId: string,
+  issued: ReturnType<typeof issueRecordingToken>,
+): FastifyReply {
+  return reply.code(201).send({
+    data: {
+      recordingId,
+      uploadUrl: `${publicOrigin(config)}/api/v1/candidate/recordings/${recordingId}/segments`,
+      headers: { 'X-Recording-Token': issued.token },
+      expiresAt: issued.expiresAt,
+    },
+    meta: { requestId: request.id },
+  });
+}
+
 const handleCreate: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -72,15 +91,29 @@ const handleCreate: Handler = async (deps, request, reply) => {
     source: body.data?.source ?? 'app',
     continuesId: continues?.id ?? null,
   });
-  return reply.code(201).send({
-    data: {
-      recordingId,
-      uploadUrl: `${publicOrigin(config)}/api/v1/candidate/recordings/${recordingId}/segments`,
-      headers: { 'X-Recording-Token': issued.token },
-      expiresAt: issued.expiresAt,
-    },
-    meta: { requestId: request.id },
+  return sendCreated(reply, request, config, recordingId, issued);
+};
+
+/**
+ * Диктовка ответа в .app (i02/i03), где нет распознавания речи браузером: та же запись
+ * B642, но без интервью; клиент читает текст и удаляет запись.
+ */
+const handleCreateDictation: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const { repository } = recordingRuntimeFor(deps, request.log);
+  const issued = issueRecordingToken();
+  const recordingId = repository.create({
+    candidateId: candidate.id,
+    applicationId: '',
+    interviewId: '',
+    tokenHash: issued.tokenHash,
+    tokenExpiresAt: issued.expiresAt,
+    source: 'dictation',
   });
+  return sendCreated(reply, request, config, recordingId, issued);
 };
 
 function viewOf(deps: RouteDeps, request: FastifyRequest, recordingId: string) {
@@ -150,6 +183,7 @@ export function registerInterviewRecordingRoutes(app: FastifyInstance, deps: Rou
     LIMIT,
     withDeps(deps, handleCreate),
   );
+  app.post('/api/v1/candidate/dictations', LIMIT, withDeps(deps, handleCreateDictation));
   app.get('/api/v1/candidate/recordings/:recordingId', LIMIT, withDeps(deps, handleGet));
   app.post('/api/v1/candidate/recordings/:recordingId/finish', LIMIT, withDeps(deps, handleFinish));
   app.delete('/api/v1/candidate/recordings/:recordingId', LIMIT, withDeps(deps, handleDelete));
