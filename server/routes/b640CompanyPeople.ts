@@ -93,6 +93,25 @@ export function circlePeople(
   return people;
 }
 
+/**
+ * B698: черновик знакомому из карточки компании — про эту компанию: вакансия его строки (или первая
+ * вакансия компании) и ещё одна. У рекрутёра вакансия уже есть, у компании без вакансий — ничего.
+ */
+export function withCompanyVacancies(
+  people: readonly B640CompanyPerson[],
+  vacancyIds: readonly string[],
+): B640CompanyPerson[] {
+  return people.map((person) => {
+    const target = person.message?.target;
+    if (!person.message || !target || !('contactId' in target)) return person;
+    const first = person.vacancyId ?? vacancyIds[0];
+    if (!first) return person;
+    const also = vacancyIds.find((id) => id !== first);
+    const withVacancies = { contactId: target.contactId, vacancyId: first, ...(also ? { alsoVacancyId: also } : {}) };
+    return { ...person, message: { ...person.message, target: withVacancies } };
+  });
+}
+
 /** Один человек — одна строка, в ближайшем круге; участники платформы — по одному на вакансию. */
 export function mergePeople(people: readonly B640CompanyPerson[]): B640CompanyPerson[] {
   const best = new Map<string, B640CompanyPerson>();
@@ -196,7 +215,8 @@ async function companyPeople(
     companyKey,
     vacancies[0]?.cluster.id ?? null,
   );
-  return mergePeople([...fromCircles, ...fromContacts]);
+  const ids = vacancies.map((item) => item.cluster.id);
+  return withCompanyVacancies(mergePeople([...fromCircles, ...fromContacts]), ids);
 }
 
 async function getPeople(backgroundDeps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

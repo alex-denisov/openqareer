@@ -121,6 +121,50 @@ describe('B698: POST contact-messages', () => {
   });
 });
 
+describe('B698: черновик из карточки компании — о самой компании', () => {
+  const TITLES: Record<string, string> = { c1: 'Директор по данным', c2: 'Руководитель отдела AI-трансформации аналитики' };
+  async function companySetup(modelBody?: string) {
+    const writer = stubWriter(modelBody);
+    const h = await createB640Harness({
+      pool: () => [poolItem({ id: 'c1', title: TITLES.c1!, company: 'VK' }), poolItem({ id: 'c2', title: TITLES.c2!, company: 'VK' })],
+      coverLetterWriter: writer,
+      engine: { getActiveCluster: (id: string) => (TITLES[id] ? { canonicalTitle: TITLES[id], canonicalCompany: 'VK' } : undefined) },
+    });
+    closers.push(h.close);
+    h.candidates.saveResumeDraft(h.candidateIds['flagged.test'], { ...EMPTY_RESUME_DRAFT, targetRole: 'Директор по данным',
+      candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline: 'Руководитель аналитики' } }, []);
+    const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
+    await h.app.inject({ method: 'PUT', url: `${OLD}/alex`, headers,
+      payload: { fullName: 'Alexandr Alexandrov', companyName: 'VK', roleTitle: 'Head of Data', relationship: 'Коллега', strength: 'strong' } });
+    const post = (payload: object) => h.app.inject({ method: 'POST', url: BASE, headers, payload });
+    return { writer, post };
+  }
+
+  it('в запросе к модели — компания, роль знакомого и обе вакансии; просьба — рекомендовать или представить', async () => {
+    const { writer, post } = await companySetup('Александр, привет! Вижу у VK вакансию директора по данным. Подскажете, кто нанимает?');
+    const res = await post({ contactId: 'alex', vacancyId: 'c1', alsoVacancyId: 'c2', kind: 'known_contact' });
+    expect(res.statusCode).toBe(201);
+    const input = writer.calls[0]!;
+    expect(input.vacancy).toEqual({ title: TITLES.c1, company: 'VK' });
+    for (const part of ['VK', 'Head of Data', TITLES.c1!, TITLES.c2!]) expect(input.wish).toContain(part);
+    expect(input.wish).toMatch(/рекоменд|представ/iu);
+    expect(input.wish).not.toContain('куда обратиться с поиском');
+  });
+
+  it('модель не ответила — запасной текст тоже про компанию и вакансию', async () => {
+    const { post } = await companySetup(undefined);
+    const text = (await post({ contactId: 'alex', vacancyId: 'c1', kind: 'known_contact' })).json().data.text as string;
+    expect(text).toContain('VK');
+    expect(text).toContain(TITLES.c1);
+  });
+
+  it('вторая вакансия без первой и чужой формат id — 400', async () => {
+    const { post } = await companySetup();
+    expect((await post({ contactId: 'alex', alsoVacancyId: 'c2', kind: 'known_contact' })).statusCode).toBe(400);
+    expect((await post({ contactId: 'alex', vacancyId: 'c1', alsoVacancyId: 'c 2', kind: 'known_contact' })).statusCode).toBe(400);
+  });
+});
+
 describe('B698: правка, одобрение, отправка', () => {
   it('правит текст до 2000 знаков и только свой', async () => {
     const { send, draft } = await setup();
