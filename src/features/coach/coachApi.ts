@@ -67,6 +67,8 @@ export type {
 export interface AuthUserFeatures {
   /** Новый кабинет B640 вместо прежнего. */
   cabinetB640: boolean;
+  /** B642: запись и расшифровка разговоров включены на сервере. */
+  interviewRecording?: boolean;
 }
 
 export interface AuthUser {

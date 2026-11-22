@@ -100,7 +100,7 @@ async function signInWith(page: Page, code: string) {
 
 test('B401: enable 2FA, keep the codes once, sign in with an app code and a backup code', async ({
   page,
-}) => {
+}, testInfo) => {
   const server = await mockTwoFactor(page);
   await page.goto('/app/account/security', { waitUntil: 'domcontentloaded' });
   const screen = page.locator('[data-b640-node="n04"]');
@@ -125,6 +125,16 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
   }));
   expect(overflow.page).toBeLessThanOrEqual(0);
   expect(overflow.copy).toBeLessThanOrEqual(0);
+  // B754: поля 295, как в макете n04d; на 390 в закреплённой панели только «Включить».
+  const field = (await screen.getByLabel('Текущий пароль').boundingBox())!;
+  expect(Math.round(field.width)).toBe(295);
+  const dock = screen.locator('.actions.m-commit');
+  await expect(dock.getByRole('button')).toHaveText(['Включить']);
+  if (testInfo.project.name === 'mobile-390') {
+    const cancel = (await screen.getByRole('button', { name: 'Отмена' }).boundingBox())!;
+    expect(cancel.y).toBeGreaterThan(field.y);
+    expect(Math.round((await dock.getByRole('button').boundingBox())!.width)).toBe(358);
+  }
   await screen.getByLabel('Код из приложения-аутентификатора').fill(APP_CODE);
   await screen.getByLabel('Текущий пароль').fill('secret-password');
   await screen.getByRole('button', { name: 'Включить' }).click();
@@ -136,6 +146,18 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
   const done = (await screen.getByRole('button', { name: 'Готово' }).boundingBox())!;
   const apart = done.x >= download.x + download.width || done.y >= download.y + download.height;
   expect(apart).toBe(true);
+  // B754: «Скачать» — контурная кнопка в строке с «Готово», под «Скопировать коды», на 1440 и 390.
+  expect(Math.round(download.height)).toBe(44);
+  const copyCodes = (await screen.getByRole('button', { name: 'Скопировать коды' }).boundingBox())!;
+  expect(Math.round(done.y)).toBe(Math.round(download.y));
+  expect(download.y).toBeGreaterThan(copyCodes.y);
+  await expect(screen.getByRole('button', { name: 'Скачать' })).toHaveClass(/\bbtn\b/u);
+  if (testInfo.project.name === 'mobile-390') {
+    expect(Math.round(copyCodes.width)).toBe(332);
+  } else {
+    // Ширина по тексту: шрифты Linux-раннера дают на 2 px уже — допуск 2 px.
+    expect(Math.abs(download.width - 125)).toBeLessThanOrEqual(2);
+  }
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
   expect(stored).not.toContain(CODES[0]);
   await screen.getByRole('button', { name: 'Готово' }).click();

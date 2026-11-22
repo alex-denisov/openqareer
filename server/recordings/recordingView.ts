@@ -10,7 +10,8 @@ import { segmentAssociatedData } from './recordingTranscriptionService';
 export type RecordingStatus = 'recording' | 'transcribing' | 'ready' | 'failed';
 
 export interface TranscriptLine {
-  readonly speaker: 'candidate' | 'interviewer';
+  /** `null` — загруженный файл: голоса не разделены (B751). */
+  readonly speaker: 'candidate' | 'interviewer' | null;
   readonly startMs: number;
   readonly endMs: number;
   readonly text: string;
@@ -46,6 +47,11 @@ export function recordingStatus(
   return segments.some((s) => s.status === 'done') ? 'ready' : 'failed';
 }
 
+function speakerOf(track: RecordingTrack): TranscriptLine['speaker'] {
+  if (track === 'upload') return null;
+  return track === 'mic' ? 'candidate' : 'interviewer';
+}
+
 function linesOf(
   sealedText: SealedText,
   segment: StoredSegment,
@@ -59,7 +65,7 @@ function linesOf(
   const parsed = JSON.parse(plain) as Array<{ start: number; end: number; text: string }>;
   const offset = Date.parse(segment.startedAt) - origin;
   return parsed.map((line) => ({
-    speaker: segment.track === 'mic' ? 'candidate' : 'interviewer',
+    speaker: speakerOf(segment.track),
     startMs: Math.max(0, Math.round(offset + line.start * 1_000)),
     endMs: Math.max(0, Math.round(offset + line.end * 1_000)),
     text: line.text,

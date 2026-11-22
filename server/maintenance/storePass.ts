@@ -5,14 +5,19 @@ import type { StorePassMark } from './storePassMark';
 export const STORE_PASS_MIN_GAP_MS = 6 * 60 * 60 * 1_000;
 /** Через сколько после старта чистка начинается: первая волна идёт без неё. */
 export const STORE_PASS_DELAY_MS = 5 * 60 * 1_000;
-/** Пауза между транзакциями чистки: диск и блокировка записи свободны между ними. */
-export const STORE_PASS_PAUSE_MS = 250;
+/**
+ * Пауза между транзакциями и окнами чистки: диск и блокировка записи свободны
+ * между ними. Замер 22.11: при 250 мс stalls цикла были в 1,5–2 раза выше обычного.
+ */
+export const STORE_PASS_PAUSE_MS = 1_000;
+/** Строк индекса пула на окно дочитывания: 5 000 по умолчанию — короче шаг. */
+export const STORE_PASS_WINDOW_ROWS = 2_000;
 
 export interface StorePassDeps {
   readonly maintainStoreAsync: (
     nowMs?: number,
     shouldStop?: () => boolean,
-    options?: { pauseMs?: number },
+    options?: { pauseMs?: number; windowRows?: number },
   ) => Promise<{ backfillWindows: number }>;
   readonly mark?: StorePassMark;
   readonly stopped: () => boolean;
@@ -39,6 +44,7 @@ export async function runStorePass(deps: StorePassDeps): Promise<void> {
   try {
     const { backfillWindows } = await deps.maintainStoreAsync(startedAt, deps.stopped, {
       pauseMs: STORE_PASS_PAUSE_MS,
+      windowRows: STORE_PASS_WINDOW_ROWS,
     });
     if (deps.stopped()) {
       deps.log.info({ ms: deps.now() - startedAt }, 'maintenance-store-pass-stopped');
