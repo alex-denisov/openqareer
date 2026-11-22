@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
+import { registerInterviewDebriefRoutes } from './interviewDebriefRoutes';
 import { registerRecordingSegmentRoute } from './interviewRecordingSegmentRoute';
 import {
   authenticateCandidate,
@@ -25,6 +26,12 @@ const finishSchema = z.object({
   failed: z.number().int().min(0),
 });
 
+/** B751: `upload` — файл с сайта; без тела — запись .app. */
+const createSchema = z
+  .object({ source: z.enum(['app', 'upload']).optional() })
+  .optional()
+  .nullable();
+
 const LIMIT = { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } };
 
 function notFound(reply: FastifyReply, request: FastifyRequest): FastifyReply {
@@ -41,6 +48,10 @@ const handleCreate: Handler = async (deps, request, reply) => {
   if (!repository.interviewBelongsTo(candidate.id, params.id, params.iid)) {
     return sendError(reply, request, 404, 'interview_not_found', 'Интервью не найдено.', false);
   }
+  const body = createSchema.safeParse(request.body);
+  if (!body.success) {
+    return sendError(reply, request, 400, 'invalid_recording', 'Неверный источник записи.', false);
+  }
   const issued = issueRecordingToken();
   const recordingId = repository.create({
     candidateId: candidate.id,
@@ -48,6 +59,7 @@ const handleCreate: Handler = async (deps, request, reply) => {
     interviewId: params.iid,
     tokenHash: issued.tokenHash,
     tokenExpiresAt: issued.expiresAt,
+    source: body.data?.source ?? 'app',
   });
   return reply.code(201).send({
     data: {
@@ -131,4 +143,5 @@ export function registerInterviewRecordingRoutes(app: FastifyInstance, deps: Rou
   app.post('/api/v1/candidate/recordings/:recordingId/finish', LIMIT, withDeps(deps, handleFinish));
   app.delete('/api/v1/candidate/recordings/:recordingId', LIMIT, withDeps(deps, handleDelete));
   registerRecordingSegmentRoute(app, deps);
+  registerInterviewDebriefRoutes(app, deps);
 }
