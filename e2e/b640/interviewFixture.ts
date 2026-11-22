@@ -10,6 +10,8 @@ export interface PrepMockOptions {
   readonly noResponses?: boolean;
   /** Сколько первых сохранений ответа ответить ошибкой 500. */
   readonly failPrep?: number;
+  /** Компании нет в данных платформы — карточка отвечает 404. */
+  readonly noCompany?: boolean;
 }
 
 export interface PrepMock {
@@ -64,6 +66,56 @@ const STORY = {
   confidence: 'confirmed',
   sourceFacts: [],
 };
+
+/** Карточка компании платформы: отрасль, город, источники и рекрутер вакансии отклика. */
+const COMPANY = {
+  key: 'arka',
+  name: 'Арка Холдинг',
+  location: 'Москва',
+  industry: 'Логистика',
+  vacancyCount: 3,
+  contactsCount: null,
+  contactsImportedAt: null,
+  want: false,
+  nextStep: null,
+  hasRecruiter: true,
+  recruiterSearchStatus: 'found',
+  sources: [{ name: 'hh.ru', observedAt: '2026-11-04T10:00:00.000Z' }],
+  vacancies: [],
+  recruiters: [
+    {
+      id: 'rec-1',
+      companyKey: 'arka',
+      vacancyId: 'cluster-arka',
+      fullName: 'Сергей Минин',
+      roleTitle: 'технический директор',
+      email: null,
+      emailStatus: 'unverified',
+      phone: null,
+    },
+  ],
+  relocation: null,
+};
+
+async function mockCompany(page: Page, options: PrepMockOptions) {
+  await page.route('**/api/v1/candidate/b640/companies/*', (route) =>
+    options.noCompany
+      ? route.fulfill({ status: 404, json: { error: { message: 'not found' } } })
+      : route.fulfill({
+          json: {
+            data: {
+              company: COMPANY,
+              roleVacancies: [],
+              roleTotal: 0,
+              roleNextOffset: null,
+              otherVacancies: [],
+              otherTotal: 0,
+              applications: {},
+            },
+          },
+        }),
+  );
+}
 
 interface State {
   interview: Json | null;
@@ -129,7 +181,13 @@ export async function mockPrep(page: Page, options: PrepMockOptions = {}): Promi
   const state: State = {
     interview: options.noInterview
       ? null
-      : { id: 'iv-1', scheduledAt: '2026-11-12T12:00:00.000Z', prepStatus: 'none', round: 1 },
+      : {
+          id: 'iv-1',
+          scheduledAt: '2026-11-12T12:00:00.000Z',
+          prepStatus: 'none',
+          round: 1,
+          format: 'видеозвонок с техническим директором',
+        },
     paragraphs: [],
     prepFails: options.failPrep ?? 0,
   };
@@ -144,5 +202,6 @@ export async function mockPrep(page: Page, options: PrepMockOptions = {}): Promi
   await page.route('**/api/v1/candidate/star-stories', (route) =>
     route.fulfill({ json: { data: { stories: [STORY], facts: [] } } }),
   );
+  await mockCompany(page, options);
   return { calls };
 }

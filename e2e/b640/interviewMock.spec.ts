@@ -11,7 +11,76 @@ async function open(page: Page, options: MockInterviewOptions = {}) {
   return mock;
 }
 
+/** Браузерное распознавание на устройстве: `__dictate(text)` даёт фразу, `__deny()` — отказ в микрофоне. */
+async function fakeRecognition(page: Page) {
+  await page.addInitScript(() => {
+    type Handler = ((event?: unknown) => void) | undefined;
+    class Fake {
+      static latest: Fake | undefined;
+      static async available() {
+        return 'available';
+      }
+      processLocally = false;
+      lang = '';
+      continuous = false;
+      interimResults = false;
+      onstart: Handler;
+      onresult: Handler;
+      onerror: Handler;
+      onend: Handler;
+      constructor() {
+        Fake.latest = this;
+      }
+      start() {
+        queueMicrotask(() => this.onstart?.());
+      }
+      stop() {
+        this.onend?.();
+      }
+      abort() {
+        this.onend?.();
+      }
+    }
+    const scope = window as unknown as Record<string, unknown>;
+    scope.SpeechRecognition = Fake;
+    scope.__dictate = (text: string) => {
+      Fake.latest?.onresult?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: text } }],
+      });
+      Fake.latest?.onend?.();
+    };
+    scope.__deny = () => {
+      Fake.latest?.onerror?.({ error: 'not-allowed' });
+      Fake.latest?.onend?.();
+    };
+  });
+}
+
 test.describe('B659: «Пробное интервью» (I2)', () => {
+  test('B749: микрофон в поле ответа — сказанное дописывается, без доступа кнопка гаснет', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name.includes('390'), 'на 390 значок есть только без доступа');
+    await fakeRecognition(page);
+    await open(page);
+    const field = page.getByLabel('Ваш ответ');
+    await field.fill('В 2024 году');
+    await page.getByRole('button', { name: 'Надиктовать' }).click();
+    await expect(page.getByRole('button', { name: 'Остановить запись' })).toBeVisible();
+    await page.evaluate(() =>
+      (window as unknown as { __dictate: (t: string) => void }).__dictate('мы перевели платформу'),
+    );
+    await expect(field).toHaveValue(/^В 2024 году.*мы перевели платформу/u);
+    await page.getByRole('button', { name: 'Надиктовать' }).click();
+    await page.evaluate(() => (window as unknown as { __deny: () => void }).__deny());
+    await expect(page.getByRole('button', { name: 'Нет доступа к микрофону' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expectGates(page);
+  });
+
   test('вопрос, ответ, разбор по критериям, «Ответить ещё раз», следующий вопрос и «Закончить»', async ({
     page,
   }) => {
