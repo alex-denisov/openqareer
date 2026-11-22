@@ -16,6 +16,10 @@
     .b640 .co-head .act-dock {
       flex-direction: column-reverse;
       align-items: flex-end;
+      gap: 0;
+      padding-block: var(--career-space-2);
+      background: var(--career-surface);
+      border-block-start-color: var(--career-line-strong);
     }
     .b640 .co-head .act-dock > .btn {
       flex: 0 0 auto;

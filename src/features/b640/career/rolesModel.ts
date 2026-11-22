@@ -3,6 +3,7 @@ import type { ProposedRole } from '../../../../shared/roleProposals';
 import { mapProposedRoleToCareerRole } from '../../career-map/roleHypothesisAdapter';
 import { formatVacancyCount } from '../../career-map/careerWageFork';
 import type { CheckedRole } from '../../skills/roleSkillAssessmentApi';
+import { roleLabel, type RoleTitlesRu } from './roleLabel';
 
 /** Откуда роль в списке: выбрана для поиска, названа по опыту, добавлена кандидатом. */
 export type RoleOrigin = 'search' | 'experience' | 'own';
@@ -15,7 +16,10 @@ export interface RoleCheck {
 /** Строка роли на вкладке «Роли» и столбец сравнения (s09, s10). */
 export interface RoleRow {
   readonly id: string;
+  /** Ключ роли поиска и проверки (английское название онтологии). */
   readonly title: string;
+  /** B737: название для кандидата — русское, если оно есть. */
+  readonly label: string;
   /** «380–520 тыс. ₽»; `null` — зарплат в выборке мало или нет. */
   readonly wage: string | null;
   /** «hh.ru, 96 вакансий, 10.11» или «нет данных о зарплатах». */
@@ -65,6 +69,7 @@ function rowOf(
   role: ProposedRole,
   search: ReadonlySet<string>,
   checked: readonly CheckedRole[],
+  titlesRu: RoleTitlesRu,
 ): RoleRow {
   const model = mapProposedRoleToCareerRole(role, {
     acceptedTitle: null,
@@ -83,6 +88,7 @@ function rowOf(
   return {
     id: role.id,
     title: role.title,
+    label: role.titleRu || roleLabel(role.title, titlesRu),
     wage: model.isWageCalculated ? model.wageDisplay : null,
     wageNote,
     vacancies: model.vacancyCount > 0 ? model.vacancyCount : null,
@@ -100,10 +106,11 @@ function rowOf(
   };
 }
 
-function searchOnlyRow(title: string): RoleRow {
+function searchOnlyRow(title: string, titlesRu: RoleTitlesRu): RoleRow {
   return {
     id: `search:${key(title)}`,
     title,
+    label: roleLabel(title, titlesRu),
     wage: null,
     wageNote: NO_WAGE,
     vacancies: null,
@@ -120,11 +127,14 @@ export function buildRoleRows(
   roles: readonly ProposedRole[],
   searchTitles: readonly string[],
   checked: readonly CheckedRole[],
+  titlesRu: RoleTitlesRu = {},
 ): readonly RoleRow[] {
   const search = new Set(searchTitles.map(key));
-  const rows = roles.map((role) => rowOf(role, search, checked));
+  const rows = roles.map((role) => rowOf(role, search, checked, titlesRu));
   const known = new Set(roles.flatMap(namesOf));
-  const extra = searchTitles.filter((title) => !known.has(key(title))).map(searchOnlyRow);
+  const extra = searchTitles
+    .filter((title) => !known.has(key(title)))
+    .map((title) => searchOnlyRow(title, titlesRu));
   return [...rows, ...extra].sort((a, b) => (b.vacancies ?? -1) - (a.vacancies ?? -1));
 }
 
@@ -137,9 +147,11 @@ export interface SearchStrip {
 export function searchStrip(
   rows: readonly RoleRow[],
   searchTitles: readonly string[],
+  titlesRu: RoleTitlesRu = {},
 ): SearchStrip | null {
-  const [first] = searchTitles;
-  if (!first) return null;
+  const [key0] = searchTitles;
+  if (!key0) return null;
+  const first = roleLabel(key0, titlesRu);
   const more = searchTitles.length - 1;
   const total = rows
     .filter((row) => row.origin === 'search')

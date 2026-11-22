@@ -143,6 +143,14 @@ describe('B689: выгрузка данных покрывает все табл
     expect(diaryGaps).toEqual([]);
   });
 
+  it('n02: «Как часто» и «Не показывать название компании» входят в выгрузку', () => {
+    const { store } = fileStore();
+    const candidate = createCandidate(store);
+    expect(store.exportCandidate(candidate.id).notificationDeliverySettings).toEqual({ frequency: 'immediate', hideCompany: false });
+    store.notificationRepository.setDeliverySettings(candidate.id, { frequency: 'weekly', hideCompany: true });
+    expect(store.exportCandidate(candidate.id).notificationDeliverySettings).toEqual({ frequency: 'weekly', hideCompany: true });
+  });
+
   it('выгрузка без флага B640 не создаёт таблицы дневника', () => {
     const { databasePath, store } = fileStore();
     const candidate = createCandidate(store);

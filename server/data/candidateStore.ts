@@ -145,6 +145,8 @@ export interface CandidateExport extends CandidateSnapshot {
   };
   /** B689: остальной дневник — цели, замеры, места работы с планом, люди, черновики KPI. */
   careerDiary: import('./careerDiaryExport').CareerDiaryExport;
+  /** n02: как почта и Telegram присылают уведомления и скрыто ли название компании. */
+  notificationDeliverySettings: import('./notificationDeliverySettings').DeliverySettings;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];

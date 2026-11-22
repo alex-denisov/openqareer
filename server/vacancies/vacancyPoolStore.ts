@@ -152,7 +152,8 @@ export interface VacancyPoolStore {
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
   ): Promise<MergeSliceResult>;
-  loadSourceStates(): StoredSourceState[];
+  /** Without ids — every stored state (start-up); with ids — only those (B736 admin page). */
+  loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[];
   /** Only sources with a pending manual request: the 5 s worker poll (B641). */
   loadRequestedSourceSyncs?(): readonly {
     sourceId: string;

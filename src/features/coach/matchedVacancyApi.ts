@@ -33,6 +33,8 @@ export interface CampaignMetaView {
     readonly value: readonly string[];
     readonly origin: 'explicit' | 'model' | 'profile' | 'default';
   };
+  /** B737: русское название роли поиска по её исходному названию (только где оно есть). */
+  readonly titlesRu?: Readonly<Record<string, string>>;
   readonly regions: {
     readonly value: readonly string[];
     readonly origin: 'explicit' | 'model' | 'profile' | 'default';

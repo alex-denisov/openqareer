@@ -1,6 +1,7 @@
 import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
 import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
 import { cabinetB640Enabled } from './cabinetB640Flag';
+import { hideFootprintTools } from './footprintPublicView';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -58,6 +59,11 @@ function sourceAvailability(config: RouteDeps['config'], youtube: boolean) {
 function youtubeEnabled(deps: RouteDeps, request: FastifyRequest): boolean {
   const principal = authenticateSession(request, deps.authService, deps.config);
   return Boolean(principal && cabinetB640Enabled(deps.config, principal.username));
+}
+
+/** B740: с флагом B640 ответ без названий инструментов поиска. */
+function forViewer<T>(deps: RouteDeps, request: FastifyRequest, data: T): T {
+  return youtubeEnabled(deps, request) ? hideFootprintTools(data) : data;
 }
 
 function getPlan(
@@ -128,8 +134,7 @@ async function handleGetFootprintPlan(
   const { plan, unidentifiedEmployers, sourceAvailability } = getPlan(
     deps, candidate.id, manualEmployers, youtubeEnabled(deps, request),
   );
-  return {
-    data: {
+  const data = {
       plan,
       unidentifiedEmployers,
       sourceAvailability,
@@ -139,9 +144,8 @@ async function handleGetFootprintPlan(
         versionId: CAPABILITY_CONSENT_CURRENT_VERSION.digital_footprint,
       },
       audit: latestFootprintAudit(deps, candidate.id),
-    },
-    meta: { requestId: request.id },
   };
+  return { data: forViewer(deps, request, data), meta: { requestId: request.id } };
 }
 
 function staleAudit(audit: NonNullable<ReturnType<NonNullable<RouteDeps['candidateReputationRepo']>['getLatestFootprintAudit']>>) {
@@ -175,7 +179,7 @@ async function handleGetFootprintAudit(
       ...(audit.completedAt ? { createdAt: audit.completedAt } : {}),
     });
   }
-  return { data: { audit }, meta: { requestId: request.id } };
+  return { data: forViewer(deps, request, { audit }), meta: { requestId: request.id } };
 }
 
 function isConsentCurrent(deps: RouteDeps, userId: string, candidateId: string): boolean {
@@ -281,7 +285,7 @@ async function launchFootprintRun(
       adapters: createFootprintAdapterSet({ config: deps.config }),
       isAuthorized: () => isConsentCurrent(deps, userId, candidateId),
     });
-    return reply.code(202).send({ data: { audit }, meta: { requestId: request.id } });
+    return reply.code(202).send({ data: forViewer(deps, request, { audit }), meta: { requestId: request.id } });
   } catch (error) {
     if (error instanceof FootprintConsentRequiredError) {
       return sendError(reply, request, 409, 'digital_footprint_consent_required', 'Согласие было отозвано. Обновите страницу.', false);
@@ -318,7 +322,7 @@ async function handleReviewFootprintFinding(
     candidate.id, findingId.data, decision.data.review,
   );
   if (!audit) return sendError(reply, request, 404, 'finding_not_found', 'Находка больше недоступна.', false);
-  return { data: { audit }, meta: { requestId: request.id } };
+  return { data: forViewer(deps, request, { audit }), meta: { requestId: request.id } };
 }
 
 async function handleDeleteFootprintFindings(

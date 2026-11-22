@@ -96,6 +96,12 @@ export function indicatorsOf(card: CareerDiaryGoalCard): readonly CareerDiaryGoa
   return card.indicators.length > 0 ? card.indicators : [card];
 }
 
+/** Единица часто уже в названии («Срок релиза, дней») — второй раз её не дописываем. */
+export function labelWithUnit(label: string, unit: string): string {
+  if (!unit || label.trim().endsWith(`, ${unit}`)) return label;
+  return `${label}, ${unit}`;
+}
+
 export interface IndicatorView {
   readonly id: string;
   readonly title: string;
@@ -115,7 +121,7 @@ function targetText(goal: CareerDiaryGoalSummary): string {
 
 export function indicatorView(goal: CareerDiaryGoalSummary): IndicatorView {
   const latest = goal.latestMeasurement;
-  const title = goal.unit && goal.unit !== '%' ? `${goal.title}, ${goal.unit}` : goal.title;
+  const title = goal.unit === '%' ? goal.title : labelWithUnit(goal.title, goal.unit);
   const baseline =
     goal.baselineValue === null ? '' : ` · было ${formatValue(goal.baselineValue, goal.unit)}`;
   return {

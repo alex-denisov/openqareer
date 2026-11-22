@@ -36,6 +36,37 @@ function ofTarget(goal: CareerDiaryGoalSummary, value: CareerDiaryMeasurement['v
     : shown;
 }
 
+interface HistoryRow {
+  readonly key: string;
+  readonly at: string;
+  readonly value: CareerDiaryMeasurement['value'];
+  readonly source: string;
+  readonly note: string;
+}
+
+/** Как в d02a: сверху «старт» (исходное значение цели), ниже замеры от старых к новым. */
+function historyRows(
+  goal: CareerDiaryGoalSummary,
+  items: readonly CareerDiaryMeasurement[],
+): readonly HistoryRow[] {
+  const measured = [...items].reverse().map((row) => ({
+    key: row.id,
+    at: row.measuredAt,
+    value: row.value,
+    source: 'вы',
+    note: row.note ?? '',
+  }));
+  if (goal.baselineValue === null) return measured;
+  const start = {
+    key: 'start',
+    at: goal.startDate,
+    value: goal.baselineValue,
+    source: 'старт',
+    note: '',
+  };
+  return [start, ...measured];
+}
+
 /** «Замеры · N»: свёрнутая история замеров показателя (`details.gt-hist`). */
 export function GoalHistory({
   goal,
@@ -48,13 +79,14 @@ export function GoalHistory({
   const now = today();
   if (rows.state === 'loading') return <StatusLine state="wait" text="Загружаем замеры" />;
   if (rows.state === 'error') return <StatusLine state="err" text="Замеры не загрузились" />;
-  const latest = rows.items[0];
+  const history = historyRows(goal, rows.items);
+  const latest = history.at(-1);
   return (
     <details className="gt-hist">
       <summary>
-        <span className="gt-hist-l">{`Замеры · ${rows.items.length}`}</span>
+        <span className="gt-hist-l">{`Замеры · ${history.length}`}</span>
         {latest ? (
-          <span className="gt-hist-v num">{`${shortDate(latest.measuredAt.slice(0, 10))} · ${ofTarget(goal, latest.value)}`}</span>
+          <span className="gt-hist-v num">{`${shortDate(latest.at.slice(0, 10))} · ${ofTarget(goal, latest.value)}`}</span>
         ) : null}
         <Icon name="down" />
       </summary>
@@ -64,19 +96,21 @@ export function GoalHistory({
           <tr>
             <th scope="col">Дата</th>
             <th scope="col">Значение</th>
+            <th scope="col">Источник</th>
             <th scope="col">Комментарий</th>
           </tr>
         </thead>
         <tbody>
-          {rows.items.map((row) => (
-            <tr key={row.id}>
+          {history.map((row) => (
+            <tr key={row.key}>
               <td data-l="Дата" className="num">
-                {longDate(row.measuredAt, now)}
+                {longDate(row.at, now)}
               </td>
               <td data-l="Значение" className="num">
                 {ofTarget(goal, row.value)}
               </td>
-              <td data-l="Комментарий">{row.note ?? ''}</td>
+              <td data-l="Источник">{row.source}</td>
+              <td data-l="Комментарий">{row.note}</td>
             </tr>
           ))}
         </tbody>

@@ -6,6 +6,7 @@ import {
 } from '../../../../shared/careerDiaryEntries';
 import { StatusLine } from '../kit/ResultLine';
 import { updateEntry } from './diaryApi';
+import { DateInput } from '../kit/DateInput';
 import { KINDS } from './model';
 import { RetryButton } from './parts';
 
@@ -64,12 +65,11 @@ function EditorRow({ id, draft, goals, change }: FieldsProps) {
     <div className="dn-edit-row">
       <div className="field">
         <label htmlFor={`${id}-d`}>День</label>
-        <input
+        <DateInput
           id={`${id}-d`}
-          type="date"
           value={draft.date}
           required
-          onChange={(event) => change({ date: event.target.value })}
+          onChange={(date) => change({ date })}
         />
       </div>
       <div className="field">
