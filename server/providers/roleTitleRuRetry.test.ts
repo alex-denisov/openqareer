@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { NamedRole } from '../../shared/roleProposals';
-import { LlmRoleNamer, type ChatCompletionClient, type RoleNamer } from './roleNamer';
+import {
+  buildRoleNamer,
+  LlmRoleNamer,
+  roleTitleTranslatorOf,
+  type ChatCompletionClient,
+  type RoleNamer,
+} from './roleNamer';
 import { TitleRuRetryRoleNamer, type RoleTitleTranslator } from './roleTitleRuRetry';
 
 function client(content: string): ChatCompletionClient {
@@ -118,5 +124,13 @@ describe('B748: вторая проверенная попытка только 
       needsTranslation: () => true,
     }).nameRoles(facts, 'en');
     expect(outcome.roles.map((r) => r.title)).toEqual(['AI Consultant']);
+  });
+});
+
+describe('B748: фоновый проход берёт тот же проверенный перевод', () => {
+  it('из собранной цепочки называния, а без ключей — никакого', () => {
+    const namer = buildRoleNamer({ providerCredentials: { openrouter: 'k' } });
+    expect(roleTitleTranslatorOf(namer)).toBeDefined();
+    expect(roleTitleTranslatorOf(undefined)).toBeUndefined();
   });
 });

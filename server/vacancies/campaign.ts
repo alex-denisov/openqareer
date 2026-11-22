@@ -31,6 +31,8 @@ export interface StoredCampaignSelection {
   readonly revision: number;
   readonly updatedAt: string;
   readonly careerRoles?: readonly CareerRoleRef[];
+  /** B748: перевод ролей поиска; значение, равное ключу, — перевод отвергнут. */
+  readonly roleTitlesRu?: Readonly<Record<string, string>>;
 }
 
 export interface CareerRoleRef {
@@ -137,11 +139,15 @@ export interface ResolveCampaignInput {
  * а не после проверки навыков). Порядок: сначала выбор кандидата в мастере.
  */
 function ownTitlesRuOf(input: ResolveCampaignInput): Record<string, string> {
-  return Object.fromEntries(
-    [...(input.auto?.roles ?? []), ...(input.explicit?.careerRoles ?? [])].flatMap((role) =>
+  const searchRoles = Object.entries(input.explicit?.roleTitlesRu ?? {}).filter(
+    ([title, titleRu]) => titleRu !== title,
+  );
+  return Object.fromEntries([
+    ...searchRoles,
+    ...[...(input.auto?.roles ?? []), ...(input.explicit?.careerRoles ?? [])].flatMap((role) =>
       role.titleRu ? [[role.title, role.titleRu] as const] : [],
     ),
-  );
+  ]);
 }
 
 function campaignRoleTitles(input: ResolveCampaignInput): string[] {
