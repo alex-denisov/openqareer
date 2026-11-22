@@ -115,7 +115,7 @@ export function RoleOptionsModule({ title }: { readonly title: string }) {
   return (
     <section className="lead" aria-labelledby="today-role">
       <h2 className="lead-title" id="today-role">
-        {closest ? `Ближе всего — роль «${closest.title}»` : title}
+        {closest ? `Ближе всего — роль «${closest.titleRu || closest.title}»` : title}
       </h2>
       <LeadActions primary={closest ? SEARCH_ROLE : ROLES}>
         {closest ? <ActionLink action={{ ...ROLES, label: 'Другие роли' }} /> : null}

@@ -1,3 +1,4 @@
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -58,7 +59,10 @@ function searchRoleOf(
   rows: readonly { readonly kind: string }[],
 ): string | null {
   if (!rows.some((row) => row.kind === 'new_vacancies_by_role')) return null;
-  return searchRoleLabel(readCampaign(deps.candidateStore, candidateId).roles.value);
+  // B737: роль поиска хранится английским названием онтологии, кандидату — по-русски.
+  return searchRoleLabel(
+    readCampaign(deps.candidateStore, candidateId).roles.value.map(roleTitleRu),
+  );
 }
 
 function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
