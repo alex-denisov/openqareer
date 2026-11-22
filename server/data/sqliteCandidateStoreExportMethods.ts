@@ -14,7 +14,7 @@ import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimula
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import { toExportedSourceConnection } from './store/exportedSourceConnection';
-import type { DatabaseSync } from 'node:sqlite';
+import { createTrackerExport, type TrackerExportSources } from './trackerExport';
 import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
@@ -39,8 +39,8 @@ interface CandidateExportDependencies {
     | 'listAchievements'
     | 'listWorkplaces'
   >;
-  /** B689: соединение и ключ хранилища для деталей, людей, отметок и KPI дневника. */
-  readonly careerDiaryDatabase: { readonly database: DatabaseSync; readonly encryptionKey: Buffer };
+  /** B689/B738: само хранилище, его соединение и ключ — для дневника и трекера. */
+  readonly ownStorage: TrackerExportSources;
   readonly diaryEntryRepo: Pick<import('./sqliteDiaryEntryRepository').SqliteDiaryEntryRepository, 'exportAll'>;
   readonly exportConsultantConversations: (
     candidateId: string,
@@ -56,8 +56,9 @@ interface CandidateExportDependencies {
 export function createSqliteCandidateStoreExportMethods(
   dependencies: CandidateExportDependencies,
 ): CandidateExportMethod {
-  const { database, encryptionKey } = dependencies.careerDiaryDatabase;
+  const { database, encryptionKey } = dependencies.ownStorage;
   const careerDiary = createCareerDiaryExportSources(database, encryptionKey, dependencies.careerDiaryRepo);
+  const exportTracker = createTrackerExport(dependencies.ownStorage);
   return {
     exportCandidate(candidateId): CandidateExport {
       const snapshot = dependencies.getSnapshot(candidateId);
@@ -77,6 +78,7 @@ export function createSqliteCandidateStoreExportMethods(
         careerDiaryEntries: dependencies.diaryEntryRepo.exportAll(candidateId),
         careerDiary: exportCareerDiary(careerDiary, candidateId),
         notificationDeliverySettings: dependencies.readDeliverySettings(candidateId),
+        tracker: exportTracker(candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {

@@ -1,8 +1,8 @@
 import type { CandidateExport } from './candidateStore';
 
 /**
- * B689: чем покрыта в выгрузке «Скачать мои данные» каждая таблица базы кандидата со столбцом
- * `candidate_id` или ссылкой на `candidates`. Тест сверяет список со схемой: новая таблица без
+ * B689: чем покрыта в выгрузке «Скачать мои данные» каждая таблица базы кандидата: со столбцом
+ * `candidate_id` или со ссылкой (и через другие таблицы) на `candidates`, `users`, `applications`. Тест сверяет список со схемой: новая таблица без
  * строки здесь роняет тест, так что выгрузку нельзя забыть.
  *
  * - `export` — данные лежат в выгрузке под этим ключом;
@@ -17,7 +17,6 @@ export type CandidateTableCoverage =
   | { readonly internal: string }
   | { readonly gap: string };
 
-const GAP_TRACKER = 'отклики и трекер: в выгрузку пока не входят';
 const GAP_NOTIFICATIONS = 'уведомления и их настройки: в выгрузку пока не входят';
 const GAP_PROFILE = 'история и производные профиля: в выгрузку пока не входят';
 const GAP_ACCOUNT = 'учётная запись и кабинет: в выгрузку пока не входят';
@@ -67,12 +66,41 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   career_diary_people: { export: 'careerDiary' },
   career_diary_kpi_imports: { export: 'careerDiary' },
   career_diary_kpi_attempts: { internal: 'время попыток разбора KPI для предела, без содержимого' },
+  // Трекер откликов (B738 · 1).
+  applications: { export: 'tracker' },
+  application_contacts: { export: 'tracker' },
+  application_employer_reads: { export: 'tracker' },
+  application_events: { export: 'tracker' },
+  application_label_assignments: { export: 'tracker' },
+  application_referral_track: { export: 'tracker' },
+  application_retry_requests: { export: 'tracker' },
+  application_star_prep: { export: 'tracker' },
+  candidate_application_labels: { export: 'tracker' },
+  candidate_outreach: { export: 'tracker' },
+  vacancy_applications: { export: 'tracker' },
+  vacancy_skips: { export: 'tracker' },
+  career_commands: { export: 'tracker' },
+  career_command_approvals: { export: 'tracker' },
+  application_questionnaires: { export: 'tracker' },
+  application_rejection_reasons: { export: 'tracker' },
+  rejection_review_feedback: { export: 'tracker' },
+  candidate_action_batches: { export: 'tracker' },
+  candidate_action_receipts: { export: 'tracker' },
+  application_interviews: { export: 'tracker' },
+  application_materials: { export: 'tracker' },
+  application_offers: { export: 'tracker' },
   // Добавляет маршрут выгрузки.
   candidate_reputation_audits: { routeExport: 'reputationAudits' },
   candidate_footprint_audits: { routeExport: 'footprintAudits' },
   // Уведомления (n02).
   candidate_notification_delivery_settings: { export: 'notificationDeliverySettings' },
   // Служебные.
+  career_command_outbox: { internal: 'очередь исполнения команд; сами команды в tracker.careerCommands' },
+  sessions: { internal: 'отпечатки токенов входа' },
+  password_reset_tokens: { internal: 'отпечатки токенов сброса пароля' },
+  user_two_factor: { internal: 'секрет второго фактора входа' },
+  user_two_factor_backup_codes: { internal: 'отпечатки резервных кодов второго фактора' },
+  two_factor_login_challenges: { internal: 'отпечатки одноразовых проверок входа' },
   assessments_product_case_only: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v14: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v15: { internal: MIGRATION_COPY },
@@ -98,21 +126,6 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   matched_snapshot_seals: { internal: 'кэш подборки вакансий, пересчитывается' },
   sealed_matched_lists: { internal: 'кэш подборки вакансий, пересчитывается' },
   // Ещё не в выгрузке.
-  applications: { gap: GAP_TRACKER },
-  application_contacts: { gap: GAP_TRACKER },
-  application_employer_reads: { gap: GAP_TRACKER },
-  application_events: { gap: GAP_TRACKER },
-  application_label_assignments: { gap: GAP_TRACKER },
-  application_referral_track: { gap: GAP_TRACKER },
-  application_retry_requests: { gap: GAP_TRACKER },
-  application_star_prep: { gap: GAP_TRACKER },
-  candidate_application_labels: { gap: GAP_TRACKER },
-  candidate_outreach: { gap: GAP_TRACKER },
-  vacancy_applications: { gap: GAP_TRACKER },
-  vacancy_skips: { gap: GAP_TRACKER },
-  career_commands: { gap: GAP_TRACKER },
-  career_command_approvals: { gap: GAP_TRACKER },
-  career_command_outbox: { gap: GAP_TRACKER },
   candidate_notifications: { gap: GAP_NOTIFICATIONS },
   candidate_notification_deliveries: { gap: GAP_NOTIFICATIONS },
   candidate_notification_invitation_events: { gap: GAP_NOTIFICATIONS },
@@ -135,9 +148,16 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   consultant_rejections: { gap: GAP_PROFILE },
   consultant_summaries: { gap: GAP_PROFILE },
   users: { gap: GAP_ACCOUNT },
+  billing_invoices: { gap: GAP_ACCOUNT },
+  career_partner_assignments: { gap: GAP_ACCOUNT },
+  billing_events: { gap: GAP_ACCOUNT },
+  billing_subscriptions: { gap: GAP_ACCOUNT },
+  billing_pro_trials: { gap: GAP_ACCOUNT },
+  billing_reminders: { gap: GAP_ACCOUNT },
   candidate_workspaces: { gap: GAP_ACCOUNT },
   candidate_visits: { gap: GAP_ACCOUNT },
   plan_requests: { gap: GAP_ACCOUNT },
+  vacancy_subscription_items: { gap: 'вакансии, найденные подпиской: в выгрузку пока не входят' },
   account_email_change_requests: { gap: GAP_ACCOUNT },
   candidate_app_preferences: { gap: GAP_ACCOUNT },
   candidate_telegram_usernames: { gap: GAP_ACCOUNT },
@@ -145,11 +165,6 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_status_changes: { gap: GAP_ACCOUNT },
   candidate_status_signal_answers: { gap: GAP_ACCOUNT },
   b640_offer_choices: { gap: GAP_ACCOUNT },
-  application_questionnaires: { gap: GAP_TRACKER },
-  application_rejection_reasons: { gap: GAP_TRACKER },
-  rejection_review_feedback: { gap: GAP_TRACKER },
-  candidate_action_batches: { gap: GAP_TRACKER },
-  candidate_action_receipts: { gap: GAP_TRACKER },
   candidate_auto_apply_consents: { gap: GAP_AUTOMATION },
   candidate_auto_apply_journal: { gap: GAP_AUTOMATION },
   candidate_auto_apply_queue: { gap: GAP_AUTOMATION },

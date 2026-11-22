@@ -147,6 +147,8 @@ export interface CandidateExport extends CandidateSnapshot {
   careerDiary: import('./careerDiaryExport').CareerDiaryExport;
   /** n02: как почта и Telegram присылают уведомления и скрыто ли название компании. */
   notificationDeliverySettings: import('./notificationDeliverySettings').DeliverySettings;
+  /** B738 · 1: отклики с событиями, собеседованиями и оффером, анкеты, отказы, действия. */
+  tracker: import('./trackerExport').TrackerExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
