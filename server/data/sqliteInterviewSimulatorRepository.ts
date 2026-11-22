@@ -95,6 +95,28 @@ export class SqliteInterviewSimulatorRepository {
     return result.changes === 1 ? this.get(candidateId, id) : null;
   }
 
+  /**
+   * B750 3b: дописать отзыв модели в фоне, не сдвигая версию — иначе следующее
+   * действие кандидата упрётся в конфликт версии. Пишет, только если с чтения
+   * тренировка не менялась.
+   */
+  replaceBodyAtVersion(
+    candidateId: string,
+    id: string,
+    version: number,
+    session: InterviewSession,
+  ): boolean {
+    const next = { ...session, version };
+    const result = this.database
+      .prepare(
+        `UPDATE candidate_interview_sessions
+         SET body_cipher = ?
+         WHERE candidate_id = ? AND id = ? AND version = ?`,
+      )
+      .run(this.seal(candidateId, next), candidateId, id, version);
+    return result.changes === 1;
+  }
+
   replaceCompleted(
     candidateId: string,
     currentId: string,
