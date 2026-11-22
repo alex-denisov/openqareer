@@ -132,7 +132,11 @@ export function persistCareerRoles(
     )
     .sort((left, right) => Number(left.origin !== 'model') - Number(right.origin !== 'model'))
     .slice(0, MAX_CAREER_ROLES)
-    .map((role) => ({ id: role.id, title: role.title }));
+    .map((role) => ({
+      id: role.id,
+      title: role.title,
+      ...(role.titleRu ? { titleRu: role.titleRu } : {}),
+    }));
   const previous = campaign.careerRoles ?? [];
   if (sameRoles(previous, next)) return false;
   deps.candidateStore.saveCandidateWorkspace(candidateId, {
@@ -144,5 +148,8 @@ export function persistCareerRoles(
 }
 
 function sameRoles(a: readonly CareerRoleRef[], b: readonly CareerRoleRef[]): boolean {
-  return a.length === b.length && a.every((role, index) => role.id === b[index]?.id);
+  return (
+    a.length === b.length &&
+    a.every((role, index) => role.id === b[index]?.id && role.titleRu === b[index]?.titleRu)
+  );
 }

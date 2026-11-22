@@ -27,6 +27,17 @@ describe('vacancyFitProfileStamp', () => {
     );
   });
 
+  it('B748: keeps the role-scoped stamp when a career role gains its Russian title', () => {
+    const withRoles = (careerRoles: unknown) =>
+      ({ lastVisitedAt: 'x', campaign: { roles: ['CTO'], careerRoles } }) as never;
+    expect(roleScopedVacancyFitProfileStamp(snapshot, withRoles([{ id: 'r1', title: 'Head of Quantum Ops' }]))).toBe(
+      roleScopedVacancyFitProfileStamp(
+        snapshot,
+        withRoles([{ id: 'r1', title: 'Head of Quantum Ops', titleRu: 'Руководитель квантовых операций' }]),
+      ),
+    );
+  });
+
   it('changes when what the match depends on changes', () => {
     const other = { memory: [{ id: 'f1', kind: 'fact', status: 'confirmed', statement: 'Built lending', sourceMessageIds: ['m1'], sensitive: false }], resume: null } as never;
     const same = { memory: [{ id: 'f1', kind: 'fact', status: 'confirmed', statement: 'Built payments', sourceMessageIds: ['m1'], sensitive: false }], resume: null } as never;
