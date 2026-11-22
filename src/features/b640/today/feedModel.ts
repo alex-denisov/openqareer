@@ -36,7 +36,7 @@ const KIND_ACTION: Record<
   import_completed: { label: 'Открыть профиль', path: buildNodePath('s01') },
   employer_reply: { label: 'Открыть отклик', response: true },
   delivery_error: { label: 'Открыть отклик', response: true },
-  post_reminder: { label: 'Скопировать и открыть', path: buildNodePath('a03b') },
+  post_reminder: { label: 'Открыть пост', path: buildNodePath('a03b') },
 };
 
 /** Одно действие события: отклик по его id, иначе раздел кабинета. */

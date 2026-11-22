@@ -136,7 +136,7 @@ describe('SQLite candidate notification repository', () => {
     }, NOW);
 
     expect(item?.title).toBe('Пора опубликовать пост');
-    expect(item?.action.label).toBe('Скопировать и открыть');
+    expect(item?.action.label).toBe('Открыть пост');
     expect(repository.list('candidate-a', { limit: 10, now: NOW })).toMatchObject({ items: [], unreadCount: 0 });
     expect(repository.listForFeed('candidate-a', { max: 10, now: NOW })).toEqual({ rows: [], unreadCount: 0 });
     expect(repository.markAllRead('candidate-a', NOW)).toBe(0);

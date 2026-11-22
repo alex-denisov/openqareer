@@ -82,7 +82,7 @@ const EVENT_PRESENTATION: Record<NotificationEventKind, { title: string; action:
   import_completed: { title: 'Импорт профиля завершён', action: 'Открыть профиль', view: 'profile' },
   employer_reply: { title: 'Есть ответ работодателя', action: 'Напомнить рекрутеру', view: 'responses' },
   delivery_error: { title: 'Отклик не доставлен', action: 'Открыть отклик', view: 'responses' },
-  post_reminder: { title: 'Пора опубликовать пост', action: 'Скопировать и открыть', view: 'profile' },
+  post_reminder: { title: 'Пора опубликовать пост', action: 'Открыть пост', view: 'profile' },
 };
 
 const EVENT_PREFERENCE: Record<NotificationEventKind, NotificationPreferenceKey | null> = {
@@ -106,7 +106,7 @@ export function notificationPreferenceKey(kind: NotificationEventKind): Notifica
 /** B690: источник уведомления «вход в hh.ru истёк»; вид — `delivery_error`, подача — своя. */
 export const HH_SESSION_SOURCE = 'hh_session';
 
-/** B695: напоминание о посте ведёт в очередь постов нового кабинета (a03b), там «Скопировать и открыть». */
+/** B695: напоминание о посте ведёт в очередь постов нового кабинета (a03b). */
 export const LINKEDIN_POSTS_PATH = '/app/profile/linkedin/posts';
 
 export function presentNotification(
