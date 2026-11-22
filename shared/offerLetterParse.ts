@@ -45,6 +45,8 @@ const MONEY_RE = new RegExp(
 
 const BONUS_RE = /прем|бонус|bonus/iu;
 const ONE_TIME_RE = /sign-on|signing|welcome|one-time|разов|приветствен|подъ[её]мн/iu;
+/** B645 o06a: «до 2 окладов», «up to 15%» — потолок премии, а не её сумма, как и вилка оклада. */
+const CAP_RE = /(?:^|\s)(?:до|не более|максимум|up to|max(?:imum)?)\s+\d/iu;
 const PROBATION_RE = /испытательн|probation/iu;
 const RANGE_RE =
   /(?:^|\s)от\s+\d[\d\s]*.{0,20}?\sдо\s+\d|вилк|\brange\b|\bbetween\b|\d\s*[–—]\s*\d/iu;
@@ -157,7 +159,9 @@ function bonusFrom(segment: string, base: Base | null): number | undefined {
 function findBonus(sentences: readonly string[], base: Base | null): number | undefined {
   for (const sentence of sentences) {
     if (!BONUS_RE.test(sentence) || ONE_TIME_RE.test(sentence) || RANGE_RE.test(sentence)) continue;
-    const value = bonusFrom(sentence.slice(bonusIndex(sentence)), base);
+    const segment = sentence.slice(bonusIndex(sentence));
+    if (CAP_RE.test(segment)) continue;
+    const value = bonusFrom(segment, base);
     if (value !== undefined) return value;
   }
   return undefined;
@@ -232,11 +236,20 @@ const EN_DM_RE = new RegExp(
 );
 const NUMERIC_DATE_RE = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{4}))?\b/u;
 
+/**
+ * B645 o06a: дата без года — в текущем году, даже если уже прошла: прошедший срок ответа
+ * остаётся прошедшим. Следующий год — только когда дата раньше сегодняшней больше чем на
+ * два месяца (письмо в декабре про январь).
+ */
+const PAST_DATE_WINDOW_MS = 62 * 86_400_000;
+
 function isoDate(day: number, month: number, year: number | null, now: Date): string | undefined {
   if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   let resolved = year ?? now.getUTCFullYear();
-  if (year === null && Date.UTC(resolved, month - 1, day) < today) resolved += 1;
+  if (year === null && Date.UTC(resolved, month - 1, day) < today - PAST_DATE_WINDOW_MS) {
+    resolved += 1;
+  }
   const date = new Date(Date.UTC(resolved, month - 1, day));
   if (date.getUTCDate() !== day) return undefined;
   return date.toISOString().slice(0, 10);

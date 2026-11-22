@@ -62,14 +62,22 @@ interface ImportRow {
 
 export class SqliteKpiImportRepository {
   private readonly database: DatabaseSync;
+  private readonly ownsDatabase: boolean;
   private readonly sealedText: SealedText;
 
-  constructor(options: { databasePath: string; encryptionKey: Buffer }) {
-    this.database = new DatabaseSync(options.databasePath);
-    this.sealedText = new SealedText(options.encryptionKey);
+  /** Своё соединение по пути к базе или (B689, выгрузка) чужое соединение хранилища. */
+  constructor(options: DatabaseSync | { databasePath: string; encryptionKey: Buffer }, key?: Buffer) {
+    this.ownsDatabase = !(options instanceof DatabaseSync);
+    this.database = options instanceof DatabaseSync ? options : new DatabaseSync(options.databasePath);
+    const encryptionKey = options instanceof DatabaseSync ? key : options.encryptionKey;
+    if (!encryptionKey) throw new Error('kpi_import_encryption_key_missing');
+    this.sealedText = new SealedText(encryptionKey);
     try {
-      applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
-      this.database.exec('PRAGMA journal_mode = WAL;');
+      // Чужое соединение (хранилища) живёт со своими настройками ожидания и журнала.
+      if (this.ownsDatabase) {
+        applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
+        this.database.exec('PRAGMA journal_mode = WAL;');
+      }
       this.database.exec(KPI_IMPORT_SCHEMA);
     } catch (error) {
       this.close();
@@ -78,7 +86,7 @@ export class SqliteKpiImportRepository {
   }
 
   close(): void {
-    this.database.close();
+    if (this.ownsDatabase) this.database.close();
   }
 
   create(
@@ -116,6 +124,22 @@ export class SqliteKpiImportRepository {
       )
       .get(candidateId, id) as ImportRow | undefined;
     return row ? this.toImport(candidateId, row) : null;
+  }
+
+  /** B689: все загрузки кандидата с исходником, пока он не стёрт, — для выгрузки данных. */
+  exportAll(candidateId: string): Array<CareerDiaryKpiImport & { source: KpiImportSource | null }> {
+    const rows = this.database
+      .prepare(
+        `SELECT id, source_kind, source_cipher IS NOT NULL AS has_source, source_cipher, draft_cipher, created_at
+         FROM career_diary_kpi_imports WHERE candidate_id = ? ORDER BY created_at, id`,
+      )
+      .all(candidateId) as unknown as Array<ImportRow & { readonly source_cipher: string | null }>;
+    return rows.map((row) => ({
+      ...this.toImport(candidateId, row),
+      source: row.source_cipher
+        ? openPayload<KpiImportSource>(this.sealedText, candidateId, SOURCE, row.id, row.source_cipher)
+        : null,
+    }));
   }
 
   /** Отмечает принятые цели; повтор принятия не создаёт их второй раз. */

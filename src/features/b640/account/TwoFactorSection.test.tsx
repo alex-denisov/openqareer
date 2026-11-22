@@ -7,7 +7,7 @@ import { click, mount, type Mounted } from '../kit/testDom';
 import { nodeByCode } from '../routes';
 import { ShellProvider } from '../shell/ShellContext';
 import { SecurityScreen } from './SecurityScreen';
-import { groupedKey } from './TwoFactorParts';
+import { groupedKey, keyLines } from './TwoFactorParts';
 
 const api = vi.hoisted(() => ({
   status: vi.fn(),
@@ -38,14 +38,42 @@ vi.mock('../../coach/coachApi', async (original) => ({
     email: 'm@mail.test',
     displayName: 'Марина',
     profile: { timezone: 'Europe/Moscow' },
-    sessions: [{ id: 'aaaaaaaaaaaaaaaa', current: true, createdAt: '2026-11-01T10:00:00.000Z', lastSeenAt: '2026-11-19T10:00:00.000Z', expiresAt: '2026-12-17T10:00:00.000Z' }],
+    sessions: [
+      {
+        id: 'aaaaaaaaaaaaaaaa',
+        current: true,
+        createdAt: '2026-11-01T10:00:00.000Z',
+        lastSeenAt: '2026-11-19T10:00:00.000Z',
+        expiresAt: '2026-12-17T10:00:00.000Z',
+      },
+    ],
   }),
   changePassword: api.changePassword,
 }));
 
-const CODES = ['k7m2p-x9qtr', '4hvbn-3wzc8', 'r2d6t-mq7ka', 'p9xfe-5ujn2', 'w3cs8-hk4vb', 'z6ta2-ry9mp', 'e8nq5-dg3xw', 'u4jk7-ft2ch'];
-const SETUP = { secret: 'JBSWY3DPEHPK3PXPK4ZQ7XWM', otpauthUrl: 'otpauth://totp/openqareer:m%40mail.test?secret=JBSWY3DPEHPK3PXPK4ZQ7XWM&issuer=openqareer' };
-const session = { username: 'f.test', role: 'candidate', isTest: true, candidateId: 'c', features: { cabinetB640: true }, emailVerified: true } as AuthUser;
+const CODES = [
+  'k7m2p-x9qtr',
+  '4hvbn-3wzc8',
+  'r2d6t-mq7ka',
+  'p9xfe-5ujn2',
+  'w3cs8-hk4vb',
+  'z6ta2-ry9mp',
+  'e8nq5-dg3xw',
+  'u4jk7-ft2ch',
+];
+const SETUP = {
+  secret: 'JBSWY3DPEHPK3PXPK4ZQ7XWM',
+  otpauthUrl:
+    'otpauth://totp/openqareer:m%40mail.test?secret=JBSWY3DPEHPK3PXPK4ZQ7XWM&issuer=openqareer',
+};
+const session = {
+  username: 'f.test',
+  role: 'candidate',
+  isTest: true,
+  candidateId: 'c',
+  features: { cabinetB640: true },
+  emailVerified: true,
+} as AuthUser;
 
 let view: Mounted | null = null;
 beforeEach(() => {
@@ -64,8 +92,22 @@ async function settle() {
 }
 
 async function open(): Promise<HTMLElement> {
-  const value = { session, path: '/app/account/security', search: '', match: null, consultantRoute: null, navigate: vi.fn(), signOut: async () => undefined, theme: 'light' as const, setTheme: () => undefined };
-  view = mount(<ShellProvider value={value}><SecurityScreen node={nodeByCode('n04')!} /></ShellProvider>);
+  const value = {
+    session,
+    path: '/app/account/security',
+    search: '',
+    match: null,
+    consultantRoute: null,
+    navigate: vi.fn(),
+    signOut: async () => undefined,
+    theme: 'light' as const,
+    setTheme: () => undefined,
+  };
+  view = mount(
+    <ShellProvider value={value}>
+      <SecurityScreen node={nodeByCode('n04')!} />
+    </ShellProvider>,
+  );
   await settle();
   return view.container;
 }
@@ -78,17 +120,31 @@ function type(input: Element | null | undefined, value: string) {
   });
 }
 
-const button = (root: ParentNode, text: string) => [...root.querySelectorAll('button')].find((item) => item.textContent?.trim() === text) ?? null;
+const button = (root: ParentNode, text: string) =>
+  [...root.querySelectorAll('button')].find((item) => item.textContent?.trim() === text) ?? null;
 const field = (root: HTMLElement, label: string) => {
   const found = [...root.querySelectorAll('label')].find((item) => item.textContent === label);
   return found ? root.ownerDocument.getElementById(found.htmlFor) : null;
 };
-const headings = (root: HTMLElement) => [...root.querySelectorAll('.set-h')].map((item) => item.textContent);
+const headings = (root: HTMLElement) =>
+  [...root.querySelectorAll('.set-h')].map((item) => item.textContent);
+
+describe('keyLines', () => {
+  it('секрет в 32 символа — две строки по четыре группы', () => {
+    expect(keyLines('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')).toEqual([
+      'ABCD EFGH IJKL MNOP',
+      'QRST UVWX YZ23 4567',
+    ]);
+    expect(keyLines('JBSWY3DPEHPK3PXP')).toEqual(['JBSW Y3DP EHPK 3PXP']);
+  });
+});
 
 describe('B401: двухфакторная защита в n04', () => {
   it('n04f: switched off — a row in «Вход» with «Включить»', async () => {
     const root = await open();
-    const row = [...root.querySelectorAll('.set-row')].find((item) => item.textContent?.includes('Двухфакторная защита'));
+    const row = [...root.querySelectorAll('.set-row')].find((item) =>
+      item.textContent?.includes('Двухфакторная защита'),
+    );
     expect(row?.textContent).toContain('выключена');
     expect(button(row as Element, 'Включить')).not.toBeNull();
   });
@@ -101,7 +157,12 @@ describe('B401: двухфакторная защита в n04', () => {
     await settle();
     expect(headings(root)).toContain('Двухфакторная защита');
     expect(root.querySelector('svg.fa-qr[role="img"]')).not.toBeNull();
-    expect(root.querySelector('.fa-key code')?.textContent).toBe(groupedKey(SETUP.secret));
+    // n04d на 390 (B645, 22.11): ключ в 8 групп не влезал в строку — строки по четыре группы.
+    const lines = [...root.querySelectorAll('.fa-key code .fa-key-line')].map(
+      (line) => line.textContent,
+    );
+    expect(lines).toEqual(['JBSW Y3DP EHPK 3PXP', 'K4ZQ 7XWM']);
+    expect(lines.join(' ')).toBe(groupedKey(SETUP.secret));
     expect(root.textContent).not.toContain('выключена');
     type(field(root, 'Код из приложения-аутентификатора'), '123456');
     type(field(root, 'Текущий пароль'), 'secret-password');
@@ -109,10 +170,16 @@ describe('B401: двухфакторная защита в n04', () => {
     await act(async () => click(button(root, 'Включить')));
     await settle();
     expect(api.enable).toHaveBeenCalledWith('123456', 'secret-password');
-    expect([...root.querySelectorAll('.fa-codes code')].map((item) => item.textContent)).toEqual(CODES);
+    expect([...root.querySelectorAll('.fa-codes code')].map((item) => item.textContent)).toEqual(
+      CODES,
+    );
     expect(headings(root)).toContain('Двухфакторная защита · включена');
     await act(async () => click(button(root, 'Скачать')));
-    expect(api.download).toHaveBeenCalledWith('openqareer-reserve-codes.txt', `${CODES.join('\n')}\n`, 'text/plain');
+    expect(api.download).toHaveBeenCalledWith(
+      'openqareer-reserve-codes.txt',
+      `${CODES.join('\n')}\n`,
+      'text/plain',
+    );
     await act(async () => click(button(root, 'Готово')));
     await settle();
     expect(root.querySelector('.fa-codes')).toBeNull();
@@ -168,10 +235,16 @@ describe('B401: двухфакторная защита в n04', () => {
     type(field(root, 'Новый пароль'), 'new-password-1');
     type(field(root, 'Повторите новый пароль'), 'new-password-1');
     expect(button(root, 'Сохранить пароль')?.hasAttribute('disabled')).toBe(true);
-    const codes = [...root.querySelectorAll('label')].filter((item) => item.textContent === 'Код из приложения-аутентификатора');
+    const codes = [...root.querySelectorAll('label')].filter(
+      (item) => item.textContent === 'Код из приложения-аутентификатора',
+    );
     type(document.getElementById(codes[0]?.htmlFor ?? ''), '123456');
     await act(async () => click(button(root, 'Сохранить пароль')));
     await settle();
-    expect(api.changePassword).toHaveBeenCalledWith({ currentPassword: 'old-password-1', newPassword: 'new-password-1', twoFactorCode: '123456' });
+    expect(api.changePassword).toHaveBeenCalledWith({
+      currentPassword: 'old-password-1',
+      newPassword: 'new-password-1',
+      twoFactorCode: '123456',
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
 } from '../vacancies/campaign';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
 import { careerGeographyOf } from '../vacancies/careerGeography';
+import { roleTitlesRu } from '../vacancies/roleTitleRu';
 import { careerRoleId } from '../../shared/roleProposals';
 import type { RouteDeps } from './deps';
 
@@ -88,6 +89,11 @@ export function rejectedCareerRoleIds(
 export function campaignMeta(campaign: CampaignResolution) {
   return {
     roles: { value: [...campaign.roles.value], origin: campaign.roles.origin },
+    /** B737: русское название роли поиска; ключом остаётся `roles.value`. */
+    titlesRu: roleTitlesRu([
+      ...campaign.roles.value,
+      ...campaign.autoRoles.map((role) => role.title),
+    ]),
     regions: {
       value: campaign.regions.origin === 'profile' ? [] : [...campaign.regions.value],
       origin: campaign.regions.origin === 'profile' ? 'default' : campaign.regions.origin,

@@ -60,7 +60,7 @@ describe('notification provider adapters', () => {
     expect(result.providerId).toBe('42');
   });
 
-  it('sets a secret Telegram webhook for only message updates', async () => {
+  it('sets a secret Telegram webhook for messages and SMM buttons', async () => {
     const fetchImpl = vi.fn(
       async () => new Response(JSON.stringify({ ok: true, result: true }), { status: 200 }),
     );
@@ -78,7 +78,7 @@ describe('notification provider adapters', () => {
     expect(JSON.parse(String(init.body))).toEqual({
       url: 'https://openqareer.test/api/v1/integrations/telegram/webhook',
       secret_token: 'long-secret-token-which-never-leaves-this-test',
-      allowed_updates: ['message'],
+      allowed_updates: ['message', 'callback_query'],
     });
   });
 });

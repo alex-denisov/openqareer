@@ -174,3 +174,34 @@ describe('compareCheckTag', () => {
     expect(compareCheckTag(row(null))).toEqual({ text: 'не начата', ok: false });
   });
 });
+
+/** B737: роль — ключ на английском, кандидату её название показывается по-русски. */
+describe('role label (B737)', () => {
+  const COO = 'Chief Operating Officer';
+  const TITLES_RU = { [COO]: 'Операционный директор (COO)' };
+
+  it('строка роли берёт titleRu ответа, ключ title не меняется', () => {
+    const role = observed('coo', COO, 12, null, { titleRu: 'Операционный директор (COO)' });
+    const [row] = buildRoleRows([role], [COO], []);
+    expect(row).toMatchObject({
+      title: COO,
+      label: 'Операционный директор (COO)',
+      origin: 'search',
+    });
+  });
+
+  it('роль только из поиска берёт словарь кампании, без перевода — исходное название', () => {
+    const rows = buildRoleRows([], [COO, 'Директор по чудесам'], [], TITLES_RU);
+    expect(rows.map((row) => [row.title, row.label])).toEqual([
+      [COO, 'Операционный директор (COO)'],
+      ['Директор по чудесам', 'Директор по чудесам'],
+    ]);
+  });
+
+  it('полоса «Роль поиска» показывает русское название первой роли', () => {
+    expect(searchStrip([], [COO, 'CTO'], TITLES_RU)?.title).toBe(
+      'Операционный директор (COO) и ещё 1',
+    );
+    expect(searchStrip([], [COO])?.title).toBe(COO);
+  });
+});
