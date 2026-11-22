@@ -49,8 +49,8 @@ export function GoalItem({ card, now }: GoalItemProps) {
       {card.risk.status === 'achieved' ? (
         <p className="dn-flag is-done">
           <Icon name="trophy" />
-          {'Достигнута → в Итоги и в профиль · '}
-          <Link className="row-act" to={buildNodePath('d04')}>
+          {'Достигнута → в Итоги и в профиль'}
+          <Link className="btn is-quiet" to={buildNodePath('d04')}>
             Перенести
           </Link>
         </p>

@@ -205,9 +205,10 @@ describe('d02 «Цели и показатели»', () => {
     const flags = [...page.querySelectorAll('.dn-goal')].map(
       (goal) => goal.querySelector('.dn-flag.is-done')?.textContent ?? null,
     );
-    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профиль · Перенести']);
+    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профильПеренести']);
     const move = page.querySelector('.dn-flag.is-done a');
     expect(move?.getAttribute('href')).toBe('/app/diary/results');
+    expect(move?.className).toBe('btn is-quiet');
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {
