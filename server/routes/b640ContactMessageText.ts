@@ -7,6 +7,7 @@ import {
   fallbackContactMessage,
   type ContactMessageFacts,
 } from '../domain/b640ContactMessage';
+import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { filterUsablePitchFacts } from '../domain/vacancyPitchService';
@@ -54,6 +55,18 @@ function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, k
 }
 
 /**
+ * Вторая вакансия — только той же компании: у разных источников бывает один id кластера
+ * (B698, prod: VK 55418 = Tata Capital), и чужая вакансия попадала в черновик знакомому.
+ */
+function sameCompany(
+  vacancy: { title: string; company: string } | null,
+  also: { title: string; company: string } | null,
+): { title: string; company: string } | null {
+  if (!vacancy || !also) return null;
+  return candidateCompanyKey(also.company) === candidateCompanyKey(vacancy.company) ? also : null;
+}
+
+/**
  * Текст сообщения: модель через тот же писатель, что и письмо получателю; при отказе, пустом ответе
  * или новых цифрах — шаблон на данных профиля. Реальный запрос B613 заменит `contactMessageWish`.
  */
@@ -68,7 +81,7 @@ export async function writeContactMessageText(
   const withheld = new Set(facts.filter((fact) => fact.sensitive === true).map((fact) => fact.id));
   const profile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
   const vacancy = vacancyOf(deps, input.vacancyId);
-  const also = vacancy ? vacancyOf(deps, input.alsoVacancyId ?? null) : null;
+  const also = sameCompany(vacancy, vacancyOf(deps, input.alsoVacancyId ?? null));
   const message: ContactMessageFacts = {
     kind: input.kind,
     recipientName: input.recipient.name,

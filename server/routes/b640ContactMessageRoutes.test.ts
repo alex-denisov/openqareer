@@ -158,6 +158,38 @@ describe('B698: черновик из карточки компании — о �
     expect(text).toContain(TITLES.c1);
   });
 
+  it('вторая вакансия другой компании (совпал id в источниках) в текст не попадает', async () => {
+    const writer = stubWriter(undefined);
+    const clusters: Record<string, { canonicalTitle: string; canonicalCompany: string }> = {
+      c1: { canonicalTitle: TITLES.c1!, canonicalCompany: 'VK' },
+      c9: { canonicalTitle: 'Customer Service - Sales - Housing', canonicalCompany: 'Tata Capital' },
+    };
+    const h = await createB640Harness({
+      pool: () => [poolItem({ id: 'c1', title: TITLES.c1!, company: 'VK' })],
+      coverLetterWriter: writer,
+      engine: { getActiveCluster: (id: string) => clusters[id] },
+    });
+    closers.push(h.close);
+    const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
+    await h.app.inject({ method: 'PUT', url: `${OLD}/alex`, headers,
+      payload: { fullName: 'Alexandr Alexandrov', companyName: 'VK', relationship: 'Коллега', strength: 'strong' } });
+    const res = await h.app.inject({ method: 'POST', url: BASE, headers,
+      payload: { contactId: 'alex', vacancyId: 'c1', alsoVacancyId: 'c9', kind: 'known_contact' } });
+    const text = res.json().data.text as string;
+    expect(text).toContain(TITLES.c1);
+    expect(text).not.toContain('Customer Service');
+    expect(text).toContain('открыта вакансия');
+    expect(text).toContain('на эту роль');
+  });
+
+  it('две вакансии в запасном тексте — «на эти роли»', async () => {
+    const { post } = await companySetup(undefined);
+    const text = (await post({ contactId: 'alex', vacancyId: 'c1', alsoVacancyId: 'c2', kind: 'known_contact' })).json().data.text as string;
+    expect(text).toContain('открыты вакансии');
+    expect(text).toContain('на эти роли');
+    expect(text).not.toContain('на эту роль');
+  });
+
   it('вторая вакансия без первой и чужой формат id — 400', async () => {
     const { post } = await companySetup();
     expect((await post({ contactId: 'alex', alsoVacancyId: 'c2', kind: 'known_contact' })).statusCode).toBe(400);

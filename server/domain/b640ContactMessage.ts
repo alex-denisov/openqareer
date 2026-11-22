@@ -90,7 +90,7 @@ export function fallbackContactMessage(facts: ContactMessageFacts): string {
   }
   if (vacancies && company) {
     const open = facts.alsoVacancyTitle ? 'открыты вакансии' : 'открыта вакансия';
-    return `${greeting} Давно не общались. Вижу, что в «${company}» ${open} ${vacancies}. Я сейчас в поиске${role}. Не порекомендуете меня или не подскажете, кто нанимает на эту роль? Заранее спасибо!`;
+    return `${greeting} Давно не общались. Вижу, что в «${company}» ${open} ${vacancies}. Я сейчас в поиске${role}. Не порекомендуете меня или не подскажете, кто нанимает на ${facts.alsoVacancyTitle ? 'эти роли' : 'эту роль'}? Заранее спасибо!`;
   }
   return `${greeting} Давно не общались. Я сейчас в поиске${role}. Если знаете, где ищут такого специалиста, или подскажете, к кому обратиться, — заранее спасибо!`;
 }
