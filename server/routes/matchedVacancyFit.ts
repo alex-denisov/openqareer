@@ -427,7 +427,10 @@ export async function withShownPageFitViews(
   const explain = lean ? explanationWithLeanFitView : explanationWithFitView;
   const context = createVacancyFitContextReader(deps, candidateId);
   const geoBlocks = createGeoBlocker(deps, candidateId);
+  const known = freshOrderViews(deps, candidateId);
   return mapYielding(items, (item) => {
+    const ready = known.get(item.cluster.id);
+    if (ready?.state === 'ready') return { ...item, explanation: explain(item.explanation, shape(ready)) };
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const view = runtime.view(context(target, []));
@@ -445,6 +448,17 @@ export async function withShownPageFitViews(
     );
     return { ...item, explanation: explain(item.explanation, fitView) };
   });
+}
+
+/**
+ * B725 (прод 20.11: ~24 мс на строку, 436 мс на страницу из 20): порядок списка уже прочитал
+ * разбор каждой посчитанной строки тем же путём, что и страница, под отпечатком профиля.
+ * Страница берёт оттуда только готовый процент и только в окне порядка: строка «в очереди»
+ * и всё после окна читаются живыми, а правка профиля меняет ключ и не видит прежних.
+ */
+function freshOrderViews(deps: RouteDeps, candidateId: string): FitViews {
+  const known = fitViewsCache.peek(`${candidateId}|${fitProfileStamp(deps, candidateId)}`);
+  return known && !known.stale ? known.value : new Map();
 }
 
 /** The lean row: the fit view and the requirement count, no point lists or summary sentence. */
