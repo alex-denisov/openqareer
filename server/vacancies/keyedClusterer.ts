@@ -5,10 +5,12 @@ import {
   ClusterIndex,
   createClusterFromVacancy,
   isDuplicatePrepared,
+  legacyMemberKeyOf,
   memberKeysOf,
   mergeVacancyIntoCluster,
   prepareCluster,
   prepareVacancy,
+  sourceMemberKey,
   vacancyClusterLookup,
   type ClusterRepresentative,
   type PreparedVacancy,
@@ -62,6 +64,8 @@ class KeyedSession {
   private readonly prepared: PreparedVacancy[] = [];
   private readonly clusterIds: string[] = [];
   private readonly byMember = new Map<string, number>();
+  /** Ключи старых представителей: голый внешний id бывает у нескольких кластеров (B752, 1 063 на проде). */
+  private readonly byLegacy = new Map<string, number[]>();
   private readonly loaded = new Map<number, VacancyCluster>();
   private readonly updated = new Set<number>();
   private readonly created: VacancyCluster[] = [];
@@ -76,7 +80,10 @@ class KeyedSession {
     this.candidates = representatives.length;
     for (const representative of representatives) {
       const position = this.register(representative.clusterId, representative.prepared);
-      for (const member of representative.members) this.byMember.set(member, position);
+      for (const member of representative.members) {
+        this.byMember.set(member, position);
+        this.byLegacy.set(member, [...(this.byLegacy.get(member) ?? []), position]);
+      }
     }
   }
 
@@ -181,6 +188,8 @@ class KeyedSession {
       const direct = this.byMember.get(member);
       if (direct !== undefined) return direct;
     }
+    const legacy = this.legacyPosition(vacancy);
+    if (legacy !== undefined) return legacy;
     const candidate = prepareVacancy(vacancy);
     return this.index
       .candidates(candidate)
@@ -189,6 +198,19 @@ class KeyedSession {
           !this.absorbed.has(position) && isDuplicatePrepared(candidate, this.prepared[position]!),
       );
   }
+
+  /** Голый внешний id старых строк (B752): совпадение засчитано, только если площадка та же. */
+  private legacyPosition(vacancy: UnifiedVacancy): number | undefined {
+    const bare = legacyMemberKeyOf(vacancy);
+    if (!bare) return undefined;
+    const scoped = sourceMemberKey(vacancy.provenance);
+    return (this.byLegacy.get(bare) ?? []).find(
+      (position) =>
+        !this.absorbed.has(position) &&
+        Boolean(this.clusterAt(position)?.sources.some((source) => sourceMemberKey(source) === scoped)),
+    );
+  }
+
 
   /** JSON кластера читается один раз и только для совпавшего. */
   private clusterAt(position: number): VacancyCluster | undefined {
@@ -216,9 +238,13 @@ export function detachVacanciesByKeys(
 ): DetachResult {
   if (gone.length === 0) return { updated: 0, deleted: 0 };
   const goneKeys = new Set(gone.flatMap(memberKeysOf));
+  const lookupKeys = (vacancy: VacancyMemberRef) => {
+    const legacy = legacyMemberKeyOf(vacancy);
+    return legacy ? [...memberKeysOf(vacancy), legacy] : memberKeysOf(vacancy);
+  };
   const clusters = store.loadClustersByKeys(
     gone.map((vacancy) => ({
-      direct: memberKeysOf(vacancy).map((key) => ({ kind: 'member' as const, key })),
+      direct: lookupKeys(vacancy).map((key) => ({ kind: 'member' as const, key })),
       companyTokens: [],
       titleTokens: [],
     })),
@@ -228,7 +254,7 @@ export function detachVacanciesByKeys(
   for (const cluster of clusters) {
     const remaining = cluster.sources.filter(
       (source) =>
-        !(source.externalId && goneKeys.has(source.externalId)) &&
+        !goneKeys.has(sourceMemberKey(source) ?? '') &&
         !(source.sourceUrl && goneKeys.has(source.sourceUrl)),
     );
     const removed = cluster.sources.length - remaining.length;

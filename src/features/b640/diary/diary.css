@@ -23,7 +23,7 @@
   .b640 .gb-f .kd-text {
     box-sizing: border-box;
     inline-size: 100%;
-    min-block-size: calc(var(--career-target-min) * 2);
+    min-block-size: calc(var(--career-space-12) * 2);
     padding: var(--career-space-3);
     border-radius: var(--career-radius-ctl);
     border: var(--career-border-width) solid
@@ -41,9 +41,31 @@
   .b640 .gb-f .kd-text:disabled {
     color: var(--career-text-soft);
   }
+  /* d02l на 390: строка списка — кнопка без своей рамки и фона (в макете это ссылка). */
+  .b640 button.kp-main {
+    padding-inline: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .b640 button.kp-main:focus-visible {
+    outline: 2px solid var(--career-accent);
+    outline-offset: var(--career-focus-offset);
+  }
+  /* B645 d02k: от шапки до подписи 20 px, как в макете. */
+  .b640 .page.kd-page {
+    gap: var(--career-space-5);
+  }
   .b640 .kd-f {
+    gap: var(--career-space-2);
     justify-items: stretch;
     max-inline-size: 40rem;
+  }
+  .b640 .kd-f label {
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
   }
   .b640 .kd-pick {
     margin: 0;
@@ -56,6 +78,8 @@
     font-size: var(--career-text-sm);
   }
   .b640 .kp-tbl select {
+    inline-size: 100%;
+    min-inline-size: 0;
     min-block-size: var(--career-target-min);
     padding-inline: var(--career-space-2);
     border-radius: var(--career-radius-sm);
@@ -64,12 +88,6 @@
     color: var(--career-text);
     font: inherit;
     font-size: var(--career-text-sm);
-  }
-  .b640 .kp-tbl .kp-w {
-    inline-size: 5rem;
-  }
-  .b640 .kp-tbl .kp-t {
-    min-inline-size: 7.5rem;
   }
   .b640 .kp-foot {
     display: grid;

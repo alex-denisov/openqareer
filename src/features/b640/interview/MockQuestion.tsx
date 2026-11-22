@@ -7,10 +7,12 @@ import {
   type InterviewQuestionView,
   type InterviewSessionView,
 } from '../../interview/interviewSimulatorApi';
+import { useDictation } from '../consultant/useDictation';
 import { Button, Icon, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import { criteriaRows, mockEyebrow } from './model/mockModel';
+import { MockAnswerField } from './MockAnswerField';
 
 interface QuestionProps {
   readonly response: ApplicationView;
@@ -118,33 +120,21 @@ function Actions(props: {
   );
 }
 
-function AnswerField(props: {
-  readonly text: string;
-  readonly readOnly: boolean;
-  readonly empty: boolean;
-  readonly onChange: (text: string) => void;
-}) {
+function QuestionHead({ response, session, question }: QuestionProps) {
   return (
-    <div className="field mi-ans">
-      <label htmlFor="mi-ans">Ваш ответ</label>
-      <div className="fld-mic mi-fld">
-        <textarea
-          id="mi-ans"
-          value={props.text}
-          readOnly={props.readOnly}
-          placeholder="Напишите ответ своими словами"
-          aria-invalid={props.empty ? true : undefined}
-          aria-describedby={props.empty ? 'mi-ans-err' : undefined}
-          onChange={(event) => props.onChange(event.currentTarget.value)}
-        />
+    <>
+      <div className="eyebrow">
+        <Icon name="play" />
+        {mockEyebrow(
+          response.vacancy?.company,
+          session.currentQuestionIndex,
+          session.questions.length,
+        )}
       </div>
-      {props.empty ? (
-        <small className="is-err" id="mi-ans-err">
-          <Icon name="warn" />
-          Напишите ответ
-        </small>
-      ) : null}
-    </div>
+      <h2 className="mod-title" id="mi-title">
+        «{question.prompt}»
+      </h2>
+    </>
   );
 }
 
@@ -155,6 +145,7 @@ export function MockQuestion(props: QuestionProps) {
   const [again, setAgain] = useState(false);
   const [empty, setEmpty] = useState(false);
   const actions = useQuestionActions(props);
+  const dictation = useDictation(setText);
   const answered = Boolean(question.answer) && !again;
   async function answer() {
     setEmpty(!text.trim());
@@ -162,18 +153,14 @@ export function MockQuestion(props: QuestionProps) {
   }
   return (
     <section className="lead mi-lead" aria-labelledby="mi-title">
-      <div className="eyebrow">
-        <Icon name="play" />
-        {mockEyebrow(
-          props.response.vacancy?.company,
-          session.currentQuestionIndex,
-          session.questions.length,
-        )}
-      </div>
-      <h2 className="mod-title" id="mi-title">
-        «{question.prompt}»
-      </h2>
-      <AnswerField text={text} readOnly={answered} empty={empty} onChange={setText} />
+      <QuestionHead {...props} />
+      <MockAnswerField
+        text={text}
+        readOnly={answered}
+        empty={empty}
+        dictation={dictation}
+        onChange={setText}
+      />
       {actions.busy === 'answer' ? (
         <p className="ls-state" role="status">
           <span>Разбираем ответ…</span>

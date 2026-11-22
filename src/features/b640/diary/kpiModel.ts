@@ -103,3 +103,33 @@ export function sourceLine(draft: CareerDiaryKpiImport): string {
   const day = longDate(draft.createdAt.slice(0, 10), draft.createdAt.slice(0, 10));
   return `${SOURCE_LABEL[draft.sourceKind]}${name}, загружено ${day}.`;
 }
+
+const HORIZON_WORD: Readonly<Record<CareerDiaryHorizon, string>> = {
+  quarter: 'квартал',
+  next_quarter: 'дальше',
+  year: 'год',
+};
+const SETTER_WORD: Readonly<Record<CareerDiaryGoalSetter, string>> = {
+  manager: 'руководитель',
+  team: 'команда',
+  self: 'вы',
+};
+
+/** Подпись строки списка d02l на 390: «квартал · вес 30 % · руководитель». */
+export function rowSummary(row: KpiDraftRow): string {
+  const weight = row.weight.trim();
+  return [
+    row.horizon ? HORIZON_WORD[row.horizon] : '',
+    weight ? `вес ${weight} %` : '',
+    row.setBy ? SETTER_WORD[row.setBy] : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** ⓘ «Как считается вес» на 390. */
+export function weightNote(rows: readonly KpiDraftRow[]): string {
+  const sum = weightLine(rows);
+  const base = 'Замеры вносятся в карточке цели';
+  return sum ? `${base}; ${sum.charAt(0).toLowerCase()}${sum.slice(1)}.` : `${base}.`;
+}

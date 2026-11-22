@@ -14,7 +14,9 @@ import {
   replaceQuestionParagraphs,
   type PrepRow,
 } from './model/prepModel';
-import { InterviewHead, PrepSteps } from './PrepSteps';
+import { buildMemo, type Memo } from './model/memoModel';
+import { CompanyAbout, MemoLink } from './PrepAside';
+import { InterviewHead, interviewMeta, interviewTitle, PrepSteps } from './PrepSteps';
 import { WhenForm } from './WhenForm';
 
 const CURRENCY: Readonly<Record<string, string>> = { RUB: '₽', USD: '$', EUR: '€' };
@@ -72,6 +74,17 @@ function PracticeRow({ responseId }: { readonly responseId: string }) {
       </Link>
     </li>
   );
+}
+
+function prepMemo(data: PrepData): Memo {
+  return buildMemo({
+    title: interviewTitle(data.response),
+    meta: interviewMeta(data.response),
+    questions: data.questions,
+    paragraphs: data.paragraphs,
+    floor: data.floor ? floorText(data.floor) : null,
+    askThem: data.askThem,
+  });
 }
 
 /** Ответ из истории: абзацы этого вопроса заменяются, остальные остаются. */
@@ -150,6 +163,7 @@ function PrepLead({
         />
       </div>
       <PrepActions responseId={data.response.id} next={next} onPrepare={answer.open} />
+      <MemoLink memo={prepMemo(data)} />
       <ul className="rows exp-rows">
         {rows.map((row) => (
           <Row key={row.id} row={row} />
@@ -197,6 +211,7 @@ function PrepBody(props: { readonly data: PrepData; readonly onSaved: (next: Pre
         <PrepLead data={props.data} onSaved={props.onSaved} />
       </div>
       <div className="col">
+        <CompanyAbout facts={props.data.company} />
         <AskThem questions={props.data.askThem} />
       </div>
     </>

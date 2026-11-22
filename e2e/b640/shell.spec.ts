@@ -11,6 +11,9 @@ async function openCabinet(page: Page, path: string): Promise<void> {
   await expect(page.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
 }
 
+/** Узлы, которые без своих данных в адресе уводят на соседний (d02l без ?import → d02k). */
+const REDIRECTS: Readonly<Record<string, string>> = { d02l: 'd02k' };
+
 function samplePath(path: string): string {
   return path.replace(/:[A-Za-z]+/gu, 'x1');
 }
@@ -31,7 +34,8 @@ test.describe('B649: оболочка нового кабинета', () => {
         await expect(page.locator('[data-b640-node="s03"]'), node.path).toBeVisible();
         continue;
       }
-      const screen = page.locator(`[data-b640-node="${node.code}"]`);
+      const code = REDIRECTS[node.code] ?? node.code;
+      const screen = page.locator(`[data-b640-node="${code}"]`);
       await expect(screen, node.path).toBeVisible();
       await expect(screen).toHaveAttribute('data-b640-section', node.section);
     }

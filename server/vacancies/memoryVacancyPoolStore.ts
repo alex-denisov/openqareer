@@ -1,4 +1,5 @@
 import { confirmsLiveness, freshnessAnchorMs, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
+import { sourceMemberKey } from './vacancyDeduplicator';
 
 /** B642: запись доски работодателя, невиденная неделю, уборка снимает. */
 function notSeenTooLong(vacancy: UnifiedVacancy): boolean {
@@ -112,7 +113,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   clusterIdForMemberKey(key: string): string | undefined {
     for (const cluster of this.clusters.values()) {
       for (const source of cluster.sources) {
-        if (source.externalId === key || source.sourceUrl === key) return cluster.id;
+        if (sourceMemberKey(source) === key || source.sourceUrl === key) return cluster.id;
       }
     }
     return undefined;
