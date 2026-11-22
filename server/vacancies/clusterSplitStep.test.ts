@@ -173,5 +173,8 @@ describe('cluster split step (B752)', () => {
 
     expect(snapshot(db)).toEqual(before);
     expect(db.prepare('SELECT count(*) AS n FROM cluster_split_journal').get()).toEqual({ n: 0 });
+    // Курсор возвращается к откаченному кластеру: следующий шаг разбивает его снова.
+    expect(db.prepare('SELECT completed FROM cluster_split_state').get()).toEqual({ completed: 0 });
+    expect(splitClustersStep(db, { chunk: 200, now: 4_000 })).toMatchObject({ split: 1 });
   });
 });

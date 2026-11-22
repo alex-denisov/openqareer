@@ -48,16 +48,13 @@ function probes(overrides: Partial<Parameters<typeof runClusterSplitDriver>[0]> 
 }
 
 describe('cluster split config (B752)', () => {
-  it('is off by default with no jobs and safe limits', () => {
+  it('is off by default with safe limits', () => {
     expect(readClusterSplitConfig({})).toEqual({
       enabled: false,
-      maxJobs: 0,
       pauseMs: 2_000,
       walLimitBytes: GIB,
     });
-    expect(
-      readClusterSplitConfig({ CLUSTER_SPLIT_ENABLED: '1', CLUSTER_SPLIT_MAX_JOBS: '50' }),
-    ).toMatchObject({ enabled: true, maxJobs: 50 });
+    expect(readClusterSplitConfig({ CLUSTER_SPLIT_ENABLED: '1' })).toMatchObject({ enabled: true });
   });
 });
 

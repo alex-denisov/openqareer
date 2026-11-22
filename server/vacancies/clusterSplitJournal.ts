@@ -146,6 +146,15 @@ function restoreCluster(db: DatabaseSync, entry: JournalRow): void {
   }
 }
 
+/** Курсор встаёт перед первым откаченным кластером: исправленный шаг пройдёт его снова. */
+function rewindCursor(db: DatabaseSync, entries: readonly JournalRow[]): void {
+  if (entries.length === 0) return;
+  const first = Math.min(...entries.map((entry) => entry.old_rowid));
+  db.prepare(
+    `UPDATE cluster_split_state SET cursor_rowid = MIN(cursor_rowid, ?), completed = 0 WHERE id = 1`,
+  ).run(first - 1);
+}
+
 /**
  * Откат шага разбиения: кластеры, ключи, каталог и переадресации шага
  * возвращаются к журналу одной транзакцией, журнал шага удаляется.
@@ -158,6 +167,7 @@ export function revertClusterSplitStep(db: DatabaseSync, stepId: string): number
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const entry of entries) restoreCluster(db, entry);
+    rewindCursor(db, entries);
     db.prepare('DELETE FROM vacancy_catalog_redirects WHERE step_id = ?').run(stepId);
     db.prepare('DELETE FROM cluster_split_journal WHERE step_id = ?').run(stepId);
     db.exec('COMMIT');

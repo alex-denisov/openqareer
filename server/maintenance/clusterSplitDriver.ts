@@ -12,7 +12,6 @@ import { splitClustersStep, type ClusterSplitStepResult } from '../vacancies/clu
 
 export interface ClusterSplitConfig {
   readonly enabled: boolean;
-  readonly maxJobs: number;
   readonly pauseMs: number;
   readonly walLimitBytes: number;
 }
@@ -35,7 +34,6 @@ export function readClusterSplitConfig(
 ): ClusterSplitConfig {
   return {
     enabled: env.CLUSTER_SPLIT_ENABLED === '1' || env.CLUSTER_SPLIT_ENABLED === 'true',
-    maxJobs: nonNegativeInteger(env.CLUSTER_SPLIT_MAX_JOBS, 0),
     pauseMs: nonNegativeInteger(env.CLUSTER_SPLIT_PAUSE_MS, DEFAULT_PAUSE_MS),
     walLimitBytes: nonNegativeInteger(env.CLUSTER_SPLIT_WAL_LIMIT_BYTES, DEFAULT_WAL_LIMIT_BYTES),
   };
