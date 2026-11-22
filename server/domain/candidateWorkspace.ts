@@ -110,6 +110,8 @@ export const candidateWorkspaceSchema = z
           .record(z.string().min(1).max(200), z.string().trim().min(1).max(200))
           .refine((value) => Object.keys(value).length <= 60)
           .optional(),
+        /** B748: версия перевода, которой проверены `roleTitlesRu` и `careerRoles[].titleRu`. */
+        titlesRuVersion: z.number().int().min(1).optional(),
       })
       .strict()
       .optional(),
