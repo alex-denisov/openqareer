@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiErrorMessage } from '../../coach/apiClient';
 import type { InterviewSessionView } from '../../interview/interviewSimulatorApi';
-import { useDictation } from '../consultant/useDictation';
 import { Button, Icon, StatusLine } from '../kit';
+import { useVoiceInput } from '../voice/useVoiceInput';
 import { finishPractice, type PracticeTask } from './data/practiceApi';
 import {
   liveCriteria,
@@ -13,9 +13,9 @@ import {
   type SchemaEdit,
   type SchemaToSave,
 } from './model/practiceModel';
+import { ANSWER_MAX, TextInput, useFinishAfterVoice, VoiceAnswer } from './PracticeAnswerInput';
 import { SchemaEditor } from './SchemaEditor';
 
-const ANSWER_MAX = 4000;
 const TICK_MS = 15_000;
 
 function useNow(): number {
@@ -43,61 +43,6 @@ function Criteria({ answer }: { readonly answer: string }) {
         ))}
       </ul>
     </>
-  );
-}
-
-interface InputProps {
-  readonly text: string;
-  readonly empty: boolean;
-  readonly onText: (text: string) => void;
-}
-
-function TextInput(props: InputProps) {
-  return (
-    <div className="field">
-      <textarea
-        className="letter full sd-live"
-        aria-label="Ваш ответ"
-        value={props.text}
-        maxLength={ANSWER_MAX}
-        aria-invalid={props.empty ? true : undefined}
-        aria-describedby={props.empty ? 'sd-ans-err' : undefined}
-        onChange={(event) => props.onText(event.currentTarget.value)}
-      />
-      {props.empty ? (
-        <small className="is-err" id="sd-ans-err">
-          <Icon name="warn" />
-          Напишите ответ
-        </small>
-      ) : null}
-    </div>
-  );
-}
-
-/** Голосом — расшифровка по мере речи; без микрофона — поле ответа. */
-function VoiceInput(props: InputProps) {
-  const dictation = useDictation(props.onText);
-  const listening = dictation.supported && !dictation.denied;
-  const { start } = dictation;
-  const started = useRef(false);
-  const first = useRef(props.text);
-  useEffect(() => {
-    if (!listening || started.current) return;
-    started.current = true;
-    start(first.current);
-  }, [listening, start]);
-  if (!listening) return <TextInput {...props} />;
-  return (
-    <div
-      className="letter full sd-live"
-      aria-live="polite"
-      aria-label="Ваш ответ, расшифровка по мере речи"
-    >
-      <div>
-        {props.text}
-        {dictation.recording ? <span className="sd-caret" aria-hidden="true" /> : null}
-      </div>
-    </div>
   );
 }
 
@@ -139,6 +84,17 @@ function useFinish(input: {
   return { empty, busy, error, finish };
 }
 
+/** Голосом — общий ввод i02/i03; «Закончить» во время записи ждёт расшифровку. */
+function useSpokenFinish(
+  spoken: boolean,
+  onText: (text: string) => void,
+  finish: () => Promise<void>,
+) {
+  const input = useVoiceInput(onText);
+  const voice = spoken ? input : null;
+  return { voice, after: useFinishAfterVoice(voice, () => void finish()) };
+}
+
 /** I3b: ответ, подсказка по желанию, схема и критерии по мере ответа. */
 export function PracticeAnswer(props: {
   readonly task: PracticeTask;
@@ -161,6 +117,7 @@ export function PracticeAnswer(props: {
     schema: edits.length > 0 ? schemaToSave(text, blocks) : null,
     onFinished: props.onFinished,
   });
+  const { voice, after } = useSpokenFinish(session.mode === 'voice', setText, finish);
 
   return (
     <section className="lead" aria-labelledby="sd-title">
@@ -168,13 +125,13 @@ export function PracticeAnswer(props: {
         {task.title}
       </h2>
       <p className="lead-sub">{[props.company, minutesLabel(left)].filter(Boolean).join(' · ')}</p>
-      {session.mode === 'voice' ? (
-        <VoiceInput text={text} empty={empty} onText={setText} />
+      {voice ? (
+        <VoiceAnswer text={text} empty={empty} voice={voice} onText={setText} />
       ) : (
         <TextInput text={text} empty={empty} onText={setText} />
       )}
       <div className="actions">
-        <Button variant="primary" busy={busy} onClick={() => void finish()}>
+        <Button variant="primary" busy={busy || after.waiting} onClick={after.request}>
           <Icon name="check" />
           Закончить и разобрать
         </Button>

@@ -66,6 +66,10 @@ test.describe('B686: «Дневник» — загрузка и проверка
       await expect(sheet).toHaveCount(0);
       await review.getByRole('button', { name: 'Ещё действия: показатели' }).click();
       await expect(review.getByRole('menuitem', { name: 'Загрузить заново' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      // B645 (5a4083db): на d02l «Принять 4» во всю ширину панели — правило половины только для d02k.
+      const accept = (await review.getByRole('button', { name: 'Принять 4' }).boundingBox())!;
+      expect([Math.round(accept.x), Math.round(accept.width)]).toEqual([16, 358]);
     } else {
       await expect(review.locator('.kp-tbl tbody tr')).toHaveCount(4);
       if (testInfo.project.name === 'desktop-1440') {
@@ -86,6 +90,17 @@ test.describe('B686: «Дневник» — загрузка и проверка
         await page.setViewportSize({ width: 1176, height: 900 });
         expect(await cutValues(page)).toEqual([]);
         await page.setViewportSize({ width: 1440, height: 900 });
+        // B645 (5a4083db): «Важность» — поле 50 с «30 %» внутри; «Верно» — контурная кнопка с галочкой.
+        const weight = (await review.locator('.kp-pct').first().boundingBox())!;
+        // Шрифты Linux-раннера дают ширину на 2,3 px другую — допуск 3 px.
+        expect(Math.abs(weight.width - 50)).toBeLessThanOrEqual(3);
+        await expect(review.locator('.kp-pct').first()).toHaveText('%');
+        const ok = review.getByRole('button', { name: 'Верно' }).first();
+        await expect(ok).toHaveAttribute('aria-pressed', 'true');
+        await expect(ok).not.toHaveClass(/\bis-on\b/u);
+        await expect(ok.locator('svg')).toHaveCount(1);
+        const fill = await ok.evaluate((button) => getComputedStyle(button).backgroundColor);
+        expect(fill).toBe('rgba(0, 0, 0, 0)');
       }
       const actions = review.locator('.m-commit > *');
       await expect(actions.first()).toHaveText('Принять 4');

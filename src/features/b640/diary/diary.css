@@ -58,7 +58,8 @@
   .b640 .page.kd-page {
     gap: var(--career-space-5);
   }
-  /* B645 d02k на 390: подпись в 16 px от шапки, поле 110 (6,875rem), «Разобрать» — правая половина панели. */
+  /* B645 d02k на 390: подпись в 16 px от шапки, поле 110 (6,875rem), «Разобрать» — правая половина панели.
+     Только на d02k (поле #kd-text): на d02l «Принять» во всю ширину панели. */
   @media (max-width: 767px) {
     .b640 .page.kd-page:has(#kd-text) {
       gap: var(--career-space-4);
@@ -66,7 +67,7 @@
     .b640 .kd-text {
       block-size: 6.875rem;
     }
-    .b640 .kd-page .actions.m-commit.m-commit > .btn.is-primary.is-primary {
+    .b640 .kd-page:has(#kd-text) .actions.m-commit.m-commit > .btn.is-primary.is-primary {
       flex: 0 0 50%;
       margin-inline-start: auto;
     }
@@ -129,17 +130,46 @@
           var(--kp-ch) * 1ch + var(--career-space-2) * 2 + var(--career-border-width) * 2
         );
       }
+      .b640 .kp-tbl .kp-pct input.kp-w {
+        inline-size: calc(
+          var(--kp-ch) * 1ch + 1ch + var(--career-space-2) * 3 + var(--career-border-width) * 2
+        );
+      }
       .b640 .kp-tbl td:first-child input {
         min-inline-size: calc(
           var(--kp-ch) * 1ch + var(--career-space-2) * 2 + var(--career-border-width) * 2
         );
       }
     }
+    /* B645 d02l: отмеченное «Верно» — контурная кнопка с галочкой, без заливки и зелёной рамки. */
+    .b640 .kp-tbl .btn.kp-okb[aria-pressed='true'] {
+      border-color: var(--career-line-strong);
+      background: transparent;
+      color: var(--career-text);
+    }
+    .b640 .kp-tbl .btn.kp-okb[aria-pressed='true']:hover {
+      border-color: var(--career-text-dim);
+      background: var(--career-surface-raised);
+    }
+    .b640 .kp-tbl .btn.kp-okb[aria-pressed='true'] .ico {
+      color: var(--career-text);
+    }
+    /* B645 d02l: «Важность» — одно поле «30 %», знак процента внутри рамки поля, как в макете. */
     .b640 .kp-tbl .kp-pct {
+      position: relative;
       display: inline-flex;
       align-items: center;
-      gap: var(--career-space-1);
       white-space: nowrap;
+    }
+    .b640 .kp-tbl .kp-pct input.kp-w {
+      padding-inline-end: calc(var(--career-space-2) * 2 + 1ch);
+    }
+    .b640 .kp-tbl .kp-pct-sign {
+      position: absolute;
+      inset-inline-end: var(--career-space-2);
+      color: var(--career-text);
+      font-size: var(--career-text-xs);
+      pointer-events: none;
     }
   }
   .b640 .kp-foot {

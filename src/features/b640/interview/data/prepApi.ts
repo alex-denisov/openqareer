@@ -5,8 +5,12 @@ import { apiFetch, readDataObject } from '../../../coach/apiClient';
 import { getDecisionProfile } from '../../../coach/decisionProfileApi';
 import { generateInterviewPrepBrief } from '../../../interview/interviewPrepEngine';
 import { getStarStories } from '../../../interview/starStoriesApi';
+import type { TariffQuotaStatus } from '../../../tariffs/tariffQuotaApi';
+import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getB640Company } from '../../companies/companiesApi';
+import { getVacancyCard } from '../../vacancies/b640Api';
 import { companyFacts, type CompanyFacts } from '../model/companyFacts';
+import { trainingQuota } from './trainingQuota';
 import {
   pickNextResponse,
   prepVacancy,
@@ -26,7 +30,11 @@ export interface PrepData {
   readonly paragraphs: readonly PrepParagraph[];
   readonly stories: readonly StarStoryView[];
   readonly floor: SalaryFloor | null;
+  /** Вилка вакансии отклика словами; `null` — вакансию не прочитали. */
+  readonly vacancyPay: string | null;
   readonly company: CompanyFacts;
+  /** «Пробные интервью: осталось N из M», как у «Тренировки» (I3). */
+  readonly quota: TariffQuotaStatus | null;
 }
 
 interface StarPrepView {
@@ -67,6 +75,13 @@ export async function putStarPrep(
   return (await readDataObject<StarPrepView>(response)).paragraphs;
 }
 
+async function vacancyPay(response: ApplicationView, signal: AbortSignal): Promise<string | null> {
+  const clusterId = response.clusterId;
+  if (!clusterId) return null;
+  const card = await optional(() => getVacancyCard(clusterId, signal));
+  return card ? formatCompensationCompact(card.cluster.salary) : null;
+}
+
 /** «Что известно о компании»: карточка компании платформы по названию из отклика. */
 async function loadCompanyFacts(response: ApplicationView): Promise<CompanyFacts> {
   const name = response.vacancy?.companyHidden ? '' : (response.vacancy?.company ?? '').trim();
@@ -90,11 +105,13 @@ export async function loadPrep(responseId: string, signal: AbortSignal): Promise
   const response = await findResponse(responseId, signal);
   if (!response) return null;
   const brief = generateInterviewPrepBrief({ vacancy: prepVacancy(response), facts: [] });
-  const [prep, stories, floor, company] = await Promise.all([
+  const [prep, stories, floor, company, pay, quota] = await Promise.all([
     getStarPrep(response.id, signal),
     optional(() => getStarStories(signal)),
     salaryFloor(signal),
     loadCompanyFacts(response),
+    vacancyPay(response, signal),
+    trainingQuota(),
   ]);
   return {
     response,
@@ -103,6 +120,8 @@ export async function loadPrep(responseId: string, signal: AbortSignal): Promise
     paragraphs: prep.paragraphs,
     stories: stories?.stories ?? [],
     floor,
+    vacancyPay: pay,
     company,
+    quota,
   };
 }
