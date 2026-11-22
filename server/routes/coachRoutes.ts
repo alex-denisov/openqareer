@@ -1,5 +1,6 @@
 import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
+import { readCoachSelection } from './coachSelectionContext';
 import { buildCoachCareerContext } from './coachCareerContext';
 import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
 import { extractCandidateFacts, type ExtractedFacts } from '../coach/candidateFactExtractor';
@@ -403,7 +404,11 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     started.input.knowledgeContext = withStarStories(deps, request, candidate.id, body.content, started.input.knowledgeContext);
   }
   if (started.state === 'ready' && candidatePlan(deps, candidate.id) === 'free') started.input.modelTier = 'free';
-  if (started.state === 'ready' && !body.subject) started.input.careerContext = readCareerContext(deps, request, candidate.id);
+  if (started.state === 'ready' && !body.subject) {
+    const career = readCareerContext(deps, request, candidate.id);
+    const selection = career ? await readCoachSelection(deps, request, candidate.id) : undefined;
+    started.input.careerContext = career && selection ? { ...career, selection: { total: selection.total, rows: [...selection.rows] } } : career;
+  }
   // A chosen vacancy is the topic itself: its turn needs no live market sample (block C R5).
   const marketQuery = body.subject?.kind === 'vacancy' ? undefined : body.marketQuery;
   return continueStartedTurn(deps, request, reply, candidate.id, key, started, marketQuery);

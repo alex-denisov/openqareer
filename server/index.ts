@@ -12,6 +12,7 @@ import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
+import { buildSkillNameTranslator } from './providers/skillNameTranslator';
 import {
   buildEnabledCoverLetterWriter,
   COVER_LETTER_VERTEX_TIMEOUT_MS,
@@ -272,6 +273,8 @@ const app = await buildApp({
     vertex: config.vertex,
     vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'campaignRoles'),
   }),
+  // B734: русские названия навыков проверки роли — та же дешёвая цепочка, что у квиза.
+  skillNameTranslator: buildSkillNameTranslator({ providerCredentials: config.providerCredentials }),
   // В журнал: какая ступень ответила на вопросы квиза и за сколько.
   skillQuizModel: buildSkillQuizModel({
     providerCredentials: config.providerCredentials,

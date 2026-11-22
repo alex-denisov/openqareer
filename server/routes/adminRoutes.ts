@@ -16,7 +16,7 @@ import { registerAdminCoverageRoutes } from './adminCoverageRoutes';
 import { registerAdminPermissionRoutes } from './adminPermissions';
 import { registerAdminPartnerRoutes } from './adminPartnerRoutes';
 import { toAdminSourceSchedule } from '../vacancies/adminSourceSchedule';
-import { buildAdminSourcePage } from '../vacancies/adminSourcePage';
+import { adminSourceWindow, buildAdminSourcePage } from '../vacancies/adminSourcePage';
 import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
 import { chainRoutes, chainStageLabel, MODEL_CHAINS } from '../providers/modelChains';
 import { describeRoleNamerQueue } from '../providers/roleNamer';
@@ -346,7 +346,6 @@ const SOURCE_NAME_COLLATOR = new Intl.Collator('ru-RU', { sensitivity: 'base' })
 async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
-  deps.multiSourceEngine.refreshPersistedSourceState();
   // Расписание B204 админ не видел вовсе, и «почему площадку не опрашивают»
   // оставалось вопросом без ответа. Сводка короткая намеренно: тот же
   // маршрут уже рвался на 20 220 байтах (INC-032).
@@ -360,6 +359,9 @@ async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply
         SOURCE_NAME_COLLATOR.compare(left.name, right.name) ||
         left.id.localeCompare(right.id),
     );
+  // B736: only this page's sources are re-read; all 76 000 stored states took ~3.4 s.
+  const window = adminSourceWindow(sources, offset);
+  deps.multiSourceEngine.refreshPersistedSourceState(window.map((source) => source.id));
   const nowMs = Date.now();
   // Do not calculate health for all 396 registered sources on every page. The
   // old route repeated the full O(N) report for each byte-bounded page, so the

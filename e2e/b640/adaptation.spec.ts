@@ -52,7 +52,7 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await people.getByRole('button', { name: 'Назначить встречу' }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('С кем').selectOption({ label: 'Руководитель тестовых сред' });
-    await dialog.getByLabel('Когда').fill('2027-01-08');
+    await dialog.getByLabel('Когда').fill('08.01.2027');
     await dialog.getByRole('button', { name: 'Назначить' }).click();
     await expect
       .poll(() => calls.people.map((call) => call.path))
@@ -76,7 +76,7 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await expect(company).toHaveValue('Вектор Банк');
     await expect(page.getByLabel('Должность')).toHaveValue('Руководитель разработки');
     await expect(page.getByLabel('Что от вас ждут')).toHaveValue(DUTIES.join('\n'));
-    await page.getByLabel('День выхода').fill('2026-12-01');
+    await page.getByLabel('День выхода').fill('01.12.2026');
     await page.getByRole('button', { name: 'Собрать план' }).click();
     await expect.poll(() => created.length).toBe(1);
     expect(created[0]).toEqual({

@@ -80,6 +80,15 @@ describe('цели: подписи', () => {
     expect(formatValue(false)).toBe('не сделано');
   });
 
+  it('B683: единица из названия не повторяется в подписи показателя', () => {
+    expect(
+      indicatorView(summary('x', { title: 'Срок релиза, дней', unit: 'дней' }) as never).title,
+    ).toBe('Срок релиза, дней');
+    expect(indicatorView(summary('x', { title: 'Срок', unit: 'дней' }) as never).title).toBe(
+      'Срок, дней',
+    );
+  });
+
   it('старая цель без разбиения — сама себе показатель', () => {
     const legacy = card({ indicators: [] });
     expect(indicatorsOf(legacy).map((goal) => goal.id)).toEqual(['goal']);

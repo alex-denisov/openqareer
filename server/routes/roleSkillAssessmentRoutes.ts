@@ -24,6 +24,7 @@ import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
+import { withRussianSkillNames } from './roleSkillNamesStep';
 import {
   createRoleRequirementReader,
   type RoleRequirementReader,
@@ -310,13 +311,14 @@ async function startRun(
     // A vacancy check (B552) runs on the resolved role: «Стратегия», else the role the
     // vacancy was offered for — a candidate without «Стратегия» still gets the quiz.
     const result = await startFocusedRun(deps, candidate.id, role, focus);
-    if (result.state === 'run')
-      deps.candidateStore.roleSkillAssessments.create(candidate.id, result.run);
-    return reply.send({ data: result });
+    if (result.state !== 'run') return reply.send({ data: result });
+    const focused = await withRussianSkillNames(deps, reply, result.run);
+    deps.candidateStore.roleSkillAssessments.create(candidate.id, focused);
+    return reply.send({ data: { ...result, run: focused } });
   }
   const context = await readAssessmentContext(deps, candidate.id, role);
   if (context.state !== 'ready') return reply.send({ data: context });
-  const run = createInitialAssessmentRun(context);
+  const run = await withRussianSkillNames(deps, reply, createInitialAssessmentRun(context));
   deps.candidateStore.roleSkillAssessments.create(candidate.id, run);
   return reply.send({ data: { state: 'run', run } });
 }

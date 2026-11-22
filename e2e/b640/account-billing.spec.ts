@@ -202,6 +202,19 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
       'Валюта зарплат',
     ]);
     await expectGates(page);
+    // DESIGN.md: место нажатия не меньше 44×44, даже если видимая плашка 42 (макет).
+    // Нажимают подпись: в WebKit .app радио внутри не растягивается на неё.
+    await expect(screen.locator('.sec-seg label')).toHaveCount(7);
+    const targets = await screen.locator('.sec-seg label').evaluateAll((labels) =>
+      labels.map((label) => {
+        const box = label.getBoundingClientRect();
+        return { width: Math.round(box.width), height: Math.round(box.height) };
+      }),
+    );
+    for (const target of targets) {
+      expect(target.width).toBeGreaterThanOrEqual(44);
+      expect(target.height).toBeGreaterThanOrEqual(44);
+    }
     await screen.getByRole('radio', { name: 'Тёмная' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'dark');
     await screen.getByRole('radio', { name: 'Светлая' }).check();

@@ -21,6 +21,7 @@ import {
 import { HORIZONS, SETTERS } from './goalsModel';
 import { IndicatorFields } from './IndicatorFields';
 import { today } from './model';
+import { DateInput } from '../kit/DateInput';
 import { RetryButton } from './parts';
 import './diary.css';
 
@@ -134,13 +135,12 @@ function MainFields({ draft, errors, change }: MainFieldsProps) {
       <div className="gb-row">
         <div className="gb-f gb-date">
           <label htmlFor="gb-d">Срок</label>
-          <input
+          <DateInput
             id="gb-d"
-            type="date"
             value={draft.dueDate}
-            onChange={(event) => change({ dueDate: event.target.value })}
+            error={errors.dueDate}
+            onChange={(dueDate) => change({ dueDate })}
           />
-          <FieldError text={errors.dueDate} />
         </div>
         <SegField
           label="Кто поставил"

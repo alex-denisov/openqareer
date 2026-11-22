@@ -56,6 +56,21 @@ test.describe('B653: «Карьера» — роли и условия поис�
     }
   });
 
+  test('B737: роль поиска на английском — по-русски в полосе и в выборе ролей', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career', {
+      searchRoles: ['Chief Operating Officer'],
+      titlesRu: { 'Chief Operating Officer': 'Операционный директор (COO)' },
+    });
+    const screen = node(page, 's09');
+    await expect(screen.locator('#role-title')).toHaveText('Операционный директор (COO)');
+    await screen.getByRole('button', { name: 'Показать все 6' }).click();
+    const rows = desk(page) ? screen.locator('.c9-table tbody tr') : screen.locator('.c9-acc');
+    await expect(rows.last()).toContainText('Операционный директор (COO)');
+    await expect(page.getByText('Chief Operating Officer')).toHaveCount(0);
+  });
+
   test('S9: крестик скрывает предложение, «Отменить» возвращает', async ({ page }) => {
     await openCareer(page, '/app/career');
     const strip = page.locator('.sk-strip');

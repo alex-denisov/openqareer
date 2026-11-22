@@ -64,7 +64,10 @@ export function suggestWeekPlan(input: WeekPlanInput): CareerDiaryPlanSuggestion
     .filter((item) => !item.done)
     .map((item) => ({ text: item.text, goalId: item.goalId, source: 'carried' }));
   const taken = new Set(carried.map((item) => item.goalId));
+  // У цели с показателями замеры вносятся в показатели: сама цель — заголовок, не пункт плана.
+  const parents = new Set(input.goals.map((goal) => goal.parentGoalId).filter(Boolean));
   const byGoals: CareerDiaryPlanSuggestion[] = input.goals
+    .filter((goal) => !parents.has(goal.id))
     .filter((goal) => goal.risk.status !== 'achieved' && !taken.has(goal.id))
     .filter((goal) => goal.startDate <= weekEnd && goal.dueDate >= input.weekStart)
     .map((goal) => {

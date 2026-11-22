@@ -86,6 +86,16 @@ describe('B398 email verification', () => {
     expect(auth.getCandidateEmail(candidateId)).toBe('candidate@example.com');
   });
 
+  it('n02: отдаёт пояс из «Приложения» для сводки уведомлений', async () => {
+    const { auth, candidates } = createVerificationServices();
+    const registered = await register(auth, candidates);
+    const candidateId = registered.principal.candidate!.id;
+    expect(auth.getCandidateTimezone(candidateId)).toBeNull();
+    auth.updateAccount(registered.sessionToken, { timezone: 'Asia/Tbilisi' });
+    expect(auth.getCandidateTimezone(candidateId)).toBe('Asia/Tbilisi');
+    expect(auth.getCandidateTimezone('missing')).toBeNull();
+  });
+
   it('uses the purpose-derived key for verification code hashes', () => {
     const secret = Buffer.alloc(32, 17);
     const message = 'openqareer-email-verification-v1\u0000candidate-b433\u0000123456';
