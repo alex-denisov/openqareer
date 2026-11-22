@@ -113,6 +113,37 @@ describe('B645: проверка ответа модели', () => {
   });
 });
 
+describe('B692: «О себе» опирается на факты всего профиля (прод 22.11: about.offer = null при 6 из 6 местах)', () => {
+  // Результат места (домен не из «О себе») — главный довод для «О себе»: «чем это подтверждено».
+  const memory = [...MEMORY.slice(0, 3), mem('x1', 'Scaled the company from a 73K seed to a 100M exit', 'achievement')];
+  const draft = {
+    ...(DRAFT as unknown as Record<string, unknown>),
+    experience: [{ id: 'e1', title: 'Co-Founder', employer: 'Fishance', startDate: '2015', current: false, endDate: '2019', descriptionMemoryId: 'x1', bulletMemoryIds: [] }],
+  } as never;
+  const request = linkedinRewriteRequest({ memory, draft }, undefined) as LinkedinRewriteRequest;
+
+  it('«О себе» со ссылкой на факт места принимается, числа сверяются с ним', () => {
+    expect(request.aboutFacts.map((fact) => fact.id)).not.toContain('x1');
+    const output = {
+      about: { text: 'I lead technology teams and took a company from a 73K seed to a 100M exit as co-founder.', factIds: ['d1', 'x1'] },
+      places: [],
+    };
+    expect(checkLinkedinRewrite(request, output).about?.facts.map((fact) => fact.id)).toEqual(['d1', 'x1']);
+  });
+
+  it('id не из запроса и число не из фактов по-прежнему отбрасывают «О себе»; причина сообщается без текста', () => {
+    const reasons: string[] = [];
+    const onReject = (section: string, reason: string) => reasons.push(`${section}:${reason}`);
+    const unknown = { about: { text: 'I lead technology teams that ship products.', factIds: ['d1', 'zz'] }, places: [] };
+    expect(checkLinkedinRewrite(request, unknown, onReject).about).toBeNull();
+    const number = { about: { text: 'I lead technology teams and grew revenue 7 times.', factIds: ['d1'] }, places: [] };
+    expect(checkLinkedinRewrite(request, number, onReject).about).toBeNull();
+    const empty = { about: { text: '', factIds: [] }, places: [] };
+    expect(checkLinkedinRewrite(request, empty, onReject).about).toBeNull();
+    expect(reasons).toEqual(['about:unknown_fact', 'about:ungrounded_number', 'about:empty']);
+  });
+});
+
 describe('B645: предложения после переписывания', () => {
   const base = buildSectionSuggestions(INPUT);
 

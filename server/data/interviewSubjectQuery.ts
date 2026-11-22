@@ -1,26 +1,26 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
 import type { CandidateInterviewSubject } from './candidateStore';
 
-function parseInterviewSnapshot(raw: string | null) {
-  if (!raw) return {};
-  try {
-    const snap = JSON.parse(raw) as { title?: string; company?: string };
-    return { vacancyTitle: snap.title, vacancyCompany: snap.company };
-  } catch {
-    return {};
-  }
-}
+/** Вакансия отклика из общего чтения (`vacancy_cipher` расшифровывает репозиторий откликов). */
+export type ReadApplicationVacancy = (
+  candidateId: string,
+  applicationId: string,
+) => VacancyApplicationSnapshot | null;
 
-/** Интервью кандидата с откликом и вакансией: для тренажёра и разбора (B251). */
+/**
+ * Интервью кандидата с откликом и вакансией: для тренажёра и разбора (B251).
+ * B746: вакансия хранится зашифрованной, сырым SQL её не прочитать — берём через общее чтение.
+ */
 export function queryInterviewSubject(
   database: DatabaseSync,
   candidateId: string,
   interviewId: string,
+  readVacancy: ReadApplicationVacancy,
 ): CandidateInterviewSubject | null {
   const row = database
     .prepare(
-      `SELECT i.id, i.application_id, i.round, i.scheduled_at,
-              a.stage, a.vacancy_snapshot, a.cluster_id
+      `SELECT i.id, i.application_id, i.round, i.scheduled_at, a.stage
        FROM application_interviews i
        JOIN applications a ON a.id = i.application_id
        WHERE i.id = ? AND a.candidate_id = ?`,
@@ -32,19 +32,17 @@ export function queryInterviewSubject(
         round: number;
         scheduled_at: string | null;
         stage: string;
-        vacancy_snapshot: string | null;
-        cluster_id: string | null;
       }
     | undefined;
   if (!row) return null;
-  const { vacancyTitle, vacancyCompany } = parseInterviewSnapshot(row.vacancy_snapshot);
+  const vacancy = readVacancy(candidateId, row.application_id);
   return {
     id: row.id,
     applicationId: row.application_id,
     round: row.round,
     scheduledAt: row.scheduled_at,
     stage: row.stage,
-    vacancyTitle,
-    vacancyCompany,
+    ...(vacancy?.title ? { vacancyTitle: vacancy.title } : {}),
+    ...(vacancy?.company ? { vacancyCompany: vacancy.company } : {}),
   };
 }

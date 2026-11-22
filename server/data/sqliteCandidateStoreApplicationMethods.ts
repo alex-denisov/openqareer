@@ -268,7 +268,12 @@ function createInterviewApplicationMethods(
   return {
     getInterviewSubject(candidateId, interviewId) {
       requireCandidate(candidateId);
-      return queryInterviewSubject(database, candidateId, interviewId);
+      return queryInterviewSubject(
+        database,
+        candidateId,
+        interviewId,
+        (owner, applicationId) => tracker.get(owner, applicationId)?.vacancy ?? null,
+      );
     },
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {
       requireCandidate(candidateId);

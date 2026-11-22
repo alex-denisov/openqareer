@@ -90,7 +90,9 @@ const sources = [
 
 export const matchedVacancies = Array.from({ length: 96 }, (_, index) => {
   const source = sources[index % sources.length];
-  const observedAt = new Date(Date.UTC(2026, 8, 20 - (index % 12), 9, 0, 0)).toISOString();
+  const observedAt = new Date(
+    Date.UTC(2026, 8, 20 - Math.floor(index / 4), 9, 0, 0, 1000 - index),
+  ).toISOString();
   return {
     cluster: {
       id: `cluster-${index}`,
@@ -156,8 +158,7 @@ function marketSalaryFixture(index: number) {
 }
 
 /** Подбор едет страницами по 50 (INC-029, B211). */
-export function matchedVacancyPage(offset: number, total = matchedVacancies.length) {
-  const pageSize = 50;
+export function matchedVacancyPage(offset: number, total = matchedVacancies.length, pageSize = 50) {
   const pool = Array.from({ length: total }, (_, index) => {
     const source = matchedVacancies[index % matchedVacancies.length]!;
     if (index < matchedVacancies.length) return source;

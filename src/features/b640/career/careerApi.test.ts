@@ -22,7 +22,7 @@ vi.mock('../../skills/roleSkillAssessmentApi', () => ({
 vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getRoleSkillDemand }));
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
 
-import { addOwnRole, loadRoles, loadSkillStrip, saveSearchRoles } from './careerApi';
+import { addOwnRole, loadRoles, loadSkillStrip, readSkillGap, saveSearchRoles } from './careerApi';
 
 const campaign = (roles: string[]) => ({
   roles: { value: roles, origin: 'explicit' },
@@ -152,5 +152,23 @@ describe('сохранение', () => {
     api.changeCareerRole.mockResolvedValue(undefined);
     await addOwnRole('Архитектор');
     expect(api.changeCareerRole).toHaveBeenCalledWith('add', 'Архитектор');
+  });
+});
+
+describe('readSkillGap (строка навыков в «Вакансиях», s07)', () => {
+  it('считает и ведёт туда же, что полоса «Роли»: первая роль с готовой проверкой', async () => {
+    api.getCurrentRoleSkillAssessment.mockImplementation(async (role: string) =>
+      role === 'VP'
+        ? { state: 'insufficient_requirements', roleTitle: 'VP', collecting: false }
+        : { state: 'ready', roleTitle: role, skills: [{ name: 'X' }, { name: 'Y' }, { name: 'Z' }] },
+    );
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+    expect(await readSkillGap(['VP', 'COO'])).toEqual({ gap: 3, role: 'COO' });
+  });
+
+  it('ни одна роль не готова — строки нет', async () => {
+    api.getCurrentRoleSkillAssessment.mockResolvedValue({ state: 'insufficient_requirements', roleTitle: 'VP' });
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+    expect(await readSkillGap(['VP'])).toEqual({ gap: 0, role: null });
   });
 });
