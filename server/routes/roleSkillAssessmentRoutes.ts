@@ -19,7 +19,7 @@ import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
-import { readTargetLevel } from './vacancyRoleContext';
+import { readRoleLevel } from './vacancyRoleContext';
 import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
@@ -51,7 +51,11 @@ import {
 const roleSchema = z.string().trim().min(1).max(200);
 const startSchema = z
   // `consent` is ignored: open tabs and installed .app builds still send it until they update (05.11).
-  .object({ consent: z.boolean().optional(), role: roleSchema.optional(), focus: focusSchema.optional() })
+  .object({
+    consent: z.boolean().optional(),
+    role: roleSchema.optional(),
+    focus: focusSchema.optional(),
+  })
   .strict();
 const currentQuerySchema = z.object({ role: roleSchema.optional() });
 
@@ -414,14 +418,20 @@ async function readAssessmentContext(
   const snapshot = await readRoleSnapshot(deps, candidateId, role.title);
   if (snapshot.state !== 'matched') return snapshot;
   const reader = createRoleRequirementReader(deps);
-  const build = () => summarizeAssessmentContext(role.title, role.version, snapshot.vacancies, reader);
+  const build = () =>
+    summarizeAssessmentContext(role.title, role.version, snapshot.vacancies, reader);
   const key = `${titleKey(role.title)}\u0000${role.version}`;
   return cached ? contextCache.read(snapshot.vacancies, key, build) : build();
 }
 
 /** The background pass builds what «Карьера» will read for a role (prod 19.11). */
 export async function warmAssessmentContext(deps: RouteDeps, candidateId: string, role: string) {
-  await readAssessmentContext(deps, candidateId, resolveAssessedRole(deps, candidateId, role), true);
+  await readAssessmentContext(
+    deps,
+    candidateId,
+    resolveAssessedRole(deps, candidateId, role),
+    true,
+  );
 }
 
 export async function readRoleSnapshot(
@@ -432,7 +442,7 @@ export async function readRoleSnapshot(
 ): Promise<MatchedRoleSnapshot> {
   const targetRoles = [roleTitle];
   const { confirmedSkills } = readMatchProfile(deps.candidateStore, candidateId);
-  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, targetRoles);
+  const targetLevel = readRoleLevel(deps.candidateStore, candidateId, roleTitle);
   try {
     const vacancies = await readMatchedSnapshot(
       deps.multiSourceEngine,

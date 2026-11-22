@@ -54,7 +54,8 @@ describe('Telegram Channel Job Parser', () => {
   });
 
   it('extracts salary and remote flags from freeform Russian text', () => {
-    const text = 'Ищем Tech Lead (Python). Компания: DataCorp. Зарплата: $5,000 - $7,000. Формат: полная удаленка.';
+    const text =
+      'Ищем Tech Lead (Python). Компания: DataCorp. Зарплата: $5,000 - $7,000. Формат: полная удаленка.';
     const parsed = parseTelegramJobPost(text, {
       postId: '555',
       channelName: 'datacareers',
@@ -197,12 +198,15 @@ describe('Telegram posts name the real title and never invent an employer (B164)
 
     const parsed = parseTelegramJobPost(html, meta);
 
-    expect(parsed?.description).toContain('Требования:\n• Опыт на Go от 4 лет\n• Опыт с highload и микросервисами');
+    expect(parsed?.description).toContain(
+      'Требования:\n• Опыт на Go от 4 лет\n• Опыт с highload и микросервисами',
+    );
     expect(parsed?.description).toContain('\n\nТребования:');
   });
 
   it('reads the employer out of «<Studio> ищет <role>» when no label exists', () => {
-    const html = 'Nival ищет Senior Game Designer<br/>Удалённо, полная занятость, стек Unity и C#, опыт от 3 лет.<br/>Требования: Unity.<br/>Условия: зарплата от 200 000 руб.<br/>Контакты: @hr_nival';
+    const html =
+      'Nival ищет Senior Game Designer<br/>Удалённо, полная занятость, стек Unity и C#, опыт от 3 лет.<br/>Требования: Unity.<br/>Условия: зарплата от 200 000 руб.<br/>Контакты: @hr_nival';
 
     const parsed = parseTelegramJobPost(html, meta);
 
@@ -274,5 +278,33 @@ describe('Telegram posts name the real title and never invent an employer (B164)
       expect(skills).toContain('Стратегическое планирование');
       expect(skills).toContain('OKR / KPI');
     });
+  });
+});
+
+/** B741: «Go» — язык, только отдельным словом с заглавной; английский глагол навыком не становится. */
+describe('extractSkillsFromText: Go (B741)', () => {
+  it.each([
+    'Own the go-to-market strategy for the product line.',
+    'Lead the team to go live in Q3.',
+    'Willing to go above and beyond.',
+    'Go-to-market experience is a plus.',
+    'Go live with the new platform in Q2.',
+    'Go-live planned for March.',
+    'Build a Go-To-Market plan.',
+    'Ready to go? Join our team.',
+  ])('«%s» — без Go', (text) => {
+    expect(extractSkillsFromText(text)).not.toContain('Go');
+  });
+
+  it.each([
+    'Стек: Go, Kubernetes, PostgreSQL.',
+    'Senior Backend Developer (Go)',
+    'Опыт разработки на Go от 4 лет',
+    'We use Go and Rust for services.',
+    'Старший Go-разработчик, ML-платформа',
+    'Ведущий Go-разработчик в MAX',
+    'Senior Go-developer',
+  ])('«%s» — Go', (text) => {
+    expect(extractSkillsFromText(text)).toContain('Go');
   });
 });
