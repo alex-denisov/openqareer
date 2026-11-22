@@ -12,6 +12,7 @@ import {
   type B640ChannelPreference,
 } from './invitationPreferenceApi';
 import type { B640Node } from '../routes';
+import { DeliverySettingsGroup } from './DeliverySettingsGroup';
 import { CHANNEL_LABEL, NOTIFICATION_ROWS, type NotificationChannel, type NotificationRow } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 import { useTelegramLink, type TelegramLink } from './useTelegramLink';
@@ -226,13 +227,14 @@ function SettingsTable({ settings, load }: { settings: Settings; load: ReturnTyp
   );
 }
 
-/** n02 «Уведомления»: что и куда присылать, привязка Telegram на месте. */
+/** n02 «Уведомления»: что и куда присылать, привязка Telegram на месте, как часто и с компанией ли. */
 export function NotificationSettingsScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadSettings);
   return (
     <SettingsPage node={node} heading="Настройки уведомлений" busy={load.state === 'loading'}>
       {load.state === 'error' ? <ErrorLine text="Настройки не загрузились" onRetry={load.retry} /> : null}
       {load.state === 'ready' ? <SettingsTable settings={load.data} load={load} /> : null}
+      {load.state === 'ready' ? <DeliverySettingsGroup telegram={load.data.channels.telegram.available} /> : null}
     </SettingsPage>
   );
 }
