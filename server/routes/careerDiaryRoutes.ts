@@ -37,7 +37,9 @@ const weekStartSchema = dateSchema.refine(
   (value) => new Date(value + 'T00:00:00.000Z').getUTCDay() === 1,
   'week_start_must_be_monday',
 );
-const diaryIdSchema = z.string().uuid();
+/** Цели из KPI, принятые до 22.11, хранят id `kpi:<импорт>:<n>`: их тоже замеряют и удаляют. */
+const LEGACY_KPI_GOAL_ID = /^kpi:[0-9a-f-]{36}:\d{1,2}$/;
+const diaryIdSchema = z.union([z.string().uuid(), z.string().regex(LEGACY_KPI_GOAL_ID)]);
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   cursor: z.string().min(1).max(300).optional(),

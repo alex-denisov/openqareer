@@ -92,7 +92,12 @@ async function setup(extractor?: KpiExtractor) {
     () => candidateStore.close(),
     () => app.close(),
   );
-  return { app, databasePath: config.databasePath };
+  return {
+    app,
+    databasePath: config.databasePath,
+    store: candidateStore,
+    candidate: sessions.get(flagged)!.candidate!.id,
+  };
 }
 
 function call(
@@ -281,6 +286,42 @@ describe('B686: загрузка KPI под флагом', () => {
       dueDate: '2027-01-31',
       details: { setBy: 'manager', weight: 50 },
     });
+
+    // Прод 22.11: id вида `kpi:<импорт>:<n>` не проходил проверку uuid — замер и удаление 400.
+    const goalId = accepted.json().data.goalIds[0] as string;
+    expect(goalId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    const measured = await call(app, 'POST', `${DIARY}/goals/${goalId}/measurements`, flagged, {
+      value: 3,
+      measuredAt: '2026-11-20',
+    });
+    expect(measured.statusCode, measured.body).toBe(201);
+  });
+
+  it('цель, принятая до правки с id `kpi:…`, замеряется и удаляется', async () => {
+    const { app, store, candidate } = await setup(extractorOf(ANSWER));
+    const legacy = `kpi:${randomUUID()}:0`;
+    store.careerDiaryRepo.createGoal(
+      candidate,
+      {
+        type: 'operational',
+        horizon: 'quarter',
+        startDate: '2026-11-01',
+        dueDate: '2026-12-31',
+        title: 'Срок релиза',
+        unit: 'дней',
+        baselineValue: 10,
+        targetValue: 5,
+      },
+      undefined,
+      legacy,
+    );
+    const path = `${DIARY}/goals/${encodeURIComponent(legacy)}`;
+    const measured = await call(app, 'POST', `${path}/measurements`, flagged, {
+      value: 7,
+      measuredAt: '2026-11-20',
+    });
+    expect(measured.statusCode, measured.body).toBe(201);
+    expect((await call(app, 'DELETE', path, flagged)).statusCode).toBe(200);
   });
 
   it(
