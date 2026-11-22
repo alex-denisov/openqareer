@@ -37,7 +37,8 @@ test.describe('B686: «Дневник» — загрузка и проверка
     } else {
       // B645 (f4ca81f9) d02k на 390: поле 110 с y 177, «Разобрать» — правая половина панели (195, 179).
       const field = await upload.locator('#kd-text').boundingBox();
-      expect(Math.abs(field!.y - 177)).toBeLessThanOrEqual(1);
+      // Шрифты Linux-раннера сдвигают строку подписи на 2 px — допуск 2 px, как у таблицы.
+      expect(Math.abs(field!.y - 177)).toBeLessThanOrEqual(2);
       expect(Math.round(field!.height)).toBe(110);
       const go = await upload.getByRole('button', { name: 'Разобрать' }).boundingBox();
       expect([Math.round(go!.x), Math.round(go!.width)]).toEqual([195, 179]);
