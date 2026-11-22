@@ -85,7 +85,7 @@ function Steps({ path, data }: { readonly path: Ready; readonly data: Profession
           Рассказать
         </button>
       </Step>
-      {bridge ? <BridgeStep title={bridge.title} vacancies={bridge.vacancies ?? 0} /> : null}
+      {bridge ? <BridgeStep title={bridge.label} vacancies={bridge.vacancies ?? 0} /> : null}
     </ol>
   );
 }
@@ -103,7 +103,7 @@ function PathLead({ path, data }: { readonly path: Ready; readonly data: Profess
           text={`Частые требования — из ${path.sampleSize} вакансий профессии за 30 дней, на ${dateLabel(path.observedAt)}.`}
         />
       </div>
-      {bridge ? <p className="lead-text">Через промежуточную роль: {bridge.title}</p> : null}
+      {bridge ? <p className="lead-text">Через промежуточную роль: {bridge.label}</p> : null}
       <Steps path={path} data={data} />
       <Link className="s11-resp" to={buildNodePath('o01')}>
         <span className="s11-resp-t">Отклики в новой профессии</span>

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ConnectionCirclePath, ConnectionCircleResult } from '../domain/candidateCompanies';
 import type { B640Contact } from '../../shared/b640Contacts';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
-import { circlePeople, contactPeople, mergePeople } from './b640CompanyPeople';
+import { circlePeople, contactPeople, contactSourceNote, mergePeople } from './b640CompanyPeople';
 
 const me = { id: 'cand', fullName: 'Кандидат', roleTitle: null, companyName: null, linkedinUrl: null };
 const person = (id: string, fullName: string) => ({ id, fullName, roleTitle: 'Рекрутер', companyName: 'Ромашка', linkedinUrl: null });
@@ -42,7 +42,7 @@ describe('B645 v10b: люди компании — те же контакты, �
     roleTitle: 'Senior Recruiter', link: 'none', linkNote: null, status: { state: 'none', at: null }, inSelection: false, ...over,
   });
 
-  it('у компании без вакансий рекрутер из контактов попадает в людей с черновиком ему самому', () => {
+  it('у компании без вакансий рекрутер из контактов — ваш контакт 1-го круга с черновиком ему самому', () => {
     const people = contactPeople(
       [
         contact({ id: 'igor', fullName: 'Igor Siusiukov', companyName: 'Autodesk' }),
@@ -54,7 +54,7 @@ describe('B645 v10b: люди компании — те же контакты, �
       null,
     );
     expect(people.map((item) => [item.name, item.circle, item.nextStep, item.evidence])).toEqual([
-      ['Igor Siusiukov', 3, 'write_known_contact', null],
+      ['Igor Siusiukov', 1, 'write_known_contact', null],
       ['Анна', 1, 'write_known_contact', 'работали вместе в «Сфере»'],
       ['Пётр', 2, 'ask_for_introduction', 'общий знакомый: Иван'],
     ]);
@@ -75,5 +75,15 @@ describe('B645 v10b: люди компании — те же контакты, �
     const merged = mergePeople([...fromCircle, ...fromContacts]);
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({ circle: 1, vacancyId: 'v-1' });
+  });
+});
+
+describe('B645 v10b: строка «как связаны» у контакта без пояснения — источник с датой, как в макете', () => {
+  it('импорт LinkedIn — «импорт контактов LinkedIn, ДД.ММ» по Москве; добавлен вручную — «добавлено вами»', () => {
+    expect(contactSourceNote({ source: 'linkedin_import', updatedAt: '2026-11-09T22:30:00.000Z' })).toBe(
+      'импорт контактов LinkedIn, 10.11',
+    );
+    expect(contactSourceNote({ source: 'linkedin_import', updatedAt: 'нет даты' })).toBe('импорт контактов LinkedIn');
+    expect(contactSourceNote({ source: 'manual', updatedAt: '2026-11-10T10:00:00.000Z' })).toBe('добавлено вами');
   });
 });

@@ -17,6 +17,7 @@ const req = (name: string, inProfile: boolean): ProfessionRequirement => ({
 const row = (title: string, vacancies: number, requirements: string[]): RoleRow => ({
   id: title,
   title,
+  label: title,
   wage: null,
   wageNote: 'нет данных о зарплатах',
   vacancies,

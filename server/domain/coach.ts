@@ -343,6 +343,25 @@ export const coachTurnInputSchema = z.object({
       formats: z.array(z.enum(CAREER_CHANGE_FORMATS)).max(3),
       relocation: z.boolean(),
       stopCompanies: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+      /** B735: подборка кандидата — первые 20 строк его списка и их общее число. */
+      selection: z
+        .object({
+          total: z.number().int().min(0),
+          rows: z
+            .array(
+              z
+                .object({
+                  title: z.string().max(200),
+                  company: z.string().max(200).nullable(),
+                  salary: z.string().max(120).nullable(),
+                  fitPercent: z.number().min(0).max(100).nullable(),
+                })
+                .strict(),
+            )
+            .max(20),
+        })
+        .strict()
+        .optional(),
     })
     .strict()
     .optional(),
