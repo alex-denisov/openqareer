@@ -144,7 +144,8 @@ export class SqliteNotificationRepository {
     const existing = this.readByIdempotencyKey(candidateId, input.idempotencyKey);
     if (existing) return this.toItem(existing);
     const createdAt = input.createdAt ?? now;
-    const expiresAt = new Date(Date.parse(createdAt) + RETENTION_MS).toISOString();
+    const keptFrom = Math.max(Date.parse(createdAt), Date.parse(input.deliverAt ?? createdAt));
+    const expiresAt = new Date(keptFrom + RETENTION_MS).toISOString();
     if (expiresAt <= now) return null;
     const id = randomUUID();
     this.database.exec('SAVEPOINT record_candidate_notification');
@@ -739,13 +740,17 @@ export class SqliteNotificationRepository {
     input: NotificationEventInput,
     now: string,
   ): void {
+    const sendAt = input.deliverAt ?? now;
+    if (Date.parse(sendAt) < Date.parse(now)) return;
+    const enqueue = (channel: NotificationDeliveryChannel) =>
+      this.enqueue(candidateId, notificationId, channel, now, sendAt);
     if (input.invitation && input.kind === 'employer_reply') {
       markInvitationEvent(this.database, candidateId, notificationId);
       const invitation = readInvitationPreference(this.database, candidateId);
       if (invitation) {
-        if (invitation.email) this.enqueue(candidateId, notificationId, 'email', now);
+        if (invitation.email) enqueue('email');
         if (this.channelOpen(candidateId, 'telegram', invitation)) {
-          this.enqueue(candidateId, notificationId, 'telegram', now);
+          enqueue('telegram');
         }
         return;
       }
@@ -754,18 +759,24 @@ export class SqliteNotificationRepository {
     if (!key) return;
     const preference = this.getPreferences(candidateId).find((item) => item.key === key);
     if (!preference) return;
-    if (preference.email) this.enqueue(candidateId, notificationId, 'email', now);
+    if (preference.email) enqueue('email');
     if (preference.telegram && this.getTelegramChat(candidateId) !== null) {
-      this.enqueue(candidateId, notificationId, 'telegram', now);
+      enqueue('telegram');
     }
   }
 
-  private enqueue(candidateId: string, notificationId: string, channel: NotificationDeliveryChannel, now: string): void {
+  private enqueue(
+    candidateId: string,
+    notificationId: string,
+    channel: NotificationDeliveryChannel,
+    now: string,
+    sendAt: string,
+  ): void {
     this.database.prepare(
       `INSERT INTO candidate_notification_deliveries
         (notification_id, candidate_id, channel, status, attempts, next_attempt_at, updated_at)
        VALUES (?, ?, ?, 'pending', 0, ?, ?) ON CONFLICT(notification_id, channel) DO NOTHING`,
-    ).run(notificationId, candidateId, channel, now, now);
+    ).run(notificationId, candidateId, channel, sendAt, now);
   }
 
   private requireSealedText(): SealedText {
