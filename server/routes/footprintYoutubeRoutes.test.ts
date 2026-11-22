@@ -111,13 +111,13 @@ describe('B668: канал YouTube в «Данных для поиска»', () 
   it('без флага B640 план и готовность источников прежние: YouTube нет', async () => {
     const { app } = await setup('fixture-key');
     const data = await plan(app, 'token-plain');
-    expect(data.plan.some((item) => item.adapterId === 'youtube')).toBe(false);
+    expect(data.plan.some((item) => item.adapterId === 'video')).toBe(false);
     expect(Object.keys(data.sourceAvailability)).toEqual([
-      'sherlock',
-      'maigret',
-      'hibp',
-      'wayback',
-      'exa',
+      'nickname',
+      'nickname_extended',
+      'leaks',
+      'archive',
+      'web',
     ]);
   });
 
@@ -177,10 +177,76 @@ describe('B740: ответы цифрового следа без названи
     expect(data.audit.findings[0]).toMatchObject({ id: 'f-1', title: 'GitHub' });
   });
 
-  it('без флага ответ прежний', async () => {
-    const { app } = await setup('fixture-key');
-    const data = await plan(app, 'token-plain');
-    expect(data.plan.every((item) => typeof item.adapterId === 'string')).toBe(true);
-    expect(data.sourceAvailability).toBeDefined();
+  /** Названия инструментов и способов поиска — значения, которых клиент не видит ни с флагом, ни без. */
+  const TOOL_NAMES =
+    /sherlock|maigret|hibp|wayback|\bexa\b|exiftool|youtube_api|documentMetadata|githubSecrets|github_tree_scan|Internet Archive|"receipts?"/iu;
+
+  const finding = (adapter: string): CandidateFootprintFinding => ({
+    id: `f-${adapter.length}`,
+    adapter,
+    kind: 'profile',
+    url: 'https://github.com/msokolova',
+    title: 'GitHub',
+    detail: 'Открытая страница найдена по нику.',
+    match: 'likely_self',
+    observedAt: '2026-11-11T09:00:00.000Z',
+    receipt: { method: 'GET', source: 'Internet Archive CDX', query: 'msokolova' },
+    sources: ['sherlock', 'maigret'],
+    receipts: [{ method: 'github_tree_scan', source: 'sherlock', query: 'msokolova' }],
+    automatedMatch: 'likely_self',
+    review: 'unreviewed',
+  });
+
+  it('без флага: план, аудит и находки — нейтральные шаги, названия инструментов только на сервере', async () => {
+    const { app, repo, people, saveAudit } = await setup('fixture-key');
+    const audit = saveAudit('plain', [finding('maigret')]);
+    repo.saveFootprintAudit({
+      ...audit,
+      adapterStatuses: [
+        { adapterId: 'sherlock', state: 'checked', sourcesChecked: 3, findingsCount: 1 },
+        { adapterId: 'hibp', state: 'not_connected', sourcesChecked: 0, findingsCount: 0 },
+      ],
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: PLAN,
+      headers: { authorization: 'Bearer token-plain' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toMatch(TOOL_NAMES);
+    const data = response.json().data;
+    expect(Object.keys(data.sourceAvailability)).toEqual([
+      'nickname',
+      'nickname_extended',
+      'leaks',
+      'archive',
+      'web',
+    ]);
+    expect(
+      data.plan.every((item: { adapterId: string }) => item.adapterId in data.sourceAvailability),
+    ).toBe(true);
+    expect(
+      data.audit.adapterStatuses.map((status: { adapterId: string }) => status.adapterId),
+    ).toEqual(['nickname', 'leaks']);
+    expect(data.audit.findings[0]).toMatchObject({
+      id: 'f-7',
+      adapter: 'nickname_extended',
+      sources: ['nickname', 'nickname_extended'],
+      title: 'GitHub',
+    });
+    expect(people.plain.candidate).toBeDefined();
+  });
+
+  it('выгрузка данных кандидата — те же шаги, без названий инструментов', async () => {
+    const { app, saveAudit } = await setup('fixture-key');
+    saveAudit('plain', [finding('exa')]);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/export',
+      headers: { authorization: 'Bearer token-plain' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toMatch(TOOL_NAMES);
+    expect(response.json().data.footprintAudits[0].findings[0].adapter).toBe('web');
   });
 });

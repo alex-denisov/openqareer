@@ -33,7 +33,10 @@ function audit(
     candidateId: 'c',
     state: 'completed',
     selectedQueryIds: [],
-    adapterStatuses: [{ adapterId: 'hibp', state: hibp, sourcesChecked: 1, findingsCount: 0 }],
+    // B740: клиент получает код шага «leaks», а не название инструмента.
+    adapterStatuses: [
+      { adapterId: 'leaks' as never, state: hibp, sourcesChecked: 1, findingsCount: 0 },
+    ],
     findings,
     ownershipConfirmedAt: '2026-10-05T09:00:00.000Z',
     startedAt: '2026-10-06T09:00:00.000Z',
