@@ -20,6 +20,10 @@ describe('findLink', () => {
       rest: 'Тема: отказы без причины Разбери',
     });
     expect(findLink('без ссылки')).toBeNull();
+    expect(findLink('(см. https://en.wikipedia.org/wiki/Foo_(bar))')?.url).toBe(
+      'https://en.wikipedia.org/wiki/Foo_(bar)',
+    );
+    expect(findLink('(см. https://vc.ru/hr/1)')?.url).toBe('https://vc.ru/hr/1');
     expect(findLink('ftp://example.com/x')).toBeNull();
   });
 
@@ -67,6 +71,11 @@ describe('extractors on saved pages', () => {
     expect(extractArticle(fixture('login-wall.html'))).toBeNull();
   });
 
+  it('a page with only a meta description is not treated as read', () => {
+    const shell = `<html><head><meta property="og:description" content="${'Описание статьи, которой на странице нет. '.repeat(3)}"></head><body><div id="root"></div></body></html>`;
+    expect(extractArticle(shell)).toBeNull();
+  });
+
   it('caps a long text', () => {
     const long = `<html><body><article><p>${'слово '.repeat(3_000)}</p></article></body></html>`;
     expect(extractArticle(long)!.text.length).toBeLessThanOrEqual(4_001);
@@ -77,6 +86,7 @@ describe('extractors on saved pages', () => {
     expect(out?.author).toBe('Карьера без воды');
     expect(out?.text).toContain('Отказ — это не оценка вас.');
     expect(out?.text).not.toContain('зарплатные вилки');
+    expect(out?.text).not.toContain('Цитата из поста');
     expect(
       extractTelegramPost(fixture('telegram-channel.html'), 'career_nowater', '99'),
     ).toBeNull();

@@ -212,7 +212,8 @@ export class SmmBot {
     if (!text) return;
     if (await this.handleCommand(text)) return;
     if (await this.handlePending(text)) return;
-    const link = findLink(text);
+    // Ответ на черновик со ссылкой — это цифры или правка поста, а не новый пример.
+    const link = message.reply_to_message ? null : findLink(text);
     if (link) {
       await this.handleLink(link.url, link.rest);
       return;

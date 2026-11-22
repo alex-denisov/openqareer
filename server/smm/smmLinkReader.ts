@@ -25,7 +25,18 @@ export interface LinkReaderDeps {
 }
 
 const URL_IN_TEXT = /https?:\/\/[^\s<>"'«»]+/iu;
-const TRAILING_PUNCTUATION = /[.,;:!?)\]]+$/u;
+const TRAILING_PUNCTUATION = /[.,;:!?]+$/u;
+
+/** Закрывающая скобка в конце — часть адреса, только если в нем есть парная открывающая. */
+function trimUrl(raw: string): string {
+  let url = raw.replace(TRAILING_PUNCTUATION, '');
+  for (;;) {
+    const last = url.at(-1);
+    const open = last === ')' ? '(' : last === ']' ? '[' : null;
+    if (!open || url.split(open).length > url.split(last!).length - 1) return url;
+    url = url.slice(0, -1).replace(TRAILING_PUNCTUATION, '');
+  }
+}
 const TELEGRAM_HOST = /^(?:www\.)?(?:t\.me|telegram\.me)$/u;
 const TELEGRAM_PATH = /^\/(?:s\/)?([a-z0-9_]{4,32})\/(\d{1,10})\/?$/iu;
 const X_HOST = /^(?:www\.|mobile\.)?(?:x\.com|twitter\.com)$/u;
@@ -35,7 +46,7 @@ const LINKEDIN_HOST = /(^|\.)linkedin\.com$/u;
 export function findLink(text: string): { url: string; rest: string } | null {
   const match = URL_IN_TEXT.exec(text);
   if (!match) return null;
-  const raw = match[0].replace(TRAILING_PUNCTUATION, '');
+  const raw = trimUrl(match[0]);
   try {
     const url = new URL(raw);
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;

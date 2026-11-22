@@ -110,9 +110,9 @@ export function extractArticle(html: string): PageContent | null {
     (metaAuthor && !/^https?:/iu.test(metaAuthor) ? metaAuthor : null) ??
     ldAuthor(article) ??
     meta(html, 'twitter:creator');
-  const description = meta(html, 'og:description') ?? meta(html, 'description') ?? '';
   const body = bodyText(html, article);
-  const text = body.length >= description.length ? body : description;
+  // Только текст самой страницы: одно описание из метатегов — не прочитанная статья.
+  const text = body;
   if (text.length < PAGE_TEXT_MIN_CHARS || (WALL.test(text) && text.length < 1_500)) return null;
   return { title, author, text: cap(text) };
 }
@@ -123,15 +123,19 @@ export function extractTelegramPost(
   channel: string,
   postId: string,
 ): PageContent | null {
-  const marker = `data-post="${channel.toLowerCase()}/${postId}"`;
-  const lower = html.toLowerCase();
-  const at = lower.indexOf(marker);
-  if (at < 0) return null;
-  const next = lower.indexOf('data-post="', at + marker.length);
-  const scope = html.slice(at, next < 0 ? html.length : next);
-  const body = findElement(scope, 'div', (attrs) =>
-    /tgme_widget_message_text/u.test(attrValue(attrs, 'class') ?? ''),
-  );
+  // Поиск без учета регистра по исходной строке: смещения из toLowerCase() могут разъехаться.
+  const start = new RegExp(`data-post="${channel}/${postId}"`, 'iu').exec(html);
+  if (!start) return null;
+  const after = start.index + start[0].length;
+  const next = html.slice(after).search(/data-post="/u);
+  const scope = html.slice(start.index, next < 0 ? html.length : after + next);
+  // Цитата ответа тоже несет класс tgme_widget_message_text: берем только сам текст поста.
+  const body = findElement(scope, 'div', (attrs) => {
+    const classes = (attrValue(attrs, 'class') ?? '').split(/\s+/u);
+    return (
+      classes.includes('tgme_widget_message_text') && !classes.includes('js-message_reply_text')
+    );
+  });
   const text = body ? htmlToText(body.inner) : '';
   if (text.length < SHORT_POST_MIN_CHARS) return null;
   const owner = findElement(scope, 'a', (attrs) =>

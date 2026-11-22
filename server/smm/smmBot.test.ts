@@ -196,6 +196,27 @@ describe('SmmBot', () => {
     expect(sent.at(-1)?.text).toBe('Модели не ответили, пришлите пример еще раз.');
   });
 
+  it('a reply to a draft with a link is a metrics report, not a new example', async () => {
+    const readPage = vi.fn(async () => ({ ok: true as const, html: ARTICLE_HTML }));
+    const { bot, store } = setup([VALID, 'Хороший охват.'], { readPage });
+    await bot.handle(message('/post'));
+    await bot.handle(
+      message('1200 просмотров, вот пост https://www.threads.com/@a/post/X', {
+        reply_to_message: { message_id: 100 },
+      }),
+    );
+    expect(readPage).not.toHaveBeenCalled();
+    expect(store.getPost(1)?.metrics).toContain('1200 просмотров');
+  });
+
+  it('page title and author reach the model only as untrusted data', async () => {
+    const { bot, prompts } = setup([EXAMPLE], articleLinks);
+    await bot.handle(message('https://habr.com/ru/articles/1/'));
+    expect(prompts.at(-1)?.[1].content).toMatch(
+      /<untrusted_example_source>\n«Почему отклик читают за шесть секунд», автор Иван Петров\n<\/untrusted_example_source>/u,
+    );
+  });
+
   it('/мой saves the owner post; it and his strong posts set the voice, weak strategy posts do not', async () => {
     const { bot, store, prompts, sent } = setup([EXAMPLE], articleLinks);
     await bot.handle(
