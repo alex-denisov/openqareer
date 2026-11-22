@@ -72,7 +72,10 @@ export interface RouteDeps {
     'prioritizeCampaign'
   > &
     Partial<
-      Pick<import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute, 'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'>
+      Pick<
+        import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute,
+        'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'
+      >
     >;
   /** Роли кандидатов — запросы к площадкам вакансий (27.10). */
   vacancyDemand?: import('../vacancies/vacancyDemandStore').VacancyDemandStore;
@@ -86,6 +89,8 @@ export interface RouteDeps {
   experienceFactRewriter?: import('../providers/experienceFactRewriter').ExperienceFactRewriter;
   /** B686: разбор KPI для дневника; без ключей и Vertex разбор отвечает отказом. */
   kpiExtractor?: import('../providers/kpiExtractor').KpiExtractor;
+  /** B743 · 2: подсказка следующей задачи по цели; без ключей подсказок в карточке цели нет. */
+  goalTaskSuggester?: import('../providers/goalTaskSuggester').GoalTaskSuggester;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */
@@ -97,6 +102,8 @@ export interface RouteDeps {
   coverLetterWriter?: CoverLetterWriter;
   /** B642: расшифровка сегмента записи; нет подстановки — Whisper на OpenRouter. */
   recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
+  /** B751: разбор интервью моделью; нет подстановки — цепочка письма без Vertex. */
+  interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
   /** d01: шаги плана адаптации из «Что от вас ждут»; нет — план из шаблона. */
   adaptationStepsWriter?: import('../providers/adaptationStepsWriter').AdaptationStepsWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */

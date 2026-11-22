@@ -29,7 +29,13 @@ function setup(transcriber: RecordingTranscriber) {
       startedAt: '2026-11-22T10:00:00.000Z',
       durationMs: 1,
     });
-    service.enqueue({ recordingId, track: 'mic', segment, audio: Buffer.from('audio') });
+    service.enqueue({
+      recordingId,
+      track: 'mic',
+      segment,
+      format: 'm4a',
+      audio: Buffer.from('audio'),
+    });
   };
   return { repository, service, recordingId, add };
 }
@@ -112,7 +118,13 @@ describe('RecordingTranscriptionService', () => {
       10,
     );
     expect(service.hasRoomFor(10)).toBe(true);
-    service.enqueue({ recordingId: 'r', track: 'mic', segment: 0, audio: Buffer.alloc(6) });
+    service.enqueue({
+      recordingId: 'r',
+      track: 'mic',
+      segment: 0,
+      format: 'm4a',
+      audio: Buffer.alloc(6),
+    });
     expect(service.hasRoomFor(4)).toBe(true);
     expect(service.hasRoomFor(5)).toBe(false);
     release();

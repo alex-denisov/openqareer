@@ -171,8 +171,10 @@ export async function openCareer(
   await page.route(`${API}/candidate/b640/matched-vacancies*`, (route) =>
     route.fulfill({ json: { data: [], meta: { total: 64, nextOffset: null } } }),
   );
-  await page.route(`${API}/candidate/role-hypotheses`, (route) =>
-    route.fulfill({ json: { data: ROLES } }),
+  // «Карьера» шлёт пояс кандидата (`?tz=`, B726): ловим по пути, без запроса.
+  await page.route(
+    (url) => url.pathname.endsWith('/candidate/role-hypotheses'),
+    (route) => route.fulfill({ json: { data: ROLES } }),
   );
   await page.route(`${API}/candidate/campaign`, (route) => {
     if (route.request().method() === 'POST') {

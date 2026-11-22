@@ -39,7 +39,7 @@ export interface MaintenanceEngine {
   maintainStoreAsync(
     nowMs?: number,
     shouldStop?: () => boolean,
-    options?: { pauseMs?: number },
+    options?: { pauseMs?: number; windowRows?: number },
   ): Promise<{ backfillWindows: number }>;
   syncSource(sourceId: string): Promise<SourceSyncOutcome>;
   syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
@@ -133,12 +133,13 @@ export interface TitleModelStep {
 }
 
 /**
- * Сколько `stop()` ждёт текущую волну. Обход hh.ru (B219) — это часы; на
- * остановке он получает отмену, сохраняет курсор по прочитанному и выходит
- * (B759). Срок — запас на запросы, уже ушедшие к площадкам, внутри
- * `TimeoutStopSec` юнита (300 с).
+ * Сколько `stop()` ждёт текущую волну. Отмену (B759) слышит только обход hh:
+ * он сохраняет курсор по прочитанному и выходит. Опросы других площадок
+ * её не слышат, и замер 22.11 показал, что 200 с ожидания уходили впустую.
+ * Брошенная волна безопасна: выход 0, базы не закрываются, SQLite сам
+ * откатит незавершённую транзакцию.
  */
-export const DEFAULT_STOP_GRACE_MS = 200_000;
+export const DEFAULT_STOP_GRACE_MS = 60_000;
 
 export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   manualSyncMs: 5 * 1_000,

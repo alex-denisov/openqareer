@@ -20,6 +20,8 @@ export interface AccountSnapshot {
     createdAt: string;
     lastSeenAt: string;
     expiresAt: string;
+    /** B754: «iPhone · Safari»; нет — устройство не распознано. */
+    deviceLabel?: string | null;
   }>;
 }
 

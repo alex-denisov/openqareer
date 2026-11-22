@@ -5,6 +5,7 @@ import {
   connectionLine,
   connectionsSummary,
   deviceLine,
+  deviceName,
   devicesTitle,
   NOTIFICATION_ROWS,
   notificationsSummary,
@@ -82,6 +83,16 @@ describe('модель «Аккаунта»', () => {
     expect(deviceLine({ ...session, current: false, lastSeenAt: new Date(2026, 10, 16, 21, 40).toISOString() }, now)).toBe(
       'вчера, 21:40',
     );
+  });
+
+  it('B754: название устройства из сессии, без него — «Это устройство» и «Другое устройство»', () => {
+    const session = { id: 'a', current: true, createdAt: '', lastSeenAt: '', expiresAt: '' };
+    expect(deviceName({ ...session, deviceLabel: 'MacBook · приложение openqareer' })).toBe(
+      'MacBook · приложение openqareer',
+    );
+    expect(deviceName({ ...session, current: false, deviceLabel: 'iPhone · Safari' })).toBe('iPhone · Safari');
+    expect(deviceName({ ...session, deviceLabel: null })).toBe('Это устройство');
+    expect(deviceName({ ...session, current: false })).toBe('Другое устройство');
   });
 
   it('сводка уведомлений называет каналы, куда хоть что-то приходит', () => {

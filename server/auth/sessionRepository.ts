@@ -23,11 +23,22 @@ export function ensureSessionDeviceHashSchema(database: DatabaseSync): void {
   if (!columns.some((column) => column.name === 'impersonated_by')) {
     database.exec('ALTER TABLE sessions ADD COLUMN impersonated_by TEXT;');
   }
+  // B754: название устройства для «Аккаунт → Устройства»; user agent не хранится.
+  if (!columns.some((column) => column.name === 'device_label')) {
+    database.exec('ALTER TABLE sessions ADD COLUMN device_label TEXT;');
+  }
   database.exec(
     `CREATE UNIQUE INDEX IF NOT EXISTS sessions_user_device
      ON sessions(user_id, device_id_hash)
      WHERE device_id_hash IS NOT NULL;`,
   );
+}
+
+/** Название пишется один раз: сессия не меняет устройство. */
+export function labelSessionDevice(database: DatabaseSync, tokenHash: string, label: string): void {
+  database
+    .prepare('UPDATE sessions SET device_label = ? WHERE token_hash = ? AND device_label IS NULL')
+    .run(label, tokenHash);
 }
 
 export function storeAuthSession(
