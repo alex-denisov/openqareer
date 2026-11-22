@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { CareerDiaryKpiImport, CareerDiaryKpiRow } from '../../../../shared/careerDiaryKpi';
-import { acceptRows, draftRows, horizonEnd, sourceLine, splitTarget, weightLine } from './kpiModel';
+import {
+  acceptRows,
+  draftRows,
+  horizonEnd,
+  rowSummary,
+  sourceLine,
+  splitTarget,
+  weightLine,
+  weightNote,
+} from './kpiModel';
 
 const row = (patch: Partial<CareerDiaryKpiRow>): CareerDiaryKpiRow => ({
   id: 'r1',
@@ -107,6 +116,22 @@ describe('kpiModel', () => {
     expect(sourceLine(draft([row({})]))).toBe('Из текста, загружено 3 января.');
     expect(sourceLine({ ...draft([row({})]), sourceKind: 'photo', sourceName: 'slide.png' })).toBe(
       'Из фото slide.png, загружено 3 января.',
+    );
+  });
+});
+
+describe('d02l на 390: строка списка и ⓘ веса', () => {
+  it('подпись строки: срок, вес, кто поставил — без пустых частей', () => {
+    const [first] = draftRows(draft([row({})]));
+    expect(rowSummary(first!)).toBe('квартал · вес 50 % · руководитель');
+    expect(rowSummary({ ...first!, horizon: '', weight: '', setBy: '' })).toBe('');
+  });
+
+  it('ⓘ «Как считается вес»: замеры в карточке и сумма отмеченных', () => {
+    const rows = draftRows(draft([row({}), row({ id: 'r2' })]));
+    expect(weightNote(rows)).toBe('Замеры вносятся в карточке цели; вес в сумме — 100 %.');
+    expect(weightNote(rows.map((item) => ({ ...item, weight: '' })))).toBe(
+      'Замеры вносятся в карточке цели.',
     );
   });
 });
