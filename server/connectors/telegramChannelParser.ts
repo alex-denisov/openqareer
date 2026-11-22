@@ -257,30 +257,38 @@ export function telegramPostToReadableText(html: string): string {
     .trim();
 }
 
-export function parseTelegramJobPost(
-  text: string,
-  meta: {
-    postId: string;
-    channelName: string;
-    /**
-     * The id the registry knows this source by. Writing `tg-<channel>` here
-     * instead meant the pool counted these vacancies under no source at all,
-     * and a later sync could never evict them (found on the B164 prod walk).
-     */
-    sourceId: string;
-    postUrl: string;
-    publishedAt: string;
-    observedAt: string;
-  },
-): UnifiedVacancy | null {
-  // The channel's HTML escapes its own characters; leaving them encoded put
-  // `&nbsp;` and `&amp;` straight into the card the candidate reads (B164).
-  const cleanText = decodeFeedEntities(
+export interface TelegramJobPostMeta {
+  postId: string;
+  channelName: string;
+  /**
+   * The id the registry knows this source by. Writing `tg-<channel>` here
+   * instead meant the pool counted these vacancies under no source at all,
+   * and a later sync could never evict them (found on the B164 prod walk).
+   */
+  sourceId: string;
+  postUrl: string;
+  publishedAt: string;
+  observedAt: string;
+}
+
+/**
+ * The channel's HTML escapes its own characters; leaving them encoded put
+ * `&nbsp;` and `&amp;` straight into the card the candidate reads (B164).
+ */
+function telegramPlainText(text: string): string {
+  return decodeFeedEntities(
     text
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim(),
   );
+}
+
+export function parseTelegramJobPost(
+  text: string,
+  meta: TelegramJobPostMeta,
+): UnifiedVacancy | null {
+  const cleanText = telegramPlainText(text);
   // Тип поста распознаётся отдельно: курс, резюме кандидата и дайджест не
   // становятся вакансиями, а пост, о котором продукт ничего не понял, не
   // выдаётся за вакансию (B164 срез 4).
