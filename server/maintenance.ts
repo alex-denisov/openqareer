@@ -1,4 +1,9 @@
 import {
+  CLUSTER_SPLIT_START_DELAY_MS,
+  readClusterSplitConfig,
+  startClusterSplit,
+} from './maintenance/clusterSplitDriver';
+import {
   PlacementBackfill,
   PlacementBackfillTicker,
 } from './companyDirectory/placement/placementBackfill';
@@ -381,6 +386,21 @@ try {
   // B761: что держит цикл — минута профиля процессора через 15 минут после старта, дальше раз в час.
   startCpuProfileLog(log);
   worker.start();
+  // B752: разбиение склеенных кластеров — только по флагу и не в такте старта.
+  const clusterSplitConfig = readClusterSplitConfig(process.env);
+  if (clusterSplitConfig.enabled) {
+    setTimeout(() => {
+      void startClusterSplit({
+        db: semanticDatabase,
+        databasePath: config.databasePath,
+        config: clusterSplitConfig,
+        log,
+        isStopped: () => shuttingDown,
+      }).catch((error: unknown) =>
+        log.error({ message: (error as Error).message }, 'cluster_split_failed'),
+      );
+    }, CLUSTER_SPLIT_START_DELAY_MS);
+  }
   // B535: landing numbers are counted here, never on the web server's event loop.
   scheduleLandingStatsJob(semanticDatabase, log);
   // CPO 27.10: курсы ЦБ для фильтра «Зарплата», раз в сутки, наружу ходит только этот процесс.

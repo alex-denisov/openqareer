@@ -39,6 +39,8 @@ export interface ClusterSplitStepResult {
   /** Кластеры шага с кусками: id всех кусков, кроме основателя. */
   newPieceIds: string[];
   completed: boolean;
+  /** Шаг просит остановить разбиение (потолок задач, сирота процента). */
+  stop?: boolean;
 }
 
 export const CLUSTER_SPLIT_CHUNK = 200;
