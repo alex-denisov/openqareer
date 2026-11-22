@@ -137,16 +137,17 @@ test.describe('B658: «Офферы» нового кабинета', () => {
     await expect(page.getByLabel('Оклад', { exact: true })).toHaveValue('520 000');
     await expect(page.getByLabel('Валюта')).toHaveValue('RUB');
     await expect(page.getByLabel('Налог, %')).toHaveValue('0');
-    await expect(page.getByLabel('Годовой бонус / премия')).toHaveValue('1 040 000');
+    // «до 2 окладов» — потолок, а не бонус (B645, o06a): поле остаётся прежним и «с ваших слов».
+    await expect(page.getByLabel('Годовой бонус / премия')).toHaveValue('0');
     await expect(page.getByLabel('Формат работы')).toHaveValue('hybrid');
     await expect(page.getByLabel('Срок ответа')).toHaveValue('14.11.2026');
     await expect(page.getByLabel('Бенефиты (через запятую)')).toHaveValue(
       'ДМС со стоматологией, оплата спорта',
     );
-    await expect(page.locator('.of-f.is-letter')).toHaveCount(10);
+    await expect(page.locator('.of-f.is-letter')).toHaveCount(9);
     await expectGates(page);
     await page.getByLabel('Оклад', { exact: true }).fill('530 000');
-    await expect(page.locator('.of-f.is-letter')).toHaveCount(9);
+    await expect(page.locator('.of-f.is-letter')).toHaveCount(8);
     await expect(
       page.locator('.of-f', { has: page.getByLabel('Оклад', { exact: true }) }).locator('.of-src'),
     ).toHaveText('с ваших слов');
