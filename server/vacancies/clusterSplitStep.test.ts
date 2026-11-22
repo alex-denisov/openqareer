@@ -119,17 +119,37 @@ describe('cluster split step (B752)', () => {
       new Set(clusterKeys(piece).map((k) => `${k.kind}|${k.key}`)).size,
     );
     expect(keysOf(keptId).some((k) => (k as { key: string }).key.includes(ORACLE))).toBe(false);
-    expect(db.prepare('SELECT cluster_id, entry_key, path FROM catalog_entries').get()).toEqual({
-      cluster_id: pieceId,
-      entry_key: vacancyKey(pieceId),
-      path: `/vacancies/job/teller-${vacancyKey(pieceId)}`,
-    });
-    expect(db.prepare('SELECT cluster_id FROM catalog_entries_seen').get()).toEqual({
-      cluster_id: pieceId,
-    });
+    // Основатель сохраняет id, а с ним ключ и адрес; кусок получает свою страницу.
+    const pages = db
+      .prepare(
+        `SELECT cluster_id, entry_key, title, source_url, source_count FROM catalog_entries
+           WHERE cluster_id IN (?, ?) ORDER BY cluster_id`,
+      )
+      .all(keptId, pieceId);
+    expect(pages).toEqual(
+      [
+        {
+          cluster_id: keptId,
+          entry_key: vacancyKey(keptId),
+          title: vk.title,
+          source_url: vk.url,
+          source_count: 1,
+        },
+        {
+          cluster_id: pieceId,
+          entry_key: vacancyKey(pieceId),
+          title: oracle.title,
+          source_url: oracle.url,
+          source_count: 1,
+        },
+      ].sort((a, b) => a.cluster_id.localeCompare(b.cluster_id)),
+    );
     expect(
-      db.prepare('SELECT old_key, new_cluster_id FROM vacancy_catalog_redirects').all(),
-    ).toEqual([{ old_key: vacancyKey(keptId), new_cluster_id: pieceId }]);
+      db.prepare('SELECT cluster_id FROM catalog_entries_seen ORDER BY cluster_id').all(),
+    ).toEqual(expect.arrayContaining([{ cluster_id: keptId }, { cluster_id: pieceId }]));
+    expect(db.prepare('SELECT count(*) AS n FROM vacancy_catalog_redirects').get()).toEqual({
+      n: 0,
+    });
     expect(db.prepare('SELECT count(*) AS n FROM cluster_split_journal').get()).toEqual({ n: 1 });
 
     expect(splitClustersStep(db, { chunk: 200, now: 2_000 })).toMatchObject({

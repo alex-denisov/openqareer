@@ -1,5 +1,4 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { vacancyKey } from '../../shared/vacancyCatalogRoutes';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import {
   candidateReferencedClusters,
@@ -9,7 +8,8 @@ import {
   planClusterSplit,
   tableExists,
 } from './clusterSplit';
-import { CATALOG_CLUSTER_TABLES, journalClusterSplit } from './clusterSplitJournal';
+import { prepareCatalogProjectionStatements, writeCatalogEntry } from './catalogEntryWriter';
+import { journalClusterSplit } from './clusterSplitJournal';
 import { clusterKeys, serializeRepresentative } from './vacancyDeduplicator';
 
 export { revertClusterSplitStep } from './clusterSplitJournal';
@@ -105,38 +105,35 @@ interface CatalogEntryRow {
   source_url: string;
 }
 
-/** Страница каталога уходит к куску, чья площадка дала её ссылку; старый ключ — в переадресацию. */
-function moveCatalogPage(context: StepContext, oldId: string, pieces: VacancyCluster[]): void {
+/**
+ * Страницы каталога пишутся той же проекцией, что у пула: основатель
+ * сохраняет id, а значит ключ и адрес; куски получают свои страницы.
+ * Старый ключ уходит в переадресацию, только если у основателя страницы
+ * больше нет, а ссылка прежней страницы досталась куску.
+ */
+function rewriteCatalogPages(context: StepContext, oldId: string, pieces: VacancyCluster[]): void {
   const { db } = context;
-  const entry = db
+  const before = db
     .prepare('SELECT entry_key, path, source_url FROM catalog_entries WHERE cluster_id = ?')
     .get(oldId) as CatalogEntryRow | undefined;
-  if (!entry) return;
-  const holder = pieces.findIndex((piece) =>
-    piece.sources.some((source) => source.sourceUrl === entry.source_url),
+  const statements = prepareCatalogProjectionStatements(db);
+  for (const piece of pieces) writeCatalogEntry(piece, statements);
+  if (!before) return;
+  context.result.catalogMoved += 1;
+  if (db.prepare('SELECT 1 FROM catalog_entries WHERE cluster_id = ?').get(oldId)) return;
+  const holder = pieces.find(
+    (piece, index) =>
+      index > 0 && piece.sources.some((source) => source.sourceUrl === before.source_url),
   );
-  if (holder <= 0) return;
-  const newId = pieces[holder]!.id;
-  const newKey = vacancyKey(newId);
-  const suffix = `-${entry.entry_key}`;
-  const keyTaken = db.prepare('SELECT 1 FROM catalog_entries WHERE entry_key = ?').get(newKey);
-  if (keyTaken || !entry.path.endsWith(suffix)) return;
-  const newPath = `${entry.path.slice(0, -suffix.length)}-${newKey}`;
-  db.prepare(
-    'UPDATE catalog_entries SET cluster_id = ?, entry_key = ?, path = ? WHERE cluster_id = ?',
-  ).run(newId, newKey, newPath, oldId);
-  for (const { table } of CATALOG_CLUSTER_TABLES.slice(1)) {
-    if (!tableExists(db, table)) continue;
-    db.prepare(`UPDATE OR REPLACE ${table} SET cluster_id = ? WHERE cluster_id = ?`).run(
-      newId,
-      oldId,
-    );
-  }
+  const moved = holder
+    ? (db.prepare('SELECT entry_key FROM catalog_entries WHERE cluster_id = ?').get(holder.id) as
+        { entry_key: string } | undefined)
+    : undefined;
+  if (!holder || !moved) return;
   db.prepare(
     `INSERT OR REPLACE INTO vacancy_catalog_redirects
        (old_key, old_path, new_cluster_id, new_key, step_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(entry.entry_key, entry.path, newId, newKey, context.stepId, context.now);
-  context.result.catalogMoved += 1;
+  ).run(before.entry_key, before.path, holder.id, moved.entry_key, context.stepId, context.now);
 }
 
 function pieceIdTaken(db: DatabaseSync, pieceIds: readonly string[]): boolean {
@@ -167,7 +164,7 @@ function splitOne(context: StepContext, cluster: VacancyCluster): void {
     now: context.now,
   });
   writePieces(context, cluster, pieces);
-  moveCatalogPage(context, cluster.id, pieces);
+  rewriteCatalogPages(context, cluster.id, pieces);
   result.split += 1;
   result.pieces += pieceIds.length;
   result.newPieceIds.push(...pieceIds);
