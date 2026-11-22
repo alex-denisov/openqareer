@@ -10,18 +10,28 @@ const draft = (over: Record<string, unknown> = {}) => ({
   targetRole: 'Head of Engineering', experience: [place()], skills: [{ id: 's1', name: 'Python' }, { id: 's2', name: 'Go' }], ...over,
 }) as never;
 
-describe('B692: заголовок', () => {
-  it('роль, до четырёх навыков и Ex-работодатель только при явной дате окончания', () => {
+describe('B692: заголовок — фраза, как в макете a03: «роль · навыки через запятую»', () => {
+  it('роль, до трёх навыков через запятую и Ex-работодатель только при явной дате окончания; без «|»', () => {
     const skills = ['A', 'B', 'C', 'D', 'E'].map((name, i) => ({ id: `s${i}`, name }));
     const result = buildSectionSuggestions({ memory: [], draft: draft({ skills }) });
-    expect(result.headline?.text).toBe('Head of Engineering | A | B | C | D | Ex-Яндекс');
+    expect(result.headline?.text).toBe('Head of Engineering · A, B, C · Ex-Яндекс');
     expect(result.headline?.facts.map((f) => f.id)).toEqual(['resume:targetRole', 'resume:skills', 'resume:experience:e1']);
     const noEnd = buildSectionSuggestions({ memory: [], draft: draft({ experience: [place({ endDate: undefined })] }) });
-    expect(noEnd.headline?.text).not.toContain('Ex-');
+    expect(noEnd.headline?.text).toBe('Head of Engineering · Python, Go');
     const current = buildSectionSuggestions({ memory: [], draft: draft({ experience: [place({ current: true })] }) });
     expect(current.headline?.text).not.toContain('Ex-');
+    expect(current.headline?.text).not.toContain('|');
   });
-  it('длиннее 220 — отбрасываются хвостовые части, а не режется середина слова', () => {
+  it('целевой роли нет — роль из последнего места работы, а не список навыков (прод 22.11)', () => {
+    const skills = ['Turn Around Management', 'Executive Leadership', 'n8n', 'Multi-agent Systems'].map((name, i) => ({ id: `s${i}`, name }));
+    const result = buildSectionSuggestions({
+      memory: [],
+      draft: draft({ targetRole: '', skills, experience: [place({ title: 'VP of Technology & IT Operations', current: true })] }),
+    });
+    expect(result.headline?.text).toBe('VP of Technology & IT Operations · Turn Around Management, Executive Leadership, n8n');
+    expect(result.headline?.facts.map((f) => f.id)).toEqual(['resume:experience:e1', 'resume:skills']);
+  });
+  it('длиннее 220 — отбрасываются хвостовые навыки, а не режется середина слова', () => {
     const role = 'R'.repeat(150);
     const skills = [{ id: 's1', name: 'S'.repeat(60) }, { id: 's2', name: 'T'.repeat(30) }];
     const text = buildSectionSuggestions({ memory: [], draft: draft({ targetRole: role, skills }) }).headline?.text ?? '';
@@ -31,8 +41,9 @@ describe('B692: заголовок', () => {
     const huge = buildSectionSuggestions({ memory: [], draft: draft({ targetRole: 'R'.repeat(400) }) }).headline?.text ?? '';
     expect(huge).toHaveLength(220);
   });
-  it('без роли и навыков предложения нет', () => {
-    expect(buildSectionSuggestions({ memory: [], draft: draft({ targetRole: '', skills: [] }) }).headline).toBeNull();
+  it('без роли и без места работы — предложения нет: одни навыки — не заголовок', () => {
+    expect(buildSectionSuggestions({ memory: [], draft: draft({ targetRole: '', skills: [] }) }).headline?.text).toBe('Руководитель разработки · Ex-Яндекс');
+    expect(buildSectionSuggestions({ memory: [], draft: draft({ targetRole: '', experience: [] }) }).headline).toBeNull();
     expect(buildSectionSuggestions({ memory: [], draft: null }).headline).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ import {
   type SuggestionMemory,
 } from './sectionSuggestions';
 
-export const LINKEDIN_REWRITE_PROMPT_REVISION = 'linkedin-profile-rewrite-2026-11-20';
+export const LINKEDIN_REWRITE_PROMPT_REVISION = 'linkedin-profile-rewrite-2026-11-22';
 /** Сколько ждёт чтение профиля; не успевший ответ дописывается в кэш для следующего открытия. */
 export const LINKEDIN_REWRITE_BUDGET_MS = 20_000;
 /** B645: экран a03 не ждёт модель дольше этого — разделы сразу, пересказ дочитывается следующим запросом. */
@@ -106,17 +106,36 @@ export interface CheckRule {
   readonly noFirstPerson?: boolean;
 }
 
-export function checkedText(answer: z.infer<typeof answerText>, rule: CheckRule, language: ProfileLanguage): { text: string; facts: LinkedinSectionFact[] } | null {
+/** Почему текст модели не принят; `null` — принят. Только код причины, без текста кандидата. */
+export type RewriteRejectReason =
+  | 'empty' | 'too_long' | 'link' | 'unknown_fact' | 'no_facts' | 'too_many_sentences'
+  | 'first_person' | 'language' | 'ungrounded_number' | 'copy';
+
+function rejectReason(
+  text: string, cited: readonly string[], facts: readonly LinkedinSectionFact[], rule: CheckRule, language: ProfileLanguage,
+): RewriteRejectReason | null {
+  if (text.length === 0) return 'empty';
+  if (text.length > rule.max) return 'too_long';
+  if (LINK_LIKE.test(text)) return 'link';
+  if (facts.length !== new Set(cited).size) return 'unknown_fact';
+  if (facts.length === 0) return 'no_facts';
+  if (rule.maxSentences !== undefined && sentences(text) > rule.maxSentences) return 'too_many_sentences';
+  if (rule.noFirstPerson && FIRST_PERSON.test(text)) return 'first_person';
+  if ((textLanguage(text) ?? language) !== language) return 'language';
+  if (!numbersAreGrounded(text, facts)) return 'ungrounded_number';
+  return copiesSource(text, facts) ? 'copy' : null;
+}
+
+export function checkedText(
+  answer: z.infer<typeof answerText>, rule: CheckRule, language: ProfileLanguage,
+  onReject?: (reason: RewriteRejectReason) => void,
+): { text: string; facts: LinkedinSectionFact[] } | null {
   const text = answer.text.replace(/\s+/gu, ' ').trim();
   const byId = new Map(rule.allowed.map((item) => [item.id, item]));
   const facts = [...new Set(answer.factIds)].flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
-  const valid =
-    text.length > 0 && text.length <= rule.max && !LINK_LIKE.test(text) && facts.length > 0 && facts.length === new Set(answer.factIds).size
-    && (rule.maxSentences === undefined || sentences(text) <= rule.maxSentences)
-    && !(rule.noFirstPerson && FIRST_PERSON.test(text))
-    && (textLanguage(text) ?? language) === language
-    && numbersAreGrounded(text, facts) && !copiesSource(text, facts);
-  return valid ? { text, facts } : null;
+  const reason = rejectReason(text, answer.factIds, facts, rule, language);
+  if (reason) onReject?.(reason);
+  return reason ? null : { text, facts };
 }
 
 export const ABOUT_RULE = { max: ABOUT_MAX } as const;
@@ -127,14 +146,27 @@ export interface CheckedLinkedinRewrite {
   readonly places: ReadonlyMap<string, { readonly text: string; readonly facts: readonly LinkedinSectionFact[] }>;
 }
 
-/** Каждый текст опирается только на свои факты, без новых чисел, без копии источника, на языке профиля. */
-export function checkLinkedinRewrite(request: LinkedinRewriteRequest, output: LinkedinRewriteOutput): CheckedLinkedinRewrite {
-  const about = output.about ? checkedText(output.about, { ...ABOUT_RULE, allowed: request.aboutFacts }, request.language) : null;
+/** Кто слушает отказы проверки: раздел и код причины, без текста. */
+export type RewriteRejectListener = (section: 'about' | 'place', reason: RewriteRejectReason) => void;
+
+/**
+ * Каждый текст опирается только на свои факты, без новых чисел, без копии источника, на языке профиля.
+ * B692: «О себе» — пересказ всего профиля, ему разрешены и факты мест («чем это подтверждено»).
+ */
+export function checkLinkedinRewrite(
+  request: LinkedinRewriteRequest, output: LinkedinRewriteOutput, onReject?: RewriteRejectListener,
+): CheckedLinkedinRewrite {
+  const aboutAllowed = [...request.aboutFacts, ...request.places.flatMap((place) => place.facts)];
+  const about = output.about
+    ? checkedText(output.about, { ...ABOUT_RULE, allowed: aboutAllowed }, request.language, (reason) => onReject?.('about', reason))
+    : null;
   const places = new Map<string, { text: string; facts: LinkedinSectionFact[] }>();
   for (const answer of output.places) {
     const place = request.places.find((item) => item.id === answer.id);
     const rule = { ...PLACE_RULE, allowed: place?.facts ?? [] };
-    const checked = place && !places.has(place.id) ? checkedText(answer, rule, request.language) : null;
+    const checked = place && !places.has(place.id)
+      ? checkedText(answer, rule, request.language, (reason) => onReject?.('place', reason))
+      : null;
     if (checked) places.set(answer.id, checked);
   }
   return { about, places };
@@ -200,12 +232,13 @@ export async function rewrittenSuggestions(
   currentAbout: string | undefined,
   rewriter: LinkedinRewriter | undefined,
   budgetMs: number,
+  onReject?: RewriteRejectListener,
 ): Promise<RewrittenSuggestions> {
   const request = linkedinRewriteRequest(input, currentAbout);
   const call = rewriter?.linkedinProfile?.bind(rewriter);
   const answer = request && call ? await withinBudget(cachedRewrite({ linkedinProfile: call }, request), budgetMs) : null;
   const output = answer === LATE ? null : answer;
-  const checked = request && output ? checkLinkedinRewrite(request, output) : null;
+  const checked = request && output ? checkLinkedinRewrite(request, output, onReject) : null;
   return {
     ...base,
     rewriting: answer === LATE,
