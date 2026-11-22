@@ -106,6 +106,16 @@ export class AuthService extends AuthServiceCore {
     this.database.exec(MIGRATION_40);
   }
 
+  getCandidateTimezone(candidateId: string): string | null {
+    const row = this.database
+      .prepare(
+        `SELECT timezone FROM users WHERE candidate_id = ? AND role = 'candidate'
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get(candidateId) as { timezone: string | null } | undefined;
+    return row?.timezone ?? null;
+  }
+
   getCandidateEmail(candidateId: string): string | null {
     const row = this.database.prepare(
       `SELECT candidate_id, email, display_name, role, is_test, created_at

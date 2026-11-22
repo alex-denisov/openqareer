@@ -4,6 +4,13 @@ import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import { MIGRATION_45 } from './notificationSchema';
 import { MIGRATION_46 } from './notificationDeliverySchema';
 import {
+  MIGRATION_DELIVERY_SETTINGS,
+  deferDeliveryUntil,
+  readDeliverySettings,
+  writeDeliverySettings,
+  type DeliverySettings,
+} from './notificationDeliverySettings';
+import {
   MIGRATION_INVITATION_PREFERENCE,
   deleteInvitationRows,
   disableInvitationEmail,
@@ -68,6 +75,8 @@ export interface ClaimedNotificationDelivery {
   readonly channel: NotificationDeliveryChannel;
   readonly attempt: number;
   readonly notification: NotificationItem;
+  /** n02: откуда событие (отклик) — по нему доставка находит компанию для строки. */
+  readonly source: { readonly type: string; readonly id: string };
 }
 
 interface DeliveryRow extends NotificationRow {
@@ -120,6 +129,7 @@ export class SqliteNotificationRepository {
     this.database.exec(MIGRATION_45);
     this.database.exec(MIGRATION_46);
     this.database.exec(MIGRATION_INVITATION_PREFERENCE);
+    this.database.exec(MIGRATION_DELIVERY_SETTINGS);
     this.deleteExpired();
     this.retentionSweep = setInterval(() => this.deleteExpired(), 60 * 60 * 1_000);
     this.retentionSweep.unref();
@@ -540,6 +550,25 @@ export class SqliteNotificationRepository {
     }
   }
 
+  /** n02 «Как часто» и «Не показывать название компании». */
+  getDeliverySettings(candidateId: string): DeliverySettings {
+    return readDeliverySettings(this.database, candidateId);
+  }
+
+  setDeliverySettings(candidateId: string, settings: DeliverySettings, now = new Date().toISOString()): DeliverySettings {
+    return writeDeliverySettings(this.database, candidateId, settings, now);
+  }
+
+  /** Уведомление об ответе было приглашением или оффером (B671): оно не ждёт сводки. */
+  isInvitation(notificationId: string): boolean {
+    return isInvitationEvent(this.database, notificationId);
+  }
+
+  /** Отложить взятую доставку до сводки (n02). */
+  deferDelivery(candidateId: string, notificationId: string, channel: NotificationDeliveryChannel, until: string, now: string): void {
+    deferDeliveryUntil(this.database, { candidateId, notificationId, channel, until, now });
+  }
+
   claimDueDeliveries(now: string, limit: number): ClaimedNotificationDelivery[] {
     const batchSize = Math.max(1, Math.min(100, Math.trunc(limit)));
     const staleAt = new Date(Date.parse(now) - 10 * 60 * 1_000).toISOString();
@@ -572,6 +601,7 @@ export class SqliteNotificationRepository {
       channel: row.channel,
       attempt: row.attempts + 1,
       notification: this.toItem(row),
+      source: { type: row.source_type ?? '', id: row.source_id },
       }));
     } catch (error) {
       this.database.exec('ROLLBACK');

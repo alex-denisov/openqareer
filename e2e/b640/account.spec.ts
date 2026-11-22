@@ -40,6 +40,7 @@ interface AccountMocks {
 interface Calls {
   preferenceWrites: number;
   invitationWrites: number;
+  deliveryWrites: object[];
   linkRequests: number;
   disconnected: string[];
   passwordChanges: number;
@@ -49,6 +50,7 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
   const calls: Calls = {
     preferenceWrites: 0,
     invitationWrites: 0,
+    deliveryWrites: [],
     linkRequests: 0,
     disconnected: [],
     passwordChanges: 0,
@@ -117,6 +119,14 @@ async function openAccount(page: Page, path: string, mocks: AccountMocks = {}): 
     const body = method === 'PUT' ? (route.request().postDataJSON() as object) : {};
     const saved = { key: 'ev-invitation', app: true, email: true, telegram: true, ...body };
     return route.fulfill({ json: { data: saved } });
+  });
+  let delivery = { frequency: 'immediate', hideCompany: false };
+  await page.route('**/api/v1/candidate/b640/notifications/preferences/delivery', (route) => {
+    if (route.request().method() === 'PUT') {
+      delivery = route.request().postDataJSON() as typeof delivery;
+      calls.deliveryWrites.push(delivery);
+    }
+    return route.fulfill({ json: { data: delivery } });
   });
   await page.route('**/api/v1/candidate/connections**', (route) => {
     const platform = new URL(route.request().url()).pathname.split('/connections/')[1];
@@ -238,7 +248,20 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
       screen.getByRole('switch', { name: /Ответы: Telegram — подключить/u }),
     ).toBeVisible();
     expect(calls.linkRequests).toBe(1);
-    await expect(screen).not.toContainText(/пока недоступно|Как часто/iu);
+    await expect(screen).not.toContainText(/пока недоступно/iu);
+
+    const how = screen.getByRole('radiogroup', { name: 'Как часто' });
+    await expect(how.getByRole('radio', { name: 'Сразу' })).toBeChecked();
+    await how.getByRole('radio', { name: 'Раз в день' }).check();
+    await expect.poll(() => calls.deliveryWrites.length).toBe(1);
+    await expect(how.getByRole('radio', { name: 'Раз в день' })).toBeChecked();
+    const hide = screen.getByRole('switch', { name: /Не показывать название компании/u });
+    await hide.check();
+    await expect
+      .poll(() => calls.deliveryWrites.at(-1))
+      .toEqual({ frequency: 'daily', hideCompany: true });
+    await expect(hide).toBeChecked();
+    await expectGates(page);
   });
 
   test('n04: смена пароля на месте, устройства, выход', async ({ page }) => {
