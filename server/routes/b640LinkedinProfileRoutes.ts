@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   LINKEDIN_OFFER_KEY,
@@ -60,6 +60,7 @@ async function loadProfile(
   repo: LinkedinSectionRepository,
   candidateId: string,
   waitMs: number = LINKEDIN_REWRITE_BUDGET_MS,
+  log?: FastifyBaseLogger,
 ): Promise<Profile> {
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const draft = snapshot.resume?.draft;
@@ -70,6 +71,8 @@ async function loadProfile(
   // B645: «О себе» и «Опыт» — пересказ моделью; без её принятого ответа первого предложения по ним нет.
   const suggestions = await rewrittenSuggestions(
     buildSectionSuggestions(input), input, current.lines.about ?? undefined, deps.experienceFactRewriter, waitMs,
+    // B692: почему текст модели не принят — только раздел и код причины, без текста кандидата.
+    (section, reason) => log?.info({ section, reason }, 'linkedin_rewrite_rejected'),
   );
   const marks: OfferMarks = { done: repo.getDone(candidateId), variants: repo.getVariants(candidateId) };
   const view: LinkedinProfileView = {
@@ -81,7 +84,7 @@ async function loadProfile(
 function registerView(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSectionRepository): void {
   app.get(BASE, READ_LIMIT, async (request, reply) => {
     const candidateId = candidateOf(deps, request, reply);
-    return candidateId ? ok(request, (await loadProfile(deps, repo, candidateId, LINKEDIN_VIEW_WAIT_MS)).view) : reply;
+    return candidateId ? ok(request, (await loadProfile(deps, repo, candidateId, LINKEDIN_VIEW_WAIT_MS, request.log)).view) : reply;
   });
   app.post(`${BASE}/done`, WRITE_LIMIT, async (request, reply) => {
     const candidateId = candidateOf(deps, request, reply);
