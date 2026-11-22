@@ -28,7 +28,7 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 5;
+export const ROLE_NAMING_PROMPT_VERSION = 6;
 
 export function roleNamingInstructions(language: RoleNameLanguage): string {
   return [
@@ -50,10 +50,11 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
         ]
       : ['Названия ролей давай по-английски — так, как их пишут в вакансиях.']),
     'Каждая роль — короткое название должности (до 60 символов).',
-    'Для каждой роли дай titleRu — как эту должность пишут в русских вакансиях;',
-    'аббревиатуры из названия (COO, CTO, AI, IT) сохрани, остальное переведи',
-    '(AI Consultant → AI-консультант). Если title уже по-русски,',
-    'повтори его в titleRu.',
+    'Для каждой роли дай titleRu всегда русской формулировкой вакансии —',
+    'как эту должность пишут в русских вакансиях; аббревиатуры из названия',
+    '(COO, CTO, AI, IT) оставь, остальное переведи (AI Consultant → AI-консультант,',
+    'Transformation Director → Директор по трансформации). Если title уже',
+    'по-русски, повтори его в titleRu.',
     'Название компании, продукта, подразделения или бренда из фактов — не роль:',
     'работодатель кандидата никогда не становится названием должности.',
     'Для каждой роли объясни в одном предложении, что именно в фактах кандидата',
@@ -81,6 +82,16 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
  */
 const CYRILLIC = /[а-яё]/iu;
 const TITLE_RU_MAX = 80;
+/** B748: вторая попытка — перевод одной пачкой только отвергнутых названий. */
+export const ROLE_TITLE_TRANSLATION_INSTRUCTIONS = [
+  'Переведи названия должностей так, как их пишут в русских вакансиях.',
+  'titleRu всегда русской формулировкой вакансии; аббревиатуры (COO, CTO, AI, IT)',
+  'оставь латиницей, остальное переведи (AI Consultant → AI-консультант,',
+  'IT Operations Director → Директор по ИТ-операциям). Не добавляй слов,',
+  'которых нет в названии.',
+  'Ответ — только JSON: {"titles":[{"title":"…","titleRu":"…"}]}, title без изменений.',
+].join('\n');
+
 /** «ИТ» и «ИИ» в русском названии — те же аббревиатуры, что «IT» и «AI». */
 const CYRILLIC_ABBREVIATIONS: Readonly<Record<string, string>> = { IT: 'ИТ', AI: 'ИИ' };
 

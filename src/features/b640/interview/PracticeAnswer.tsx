@@ -6,6 +6,7 @@ import { Button, Icon, StatusLine } from '../kit';
 import { finishPractice, type PracticeTask } from './data/practiceApi';
 import {
   liveCriteria,
+  minutesLabel,
   minutesLeft,
   schemaBlocks,
   schemaToSave,
@@ -166,7 +167,7 @@ export function PracticeAnswer(props: {
       <h2 className="lead-title is-long" id="sd-title">
         {task.title}
       </h2>
-      <p className="lead-sub">{[props.company, `${left} минут`].filter(Boolean).join(' · ')}</p>
+      <p className="lead-sub">{[props.company, minutesLabel(left)].filter(Boolean).join(' · ')}</p>
       {session.mode === 'voice' ? (
         <VoiceInput text={text} empty={empty} onText={setText} />
       ) : (
