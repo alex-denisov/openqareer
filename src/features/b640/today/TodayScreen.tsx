@@ -19,7 +19,7 @@ import {
 import { getStatusToday } from './statusApi';
 import { StatusSignalBlock } from './StatusSignalBlock';
 import { StatusStrip } from './StatusStrip';
-import { funnelLine, moduleLayout } from './todayModel';
+import { moduleLayout } from './todayModel';
 import { useLoad } from './useLoad';
 
 function weeklyTitle(today: TodayDay, fallback: string): string {
@@ -90,7 +90,6 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
     <>
       <StatusStrip
         status={status}
-        progress={funnelLine(today.snapshot?.funnel)}
         revertedTitle={revertedTitle}
         onReverted={onReverted}
       />

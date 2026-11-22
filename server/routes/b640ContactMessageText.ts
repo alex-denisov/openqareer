@@ -2,14 +2,17 @@ import type { FastifyRequest } from 'fastify';
 import type { B640ContactMessageKind } from '../../shared/b640ContactMessage';
 import {
   acceptModelMessage,
+  modelMessageRejection,
   contactMessageWish,
   fallbackContactMessage,
   type ContactMessageFacts,
 } from '../domain/b640ContactMessage';
+import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { filterUsablePitchFacts } from '../domain/vacancyPitchService';
 import { candidateGenderFromName } from '../../shared/candidateGender';
+import type { CoverLetterOutcome } from '../providers/coverLetterWriter';
 import type { RouteDeps } from './deps';
 
 export interface MessageRecipient {
@@ -38,6 +41,31 @@ function vacancyOf(deps: RouteDeps, vacancyId: string | null): { title: string; 
   return cluster?.canonicalTitle ? { title: cluster.canonicalTitle, company: cluster.canonicalCompany ?? '' } : null;
 }
 
+/** B753: отказ ступени и непринятый текст — в журнал (без текста), иначе запасной текст не объяснить. */
+function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, known: string): void {
+  if (outcome.failure) {
+    request.log.warn({ ...outcome.failure, code: 'contact_message_stage_failed' }, 'contact-message-stage-failed');
+  }
+  const rejected = outcome.body || !outcome.failure ? modelMessageRejection(outcome.body, known) : null;
+  if (!rejected) return;
+  request.log.warn(
+    { code: 'contact_message_model_rejected', reason: rejected, stage: outcome.stage ?? null, length: outcome.body?.length ?? 0 },
+    'contact-message-model-rejected',
+  );
+}
+
+/**
+ * Вторая вакансия — только той же компании: у разных источников бывает один id кластера
+ * (B698, prod: VK 55418 = Tata Capital), и чужая вакансия попадала в черновик знакомому.
+ */
+function sameCompany(
+  vacancy: { title: string; company: string } | null,
+  also: { title: string; company: string } | null,
+): { title: string; company: string } | null {
+  if (!vacancy || !also) return null;
+  return candidateCompanyKey(also.company) === candidateCompanyKey(vacancy.company) ? also : null;
+}
+
 /**
  * Текст сообщения: модель через тот же писатель, что и письмо получателю; при отказе, пустом ответе
  * или новых цифрах — шаблон на данных профиля. Реальный запрос B613 заменит `contactMessageWish`.
@@ -53,7 +81,7 @@ export async function writeContactMessageText(
   const withheld = new Set(facts.filter((fact) => fact.sensitive === true).map((fact) => fact.id));
   const profile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
   const vacancy = vacancyOf(deps, input.vacancyId);
-  const also = vacancy ? vacancyOf(deps, input.alsoVacancyId ?? null) : null;
+  const also = sameCompany(vacancy, vacancyOf(deps, input.alsoVacancyId ?? null));
   const message: ContactMessageFacts = {
     kind: input.kind,
     recipientName: input.recipient.name,
@@ -80,6 +108,7 @@ export async function writeContactMessageText(
       profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
       vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
     ].join('\n');
+    logModelOutcome(request, outcome, known);
     return acceptModelMessage(outcome.body, known) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');

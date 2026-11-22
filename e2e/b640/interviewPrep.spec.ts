@@ -27,6 +27,10 @@ test.describe('B659: «Подготовка к интервью» (I1)', () => {
       'href',
       '/app/responses/r-arka/interview/mock',
     );
+    await expect(page.getByRole('link', { name: 'Тренировка' })).toHaveAttribute(
+      'href',
+      '/app/responses/r-arka/interview/practice',
+    );
     await expect(page.getByRole('heading', { name: 'Спросите сами' })).toBeVisible();
     await expect(
       page.getByRole('navigation', { name: 'Шаги' }).getByRole('link', { name: 'Подготовка' }),
