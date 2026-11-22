@@ -6,6 +6,7 @@ import {
   buildOfferCards,
   compareLine,
   conditionRows,
+  formatDay,
   formatMoney,
   leadTitle,
   payText,
@@ -149,6 +150,27 @@ describe('compareLine', () => {
       'Вектор Банк 520 тыс. ₽ · Гринкод ≈ 590 тыс. ₽',
     );
   });
+
+  it('with one offer keeps only the pay: the company is already in the title (B645 o06)', () => {
+    expect(compareLine([card()], 'RUB', RATES)).toBe('520 тыс. ₽');
+    expect(compareLine([greencode], 'RUB', RATES)).toBe('≈ 590 тыс. ₽');
+  });
+});
+
+describe('formatDay', () => {
+  const now = new Date('2026-11-22T10:00:00Z');
+
+  it('writes a typed dd.mm.yyyy date in words, with the year only when it is not this year', () => {
+    expect(formatDay('01.02.2027', now)).toBe('1 февраля 2027');
+    expect(formatDay('15.12.2026', now)).toBe('15 декабря');
+    expect(formatDay('1.2.2027', now)).toBe('1 февраля 2027');
+  });
+
+  it('keeps ISO dates as before and other text as it is', () => {
+    expect(formatDay('2026-12-01', now)).toBe('1 декабря');
+    expect(formatDay('с понедельника', now)).toBe('с понедельника');
+    expect(formatDay('31.02.2027', now)).toBe('31.02.2027');
+  });
 });
 
 describe('conditionRows', () => {
@@ -194,6 +216,14 @@ describe('conditionRows', () => {
     expect(rows[0].cells[0]).toBe('300 тыс. ₽ в год');
     expect(rows[3].cells[0]).toBe('Премия не гарантирована');
     expect(conditionRows([card({ terms: { bonus: 0 } })])[0].cells[0]).toBe('нет');
+  });
+
+  it('writes a typed format the way the list does: «Гибрид», not «гибрид» (B645 o06)', () => {
+    const format = (value: string) =>
+      conditionRows([card({ terms: { format: value } })]).find((row) => row.label === 'Формат')
+        ?.cells[0];
+    expect(format('гибрид')).toBe('Гибрид');
+    expect(format('гибрид, 2 дня в офисе')).toBe('Гибрид, 2 дня в офисе');
   });
 });
 
