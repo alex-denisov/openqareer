@@ -240,6 +240,20 @@ impl OutputIvars {
             }
         }
     }
+
+    /// Бросает открытые куски без отправки: AVAssetWriter удаляет недописанный файл сам.
+    fn cancel_all(&self) {
+        let Ok(mut tracks) = self.tracks.lock() else {
+            return;
+        };
+        for writer in tracks.iter_mut() {
+            if let Some(file) = writer.file.take() {
+                // SAFETY: cancelling a writer that is in the Writing state.
+                unsafe { file.writer.cancelWriting() };
+                let _ = std::fs::remove_file(&file.path);
+            }
+        }
+    }
 }
 
 fn output_settings() -> Retained<NSDictionary<NSString, AnyObject>> {
@@ -449,7 +463,12 @@ pub fn start(dir: PathBuf, sink: SegmentSink) -> Result<Capture, String> {
     });
     // SAFETY: the block is 'static and only sends on a channel.
     unsafe { stream.startCaptureWithCompletionHandler(Some(&block)) };
-    wait_error(&rx, "start_capture")?;
+    if let Err(error) = wait_error(&rx, "start_capture") {
+        // Поток мог стартовать позже ответа: остановить его, чтобы он не писал втихую.
+        let _ = stop_stream(&stream);
+        output.ivars().cancel_all();
+        return Err(error);
+    }
     Ok(Capture {
         stream,
         output,
@@ -458,18 +477,24 @@ pub fn start(dir: PathBuf, sink: SegmentSink) -> Result<Capture, String> {
 }
 
 /// Останавливает поток и закрывает открытые куски; они уходят в `SegmentSink`.
-pub fn stop(capture: Capture) -> Result<(), String> {
+fn stop_stream(stream: &SCStream) -> Result<(), String> {
     let (tx, rx) = mpsc::channel();
     let block = RcBlock::new(move |error: *mut NSError| {
         let _ = tx.send(error_text(error));
     });
     // SAFETY: the block is 'static and only sends on a channel.
-    unsafe {
-        capture
-            .stream
-            .stopCaptureWithCompletionHandler(Some(&block))
-    };
-    let stopped = wait_error(&rx, "stop_capture");
+    unsafe { stream.stopCaptureWithCompletionHandler(Some(&block)) };
+    wait_error(&rx, "stop_capture")
+}
+
+pub fn stop(capture: Capture) -> Result<(), String> {
+    let stopped = stop_stream(&capture.stream);
     capture.output.ivars().finish_all();
     stopped
+}
+
+/// Выход из приложения посреди записи: остановить поток, недописанное не отправлять.
+pub fn abandon(capture: Capture) {
+    let _ = stop_stream(&capture.stream);
+    capture.output.ivars().cancel_all();
 }

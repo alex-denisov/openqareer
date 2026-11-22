@@ -43,6 +43,13 @@ fn a_track_is_named_mic_or_system() {
 
 /// Отвечает по очереди статусами из `statuses`, запоминая тела запросов.
 async fn serve(statuses: Vec<u16>) -> (String, Arc<Mutex<Vec<String>>>) {
+    serve_with_location(statuses, "http://127.0.0.1:9/elsewhere".to_string()).await
+}
+
+async fn serve_with_location(
+    statuses: Vec<u16>,
+    location: String,
+) -> (String, Arc<Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!(
         "http://{}/api/v1/candidate/recordings/r-1/segments",
@@ -80,7 +87,7 @@ async fn serve(statuses: Vec<u16>) -> (String, Arc<Mutex<Vec<String>>>) {
                 .unwrap()
                 .push(String::from_utf8_lossy(&raw).to_string());
             let reply =
-                format!("HTTP/1.1 {status} X\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+                format!("HTTP/1.1 {status} X\r\nlocation: {location}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
             socket.write_all(reply.as_bytes()).await.unwrap();
         }
     });
@@ -155,4 +162,20 @@ fn tempdir() -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("oq-rec-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+#[tokio::test]
+async fn a_redirect_is_not_followed_and_the_segment_is_dropped() {
+    let (elsewhere, other_host) = serve(vec![202]).await;
+    let (url, seen) = serve_with_location(vec![302], elsewhere).await;
+    let dir = tempdir();
+    let path = segment_file(&dir);
+    let target = UploadTarget::for_tests(url, vec![("X-Recording-Token".into(), "t-1".into())]);
+    assert!(!upload_segment(&target, &meta(), &path, &[0]).await);
+    assert_eq!(seen.lock().unwrap().len(), 1);
+    assert!(
+        other_host.lock().unwrap().is_empty(),
+        "audio followed the redirect"
+    );
+    assert!(!path.exists());
 }

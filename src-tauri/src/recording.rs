@@ -218,8 +218,10 @@ pub fn recording_permissions(state: State<'_, RecordingState>) -> Permissions {
 
 #[tauri::command]
 pub async fn recording_request_permissions(
+    webview: tauri::Webview,
     state: State<'_, RecordingState>,
 ) -> Result<Permissions, String> {
+    require_app_page(&webview)?;
     #[cfg(target_os = "macos")]
     {
         use crate::recording_macos as mac;
@@ -234,12 +236,63 @@ pub async fn recording_request_permissions(
     Ok(current_permissions(&state))
 }
 
-fn recording_dir(app: &AppHandle, recording_id: &str) -> Result<PathBuf, String> {
-    let base = app
-        .path()
+fn recordings_root(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path()
         .app_cache_dir()
-        .map_err(|e| format!("cache_dir: {e}"))?;
-    let dir = base.join("recordings").join(recording_id);
+        .map(|base| base.join("recordings"))
+        .map_err(|e| format!("cache_dir: {e}"))
+}
+
+/// При запуске записи идти не может: всё, что осталось после выхода или сбоя, удаляется.
+pub fn purge_leftovers(app: &AppHandle) {
+    if let Ok(root) = recordings_root(app) {
+        match std::fs::remove_dir_all(&root) {
+            Ok(()) => eprintln!("recording: leftover segments removed"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => eprintln!("recording: leftovers not removed: {error}"),
+        }
+    }
+}
+
+/// Папка записи названа локальным UUID: имя на диске не берётся из адреса страницы.
+/// Выход из приложения: запись бросается без отправки, все куски удаляются.
+pub fn abandon_on_exit(app: &AppHandle) {
+    let state = app.state::<RecordingState>();
+    let active = state
+        .active
+        .try_lock()
+        .ok()
+        .and_then(|mut guard| guard.take());
+    if let Some(active) = active {
+        active.ticker.abort();
+        #[cfg(target_os = "macos")]
+        crate::recording_macos::abandon(active.capture);
+        let _ = std::fs::remove_dir_all(&active.dir);
+    }
+    purge_leftovers(app);
+}
+
+/// Команды записи принимаются только от страницы самого приложения, не от чужого сайта в окне.
+pub fn is_app_page(url: &tauri::Url) -> bool {
+    let host = url.host_str().unwrap_or_default();
+    match url.scheme() {
+        "tauri" => host == "localhost",
+        "http" | "https" => {
+            host == "tauri.localhost" || (cfg!(debug_assertions) && host == "localhost")
+        }
+        _ => false,
+    }
+}
+
+fn require_app_page(webview: &tauri::Webview) -> Result<(), String> {
+    match webview.url() {
+        Ok(url) if is_app_page(&url) => Ok(()),
+        _ => Err("forbidden_origin".to_string()),
+    }
+}
+
+fn recording_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = recordings_root(app)?.join(uuid::Uuid::new_v4().to_string());
     std::fs::create_dir_all(&dir).map_err(|e| format!("cache_dir: {e}"))?;
     Ok(dir)
 }
@@ -262,9 +315,11 @@ fn spawn_ticker(app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
 #[tauri::command]
 pub async fn recording_start(
     app: AppHandle,
+    webview: tauri::Webview,
     state: State<'_, RecordingState>,
     args: StartArgs,
 ) -> Result<StartResult, String> {
+    require_app_page(&webview)?;
     let headers: Vec<(String, String)> = args.headers.into_iter().collect();
     let target = UploadTarget::new(&args.upload_url, &headers)?;
     let recording_id = recording_id_of(&args.upload_url).ok_or("upload_url")?;
@@ -272,7 +327,7 @@ pub async fn recording_start(
     if active.is_some() {
         return Err("already_recording".to_string());
     }
-    let dir = recording_dir(&app, &recording_id)?;
+    let dir = recording_dir(&app)?;
     let tally = Arc::new(Tally::default());
     let uploads = Arc::new(Mutex::new(Vec::new()));
     let sink = make_sink(target, tally.clone(), uploads.clone());
@@ -382,6 +437,24 @@ mod tests {
             recording_id_of("https://openqareer.com/api/v1/candidate/recordings/r-1/segments"),
             Some("r-1".to_string())
         );
+    }
+
+    #[test]
+    fn only_the_app_page_may_record() {
+        for good in [
+            "tauri://localhost/app/responses",
+            "http://tauri.localhost/app",
+        ] {
+            assert!(is_app_page(&tauri::Url::parse(good).unwrap()), "{good}");
+        }
+        for bad in [
+            "https://openqareer.com/app",
+            "https://hh.ru/",
+            "https://tauri.localhost.evil.example/",
+            "file:///tmp/x.html",
+        ] {
+            assert!(!is_app_page(&tauri::Url::parse(bad).unwrap()), "{bad}");
+        }
     }
 
     #[test]

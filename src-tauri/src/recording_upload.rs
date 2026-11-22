@@ -43,6 +43,7 @@ pub struct SegmentMeta {
 pub struct UploadTarget {
     url: String,
     headers: Vec<(String, String)>,
+    https_only: bool,
 }
 
 impl UploadTarget {
@@ -51,12 +52,17 @@ impl UploadTarget {
         Ok(Self {
             url: url.to_string(),
             headers: upload_headers(headers)?,
+            https_only: true,
         })
     }
 
     #[cfg(test)]
     pub fn for_tests(url: String, headers: Vec<(String, String)>) -> Self {
-        Self { url, headers }
+        Self {
+            url,
+            headers,
+            https_only: false,
+        }
     }
 }
 
@@ -157,7 +163,13 @@ async fn send_with_retries(
     path: &Path,
     delays_ms: &[u64],
 ) -> bool {
-    let client = match reqwest::Client::builder().timeout(REQUEST_TIMEOUT).build() {
+    // Без переходов: редирект увёл бы аудио и токен записи на другой хост.
+    let client = match reqwest::Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .redirect(reqwest::redirect::Policy::none())
+        .https_only(target.https_only)
+        .build()
+    {
         Ok(client) => client,
         Err(error) => {
             eprintln!("recording: http client: {error}");

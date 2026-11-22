@@ -574,6 +574,7 @@ fn main() {
         .manage(device_settings::DeviceSettingsState::default())
         .setup(|app| {
             desktop_notify::configure_tray(app)?;
+            recording::purge_leftovers(app.handle());
             device_settings::load_on_startup(app.handle());
             Ok(())
         })
@@ -668,6 +669,7 @@ fn main() {
         if !is_tunnel_cleanup_event(&event) {
             return;
         }
+        recording::abandon_on_exit(app_handle);
         let tunnel = app_handle.state::<AppState>().tunnel.clone();
         tauri::async_runtime::block_on(async move {
             let _ = tunnel.stop().await;
