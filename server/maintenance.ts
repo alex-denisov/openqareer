@@ -155,6 +155,9 @@ const composed = composeVacancyEngine({
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
   // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
   onPoolWrite: logPoolWrites(log),
+  // B756: где стоит выборка hh.ru — соединение, тело или цикл событий процесса.
+  onHhFetch: (event) =>
+    event.status === 0 ? log.warn({ ...event }, 'hh_fetch') : log.info({ ...event }, 'hh_fetch'),
   // HTTP ждёт запись на главном потоке: между транзакциями кластеров ему нужен зазор.
   clusterWritePause: pauseClusterWrite,
 });
