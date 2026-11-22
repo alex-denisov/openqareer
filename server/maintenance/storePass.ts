@@ -13,6 +13,16 @@ export const STORE_PASS_PAUSE_MS = 1_000;
 /** Строк индекса пула на окно дочитывания: 5 000 по умолчанию — короче шаг. */
 export const STORE_PASS_WINDOW_ROWS = 2_000;
 
+/**
+ * Когда следующий проход: через 6 ч от отметки. Нет отметки или она старше срока
+ * (проход сорвался) — снова через 6 ч, а не сразу: сбой не повторяется каждую минуту.
+ */
+export function nextStorePassDelayMs(lastFinishedMs: number | null, nowMs: number): number {
+  if (lastFinishedMs === null) return STORE_PASS_MIN_GAP_MS;
+  const due = lastFinishedMs + STORE_PASS_MIN_GAP_MS - nowMs;
+  return due > 0 ? due : STORE_PASS_MIN_GAP_MS;
+}
+
 export interface StorePassDeps {
   readonly maintainStoreAsync: (
     nowMs?: number,
