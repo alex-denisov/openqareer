@@ -19,6 +19,8 @@ export interface MessageRecipient {
   readonly company: string;
   readonly linkedinUrl: string | null;
   readonly relationship: string | null;
+  /** Должность получателя из контакта; пусто — null. */
+  readonly role: string | null;
 }
 
 interface TextInput {
@@ -26,6 +28,8 @@ interface TextInput {
   readonly kind: B640ContactMessageKind;
   readonly recipient: MessageRecipient;
   readonly vacancyId: string | null;
+  /** B698: вторая вакансия той же компании из карточки компании — только для текста. */
+  readonly alsoVacancyId?: string | null;
 }
 
 function vacancyOf(deps: RouteDeps, vacancyId: string | null): { title: string; company: string } | null {
@@ -49,6 +53,7 @@ export async function writeContactMessageText(
   const withheld = new Set(facts.filter((fact) => fact.sensitive === true).map((fact) => fact.id));
   const profile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
   const vacancy = vacancyOf(deps, input.vacancyId);
+  const also = vacancy ? vacancyOf(deps, input.alsoVacancyId ?? null) : null;
   const message: ContactMessageFacts = {
     kind: input.kind,
     recipientName: input.recipient.name,
@@ -56,6 +61,8 @@ export async function writeContactMessageText(
     targetRole: draft.targetRole ?? '',
     ...(vacancy ? { vacancyTitle: vacancy.title, vacancyCompany: vacancy.company } : {}),
     ...(input.recipient.relationship ? { relationship: input.recipient.relationship } : {}),
+    ...(input.recipient.role ? { recipientRole: input.recipient.role } : {}),
+    ...(also && also.title !== vacancy?.title ? { alsoVacancyTitle: also.title } : {}),
   };
   const fallback = fallbackContactMessage(message);
   if (!deps.coverLetterWriter || !profile.trim()) return fallback;
@@ -69,7 +76,10 @@ export async function writeContactMessageText(
       chosenLanguage: 'ru',
       wish: contactMessageWish(message),
     });
-    const known = [profile, input.recipient.name, input.recipient.company, vacancy?.title ?? '', draft.targetRole ?? ''].join('\n');
+    const known = [
+      profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
+      vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
+    ].join('\n');
     return acceptModelMessage(outcome.body, known) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');
