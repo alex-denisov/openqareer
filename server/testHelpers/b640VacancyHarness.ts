@@ -105,8 +105,7 @@ export async function createB640Harness(options: HarnessOptions) {
     dataEncryptionKey: Buffer.alloc(32, 8), databasePath,
     model: 'gpt-5.6-sol', staticRoot: directory, release: 'test', logLevel: options.logLines ? 'info' : 'fatal',
     secureCookies: false, allowedOrigins: ['http://localhost:3000'], seedAccounts: [],
-    cabinetB640Usernames: ['flagged.test', 'other.test'],
-    interviewRecordingEnabled: options.interviewRecording ?? true,
+    cabinetB640Usernames: ['flagged.test', 'other.test'], interviewRecordingEnabled: options.interviewRecording ?? true,
     ...(options.billing ? { billingEnforcement: true } : {}),
   } as ServerConfig;
   let poolReads = 0;
