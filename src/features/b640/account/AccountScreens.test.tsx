@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
   getNotificationPreferences: vi.fn(),
   getInvitationPreference: vi.fn(),
   putInvitationPreference: vi.fn(),
+  getDeliverySettings: vi.fn(),
+  putDeliverySettings: vi.fn(),
   getNotificationChannelStatus: vi.fn(),
   updateNotificationPreference: vi.fn(),
   startTelegramLink: vi.fn(),
@@ -60,6 +62,10 @@ vi.mock('./invitationPreferenceApi', () => ({
   INVITATION_KEY: 'ev-invitation',
   getInvitationPreference: api.getInvitationPreference,
   putInvitationPreference: api.putInvitationPreference,
+}));
+vi.mock('./deliverySettingsApi', () => ({
+  getDeliverySettings: api.getDeliverySettings,
+  putDeliverySettings: api.putDeliverySettings,
 }));
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
@@ -163,6 +169,7 @@ beforeEach(() => {
   api.getNotificationPreferences.mockResolvedValue(events);
   api.getInvitationPreference.mockResolvedValue({ key: 'ev-invitation', app: true, email: true, telegram: true });
   api.getNotificationChannelStatus.mockResolvedValue(channels(false));
+  api.getDeliverySettings.mockResolvedValue({ frequency: 'immediate', hideCompany: false });
   api.getTelegramLinkState.mockResolvedValue({ state: 'none', expiresAt: null, username: null });
   api.getAccountCapabilityConsents.mockResolvedValue([
     { id: 'c1', capability: 'profile_activity', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: null },
@@ -305,7 +312,7 @@ describe('n03 «Подключения»', () => {
 });
 
 describe('n02 «Уведомления»', () => {
-  it('таблица: все события сервера по каналам, без строк без механики', async () => {
+  it('таблица: все события сервера по каналам', async () => {
     const root = await open(<NotificationSettingsScreen node={node('n02')} />);
     expect([...root.querySelectorAll('.set-mx.is-head .set-ch')].map((cell) => cell.textContent)).toEqual([
       'Приложение',
@@ -317,7 +324,6 @@ describe('n02 «Уведомления»', () => {
     const reply = root.querySelector('input[aria-label="Ответы: Приложение"]') as HTMLInputElement;
     expect(reply.checked).toBe(true);
     expect((root.querySelector('input[aria-label="Итоги недели: Приложение"]') as HTMLInputElement).checked).toBe(false);
-    expect(root.textContent).not.toMatch(/Как часто|название компании/u);
   });
 
   it('«Приглашения» сохраняются своим маршрутом, прежний ключ не трогают', async () => {
@@ -330,6 +336,41 @@ describe('n02 «Уведомления»', () => {
     expect(api.putInvitationPreference).toHaveBeenCalledWith({ app: true, email: false, telegram: true });
     expect(api.updateNotificationPreference).not.toHaveBeenCalled();
     expect(input().checked).toBe(false);
+  });
+
+  it('«Как часто» и «Не показывать название компании» под таблицей, сохраняются сразу', async () => {
+    api.putDeliverySettings.mockImplementation(async (value: object) => value);
+    const root = await open(<NotificationSettingsScreen node={node('n02')} />);
+    const group = root.querySelector('section.set-group[aria-label="Как присылать"]') as HTMLElement;
+    expect(group).not.toBeNull();
+    const radios = [...group.querySelectorAll<HTMLInputElement>('.seg-ctl input[type="radio"]')];
+    expect(radios.map((radio) => radio.parentElement?.textContent)).toEqual(['Сразу', 'Раз в день', 'Раз в неделю']);
+    expect(radios[0]!.checked).toBe(true);
+    const hide = () => group.querySelector('input[role="switch"]') as HTMLInputElement;
+    expect(document.getElementById(hide().getAttribute('aria-labelledby')!)?.textContent).toContain(
+      'Не показывать название компании',
+    );
+    expect(group.querySelector('.tip-bubble')?.textContent).toBe(
+      'На заблокированном экране, в письме и в Telegram будет «Ответ работодателя».',
+    );
+
+    click(radios[1]!);
+    await settle();
+    expect(api.putDeliverySettings).toHaveBeenLastCalledWith({ frequency: 'daily', hideCompany: false });
+    expect(radios[1]!.checked).toBe(true);
+
+    click(hide());
+    await settle();
+    expect(api.putDeliverySettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ frequency: 'daily', hideCompany: true }),
+    );
+    expect(hide().checked).toBe(true);
+
+    api.putDeliverySettings.mockRejectedValueOnce(new Error('сеть'));
+    click(radios[2]!);
+    await settle();
+    expect(radios[1]!.checked).toBe(true);
+    expect(group.querySelector('.set-res.is-err span')?.textContent).toBe('Настройка не сохранилась');
   });
 
   it('переключатель сохраняется сразу; сбой возвращает значение и показан на месте', async () => {
@@ -451,6 +492,9 @@ describe('n02 «Уведомления»', () => {
     const root = await open(<NotificationSettingsScreen node={node('n02')} />);
     expect([...root.querySelectorAll('.set-ch')].map((cell) => cell.textContent)).toEqual(['Приложение', 'Почта']);
     expect(root.textContent).not.toContain('Telegram');
+    expect(root.querySelector('.tip-bubble')?.textContent).toBe(
+      'На заблокированном экране и в письме будет «Ответ работодателя».',
+    );
   });
 });
 

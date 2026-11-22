@@ -42,7 +42,8 @@ jobs:
   # on main requires an up-to-date branch, so a squash merge keeps that tree.
   # Anything else (direct push, stale merge, manual run) runs every gate.
   # Three modes keep the 20-job account limit free for parallel PRs:
-  # light  - a PR push: one quick-gates job + one job with the affected tests.
+  # light  - a PR push: one quick-gates job + one job with the affected tests
+  #          (8 shards when the diff reaches more than 250 browser tests).
   # full   - a PR labelled merge-ready (or merge_group / manual run / a push to
   #          main that no PR verified): every gate, sharded. Its success posts
   #          the commit status "Full verify" that the ruleset on main requires.
@@ -53,13 +54,15 @@ jobs:
     name: Plan gates
     if: github.event.action != 'labeled' || github.event.label.name == 'merge-ready'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
       statuses: read
     outputs:
       mode: ${{ steps.plan.outputs.mode }}
+      affected_shards: ${{ steps.affected.outputs.shards || '[1]' }}
+      affected_shard_count: ${{ steps.affected.outputs.count || '1' }}
     steps:
       - name: Decide light, full or deploy-only
         id: plan
@@ -108,6 +111,50 @@ jobs:
             fi
           fi
           printf 'mode=%s\n' "$mode" | tee -a "$GITHUB_OUTPUT"
+
+      # Light mode shards the affected job when the diff reaches many browser
+      # tests: a shared e2e fixture pulls in almost the whole suite, and on two
+      # workers 1260 tests did not fit 20 minutes (#780, 22.11). Ordinary PRs
+      # reach 2-90 tests, 1.6 min at most, and stay one job.
+      - name: Check out exact commit with history
+        if: steps.plan.outputs.mode == 'light'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 24
+        if: steps.plan.outputs.mode == 'light'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        if: steps.plan.outputs.mode == 'light'
+        run: npm ci
+
+      - name: Count browser tests reachable from the diff
+        id: affected
+        if: steps.plan.outputs.mode == 'light'
+        env:
+          BASE: origin/${{ github.base_ref }}
+          E2E_WEBKIT: skip
+          # Above this many tests the light job runs as the full run's 8 shards.
+          SHARD_THRESHOLD: 250
+        run: |
+          set -euo pipefail
+          listing="$(npx playwright test --list --only-changed="$BASE" --pass-with-no-tests)"
+          total="$(printf '%s\n' "$listing" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -1)"
+          total="${total:-0}"
+          if [ "$total" -gt "$SHARD_THRESHOLD" ]; then
+            count=8
+            shards='[1,2,3,4,5,6,7,8]'
+          else
+            count=1
+            shards='[1]'
+          fi
+          printf 'browser tests=%s threshold=%s shards=%s\n' "$total" "$SHARD_THRESHOLD" "$count"
+          printf 'count=%s\nshards=%s\n' "$count" "$shards" >> "$GITHUB_OUTPUT"
 
   # Independent gates run side by side; the slowest one sets the wall time.
   static:
@@ -168,13 +215,18 @@ jobs:
   # Light mode: only the unit and browser specs that the diff against main can
   # reach. The full sharded suite runs once, when the PR is labelled merge-ready.
   affected:
-    name: Affected tests
+    name: Affected tests (shard ${{ matrix.shard }}/${{ needs.plan.outputs.affected_shard_count }})
     needs: plan
     if: needs.plan.outputs.mode == 'light'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
-    timeout-minutes: 20
+    # The longest unsharded run so far was 13 min; 30 is the backstop, sharding is the fix.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.affected_shards) }}
     steps:
       - name: Check out exact commit with history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -197,6 +249,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Unit tests reachable from the diff
+        if: matrix.shard == 1
         run: npx vitest run --changed "origin/${{ github.base_ref }}" --passWithNoTests
 
       - name: Build production artifact
@@ -205,7 +258,9 @@ jobs:
       - name: Browser specs reachable from the diff
         env:
           E2E_WEBKIT: skip
-        run: npx playwright test --only-changed="origin/${{ github.base_ref }}" --pass-with-no-tests
+        run: >-
+          npx playwright test --only-changed="origin/${{ github.base_ref }}" --pass-with-no-tests
+          --shard=${{ matrix.shard }}/${{ needs.plan.outputs.affected_shard_count }}
 
   unit:
     name: Unit tests (shard ${{ matrix.shard }}/4)

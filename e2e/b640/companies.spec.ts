@@ -296,6 +296,15 @@ test.describe('B655/B677: «Компании и люди» нового каби
         expect(want.width).toBeLessThan(dock.width * 0.7);
         expect(Math.abs(want.x + want.width - (dock.x + dock.width))).toBeLessThan(24);
       }
+      // B645: «Хочу в компанию» и «Написать …» стоят вплотную, как в макете.
+      const boxes = await page.locator('.co-head .act-dock > *').evaluateAll((els) =>
+        els
+          .map((el) => el.getBoundingClientRect())
+          .sort((a, b) => a.y - b.y)
+          .map((r) => ({ y: r.y, h: r.height })),
+      );
+      expect(boxes).toHaveLength(2);
+      expect(Math.abs(boxes[1]!.y - (boxes[0]!.y + boxes[0]!.h))).toBeLessThan(1);
     } else {
       // На 1440 «Хочу в компанию» в шапке справа от названия, на одной высоте с ним.
       const head = await page.locator('.co-head').boundingBox();
@@ -341,6 +350,49 @@ test.describe('B655/B677: «Компании и люди» нового каби
     );
     await row.getByRole('button', { name: 'Написать знакомому' }).click();
     await expect(row.locator('textarea')).toHaveCount(0);
+  });
+
+  test('«Отправил» в строке человека закрывает черновик и показывает «писали ДД.ММ» (B698)', async ({
+    page,
+  }) => {
+    await openList(page);
+    const message = {
+      id: 'm1',
+      kind: 'known_contact',
+      text: 'Роман, привет!',
+      recipient: { name: 'Роман Ефимов', linkedinUrl: null },
+      createdAt: '2026-11-12T12:00:00.000Z',
+    };
+    await page.route('**/api/v1/candidate/b640/contact-messages', (route) =>
+      route.fulfill({ json: { data: message } }),
+    );
+    // Одобрение и «Отправил» — заглушки: на площадку ничего не уходит, профиль получателя не открывается.
+    await page.route('**/api/v1/candidate/b640/contact-messages/m1/approve', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            ...message,
+            state: 'approved',
+            approvedAt: '2026-11-12T12:01:00.000Z',
+            openUrl: null,
+          },
+        },
+      }),
+    );
+    await page.route('**/api/v1/candidate/b640/contact-messages/m1/sent', (route) =>
+      route.fulfill({
+        json: { data: { ...message, state: 'sent', sentAt: '2026-11-12T12:02:00.000Z' } },
+      }),
+    );
+    await page.locator('a.co-nm', { hasText: 'Ладога Банк' }).click();
+    const row = page.locator('.co-person').first();
+    await row.getByRole('button', { name: 'Написать знакомому' }).click();
+    await expect(row.locator('textarea')).toHaveValue('Роман, привет!');
+    await row.getByRole('button', { name: 'Одобрить и отправить' }).click();
+    await row.getByRole('button', { name: 'Отправил' }).click();
+    await expect(row.locator('textarea')).toHaveCount(0);
+    await expect(row.getByRole('button', { name: 'Написать знакомому' })).toHaveCount(0);
+    await expect(row.locator('.co-sent')).toHaveText('писали 12.11');
   });
 
   test('релокация в городе без компаний — v10g и путь к удалённой работе', async ({ page }) => {

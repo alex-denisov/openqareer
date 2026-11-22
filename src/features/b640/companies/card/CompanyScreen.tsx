@@ -96,7 +96,9 @@ function Head(props: HeadProps) {
         </div>
       ) : null}
       {hasActions ? <ActionDock primary={<HeadActions {...props} />} /> : null}
-      {props.want.failed ? <RetryLine text="Не удалось сохранить отметку" onRetry={props.want.retry} /> : null}
+      {props.want.failed ? (
+        <RetryLine text="Не удалось сохранить отметку" onRetry={props.want.retry} />
+      ) : null}
     </section>
   );
 }
@@ -113,12 +115,20 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
   const want = useCompanyWant(card.markWant);
   const people = usePeople(companyId, true);
   const [openId, setOpenId] = useState<string | null>(null);
-  const onToggle = (personId: string) => setOpenId((current) => (current === personId ? null : personId));
+  const [sent, setSent] = useState<ReadonlyMap<string, string>>(new Map());
+  const onSent = (personId: string, sentAt: string) => {
+    setSent((now) => new Map(now).set(personId, sentAt));
+    setOpenId(null);
+  };
+  const onToggle = (personId: string) =>
+    setOpenId((current) => (current === personId ? null : personId));
   const onWrite = (person: B640CompanyPerson) => {
     setOpenId(person.id);
     document.getElementById(personRowId(person.id))?.scrollIntoView({ block: 'center' });
   };
-  const known = people.people.find((person) => person.circle === 1 && person.name && person.message);
+  const known = people.people.find(
+    (person) => person.circle === 1 && person.name && person.message,
+  );
   return (
     <>
       {company.want ? (
@@ -139,7 +149,11 @@ function Loaded({ card, companyId }: { readonly card: LoadedCard; readonly compa
           moreFailed={card.moreFailed}
           onMore={() => void card.loadMore()}
         />
-        <CompanyPeople state={people} next={peopleNext(card)} draft={{ openId, onToggle }} />
+        <CompanyPeople
+          state={people}
+          next={peopleNext(card)}
+          draft={{ openId, onToggle, sent, onSent }}
+        />
       </div>
     </>
   );

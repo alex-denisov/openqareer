@@ -13,11 +13,15 @@ async function openCabinet(
     readonly hidden?: readonly unknown[];
     readonly total?: number;
     readonly own?: readonly unknown[];
+    readonly campaignRoles?: readonly string[];
+    readonly skillGap?: number;
   } = {},
 ): Promise<void> {
   await mockSignedInCabinet(page, {
     cabinetB640: true,
     vacancyTotal: options.total ?? 45,
+    ...(options.campaignRoles ? { vacancyCampaignRoles: options.campaignRoles } : {}),
+    ...(options.skillGap !== undefined ? { roleSkillGap: options.skillGap } : {}),
     vacancyFacets: {
       total: options.total ?? 45,
       regions: [],
@@ -221,6 +225,42 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(show).toHaveText(new RegExp(`^Показать ${expected} `));
     await show.click();
     await expect(page.locator('.vl-count .num')).toHaveText(String(expected));
+  });
+
+  test('B645: роли «Карьеры» — фильтр по умолчанию; чип убирается, «Сбросить всё» очищает', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'на 390 фильтры — нижний лист');
+    await openCabinet(page, '/app/vacancies', {
+      campaignRoles: ['Руководитель разработки', 'Директор по разработке'],
+    });
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 2/ })).toBeVisible();
+    const chips = page.locator('.vt-chips .vt-chip');
+    await expect(chips).toHaveCount(2);
+    await page.getByRole('button', { name: 'Убрать: Директор по разработке' }).click();
+    await expect(chips).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^Роли: выбрано 1/ })).toBeVisible();
+    await page.locator('.vt-chips').getByRole('button', { name: 'Сбросить всё' }).click();
+    await expect(chips).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Все роли/ })).toBeVisible();
+  });
+
+  test('B645: строка «Проверить N навыка» ведёт в проверку навыков', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies', {
+      campaignRoles: ['Руководитель разработки'],
+      skillGap: 3,
+    });
+    const link = page.locator('.vt-skill a.row-act');
+    await expect(link).toHaveText('Проверить 3 навыка');
+    await expect(link).toHaveAttribute('href', /\/app\/career\/skills/u);
+  });
+
+  test('B645: «Помочь выбрать» — ссылка на режим подборки', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    await expect(page.locator('a.btn.va-review')).toHaveAttribute(
+      'href',
+      '/app/vacancies?mode=review',
+    );
   });
 
   test('вкладка «Роли» показывает роли с числом вакансий', async ({ page }, testInfo) => {

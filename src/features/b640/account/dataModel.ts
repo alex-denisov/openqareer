@@ -9,13 +9,19 @@ export interface ConsentRow {
   readonly revokeWarning?: { readonly title: string; readonly text: string };
 }
 
-/** Согласия, которые умеет хранить сервер. */
+/** «Вы в поиске» (B263) — первая строка n05, как в макете; хранится отдельно от `me/consents`. */
+export const SEARCH_CONSENT_ROW = {
+  title: 'Вы в поиске',
+  line: 'Разрешает искать рекрутеров и тёплые пути',
+} as const;
+
+/**
+ * Согласия `me/consents` в порядке макета N5: «Цифровой след», затем согласия,
+ * которых в макете нет, но у них есть механика (решение оркестратора 22.11).
+ * `actions_on_behalf` назван по делу — «Отклики и подъём резюме», чтобы не
+ * повторять заголовок раздела «Действия от вашего имени» ниже.
+ */
 export const CONSENT_ROWS: readonly ConsentRow[] = [
-  {
-    capability: 'profile_activity',
-    title: 'Подключённый профиль',
-    line: 'Проверять, что данные профиля на площадке не устарели',
-  },
   {
     capability: 'digital_footprint',
     title: 'Цифровой след',
@@ -27,9 +33,14 @@ export const CONSENT_ROWS: readonly ConsentRow[] = [
     },
   },
   {
+    capability: 'profile_activity',
+    title: 'Подключённый профиль',
+    line: 'Проверять, что данные профиля на площадке не устарели',
+  },
+  {
     capability: 'actions_on_behalf',
-    title: 'Действия от вашего имени',
-    line: 'Отправлять отклики, которые вы одобрили',
+    title: 'Отклики и подъём резюме',
+    line: 'Отправлять одобренные вами отклики и поднимать резюме',
   },
 ];
 

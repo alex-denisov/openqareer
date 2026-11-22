@@ -35,11 +35,10 @@ import type {
   NativeSourceReceiptInput,
 } from './candidateStore';
 import { insertPlanRequest, selectPlanRequests } from './store/planRequestStore';
-import {
-  exportExecutiveRequests,
-} from './store/executiveRequestStore';
+import { exportExecutiveRequests } from './store/executiveRequestStore';
 import { createSqliteCandidateStoreExecutiveRequestMethods } from './sqliteCandidateStoreExecutiveRequestMethods';
 import { createSqliteCandidateStoreExportMethods } from './sqliteCandidateStoreExportMethods';
+import { purgeCandidateRows } from './candidateRowPurge';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedMatchedListStore } from './sealedMatchedListStore';
 import { SealedText } from './sealedText';
@@ -250,6 +249,7 @@ export class SqliteCandidateStore implements CandidateStore {
       }),
       createSqliteCandidateStoreExportMethods({
         getSnapshot: (candidateId) => this.getSnapshot(candidateId),
+        readDeliverySettings: (candidateId) => this.notificationRepository.getDeliverySettings(candidateId),
         sourceConnections: this.sourceConnections,
         careerStrategyRepository: this.careerStrategyRepository,
         workPreferenceRepository: this.workPreferenceRepository,
@@ -259,8 +259,7 @@ export class SqliteCandidateStore implements CandidateStore {
           getProfile: (candidateId) => this.relocationQuestionnaireRepo.getProfile(candidateId),
           getConsent: (candidateId) => this.relocationQuestionnaireRepo.getConsent(candidateId),
         },
-        exportConsultantConversations: (candidateId) =>
-          this.exportConsultantConversations(candidateId),
+        exportConsultantConversations: (candidateId) => this.exportConsultantConversations(candidateId),
         exportExecutiveRequests: (candidateId) =>
           exportExecutiveRequests(this.database, this.sealedText, candidateId),
         roleSkillAssessments: this.roleSkillAssessments,
@@ -814,7 +813,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   deleteCandidate(candidateId: string): boolean {
     const result = this.transaction(() => {
-      this.consultantHistory.deleteAllIndexes(candidateId);
+      purgeCandidateRows(this.database, candidateId);
       return this.database.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
     });
     if (result.changes === 1) this.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');

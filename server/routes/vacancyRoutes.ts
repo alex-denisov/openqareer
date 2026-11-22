@@ -1,3 +1,4 @@
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { loadDetailText } from './vacancyDetailText';
 import { registerResumeBuilderRoutes } from './resumeBuilderRoutes';
 import { summarizeRoleSample } from './roleSampleSummary';
@@ -127,7 +128,8 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
   }
 
   return {
-    data: roles,
+    // B737: русское название для показа; `title` остаётся ключом выбора и проверки.
+    data: roles.map((role) => ({ ...role, titleRu: roleTitleRu(role.title) })),
     meta: {
       requestId: request.id,
       poolSize: context.poolSize,

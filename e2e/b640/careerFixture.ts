@@ -105,11 +105,14 @@ export interface CareerOptions {
   readonly relocationCities?: readonly unknown[];
   /** Вилка города России по названию. */
   readonly relocationCityPay?: Readonly<Record<string, unknown>>;
+  /** B737: русские названия ролей поиска в ответе кампании. */
+  readonly titlesRu?: Readonly<Record<string, string>>;
 }
 
-function campaign(roles: string[]) {
+function campaign(roles: string[], titlesRu?: Readonly<Record<string, string>>) {
   return {
     roles: { value: roles, origin: 'explicit' },
+    ...(titlesRu ? { titlesRu } : {}),
     regions: { value: [], origin: 'default' },
     remoteOnly: false,
   };
@@ -162,6 +165,10 @@ export async function openCareer(
   };
   let stop = [{ company: 'Гринкод', origin: 'manual' }];
   await mockSignedInCabinet(page, { cabinetB640: true });
+  // Полоса «Роль поиска» берёт число из того же итога, что список «Вакансии» (единый счётчик s07).
+  await page.route(`${API}/candidate/b640/matched-vacancies*`, (route) =>
+    route.fulfill({ json: { data: [], meta: { total: 64, nextOffset: null } } }),
+  );
   await page.route(`${API}/candidate/role-hypotheses`, (route) =>
     route.fulfill({ json: { data: ROLES } }),
   );
@@ -171,13 +178,13 @@ export async function openCareer(
       calls.campaigns.push(body);
       roles = body.roles;
     }
-    return route.fulfill({ json: { data: campaign(roles) } });
+    return route.fulfill({ json: { data: campaign(roles, options.titlesRu) } });
   });
   await page.route(`${API}/candidate/career-roles`, (route) => {
     const body = route.request().postDataJSON() as { title: string };
     calls.ownRoles.push(body);
     roles = [...roles, body.title];
-    return route.fulfill({ json: { data: campaign(roles) } });
+    return route.fulfill({ json: { data: campaign(roles, options.titlesRu) } });
   });
   await page.route(`${API}/candidate/role-skill-assessments/checked-roles`, (route) =>
     route.fulfill({

@@ -14,7 +14,6 @@ describe('parseOfferLetter: ten real letter formats', () => {
       net: true,
       probationPeriodMonths: 3,
       probationSalary: 500_000,
-      bonus: 1_040_000,
       format: 'hybrid',
       benefits: ['ДМС со стоматологией', 'оплата спорта'],
       startDate: '2026-12-01',
@@ -123,5 +122,40 @@ describe('parseOfferLetter: ten real letter formats', () => {
       probationPeriodMonths: 2,
       benefits: ['Компенсация обучения', 'ДМС'],
     });
+  });
+});
+
+describe('B645 o06a: потолок премии и дата без года', () => {
+  const LATE = new Date('2026-11-20T09:00:00Z');
+
+  it('«до 2 окладов» — потолок, а не сумма: премия из письма не заполняется', () => {
+    const parsed = parseOfferLetter('Оклад 520 000 ₽ в месяц. Годовая премия до 2 окладов.', LATE);
+    expect(parsed.baseSalary).toBe(520_000);
+    expect(parsed.bonus).toBeUndefined();
+  });
+
+  it('потолок процентом и по-английски тоже не сумма', () => {
+    const ru = parseOfferLetter('Оклад 300 000 ₽ в месяц. Бонус до 20% годового дохода.', LATE);
+    const en = parseOfferLetter('Base salary $10,000 per month. Annual bonus up to 15%.', LATE);
+    expect(ru.bonus).toBeUndefined();
+    expect(en.bonus).toBeUndefined();
+  });
+
+  it('точная премия по-прежнему считается', () => {
+    const parsed = parseOfferLetter('Оклад 520 000 ₽ в месяц. Годовая премия 2 оклада.', LATE);
+    expect(parsed.bonus).toBe(1_040_000);
+  });
+
+  it('прошедший срок без года остаётся прошедшим, а не уходит на год вперёд', () => {
+    expect(parseOfferLetter('Просим ответить до 14 ноября.', LATE).respondBy).toBe('2026-11-14');
+  });
+
+  it('срок без года, который ещё не наступил, — в этом году', () => {
+    expect(parseOfferLetter('Просим ответить до 14 ноября.', NOW).respondBy).toBe('2026-11-14');
+  });
+
+  it('письмо в декабре про январь — следующий год', () => {
+    const december = new Date('2026-12-20T09:00:00Z');
+    expect(parseOfferLetter('Выход 15 января.', december).startDate).toBe('2027-01-15');
   });
 });

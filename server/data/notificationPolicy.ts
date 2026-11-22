@@ -39,6 +39,8 @@ export interface NotificationEventInput {
   readonly createdAt?: string;
   /** B671: ответ работодателя — приглашение или оффер; доставка идёт по ключу «Приглашения», если он сохранён. */
   readonly invitation?: boolean;
+  /** B731: когда отправить по каналам (напоминание за сутки); прошедшее время — не отправлять. */
+  readonly deliverAt?: string;
 }
 
 export interface NotificationItem {
