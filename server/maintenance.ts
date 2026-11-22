@@ -27,6 +27,7 @@ import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirector
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { createScriptPageRenderer, launchSiteRenderBrowser } from './vacancies/scriptPageRenderer';
 import { createRenderInWorker } from './vacancies/siteRenderInWorker';
+import { createHhTransportInWorker } from './vacancies/hhFetchInWorker';
 import { existsSync } from 'node:fs';
 import { Worker } from 'node:worker_threads';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
@@ -151,6 +152,17 @@ const renderScriptPage = existsSync(siteRenderWorkerFile)
 const HH_FETCH_SUMMARY_MS = 5 * 60_000;
 const hhFetchSummary = createHhFetchSummary(log);
 setInterval(() => hhFetchSummary.flush(), HH_FETCH_SUMMARY_MS).unref();
+// B756 22.11: цикл обслуживания стоит до 24 с, и тело страницы hh.ru не дочитывается
+// за 30 с. Выборка целиком — в своём потоке (dist/hh-fetch-worker.mjs), один на процесс;
+// без файла потока (tsx в разработке) — в этом процессе, как раньше.
+const hhFetchWorkerFile = new URL('./hh-fetch-worker.mjs', import.meta.url);
+const hhFetchInWorker = existsSync(hhFetchWorkerFile)
+  ? createHhTransportInWorker({
+      spawn: () => new Worker(hhFetchWorkerFile),
+      onFetch: (event) => hhFetchSummary.record(event),
+      log: (fields, message) => log.warn(fields, message),
+    })
+  : undefined;
 // B759: SIGTERM отменяет обход — курсор сохраняется по прочитанному, а не через минуту ожидания.
 const collection = new AbortController();
 const composed = composeVacancyEngine({
@@ -167,6 +179,7 @@ const composed = composeVacancyEngine({
   onPoolWrite: logPoolWrites(log),
   // B756: где стоит выборка hh.ru — соединение, тело или цикл событий процесса.
   onHhFetch: (event) => hhFetchSummary.record(event),
+  ...(hhFetchInWorker ? { hhDirect: hhFetchInWorker.transport } : {}),
   // HTTP ждёт запись на главном потоке: между транзакциями кластеров ему нужен зазор.
   clusterWritePause: pauseClusterWrite,
 });
@@ -332,7 +345,11 @@ function shutdown(signal: string): Promise<void> {
       stopCatalogSearchEvidence?.();
       stopLinkedinOrgResolver?.();
     },
-    abortCollection: () => collection.abort(),
+    abortCollection: () => {
+      collection.abort();
+      // Выборки в потоке получают отказ сразу: обход сохраняет курсор по прочитанному.
+      void hhFetchInWorker?.close();
+    },
     stopWorker: () => worker.stop(),
     startup: restoreInFlight,
     closeStores: () => {

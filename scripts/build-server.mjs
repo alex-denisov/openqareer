@@ -32,6 +32,12 @@ await build({
   entryPoints: ['server/vacancies/siteRenderWorker.ts'],
   outfile: 'dist/site-render-worker.mjs',
 });
+// B756: hh.ru fetch (request and body) on its own event loop; maintenance.mjs spawns it.
+await build({
+  ...shared,
+  entryPoints: ['server/vacancies/hhFetchWorker.ts'],
+  outfile: 'dist/hh-fetch-worker.mjs',
+});
 // B645: freehire pages pass in its own thread of the maintenance process.
 await build({
   ...shared,
