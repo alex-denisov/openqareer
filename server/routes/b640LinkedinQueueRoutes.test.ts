@@ -156,6 +156,27 @@ describe('B694: очередь', () => {
     expect((await h.get(`${BASE}/queue`, 'other.test')).json().data.total).toBe(0);
   });
 
+  it('B695: «Остановить всё» ставит очередь на паузу — ничего не наступает, напоминание не ставится; снятие паузы возвращает', async () => {
+    const { h, call, draft, sql } = await setup();
+    draft('flagged.test', { id: 'd1' });
+    const queued = (await call('POST', `${BASE}/queue`, { draftId: 'd1', at: future(2) })).json().data;
+    sql('UPDATE candidate_linkedin_queue SET scheduled_at = ? WHERE id = ?', '2020-01-01T10:00:00.000Z', queued.id);
+    expect((await h.get(`${BASE}/queue?state=due`, 'flagged.test')).json().data).toMatchObject({ total: 1, paused: false });
+
+    expect((await call('POST', '/api/v1/candidate/automation/pause', { days: 365 })).statusCode).toBe(200);
+    const paused = (await h.get(`${BASE}/queue`, 'flagged.test')).json().data;
+    expect(paused).toMatchObject({ total: 1, paused: true });
+    expect(paused.items[0]).toMatchObject({ state: 'queued', openUrl: null });
+    expect((await h.get(`${BASE}/queue?state=due`, 'flagged.test')).json().data.total).toBe(0);
+    expect((await call('POST', `${BASE}/queue/${queued.id}/reminded`, {})).statusCode).toBe(409);
+    // Пауза одного кандидата не трогает другого.
+    expect((await h.get(`${BASE}/queue`, 'other.test')).json().data.paused).toBe(false);
+
+    expect((await call('DELETE', '/api/v1/candidate/automation/pause', undefined)).statusCode).toBe(200);
+    const resumed = (await h.get(`${BASE}/queue?state=due`, 'flagged.test')).json().data;
+    expect(resumed).toMatchObject({ total: 1, paused: false });
+  });
+
   it('страницы: limit не больше 20, сортировка по времени', async () => {
     const { h, call, draft } = await setup();
     for (const [i, id] of ['a', 'b', 'c'].entries()) {

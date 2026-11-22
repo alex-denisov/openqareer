@@ -58,8 +58,25 @@ export class LinkedinQueueRepository {
     return rhythm;
   }
 
+  /**
+   * B695: «Остановить всё» (n05) — та же пауза, что у автооткликов (`candidate_auto_apply_settings.paused_until`).
+   * Пока она действует, время очереди не наступает: ни `due`, ни напоминаний.
+   */
+  isPaused(candidateId: string): boolean {
+    const exists = this.database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_auto_apply_settings'").get();
+    if (!exists) return false;
+    const row = this.database.prepare('SELECT paused_until FROM candidate_auto_apply_settings WHERE candidate_id = ?')
+      .get(candidateId) as { paused_until: string | null } | undefined;
+    return Boolean(row?.paused_until && Date.parse(row.paused_until) > this.clock());
+  }
+
+  /** Момент, до которого время очереди считается наступившим; на паузе — никакое. */
+  private dueBefore(candidateId: string): number {
+    return this.isPaused(candidateId) ? 0 : this.clock();
+  }
+
   list(candidateId: string, filter: { state?: LinkedinQueueState; offset: number; limit: number }): LinkedinQueuePage {
-    const now = this.clock();
+    const now = this.dueBefore(candidateId);
     const nowIso = new Date(now).toISOString();
     const where: Record<LinkedinQueueState, string> = {
       queued: "q.state = 'queued' AND q.scheduled_at > ?",
@@ -72,7 +89,7 @@ export class LinkedinQueueRepository {
       .get(candidateId, nowIso) as { n: number }).n;
     const rows = this.database.prepare(`${SELECT} WHERE q.candidate_id = ? ${condition} ORDER BY q.scheduled_at ASC, q.rowid ASC LIMIT ? OFFSET ?`)
       .all(candidateId, nowIso, filter.limit, filter.offset) as unknown as QueueRow[];
-    return { items: rows.map((row) => toItem(row, now)), total, offset: filter.offset, limit: filter.limit };
+    return { items: rows.map((row) => toItem(row, now)), total, offset: filter.offset, limit: filter.limit, paused: now === 0 };
   }
 
   private find(candidateId: string, id: string): QueueRow | undefined {
@@ -81,7 +98,7 @@ export class LinkedinQueueRepository {
 
   get(candidateId: string, id: string): LinkedinQueueItem | null {
     const row = this.find(candidateId, id);
-    return row ? toItem(row, this.clock()) : null;
+    return row ? toItem(row, this.dueBefore(candidateId)) : null;
   }
 
   enqueue(candidateId: string, draftId: string, at: string | undefined, rhythm: LinkedinRhythm): EnqueueResult {
@@ -144,7 +161,7 @@ export class LinkedinQueueRepository {
   markReminded(candidateId: string, id: string): ChangeResult {
     const row = this.find(candidateId, id);
     if (!row) return { ok: false, error: 'not_found' };
-    const item = toItem(row, this.clock());
+    const item = toItem(row, this.dueBefore(candidateId));
     if (item.state !== 'due') return { ok: false, error: 'wrong_state' };
     if (row.reminded_at) return { ok: true, item };
     return this.updateQueued(candidateId, id, 'reminded_at = ?', new Date(this.clock()).toISOString());
