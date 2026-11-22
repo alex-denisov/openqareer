@@ -146,6 +146,16 @@ export class SmmStore {
     return rows.map(toPost);
   }
 
+  /** Посты, которые владелец принял или прислал как свои: из них берётся его голос. */
+  acceptedPosts(limit: number): SmmPost[] {
+    const rows = this.database
+      .prepare(
+        "SELECT * FROM smm_posts WHERE status = 'accepted' ORDER BY created_ms DESC, id DESC LIMIT ?",
+      )
+      .all(limit) as unknown as PostRow[];
+    return rows.map(toPost);
+  }
+
   countCreatedSince(sinceMs: number, origin: string): number {
     const row = this.database
       .prepare('SELECT COUNT(*) AS n FROM smm_posts WHERE created_ms >= ? AND origin = ?')

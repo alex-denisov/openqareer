@@ -436,6 +436,45 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
   });
 });
 
+describe('B747: проверенные навыки отдаются русскими названиями словаря', () => {
+  const OTHER_ROLE = 'Director of Engineering';
+  it('старая проверка с английскими названиями: словарь переводит, повторы сливаются', async () => {
+    const rig = await createRig(8);
+    const started = await rig.app.inject({
+      method: 'POST',
+      url: START_PATH,
+      headers: mutationHeaders(rig),
+      payload: { role: OTHER_ROLE },
+    });
+    const run = runFrom(started);
+    const [first, second, third, ...rest] = run.skills;
+    rig.store.roleSkillAssessments.create(rig.candidate.id, {
+      ...run,
+      id: randomUUID(),
+      status: 'complete',
+      completedAt: OBSERVED_AT,
+      skills: [
+        { ...first, name: 'Cross-functional leadership', grade: 'confirmed' },
+        { ...second, name: 'Team leadership', grade: 'confirmed' },
+        { ...third, name: 'Azure', grade: 'confirmed' },
+        ...rest.map((skill: typeof first) => ({ ...skill, grade: 'not_confirmed' as const })),
+      ],
+    });
+    const after = await rig.app.inject({
+      method: 'GET',
+      url: `${BASE_PATH}/checked-roles`,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(after)).toEqual([
+      {
+        roleTitle: OTHER_ROLE,
+        completedAt: OBSERVED_AT,
+        confirmedSkills: ['Управление командой', 'Azure'],
+      },
+    ]);
+  });
+});
+
 describe('B509 skills from vacancy text when clusters carry none', () => {
   const SKILLS = [
     'Product discovery',

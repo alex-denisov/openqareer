@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ROLE_NAMING_JSON_SCHEMA,
   ROLE_NAMING_PROMPT_VERSION,
+  checkedTitleRu,
   dropOrganisationTitles,
   roleNamingInstructions,
   roleNamingSchema,
@@ -83,6 +85,58 @@ describe('роль держится на направлении опыта (28.1
     const text = roleNamingInstructions('ru');
     expect(text).toContain('Не называй роль по одному упоминанию технологии или навыка');
     expect(text).toContain('место работы или минимум два факта');
-    expect(ROLE_NAMING_PROMPT_VERSION).toBe(3);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(4);
+  });
+});
+
+describe('B748: русское название роли от модели проходит проверку', () => {
+  it('принимает перевод с кириллицей, сохранившими аббревиатурами', () => {
+    expect(
+      checkedTitleRu('Head of IT Service Management', 'Руководитель управления ИТ-услугами (IT)'),
+    ).toBe('Руководитель управления ИТ-услугами (IT)');
+    expect(checkedTitleRu('Co-Founder', 'Сооснователь')).toBe('Сооснователь');
+    expect(checkedTitleRu('AI Solutions Architect', 'Архитектор AI-решений')).toBe(
+      'Архитектор AI-решений',
+    );
+  });
+
+  it('отвергает перевод без кириллицы, длинный, без аббревиатуры или совпадающий с исходным', () => {
+    expect(checkedTitleRu('Co-Founder', 'Co-Founder')).toBeNull();
+    expect(checkedTitleRu('AI Solutions Architect', 'Архитектор решений')).toBeNull();
+    expect(checkedTitleRu('Co-Founder', 'С'.repeat(81))).toBeNull();
+    expect(checkedTitleRu('Co-Founder', '')).toBeNull();
+    expect(checkedTitleRu('Co-Founder', undefined)).toBeNull();
+  });
+
+  it('русское название роли уже по-русски — перевод не нужен', () => {
+    expect(checkedTitleRu('Операционный директор', 'Операционный директор')).toBeNull();
+  });
+
+  it('схема ответа читает titleRu и отбрасывает непрошедший проверку', () => {
+    const parsed = roleNamingSchema.parse({
+      roles: [
+        {
+          title: 'Co-Founder',
+          titleRu: 'Сооснователь',
+          reason: 'основал компанию',
+          evidenceRefs: ['memory:1'],
+        },
+        {
+          title: 'AI Solutions Architect',
+          titleRu: 'Architect',
+          reason: 'строил AI',
+          evidenceRefs: ['memory:2'],
+        },
+      ],
+    });
+    expect(parsed.roles.map((role) => role.titleRu)).toEqual(['Сооснователь', undefined]);
+  });
+
+  it('JSON-схема и инструкция просят titleRu, версия промпта поднята', () => {
+    const item = ROLE_NAMING_JSON_SCHEMA.schema.properties.roles.items;
+    expect(item.required).toContain('titleRu');
+    expect(item.properties.titleRu).toEqual({ type: 'string' });
+    expect(roleNamingInstructions('en')).toContain('titleRu');
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(4);
   });
 });

@@ -2,7 +2,8 @@ import type { SmmAgent } from './smmAgent';
 import { isPostDue, mskDayStart } from './smmSchedule';
 import type { SmmPost, SmmStore } from './smmStore';
 import type { SmmTelegram, TelegramMessage, TelegramUpdate } from './smmTelegram';
-import { fetchThreadsPost, findThreadsUrl } from './smmThreadsLink';
+import type { PageContent } from './smmLinkExtract';
+import { findLink, readLink, refusalText, type LinkReaderDeps } from './smmLinkReader';
 
 const OFFSET_KEY = 'telegram_offset';
 const PENDING_KEY = 'pending_action';
@@ -21,7 +22,8 @@ export const SMM_BUTTONS = {
 const HELP = [
   'Я SMM-агент openqareer: пишу посты Threads от вашего имени, вы публикуете их сами.',
   '/post — новый пост сейчас',
-  'Ссылка на пост Threads или снимок экрана — новый пост по его схеме.',
+  'Ссылка на пример (статья, пост Threads, Telegram, X) или снимок экрана — разберу, почему он работает, и предложу 2–3 варианта вашим голосом. Тему можно дописать рядом со ссылкой.',
+  '/мой и текст — ваш собственный пост: учусь на нем писать вашим голосом. Цифры по нему пришлите ответом.',
   'Ответ на мой пост с цифрами («1200 просмотров, 40 лайков») — запишу и разберу.',
   'Любой другой текст — разговор о контент-стратегии.',
 ].join('\n');
@@ -35,6 +37,8 @@ export interface SmmBotDeps {
   readonly log: (event: string, detail?: Record<string, unknown>) => void;
   /** Плановые посты в чат; выключено, пока владелец не утвердит подачу (09.11). */
   readonly autopost?: boolean;
+  /** Чтение ссылок; в тестах — сохраненные страницы вместо сети. */
+  readonly links?: LinkReaderDeps;
 }
 
 function formatDraft(post: SmmPost, check: string): string {
@@ -73,6 +77,18 @@ export class SmmBot {
     ]);
     if (messageId !== null) store.setState(`${MESSAGE_POST_PREFIX}${messageId}`, String(id));
     return result.post;
+  }
+
+  /** Разбор примера, затем каждый вариант отдельным черновиком со своими кнопками. */
+  private async deliverExample(page: PageContent, topic: string): Promise<void> {
+    const { telegram, chatId, agent } = this.deps;
+    const result = await agent.fromExample(page, topic);
+    if (!result) {
+      await telegram.send(chatId, 'Модели не ответили, пришлите пример еще раз.');
+      return;
+    }
+    await telegram.send(chatId, result.breakdown);
+    for (const draft of result.drafts) await this.deliver(draft, '');
   }
 
   private async exclusive(task: () => Promise<void>): Promise<void> {
@@ -190,21 +206,22 @@ export class SmmBot {
   private async handleMessage(message: TelegramMessage): Promise<void> {
     const text = (message.text ?? message.caption ?? '').trim();
     if (message.photo && message.photo.length > 0) {
-      await this.handlePhoto(message.photo[message.photo.length - 1].file_id);
+      await this.handlePhoto(message.photo[message.photo.length - 1].file_id, text);
       return;
     }
     if (!text) return;
     if (await this.handleCommand(text)) return;
     if (await this.handlePending(text)) return;
-    const threadsUrl = findThreadsUrl(text);
-    if (threadsUrl) {
-      await this.handleThreadsLink(threadsUrl);
+    // Ответ на черновик со ссылкой — это цифры или правка поста, а не новый пример.
+    const link = message.reply_to_message ? null : findLink(text);
+    if (link) {
+      await this.handleLink(link.url, link.rest);
       return;
     }
     await this.handleTalk(message, text);
   }
 
-  private async handlePhoto(fileId: string): Promise<void> {
+  private async handlePhoto(fileId: string, topic: string): Promise<void> {
     const { telegram, chatId, agent } = this.deps;
     await this.exclusive(async () => {
       await telegram.send(chatId, 'Читаю снимок…');
@@ -214,10 +231,7 @@ export class SmmBot {
         await telegram.send(chatId, 'Не смог прочитать снимок. Пришлите текст поста сообщением.');
         return;
       }
-      await this.deliver(
-        await agent.fromPattern(seen, 'screenshot'),
-        'Модели не ответили, пришлите снимок ещё раз.',
-      );
+      await this.deliverExample({ title: null, author: null, text: seen }, topic);
     });
   }
 
@@ -225,6 +239,11 @@ export class SmmBot {
     const { telegram, chatId, agent } = this.deps;
     if (/^\/(start|help)/.test(text)) {
       await telegram.send(chatId, `${HELP}\n\nchat id: ${chatId}`);
+      return true;
+    }
+    const own = /^\/(мой|mine)(?:\s+|$)([\s\S]*)$/iu.exec(text);
+    if (own) {
+      await this.handleOwnPost(own[2]!.trim());
       return true;
     }
     if (!/^\/(post|пост)\b/i.test(text)) return false;
@@ -263,21 +282,36 @@ export class SmmBot {
     return false;
   }
 
-  private async handleThreadsLink(url: string): Promise<void> {
-    const { telegram, chatId, agent } = this.deps;
+  private async handleOwnPost(text: string): Promise<void> {
+    const { telegram, chatId, store, agent } = this.deps;
+    if (text.length < 20) {
+      await telegram.send(chatId, 'Пришлите после /мой полный текст вашего поста.');
+      return;
+    }
+    const post = agent.saveOwnerPost(text);
+    const messageId = await telegram.send(
+      chatId,
+      `Сохранил ваш пост #${post.id}. Пришлите ответом на это сообщение его цифры: просмотры, переходы.`,
+    );
+    if (messageId !== null) store.setState(`${MESSAGE_POST_PREFIX}${messageId}`, String(post.id));
+  }
+
+  /** Любая ссылка: читаем страницу; не прочитали — честно говорим и просим снимок, модель не зовем. */
+  private async handleLink(url: string, topic: string): Promise<void> {
+    const { telegram, chatId } = this.deps;
     await this.exclusive(async () => {
-      const external = await fetchThreadsPost(url);
-      if (!external) {
-        await telegram.send(
-          chatId,
-          'Threads не отдал текст по ссылке (пост закрыт или удалён). Пришлите снимок экрана.',
-        );
+      await telegram.send(chatId, 'Читаю ссылку…');
+      const read = await readLink(url, this.deps.links);
+      this.deps.log('smm-link-read', {
+        kind: read.kind,
+        ok: read.ok,
+        ...(read.ok ? {} : { reason: read.reason }),
+      });
+      if (!read.ok) {
+        await telegram.send(chatId, refusalText(read));
         return;
       }
-      await this.deliver(
-        await agent.fromPattern(external, 'threads_link'),
-        'Модели не ответили, пришлите ссылку ещё раз.',
-      );
+      await this.deliverExample(read.page, topic);
     });
   }
 

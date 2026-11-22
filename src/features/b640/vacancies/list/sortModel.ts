@@ -25,6 +25,21 @@ const DESC_FIRST: readonly SortKey[] = ['money', 'fit', 'date'];
 /** Порядок сервера: совпадение по убыванию. */
 export const SERVER_SORT: SortState = { key: 'fit', dir: 'desc' };
 
+/** Порядок подборки s07 по умолчанию, как в макете: «Дата», сначала новые. */
+export const DEFAULT_LIST_SORT: SortState = { key: 'date', dir: 'desc' };
+
+/**
+ * Порядок столбца за подборку, прочитанную не целиком, отдаёт сервер. Пока читается первая порция
+ * или чтение сорвалось, строки показываем из пула: второго запроса порции до этого не шлём.
+ */
+export function serverSortApplies(pool: {
+  readonly complete: boolean;
+  readonly loading: boolean;
+  readonly failed: boolean;
+}): boolean {
+  return !pool.complete && !pool.loading && !pool.failed;
+}
+
 /** Первое нажатие — естественное направление столбца, повторное — обратное. */
 export function nextSort(current: SortState | null, key: SortKey): SortState {
   if (current?.key === key) return { key, dir: current.dir === 'asc' ? 'desc' : 'asc' };

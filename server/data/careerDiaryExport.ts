@@ -11,6 +11,7 @@ import { SqliteDiaryCheckpointRepository } from './sqliteDiaryCheckpointReposito
 import { SqliteDiaryDetailsRepository } from './sqliteDiaryDetailsRepository';
 import { SqliteDiaryPeopleRepository } from './sqliteDiaryPeopleRepository';
 import { SqliteKpiImportRepository } from './sqliteKpiImportRepository';
+import { whenTableExists } from './exportTableReader';
 
 type DetailsExport = ReturnType<SqliteDiaryDetailsRepository['exportAll']>;
 
@@ -41,33 +42,6 @@ export interface CareerDiaryExportSources {
   readonly checkpoints: Pick<SqliteDiaryCheckpointRepository, 'exportAll'>;
   readonly people: Pick<SqliteDiaryPeopleRepository, 'exportAll'>;
   readonly kpiImports: Pick<SqliteKpiImportRepository, 'exportAll'>;
-}
-
-function tableExists(database: DatabaseSync, table: string): boolean {
-  return (
-    database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
-    undefined
-  );
-}
-
-/**
- * Читатель таблицы, которую создаёт маршрут дневника под флагом B640. Пока таблицы нет,
- * выгрузка отдаёт пусто и схему не трогает; репозиторий открывается на соединении хранилища
- * при первой выгрузке после появления таблицы.
- */
-function whenTableExists<Repository, Result>(
-  database: DatabaseSync,
-  table: string,
-  open: () => Repository,
-  read: (repository: Repository, candidateId: string) => Result,
-  empty: () => Result,
-): (candidateId: string) => Result {
-  let repository: Repository | undefined;
-  return (candidateId) => {
-    if (!repository && !tableExists(database, table)) return empty();
-    repository ??= open();
-    return read(repository, candidateId);
-  };
 }
 
 /**

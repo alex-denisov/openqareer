@@ -64,25 +64,28 @@ describe('счётчик и чипы', () => {
 describe('фильтрация по загруженным строкам', () => {
   const items = [
     makeItem({ id: 'a', location: 'Москва', salary: { from: 500_000, to: 600_000, currency: 'RUR' } }),
-    makeItem({ id: 'b', location: 'Казань', remote: true, relocation: true, observedAt: '2026-10-01T09:00:00Z' }),
+    makeItem({ id: 'b', location: 'Казань', salary: { from: 100_000, to: 200_000, currency: 'RUR' }, remote: true, relocation: true, observedAt: '2026-10-01T09:00:00Z' }),
     makeItem({ id: 'c', location: 'Москва', observedAt: '2026-11-11T08:00:00Z' }),
   ];
+  // Rows with a salary only: a vacancy without one passes «Деньги от X» and blocks nothing.
+  const salaried = items.filter((item) => item.cluster.id !== 'c');
 
   it('локации, дата, релокация, деньги', () => {
     expect(applyFilters(items, { ...EMPTY_FILTERS, locations: ['Казань'] }, context)).toHaveLength(1);
     expect(applyFilters(items, { ...EMPTY_FILTERS, locations: ['Удалённо'] }, context)).toHaveLength(1);
     expect(applyFilters(items, { ...EMPTY_FILTERS, date: 'today' }, context).map((i) => i.cluster.id)).toEqual(['c']);
     expect(applyFilters(items, { ...EMPTY_FILTERS, reloc: true }, context)).toHaveLength(1);
-    expect(applyFilters(items, { ...EMPTY_FILTERS, moneyFrom: 400 }, context).map((i) => i.cluster.id)).toEqual(['a']);
+    // B645 s07: без зарплаты вакансия остаётся под «Деньги от X» с пометкой «не указана», как в макете.
+    expect(applyFilters(items, { ...EMPTY_FILTERS, moneyFrom: 400 }, context).map((i) => i.cluster.id)).toEqual(['a', 'c']);
   });
 
   it('мешающие фильтры: тот, без которого что-то нашлось бы', () => {
     const filters = { ...EMPTY_FILTERS, locations: ['Казань'], moneyFrom: 400 };
-    expect(applyFilters(items, filters, context)).toHaveLength(0);
-    const kinds = blockersOf(items, filters, context).map((entry) => entry.kind);
+    expect(applyFilters(salaried, filters, context)).toHaveLength(0);
+    const kinds = blockersOf(salaried, filters, context).map((entry) => entry.kind);
     expect(kinds).toEqual(['locations', 'money']);
     const onlyMoney = { ...EMPTY_FILTERS, locations: ['Москва'], moneyFrom: 9000 };
-    expect(blockersOf(items, onlyMoney, context).map((entry) => entry.kind)).toEqual(['money']);
+    expect(blockersOf(salaried, onlyMoney, context).map((entry) => entry.kind)).toEqual(['money']);
   });
 });
 

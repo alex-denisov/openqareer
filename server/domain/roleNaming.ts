@@ -28,7 +28,7 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 3;
+export const ROLE_NAMING_PROMPT_VERSION = 4;
 
 export function roleNamingInstructions(language: RoleNameLanguage): string {
   return [
@@ -50,6 +50,9 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
         ]
       : ['Названия ролей давай по-английски — так, как их пишут в вакансиях.']),
     'Каждая роль — короткое название должности (до 60 символов).',
+    'Для каждой роли дай titleRu — как эту должность пишут в русских вакансиях;',
+    'аббревиатуры из названия (COO, CTO, AI, IT) сохрани. Если title уже по-русски,',
+    'повтори его в titleRu.',
     'Название компании, продукта, подразделения или бренда из фактов — не роль:',
     'работодатель кандидата никогда не становится названием должности.',
     'Для каждой роли объясни в одном предложении, что именно в фактах кандидата',
@@ -62,9 +65,9 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
     'слова «подходит», «не подходит», «уровень», «балл».',
     'Порядок ролей не важен: его определяет не ты.',
     'Формат ответа — ровно такой:',
-    '{"roles":[{"title":"Product Manager","reason":"девять лет вёл внутренние продукты",',
-    '"evidenceRefs":["memory:1"]}]}',
-    'Имена полей именно эти: title, reason, evidenceRefs.',
+    '{"roles":[{"title":"Product Manager","titleRu":"Продакт-менеджер",',
+    '"reason":"девять лет вёл внутренние продукты","evidenceRefs":["memory:1"]}]}',
+    'Имена полей именно эти: title, titleRu, reason, evidenceRefs.',
   ].join(' ');
 }
 
@@ -75,20 +78,46 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
  * чем терять названную роль из-за буквы; смысл при этом не размывается — поля
  * ровно те же три, и любое лишнее отбрасывается.
  */
+const CYRILLIC = /[а-яё]/iu;
+const TITLE_RU_MAX = 80;
+/** «ИТ» в русском названии — та же аббревиатура, что «IT». */
+const CYRILLIC_ABBREVIATIONS: Readonly<Record<string, string>> = { IT: 'ИТ' };
+
+/**
+ * B748: русское название роли от модели берётся, только если оно правда русское,
+ * короткое и не потеряло аббревиатур исходного (COO, AI): иначе показываем исходное.
+ */
+export function checkedTitleRu(title: string, titleRu: string | undefined): string | null {
+  const text = titleRu?.trim() ?? '';
+  if (!text || text.length > TITLE_RU_MAX || !CYRILLIC.test(text) || CYRILLIC.test(title))
+    return null;
+  const abbreviations = title.match(/\b[A-Z]{2,5}\b/gu) ?? [];
+  const kept = abbreviations.every(
+    (abbr) => text.includes(abbr) || text.includes(CYRILLIC_ABBREVIATIONS[abbr] ?? abbr),
+  );
+  return kept ? text : null;
+}
+
 const namedRoleSchema = z
   .object({
     title: z.string().trim().min(2).max(60).optional(),
+    titleRu: z.string().max(200).optional(),
     role: z.string().trim().min(2).max(60).optional(),
     reason: z.string().trim().min(1).max(400).optional(),
     explanation: z.string().trim().min(1).max(400).optional(),
     evidenceRefs: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
     refs: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
   })
-  .transform((value) => ({
-    title: value.title ?? value.role ?? '',
-    reason: value.reason ?? value.explanation ?? '',
-    evidenceRefs: value.evidenceRefs ?? value.refs ?? [],
-  }))
+  .transform((value) => {
+    const title = value.title ?? value.role ?? '';
+    const titleRu = checkedTitleRu(title, value.titleRu);
+    return {
+      title,
+      ...(titleRu ? { titleRu } : {}),
+      reason: value.reason ?? value.explanation ?? '',
+      evidenceRefs: value.evidenceRefs ?? value.refs ?? [],
+    };
+  })
   .refine((value) => value.title.length >= 2 && value.reason.length >= 1);
 
 export const roleNamingSchema = z
@@ -109,9 +138,10 @@ export const ROLE_NAMING_JSON_SCHEMA = {
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['title', 'reason', 'evidenceRefs'],
+          required: ['title', 'titleRu', 'reason', 'evidenceRefs'],
           properties: {
             title: { type: 'string' },
+            titleRu: { type: 'string' },
             reason: { type: 'string' },
             evidenceRefs: { type: 'array', items: { type: 'string' } },
           },

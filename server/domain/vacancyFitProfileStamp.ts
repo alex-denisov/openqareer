@@ -61,8 +61,9 @@ function conditionsOf(workspace: ReturnType<ProfileReader['getCandidateWorkspace
         campaign: campaign
           // Названия ролей в новом отпечатке нет: роль сверяют ворота role и level, а переименование
           // ролей моделью пересчитывало все проценты (29.10: Киров 100 % → 25 %).
+          // Русский перевод роли (B748) — только показ, в отпечаток не входит.
           ? withRoles
-            ? { roles: campaign.roles, regions: campaign.regions, remoteOnly: campaign.remoteOnly ?? false, careerRoles: campaign.careerRoles ?? [] }
+            ? { roles: campaign.roles, regions: campaign.regions, remoteOnly: campaign.remoteOnly ?? false, careerRoles: (campaign.careerRoles ?? []).map(({ id, title }) => ({ id, title })) }
             : { regions: campaign.regions, remoteOnly: campaign.remoteOnly ?? false }
           : null,
       }

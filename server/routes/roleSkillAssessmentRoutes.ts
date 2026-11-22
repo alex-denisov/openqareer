@@ -24,7 +24,7 @@ import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
-import { withRussianSkillNames } from './roleSkillNamesStep';
+import { russianSkillNames, withRussianSkillNames } from './roleSkillNamesStep';
 import {
   createRoleRequirementReader,
   type RoleRequirementReader,
@@ -244,9 +244,9 @@ async function handleCheckedRoles(deps: RouteDeps, request: FastifyRequest, repl
     .map((run) => ({
       roleTitle: run.roleTitle,
       completedAt: run.completedAt,
-      confirmedSkills: run.skills
-        .filter((skill) => skill.grade === 'confirmed')
-        .map((skill) => skill.name),
+      confirmedSkills: russianSkillNames(
+        run.skills.filter((skill) => skill.grade === 'confirmed').map((skill) => skill.name),
+      ),
     }));
   return reply.send({ data: checked });
 }

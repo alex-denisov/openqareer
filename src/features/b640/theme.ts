@@ -70,14 +70,38 @@ export function useB640Theme(readServerTheme?: () => Promise<B640Theme | null>):
  * темы нового кабинета, пока он открыт. Стиль ставится через CSSOM: атрибут
  * `style` в разметке запрещён политикой страницы.
  */
+/**
+ * Цвет в виде, который понимает `theme-color` любого браузера: точка на холсте
+ * переводит oklch в rgb; без холста (тесты, старые движки) — как есть.
+ */
+function barColor(color: string): string {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return color;
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+    return `rgb(${red}, ${green}, ${blue})`;
+  } catch {
+    return color;
+  }
+}
+
 export function useDocumentTheme(root: HTMLElement | null, theme: B640Theme): void {
   useEffect(() => {
     if (!root) return undefined;
     const page = document.documentElement;
+    // Полоса браузера на телефоне (index.html задаёт тёмную) — по действующей теме кабинета.
+    const bar = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const barBefore = bar?.content ?? null;
     const apply = () => {
       const styles = window.getComputedStyle(root);
       page.style.backgroundColor = styles.backgroundColor;
       page.style.colorScheme = styles.colorScheme;
+      if (bar && styles.backgroundColor) bar.content = barColor(styles.backgroundColor);
     };
     apply();
     const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -86,6 +110,7 @@ export function useDocumentTheme(root: HTMLElement | null, theme: B640Theme): vo
       media.removeEventListener('change', apply);
       page.style.removeProperty('background-color');
       page.style.removeProperty('color-scheme');
+      if (bar && barBefore !== null) bar.content = barBefore;
     };
   }, [root, theme]);
 }

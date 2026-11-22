@@ -90,10 +90,10 @@ export function campaignMeta(campaign: CampaignResolution) {
   return {
     roles: { value: [...campaign.roles.value], origin: campaign.roles.origin },
     /** B737: русское название роли поиска; ключом остаётся `roles.value`. */
-    titlesRu: roleTitlesRu([
-      ...campaign.roles.value,
-      ...campaign.autoRoles.map((role) => role.title),
-    ]),
+    titlesRu: roleTitlesRu(
+      [...campaign.roles.value, ...campaign.autoRoles.map((role) => role.title)],
+      campaign.ownTitlesRu,
+    ),
     regions: {
       value: campaign.regions.origin === 'profile' ? [] : [...campaign.regions.value],
       origin: campaign.regions.origin === 'profile' ? 'default' : campaign.regions.origin,

@@ -27,15 +27,32 @@ function buildIndex(): ReadonlyMap<string, string> {
 
 const INDEX = buildIndex();
 
-export function roleTitleRu(title: string): string {
-  return INDEX.get(keyOf(title)) ?? title;
+/** Проверенные русские названия ролей одного кандидата: название → перевод. */
+export type OwnTitlesRu = Readonly<Record<string, string>>;
+
+function ownTitleRu(own: OwnTitlesRu, key: string): string | undefined {
+  for (const [title, titleRu] of Object.entries(own)) if (keyOf(title) === key) return titleRu;
+  return undefined;
+}
+
+/**
+ * B748: роли, придуманные моделью, в онтологии нет. Их проверенный русский перевод
+ * хранится у ролей самого кандидата и приходит сюда аргументом: вывод модели по
+ * одному профилю не становится названием роли для других. Онтология важнее.
+ */
+export function roleTitleRu(title: string, own: OwnTitlesRu = {}): string {
+  const key = keyOf(title);
+  return INDEX.get(key) ?? ownTitleRu(own, key) ?? title;
 }
 
 /** Только названия, у которых есть русское: клиент показывает `titlesRu[title] ?? title`. */
-export function roleTitlesRu(titles: readonly string[]): Record<string, string> {
+export function roleTitlesRu(
+  titles: readonly string[],
+  own: OwnTitlesRu = {},
+): Record<string, string> {
   return Object.fromEntries(
     titles
-      .map((title) => [title, roleTitleRu(title)] as const)
+      .map((title) => [title, roleTitleRu(title, own)] as const)
       .filter(([title, ru]) => ru !== title),
   );
 }

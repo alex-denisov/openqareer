@@ -46,3 +46,13 @@ export async function withRussianSkillNames(
   const model = await translatedByModel(deps, reply, rest);
   return withSkillNames(run, new Map([...model, ...dictionary]));
 }
+
+/**
+ * B747: проверки до B734 хранят английские названия («Cross-functional leadership»),
+ * и «Карьера» показывала их рядом с русскими требованиями. Чтение переводит словарём
+ * без вызова модели и сливает повторы («Team leadership» — тоже «Управление командой»).
+ */
+export function russianSkillNames(names: readonly string[]): string[] {
+  const dictionary = russianNamesFromDictionary(names);
+  return [...new Set(names.map((name) => dictionary.get(name) ?? name))];
+}
