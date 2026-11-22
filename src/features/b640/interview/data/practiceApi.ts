@@ -12,7 +12,8 @@ import {
   type InterviewAnswerMode,
   type InterviewSessionView,
 } from '../../../interview/interviewSimulatorApi';
-import { fetchTariffQuotas, type TariffQuotaStatus } from '../../../tariffs/tariffQuotaApi';
+import type { TariffQuotaStatus } from '../../../tariffs/tariffQuotaApi';
+import { trainingQuota } from './trainingQuota';
 import { practiceChoice, type ReviewEvaluation, type SchemaToSave } from '../model/practiceModel';
 import { findResponse } from './prepApi';
 
@@ -60,23 +61,12 @@ export function practiceTask(response: ApplicationView): PracticeTask {
   return task;
 }
 
-async function quotaOf(): Promise<TariffQuotaStatus | null> {
-  try {
-    const summary = await fetchTariffQuotas();
-    if (summary.unlimited) return null;
-    return summary.quotas.find((quota) => quota.key === 'interview_trainings') ?? null;
-  } catch {
-    // Счётчик — подсказка у «Начать»: без него экран работает.
-    return null;
-  }
-}
-
 /** Тренировка System Design по отклику: продолжить начатую или показать задачу. */
 export async function loadPractice(responseId: string, signal: AbortSignal): Promise<PracticeLoad> {
   const response = await findResponse(responseId, signal);
   if (!response) return { kind: 'none' };
   const task = practiceTask(response);
-  const [current, quota] = await Promise.all([getCurrentInterviewSession(signal), quotaOf()]);
+  const [current, quota] = await Promise.all([getCurrentInterviewSession(signal), trainingQuota()]);
   const choice = practiceChoice(current, response.id);
   if (current && choice === 'other') return { kind: 'other', response, task, session: current };
   const kept = choice === 'resume' || choice === 'review' ? current : null;
