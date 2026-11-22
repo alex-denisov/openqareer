@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { vacancySourceLabel } from '../../../../../shared/vacancySourceLabel';
-import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
 import { acquaintancesOf, friendOf, pathLine, writeLabel } from './acquaintances';
 import { AcquaintBlock } from './AcquaintBlock';
 import { ActBar } from './ActBar';
+import { companyNodePath } from '../companyPath';
 import './card.css';
 import { CompanyBlock } from './CompanyBlock';
 import { ComposeView } from './ComposeView';
@@ -53,7 +53,8 @@ interface RightColumnProps {
   readonly item: LoadedItem;
   readonly data: CardData;
   readonly ways: readonly ApplyWay[];
-  readonly companyPath: string;
+  /** `null` — у вакансии нет компании: ссылки на её карточку нет. */
+  readonly companyPath: string | null;
 }
 
 /** Правая колонка: Деньги → О компании → Знакомые → Письмо и резюме. */
@@ -113,7 +114,8 @@ interface CardBodyProps {
   readonly vacancyId: string;
   readonly item: LoadedItem;
   readonly data: CardData;
-  readonly companyPath: string;
+  /** `null` — у вакансии нет компании: ссылки на её карточку нет. */
+  readonly companyPath: string | null;
   readonly onCompose: (action: ComposeAction) => void;
 }
 
@@ -204,7 +206,7 @@ interface LoadedCardProps {
 function LoadedCard({ vacancyId, item, data }: LoadedCardProps) {
   const [compose, setCompose] = useState<ComposeAction | null>(null);
   const company = item.cluster.canonicalCompany;
-  const companyPath = buildNodePath('v10b', { companyId: companyLookupKey(company) || company });
+  const companyPath = companyNodePath(company);
   const back = () => setCompose(null);
   return (
     <>

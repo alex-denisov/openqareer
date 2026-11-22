@@ -2,13 +2,12 @@ import { useEffect, useId, useState } from 'react';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
-import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { BarPart } from '../Bar';
 import { moneyView } from '../format';
-import type { RowEnv } from './VacancyRow';
+import { CompanyName, type RowEnv } from './VacancyRow';
 
 function SourceTip({ label, text }: { label: string; text: string }) {
   const id = useId();
@@ -140,9 +139,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
           <p className="vs-co">
             <Icon name="building" />
             <span>
-              <Link className="vt-co" to={buildNodePath('v10b', { companyId: companyLookupKey(company) })}>
-                {company}
-              </Link>
+              <CompanyName name={company} />
               {industry ? <> · <span className="vs-co-t">{industry}</span></> : null}
             </span>
           </p>

@@ -10,6 +10,7 @@ import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
 import { cardRisk } from '../domain/careerDiaryCardRisk';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -377,6 +378,32 @@ describe('B684: цель с показателями под флагом', () =>
       targetValue: 9,
       indicators: [],
       details: { setBy: 'self', agreedOn: null, weight: null, archive: null, quarterTargets: null },
+    });
+  });
+
+  it('детали, сохранённые до кварталов и переноса, читают их как null', async () => {
+    const { app, sessions, databasePath } = await setup();
+    const goal = await legacyGoal(app, flagged, 'Встречи один на один');
+    const stored = new SqliteDiaryDetailsRepository({
+      databasePath,
+      encryptionKey: baseConfig.dataEncryptionKey,
+    });
+    // Запись прежнего вида: полей quarterTargets и transfer в ней нет.
+    stored.saveGoalDetail(sessions.get(flagged)!.candidate!.id, goal.id, {
+      setBy: 'manager',
+      agreedOn: null,
+      weight: 30,
+      archive: null,
+    } as never);
+    stored.close();
+    const [item] = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data.items;
+    expect(item.details).toEqual({
+      setBy: 'manager',
+      agreedOn: null,
+      weight: 30,
+      archive: null,
+      quarterTargets: null,
+      transfer: null,
     });
   });
 

@@ -17,7 +17,7 @@ type UploadPhase =
 const megabytes = (bytes: number) =>
   `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(bytes / 1_048_576)}\u00a0МБ`;
 
-function useUpload(data: DebriefData) {
+function useUpload(data: DebriefData, onSent: () => void) {
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<UploadPhase>({ kind: 'idle' });
   async function send(next: File) {
@@ -32,6 +32,7 @@ function useUpload(data: DebriefData) {
         (sent, total) => setPhase({ kind: 'sending', percent: Math.round((sent / total) * 100) }),
       );
       setPhase({ kind: 'sent', durationMs: result.durationMs });
+      onSent();
     } catch (error) {
       setPhase({ kind: 'failed', error: uploadErrorText(error) });
     }
@@ -147,8 +148,15 @@ function Interviewer({ data }: { readonly data: DebriefData }) {
   );
 }
 
-function UploadBody({ data }: { readonly data: DebriefData }) {
-  const upload = useUpload(data);
+/** Заголовок по фазе загрузки: при сбое — снова «Загрузите запись интервью». */
+function uploadTitle(phase: UploadPhase, hasFile: boolean): string {
+  if (phase.kind === 'sending') return 'Загружаем запись…';
+  if (phase.kind === 'failed' || !hasFile) return 'Загрузите запись интервью';
+  return 'Запись загружена';
+}
+
+function UploadBody({ data, onSent }: { readonly data: DebriefData; readonly onSent: () => void }) {
+  const upload = useUpload(data, onSent);
   if (!data.debrief) {
     return <StatusLine state="wait" text="Интервью по этому отклику ещё не записано." />;
   }
@@ -158,7 +166,7 @@ function UploadBody({ data }: { readonly data: DebriefData }) {
       <div className="col">
         <section className="lead" aria-labelledby="ic-t">
           <h2 className="lead-title is-long" id="ic-t">
-            {upload.file ? 'Запись загружена' : 'Загрузите запись интервью'}
+            {uploadTitle(upload.phase, Boolean(upload.file))}
           </h2>
           {upload.file ? (
             <FileRow
@@ -190,17 +198,20 @@ function UploadBody({ data }: { readonly data: DebriefData }) {
   );
 }
 
-/** «Загрузка записи» (I4c): файл без деления голосов, имя собеседника. */
+/** «Загрузка записи» (I4c): файл без деления голосов (редакция 1.3), имя собеседника. */
 export function UploadScreen({ responseId }: { readonly responseId: string }) {
   const load = useCallback((signal: AbortSignal) => loadDebrief(responseId, signal), [responseId]);
   const { state } = useAsync(load, 'Загрузка не открылась.');
   const data = state.data;
+  // «Запись или файл» — текущий шаг, пока файла нет; после загрузки он с галочкой.
+  const [sent, setSent] = useState(false);
+  const step = sent || data?.debrief?.recording ? 'voices' : 'source';
   return (
     <>
-      <RecordSteps responseId={data?.response.id ?? responseId} current="voices" />
+      <RecordSteps responseId={data?.response.id ?? responseId} current={step} />
       <div className="page two" data-b640-node="i04c" data-b640-section="interview">
         {data ? <SourceHead data={data} /> : null}
-        {data ? <UploadBody data={data} /> : null}
+        {data ? <UploadBody data={data} onSent={() => setSent(true)} /> : null}
         {state.status === 'error' && !data ? <StatusLine state="err" text={state.error} /> : null}
       </div>
     </>

@@ -6,6 +6,7 @@ export interface AdaptationCalls {
   readonly details: unknown[];
   readonly people: Array<{ method: string; path: string; body: unknown }>;
   readonly checks: Array<{ method: string; body: unknown }>;
+  readonly transfers: Array<{ goalId: string; body: unknown }>;
 }
 
 const START = '2026-12-01';
@@ -299,6 +300,45 @@ export const RESULTS = {
     'За 90 дней 2 из 3 целей достигнуто, 1 в работе. Прошу зафиксировать критерии итоговой оценки и обсудить ожидания на следующий квартал.',
 };
 
+const goalCard = (id: string, title: string, unit: string, from: number, to: number) => ({
+  id,
+  title,
+  unit: '',
+  baselineValue: null,
+  targetValue: 0,
+  risk: { status: 'achieved', rule: 'target_reached', explanation: '' },
+  details: { setBy: 'manager', agreedOn: null, weight: null, archive: null, transfer: null },
+  indicators: [
+    {
+      id: `${id}-i`,
+      title,
+      unit,
+      baselineValue: from,
+      targetValue: to,
+      latestMeasurement: { id: 'm', goalId: `${id}-i`, value: to, measuredAt: '2027-01-10' },
+    },
+  ],
+});
+/** Достигнутые цели итогов: строки результата для «Добавить в профиль». */
+const GOAL_CARDS = [
+  goalCard('g1', 'Срок релиза', 'дней', 14, 5),
+  goalCard('g2', 'Нанять 2 разработчиков', 'чел.', 0, 2),
+];
+
+function handleTransfer(route: Route, calls: AdaptationCalls, path: string, body: unknown) {
+  const goalId = path.split('/')[2] ?? '';
+  calls.transfers.push({ goalId, body });
+  const card = GOAL_CARDS.find((item) => item.id === goalId) ?? GOAL_CARDS[0]!;
+  const transfer = {
+    experienceId: 'e1',
+    memoryId: `m-${goalId}`,
+    transferredAt: '2027-03-01T09:00:00.000Z',
+  };
+  return route.fulfill({
+    json: { data: { ...card, details: { ...card.details, transfer } } },
+  });
+}
+
 function handle(route: Route, calls: AdaptationCalls) {
   const request = route.request();
   const method = request.method();
@@ -325,6 +365,10 @@ function handle(route: Route, calls: AdaptationCalls) {
     const sentOn = method === 'PUT' ? (body as { sentOn: string }).sentOn : null;
     return route.fulfill({ json: { data: { ...CHECK, sentOn } } });
   }
+  if (path === '/goal-cards' && method === 'GET')
+    return route.fulfill({ json: { data: { items: GOAL_CARDS, archived: [] } } });
+  if (/^\/goal-cards\/[^/]+\/transfer$/u.test(path) && method === 'POST')
+    return handleTransfer(route, calls, path, body);
   if (path === '/workplaces/w1/results-90') return route.fulfill({ json: { data: RESULTS } });
   if (path.startsWith('/workplaces/w1/people')) {
     if (method !== 'GET') calls.people.push({ method, path, body });
@@ -334,7 +378,7 @@ function handle(route: Route, calls: AdaptationCalls) {
 }
 
 export async function mockAdaptation(page: Page): Promise<AdaptationCalls> {
-  const calls: AdaptationCalls = { plans: [], details: [], people: [], checks: [] };
+  const calls: AdaptationCalls = { plans: [], details: [], people: [], checks: [], transfers: [] };
   await page.route('**/api/v1/candidate/career-diary**', (route) => handle(route, calls));
   return calls;
 }
