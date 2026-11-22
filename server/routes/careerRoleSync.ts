@@ -89,6 +89,26 @@ function withinExperience(
 }
 
 /**
+ * B748: проверенный перевод роли хранится у кандидата. Если новое называние его
+ * не дало (модель ответила без кириллицы), остаётся сохранённый — иначе роль
+ * снова показалась бы по-английски.
+ */
+export function withStoredTitlesRu(
+  campaign: { readonly careerRoles?: readonly CareerRoleRef[] } | undefined,
+  roles: readonly ProposedRole[],
+): ProposedRole[] {
+  const stored = new Map(
+    (campaign?.careerRoles ?? []).flatMap((role) =>
+      role.titleRu ? [[role.id, role.titleRu] as const] : [],
+    ),
+  );
+  return roles.map((role) => {
+    const titleRu = role.titleRu ?? stored.get(role.id);
+    return titleRu && titleRu !== role.titleRu ? { ...role, titleRu } : role;
+  });
+}
+
+/**
  * Запоминает роли, которые кандидат видит на «Карьере», чтобы подбор
  * «Вакансий» шёл по ним же: что на экране, то и в подборе. Роли рынка тоже
  * идут в подбор — на проде модель называния часто молчит, и все пять ролей

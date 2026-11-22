@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ProposedRole } from '../../shared/roleProposals';
 import { careerRoleId } from '../../shared/roleProposals';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
-import { careerRolesWithCandidateChoices, persistCareerRoles } from './careerRoleSync';
+import { careerRolesWithCandidateChoices, persistCareerRoles, withStoredTitlesRu } from './careerRoleSync';
 import type { RoleContext } from './vacancyRoleContext';
 
 function role(title: string, origin: ProposedRole['origin'] = 'model'): ProposedRole {
@@ -71,6 +71,19 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
     expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toEqual([
       { id: careerRoleId('Head of Quantum Ops'), title: 'Head of Quantum Ops', titleRu: 'Руководитель квантовых операций' },
     ]);
+  });
+
+  it('B748: сохранённый перевод остаётся, если новое называние его не дало', () => {
+    const stored = { id: careerRoleId('AI Consultant'), title: 'AI Consultant', titleRu: 'AI-консультант' };
+    const store = fakeStore({ campaign: { ...campaign, careerRoles: [stored] } });
+    const shown = withStoredTitlesRu(store.getCandidateWorkspace()?.campaign, [role('AI Consultant')]);
+    expect(shown[0]?.titleRu).toBe('AI-консультант');
+    expect(persistCareerRoles({ candidateStore: store as never }, 'c1', shown)).toBe(false);
+    expect(store.saveCandidateWorkspace).not.toHaveBeenCalled();
+    const fresh = { ...role('AI Consultant'), titleRu: 'Консультант по ИИ' };
+    expect(withStoredTitlesRu(store.getCandidateWorkspace()?.campaign, [fresh])[0]?.titleRu).toBe(
+      'Консультант по ИИ',
+    );
   });
 
   it('показывает на «Карьере» роль из мастера, которой нет среди названных', () => {
