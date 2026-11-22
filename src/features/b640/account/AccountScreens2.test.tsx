@@ -332,7 +332,7 @@ describe('n05 «Согласия и данные»', () => {
     expect(input().checked).toBe(true);
     const dialog = () => document.querySelector('.pf-dialog[role=dialog]') as HTMLElement | null;
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Отозвать согласие на цифровой след?');
-    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые находки удалятся.');
+    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые проверки и находки удалятся.');
     click(button(dialog()!, 'Отмена'));
     await settle();
     expect(dialog()).toBeNull();
