@@ -1,7 +1,6 @@
 import { getCurrencyRates } from '../currency/cbrRates';
-import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
-import { dateFacet } from '../../shared/listFilterFacets';
-import { careerTimeZone, startOfDayIn } from './careerRoleCounts';
+import { careerTimeZone } from './careerRoleCounts';
+import { matchedFacetsResponse, readMatchedPart, withFilteredDates, type MatchedPart } from './matchedVacancyPart';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readSortedFilters } from './matchedVacancySort';
@@ -343,7 +342,9 @@ function matchedVacancyResponse(
   targetLevel: ReturnType<typeof readTargetLevel>,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
   timeZone = 'UTC',
+  part: MatchedPart = 'all',
 ) {
+  const facets = part === 'all' ? response.facets : undefined;
   return {
     data: response.data,
     meta: {
@@ -356,25 +357,9 @@ function matchedVacancyResponse(
       // B725: 25 КБ кампании на каждой из 154 страниц; клиент читает её только с первой.
       ...(response.page.offset === 0 ? { campaign: campaignMeta(response.campaignWithHypotheses) } : {}),
       candidateLevel: targetLevel ?? null,
-      ...(response.facets
-        ? { facets: withFilteredDates(response.facets, response.filteredObserved, timeZone) }
-        : {}),
+      ...(facets ? { facets: withFilteredDates(facets, response.filteredObserved, timeZone) } : {}),
     },
   };
-}
-
-/**
- * B729: числа периодов «Даты» по всей выдаче. Граница дня — по поясу кандидата и на момент
- * ответа, поэтому они не хранятся со списком, а считаются здесь из моментов появления строк.
- */
-function withFilteredDates(
-  facets: MatchedVacancyFacets,
-  observed: readonly number[] | undefined,
-  timeZone: string,
-): MatchedVacancyFacets {
-  if (!facets.filtered || !observed) return facets;
-  const dates = dateFacet(observed, startOfDayIn(new Date(), timeZone));
-  return { ...facets, filtered: { ...facets.filtered, dates } };
 }
 
 /** B546: the page carries the estimate the maintenance process computed. */
@@ -438,6 +423,7 @@ interface SealedRead {
   readonly campaign: ReturnType<typeof readCampaign>;
   readonly sort: VacancySort;
   readonly lean: boolean;
+  readonly part: MatchedPart;
   readonly startTiming: {
     readonly mode: 'legacy' | 'semantic';
     readonly cold: boolean;
@@ -501,6 +487,8 @@ async function answerFromSealedList(
     // A row that does not open is a cold read, not a failed one.
     request.log.warn({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'matched-list-unseal-failed');
   }
+  const timeZone = careerTimeZone(request.query);
+  if (sealed && read.part === 'facets') return matchedFacetsResponse(sealed, request.id, timeZone);
   if (!sealed || !page) return undefined;
   const sealedReadMs = elapsedMs(startedAt);
   const response = await sealedResponse(deps, candidateId, sealed, page, targetLevel, read.lean);
@@ -510,7 +498,7 @@ async function answerFromSealedList(
   rebuildBehindSealedList(backgroundDeps, candidateId, request.query, request.log);
   const { mode, cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } = startTiming;
   logMatchedTiming(request, mode, cold, candidateCampaignMs, sealedReadMs, response, requestStartedAt, { beforeCampaignMs, sealedReadMs, sealedRows: sealed.total });
-  return matchedVacancyResponse(response, request.id, targetLevel, read.sort, careerTimeZone(request.query));
+  return matchedVacancyResponse(response, request.id, targetLevel, read.sort, timeZone, read.part);
 }
 
 /** B725: a B640 account reads this pool only from the new list; the old cabinet never shows it one. */
@@ -525,11 +513,11 @@ function readsLeanRows(
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
   const deps = withRequestScopedCandidateReads(backgroundDeps), requestStartedAt = performance.now();
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
-  const cold = !observedMatchEngines.has(multiSourceEngine);
+  const cold = !observedMatchEngines.has(multiSourceEngine), timeZone = careerTimeZone(request.query);
   observedMatchEngines.add(multiSourceEngine);
   const session = authenticateCandidateSession(request, reply, candidateStore, authService, config);
   if (!session) return undefined;
-  const { candidate } = session, lean = readsLeanRows(session, config);
+  const { candidate } = session, lean = readsLeanRows(session, config), part = readMatchedPart(request.query);
   const { filters, sort } = readSortedFilters(deps, candidate.id, request.query);
   const { offset } = filters;
   // B725: 74 тыс. источников досок — реестр на минуту, а не на каждую страницу.
@@ -547,7 +535,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   }
 
   const startTiming = { mode: config.matchMode ?? 'legacy', cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } as const;
-  const sealedAnswer = await answerFromSealedList(deps, backgroundDeps, { candidateId: candidate.id, filters, confirmedSkills, targetRoles, campaign, sort, lean, startTiming }, request);
+  const sealedAnswer = await answerFromSealedList(deps, backgroundDeps, { candidateId: candidate.id, filters, confirmedSkills, targetRoles, campaign, sort, lean, part, startTiming }, request);
   if (sealedAnswer) return sealedAnswer;
 
   const { targetLevel, fitLimit, order, ...setupSteps } = await prepareMatchedRead(deps, candidate.id, targetRoles, sort, request.log);
@@ -562,6 +550,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     request.log,
     fitLimit, lean,
   );
+  if (part === 'facets') return matchedFacetsResponse({ ...orderedPage, total: orderedPage.page.total }, request.id, timeZone);
   const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request, lean });
   logMatchedTiming(
     request,
@@ -574,7 +563,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     { beforeCampaignMs, ...setupSteps, ...readSteps, ...page.steps },
   );
 
-  return matchedVacancyResponse(page.response, request.id, targetLevel, sort, careerTimeZone(request.query));
+  return matchedVacancyResponse(page.response, request.id, targetLevel, sort, timeZone, part);
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {

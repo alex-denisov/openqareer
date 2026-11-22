@@ -110,9 +110,19 @@ export interface CoverLetterWriter {
  * 10.11: с выбором провайдера по задержке DeepSeek max 15,6 с на 20 письмах, а зависший провайдер
  * держал 25 с, пока GLM отвечала за 3 с. Срок 18 с: запас над замером, зависание уступает GLM раньше.
  */
-const DEEPSEEK_LETTER_STAGE_MS = 18_000;
-const GLM_LETTER_STAGE_MS = 15_000;
-const VERTEX_LETTER_STAGE_MS = 60_000;
+/**
+ * B730, 22.11: замер с прода — DeepSeek с рассуждением low на письме 35–64 с (одно рассуждение
+ * 5–8,6 тыс. токенов), а GLM отвечает за 2–8 с. Решение оркестратора: рассуждение остаётся
+ * (без него письмо перечисляет факты), ступень DeepSeek 8 с — дольше она уступает GLM.
+ */
+export const LETTER_STAGE_MS = {
+  deepseek: 8_000,
+  glm: 15_000,
+  vertex: 60_000,
+} as const;
+const DEEPSEEK_LETTER_STAGE_MS = LETTER_STAGE_MS.deepseek;
+const GLM_LETTER_STAGE_MS = LETTER_STAGE_MS.glm;
+const VERTEX_LETTER_STAGE_MS = LETTER_STAGE_MS.vertex;
 /** Потолок учётного fetch Vertex на прод: его потолок для кандидата (18 с) оборвал бы письмо раньше ступени. */
 export const COVER_LETTER_VERTEX_TIMEOUT_MS = VERTEX_LETTER_STAGE_MS;
 /** Сумма ступеней: каждая успевает ответить даже после отказа предыдущей. */

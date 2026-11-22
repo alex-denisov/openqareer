@@ -84,6 +84,14 @@ export class SqliteApplicationOfferRepository {
     };
   }
 
+  /** `true`, если оффер был: кандидат убирает оффер, внесённый по ошибке. */
+  delete(applicationId: string): boolean {
+    const result = this.database
+      .prepare('DELETE FROM application_offers WHERE application_id = ?')
+      .run(applicationId);
+    return Number(result.changes) > 0;
+  }
+
   list(applicationIds: readonly string[]): StoredApplicationOffer[] {
     if (applicationIds.length === 0) return [];
     return applicationIds

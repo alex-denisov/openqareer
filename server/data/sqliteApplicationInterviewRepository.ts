@@ -103,6 +103,14 @@ export class SqliteApplicationInterviewRepository {
     return this.get(applicationId, id);
   }
 
+  /** `true`, если интервью было в этом отклике. */
+  delete(applicationId: string, id: string): boolean {
+    const result = this.database
+      .prepare('DELETE FROM application_interviews WHERE application_id = ? AND id = ?')
+      .run(applicationId, id);
+    return Number(result.changes) > 0;
+  }
+
   list(applicationId: string): StoredApplicationInterview[] {
     const rows = this.database
       .prepare(`${INTERVIEW_SELECT} WHERE application_id = ? ORDER BY scheduled_at`)
