@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient, type BulkLlmInput } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, BulkInputTooLarge, type BulkLlmClient, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { extractVacancyRequirements, vacancyDescriptionHash } from './vacancyRequirements';
@@ -409,6 +409,25 @@ describe('background vacancy mechanics with real SQLite', () => {
     }
     expect(runtime.takeStats()).toMatchObject({ failed: 1, lastError: 'assessment_model_invalid' });
     expect(runtime.view(source)).toMatchObject({ state: 'failed', failure: 'model_invalid' });
+  });
+
+  it('B757: a fit over the per-call ceiling is settled once as «не удалось посчитать» and not asked again', async () => {
+    const runtime = setup(); const original = input();
+    const source: VacancyFitInput = { ...original, gates: {
+      role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
+      region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },
+    } };
+    const complete = vi.fn().mockRejectedValue(new BulkInputTooLarge());
+    const client = fitClient(complete);
+    runtime.enqueue(source);
+    await runtime.runNext(client);
+    expect(runtime.view(source)).toMatchObject({ state: 'failed', failure: 'too_large' });
+    expect(runtime.view(source).result).toBeUndefined();
+    expect(runtime.takeStats()).toMatchObject({ failed: 1, retried: 0, lastError: 'assessment_input_too_large' });
+    const asked = complete.mock.calls.length;
+    runtime.enqueue(source);
+    expect(await runtime.runNext(client)).toBe(false);
+    expect(complete).toHaveBeenCalledTimes(asked);
   });
 
   it('bounds automatic retries and lets an explicit request retry a failed job after recovery', async () => {

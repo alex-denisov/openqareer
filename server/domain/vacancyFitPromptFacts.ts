@@ -83,12 +83,16 @@ function withoutCopies(facts: readonly VacancyFitFact[]): readonly VacancyFitFac
   );
 }
 
-/** Facts for one model call: the whole list when it fits, else core plus the most relevant ones. */
+/**
+ * Facts for one model call: the whole list when it fits, else core plus the most relevant ones.
+ * `maxBytes` (B757): a smaller budget when the whole request did not fit the per-call ceiling.
+ */
 export function vacancyFitPromptFacts(
   facts: readonly VacancyFitFact[],
   requirements: readonly Pick<VacancyRequirement, 'text'>[],
+  maxBytes = MAX_FIT_EVIDENCE_BYTES,
 ): readonly VacancyFitFact[] {
-  if (facts.reduce((sum, fact) => sum + bytesOf(fact), 2) <= MAX_FIT_EVIDENCE_BYTES) return facts;
+  if (facts.reduce((sum, fact) => sum + bytesOf(fact), 2) <= maxBytes) return facts;
   const distinct = withoutCopies(facts);
   const core = distinct.filter((fact) => CORE.test(fact.id));
   const rest = rankedByRequirement(
@@ -99,7 +103,7 @@ export function vacancyFitPromptFacts(
   const chosen = new Set<string>();
   for (const fact of [...core, ...rest]) {
     const size = bytesOf(fact);
-    if (bytes + size > MAX_FIT_EVIDENCE_BYTES) continue;
+    if (bytes + size > maxBytes) continue;
     bytes += size;
     chosen.add(fact.id);
   }
