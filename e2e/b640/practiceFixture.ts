@@ -112,7 +112,7 @@ async function sessions(
   }
   const session = ref.session!;
   if (path.endsWith('/answers')) {
-    calls.push(`answer ${String(body.questionId)}`);
+    calls.push(`answer ${String(body.questionId)}${body.feedback === false ? '' : ' +feedback'}`);
     ref.session = { ...session, version: session.version + 1, answer: String(body.answer) };
   } else {
     calls.push(String(body.action));

@@ -5,6 +5,8 @@ import { apiFetch, readDataObject } from '../../../coach/apiClient';
 import { getDecisionProfile } from '../../../coach/decisionProfileApi';
 import { generateInterviewPrepBrief } from '../../../interview/interviewPrepEngine';
 import { getStarStories } from '../../../interview/starStoriesApi';
+import { getB640Company } from '../../companies/companiesApi';
+import { companyFacts, type CompanyFacts } from '../model/companyFacts';
 import {
   pickNextResponse,
   prepVacancy,
@@ -24,6 +26,7 @@ export interface PrepData {
   readonly paragraphs: readonly PrepParagraph[];
   readonly stories: readonly StarStoryView[];
   readonly floor: SalaryFloor | null;
+  readonly company: CompanyFacts;
 }
 
 interface StarPrepView {
@@ -64,6 +67,13 @@ export async function putStarPrep(
   return (await readDataObject<StarPrepView>(response)).paragraphs;
 }
 
+/** «Что известно о компании»: карточка компании платформы по названию из отклика. */
+async function loadCompanyFacts(response: ApplicationView): Promise<CompanyFacts> {
+  const name = response.vacancy?.companyHidden ? '' : (response.vacancy?.company ?? '').trim();
+  const card = name ? await optional(() => getB640Company(name)) : null;
+  return companyFacts({ company: card?.company ?? null, clusterId: response.clusterId });
+}
+
 /** Отклик по адресу; `next` — ближайшее интервью. `null` — такого отклика нет. */
 export async function findResponse(
   responseId: string,
@@ -80,10 +90,11 @@ export async function loadPrep(responseId: string, signal: AbortSignal): Promise
   const response = await findResponse(responseId, signal);
   if (!response) return null;
   const brief = generateInterviewPrepBrief({ vacancy: prepVacancy(response), facts: [] });
-  const [prep, stories, floor] = await Promise.all([
+  const [prep, stories, floor, company] = await Promise.all([
     getStarPrep(response.id, signal),
     optional(() => getStarStories(signal)),
     salaryFloor(signal),
+    loadCompanyFacts(response),
   ]);
   return {
     response,
@@ -92,5 +103,6 @@ export async function loadPrep(responseId: string, signal: AbortSignal): Promise
     paragraphs: prep.paragraphs,
     stories: stories?.stories ?? [],
     floor,
+    company,
   };
 }

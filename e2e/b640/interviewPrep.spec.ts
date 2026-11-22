@@ -12,6 +12,9 @@ async function open(page: Page, path: string, node: string, options: PrepMockOpt
 
 const headline = (page: Page) => page.getByRole('heading', { level: 2 }).first();
 
+// Время интервью в строках — московское; CI работает в UTC.
+test.use({ timezoneId: 'Europe/Moscow' });
+
 test.describe('B659: «Подготовка к интервью» (I1)', () => {
   test('вкладка «Подготовка» находит ближайшее интервью: вопросы, готовность, «Спросите сами»', async ({
     page,
@@ -36,6 +39,50 @@ test.describe('B659: «Подготовка к интервью» (I1)', () => {
       page.getByRole('navigation', { name: 'Шаги' }).getByRole('link', { name: 'Подготовка' }),
     ).toHaveAttribute('aria-current', 'page');
     await expectGates(page);
+  });
+
+  test('B749: формат в полосе контекста, «Что известно о компании» из данных платформы, без новостей', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses/r-arka/interview', 'i01');
+    await expect(page.locator('.ctx-meta li')).toHaveText([
+      '12 ноября, 15:00',
+      'видеозвонок с техническим директором',
+    ]);
+    const about = page.locator('section.mod', { hasText: 'Что известно о компании' });
+    await expect(about.locator('dt')).toHaveText(['Чем занята', 'Кто ведёт']);
+    await expect(about.locator('dd')).toHaveText([
+      'Логистика, Москва',
+      'Сергей Минин, технический директор',
+    ]);
+    await expect(about).not.toContainText('Новости');
+    await expect(about.getByRole('button', { name: 'Откуда данные' })).toBeVisible();
+    await expectGates(page);
+  });
+
+  test('B749: компании нет в данных — одна строка, без выдуманных фактов', async ({ page }) => {
+    await open(page, '/app/responses/r-arka/interview', 'i01', { noCompany: true });
+    const about = page.locator('section.mod', { hasText: 'Что известно о компании' });
+    await expect(about).toContainText('О компании на платформе пока нет данных.');
+    await expect(about.locator('dl')).toHaveCount(0);
+  });
+
+  test('B749: «Памятка к интервью» собрана из подготовки и копируется текстом', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses/r-arka/interview', 'i01');
+    await page.getByRole('button', { name: 'Памятка к интервью' }).click();
+    const memo = page.getByRole('dialog', { name: 'Руководитель платформы · Арка Холдинг' });
+    await expect(memo).toContainText('12 ноября, 15:00 · видеозвонок с техническим директором');
+    await expect(memo.getByRole('heading', { level: 4 })).toHaveText([
+      'Ответы',
+      'Ожидания по зарплате',
+      'Спросите сами',
+    ]);
+    await expect(memo).toContainText('от 500 000 ₽');
+    await expectGates(page);
+    await memo.getByRole('button', { name: 'Закрыть' }).click();
+    await expect(memo).toBeHidden();
   });
 
   test('«Подготовить ответ»: пример из истории становится ответом, сбой не закрывает окно', async ({
