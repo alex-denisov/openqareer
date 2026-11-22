@@ -24,7 +24,7 @@ export const IMPERSONATED_CODE = 'impersonated_session';
 export const IMPERSONATED_MESSAGE = 'Это может сделать только сам кандидат.';
 
 const LOCKED = 'Слишком много попыток. Попробуйте через 15 минут.';
-const answer = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
+export const answer = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
 
 function refuseCheck(reply: FastifyReply, request: FastifyRequest, check: Exclude<TwoFactorCheck, 'ok'>) {
   return check === 'locked'
@@ -53,9 +53,9 @@ async function postLoginStep(deps: RouteDeps, request: FastifyRequest, reply: Fa
   return answer(request, { ...publicPrincipal(authenticated.principal, deps.config), sessionToken: authenticated.sessionToken });
 }
 
-type AccountHandler = (deps: RouteDeps, principal: AuthPrincipal, request: FastifyRequest, reply: FastifyReply) => unknown;
+export type AccountHandler = (deps: RouteDeps, principal: AuthPrincipal, request: FastifyRequest, reply: FastifyReply) => unknown;
 
-function account(deps: RouteDeps, handler: AccountHandler, changesProtection = false) {
+export function account(deps: RouteDeps, handler: AccountHandler, changesProtection = false) {
   return withDeps(deps, async (routeDeps, request, reply) => {
     const principal = requireCabinetB640(request, reply, routeDeps);
     if (!principal) return reply;

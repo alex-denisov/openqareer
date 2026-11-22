@@ -1,21 +1,15 @@
-import type { FieldDictation } from '../consultant/useDictation';
+import type { VoiceInput } from '../voice/useVoiceInput';
 import { Icon } from '../kit';
 
 export interface MockAnswerFieldProps {
   readonly text: string;
   readonly readOnly: boolean;
   readonly empty: boolean;
-  readonly dictation: FieldDictation;
+  readonly dictation: VoiceInput;
   readonly onChange: (text: string) => void;
 }
 
-function MicButton({
-  text,
-  dictation,
-}: {
-  readonly text: string;
-  readonly dictation: FieldDictation;
-}) {
+function MicButton({ text, dictation }: { readonly text: string; readonly dictation: VoiceInput }) {
   if (dictation.failure === 'mic') {
     return (
       <>

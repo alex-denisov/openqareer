@@ -5,6 +5,7 @@ import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { AuthCardHeader, AuthInputField } from './AuthPageComponents';
 import { TwoFactorLoginStep } from './TwoFactorLoginStep';
+import { usePasskeyAutofill } from './usePasskeyAutofill';
 
 export { AuthCardHeader, AuthInputField };
 export type { AuthInputFieldProps } from './AuthPageComponents';
@@ -59,6 +60,7 @@ function useLoginForm({
   const [busy, setBusy] = useState(bootstrapPending);
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  usePasskeyAutofill(onSignedIn, !bootstrapPending);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,7 +104,7 @@ function LoginFormFields({
         id="login-identifier"
         name="username"
         label="Email или логин"
-        autoComplete={form.bootstrapPending ? 'off' : 'username'}
+        autoComplete={form.bootstrapPending ? 'off' : 'username webauthn'}
         placeholder="candidate@example.com"
         value={form.identifier}
         onChange={form.setIdentifier}

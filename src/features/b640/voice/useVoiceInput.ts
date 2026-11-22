@@ -20,11 +20,11 @@ export interface VoiceInput extends ComposerDictation {
 type AppPhase = 'idle' | 'listening' | 'transcribing';
 
 /**
- * Запись .app пока берёт и звук компьютера, и доступ к экрану; для диктовки это не годится
- * (решение 22.11). Режим записи `mic` (B758, #930) уже в main, но запрос разрешений .app
- * спрашивает и доступ к экрану; включается, когда .app умеет просить только микрофон.
+ * Диктовка в .app пишет только микрофон (запись `mic` B758 #930, разрешения `mic` #942):
+ * без звука компьютера и окна «Запись экрана». Фронтенд .app собирается вместе с нативной
+ * частью, поэтому сборка без этих режимов этот код не получит.
  */
-export const APP_MIC_ONLY_READY = false;
+export const APP_MIC_ONLY_READY = true;
 
 const joined = (base: string, text: string) => [base.trimEnd(), text].filter(Boolean).join(' ');
 
@@ -57,7 +57,7 @@ function useAppDictation(onText: (text: string) => void): VoiceInput {
   const start = useCallback(async (currentText: string) => {
     setFailure(null);
     try {
-      if (!(await requestRecordingPermissions()).microphone) throw new Error('microphone');
+      if (!(await requestRecordingPermissions('mic')).microphone) throw new Error('microphone');
       current.current = { created: await beginAppDictation(), base: currentText };
       setPhase('listening');
     } catch {

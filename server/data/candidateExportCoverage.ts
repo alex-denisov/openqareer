@@ -102,6 +102,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   user_two_factor: { internal: 'секрет второго фактора входа' },
   user_two_factor_backup_codes: { internal: 'отпечатки резервных кодов второго фактора' },
   two_factor_login_challenges: { internal: 'отпечатки одноразовых проверок входа' },
+  user_passkeys: { export: 'passkeys' },
+  passkey_challenges: { internal: 'отпечатки одноразовых вызовов ключа доступа' },
   assessments_product_case_only: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v14: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v15: { internal: MIGRATION_COPY },

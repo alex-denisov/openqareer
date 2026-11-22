@@ -205,6 +205,14 @@ export async function mockPrep(page: Page, options: PrepMockOptions = {}): Promi
   await page.route('**/api/v1/candidate/star-stories', (route) =>
     route.fulfill({ json: { data: { stories: [STORY], facts: [] } } }),
   );
+  // Вакансия отклика без вилки: «вилка вакансии не указана», как в макете I1.
+  await page.route('**/api/v1/candidate/b640/vacancies/cluster-arka', (route) =>
+    route.fulfill({
+      json: {
+        data: { cluster: { id: 'cluster-arka' }, explanation: { clusterId: 'cluster-arka' } },
+      },
+    }),
+  );
   await mockCompany(page, options);
   return { calls };
 }
