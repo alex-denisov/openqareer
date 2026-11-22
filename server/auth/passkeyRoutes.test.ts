@@ -348,6 +348,29 @@ describe('B755: вход ключом', () => {
   });
 });
 
+describe('B755: вход ключом и флаг нового кабинета', () => {
+  it('без флага у владельца ключ не входит: тот же 401, сессии нет', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    clock('2026-11-22T10:00:00.000Z');
+    const app = await createApp(undefined, undefined, undefined, {}, { cabinetB640Usernames: [] });
+    const { token } = (await post(app, '/api/v1/auth/passkey/options', {})).json().data;
+    rows(
+      app,
+      `INSERT INTO user_passkeys (id, user_id, credential_id, public_key, created_at)
+       SELECT 'k1', id, 'cred-1', x'01', '2026-11-22T10:00:00.000Z' FROM users
+       WHERE username = 'candidate.test'`,
+    );
+    acceptAssertion('cred-1', 1);
+    const response = await post(app, '/api/v1/auth/passkey', {
+      token,
+      response: credential('cred-1'),
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.headers['set-cookie']).toBeUndefined();
+    expect(authVerify).not.toHaveBeenCalled();
+  });
+});
+
 describe('B755: удаление ключа', () => {
   it('needs the password and removes only the own key', async () => {
     const { app, cookie } = await setup();

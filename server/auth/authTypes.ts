@@ -97,6 +97,14 @@ export interface PasswordResetDelivery {
   token: string;
 }
 
+/** B755: письмо о новом ключе входа. */
+export interface PasskeyAddedDelivery {
+  readonly email: string;
+  readonly displayName: string | null;
+  readonly passkeyId: string;
+  readonly deviceLabel: string | null;
+}
+
 export interface SeedAccount {
   username: string;
   password: string;
@@ -229,6 +237,8 @@ export interface SessionAuth {
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   getAccount?(sessionToken: string): AccountSnapshot | null;
   labelSession?(sessionToken: string, label: string): void;
+  /** B755: письмо владельцу о новом ключе входа; без почты или без отправителя — ничего. */
+  notifyPasskeyAdded?(userId: string, passkeyId: string, deviceLabel: string | null): Promise<void>;
   revokeAccountSession?(
     sessionToken: string,
     sessionId: string,

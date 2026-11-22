@@ -11,6 +11,8 @@ export type PasskeyPurpose = 'register' | 'login';
 export interface StoredPasskey {
   readonly id: string;
   readonly userId: string;
+  /** Имя входа владельца: по нему вход проверяет флаг нового кабинета. */
+  readonly username: string;
   readonly credentialId: string;
   readonly publicKey: Uint8Array<ArrayBuffer>;
   readonly signCount: number;
@@ -37,6 +39,7 @@ export interface NewPasskey {
 interface PasskeyRow {
   id: string;
   user_id: string;
+  username: string;
   credential_id: string;
   public_key: Uint8Array;
   sign_count: number;
@@ -175,13 +178,16 @@ export class PasskeyStore {
   findByCredentialId(credentialId: string): StoredPasskey | null {
     const row = this.database
       .prepare(
-        'SELECT id, user_id, credential_id, public_key, sign_count, transports_json FROM user_passkeys WHERE credential_id = ?',
+        `SELECT p.id, p.user_id, u.username, p.credential_id, p.public_key, p.sign_count, p.transports_json
+         FROM user_passkeys p JOIN users u ON u.id = p.user_id
+         WHERE p.credential_id = ?`,
       )
       .get(credentialId) as PasskeyRow | undefined;
     return row
       ? {
           id: row.id,
           userId: row.user_id,
+          username: row.username,
           credentialId: row.credential_id,
           publicKey: Uint8Array.from(row.public_key),
           signCount: row.sign_count,

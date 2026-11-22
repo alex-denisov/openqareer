@@ -1,3 +1,4 @@
+import { cabinetB640Enabled } from '../auth/cabinetB640Access';
 import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
@@ -73,7 +74,9 @@ async function postLogin(deps: RouteDeps, request: FastifyRequest, reply: Fastif
   const now = new Date();
   const challenge = body ? store.takeChallenge(body.token, 'login', now) : null;
   const key = body && challenge ? store.findByCredentialId(body.response.id) : null;
-  if (!body || !challenge || !key) return refuse(request, reply);
+  // Без флага нового кабинета ключ не виден и не удаляется — значит, и входа по нему нет.
+  if (!body || !challenge || !key || !cabinetB640Enabled(deps.config, key.username))
+    return refuse(request, reply);
   const newCounter = await verifyKey(deps, key, challenge.challenge, body);
   if (newCounter === null || !store.recordUse(key.id, key.signCount, newCounter, now))
     return refuse(request, reply);

@@ -1,11 +1,12 @@
 import { generateRegistrationOptions, verifyRegistrationResponse } from '@simplewebauthn/server';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { deviceLabelOf } from '../auth/deviceLabel';
 import { passkeyRelyingParty } from '../auth/passkeyRelyingParty';
 import { closePasskeyStoreFor, passkeyStoreFor } from './passkeyAccess';
 import { parseRegistrationBody } from './passkeyJson';
 import { passkeyProven } from './passkeyProof';
+import type { RouteDeps } from './deps';
 import { sendError } from './helpers';
 import { account, answer, type AccountHandler } from './twoFactorRoutes';
 
@@ -66,6 +67,7 @@ const postRegister: AccountHandler = async (deps, principal, request, reply) => 
     return sendError(reply, request, 400, 'passkey_invalid', ADD_FAILED, false);
   }
   const { credential, credentialBackedUp } = verified.registrationInfo;
+  const deviceLabel = deviceLabelOf(request.headers['user-agent'], request.headers.origin);
   const id = store.add(
     principal.userId,
     {
@@ -74,14 +76,30 @@ const postRegister: AccountHandler = async (deps, principal, request, reply) => 
       signCount: credential.counter,
       transports: credential.transports ?? [],
       backedUp: credentialBackedUp,
-      deviceLabel: deviceLabelOf(request.headers['user-agent'], request.headers.origin),
+      deviceLabel,
     },
     now,
   );
   if (!id)
     return sendError(reply, request, 409, 'passkey_exists', 'Это устройство уже добавлено.', false);
+  notifyAdded(deps, request, principal.userId, id, deviceLabel);
   return answer(request, { id });
 };
+
+/** Письмо о новом ключе уходит в фоне: сбой почты не отменяет добавленный ключ, но пишется в журнал. */
+function notifyAdded(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  userId: string,
+  passkeyId: string,
+  deviceLabel: string | null,
+): void {
+  deps.authService
+    .notifyPasskeyAdded?.(userId, passkeyId, deviceLabel)
+    ?.catch((error: unknown) =>
+      request.log.error({ err: error, passkeyId }, 'passkey added email failed'),
+    );
+}
 
 const deleteOne: AccountHandler = async (deps, principal, request, reply) => {
   const id = idSchema.safeParse((request.params as { id?: string }).id);
