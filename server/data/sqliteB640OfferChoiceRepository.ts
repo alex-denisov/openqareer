@@ -90,6 +90,13 @@ export class SqliteB640OfferChoiceRepository {
       .run(applicationId, candidateId, decision, decision === null ? null : now, now);
   }
 
+  /** Выбор уходит вместе с удалённым оффером: новый оффер на том же отклике начинается с «Думаю». */
+  delete(candidateId: string, applicationId: string): void {
+    this.database
+      .prepare('DELETE FROM b640_offer_choices WHERE candidate_id = ? AND application_id = ?')
+      .run(candidateId, applicationId);
+  }
+
   /**
    * Отклики кандидата, отправленные автооткликом: id есть в очереди и строка
    * не снята. Только чтение; таблицы ещё может не быть — тогда автооткликов нет.

@@ -221,7 +221,7 @@ export class SqliteCandidateStore implements CandidateStore {
       this.transaction(operation),
     ));
     this.installLinkedInMethods();
-    this.installExportMethods();
+    this.installExportMethods(options.encryptionKey);
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
   }
 
@@ -236,7 +236,7 @@ export class SqliteCandidateStore implements CandidateStore {
     );
   }
 
-  private installExportMethods(): void {
+  private installExportMethods(encryptionKey: Buffer): void {
     Object.assign(
       this,
       createMemoryMethods({
@@ -266,7 +266,7 @@ export class SqliteCandidateStore implements CandidateStore {
         roleSkillAssessments: this.roleSkillAssessments,
         starStoriesRepo: this.starStoriesRepo,
         interviewSimulatorRepo: this.interviewSimulatorRepo,
-        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo,
+        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo, careerDiaryDatabase: { database: this.database, encryptionKey },
       }),
     );
   }

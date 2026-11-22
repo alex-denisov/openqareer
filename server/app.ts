@@ -119,6 +119,8 @@ interface BuildAppOptions {
   hhCrawlSettings?: import('./vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   /** Память и пауза опросов — админский маршрут, сторож памяти (B220). */
   runtimeMemory?: RouteDeps['runtimeMemory'];
+  /** B732: обновления SMM-чата с общего вебхука бота. */
+  smmTelegram?: RouteDeps['smmTelegram'];
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
@@ -465,7 +467,7 @@ function assembleRouteDeps(
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
-    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}),
+    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}), ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}),
     ...services,
   };
 }

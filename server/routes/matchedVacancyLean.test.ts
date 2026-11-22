@@ -79,4 +79,32 @@ describe('B725: облегчённые строки подбора для каб
     }
     expect(ids).toEqual(Array.from({ length: 87 }, (_, index) => `v-${index}`));
   });
+
+  describe('страница 0 и фасеты двумя запросами', () => {
+    it('part=rows отдаёт строки без фасетов, part=facets — фасеты без строк', async () => {
+      const { get } = await setup();
+      const rows = (await get(`${OLD}?offset=0&part=rows`, 'flagged.test')).json();
+      expect(rows.data).toHaveLength(20);
+      expect(rows.meta.pageOffsets).toEqual([0, 20, 40]);
+      expect(rows.meta.facets).toBeUndefined();
+      const facets = (await get(`${OLD}?offset=0&part=facets`, 'flagged.test')).json();
+      expect(facets.data).toEqual([]);
+      expect(facets.meta.total).toBe(45);
+      const both = (await get(`${OLD}?offset=0`, 'flagged.test')).json();
+      expect(both.meta.facets).toBeDefined();
+      expect(facets.meta.facets).toEqual(both.meta.facets);
+    });
+
+    it('фасеты нового процесса читаются из сохранённого списка так же', async () => {
+      const { get, poolReads } = await setup();
+      const live = (await get(`${OLD}?offset=0&part=facets`, 'flagged.test')).json();
+      forgetMatchedListsForTests();
+      const readsBefore = poolReads();
+      const sealed = (await get(`${OLD}?offset=0&part=facets`, 'flagged.test')).json();
+      expect(sealed.data).toEqual([]);
+      expect(sealed.meta.facets).toEqual(live.meta.facets);
+      expect(sealed.meta.total).toBe(45);
+      expect(poolReads()).toBe(readsBefore);
+    });
+  });
 });
