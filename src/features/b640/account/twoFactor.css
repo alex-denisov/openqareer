@@ -15,7 +15,8 @@
     border-radius: var(--career-radius-sm);
     border: var(--career-border-width) solid var(--career-line);
   }
-  .b640 .fa-key { display: flex; align-items: center; gap: var(--career-space-2); }
+  .b640 .fa-key { display: flex; align-items: flex-start; gap: var(--career-space-2); }
+  .b640 .fa-key code { display: grid; min-inline-size: 0; padding-block-start: var(--career-space-2); }
   .b640 .fa-key code,
   .b640 .fa-codes code {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -35,7 +36,9 @@
     border-radius: var(--career-radius-sm);
     background: var(--career-surface);
   }
-  .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-2); }
+  .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-1); }
+  /* row-act тянет поля на −8 px: при зазоре меньше 16 px зоны клика «Скачать» и «Готово» перекрывались. */
+  .b640 .fa-bar .row-act { margin-inline: 0; }
   @media (max-width: 767px) {
     .b640 .fa-setup { grid-template-columns: minmax(0, 1fr); justify-items: start; }
     .b640 .fa-codes { grid-template-columns: repeat(2, minmax(0, 1fr)); }

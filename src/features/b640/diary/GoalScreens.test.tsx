@@ -289,7 +289,7 @@ describe('d02b «Новая цель»', () => {
     ]);
     api.createGoalCard.mockResolvedValue({ id: 'new-goal' });
     typeInto(page.querySelector('#gb-n'), 'Сократить время ревью');
-    typeInto(page.querySelector('#gb-d'), '2099-03-31');
+    typeInto(page.querySelector('#gb-d'), '31.03.2099');
     typeInto(page.querySelector('#gb-0-i'), 'Время до ревью, часов');
     typeInto(page.querySelector('#gb-0-now'), '18');
     typeInto(page.querySelector('#gb-0-tg'), '4');

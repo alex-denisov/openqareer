@@ -172,7 +172,7 @@ function Places({ data, reload, aside }: PlacesProps) {
         <section className="lead" aria-labelledby="rl-title">
           <Head
             title={placesTitle(abroad.length, inside.length)}
-            role={data.role}
+            role={data.role ? (data.titlesRu[data.role] ?? data.role) : null}
             onPlaces={() => setEditPlaces(true)}
           />
           <RelocationWhoDialog

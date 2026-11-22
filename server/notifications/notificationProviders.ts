@@ -68,7 +68,8 @@ export function buildTelegramWebhookConfigurator(
       body: JSON.stringify({
         url: webhookUrl,
         secret_token: webhookSecret,
-        allowed_updates: ['message'],
+        // B732: кнопки SMM-чата приходят тем же вебхуком.
+        allowed_updates: ['message', 'callback_query'],
       }),
     });
     const result = (await response.json().catch(() => null)) as { ok?: unknown } | null;

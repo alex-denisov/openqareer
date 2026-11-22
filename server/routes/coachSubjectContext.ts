@@ -10,7 +10,7 @@ const STAGE_CONTEXT_MAX_CHARS = 10_000;
 const VACANCY_TEXT_MAX_CHARS = 6_000;
 const LETTER_DRAFT_MAX_CHARS = 3_000;
 
-function salaryLine(salary: VacancySalary | undefined): string | null {
+export function salaryLine(salary: VacancySalary | undefined): string | null {
   if (!salary || (salary.from === undefined && salary.to === undefined)) return null;
   const amount = (value: number) => value.toLocaleString('ru-RU').replace(/\s/gu, ' ');
   const range = [salary.from, salary.to]
