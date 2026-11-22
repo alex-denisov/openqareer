@@ -64,6 +64,8 @@ class KeyedSession {
   private readonly prepared: PreparedVacancy[] = [];
   private readonly clusterIds: string[] = [];
   private readonly byMember = new Map<string, number>();
+  /** Ключи старых представителей: голый внешний id бывает у нескольких кластеров (B752, 1 063 на проде). */
+  private readonly byLegacy = new Map<string, number[]>();
   private readonly loaded = new Map<number, VacancyCluster>();
   private readonly updated = new Set<number>();
   private readonly created: VacancyCluster[] = [];
@@ -78,7 +80,10 @@ class KeyedSession {
     this.candidates = representatives.length;
     for (const representative of representatives) {
       const position = this.register(representative.clusterId, representative.prepared);
-      for (const member of representative.members) this.byMember.set(member, position);
+      for (const member of representative.members) {
+        this.byMember.set(member, position);
+        this.byLegacy.set(member, [...(this.byLegacy.get(member) ?? []), position]);
+      }
     }
   }
 
@@ -197,14 +202,15 @@ class KeyedSession {
   /** Голый внешний id старых строк (B752): совпадение засчитано, только если площадка та же. */
   private legacyPosition(vacancy: UnifiedVacancy): number | undefined {
     const bare = legacyMemberKeyOf(vacancy);
-    const position = bare ? this.byMember.get(bare) : undefined;
-    if (position === undefined || this.absorbed.has(position)) return undefined;
+    if (!bare) return undefined;
     const scoped = sourceMemberKey(vacancy.provenance);
-    const cluster = this.clusterAt(position);
-    return cluster?.sources.some((source) => sourceMemberKey(source) === scoped)
-      ? position
-      : undefined;
+    return (this.byLegacy.get(bare) ?? []).find(
+      (position) =>
+        !this.absorbed.has(position) &&
+        Boolean(this.clusterAt(position)?.sources.some((source) => sourceMemberKey(source) === scoped)),
+    );
   }
+
 
   /** JSON кластера читается один раз и только для совпавшего. */
   private clusterAt(position: number): VacancyCluster | undefined {

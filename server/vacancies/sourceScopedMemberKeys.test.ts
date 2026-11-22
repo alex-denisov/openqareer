@@ -47,6 +47,26 @@ function databaseOf(store: SqliteVacancyPoolStore): DatabaseSync {
   return (store as unknown as { database: DatabaseSync }).database;
 }
 
+/** Кластер как до B752: ключи членства и представитель — с голым внешним id. */
+function toLegacy(store: SqliteVacancyPoolStore, clusterId: string): void {
+  const database = databaseOf(store);
+  const cluster = store.getCluster(clusterId)!;
+  const bare = new Map(cluster.sources.map((s) => [`${s.sourceId}:${s.externalId}`, s.externalId!]));
+  for (const [scoped, plain] of bare) {
+    database
+      .prepare("UPDATE OR IGNORE vacancy_cluster_keys SET key = ? WHERE kind = 'member' AND key = ? AND cluster_id = ?")
+      .run(plain, scoped, clusterId);
+  }
+  const row = database.prepare('SELECT representative FROM vacancy_clusters WHERE id = ?').get(clusterId) as {
+    representative: string;
+  };
+  const representative = JSON.parse(row.representative) as { m: string[] };
+  const m = representative.m.map((key) => bare.get(key) ?? key);
+  database
+    .prepare('UPDATE vacancy_clusters SET representative = ? WHERE id = ?')
+    .run(JSON.stringify({ ...representative, m }), clusterId);
+}
+
 describe('source-scoped member keys (B752)', () => {
   it('member keys carry the source id, never the bare external id', () => {
     const cluster = createClusterFromVacancy(oracle());
@@ -145,6 +165,50 @@ describe('source-scoped member keys (B752)', () => {
     ]);
     expect(store.countClusters()).toBe(2);
     expect(store.getCluster(legacy.id)!.sources.every((s) => s.sourceId === VK)).toBe(true);
+    store.close();
+  });
+
+  it('detaching a legacy-only cluster still removes it', () => {
+    const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
+    const legacy = createClusterFromVacancy(vk());
+    store.saveClusters([legacy]);
+    toLegacy(store, legacy.id);
+    expect(detachVacanciesByKeys(store, [vk()])).toEqual({ updated: 0, deleted: 1 });
+    expect(store.getCluster(legacy.id)).toBeUndefined();
+    store.close();
+  });
+
+  it('re-polling a collided legacy VK+Oracle cluster creates no duplicates', () => {
+    const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
+    const collided = createClusterFromVacancy(vk());
+    store.saveClusters([{ ...collided, sources: [...collided.sources, oracle().provenance], vacanciesCount: 2 }]);
+    toLegacy(store, collided.id);
+    clusterBatchByKeys(store, [vk(), oracle()]);
+    clusterBatchByKeys(store, [vk(), oracle()]);
+    expect(store.countClusters()).toBe(1);
+    store.close();
+  });
+
+  it('two legacy clusters with one bare key: the record goes to the one with its source', () => {
+    const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
+    const vkCluster = createClusterFromVacancy(vk());
+    // Сортируется после VK: в старой карте «последний выигрывает» ключ достался бы ему.
+    const oracleCluster = createClusterFromVacancy(
+      vacancy('src-zz-tenant', '55418', { company: 'Tata Capital', title: 'Relationship Manager' }),
+    );
+    store.saveClusters([vkCluster]);
+    store.saveClusters([oracleCluster]);
+    toLegacy(store, vkCluster.id);
+    toLegacy(store, oracleCluster.id);
+    // Id записи не «площадка:внешний id» (так у части адаптеров): найти кластер можно только по голому ключу.
+    const moved = {
+      ...vacancy(VK, '55418', { company: 'Other', title: 'Renamed', url: 'https://vk.example/moved' }),
+      id: `${VK}:moved-55418`,
+    };
+    clusterBatchByKeys(store, [moved]);
+    expect(store.countClusters()).toBe(2);
+    expect(store.getCluster(vkCluster.id)!.sources.map((s) => s.sourceUrl)).toContain('https://vk.example/moved');
+    expect(store.getCluster(oracleCluster.id)!.sources.every((s) => s.sourceId === 'src-zz-tenant')).toBe(true);
     store.close();
   });
 });
