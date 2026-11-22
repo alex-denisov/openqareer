@@ -24,14 +24,22 @@ export interface CheckpointMark {
 
 export class SqliteDiaryCheckpointRepository {
   private readonly database: DatabaseSync;
+  private readonly ownsDatabase: boolean;
   private readonly sealedText: SealedText;
 
-  constructor(options: { databasePath: string; encryptionKey: Buffer }) {
-    this.database = new DatabaseSync(options.databasePath);
-    this.sealedText = new SealedText(options.encryptionKey);
+  /** Своё соединение по пути к базе или (B689, выгрузка) чужое соединение хранилища. */
+  constructor(options: DatabaseSync | { databasePath: string; encryptionKey: Buffer }, key?: Buffer) {
+    this.ownsDatabase = !(options instanceof DatabaseSync);
+    this.database = options instanceof DatabaseSync ? options : new DatabaseSync(options.databasePath);
+    const encryptionKey = options instanceof DatabaseSync ? key : options.encryptionKey;
+    if (!encryptionKey) throw new Error('diary_checkpoint_encryption_key_missing');
+    this.sealedText = new SealedText(encryptionKey);
     try {
-      applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
-      this.database.exec('PRAGMA journal_mode = WAL;');
+      // Чужое соединение (хранилища) живёт со своими настройками ожидания и журнала.
+      if (this.ownsDatabase) {
+        applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
+        this.database.exec('PRAGMA journal_mode = WAL;');
+      }
       this.database.exec(DIARY_CHECKPOINT_SCHEMA);
     } catch (error) {
       this.close();
@@ -40,7 +48,22 @@ export class SqliteDiaryCheckpointRepository {
   }
 
   close(): void {
-    this.database.close();
+    if (this.ownsDatabase) this.database.close();
+  }
+
+  /** B689: все отметки кандидата — для выгрузки данных. */
+  exportAll(candidateId: string): Array<{ workplaceId: string; kind: string; mark: CheckpointMark }> {
+    const rows = this.database
+      .prepare(
+        `SELECT workplace_id, kind FROM career_diary_checkpoints
+         WHERE candidate_id = ? ORDER BY workplace_id, kind`,
+      )
+      .all(candidateId) as unknown as Array<{ workplace_id: string; kind: string }>;
+    return rows.map((row) => ({
+      workplaceId: row.workplace_id,
+      kind: row.kind,
+      mark: this.get(candidateId, row.workplace_id, row.kind),
+    }));
   }
 
   get(candidateId: string, workplaceId: string, kind: string): CheckpointMark {

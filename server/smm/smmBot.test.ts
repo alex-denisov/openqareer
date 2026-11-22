@@ -1,10 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { SmmAgent } from './smmAgent';
-import { pollRetryDelayMs, SmmBot } from './smmBot';
+import { SmmBot } from './smmBot';
 import type { ChatTurn, SmmModel } from './smmModel';
 import { SmmStore } from './smmStore';
-import { TelegramApiError } from './smmTelegram';
+import { createSmmTelegram } from './smmTelegram';
 import type { InlineButton, SmmTelegram, TelegramUpdate } from './smmTelegram';
 
 const CHAT = '-100777';
@@ -40,9 +40,6 @@ function setup(replies: Array<string | null> = [VALID]) {
   const sent: Sent[] = [];
   let nextId = 100;
   const telegram: SmmTelegram = {
-    async getUpdates() {
-      return [];
-    },
     async send(_chat, text, buttons) {
       sent.push({ text, buttons });
       return nextId++;
@@ -177,28 +174,29 @@ describe('SmmBot', () => {
     expect(store.recentPosts(5)).toHaveLength(0);
   });
 
-  it('answers 429 and 409 with a minute pause and grows other delays', () => {
-    expect(pollRetryDelayMs(new TelegramApiError('getUpdates', 429), 1)).toBe(60_000);
-    expect(pollRetryDelayMs(new TelegramApiError('getUpdates', 409), 5)).toBe(60_000);
-    expect(pollRetryDelayMs(new Error('x'), 1)).toBeLessThanOrEqual(6_000);
-    expect(pollRetryDelayMs(new Error('x'), 20)).toBeLessThanOrEqual(360_000);
+  it('a repeated webhook update is handled once (B732)', async () => {
+    const { bot, sent } = setup();
+    await bot.receive({ ...message('/post'), update_id: 50 });
+    const after = sent.length;
+    await bot.receive({ ...message('/post'), update_id: 50 });
+    await bot.receive({ ...message('/post'), update_id: 49 });
+    expect(after).toBeGreaterThan(0);
+    expect(sent).toHaveLength(after);
   });
 
-  it('a database error while polling is logged, not thrown out of the loop', async () => {
-    vi.useFakeTimers();
-    try {
-      const { store, bot } = setup();
-      vi.spyOn(store, 'getState').mockImplementationOnce(() => {
-        throw new Error('database is locked');
-      });
-      const polling = bot.poll();
-      await vi.advanceTimersByTimeAsync(0);
-      bot.stop();
-      await vi.advanceTimersByTimeAsync(10_000);
-      await expect(polling).resolves.toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
+  it('a handler error is logged, not thrown into the webhook (B732)', async () => {
+    const { store, bot } = setup();
+    vi.spyOn(store, 'getState').mockImplementationOnce(() => {
+      throw new Error('database is locked');
+    });
+    await expect(bot.receive(message('/post'))).resolves.toBeUndefined();
+  });
+});
+
+describe('SMM без опроса Bot API (B732)', () => {
+  it('клиент SMM не умеет getUpdates: обновления приходят вебхуком', () => {
+    const fetchImpl = vi.fn();
+    expect(Object.keys(createSmmTelegram('1:x', fetchImpl as unknown as typeof fetch))).not.toContain('getUpdates');
   });
 });
 

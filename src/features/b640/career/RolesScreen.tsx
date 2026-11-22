@@ -41,7 +41,7 @@ function SearchRoleStrip({
   readonly data: RolesData;
   readonly onEdit: () => void;
 }) {
-  const strip = searchStrip(data.rows, data.searchTitles);
+  const strip = searchStrip(data.rows, data.searchTitles, data.campaign.titlesRu);
   return (
     <section className="role-strip" aria-labelledby="role-title">
       <p className="role-strip-t">

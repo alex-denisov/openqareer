@@ -34,7 +34,15 @@ export interface RuntimeMemoryReport {
   };
 }
 
+/** Обработчик обновлений SMM-чата; ошибки он пишет в журнал сам. */
+export interface SmmTelegramUpdates {
+  readonly chatId: string;
+  readonly handle: (update: unknown) => void;
+}
+
 export interface RouteDeps {
+  /** B732: SMM-чат владельца получает свои обновления с общего вебхука бота. */
+  smmTelegram?: SmmTelegramUpdates;
   vacancyMechanics?: import('../domain/vacancyMechanicsRuntime').VacancyMechanicsRuntime;
   bulkLlmRuntime?: import('../providers/bulkLlmRuntime').BulkLlmRuntime;
   /** Черновики LinkedIn: очередь «Сегодня» показывает посты, ждущие одобрения. */
@@ -83,6 +91,8 @@ export interface RouteDeps {
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */
   campaignRoleModel?: import('../vacancies/campaignRoleSet').CampaignRoleModel;
   skillQuizModel?: import('../providers/skillQuizModel').SkillQuizModel;
+  /** B734: русские названия навыков проверки роли; без него — названия как в вакансиях. */
+  skillNameTranslator?: import('../providers/skillNameTranslator').SkillNameTranslator;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
   /** d01: шаги плана адаптации из «Что от вас ждут»; нет — план из шаблона. */
