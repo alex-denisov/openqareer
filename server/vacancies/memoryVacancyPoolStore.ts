@@ -210,8 +210,12 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
       .map((row) => ({ id: row.vacancy.id, url: row.vacancy.url }));
   }
 
-  loadSourceStates(): StoredSourceState[] {
-    return Array.from(this.states.values());
+  loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[] {
+    if (!sourceIds) return Array.from(this.states.values());
+    return sourceIds.flatMap((id) => {
+      const state = this.states.get(id);
+      return state ? [state] : [];
+    });
   }
 
   saveSourceState(written: StoredSourceState): void {

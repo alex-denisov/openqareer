@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { makeItem } from './fixtures';
-import { footOf, serverFoot, nextSort, sortItems, visibleSlice } from './sortModel';
+import {
+  DEFAULT_LIST_SORT,
+  footOf,
+  nextSort,
+  serverFoot,
+  serverSortApplies,
+  sortItems,
+  visibleSlice,
+} from './sortModel';
 
 const items = [
   makeItem({ id: 'a', title: 'Бета', percent: 50 }),
@@ -68,5 +76,20 @@ describe('подвал серверного режима', () => {
       shown: 31,
       countKnown: true,
     });
+  });
+});
+
+describe('порядок подборки по умолчанию (s07)', () => {
+  it('«Дата», сначала новые; повторное нажатие — старые сначала', () => {
+    expect(DEFAULT_LIST_SORT).toEqual({ key: 'date', dir: 'desc' });
+    expect(nextSort(DEFAULT_LIST_SORT, 'date')).toEqual({ key: 'date', dir: 'asc' });
+    expect(nextSort(DEFAULT_LIST_SORT, 'fit')).toEqual({ key: 'fit', dir: 'desc' });
+  });
+
+  it('сервер сортирует только непрочитанную до конца подборку, и не раньше первой порции пула', () => {
+    expect(serverSortApplies({ complete: false, loading: false, failed: false })).toBe(true);
+    expect(serverSortApplies({ complete: false, loading: true, failed: false })).toBe(false);
+    expect(serverSortApplies({ complete: true, loading: false, failed: false })).toBe(false);
+    expect(serverSortApplies({ complete: false, loading: false, failed: true })).toBe(false);
   });
 });

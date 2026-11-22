@@ -14,6 +14,7 @@ import {
   type FilterKind,
   type ListFilters,
 } from './filterModel';
+import { defaultRoles } from './defaultRoles';
 import { buildOptions, listCount, type FilterOptions } from './filterOptions';
 import {
   useServerSortedList,
@@ -23,8 +24,9 @@ import {
 import { usePreferredMoneyCurrency } from '../../account/usePreferredMoneyCurrency';
 import {
   PAGE_SIZE,
-  SERVER_SORT,
+  DEFAULT_LIST_SORT,
   nextSort,
+  serverSortApplies,
   serverFoot,
   sortItems,
   visibleSlice,
@@ -76,12 +78,15 @@ function useServerRoles(
   const sent = useRef('');
   const seeded = useRef(false);
   const initial = pool.initialFilters;
+  const campaign = pool.campaign;
   useEffect(() => {
-    if (seeded.current || !initial) return;
+    if (seeded.current || (!initial && !campaign)) return;
     seeded.current = true;
-    sent.current = initial.roles.join('\n');
-    if (initial.roles.length > 0) seed(initial.roles);
-  }, [initial, seed]);
+    // Сервер уже отдал подборку с сохранёнными ролями; роли «Карьеры» подборку ещё не сузили.
+    sent.current = (initial?.roles ?? []).join('\n');
+    const start = defaultRoles(initial?.roles, campaign?.roles);
+    if (start.length > 0) seed(start);
+  }, [initial, campaign, seed]);
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;
@@ -191,7 +196,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   const rates = useCurrencyRates();
   const [filters, setFilters] = useState<ListFilters>(EMPTY_FILTERS);
   const [currency, setCurrency] = usePreferredListCurrency();
-  const [sortState, setSortState] = useState<SortState | null>(null);
+  const [sortState, setSortState] = useState<SortState>(DEFAULT_LIST_SORT);
   const [openKind, setOpenKind] = useState<FilterKind | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
@@ -199,8 +204,10 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   useServerRoles(pool, filters.roles, (roles) => setFilters((current) => ({ ...current, roles })));
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
-  const serverMode = !pool.complete && sortState !== null;
-  const server = useServerSortedList(serverMode, sortState ?? SERVER_SORT, filters.roles, hidden);
+  const serverMode = serverSortApplies(pool);
+  const server = useServerSortedList(serverMode, sortState, filters.roles, hidden);
+  // Порядок по умолчанию на время первой порции сервера показываем из пула, чтобы таблица не мигала пустой.
+  const waitingFirst = server.status === 'loading' && server.rows.length === 0 && sortState === DEFAULT_LIST_SORT;
   const derived = useListRows({
     pool,
     hidden,
@@ -209,7 +216,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     rates,
     now,
     sortState,
-    serverMode,
+    serverMode: serverMode && !waitingFirst,
     server,
     shown,
   });
@@ -222,8 +229,8 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     resetFilters: () => setFilters(EMPTY_FILTERS),
     currency,
     setCurrency,
-    sort: sortState ?? SERVER_SORT,
-    toggleSort: (key) => setSortState((current) => nextSort(current ?? SERVER_SORT, key)),
+    sort: sortState,
+    toggleSort: (key) => setSortState((current) => nextSort(current, key)),
     openKind,
     setOpenKind,
     sheetOpen,

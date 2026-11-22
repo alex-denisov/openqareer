@@ -494,10 +494,6 @@ export class ConsultantHistoryStore {
     return true;
   }
 
-  deleteAllIndexes(candidateId: string): void {
-    this.database.prepare('DELETE FROM consultant_messages_fts WHERE candidate_id = ?').run(candidateId);
-  }
-
   private summaryView(candidateId: string, row: ConversationRow): ConsultantConversationSummary {
     const first = row.first_user_message_id
       ? this.message(candidateId, row.id, row.first_user_message_id)

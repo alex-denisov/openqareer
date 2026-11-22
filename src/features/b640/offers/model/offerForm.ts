@@ -1,6 +1,6 @@
 import { B640_TAX_PERCENT_MAX } from '../../../../../shared/b640Offers';
 import type { ApplicationOfferTerms } from '../../../../../server/data/sqliteApplicationOfferRepository';
-import type { OfferCard } from './offerModel';
+import { formatOption, type OfferCard } from './offerModel';
 
 /** Поля формы O6a как их видит кандидат: строки, без преобразований. */
 export interface OfferForm {
@@ -79,7 +79,7 @@ export function formFromCard(card: OfferCard | null): OfferForm {
     period: terms.salaryPeriod ?? 'month',
     currency: terms.currency ?? 'RUB',
     bonus: amount(terms.bonus),
-    format: terms.format ?? '',
+    format: formatOption(terms.format ?? ''),
     respondBy: dayText(card.respondBy),
     probationMonths: amount(terms.probationPeriodMonths),
     probationSalary: amount(terms.probationSalary),

@@ -296,6 +296,15 @@ test.describe('B655/B677: «Компании и люди» нового каби
         expect(want.width).toBeLessThan(dock.width * 0.7);
         expect(Math.abs(want.x + want.width - (dock.x + dock.width))).toBeLessThan(24);
       }
+      // B645: «Хочу в компанию» и «Написать …» стоят вплотную, как в макете.
+      const boxes = await page.locator('.co-head .act-dock > *').evaluateAll((els) =>
+        els
+          .map((el) => el.getBoundingClientRect())
+          .sort((a, b) => a.y - b.y)
+          .map((r) => ({ y: r.y, h: r.height })),
+      );
+      expect(boxes).toHaveLength(2);
+      expect(Math.abs(boxes[1]!.y - (boxes[0]!.y + boxes[0]!.h))).toBeLessThan(1);
     } else {
       // На 1440 «Хочу в компанию» в шапке справа от названия, на одной высоте с ним.
       const head = await page.locator('.co-head').boundingBox();

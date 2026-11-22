@@ -70,6 +70,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   // Добавляет маршрут выгрузки.
   candidate_reputation_audits: { routeExport: 'reputationAudits' },
   candidate_footprint_audits: { routeExport: 'footprintAudits' },
+  // Уведомления (n02).
+  candidate_notification_delivery_settings: { export: 'notificationDeliverySettings' },
   // Служебные.
   assessments_product_case_only: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v14: { internal: MIGRATION_COPY },

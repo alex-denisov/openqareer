@@ -15,6 +15,7 @@ import {
   type CandidateStatusId,
 } from '../../../../shared/candidateStatus';
 import { getStatus } from '../profile/statusChoice';
+import { readSelectionTotal } from '../vacancies/list/selectionCount';
 import { buildRoleRows, type RoleRow } from './rolesModel';
 
 /** Всё, что нужно вкладке «Роли»: строки ролей, роли поиска и пробелы в навыках. */
@@ -22,6 +23,8 @@ export interface RolesData {
   readonly rows: readonly RoleRow[];
   readonly searchTitles: readonly string[];
   readonly campaign: CampaignMetaView;
+  /** Число вакансий выбора: единый расчёт со списком «Вакансии»; `null` — не прочитано. */
+  readonly selectionTotal: number | null;
 }
 
 /** Полоса «Проверьте N навыков»: роль поиска, проверку которой можно начать. */
@@ -85,6 +88,14 @@ function withLacks(
   });
 }
 
+/** Строка «Проверить N навыков» в «Вакансиях» (s07): тот же счёт, что у полосы во вкладке «Роли». */
+export async function readSkillGap(
+  searchTitles: readonly string[],
+): Promise<{ readonly gap: number; readonly role: string | null }> {
+  const [ready, demand] = await Promise.all([readyRole(searchTitles), readDemand()]);
+  return ready ? { gap: gapOf(demand, ready), role: ready.title } : { gap: 0, role: null };
+}
+
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
     getRoleHypotheses(signal),
@@ -94,9 +105,10 @@ export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   ]);
   const searchTitles = campaign.roles.value;
   return {
-    rows: withLacks(buildRoleRows(roles, searchTitles, checked), demand),
+    rows: withLacks(buildRoleRows(roles, searchTitles, checked, campaign.titlesRu), demand),
     searchTitles,
     campaign,
+    selectionTotal: searchTitles.length > 0 ? await readSelectionTotal(searchTitles, signal) : null,
   };
 }
 
@@ -112,10 +124,15 @@ export async function loadSkillStrip(signal: AbortSignal): Promise<SkillStripDat
 export async function loadSkillRoles(signal: AbortSignal): Promise<{
   readonly searchTitles: readonly string[];
   readonly ready: string | null;
+  readonly titlesRu: Readonly<Record<string, string>>;
 }> {
   const campaign = await getCandidateCampaign(signal);
   const searchTitles = campaign.roles.value;
-  return { searchTitles, ready: (await readyRole(searchTitles))?.title ?? null };
+  return {
+    searchTitles,
+    ready: (await readyRole(searchTitles))?.title ?? null,
+    titlesRu: campaign.titlesRu ?? {},
+  };
 }
 
 /** Роли поиска целиком: подборка пересчитывается по ним. */

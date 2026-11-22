@@ -54,6 +54,32 @@ const FORMATS: Readonly<Record<string, string>> = {
   office: 'Офис',
 };
 
+/** Слова, которыми формат вписывают руками или берут из письма, → значение списка «Формат работы». */
+const FORMAT_WORDS: Readonly<Record<string, string>> = {
+  remote: 'remote',
+  удалённо: 'remote',
+  удаленно: 'remote',
+  удалёнка: 'remote',
+  удаленка: 'remote',
+  hybrid: 'hybrid',
+  гибрид: 'hybrid',
+  office: 'office',
+  офис: 'office',
+  'в офисе': 'office',
+};
+
+/** «гибрид» → `hybrid`; текст с подробностями («Гибрид, 2 дня в офисе») остаётся как есть. */
+export function formatOption(value: string): string {
+  const trimmed = value.trim();
+  return FORMAT_WORDS[trimmed.toLowerCase()] ?? trimmed;
+}
+
+function formatLabel(value: string | undefined): string {
+  const option = formatOption(value ?? '');
+  if (!option) return NOT_SET;
+  return FORMATS[option] ?? option.charAt(0).toUpperCase() + option.slice(1);
+}
+
 function sign(currency: string): string {
   return SIGNS[currency.trim().toUpperCase()] ?? currency.trim().toUpperCase();
 }
@@ -86,13 +112,27 @@ function plural(count: number, forms: readonly [string, string, string]): string
   return forms[2];
 }
 
-/** «14 ноября» из даты `YYYY-MM-DD` (или начала ISO-строки); чужой текст — как есть. */
-export function formatDay(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
-  if (!match) return value.trim() || null;
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+function dayInWords(date: Date): string {
   return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
+/** Вписанная руками «01.02.2027» → «1 февраля 2027»; год — только если он не нынешний. */
+function typedDay(text: string, now: Date): string | null {
+  const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(text);
+  if (!match) return null;
+  const [day, month, year] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return year === now.getUTCFullYear() ? dayInWords(date) : `${dayInWords(date)} ${year}`;
+}
+
+/** «14 ноября» из даты `YYYY-MM-DD` (или начала ISO-строки) и из «дд.мм.гггг»; чужой текст — как есть. */
+export function formatDay(value: string | null | undefined, now = new Date()): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (!match) return typedDay(text, now) ?? text;
+  return dayInWords(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))));
 }
 
 function byDeadline(a: OfferCard, b: OfferCard): number {
@@ -171,14 +211,18 @@ export function compareLine(
   choice: CurrencyChoice,
   rates: CurrencyRates | null,
 ): string {
+  // Один оффер: компания уже в заголовке и в «Решении», в строке остаётся только сумма.
+  const named = cards.length > 1;
   return cards
     .map((card) => {
       const pay = monthlyPay(card);
-      if (!pay) return `${card.company} ${NOT_SET}`;
-      const other = converted(pay, choice, rates);
-      return other === undefined
-        ? `${card.company} ${formatMoney(pay.amount, pay.currency)}`
-        : `${card.company} ≈ ${formatMoney(other, choice)}`;
+      const other = pay ? converted(pay, choice, rates) : undefined;
+      const money = !pay
+        ? NOT_SET
+        : other === undefined
+          ? formatMoney(pay.amount, pay.currency)
+          : `≈ ${formatMoney(other, choice)}`;
+      return named ? `${card.company} ${money}` : money;
     })
     .join(' · ');
 }
@@ -210,10 +254,7 @@ export function conditionRows(cards: readonly OfferCard[]): ConditionRow[] {
     { label: 'Бонус', cells: cards.map((card) => bonusText(card.terms)) },
     {
       label: 'Формат',
-      cells: cards.map((card) => {
-        const format = card.terms.format?.trim();
-        return format ? (FORMATS[format] ?? format) : NOT_SET;
-      }),
+      cells: cards.map((card) => formatLabel(card.terms.format)),
     },
     { label: 'Выход', cells: cards.map((card) => formatDay(card.terms.startDate) ?? NOT_SET) },
     { label: 'Риски', cells: cards.map((card) => riskText(card.terms)) },

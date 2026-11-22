@@ -355,6 +355,26 @@ describe('candidate company routes (B439)', () => {
     expect(wants.get(candidate.id, key)).toBeFalsy();
   });
 
+  it('n05: consent revoked through PUT search-consent closes the recruiter search again', async () => {
+    const items = [matchedVacancy('cluster-v1', 'Вектор Банк')];
+    const { app, authorization, candidate, consent } = await setup(items);
+    const url = `/api/v1/candidate/companies/${candidateCompanyKey('Вектор Банк')}/recruiter-search`;
+    const headers = { authorization, origin: 'http://localhost:3000' };
+    consent.set(candidate.id, { granted: true, policyVersion: SEARCH_CONSENT_POLICY_VERSION });
+    expect((await app.inject({ method: 'POST', url, headers, payload: {} })).statusCode).toBe(202);
+    const revoked = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/search-consent',
+      headers,
+      payload: { granted: false },
+    });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json().data.consent.granted).toBe(false);
+    const refused = await app.inject({ method: 'POST', url, headers, payload: {} });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.code).toBe('search_consent_required');
+  });
+
   it('requires search consent and returns only candidate-safe recruiter provenance', async () => {
     const items = [matchedVacancy('cluster-v1', 'Вектор Банк')];
     const { app, authorization, candidate, contacts, consent } = await setup(items);
