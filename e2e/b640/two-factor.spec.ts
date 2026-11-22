@@ -126,6 +126,9 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
 
   await screen.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await expect.poll(() => server.signedIn).toBe(false);
+  // Выход уводит на «/» полной загрузкой документа (граница аналитики, App.tsx):
+  // `goto('/login')` поверх незавершённого перехода падал с net::ERR_ABORTED.
+  await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'domcontentloaded' });
 
   await signInWith(page, APP_CODE);
   await signInWith(page, CODES[2]);
