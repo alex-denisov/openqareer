@@ -94,7 +94,7 @@ export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   ]);
   const searchTitles = campaign.roles.value;
   return {
-    rows: withLacks(buildRoleRows(roles, searchTitles, checked), demand),
+    rows: withLacks(buildRoleRows(roles, searchTitles, checked, campaign.titlesRu), demand),
     searchTitles,
     campaign,
   };
@@ -112,10 +112,15 @@ export async function loadSkillStrip(signal: AbortSignal): Promise<SkillStripDat
 export async function loadSkillRoles(signal: AbortSignal): Promise<{
   readonly searchTitles: readonly string[];
   readonly ready: string | null;
+  readonly titlesRu: Readonly<Record<string, string>>;
 }> {
   const campaign = await getCandidateCampaign(signal);
   const searchTitles = campaign.roles.value;
-  return { searchTitles, ready: (await readyRole(searchTitles))?.title ?? null };
+  return {
+    searchTitles,
+    ready: (await readyRole(searchTitles))?.title ?? null,
+    titlesRu: campaign.titlesRu ?? {},
+  };
 }
 
 /** Роли поиска целиком: подборка пересчитывается по ним. */

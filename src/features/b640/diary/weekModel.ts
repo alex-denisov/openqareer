@@ -6,6 +6,7 @@ import {
   type CareerDiaryWeekDraft,
   type CareerDiaryWeekSummaryInput,
 } from '../../../../shared/careerDiaryEntries';
+import { labelWithUnit } from './goalsModel';
 import { weekEnd } from './model';
 
 /** Модель экрана «Итог недели» (d00d): форма из черновика сервера и обратно. */
@@ -59,7 +60,7 @@ function meterOf(
   const was = numeric(before?.value) || numeric(goal.baselineValue);
   return {
     goalId: goal.id,
-    label: goal.unit ? `${label}, ${goal.unit}` : label,
+    label: labelWithUnit(label, goal.unit),
     placeholder: was ? `было ${was}` : '',
     value: inWeek ? numeric(latest?.value) : '',
   };
@@ -81,7 +82,8 @@ function titleOf(cards: readonly CareerDiaryGoalCard[], goalId: string | null): 
   if (!goalId) return null;
   for (const card of cards) {
     if (card.id === goalId) return card.title;
-    if (card.indicators.some((indicator) => indicator.id === goalId)) return card.title;
+    const indicator = card.indicators.find((item) => item.id === goalId);
+    if (indicator) return card.indicators.length > 1 ? indicator.title : card.title;
   }
   return null;
 }

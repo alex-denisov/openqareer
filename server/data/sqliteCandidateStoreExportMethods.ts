@@ -46,6 +46,8 @@ interface CandidateExportDependencies {
     candidateId: string,
   ) => ConsultantConversationExport[];
   readonly exportExecutiveRequests: (candidateId: string) => StoredExecutiveRequest[];
+  /** n02: «Как часто» и «Не показывать название компании». */
+  readonly readDeliverySettings: (candidateId: string) => import('./notificationDeliverySettings').DeliverySettings;
   readonly roleSkillAssessments: Pick<RoleSkillAssessmentRepository, 'list'>;
   readonly starStoriesRepo: Pick<SqliteStarStoriesRepository, 'list'>;
   readonly interviewSimulatorRepo: Pick<SqliteInterviewSimulatorRepository, 'getCurrent'>;
@@ -74,6 +76,7 @@ export function createSqliteCandidateStoreExportMethods(
         adaptationApplications: dependencies.careerDiaryRepo.adaptationApplications.exportApplications(candidateId),
         careerDiaryEntries: dependencies.diaryEntryRepo.exportAll(candidateId),
         careerDiary: exportCareerDiary(careerDiary, candidateId),
+        notificationDeliverySettings: dependencies.readDeliverySettings(candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {

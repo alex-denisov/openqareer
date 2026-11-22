@@ -44,10 +44,11 @@ function useGoalCard(goalId: string, version: number): readonly [Loaded, () => v
   return [loaded, useCallback(() => setAttempt((value) => value + 1), [])];
 }
 
+/** Без замеров состояние — исходное значение, как строка «старт» в истории. */
 function stateNumber(goal: CareerDiaryGoalSummary): string {
-  const latest = goal.latestMeasurement;
-  if (!latest) return 'не внесено';
-  const value = formatValue(latest.value, goal.unit);
+  const current = goal.latestMeasurement?.value ?? goal.baselineValue;
+  if (current === null) return 'не внесено';
+  const value = formatValue(current, goal.unit);
   return typeof goal.targetValue === 'number'
     ? `${value} из ${formatValue(goal.targetValue, goal.unit)}`
     : value;
