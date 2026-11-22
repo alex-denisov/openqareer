@@ -9,7 +9,8 @@ import type { AuthPrincipal, CabinetFeatures } from './authTypes';
  */
 export const CABINET_B640_EVERYONE = '*';
 
-export type CabinetB640Config = Pick<ServerConfig, 'cabinetB640Usernames'>;
+export type CabinetB640Config = Pick<ServerConfig, 'cabinetB640Usernames'> &
+  Partial<Pick<ServerConfig, 'interviewRecordingEnabled'>>;
 
 /** Включён ли новый кабинет для имени входа. */
 export function cabinetB640Enabled(
@@ -28,5 +29,8 @@ export function cabinetB640Features(
   config: CabinetB640Config,
   principal: Pick<AuthPrincipal, 'username'>,
 ): CabinetFeatures {
-  return { cabinetB640: cabinetB640Enabled(config, principal.username) };
+  return {
+    cabinetB640: cabinetB640Enabled(config, principal.username),
+    interviewRecording: config.interviewRecordingEnabled === true,
+  };
 }

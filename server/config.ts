@@ -106,6 +106,11 @@ const configSchema = z.object({
     (value) => (value === '' ? undefined : value),
     z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   ),
+  /** B642: запись и расшифровка разговоров — выключены до редакции 1.3 юридических документов. */
+  OPENQAREER_INTERVIEW_RECORDING_ENABLED: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  ),
   OPENQAREER_EXECUTIVE_REQUEST_CAPACITY: z.coerce.number().int().min(0).max(10_000).default(0),
   OPENQAREER_TEST_FIXED_CODE: blankAsUnset(z.string().regex(/^\d{6}$/u)),
   OPENQAREER_MX_CHECK_BYPASS_DOMAINS: z.preprocess(
@@ -322,6 +327,8 @@ export interface ServerConfig {
     publicBaseUrl: string;
   };
   emailVerificationRequired?: boolean;
+  /** B642: маршруты записей разговоров; выключено — их нет (404). */
+  interviewRecordingEnabled?: boolean;
   emailVerificationFixedCode?: string;
   /** B471: zero means new Executive requests are placed on the waitlist. */
   executiveRequestCapacity?: number;
@@ -474,6 +481,7 @@ export function readServerConfig(
     emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
     cabinetB640Usernames: parsed.OPENQAREER_CABINET_B640_USERNAMES,
     emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
+    interviewRecordingEnabled: parsed.OPENQAREER_INTERVIEW_RECORDING_ENABLED,
     executiveRequestCapacity: parsed.OPENQAREER_EXECUTIVE_REQUEST_CAPACITY,
     emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,
     secureCookies,

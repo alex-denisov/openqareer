@@ -99,8 +99,10 @@ describe('cabinetB640Enabled', () => {
 
   it('builds the public features object', () => {
     const config = flagConfig(['flagged.test']);
-    expect(cabinetB640Features(config, principal('flagged.test'))).toEqual({ cabinetB640: true });
-    expect(cabinetB640Features(config, principal('plain.test'))).toEqual({ cabinetB640: false });
+    expect(cabinetB640Features(config, principal('flagged.test'))).toEqual({ cabinetB640: true, interviewRecording: false });
+    expect(cabinetB640Features(config, principal('plain.test'))).toEqual({ cabinetB640: false, interviewRecording: false });
+    const recording = { ...config, interviewRecordingEnabled: true };
+    expect(cabinetB640Features(recording, principal('flagged.test')).interviewRecording).toBe(true);
   });
 });
 
