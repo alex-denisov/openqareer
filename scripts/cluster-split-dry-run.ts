@@ -45,7 +45,7 @@ function dryRun(path: string, limit: number | undefined): void {
   const counts = runClusterSplitDryRun(db, limit === undefined ? {} : { limit });
   const elapsedMs = Math.round(performance.now() - started);
   db.close();
-  const report = { ...counts, jobsUpperBound: counts.splitWithRequirements, elapsedMs };
+  const report = { ...counts, jobsUpperBound: counts.piecesWithRequirements, elapsedMs };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 

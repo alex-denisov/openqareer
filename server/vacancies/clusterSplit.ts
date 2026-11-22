@@ -89,6 +89,8 @@ export interface ClusterSplitCounts {
   skippedCandidateRef: number;
   /** Разбитые кластеры, у которых уже был кэш требований: верхняя граница задач (B752). */
   splitWithRequirements: number;
+  /** Новые куски этих кластеров: у них нет строки требований, это верх числа задач. */
+  piecesWithRequirements: number;
   /** Переезды страниц, по которым шаг запишет переадресацию (ключ свободен, адрес с ключом). */
   redirects: number;
   /** Примерный объём журнала: строка кластера, его ключи и строка каталога, байты. */
@@ -199,10 +201,11 @@ function countCluster(context: DryRunContext, cluster: VacancyCluster): void {
   if (
     context.hasRequirements &&
     db
-      .prepare('SELECT 1 FROM vacancy_requirements_cache WHERE cluster_id = ? LIMIT 1')
+      .prepare('SELECT 1 FROM vacancy_requirements_cache WHERE vacancy_id = ? LIMIT 1')
       .get(cluster.id)
   ) {
     counts.splitWithRequirements += 1;
+    counts.piecesWithRequirements += pieces.length - 1;
   }
 }
 
@@ -230,6 +233,7 @@ export function runClusterSplitDryRun(
       catalogMoved: 0,
       skippedCandidateRef: 0,
       splitWithRequirements: 0,
+      piecesWithRequirements: 0,
       redirects: 0,
       journalBytesEstimate: 0,
     },
