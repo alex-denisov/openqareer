@@ -34,6 +34,7 @@ import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecu
 import { notifyOwner } from './notifications/ownerTelegram';
 import { startEventLoopDelayLog } from './maintenance/eventLoopDelayLog';
 import { recordStepStall, startStepTimingLog } from './maintenance/stepTiming';
+import { startCpuProfileLog } from './maintenance/cpuProfileTop';
 import { recordEventLoopStall } from './vacancies/freehire/atsFuse';
 import { RoleLinkStep } from './vacancies/titleParse/roleLinkStep';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
@@ -377,6 +378,8 @@ try {
     },
   });
   startStepTimingLog(log);
+  // B761: что держит цикл — минута профиля процессора через 15 минут после старта, дальше раз в час.
+  startCpuProfileLog(log);
   worker.start();
   // B535: landing numbers are counted here, never on the web server's event loop.
   scheduleLandingStatsJob(semanticDatabase, log);
