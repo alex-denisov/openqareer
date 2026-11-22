@@ -204,6 +204,7 @@ export function proposeRoles(input: {
         {
           id: careerRoleId(role.title),
           title: role.title.trim(),
+          ...(role.titleRu ? { titleRu: role.titleRu } : {}),
           origin: 'model',
           reason: role.reason.trim(),
           evidenceRefs: role.evidenceRefs,

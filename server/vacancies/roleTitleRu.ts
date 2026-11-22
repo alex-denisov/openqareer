@@ -27,29 +27,32 @@ function buildIndex(): ReadonlyMap<string, string> {
 
 const INDEX = buildIndex();
 
-/**
- * B748: роли, придуманные моделью, в онтологии нет. Их проверенные русские названия
- * приходят с называнием ролей (и из его кэша) и живут здесь: название роли — не
- * данные кандидата, одно на всех. Онтология важнее.
- */
-const fromNaming = new Map<string, string>();
+/** Проверенные русские названия ролей одного кандидата: название → перевод. */
+export type OwnTitlesRu = Readonly<Record<string, string>>;
 
-export function rememberRoleTitlesRu(
-  roles: readonly { readonly title: string; readonly titleRu?: string }[],
-): void {
-  for (const role of roles) if (role.titleRu) fromNaming.set(keyOf(role.title), role.titleRu);
+function ownTitleRu(own: OwnTitlesRu, key: string): string | undefined {
+  for (const [title, titleRu] of Object.entries(own)) if (keyOf(title) === key) return titleRu;
+  return undefined;
 }
 
-export function roleTitleRu(title: string): string {
+/**
+ * B748: роли, придуманные моделью, в онтологии нет. Их проверенный русский перевод
+ * хранится у ролей самого кандидата и приходит сюда аргументом: вывод модели по
+ * одному профилю не становится названием роли для других. Онтология важнее.
+ */
+export function roleTitleRu(title: string, own: OwnTitlesRu = {}): string {
   const key = keyOf(title);
-  return INDEX.get(key) ?? fromNaming.get(key) ?? title;
+  return INDEX.get(key) ?? ownTitleRu(own, key) ?? title;
 }
 
 /** Только названия, у которых есть русское: клиент показывает `titlesRu[title] ?? title`. */
-export function roleTitlesRu(titles: readonly string[]): Record<string, string> {
+export function roleTitlesRu(
+  titles: readonly string[],
+  own: OwnTitlesRu = {},
+): Record<string, string> {
   return Object.fromEntries(
     titles
-      .map((title) => [title, roleTitleRu(title)] as const)
+      .map((title) => [title, roleTitleRu(title, own)] as const)
       .filter(([title, ru]) => ru !== title),
   );
 }

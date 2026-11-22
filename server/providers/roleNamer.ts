@@ -1,4 +1,3 @@
-import { rememberRoleTitlesRu } from '../vacancies/roleTitleRu';
 import { MODEL_CHAINS, resolveChain } from './modelChains';
 import {
   retryOn429,
@@ -445,7 +444,6 @@ export class CachedRoleNamer implements RoleNamer {
 
     const stored = this.store?.read(key);
     if (stored && this.now() - stored.at < this.durableTtlMs) {
-      rememberRoleTitlesRu(stored.roles);
       const outcome: RoleNamingOutcome = {
         roles: stored.roles,
         ...(stored.stage ? { stage: stored.stage } : {}),
@@ -455,7 +453,6 @@ export class CachedRoleNamer implements RoleNamer {
     }
 
     const outcome = await this.inner.nameRoles(facts, language);
-    rememberRoleTitlesRu(outcome.roles);
     // Пустой ответ не кэшируется: отказ провайдера не должен становиться
     // «моделью названо ноль ролей» на четверть часа.
     // Причины в кэш не кладутся: попадание не должно писать в лог отказ,
