@@ -680,7 +680,7 @@ export class MultiSourceVacancyEngine {
   public async maintainStoreAsync(
     nowMs: number = Date.now(),
     shouldStop: () => boolean = () => false,
-    options: { pauseMs?: number } = {},
+    options: { pauseMs?: number; windowRows?: number } = {},
   ): Promise<{ backfillWindows: number }> {
     const oldestPublishedAt = new Date(
       nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
@@ -700,7 +700,7 @@ export class MultiSourceVacancyEngine {
     let backfillWindows = 0;
     while (this.pool.backfillWindowStep && !shouldStop()) {
       backfillWindows += 1;
-      if (this.pool.backfillWindowStep().done) break;
+      if (this.pool.backfillWindowStep(options.windowRows).done) break;
       await new Promise((resolve) =>
         pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
       );

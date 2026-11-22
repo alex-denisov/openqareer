@@ -154,6 +154,15 @@ describe('role and session authentication', () => {
     expect(auth.getAccount(other!.sessionToken)?.sessions).toHaveLength(2);
   });
 
+  it('B754: device name is written once and comes back in the account sessions', async () => {
+    const { auth, candidates } = createServices();
+    const session = await auth.register('device.label', 'candidate-password-for-tests', candidates);
+    expect(auth.getAccount(session.sessionToken)?.sessions[0]?.deviceLabel).toBeNull();
+    auth.labelSession(session.sessionToken, 'iPhone · Safari');
+    auth.labelSession(session.sessionToken, 'Windows · Chrome');
+    expect(auth.getAccount(session.sessionToken)?.sessions[0]?.deviceLabel).toBe('iPhone · Safari');
+  });
+
   it('shows old sessions without a device id as one device (B427-2)', async () => {
     const { auth, candidates } = createServices();
     const password = 'candidate-password-for-tests';
