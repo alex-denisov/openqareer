@@ -23,6 +23,8 @@ export interface SkillCheck {
   readonly resultCase: RunCase | undefined;
   readonly answerCase: () => Promise<void>;
   readonly nextAfterResult: () => void;
+  /** B734: дальше, не записывая итог кейса в профиль. */
+  readonly keepOutAfterResult: () => Promise<void>;
   readonly answerAgain: () => void;
 }
 
@@ -67,6 +69,12 @@ export function useSkillCheck(roleTitle: string | undefined): SkillCheck {
     actions.focusCase();
   };
 
+  const keepOutAfterResult = async () => {
+    const record = resultCase;
+    if (!record) return;
+    if (await actions.keepCaseOut(record.assessmentCase.id)) nextAfterResult();
+  };
+
   const answerAgain = () => {
     const record = resultCase;
     if (!record) return;
@@ -76,5 +84,6 @@ export function useSkillCheck(roleTitle: string | undefined): SkillCheck {
     setReopened(true);
   };
 
-  return { state, run, activeCase, actions, resultCase, answerCase, nextAfterResult, answerAgain };
+  const flow = { answerCase, nextAfterResult, keepOutAfterResult, answerAgain };
+  return { state, run, activeCase, actions, resultCase, ...flow };
 }

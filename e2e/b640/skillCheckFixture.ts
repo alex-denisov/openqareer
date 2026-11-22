@@ -137,6 +137,8 @@ export interface SkillOptions {
   readonly searchRoles?: readonly string[];
   /** Роли, требований которых мало: `insufficient_requirements`, сбор не идёт. */
   readonly insufficient?: readonly string[];
+  /** Оценка кейса держится, пока тест не отпустит её (B734 «Оцениваем ответ»). */
+  readonly holdAnswer?: Promise<void>;
 }
 
 function answered(run: SkillRun, caseId: string, answer: string): SkillRun {
@@ -160,6 +162,13 @@ function answered(run: SkillRun, caseId: string, answer: string): SkillRun {
     skills,
     currentCaseIndex: run.currentCaseIndex + 1,
   };
+}
+
+function keptOut(run: SkillRun, caseId: string): SkillRun {
+  const cases = run.cases.map((record) =>
+    record.assessmentCase.id === caseId ? { ...record, keptOutOfProfile: true } : record,
+  );
+  return { ...run, revision: run.revision + 1, cases };
 }
 
 function afterDialogue(run: SkillRun): SkillRun {
@@ -239,11 +248,12 @@ export async function openSkillCheck(
     calls.posts.push({ path: 'start', body: route.request().postDataJSON() });
     return route.fulfill({ json: { data: { state: 'run', run } } });
   });
-  await page.route(`${BASE}/*/**`, (route: Route) => {
+  await page.route(`${BASE}/*/**`, async (route: Route) => {
     const path = new URL(route.request().url()).pathname.split('/role-skill-assessments/')[1] ?? '';
     const body = route.request().postDataJSON() as Record<string, unknown>;
     calls.posts.push({ path, body });
     if (path.endsWith('/answer')) {
+      await options.holdAnswer;
       if (fails > 0) {
         fails -= 1;
         return route.fulfill({
@@ -252,6 +262,8 @@ export async function openSkillCheck(
         });
       }
       run = answered(run, path.split('/')[2] ?? '', String(body.answer));
+    } else if (path.endsWith('/keep-out')) {
+      run = keptOut(run, path.split('/')[2] ?? '');
     } else if (path.endsWith('/dialogue')) {
       run = afterDialogue(run);
     } else if (path.endsWith('/suggestions')) {

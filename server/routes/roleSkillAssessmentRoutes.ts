@@ -46,6 +46,7 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { profileSkills } from './roleSkillAssessmentKeepOut';
 
 const roleSchema = z.string().trim().min(1).max(200);
 const startSchema = z
@@ -243,9 +244,7 @@ async function handleCheckedRoles(deps: RouteDeps, request: FastifyRequest, repl
     .map((run) => ({
       roleTitle: run.roleTitle,
       completedAt: run.completedAt,
-      confirmedSkills: run.skills
-        .filter((skill) => skill.grade === 'confirmed')
-        .map((skill) => skill.name),
+      confirmedSkills: profileSkills(run),
     }));
   return reply.send({ data: checked });
 }
@@ -519,7 +518,8 @@ export function toAssessmentVacancies(
         return {
           id: `requirement-${stableRefId(cluster.id, skillId)}`,
           skillId,
-          statement: label.trim(),
+          // B734: dictionary name; the raw label named the case «Executive Leadership».
+          statement: normalizedSkill || label.trim(),
           sourceRefs: sourceRefs.map((source) => ({
             id: stableRefId(cluster.id, `${source.sourceId}:${skillId}`),
             vacancyId: cluster.id,

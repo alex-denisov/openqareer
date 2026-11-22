@@ -10,6 +10,8 @@ export interface SkillQuestionProps {
   readonly criteria?: readonly string[];
   readonly answer: string;
   readonly busy: boolean;
+  /** Строка, пока ответ обрабатывается: у кейса — «Оцениваем ответ» (B734). */
+  readonly pendingText?: string;
   /** Сбой оценки или сохранения: строка на месте, ответ остаётся в поле. */
   readonly failed: boolean;
   readonly onChange: (answer: string) => void;
@@ -76,6 +78,7 @@ export function SkillQuestion(props: SkillQuestionProps) {
           </button>
         }
       />
+      {busy && props.pendingText ? <StatusLine state="wait" text={props.pendingText} /> : null}
       {failed ? <StatusLine state="err" text={EVAL_ERROR} action={retry} /> : null}
     </section>
   );

@@ -13,6 +13,8 @@ export interface SkillResultProps {
   readonly busy: boolean;
   readonly failed: boolean;
   readonly onNext: () => void;
+  /** B734 «Дальше без изменений»: итог остаётся в проверке, в профиль не идёт. */
+  readonly onKeepOut: () => void;
   readonly onAgain: () => void;
   readonly onAppeal: (reason: string) => Promise<boolean>;
 }
@@ -64,11 +66,33 @@ function AppealField(props: {
   );
 }
 
+/** Дальше с записью в профиль, ещё раз или дальше без изменений (B734). */
+function ResultActions(props: SkillResultProps & { readonly toProfile: boolean }) {
+  return (
+    <div className="actions">
+      <Button variant="primary" icon="checkc" onClick={props.onNext}>
+        {props.toProfile ? 'Подтвердить навык' : 'Дальше'}
+      </Button>
+      <Button icon="repeat" onClick={props.onAgain}>
+        Пройти ещё раз
+      </Button>
+      {props.toProfile ? (
+        <Button variant="quiet" busy={props.busy} onClick={props.onKeepOut}>
+          Дальше без изменений
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 /** C4b «Итог кейса»: пункты оценки, что попадёт в профиль, дальше или ещё раз. */
-export function SkillResult({ record, busy, failed, onNext, onAgain, onAppeal }: SkillResultProps) {
+export function SkillResult(props: SkillResultProps) {
+  const { record, busy, failed, onNext, onAppeal } = props;
   const [appealing, setAppealing] = useState(false);
   const { evaluation } = record;
-  const line = profileLine(record.assessmentCase.skillName, evaluation.grade);
+  const line = record.keptOutOfProfile
+    ? null
+    : profileLine(record.assessmentCase.skillName, evaluation.grade);
   const appeal = async (reason: string) => {
     const sent = await onAppeal(reason);
     if (sent) setAppealing(false);
@@ -98,14 +122,7 @@ export function SkillResult({ record, busy, failed, onNext, onAgain, onAppeal }:
         <AppealField busy={busy} onSend={appeal} onCancel={() => setAppealing(false)} />
       ) : null}
       {failed ? <StatusLine state="err" text="Не отправилось. Попробуйте ещё раз." /> : null}
-      <div className="actions">
-        <Button variant="primary" icon="checkc" onClick={onNext}>
-          {line ? 'Подтвердить навык' : 'Дальше'}
-        </Button>
-        <Button icon="repeat" onClick={onAgain}>
-          Пройти ещё раз
-        </Button>
-      </div>
+      <ResultActions {...props} toProfile={Boolean(line)} />
     </section>
   );
 }

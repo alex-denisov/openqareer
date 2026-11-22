@@ -65,6 +65,31 @@ test.describe('B653: «Карьера» — проверка навыков C04'
     await expect(node(page, 'c04').getByLabel('Ваш ответ')).toHaveValue('');
   });
 
+  test('C4b: «Дальше без изменений» — итог не идёт в профиль, следующий кейс (B734)', async ({
+    page,
+  }) => {
+    let release = () => {};
+    const holdAnswer = new Promise<void>((resolve) => (release = resolve));
+    const calls = await openSkillCheck(page, PATH, { holdAnswer });
+    const screen = node(page, 'c04');
+    await screen.getByLabel('Ваш ответ').fill('Разберу причины с командой и назову новый срок.');
+    await screen.getByRole('button', { name: 'Ответить' }).click();
+    await expect(screen.getByText('Оцениваем ответ')).toBeVisible();
+    await expect(screen.getByLabel('Ваш ответ')).toBeDisabled();
+    release();
+    const result = node(page, 'c04b');
+    await expect(result.getByRole('heading', { name: 'Раскрыты все 3 пункта' })).toBeVisible();
+    await expect(screen.getByText('Оцениваем ответ')).toHaveCount(0);
+    await expectGates(page);
+    await result.getByRole('button', { name: 'Дальше без изменений' }).click();
+    await expect(node(page, 'c04').getByText('Kubernetes · вопрос 6 из 6')).toBeVisible();
+    const kept = calls.posts.filter((post) => post.path.endsWith('/keep-out'));
+    expect(kept).toHaveLength(1);
+    expect(kept[0]?.path).toMatch(/\/cases\/[^/]+\/keep-out$/u);
+    expect(kept[0]?.body).toMatchObject({ expectedRevision: expect.any(Number) });
+    expect(calls.posts.filter((post) => post.path.endsWith('/suggestions'))).toHaveLength(0);
+  });
+
   test('C4: сбой оценки — строка на месте, ответ остался, «Повторить» тем же запросом', async ({
     page,
   }) => {

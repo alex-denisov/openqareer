@@ -155,6 +155,17 @@ export async function skipRoleAssessmentCase(input: {
   return post(`${base(runId)}/cases/${encodeURIComponent(caseId)}/skip`, body);
 }
 
+/** B734 «Дальше без изменений»: итог кейса не идёт в профиль. */
+export async function keepRoleAssessmentCaseOut(input: {
+  runId: string;
+  caseId: string;
+  expectedRevision: number;
+  requestId: string;
+}): Promise<RoleSkillAssessmentMutationResult> {
+  const { runId, caseId, ...body } = input;
+  return post(`${base(runId)}/cases/${encodeURIComponent(caseId)}/keep-out`, body);
+}
+
 export async function discussRoleAssessmentCase(input: {
   runId: string;
   caseId: string;

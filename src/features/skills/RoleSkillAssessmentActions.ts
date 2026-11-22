@@ -7,6 +7,7 @@ import {
   decideRoleAssessmentSuggestions,
   discussRoleAssessmentCase,
   getCurrentRoleSkillAssessment,
+  keepRoleAssessmentCaseOut,
   rollbackRoleAssessmentSuggestions,
   retryRoleSkillAssessment,
   saveRoleAssessmentDraft,
@@ -144,6 +145,17 @@ export class RoleSkillAssessmentActions {
     const requestId = this.requestId('skip', payload);
     return this.performMutation(() =>
       skipRoleAssessmentCase({ runId: run.id, ...payload, requestId }),
+    );
+  };
+
+  /** B734: итог кейса остаётся в проверке, в профиль он не идёт. */
+  keepCaseOut = async (caseId: string): Promise<boolean> => {
+    const run = this.run;
+    if (!run) return false;
+    const payload = { expectedRevision: run.revision, caseId };
+    const requestId = this.requestId('keep-out', payload);
+    return this.performMutation(() =>
+      keepRoleAssessmentCaseOut({ runId: run.id, ...payload, requestId }),
     );
   };
 

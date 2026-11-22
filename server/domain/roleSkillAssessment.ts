@@ -207,6 +207,8 @@ const roleSkillRunCaseSchema = z
           .strict(),
       )
       .max(10),
+    /** B734: «Дальше без изменений» — итог кейса не идёт в профиль. */
+    keptOutOfProfile: z.literal(true).optional(),
   })
   .strict();
 

@@ -102,6 +102,7 @@ function QuestionStep({
       eyebrow={caseEyebrow(run, activeCase)}
       title={activeCase.assessmentCase.prompt}
       criteria={CASE_CRITERIA_LABELS}
+      pendingText="Оцениваем ответ"
       answer={state.caseAnswer}
       busy={state.busy}
       failed={failed}
@@ -123,6 +124,7 @@ function RunStep({ check, onLater }: { readonly check: SkillCheck; readonly onLa
         busy={state.busy}
         failed={Boolean(state.error)}
         onNext={check.nextAfterResult}
+        onKeepOut={() => void check.keepOutAfterResult()}
         onAgain={check.answerAgain}
         onAppeal={actions.appealCase}
       />

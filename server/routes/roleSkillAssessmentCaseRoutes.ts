@@ -8,6 +8,7 @@ import {
 import type { CandidateIdentity } from '../data/candidateStore';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { registerRoleSkillKeepOutRoute } from './roleSkillAssessmentKeepOut';
 import {
   CASE_CRITERIA,
   actionSchema,
@@ -66,6 +67,7 @@ export function registerRoleSkillAssessmentCaseRoutes(app: FastifyInstance, deps
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     withDeps(deps, handleRetry),
   );
+  registerRoleSkillKeepOutRoute(app, deps);
 }
 
 async function handleDraft(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -567,6 +569,7 @@ function buildEvaluationContext(
       'Return only strict JSON with one criterion result for each criterion.',
       'Use only supplied source ids. Candidate excerpts must be verbatim from the answer.',
       'Do not infer missing facts or claim experience the answer does not state.',
+      'Write every explanation in Russian to the candidate in the second person, as «вы»: «Вы назвали…», never «Кандидат назвал…».',
     ],
     role: run.roleTitle,
     case: record.assessmentCase,
@@ -646,6 +649,7 @@ function saveEvaluationOnCase(
           },
           evaluationHistory: history,
           appealReason: null,
+          keptOutOfProfile: undefined,
         }
       : record,
   );
