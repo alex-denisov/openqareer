@@ -75,7 +75,8 @@ function TextCell({
 function OkToggle({ ok, onToggle }: { readonly ok: boolean; readonly onToggle: () => void }) {
   return (
     <button
-      className={ok ? 'btn is-sm is-on' : 'btn is-sm'}
+      // B645 d02l: «Верно» — контурная кнопка с галочкой, без заливки, как в макете.
+      className="btn is-sm kp-okb"
       type="button"
       aria-pressed={ok}
       onClick={onToggle}
@@ -126,7 +127,9 @@ function WeightCell(props: {
           max={6}
           onChange={props.onChange}
         />
-        %
+        <span className="kp-pct-sign" aria-hidden="true">
+          %
+        </span>
       </span>
     </td>
   );
