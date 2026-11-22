@@ -335,6 +335,20 @@ export class SqliteCandidateReputationRepository {
     return updated;
   }
 
+  /** B645 p02: «Это не проблема» у расхождения с резюме и её отмена — в последней проверке следа. */
+  updateFootprintMismatchReview(
+    candidateId: string,
+    key: string,
+    review: 'hidden' | 'unreviewed',
+  ): CandidateFootprintAudit | null {
+    const audit = this.getLatestFootprintAudit(candidateId);
+    if (!audit) return null;
+    const others = (audit.hiddenMismatches ?? []).filter((entry) => entry !== key);
+    const updated = { ...audit, hiddenMismatches: review === 'hidden' ? [...others, key] : others };
+    this.saveFootprintAudit(updated);
+    return updated;
+  }
+
   /** B544/B382: stores the candidate's checklist mark, profile fact or removal path on one finding. */
   updateFootprintFindingChecklist(
     candidateId: string,

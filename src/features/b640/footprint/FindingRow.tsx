@@ -6,10 +6,23 @@ import { buildNodePath } from '../routes';
 import {
   addCandidateFootprintFindingToProfile,
   reviewCandidateFootprintFinding,
+  reviewFootprintMismatch,
 } from './footprintApi';
 import { ACTION_ICON, confirmsOwner, levelTag, opensRemovalPath } from './footprintModel';
 import { reportFailure } from './reportFailure';
 import { announceFootprintChanged } from './useFootprint';
+
+/** Что отмечаем: находку следа или расхождение с резюме (B645 p02). */
+export interface ReviewTarget {
+  readonly kind: 'finding' | 'mismatch';
+  readonly id: string;
+}
+
+/** Расхождение отмечается само, а не находка, к которой оно привязано. */
+export function reviewTarget(item: FootprintRiskItem): ReviewTarget | null {
+  if (item.mismatch) return { kind: 'mismatch', id: item.id };
+  return item.findingId ? { kind: 'finding', id: item.findingId } : null;
+}
 
 /** Отметка находки и отмена в тосте; после неё сводка перечитывается. */
 export function useReview(onChanged: () => void) {
@@ -17,9 +30,13 @@ export function useReview(onChanged: () => void) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function send(findingId: string, review: FootprintReview): Promise<boolean> {
+  async function send(target: ReviewTarget, review: FootprintReview): Promise<boolean> {
     try {
-      await reviewCandidateFootprintFinding(findingId, review);
+      if (target.kind === 'mismatch') {
+        await reviewFootprintMismatch(target.id, review === 'unreviewed' ? 'unreviewed' : 'hidden');
+      } else {
+        await reviewCandidateFootprintFinding(target.id, review);
+      }
       return true;
     } catch (reason) {
       reportFailure('отметка находки не сохранилась', reason);
@@ -28,11 +45,11 @@ export function useReview(onChanged: () => void) {
     }
   }
 
-  async function mark(findingId: string, review: 'hidden' | 'not_self', text: string) {
+  async function mark(target: ReviewTarget, review: 'hidden' | 'not_self', text: string) {
     if (busy) return;
     setBusy(true);
     setError(null);
-    const ok = await send(findingId, review);
+    const ok = await send(target, review);
     setBusy(false);
     if (!ok) return;
     onChanged();
@@ -41,7 +58,7 @@ export function useReview(onChanged: () => void) {
       undo: {
         label: 'Отменить',
         // Экран мог смениться: перечитывает тот, что открыт сейчас.
-        onUndo: () => void send(findingId, 'unreviewed').then((done) => done && announceFootprintChanged()),
+        onUndo: () => void send(target, 'unreviewed').then((done) => done && announceFootprintChanged()),
       },
     });
   }
@@ -88,7 +105,7 @@ function OwnerActions({ item, onChanged }: { readonly item: FootprintRiskItem; r
       </a>
       {findingId ? (
         <button className="row-act" type="button" disabled={review.busy}
-          onClick={() => void review.mark(findingId, 'not_self', 'Отмечено: это не ваша страница')}>
+          onClick={() => void review.mark({ kind: 'finding', id: findingId }, 'not_self', 'Отмечено: это не ваша страница')}>
           Это не моё
         </button>
       ) : null}
@@ -102,6 +119,7 @@ function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; rea
   const { action, findingId } = item;
   if (!action) return null;
   if (confirmsOwner(item)) return <OwnerActions item={item} onChanged={onChanged} />;
+  const target = reviewTarget(item);
   return (
     <div className="fp-acts">
       {action.kind === 'add_to_profile' && findingId ? <AddToProfile findingId={findingId} /> : null}
@@ -111,9 +129,9 @@ function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; rea
           {action.label}
         </Link>
       ) : null}
-      {findingId && action.kind !== 'add_to_profile' ? (
+      {target && action.kind !== 'add_to_profile' ? (
         <button className="row-act" type="button"
-          onClick={() => void review.mark(findingId, 'hidden', 'Отмечено: не проблема')}>
+          onClick={() => void review.mark(target, 'hidden', 'Отмечено: не проблема')}>
           Это не проблема
         </button>
       ) : null}

@@ -45,6 +45,8 @@ export interface CandidateFootprintAudit {
   readonly ownershipConfirmedAt: string;
   readonly startedAt: string;
   readonly completedAt?: string;
+  /** B645 p02: расхождения с резюме, отмеченные «Это не проблема», — по ключу содержания. */
+  readonly hiddenMismatches?: readonly string[];
 }
 
 export interface CandidateFootprintConsentState {
