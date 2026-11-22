@@ -3,6 +3,7 @@ import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
 import { warmRoleSnapshots } from './routes/roleSnapshotWarm';
 import { warmMatchedList } from './routes/matchedListWarm';
 import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
+import { backfillRoleTitlesRu } from './routes/careerRoleTitleRuBackfill';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
 import { redactRequestUrlForLogs } from './observability/redactRequestUrl';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
@@ -27,7 +28,7 @@ import { CareerCommandDispatcher } from './orchestration/careerCommandDispatcher
 import type { ConnectorExecutor } from './connectors/connectorHarness';
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
-import type { RoleNamer } from './providers/roleNamer';
+import { roleTitleTranslatorOf, type RoleNamer } from './providers/roleNamer';
 import { RoleNamingFailureLog } from './providers/roleNamingFailureLog';
 import { COVER_LETTER_VERTEX_TIMEOUT_MS, type CoverLetterWriter } from './providers/coverLetterWriter';
 import type { SessionAuth } from './auth/authService';
@@ -132,6 +133,8 @@ interface BuildAppOptions {
   /** B734: русские названия навыков проверки роли. */
   skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
+  /** B642: Whisper для записей собеседований; без подстановки — OpenRouter. */
+  recordingTranscriber?: RouteDeps['recordingTranscriber'];
   adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
@@ -282,7 +285,7 @@ async function createFastifyBase(
       reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
       reply.header(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id',
+        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id, X-Recording-Token',
       );
     }
     if (request.method === 'OPTIONS') {
@@ -453,7 +456,7 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter, recordingTranscriber: options.recordingTranscriber, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor
@@ -479,9 +482,14 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
   deps.matchedPoolPrecompute?.setFitRequester?.((candidateId, snapshot) =>
     queuePrecomputedSelectionFit(deps, candidateId, snapshot),
   );
-  deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.((candidateId, log) =>
-    rebuildCampaignRoles(deps, candidateId, { log }),
-  );
+  const translator = roleTitleTranslatorOf(deps.roleNamer);
+  deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.(async (candidateId, log) => {
+    await rebuildCampaignRoles(deps, candidateId, { log });
+    // B748: старые роли поиска без русского названия — тот же проход, раз за запуск.
+    if (!translator) return;
+    const written = await backfillRoleTitlesRu({ candidateStore: deps.candidateStore, translator }, candidateId);
+    if (written > 0) log({ written }, 'role-titles-ru-backfill');
+  });
   deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
     // Roles first (prod 19.11): the list answers from its sealed copy, «Карьера» had nothing.
     await warmRoleSnapshots(deps, candidateId, log);

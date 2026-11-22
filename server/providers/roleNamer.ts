@@ -559,6 +559,13 @@ export class QueuedRoleNamer implements RoleNamer {
   }
 }
 
+/** B748: проверенный перевод названий из собранной цепочки называния; нет — перевода нет. */
+export function roleTitleTranslatorOf(namer: RoleNamer | undefined): RoleTitleTranslator | undefined {
+  const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;
+  const clean = cached instanceof HygienicRoleNamer ? cached.inner : cached;
+  return clean instanceof TitleRuRetryRoleNamer ? clean.translator : undefined;
+}
+
 /** Отчёт об очереди считается по ней самой, а не по отдельному списку (B183). */
 export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
   const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;

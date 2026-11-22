@@ -55,6 +55,9 @@ function requestedAtFor(now: string, options: FitEnqueueOptions): string {
   return new Date(BACKGROUND_BASE_MS - Math.max(0, Math.floor(options.backgroundRank))).toISOString();
 }
 
+/** B757: the fit request is larger than one model call may cost; it is settled for good. */
+export const FIT_INPUT_TOO_LARGE = 'assessment_input_too_large';
+
 export class SqliteVacancyFitStore {
   private readonly cachedIdsMemo = new Map<string, { readonly ids: ReadonlySet<string>; readonly count: number; readonly last: number }>();
 
@@ -308,12 +311,14 @@ export class SqliteVacancyFitStore {
     return { key, status: row.status };
   }
 
+  /** B757: a request over the per-call ceiling is the same request next time, so it is not revived. */
   retryFailed(input: VacancyFitInput, now = new Date().toISOString(), options: FitEnqueueOptions = {}): void {
     const key = this.cacheKey(input);
     const requestedAt = requestedAtFor(now, options);
     this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,defers=0,last_error=NULL,
-      lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'`)
-      .run(this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, key, this.candidateKey(input.candidateId));
+      lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'
+      AND COALESCE(last_error,'')<>?`)
+      .run(this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, key, this.candidateKey(input.candidateId), FIT_INPUT_TOO_LARGE);
   }
 
   /**

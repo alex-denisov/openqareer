@@ -103,6 +103,16 @@ class BulkStageError extends Error {
 }
 /** Money is uncertain or a cap is hit: the chain stops, no later stage is asked. */
 class BulkSpendError extends Error {}
+const OVER_CEILING = 'request_over_ceiling';
+/**
+ * B757: the request is larger than one call may cost on every stage. Nothing was sent or reserved;
+ * the same input will never fit, so the caller settles it for good instead of asking again.
+ */
+export class BulkInputTooLarge extends Error {
+  constructor() {
+    super('Request exceeds reserved budget');
+  }
+}
 const UNKNOWN_USAGE = 'Unknown bulk usage; reservation retained';
 
 function isJsonAnswer(content: string): boolean {
@@ -226,8 +236,9 @@ export class BulkLlmClient {
     const inputUpperBound = Buffer.byteLength(input.prefix) + Buffer.byteLength(input.input) + 4096;
     const costUpperBound =
       (inputUpperBound * lane.inputPerMillionUsd + maxTokens * lane.outputPerMillionUsd) / 1e6;
+    // B757: a stage's own refusal, so a cheaper stage of the chain is still asked.
     if (inputUpperBound > 2_000_000 || costUpperBound > this.config.perRequestUsd)
-      throw new Error('Request exceeds reserved budget');
+      throw new BulkStageError(OVER_CEILING, false, 'Request exceeds reserved budget');
     return {
       model: lane.model,
       messages: [
@@ -299,9 +310,12 @@ export class BulkLlmClient {
     if (input.onlyVertex) throw new Error(`Vertex gave no answer: ${vertex?.failure ?? 'no_stage'}`);
     let failure: BulkStageError | undefined;
     let rejected: Error | undefined;
+    let asked = 0;
+    let overCeiling = 0;
     for (const lane of this.stagesFor(input)) {
       if (this.now() - startedAt > CALL_DEADLINE_MS) break;
       const outcome = await this.askStage(lane, input, accept, startedAt);
+      asked += 1;
       if (outcome.result) {
         this.unavailableSince = undefined;
         const fallbackReason =
@@ -313,9 +327,11 @@ export class BulkLlmClient {
       }
       rejected = outcome.rejected ?? rejected;
       failure = outcome.failure ?? failure;
+      if (outcome.failure?.reason === OVER_CEILING) overCeiling += 1;
     }
     // A stage's own answer was unusable: the job's to count, not an outage.
     if (rejected) throw rejected;
+    if (overCeiling > 0 && overCeiling === asked) throw new BulkInputTooLarge();
     throw this.channelDown(failure?.reason ?? 'no_stage');
   }
 
