@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { saveCandidateCampaign } from './matchedVacancyApi';
+import { getMatchedVacancyFacets, getMatchedVacancyPage, saveCandidateCampaign } from './matchedVacancyApi';
 import * as apiClient from './apiClient';
 
 describe('saveCandidateCampaign', () => {
@@ -66,3 +66,39 @@ describe('updateCampaignRoles', () => {
   });
 });
 
+describe('B725: страница 0 и фасеты двумя запросами', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const facets = { total: 3, regions: [], remote: 0, levels: [], roles: [], sources: [] };
+
+  it('страница строк просит part=rows', async () => {
+    const spy = vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [], meta: { total: 0, nextOffset: null } }), { status: 200 }),
+    );
+    await getMatchedVacancyPage(0, undefined, undefined, 'rows');
+    const url = String(spy.mock.calls[0]?.[0]);
+    expect(url).toContain('offset=0');
+    expect(url).toContain('part=rows');
+  });
+
+  it('фасеты — отдельный запрос с теми же условиями и поясом', async () => {
+    const spy = vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [], meta: { total: 3, facets } }), { status: 200 }),
+    );
+    const filters = { roles: ['COO'], regions: ['eu'], levels: [], sources: [], remoteOnly: true };
+    await expect(getMatchedVacancyFacets(undefined, filters)).resolves.toEqual(facets);
+    const url = new URL(String(spy.mock.calls[0]?.[0]), 'https://x.test');
+    expect(url.pathname).toBe('/api/v1/candidate/matched-vacancies');
+    expect(url.searchParams.get('part')).toBe('facets');
+    expect(url.searchParams.get('offset')).toBe('0');
+    expect(url.searchParams.getAll('role')).toEqual(['COO']);
+    expect(url.searchParams.get('remote')).toBe('1');
+    expect(url.searchParams.get('tz')).toBeTruthy();
+  });
+
+  it('ошибка фасетов — ошибка запроса, а не пустые фасеты', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: 'x', message: 'x' } }), { status: 500 }),
+    );
+    await expect(getMatchedVacancyFacets()).rejects.toBeTruthy();
+  });
+});
