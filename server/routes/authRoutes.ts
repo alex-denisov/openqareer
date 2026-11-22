@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { deviceLabelOf } from '../auth/deviceLabel';
 import type { RouteDeps } from './deps';
 import { registerTwoFactorRoutes } from './twoFactorRoutes';
 import { twoFactorLoginGate, twoFactorStoreFor } from './twoFactorAccess';
@@ -332,11 +333,18 @@ async function handleChangeUnverifiedEmail(
   }
 }
 
+/** B754: название устройства сессии из user agent — один раз, при первом чтении. */
+function labelDevice(deps: RouteDeps, request: FastifyRequest): void {
+  const label = deviceLabelOf(request.headers['user-agent'], request.headers.origin);
+  if (label) deps.authService.labelSession?.(extractSessionToken(request, deps.config), label);
+}
+
 async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = authenticateSession(request, deps.authService, deps.config);
   if (!principal) {
     return { data: null, meta: { requestId: request.id } };
   }
+  labelDevice(deps, request);
   // Сервер уже продлил сессию; браузерная cookie продлевается здесь же, иначе
   // она умирала бы по своему сроку при живой серверной сессии (PRB-038).
   if (sessionCameFromCookie(request, deps.config)) {
@@ -364,6 +372,7 @@ async function handleGetAccount(deps: RouteDeps, request: FastifyRequest, reply:
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  labelDevice(deps, request);
   const account = deps.authService.getAccount?.(sessionToken) ?? null;
   if (!account) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);

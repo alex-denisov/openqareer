@@ -134,7 +134,10 @@ function SetupFields({ setup, code, password, onCode, onPassword }: SetupFieldsP
   );
 }
 
-/** Два ряда действий: на 390 «Готово» уходит под копирование и скачивание, верх кнопок в ряду общий. */
+/**
+ * n04e: на 1440 один ряд; на 390 «Скопировать коды» во всю ширину, ниже «Скачать» и «Готово».
+ * Две группы: у кнопок одной группы общий верх (гейт B640 «верх в группе»).
+ */
 function BackupActions({
   text,
   onCopied,
@@ -155,6 +158,8 @@ function BackupActions({
           <Icon name="copy" />
           Скопировать коды
         </button>
+      </div>
+      <div className="actions">
         <button
           className="row-act"
           type="button"
@@ -165,8 +170,6 @@ function BackupActions({
           <Icon name="download" />
           Скачать
         </button>
-      </div>
-      <div className="actions">
         <button className="row-act" type="button" onClick={onDone}>
           Готово
         </button>
@@ -211,16 +214,19 @@ export function SetupForm({ setup, onEnabled, onCancel }: SetupFormProps) {
           onPassword={setPassword}
         />
         {error ? <ErrorLine text={error} /> : null}
-        <div className="actions m-commit">
-          <button
-            className="btn is-primary"
-            type="submit"
-            disabled={busy || !code.trim() || !password}
-            aria-busy={busy || undefined}
-          >
-            <Icon name="check" />
-            Включить
-          </button>
+        {/* На 390 закреплена только «Включить»; «Отмена» остаётся под полями, как в макете n04d. */}
+        <div className="actions fa-act">
+          <div className="actions m-commit">
+            <button
+              className="btn is-primary"
+              type="submit"
+              disabled={busy || !code.trim() || !password}
+              aria-busy={busy || undefined}
+            >
+              <Icon name="check" />
+              Включить
+            </button>
+          </div>
           <button className="row-act" type="button" onClick={onCancel}>
             Отмена
           </button>

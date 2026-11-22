@@ -7,7 +7,8 @@
     align-items: start;
     grid-column: 1 / -1;
   }
-  .b640 .fa-fields { display: grid; gap: var(--career-space-3); }
+  /* Поля шириной 295, как в макете n04d: там их задаёт ключ в одну строку, у нас ключ переносится. */
+  .b640 .fa-fields { display: grid; gap: var(--career-space-3); min-inline-size: 18.4375rem; }
   .b640 .fa-l { color: var(--career-text-soft); font-size: var(--career-text-xs); font-weight: 600; }
   .b640 .fa-qr {
     inline-size: 10rem;
@@ -36,12 +37,15 @@
     border-radius: var(--career-radius-sm);
     background: var(--career-surface);
   }
-  .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-1); }
-  /* row-act тянет поля на −8 px: при зазоре меньше 16 px зоны клика «Скачать» и «Готово» перекрывались. */
+  .b640 .fa-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-2); }
+  /* row-act тянет поля на −8 px: при малом зазоре зоны клика «Скачать» и «Готово» перекрывались. */
   .b640 .fa-bar .row-act { margin-inline: 0; }
   @media (max-width: 767px) {
     .b640 .fa-setup { grid-template-columns: minmax(0, 1fr); justify-items: start; }
     .b640 .fa-codes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .b640 .fa-done .fa-bar { flex-direction: column; align-items: stretch; }
+    /* n04e на 390: «Скопировать коды» во всю ширину, ниже «Скачать» и «Готово». */
+    .b640 .fa-fields { min-inline-size: min(100%, 18.4375rem); }
+    .b640 .fa-done .fa-bar > .actions { flex: 1 1 100%; }
+    .b640 .fa-done .fa-bar .btn.is-primary { flex: 1 1 100%; justify-content: center; }
   }
 }

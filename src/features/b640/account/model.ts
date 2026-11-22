@@ -81,6 +81,7 @@ export function deviceLine(session: AccountSession, now: Date = new Date()): str
 }
 
 export function deviceName(session: AccountSession): string {
+  if (session.deviceLabel) return session.deviceLabel;
   return session.current ? 'Это устройство' : 'Другое устройство';
 }
 
