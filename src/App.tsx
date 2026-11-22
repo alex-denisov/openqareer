@@ -51,6 +51,7 @@ import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
 import { readRememberedCabinetB640, rememberSignedIn } from './features/site/signedInFlag';
+import { APP_SIGN_IN_PATH } from './features/site/appSignIn';
 
 const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
@@ -136,6 +137,9 @@ const EmailVerificationPage = lazy(() =>
 );
 const ResetPasswordPage = lazy(() =>
   loadAuthPages().then((module) => ({ default: module.ResetPasswordPage })),
+);
+const AppSignInPage = lazy(() =>
+  import('./features/site/AppSignInPage').then((module) => ({ default: module.AppSignInPage })),
 );
 
 /** B589: `/` in the .app is the cabinet, the landing is not in its bundle. */
@@ -647,6 +651,9 @@ export default function App() {
     if (currentPath === '/reset-password') {
       return <ResetPasswordPage onNavigate={navigate} onSessionChange={handleSessionChange} />;
     }
+    if (currentPath === APP_SIGN_IN_PATH) {
+      return <AppSignInPage session={state.session} onNavigate={navigate} />;
+    }
     return null;
   };
 
@@ -908,7 +915,8 @@ export function isAuthPath(path: string): boolean {
     path === '/login' ||
     path === '/signup' ||
     path === '/reset-password' ||
-    path === '/verify-email'
+    path === '/verify-email' ||
+    path === APP_SIGN_IN_PATH
   );
 }
 
