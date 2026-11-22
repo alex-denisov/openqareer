@@ -34,7 +34,15 @@ export interface RuntimeMemoryReport {
   };
 }
 
+/** Обработчик обновлений SMM-чата; ошибки он пишет в журнал сам. */
+export interface SmmTelegramUpdates {
+  readonly chatId: string;
+  readonly handle: (update: unknown) => void;
+}
+
 export interface RouteDeps {
+  /** B732: SMM-чат владельца получает свои обновления с общего вебхука бота. */
+  smmTelegram?: SmmTelegramUpdates;
   vacancyMechanics?: import('../domain/vacancyMechanicsRuntime').VacancyMechanicsRuntime;
   bulkLlmRuntime?: import('../providers/bulkLlmRuntime').BulkLlmRuntime;
   /** Черновики LinkedIn: очередь «Сегодня» показывает посты, ждущие одобрения. */
