@@ -46,8 +46,12 @@ export async function recordingPermissions(): Promise<RecordingPermissions> {
   );
 }
 
-export async function requestRecordingPermissions(): Promise<RecordingPermissions> {
-  const granted = await invokeDesktopCommand<RecordingPermissions>('recording_request_permissions');
+/** `mic` (B758, #942): только микрофон, без окна «Запись экрана»; без режима — для встречи. */
+export async function requestRecordingPermissions(mode?: 'mic'): Promise<RecordingPermissions> {
+  const granted = await invokeDesktopCommand<RecordingPermissions>(
+    'recording_request_permissions',
+    mode ? { mode } : undefined,
+  );
   return granted ?? { supported: false, microphone: false, screen: false };
 }
 
