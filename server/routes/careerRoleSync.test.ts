@@ -62,6 +62,17 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
     expect(store.saveCandidateWorkspace).not.toHaveBeenCalled();
   });
 
+  it('B748: хранит проверенный русский перевод роли у этого кандидата и пишет, когда он появился', () => {
+    const store = fakeStore({
+      campaign: { ...campaign, careerRoles: [{ id: careerRoleId('Head of Quantum Ops'), title: 'Head of Quantum Ops' }] },
+    });
+    const named = { ...role('Head of Quantum Ops'), titleRu: 'Руководитель квантовых операций' };
+    expect(persistCareerRoles({ candidateStore: store as never }, 'c1', [named])).toBe(true);
+    expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toEqual([
+      { id: careerRoleId('Head of Quantum Ops'), title: 'Head of Quantum Ops', titleRu: 'Руководитель квантовых операций' },
+    ]);
+  });
+
   it('показывает на «Карьере» роль из мастера, которой нет среди названных', () => {
     const store = fakeStore({ campaign });
     const context = {

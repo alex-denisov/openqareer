@@ -39,6 +39,8 @@ export interface LinkedinQueuePage {
   readonly total: number;
   readonly offset: number;
   readonly limit: number;
+  /** B695: действует «Остановить всё» — время очереди не наступает, напоминаний нет. */
+  readonly paused: boolean;
 }
 
 export const LINKEDIN_QUEUE_PAGE_MAX = 20;

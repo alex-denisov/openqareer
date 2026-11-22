@@ -341,3 +341,37 @@ describe('coach input cache prefix (B580)', () => {
     expect(JSON.parse(second).pastMessageMatches).toEqual([snippet('зарплата вилка')]);
   });
 });
+
+describe('nextSection в ответе консультанта (B745)', () => {
+  const base = {
+    message: 'Ответ',
+    phase: 'discovery',
+    memoryCandidates: [],
+    nextQuestion: null,
+    completeness: { known: [], unknown: [] },
+    safety: { needsHuman: false, reason: null },
+    careerTrack: null,
+    actionProposals: [],
+  };
+
+  it('принимает раздел из закрытого списка, null и прежние ходы без поля', () => {
+    expect(coachTurnResultSchema.parse({ ...base, nextSection: 'profile' }).nextSection).toBe(
+      'profile',
+    );
+    expect(coachTurnResultSchema.parse({ ...base, nextSection: null }).nextSection).toBeNull();
+    expect(coachTurnResultSchema.parse(base).nextSection).toBeUndefined();
+    expect(coachTurnResultSchema.safeParse({ ...base, nextSection: 'settings' }).success).toBe(
+      false,
+    );
+  });
+
+  it('JSON-схема модели требует поле: раздел из списка или null', () => {
+    expect(COACH_TURN_JSON_SCHEMA.required).toContain('nextSection');
+    expect(COACH_TURN_JSON_SCHEMA.properties.nextSection).toEqual({
+      anyOf: [
+        { type: 'string', enum: ['profile', 'career', 'vacancies', 'responses'] },
+        { type: 'null' },
+      ],
+    });
+  });
+});
