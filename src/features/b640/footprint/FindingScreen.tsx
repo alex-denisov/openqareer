@@ -4,7 +4,7 @@ import { Icon, Link, StatusLine, useToast } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { FindingDock, RemovalDoneLine } from './FindingDock';
-import { useReview } from './FindingRow';
+import { reviewTarget, useReview } from './FindingRow';
 import { FootprintLoad, StartPage, hasSummary } from './FootprintScreen';
 import {
   GOOGLE_REMOVAL_URL,
@@ -40,19 +40,22 @@ function Facts({ item }: { readonly item: FootprintRiskItem }) {
 
 function QuietRow({ item, onDone }: { readonly item: FootprintRiskItem; readonly onDone: () => void }) {
   const review = useReview(onDone);
-  const { findingId } = item;
-  if (!findingId) return null;
+  const target = reviewTarget(item);
+  if (!target) return null;
   return (
     <>
       <div className="actions fp-quiet-row">
         <button className="row-act" type="button"
-          onClick={() => void review.mark(findingId, 'hidden', 'Отмечено: не проблема')}>
+          onClick={() => void review.mark(target, 'hidden', 'Отмечено: не проблема')}>
           Это не проблема
         </button>
-        <button className="row-act" type="button"
-          onClick={() => void review.mark(findingId, 'not_self', 'Отмечено: это не вы')}>
-          Это не я
-        </button>
+        {/* Расхождение — данные о самом кандидате: «Это не я» к нему не относится. */}
+        {target.kind === 'finding' ? (
+          <button className="row-act" type="button"
+            onClick={() => void review.mark(target, 'not_self', 'Отмечено: это не вы')}>
+            Это не я
+          </button>
+        ) : null}
       </div>
       {review.error ? <StatusLine state="err" text={review.error} /> : null}
     </>
