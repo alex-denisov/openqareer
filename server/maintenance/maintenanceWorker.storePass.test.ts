@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MaintenanceWorker, STORE_PASS_MIN_GAP_MS, type MaintenanceLog } from './maintenanceWorker';
+import {
+  DEFAULT_STOP_GRACE_MS,
+  MaintenanceWorker,
+  STORE_PASS_MIN_GAP_MS,
+  type MaintenanceLog,
+} from './maintenanceWorker';
 
 function silentLog(): MaintenanceLog & { entries: Array<{ level: string; msg: string }> } {
   const entries: Array<{ level: string; msg: string }> = [];
@@ -9,13 +14,17 @@ function silentLog(): MaintenanceLog & { entries: Array<{ level: string; msg: st
   return { entries, info: push('info'), warn: push('warn'), error: push('error') };
 }
 
-type StoreCall = { shouldStop: (() => boolean) | undefined; pauseMs: number | undefined };
+type StoreCall = {
+  shouldStop: (() => boolean) | undefined;
+  pauseMs: number | undefined;
+  windowRows?: number | undefined;
+};
 
 function engineWith(
   maintainStoreAsync: (
     nowMs?: number,
     shouldStop?: () => boolean,
-    options?: { pauseMs?: number },
+    options?: { pauseMs?: number; windowRows?: number },
   ) => Promise<{ backfillWindows: number }>,
 ) {
   return {
@@ -78,7 +87,7 @@ describe('MaintenanceWorker · чистка пула в фоне (B759)', () => 
     const { marks, storePassMark } = markAt(null);
     const worker = new MaintenanceWorker({
       engine: engineWith(async (_now, shouldStop, options) => {
-        calls.push({ shouldStop, pauseMs: options?.pauseMs });
+        calls.push({ shouldStop, pauseMs: options?.pauseMs, windowRows: options?.windowRows });
         return { backfillWindows: 2 };
       }),
       log,
@@ -90,7 +99,9 @@ describe('MaintenanceWorker · чистка пула в фоне (B759)', () => 
     expect(calls).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.pauseMs).toBeGreaterThan(0);
+    // B759 замер 22.11: 250 мс давали stalls в 1,5–2 раза выше обычного — 1 с и окна меньше.
+    expect(calls[0]?.pauseMs).toBe(1_000);
+    expect(calls[0]?.windowRows).toBe(2_000);
     expect(calls[0]?.shouldStop?.()).toBe(false);
     expect(marks).toEqual([Date.parse('2026-11-22T12:00:01Z')]);
     expect(log.entries.some((entry) => entry.msg === 'maintenance-store-pass')).toBe(true);
@@ -169,5 +180,11 @@ describe('MaintenanceWorker · чистка пула в фоне (B759)', () => 
     expect(log.entries.some((entry) => entry.msg === 'maintenance-store-pass-failed')).toBe(true);
     expect(marks).toEqual([]);
     await worker.stop();
+  });
+});
+
+describe('MaintenanceWorker · срок остановки (B759)', () => {
+  it('ждёт волну не дольше 60 с: отмену слышит только обход hh, дольше ждать незачем', () => {
+    expect(DEFAULT_STOP_GRACE_MS).toBe(60_000);
   });
 });

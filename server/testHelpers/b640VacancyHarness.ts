@@ -69,6 +69,8 @@ export interface HarnessOptions {
   readonly recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** B642: флаг записи разговоров; по умолчанию включён, чтобы маршруты были. */
   readonly interviewRecording?: boolean;
+  /** B751: подставной разбор интервью. */
+  readonly interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
   /** Подставной автор черновиков LinkedIn: тесты не зовут модель. */
   readonly linkedinDraftWriter?: { writeDraft(input: unknown): Promise<{ text: string }> };
   /** Подставной переписчик фактов (B645: тексты профиля LinkedIn): тесты не зовут модель. */
@@ -117,7 +119,7 @@ export async function createB640Harness(options: HarnessOptions) {
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
-    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
+    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), ...(options.interviewDebriefWriter ? { interviewDebriefWriter: options.interviewDebriefWriter } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
     ...(options.logLines ? { logDestination: { write: (line: string) => { options.logLines?.push(line); } } } : {}),
   });
   const get = (url: string, user?: HarnessUser) =>

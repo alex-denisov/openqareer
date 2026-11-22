@@ -7,9 +7,12 @@ export interface WhisperSegment {
   readonly text: string;
 }
 
+export type AudioFormat = 'm4a' | 'wav';
+
 export type RecordingTranscriber = (
   audio: Buffer,
   signal: AbortSignal,
+  format?: AudioFormat,
 ) => Promise<WhisperSegment[]>;
 
 export const WHISPER_URL = 'https://openrouter.ai/api/v1/audio/transcriptions';
@@ -57,7 +60,7 @@ export function createWhisperTranscriber(
   config: Pick<ServerConfig, 'openRouterKey'>,
   fetchImpl: typeof fetch = fetch,
 ): RecordingTranscriber {
-  return async (audio, signal) => {
+  return async (audio, signal, format = 'm4a') => {
     if (!config.openRouterKey) throw new TranscriberUnavailableError();
     const response = await fetchImpl(WHISPER_URL, {
       method: 'POST',
@@ -68,7 +71,7 @@ export function createWhisperTranscriber(
       },
       body: JSON.stringify({
         model: WHISPER_MODEL,
-        input_audio: { data: audio.toString('base64'), format: 'm4a' },
+        input_audio: { data: audio.toString('base64'), format },
         response_format: 'verbose_json',
         timestamp_granularities: ['segment'],
         provider: { zdr: true, data_collection: 'deny' },

@@ -4,6 +4,7 @@ export interface SessionRow {
   created_at: string;
   last_seen_at: string;
   device_id_hash: string | null;
+  device_label?: string | null;
 }
 
 export const USER_SELECT = `
