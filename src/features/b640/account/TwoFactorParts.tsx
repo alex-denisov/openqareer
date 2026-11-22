@@ -134,47 +134,6 @@ function SetupFields({ setup, code, password, onCode, onPassword }: SetupFieldsP
   );
 }
 
-/** Два ряда действий: на 390 «Готово» уходит под копирование и скачивание, верх кнопок в ряду общий. */
-function BackupActions({
-  text,
-  onCopied,
-  onDone,
-}: {
-  readonly text: string;
-  readonly onCopied: () => void;
-  readonly onDone: () => void;
-}) {
-  return (
-    <div className="fa-bar">
-      <div className="actions">
-        <button
-          className="btn is-primary"
-          type="button"
-          onClick={() => void navigator.clipboard?.writeText(text).then(onCopied, () => undefined)}
-        >
-          <Icon name="copy" />
-          Скопировать коды
-        </button>
-        <button
-          className="row-act"
-          type="button"
-          onClick={() =>
-            void triggerFileDownload('openqareer-reserve-codes.txt', `${text}\n`, 'text/plain')
-          }
-        >
-          <Icon name="download" />
-          Скачать
-        </button>
-      </div>
-      <div className="actions">
-        <button className="row-act" type="button" onClick={onDone}>
-          Готово
-        </button>
-      </div>
-    </div>
-  );
-}
-
 interface SetupFormProps {
   readonly setup: TwoFactorSetup;
   readonly onEnabled: (codes: readonly string[]) => void;
@@ -211,16 +170,19 @@ export function SetupForm({ setup, onEnabled, onCancel }: SetupFormProps) {
           onPassword={setPassword}
         />
         {error ? <ErrorLine text={error} /> : null}
-        <div className="actions m-commit">
-          <button
-            className="btn is-primary"
-            type="submit"
-            disabled={busy || !code.trim() || !password}
-            aria-busy={busy || undefined}
-          >
-            <Icon name="check" />
-            Включить
-          </button>
+        {/* На 390 закреплена только «Включить»; «Отмена» остаётся под полями, как в макете n04d. */}
+        <div className="actions fa-act">
+          <div className="actions m-commit">
+            <button
+              className="btn is-primary"
+              type="submit"
+              disabled={busy || !code.trim() || !password}
+              aria-busy={busy || undefined}
+            >
+              <Icon name="check" />
+              Включить
+            </button>
+          </div>
           <button className="row-act" type="button" onClick={onCancel}>
             Отмена
           </button>
@@ -241,22 +203,45 @@ export function BackupCodes({
   const titleId = useId();
   const [copied, setCopied] = useState(false);
   const text = codes.join('\n');
+  const copy = () => void navigator.clipboard?.writeText(text).then(() => setCopied(true), () => undefined);
+  const download = () =>
+    void triggerFileDownload('openqareer-reserve-codes.txt', `${text}\n`, 'text/plain');
+  // Две строки: в строке не больше одной кнопки с рамкой или заливкой (гейт B640 row_actions),
+  // поэтому контурная «Скачать» стоит в строке с «Готово», на 1440 и на 390.
   return (
-    <li className="set-row is-block is-next">
-      <div className="c5-form fa-done">
-        <p className="set-t" id={titleId}>
-          Резервные коды · {codes.length}
-        </p>
-        <ul className="fa-codes" aria-labelledby={titleId}>
-          {codes.map((code) => (
-            <li key={code}>
-              <code>{code}</code>
-            </li>
-          ))}
-        </ul>
-        {copied ? <ResultLine text="Коды скопированы" /> : null}
-        <BackupActions text={text} onCopied={() => setCopied(true)} onDone={onDone} />
-      </div>
-    </li>
+    <>
+      <li className="set-row is-block is-next">
+        <div className="c5-form fa-done">
+          <p className="set-t" id={titleId}>
+            Резервные коды · {codes.length}
+          </p>
+          <ul className="fa-codes" aria-labelledby={titleId}>
+            {codes.map((code) => (
+              <li key={code}>
+                <code>{code}</code>
+              </li>
+            ))}
+          </ul>
+          {copied ? <ResultLine text="Коды скопированы" /> : null}
+          <div className="actions fa-bar">
+            <button className="btn is-primary" type="button" onClick={copy}>
+              <Icon name="copy" />
+              Скопировать коды
+            </button>
+          </div>
+        </div>
+      </li>
+      <li className="set-row fa-done-row">
+        <div className="actions fa-bar">
+          <button className="btn" type="button" onClick={download}>
+            <Icon name="download" />
+            Скачать
+          </button>
+          <button className="row-act" type="button" onClick={onDone}>
+            Готово
+          </button>
+        </div>
+      </li>
+    </>
   );
 }

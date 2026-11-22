@@ -77,6 +77,8 @@ export interface AccountSnapshot {
     createdAt: string;
     lastSeenAt: string;
     expiresAt: string;
+    /** B754: «iPhone · Safari»; `null` — устройство не распознано. */
+    deviceLabel: string | null;
   }>;
 }
 
@@ -226,6 +228,7 @@ export interface SessionAuth {
     code: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   getAccount?(sessionToken: string): AccountSnapshot | null;
+  labelSession?(sessionToken: string, label: string): void;
   revokeAccountSession?(
     sessionToken: string,
     sessionId: string,

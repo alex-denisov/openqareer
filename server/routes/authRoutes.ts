@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { labelDevice, startSession } from './sessionDevice';
 import type { RouteDeps } from './deps';
 import { registerTwoFactorRoutes } from './twoFactorRoutes';
 import { twoFactorLoginGate, twoFactorStoreFor } from './twoFactorAccess';
@@ -108,7 +109,7 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
       versionId: body.legalConsent.versionId,
       documents: LEGAL_DOC_SLUGS,
     });
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return reply.code(201).send({
       data: {
         ...publicPrincipal(authenticated.principal, deps.config),
@@ -185,7 +186,7 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
   }
   const gated = twoFactorLoginGate(deps, request, reply, authenticated, deviceId ?? null);
   if (gated) return gated;
-  setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+  startSession(deps, request, reply, authenticated.sessionToken);
   return {
     data: {
       ...publicPrincipal(authenticated.principal, deps.config),
@@ -255,7 +256,7 @@ async function handleVerifyEmail(deps: RouteDeps, request: FastifyRequest, reply
     if (!authenticated) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: { ...publicPrincipal(authenticated.principal, deps.config), sessionToken: authenticated.sessionToken },
       meta: { requestId: request.id },
@@ -280,7 +281,7 @@ async function handleResendEmailVerification(
     if (!result) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, sessionToken);
     return {
       data: {
         ...publicPrincipal(result.principal, deps.config),
@@ -316,7 +317,7 @@ async function handleChangeUnverifiedEmail(
     if (!result) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, sessionToken);
     return {
       data: {
         ...publicPrincipal(result.principal, deps.config),
@@ -337,6 +338,7 @@ async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, reply: Fas
   if (!principal) {
     return { data: null, meta: { requestId: request.id } };
   }
+  labelDevice(deps, request);
   // Сервер уже продлил сессию; браузерная cookie продлевается здесь же, иначе
   // она умирала бы по своему сроку при живой серверной сессии (PRB-038).
   if (sessionCameFromCookie(request, deps.config)) {
@@ -364,6 +366,7 @@ async function handleGetAccount(deps: RouteDeps, request: FastifyRequest, reply:
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
   if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  labelDevice(deps, request);
   const account = deps.authService.getAccount?.(sessionToken) ?? null;
   if (!account) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
@@ -458,7 +461,7 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
     twoFactorStoreFor(deps).dropChallenges(principal.userId);
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: publicPrincipal(authenticated.principal, deps.config),
       meta: { requestId: request.id },
@@ -565,7 +568,7 @@ async function handleCreateAccountEmailChange(
         meta: { requestId: request.id },
       });
     }
-    setSessionCookie(reply, result.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, result.sessionToken);
     return {
       data: {
         status: result.status,
@@ -623,7 +626,7 @@ async function handleVerifyAccountEmailChange(
     if (!authenticated) {
       return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: publicPrincipal(authenticated.principal, deps.config),
       meta: { requestId: request.id },
@@ -680,7 +683,7 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
     twoFactorStoreFor(deps).dropChallenges(authenticated.principal.userId);
     const gated = twoFactorLoginGate(deps, request, reply, authenticated, clientDeviceIdFrom(request) ?? null);
     if (gated) return gated;
-    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    startSession(deps, request, reply, authenticated.sessionToken);
     return {
       data: {
         ...publicPrincipal(authenticated.principal, deps.config),
