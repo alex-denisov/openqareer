@@ -203,6 +203,8 @@ function salaryState(filters: ListFilters, currency: MoneyCurrency): VacanciesSc
   return {
     ...base,
     salaryMinimum: filters.moneyFrom * 1000,
+    // B645 s07: a vacancy without a salary stays in the list as «не указана», as in the mockup.
+    includeMissingSalary: true,
     salaryCurrency: normalizeSalaryCurrency(currency === 'ORIG' ? 'RUB' : currency),
   };
 }
