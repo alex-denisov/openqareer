@@ -141,6 +141,16 @@ describe('черновик итога недели', () => {
     expect(plan[0].source).toBe('carried');
   });
 
+  it('B683: цель с показателями сама в план не идёт — только её показатели', () => {
+    const goals = [
+      goal({ id: 'p' }),
+      goal({ id: 'p1', parentGoalId: 'p' }),
+      goal({ id: 'p2', parentGoalId: 'p' }),
+    ];
+    const plan = suggestWeekPlan({ goals, previous: null, weekStart: '2026-12-28' });
+    expect(plan.map((item) => item.goalId)).toEqual(['p1', 'p2']);
+  });
+
   it('предложений не больше семи', () => {
     const goals = Array.from({ length: 12 }, (_, index) => goal({ id: `g${index}` }));
     expect(suggestWeekPlan({ goals, previous: null, weekStart: '2026-12-28' })).toHaveLength(7);
