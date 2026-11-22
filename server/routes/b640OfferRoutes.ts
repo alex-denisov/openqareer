@@ -52,6 +52,19 @@ function ownOffer(
   }
 }
 
+function deletedOwnOffer(
+  store: RouteDeps['candidateStore'],
+  candidateId: string,
+  applicationId: string,
+): boolean {
+  try {
+    return store.deleteApplicationOffer?.(candidateId, applicationId) ?? false;
+  } catch (error) {
+    if (error instanceof ApplicationNotFoundError) return false;
+    throw error;
+  }
+}
+
 function offerView(ctx: Ctx, candidateId: string, applicationId: string): B640OfferView | null {
   const { candidateStore } = ctx.deps;
   const offer = ownOffer(candidateStore, candidateId, applicationId);
@@ -141,6 +154,20 @@ const putDecision: Handler = async (ctx, request, reply) => {
   return { data, meta: { requestId: request.id } };
 };
 
+/** Кандидат убирает оффер, внесённый по ошибке: оффер и выбор по нему (решение, налог). */
+const deleteOffer: Handler = async (ctx, request, reply) => {
+  const candidateId = candidateOf(ctx, request, reply);
+  if (!candidateId) return reply;
+  const id = applicationIdSchema.safeParse(
+    (request.params as { applicationId: string }).applicationId,
+  );
+  if (!id.success) return invalidBody(request, reply);
+  if (!deletedOwnOffer(ctx.deps.candidateStore, candidateId, id.data))
+    return offerNotFound(request, reply);
+  ctx.choices.delete(candidateId, id.data);
+  return { data: { applicationId: id.data, deleted: true }, meta: { requestId: request.id } };
+};
+
 /** B680: отклики (авто и ручные отдельно) и офферы кабинета B640; все маршруты за флагом. */
 export function registerB640OfferRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const choices = new SqliteB640OfferChoiceRepository({ databasePath: deps.config.databasePath });
@@ -160,4 +187,5 @@ export function registerB640OfferRoutes(app: FastifyInstance, deps: RouteDeps): 
   app.get(`${BASE}/offers`, bind(getOffers));
   app.put(`${BASE}/offers/:applicationId/tax`, write, bind(putTax));
   app.put(`${BASE}/offers/:applicationId/decision`, write, bind(putDecision));
+  app.delete(`${BASE}/offers/:applicationId`, write, bind(deleteOffer));
 }
