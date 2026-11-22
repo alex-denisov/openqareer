@@ -23,18 +23,20 @@ import { requireTariffQuota } from './tariffQuotaGuard';
 
 const BASE = '/api/v1/candidate/b640/contact-messages';
 const idSchema = z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/u);
+/** Id кластера вакансии: у источников с префиксом есть двоеточие (`cluster-src-hh-search:137412812`). */
+const vacancyIdSchema = z.string().trim().min(1).max(200).regex(/^[a-zA-Z0-9_:.-]+$/u);
 const createSchema = z
   .object({
     contactId: idSchema.optional(),
     recruiterId: idSchema.optional(),
-    vacancyId: idSchema.optional(),
+    vacancyId: vacancyIdSchema.optional(),
     kind: z.enum(B640_CONTACT_MESSAGE_KINDS),
   })
   .strict()
   .refine((body) => (body.contactId === undefined) !== (body.recruiterId === undefined));
 const editSchema = z.object({ text: z.string().trim().min(1).max(B640_CONTACT_MESSAGE_EDIT_MAX) }).strict();
 const listSchema = z.object({ contactId: idSchema });
-const sentSchema = z.object({ vacancyId: idSchema });
+const sentSchema = z.object({ vacancyId: vacancyIdSchema });
 
 interface Stores {
   readonly messages: SqliteContactMessageRepository;
