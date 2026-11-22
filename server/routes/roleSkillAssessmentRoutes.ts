@@ -19,7 +19,7 @@ import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
-import { readTargetLevel } from './vacancyRoleContext';
+import { readRoleLevel } from './vacancyRoleContext';
 import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
@@ -432,7 +432,7 @@ export async function readRoleSnapshot(
 ): Promise<MatchedRoleSnapshot> {
   const targetRoles = [roleTitle];
   const { confirmedSkills } = readMatchProfile(deps.candidateStore, candidateId);
-  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, targetRoles);
+  const targetLevel = readRoleLevel(deps.candidateStore, candidateId, roleTitle);
   try {
     const vacancies = await readMatchedSnapshot(
       deps.multiSourceEngine,

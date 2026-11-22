@@ -108,6 +108,7 @@ describe('B738 · 1: выгрузка отдаёт трекер откликов
     expect(tracker.rejectionReviewHelped).toBe(true);
     expect(tracker.actionBatches).toMatchObject([{ id: 'batch-свой', confirmedAt: '2026-11-20T09:00:00.000Z' }]);
     expect(tracker.actionReceipts).toMatchObject([{ batchId: 'batch-свой', applicationId, status: 'delivered' }]);
+    expect(tracker.stagePromotions).toMatchObject([{ applicationId, fromStage: 'applied' }]);
     for (const key of ['retryRequests', 'referralTracks', 'vacancyApplications', 'careerCommands', 'commandApprovals', 'outreach'] as const) {
       expect(tracker[key]).toEqual([]);
     }

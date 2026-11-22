@@ -29,6 +29,7 @@ import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
 import { defaultProcessProfile } from '../../vacancies/processProfileDefault';
 import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './errors';
+import { InterviewStagePromotions } from '../interviewStagePromotion';
 
 export interface ReadApplicationOptions {
   readonly now?: string;
@@ -48,6 +49,7 @@ export class ApplicationTrackerController {
   private readonly offers: SqliteApplicationOfferRepository;
   private readonly skips: SqliteVacancySkipRepository;
   private readonly visits: SqliteCandidateVisitRepository;
+  private readonly promotions: InterviewStagePromotions;
 
   constructor(
     database: DatabaseSync,
@@ -63,6 +65,7 @@ export class ApplicationTrackerController {
     this.offers = new SqliteApplicationOfferRepository(database, sealedText);
     this.skips = new SqliteVacancySkipRepository(database);
     this.visits = new SqliteCandidateVisitRepository(database);
+    this.promotions = new InterviewStagePromotions(database);
   }
 
   listLegacy(candidateId: string): VacancyApplication[] {
@@ -164,22 +167,38 @@ export class ApplicationTrackerController {
   createInterview(candidateId: string, applicationId: string, input: CreateInterviewInput): StoredApplicationInterview {
     return this.transaction(() => {
       const application = this.mustGetOwn(candidateId, applicationId);
-      if (application.stage !== 'interview') {
+      const promoted = application.stage !== 'interview';
+      // Этап меняется сейчас, а не в день интервью: будущая дата выпадала из окна воронки.
+      if (promoted) {
         this.applications.patch(candidateId, applicationId, {
           expectedVersion: application.version,
           stage: 'interview',
-          ...(input.scheduledAt ? { occurredAt: input.scheduledAt } : {}),
         });
       }
-      const parked = stageShowsInterview(application.stage)
-        ? null
-        : this.upcomingInterview(applicationId);
-      if (parked && input.scheduledAt) {
-        const moved = this.interviews.patch(applicationId, parked.id, { scheduledAt: input.scheduledAt });
-        if (moved) return moved;
+      const interview = this.placeInterview(application.stage, applicationId, input);
+      if (promoted) {
+        this.promotions.record({
+          applicationId,
+          interviewId: interview.id,
+          fromStage: application.stage,
+          fromStageChangedAt: application.stageChangedAt,
+        });
       }
-      return this.interviews.create(applicationId, input);
+      return interview;
     });
+  }
+
+  private placeInterview(
+    stageBefore: ApplicationStage,
+    applicationId: string,
+    input: CreateInterviewInput,
+  ): StoredApplicationInterview {
+    const parked = stageShowsInterview(stageBefore) ? null : this.upcomingInterview(applicationId);
+    if (parked && input.scheduledAt) {
+      const moved = this.interviews.patch(applicationId, parked.id, { scheduledAt: input.scheduledAt });
+      if (moved) return moved;
+    }
+    return this.interviews.create(applicationId, input);
   }
 
   /** The slot a rollback left stored: a return to «Интервью» moves it, keeping its notes. */
@@ -207,7 +226,11 @@ export class ApplicationTrackerController {
   /** Чужой или несуществующий отклик — та же ошибка, что и у правки: маршрут отвечает 404. */
   deleteInterview(candidateId: string, applicationId: string, interviewId: string): boolean {
     this.mustGetOwn(candidateId, applicationId);
-    return this.interviews.delete(applicationId, interviewId);
+    return this.transaction(() => {
+      const deleted = this.interviews.delete(applicationId, interviewId);
+      if (deleted) this.promotions.undo(applicationId, interviewId, new Date().toISOString());
+      return deleted;
+    });
   }
 
   deleteOffer(candidateId: string, applicationId: string): boolean {

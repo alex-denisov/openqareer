@@ -5,6 +5,7 @@ import {
   type CampaignMetaView,
 } from '../../coach/matchedVacancyApi';
 import { changeCareerRole } from '../../career-map/careerRoleApi';
+import { skillKey } from '../../career-map/roleHypothesisAdapter';
 import {
   getCheckedRoles,
   getCurrentRoleSkillAssessment,
@@ -89,7 +90,10 @@ function withLacks(
 ): readonly RoleRow[] {
   return rows.map((row) => {
     if (row.lacks) return row;
-    const missing = demandOf(demand, row.title)?.skills.find((skill) => !skill.inProfile);
+    const confirmed = new Set(row.confirmedNames.map(skillKey));
+    const missing = demandOf(demand, row.title)?.skills.find(
+      (skill) => !skill.inProfile && !confirmed.has(skillKey(skill.name)),
+    );
     return missing ? { ...row, lacks: missing.name } : row;
   });
 }

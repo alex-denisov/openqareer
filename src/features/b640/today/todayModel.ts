@@ -98,16 +98,6 @@ export function queueAction(item: TodayQueueItem): TodayAction {
   return { title: queueActionTitle(item), sub: actionSub(item), ...actionFace(item) };
 }
 
-/** «13 откликов → 1 интервью → 1 оффер»; без откликов строки нет. */
-export function funnelLine(funnel: TodayFunnelCounts | undefined): string | null {
-  if (!funnel?.applied) return null;
-  return [
-    pluralRu(funnel.applied, ['отклик', 'отклика', 'откликов']),
-    `${funnel.interviews ?? 0} интервью`,
-    pluralRu(funnel.offers, ['оффер', 'оффера', 'офферов']),
-  ].join(' → ');
-}
-
 export interface SkillFit {
   readonly title: string;
   readonly role: string;

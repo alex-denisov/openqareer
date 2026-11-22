@@ -37,6 +37,7 @@ const api = vi.hoisted(() => ({
   saveAppPreferences: vi.fn(),
   getSearchConsent: vi.fn(),
   setSearchConsent: vi.fn(),
+  countScheduledPosts: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
@@ -56,6 +57,7 @@ vi.mock('../../automation/automationApi', () => ({
   pauseCandidateAutomation: api.pauseAutomation,
   resumeCandidateAutomation: api.resumeAutomation,
 }));
+vi.mock('../platforms/linkedin/linkedinQueueApi', () => ({ countScheduledPosts: api.countScheduledPosts }));
 vi.mock('../../vacancies/recruiterContactsApi', () => ({
   getSearchConsent: api.getSearchConsent,
   setSearchConsent: api.setSearchConsent,
@@ -168,6 +170,7 @@ beforeEach(() => {
     updatedAt: '2026-11-01T00:00:00.000Z',
   });
   vi.clearAllMocks();
+  api.countScheduledPosts.mockResolvedValue(0);
   api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
   api.saveAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
   api.getAccount.mockResolvedValue({ profile: { timezone: 'Europe/Samara' }, sessions: [] });
@@ -190,7 +193,7 @@ describe('n05 «Согласия и данные»', () => {
     const root = await open(<DataScreen node={node('n05')} />);
     const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
     expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
-      ['Вы в поиске', true],
+      ['«Вы в поиске»', true],
       ['Цифровой след', true],
       ['Подключённый профиль', false],
       ['Отклики и подъём резюме', false],
@@ -202,27 +205,35 @@ describe('n05 «Согласия и данные»', () => {
   it('«Вы в поиске»: отзыв сразу, выдача — после текста согласия', async () => {
     api.setSearchConsent.mockResolvedValue({ granted: false, policyVersion: 'v', updatedAt: '' });
     const root = await open(<DataScreen node={node('n05')} />);
-    click(root.querySelector('input[aria-label="Вы в поиске"]'));
+    click(root.querySelector('input[aria-label="«Вы в поиске»"]'));
     await settle();
     expect(api.setSearchConsent).toHaveBeenCalledWith(false);
     api.getSearchConsent.mockResolvedValue({ granted: false, policyVersion: 'v', updatedAt: '' });
     api.setSearchConsent.mockClear();
     const again = await open(<DataScreen node={node('n05')} />);
-    click(again.querySelector('input[aria-label="Вы в поиске"]'));
+    click(again.querySelector('input[aria-label="«Вы в поиске»"]'));
     expect(api.setSearchConsent).not.toHaveBeenCalled();
     const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
-    expect(dialog.querySelector('h2')?.textContent).toBe('Вы в поиске');
+    expect(dialog.querySelector('h2')?.textContent).toBe('«Вы в поиске»');
     expect(dialog.textContent).toContain('мы будем искать контакты нанимающих');
     click(button(dialog, 'Дать согласие'));
     await settle();
     expect(api.setSearchConsent).toHaveBeenCalledWith(true);
   });
 
-  it('«Вы в поиске» не прочиталось — строки нет, остальные согласия на месте', async () => {
+  it('«Вы в поиске» не прочиталось — строка с ошибкой и «Повторить», остальные на месте', async () => {
     api.getSearchConsent.mockRejectedValue(new Error('down'));
     const root = await open(<DataScreen node={node('n05')} />);
-    expect(root.querySelector('input[aria-label="Вы в поиске"]')).toBeNull();
+    const row = root.querySelector('.set-row') as HTMLElement;
+    expect(row.querySelector('.set-t')?.textContent).toBe('«Вы в поиске»');
+    expect(row.querySelector('.set-res.is-err')?.textContent).toContain('Не загрузилось');
     expect(root.querySelectorAll('input.sw')).toHaveLength(3);
+    api.getSearchConsent.mockResolvedValue({ granted: true, policyVersion: 'v', updatedAt: '' });
+    click(button(row, 'Повторить'));
+    await settle();
+    await settle();
+    expect(root.querySelector('input[aria-label="«Вы в поиске»"]')).not.toBeNull();
+    expect(root.querySelector('.set-res.is-err')).toBeNull();
   });
 
   it('три согласия сервера и удаление аккаунта, как в макете', async () => {
@@ -235,7 +246,7 @@ describe('n05 «Согласия и данные»', () => {
     ]);
     const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
     expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
-      ['Вы в поиске', true],
+      ['«Вы в поиске»', true],
       ['Цифровой след', true],
       ['Подключённый профиль', false],
       ['Отклики и подъём резюме', false],
@@ -332,7 +343,7 @@ describe('n05 «Согласия и данные»', () => {
     expect(input().checked).toBe(true);
     const dialog = () => document.querySelector('.pf-dialog[role=dialog]') as HTMLElement | null;
     expect(dialog()?.querySelector('h2')?.textContent).toBe('Отозвать согласие на цифровой след?');
-    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые находки удалятся.');
+    expect(dialog()?.querySelector('.c5-lead')?.textContent).toBe('Сохранённые проверки и находки удалятся.');
     click(button(dialog()!, 'Отмена'));
     await settle();
     expect(dialog()).toBeNull();
@@ -390,6 +401,35 @@ describe('n05 «Согласия и данные»', () => {
 
   it('автоотклики выключены — останавливать нечего', async () => {
     api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    const root = await open(<DataScreen node={node('n05')} />);
+    expect(root.querySelectorAll('.set-group')[1].querySelector('.set-v')?.textContent).toBe('выключены');
+    expect(button(root, 'Остановить всё')).toBeNull();
+  });
+
+  it('B695: автоотклики выключены, но в очереди LinkedIn есть посты — «Остановить всё» есть', async () => {
+    api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    api.countScheduledPosts.mockResolvedValue(2);
+    api.pauseAutomation.mockResolvedValue(undefined);
+    const root = await open(<DataScreen node={node('n05')} />);
+    const group = root.querySelectorAll('.set-group')[1];
+    expect(group.querySelector('.set-t')?.textContent).toBe('Автоотклики, комментарии в LinkedIn');
+    expect(group.querySelector('.set-v')?.textContent).toBe('идут');
+    click(button(root, 'Остановить всё'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelector('.c5-lead')?.textContent).toBe('Остановятся автоотклики на hh.ru и публикации в LinkedIn.');
+    api.getAutomation.mockResolvedValue({
+      settings: { enabled: false, pausedUntil: new Date(Date.now() + 86_400_000).toISOString() },
+    });
+    click(button(dialog, 'Остановить всё'));
+    await settle();
+    expect(api.pauseAutomation).toHaveBeenCalledWith(365);
+    expect(root.querySelectorAll('.set-group')[1].querySelector('.set-v')?.textContent).toBe('остановлены');
+    expect(button(root, 'Возобновить')).not.toBeNull();
+  });
+
+  it('B695: очередь не прочиталась — строка по автооткликам, экран не падает', async () => {
+    api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    api.countScheduledPosts.mockRejectedValue(new Error('сеть'));
     const root = await open(<DataScreen node={node('n05')} />);
     expect(root.querySelectorAll('.set-group')[1].querySelector('.set-v')?.textContent).toBe('выключены');
     expect(button(root, 'Остановить всё')).toBeNull();

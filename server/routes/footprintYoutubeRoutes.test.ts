@@ -124,17 +124,20 @@ describe('B668: канал YouTube в «Данных для поиска»', () 
   it('с флагом и ключом — у ссылки YouTube есть доступная проверка канала; Instagram остаётся ссылкой', async () => {
     const { app } = await setup('fixture-key');
     const data = await plan(app, 'token-flagged');
-    // Та же строка, что у ссылки: архив страницы и проверка канала.
+    // Архив страницы и проверка канала — одна строка на ссылку (B668: без повторов).
     const youtube = data.plan.filter((item) => item.preview.includes('youtube.com'));
-    expect(youtube.map((item) => item.available)).toEqual([true, true]);
+    expect(youtube.map((item) => item.available)).toEqual([true]);
+    const previews = data.plan.map((item) => item.preview);
+    expect(new Set(previews).size).toBe(previews.length);
     expect(data.plan.filter((item) => item.preview.includes('instagram'))).toHaveLength(1);
   });
 
-  it('с флагом без ключа — проверка канала есть, но не доступна (источник не подключён)', async () => {
+  it('с флагом без ключа — строка ссылки одна и доступна: архив страницы, без проверки канала', async () => {
     const { app } = await setup();
     const data = await plan(app, 'token-flagged');
     const youtube = data.plan.filter((item) => item.preview.includes('youtube.com'));
-    expect(youtube.map((item) => item.available)).toEqual([true, false]);
+    // Строка остаётся доступной: архив страницы работает и без ключа.
+    expect(youtube.map((item) => item.available)).toEqual([true]);
   });
 });
 

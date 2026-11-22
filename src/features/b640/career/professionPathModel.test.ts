@@ -23,6 +23,7 @@ const row = (title: string, vacancies: number, requirements: string[]): RoleRow 
   vacancies,
   origin: 'experience',
   confirms: null,
+  confirmedNames: [],
   lacks: null,
   check: null,
   requirements,
@@ -48,6 +49,40 @@ describe('professionPathModel', () => {
     );
     expect(bridgeRole([row('Дизайнер', 10, ['Figma'])], 'Продакт-менеджер', target)).toBeNull();
     expect(bridgeRole([row('Аналитик', 0, ['Метрики'])], 'Продакт-менеджер', target)).toBeNull();
+  });
+
+  it('B741: общие навыки управления не делают роль промежуточной', () => {
+    const target = [
+      req('Управление командой', true),
+      req('Стратегическое планирование', true),
+      req('P&L', true),
+      req('OKR', false),
+      req('KPI', false),
+      req('Управление рисками', true),
+      req('Метрики', false),
+    ];
+    const rows = [
+      row('COO', 120, [
+        'Управление командой',
+        'Стратегическое планирование',
+        'P&L',
+        'OKR',
+        'KPI',
+        'Управление рисками',
+      ]),
+      row('Технический продакт-менеджер', 12, ['Метрики']),
+    ];
+    expect(bridgeRole(rows, 'Продакт-менеджер', target)?.title).toBe(
+      'Технический продакт-менеджер',
+    );
+    expect(bridgeRole([rows[0]], 'Продакт-менеджер', target)).toBeNull();
+    expect(
+      bridgeRole(
+        [row('Operations Director', 5, ['Team management', 'Risk management'])],
+        'Продакт-менеджер',
+        [req('Team management', true), req('Risk management', true)],
+      ),
+    ).toBeNull();
   });
 
   it('formats the fork in thousands', () => {

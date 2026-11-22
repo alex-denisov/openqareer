@@ -24,6 +24,7 @@ import { ResultLine } from '../kit/ResultLine';
 import type { B640Node } from '../routes';
 import { AccountDeletionGroup } from './AccountDeletion';
 import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
+import { countScheduledPosts } from '../platforms/linkedin/linkedinQueueApi';
 import { ConsentSwitch, useAction } from './consentParts';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
 import { SearchConsentRow } from './SearchConsentRow';
@@ -32,7 +33,7 @@ import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 interface AccountData {
   /** Согласия, которые сейчас действуют. */
   readonly granted: readonly CandidateCapability[];
-  /** «Вы в поиске» (B263); `null` — не прочиталось, строки нет. */
+  /** «Вы в поиске» (B263); `null` — не прочиталось: строка с ошибкой и «Повторить». */
   readonly searchConsent: boolean | null;
   /** Автоотклики; `null` — состояние не прочиталось. */
   readonly automation: AutomationState | null;
@@ -44,7 +45,7 @@ interface AccountData {
 const STOP_DAYS = 365;
 
 async function loadData(): Promise<AccountData> {
-  const [consents, searchConsent, automation, deletion] = await Promise.all([
+  const [consents, searchConsent, automation, deletion, scheduledPosts] = await Promise.all([
     getAccountCapabilityConsents(),
     getSearchConsent().then(
       (consent) => consent.granted,
@@ -52,6 +53,7 @@ async function loadData(): Promise<AccountData> {
     ),
     getCandidateAutomation().catch(() => null),
     getAccountDeletion().catch(() => undefined),
+    countScheduledPosts().catch(() => 0),
   ]);
   return {
     granted: consents.filter((item) => item.revokedAt === null).map((item) => item.capability),
@@ -61,6 +63,7 @@ async function loadData(): Promise<AccountData> {
           enabled: automation.settings.enabled,
           pausedUntil: automation.settings.pausedUntil,
           emergencyPaused: automation.schedulerRuntime?.emergencyPaused === true,
+          scheduledPosts,
         }
       : null,
     deletion,
@@ -200,7 +203,7 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
     <Group title="Действия от вашего имени">
       <li className="set-row">
         <div className="set-l">
-          <span className="set-t">Автоотклики</span>
+          <span className="set-t">Автоотклики, комментарии в LinkedIn</span>
           <span className="set-v">{line.text}</span>
           {failed && !asking ? <ErrorLine text="Не получилось" /> : null}
         </div>
@@ -218,7 +221,7 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
         ) : null}
       </li>
       <Dialog open={asking} title="Остановить всё?" onClose={() => setAsking(false)}>
-        <p className="c5-lead">Остановятся автоотклики на hh.ru.</p>
+        <p className="c5-lead">Остановятся автоотклики на hh.ru и публикации в LinkedIn.</p>
         {failed ? <ErrorLine text="Остановить не получилось" /> : null}
         <div className="actions">
           <button
@@ -282,9 +285,7 @@ function Sections({ data, load }: { readonly data: AccountData; readonly load: L
   return (
     <>
       <Group title="На что вы дали согласие">
-        {data.searchConsent === null ? null : (
-          <SearchConsentRow granted={data.searchConsent} onChanged={load.retry} />
-        )}
+        <SearchConsentRow granted={data.searchConsent} onChanged={load.retry} />
         {CONSENT_ROWS.map((row) => (
           <Consent
             key={row.capability}

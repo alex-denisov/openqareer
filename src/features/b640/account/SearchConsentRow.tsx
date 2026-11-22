@@ -8,7 +8,8 @@ import { SEARCH_CONSENT_ROW } from './dataModel';
 import { ErrorLine } from './parts';
 
 interface SearchConsentRowProps {
-  readonly granted: boolean;
+  /** null — согласие не прочиталось: строка остаётся с ошибкой и «Повторить». */
+  readonly granted: boolean | null;
   readonly onChanged: () => void;
 }
 
@@ -30,13 +31,16 @@ export function SearchConsentRow({ granted, onChanged }: SearchConsentRowProps) 
         <span className="set-t">{SEARCH_CONSENT_ROW.title}</span>
         <span className="set-v">{SEARCH_CONSENT_ROW.line}</span>
         {failed && !asking ? <ErrorLine text="Не сохранилось" /> : null}
+        {granted === null ? <ErrorLine text="Не загрузилось" onRetry={onChanged} /> : null}
       </div>
-      <ConsentSwitch
-        label={SEARCH_CONSENT_ROW.title}
-        checked={granted}
-        disabled={busy}
-        onChange={toggle}
-      />
+      {granted === null ? null : (
+        <ConsentSwitch
+          label={SEARCH_CONSENT_ROW.title}
+          checked={granted}
+          disabled={busy}
+          onChange={toggle}
+        />
+      )}
       <Dialog open={asking} title={SEARCH_CONSENT_ROW.title} onClose={() => setAsking(false)}>
         <p className="c5-lead">{SEARCH_CONSENT_TEXT}</p>
         {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}

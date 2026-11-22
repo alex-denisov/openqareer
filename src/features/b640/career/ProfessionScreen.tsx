@@ -70,10 +70,12 @@ function Steps({ path, data }: { readonly path: Ready; readonly data: Profession
         <span className="step-meta num">{requirementsMeta(path.requirements)}</span>
       </Step>
       <Step cls="now is-next" title="Проверка навыков профессии" tip="Подтвердит навыки в профиле">
-        <Link className="btn is-primary" to={skillCheckPath(path.target)}>
-          <Icon name="checkc" />
-          Проверить
-        </Link>
+        {data.checkReady ? (
+          <Link className="btn is-primary" to={skillCheckPath(path.target)}>
+            <Icon name="checkc" />
+            Проверить
+          </Link>
+        ) : null}
       </Step>
       <Step
         cls=""

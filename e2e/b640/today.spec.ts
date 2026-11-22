@@ -418,7 +418,9 @@ test.describe('B650: «Сегодня» на данных в форме прод
       'Напомнить компании Snowflake про ответ',
     );
     await expect(screen.locator('.lead .lead-sub')).toContainText('ответа нет 47 дней');
-    await expect(screen.locator('.s5-prog')).toContainText('13 откликов → 1 интервью → 1 оффер');
+    // Макет s03: в строке статуса пути откликов нет; итоги — только на t02 «Отклики закончились».
+    await expect(screen.locator('.s5-prog')).toContainText('Статус:');
+    await expect(screen.locator('.s5-prog')).not.toContainText('→');
     // Подробность лида — вакансия, как p.lead-text макета (B645 s03).
     await expect(screen.locator('.lead .lead-text')).toHaveText(
       'Director of Engineering, AI Functions',
