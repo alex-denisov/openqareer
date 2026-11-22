@@ -1,4 +1,6 @@
+import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { MIGRATION_INTERVIEW_RECORDINGS } from './interviewRecordingSchema';
 import { recordingRepositoryForTests } from '../testHelpers/recordingRepositoryForTests';
 
 describe('failInterrupted', () => {
@@ -56,3 +58,22 @@ describe('insertSegmentIfNew', () => {
   });
 });
 
+
+describe('audio retention (privacy policy, section 9)', () => {
+  it('has no column that could keep the audio: only the transcript is stored', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY);');
+    database.exec(MIGRATION_INTERVIEW_RECORDINGS);
+    for (const table of ['interview_recordings', 'interview_recording_segments']) {
+      const columns = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+        name: string;
+        type: string;
+      }>;
+      expect(columns.length).toBeGreaterThan(0);
+      for (const column of columns) {
+        expect(column.type.toUpperCase()).not.toBe('BLOB');
+        expect(column.name).not.toMatch(/audio|sound|blob|file/u);
+      }
+    }
+  });
+});
