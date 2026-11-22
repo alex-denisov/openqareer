@@ -152,6 +152,30 @@ describe('B755: вход в приложение через системный �
     expect((await issue(plain.app, { origin: SITE, cookie: plain.cookie })).statusCode).toBe(400);
   });
 
+  it('сессия администратора «от имени» кандидата код для приложения не получает', async () => {
+    const { app } = await setup();
+    const { cookie: admin } = await login(app, 'admin.test', 'admin-password-for-tests');
+    const users = (
+      await app.inject({ method: 'GET', url: '/api/v1/admin/users', headers: { cookie: admin } })
+    ).json().data;
+    const list = (Array.isArray(users) ? users : users.users) as Array<{
+      id: string;
+      username: string;
+    }>;
+    const candidate = list.find((user) => user.username === 'candidate.test');
+    const started = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/users/${candidate?.id}/impersonate`,
+      payload: {},
+      headers: { origin: SITE, cookie: admin },
+    });
+    expect(started.statusCode).toBe(200);
+    const cookie = String(started.headers['set-cookie']).split(';')[0]!;
+    const refused = await issue(app, { origin: SITE, cookie });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.code).toBe('impersonated_session');
+  });
+
   it('обмен ограничен по числу попыток', async () => {
     const { app } = await setup();
     const codes = Array.from({ length: 11 }, () => `oqa_${'x'.repeat(43)}`);

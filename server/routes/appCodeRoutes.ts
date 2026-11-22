@@ -4,7 +4,15 @@ import { AppCodeStore, CHALLENGE_PATTERN } from '../auth/appCodeStore';
 import { cabinetB640Enabled } from '../auth/cabinetB640Access';
 import type { ServerConfig } from '../config';
 import type { RouteDeps } from './deps';
-import { csrfError, publicPrincipal, sendError, sessionCookieName, withDeps } from './helpers';
+import {
+  csrfError,
+  publicPrincipal,
+  requireVerifiedEmail,
+  sendError,
+  sessionCookieName,
+  withDeps,
+} from './helpers';
+import { IMPERSONATED_CODE, IMPERSONATED_MESSAGE } from './twoFactorRoutes';
 
 const stores = new WeakMap<RouteDeps['config'], AppCodeStore>();
 
@@ -53,6 +61,12 @@ async function postIssue(deps: RouteDeps, request: FastifyRequest, reply: Fastif
   const principal = token ? deps.authService.authenticate(token) : null;
   if (!principal) {
     return sendError(reply, request, 401, 'unauthorized', 'Войдите на сайте.', false);
+  }
+  // Сессия администратора «от имени» кандидата и неподтверждённая почта сессию приложения не выдают:
+  // новая сессия не несла бы отметку подмены, а письмо о входе некуда отправить.
+  if (!requireVerifiedEmail(request, reply, principal)) return reply;
+  if (principal.impersonatedBy) {
+    return sendError(reply, request, 403, IMPERSONATED_CODE, IMPERSONATED_MESSAGE, false);
   }
   const body = issueSchema.safeParse(request.body);
   if (!body.success || !cabinetB640Enabled(deps.config, principal.username)) {
