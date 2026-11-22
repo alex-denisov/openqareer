@@ -17,6 +17,7 @@ import {
 } from '../vacancies/multiSourceVacancyEngine';
 import { timedStep } from './stepTiming';
 import { nextStorePassDelayMs, runStorePass, STORE_PASS_DELAY_MS } from './storePass';
+import { guardStep } from './guardStep';
 import type { StorePassMark } from './storePassMark';
 
 export { STORE_PASS_MIN_GAP_MS } from './storePass';
@@ -770,7 +771,7 @@ export class MaintenanceWorker {
   start(): void {
     const every = (ms: number, tick: () => unknown, name = stepName(tick)) => {
       const timed = timedStep(name, tick);
-      const timer = setInterval(() => void timed(), ms);
+      const timer = setInterval(() => guardStep(this.log, name, timed), ms);
       this.timers.push(timer);
     };
     every(this.intervals.manualSyncMs, () => this.runManualSyncWave());
@@ -810,9 +811,11 @@ export class MaintenanceWorker {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }
     every(CATALOG_TOTALS_TICK_MS, () => this.refreshCatalogTotals());
-    void timedStep('runManualSyncWave', () => this.runManualSyncWave())();
-    void timedStep('runSyncWave', () => this.runSyncWave())();
-    timedStep('refreshCatalogTotals', () => this.refreshCatalogTotals())();
+    const once = (name: string, tick: () => unknown) =>
+      guardStep(this.log, name, timedStep(name, tick));
+    once('runManualSyncWave', () => this.runManualSyncWave());
+    once('runSyncWave', () => this.runSyncWave());
+    once('refreshCatalogTotals', () => this.refreshCatalogTotals());
     this.scheduleStorePass();
   }
 
@@ -827,7 +830,7 @@ export class MaintenanceWorker {
     const timer = setTimeout(() => {
       const index = this.timers.indexOf(timer);
       if (index >= 0) this.timers.splice(index, 1);
-      void this.runScheduledStorePass();
+      guardStep(this.log, 'runScheduledStorePass', () => this.runScheduledStorePass());
     }, delayMs);
     this.timers.push(timer);
   }

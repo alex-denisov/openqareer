@@ -78,4 +78,32 @@ describe('остановка обслуживания (B759)', () => {
     expect(calls).toContain('close');
     expect(exits).toEqual([0]);
   });
+
+  it('B756: отказ остановки волн, пока идёт стартовый проход, — выход 0 без необработанного отказа', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => void unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      let finishStartup!: () => void;
+      const startup = new Promise<void>((resolve) => (finishStartup = resolve));
+      const {
+        calls,
+        exits,
+        deps: d,
+      } = deps({
+        startup,
+        stopWorker: () => Promise.reject(new Error('database is locked')),
+      });
+      const done = shutdownMaintenance('SIGTERM', d);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      finishStartup();
+      await done;
+      expect(unhandled).toEqual([]);
+      expect(calls).toContain('error:maintenance-shutdown-wave-abandoned');
+      expect(calls).not.toContain('close');
+      expect(exits).toEqual([0]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

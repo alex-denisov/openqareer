@@ -27,6 +27,7 @@ import { careerDiaryPlanningSchema } from '../domain/careerDiaryAdaptation';
 import { buildAdaptationView } from '../domain/careerDiaryAdaptationView';
 import { cardRisk } from '../domain/careerDiaryCardRisk';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { registerCareerDiaryGoalTransferRoutes } from './careerDiaryGoalTransferRoutes';
 import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
 import { registerCareerDiaryTaskSuggestionRoutes } from './careerDiaryTaskSuggestionRoutes';
 import type { RouteDeps } from './deps';
@@ -273,6 +274,7 @@ function createCard(
       weight: input.weight ?? null,
       archive: null,
       quarterTargets: input.quarterTargets ?? null,
+      transfer: null,
     };
     deps.details().saveGoalDetail(candidate, goal.id, details);
   }
@@ -484,6 +486,15 @@ export function registerCareerDiaryCardRoutes(
     ...deps,
     goalCard: (candidate, goalId) => cardOf(bound, candidate, goalId),
     goalTasks: (candidate, goalId) => goalPlanTasks(bound, candidate, goalId),
+  });
+  registerCareerDiaryGoalTransferRoutes(app, {
+    candidateStore: deps.candidateStore,
+    candidateId: (request, reply) => candidateId(bound, request, reply),
+    goalId: (request, reply) => routeId(request, reply, 'goalId'),
+    cardOf: (candidate, goalId) => cardOf(bound, candidate, goalId),
+    saveTransfer: (candidate, goalId, transfer) =>
+      changeDetails(bound, candidate, goalId, (details) => ({ ...details, transfer })),
+    rateLimit: write,
   });
 }
 
