@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { AuthService } from '../auth/authService';
+import { PasskeyStore } from '../auth/passkeyStore';
 import { TwoFactorStore } from '../auth/twoFactorStore';
 import { SealedText } from '../data/sealedText';
 import type { SqliteCandidateStore } from '../data/sqliteCandidateStore';
@@ -25,6 +26,7 @@ export function openSideTablesForPurgeTest(
   const options = { databasePath, encryptionKey };
   new AuthService({ databasePath }).close();
   new TwoFactorStore(options).close();
+  new PasskeyStore({ databasePath }).close();
   new SqliteDiaryDetailsRepository(options).close();
   new SqliteDiaryCheckpointRepository(options).close();
   new SqliteDiaryPeopleRepository(options).close();
