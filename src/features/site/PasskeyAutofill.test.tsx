@@ -108,4 +108,24 @@ describe('B755: вход ключом в поле почты', () => {
     expect(api.login).not.toHaveBeenCalled();
     expect(onSignedIn).not.toHaveBeenCalled();
   });
+
+  it('запрос ключа обновляется раньше, чем истекут 5 минут на сервере', async () => {
+    vi.useFakeTimers();
+    try {
+      api.start.mockImplementation(() => new Promise(() => undefined));
+      const onSignedIn = vi.fn();
+      root = createRoot(host);
+      await act(async () => {
+        root?.render(<Probe onSignedIn={onSignedIn} />);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(api.options).toHaveBeenCalledTimes(1);
+      await act(async () => vi.advanceTimersByTimeAsync(270_000));
+      expect(api.cancel).toHaveBeenCalledTimes(1);
+      expect(api.options).toHaveBeenCalledTimes(2);
+      expect(onSignedIn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
