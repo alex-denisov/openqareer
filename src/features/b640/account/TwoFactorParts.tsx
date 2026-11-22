@@ -54,6 +54,18 @@ export function groupedKey(secret: string): string {
   return secret.replace(/(.{4})/gu, '$1 ').trim();
 }
 
+const GROUPS_PER_LINE = 4;
+
+/** Ключ строками по четыре группы: 32 символа в одну строку не влезали на 390 (B645, 22.11). */
+export function keyLines(secret: string): string[] {
+  const groups = groupedKey(secret).split(' ');
+  const lines: string[] = [];
+  for (let start = 0; start < groups.length; start += GROUPS_PER_LINE) {
+    lines.push(groups.slice(start, start + GROUPS_PER_LINE).join(' '));
+  }
+  return lines;
+}
+
 /** Ключ для ввода вручную, сгруппированный по четыре, с копированием. */
 function ManualKey({ secret }: { readonly secret: string }) {
   const keyId = useId();
@@ -70,7 +82,13 @@ function ManualKey({ secret }: { readonly secret: string }) {
         Ключ для ввода вручную
       </span>
       <div className="fa-key">
-        <code aria-labelledby={keyId}>{groupedKey(secret)}</code>
+        <code aria-labelledby={keyId}>
+          {keyLines(secret).map((line) => (
+            <span className="fa-key-line" key={line}>
+              {line}
+            </span>
+          ))}
+        </code>
         <button
           className="icon-btn"
           type="button"
