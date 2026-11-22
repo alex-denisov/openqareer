@@ -1,3 +1,4 @@
+import { dropUserPasskeys } from './passkeySchema';
 import { randomBytes, randomUUID, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
@@ -502,6 +503,7 @@ export async function adminSetUserPassword(
     .run(passwordHash, passwordSalt, new Date().toISOString(), targetUserId);
 
   database.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(targetUserId);
+  dropUserPasskeys(database, targetUserId);
 
   if (actorPrincipal) {
     recordAdminAudit(database, {

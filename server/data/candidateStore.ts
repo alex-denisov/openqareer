@@ -150,6 +150,8 @@ export interface CandidateExport extends CandidateSnapshot {
   /** B738 · 1: отклики с событиями, собеседованиями и оффером, анкеты, отказы, действия. */
   tracker: import('./trackerExport').TrackerExport;
   notifications: import('./notificationExport').NotificationExport;
+  /** B755: ключи доступа — название устройства и даты, без ключей. */
+  passkeys: import('./passkeyExport').ExportedPasskey[];
   profileHistory: import('./profileHistoryExport').ProfileHistoryExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];

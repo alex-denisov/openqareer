@@ -138,3 +138,12 @@ export function prepVacancy(response: {
     descriptionSummary: response.vacancy?.description ?? undefined,
   };
 }
+
+/**
+ * Строка «Ожидания по зарплате»: планка из профиля и вилка вакансии отклика.
+ * `vacancyPay` — вилка словами («не указана», «450–600 тыс. ₽»); `null` — вакансию не прочитали.
+ */
+export function salaryAnswer(floor: string, vacancyPay: string | null): string {
+  const base = `Ответ готов · ${floor} на руки`;
+  return vacancyPay ? `${base}, вилка вакансии ${vacancyPay}` : base;
+}

@@ -7,6 +7,7 @@ import {
   pickNextResponse,
   prepHeadline,
   prepVacancy,
+  salaryAnswer,
   replaceQuestionParagraphs,
   type PrepParagraph,
 } from './prepModel';
@@ -146,5 +147,23 @@ describe('prepVacancy (B635)', () => {
       company: undefined,
       descriptionSummary: undefined,
     });
+  });
+});
+
+describe('salaryAnswer: строка «Ожидания по зарплате» (I1)', () => {
+  it('у вакансии нет вилки — как в макете', () => {
+    expect(salaryAnswer('от 500 000 ₽', 'не указана')).toBe(
+      'Ответ готов · от 500 000 ₽ на руки, вилка вакансии не указана',
+    );
+  });
+
+  it('вилка есть — она рядом с ожиданиями', () => {
+    expect(salaryAnswer('от 500 000 ₽', '450–600 тыс. ₽')).toBe(
+      'Ответ готов · от 500 000 ₽ на руки, вилка вакансии 450–600 тыс. ₽',
+    );
+  });
+
+  it('вакансию не прочитали — о вилке не пишем', () => {
+    expect(salaryAnswer('от 500 000 ₽', null)).toBe('Ответ готов · от 500 000 ₽ на руки');
   });
 });

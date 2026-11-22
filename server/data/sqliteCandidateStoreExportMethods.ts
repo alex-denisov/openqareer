@@ -1,3 +1,4 @@
+import { exportPasskeys } from './passkeyExport';
 import type {
   CandidateExport,
   CandidateSnapshot,
@@ -84,6 +85,7 @@ export function createSqliteCandidateStoreExportMethods(
         careerDiary: exportCareerDiary(careerDiary, candidateId),
         notificationDeliverySettings: dependencies.readDeliverySettings(candidateId),
         tracker: exportTracker(candidateId),
+        passkeys: exportPasskeys(database, candidateId),
         notifications: exportNotifications(database, dependencies.ownStorage.store, candidateId),
         profileHistory: exportProfileHistory(dependencies.ownStorage, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,

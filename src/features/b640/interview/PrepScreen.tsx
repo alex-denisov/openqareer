@@ -5,13 +5,16 @@ import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { useScreenChrome } from '../shell/ShellContext';
+import { useInterviewRecording } from '../voice/recordingFeature';
 import { AnswerDialog } from './AnswerDialog';
+import { canRecordInApp } from './data/recordingBridge';
 import { loadPrep, putStarPrep, type PrepData, type SalaryFloor } from './data/prepApi';
 import {
   buildPrepRows,
   paragraphsFromStory,
   prepHeadline,
   replaceQuestionParagraphs,
+  salaryAnswer,
   type PrepRow,
 } from './model/prepModel';
 import { buildMemo, type Memo } from './model/memoModel';
@@ -40,13 +43,13 @@ function Row({ row }: { readonly row: PrepRow }) {
   );
 }
 
-function SalaryRow({ floor }: { readonly floor: SalaryFloor }) {
+function SalaryRow(props: { readonly floor: SalaryFloor; readonly vacancyPay: string | null }) {
   return (
     <li className="row">
       <div>
         <div className="row-title">Ожидания по зарплате</div>
         <div className="row-sub">
-          Ответ готов · {floorText(floor)}
+          {salaryAnswer(floorText(props.floor), props.vacancyPay)}
           <InfoTip
             label="Откуда ответ"
             text="Ожидания — из вашего профиля. Текущий доход в ответ не входит."
@@ -73,6 +76,31 @@ function PracticeRow({ responseId }: { readonly responseId: string }) {
         Тренировка
       </Link>
     </li>
+  );
+}
+
+/** Запись для разбора (I4): в .app — запись звонка, в браузере — загрузка файла. */
+function RecordingRow({ responseId }: { readonly responseId: string }) {
+  if (useInterviewRecording() !== true) return null;
+  const node = canRecordInApp() ? 'i04b' : 'i04c';
+  return (
+    <li className="row">
+      <div>
+        <div className="row-title">Запись интервью для разбора</div>
+      </div>
+      <Link className="row-act" to={buildNodePath(node, { responseId })}>
+        Как записать
+      </Link>
+    </li>
+  );
+}
+
+function QuotaNote({ quota }: { readonly quota: PrepData['quota'] }) {
+  if (!quota) return null;
+  return (
+    <p className="note num">
+      Пробные интервью: осталось {quota.remaining} из {quota.limit}
+    </p>
   );
 }
 
@@ -168,9 +196,11 @@ function PrepLead({
         {rows.map((row) => (
           <Row key={row.id} row={row} />
         ))}
-        {data.floor ? <SalaryRow floor={data.floor} /> : null}
+        {data.floor ? <SalaryRow floor={data.floor} vacancyPay={data.vacancyPay} /> : null}
         <PracticeRow responseId={data.response.id} />
+        <RecordingRow responseId={data.response.id} />
       </ul>
+      <QuotaNote quota={data.quota} />
       {answer.question ? (
         <AnswerDialog
           question={answer.question}
