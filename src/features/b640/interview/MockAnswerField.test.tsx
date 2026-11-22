@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FieldDictation } from '../consultant/useDictation';
+import type { VoiceInput } from '../voice/useVoiceInput';
 import { click, mount, type Mounted } from '../kit/testDom';
 import { MockAnswerField } from './MockAnswerField';
 
 let view: Mounted | null = null;
 afterEach(() => view?.unmount());
 
-function dictation(over: Partial<FieldDictation> = {}): FieldDictation {
+function dictation(over: Partial<VoiceInput> = {}): VoiceInput {
   return {
     supported: true,
     recording: false,
@@ -20,7 +20,7 @@ function dictation(over: Partial<FieldDictation> = {}): FieldDictation {
   };
 }
 
-function render(voice: FieldDictation, readOnly = false) {
+function render(voice: VoiceInput, readOnly = false) {
   view = mount(
     <MockAnswerField
       text="В 2024 году"

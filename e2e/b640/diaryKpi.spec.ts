@@ -34,6 +34,14 @@ test.describe('B686: «Дневник» — загрузка и проверка
       expect(label.size).toBe('14px');
       expect(Math.round(field.top - label.bottom)).toBe(8);
       expect(Math.round(field.height)).toBe(96);
+    } else {
+      // B645 (f4ca81f9) d02k на 390: поле 110 с y 177, «Разобрать» — правая половина панели (195, 179).
+      const field = await upload.locator('#kd-text').boundingBox();
+      // Шрифты Linux-раннера сдвигают строку подписи на 2 px — допуск 2 px, как у таблицы.
+      expect(Math.abs(field!.y - 177)).toBeLessThanOrEqual(2);
+      expect(Math.round(field!.height)).toBe(110);
+      const go = await upload.getByRole('button', { name: 'Разобрать' }).boundingBox();
+      expect([Math.round(go!.x), Math.round(go!.width)]).toEqual([195, 179]);
     }
     await upload.getByLabel('Текст').fill('Релиз — не дольше недели к концу января, вес 30 %.');
     await upload.getByRole('button', { name: 'Разобрать' }).click();
@@ -58,18 +66,41 @@ test.describe('B686: «Дневник» — загрузка и проверка
       await expect(sheet).toHaveCount(0);
       await review.getByRole('button', { name: 'Ещё действия: показатели' }).click();
       await expect(review.getByRole('menuitem', { name: 'Загрузить заново' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      // B645 (5a4083db): на d02l «Принять 4» во всю ширину панели — правило половины только для d02k.
+      const accept = (await review.getByRole('button', { name: 'Принять 4' }).boundingBox())!;
+      expect([Math.round(accept.x), Math.round(accept.width)]).toEqual([16, 358]);
     } else {
       await expect(review.locator('.kp-tbl tbody tr')).toHaveCount(4);
       if (testInfo.project.name === 'desktop-1440') {
-        // B645: таблица в колонке формы, как в макете d02l (438→1094), строки с y 262.
+        // B645: таблица с x 438, правый край 1094 в макете (за край формы на 16 px); у нас «руководитель»
+        // длиннее макетного «директора» — край 1098, в поле страницы. Строки с y 262.
         const geometry = await review.evaluate((root) => {
           const box = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
           return { table: box('.kp-tbl'), row: box('.kp-tbl tbody tr'), form: box('form') };
         });
         expect(geometry.table.left).toBe(438);
-        expect(geometry.table.right).toBeLessThanOrEqual(geometry.form.right);
+        expect(Math.round(geometry.table.right)).toBeLessThanOrEqual(
+          Math.round(geometry.form.right) + 20,
+        );
         // Шрифты Linux-раннера сдвигают строку на 1 px — допуск 2 px.
         expect(Math.abs(geometry.table.top - 198)).toBeLessThanOrEqual(2);
+        // B645 (f4ca81f9): значения в таблице видны целиком на 1440 и 1176.
+        expect(await cutValues(page)).toEqual([]);
+        await page.setViewportSize({ width: 1176, height: 900 });
+        expect(await cutValues(page)).toEqual([]);
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // B645 (5a4083db): «Важность» — поле 50 с «30 %» внутри; «Верно» — контурная кнопка с галочкой.
+        const weight = (await review.locator('.kp-pct').first().boundingBox())!;
+        // Шрифты Linux-раннера дают ширину на 2,3 px другую — допуск 3 px.
+        expect(Math.abs(weight.width - 50)).toBeLessThanOrEqual(3);
+        await expect(review.locator('.kp-pct').first()).toHaveText('%');
+        const ok = review.getByRole('button', { name: 'Верно' }).first();
+        await expect(ok).toHaveAttribute('aria-pressed', 'true');
+        await expect(ok).not.toHaveClass(/\bis-on\b/u);
+        await expect(ok.locator('svg')).toHaveCount(1);
+        const fill = await ok.evaluate((button) => getComputedStyle(button).backgroundColor);
+        expect(fill).toBe('rgba(0, 0, 0, 0)');
       }
       const actions = review.locator('.m-commit > *');
       await expect(actions.first()).toHaveText('Принять 4');
@@ -115,3 +146,32 @@ test.describe('B686: «Дневник» — загрузка и проверка
     }
   });
 });
+
+/** Поля и списки таблицы d02l, у которых значение не помещается: «ква» вместо «квартал». */
+async function cutValues(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const canvas = document.createElement('canvas').getContext('2d')!;
+    const cut: string[] = [];
+    for (const field of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+      '.kp-tbl input, .kp-tbl select',
+    )) {
+      const style = getComputedStyle(field);
+      const text =
+        field instanceof HTMLSelectElement
+          ? (field.selectedOptions[0]?.textContent ?? '')
+          : field.value;
+      canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      const padding = parseFloat(style.paddingInlineStart) + parseFloat(style.paddingInlineEnd);
+      // Стрелку списка рисует фон: если она есть, ей оставлено 16 px.
+      const arrow = field instanceof HTMLSelectElement && style.backgroundImage !== 'none' ? 16 : 0;
+      const room = field.clientWidth - padding - arrow;
+      // WebKit считает рамку в scrollWidth поля: сверка с offsetWidth.
+      if (canvas.measureText(text).width > room + 0.5 || field.scrollWidth > field.offsetWidth) {
+        cut.push(
+          `${field.getAttribute('aria-label')}: «${text}» в ${Math.round(field.clientWidth)} px`,
+        );
+      }
+    }
+    return cut;
+  });
+}

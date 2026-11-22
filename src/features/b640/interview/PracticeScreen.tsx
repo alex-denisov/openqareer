@@ -6,15 +6,16 @@ import {
   type InterviewAnswerMode,
   type InterviewSessionView,
 } from '../../interview/interviewSimulatorApi';
-import { speechSupported } from '../consultant/useDictation';
 import { Button, Icon, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
+import { useVoiceInput } from '../voice/useVoiceInput';
 import { loadPractice, startPractice, type PracticeLoad } from './data/practiceApi';
 import { practiceChoice } from './model/practiceModel';
 import { formatInterviewWhen } from './model/prepModel';
 import { PracticeAnswer } from './PracticeAnswer';
+import { answerModeOf } from './PracticeAnswerInput';
 import { PracticeReview } from './PracticeReview';
 import { PracticeTask } from './PracticeTask';
 import { InterviewHead, PrepSteps } from './PrepSteps';
@@ -139,13 +140,17 @@ function StartError({ error }: { readonly error: string }) {
   );
 }
 
+const ignoreText = (): void => undefined;
+
 function TaskStep(props: {
   readonly load: Ready;
   readonly onSession: (session: InterviewSessionView) => void;
 }) {
   const { load } = props;
-  const [voice] = useState(speechSupported);
-  const [mode, setMode] = useState<InterviewAnswerMode>(voice ? 'voice' : 'text');
+  // В .app голос становится доступен не сразу: выбор «Голосом / Текстом» следует за ним.
+  const voice = useVoiceInput(ignoreText).supported;
+  const [chosen, setMode] = useState<InterviewAnswerMode | null>(null);
+  const mode = answerModeOf(chosen, voice);
   const started = useStart(load, props.onSession);
   const running = practiceChoice(load.session, load.response.id) === 'resume';
   return (
@@ -168,7 +173,7 @@ function TaskStep(props: {
           ) : null
         }
         onMode={setMode}
-        onStart={() => void started.start(voice ? mode : 'text')}
+        onStart={() => void started.start(mode)}
       />
       {started.error ? <StartError error={started.error} /> : null}
     </div>

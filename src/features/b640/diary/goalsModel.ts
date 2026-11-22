@@ -8,6 +8,7 @@ import type {
   CareerDiaryGoalArchive,
   CareerDiaryGoalCard,
   CareerDiaryGoalSetter,
+  CareerDiaryQuarterTarget,
 } from '../../../../shared/careerDiaryCards';
 import { shortDate } from './model';
 
@@ -76,6 +77,21 @@ export function archiveNote(archive: CareerDiaryGoalArchive, now: string): strin
     ? ` ${longDate(archive.archivedAt, now)}`
     : '';
   return `Убрана в архив${day}. Причина: ${reason}${end}`;
+}
+
+/** B742 d02: «Вклад кварталов: I — 85 %, II — 88 %» у годовой цели; вклада нет — null. */
+export function quarterLine(
+  targets: readonly CareerDiaryQuarterTarget[] | null,
+  unit: string,
+): string | null {
+  if (!targets || targets.length === 0) return null;
+  const parts = [...targets]
+    .sort((a, b) => a.quarter - b.quarter)
+    .map((item) => {
+      const value = formatValue(item.value);
+      return `${QUARTERS[item.quarter - 1]} — ${unit ? `${value} ${unit}` : value}`;
+    });
+  return `Вклад кварталов: ${parts.join(', ')}`;
 }
 
 /** «IV квартал 2026». */

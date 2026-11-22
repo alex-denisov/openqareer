@@ -69,6 +69,18 @@ const acceptRowSchema = z
     horizon: z.enum(['quarter', 'next_quarter', 'year']),
     weight: z.number().min(0).max(100).nullable(),
     setBy: z.enum(GOAL_SETTERS),
+    quarterTargets: z
+      .array(
+        z
+          .object({
+            quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+            value: z.number().finite(),
+          })
+          .strict(),
+      )
+      .max(4)
+      .refine((items) => new Set(items.map((item) => item.quarter)).size === items.length)
+      .nullish(),
   })
   .strict();
 const acceptSchema = z.object({ rows: z.array(acceptRowSchema).min(1).max(KPI_ROWS_MAX) }).strict();
@@ -228,6 +240,7 @@ function cardInput(row: CareerDiaryKpiAcceptRow): CareerDiaryGoalCardInput {
     dueDate: row.dueDate,
     setBy: row.setBy,
     weight: row.weight,
+    quarterTargets: row.quarterTargets?.length ? row.quarterTargets : null,
     indicators: [
       { title: row.title, unit: row.unit, baselineValue: null, targetValue: row.targetValue },
     ],

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Icon } from '../kit/Icon';
 import type { KpiDraftRow } from './kpiModel';
 
@@ -47,12 +48,15 @@ function TextCell({
   value,
   max,
   className,
+  chars,
   onChange,
 }: {
   readonly label: string;
   readonly value: string;
   readonly max: number;
   readonly className?: string;
+  /** Ширина поля по значению, в знаках: столбец таблицы по содержимому (B645 d02l). */
+  readonly chars?: number;
   readonly onChange: (value: string) => void;
 }) {
   return (
@@ -61,6 +65,7 @@ function TextCell({
       type="text"
       aria-label={label}
       value={value}
+      style={chars ? ({ '--kp-ch': chars } as CSSProperties) : undefined}
       maxLength={max}
       onChange={(event) => onChange(event.target.value)}
     />
@@ -70,7 +75,8 @@ function TextCell({
 function OkToggle({ ok, onToggle }: { readonly ok: boolean; readonly onToggle: () => void }) {
   return (
     <button
-      className={ok ? 'btn is-sm is-on' : 'btn is-sm'}
+      // B645 d02l: «Верно» — контурная кнопка с галочкой, без заливки, как в макете.
+      className="btn is-sm kp-okb"
       type="button"
       aria-pressed={ok}
       onClick={onToggle}
@@ -92,6 +98,7 @@ function TitleCell(props: {
       <TextCell
         label={`Показатель: ${props.name}`}
         value={props.value}
+        chars={props.value.length}
         max={240}
         onChange={props.onChange}
       />
@@ -100,6 +107,30 @@ function TitleCell(props: {
           {props.error}
         </p>
       ) : null}
+    </td>
+  );
+}
+
+function WeightCell(props: {
+  readonly name: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}) {
+  return (
+    <td data-l="Важность">
+      <span className="kp-pct">
+        <TextCell
+          className="kp-w"
+          label={`Важность, %: ${props.name}`}
+          value={props.value}
+          chars={Math.max(props.value.length, 2)}
+          max={6}
+          onChange={props.onChange}
+        />
+        <span className="kp-pct-sign" aria-hidden="true">
+          %
+        </span>
+      </span>
     </td>
   );
 }
@@ -115,6 +146,7 @@ function KpiRow({ row, error, onChange }: RowProps) {
           className="kp-t"
           label={`Цель: ${name}`}
           value={row.target}
+          chars={Math.max(row.target.length, 4)}
           max={120}
           onChange={(target) => set({ target })}
         />
@@ -127,15 +159,7 @@ function KpiRow({ row, error, onChange }: RowProps) {
           onChange={(value) => set({ horizon: value as KpiDraftRow['horizon'] })}
         />
       </td>
-      <td data-l="Важность">
-        <TextCell
-          className="kp-w"
-          label={`Важность, %: ${name}`}
-          value={row.weight}
-          max={6}
-          onChange={(weight) => set({ weight })}
-        />
-      </td>
+      <WeightCell name={name} value={row.weight} onChange={(weight) => set({ weight })} />
       <td data-l="Кто поставил">
         <Select
           label={`Кто поставил: ${name}`}

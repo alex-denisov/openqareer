@@ -46,6 +46,10 @@
     /* n04e на 390: «Скопировать коды» во всю ширину, ниже «Скачать» и «Готово». */
     .b640 .fa-fields { min-inline-size: min(100%, 18.4375rem); }
     .b640 .fa-done .fa-bar > .btn.is-primary { flex: 1 1 100%; justify-content: center; }
+    /* B645 n04e на 390: «Скачать» тянется до «Готово» справа, без линии над строкой — как в макете. */
+    .b640 .set-row.fa-done-row { border-block-start: 0; padding-block-start: 0; }
+    .b640 .fa-done-row .fa-bar { flex: 1 1 auto; flex-wrap: nowrap; gap: var(--career-space-1); }
     .b640 .fa-done-row .fa-bar > .btn { flex: 1 1 auto; justify-content: center; }
+    .b640 .fa-done-row .fa-bar > .row-act { padding-inline: var(--career-space-2) 0; }
   }
 }

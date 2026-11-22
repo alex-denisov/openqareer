@@ -7,6 +7,7 @@ import type { SealedText } from '../data/sealedText';
 import {
   TranscriberUnavailableError,
   WHISPER_TIMEOUT_MS,
+  type AudioFormat,
   type RecordingTranscriber,
 } from '../providers/whisperTranscriber';
 
@@ -20,6 +21,7 @@ export interface SegmentJob {
   readonly recordingId: string;
   readonly track: RecordingTrack;
   readonly segment: number;
+  readonly format: AudioFormat;
   readonly audio: Buffer;
 }
 
@@ -27,6 +29,7 @@ interface QueuedJob {
   readonly recordingId: string;
   readonly track: RecordingTrack;
   readonly segment: number;
+  readonly format: AudioFormat;
   /** Единственная ссылка на аудио; обнуляется сразу после вызова модели. */
   audio: Buffer | null;
 }
@@ -119,7 +122,7 @@ export class RecordingTranscriptionService {
     job.audio = null;
     let outcome: { textCipher: string } | { errorCode: string };
     try {
-      const lines = await this.transcriber(audio, AbortSignal.timeout(this.timeoutMs));
+      const lines = await this.transcriber(audio, AbortSignal.timeout(this.timeoutMs), job.format);
       outcome = {
         textCipher: this.sealedText.seal(JSON.stringify(lines), segmentAssociatedData(job)),
       };

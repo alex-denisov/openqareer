@@ -154,6 +154,13 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
   await expect(screen.getByRole('button', { name: 'Скачать' })).toHaveClass(/\bbtn\b/u);
   if (testInfo.project.name === 'mobile-390') {
     expect(Math.round(copyCodes.width)).toBe(332);
+    // B645 (5a4083db): «Скачать» тянется с 29 до «Готово» у правого края (309), линии над строкой нет.
+    expect([Math.round(download.x), Math.round(done.x)]).toEqual([29, 309]);
+    expect(Math.abs(download.width - 276)).toBeLessThanOrEqual(2);
+    const divider = await screen
+      .locator('.fa-done-row')
+      .evaluate((row) => getComputedStyle(row).borderTopWidth);
+    expect(divider).toBe('0px');
   } else {
     // Ширина по тексту: шрифты Linux-раннера дают на 2 px уже — допуск 2 px.
     expect(Math.abs(download.width - 125)).toBeLessThanOrEqual(2);

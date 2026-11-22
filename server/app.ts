@@ -92,6 +92,7 @@ import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { buildGoalTaskSuggester } from './providers/goalTaskSuggester';
 import { buildKpiExtractor } from './providers/kpiExtractor';
 import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { currentVacancyFitProfileValidator } from './domain/vacancyFitProfileStamp';
@@ -126,6 +127,7 @@ interface BuildAppOptions {
   resumeStructurer?: ResumeStructurer;
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
   kpiExtractor?: RouteDeps['kpiExtractor'];
+  goalTaskSuggester?: RouteDeps['goalTaskSuggester'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
@@ -135,6 +137,8 @@ interface BuildAppOptions {
   coverLetterWriter?: CoverLetterWriter;
   /** B642: Whisper для записей собеседований; без подстановки — OpenRouter. */
   recordingTranscriber?: RouteDeps['recordingTranscriber'];
+  /** B751: разбор интервью; без подстановки — цепочка письма. */
+  interviewDebriefWriter?: RouteDeps['interviewDebriefWriter'];
   adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
@@ -456,7 +460,7 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, recordingTranscriber: options.recordingTranscriber, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor
@@ -576,6 +580,7 @@ function createCandidateDraftDeps(
   | 'skillQuizModel'
   | 'experienceFactRewriter'
   | 'kpiExtractor'
+  | 'goalTaskSuggester'
 > {
   const { config } = options;
   return {
@@ -588,6 +593,9 @@ function createCandidateDraftDeps(
         vertex: config.vertex,
         vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'kpiImport'),
       }),
+    goalTaskSuggester:
+      options.goalTaskSuggester ??
+      buildGoalTaskSuggester({ providerCredentials: config.providerCredentials }),
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),

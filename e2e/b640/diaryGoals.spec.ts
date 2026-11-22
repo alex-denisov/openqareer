@@ -160,6 +160,104 @@ test.describe('B662: «Дневник» — цели и показатели', (
     await expectGates(page);
   });
 
+  test('B743: d02a — подсказка задачи: строка, «Добавить» кладёт задачу в план, «Пропустить» прячет', async ({
+    page,
+  }, testInfo) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    const calls = await mockDiary(page);
+    const SUGGESTED = 'Описание второй вакансии в повестку 14 января';
+    let tasks: Array<Record<string, unknown>> = [];
+    const links: Record<string, string> = {};
+    const workplace = () => ({
+      id: 'w1',
+      company: 'Вектор Банк',
+      title: 'Руководитель разработки',
+      startDate: '2026-12-15',
+      planning: {
+        adaptationPlan: {
+          id: 'p1',
+          workplaceId: 'w1',
+          startDate: '2026-12-15',
+          createdAt: '2026-12-15T12:00:00.000Z',
+          status: 'active',
+          closedAt: null,
+          tasks,
+        },
+      },
+    });
+    const view = () => ({
+      workplaceId: 'w1',
+      startDate: '2026-12-15',
+      stages: [
+        {
+          stage: 'days_1_30',
+          tasks: tasks.map((item) => ({
+            ...item,
+            step: null,
+            group: null,
+            goalId: links[item.id as string] ?? null,
+          })),
+        },
+      ],
+    });
+    await page.route('**/career-diary/goal-cards/*/task-suggestion', (route) =>
+      route.fulfill({
+        json: { data: { id: 's1', text: SUGGESTED, dueDate: '2027-01-12' } },
+      }),
+    );
+    await page.route(/\/api\/v1\/candidate\/career-diary$/u, (route) =>
+      route.fulfill({ json: { data: { primaryWorkplace: { id: 'w1' }, summary: {} } } }),
+    );
+    await page.route('**/career-diary/workplaces/w1', async (route) => {
+      const body = route.request().postDataJSON() as {
+        planning?: { adaptationPlan?: { tasks: typeof tasks } };
+      } | null;
+      if (body?.planning?.adaptationPlan) tasks = body.planning.adaptationPlan.tasks;
+      await route.fulfill({ json: { data: workplace() } });
+    });
+    await page.route('**/career-diary/workplaces/w1/adaptation', async (route) => {
+      if (route.request().method() === 'PATCH') {
+        const body = route.request().postDataJSON() as {
+          tasks: Record<string, { goalId: string }>;
+        };
+        for (const [id, details] of Object.entries(body.tasks)) links[id] = details.goalId;
+      }
+      await route.fulfill({ json: { data: view() } });
+    });
+    await page.goto('/app/diary/goals/goal-1', { waitUntil: 'domcontentloaded' });
+    const section = page.locator('[data-b640-node="d02a"] section[aria-labelledby="ga-k"]');
+    const row = section.locator('li.gt-sugg');
+    await expect(row.locator('.gt-sugg-t')).toHaveText(SUGGESTED);
+    const add = row.locator('.btn.is-sm');
+    const skip = row.locator('.row-act');
+    await expect(add).toHaveText('Добавить');
+    await expect(skip).toHaveText('Пропустить');
+    if (testInfo.project.name === 'mobile-390') {
+      for (const control of [add, skip]) {
+        expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+    await expectGates(page);
+
+    await skip.click();
+    await expect(row).toHaveCount(0);
+    await expect.poll(() => calls.suggestion).toEqual([{ action: 'skip', id: 's1' }]);
+    // Новый заход: мок снова отдаёт подсказку (сервер после «Пропустить» её бы не вернул).
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(row).toBeVisible();
+    await add.click();
+    await expect(row).toHaveCount(0);
+    await expect(section.locator('.gt-row label')).toHaveText([SUGGESTED]);
+    await expect(section.locator('.gt-when')).toHaveText(['до 12 янв']);
+    await expect
+      .poll(() => calls.suggestion)
+      .toEqual([
+        { action: 'skip', id: 's1' },
+        { action: 'accept', id: 's1' },
+      ]);
+    await expectGates(page);
+  });
+
   test('снимки целей: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {
     test.skip(
       !SHOTS || testInfo.project.name !== 'desktop-1440',
