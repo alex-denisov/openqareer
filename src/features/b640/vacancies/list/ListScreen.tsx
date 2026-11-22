@@ -16,11 +16,12 @@ import {
   MoreFoot,
   SortError,
 } from './ListParts';
+import { SkillLine } from './SkillLine';
 import { TableBlock } from './TableBlock';
 import { OwnAddButton, OwnVacancyPanel } from './OwnVacancyPanel';
 import { OwnRows } from './OwnRows';
 import { TriagePanel } from './TriagePanel';
-import { ReviewButton } from './TriageParts';
+import { ReviewButton, useReviewDeepLink } from './TriageParts';
 import type { RowEnv, RowPick } from './VacancyRow';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { useHiddenSection, type HiddenSection } from './useHiddenSection';
@@ -159,14 +160,13 @@ export function ListScreen() {
   const triageQuery = isNarrowed(list.filters) ? null : poolFilterQuery(list.filters.roles);
   const triage = useTriage(list.all, rows.hideMany, { query: triageQuery, expected: list.count });
   // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
-  const { clearResult } = triage;
+  const { clearResult, start } = triage;
   const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
   useEffect(() => clearResult(), [listAction, clearResult]);
-  const env = { currency: list.currency, rates: list.rates, noRole: list.noRole };
+  useReviewDeepLink(list.all.length, start);
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';
   const empty = pool.matched.length === 0;
-  const waiting = empty && (pool.loading || retrying);
   // Числа и список появляются с первой прочитанной порцией: «0 вакансий» на время чтения не пишем.
   const unread = empty && (pool.loading || retrying || pool.failed);
   const strip = list.noRole ? 'role' : profileIsEmpty(list) ? 'profile' : null;
@@ -184,11 +184,12 @@ export function ListScreen() {
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
         />
+        <SkillLine roles={pool.campaign?.roles.value ?? []} />
         <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
-        {waiting ? <LoadingLine /> : null}
+        {empty && (pool.loading || retrying) ? <LoadingLine /> : null}
         {!unread && list.all.length === 0 && !serverBusy ? <EmptyList list={list} /> : null}
-        <ListTable list={list} rows={rows} section={section} env={env} links={links} triage={triage} own={own} />
+        <ListTable list={list} rows={rows} section={section} env={{ currency: list.currency, rates: list.rates, noRole: list.noRole }} links={links} triage={triage} own={own} />
       </section>
       <FilterSheet
         {...filterProps(list, section)}
