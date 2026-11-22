@@ -4,6 +4,7 @@ import { DebriefScreen } from './DebriefScreen';
 import { MockScreen } from './MockScreen';
 import { PracticeScreen } from './PracticeScreen';
 import { PrepScreen } from './PrepScreen';
+import { RecordScreen } from './RecordScreen';
 
 /** Вход раздела «Подготовка»: I1 — подготовка к интервью (I1d — интервью ещё не записано), I2 — пробное интервью, I3 — тренировка System Design. */
 export default function Section({ node, params }: SectionProps) {
@@ -18,7 +19,12 @@ export default function Section({ node, params }: SectionProps) {
 =======
     case 'i04':
       return <DebriefScreen key={params.responseId} responseId={params.responseId ?? 'next'} />;
+<<<<<<< HEAD
 >>>>>>> 21660d3c8 (feat(b751): экран i04 «Разбор после интервью» — меры, вопросы с цитатами, расшифровка, договорённости, заметки)
+=======
+    case 'i04b':
+      return <RecordScreen key={params.responseId} responseId={params.responseId ?? 'next'} />;
+>>>>>>> 443950ab3 (feat(b751): i04b — запись интервью в приложении по контракту D2: разрешения, индикатор, сбой с продолжением)
     default:
       return <NodeStub node={node} />;
   }
