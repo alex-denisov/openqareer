@@ -98,7 +98,10 @@ describe('replyExtrasOf: nextSection (B745)', () => {
 
   it('предложения стратега важнее nextSection', () => {
     const extras = replyExtrasOf(
-      result({ nextSection: 'profile', actionProposals: [proposal('vacancies.search', ['memory:own-1'])] }),
+      result({
+        nextSection: 'profile',
+        actionProposals: [proposal('vacancies.search', ['memory:own-1'])],
+      }),
       memory,
     );
     expect(extras.actions).toEqual(['vacancies']);

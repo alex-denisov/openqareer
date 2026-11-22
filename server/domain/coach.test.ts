@@ -355,10 +355,14 @@ describe('nextSection в ответе консультанта (B745)', () => {
   };
 
   it('принимает раздел из закрытого списка, null и прежние ходы без поля', () => {
-    expect(coachTurnResultSchema.parse({ ...base, nextSection: 'profile' }).nextSection).toBe('profile');
+    expect(coachTurnResultSchema.parse({ ...base, nextSection: 'profile' }).nextSection).toBe(
+      'profile',
+    );
     expect(coachTurnResultSchema.parse({ ...base, nextSection: null }).nextSection).toBeNull();
     expect(coachTurnResultSchema.parse(base).nextSection).toBeUndefined();
-    expect(coachTurnResultSchema.safeParse({ ...base, nextSection: 'settings' }).success).toBe(false);
+    expect(coachTurnResultSchema.safeParse({ ...base, nextSection: 'settings' }).success).toBe(
+      false,
+    );
   });
 
   it('JSON-схема модели требует поле: раздел из списка или null', () => {
