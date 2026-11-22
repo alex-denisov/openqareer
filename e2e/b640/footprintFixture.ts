@@ -228,6 +228,8 @@ function caseAudit(kind: FootprintCase) {
 export interface FootprintCalls {
   readonly started: unknown[];
   readonly reviews: Array<{ id: string; review: string }>;
+  /** B645 p02: «Это не проблема» у расхождения с резюме и её отмена. */
+  readonly mismatches: Array<{ id: string; review: string }>;
   readonly granted: string[];
   revoked: number;
   /** B382: «Письмо отправлено» и «Проверить находку» по id находки. */
@@ -251,7 +253,12 @@ function withRemovals(data: ReturnType<typeof caseSummary>, removals: Map<string
 /** «Это не моё» (B727): как на сервере, отвергнутая находка уходит из сводки. */
 function withoutRejected(data: ReturnType<typeof caseSummary>, calls: FootprintCalls) {
   const last = new Map(calls.reviews.map((entry) => [entry.id, entry.review]));
-  const items = data.items.filter((entry) => last.get(entry.findingId ?? '') !== 'not_self');
+  // Как на сервере: отмеченное «Это не проблема» расхождение уходит из сводки до отмены.
+  const mismatch = new Map(calls.mismatches.map((entry) => [entry.id, entry.review]));
+  const items = data.items.filter(
+    (entry) =>
+      last.get(entry.findingId ?? '') !== 'not_self' && mismatch.get(entry.id) !== 'hidden',
+  );
   return { ...data, items };
 }
 
@@ -291,6 +298,7 @@ export async function openFootprint(
   const calls: FootprintCalls = {
     started: [],
     reviews: [],
+    mismatches: [],
     granted: [],
     revoked: 0,
     removals: [],
@@ -322,6 +330,12 @@ export async function openFootprint(
     calls.started.push(route.request().postDataJSON());
     kind = 'checking';
     return route.fulfill({ status: 202, json: { data: { audit: caseAudit('checking') } } });
+  });
+  await page.route(`${API}/candidate/footprint/mismatches/*`, (route) => {
+    const id = decodeURIComponent(route.request().url().split('/').pop() ?? '');
+    const review = (route.request().postDataJSON() as { review: string }).review;
+    calls.mismatches.push({ id, review });
+    return route.fulfill({ json: { data: { id, review } } });
   });
   await page.route(`${API}/candidate/footprint/findings/*`, (route) => {
     const id = route.request().url().split('/').pop() ?? '';

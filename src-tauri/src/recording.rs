@@ -63,12 +63,24 @@ pub struct RecordingState {
     screen_asked: AtomicBool,
 }
 
+/// B758: что записывать. `meeting` — микрофон и системный звук (интервью, по умолчанию);
+/// `mic` — только микрофон для диктовки: без записи экрана и её разрешения.
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RecordingMode {
+    #[default]
+    Meeting,
+    Mic,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartArgs {
     pub resource_id: String,
     pub upload_url: String,
     pub headers: HashMap<String, String>,
+    #[serde(default)]
+    pub mode: RecordingMode,
 }
 
 #[derive(Debug, Serialize)]
@@ -331,7 +343,7 @@ pub async fn recording_start(
     let tally = Arc::new(Tally::default());
     let uploads = Arc::new(Mutex::new(Vec::new()));
     let sink = make_sink(target, tally.clone(), uploads.clone());
-    let capture = start_capture(dir.clone(), sink)
+    let capture = start_capture(dir.clone(), sink, args.mode)
         .await
         .inspect_err(|error| {
             let _ = std::fs::remove_dir_all(&dir);
@@ -359,24 +371,31 @@ pub async fn recording_start(
 async fn start_capture(
     dir: PathBuf,
     sink: SegmentSink,
+    mode: RecordingMode,
 ) -> Result<crate::recording_macos::Capture, String> {
     use crate::recording_macos as mac;
-    if !mac::is_supported() {
-        return Err("unsupported".to_string());
-    }
     if mac::microphone_access() != mac::Access::Granted {
         return Err("microphone_permission".to_string());
     }
-    if mac::screen_access(true) != mac::Access::Granted {
-        return Err("screen_permission".to_string());
+    if mode == RecordingMode::Meeting {
+        if !mac::is_supported() {
+            return Err("unsupported".to_string());
+        }
+        if mac::screen_access(true) != mac::Access::Granted {
+            return Err("screen_permission".to_string());
+        }
     }
-    tauri::async_runtime::spawn_blocking(move || mac::start(dir, sink))
+    tauri::async_runtime::spawn_blocking(move || mac::start(dir, sink, mode))
         .await
         .map_err(|e| e.to_string())?
 }
 
 #[cfg(not(target_os = "macos"))]
-async fn start_capture(_dir: PathBuf, _sink: SegmentSink) -> Result<(), String> {
+async fn start_capture(
+    _dir: PathBuf,
+    _sink: SegmentSink,
+    _mode: RecordingMode,
+) -> Result<(), String> {
     Err("unsupported".to_string())
 }
 
@@ -430,6 +449,34 @@ pub async fn recording_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn start_args(extra: &str) -> Result<StartArgs, serde_json::Error> {
+        serde_json::from_str(&format!(
+            r#"{{"resourceId":"i-1","uploadUrl":"https://openqareer.com/api/v1/candidate/recordings/r-1/segments","headers":{{}}{extra}}}"#
+        ))
+    }
+
+    #[test]
+    fn start_without_mode_records_the_meeting() {
+        assert_eq!(start_args("").unwrap().mode, RecordingMode::Meeting);
+    }
+
+    #[test]
+    fn mic_mode_records_the_microphone_only() {
+        assert_eq!(
+            start_args(r#","mode":"mic""#).unwrap().mode,
+            RecordingMode::Mic
+        );
+        assert_eq!(
+            start_args(r#","mode":"meeting""#).unwrap().mode,
+            RecordingMode::Meeting
+        );
+    }
+
+    #[test]
+    fn unknown_mode_is_rejected() {
+        assert!(start_args(r#","mode":"screen""#).is_err());
+    }
 
     #[test]
     fn the_recording_id_comes_from_the_upload_url() {
