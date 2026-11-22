@@ -90,9 +90,16 @@ export function journalClusterSplit(db: DatabaseSync, input: JournalInput): void
   );
 }
 
-interface JournalRow extends Omit<OldClusterRow, 'id' | 'rowid'> {
+interface JournalRow {
   old_cluster_id: string;
   old_rowid: number;
+  old_fingerprint: string;
+  old_title: string;
+  old_company: string;
+  old_cluster_json: string;
+  old_representative: string | null;
+  old_items_count: number;
+  old_updated_at: number;
   old_keys_json: string;
   old_catalog_json: string;
   new_piece_ids_json: string;
