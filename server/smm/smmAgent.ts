@@ -16,6 +16,8 @@ import { OWNER_POST_ORIGIN, voiceSamples } from './smmVoice';
 
 /** Сколько реплик диалога с владельцем держим в памяти разговора. */
 const CHAT_TURNS_KEPT = 8;
+/** Разбор и 2–3 варианта: при низком размышлении 6 из 6 ответов годны, 8–30 с, $0,001–0,007 (22.11). */
+const EXAMPLE_BUDGET = { outputTokens: 16_000, reasoningEffort: 'low' } as const;
 const CHAT_TURN_MAX_CHARS = 1_500;
 const STRATEGY_MARK = 'СТРАТЕГИЯ:';
 const STYLE_MARK = 'ПРАВИЛО:';
@@ -146,7 +148,11 @@ export class SmmAgent {
     ];
     const usableVariant = (draft: ParsedDraft): boolean =>
       !hasUnverifiedPercent(draft.draft.parts.join('\n'));
-    const raw = await model.complete(turns, (text) => parseExample(text, usableVariant) !== null);
+    const raw = await model.complete(
+      turns,
+      (text) => parseExample(text, usableVariant) !== null,
+      EXAMPLE_BUDGET,
+    );
     const parsed = raw ? parseExample(raw, usableVariant) : null;
     if (!parsed) return null;
     const drafts = parsed.variants.map((variant) => ({

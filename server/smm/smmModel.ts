@@ -12,6 +12,16 @@ export const SMM_VISION_MODEL = 'gemini-3.6-flash';
 const VISION_TIMEOUT_MS = 45_000;
 const OUTPUT_TOKENS = 6_000;
 
+/**
+ * Бюджет одного вызова. Размышление и ответ делят один потолок: у разбора примера
+ * (разбор и 2–3 варианта) GLM тратил все 6 000 на размышление и возвращал пустой ответ,
+ * deepseek на прод-промпте тоже упирался в потолок (22.11, замер на OpenRouter).
+ */
+export interface CompleteBudget {
+  readonly outputTokens: number;
+  readonly reasoningEffort?: 'low' | 'medium' | 'high';
+}
+
 export interface ChatTurn {
   readonly role: 'system' | 'user' | 'assistant';
   readonly content: string;
@@ -19,7 +29,11 @@ export interface ChatTurn {
 
 export interface SmmModel {
   /** Текст ответа первой ответившей ступени; `accept` отбраковывает негодный ответ, и ход уходит дальше. */
-  complete(turns: readonly ChatTurn[], accept?: (text: string) => boolean): Promise<string | null>;
+  complete(
+    turns: readonly ChatTurn[],
+    accept?: (text: string) => boolean,
+    budget?: CompleteBudget,
+  ): Promise<string | null>;
   /** Текст со снимка поста; null — зрения нет или снимок не прочитан. */
   readImage(image: Uint8Array, mimeType: string): Promise<string | null>;
 }
@@ -42,6 +56,7 @@ async function completeWithChain(
   log: SmmLog,
   turns: readonly ChatTurn[],
   accept?: (text: string) => boolean,
+  budget?: CompleteBudget,
 ): Promise<string | null> {
   if (!client) return null;
   for (const stage of SMM_TEXT_CHAIN) {
@@ -50,9 +65,11 @@ async function completeWithChain(
         {
           model: stage.model,
           messages: turns.map((turn) => ({ role: turn.role, content: turn.content })),
-          max_tokens: OUTPUT_TOKENS,
+          max_tokens: budget?.outputTokens ?? OUTPUT_TOKENS,
           temperature: 1,
-        },
+          // Поле OpenRouter, в типах SDK его нет.
+          ...(budget?.reasoningEffort ? { reasoning: { effort: budget.reasoningEffort } } : {}),
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
         { signal: AbortSignal.timeout(stage.timeoutMs) },
       );
       const text = response.choices[0]?.message?.content?.trim() ?? '';
@@ -127,7 +144,7 @@ export function createSmmModel(options: SmmModelOptions): SmmModel {
     : null;
 
   return {
-    complete: (turns, accept) => completeWithChain(client, log, turns, accept),
+    complete: (turns, accept, budget) => completeWithChain(client, log, turns, accept, budget),
     readImage: (image, mimeType) =>
       readImageWithGemini(options.geminiKey, fetchImpl, log, image, mimeType),
   };
