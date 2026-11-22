@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AuthUser } from '../../coach/coachApi';
 import { click, mount, type Mounted } from '../kit/testDom';
+import { ShellProvider } from '../shell/ShellContext';
 import { GoalTasks } from './GoalTasks';
 
 const api = vi.hoisted(() => ({
@@ -58,11 +60,27 @@ async function settle(): Promise<void> {
   });
 }
 
-async function open(): Promise<HTMLElement> {
+const session = { username: 'f.test', role: 'candidate', isTest: true } as AuthUser;
+const navigate = vi.fn();
+
+async function open(search = ''): Promise<HTMLElement> {
+  const shell = {
+    session,
+    path: '/app/diary/goals/g1',
+    search,
+    match: null,
+    consultantRoute: null,
+    navigate,
+    signOut: async () => undefined,
+    theme: 'light' as const,
+    setTheme: () => undefined,
+  };
   view = mount(
-    <div className="b640">
-      <GoalTasks goalId="g1" />
-    </div>,
+    <ShellProvider value={shell}>
+      <div className="b640">
+        <GoalTasks goalId="g1" />
+      </div>
+    </ShellProvider>,
   );
   await settle();
   await settle();
@@ -137,15 +155,26 @@ describe('B743: d02a «Задачи»', () => {
     expect(page.querySelectorAll('.gt-row')).toHaveLength(3);
   });
 
-  it('задач нет — строка и «+ Задача»; места работы нет — раздела нет', async () => {
+  it('задач нет — строка и «+ Задача»', async () => {
     api.getAdaptation.mockResolvedValue(viewOf([task('t2', null)]));
     const page = await open();
     expect(page.querySelector('.vl-empty')?.textContent).toBe('Задач по цели нет.');
     expect(button(page, 'Задача')).not.toBeNull();
-    view?.unmount();
+  });
+
+  it('места работы нет — раздел есть, «+ Задача» ведёт в форму места работы', async () => {
     api.getOverview.mockResolvedValue({ primaryWorkplace: null });
-    const none = await open();
-    expect(none.querySelector('#ga-k')).toBeNull();
+    const page = await open();
+    expect(page.querySelector('#ga-k')?.textContent).toBe('Задачи');
+    expect(page.querySelector('.vl-empty')?.textContent).toBe('Задач по цели нет.');
+    click(button(page, 'Задача'));
+    expect(navigate).toHaveBeenCalledWith('/app/diary/adaptation?goal=g1');
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('вернулись из формы места работы — «Новая задача» открыта', async () => {
+    await open('?task=new');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Новая задача');
   });
 
   it('план не прочитался — ошибка на месте с «Повторить»', async () => {

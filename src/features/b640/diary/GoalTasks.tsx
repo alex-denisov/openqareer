@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CareerDiaryAdaptationView } from '../../../../shared/careerDiaryCards';
 import {
   setCareerDiaryAdaptationTaskCompleted,
@@ -14,6 +14,8 @@ import {
 } from '../adaptation/adaptationApi';
 import { Icon } from '../kit/Icon';
 import { StatusLine } from '../kit/ResultLine';
+import { buildNodePath } from '../routes';
+import { useShell } from '../shell/ShellContext';
 import { goalTasks, taskWhen, withGoalTask, type NewGoalTask } from './goalTasksModel';
 
 interface Plan {
@@ -120,11 +122,35 @@ function LoadFailed({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
+/** Вернулись из формы места работы с `?task=new` — «Новая задача» открывается один раз. */
+function useOpenOnReturn(ready: boolean, open: () => void) {
+  const { search } = useShell();
+  const wanted = new URLSearchParams(search).get('task') === 'new';
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!wanted || !ready || opened.current) return;
+    opened.current = true;
+    open();
+  }, [wanted, ready, open]);
+}
+
+function AddButton({ onClick }: { readonly onClick: () => void }) {
+  return (
+    <button className="btn is-quiet is-sm gt-add" type="button" onClick={onClick}>
+      <Icon name="plus" />
+      Задача
+    </button>
+  );
+}
+
 /** d02a «Задачи»: задачи плана адаптации по этой цели, отметка и «+ Задача». */
 export function GoalTasks({ goalId }: { readonly goalId: string }) {
+  const { navigate } = useShell();
   const { loaded, setLoaded, retry } = useGoalPlan();
   const [adding, setAdding] = useState(false);
-  if (loaded.state === 'none' || loaded.state === 'loading') return null;
+  const startAdding = useCallback(() => setAdding(true), []);
+  useOpenOnReturn(loaded.state === 'ready', startAdding);
+  if (loaded.state === 'loading') return null;
   const ready = loaded.state === 'ready' ? loaded : null;
   async function add(input: NewGoalTask) {
     if (!ready) return;
@@ -133,6 +159,8 @@ export function GoalTasks({ goalId }: { readonly goalId: string }) {
     const view = await patchAdaptation(workplace.id, { tasks: { [taskId]: { goalId } } });
     setLoaded({ state: 'ready', workplace, view });
   }
+  // Места работы нет: задачам негде жить — «+ Задача» ведёт в форму места работы.
+  const toWorkplace = () => navigate(`${buildNodePath('d01')}?goal=${encodeURIComponent(goalId)}`);
   return (
     <section className="gt-sec" aria-labelledby="ga-k">
       <h3 className="gt-sec-h" id="ga-k">
@@ -144,15 +172,11 @@ export function GoalTasks({ goalId }: { readonly goalId: string }) {
           goalId={goalId}
           onChanged={(plan) => setLoaded({ state: 'ready', ...plan })}
         />
-      ) : (
-        <LoadFailed onRetry={retry} />
-      )}
-      {ready ? (
-        <button className="btn is-quiet is-sm gt-add" type="button" onClick={() => setAdding(true)}>
-          <Icon name="plus" />
-          Задача
-        </button>
       ) : null}
+      {loaded.state === 'none' ? <p className="vl-empty">Задач по цели нет.</p> : null}
+      {loaded.state === 'error' ? <LoadFailed onRetry={retry} /> : null}
+      {ready ? <AddButton onClick={startAdding} /> : null}
+      {loaded.state === 'none' ? <AddButton onClick={toWorkplace} /> : null}
       {ready ? (
         <AddTaskDialog
           open={adding}

@@ -66,8 +66,9 @@ async function settle() {
     await new Promise((done) => setTimeout(done, 0));
   });
 }
-async function open(element: ReactElement) {
-  const value = { session, path: '/app/diary/adaptation', search: '', match: null, consultantRoute: null, navigate: vi.fn(), signOut: async () => undefined, theme: 'light' as const, setTheme: () => undefined };
+const navigate = vi.fn();
+async function open(element: ReactElement, search = '') {
+  const value = { session, path: '/app/diary/adaptation', search, match: null, consultantRoute: null, navigate, signOut: async () => undefined, theme: 'light' as const, setTheme: () => undefined };
   view = mount(<ShellProvider value={value}>{element}</ShellProvider>);
   await settle();
   await settle();
@@ -132,6 +133,20 @@ describe('d01 план адаптации', () => {
     expect(api.createWorkplace).toHaveBeenCalledWith({ company: 'Норма', title: 'руководитель разработки', startDate: '2026-12-01' });
     expect(api.savePlan).toHaveBeenCalledWith('w1', expect.objectContaining({ status: 'active', tasks: expect.any(Array) }));
     expect(api.generateSteps).not.toHaveBeenCalled();
+  });
+
+  it('d01 из «+ Задача» цели: после формы — обратно к цели, в «Новую задачу»', async () => {
+    api.getOverview.mockResolvedValue({ primaryWorkplace: null });
+    api.createWorkplace.mockResolvedValue({ ...WORKPLACE, planning: null });
+    api.savePlan.mockResolvedValue({});
+    const page = await open(<PlanScreen node={nodeByCode('d01')!} />, '?goal=g1');
+    typeInto(page.querySelector('#ap-company'), 'Норма');
+    typeInto(page.querySelector('#ap-title'), 'CTO');
+    typeInto(page.querySelector('#ap-start-date'), '01.12.2026');
+    click(button(page, 'Собрать план'));
+    await settle();
+    expect(api.createWorkplace).toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith('/app/diary/goals/g1?task=new');
   });
 
   it('d01h/d01i: компания из откликов подставляет должность и обязанности вакансии', async () => {
