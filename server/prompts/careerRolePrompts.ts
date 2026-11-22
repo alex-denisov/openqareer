@@ -2,9 +2,9 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.5-2026-11-22',
-  career_strategist: 'career-strategist-v1.7-2026-11-22',
-  career_expert: 'career-expert-v1.5-2026-11-22',
+  career_consultant: 'career-consultant-v1.6-2026-11-22',
+  career_strategist: 'career-strategist-v1.8-2026-11-22',
+  career_expert: 'career-expert-v1.6-2026-11-22',
 };
 
 const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
@@ -21,6 +21,11 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   actionProposals. Для открытого вопроса верни пустой массив.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
+- nextSection — раздел кабинета, где кандидат делает то, что ты советуешь:
+  profile (профиль и резюме), career (роли и условия поиска), vacancies
+  (вакансии и компании), responses (отклики и письма). Заполни его, только если
+  реплика советует конкретное действие в этом разделе.
+  На нейтральный вопрос, уточнение или разговор без шага в кабинете верни nextSection = null.
 - Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
   свои гипотезы и открытые вопросы, не больше трёх.
 `.trim(),
@@ -32,7 +37,7 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   и условие пересмотра стратегии.
 - Не повышай confidence фактов и не обходи ограничения кандидата.
 - Верни quickReplies как пустой массив: варианты ответа формирует только
-  карьерный консультант.
+  карьерный консультант. Верни nextSection = null.
 - Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
   свои гипотезы и открытые вопросы, не больше трёх.
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
@@ -89,7 +94,7 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - При рыночном выводе цитируй переданные observations дословным ref формата
   market:hh:<id>; не создавай ref самостоятельно.
 - Верни quickReplies как пустой массив: варианты ответа формирует только
-  карьерный консультант.
+  карьерный консультант. Верни nextSection = null.
 - Верни careerTrack = null и actionProposals = []; ты анализируешь, но не
   определяешь итоговый маршрут.
 - Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
@@ -119,7 +124,7 @@ const CONSULTANT_SUMMARY_PROMPT = `
 ЗАДАЧА: ВЫЖИМКА ЗАКРЫТОЙ БЕСЕДЫ
 - Сожми только факты, решения и открытые вопросы, которые прямо есть в сообщениях.
 - Не отвечай кандидату, не задавай вопрос, не предлагай действие и не создавай факт памяти.
-- Верни пустой массив quickReplies.
+- Верни пустой массив quickReplies и nextSection = null.
 - Верни три коротких раздела с заголовками: «Что выяснили», «Что решили», «Что осталось открытым».
 - Если раздел пуст, напиши «не указано». Не добавляй выводы, которых нет в беседе.
 `.trim();
@@ -133,7 +138,8 @@ const STRUCTURED_STAGE_PROMPT = `
 - Выполни задачу из stageContext. Это шаг сервера, а не реплика кандидату.
 - message содержит только JSON-объект по stageContext.outputSchema: без приветствия,
   пояснения, markdown и обрамления. Правило ФОРМАТ ОТВЕТА о выводе в message здесь не действует.
-- Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null.
+- Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null,
+  nextSection = null.
 `.trim();
 
 export function careerInstructionsForRole(

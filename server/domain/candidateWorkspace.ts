@@ -92,7 +92,12 @@ export const candidateWorkspaceSchema = z
         careerRoles: z
           .array(
             z
-              .object({ id: z.string().min(1).max(300), title: z.string().trim().min(1).max(200) })
+              .object({
+                id: z.string().min(1).max(300),
+                title: z.string().trim().min(1).max(200),
+                /** B748: проверенный перевод названия, придуманного моделью, — только для показа. */
+                titleRu: z.string().trim().min(1).max(80).optional(),
+              })
               .strict(),
           )
           .max(20)

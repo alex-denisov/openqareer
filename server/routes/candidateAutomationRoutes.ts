@@ -29,6 +29,7 @@ import {
 import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStore';
 import type { RouteDeps } from './deps';
 import { createAutomationPausePort } from '../candidate/automationPausePort';
+import { postRemindersFor } from './linkedinPostReminders';
 import { registerCandidateStatusRoutes } from './candidateStatusRoutes';
 import { registerAccountDeletionRoutes } from './accountDeletionRoutes';
 import {
@@ -241,6 +242,8 @@ const pauseAutomation: Handler = async (deps, request, reply) => {
   const runtime = deps.automationRepository.schedulerRepository.setRuntime(candidate.id, {
     status: 'paused', pauseUntil: until, nextSendAt: until,
   });
+  // B695: «Остановить всё» снимает и напоминания очереди LinkedIn.
+  postRemindersFor(deps, request.log)?.pauseAll(candidate.id);
   return reply.send({ data: { settings, runtime } });
 };
 
@@ -251,6 +254,7 @@ const resumeAutomation: Handler = async (deps, request, reply) => {
   const settings = deps.automationRepository.setPause(candidate.id, null);
   deps.candidateActionRepository?.setKillSwitch(`candidate:${candidate.id}`, false, 'manual_pause');
   const runtime = deps.automationRepository.schedulerRepository.setEmergencyPause(candidate.id, false);
+  postRemindersFor(deps, request.log)?.resumeAll(candidate.id);
   return reply.send({ data: { settings, runtime } });
 };
 
