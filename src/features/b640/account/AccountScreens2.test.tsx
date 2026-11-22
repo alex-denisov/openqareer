@@ -35,6 +35,8 @@ const api = vi.hoisted(() => ({
   restoreAccount: vi.fn(),
   getAppPreferences: vi.fn(),
   saveAppPreferences: vi.fn(),
+  getSearchConsent: vi.fn(),
+  setSearchConsent: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', async (original) => ({
@@ -53,6 +55,10 @@ vi.mock('../../automation/automationApi', () => ({
   getCandidateAutomation: api.getAutomation,
   pauseCandidateAutomation: api.pauseAutomation,
   resumeCandidateAutomation: api.resumeAutomation,
+}));
+vi.mock('../../vacancies/recruiterContactsApi', () => ({
+  getSearchConsent: api.getSearchConsent,
+  setSearchConsent: api.setSearchConsent,
 }));
 vi.mock('./appPreferencesApi', () => ({
   getAppPreferences: api.getAppPreferences,
@@ -156,6 +162,11 @@ const button = (root: Element, text: string) =>
   [...root.querySelectorAll('button, a.btn')].find((item) => item.textContent?.trim() === text) ?? null;
 
 beforeEach(() => {
+  api.getSearchConsent.mockResolvedValue({
+    granted: true,
+    policyVersion: 'v',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+  });
   vi.clearAllMocks();
   api.getAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
   api.saveAppPreferences.mockResolvedValue({ theme: null, moneyCurrency: null });
@@ -175,6 +186,45 @@ afterEach(() => {
 });
 
 describe('n05 «Согласия и данные»', () => {
+  it('согласия в порядке макета, заголовок раздела не повторяется', async () => {
+    const root = await open(<DataScreen node={node('n05')} />);
+    const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
+    expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
+      ['Вы в поиске', true],
+      ['Цифровой след', true],
+      ['Подключённый профиль', false],
+      ['Отклики и подъём резюме', false],
+    ]);
+    const titles = [...root.querySelectorAll('.set-t, .set-h')].map((item) => item.textContent);
+    expect(titles.filter((title) => title === 'Действия от вашего имени')).toHaveLength(1);
+  });
+
+  it('«Вы в поиске»: отзыв сразу, выдача — после текста согласия', async () => {
+    api.setSearchConsent.mockResolvedValue({ granted: false, policyVersion: 'v', updatedAt: '' });
+    const root = await open(<DataScreen node={node('n05')} />);
+    click(root.querySelector('input[aria-label="Вы в поиске"]'));
+    await settle();
+    expect(api.setSearchConsent).toHaveBeenCalledWith(false);
+    api.getSearchConsent.mockResolvedValue({ granted: false, policyVersion: 'v', updatedAt: '' });
+    api.setSearchConsent.mockClear();
+    const again = await open(<DataScreen node={node('n05')} />);
+    click(again.querySelector('input[aria-label="Вы в поиске"]'));
+    expect(api.setSearchConsent).not.toHaveBeenCalled();
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelector('h2')?.textContent).toBe('Вы в поиске');
+    expect(dialog.textContent).toContain('мы будем искать контакты нанимающих');
+    click(button(dialog, 'Дать согласие'));
+    await settle();
+    expect(api.setSearchConsent).toHaveBeenCalledWith(true);
+  });
+
+  it('«Вы в поиске» не прочиталось — строки нет, остальные согласия на месте', async () => {
+    api.getSearchConsent.mockRejectedValue(new Error('down'));
+    const root = await open(<DataScreen node={node('n05')} />);
+    expect(root.querySelector('input[aria-label="Вы в поиске"]')).toBeNull();
+    expect(root.querySelectorAll('input.sw')).toHaveLength(3);
+  });
+
   it('три согласия сервера и удаление аккаунта, как в макете', async () => {
     const root = await open(<DataScreen node={node('n05')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
@@ -185,9 +235,10 @@ describe('n05 «Согласия и данные»', () => {
     ]);
     const switches = [...root.querySelectorAll('input.sw')] as HTMLInputElement[];
     expect(switches.map((item) => [item.getAttribute('aria-label'), item.checked])).toEqual([
-      ['Подключённый профиль', false],
+      ['Вы в поиске', true],
       ['Цифровой след', true],
-      ['Действия от вашего имени', false],
+      ['Подключённый профиль', false],
+      ['Отклики и подъём резюме', false],
     ]);
     const remove = root.querySelector('button[aria-label="Удалить аккаунт"]') as HTMLButtonElement;
     expect(remove.textContent).toBe('Удалить');
@@ -302,7 +353,7 @@ describe('n05 «Согласия и данные»', () => {
     ]);
     api.revokeConsent.mockResolvedValue(null);
     const root = await open(<DataScreen node={node('n05')} />);
-    click(root.querySelector('input[aria-label="Действия от вашего имени"]'));
+    click(root.querySelector('input[aria-label="Отклики и подъём резюме"]'));
     await settle();
     expect(api.revokeConsent).toHaveBeenCalledWith('actions_on_behalf');
     expect(document.querySelector('.pf-dialog')).toBeNull();

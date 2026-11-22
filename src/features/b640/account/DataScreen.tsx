@@ -10,6 +10,7 @@ import {
   resumeCandidateAutomation,
 } from '../../automation/automationApi';
 import { exportCandidateData } from '../../coach/coachApi';
+import { getSearchConsent } from '../../vacancies/recruiterContactsApi';
 import {
   CAPABILITY_CONSENT_CURRENT_VERSION,
   CAPABILITY_CONSENT_DOCUMENTS,
@@ -23,12 +24,16 @@ import { ResultLine } from '../kit/ResultLine';
 import type { B640Node } from '../routes';
 import { AccountDeletionGroup } from './AccountDeletion';
 import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
+import { ConsentSwitch, useAction } from './consentParts';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
+import { SearchConsentRow } from './SearchConsentRow';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 
 interface AccountData {
   /** Согласия, которые сейчас действуют. */
   readonly granted: readonly CandidateCapability[];
+  /** «Вы в поиске» (B263); `null` — не прочиталось, строки нет. */
+  readonly searchConsent: boolean | null;
   /** Автоотклики; `null` — состояние не прочиталось. */
   readonly automation: AutomationState | null;
   /** Удаление аккаунта; `undefined` — состояние не прочиталось, группы нет. */
@@ -39,13 +44,18 @@ interface AccountData {
 const STOP_DAYS = 365;
 
 async function loadData(): Promise<AccountData> {
-  const [consents, automation, deletion] = await Promise.all([
+  const [consents, searchConsent, automation, deletion] = await Promise.all([
     getAccountCapabilityConsents(),
+    getSearchConsent().then(
+      (consent) => consent.granted,
+      () => null,
+    ),
     getCandidateAutomation().catch(() => null),
     getAccountDeletion().catch(() => undefined),
   ]);
   return {
     granted: consents.filter((item) => item.revokedAt === null).map((item) => item.capability),
+    searchConsent,
     automation: automation
       ? {
           enabled: automation.settings.enabled,
@@ -64,25 +74,6 @@ function Group({ title, children }: { readonly title: string; readonly children:
       <ul className="set-list">{children}</ul>
     </section>
   );
-}
-
-/** Действие с ожиданием и ошибкой на месте. */
-function useAction(onDone: () => void) {
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-  async function run(action: () => Promise<unknown>) {
-    setBusy(true);
-    setFailed(false);
-    try {
-      await action();
-      onDone();
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-  return { busy, failed, run: (action: () => Promise<unknown>) => void run(action) };
 }
 
 interface ConsentDialogProps {
@@ -115,31 +106,6 @@ function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: Con
         </button>
       </div>
     </Dialog>
-  );
-}
-
-interface ConsentSwitchProps {
-  readonly label: string;
-  readonly checked: boolean;
-  readonly disabled: boolean;
-  readonly onChange: (checked: boolean) => void;
-}
-
-function ConsentSwitch({ label, checked, disabled, onChange }: ConsentSwitchProps) {
-  return (
-    <div className="set-r">
-      <span className="sw-cell">
-        <input
-          className="sw"
-          type="checkbox"
-          role="switch"
-          aria-label={label}
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-        />
-      </span>
-    </div>
   );
 }
 
@@ -316,6 +282,9 @@ function Sections({ data, load }: { readonly data: AccountData; readonly load: L
   return (
     <>
       <Group title="На что вы дали согласие">
+        {data.searchConsent === null ? null : (
+          <SearchConsentRow granted={data.searchConsent} onChanged={load.retry} />
+        )}
         {CONSENT_ROWS.map((row) => (
           <Consent
             key={row.capability}
