@@ -11,7 +11,7 @@ export interface ConsentRow {
 
 /** «Вы в поиске» (B263) — первая строка n05, как в макете; хранится отдельно от `me/consents`. */
 export const SEARCH_CONSENT_ROW = {
-  title: 'Вы в поиске',
+  title: '«Вы в поиске»',
   line: 'Разрешает искать рекрутеров и тёплые пути',
 } as const;
 
@@ -29,7 +29,7 @@ export const CONSENT_ROWS: readonly ConsentRow[] = [
     // server/routes/capabilityConsentRoutes.ts: при отзыве удаляются проверки следа.
     revokeWarning: {
       title: 'Отозвать согласие на цифровой след?',
-      text: 'Сохранённые находки удалятся.',
+      text: 'Сохранённые проверки и находки удалятся.',
     },
   },
   {

@@ -30,10 +30,13 @@ const createSchema = z
     contactId: idSchema.optional(),
     recruiterId: idSchema.optional(),
     vacancyId: vacancyIdSchema.optional(),
+    /** B698: вторая вакансия компании из её карточки — только для текста сообщения. */
+    alsoVacancyId: vacancyIdSchema.optional(),
     kind: z.enum(B640_CONTACT_MESSAGE_KINDS),
   })
   .strict()
-  .refine((body) => (body.contactId === undefined) !== (body.recruiterId === undefined));
+  .refine((body) => (body.contactId === undefined) !== (body.recruiterId === undefined))
+  .refine((body) => body.alsoVacancyId === undefined || body.vacancyId !== undefined);
 const editSchema = z.object({ text: z.string().trim().min(1).max(B640_CONTACT_MESSAGE_EDIT_MAX) }).strict();
 const listSchema = z.object({ contactId: idSchema });
 const sentSchema = z.object({ vacancyId: vacancyIdSchema });
@@ -76,7 +79,7 @@ function findRecipient(
     const meta = record && readConnectionMetadata(record);
     return record && meta
       ? { contactId: meta.contactId, recruiterId: null, name: record.fullName, company: record.companyName,
-          linkedinUrl: record.linkedinUrl, relationship: meta.relationship }
+          linkedinUrl: record.linkedinUrl, relationship: meta.relationship, role: record.roleTitle || null }
       : notFoundRecipient(request, reply);
   }
   const record = body.vacancyId
@@ -84,7 +87,7 @@ function findRecipient(
     : undefined;
   return record
     ? { contactId: null, recruiterId: record.id, name: record.fullName, company: record.companyName,
-        linkedinUrl: record.linkedinUrl, relationship: null }
+        linkedinUrl: record.linkedinUrl, relationship: null, role: record.roleTitle || null }
     : notFoundRecipient(request, reply);
 }
 
@@ -107,6 +110,7 @@ async function createMessage(deps: RouteDeps, stores: Stores, request: FastifyRe
     kind: body.data.kind,
     recipient,
     vacancyId: body.data.vacancyId ?? null,
+    alsoVacancyId: body.data.alsoVacancyId ?? null,
   });
   const stored = stores.messages.create({
     id: randomUUID(),
