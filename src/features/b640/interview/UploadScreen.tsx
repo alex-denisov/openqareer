@@ -131,9 +131,8 @@ function Interviewer({ data }: { readonly data: DebriefData }) {
       {state === 'failed' ? (
         <StatusLine state="err" text="Имя не сохранилось. Попробуйте ещё раз." />
       ) : null}
-      <div className="actions m-commit">
+      <div className="actions">
         <Button
-          variant="primary"
           disabled={state === 'saving' || !name.trim()}
           onClick={() => void save()}
         >
