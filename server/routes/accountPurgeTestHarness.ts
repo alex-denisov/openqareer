@@ -6,6 +6,7 @@ import type { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { SqliteDiaryCheckpointRepository } from '../data/sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
 import { SqliteDiaryPeopleRepository } from '../data/sqliteDiaryPeopleRepository';
+import { SqliteGoalTaskSuggestionRepository } from '../data/sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
 import { SqliteTelegramUsernameStore } from '../notifications/telegramUsernameStore';
 import { HH_TEXT_PRIORITY_TABLE } from '../vacancies/hhTextPriorityTable';
@@ -29,6 +30,7 @@ export function openSideTablesForPurgeTest(
   new SqliteDiaryCheckpointRepository(options).close();
   new SqliteDiaryPeopleRepository(options).close();
   new SqliteKpiImportRepository(options).close();
+  new SqliteGoalTaskSuggestionRepository(options).close();
   // B642: таблицы записей интервью создаются при первом обращении к записи.
   new SqliteInterviewRecordingRepository({ databasePath }).close();
   const telegram = new DatabaseSync(databasePath);

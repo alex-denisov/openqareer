@@ -98,6 +98,12 @@ export const MODEL_CHAINS = {
    * замер 13,1 с на Vertex против 6,0 с на DeepSeek.
    */
   skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
+  /**
+   * B743 · 2: одна подсказка задачи по цели в карточке цели. Вызов короткий и частый (раз на
+   * изменение данных цели), поэтому дешёвая ступень первой; в запросе данные кандидата — только
+   * OpenRouter с запретом сбора данных (`personal`), без Vertex (выключен решением владельца 20.11).
+   */
+  goalTaskSuggestions: [DEEPSEEK_FLASH, GLM_FLASH],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [VERTEX, DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;
