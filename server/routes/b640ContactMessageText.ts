@@ -2,6 +2,7 @@ import type { FastifyRequest } from 'fastify';
 import type { B640ContactMessageKind } from '../../shared/b640ContactMessage';
 import {
   acceptModelMessage,
+  modelMessageRejection,
   contactMessageWish,
   fallbackContactMessage,
   type ContactMessageFacts,
@@ -11,6 +12,7 @@ import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { filterUsablePitchFacts } from '../domain/vacancyPitchService';
 import { candidateGenderFromName } from '../../shared/candidateGender';
+import type { CoverLetterOutcome } from '../providers/coverLetterWriter';
 import type { RouteDeps } from './deps';
 
 export interface MessageRecipient {
@@ -37,6 +39,19 @@ function vacancyOf(deps: RouteDeps, vacancyId: string | null): { title: string; 
   if (!vacancyId) return null;
   const cluster = deps.multiSourceEngine?.getActiveCluster?.(vacancyId);
   return cluster?.canonicalTitle ? { title: cluster.canonicalTitle, company: cluster.canonicalCompany ?? '' } : null;
+}
+
+/** B753: отказ ступени и непринятый текст — в журнал (без текста), иначе запасной текст не объяснить. */
+function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, known: string): void {
+  if (outcome.failure) {
+    request.log.warn({ ...outcome.failure, code: 'contact_message_stage_failed' }, 'contact-message-stage-failed');
+  }
+  const rejected = outcome.body || !outcome.failure ? modelMessageRejection(outcome.body, known) : null;
+  if (!rejected) return;
+  request.log.warn(
+    { code: 'contact_message_model_rejected', reason: rejected, stage: outcome.stage ?? null, length: outcome.body?.length ?? 0 },
+    'contact-message-model-rejected',
+  );
 }
 
 /**
@@ -93,6 +108,7 @@ export async function writeContactMessageText(
       profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
       vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
     ].join('\n');
+    logModelOutcome(request, outcome, known);
     return acceptModelMessage(outcome.body, known) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');

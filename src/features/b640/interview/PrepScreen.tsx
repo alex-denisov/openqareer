@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { StarStoryView } from '../../../../shared/starStories';
+import { SYSTEM_DESIGN_TIME_LIMIT_MINUTES } from '../../../../server/domain/systemDesignTask';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
@@ -51,6 +52,24 @@ function SalaryRow({ floor }: { readonly floor: SalaryFloor }) {
         </div>
       </div>
       <span className="tag ok">готово</span>
+    </li>
+  );
+}
+
+/** Тренировка System Design по вакансии отклика (I3). */
+function PracticeRow({ responseId }: { readonly responseId: string }) {
+  return (
+    <li className="row">
+      <div>
+        <div className="row-title">Пробное интервью · тема System Design</div>
+        <div className="row-sub">
+          System Design · <span className="num">{SYSTEM_DESIGN_TIME_LIMIT_MINUTES}</span> минут
+        </div>
+      </div>
+      <Link className="btn is-quiet" to={buildNodePath('i03', { responseId })}>
+        <Icon name="compass" />
+        Тренировка
+      </Link>
     </li>
   );
 }
@@ -136,6 +155,7 @@ function PrepLead({
           <Row key={row.id} row={row} />
         ))}
         {data.floor ? <SalaryRow floor={data.floor} /> : null}
+        <PracticeRow responseId={data.response.id} />
       </ul>
       {answer.question ? (
         <AnswerDialog

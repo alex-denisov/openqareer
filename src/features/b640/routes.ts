@@ -141,7 +141,7 @@ const ROWS: readonly NodeRow[] = [
   ['n03', 'n03-akkaunt', 'account', 'settings', '/app/account/connections', 'Подключения', 'settings', { parent: 'n00', tabs: 'account' }],
   ['n02', 'n02-nastrojki-uvedomlenij', 'account', 'settings', '/app/account/notifications', 'Уведомления', 'settings', { parent: 'n00', tabs: 'account' }],
   ['n04', 'n04-vhod-i-bezopasnost', 'account', 'settings', '/app/account/security', 'Вход и безопасность', 'settings', { parent: 'n00', tabs: 'account' }],
-  ['n05', 'n05-soglasiya-i-dannye', 'account', 'settings', '/app/account/data', 'Аккаунт', 'settings', { parent: 'n00', tabs: 'account', crumb: 'Согласия и данные' }],
+  ['n05', 'n05-soglasiya-i-dannye', 'account', 'settings', '/app/account/data', 'Согласия и данные', 'settings', { parent: 'n00', tabs: 'account', crumb: 'Согласия и данные' }],
   ['t03', 't03-podpiska-i-oplata', 'account', 'tariffs', '/app/account/billing', 'Подписка', 'settings', { parent: 'n00', tabs: 'account', crumb: 'Подписка и оплата' }],
   ['n06', 'n06-prilozhenie', 'account', 'settings', '/app/account/app', 'Приложение', 'settings', { parent: 'n00', tabs: 'account' }],
   ['t01', 't01-tarify', 'account', 'tariffs', '/app/tariffs', 'Тарифы', 'focus'],

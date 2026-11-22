@@ -90,6 +90,8 @@ export interface CareerOptions {
   readonly failProfileSave?: boolean;
   /** Ответ пути в профессию (S11); без него — «цель не выбрана». */
   readonly professionPath?: unknown;
+  /** B741: состояние проверки навыков роли; по умолчанию `ready`. */
+  readonly assessmentState?: string;
   /** Нынешний доход на руки из профиля. */
   readonly income?: number | null;
   /** Ответ цели роста (S12); выбор цели возвращает `growthAfter`, если он задан. */
@@ -202,7 +204,8 @@ export async function openCareer(
   // Проверка навыков готова для любой роли: полоса «Проверьте» берёт первую роль поиска.
   await page.route(`${API}/candidate/role-skill-assessments/current*`, (route) => {
     const role = new URL(route.request().url()).searchParams.get('role') ?? '';
-    return route.fulfill({ json: { data: { state: 'ready', roleTitle: role, skills: [] } } });
+    const state = options.assessmentState ?? 'ready';
+    return route.fulfill({ json: { data: { state, roleTitle: role, skills: [] } } });
   });
   await page.route(`${API}/candidate/role-skill-demand`, (route) =>
     route.fulfill({

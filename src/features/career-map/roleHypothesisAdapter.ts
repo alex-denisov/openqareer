@@ -88,7 +88,7 @@ interface RoleEvidence {
  * B747: одно требование не бывает и подтверждённым, и недостающим. Названия
  * сравниваются без регистра, ё/е, неразрывных и двойных пробелов.
  */
-function skillKey(text: string): string {
+export function skillKey(text: string): string {
   return text
     .normalize('NFKC')
     .toLocaleLowerCase('ru')
