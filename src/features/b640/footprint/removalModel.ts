@@ -35,9 +35,9 @@ export function removalDone(removal: FootprintRemoval | undefined): string | nul
 }
 
 const CHECK_TEXT = {
-  removed: 'удалено',
-  still_there: 'ещё на месте',
-  unclear: 'сайт не ответил',
+  removed: 'Удалено',
+  still_there: 'Ещё на месте',
+  unclear: 'Сайт не ответил',
 } as const;
 
 export interface RemovalRequestLine {
@@ -47,7 +47,7 @@ export interface RemovalRequestLine {
 }
 
 export interface ChecksStatus {
-  /** «телефон из объявления: удалено» — итог последней проверки находки; `null` — проверок не было. */
+  /** «Удалено: телефон из объявления» — итог последней проверки находки; `null` — проверок не было. */
   readonly lastCheck: string | null;
   /** Запросы сайтам, ещё не закрытые подтверждённым удалением. */
   readonly requests: readonly RemovalRequestLine[];
@@ -70,7 +70,7 @@ export function checksStatus(items: readonly FootprintRiskItem[]): ChecksStatus 
       : [];
   });
   return {
-    lastCheck: checked && result ? `${lowerFirst(checked.title)}: ${CHECK_TEXT[result]}` : null,
+    lastCheck: checked && result ? `${CHECK_TEXT[result]}: ${lowerFirst(checked.title)}` : null,
     requests,
   };
 }

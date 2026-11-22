@@ -184,7 +184,7 @@ test.describe('B652: «Цифровой след»', () => {
     await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
     const checks = page.locator('section', { has: page.locator('#fp-sum') });
     await expect(checks.getByRole('heading', { name: 'Проверки и запросы' })).toBeVisible();
-    await expect(checks.locator('dd').first()).toContainText(/ · .+: удалено$/u);
+    await expect(checks.locator('dd').first()).toContainText(/ · Удалено: .+$/u);
     await expect(checks.getByText('Жалоба отправлена')).toHaveCount(0);
   });
 
@@ -201,7 +201,7 @@ test.describe('B652: «Цифровой след»', () => {
     // B645 p02: запрос не закрыт удалением — строка «Жалоба отправлена» в сводке.
     await page.goto('/app/profile/footprint', { waitUntil: 'domcontentloaded' });
     const checks = page.locator('section', { has: page.locator('#fp-sum') });
-    await expect(checks.locator('dd').first()).toContainText(/: ещё на месте$/u);
+    await expect(checks.locator('dd').first()).toContainText(/ · Ещё на месте: .+$/u);
     await expect(checks.locator('dt', { hasText: 'Жалоба отправлена' })).toHaveCount(1);
     await expect(checks.locator('dd').nth(1)).toContainText(/ — сайту 18\.11$/u);
   });

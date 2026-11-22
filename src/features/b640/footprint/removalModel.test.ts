@@ -73,7 +73,7 @@ describe('B645 p02: «Проверки и запросы»', () => {
       risk('d', 'Профиль на GitHub'),
     ];
     expect(checksStatus(items)).toEqual({
-      lastCheck: 'телефон из объявления: удалено',
+      lastCheck: 'Удалено: телефон из объявления',
       requests: [
         { id: 'b', title: 'Фото на чужом профиле', date: '10.11' },
         { id: 'c', title: 'Старый блог', date: '01.11' },
@@ -85,11 +85,11 @@ describe('B645 p02: «Проверки и запросы»', () => {
     const still = [
       risk('c', 'Старый блог', { checkedAt: '2026-11-03T09:00:00.000Z', result: 'still_there' }),
     ];
-    expect(checksStatus(still).lastCheck).toBe('старый блог: ещё на месте');
+    expect(checksStatus(still).lastCheck).toBe('Ещё на месте: старый блог');
     const unclear = [
       risk('c', 'Старый блог', { checkedAt: '2026-11-03T09:00:00.000Z', result: 'unclear' }),
     ];
-    expect(checksStatus(unclear).lastCheck).toBe('старый блог: сайт не ответил');
+    expect(checksStatus(unclear).lastCheck).toBe('Сайт не ответил: старый блог');
     expect(checksStatus([risk('d', 'Профиль на GitHub')])).toEqual({
       lastCheck: null,
       requests: [],
