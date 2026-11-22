@@ -1,4 +1,5 @@
 import type { CatalogChip, ChipCounts } from './catalogChips';
+import type { PruneControl } from './poolPruneBatches';
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
 import type { SourceObservations } from './sourceHealthVerdict';
@@ -134,8 +135,12 @@ export interface VacancyPoolStore {
   /** Шаг дочитывания по окну строк: каждый шаг ограничен и по чтению (B649-2). */
   backfillWindowStep?(windowRows?: number): { done: boolean };
   /** Чистка, отпускающая цикл событий между транзакциями (B649-2). */
-  pruneAsync?(knownSourceIds: readonly string[], oldestPublishedAt: string): Promise<void>;
-  pruneClustersBeforeAsync?(oldestPublishedAt: string): Promise<number>;
+  pruneAsync?(
+    knownSourceIds: readonly string[],
+    oldestPublishedAt: string,
+    control?: PruneControl,
+  ): Promise<void>;
+  pruneClustersBeforeAsync?(oldestPublishedAt: string, control?: PruneControl): Promise<number>;
   /**
    * Дополняет срез площадки частичным чтением: прочитанное обновляется,
    * непрочитанное остаётся (B214). С `dropObservedBefore` снимает записи,
