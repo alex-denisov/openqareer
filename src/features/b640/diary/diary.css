@@ -93,8 +93,7 @@
     display: grid;
     gap: var(--career-space-2);
   }
-}
-
-.b640 .dn-flag.is-done > .ico {
-  color: var(--career-success);
+  .b640 .dn-flag.is-done > .ico {
+    color: var(--career-success);
+  }
 }
