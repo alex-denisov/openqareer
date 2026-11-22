@@ -125,6 +125,8 @@ export async function finishPractice(input: {
     questionId: input.questionId,
     answer: input.answer.trim(),
     elapsedSeconds: input.elapsedSeconds,
+    // Разбор строит отдельный вызов (POST review): отзыв к ответу никто не читает.
+    feedback: false,
   });
   if (input.schema && input.schema.nodes.length > 0) {
     await saveSchema(answered.id, input.questionId, input.schema);

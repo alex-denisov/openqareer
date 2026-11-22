@@ -72,6 +72,17 @@ describe('deriveApplicationFields', () => {
     expect(result.whoseTurn).toBe('candidate');
   });
 
+  it('carries the interview format into the nearest-interview summary (B749 context strip)', () => {
+    const result = deriveApplicationFields({
+      application: application({ stage: 'interview' }),
+      events: [],
+      materials: [],
+      interviews: [{ id: 'i1', applicationId: 'app-1', round: 1, scheduledAt: '2024-01-12T12:00:00Z', format: 'видеозвонок с техническим директором', prepStatus: 'none', prep: null, debrief: null, createdAt: '', updatedAt: '' }],
+      now: '2024-01-10T00:00:00Z',
+    });
+    expect(result.nearestInterview?.format).toBe('видеозвонок с техническим директором');
+  });
+
   it('marks the offer stage as the candidate’s turn', () => {
     const result = deriveApplicationFields({
       application: application({ stage: 'offer' }),

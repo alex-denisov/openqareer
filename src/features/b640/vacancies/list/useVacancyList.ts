@@ -191,8 +191,14 @@ function usePreferredListCurrency() {
   return state;
 }
 
+/**
+ * B645 s07: первая страница пула и число от сервера; дальше и в другом порядке строки дают
+ * порции сервера по 20 «Показать ещё» (useServerSortedList), всю подборку не читаем.
+ */
+const S07_POOL = { pageLimit: 1 } as const;
+
 export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>): VacancyList {
-  const pool = useMatchedPool();
+  const pool = useMatchedPool(undefined, S07_POOL);
   const rates = useCurrencyRates();
   const [filters, setFilters] = useState<ListFilters>(EMPTY_FILTERS);
   const [currency, setCurrency] = usePreferredListCurrency();

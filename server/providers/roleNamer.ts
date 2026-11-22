@@ -8,8 +8,17 @@ import {
 import { createHash } from 'node:crypto';
 import { HygienicRoleNamer } from './hygienicRoleNamer';
 import OpenAI from 'openai';
+import { z } from 'zod';
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import {
+  QueuedTitleTranslator,
+  TitleRuRetryRoleNamer,
+  type RoleTitleTranslator,
+} from './roleTitleRuRetry';
+import {
+  checkedTitleRu,
   ROLE_NAMING_JSON_SCHEMA,
+  ROLE_TITLE_TRANSLATION_INSTRUCTIONS,
   roleNamingInstructions,
   ROLE_NAMING_PROMPT_VERSION,
   roleNamingSchema,
@@ -211,6 +220,46 @@ export class LlmRoleNamer implements RoleNamer {
       return { roles: [], failures: [thrownFailure(this.stage, error, this.apiKey)] };
     }
   }
+
+  /** B748: перевод названий одной пачкой; каждый перевод проходит ту же проверку. */
+  async translateTitles(titles: readonly string[]): Promise<Readonly<Record<string, string>>> {
+    if (titles.length === 0) return {};
+    if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
+    const response = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: 'system', content: ROLE_TITLE_TRANSLATION_INSTRUCTIONS },
+        { role: 'user', content: JSON.stringify({ titles }) },
+      ],
+      ...openRouterRouting({ personal: this.openRouter, requireParameters: false }),
+    });
+    return parseTranslations(response.choices[0]?.message?.content ?? null, titles);
+  }
+}
+
+const translationSchema = z.object({
+  titles: z.array(z.object({ title: z.string(), titleRu: z.string() })),
+});
+
+function parseTranslations(
+  content: string | null,
+  asked: readonly string[],
+): Readonly<Record<string, string>> {
+  const payload = content ? jsonPayload(content) : null;
+  if (!payload) return {};
+  try {
+    const parsed = translationSchema.safeParse(JSON.parse(payload));
+    if (!parsed.success) return {};
+    const wanted = new Set(asked);
+    return Object.fromEntries(
+      parsed.data.titles.flatMap(({ title, titleRu }) => {
+        const checked = wanted.has(title) ? checkedTitleRu(title, titleRu) : null;
+        return checked ? [[title, checked] as const] : [];
+      }),
+    );
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -253,8 +302,11 @@ function parseRoles(content: string | null): NamedRole[] {
   try {
     const parsed = roleNamingSchema.safeParse(JSON.parse(payload));
     if (!parsed.success) return [];
+    // titleRu уже проверен схемой (checkedTitleRu): без него перевод модели
+    // не доходил до ролей вовсе (B748).
     return parsed.data.roles.map((role) => ({
       title: role.title,
+      ...(role.titleRu ? { titleRu: role.titleRu } : {}),
       reason: role.reason,
       evidenceRefs: role.evidenceRefs,
     }));
@@ -512,7 +564,9 @@ export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
   const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;
   // Между хранилищем и очередью стоит чистка названий (B210): она ступеней не
   // добавляет, поэтому обёртку разворачиваем, а не считаем концом очереди.
-  const queue = cached instanceof HygienicRoleNamer ? cached.inner : cached;
+  const clean = cached instanceof HygienicRoleNamer ? cached.inner : cached;
+  // Вторая попытка перевода (B748) ступеней называния тоже не добавляет.
+  const queue = clean instanceof TitleRuRetryRoleNamer ? clean.inner : clean;
   if (!(queue instanceof QueuedRoleNamer)) return [];
   return [...queue.descriptors];
 }
@@ -542,7 +596,7 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
     // Чистка стоит до хранилища: невидимая метка в названии роли не должна
     // пережить рестарт вместе с ним (B210, B191).
     new HygienicRoleNamer({
-      inner: new QueuedRoleNamer(
+      inner: withTitleRuRetry(
         stages.map((stage) =>
           stage.kind === 'vertex' ? vertexRoleNamer(stage.vertex, config.vertexFetch) : routeRoleNamer(stage.route),
         ),
@@ -551,6 +605,23 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
     }),
     { ...(config.cacheStore ? { store: config.cacheStore } : {}) },
   );
+}
+
+/**
+ * Очередь называния с второй попыткой перевода (B748): переводят те же
+ * chat-completions ступени, по очереди; онтология покрывает своё без вызова.
+ */
+function withTitleRuRetry(namers: readonly RoleNamer[], labels: readonly string[]): RoleNamer {
+  const queue = new QueuedRoleNamer(namers, labels);
+  const translators: RoleTitleTranslator[] = namers.filter(
+    (namer): namer is LlmRoleNamer => namer instanceof LlmRoleNamer,
+  );
+  if (translators.length === 0) return queue;
+  return new TitleRuRetryRoleNamer({
+    inner: queue,
+    translator: new QueuedTitleTranslator(translators),
+    needsTranslation: (title) => roleTitleRu(title) === title,
+  });
 }
 
 function vertexRoleNamer(vertex: VertexConfig, fetchImpl?: typeof fetch): RoleNamer {

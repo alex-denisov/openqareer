@@ -411,6 +411,7 @@
   .b640 .mi-lead:has(#mi-st-rec:checked) .mi-ans-e { display: block; }
   .b640 .mi-lead:has(#mi-st-mic:checked) .mi-mic-off { display: contents; }
   .b640 .mi-lead:has(#mi-st-rec:checked) .mi-rec-err { display: inline-flex; }
+  .b640 .mi-rec-err.is-on { display: inline-flex; }
   .b640 .mi-lead:has(#mi-st-mic:checked) .mi-send,
   .b640 .mi-lead:has(#mi-st-rec:checked) .mi-send { display: inline-flex; }
   @media (max-width: 767px) { .b640 .lead-head:has(#ln-title) > .tip { display: none; } }

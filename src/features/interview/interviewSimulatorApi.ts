@@ -114,6 +114,8 @@ export async function submitInterviewAnswer(
     readonly answer: string;
     readonly elapsedSeconds: number;
     readonly replaceAnswer?: boolean;
+    /** Ложь — отзыв модели не нужен экрану (тренировка i03, B750 3b). */
+    readonly feedback?: boolean;
   },
 ): Promise<InterviewSessionView> {
   const response = await apiFetch(`${INTERVIEW_URL}/${encodeURIComponent(id)}/answers`, {
