@@ -11,6 +11,7 @@ import { GoalEntries } from './GoalEntries';
 import { GoalHistory } from './GoalHistory';
 import { GoalMenu } from './GoalMenu';
 import { SETTERS, formatValue, indicatorsOf, longDate, riskTag } from './goalsModel';
+import { GoalTasks } from './GoalTasks';
 import { MeasureDialog } from './MeasureDialog';
 import { today } from './model';
 import { RetryButton } from './parts';
@@ -153,6 +154,7 @@ function GoalCardView({ card, version, onChanged }: GoalCardViewProps) {
         <GoalHead card={card} onChanged={onChanged} />
         <GoalState card={card} goal={goal} onMeasure={() => setMeasuring(true)} />
         <GoalHistory goal={goal} version={version} />
+        <GoalTasks goalId={card.id} />
         <GoalEntries goal={card} />
       </div>
       <div className="col">
