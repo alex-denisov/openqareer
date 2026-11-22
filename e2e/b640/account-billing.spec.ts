@@ -69,7 +69,7 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await expect(screen.locator('.set-h').last()).toHaveText('Удаление аккаунта');
     await expect(screen.getByRole('switch')).toHaveCount(4);
     await expect(screen.locator('.set-group').first().locator('.set-t')).toHaveText([
-      'Вы в поиске',
+      '«Вы в поиске»',
       'Цифровой след',
       'Подключённый профиль',
       'Отклики и подъём резюме',
@@ -136,6 +136,32 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await toggle.click();
     await expect(toggle).not.toBeChecked();
     expect(sent).toEqual([{ granted: true }, { granted: false }]);
+  });
+
+  test('n05: «Вы в поиске» не прочиталось — строка с «Повторить», повтор даёт переключатель', async ({
+    page,
+  }) => {
+    await openAccount(page, '/app/account/data');
+    let fail = true;
+    await page.route('**/api/v1/candidate/search-consent', async (route) => {
+      if (fail) {
+        await route.fulfill({ status: 500, json: { error: { code: 'internal', message: 'x' } } });
+        return;
+      }
+      await route.fulfill({
+        json: { data: { consent: { granted: true, policyVersion: 'synthetic', updatedAt: '' } } },
+      });
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    const screen = page.locator('[data-b640-node="n05"]');
+    const row = screen.locator('.set-row').first();
+    await expect(row.locator('.set-t')).toHaveText('«Вы в поиске»');
+    await expect(row.locator('.set-res.is-err')).toContainText('Не загрузилось');
+    await expect(screen.getByRole('switch')).toHaveCount(3);
+    fail = false;
+    await row.getByRole('button', { name: 'Повторить' }).click();
+    await expect(screen.getByRole('switch', { name: '«Вы в поиске»' })).toBeChecked();
+    await expect(screen.getByRole('switch')).toHaveCount(4);
   });
 
   test('n05: текст согласия показан до выдачи', async ({ page }) => {
@@ -215,10 +241,16 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
       expect(target.width).toBeGreaterThanOrEqual(44);
       expect(target.height).toBeGreaterThanOrEqual(44);
     }
+    const bar = page.locator('meta[name="theme-color"]');
     await screen.getByRole('radio', { name: 'Тёмная' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'dark');
+    await expect(bar).toHaveAttribute(
+      'content',
+      /^rgb\((?:[0-3]?\d), (?:[0-3]?\d), (?:[0-3]?\d)\)$/u,
+    );
     await screen.getByRole('radio', { name: 'Светлая' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'light');
+    await expect(bar).toHaveAttribute('content', /^rgb\(2[3-5]\d, 2[3-5]\d, 2[3-5]\d\)$/u);
     await expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveValue('ru');
     await expect(screen.getByRole('combobox', { name: 'Часовой пояс' })).toHaveValue(
       'Europe/Moscow',

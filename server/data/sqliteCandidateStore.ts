@@ -265,7 +265,7 @@ export class SqliteCandidateStore implements CandidateStore {
         roleSkillAssessments: this.roleSkillAssessments,
         starStoriesRepo: this.starStoriesRepo,
         interviewSimulatorRepo: this.interviewSimulatorRepo,
-        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo, careerDiaryDatabase: { database: this.database, encryptionKey },
+        careerDiaryRepo: this.careerDiaryRepo, diaryEntryRepo: this.diaryEntryRepo, ownStorage: { store: this as unknown as import('./trackerExport').TrackerExportStore, database: this.database, encryptionKey },
       }),
     );
   }

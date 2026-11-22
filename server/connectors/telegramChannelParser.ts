@@ -94,11 +94,23 @@ function parseNumberWithK(raw: string): number | undefined {
 
 const MIN_TECH_TERMS_FOR_TECH_ONLY = 3;
 
+/**
+ * B741 (прод 22.11): «Go» без учёта регистра находил язык в «go-to-market», «go live» и
+ * «go above and beyond» — у вице-президентов по продукту Go стоял четвёртым требованием.
+ * Язык — только отдельное слово с заглавной; «Go-разработчик» — язык, «go-to» и «go-live» — нет.
+ */
+const GO_LANGUAGE =
+  /(?<![\p{L}\p{N}-])Go(?![\p{L}\p{N}])(?!-(?:[Tt]o|[Ll]ive)\b)(?!\s+(?:live|above|ahead|beyond|to|through|for|with|after|back)\b)/u;
+
+function keywordPattern(keyword: string): RegExp {
+  if (keyword === 'Go') return GO_LANGUAGE;
+  return new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'i');
+}
+
 export function extractSkillsFromText(text: string): string[] {
   const found = new Set<string>();
   for (const keyword of KNOWN_TECH_KEYWORDS) {
-    const regex = new RegExp(`\\b${escapeRegExp(keyword)}\\b`, 'i');
-    if (regex.test(text)) {
+    if (keywordPattern(keyword).test(text)) {
       found.add(keyword);
     }
   }
@@ -136,14 +148,17 @@ function extractExperienceLevel(text: string): string | undefined {
 }
 
 function extractEmploymentType(text: string): string | undefined {
-  if (/\bpart-time|парт-тайм|частичная занятость|проектная\b/i.test(text)) return 'Part-time / Project';
+  if (/\bpart-time|парт-тайм|частичная занятость|проектная\b/i.test(text))
+    return 'Part-time / Project';
   if (/\bcontract|контракт|b2b|гпх|ип|самозанят\b/i.test(text)) return 'Contract / B2B';
   if (/\binternship|стажировка\b/i.test(text)) return 'Internship';
   return 'Full-time';
 }
 
 function extractContactInfo(text: string): string | undefined {
-  const tgMatch = text.match(/(?:контакты|отклик|связь|apply|contact|hr|telegram|tg):\s*(@[a-zA-Z0-9_]{4,32}|\S+@\S+\.\S+|https:\/\/t\.me\/\S+)/i);
+  const tgMatch = text.match(
+    /(?:контакты|отклик|связь|apply|contact|hr|telegram|tg):\s*(@[a-zA-Z0-9_]{4,32}|\S+@\S+\.\S+|https:\/\/t\.me\/\S+)/i,
+  );
   if (tgMatch) return tgMatch[1];
   const directUsername = text.match(/@[a-zA-Z0-9_]{5,32}/);
   if (directUsername) return directUsername[0];
@@ -188,16 +203,34 @@ function extractListUnderHeading(text: string, headings: string[]): string[] {
 
 function extractStructuredJobSections(text: string) {
   const responsibilities = extractListUnderHeading(text, [
-    'обязанности', 'задачи', 'чем предстоит заниматься', 'что предстоит делать', 'responsibilities',
+    'обязанности',
+    'задачи',
+    'чем предстоит заниматься',
+    'что предстоит делать',
+    'responsibilities',
   ]);
   const qualifications = extractListUnderHeading(text, [
-    'требования', 'ожидания', 'что нужно знать', 'requirements', 'qualifications', 'стек',
+    'требования',
+    'ожидания',
+    'что нужно знать',
+    'requirements',
+    'qualifications',
+    'стек',
   ]);
   const niceToHave = extractListUnderHeading(text, [
-    'будет плюсом', 'плюсом будет', 'будет преимуществом', 'nice to have', 'желательно',
+    'будет плюсом',
+    'плюсом будет',
+    'будет преимуществом',
+    'nice to have',
+    'желательно',
   ]);
   const benefits = extractListUnderHeading(text, [
-    'условия', 'мы предлагаем', 'бенефиты', 'что мы предлагаем', 'benefits', 'offering',
+    'условия',
+    'мы предлагаем',
+    'бенефиты',
+    'что мы предлагаем',
+    'benefits',
+    'offering',
   ]);
 
   return {
@@ -218,30 +251,44 @@ export function telegramPostToReadableText(html: string): string {
     .replace(/\r\n?/g, '\n')
     .split('\n')
     .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim());
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return lines
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export interface TelegramJobPostMeta {
+  postId: string;
+  channelName: string;
+  /**
+   * The id the registry knows this source by. Writing `tg-<channel>` here
+   * instead meant the pool counted these vacancies under no source at all,
+   * and a later sync could never evict them (found on the B164 prod walk).
+   */
+  sourceId: string;
+  postUrl: string;
+  publishedAt: string;
+  observedAt: string;
+}
+
+/**
+ * The channel's HTML escapes its own characters; leaving them encoded put
+ * `&nbsp;` and `&amp;` straight into the card the candidate reads (B164).
+ */
+function telegramPlainText(text: string): string {
+  return decodeFeedEntities(
+    text
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
 }
 
 export function parseTelegramJobPost(
   text: string,
-  meta: {
-    postId: string;
-    channelName: string;
-    /**
-     * The id the registry knows this source by. Writing `tg-<channel>` here
-     * instead meant the pool counted these vacancies under no source at all,
-     * and a later sync could never evict them (found on the B164 prod walk).
-     */
-    sourceId: string;
-    postUrl: string;
-    publishedAt: string;
-    observedAt: string;
-  },
+  meta: TelegramJobPostMeta,
 ): UnifiedVacancy | null {
-  // The channel's HTML escapes its own characters; leaving them encoded put
-  // `&nbsp;` and `&amp;` straight into the card the candidate reads (B164).
-  const cleanText = decodeFeedEntities(
-    text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-  );
+  const cleanText = telegramPlainText(text);
   // Тип поста распознаётся отдельно: курс, резюме кандидата и дайджест не
   // становятся вакансиями, а пост, о котором продукт ничего не понял, не
   // выдаётся за вакансию (B164 срез 4).
@@ -255,8 +302,12 @@ export function parseTelegramJobPost(
   const sections = extractStructuredJobSections(text);
 
   const fingerprint = calculateVacancyFingerprint({
-    title, company, description: cleanText,
-    salaryFrom: salary?.from, salaryTo: salary?.to, currency: salary?.currency,
+    title,
+    company,
+    description: cleanText,
+    salaryFrom: salary?.from,
+    salaryTo: salary?.to,
+    currency: salary?.currency,
   });
 
   return {
