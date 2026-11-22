@@ -286,6 +286,31 @@ export class SqliteNotificationRepository {
     return true;
   }
 
+  /**
+   * Источник удалён (тестовое или ошибочное интервью): его уведомления, которые ещё никуда не
+   * ушли, снимаются вместе с доставками. Ушедшее письмо или сообщение остаётся в истории.
+   */
+  withdrawUnsentFromSource(candidateId: string, sourceType: string, sourceId: string): number {
+    const ofSource = `SELECT id FROM candidate_notifications
+      WHERE candidate_id = ? AND source_type = ? AND source_id = ?`;
+    // A channel still waiting goes too, even if another channel already sent the reminder.
+    this.database
+      .prepare(
+        `DELETE FROM candidate_notification_deliveries
+         WHERE status IN ('pending', 'failed') AND notification_id IN (${ofSource})`,
+      )
+      .run(candidateId, sourceType, sourceId);
+    const unsent = `${ofSource} AND NOT EXISTS (SELECT 1 FROM candidate_notification_deliveries d
+      WHERE d.notification_id = candidate_notifications.id AND d.status IN ('sending', 'delivered'))`;
+    this.database
+      .prepare(`DELETE FROM candidate_notification_deliveries WHERE notification_id IN (${unsent})`)
+      .run(candidateId, sourceType, sourceId);
+    const result = this.database
+      .prepare(`DELETE FROM candidate_notifications WHERE id IN (${unsent})`)
+      .run(candidateId, sourceType, sourceId);
+    return Number(result.changes);
+  }
+
   /** B690: есть ли непрочитанное уведомление этого источника — повтор не нужен. */
   hasUnreadFromSource(candidateId: string, sourceType: string, now = new Date().toISOString()): boolean {
     return this.database
