@@ -75,7 +75,7 @@ describe('v10b: карточка компании', () => {
   it('шапка, вакансия с процентом и деньгами, другие вакансии, люди по кругам', async () => {
     vi.mocked(api.getB640Company).mockResolvedValue(card());
     people([
-      person({ id: 'a', circle: 1, name: 'Роман Ефимов', nextStep: 'write_known_contact' }),
+      person({ id: 'a', circle: 1, name: 'Роман Ефимов', nextStep: 'write_known_contact', message: { kind: 'known_contact', target: { contactId: 'c-a' } } }),
       person({ id: 'b', circle: 2, name: null, roleTitle: null, platformMember: true, nextStep: 'ask_for_introduction' }),
       person({ id: 'c' }),
     ]);
@@ -100,7 +100,7 @@ describe('v10b: карточка компании', () => {
   it('B645: на 390 действия шапки — в закреплённой панели над навигацией', async () => {
     mobile = true;
     vi.mocked(api.getB640Company).mockResolvedValue(card());
-    people([person({ id: 'a', circle: 1, name: 'Роман Ефимов', nextStep: 'write_known_contact' })]);
+    people([person({ id: 'a', circle: 1, name: 'Роман Ефимов', nextStep: 'write_known_contact', message: { kind: 'known_contact', target: { contactId: 'c-a' } } })]);
     const view = mount(<CompanyScreen companyId={KEY} />);
     await flush();
     const dock = view.container.querySelector('.act-dock')!;

@@ -52,8 +52,8 @@ export interface B640CompanyPerson {
   /** Почему этот человек: общее место работы, общий знакомый, рекрутер вакансии. */
   readonly evidence: string | null;
   readonly nextStep: 'write_known_contact' | 'ask_for_introduction' | 'cold_application';
-  /** Вакансия, к которой ведёт действие строки. */
-  readonly vacancyId: string;
+  /** Вакансия, к которой ведёт действие строки; у контакта компании без вакансий в подборке — null. */
+  readonly vacancyId: string | null;
   readonly platformMember: boolean;
   /** Кому и о чём черновик сообщения (B698); у участника платформы без имени — `null`. */
   readonly message: B640PersonMessage | null;

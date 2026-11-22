@@ -187,4 +187,17 @@ describe('B698: отправленные по вакансии — для «Чт
     expect((await send('GET', `${BASE}/sent`, 'flagged.test')).statusCode).toBe(400);
     expect((await send('GET', `${BASE}/sent?vacancyId=a%20b`, 'flagged.test')).statusCode).toBe(400);
   });
+
+  it('id вакансии с двоеточием, как у кластеров hh (`cluster-src-hh-search:137412812`), принимается', async () => {
+    const { send, draft } = await setup();
+    const vacancyId = 'cluster-src-hh-search:137412812';
+    const created = await draft({ contactId: 'anna', vacancyId, kind: 'known_contact' });
+    expect(created.statusCode).toBe(201);
+    const id = created.json().data.id as string;
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${id}/sent`, 'flagged.test');
+    const list = await send('GET', `${BASE}/sent?vacancyId=${encodeURIComponent(vacancyId)}`, 'flagged.test');
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data.items.map((item: { id: string }) => item.id)).toEqual([id]);
+  });
 });

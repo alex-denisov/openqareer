@@ -1,5 +1,6 @@
 import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
 import { Icon, InfoTip, Link, StatusLine } from '../../kit';
+import { MessageDraft } from '../../messages/MessageDraft';
 import { buildNodePath } from '../../routes';
 import { RetryLine } from '../RetryLine';
 import type { CompanyPeopleState } from './usePeople';
@@ -14,11 +15,38 @@ const ACTION_LABELS: Readonly<Record<B640CompanyPerson['nextStep'], string>> = {
   cold_application: 'Холодный отклик',
 };
 
-function PersonRow({ person }: { readonly person: B640CompanyPerson }) {
+/** Какая строка открыта: черновик одной строки за раз; шапка открывает строку знакомого. */
+export interface PeopleDraft {
+  readonly openId: string | null;
+  readonly onToggle: (personId: string) => void;
+}
+
+export const personRowId = (personId: string): string => `co-person-${personId.replace(/[^a-zA-Z0-9_-]/gu, '-')}`;
+
+function PersonAction({ person, draft }: { readonly person: B640CompanyPerson; readonly draft: PeopleDraft }) {
+  const label = ACTION_LABELS[person.nextStep];
+  if (person.message && person.name) {
+    const open = draft.openId === person.id;
+    return (
+      <button className="btn" type="button" aria-expanded={open} onClick={() => draft.onToggle(person.id)}>
+        {label}
+      </button>
+    );
+  }
+  if (!person.vacancyId) return null;
+  return (
+    <Link className="btn" to={buildNodePath('o02', { responseId: person.vacancyId })}>
+      {label}
+    </Link>
+  );
+}
+
+function PersonRow({ person, draft }: { readonly person: B640CompanyPerson; readonly draft: PeopleDraft }) {
   const title = person.platformMember ? (person.roleTitle ?? 'Участник платформы') : (person.name ?? 'Без имени');
   const role = person.platformMember ? 'имя скрыто' : person.roleTitle;
+  const open = draft.openId === person.id && person.message && person.name;
   return (
-    <li className="row co-person">
+    <li className="row co-person" id={personRowId(person.id)}>
       <div>
         <div className="row-title">{title}</div>
         {role ? <div className="row-sub">{role}</div> : null}
@@ -30,9 +58,18 @@ function PersonRow({ person }: { readonly person: B640CompanyPerson }) {
         ) : null}
       </div>
       <span className={person.circle === 1 ? 'tag ok' : 'tag'}>{`круг ${person.circle}`}</span>
-      <Link className="btn" to={buildNodePath('o02', { responseId: person.vacancyId })}>
-        {ACTION_LABELS[person.nextStep]}
-      </Link>
+      <PersonAction person={person} draft={draft} />
+      {open && person.message && person.name ? (
+        <div className="co-write">
+          <MessageDraft
+            target={person.message.target}
+            kind={person.message.kind}
+            recipientName={person.name}
+            onSent={() => undefined}
+            onClose={() => draft.onToggle(person.id)}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -75,9 +112,10 @@ function NextStep({ next }: { readonly next: PeopleNext }) {
 interface PeopleBodyProps {
   readonly state: CompanyPeopleState;
   readonly next: PeopleNext;
+  readonly draft: PeopleDraft;
 }
 
-function PeopleBody({ state, next }: PeopleBodyProps) {
+function PeopleBody({ state, next, draft }: PeopleBodyProps) {
   if (state.load === 'loading') return <StatusLine state="wait" text="Ищем знакомых в компании…" />;
   if (state.load === 'error') return <RetryLine text="Не удалось загрузить людей компании" onRetry={state.retry} />;
   if (state.people.length === 0) {
@@ -93,21 +131,21 @@ function PeopleBody({ state, next }: PeopleBodyProps) {
   return (
     <ul className="rows co-people">
       {state.people.map((person) => (
-        <PersonRow key={person.id} person={person} />
+        <PersonRow key={person.id} person={person} draft={draft} />
       ))}
     </ul>
   );
 }
 
 /** «Люди компании из вашей сети»: круги 1–3, участники платформы без имени. */
-export function CompanyPeople({ state, next }: PeopleBodyProps) {
+export function CompanyPeople({ state, next, draft }: PeopleBodyProps) {
   return (
     <section className="mod" aria-labelledby="co-ppl">
       <h3 className="mod-title" id="co-ppl">
         Люди компании из вашей сети
         <InfoTip label="Что значат круги" text={CIRCLES_TIP} />
       </h3>
-      <PeopleBody state={state} next={next} />
+      <PeopleBody state={state} next={next} draft={draft} />
     </section>
   );
 }

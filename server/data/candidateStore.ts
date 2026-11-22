@@ -745,6 +745,12 @@ export interface CandidateStore extends ConsultantHistoryMethods {
     candidateId: string,
   ): StoredApplicationOffer[];
 
+  /** `false`, если интервью нет; чужой отклик — `ApplicationNotFoundError`. */
+  deleteApplicationInterview?(candidateId: string, applicationId: string, interviewId: string): boolean;
+
+  /** `false`, если оффера нет; чужой отклик — `ApplicationNotFoundError`. */
+  deleteApplicationOffer?(candidateId: string, applicationId: string): boolean;
+
   listVacancySkips(candidateId: string): StoredVacancySkip[];
 
   createVacancySkip(
