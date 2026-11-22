@@ -3,6 +3,7 @@ import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolL
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
 import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema';
+import { CLUSTER_SPLIT_TABLES } from '../data/clusterSplitSchema';
 import {
   prunePoolInBatches,
   prunePoolInBatchesAsync,
@@ -472,6 +473,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES);
+    this.database.exec(CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
     // (например, `:memory:` в тестах, где второго соединения не будет).

@@ -90,7 +90,7 @@ export interface ClusterSplitCounts {
   splitWithRequirements: number;
 }
 
-function tableExists(db: DatabaseSync, table: string): boolean {
+export function tableExists(db: DatabaseSync, table: string): boolean {
   return (
     db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
     undefined
@@ -126,7 +126,7 @@ export function loadMemberVacancies(
   return found;
 }
 
-function parseCluster(json: string): VacancyCluster | undefined {
+export function parseCluster(json: string): VacancyCluster | undefined {
   try {
     const parsed = JSON.parse(json) as VacancyCluster;
     return parsed && typeof parsed.id === 'string' && Array.isArray(parsed.sources)
