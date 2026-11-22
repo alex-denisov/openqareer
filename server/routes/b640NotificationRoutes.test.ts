@@ -178,6 +178,24 @@ describe('лента уведомлений с флагом B640', () => {
     expect(item.eventAt).toBe(item.createdAt);
   });
 
+  it('роль поиска на английском показывается по-русски (B737)', async () => {
+    const fixture = await setup();
+    fixture.candidateStore.saveResumeDraft(
+      fixture.id,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Chief Operating Officer' },
+      [],
+    );
+    fixture.notifications.recordEvent(fixture.id, {
+      kind: 'new_vacancies_by_role',
+      sourceType: 'matched_vacancy_batch',
+      sourceId: 'batch-2',
+      idempotencyKey: 'new-vacancies:batch-2',
+    });
+    const [item] = (await call(fixture.app, 'GET', `${PATH}?category=vacancies`, flagged)).json()
+      .data.items;
+    expect(item.role).toBe('Операционный директор (COO)');
+  });
+
   it('неверный запрос — 400 invalid_query', async () => {
     const { app } = await setup();
     for (const query of [

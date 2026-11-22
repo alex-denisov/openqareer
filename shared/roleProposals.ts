@@ -52,6 +52,8 @@ export type RoleConfirmation =
 export interface ProposedRole {
   readonly id: string;
   readonly title: string;
+  /** B737: русское название для показа; приходит в ответе «Карьеры», ключом остаётся `title`. */
+  readonly titleRu?: string;
   /**
    * Откуда имя: назвала модель по резюме, назвал рынок группой вакансий или
    * кандидат сам (в мастере или принял предложение консультанта, 26.10).

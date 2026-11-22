@@ -58,6 +58,8 @@ export interface RelocationPlace {
 export interface RelocationData {
   readonly places: readonly RelocationPlace[];
   readonly role: string | null;
+  /** B737: русские названия ролей поиска; `role` остаётся ключом зарплат. */
+  readonly titlesRu: Readonly<Record<string, string>>;
   /** Компании, которые оплачивают переезд; `null` — список не прочитан. */
   readonly companies: number | null;
   /** Анкета релокации и согласие: «Кто едет» и запись трат. */
@@ -169,6 +171,7 @@ export async function loadRelocation(signal: AbortSignal): Promise<RelocationDat
   return {
     places,
     role,
+    titlesRu: campaign?.titlesRu ?? {},
     companies,
     questionnaire,
     scenarios,
