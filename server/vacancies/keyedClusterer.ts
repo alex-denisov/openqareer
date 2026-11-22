@@ -5,10 +5,12 @@ import {
   ClusterIndex,
   createClusterFromVacancy,
   isDuplicatePrepared,
+  legacyMemberKeyOf,
   memberKeysOf,
   mergeVacancyIntoCluster,
   prepareCluster,
   prepareVacancy,
+  sourceMemberKey,
   vacancyClusterLookup,
   type ClusterRepresentative,
   type PreparedVacancy,
@@ -181,6 +183,8 @@ class KeyedSession {
       const direct = this.byMember.get(member);
       if (direct !== undefined) return direct;
     }
+    const legacy = this.legacyPosition(vacancy);
+    if (legacy !== undefined) return legacy;
     const candidate = prepareVacancy(vacancy);
     return this.index
       .candidates(candidate)
@@ -188,6 +192,18 @@ class KeyedSession {
         (position) =>
           !this.absorbed.has(position) && isDuplicatePrepared(candidate, this.prepared[position]!),
       );
+  }
+
+  /** Голый внешний id старых строк (B752): совпадение засчитано, только если площадка та же. */
+  private legacyPosition(vacancy: UnifiedVacancy): number | undefined {
+    const bare = legacyMemberKeyOf(vacancy);
+    const position = bare ? this.byMember.get(bare) : undefined;
+    if (position === undefined || this.absorbed.has(position)) return undefined;
+    const scoped = sourceMemberKey(vacancy.provenance);
+    const cluster = this.clusterAt(position);
+    return cluster?.sources.some((source) => sourceMemberKey(source) === scoped)
+      ? position
+      : undefined;
   }
 
   /** JSON кластера читается один раз и только для совпавшего. */
@@ -216,9 +232,13 @@ export function detachVacanciesByKeys(
 ): DetachResult {
   if (gone.length === 0) return { updated: 0, deleted: 0 };
   const goneKeys = new Set(gone.flatMap(memberKeysOf));
+  const lookupKeys = (vacancy: VacancyMemberRef) => {
+    const legacy = legacyMemberKeyOf(vacancy);
+    return legacy ? [...memberKeysOf(vacancy), legacy] : memberKeysOf(vacancy);
+  };
   const clusters = store.loadClustersByKeys(
     gone.map((vacancy) => ({
-      direct: memberKeysOf(vacancy).map((key) => ({ kind: 'member' as const, key })),
+      direct: lookupKeys(vacancy).map((key) => ({ kind: 'member' as const, key })),
       companyTokens: [],
       titleTokens: [],
     })),
@@ -228,7 +248,7 @@ export function detachVacanciesByKeys(
   for (const cluster of clusters) {
     const remaining = cluster.sources.filter(
       (source) =>
-        !(source.externalId && goneKeys.has(source.externalId)) &&
+        !goneKeys.has(sourceMemberKey(source) ?? '') &&
         !(source.sourceUrl && goneKeys.has(source.sourceUrl)),
     );
     const removed = cluster.sources.length - remaining.length;
