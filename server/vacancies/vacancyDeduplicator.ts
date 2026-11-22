@@ -747,11 +747,7 @@ export function clusterKeys(cluster: VacancyCluster): ClusterKey[] {
   for (const token of prepared.roleTitleTokens) keys.push({ kind: 'title_token', key: token });
   // Членство — только по источникам: основатель тоже лежит в `sources`, а
   // после снятия его id в имени кластера не должен находить кластер.
-  const members = new Set<string>();
-  for (const source of cluster.sources) {
-    if (source.externalId) members.add(source.externalId);
-    if (source.sourceUrl) members.add(source.sourceUrl);
-  }
+  const members = sourceMemberKeys(cluster.sources);
   for (const member of members) keys.push({ kind: 'member', key: member });
   return keys;
 }
@@ -774,6 +770,8 @@ export function vacancyClusterLookup(vacancy: UnifiedVacancy): VacancyClusterLoo
   if (prepared.atsLink) direct.push({ kind: 'ats', key: prepared.atsLink });
   if (prepared.textKey) direct.push({ kind: 'text', key: prepared.textKey });
   for (const member of memberKeysOf(vacancy)) direct.push({ kind: 'member', key: member });
+  const legacy = legacyMemberKeyOf(vacancy);
+  if (legacy) direct.push({ kind: 'member', key: legacy });
   return {
     direct,
     companyTokens: Array.from(prepared.companyTokens),
@@ -781,17 +779,57 @@ export function vacancyClusterLookup(vacancy: UnifiedVacancy): VacancyClusterLoo
   };
 }
 
-/** Чем запись находит свой кластер: id, ссылка, `externalId`, `sourceUrl`. */
+/**
+ * Чем запись находит свой кластер: id, ссылка, пара «площадка:внешний id»,
+ * `sourceUrl`. Голый внешний id не ключ (B752): у VK и у Oracle-тенанта
+ * бывает одна и та же 55418.
+ */
 export interface VacancyMemberRef {
   readonly id: string;
   readonly url?: string;
-  readonly provenance?: { readonly externalId?: string; readonly sourceUrl?: string };
+  readonly provenance?: {
+    readonly sourceId?: string;
+    readonly externalId?: string;
+    readonly sourceUrl?: string;
+  };
+}
+
+/** Ключ члена по внешнему id — только вместе с площадкой (B752). */
+export function sourceMemberKey(source: {
+  readonly sourceId?: string;
+  readonly externalId?: string;
+}): string | undefined {
+  return source.sourceId && source.externalId
+    ? `${source.sourceId}:${source.externalId}`
+    : undefined;
+}
+
+/** Ключи членства кластера: пары источников и их `sourceUrl`. */
+export function sourceMemberKeys(
+  sources: readonly { readonly sourceId?: string; readonly externalId?: string; readonly sourceUrl?: string }[],
+): Set<string> {
+  const members = new Set<string>();
+  for (const source of sources) {
+    const scoped = sourceMemberKey(source);
+    if (scoped) members.add(scoped);
+    if (source.sourceUrl) members.add(source.sourceUrl);
+  }
+  return members;
+}
+
+/**
+ * Голый внешний id из строк до B752: по нему ищут, пока разбиение кластеров
+ * не переписало ключи, но склеивают только с источником той же площадки.
+ */
+export function legacyMemberKeyOf(vacancy: VacancyMemberRef): string | undefined {
+  return vacancy.provenance?.sourceId ? vacancy.provenance.externalId : undefined;
 }
 
 export function memberKeysOf(vacancy: VacancyMemberRef): string[] {
   const keys = new Set<string>([vacancy.id]);
   if (vacancy.url) keys.add(vacancy.url);
-  if (vacancy.provenance?.externalId) keys.add(vacancy.provenance.externalId);
+  const scoped = vacancy.provenance ? sourceMemberKey(vacancy.provenance) : undefined;
+  if (scoped) keys.add(scoped);
   if (vacancy.provenance?.sourceUrl) keys.add(vacancy.provenance.sourceUrl);
   return Array.from(keys);
 }
@@ -822,11 +860,7 @@ interface SerializedRepresentative {
 
 export function serializeRepresentative(cluster: VacancyCluster): string {
   const prepared = prepareCluster(cluster);
-  const members = new Set<string>();
-  for (const source of cluster.sources) {
-    if (source.externalId) members.add(source.externalId);
-    if (source.sourceUrl) members.add(source.sourceUrl);
-  }
+  const members = sourceMemberKeys(cluster.sources);
   const serialized: SerializedRepresentative = {
     f: prepared.fingerprint,
     u: prepared.url,

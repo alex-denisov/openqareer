@@ -1,13 +1,13 @@
 import { Icon } from '../kit/Icon';
 import type { KpiDraftRow } from './kpiModel';
 
-const HORIZON_OPTIONS = [
+export const HORIZON_OPTIONS = [
   ['', '—'],
   ['quarter', 'квартал'],
   ['year', 'год'],
   ['next_quarter', 'дальше'],
 ] as const;
-const SETTER_OPTIONS = [
+export const SETTER_OPTIONS = [
   ['', '—'],
   ['manager', 'руководитель'],
   ['team', 'команда'],

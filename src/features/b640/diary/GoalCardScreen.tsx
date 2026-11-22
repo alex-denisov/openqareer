@@ -90,7 +90,10 @@ function GoalState({ card, goal, onMeasure }: GoalStateProps) {
       <span className="gt-tag">
         <span className={tag.className}>{tag.text}</span>
         {card.risk.explanation ? (
-          <InfoTip label="Как считается" text={card.risk.explanation} />
+          <InfoTip
+            label={card.risk.status === 'at_risk' ? 'Почему отстаёт' : 'Как считается'}
+            text={card.risk.explanation}
+          />
         ) : null}
       </span>
       {card.details.archive ? null : (
@@ -116,7 +119,7 @@ function Nears({ goals, selected, onSelect }: NearsProps) {
   return (
     <section className="gt-sec" aria-labelledby="ga-p">
       <h3 className="gt-sec-h" id="ga-p">
-        Другие показатели
+        Показатели рядом
       </h3>
       <ul className="gt-nears">
         {others.map((goal) => (
