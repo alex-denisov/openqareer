@@ -8,15 +8,12 @@
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-/** Advisories allowed through until `until` (inclusive, UTC date). */
-export const EXCEPTIONS = [
-  {
-    id: 'GHSA-fc5q-39xc-vjpf',
-    until: '2026-12-17',
-    reason:
-      'picomatch ReDoS: no patched release exists (latest 4.0.7 is affected); reached only through build and test tooling (vite, vitest, eslint), never through production dependencies.',
-  },
-];
+/**
+ * Advisories allowed through until `until` (inclusive, UTC date). Empty: the picomatch
+ * exception (GHSA-fc5q-39xc-vjpf) left on 22.11 — GitHub withdrew the advisory on 18.11
+ * and `npm audit` no longer reports it (B705).
+ */
+export const EXCEPTIONS = [];
 
 const BLOCKING = new Set(['high', 'critical']);
 

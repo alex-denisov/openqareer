@@ -76,6 +76,7 @@ export function SkillQuestion(props: SkillQuestionProps) {
           </button>
         }
       />
+      {busy && props.criteria?.length ? <StatusLine state="wait" text="Оцениваем ответ" /> : null}
       {failed ? <StatusLine state="err" text={EVAL_ERROR} action={retry} /> : null}
     </section>
   );

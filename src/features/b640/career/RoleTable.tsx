@@ -29,7 +29,7 @@ function GoLink({ row }: { readonly row: RoleRow }) {
     <Link
       className="btn is-quiet c9-go"
       to={buildNodePath('s07')}
-      aria-label={`Вакансии по роли «${row.title}»`}
+      aria-label={`Вакансии по роли «${row.label}»`}
     >
       <Icon name="search" />
       Вакансии по роли
@@ -62,7 +62,7 @@ function DeskTable({ rows }: { readonly rows: readonly RoleRow[] }) {
       <tbody>
         {rows.map((row) => (
           <tr key={row.id}>
-            <th scope="row">{row.title}</th>
+            <th scope="row">{row.label}</th>
             <td className="num">
               <Wage row={row} />
             </td>
@@ -87,7 +87,7 @@ function MobileList({ rows }: { readonly rows: readonly RoleRow[] }) {
         <li className="c9-acc" key={row.id}>
           <details>
             <summary>
-              <span className="c9-name">{row.title}</span>
+              <span className="c9-name">{row.label}</span>
               <span className="num c9-cnt">{count(row)}</span>
               <Icon name="down" className="c9-chev" />
             </summary>
