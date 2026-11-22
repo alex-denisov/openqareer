@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { B640CompanyPeoplePage, B640CompanyPerson, B640PersonMessage } from '../../shared/b640Companies';
 import type { B640Contact } from '../../shared/b640Contacts';
-import { buildB640ContactList } from '../domain/b640Contacts';
+import { buildB640ContactList, type B640ContactSource } from '../domain/b640Contacts';
 import {
   candidateCompanyKey,
   type ConnectionCirclePath,
@@ -108,8 +108,14 @@ export function mergePeople(people: readonly B640CompanyPerson[]): B640CompanyPe
 
 /** Контакт из a02 — человек из списка кандидата, т. е. 1-й круг; 2-й — только путь через общего знакомого. */
 const CONTACT_CIRCLE: Readonly<Record<B640Contact['link'], 1 | 2>> = { direct: 1, intro: 2, none: 1 };
-/** Строка «как связаны» для контакта без пояснения — тот же текст, что у 1-го круга из вакансии. */
-const IMPORTED_CONTACT_EVIDENCE = 'Контакт из импортированного списка LinkedIn';
+const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Moscow' });
+
+/** Строка «как связаны» у контакта без пояснения — его источник, как в макете v10b: «импорт контактов LinkedIn, 10.11». */
+export function contactSourceNote(source: Pick<B640ContactSource, 'source' | 'updatedAt'>): string {
+  if (source.source === 'manual') return 'добавлено вами';
+  const at = new Date(source.updatedAt);
+  return Number.isNaN(at.getTime()) ? 'импорт контактов LinkedIn' : `импорт контактов LinkedIn, ${DAY_MONTH.format(at)}`;
+}
 
 /**
  * B645 v10b: люди компании из тех же контактов, что в «Контактах» (a02), с тем же сопоставлением
@@ -127,7 +133,7 @@ export function contactPeople(
       circle: CONTACT_CIRCLE[contact.link],
       name: contact.fullName,
       roleTitle: contact.roleTitle || null,
-      evidence: contact.linkNote ?? IMPORTED_CONTACT_EVIDENCE,
+      evidence: contact.linkNote,
       nextStep: contact.link === 'intro' ? 'ask_for_introduction' : 'write_known_contact',
       vacancyId,
       platformMember: false,
@@ -152,7 +158,10 @@ function candidateContacts(
     selectionKeys: new Set<string>(),
   };
   const query = { offset: 0, limit: contacts.length, search: '', company: [], link: [], status: [], sort: 'name' } as const;
-  return buildB640ContactList(input, query).items;
+  const notes = new Map(contacts.map((source) => [source.id, contactSourceNote(source)]));
+  return buildB640ContactList(input, query).items.map((contact) =>
+    contact.linkNote ? contact : { ...contact, linkNote: notes.get(contact.id) ?? null },
+  );
 }
 
 function companyVacancies(
