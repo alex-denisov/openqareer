@@ -27,7 +27,7 @@ const pageAt = (offset: number): MatchedVacancyPage => ({
 });
 
 async function readPool(options?: { readonly pageLimit: number }): Promise<MatchedPool> {
-  vi.mocked(getMatchedVacancyPage).mockImplementation(async (offset) => pageAt(offset));
+  vi.mocked(getMatchedVacancyPage).mockImplementation(async (offset) => pageAt(offset ?? 0));
   let pool!: MatchedPool;
   function Reader() {
     pool = useMatchedPool(undefined, options);
