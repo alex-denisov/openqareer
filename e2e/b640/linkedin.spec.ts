@@ -206,12 +206,80 @@ test.describe('B664: LinkedIn нового кабинета', () => {
     await expectGates(page);
   });
 
-  test('лента: черновик комментария с «Скопировать»', async ({ page }) => {
+  test('лента: черновик комментария — «Одобрить», «Другой вариант · 3», «Пропустить»', async ({
+    page,
+  }) => {
     await mock(page, { feed: [feedPost(1)] });
+    await page.route('**/api/v1/candidate/text-variants?*', (route) =>
+      route.fulfill({ json: { data: { variants: [], remaining: 3 } } }),
+    );
+    let skipped: unknown = null;
+    await page.route('**/api/v1/candidate/b640/linkedin/feed-posts/f1/skip', (route) => {
+      skipped = route.request().method();
+      return route.fulfill({ json: { data: { draftId: 'f1', skipped: true } } });
+    });
     await page.goto(FEED, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.lk-card')).toHaveCount(1, { timeout: 15_000 });
     await expect(page.getByRole('button', { name: 'Одобрить', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Скопировать/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Другой вариант · 3' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Скопировать/ })).toHaveCount(0);
+    await expect(page.locator('textarea.lk-draft')).toBeEditable();
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Пропустить' }).click();
+    await expect.poll(() => skipped).toBe('POST');
+  });
+
+  test('лента a05b: без нового черновика главная — «Настроить ритм», на 390 лист', async ({
+    page,
+  }, testInfo) => {
+    const at = '2026-12-01T10:00:00.000Z';
+    await mock(page, {
+      feed: [{ ...feedPost(1), state: 'queued', scheduledAt: at }],
+      queue: [
+        {
+          id: 'q1',
+          draftId: 'c1',
+          kind: 'comment',
+          text: 'В очереди',
+          scheduledAt: at,
+          state: 'queued',
+          updatedAt: at,
+          remindedAt: null,
+          openUrl: null,
+        },
+      ],
+    });
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri'];
+    await page.route('**/api/v1/candidate/b640/linkedin/rhythm', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            postsPerWeek: 1,
+            days: ['fri'],
+            time: '10:00',
+            timezone: 'Europe/Moscow',
+            comments: { perDay: 2, days, from: '10:00', to: '18:00' },
+          },
+        },
+      }),
+    );
+    await page.goto(FEED, { waitUntil: 'domcontentloaded' });
+    const rhythm = page.getByRole('button', { name: 'Настроить ритм' });
+    await expect(rhythm).toBeVisible({ timeout: 15_000 });
+    await expect(rhythm).toHaveClass(/is-primary/);
+    await expect(page.locator('main .is-primary')).toHaveCount(1);
+    await expectGates(page);
+    if (testInfo.project.name !== 'mobile-390') return;
+    // На 390 главная кнопка стоит в полосе над навигацией, всплывашка — лист снизу.
+    const button = await rhythm.boundingBox();
+    expect(button && button.y + button.height).toBeGreaterThan(700);
+    await rhythm.click();
+    const sheet = await page.locator('#va-pop-rh').boundingBox();
+    expect(sheet?.x).toBe(0);
+    expect(sheet?.width).toBe(390);
+    expect(sheet && sheet.y + sheet.height).toBeCloseTo(844, 0);
+    const chip = await page.locator('#va-pop-rh .va-pop-chips .chip').first().boundingBox();
+    expect(chip?.height).toBeGreaterThanOrEqual(44);
   });
 
   test('снимки для сверки с макетом', async ({ page }, testInfo) => {
