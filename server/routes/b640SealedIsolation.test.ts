@@ -48,9 +48,10 @@ const workspace = (by: 'fit' | 'money', dir: 'desc' | 'asc') => ({
 
 async function setup(
   saved: { by: 'fit' | 'money'; dir: 'desc' | 'asc' } = { by: 'fit', dir: 'desc' },
+  pool = POOL,
 ) {
   const lines: string[] = [];
-  const harness = await createB640Harness({ pool: () => POOL, logLines: lines });
+  const harness = await createB640Harness({ pool: () => pool, logLines: lines });
   closers.push(harness.close);
   const id = harness.candidateIds['flagged.test'];
   harness.candidates.saveCandidateWorkspace(id, workspace(saved.by, saved.dir));
@@ -75,7 +76,9 @@ async function setup(
       .map((line) => JSON.parse(line))
       .filter((line) => line.msg === 'matched-vacancies-timing')
       .at(-1)?.listServed;
-  return { ...harness, lastServed, id, sealedRow, ids, user };
+  const servedSealed = (): number =>
+    lines.filter((line) => JSON.parse(line).msg === 'b640-matched-served-sealed').length;
+  return { ...harness, lastServed, servedSealed, id, sealedRow, ids, user };
 }
 
 const within = <T>(work: Promise<T>, ms: number, what: string): Promise<T> =>
@@ -95,12 +98,15 @@ const FILTERS = [
   'place=Москва',
 ];
 
+// B776: the main view (roles only) is sealed by the new route too; the other filters never are.
+const NARROWING = FILTERS.filter((filter) => !filter.startsWith('role='));
+
 describe('B674: filters never reseal the list', () => {
   it('keeps the sealed row byte for byte for each filter and their mix', async () => {
     const h = await setup();
     await h.get(OLD, h.user);
     const before = h.sealedRow();
-    const queries = [...FILTERS, FILTERS.join('&')];
+    const queries = [...NARROWING, NARROWING.join('&'), FILTERS.join('&')];
     for (const query of queries) {
       expect((await h.get(`${NEW}?${query}&sort=company`, h.user)).statusCode).toBe(200);
     }
@@ -203,5 +209,52 @@ describe('B702: a new process answers the first read of the new route from the s
     const company = await h.get(`${NEW}?sort=company&direction=asc`, h.user);
     expect(company.statusCode).toBe(200);
     expect(h.ids(company.body)).toEqual(['cluster-2', 'cluster-1', 'cluster-3', 'cluster-4']);
+  });
+});
+
+type SealedChoiceRow = { readonly choice: string };
+
+describe('B776: the new route seals its main view (roles only), a new process answers it sealed', () => {
+  // Роль фильтра должна быть среди целевых ролей кандидата; у харнеса она одна.
+  const ROLES = `role=${encodeURIComponent('Инженер данных')}&sort=fit`;
+  const DATA_POOL = [
+    ...POOL,
+    poolItem({ id: 'cluster-5', title: 'Инженер данных', company: 'Эпсилон', location: 'Москва' }),
+    poolItem({ id: 'cluster-6', title: 'Инженер данных', company: 'Зета', isRemote: true }),
+  ];
+  const fit = { by: 'fit', dir: 'desc' } as const;
+
+  it('a cold read of the same roles answers sealed within 3 s while the pool hangs', async () => {
+    const h = await setup(fit, DATA_POOL);
+    const built = await h.get(`${NEW}?${ROLES}`, h.user);
+    expect(built.statusCode, built.body).toBe(200);
+    expect(h.sealedRow()).toHaveLength(1);
+    forgetMatchedListsForTests();
+    h.hangPool(true);
+    const cold = await within(h.get(`${NEW}?${ROLES}`, h.user), timeBudget(3000), 'new route');
+    expect(h.ids(cold.body)).toEqual(h.ids(built.body));
+    expect(h.servedSealed()).toBe(1);
+  });
+
+  it('the general row stays byte for byte; a narrowing filter adds no row', async () => {
+    const h = await setup(fit, DATA_POOL);
+    await h.get(OLD, h.user);
+    const general = h.sealedRow();
+    await h.get(`${NEW}?${ROLES}`, h.user);
+    const afterRoles = h.sealedRow() as SealedChoiceRow[];
+    expect(afterRoles).toHaveLength(2);
+    expect(afterRoles).toEqual(expect.arrayContaining(general as SealedChoiceRow[]));
+    await h.get(`${NEW}?${ROLES}&remote=1`, h.user);
+    expect(h.sealedRow()).toEqual(afterRoles);
+  });
+
+  it('does not serve another choice or another candidate', async () => {
+    const h = await setup(fit, DATA_POOL);
+    await h.get(`${NEW}?${ROLES}`, h.user);
+    forgetMatchedListsForTests();
+    expect((await h.get(`${NEW}?sort=fit`, h.user)).statusCode).toBe(200);
+    const other = await h.get(`${NEW}?${ROLES}`, 'other.test');
+    expect(other.statusCode, other.body).toBe(200);
+    expect(h.servedSealed()).toBe(0);
   });
 });

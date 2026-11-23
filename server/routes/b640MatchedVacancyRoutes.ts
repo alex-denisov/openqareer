@@ -79,6 +79,17 @@ function listFilters(query: Query, order: VacancySort): MatchedVacancyFilters {
   return { offset: 0, region, level, source, role, remote, place, placeRemote, sort: order.by, dir: order.dir };
 }
 
+/**
+ * B776: основной вид подборки — только роли. Его список пишется в запечатанную строку, как у
+ * прежнего маршрута, иначе после перезапуска первое открытие строило его заново (прод 23.11,
+ * 13 ролей — 14–18 с). Сужающие фильтры не пишутся (B674): строк на кандидата четыре, и выбор
+ * фильтров вытеснял бы общий список. Ключ строки — тот же выбор, что у чтения (`readB640Sealed`).
+ */
+function sealsMainView(filters: MatchedVacancyFilters): boolean {
+  const { region, level, source, place, remote, placeRemote } = filters;
+  return !remote && !placeRemote && [region, level, source, place].every((values) => !values?.length);
+}
+
 function emptyResponse(request: FastifyRequest, query: Query, context: B640ListContext) {
   return {
     data: [],
@@ -127,7 +138,7 @@ async function readList(
       filters,
       sourceRegistry,
       order: read.order,
-      seal: false,
+      seal: sealsMainView(filters),
       ...(typeof deps.multiSourceEngine.getCatalogTotals === 'function'
         ? { catalogTotals: () => deps.multiSourceEngine.getCatalogTotals!() }
         : {}),
@@ -345,7 +356,7 @@ export async function readB640PoolRows(
   return read.list.filtered;
 }
 
-/** B674: подборка с сортировкой по любому столбцу; запомненную сортировку и запечатанный список прежнего маршрута читает как он, но не пишет. */
+/** B674: подборка с сортировкой по любому столбцу; запомненную сортировку читает как прежний маршрут, но не пишет; запечатанный список пишет только для основного вида (B776). */
 export function registerB640MatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/b640/matched-vacancies', withDeps(deps, getMatchedVacancies));
 }
