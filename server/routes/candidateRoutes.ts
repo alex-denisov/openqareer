@@ -71,6 +71,7 @@ import {
   resumeImportSchema,
 } from './schemas';
 import { toPublicFootprint } from './footprintPublicView';
+import { withoutForbiddenKeys } from '../data/exportForbiddenKeys';
 
 export type Handler = (
   deps: RouteDeps,
@@ -346,7 +347,8 @@ const handleExportCandidate: Handler = async (
   if (!candidate) return undefined;
   reply.header('Content-Disposition', 'attachment; filename="openqareer-candidate-export.json"');
   return {
-    data: {
+    // B738: отчёты репутации и следа добавляются здесь, поэтому запретные поля убираются со всего ответа.
+    data: withoutForbiddenKeys({
       ...candidateStore.exportCandidate(candidate.id),
       reputationAudits:
         candidateReputationRepo?.listAudits(candidate.id, { trustedOnly: true }) ?? [],
@@ -357,7 +359,7 @@ const handleExportCandidate: Handler = async (
       footprintAudits: toPublicFootprint(
         candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
       ),
-    },
+    }),
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };
 };
