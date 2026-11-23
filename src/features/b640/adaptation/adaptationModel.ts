@@ -78,12 +78,12 @@ const STAGE_DAY: Readonly<Record<CareerDiaryAdaptationStageId, string>> = {
 export const PROGRESS_TAG: Readonly<Record<CareerDiaryProgress, readonly [string, string]>> = {
   done: ['ok', 'готово'],
   active: ['part', 'в работе'],
-  ahead: ['', 'впереди'],
+  ahead: ['miss', 'впереди'],
 };
 export const STEP_TAG: Readonly<Record<CareerDiaryProgress, readonly [string, string]>> = {
   done: ['ok', 'пройдено'],
   active: ['part', 'идёт'],
-  ahead: ['', 'впереди'],
+  ahead: ['miss', 'впереди'],
 };
 
 export function stageTitle(stage: CareerDiaryAdaptationStageView): string {

@@ -1,5 +1,6 @@
 import { useCallback, useId, useState, type ChangeEvent } from 'react';
 import { Button, Icon, Link, StatusLine } from '../kit';
+import { useScreenChrome } from '../shell/ShellContext';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { loadDebrief, saveInterviewerName, type DebriefData } from './data/debriefApi';
@@ -203,6 +204,8 @@ export function UploadScreen({ responseId }: { readonly responseId: string }) {
   const load = useCallback((signal: AbortSignal) => loadDebrief(responseId, signal), [responseId]);
   const { state } = useAsync(load, 'Загрузка не открылась.');
   const data = state.data;
+  // Макет: плотные мобильные отступы (`data-mtight`), как у I1, I2 и I3.
+  useScreenChrome({ rootData: { mtight: '1' } });
   // «Запись или файл» — текущий шаг, пока файла нет; после загрузки он с галочкой.
   const [sent, setSent] = useState(false);
   const step = sent || data?.debrief?.recording ? 'voices' : 'source';

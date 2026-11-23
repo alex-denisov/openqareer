@@ -102,6 +102,7 @@ export function ShellFrame() {
       <Rail active={node?.nav ?? null} />
       <Topbar
         title={title}
+        titleTip={chrome.title ? undefined : chrome.titleTip}
         active={node?.nav ?? null}
         bellCount={bellCount}
         bellCritical={chrome.bellCritical ?? false}
