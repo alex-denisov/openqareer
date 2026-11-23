@@ -38,7 +38,8 @@ export interface NotificationExport {
   /** Отдельная настройка «Приглашения»; null — кандидат её не менял. */
   readonly invitationPreference: InvitationChannels | null;
   /** Привязанный чат Telegram; null — не привязан. */
-  readonly telegram: { readonly chatId: string; readonly linkedAt: string | null } | null;
+  /** Привязан ли Telegram и когда; номер чата бота — служебный и не выгружается (B738 · 7). */
+  readonly telegram: { readonly linked: true; readonly linkedAt: string | null } | null;
 }
 
 interface NotificationRow {
@@ -115,6 +116,6 @@ export function exportNotifications(
     items: readNotifications(database, candidateId),
     preferences: repository.getPreferences(candidateId),
     invitationPreference: readInvitationPreference(database, candidateId),
-    telegram: chatId === null ? null : { chatId, linkedAt: repository.getTelegramLinkStatus(candidateId).linkedAt },
+    telegram: chatId === null ? null : { linked: true, linkedAt: repository.getTelegramLinkStatus(candidateId).linkedAt },
   };
 }

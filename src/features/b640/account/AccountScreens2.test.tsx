@@ -236,6 +236,29 @@ describe('n05 «Согласия и данные»', () => {
     expect(root.querySelector('.set-res.is-err')).toBeNull();
   });
 
+  it('B774: у данного согласия «Текст согласия» открывает тот же текст без кнопки выдачи', async () => {
+    const root = await open(<DataScreen node={node('n05')} />);
+    const row = (title: string) =>
+      [...root.querySelectorAll('.set-row')].find((item) => item.querySelector('.set-t')?.textContent === title)!;
+    expect(row('Подключённый профиль').textContent).not.toContain('Текст согласия');
+    click(button(row('Цифровой след'), 'Текст согласия'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelectorAll('li').length).toBeGreaterThan(0);
+    expect(dialog.textContent).not.toContain('Дать согласие');
+    click(button(row('«Вы в поиске»'), 'Текст согласия'));
+    const search = [...document.querySelectorAll('.pf-dialog[role=dialog]')].at(-1) as HTMLElement;
+    expect(search.textContent).toContain('мы будем искать контакты нанимающих');
+    expect(search.textContent).not.toContain('Дать согласие');
+  });
+
+  it('B774: выключенные действия от вашего имени ведут туда, где их включают', async () => {
+    api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
+    const root = await open(<DataScreen node={node('n05')} />);
+    const link = root.querySelector('a[aria-label="Настроить автоотклики"]');
+    expect(link?.getAttribute('href')).toBe('/app/responses');
+    expect(link?.closest('.set-row')?.textContent).toContain('выключены');
+  });
+
   it('три согласия сервера и удаление аккаунта, как в макете', async () => {
     const root = await open(<DataScreen node={node('n05')} />);
     expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
