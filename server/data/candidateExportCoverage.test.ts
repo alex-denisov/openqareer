@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { CANDIDATE_TABLE_COVERAGE } from './candidateExportCoverage';
+import { forbiddenExportKeys } from './exportForbiddenKeys';
+import { openSeeded, seedAutoApply, seedHh, seedRecording } from './exportTestSeeds';
 import { SqliteDiaryCheckpointRepository } from './sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from './sqliteDiaryDetailsRepository';
 import { SqliteDiaryPeopleRepository } from './sqliteDiaryPeopleRepository';
@@ -167,11 +169,26 @@ describe('B689: выгрузка данных покрывает все табл
     expect(Object.keys(CANDIDATE_TABLE_COVERAGE).filter((table) => !tables.includes(table))).toEqual([]);
   });
 
-  it('таблицы дневника с содержимым кандидата все в выгрузке', () => {
-    const diaryGaps = Object.entries(CANDIDATE_TABLE_COVERAGE).filter(
-      ([table, coverage]) => table.startsWith('career_diary_') && 'gap' in coverage,
-    );
-    expect(diaryGaps).toEqual([]);
+  it('B738: пробелов нет — каждая таблица либо в выгрузке, либо служебная с причиной', () => {
+    const unresolved = Object.entries(CANDIDATE_TABLE_COVERAGE).filter(([, coverage]) => {
+      if ('internal' in coverage) return coverage.internal.trim().length === 0;
+      return !('export' in coverage) && !('routeExport' in coverage);
+    });
+    expect(unresolved).toEqual([]);
+  });
+
+  it('B738: в выгрузке нет полей с хешами, токенами, секретами, cookie и паролями', () => {
+    const { databasePath, store } = fileStore();
+    const candidate = createCandidate(store);
+    const database = openSeeded(databasePath);
+    seedAutoApply(database, candidate.id, 'own');
+    seedHh(databasePath, database, candidate.id, 'own');
+    seedRecording(database, candidate.id, 'own');
+    database.close();
+    const exported = store.exportCandidate(candidate.id);
+    expect(exported.automation.queue).toHaveLength(1);
+    expect(exported.interviewRecordings.recordings).toHaveLength(1);
+    expect(forbiddenExportKeys(exported, 'export')).toEqual([]);
   });
 
   it('n02: «Как часто» и «Не показывать название компании» входят в выгрузку', () => {

@@ -21,6 +21,8 @@ import { exportProfileHistory, type ProfileHistoryExportStore } from './profileH
 import { exportContent } from './contentExport';
 import { exportCareerSections, exportContacts } from './contactsCareerExport';
 import { type AccountExportStore, exportAccount } from './accountExport';
+import { exportAutomation } from './automationExport';
+import { exportInterviewRecordings } from './interviewRecordingExport';
 import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
@@ -95,6 +97,8 @@ export function createSqliteCandidateStoreExportMethods(
         contacts: exportContacts(dependencies.ownStorage, candidateId),
         careerSections: exportCareerSections(dependencies.ownStorage, candidateId),
         account: exportAccount(dependencies.ownStorage, candidateId),
+        automation: exportAutomation(dependencies.ownStorage, candidateId),
+        interviewRecordings: exportInterviewRecordings(dependencies.ownStorage, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
