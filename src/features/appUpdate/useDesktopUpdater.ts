@@ -24,13 +24,16 @@ const EMPTY_INFO: AppUpdateReleaseInfo = {
 
 export const IDLE_UPDATER_STATUS: AppUpdateStatusData = { state: 'idle', modal: 'none', info: EMPTY_INFO };
 
+/** B771: what one check found; `busy` — an update is already found, loading or waiting. */
+export type CheckOutcome = 'latest' | 'available' | 'failed' | 'busy';
+
 type Patch = (next: Partial<AppUpdateStatusData>, info?: Partial<AppUpdateReleaseInfo>) => void;
 
 export interface DesktopUpdater {
   readonly getStatus: () => AppUpdateStatusData;
   readonly subscribe: (listener: () => void) => () => void;
   readonly start: () => () => void;
-  readonly check: () => Promise<void>;
+  readonly check: () => Promise<CheckOutcome>;
   /** B722: «Обновлять автоматически» — найденная версия скачивается сама и ждёт перезапуска. */
   readonly setAutoInstall: (enabled: boolean) => void;
   readonly actions: AppUpdateActions;
@@ -78,7 +81,7 @@ function createActions(patch: Patch, install: () => Promise<void>): AppUpdateAct
 }
 
 /** B359: a background check shortly after launch, then every six hours; returns the stop. */
-function scheduleChecks(check: () => Promise<void>): () => void {
+function scheduleChecks(check: () => Promise<unknown>): () => void {
   const first = window.setTimeout(() => void check(), UPDATE_CHECK_DELAY_MS);
   const repeat = window.setInterval(() => void check(), UPDATE_CHECK_INTERVAL_MS);
   return () => {
@@ -97,11 +100,11 @@ export function createDesktopUpdater(): DesktopUpdater {
     for (const listener of listeners) listener();
   };
 
-  const check = async () => {
-    if (status.state !== 'idle') return;
+  const check = async (): Promise<CheckOutcome> => {
+    if (status.state !== 'idle') return 'busy';
     try {
       const result = await checkForUpdate();
-      if (result.status !== 'available') return;
+      if (result.status !== 'available') return 'latest';
       patch({ state: 'available', modal: 'none' }, {
         version: result.version,
         currentVersion: result.currentVersion,
@@ -109,8 +112,11 @@ export function createDesktopUpdater(): DesktopUpdater {
         changelog: result.notes ? [{ tag: 'new', tagLabel: 'Новое', text: result.notes }] : [],
       });
       if (autoInstall) await install();
+      return 'available';
     } catch {
-      // Offline or the feed is unreachable: stay quiet, the next check retries.
+      // Offline or the feed is unreachable: the background check stays quiet and
+      // retries; a check the candidate started says so in place.
+      return 'failed';
     }
   };
 
