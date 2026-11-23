@@ -93,7 +93,7 @@ function ruleFor(finding: CandidateFootprintFinding): Rule {
         category: 'personal_data',
         level: 'high',
         action: CLOSE,
-        reason: 'почта есть в утечке данных',
+        reason: 'старые аккаунты на эту почту ещё открыты',
       };
     case 'metadata':
       return {

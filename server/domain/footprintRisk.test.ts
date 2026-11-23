@@ -509,7 +509,7 @@ describe('B645 f03b: строка «Риск» — уровень и почем�
     buildFootprintRiskSummary(audit([finding(overrides)]), []).items[0]?.levelReason;
 
   it('у каждой находки есть причина уровня по её виду', () => {
-    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe('почта есть в утечке данных');
+    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe('старые аккаунты на эту почту ещё открыты');
     expect(reasonOf({ review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
       'страницу находят по нику, чья она — неизвестно',
     );
@@ -518,5 +518,10 @@ describe('B645 f03b: строка «Риск» — уровень и почем�
     );
     expect(reasonOf({ kind: 'profile', review: 'confirmed_self' })).toBe('подтверждает ваш опыт');
     expect(reasonOf({ kind: 'archive', adapter: 'wayback' })).toBe('старая копия страницы ещё открыта');
+    const all = ['breach', 'metadata', 'secret', 'archive', 'profile', 'mention'].map((kind) =>
+      reasonOf({ kind: kind as CandidateFootprintFinding['kind'], staleAccount: kind === 'profile' }),
+    );
+    // Кандидату не называем инструменты и не пугаем словами «утечка», «пароль» (B667).
+    expect(all.join(' · ')).not.toMatch(/sherlock|maigret|hibp|wayback|exa\b|утечк|парол/iu);
   });
 });
