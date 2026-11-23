@@ -8,6 +8,7 @@ import {
   failedChecks,
   findingsWord,
   letterText,
+  riskLine,
   mailtoHref,
   opensRemovalPath,
   planGroups,
@@ -121,5 +122,17 @@ describe('B668: ссылка YouTube в «Данных для поиска»', (
       { id: 'y', kind: 'profile_url', preview, selectedByDefault: true, available: true },
     ]);
     expect(groups).toEqual([{ key: `profile_url\0${preview}`, kind: 'profile_url', label: preview, ids: ['w', 'y'] }]);
+  });
+});
+
+describe('B645 f03b: строка «Риск» — уровень и почему', () => {
+  const base = { level: 'high', levelLabel: 'высокий риск' } as const;
+  it('уровень коротко и причина через двоеточие, как в макете', () => {
+    expect(riskLine({ ...base, levelReason: 'номер находят по имени' })).toBe('высокий: номер находят по имени');
+    expect(riskLine({ level: 'important', levelLabel: 'важно', levelReason: 'совпадение по имени не подтверждено' }))
+      .toBe('важно: совпадение по имени не подтверждено');
+  });
+  it('без причины — прежняя подпись уровня', () => {
+    expect(riskLine(base)).toBe('высокий риск');
   });
 });

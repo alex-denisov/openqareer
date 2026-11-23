@@ -1,12 +1,15 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import jpeg from 'jpeg-js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
+import { SealedText } from '../data/sealedText';
+import { SqliteCandidateMediaRepository } from '../data/sqliteCandidateMediaRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import { resetPhotoUploadCounter } from './profileB640Routes';
@@ -76,7 +79,7 @@ async function setup(options: { withProfile?: boolean } = {}) {
     () => candidateStore.close(),
     () => app.close(),
   );
-  return { app, candidateStore, people };
+  return { app, candidateStore, people, databasePath: config.databasePath };
 }
 
 function call(
@@ -112,6 +115,9 @@ async function photoIdOf(app: App, token: string): Promise<string | undefined> {
 const NEW_ROUTES: ReadonlyArray<['GET' | 'POST' | 'PUT' | 'DELETE', string, unknown?]> = [
   ['PUT', `${PROFILE}/photo`, { contentBase64: jpegBase64() }],
   ['DELETE', `${PROFILE}/photo`],
+  ['POST', `${PROFILE}/photo/linkedin`],
+  ['GET', `${PROFILE}/photo/resume`],
+  ['PUT', `${PROFILE}/photo/resume`, { inResume: false }],
   ['GET', `${PROFILE}/income`],
   ['PUT', `${PROFILE}/income`, { current: 440_000, expected: 500_000 }],
   ['POST', `${PROFILE}/history/any-id/reapply`],
@@ -400,5 +406,74 @@ describe('повторное применение отменённой прав�
       (await call(app, 'POST', `${PROFILE}/history/no-such/reapply`, flagged)).statusCode,
     ).toBe(404);
     expect(await headline(app)).toBe('Руководитель продукта');
+  });
+});
+
+describe('p08: «Взять из LinkedIn» и «Фото в резюме»', () => {
+  const LINKEDIN_PHOTO = 'a'.repeat(32);
+
+  function seedLinkedinPhoto(store: SqliteCandidateStore, path: string, candidateId: string) {
+    const database = new DatabaseSync(path);
+    cleanups.push(() => database.close());
+    const media = new SqliteCandidateMediaRepository(
+      database,
+      new SealedText(baseConfig.dataEncryptionKey),
+    );
+    media.saveMany(candidateId, [
+      { mediaId: LINKEDIN_PHOTO, kind: 'photo', mime: 'image/jpeg', bytes: Buffer.from('jpeg') },
+    ]);
+    store.saveResumeDraft(
+      candidateId,
+      {
+        ...DRAFT,
+        candidate: {
+          ...DRAFT.candidate,
+          photoMediaId: LINKEDIN_PHOTO,
+          linkedinPhotoMediaId: LINKEDIN_PHOTO,
+        },
+      },
+      [],
+    );
+  }
+
+  it('своё фото не стирает фото из LinkedIn, «Взять из LinkedIn» ставит его снова', async () => {
+    const { app, candidateStore, people, databasePath } = await setup();
+    seedLinkedinPhoto(candidateStore, databasePath, people.flagged.candidate!.id);
+    const own = await call(app, 'PUT', `${PROFILE}/photo`, flagged, {
+      contentBase64: jpegBase64(),
+    });
+    expect(own.json().data.photoMediaId).not.toBe(LINKEDIN_PHOTO);
+    const kept = await call(app, 'GET', `/api/v1/candidate/media/${LINKEDIN_PHOTO}`, flagged);
+    expect(kept.statusCode).toBe(200);
+
+    const taken = await call(app, 'POST', `${PROFILE}/photo/linkedin`, flagged);
+    expect(taken.json().data).toEqual({ photoMediaId: LINKEDIN_PHOTO });
+    expect(await photoIdOf(app, flagged)).toBe(LINKEDIN_PHOTO);
+    const entries = (await call(app, 'GET', `${PROFILE}/history`, flagged)).json().data.entries;
+    expect(entries[0]).toMatchObject({ section: 'photo', appliedText: 'фото из LinkedIn' });
+  });
+
+  it('без импорта из LinkedIn брать нечего: 409, профиль не меняется', async () => {
+    const { app } = await setup();
+    const response = await call(app, 'POST', `${PROFILE}/photo/linkedin`, flagged);
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('linkedin_photo_missing');
+    expect(await photoIdOf(app, flagged)).toBeUndefined();
+  });
+
+  it('«Фото в резюме» по умолчанию включено, выключение хранится у своего кандидата', async () => {
+    const { app } = await setup();
+    const initial = await call(app, 'GET', `${PROFILE}/photo/resume`, flagged);
+    expect(initial.json().data).toEqual({ inResume: true });
+    const off = await call(app, 'PUT', `${PROFILE}/photo/resume`, flagged, { inResume: false });
+    expect(off.json().data).toEqual({ inResume: false });
+    expect((await call(app, 'GET', `${PROFILE}/photo/resume`, flagged)).json().data).toEqual({
+      inResume: false,
+    });
+    expect((await call(app, 'GET', `${PROFILE}/photo/resume`, other)).json().data).toEqual({
+      inResume: true,
+    });
+    const bad = await call(app, 'PUT', `${PROFILE}/photo/resume`, flagged, { inResume: 'нет' });
+    expect(bad.statusCode).toBe(400);
   });
 });
