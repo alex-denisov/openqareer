@@ -11,6 +11,8 @@ export interface ChatMessage {
   readonly id: string;
   readonly role: 'user' | 'assistant';
   readonly content: string;
+  /** Когда сообщение записано (ISO); у ответа, который ещё пишется, времени нет. */
+  readonly at?: string;
 }
 
 const STAGE_LABEL: Readonly<Record<CoachTurnStage, string>> = {
@@ -149,11 +151,38 @@ export function conversationTitle(item: {
   return lines.find((line) => line.length > 0) ?? 'Разговор без темы';
 }
 
-/** «Сегодня, 15:02» или «11 ноября». */
+function yesterdayOf(now: Date): string {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toDateString();
+}
+
+/** «Сегодня, 15:02», «Вчера, 18:05» или «11 ноября». */
 export function dayLabel(iso: string, now: Date = new Date()): string | null {
   const date = parseDate(iso);
   if (!date) return null;
-  return date.toDateString() === now.toDateString()
-    ? `Сегодня, ${HOUR_MINUTE.format(date)}`
-    : DAY_MONTH.format(date);
+  const day = date.toDateString();
+  if (day === now.toDateString()) return `Сегодня, ${HOUR_MINUTE.format(date)}`;
+  if (day === yesterdayOf(now)) return `Вчера, ${HOUR_MINUTE.format(date)}`;
+  return DAY_MONTH.format(date);
+}
+
+/**
+ * Метки дня в ленте разговора (макет k01: «Сегодня, 15:02» перед первым сообщением):
+ * у первого сообщения каждого дня. Сообщение без времени дня не начинает.
+ */
+export function dayMarks(
+  messages: readonly ChatMessage[],
+  now: Date = new Date(),
+): ReadonlyMap<string, string> {
+  const entries = messages.flatMap((message, index) => {
+    const date = message.at ? parseDate(message.at) : null;
+    if (!date) return [];
+    const previous = messages
+      .slice(0, index)
+      .flatMap((item) => (item.at ? [parseDate(item.at)] : []))
+      .at(-1);
+    if (previous && previous.toDateString() === date.toDateString()) return [];
+    const label = dayLabel(message.at!, now);
+    return label ? [[message.id, label] as const] : [];
+  });
+  return new Map(entries);
 }

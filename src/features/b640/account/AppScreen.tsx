@@ -1,5 +1,9 @@
 import { useId, useState } from 'react';
-import { COMMON_TIMEZONES, DEFAULT_ACCOUNT_TIMEZONE, formatTimezoneDisplay } from '../../../../shared/timezoneUtils';
+import {
+  COMMON_TIMEZONES,
+  DEFAULT_ACCOUNT_TIMEZONE,
+  formatTimezoneOffset,
+} from '../../../../shared/timezoneUtils';
 import { getAccount, updateAccountProfile } from '../../coach/coachApi';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { SegControl } from '../kit/SegControl';
@@ -10,6 +14,12 @@ import type { AppMoneyCurrency } from '../../../../shared/b640AppPreferences';
 import { DeviceSettingsSection, WebAppSection } from './DeviceSettingsSection';
 import { getAppPreferences, saveAppPreferences } from './appPreferencesApi';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+
+/** Пояс в списке n06 так, как в макете: «Москва, UTC+3». */
+function zoneLabel(timezone: string): string {
+  const city = COMMON_TIMEZONES.find((item) => item.timezone === timezone)?.city ?? timezone;
+  return `${city}, ${formatTimezoneOffset(timezone)}`;
+}
 
 const THEMES: ReadonlyArray<{ value: B640Theme; label: string }> = [
   { value: 'system', label: 'Как в системе' },
@@ -100,7 +110,7 @@ function TimezoneRow() {
         >
           {zones.map((zone) => (
             <option key={zone.timezone} value={zone.timezone}>
-              {formatTimezoneDisplay(zone.timezone)}
+              {zoneLabel(zone.timezone)}
             </option>
           ))}
         </select>
