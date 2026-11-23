@@ -144,6 +144,10 @@ describe('B753: своя цепочка сообщения', () => {
     expect(res.json().data.text).toContain('Давно не общались');
     expect(contact.calls).toHaveLength(1);
     expect(letter.calls).toHaveLength(0);
+    const review = contact.calls[0]?.review;
+    expect(review?.('Анна, привет! ' + 'а'.repeat(700))).toEqual(['contact_too_long']);
+    expect(review?.('Анна, привет! Откликаюсь на вакансию в Альфа.')).toEqual(['contact_response_formula']);
+    expect(review?.('Анна, привет! Давно не общались.')).toEqual([]);
   });
 });
 

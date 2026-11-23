@@ -22,3 +22,11 @@ describe('letterCorrection (B640): причина отказа одной фра
     expect(letterCorrection(['unknown'])).toBe(undefined);
   });
 });
+
+describe('B753: отказ проверки сообщения знакомому и рекрутёру', () => {
+  it('длинный текст, слова отклика и новые цифры — своя фраза', () => {
+    expect(letterCorrection(['contact_too_long'])).toContain('короче');
+    expect(letterCorrection(['contact_response_formula'])).toContain('не отклик');
+    expect(letterCorrection(['contact_new_digits'])).toContain('цифр');
+  });
+});
