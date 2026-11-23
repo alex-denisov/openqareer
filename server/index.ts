@@ -37,6 +37,7 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { readSmmConfig, startSmmAssistant } from './smm/smmRuntime';
 import { AuthService } from './auth/authService';
 import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
+import { buildAppSignInNotifier } from './auth/appSignInEmail';
 import { buildPasskeyAddedNotifier } from './auth/passkeyAddedEmail';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
@@ -89,6 +90,11 @@ const authService = new AuthService({
           publicBaseUrl: config.accountEmail.publicBaseUrl,
         }),
         onPasskeyAdded: buildPasskeyAddedNotifier({
+          apiKey: config.accountEmail.apiKey,
+          from: config.accountEmail.from,
+          publicBaseUrl: config.accountEmail.publicBaseUrl,
+        }),
+        onAppSignIn: buildAppSignInNotifier({
           apiKey: config.accountEmail.apiKey,
           from: config.accountEmail.from,
           publicBaseUrl: config.accountEmail.publicBaseUrl,
