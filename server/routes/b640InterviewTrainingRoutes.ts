@@ -13,6 +13,7 @@ import { sessionCandidate } from './b640VacancyContext';
 import { storedOrRuleTask } from './b640SystemDesignTaskSource';
 import { registerB640SystemDesignTaskRoutes } from './b640SystemDesignTaskRoutes';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { judgedEvaluation } from './interviewAnswerJudging';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
@@ -134,7 +135,20 @@ const handleReview: Handler = async (deps, request, reply) => {
   }
   const { candidate, session, question } = context;
   const schema = question.type === 'system_design' ? schemaView(deps, context) : null;
-  const evaluation = scoreInterviewAnswerWithQuotes(question.answer.text, question.type);
+  // B780: модель оценивает критерии; у System Design «Требования» — по пунктам «Что важно в задаче».
+  const task =
+    question.type === 'system_design' ? storedOrRuleTask(deps, candidate.id, session) : null;
+  const evaluation = await judgedEvaluation(
+    deps,
+    request.log,
+    {
+      type: question.type,
+      question: question.prompt,
+      answer: question.answer.text,
+      ...(task ? { taskPoints: task.points } : {}),
+    },
+    scoreInterviewAnswerWithQuotes(question.answer.text, question.type),
+  );
   const facts = deps.candidateStore.getSnapshot(candidate.id).memory;
   const helpful = deps.candidateStore.interviewSimulatorRepo.reviewHelpful.get({
     candidateId: candidate.id,
@@ -147,10 +161,7 @@ const handleReview: Handler = async (deps, request, reply) => {
       type: question.type,
       evaluation: schema ? linkReviewToSchema(evaluation, schema.schema) : evaluation,
       numbers: checkAnswerNumbers(question.answer.text, facts),
-      exampleAnswer:
-        question.type === 'system_design'
-          ? storedOrRuleTask(deps, candidate.id, session).exampleAnswer
-          : null,
+      exampleAnswer: task?.exampleAnswer ?? null,
       helpful,
       schema,
     },

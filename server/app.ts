@@ -143,6 +143,7 @@ interface BuildAppOptions {
   recordingTranscriber?: RouteDeps['recordingTranscriber'];
   /** B751: разбор интервью; без подстановки — цепочка письма. */
   interviewDebriefWriter?: RouteDeps['interviewDebriefWriter'];
+  interviewAnswerJudge?: RouteDeps['interviewAnswerJudge'];
   adaptationStepsWriter?: AdaptationStepsWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
@@ -473,7 +474,7 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, contactMessageWriter: options.contactMessageWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter, contactMessageWriter: options.contactMessageWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, interviewAnswerJudge: options.interviewAnswerJudge, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor

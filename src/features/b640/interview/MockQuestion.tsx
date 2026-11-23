@@ -8,7 +8,7 @@ import {
   type InterviewSessionView,
 } from '../../interview/interviewSimulatorApi';
 import { useVoiceInput } from '../voice/useVoiceInput';
-import { Button, Icon, StatusLine } from '../kit';
+import { Button, Icon, StatusLine, useDockHeight } from '../kit';
 import { buildNodePath } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import { criteriaRows, mockEyebrow } from './model/mockModel';
@@ -92,8 +92,11 @@ function Actions(props: {
   readonly onAgain: () => void;
   readonly onFinish: () => void;
 }) {
+  // B780: на 390 полоса из трёх кнопок выше запасного отступа — main берёт её настоящую высоту.
+  const dock = useRef<HTMLDivElement>(null);
+  useDockHeight(dock);
   return (
-    <div className="actions m-commit">
+    <div ref={dock} className="actions m-commit">
       {props.answered && !props.last ? (
         <Button variant="primary" disabled={props.busy} onClick={props.onNext}>
           <Icon name="right" />
