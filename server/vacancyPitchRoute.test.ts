@@ -449,6 +449,24 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(resolved.description).toBe('Короткая сводка');
   });
 
+  it('B778: a row merged into another stored cluster — the letter cites the chosen vacancy, not the founder', () => {
+    const founder = {
+      id: 'cluster-src-himalayas:1', canonicalTitle: 'Fractional Chief Administrative Officer', canonicalCompany: 'Himalayas Co',
+      descriptionSummary: 'Founder summary', skills: ['Administration'], canonicalLocation: 'Remote', isRemote: true,
+    };
+    const chosen = {
+      title: 'Chief of Staff', company: 'Arootah', description: 'Chosen text', fullDescription: 'Chosen full text',
+      requiredSkills: ['Coaching'], responsibilities: [], location: 'New York', isRemote: false,
+    };
+    const resolved = resolvePitchVacancy(undefined as never, 'cluster-src-arootah:8faace0f', founder as never, chosen as never);
+    expect(resolved).toMatchObject({
+      title: 'Chief of Staff', company: 'Arootah', description: 'Chosen text', fullDescription: 'Chosen full text',
+      requiredSkills: ['Coaching'], location: 'New York', isRemote: false,
+    });
+    const own = resolvePitchVacancy(undefined as never, 'cluster-src-himalayas:1', founder as never, chosen as never);
+    expect(own.title).toBe('Fractional Chief Administrative Officer');
+  });
+
   it('B601: the writer gets the full vacancy text, the whole profile and the language only when chosen', async () => {
     const inputs: CoverLetterWriteInput[] = [];
     const writer: CoverLetterWriter = {
