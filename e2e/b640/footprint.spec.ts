@@ -109,6 +109,12 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(open).toHaveAttribute('target', '_blank');
     // Пока неизвестно, чья страница, письма о удалении нет.
     await expect(finding.locator('.fp-letter')).toHaveCount(0);
+    // B645 (и): три действия не выходят за колонку ни на 1440, ни на 390.
+    const edge = await finding.locator('.lead').evaluate((el) => el.getBoundingClientRect().right);
+    for (const name of ['Это моё', 'Это не моё']) {
+      const box = await finding.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(edge + 0.5);
+    }
     await finding.getByRole('button', { name: 'Это моё' }).click();
     await expect.poll(() => calls.reviews).toEqual([{ id: fid(7), review: 'confirmed_self' }]);
   });

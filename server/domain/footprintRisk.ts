@@ -80,6 +80,9 @@ const BROKER: Rule = {
   reason: 'база контактов показывает вашу почту или телефон',
 };
 
+/** B645 f03b: у базы контактов заголовок страницы длинный и чужой — называем, что там лежит. */
+const BROKER_TITLE = 'Почта и телефон в базе контактов';
+
 /** Поиск по нику: находит открытую страницу, но не знает, чья она. */
 const NICK_SEARCH = new Set(['sherlock', 'maigret']);
 
@@ -151,9 +154,17 @@ function cleanTitle(title: string): string {
 /** Просьба без действия: подтверждает кандидат кнопками строки (B727). */
 const OWNER_REQUEST = /;\s*владение нужно подтвердить(?=[.!?]?$)/u;
 
+/** Текст страницы приходит с разметкой: «# Заголовок», «**жирный**» — кандидату без неё. */
+function withoutMarkup(text: string): string {
+  return text
+    .replace(/^\s{0,3}#{1,6}\s+/gmu, '')
+    .replace(/\*{1,3}([^*\n]+)\*{1,3}/gu, '$1')
+    .replace(/\s*\n+\s*/gu, ' ');
+}
+
 /** Описание без предложений, где назван инструмент или способ поиска. */
 function cleanDetail(detail: string): string {
-  return detail
+  return withoutMarkup(detail)
     .split(/(?<=[.!?])\s+/u)
     .map((sentence) => sentence.replace(OWNER_REQUEST, ''))
     .filter((sentence) => !sentence.match(TOOL_NAMES))
@@ -251,8 +262,12 @@ function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
     level: rule.level,
     levelLabel: FOOTPRINT_LEVEL_LABELS[rule.level],
     levelReason: rule.reason,
-    title: cleanTitle(finding.title) || 'Находка',
-    detail: detailWithAddress(cleanDetail(finding.detail), safeUrl(finding.url)),
+    title: rule === BROKER ? BROKER_TITLE : cleanTitle(finding.title) || 'Находка',
+    // База контактов: «Где» — одна строка с адресом, текст страницы повторяет заголовок.
+    detail:
+      rule === BROKER
+        ? (pageAddress(safeUrl(finding.url)) ?? '')
+        : detailWithAddress(cleanDetail(finding.detail), safeUrl(finding.url)),
     url: safeUrl(finding.url),
     observedAt: finding.observedAt || null,
     resolved,
