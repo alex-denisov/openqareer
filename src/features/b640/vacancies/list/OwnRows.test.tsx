@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
 import { OwnRows } from './OwnRows';
 
@@ -16,6 +16,14 @@ const item = {
   id: 'own-1', title: 'Руководитель группы бэкенда', company: 'Ритм Ритейл', location: 'Москва', workFormat: 'office' as const,
   url: 'https://ritm.example/jobs/1', createdAt: '2026-11-18T10:00:00.000Z', coverage: { matched: 3, total: 5 }, comparing: false,
 };
+
+let mobileScreen = false;
+beforeEach(() => {
+  mobileScreen = false;
+  window.matchMedia = ((query: string) => ({
+    matches: mobileScreen, media: query, addEventListener: () => {}, removeEventListener: () => {},
+  })) as unknown as typeof window.matchMedia;
+});
 
 const RUB = { currency: 'RUB' as const, rates: { date: '2026-11-23', rubPerUnit: { USD: 90, EUR: 98 } } };
 
@@ -98,5 +106,18 @@ describe('свои вакансии в таблице', () => {
     expect(view.container.querySelector('a.vs-open')!.getAttribute('href')).toBe('https://ritm.example/jobs/1');
     expect(view.container.querySelector('a.vs-open')!.getAttribute('aria-label')).toBe('Открыть на сайте');
     view.unmount();
+  });
+  it('B676: на 390 удалить — через «…» → «Удалить», корзины в строке нет', () => {
+    mobileScreen = true;
+    const onRemove = vi.fn();
+    const view = mount(<table><OwnRows items={[item]} money={RUB} onRemove={onRemove} /></table>);
+    const more = view.container.querySelector<HTMLButtonElement>('.va-more');
+    expect(more?.getAttribute('aria-label')).toBe('Ещё действия');
+    click(more!);
+    const dialog = view.container.querySelector('[role="dialog"]');
+    expect(dialog?.getAttribute('aria-label')).toBe(`Действия: ${item.title}`);
+    click(dialog!.querySelector<HTMLButtonElement>('.va-mi')!);
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(view.container.querySelector('[role="dialog"]')).toBeNull();
   });
 });

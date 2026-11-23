@@ -15,11 +15,15 @@ export interface StatusChoice {
 
 export interface StatusPreviewContext {
   readonly autoApplyPaused: boolean;
+  /** B779: подборка раз в неделю уже включена. */
+  readonly weeklySelection?: boolean;
 }
 
 /** Отметки кандидата в «Что можно поменять». */
 export interface StatusChangeOptions {
   readonly pauseAutoApply?: boolean;
+  /** B779: подборка в своей роли раз в неделю; нет поля — как было. */
+  readonly weeklySelection?: boolean;
 }
 
 interface StatusEffects {
@@ -84,6 +88,7 @@ const STAYS: readonly string[] = [
 ];
 
 const PAUSE_AUTO_APPLY_LABEL = 'Поставить автоотклики на паузу';
+const WEEKLY_SELECTION_LABEL = 'Подборку в своей роли — раз в неделю';
 
 function sameChoice(from: StatusChoice, to: StatusChoice): boolean {
   return from.status === to.status && from.targetProfession === to.targetProfession;
@@ -98,9 +103,15 @@ function appearsFor(to: StatusChoice): readonly string[] {
 }
 
 function optionsFor(to: StatusChoice, context: StatusPreviewContext): readonly StatusChangeOption[] {
-  if (context.autoApplyPaused) return [];
+  const weekly: StatusChangeOption = {
+    key: 'weeklySelection',
+    label: WEEKLY_SELECTION_LABEL,
+    checked: context.weeklySelection === true,
+  };
+  if (context.autoApplyPaused) return [weekly];
   return [
     { key: 'pauseAutoApply', label: PAUSE_AUTO_APPLY_LABEL, checked: to.status === 'working' },
+    weekly,
   ];
 }
 

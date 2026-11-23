@@ -7,6 +7,7 @@ import {
   type ResumeTemplate,
 } from '../../shared/resumeBuilder/model';
 import { loadResumeFonts } from './resumeFonts';
+import { RESUME_PHOTO_GAP_PT, RESUME_PHOTO_PT, type ResumePhoto } from './resumePhoto';
 import { TEMPLATE_STYLES, type TemplateStyle } from './templateStyle';
 
 type Doc = InstanceType<typeof PDFDocument>;
@@ -18,17 +19,38 @@ function contentWidth(doc: Doc, style: TemplateStyle): number {
   return doc.page.width - style.margin * 2;
 }
 
-function head(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
+/** Фото справа вверху; текст шапки уже на его ширину. Возвращает нижний край фото. */
+function headPhoto(doc: Doc, style: TemplateStyle, photo: ResumePhoto | null): number {
+  if (!photo) return 0;
+  const x = style.margin + contentWidth(doc, style) - RESUME_PHOTO_PT;
+  doc.image(photo.bytes, x, style.margin, {
+    fit: [RESUME_PHOTO_PT, RESUME_PHOTO_PT],
+    align: 'center',
+    valign: 'center',
+  });
+  return style.margin + RESUME_PHOTO_PT;
+}
+
+function head(
+  doc: Doc,
+  resume: BuilderResume,
+  style: TemplateStyle,
+  photo: ResumePhoto | null,
+): void {
   const align = style.centeredHead ? 'center' : 'left';
   const name = style.nameUpper ? resume.fullName.toUpperCase() : resume.fullName;
+  const photoBottom = headPhoto(doc, style, photo);
+  const width = contentWidth(doc, style) - (photo ? RESUME_PHOTO_PT + RESUME_PHOTO_GAP_PT : 0);
+  doc.x = style.margin;
+  doc.y = style.margin;
   doc.font('bold').fontSize(style.nameSize).fillColor(INK);
-  doc.text(name || ' ', { align, characterSpacing: style.nameUpper ? 1 : 0 });
+  doc.text(name || ' ', { align, width, characterSpacing: style.nameUpper ? 1 : 0 });
   if (style.showTitle && resume.title) {
     doc
       .font('bold')
       .fontSize(style.bodySize + 2)
       .fillColor(hex(style.accent));
-    doc.text(resume.title, { align });
+    doc.text(resume.title, { align, width });
   }
   const contacts = contactLine(resume);
   if (contacts) {
@@ -36,8 +58,9 @@ function head(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
       .font('regular')
       .fontSize(style.bodySize - 0.5)
       .fillColor(hex(style.muted));
-    doc.moveDown(0.2).text(contacts, { align });
+    doc.moveDown(0.2).text(contacts, { align, width });
   }
+  doc.y = Math.max(doc.y, photoBottom);
 }
 
 function section(doc: Doc, title: string, style: TemplateStyle): void {
@@ -120,7 +143,11 @@ function body(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
 }
 
 /** A real PDF with embedded Cyrillic fonts, A4, text selectable for ATS. */
-export function renderResumePdf(input: BuilderResume, template: ResumeTemplate): Promise<Buffer> {
+export function renderResumePdf(
+  input: BuilderResume,
+  template: ResumeTemplate,
+  photo: ResumePhoto | null = null,
+): Promise<Buffer> {
   const resume = compactBuilderResume(input);
   const style = TEMPLATE_STYLES[template];
   const fonts = loadResumeFonts(style.family);
@@ -145,7 +172,7 @@ export function renderResumePdf(input: BuilderResume, template: ResumeTemplate):
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
     try {
-      head(doc, resume, style);
+      head(doc, resume, style, photo);
       body(doc, resume, style);
       doc.end();
     } catch (error) {

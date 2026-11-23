@@ -138,7 +138,10 @@ describe('candidate status routes with the B640 flag', () => {
     expect(preview.appears.length).toBeGreaterThan(0);
     expect(preview.leaves.length).toBeGreaterThan(0);
     expect(preview.stays.length).toBeGreaterThan(0);
-    expect(preview.options).toEqual([{ key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true }]);
+    expect(preview.options).toEqual([
+      { key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true },
+      { key: 'weeklySelection', label: 'Подборку в своей роли — раз в неделю', checked: false },
+    ]);
     expect((await call(app, 'GET', STATUS, flagged)).json().data.current.chosen).toBe(false);
     expect(await pausedUntil(app, flagged)).toBeNull();
   });
@@ -172,6 +175,24 @@ describe('candidate status routes with the B640 flag', () => {
     expect(entry).toMatchObject({
       section: 'status', label: 'Статус', previousText: 'Ищу работу', appliedText: 'Работаю', actor: 'candidate', revertedAt: null,
     });
+  });
+
+  it('B779: «Подборку раз в неделю» сохраняет отметка при смене статуса', async () => {
+    const app = await setup();
+    const saved = await call(app, 'PUT', STATUS, flagged, {
+      status: 'working',
+      options: { weeklySelection: true },
+    });
+    expect(saved.statusCode).toBe(200);
+    const preview = await call(app, 'POST', `${STATUS}/preview`, flagged, { status: 'looking' });
+    const weekly = preview
+      .json()
+      .data.preview.options.find((option: { key: string }) => option.key === 'weeklySelection');
+    expect(weekly).toMatchObject({ checked: true });
+    expect(
+      (await call(app, 'PUT', STATUS, flagged, { status: 'looking', options: { weeklySelection: 'yes' } }))
+        .statusCode,
+    ).toBe(400);
   });
 
   it('does not pause when the candidate cleared the mark', async () => {
