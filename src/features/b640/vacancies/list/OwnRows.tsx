@@ -70,11 +70,14 @@ function OwnText({ text }: { text: string }) {
   );
 }
 
-/** Без счёта — почему, словами; найденные требования видны, даже если ни одно не навык. */
-function NoScore({ view, listed }: { view: VacancyFitView; listed: boolean }) {
+/**
+ * Без строк навыков: почему нет счёта, словами, и найденные требования, даже если ни одно не навык.
+ * Со строками навыков причина стоит заголовком их рамки (OwnDetailBody).
+ */
+function NoScore({ view }: { view: VacancyFitView }) {
   const reason = ownNoScoreReason(view);
   if (!reason) return null;
-  const others = listed ? [] : view.requirements;
+  const others = view.requirements;
   return (
     <div className={others.length > 0 ? 'v4-box v4-reqs-box' : 'v4-box'}>
       <p className="v4-req-row">{reason}</p>
@@ -97,13 +100,13 @@ function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
       <p className="v4-one">Сравнение с одной вакансией — не оценка рынка</p>
       {rows.length > 0 ? (
         <div className="v4-box v4-reqs-box">
-          <p className="v4-req-row">{coverageLabel(detail.fit, rows.length)}</p>
+          <p className="v4-req-row">{ownNoScoreReason(detail.fit) ?? coverageLabel(detail.fit, rows.length)}</p>
           <div className="v4-reqs-open">
             <RequirementList rows={rows} />
           </div>
         </div>
       ) : null}
-      <NoScore view={detail.fit} listed={rows.length > 0} />
+      {rows.length > 0 ? null : <NoScore view={detail.fit} />}
       <OwnText text={detail.text} />
       {url ? (
         <a className="row-act vs-open" href={url} target="_blank" rel="noopener noreferrer" aria-label="Открыть на сайте">
