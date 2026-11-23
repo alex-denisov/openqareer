@@ -617,6 +617,8 @@ export class AuthServiceCore implements SessionAuth {
         )
         .run(salt.toString('base64'), passwordHash.toString('base64'), now, user.id);
       this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      // Пароль меняют и при подозрении на захват: ключ, добавленный чужим, не должен пережить смену.
+      dropUserPasskeys(this.database, user.id);
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');

@@ -36,6 +36,7 @@ interface ReadArgs {
   readonly key: string;
   readonly sort: SortState;
   readonly roles: readonly string[];
+  readonly days: number | null;
   readonly offset: number;
   readonly base: State;
   readonly seq: MutableRefObject<number>;
@@ -43,11 +44,20 @@ interface ReadArgs {
 }
 
 /** Читает одну порцию; ответ устаревшего чтения (другой столбец, роли, перезапуск) отбрасывается. */
-function readPortion({ key, sort, roles, offset, base, seq, setState }: ReadArgs): AbortController {
+function readPortion({
+  key,
+  sort,
+  roles,
+  days,
+  offset,
+  base,
+  seq,
+  setState,
+}: ReadArgs): AbortController {
   const id = ++seq.current;
   const controller = new AbortController();
   setState({ ...base, key, status: 'loading', pending: offset });
-  getSortedMatchedPage(sort, roles, offset, controller.signal)
+  getSortedMatchedPage(sort, roles, offset, controller.signal, days)
     .then((page) => {
       if (seq.current !== id) return;
       const rows = [...base.rows, ...page.rows];
@@ -76,15 +86,18 @@ export function useServerSortedList(
   sort: SortState,
   roles: readonly string[],
   hidden: ReadonlySet<string>,
+  /** Фильтр «Дата» в днях (B726): его режет и считает сервер; `null` — без даты. */
+  days: number | null = null,
 ): ServerSortedList {
   const [reload, setReload] = useState(0);
-  const key = `${sort.key}:${sort.dir}:${roles.join('\n')}:${reload}`;
+  const key = `${sort.key}:${sort.dir}:${roles.join('\n')}:${days ?? ''}:${reload}`;
   const [state, setState] = useState<State | null>(null);
   const seq = useRef(0);
 
   const fetchFrom = useCallback(
-    (offset: number, base: State) => readPortion({ key, sort, roles, offset, base, seq, setState }),
-    // sort и roles закрыты над key.
+    (offset: number, base: State) =>
+      readPortion({ key, sort, roles, days, offset, base, seq, setState }),
+    // sort, roles и days закрыты над key.
     [key],
   );
 
