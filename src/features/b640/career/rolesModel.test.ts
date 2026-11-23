@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProposedRole } from '../../../../shared/roleProposals';
 import {
+  sourcesLine,
   buildRoleRows,
   compareCheckTag,
   searchStrip,
@@ -194,7 +195,9 @@ describe('B764: проверка, пройденная под другим на�
     const rows = buildRoleRows([vp, coo], ['VP of Operations', 'COO'], checked, titlesRu);
     const vpRow = rows.find((row) => row.title === 'VP of Operations')!;
     expect(compareCheckTag(vpRow)).toEqual({
-      text: 'пройдена для «Операционный директор (COO)» · 4 из 6',
+      // B645-2: в столбце роли — короткая строка по макету; чья проверка — в имени ссылки.
+      text: 'пройдена · 4 из 6',
+      label: 'пройдена для «Операционный директор (COO)» · 4 из 6',
       ok: true,
       role: 'Chief Operating Officer',
     });
@@ -239,5 +242,15 @@ describe('role label (B737)', () => {
       'Операционный директор (COO) и ещё 1',
     );
     expect(searchStrip([COO], null)?.title).toBe(COO);
+  });
+});
+
+describe('B645-2 s09: строка источников короткая', () => {
+  it('главный источник и «и ещё N»', () => {
+    expect(sourcesLine(['hh.ru'])).toBe('hh.ru');
+    expect(sourcesLine(['hh.ru', 'Indeed', 'сайты компаний', 'LinkedIn', 'RSS-лента'])).toBe(
+      'hh.ru и ещё 4',
+    );
+    expect(sourcesLine([])).toBe('');
   });
 });

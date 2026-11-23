@@ -64,6 +64,13 @@ function listOf(items: readonly { readonly text: string }[]): string | null {
         .join(', ');
 }
 
+/** B645-2 (s09, макет «hh.ru, 96 вакансий»): главный источник и «и ещё N», а не все площадки. */
+export function sourcesLine(sources: readonly string[]): string {
+  const [first, ...rest] = sources;
+  if (!first) return '';
+  return rest.length > 0 ? `${first} и ещё ${rest.length}` : first;
+}
+
 function originOf(role: ProposedRole, search: ReadonlySet<string>): RoleOrigin {
   if (namesOf(role).some((name) => search.has(name))) return 'search';
   return role.origin === 'candidate' ? 'own' : 'experience';
@@ -86,7 +93,7 @@ function rowOf(
   const sample = wageSample(role);
   const label = role.titleRu || roleLabel(role.title, titlesRu);
   const wageNote = model.isWageCalculated
-    ? [model.sources.join(', '), formatVacancyCount(sample), model.observedDate]
+    ? [sourcesLine(model.sources), formatVacancyCount(sample), model.observedDate]
         .filter(Boolean)
         .join(', ')
     : NO_WAGE;
@@ -198,6 +205,8 @@ export function skillStripText(count: number): string {
 
 export function compareCheckTag(row: RoleRow): {
   readonly text: string;
+  /** Полное имя ссылки: чья это проверка (видимая строка короткая, по макету). */
+  readonly label?: string;
   readonly ok: boolean;
   /** B764: роль прогона, если проверка пройдена под другим названием, — ссылка на него. */
   readonly role?: string;
@@ -205,7 +214,14 @@ export function compareCheckTag(row: RoleRow): {
   if (!row.check) return { text: 'не начата', ok: false };
   const share = row.check.total > 0 ? ` · ${row.check.confirmed} из ${row.check.total}` : '';
   const { source } = row.check;
-  if (source) return { text: `пройдена для «${source.label}»${share}`, ok: true, role: source.title };
+  // B645-2: столбец роли узкий — видна строка макета, роль проверки называет ссылка.
+  if (source)
+    return {
+      text: `пройдена${share}`,
+      label: `пройдена для «${source.label}»${share}`,
+      ok: true,
+      role: source.title,
+    };
   return { text: `пройдена${share}`, ok: true };
 }
 

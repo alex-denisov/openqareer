@@ -58,7 +58,7 @@ test.describe('B653: «Карьера» — роли и условия поис�
         '/app/vacancies?role=%D0%A0%D1%83%D0%BA%D0%BE%D0%B2%D0%BE%D0%B4%D0%B8%D1%82%D0%B5%D0%BB%D1%8C+%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B8&date=30',
       );
       await expect(list.last()).toContainText('нет данных о зарплатах');
-      await expect(list.nth(2)).toContainText('Открытый API, Страница вакансий, hh.ru');
+      await expect(list.nth(2)).toContainText('Открытый API и ещё 2');
       await expectWageNotesInsideCells(page);
     }
   });
@@ -126,6 +126,26 @@ test.describe('B653: «Карьера» — роли и условия поис�
       await expect(screen.locator('table.cmp thead .r2-pick')).toHaveCount(3);
       await expect(screen.locator('table.cmp')).toContainText('пройдена · 3 из 3');
       await expect(screen.locator('table.cmp')).toContainText('не начата');
+      // B645-2: столбцы ролей равной ширины (WebKit делил их неровно).
+      const widths = await screen
+        .locator('table.cmp thead th[scope="col"]')
+        .evaluateAll((cells) => cells.slice(1).map((cell) => cell.getBoundingClientRect().width));
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
+    }
+    // B645-2: «Как посчитано» на строке последнего слова заголовка, не отдельной строкой
+    // (на 1440 заголовок фикстуры в одну строку; на 390 значок переносится, только если не влезает).
+    const head = await screen
+      .locator('.lead-head')
+      .first()
+      .evaluate((el) => {
+        const title = el.querySelector('.lead-title')!.getClientRects();
+        const tip = el.querySelector('.tip')!.getBoundingClientRect();
+        const last = title[title.length - 1];
+        return { tipMid: tip.top + tip.height / 2, top: last.top, bottom: last.bottom };
+      });
+    if (desk(page)) {
+      expect(head.tipMid).toBeGreaterThanOrEqual(head.top);
+      expect(head.tipMid).toBeLessThanOrEqual(head.bottom);
     }
     await expectGates(page);
     // Гейты меняют размер окна: курсор мог остаться над ⓘ, и подсказка закрывает строки.

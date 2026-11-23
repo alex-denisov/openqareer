@@ -31,7 +31,7 @@ function CheckTag({ row }: { readonly row: RoleRow }) {
   // B764: проверка под другим названием роли — ссылка на сам прогон, а не на «мало требований».
   if (tag.role)
     return (
-      <Link className={className} to={skillCheckPath(tag.role)}>
+      <Link className={className} to={skillCheckPath(tag.role)} aria-label={tag.label}>
         {tag.text}
       </Link>
     );
@@ -56,7 +56,7 @@ function DeskTable({ rows, picked, onToggle }: PickProps) {
     </tr>
   );
   return (
-    <table className="cmp only-desk-t">
+    <table className="cmp cmp-roles only-desk-t">
       <thead>
         <tr>
           <th scope="col">
