@@ -103,6 +103,14 @@ describe('находки', () => {
     expect(letterText(mismatch)).toContain('верно — «руководитель группы»');
     expect(mailtoHref(item)).toMatch(/^mailto:\?subject=%D0/u);
   });
+
+  it('заголовок — только адрес сайта: в письме нет «мои данные: spark-interfax.ru»', () => {
+    const site = { ...item, url: 'https://www.spark-interfax.ru/ooo-1', title: 'spark-interfax.ru' };
+    expect(letterText(site)).toBe(
+      'Здравствуйте. На странице https://www.spark-interfax.ru/ooo-1 опубликованы мои данные. ' +
+        'Прошу удалить их и ответить на это письмо.',
+    );
+  });
 });
 
 describe('B668: ссылка YouTube в «Данных для поиска»', () => {

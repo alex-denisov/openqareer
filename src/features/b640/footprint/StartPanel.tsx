@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, InfoTip, StatusLine } from '../kit';
+import { Button, Icon, InfoTip, StatusLine } from '../kit';
 import {
   auditProgress,
   defaultSelection,
@@ -7,6 +7,7 @@ import {
   planGroups,
   searchByLine,
   selectedIds,
+  uncheckedLine,
   type PlanGroup,
 } from './footprintModel';
 import type { FootprintData } from './useFootprint';
@@ -17,30 +18,32 @@ interface StartPanelProps {
   readonly onStarted: () => void;
 }
 
-/** Полоса ожидания (F2) и строка «не всё проверили» с «Повторить» (F2б) — у кнопки поиска. */
+/** Полоса ожидания (F2) и строка «N категорий не проверены» с «Повторить» (F2б) — вверху страницы. */
 export function SearchState({ data, onStarted }: StartPanelProps) {
   const repeat = useStartSearch(data, onStarted);
   if (data.summary.state === 'checking') {
     const { done, total } = auditProgress(data.audit);
     return (
-      <progress className="pf-prog" aria-label="Проверено" max={total} value={done}>
-        {done} из {total}
-      </progress>
+      <div className="pf-state">
+        <progress className="pf-prog" aria-label="Проверено категорий" max={total} value={done}>
+          {done} из {total}
+        </progress>
+      </div>
     );
   }
   const failed = failedChecks(data.audit);
   if (failed === 0 && !repeat.error) return null;
   return (
-    <StatusLine
-      state="err"
-      text={repeat.error ?? 'Проверили не всё'}
-      action={
+    <div className="pf-state">
+      <p className="li-err" role="alert">
+        <Icon name="warn" />
+        {repeat.error ?? uncheckedLine(failed)}
         <Button variant="primary" size="sm" icon="repeat" busy={repeat.busy}
           onClick={() => void repeat.start(repeatIds(data))}>
           Повторить
         </Button>
-      }
-    />
+      </p>
+    </div>
   );
 }
 
@@ -109,7 +112,6 @@ export function StartPanel({ data, onStarted }: StartPanelProps) {
             text="Ищем только по данным, которые вы отметили. Не пишем от вашего имени." />
         </div>
       </div>
-      <SearchState data={data} onStarted={onStarted} />
       {search.error ? <StatusLine state="err" text={search.error} /> : null}
       <div className="actions fp-go">
         <Button variant="primary" icon="search" busy={search.busy || checking}

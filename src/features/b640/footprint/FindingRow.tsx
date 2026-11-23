@@ -4,7 +4,8 @@ import type { FootprintRiskItem } from '../../../../shared/footprintRisk';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
 import {
-  addCandidateFootprintFindingToProfile,
+  addFindingToProfile,
+  removeFindingFromProfile,
   reviewCandidateFootprintFinding,
   reviewFootprintMismatch,
 } from './footprintApi';
@@ -66,15 +67,31 @@ export function useReview(onChanged: () => void) {
   return { error, busy, mark };
 }
 
+/** «В профиль» с отменой в тосте; тот же факт уже в профиле — «Уже в профиле» (B382). */
 function AddToProfile({ findingId }: { readonly findingId: string }) {
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const toast = useToast();
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'already' | 'error'>('idle');
   if (state === 'done') return <ResultLine text="Добавлено в профиль" />;
+  if (state === 'already') return <ResultLine text="Уже в профиле" />;
+
+  async function undo() {
+    try {
+      await removeFindingFromProfile(findingId);
+      setState('idle');
+      announceFootprintChanged();
+    } catch (reason) {
+      reportFailure('находка не убрана из профиля', reason);
+    }
+  }
 
   async function add() {
     setState('busy');
     try {
-      await addCandidateFootprintFindingToProfile(findingId);
-      setState('done');
+      const { alreadyInProfile } = await addFindingToProfile(findingId);
+      setState(alreadyInProfile ? 'already' : 'done');
+      if (!alreadyInProfile) {
+        toast.show({ text: 'Добавлено в профиль', undo: { label: 'Отменить', onUndo: () => void undo() } });
+      }
     } catch (reason) {
       reportFailure('находка не добавилась в профиль', reason);
       setState('error');
