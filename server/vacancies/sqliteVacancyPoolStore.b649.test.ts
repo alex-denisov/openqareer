@@ -101,4 +101,27 @@ describe('SqliteVacancyPoolStore · B649', () => {
     expect(store.backfillWindowStep(3).done).toBe(false);
     expect(store.backfillWindowStep(3).done).toBe(true);
   });
+
+  it('B759: окно продолжается с позиции прошлого запуска, курсор отдаётся наружу', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b759-cursor-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATION_23);
+    const insert = legacy.prepare(
+      'INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload) VALUES (?, ?, ?, ?, ?)',
+    );
+    const at = '2026-09-01T10:00:00.000Z';
+    for (let n = 0; n < 7; n += 1)
+      insert.run(`c${n}`, 'src', at, at, JSON.stringify(card(`c${n}`)));
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    // Новый процесс: курсор в памяти 0, позиция 3 — из сохранённого прогресса.
+    expect(store.backfillWindowStep(3, 3)).toEqual({ done: false, cursor: 6 });
+    expect(store.pendingBackfill()).toBe(4);
+    expect(store.backfillWindowStep(3, 6)).toEqual({ done: true, cursor: 0 });
+    expect(store.pendingBackfill()).toBe(3);
+  });
 });
