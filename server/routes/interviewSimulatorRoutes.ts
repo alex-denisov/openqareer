@@ -1,5 +1,6 @@
 import { registerInterviewDiaryRoutes } from './interviewDiaryRoutes';
 import { registerB640InterviewTrainingRoutes } from './b640InterviewTrainingRoutes';
+import { judgedEvaluation } from './interviewAnswerJudging';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -358,7 +359,13 @@ const handleSubmitAnswer: Handler = async (deps, request, reply) => {
     return sendConflict(reply, request, 'interview_question_changed', 'Откройте текущий вопрос.');
   }
   if (currentQuestion.answer && !parsed.data.replaceAnswer) return sendConflict(reply, request, 'interview_answer_exists', 'Ответ уже записан. Выберите «Ответить ещё раз», чтобы заменить его.');
-  const evaluation = scoreInterviewAnswer(parsed.data.answer, currentQuestion.type);
+  // B780: критерии оценивает модель (одна оценка на ответ — она сохраняется), правила — запасной путь.
+  const evaluation = await judgedEvaluation(
+    deps,
+    request.log,
+    { type: currentQuestion.type, question: currentQuestion.prompt, answer: parsed.data.answer },
+    scoreInterviewAnswer(parsed.data.answer, currentQuestion.type),
+  );
   const saved = persistInterviewAnswer(
     deps, candidate.id, session, parsed.data.answer, parsed.data.elapsedSeconds, evaluation,
   );
