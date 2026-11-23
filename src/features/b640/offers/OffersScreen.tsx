@@ -208,7 +208,9 @@ export function OffersScreen() {
   const load = useCallback((signal: AbortSignal) => loadOffers(signal), []);
   const { state, reload } = useAsync(load, 'Офферы не загрузились.');
   const [saved] = useState(takeSavedFlash);
-  useScreenChrome({ rootData: { mtight: '1' } });
+  const empty = state.status === 'ready' && state.data.cards.length === 0;
+  // Макеты: o06/o06a — плотные мобильные отступы, пустое «Офферов пока нет» (o06b) — обычные.
+  useScreenChrome({ rootData: empty ? {} : { mtight: '1' } });
   return (
     <div className="page two" data-b640-node="o06" data-b640-section="offers">
       {saved ? (

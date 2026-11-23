@@ -129,8 +129,10 @@ test.describe('B663: «Дневник» — адаптация', () => {
     const results = page.locator('[data-b640-node="d04"]');
     await expect(results.locator('.row')).toHaveCount(3);
     await expect(results.locator('.tag.part')).toHaveText('отстаёт');
-    await expect(results.getByRole('button', { name: 'Скопировать' })).toHaveCount(2);
+    await expect(results.getByRole('button', { name: 'Скопировать' })).toHaveCount(1);
     await expectGates(page);
+    await results.getByRole('button', { name: 'Подготовить разговор' }).click();
+    await expect(page.locator('.b640 aside.panel-col')).toBeVisible();
   });
 
   test('d04: «Добавить в профиль» — кнопка и галочка, окно, строки уходят, повтора нет', async ({

@@ -173,8 +173,9 @@ function useAnalysisPoll(pending: boolean, refresh: () => Promise<void>): void {
   }, [pending, refresh, tick]);
 }
 
-function chatMessage({ id, role, content }: ChatMessage): ChatMessage {
-  return { id, role, content };
+function chatMessage(message: ChatMessage & { readonly createdAt?: string }): ChatMessage {
+  const { id, role, content, createdAt } = message;
+  return createdAt ? { id, role, content, at: createdAt } : { id, role, content };
 }
 
 function newTurn(content: string): PendingTurn {
@@ -187,8 +188,17 @@ function refusalIn(error: unknown): TurnRefusal | null {
   return spent ? refusalOf(error.details) : null;
 }
 
+function questionOf(turn: PendingTurn, content: string): ChatMessage {
+  return { id: turn.messageId, role: 'user', content, at: new Date().toISOString() };
+}
+
 function answerOf(turn: PendingTurn, content: string): ChatMessage {
-  return { id: `reply:${turn.idempotencyKey}`, role: 'assistant', content };
+  return {
+    id: `reply:${turn.idempotencyKey}`,
+    role: 'assistant',
+    content,
+    at: new Date().toISOString(),
+  };
 }
 
 /**
@@ -236,7 +246,7 @@ function useTurns(feed: FeedInternals): Turns {
       if (pending.current) return;
       const turn = newTurn(content);
       pending.current = turn;
-      setMessages((current) => [...current, { id: turn.messageId, role: 'user', content }]);
+      setMessages((current) => [...current, questionOf(turn, content)]);
       void deliver(turn);
     },
     [deliver, setMessages],

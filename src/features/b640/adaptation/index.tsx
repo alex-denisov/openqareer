@@ -7,6 +7,7 @@ import { PlanScreen } from './PlanScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { StepScreen, STEP_OF_NODE } from './StepScreen';
 import { useB640Title } from '../kit/useB640Title';
+import { useDiaryTitleTip } from '../diary/diaryTitleTip';
 
 /**
  * Вход раздела «Адаптация» (B663): экран узла выбирается по `node.code`.
@@ -14,6 +15,7 @@ import { useB640Title } from '../kit/useB640Title';
  */
 export default function Section({ node }: SectionProps) {
   useB640Title('Дневник');
+  useDiaryTitleTip(node);
   if (node.code === 'd01') return <PlanScreen node={node} />;
   if (node.code === 'd01c') return <MeetingScreen node={node} />;
   if (node.code === 'd01d') return <PeopleScreen node={node} />;
