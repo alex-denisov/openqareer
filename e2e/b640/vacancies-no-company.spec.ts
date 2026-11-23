@@ -7,6 +7,8 @@ import { matchedVacancyPage } from '../fixtures/readabilityWorkspace';
  * «Подборку» — ссылка v10b без companyId. Строка показывает компанию текстом, раздел на месте.
  */
 const TOTAL = 45;
+const BARE_ID = 'cluster-tg-it_vakansii_udalenka-2838';
+const TG_POST = 'https://t.me/it_vakansii_udalenka/2838';
 
 type Page50 = ReturnType<typeof matchedVacancyPage>;
 
@@ -21,8 +23,18 @@ function withBareFirst(page: Page50, offset: number): Page50 {
     cluster: {
       ...first.cluster,
       firstObservedAt: now,
-      sources: first.cluster.sources.map((source) => ({ ...source, observedAt: now })),
-      id: 'cluster-tg-it_vakansii_udalenka-2838',
+      sources: [
+        {
+          ...first.cluster.sources[0],
+          sourceType: 'telegram',
+          sourceId: 'tg-it_vakansii_udalenka',
+          sourceName: 'IT вакансии удалёнка',
+          sourceUrl: TG_POST,
+          observedAt: now,
+        },
+      ],
+      primaryUrl: TG_POST,
+      id: BARE_ID,
       canonicalTitle: 'Технический директор / Tech lead / CTO',
       canonicalCompany: '',
     },
@@ -60,3 +72,15 @@ for (const path of ['/app/vacancies', '/app/vacancies?role=CTO&date=30']) {
     );
   });
 }
+
+/** B726 (B645, прод 23.11): v04 поста Telegram без компании — без пустого «О компании» и «сайта работодателя». */
+test('B726: карточка вакансии без компании — источник назван постом Telegram', async ({ page }) => {
+  await open(page, `/app/vacancies/${BARE_ID}`);
+  const link = page.getByRole('link', { name: 'Открыть пост в Telegram' });
+  await expect(link).toBeVisible({ timeout: 15_000 });
+  await expect(link).toHaveAttribute('href', TG_POST);
+  await expect(page.getByText('Что-то пошло не так')).toHaveCount(0);
+  await expect(page.getByText('Открыть на сайте работодателя')).toHaveCount(0);
+  await expect(page.getByText('Сайт компании')).toHaveCount(0);
+  await expect(page.locator('.b640 .v4-about-co')).toHaveCount(0);
+});

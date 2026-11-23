@@ -17,11 +17,12 @@ export interface RoleTitleRuBackfillDeps {
 const CYRILLIC = /[А-Яа-яЁё]/u;
 
 /**
- * Версия, которой проверены переводы кампании: та же, что у промпта называния, — правка
- * перевода (v7: Operations — эксплуатация, а не инфраструктура) поднимает её, и записанное
- * прошлой версией пересчитывается один раз.
+ * Версия, которой проверены переводы кампании: правка перевода (v7: Operations — эксплуатация,
+ * а не инфраструктура; v8: уровень не латиницей) поднимает её, и записанное прошлой версией
+ * пересчитывается один раз фоном. Своя, не версия промпта называния: та входит в ключ кэша ролей,
+ * и её подъём звал бы модель на первом входе «Карьеры» у каждого кандидата.
  */
-export const ROLE_TITLES_RU_VERSION = ROLE_NAMING_PROMPT_VERSION;
+export const ROLE_TITLES_RU_VERSION = Math.max(ROLE_NAMING_PROMPT_VERSION, 8);
 
 function allTitles(campaign: Campaign): string[] {
   return [...campaign.roles, ...(campaign.careerRoles ?? []).map((role) => role.title)];

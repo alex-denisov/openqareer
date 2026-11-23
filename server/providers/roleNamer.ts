@@ -463,6 +463,18 @@ const DURABLE_TTL_MS = 7 * 24 * 60 * 60_000;
  * незачем. Память — быстрый слой, переживает рестарт база: без неё каждый
  * деплой снова звал модель и упирался в исчерпанную квоту (INC-035, B191).
  */
+/**
+ * B748 (переводы v8): сохранённое прежней проверкой название проходит нынешнюю без модели.
+ * Не прошедшее отбрасывается — экран берёт перевод, который фоновый проход записал роли.
+ */
+function recheckedTitleRu(role: NamedRole): NamedRole {
+  if (!role.titleRu) return role;
+  const titleRu = checkedTitleRu(role.title, role.titleRu);
+  if (titleRu === role.titleRu) return role;
+  const { titleRu: _dropped, ...rest } = role;
+  return titleRu ? { ...rest, titleRu } : rest;
+}
+
 export class CachedRoleNamer implements RoleNamer {
   private readonly entries = new Map<string, { at: number; outcome: RoleNamingOutcome }>();
 
@@ -504,7 +516,7 @@ export class CachedRoleNamer implements RoleNamer {
     const stored = this.store?.read(key);
     if (stored && this.now() - stored.at < this.durableTtlMs) {
       const outcome: RoleNamingOutcome = {
-        roles: stored.roles,
+        roles: stored.roles.map(recheckedTitleRu),
         ...(stored.stage ? { stage: stored.stage } : {}),
       };
       this.entries.set(key, { at: this.now(), outcome });
