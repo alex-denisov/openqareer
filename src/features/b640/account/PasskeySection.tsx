@@ -1,6 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
+import { getApiBaseUrl } from '../../coach/apiClient';
+import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
+import { openExternalLink } from '../../../services/desktop/openExternalLink';
 import { Icon } from '../kit/Icon';
+import { buildNodePath } from '../routes';
 import { ErrorLine, useLoad, type Load } from './parts';
 import {
   listPasskeys,
@@ -54,6 +58,31 @@ function addFailure(reason: unknown): string {
   return failureText(reason, 'Не удалось добавить устройство');
 }
 
+/**
+ * В .app ключ не создаётся: окно приложения не на адресе сайта. «Добавить устройство» открывает
+ * «Вход и безопасность» в браузере, ключ живёт там же, где идёт вход в приложение (B755).
+ */
+function AppPasskeyRow({ keys }: { readonly keys: readonly PasskeySummary[] }) {
+  const site = getApiBaseUrl() || window.location.origin;
+  return (
+    <li className="set-row">
+      <div className="set-l">
+        <span className="set-t">Вход по Touch ID / Face ID</span>
+        <span className="set-v">{`ключей: ${keys.length}`}</span>
+      </div>
+      <div className="set-r">
+        <button
+          className="btn is-sm"
+          type="button"
+          onClick={() => void openExternalLink(`${site}${buildNodePath('n04')}`)}
+        >
+          Добавить устройство
+        </button>
+      </div>
+    </li>
+  );
+}
+
 /** Строка «Вход» (n04): состояние ключа на этом устройстве и «Добавить устройство». */
 export function PasskeyRow({
   state,
@@ -63,7 +92,9 @@ export function PasskeyRow({
   readonly currentLabel: string | null;
 }) {
   const { load, adding, setAdding } = state;
-  if (load.state !== 'ready' || !browserSupportsWebAuthn()) return null;
+  if (load.state !== 'ready') return null;
+  if (isTauriEnvironment()) return <AppPasskeyRow keys={load.data} />;
+  if (!browserSupportsWebAuthn()) return null;
   return (
     <li className="set-row">
       <div className="set-l">
