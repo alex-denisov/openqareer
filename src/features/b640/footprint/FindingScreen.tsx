@@ -122,7 +122,7 @@ function OwnerRow({ item, onDone }: { readonly item: FootprintRiskItem; readonly
   if (!item.url || !target) return null;
   return (
     <>
-      <div className="actions fp-ext-row">
+      <div className="actions fp-owner-row">
         <a className="btn is-primary" href={item.url} rel="noopener noreferrer" target="_blank"
           aria-label={`Открыть страницу ${item.title}, откроется в новой вкладке`}>
           Открыть страницу

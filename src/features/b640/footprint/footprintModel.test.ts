@@ -7,6 +7,7 @@ import {
   defaultSelection,
   failedChecks,
   findingsWord,
+  firstToRemove,
   letterText,
   riskLine,
   mailtoHref,
@@ -135,5 +136,21 @@ describe('B645 f03b: строка «Риск» — уровень и почем�
   });
   it('без причины — прежняя подпись уровня', () => {
     expect(riskLine(base)).toBe('высокий риск');
+  });
+});
+
+describe('B645 f03: главная кнопка — первая находка, которую стоит убрать', () => {
+  const nick = { ...item, id: 'nick', action: { kind: 'confirm_owner' as const, label: 'Проверить' } };
+  const check = { ...item, id: 'check', action: { kind: 'check_now' as const, label: 'Проверить' } };
+  const hide = { ...item, id: 'hide', action: { kind: 'hide' as const, label: 'Скрыть' } };
+  it('страницы «Проверить» пропускает', () => {
+    expect(firstToRemove([nick, check, hide])?.id).toBe('hide');
+  });
+  it('убирать нечего — первая страница «Проверить»', () => {
+    expect(firstToRemove([nick, check])?.id).toBe('nick');
+  });
+  it('полезные и разобранные не берёт', () => {
+    const useful = { ...item, action: { kind: 'not_mine' as const, label: 'Это не моё' } };
+    expect(firstToRemove([useful, { ...hide, action: null }])).toBeUndefined();
   });
 });
