@@ -58,11 +58,20 @@ describe('n01b «Важно»: сводка входов', () => {
     expect(lines[0]!.items.map((entry) => entry.id)).toEqual(['hh', 'l1']);
   });
 
-  it('два события одной площадки — одно подключение, название в списке один раз', () => {
-    const hhAgain = { ...hhSession, id: 'hh2' };
-    const [line] = pinnedLines([hhSession, hhAgain]);
-    expect(line).toMatchObject({ title: '1 подключение требует входа', detail: 'hh.ru' });
-    expect(line!.items.map((entry) => entry.id)).toEqual(['hh', 'hh2']);
+  it('два события одной площадки — обычная строка последнего, без сводки', () => {
+    const hhAgain = {
+      ...hhSession,
+      id: 'hh2',
+      title: 'hh.ru: нужен вход',
+      createdAt: '2026-11-16T09:00:00.000Z',
+    };
+    const lines = pinnedLines([hhSession, failed, hhAgain]);
+    expect(lines.map((line) => line.title)).toEqual([
+      'hh.ru: нужен вход',
+      'Отклик не дошёл · Карта',
+    ]);
+    expect(lines[0]!.detail).toBeNull();
+    expect(lines[0]!.items.map((entry) => entry.id)).toEqual(['hh', 'hh2']);
   });
 
   it('событие без площадки — «другое подключение» и +1 к числу', () => {

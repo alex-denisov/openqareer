@@ -63,16 +63,29 @@ function loginSummary(items: readonly B640Notification[]): PinnedLine {
   };
 }
 
+function connectionOf(item: B640Notification): string {
+  return loginName(item) ?? OTHER_CONNECTION;
+}
+
+/** Одно подключение с несколькими событиями — строка последнего; клик отмечает все. */
+function connectionLine(items: readonly B640Notification[]): PinnedLine {
+  const head = items.reduce((last, item) => (item.createdAt > last.createdAt ? item : last));
+  return { ...singleLine(head), items };
+}
+
 /**
- * n01b «Важно»: два и больше входа на площадки — одна строка «2 подключения требуют входа»
- * со списком внутри и «Подключить»; она стоит на месте первого из них.
+ * n01b «Важно»: входа требуют два и больше различных подключения — одна строка
+ * «2 подключения требуют входа» со списком внутри и «Подключить»; события одного
+ * подключения — его обычная строка. Она стоит на месте первого из них.
  */
 export function pinnedLines(pinned: readonly B640Notification[]): readonly PinnedLine[] {
   const logins = pinned.filter(needsLogin);
   if (logins.length < 2) return pinned.map(singleLine);
+  const connections = new Set(logins.map(connectionOf));
+  const merged = connections.size >= 2 ? loginSummary(logins) : connectionLine(logins);
   const firstLogin = logins[0]!;
   return pinned.flatMap((item) => {
     if (!needsLogin(item)) return [singleLine(item)];
-    return item === firstLogin ? [loginSummary(logins)] : [];
+    return item === firstLogin ? [merged] : [];
   });
 }
