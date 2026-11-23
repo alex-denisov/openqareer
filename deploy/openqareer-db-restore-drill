@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# B777: учебное восстановление последней копии из S3. Закрытый ключ age приходит на stdin
+# (с Mac владельца: OPENQAREER_BACKUP_AGE_KEY) и живёт только в памяти этого процесса.
+#   grep '^OPENQAREER_BACKUP_AGE_KEY=' ~/.openqareer/openqareer.env | cut -d= -f2- |
+#     ssh openqareer-de-1 'bash /usr/local/sbin/openqareer-db-restore-drill'
+# Скачивает последний архив во временную папку, сверяет sha256 с манифестом, расшифровывает,
+# распаковывает, PRAGMA integrity_check, печатает итог и всё удаляет. Живую базу не трогает.
+set -Eeuo pipefail
+umask 077
+
+readonly BUCKET="${OPENQAREER_BACKUP_BUCKET:-openqareer-data}"
+readonly NODE=/opt/openqareer/node-v24.14.1-linux-x64/bin/node
+readonly ROOT="${OPENQAREER_DRILL_DIR:-/var/lib/openqareer-backup}"
+
+[[ "${EUID}" -eq 0 ]] || { printf 'run as root\n' >&2; exit 1; }
+IFS= read -r identity
+[[ "$identity" == AGE-SECRET-KEY-* ]] || { printf 'no age identity on stdin\n' >&2; exit 1; }
+
+: > "$ROOT/.rclone.conf"
+export RCLONE_CONFIG="$ROOT/.rclone.conf"
+set -a
+# shellcheck disable=SC1091
+. /etc/openqareer/backup.env
+set +a
+export RCLONE_CONFIG_OQS3_TYPE=s3 RCLONE_CONFIG_OQS3_PROVIDER=Other \
+  RCLONE_CONFIG_OQS3_ENDPOINT=https://s3.cloud.ru RCLONE_CONFIG_OQS3_REGION=ru-central-1 \
+  RCLONE_CONFIG_OQS3_ACCESS_KEY_ID="${CLOUDRU_PROJECT_ID}:${CLOUDRU_S3_KEY_ID}" \
+  RCLONE_CONFIG_OQS3_SECRET_ACCESS_KEY="$CLOUDRU_S3_KEY_SECRET" RCLONE_CONFIG_OQS3_NO_CHECK_BUCKET=true
+
+drill="$(mktemp -d "$ROOT/drill.XXXXXX")"
+trap 'rm -rf -- "$drill"' EXIT
+
+key="$(rclone lsf -R --files-only "oqs3:$BUCKET/db" | grep '\.db\.zst\.age$' | sort | tail -1)"
+[[ -n "$key" ]] || { printf 'no archives in the bucket\n' >&2; exit 1; }
+key="db/$key"
+started="$(date +%s)"
+rclone copyto "oqs3:$BUCKET/$key" "$drill/archive"
+rclone copyto "oqs3:$BUCKET/${key%.db.zst.age}.json" "$drill/manifest.json"
+downloaded="$(date +%s)"
+expected="$("$NODE" -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256)' "$drill/manifest.json")"
+actual="$(sha256sum "$drill/archive" | cut -d' ' -f1)"
+[[ "$expected" == "$actual" ]] || { printf 'sha256 mismatch\n' >&2; exit 1; }
+age -d -i <(printf '%s\n' "$identity") "$drill/archive" | nice -n 19 zstd -d -q -o "$drill/restored.db"
+unset identity
+rm -f -- "$drill/archive"
+restored="$(date +%s)"
+result="$(nice -n 19 ionice -c3 "$NODE" -e '
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(process.argv[1], { readOnly: true });
+  const check = db.prepare("PRAGMA integrity_check").all().map((row) => Object.values(row)[0]).join("; ").slice(0, 300);
+  const clusters = db.prepare("SELECT COUNT(*) AS n FROM vacancy_clusters").get().n;
+  console.log(JSON.stringify({ check, clusters }));' "$drill/restored.db")"
+checked="$(date +%s)"
+printf '{"key":"%s","sha256":"ok","bytes":%s,"downloadSec":%s,"decryptSec":%s,"checkSec":%s,"result":%s}\n' \
+  "$key" "$(stat -c %s "$drill/restored.db")" $((downloaded - started)) $((restored - downloaded)) \
+  $((checked - restored)) "$result"
