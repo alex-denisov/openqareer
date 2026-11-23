@@ -7,6 +7,7 @@ import type {
   ResumeStudioView,
 } from '../../resume/resumeTypes';
 import { buildNodePath } from '../routes';
+import { languageNameRu } from '../../../../shared/languageNames';
 
 /** Текст факта по его id: результаты места работы хранятся ссылками на факты. */
 export function statementsOf(view: ResumeStudioView): ReadonlyMap<string, string> {
@@ -155,7 +156,7 @@ export interface LanguageRow {
 }
 
 export function languageRow(language: ResumeLanguageInput): LanguageRow | null {
-  const name = language.name?.trim();
+  const name = language.name?.trim() ? languageNameRu(language.name) : '';
   if (!name) return null;
   const step = language.cefr ? CEFR_STEPS.indexOf(language.cefr) + 1 : 0;
   return { id: language.id, name, level: language.cefr ?? null, filled: step };
