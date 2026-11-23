@@ -30,3 +30,18 @@ export function resolvePoolVacancyCluster(engine: Engine, id: string): VacancyCl
   const cluster = createClusterFromVacancy(record);
   return cluster.id === rowId ? cluster : undefined;
 }
+
+/**
+ * B765 (B645 23.11): карточка строки подборки. Строка `cluster-<запись>` — сама запись: подборка
+ * собирает её из той же записи пула. Через ключ участника `getActiveCluster` отдавал склеенный
+ * кластер другой вакансии (Arootah: 200–300 $/ч основателя вместо 275–425 $/ч строки).
+ * Снятая запись — прежний порядок `resolvePoolVacancyCluster`.
+ */
+export function resolveRowVacancyCluster(engine: Engine, id: string): VacancyCluster | undefined {
+  const resolved = resolvePoolVacancyCluster(engine, id);
+  if (resolved?.id === id || !id.startsWith(ROW_PREFIX)) return resolved;
+  const record = engine.getVacancy?.(id.slice(ROW_PREFIX.length));
+  if (record?.status !== 'active') return resolved;
+  const own = createClusterFromVacancy(record);
+  return own.id === id ? own : resolved;
+}

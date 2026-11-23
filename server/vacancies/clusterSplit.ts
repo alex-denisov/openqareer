@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import { vacancyKey } from '../../shared/vacancyCatalogRoutes';
 import { parseVacancy } from './sqliteVacancyPoolStore';
 import { clusterKeys, clusterVacancies, sourceMemberKey } from './vacancyDeduplicator';
 
@@ -88,9 +89,15 @@ export interface ClusterSplitCounts {
   skippedCandidateRef: number;
   /** Разбитые кластеры, у которых уже был кэш требований: верхняя граница задач (B752). */
   splitWithRequirements: number;
+  /** Новые куски этих кластеров: у них нет строки требований, это верх числа задач. */
+  piecesWithRequirements: number;
+  /** Переезды страниц, по которым шаг запишет переадресацию (ключ свободен, адрес с ключом). */
+  redirects: number;
+  /** Примерный объём журнала: строка кластера, его ключи и строка каталога, байты. */
+  journalBytesEstimate: number;
 }
 
-function tableExists(db: DatabaseSync, table: string): boolean {
+export function tableExists(db: DatabaseSync, table: string): boolean {
   return (
     db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
     undefined
@@ -126,7 +133,7 @@ export function loadMemberVacancies(
   return found;
 }
 
-function parseCluster(json: string): VacancyCluster | undefined {
+export function parseCluster(json: string): VacancyCluster | undefined {
   try {
     const parsed = JSON.parse(json) as VacancyCluster;
     return parsed && typeof parsed.id === 'string' && Array.isArray(parsed.sources)
@@ -142,6 +149,36 @@ interface DryRunContext {
   readonly referenced: ReadonlyMap<string, string>;
   readonly hasRequirements: boolean;
   readonly counts: ClusterSplitCounts;
+}
+
+interface CatalogRowForCount {
+  entry_key: string;
+  path: string;
+  source_url: string;
+}
+
+/** Переезд страницы и объём журнала — по тем же правилам, что у шага разбиения. */
+function countCatalog(
+  context: DryRunContext,
+  cluster: VacancyCluster,
+  pieces: readonly VacancyCluster[],
+): void {
+  const { db, counts } = context;
+  const entry = db.prepare('SELECT * FROM catalog_entries WHERE cluster_id = ?').get(cluster.id) as
+    CatalogRowForCount | undefined;
+  counts.journalBytesEstimate +=
+    Buffer.byteLength(JSON.stringify(cluster)) * 2 +
+    Buffer.byteLength(JSON.stringify(clusterKeys(cluster))) +
+    (entry ? Buffer.byteLength(JSON.stringify(entry)) : 0);
+  if (!entry) return;
+  const holder = pieces.findIndex((piece) =>
+    piece.sources.some((source) => source.sourceUrl === entry.source_url),
+  );
+  if (holder <= 0) return;
+  counts.catalogMoved += 1;
+  const newKey = vacancyKey(pieces[holder]!.id);
+  const taken = db.prepare('SELECT 1 FROM catalog_entries WHERE entry_key = ?').get(newKey);
+  if (!taken && entry.path.endsWith(`-${entry.entry_key}`)) counts.redirects += 1;
 }
 
 function countCluster(context: DryRunContext, cluster: VacancyCluster): void {
@@ -160,20 +197,15 @@ function countCluster(context: DryRunContext, cluster: VacancyCluster): void {
   counts.clustersSplit += 1;
   counts.piecesCreated += pieces.length - 1;
   for (const piece of pieces) counts.keysRewritten += clusterKeys(piece).length;
-  const entry = db
-    .prepare('SELECT source_url FROM catalog_entries WHERE cluster_id = ?')
-    .get(cluster.id) as { source_url: string } | undefined;
-  const holder = entry
-    ? pieces.findIndex((piece) => piece.sources.some((s) => s.sourceUrl === entry.source_url))
-    : -1;
-  if (holder > 0) counts.catalogMoved += 1;
+  countCatalog(context, cluster, pieces);
   if (
     context.hasRequirements &&
     db
-      .prepare('SELECT 1 FROM vacancy_requirements_cache WHERE cluster_id = ? LIMIT 1')
+      .prepare('SELECT 1 FROM vacancy_requirements_cache WHERE vacancy_id = ? LIMIT 1')
       .get(cluster.id)
   ) {
     counts.splitWithRequirements += 1;
+    counts.piecesWithRequirements += pieces.length - 1;
   }
 }
 
@@ -201,6 +233,9 @@ export function runClusterSplitDryRun(
       catalogMoved: 0,
       skippedCandidateRef: 0,
       splitWithRequirements: 0,
+      piecesWithRequirements: 0,
+      redirects: 0,
+      journalBytesEstimate: 0,
     },
   };
   const page = db.prepare(

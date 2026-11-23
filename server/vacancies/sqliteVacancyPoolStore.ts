@@ -3,6 +3,7 @@ import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolL
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
 import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema';
+import { CLUSTER_SPLIT_TABLES } from '../data/clusterSplitSchema';
 import {
   prunePoolInBatches,
   prunePoolInBatchesAsync,
@@ -26,6 +27,7 @@ import {
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import { prepareCatalogProjectionStatements, writeCatalogEntry } from './catalogEntryWriter';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import {
   MIGRATION_23,
@@ -88,7 +90,6 @@ import type {
   ClusterMerge,
 } from './vacancyPoolStore';
 import {
-  catalogEntryRowOfCluster,
   type CatalogEntriesPage,
   type CatalogEntriesQuery,
   type CatalogEntryRow,
@@ -184,11 +185,6 @@ interface CatalogEntrySqlRow {
   last_seen_ms: number;
 }
 
-interface CatalogProjectionStatements {
-  readonly upsert: { run(...values: SQLInputValue[]): unknown };
-  readonly markSeen: { run(...values: SQLInputValue[]): unknown };
-  readonly remove: { run(...values: SQLInputValue[]): unknown };
-}
 
 /** 03.11: a sibling process holding an older reading ledger never overwrites a newer one. */
 const OBSERVATIONS_NEWER_WINS = `CASE
@@ -471,7 +467,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
-    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES);
+    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES + CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
     // (например, `:memory:` в тестах, где второго соединения не будет).
@@ -1871,61 +1867,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
-  /**
-   * The 32-bit `vacancyKey` of two different clusters can collide (03.11 prod:
-   * UNIQUE entry_key aborted a whole Indeed write). The first holder keeps the
-   * key, the later cluster is simply not addressable, and the write goes on.
-   */
-  private prepareCatalogEntryUpsert(): CatalogProjectionStatements['upsert'] {
-    const holder = this.database.prepare(
-      'SELECT cluster_id FROM catalog_entries WHERE entry_key = ? AND cluster_id <> ?',
-    );
-    const statement = this.prepareCatalogEntryStatement();
-    return {
-      run: (...values: SQLInputValue[]) => {
-        if (holder.get(values[1] as string, values[0] as string)) return undefined;
-        return statement.run(...values);
-      },
-    };
-  }
-
-  private prepareCatalogEntryStatement() {
-    return this.database.prepare(
-      `INSERT INTO catalog_entries (
-         cluster_id, entry_key, path, title, company, location, is_remote,
-         salary_label, summary, skills_json, source_url, source_name,
-         published_at, last_seen_at, source_count, status,
-         place_slug, place_label, role_slug, role_label, published_ms, last_seen_ms
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(cluster_id) DO UPDATE SET
-         entry_key = excluded.entry_key,
-         path = excluded.path,
-         title = excluded.title,
-         company = excluded.company,
-         location = excluded.location,
-         is_remote = excluded.is_remote,
-         salary_label = excluded.salary_label,
-         summary = excluded.summary,
-         skills_json = excluded.skills_json,
-         source_url = excluded.source_url,
-         source_name = excluded.source_name,
-         published_at = excluded.published_at,
-         last_seen_at = excluded.last_seen_at,
-         source_count = excluded.source_count,
-         status = excluded.status,
-         place_slug = excluded.place_slug,
-         place_label = excluded.place_label,
-         role_slug = excluded.role_slug,
-         role_label = excluded.role_label,
-         published_ms = excluded.published_ms,
-         last_seen_ms = excluded.last_seen_ms`,
-    );
-  }
-
   private markCatalogSeen(
     clusterId: string,
     processedAt = Date.now(),
-    statement?: CatalogProjectionStatements['markSeen'],
+    statement?: { run(...values: SQLInputValue[]): unknown },
   ): void {
     const markSeen =
       statement ??
@@ -1936,75 +1881,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     markSeen.run(clusterId, processedAt);
   }
 
-  private writeCatalogEntry(
-    cluster: VacancyCluster,
-    statements: CatalogProjectionStatements,
-  ): void {
-    const entry = catalogEntryRowOfCluster(cluster);
-    if (!entry) {
-      // An unaddressable role is intentionally absent from the public catalog,
-      // but still marked as inspected so it cannot hold the backfill open.
-      statements.remove.run(cluster.id);
-      this.markCatalogSeen(cluster.id, Date.now(), statements.markSeen);
-      return;
-    }
-    const publishedMs = Date.parse(entry.publishedAt);
-    const lastSeenMs = Date.parse(entry.lastSeenAt);
-    statements.upsert.run(
-      entry.clusterId,
-      entry.key,
-      entry.path,
-      entry.title,
-      entry.company,
-      entry.location ?? null,
-      entry.isRemote ? 1 : 0,
-      entry.salaryLabel ?? null,
-      entry.summary,
-      JSON.stringify(entry.skills),
-      entry.sourceUrl,
-      entry.sourceName ?? null,
-      entry.publishedAt,
-      entry.lastSeenAt,
-      entry.sourceCount,
-      entry.status,
-      entry.placeSlug ?? null,
-      entry.placeLabel ?? null,
-      entry.roleSlug ?? null,
-      entry.roleLabel ?? null,
-      Number.isFinite(publishedMs) ? publishedMs : 0,
-      Number.isFinite(lastSeenMs) ? lastSeenMs : 0,
-    );
-    this.markCatalogSeen(cluster.id, Date.now(), statements.markSeen);
-  }
-
   private upsertCatalogEntry(cluster: VacancyCluster): void {
-    this.writeCatalogEntry(cluster, {
-      upsert: this.prepareCatalogEntryUpsert(),
-      markSeen: this.database.prepare(
-        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
-         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
-      ),
-      remove: this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
-    });
+    writeCatalogEntry(cluster, prepareCatalogProjectionStatements(this.database));
   }
 
   private persistCatalogProjectionBatch(
     rows: ReadonlyArray<{ rowid: number; id: string; cluster_json: string }>,
   ): void {
-    const statements: CatalogProjectionStatements = {
-      upsert: this.prepareCatalogEntryUpsert(),
-      markSeen: this.database.prepare(
-        `INSERT INTO catalog_entries_seen (cluster_id, processed_at) VALUES (?, ?)
-         ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
-      ),
-      remove: this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
-    };
+    const statements = prepareCatalogProjectionStatements(this.database);
     this.inTransaction(() => {
       for (const row of rows) {
         try {
           const parsed = JSON.parse(row.cluster_json) as VacancyCluster;
           if (parsed && typeof parsed.id === 'string') {
-            this.writeCatalogEntry(parsed, statements);
+            writeCatalogEntry(parsed, statements);
           } else {
             statements.remove.run(row.id);
             this.markCatalogSeen(row.id, Date.now(), statements.markSeen);

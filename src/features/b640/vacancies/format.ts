@@ -1,5 +1,9 @@
 import { convertAmount, type CurrencyRates } from '../../../../shared/currencyRates';
-import { monthlyAmount, salaryPeriodOf } from '../../../../shared/monthlyRubSalary';
+import {
+  monthlyAmount,
+  salaryPeriodOf,
+  type SalaryPeriod,
+} from '../../../../shared/monthlyRubSalary';
 import type { VacancyFitTier } from '../../../../shared/vacancyFitPercent';
 import { workFormatLabel } from '../../../../shared/vacancyWorkFormat';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
@@ -122,13 +126,13 @@ function ratesNote(rates: CurrencyRates, target: MoneyCurrency): string {
   return `курс ЦБ на ${day}.${month}${pairs.length > 0 ? `: ${pairs.join(', ')}` : ''}`;
 }
 
-type SalaryPeriod = 'hour' | 'month' | 'year';
 type ClusterSalary = NonNullable<MatchedVacancyItem['cluster']['salary']>;
 
 const PERIOD_WORDS: Readonly<Record<SalaryPeriod, string>> = {
   hour: ' в час',
   month: '',
   year: ' в год',
+  unknown: '',
 };
 
 /** Сумма как в вакансии, с периодом: «$218–265 тыс. в год», «$250–400 в час». */
@@ -152,7 +156,8 @@ export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): Mone
   const original = originalText(salary, period);
   const target = options.currency;
   const source = salary.currency ?? '';
-  if (target === 'ORIG' || !source) return splitRouble(original);
+  // Период неизвестен — сумма как в вакансии: пересчёт в месяц и в ₽ был бы выдумкой.
+  if (target === 'ORIG' || !source || period === 'unknown') return splitRouble(original);
   if (target === 'RUB' && isRouble(source) && period === 'month') return splitRouble(original);
   const shown = shownAmounts(salary, period);
   const convert = (amount: number | undefined) =>
