@@ -544,6 +544,38 @@ test.describe('B691: сигналы на «Сегодня»', () => {
     expect(calls.answers).toEqual(['no', 'undo']);
   });
 
+  test('390: ответы «Присматриваюсь» в нижней полосе по макету s04, содержимое не закрыто', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'полоса только на телефоне');
+    await openCabinet(page, '/app/today', { status: 'looking', signal: 'started_search' });
+    const box = async (name: string) =>
+      (await card(page).getByRole('button', { name, exact: true }).boundingBox())!;
+    const [yes, no, later] = [await box('Верно'), await box('Нет'), await box('Не сейчас')];
+    const width = page.viewportSize()!.width;
+    // Макет s04 на 390: «Нет» слева, «Верно» справа на полширины, «Не сейчас» строкой выше справа.
+    expect(Math.round(no.x)).toBe(16);
+    expect(Math.round(yes.x + yes.width)).toBe(width - 16);
+    expect(Math.round(yes.width)).toBe((width - 32) / 2);
+    expect(Math.round(yes.y)).toBe(Math.round(no.y));
+    expect(Math.round(later.x + later.width)).toBe(width - 16);
+    expect(Math.round(later.y + later.height)).toBe(Math.round(yes.y));
+    expect(yes.height).toBe(44);
+    // «Верно» остаётся контурной (решение CPO): главная кнопка экрана — не она.
+    await expect(card(page).getByRole('button', { name: 'Верно' })).not.toHaveClass(/is-primary/u);
+    // Полоса над нижней навигацией и при полной прокрутке не закрывает содержимое (урок s03).
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const covered = await page.evaluate(() => {
+      const bar = document
+        .querySelector('.route.why .why-body > .actions')!
+        .getBoundingClientRect();
+      const blocks = [...document.querySelectorAll('#career-main .page > *:not(.route.why)')];
+      const last = blocks.at(-1)!.getBoundingClientRect();
+      return last.bottom > bar.top + 0.5;
+    });
+    expect(covered).toBe(false);
+  });
+
   test('«Верно» ведёт к выбору статуса с предложением, сам статус не меняет', async ({ page }) => {
     const calls = await openCabinet(page, '/app/today', {
       status: 'looking',
