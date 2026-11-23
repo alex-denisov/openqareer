@@ -23,6 +23,26 @@ const STAGE_FIRST_DAY: Readonly<Record<CareerDiaryAdaptationStageId, number>> = 
   days_61_90: 61,
 };
 
+/**
+ * Дни шага на новом месте (день выхода — 1), как в плане d01: «До выхода» и «Первые две недели»
+ * совпадают с `STEP_SPAN` экрана; карта людей ведётся весь срок адаптации.
+ */
+const STEP_DAYS: Readonly<Record<CareerDiaryAdaptationStepId, readonly [number, number]>> = {
+  before_start: [Number.NEGATIVE_INFINITY, 0],
+  first_two_weeks: [1, 13],
+  first_meeting: [1, 7],
+  people_map: [1, 90],
+  day_30_check: [28, 30],
+  settling: [1, 30],
+};
+
+/** B685: шаг без задач — по дню адаптации: дни прошли — пройден, идут — идёт, иначе впереди. */
+function progressByDay(id: CareerDiaryAdaptationStepId, day: number): CareerDiaryProgress {
+  const [from, to] = STEP_DAYS[id];
+  if (day > to) return 'done';
+  return day >= from ? 'active' : 'ahead';
+}
+
 /** Шаг задачи прежнего плана, у которой шаг не назван: по этапу и виду задачи. */
 function defaultStep(task: PlanTask): CareerDiaryAdaptationStepId | null {
   if (task.stage === 'prep') return 'before_start';
@@ -92,7 +112,9 @@ export function buildAdaptationView(input: AdaptationViewInput): CareerDiaryAdap
     }),
     steps: ADAPTATION_STEPS.map((id) => {
       const own = tasks.filter((task) => task.step === id);
-      return { id, groups: groupsOf(own), ...counted(own, own.some((task) => task.completed)) };
+      const summary = counted(own, own.some((task) => task.completed));
+      const status = own.length === 0 ? progressByDay(id, day) : summary.status;
+      return { id, groups: groupsOf(own), ...summary, status };
     }),
     probation: details.probation,
     firstMeeting: details.firstMeeting,
