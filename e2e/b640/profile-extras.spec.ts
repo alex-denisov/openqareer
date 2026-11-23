@@ -47,6 +47,7 @@ interface Calls {
   readonly reapplied: string[];
   linkedinTaken: number;
   readonly inResumePuts: unknown[];
+  readonly exports: Array<Record<string, unknown>>;
 }
 
 async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise<Calls> {
@@ -57,6 +58,7 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     reapplied: [],
     linkedinTaken: 0,
     inResumePuts: [],
+    exports: [],
   };
   let photoMediaId: string | null = mocks.photo ? 'photo-1' : null;
   let inResume = mocks.inResume ?? true;
@@ -96,6 +98,10 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     photoMediaId = `photo-${calls.uploads.length + 1}`;
     return route.fulfill({ json: { data: { photoMediaId } } });
+  });
+  await page.route(`${API}/resume-builder/export`, (route) => {
+    calls.exports.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4\n%%EOF' });
   });
   await page.route(`${API}/profile/photo/linkedin`, (route) => {
     calls.linkedinTaken += 1;
@@ -307,6 +313,28 @@ test.describe('B666: «Фото в резюме» в «Резюме под ро�
     await toggle.click();
     await expect(toggle).toBeChecked();
     expect(calls.inResumePuts).toEqual([{ inResume: true }]);
+  });
+
+  test('«Скачать» отдаёт PDF резюме под роль, «Открыть» — тот же файл в новой вкладке', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/profile');
+    const resume = page.locator('section[aria-labelledby="cv-title"]');
+    const download = page.waitForEvent('download');
+    await resume.getByRole('button', { name: /^Скачать резюме/u }).click();
+    expect((await download).suggestedFilename()).toMatch(/\.pdf$/u);
+    expect(calls.exports[0]).toMatchObject({
+      format: 'pdf',
+      template: 'strict',
+      profilePhoto: true,
+    });
+
+    const tab = page.context().waitForEvent('page');
+    await resume.getByRole('button', { name: /^Открыть резюме/u }).click();
+    // Вкладка открывается по нажатию; PDF в ней показывает просмотрщик браузера,
+    // которого нет в headless Chromium, поэтому здесь — что вкладка есть и файл собран.
+    expect(await tab).toBeTruthy();
+    await expect.poll(() => calls.exports.length).toBe(2);
   });
 });
 

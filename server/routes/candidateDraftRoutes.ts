@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { linkedinDraftsPerDay } from '../billing/linkedinDraftTariff';
 import { collectDraftFacts } from '../candidate/draftFacts';
 import type { CandidateDraft, CandidateDraftStatus, SqliteCandidateDraftRepository } from '../candidate/sqliteCandidateDraftRepository';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -354,13 +355,6 @@ function workflowError(reply: FastifyReply, request: FastifyRequest, result: Exc
   return routeError(reply, request, 409, 'draft_cadence_limit', `Следующий пост можно отметить опубликованным не раньше ${result.nextAllowedAt}.`);
 }
 
-function dailyDraftLimit(tier: string, kind: z.infer<typeof createSchema>['kind']): number {
-  if (tier === 'pro') return kind === 'comment' ? 3 : 0;
-  if (tier === 'executive' || tier === 'enterprise' || tier === 'max')
-    return kind === 'comment' ? 5 : 2;
-  return 0;
-}
-
 async function writeCandidateDraft(
   deps: CandidateDraftRouteDeps,
   request: FastifyRequest,
@@ -410,7 +404,7 @@ export async function prepareDraftText(
     return null;
   };
   const account = accountContext(deps, request, candidate);
-  const limit = dailyDraftLimit(account.tier, input.kind);
+  const limit = linkedinDraftsPerDay(account.tier, input.kind);
   if (!limit) return refuse(402, 'paywall_required', 'Для этого черновика нужен другой тариф.');
   const localDate = formatLocalDate(new Date(), account.timezone);
   if (deps.candidateDraftRepository.countForDay(candidate.id, localDate, input.kind) >= limit)

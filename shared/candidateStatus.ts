@@ -90,7 +90,7 @@ export interface CandidateStatusState {
   readonly revert: CandidateStatusRevert | null;
 }
 
-export const STATUS_CHANGE_OPTION_KEYS = ['pauseAutoApply'] as const;
+export const STATUS_CHANGE_OPTION_KEYS = ['pauseAutoApply', 'weeklySelection'] as const;
 export type StatusChangeOptionKey = (typeof STATUS_CHANGE_OPTION_KEYS)[number];
 
 /** Переключатель «Что можно поменять»: без отметки кандидата ничего не выключается. */

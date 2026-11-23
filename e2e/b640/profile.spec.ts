@@ -45,7 +45,15 @@ function preview(body: { status: string; targetProfession?: string }) {
     stays: [],
     options:
       body.status === 'working'
-        ? [{ key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true }]
+        ? [
+            { key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true },
+            // B779: как на сервере — подборка раз в неделю, отметка по тому, включена ли она.
+            {
+              key: 'weeklySelection',
+              label: 'Подборку в своей роли — раз в неделю',
+              checked: false,
+            },
+          ]
         : [],
   };
 }
@@ -205,9 +213,12 @@ test.describe('B651: «Статус» (s02)', () => {
     await expectGates(page);
 
     await screen.getByRole('checkbox', { name: 'Поставить автоотклики на паузу' }).uncheck();
+    await screen.getByRole('checkbox', { name: 'Подборку в своей роли — раз в неделю' }).check();
     await page.getByRole('button', { name: 'Сменить статус' }).click();
     await expect(page).toHaveURL(/\/app\/today$/u);
-    expect(calls.statusPuts).toEqual([{ status: 'working', options: { pauseAutoApply: false } }]);
+    expect(calls.statusPuts).toEqual([
+      { status: 'working', options: { pauseAutoApply: false, weeklySelection: true } },
+    ]);
   });
 
   test('предложение из адреса: статус и профессия подставлены, чужое значение отброшено', async ({

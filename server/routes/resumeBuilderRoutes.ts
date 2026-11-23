@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { builderResumeSchema, RESUME_TEMPLATES } from '../../shared/resumeBuilder/model';
+import { resumePhotoForExport, type ResumePhotoDeps } from '../candidate/resumePhotoForExport';
+import { SqliteResumePhotoRepository } from '../candidate/sqliteResumePhotoRepository';
+import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { renderResumeDocx } from '../resumeBuilder/resumeDocx';
 import { renderResumePdf } from '../resumeBuilder/resumePdf';
@@ -30,6 +34,8 @@ const exportSchema = z
     format: z.enum(['pdf', 'docx']),
     template: z.enum(RESUME_TEMPLATES),
     resume: builderResumeSchema,
+    /** s01 «Резюме под роль»: фото профиля в шапке по настройке «Фото в резюме». */
+    profilePhoto: z.boolean().optional(),
   })
   .strict();
 
@@ -107,7 +113,9 @@ const CONTENT_TYPES = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 } as const;
 
-const handleExport: Handler = async (deps, request, reply) => {
+type ExportDeps = RouteDeps & { readonly resumePhoto: ResumePhotoDeps };
+
+const handleExport = async (deps: ExportDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
@@ -123,12 +131,13 @@ const handleExport: Handler = async (deps, request, reply) => {
       false,
     );
   }
-  const { format, template, resume } = parsed.data;
+  const { format, template, resume, profilePhoto } = parsed.data;
   try {
+    const photo = profilePhoto ? resumePhotoForExport(deps.resumePhoto, candidate.id) : null;
     const file =
       format === 'pdf'
-        ? await renderResumePdf(resume, template)
-        : await renderResumeDocx(resume, template);
+        ? await renderResumePdf(resume, template, photo)
+        : await renderResumeDocx(resume, template, photo);
     return reply
       .header('content-type', CONTENT_TYPES[format])
       .header('content-disposition', `attachment; filename="resume.${format}"`)
@@ -149,6 +158,14 @@ const handleExport: Handler = async (deps, request, reply) => {
 
 /** B567: the public builder's vacancy keywords and the signed-in file export. */
 export function registerResumeBuilderRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  const database = new DatabaseSync(deps.config.databasePath);
+  database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  applySqliteBusyTimeout(database);
+  app.addHook('onClose', async () => database.close());
+  const exportDeps: ExportDeps = {
+    ...deps,
+    resumePhoto: { store: deps.candidateStore, setting: new SqliteResumePhotoRepository(database) },
+  };
   app.post(
     '/api/v1/resume-builder/keywords',
     { bodyLimit: 64 * 1024, config: { rateLimit: { max: 30, timeWindow: '10 minutes' } } },
@@ -158,6 +175,6 @@ export function registerResumeBuilderRoutes(app: FastifyInstance, deps: RouteDep
     '/api/v1/candidate/resume-builder/export',
     // Signed in: no request limit inside the product (owner, 23.10).
     { bodyLimit: 128 * 1024 },
-    withDeps(deps, handleExport),
+    withDeps(exportDeps, handleExport),
   );
 }

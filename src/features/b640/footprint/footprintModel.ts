@@ -148,6 +148,7 @@ export const ACTION_ICON: Readonly<Record<FootprintRiskActionKind, IconName>> = 
   hide: 'eyeoff',
   add_to_profile: 'plus',
   confirm_owner: 'flag',
+  not_mine: 'close',
 };
 
 /** Находки, которые ещё стоит разобрать: открытые и не полезные. */
@@ -159,12 +160,18 @@ export function usefulItems(summary: FootprintRiskSummary): readonly FootprintRi
   return summary.items.filter((item) => item.level === 'useful');
 }
 
-/** Ведёт ли действие на экран пути удаления (у полезной находки — нет). */
+/** Действия полезной находки: путь удаления у неё не открывается. */
+const USEFUL_ACTIONS: ReadonlySet<string> = new Set(['add_to_profile', 'not_mine']);
+
+/** Ведёт ли действие на экран находки f03b (у полезной находки — нет). */
 export function opensRemovalPath(item: FootprintRiskItem): boolean {
-  return item.action !== null && item.action.kind !== 'add_to_profile' && !confirmsOwner(item);
+  return item.action !== null && !USEFUL_ACTIONS.has(item.action.kind);
 }
 
-/** B727: страница по нику — «Проверить» открывает саму страницу, кандидат решает, его ли она. */
+/**
+ * B727: страница по нику — кандидат решает, его ли она. Строка ведёт на f03b (B382: из списка
+ * внешних ссылок нет, макет p02), а сама страница открывается уже с f03b.
+ */
 export function confirmsOwner(item: FootprintRiskItem): boolean {
   return item.action?.kind === 'confirm_owner' && item.url !== null;
 }

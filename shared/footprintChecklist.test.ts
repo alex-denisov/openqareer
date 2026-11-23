@@ -96,6 +96,24 @@ describe('buildFootprintChecklist (B544)', () => {
     expect(list.done).toBe(2);
   });
 
+  it('B382: a contact-data broker page is not an artifact to move into the profile', () => {
+    const list = buildFootprintChecklist(
+      audit(
+        [
+          finding('4', { kind: 'mention', review: 'confirmed_self' }),
+          finding('6', {
+            kind: 'mention',
+            review: 'confirmed_self',
+            url: 'https://aeroleads.com/people/maria-sokolova',
+          }),
+        ],
+        'checked',
+      ),
+    );
+    const artifacts = list.items.find((item) => item.id === 'artifacts');
+    expect(artifacts).toMatchObject({ remaining: 1, findingIds: ['4'] });
+  });
+
   it('marks leaks done only after HIBP answered with nothing found', () => {
     const list = buildFootprintChecklist(audit([finding('1', { review: 'not_self' })], 'checked'));
     expect(list.items[1]).toMatchObject({ done: true, status: 'Утечек не найдено' });
