@@ -155,6 +155,10 @@ export interface CandidateExport extends CandidateSnapshot {
   profileHistory: import('./profileHistoryExport').ProfileHistoryExport;
   /** B738 · 4: черновики, посты ленты, варианты текстов и LinkedIn. */
   content: import('./contentExport').ContentExport;
+  /** B738 · 5: контакты рекрутёров, сообщения и статусы «писали / ответили». */
+  contacts: import('./contactsCareerExport').ContactsExport;
+  /** B738 · 6: компании, цели роста, доход, путь профессии, места переезда, вакансии подписки. */
+  careerSections: import('./contactsCareerExport').CareerSectionsExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
