@@ -23,13 +23,21 @@ const CRITERION_TITLE: Readonly<Record<string, string>> = {
 
 const TAG_BY_POINTS = ['добавить', 'уточнить', 'есть'] as const;
 
-/** Незаконченная тренировка этого отклика продолжается; чужую сначала надо закончить. */
+/**
+ * Незаконченная тренировка этого отклика продолжается; чужую сначала надо закончить. Задача
+ * System Design (i03) по этому же отклику — тоже чужая: её вопрос не для пробного интервью.
+ */
 export function sessionChoice(
-  current: { readonly status: string; readonly applicationId: string | null } | null,
+  current: {
+    readonly status: string;
+    readonly applicationId: string | null;
+    readonly questionTypes: readonly string[];
+  } | null,
   responseId: string,
 ): SessionChoice {
   if (!current || current.status === 'completed') return 'start';
-  return current.applicationId === responseId ? 'resume' : 'other';
+  const own = current.applicationId === responseId && current.questionTypes.includes('behavioral');
+  return own ? 'resume' : 'other';
 }
 
 export function criteriaRows(evaluation: InterviewEvaluation): readonly CriterionRow[] {

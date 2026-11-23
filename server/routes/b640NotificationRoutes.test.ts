@@ -175,7 +175,7 @@ describe('лента уведомлений с флагом B640', () => {
     const [item] = (await call(fixture.app, 'GET', `${PATH}?category=vacancies`, flagged)).json()
       .data.items;
     expect(item).toMatchObject({ kind: 'new_vacancies_by_role', role: 'Инженер данных' });
-    expect(item.eventAt).toBe(item.createdAt);
+    expect(item.eventAt).toBeNull();
   });
 
   it('роль поиска на английском показывается по-русски (B737)', async () => {

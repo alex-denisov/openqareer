@@ -69,8 +69,10 @@ async function openFeed(page: Page) {
   const calls = { categories: [] as string[], read: [] as string[] };
   await mockSignedInCabinet(page, { cabinetB640: true });
   await page.route(`${API}/b640/notifications**`, (route) => {
-    const category = new URL(route.request().url()).searchParams.get('category') ?? 'all';
-    calls.categories.push(category);
+    const url = new URL(route.request().url());
+    const category = url.searchParams.get('category') ?? 'all';
+    // Колокольчик оболочки читает ленту с limit=1 — это не фильтр экрана.
+    if (url.searchParams.get('limit') !== '1') calls.categories.push(category);
     const pick = <T extends { category: string }>(rows: T[]) =>
       category === 'all' ? rows : rows.filter((row) => row.category === category);
     const data = { items: pick(ITEMS), pinned: pick(PINNED), unreadCount: 2, nextCursor: null };
@@ -97,10 +99,13 @@ test.describe('B671: лента уведомлений', () => {
     const pinned = screen.locator('.np-crit-i');
     await expect(pinned).toHaveCount(1, { timeout: 15_000 });
     await expect(pinned).toContainText('Важно');
-    await expect(pinned).toContainText(
-      'Отклик не доставлен · Ладога Банк · Руководитель разработки',
-    );
+    // n01b: в «Важно» — «Отклик не дошёл» и «Повторить» с иконкой.
+    await expect(pinned).toContainText('Отклик не дошёл · Ладога Банк · Руководитель разработки');
     await expect(pinned.getByRole('link')).toHaveCount(1);
+    // n01: при важном непрочитанном счётчик колокольчика — в цвете ошибки (колокольчик шапки 1440).
+    if ((page.viewportSize()?.width ?? 0) >= 768) {
+      await expect(page.locator('.b640 .bell:visible .dot')).toHaveClass(/is-crit/u);
+    }
     const invite = screen.locator('.notif').filter({ hasText: 'Арка Холдинг приглашает' });
     await expect(invite.locator('.notif-s')).toHaveText(
       /^Руководитель платформы · 12 декабря, \d{2}:00 · \d{2}:\d{2}$/u,
@@ -110,8 +115,10 @@ test.describe('B671: лента уведомлений', () => {
       '/app/responses/app-2',
     );
     await expectGates(page);
-    await pinned.getByRole('link', { name: 'Открыть отклик' }).click();
-    await expect(page).toHaveURL(/\/app\/responses\/app-1$/u);
+    const retry = pinned.getByRole('link', { name: 'Повторить' });
+    await expect(retry.locator('svg')).toHaveCount(1);
+    await retry.click();
+    await expect(page).toHaveURL(/\/app\/responses\/app-1\/letter$/u);
     expect(calls.read).toEqual([PINNED[0]!.id]);
   });
 

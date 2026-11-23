@@ -10,6 +10,7 @@ const node = (page: Page, code: string) =>
 const PATH = {
   state: 'ready',
   target: 'Продакт-менеджер',
+  forms: { toBecome: 'продакт-менеджеры', genitive: 'продакта', instrumental: 'продактом' },
   sampleSize: 118,
   observedAt: '2026-11-10T09:00:00.000Z',
   requirements: [
@@ -39,9 +40,10 @@ test.describe('B669: «Карьера» при «Меняю профессию»
   test('путь в профессию, промежуточная роль, отклики и доход; гейты', async ({ page }) => {
     const calls = await openCareer(page, '/app/career', CHANGING);
     const screen = node(page, 's11');
-    await expect(
-      screen.getByRole('heading', { name: 'Путь в профессию «Продакт-менеджер»' }),
-    ).toBeVisible();
+    await expect(screen.getByRole('heading', { name: 'Путь в продакт-менеджеры' })).toBeVisible();
+    await expect(screen.getByText('Что уже есть для продакта')).toBeVisible();
+    await expect(screen.getByText('Проверка навыков продакта')).toBeVisible();
+    await expect(screen.locator('.s11-resp-t')).toHaveText('Отклики продактом');
     await expect(
       screen.getByText('Через промежуточную роль: Руководитель разработки'),
     ).toBeVisible();
@@ -90,9 +92,21 @@ test.describe('B669: «Карьера» при «Меняю профессию»
       assessmentState: 'insufficient_requirements',
     });
     const screen = node(page, 's11');
-    await expect(screen.getByText('Проверка навыков профессии')).toBeVisible();
+    await expect(screen.getByText('Проверка навыков продакта')).toBeVisible();
     await expect(screen.getByText('2 из 4 требований')).toBeVisible();
     await expect(screen.getByRole('link', { name: 'Проверить' })).toHaveCount(0);
+  });
+
+  test('профессия без форм в словаре — общие тексты с её названием', async ({ page }) => {
+    await openCareer(page, '/app/career', {
+      ...CHANGING,
+      professionPath: { ...PATH, target: 'Сомелье', forms: null },
+    });
+    const screen = node(page, 's11');
+    await expect(screen.getByRole('heading', { name: 'Путь в профессию «Сомелье»' })).toBeVisible();
+    await expect(screen.getByText('Что уже есть для новой профессии')).toBeVisible();
+    await expect(screen.getByText('Проверка навыков профессии')).toBeVisible();
+    await expect(screen.locator('.s11-resp-t')).toHaveText('Отклики в новой профессии');
   });
 
   test('профессия не выбрана — ведёт к выбору статуса', async ({ page }) => {

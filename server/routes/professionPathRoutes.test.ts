@@ -147,6 +147,19 @@ describe('путь в профессию с флагом B640', () => {
     expect(getMatchedVacanciesAsync).not.toHaveBeenCalled();
   });
 
+  it('отдаёт падежные формы профессии из словаря, без них — null (B669)', async () => {
+    const { app } = await setup({ getMatchedVacanciesAsync: vi.fn(async () => []) });
+    const read = async (targetProfession: string) => {
+      await call(app, 'PUT', STATUS, flagged, { status: 'changing_profession', targetProfession });
+      return (await call(app, 'GET', PATH, flagged)).json().data;
+    };
+    expect(await read('Продакт-менеджер')).toMatchObject({
+      state: 'too_few',
+      forms: { toBecome: 'продакт-менеджеры', genitive: 'продакта', instrumental: 'продактом' },
+    });
+    expect(await read('Сомелье')).toMatchObject({ state: 'too_few', forms: null });
+  });
+
   it('с целевой профессией отдаёт её и принимает ответ о доходе', async () => {
     const { app } = await setup();
     const changed = await call(app, 'PUT', STATUS, flagged, {

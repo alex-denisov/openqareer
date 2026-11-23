@@ -6,6 +6,7 @@ import type { SqliteCandidateStatusRepository } from '../candidate/sqliteCandida
 import { SqliteProfessionPathRepository } from '../candidate/sqliteProfessionPathRepository';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { professionForms } from '../domain/professionForms';
 import {
   LOWER_INCOME_ANSWERS,
   professionResponses,
@@ -108,7 +109,10 @@ const getPath: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const target = targetOf(deps, candidateId);
-  const data = target ? await readPath(deps, candidateId, target) : { state: 'no_target' };
+  // B669: падежные формы профессии для текстов пути; без форм — общие тексты.
+  const data = target
+    ? { ...(await readPath(deps, candidateId, target)), forms: professionForms(target) }
+    : { state: 'no_target' };
   return { data, meta: { requestId: request.id } };
 };
 

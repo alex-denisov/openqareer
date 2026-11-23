@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { scoreInterviewAnswer } from './interviewSimulator';
-import { buildSystemDesignTask, SYSTEM_DESIGN_TIME_LIMIT_MINUTES } from './systemDesignTask';
+import {
+  buildSystemDesignTask,
+  detectStack,
+  SYSTEM_DESIGN_TIME_LIMIT_MINUTES,
+} from './systemDesignTask';
 
 describe('buildSystemDesignTask', () => {
   it('builds the task from the saved vacancy description', () => {
@@ -108,5 +112,14 @@ describe('buildSystemDesignTask', () => {
       expect(score.points, `${task.domain}`).toBe(score.maxPoints);
       expect(task.points, `${task.domain}`).toHaveLength(4);
     }
+  });
+});
+
+describe('B741: стек задачи — «Go-to-market» не язык Go', () => {
+  it('go-to-market и Go live не дают Go', () => {
+    expect(detectStack('Go-to-market strategy, Go live in Q1, Kafka')).toEqual(['Kafka']);
+  });
+  it('«Go, Kubernetes» даёт Go', () => {
+    expect(detectStack('Go, Kubernetes')).toEqual(['Go', 'Kubernetes']);
   });
 });

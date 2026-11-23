@@ -27,6 +27,11 @@
       "family": "project-mgmt.delivery",
       "titleEn": "Project Manager",
       "titleRu": "Менеджер проектов",
+      "forms": {
+        "toBecome": "менеджеры проектов",
+        "genitive": "менеджера проектов",
+        "instrumental": "менеджером проектов"
+      },
       "levels": [
         "ic",
         "lead"
@@ -91,6 +96,11 @@
       "family": "project-mgmt.delivery",
       "titleEn": "Scrum Master / Agile Coach",
       "titleRu": "Скрам-мастер / Agile-коуч",
+      "forms": {
+        "toBecome": "скрам-мастера",
+        "genitive": "скрам-мастера",
+        "instrumental": "скрам-мастером"
+      },
       "levels": [
         "ic",
         "lead"

@@ -3,6 +3,7 @@ import {
   bridgeRole,
   formatFork,
   incomeShift,
+  professionTexts,
   requirementsMeta,
   type ProfessionRequirement,
 } from './professionPathModel';
@@ -93,5 +94,28 @@ describe('professionPathModel', () => {
     expect(incomeShift(350_000, 420_000, 440_000)).toEqual({ kind: 'lower', from: 5, to: 20 });
     expect(incomeShift(450_000, 500_000, 400_000)).toEqual({ kind: 'higher', from: 13, to: 25 });
     expect(incomeShift(380_000, 480_000, 440_000)).toEqual({ kind: 'same' });
+  });
+
+  it('B669: тексты пути склоняют профессию по её формам из словаря', () => {
+    const forms = {
+      toBecome: 'продакт-менеджеры',
+      genitive: 'продакта',
+      instrumental: 'продактом',
+    };
+    expect(professionTexts('Продакт-менеджер', forms)).toEqual({
+      path: 'Путь в продакт-менеджеры',
+      owned: 'Что уже есть для продакта',
+      check: 'Проверка навыков продакта',
+      responses: 'Отклики продактом',
+    });
+  });
+
+  it('B669: без форм — прежние тексты с названием профессии', () => {
+    expect(professionTexts('Сомелье', null)).toEqual({
+      path: 'Путь в профессию «Сомелье»',
+      owned: 'Что уже есть для новой профессии',
+      check: 'Проверка навыков профессии',
+      responses: 'Отклики в новой профессии',
+    });
   });
 });
