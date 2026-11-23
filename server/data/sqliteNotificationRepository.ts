@@ -306,8 +306,11 @@ export class SqliteNotificationRepository {
     }
     const next = merge(existing.source_id);
     if (next === existing.source_id) return;
+    // Новое содержимое — новость: прочитанная запись снова непрочитана (B671, n01b).
     this.database
-      .prepare('UPDATE candidate_notifications SET source_id = ?, created_at = ? WHERE id = ?')
+      .prepare(
+        'UPDATE candidate_notifications SET source_id = ?, created_at = ?, read_at = NULL WHERE id = ?',
+      )
       .run(next, input.createdAt ?? new Date().toISOString(), existing.id);
   }
 

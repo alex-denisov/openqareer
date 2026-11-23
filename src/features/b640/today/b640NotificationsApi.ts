@@ -22,6 +22,8 @@ export interface B640Notification {
   readonly role: string | null;
   /** Время самого события (интервью), если известно. */
   readonly eventAt: string | null;
+  /** Подпись подборки «выше 450 тыс. ₽»; есть только при пороге зарплаты кандидата. */
+  readonly note?: string | null;
   readonly createdAt: string;
   readonly readAt: string | null;
   readonly sourceType: string;

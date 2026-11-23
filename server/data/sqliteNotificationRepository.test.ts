@@ -77,6 +77,31 @@ describe('SQLite candidate notification repository', () => {
     expect(repository.list('candidate-a', { limit: 10, now: NOW }).items).toEqual([]);
   });
 
+  it('B671: a digest that grows becomes unread again, an unchanged one stays read', () => {
+    const repository = createRepository();
+    const digest = {
+      idempotencyKey: 'new-vacancies:2026-10-11:role',
+      kind: 'new_vacancies_by_role',
+      sourceType: 'matched_vacancy_day',
+      sourceId: '',
+      createdAt: '2026-10-11T08:00:00.000Z',
+    } as const;
+    const grow = (extra: string) => (stored: string) =>
+      stored.split(',').includes(extra) ? stored : [stored, extra].filter(Boolean).join(',');
+    repository.recordOrMergeEvent('candidate-a', digest, grow('a'));
+    const [item] = repository.list('candidate-a', { limit: 10, now: NOW }).items;
+    expect(repository.markRead('candidate-a', item!.id, NOW)).toBe(true);
+
+    repository.recordOrMergeEvent('candidate-a', { ...digest, createdAt: '2026-10-11T09:00:00.000Z' }, grow('a'));
+    expect(repository.list('candidate-a', { limit: 10, now: NOW }).unreadCount).toBe(0);
+
+    repository.recordOrMergeEvent('candidate-a', { ...digest, createdAt: '2026-10-11T10:00:00.000Z' }, grow('b'));
+    const page = repository.list('candidate-a', { limit: 10, now: NOW });
+    expect(page.unreadCount).toBe(1);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]!.id).toBe(item!.id);
+  });
+
   it('applies event preferences and physically deletes notifications after 90 days', () => {
     const repository = createRepository();
     const stale = repository.recordEvent(
