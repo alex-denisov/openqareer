@@ -120,10 +120,44 @@ function itVerdict(item: RoleItem, read: RequirementsReader): boolean {
   return it;
 }
 
+/**
+ * B770 (prod 23.11): `roleCounts` и `facets` сверяли каждое название с каждой ролью на каждой сборке.
+ * Совпадение зависит только от названия и роли — одно на процесс; 300 000 пар (~20 000 названий × роли).
+ */
+const MAX_TITLE_ROLE_ENTRIES = 300_000;
+let titleRoleLimit = MAX_TITLE_ROLE_ENTRIES;
+let titleRoles = new Map<string, Map<string, boolean>>();
+let titleRoleEntries = 0;
+
+/** Пар название–роль в кэше — потолок на пары, а не на названия: роль приходит из запроса. */
+export function titleRoleCacheSize(): number {
+  return titleRoleEntries;
+}
+
+/** Для тестов: потолок пар; без аргумента — рабочий. */
+export function setTitleRoleCacheLimit(limit = MAX_TITLE_ROLE_ENTRIES): void {
+  titleRoleLimit = limit;
+}
+
+function titleInRole(title: string, role: string): boolean {
+  const known = titleRoles.get(title)?.get(role);
+  if (known !== undefined) return known;
+  const same = sameCareerRole(title, role);
+  if (titleRoleEntries >= titleRoleLimit) {
+    titleRoles = new Map();
+    titleRoleEntries = 0;
+  }
+  const roles = titleRoles.get(title);
+  if (roles) roles.set(role, same);
+  else titleRoles.set(title, new Map([[role, same]]));
+  titleRoleEntries += 1;
+  return same;
+}
+
 /** `sameCareerRole` плюс признак ИТ для общего «Технический директор». */
 export function vacancyInCareerRole(item: RoleItem, role: string): boolean {
   const title = item.cluster.canonicalTitle;
-  if (!sameCareerRole(title, role)) return false;
+  if (!titleInRole(title, role)) return false;
   if (!reader || !needsItSignal(title)) return true;
   return itVerdict(item, reader);
 }
