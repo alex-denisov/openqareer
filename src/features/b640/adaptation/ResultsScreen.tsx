@@ -1,8 +1,9 @@
 import type { CareerDiaryResults90 } from '../../../../shared/careerDiaryCheckpoints';
+import { Icon } from '../kit';
 import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
-import { useScreenChrome } from '../shell/ShellContext';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { addDays, dayLabel } from './adaptationModel';
 import { AdaptationGate } from './AdaptationGate';
 import { getResults90 } from './checkpointsApi';
@@ -67,6 +68,7 @@ function Lead({ results }: { readonly results: CareerDiaryResults90 }) {
 }
 
 function Talk({ results }: { readonly results: CareerDiaryResults90 }) {
+  const { openConsultant } = useShell();
   return (
     <section className="mod" {...(results.talkText ? { 'aria-labelledby': 'rs-raise' } : { 'aria-label': 'Что дальше' })}>
       {/* Без текста заголовок не показывается: пустой блок «для разговора» вводит в заблуждение. */}
@@ -74,7 +76,13 @@ function Talk({ results }: { readonly results: CareerDiaryResults90 }) {
         <>
           <h3 className="mod-title" id="rs-raise">Для разговора об итоговой оценке</h3>
           <p className="dn-quote">{results.talkText}</p>
-          <CopyText text={results.talkText} />
+          {/* B645-2: как в макете d04 и как «Подготовить разговор» в «Росте» — разговор готовится с консультантом. */}
+          <div className="actions">
+            <button className="btn" type="button" onClick={() => openConsultant()}>
+              <Icon name="file" />
+              Подготовить разговор
+            </button>
+          </div>
         </>
       ) : null}
       <div className="actions dn-links">
