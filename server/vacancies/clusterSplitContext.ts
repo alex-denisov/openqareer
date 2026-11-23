@@ -3,6 +3,10 @@ import type { SplitWriters } from './clusterSplitWrite';
 
 /** B752: общее у шага разбиения — результат, бюджет записи, счётчики состояния. */
 
+/** 23.11, копия прода: 5–10 мс на кусок с ключами и каталогом, холодный кэш. */
+export const CLUSTER_SPLIT_MAX_PIECES = 40;
+export const CLUSTER_SPLIT_BUDGET_MS = 500;
+
 export type ClusterSplitLog = (event: string, fields: Record<string, unknown>) => void;
 
 export interface ClusterSplitStepResult {
