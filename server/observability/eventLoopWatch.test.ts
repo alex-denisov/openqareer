@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import { backgroundStep } from './backgroundSteps';
+import { syncSection } from './syncSections';
 import { namedInFlight, registerEventLoopWatch } from './eventLoopWatch';
 
 function busy(ms: number): void {
@@ -49,6 +50,38 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
     expect(stall?.background).toEqual([expect.objectContaining({ name: 'list-build' })]);
     expect(stall?.background[0].overlapMs).toBeGreaterThanOrEqual(200);
     expect(typeof stall?.gcMs).toBe('number');
+  });
+
+  it('B770a-0: names the synchronous sections and the serialization that held the stall', async () => {
+    const log = vi.fn();
+    const app = Fastify();
+    registerEventLoopWatch(app, { log, stallMs: 100, tickMs: 10, reportMs: 60_000 });
+    app.get('/big/:id', async () => ({ toJSON: () => (busy(220), { ok: true }) }));
+    app.get('/page/:n', async () => {
+      busy(220);
+      return 'html';
+    });
+    await app.ready();
+    await backgroundStep('list:build', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      syncSection('list:order', () => busy(220));
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await app.inject({ url: '/big/42?token=secret' });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await app.inject({ url: '/page/7' });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await app.close();
+    const stalls = log.mock.calls
+      .filter(([, msg]) => msg === 'event-loop-stall')
+      .map(([fields]) => fields);
+    const names = stalls.flatMap((stall) =>
+      stall.sync.map((section: { name: string }) => section.name),
+    );
+    expect(names).toContain('list:order');
+    expect(names).toContain('serialize GET /big/:id');
+    expect(names).toContain('handler GET /page/:n');
+    expect(JSON.stringify(stalls)).not.toContain('secret');
   });
 
   it('forgets a request the client dropped (prod 03.11: 78 dropped reads named in every stall for hours)', async () => {
