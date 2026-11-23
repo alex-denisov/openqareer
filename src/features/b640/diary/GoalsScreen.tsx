@@ -10,7 +10,7 @@ import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { listGoalCards } from './diaryApi';
-import { getGoalExamples, type GoalExample } from './goalHintsApi';
+import { getGoalExamples, getRoleTitleRu, type GoalExample } from './goalHintsApi';
 import { useRoleTitle } from './roleTitle';
 import { GoalItem } from './GoalItem';
 import { GoalsMeeting } from './GoalsMeeting';
@@ -83,17 +83,35 @@ function useRoleExamples(role: string | null | undefined): readonly GoalExample[
   return role ? examples : null;
 }
 
+/** Название роли в тексте экрана по-русски; модели уходит роль как есть. */
+function useRoleLabel(role: string | null | undefined): string | null | undefined {
+  const [label, setLabel] = useState<string | null>(null);
+  useEffect(() => {
+    if (!role) return undefined;
+    let active = true;
+    getRoleTitleRu(role).then(
+      (titleRu) => active && setLabel(titleRu),
+      () => active && setLabel(null),
+    );
+    return () => {
+      active = false;
+    };
+  }, [role]);
+  return role ? (label ?? role) : role;
+}
+
 /** Пусто (d02c): вопрос о целях в роли кандидата и пример. */
 function NoGoals() {
   const role = useRoleTitle();
   const forRole = useRoleExamples(role);
+  const label = useRoleLabel(role);
   const examples = forRole ?? GOAL_EXAMPLES;
   return (
     <section className="lead" aria-labelledby="gc-t">
       <div className="lead-head">
         <h2 className="lead-title gc-title" id="gc-t">
-          {role
-            ? `Какие цели в роли «${role}» в первом квартале?`
+          {label
+            ? `Какие цели в роли «${label}» в первом квартале?`
             : 'Какие у вас цели на этот квартал?'}
         </h2>
         <InfoTip
@@ -112,7 +130,7 @@ function NoGoals() {
         </Link>
       </div>
       <div className="ghost" aria-label={forRole ? 'Пример целей для роли' : 'Пример целей'}>
-        <p className="ghost-cap">{forRole && role ? `Пример для роли «${role}»` : 'Пример'}</p>
+        <p className="ghost-cap">{forRole && label ? `Пример для роли «${label}»` : 'Пример'}</p>
         {examples.map((example) => (
           <p className="gc-ex" key={example.title}>
             <strong>{example.title}</strong>
