@@ -39,8 +39,8 @@ export function transcriptHash(lines: readonly DebriefLine[]): string {
   return createHash('sha256').update(JSON.stringify(lines)).digest('hex');
 }
 
-const findingsData = (recordingId: string, hash: string) => `${recordingId}:debrief:${hash}`;
-const interviewerData = (interviewId: string) => `${interviewId}:interviewer`;
+export const findingsData = (recordingId: string, hash: string) => `${recordingId}:debrief:${hash}`;
+export const interviewerData = (interviewId: string) => `${interviewId}:interviewer`;
 
 type PartView = ReturnType<typeof buildRecordingView>;
 
