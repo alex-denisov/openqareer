@@ -12,7 +12,8 @@ vi.mock('./careerRoleKey', async (importOriginal) => {
   };
 });
 
-const { vacancyInCareerRole } = await import('./techDirectorSignal');
+const { vacancyInCareerRole, titleRoleCacheSize, setTitleRoleCacheLimit } =
+  await import('./techDirectorSignal');
 const { countMatchedVacanciesByRole } = await import('./vacancyRoleCounts');
 const { buildMatchedVacancyFacets } = await import('./matchedVacancyFacets');
 const { sameCareerRole } =
@@ -90,5 +91,17 @@ describe('vacancyInCareerRole: совпадение названия с роль
     expect(calls.count).toBe(coldCalls);
     expect(coldCalls).toBe(rows.length * roles.length);
     expect(cold[0]).toMatchObject({ CTO: expect.any(Number) });
+  });
+
+  it('кэш ограничен числом пар название–роль, а не только названий', () => {
+    setTitleRoleCacheLimit(50);
+    try {
+      for (let i = 0; i < 120; i += 1)
+        vacancyInCareerRole(row('x', 'Head of Platform'), `Role ${i}`);
+      expect(titleRoleCacheSize()).toBeLessThanOrEqual(50);
+      expect(titleRoleCacheSize()).toBeGreaterThan(0);
+    } finally {
+      setTitleRoleCacheLimit();
+    }
   });
 });
