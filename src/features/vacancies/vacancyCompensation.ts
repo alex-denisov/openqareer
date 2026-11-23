@@ -51,3 +51,15 @@ export function formatCompensationCompact(salary: Salary): string {
   }
   return `до ${withCurrency(thousandsAmount(salary.to as number), salary.currency)}`;
 }
+
+/** B765: почасовая ставка целыми суммами, без «тыс.»: «$250–400», «900–1 200 ₽». */
+export function formatRateAmounts(salary: Salary): string {
+  const plain = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 });
+  const parts = [salary?.from, salary?.to].filter((value): value is number => value !== undefined);
+  const amounts = [...new Set(parts)].map((value) => plain.format(value)).join('–');
+  const code = currencyCode(salary?.currency);
+  if (code === 'rub' || code === 'rur') return `${amounts} ₽`;
+  const sign = CURRENCY_SYMBOLS[code];
+  if (sign) return `${sign}${amounts}`;
+  return code ? `${amounts} ${code.toUpperCase()}` : amounts;
+}
