@@ -1,6 +1,7 @@
 import { titleKey } from '../../shared/poolRoleHypotheses';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
+import { backgroundStep } from '../observability/backgroundSteps';
 import { readRoleSnapshot, warmAssessmentContext } from './roleSkillAssessmentRoutes';
 
 interface WarmLog {
@@ -34,9 +35,9 @@ export async function warmRoleSnapshots(
   const roles = rolesToWarm(deps, candidateId);
   let unavailable = 0;
   for (const role of roles) {
-    const snapshot = await readRoleSnapshot(deps, candidateId, role, { awaitRebuild: true });
+    const snapshot = await backgroundStep('role-snapshot', () => readRoleSnapshot(deps, candidateId, role, { awaitRebuild: true }));
     if (snapshot.state !== 'matched') unavailable += 1;
-    else await warmAssessmentContext(deps, candidateId, role);
+    else await backgroundStep('role-assessment-context', () => warmAssessmentContext(deps, candidateId, role));
   }
   if (roles.length > 0) {
     log?.info(
