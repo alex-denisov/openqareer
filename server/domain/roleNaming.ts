@@ -28,7 +28,15 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 7;
+export const ROLE_NAMING_PROMPT_VERSION = 8;
+
+/** B748 (v8): уровень должности в titleRu — русским словом, латиницей только устоявшиеся C-level. */
+const LEVEL_RULE = [
+  'Уровень в titleRu — русским словом: VP — вице-президент, Head — руководитель, Lead — ведущий;',
+  'латиницей остаются только CEO, CTO, CIO, CFO, COO, другие C-level — в скобках после русского',
+  '(VP of IT Operations → Вице-президент по ИТ-эксплуатации,',
+  'Chief Customer Officer → Директор по работе с клиентами (CCO)).',
+].join(' ');
 
 export function roleNamingInstructions(language: RoleNameLanguage): string {
   return [
@@ -55,6 +63,7 @@ export function roleNamingInstructions(language: RoleNameLanguage): string {
     '(COO, CTO, AI, IT) оставь, остальное переведи (AI Consultant → AI-консультант,',
     'Transformation Director → Директор по трансформации, Head of IT Operations →',
     'Руководитель ИТ-эксплуатации: Operations — эксплуатация сервисов, не инфраструктура).',
+    LEVEL_RULE,
     'Если title уже',
     'по-русски, повтори его в titleRu.',
     'Название компании, продукта, подразделения или бренда из фактов — не роль:',
@@ -90,10 +99,23 @@ export const ROLE_TITLE_TRANSLATION_INSTRUCTIONS = [
   'titleRu всегда русской формулировкой вакансии; аббревиатуры (COO, CTO, AI, IT)',
   'оставь латиницей, остальное переведи (AI Consultant → AI-консультант,',
   'Head of IT Operations → Руководитель ИТ-эксплуатации: Operations — эксплуатация',
-  'сервисов, не инфраструктура). Не добавляй слов,',
+  'сервисов, не инфраструктура).',
+  LEVEL_RULE,
+  'Не добавляй слов,',
   'которых нет в названии.',
   'Ответ — только JSON: {"titles":[{"title":"…","titleRu":"…"}]}, title без изменений.',
 ].join('\n');
+
+/** Уровни, которые переводят словом: в русском названии их не ищут и не допускают. */
+const LEVEL_ABBREVIATIONS = new Set(['VP', 'SVP', 'EVP']);
+/** Устоявшиеся C-level пишут латиницей; остальные уровни латиницей вне скобок — недоперевод. */
+const ESTABLISHED_C_LEVEL = new Set(['CEO', 'CTO', 'CIO', 'CFO', 'COO']);
+const LATIN_LEVEL = /(?<![A-Za-z])(?:S?VP|EVP|Head|Lead|C[A-Z]{1,3}O)(?![A-Za-z])/gu;
+
+function hasLatinLevel(text: string): boolean {
+  const outsideBrackets = text.replace(/\([^)]*\)/gu, ' ');
+  return (outsideBrackets.match(LATIN_LEVEL) ?? []).some((word) => !ESTABLISHED_C_LEVEL.has(word));
+}
 
 /** «ИТ» и «ИИ» в русском названии — те же аббревиатуры, что «IT» и «AI». */
 const CYRILLIC_ABBREVIATIONS: Readonly<Record<string, string>> = { IT: 'ИТ', AI: 'ИИ' };
@@ -106,7 +128,10 @@ export function checkedTitleRu(title: string, titleRu: string | undefined): stri
   const text = titleRu?.trim() ?? '';
   if (!text || text.length > TITLE_RU_MAX || !CYRILLIC.test(text) || CYRILLIC.test(title))
     return null;
-  const abbreviations = title.match(/\b[A-Z]{2,5}\b/gu) ?? [];
+  if (hasLatinLevel(text)) return null;
+  const abbreviations = (title.match(/\b[A-Z]{2,5}\b/gu) ?? []).filter(
+    (abbr) => !LEVEL_ABBREVIATIONS.has(abbr),
+  );
   const kept = abbreviations.every(
     (abbr) => text.includes(abbr) || text.includes(CYRILLIC_ABBREVIATIONS[abbr] ?? abbr),
   );

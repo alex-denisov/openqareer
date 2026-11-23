@@ -204,3 +204,27 @@ describe('B748: переводы прошлой версии пересчиты�
     expect(store.read()!.campaign!.titlesRuVersion).toBe(ROLE_TITLES_RU_VERSION);
   });
 });
+
+describe('B748 v8: уровень латиницей пересчитывается по версии', () => {
+  it('«VP по ИТ-эксплуатации» прошлой версии заменяется русским названием уровня', async () => {
+    const store = fakeStore({
+      campaign: {
+        ...campaign,
+        titlesRuVersion: ROLE_TITLES_RU_VERSION - 1,
+        careerRoles: [
+          { id: 'r-3', title: 'VP of IT Operations', titleRu: 'VP по ИТ-эксплуатации' },
+        ],
+      },
+    });
+    const translate = translator({ 'VP of IT Operations': 'Вице-президент по ИТ-эксплуатации' });
+    await backfillRoleTitlesRu({ candidateStore: store as never, translator: translate }, 'c1');
+    expect(translate.translateTitles).toHaveBeenCalledWith(
+      expect.arrayContaining(['VP of IT Operations']),
+    );
+    const next = store.read()!.campaign!;
+    expect(next.careerRoles).toEqual([
+      { id: 'r-3', title: 'VP of IT Operations', titleRu: 'Вице-президент по ИТ-эксплуатации' },
+    ]);
+    expect(next.titlesRuVersion).toBe(ROLE_TITLES_RU_VERSION);
+  });
+});
