@@ -37,15 +37,21 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('тексты для человека: Vertex первым, дешёвая ступень дважды, потом luna (04.11)', () => {
-    for (const mechanic of ['roleNames', 'linkedinDrafts'] as const) {
-      expect(labels(mechanic)).toEqual([
-        'vertex',
-        'openrouter:deepseek/deepseek-v4.1-flash',
-        'openrouter:deepseek/deepseek-v4.1-flash',
-        'openai:gpt-5.6-luna',
-      ]);
-    }
+  it('черновики LinkedIn: Vertex первым, дешёвая ступень дважды, потом luna (04.11)', () => {
+    expect(labels('linkedinDrafts')).toEqual([
+      'vertex',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
+  });
+
+  it('названия ролей без Vertex (выключен решением владельца 20.11): дешёвая дважды, потом luna', () => {
+    expect(labels('roleNames')).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
   });
 
   it('письмо: по одному вызову — DeepSeek, GLM, Gemini (B640, решение CPO 10.11)', () => {
@@ -65,11 +71,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
   });
 
   it('Vertex стоит только первым и один раз, за ним голова повторена ровно один раз', () => {
-    for (const mechanic of [
-      'roleNames',
-      'linkedinDrafts',
-      'campaignRoles',
-    ] as const) {
+    for (const mechanic of ['linkedinDrafts', 'campaignRoles'] as const) {
       const stages = labels(mechanic);
       expect(stages.filter((label) => label === 'vertex')).toEqual(['vertex']);
       expect(stages[0]).toBe('vertex');
