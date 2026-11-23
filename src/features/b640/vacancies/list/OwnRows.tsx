@@ -75,7 +75,7 @@ function NoScore({ view, listed }: { view: VacancyFitView; listed: boolean }) {
   if (!reason) return null;
   const others = listed ? [] : view.requirements;
   return (
-    <div className="v4-box">
+    <div className={others.length > 0 ? 'v4-box v4-reqs-box' : 'v4-box'}>
       <p className="v4-req-row">{reason}</p>
       {others.length > 0 ? (
         <div className="v4-reqs-open">
@@ -105,7 +105,7 @@ function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
       <NoScore view={detail.fit} listed={rows.length > 0} />
       <OwnText text={detail.text} />
       {url ? (
-        <a className="row-act vs-open" href={url} target="_blank" rel="noopener noreferrer">
+        <a className="row-act vs-open" href={url} target="_blank" rel="noopener noreferrer" aria-label="Открыть на сайте">
           <Icon name="out" />
           <span className="vs-open-t">Открыть на сайте</span>
         </a>
