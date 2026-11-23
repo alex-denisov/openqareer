@@ -4,11 +4,10 @@ import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
 import {
   compareFitDirected,
-  compareMoney,
   DEFAULT_VACANCY_SORT,
   type VacancySort,
 } from '../../shared/vacancySort';
-import { createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
+import { compareMoneyRank, createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
 import type { ListPhasesMs } from './matchedListPhases';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -437,7 +436,7 @@ function orderByFit(
   const amounts = new Map(decorated.map((item) => [item.cluster.id, money(item)]));
   return decorated.sort(
     (left, right) =>
-      compareMoney(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
+      compareMoneyRank(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
       compareFitOrder(left, right),
   );
 }
