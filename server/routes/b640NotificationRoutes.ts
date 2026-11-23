@@ -3,7 +3,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   buildB640NotificationFeed,
-  searchRoleLabel,
   type B640ApplicationContext,
 } from '../domain/b640Notifications';
 import { registerB640DeliverySettingsRoutes } from './b640DeliverySettingsRoutes';
@@ -54,17 +53,28 @@ function applicationContexts(
 type FeedQuery = z.infer<typeof querySchema>;
 
 /** B671: роль поиска нужна только ленте с подборками «Новые вакансии по вашей роли». */
-function searchRoleOf(
+function searchRolesOf(
   deps: RouteDeps,
   candidateId: string,
   rows: readonly { readonly kind: string }[],
-): string | null {
-  if (!rows.some((row) => row.kind === 'new_vacancies_by_role')) return null;
+): string[] {
+  if (!rows.some((row) => row.kind === 'new_vacancies_by_role')) return [];
   // B737: роль поиска хранится английским названием онтологии, кандидату — по-русски.
   const campaign = readCampaign(deps.candidateStore, candidateId);
-  return searchRoleLabel(
-    campaign.roles.value.map((title) => roleTitleRu(title, campaign.ownTitlesRu)),
-  );
+  return campaign.roles.value
+    .map((title) => roleTitleRu(title, campaign.ownTitlesRu).trim())
+    .filter(Boolean);
+}
+
+/** B671 (n01b): число находок для «Цифровой след: N новых находок». */
+function findingCountsOf(
+  deps: RouteDeps,
+  candidateId: string,
+  rows: readonly { readonly kind: string }[],
+): Map<string, number> {
+  if (!rows.some((row) => row.kind === 'footprint_findings')) return new Map();
+  const audits = deps.candidateReputationRepo?.listFootprintAudits(candidateId) ?? [];
+  return new Map(audits.map((audit) => [audit.id, audit.findings.length]));
 }
 
 function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
@@ -89,7 +99,8 @@ function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
     category: query.category,
     offset: query.cursor,
     limit: query.limit,
-    searchRole: searchRoleOf(deps, candidateId, stored.rows),
+    searchRoles: searchRolesOf(deps, candidateId, stored.rows),
+    findingCounts: findingCountsOf(deps, candidateId, stored.rows),
   });
 }
 

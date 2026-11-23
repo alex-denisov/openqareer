@@ -1,4 +1,6 @@
 import { presentNotification, type NotificationEventKind } from '../data/notificationPolicy';
+import { pluralWordRu } from '../../shared/pluralRu';
+import { digestCount, roleDigestTitle, roleInDigestTitle } from './roleVacancyDigest';
 
 /** B671: лента уведомлений нового кабинета поверх прежней таблицы уведомлений. */
 export type B640NotificationKind =
@@ -145,37 +147,73 @@ export function searchRoleLabel(roles: readonly string[]): string | null {
   return named.length === 1 ? named[0] : `${named[0]} и ещё ${named.length - 1}`;
 }
 
-/**
- * B671: у подборки «Новые вакансии по вашей роли» нет отклика — роль берётся из роли поиска,
- * время события — когда подборка пришла.
- */
+/** Время события есть только у приглашения; у остальных подпись несёт время записи. */
 function eventAtOf(
   kind: B640NotificationKind,
-  row: B640NotificationSource,
   application: B640ApplicationContext | undefined,
 ): string | null {
-  if (kind === 'interview_invitation') return application?.interviewAt ?? null;
-  return kind === 'new_vacancies_by_role' ? row.createdAt : null;
+  return kind === 'interview_invitation' ? (application?.interviewAt ?? null) : null;
+}
+
+/**
+ * B671 (n01b): у подборки за сутки — число и роль в заголовке («6 новых вакансий
+ * руководителя разработки»); роль поиска уходит в подпись, только если её нет в заголовке.
+ */
+function roleDigestView(
+  row: B640NotificationSource,
+  searchRoles: readonly string[],
+): { readonly title: string; readonly role: string | null } | null {
+  const count = digestCount(row.sourceType, row.sourceId);
+  if (count === null) return null;
+  return {
+    title: roleDigestTitle(count, searchRoles),
+    role: roleInDigestTitle(searchRoles) ? null : searchRoleLabel(searchRoles),
+  };
+}
+
+/** То, что лента знает о кандидате помимо строки уведомления. */
+export interface ClassifyContext {
+  readonly searchRoles?: readonly string[];
+  /** B671 (n01b): сколько находок в проверке следа этого уведомления. */
+  readonly findingCount?: number;
+}
+
+/** n01b: «Цифровой след: 1 новая находка». */
+export function footprintTitle(count: number | undefined): string {
+  if (!count || count < 1) return 'Цифровой след: новые находки';
+  const word = pluralWordRu(count, ['новая находка', 'новые находки', 'новых находок']);
+  return `Цифровой след: ${count} ${word}`;
 }
 
 export function classifyB640Notification(
   row: B640NotificationSource,
   application: B640ApplicationContext | undefined,
   newestReplies: ReadonlySet<string>,
-  searchRole: string | null = null,
+  context: ClassifyContext = {},
 ): B640Notification {
   const kind = classifyKind(row, application, newestReplies);
   const company = cleaned(application?.company);
-  const role = kind === 'new_vacancies_by_role' ? cleaned(searchRole) : cleaned(application?.role);
+  const searchRoles = context.searchRoles ?? [];
+  const digest = kind === 'new_vacancies_by_role' ? roleDigestView(row, searchRoles) : null;
+  const role =
+    kind === 'new_vacancies_by_role'
+      ? digest
+        ? digest.role
+        : searchRoleLabel(searchRoles)
+      : cleaned(application?.role);
   return {
     id: row.id,
     kind,
     category: CATEGORY_BY_KIND[kind] ?? 'other',
     important: row.readAt === null && IMPORTANT_KINDS.has(kind),
-    title: titleFor(kind, company, row),
+    title:
+      digest?.title ??
+      (kind === 'footprint_findings'
+        ? footprintTitle(context.findingCount)
+        : titleFor(kind, company, row)),
     company,
     role,
-    eventAt: eventAtOf(kind, row, application),
+    eventAt: eventAtOf(kind, application),
     createdAt: row.createdAt,
     readAt: row.readAt,
     sourceType: row.sourceType,
@@ -196,8 +234,10 @@ export interface BuildB640FeedInput {
    * свой сохранённый ключ и репозиторий отдал ответы без фильтра по «Ответам».
    */
   readonly inApp?: { readonly replies: boolean; readonly invitations: boolean };
-  /** B671: роль поиска кандидата — для «Новые вакансии по вашей роли». */
-  readonly searchRole?: string | null;
+  /** B671: роли поиска кандидата по-русски — для «Новые вакансии по вашей роли». */
+  readonly searchRoles?: readonly string[];
+  /** B671 (n01b): число находок по id проверки следа. */
+  readonly findingCounts?: ReadonlyMap<string, number>;
 }
 
 const INVITATION_KINDS: ReadonlySet<B640NotificationKind> = new Set([
@@ -218,7 +258,11 @@ export function buildB640NotificationFeed(input: BuildB640FeedInput): B640Notifi
       row,
       row.sourceType === 'application' ? input.applications.get(row.sourceId) : undefined,
       newestReplies,
-      input.searchRole ?? null,
+      {
+        searchRoles: input.searchRoles ?? [],
+        findingCount:
+          row.kind === 'footprint_findings' ? input.findingCounts?.get(row.sourceId) : undefined,
+      },
     ),
   );
   const classified = all.filter((item) => shownInApp(item, input.inApp));

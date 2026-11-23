@@ -576,6 +576,31 @@ test.describe('B691: сигналы на «Сегодня»', () => {
     expect(covered).toBe(false);
   });
 
+  test('390: при полосе сигнала главная кнопка экрана в потоке, полоса её не закрывает (B645-2)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'полоса только на телефоне');
+    await openCabinet(page, '/app/today', { status: 'looking', signal: 'started_search' });
+    await expect(card(page).getByRole('button', { name: 'Верно' })).toBeVisible();
+    const lead = page.locator('#career-main .lead > .actions > .btn').first();
+    await expect(lead).toBeVisible();
+    // Макет s04 на 390: кнопка ведущего блока контурная, под списком на всю ширину, не в своей полосе.
+    await expect(lead).not.toHaveClass(/is-primary/u);
+    expect(await lead.evaluate((el) => getComputedStyle(el.parentElement!).position)).toBe(
+      'static',
+    );
+    const width = page.viewportSize()!.width;
+    const btn = (await lead.boundingBox())!;
+    expect(Math.round(btn.x)).toBe(16);
+    expect(Math.round(btn.width)).toBe(width - 32);
+    await lead.scrollIntoViewIfNeeded();
+    const reachable = await lead.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+    });
+    expect(reachable).toBe(true);
+  });
+
   test('«Верно» ведёт к выбору статуса с предложением, сам статус не меняет', async ({ page }) => {
     const calls = await openCabinet(page, '/app/today', {
       status: 'looking',
