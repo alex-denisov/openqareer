@@ -25,6 +25,12 @@ vi.mock('./linkedinQueueApi', () => ({
     days: ['fri'],
     time: '10:00',
     timezone: 'Europe/Moscow',
+    comments: {
+      perDay: 2,
+      days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+      from: '10:00',
+      to: '18:00',
+    },
   }),
   listQueue: vi.fn().mockResolvedValue({ items: [], total: 0, offset: 0, limit: 20 }),
   enqueueDraft: vi.fn(),
@@ -76,7 +82,9 @@ describe('a03: профиль LinkedIn', () => {
     vi.mocked(profileApi.getLinkedinProfile).mockResolvedValue({ kind: 'no_import' });
     const view = mount(<Section node={node('a03')} params={{}} />);
     await flush();
-    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain('Импортировать из LinkedIn');
+    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain(
+      'Импортировать из LinkedIn',
+    );
     expect(view.container.querySelector('.li-sec')).toBeNull();
     view.unmount();
   });
@@ -138,6 +146,67 @@ describe('a03p, a03b, a05', () => {
     await flush();
     expect(view.container.querySelector('.vl-empty-t')!.textContent).toBe('Новых постов нет');
     expect(view.container.querySelector('#fp-text')).not.toBeNull();
+    // a05h: «Изменить темы» под строкой «Новых постов нет».
+    expect(
+      [...view.container.querySelectorAll('a')].some((a) =>
+        a.textContent?.includes('Изменить темы'),
+      ),
+    ).toBe(true);
+    // Главная кнопка на a05h одна — «Изменить темы»; «Подготовить комментарий» обычная.
+    expect(
+      [...view.container.querySelectorAll('.is-primary')].map((item) => item.textContent),
+    ).toEqual(['Изменить темы']);
+    view.unmount();
+  });
+  it('лента a05: «N постов · Сегодня осталось X из Y», меню «Изменить темы», очередь комментариев с ритмом', async () => {
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    vi.mocked(queue.listFeedPosts).mockResolvedValue({
+      items: [
+        {
+          draftId: 'f1',
+          postUrl: null,
+          postExcerpt: 'Пост',
+          comment: 'К',
+          state: 'draft',
+          createdAt: at,
+          scheduledAt: null,
+        },
+      ],
+      total: 1,
+      offset: 0,
+      limit: 20,
+    } as never);
+    vi.mocked(queue.listQueue).mockResolvedValue({
+      items: [
+        {
+          id: 'q1',
+          draftId: 'c1',
+          kind: 'comment',
+          text: 'В очереди',
+          scheduledAt: at,
+          state: 'queued',
+          updatedAt: at,
+          remindedAt: null,
+          openUrl: null,
+        },
+      ],
+      total: 1,
+      offset: 0,
+      limit: 20,
+      paused: false,
+    } as never);
+    const view = mount(<Section node={node('a05')} params={{}} />);
+    await flush();
+    const heading = view.container.querySelector('#cm-title')!.textContent!;
+    expect(heading).toMatch(/^1 пост · Сегодня осталось [0-2] из 2$/u);
+    const menu = view.container.querySelector('.list-head .lk-menu')!;
+    expect(menu.querySelector('button')!.getAttribute('aria-label')).toBe(
+      'Ещё действия: комментарии',
+    );
+    click(menu.querySelector('button'));
+    expect(menu.querySelector('[role="menuitem"]')!.textContent).toBe('Изменить темы');
+    expect(view.container.querySelector('#cq-title')!.textContent).toBe('1 комментарий в очереди');
+    expect(view.container.textContent).toContain('Настроить ритм');
     view.unmount();
   });
   it('лента: карточки, «Одобрить» и пакетное «Одобрить все»', async () => {

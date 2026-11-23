@@ -8,6 +8,7 @@ import { RequirementList } from '../card/RequirementList';
 import { textBlocks } from '../card/textBlocks';
 import { isoRowDate, safeHttpUrl, salaryMoneyView, type MoneyOptions } from '../format';
 import { getOwnVacancy } from '../ownVacancyApi';
+import { ownNoScoreReason } from './ownNoScore';
 
 /** «3 из 5» в колонке совпадения: процента у своей вакансии нет. */
 function CoverageCell({ item }: { item: OwnVacancy }) {
@@ -68,6 +69,25 @@ function OwnText({ text }: { text: string }) {
   );
 }
 
+/** Без счёта — почему, словами; найденные требования видны, даже если ни одно не навык. */
+function NoScore({ view, listed }: { view: VacancyFitView; listed: boolean }) {
+  const reason = ownNoScoreReason(view);
+  if (!reason) return null;
+  const others = listed ? [] : view.requirements;
+  return (
+    <div className="v4-box">
+      <p className="v4-req-row">{reason}</p>
+      {others.length > 0 ? (
+        <div className="v4-reqs-open">
+          <ul className="v4-fd-l">
+            {others.map((item) => <li key={item.id}><span className="v4-fd-r">{item.label?.trim() || item.text}</span></li>)}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
   const rows = fitRows(detail.fit);
   const url = safeHttpUrl(detail.url);
@@ -82,11 +102,7 @@ function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
           </div>
         </div>
       ) : null}
-      {detail.fit.state === 'no_requirements' ? (
-        <div className="v4-box">
-          <p className="v4-req-row">Требования в тексте не нашлись</p>
-        </div>
-      ) : null}
+      <NoScore view={detail.fit} listed={rows.length > 0} />
       <OwnText text={detail.text} />
       {url ? (
         <a className="row-act vs-open" href={url} target="_blank" rel="noopener noreferrer">

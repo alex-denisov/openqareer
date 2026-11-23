@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSkillRequirement } from '../../domain/vacancyFit';
+import { isSkillRequirement, MIN_SKILL_REQUIREMENTS } from '../../domain/vacancyFit';
 import { extractVacancyRequirements } from '../../domain/vacancyRequirements';
 import { shownOwnRequirements } from './ownVacancyComparison';
 
@@ -30,6 +30,27 @@ describe('требования своей вакансии: счёт и стро
       .map((item) => item.id);
     expect(counted.length).toBeGreaterThan(2);
     expect(shown).toEqual(counted);
+  });
+
+  it('строка «Требования: a; b, c; d» — отдельные требования, навыков хватает для счёта (прод 23.11)', () => {
+    const raw = extracted(
+      'Директор по разработке\nТребования: опыт руководства инженерными командами от 50 человек; ' +
+        'построение платформы и процессов релиза; Kubernetes, PostgreSQL; английский B2.',
+    );
+    expect(raw.map((item) => item.text)).toEqual([
+      'опыт руководства инженерными командами от 50 человек',
+      'построение платформы и процессов релиза',
+      'Kubernetes',
+      'PostgreSQL',
+      'английский B2',
+    ]);
+    expect(raw.filter(isSkillRequirement).length).toBeGreaterThanOrEqual(MIN_SKILL_REQUIREMENTS);
+    expect(raw.find((item) => item.text === 'английский B2')?.kind).toBe('language');
+  });
+
+  it('строка без «;» и длинный перечень через запятую остаются одним требованием', () => {
+    const raw = extracted('Требования:\n- опыт с Python, Go и Rust от 3 лет;\n- SQL');
+    expect(raw.map((item) => item.text)).toEqual(['опыт с Python, Go и Rust от 3 лет;', 'SQL']);
   });
 
   it('у навыков остаётся короткая подпись для строки', () => {

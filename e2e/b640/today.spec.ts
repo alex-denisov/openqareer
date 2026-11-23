@@ -657,6 +657,41 @@ test.describe('B650 s05b: «События откликов»', () => {
     );
   });
 
+  test('путь откликов в полосе статуса — между статусом и «Сменить», отклики читаются один раз', async ({
+    page,
+  }) => {
+    let reads = 0;
+    page.on('request', (request) => {
+      if (/\/api\/v1\/candidate\/applications\?/u.test(request.url())) reads += 1;
+    });
+    const interview = {
+      ...UNDELIVERED,
+      id: 'r-arka',
+      stage: 'interview',
+      deliveryReceipt: null,
+      deliveryReceiptRecordedAt: null,
+      reachedStages: ['applied', 'interview'],
+    };
+    await openCabinet(page, '/app/today', { responses: [UNDELIVERED, interview] });
+    const strip = page.locator('.b640 .s5-prog');
+    await expect(strip.locator('.num')).toHaveText(
+      'С 2 октября: 2 отклика → 1 интервью → 0 офферов',
+    );
+    await expect(strip.locator(':scope > *')).toHaveText([
+      'Статус: Ищу работу',
+      'С 2 октября: 2 отклика → 1 интервью → 0 офферов',
+      'Сменить',
+    ]);
+    await expect(page.locator('.b640 section.re-today li.re-card')).toHaveCount(1);
+    expect(reads).toBe(1);
+  });
+
+  test('откликов нет — строки пути нет', async ({ page }) => {
+    await openCabinet(page, '/app/today');
+    await expect(page.locator('.b640 .s5-prog')).toContainText('Статус: Ищу работу');
+    await expect(page.locator('.b640 .s5-prog .num')).toHaveCount(0);
+  });
+
   test('событий нет — блока нет', async ({ page }) => {
     await openCabinet(page, '/app/today');
     await expect(page.locator('.b640 .col').first()).toBeVisible();

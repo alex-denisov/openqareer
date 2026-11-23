@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
-  LINKEDIN_QUEUE_PAGE_MAX, LINKEDIN_QUEUE_STATES, LINKEDIN_RHYTHM_DAYS, type LinkedinQueueItem, type LinkedinRhythm,
+  LINKEDIN_COMMENTS_PER_DAY_MAX, LINKEDIN_QUEUE_PAGE_MAX, LINKEDIN_QUEUE_STATES, LINKEDIN_RHYTHM_DAYS, type LinkedinQueueItem, type LinkedinRhythm,
 } from '../../shared/b640LinkedinQueue';
 import { DEFAULT_ACCOUNT_TIMEZONE, isValidTimezone } from '../../shared/timezoneUtils';
 import type { LinkedinQueueRepository, ChangeResult } from '../linkedinQueue/linkedinQueueRepository';
@@ -17,11 +17,19 @@ const MAX_AHEAD_MS = 366 * 86_400_000;
 const READ_LIMIT = { config: { rateLimit: { max: 120, timeWindow: '1 minute' } } };
 const WRITE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
 
+const clockSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/u);
+const commentRhythmSchema = z.object({
+  perDay: z.number().int().min(1).max(LINKEDIN_COMMENTS_PER_DAY_MAX),
+  days: z.array(z.enum(LINKEDIN_RHYTHM_DAYS)).min(1).max(7),
+  from: clockSchema,
+  to: clockSchema,
+}).strict().refine((value) => value.from < value.to);
 const rhythmSchema = z.object({
   postsPerWeek: z.number().int().min(1).max(7),
   days: z.array(z.enum(LINKEDIN_RHYTHM_DAYS)).min(1).max(7),
-  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/u),
+  time: clockSchema,
   timezone: z.string().refine(isValidTimezone),
+  comments: commentRhythmSchema.optional(),
 }).strict();
 const futureAt = z.string().datetime({ offset: true }).refine((value) => {
   const time = Date.parse(value);
@@ -67,7 +75,7 @@ const ENQUEUE_ERRORS = {
   no_slot: [409, 'no_free_slot', 'В ближайшие месяцы нет свободного слота ритма.'],
 } as const;
 
-function registerRhythm(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQueueRepository): void {
+function registerRhythm(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQueueRepository, reminders: PostReminders): void {
   app.get(`${BASE}/rhythm`, READ_LIMIT, async (request, reply) => {
     const ctx = context(deps, repo, request, reply);
     if (!ctx) return reply;
@@ -79,8 +87,17 @@ function registerRhythm(app: FastifyInstance, deps: RouteDeps, repo: LinkedinQue
     const parsed = rhythmSchema.safeParse(request.body);
     if (!parsed.success) return bad(request, reply, 'invalid_rhythm', 'Проверьте ритм: посты в неделю, дни, время и пояс.');
     const days = LINKEDIN_RHYTHM_DAYS.filter((day) => parsed.data.days.includes(day));
-    const rhythm: LinkedinRhythm = { ...parsed.data, days };
-    return ok(request, repo.setRhythm(ctx.candidateId, rhythm));
+    // a05e: без `comments` ритм комментариев остаётся прежним.
+    const saved = parsed.data.comments ?? repo.getRhythm(ctx.candidateId, ctx.timezone).comments;
+    const comments = { ...saved, days: LINKEDIN_RHYTHM_DAYS.filter((day) => saved.days.includes(day)) };
+    const rhythm: LinkedinRhythm = { ...parsed.data, days, comments };
+    const result = repo.setRhythm(ctx.candidateId, rhythm);
+    // Перенесённые комментарии: напоминание «пора опубликовать» — на новое время.
+    const now = Date.now();
+    for (const slot of repo.waiting(ctx.candidateId)) {
+      if (slot.kind === 'comment' && Date.parse(slot.scheduledAt) > now) reminders.schedule(ctx.candidateId, slot);
+    }
+    return ok(request, result);
   });
 }
 
@@ -142,7 +159,7 @@ export function registerB640LinkedinQueueRoutes(app: FastifyInstance, deps: Rout
   const repo = linkedinQueueFor(deps);
   const reminders = postRemindersFor(deps, app.log, repo);
   if (!repo || !reminders) return;
-  registerRhythm(app, deps, repo);
+  registerRhythm(app, deps, repo, reminders);
   registerQueueRead(app, deps, repo, reminders);
   registerItemChanges(app, deps, repo, reminders);
 }
