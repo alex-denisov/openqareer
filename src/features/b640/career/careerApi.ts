@@ -25,8 +25,6 @@ export interface RolesData {
   readonly rows: readonly RoleRow[];
   readonly searchTitles: readonly string[];
   readonly campaign: CampaignMetaView;
-  /** Число вакансий выбора: единый расчёт со списком «Вакансии»; `null` — не прочитано. */
-  readonly selectionTotal: number | null;
 }
 
 /** Полоса «Проверьте N навыков»: роль поиска, проверку которой можно начать. */
@@ -143,8 +141,18 @@ export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
     rows: withLacks(buildRoleRows(roles, searchTitles, checked, campaign.titlesRu), demand),
     searchTitles,
     campaign,
-    selectionTotal: searchTitles.length > 0 ? await readSelectionTotal(searchTitles, signal) : null,
   };
+}
+
+/**
+ * Число вакансий выбора: единый расчёт со списком «Вакансии»; `null` — не прочитано.
+ * B768: читается отдельно — таблица ролей его не ждёт (на проде запрос шёл 3,6 с).
+ */
+export function loadSelectionTotal(
+  titles: readonly string[],
+  signal: AbortSignal,
+): Promise<number | null> {
+  return titles.length > 0 ? readSelectionTotal(titles, signal) : Promise.resolve(null);
 }
 
 /** Полоса навыков догружается после таблицы ролей и её не держит. */
