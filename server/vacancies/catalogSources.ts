@@ -5,6 +5,7 @@
  * фоне и держит её в памяти: HTTP пул не трогает (B308).
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { readRowsChunked } from '../data/chunkedRows';
 
 export interface CatalogSourceCount {
   readonly sourceId: string;
@@ -51,18 +52,18 @@ export function writeCatalogSources(
   }
 }
 
-export function readCatalogSources(database: DatabaseSync): CatalogSourceCount[] {
+/** B776: 57 696 строк на проде (23.11) читались 0,25 с одним куском — теперь порциями. */
+export async function readCatalogSources(database: DatabaseSync): Promise<CatalogSourceCount[]> {
   const exists = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalog_sources'")
     .get();
   if (!exists) return [];
-  return (
-    database
-      .prepare(
-        'SELECT source_id, vacancy_count FROM catalog_sources ORDER BY vacancy_count DESC, source_id',
-      )
-      .all() as { source_id: string; vacancy_count: number }[]
-  ).map((row) => ({ sourceId: row.source_id, count: Number(row.vacancy_count) }));
+  const rows = await readRowsChunked<{ source_id: string; vacancy_count: number }>(
+    database.prepare(
+      'SELECT source_id, vacancy_count FROM catalog_sources ORDER BY vacancy_count DESC, source_id',
+    ),
+  );
+  return rows.map((row) => ({ sourceId: row.source_id, count: Number(row.vacancy_count) }));
 }
 
 let current: readonly CatalogSourceCount[] = [];
