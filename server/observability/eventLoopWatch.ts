@@ -1,5 +1,6 @@
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import type { FastifyInstance } from 'fastify';
+import { gcWatch, heldBackgroundSteps } from './backgroundSteps';
 import { redactRequestUrlForLogs } from './redactRequestUrl';
 
 type WatchLog = (fields: Record<string, unknown>, message: string) => void;
@@ -92,6 +93,7 @@ function stallTicker(
   log: WatchLog,
   stallMs: number,
   tickMs: number,
+  gcMsIn: (windowStart: number, now: number) => number,
 ) {
   let lastTick = performance.now();
   return {
@@ -102,6 +104,7 @@ function stallTicker(
       const now = performance.now();
       const late = now - lastTick - tickMs;
       const held = heldRequests(tracked, lastTick, now);
+      const windowStart = lastTick;
       lastTick = now;
       if (late < stallMs) return;
       log(
@@ -110,6 +113,9 @@ function stallTicker(
           inFlight: namedInFlight(held),
           inFlightCount: held.length,
           unfinishedCount: held.filter((item) => !item.finished).length,
+          // B769: фоновый шаг и сборка мусора в том же окне — задержки без запросов было не объяснить.
+          background: heldBackgroundSteps(windowStart, now),
+          gcMs: gcMsIn(windowStart, now),
         },
         'event-loop-stall',
       );
@@ -149,11 +155,13 @@ export function registerEventLoopWatch(
 ): void {
   const { stallMs = 250, tickMs = 50, reportMs = 60_000 } = options;
   const log: WatchLog = options.log ?? ((fields, message) => app.log.info(fields, message));
-  const stalls = stallTicker(trackRequests(app), log, stallMs, tickMs);
+  const gc = gcWatch();
+  const stalls = stallTicker(trackRequests(app), log, stallMs, tickMs, gc.msIn);
   const lag = lagReporter(log);
   const timers: NodeJS.Timeout[] = [];
   app.addHook('onReady', async () => {
     lag.delay.enable();
+    gc.enable();
     stalls.reset();
     timers.push(setInterval(stalls.tick, tickMs), setInterval(lag.report, reportMs));
     timers.forEach((timer) => timer.unref());
@@ -161,5 +169,6 @@ export function registerEventLoopWatch(
   app.addHook('onClose', async () => {
     timers.forEach((timer) => clearInterval(timer));
     lag.delay.disable();
+    gc.disable();
   });
 }
