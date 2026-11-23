@@ -95,7 +95,11 @@
   }
   .b640 .topbar h1:has(.top-tip) { display: flex; align-items: center; gap: var(--career-space-1); overflow: visible; }
   .b640 .top-tip .tip-bubble { font-size: var(--career-text-xs); font-weight: 400; letter-spacing: normal; white-space: normal; }
-  @media (max-width: 767px) { .b640 .topbar h1:has(.top-tip) { justify-content: center; } }
+  @media (max-width: 767px) {
+    .b640 .topbar h1:has(.top-tip) { justify-content: center; }
+    /* ⓘ у заголовка по центру экрана: подсказка под кнопкой по центру, иначе уходит за правый край 390. */
+    .b640 .top-tip .tip-bubble { inset-inline-start: 50%; translate: -50% 0; max-inline-size: min(var(--career-tip-width), calc(100vw - var(--career-space-4) * 2)); }
+  }
   .b640 .dn-q-row { display: flex; align-items: center; gap: var(--career-space-2); }
   .b640 .dn-quick input { min-block-size: var(--career-target-min); padding-inline-start: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
   .b640 .dn-quick input:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }

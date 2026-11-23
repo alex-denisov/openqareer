@@ -63,6 +63,27 @@ test.describe('B662: «Дневник» нового кабинета — зап
     expect(calls.weeks).toHaveLength(1);
   });
 
+  test('B645-2 п. 97: ⓘ «Кто видит» у заголовка — с клавиатуры, в пределах экрана, Esc снимает', async ({
+    page,
+  }) => {
+    await openDiary(page, '/app/diary', 'd00');
+    const tip = page.locator('.topbar h1 .top-tip');
+    const button = tip.getByRole('button', { name: 'Кто видит' });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    const bubble = tip.getByRole('tooltip');
+    await expect(bubble).toHaveText('Дневник виден только вам: работодатель его не видит.');
+    await expect(bubble).toBeVisible();
+    const box = await bubble.boundingBox();
+    const width = page.viewportSize()?.width ?? 1440;
+    expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
+    expect(box?.y ?? -1).toBeGreaterThanOrEqual(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.keyboard.press('Escape');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
   test('снимки «Дневника»: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {
     test.skip(
       !SHOTS || testInfo.project.name !== 'desktop-1440',

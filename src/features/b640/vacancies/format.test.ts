@@ -66,6 +66,15 @@ describe('format: строка вакансии B640', () => {
     expect(rowFormat(item({ workFormat: 'remote', isRemote: true }))).toBe('удалённо');
   });
 
+  it('B765: сумма без периода 100–999 — как в вакансии, без ₽ и без периода (per diem 450–600 USD)', () => {
+    const view = moneyView(item({ salary: { from: 450, to: 600, currency: 'USD' } }), {
+      currency: 'RUB',
+      rates: RATES,
+    });
+    expect(view.text).toBe('$450–600');
+    expect(view.title).toBeUndefined();
+  });
+
   it('деньги в рублях — без «≈» и без подсказки', () => {
     const view = moneyView(item({ salary: { from: 480000, to: 580000, currency: 'RUR' } }), {
       currency: 'RUB',

@@ -69,6 +69,14 @@ describe('n06 «Приложение» в .app', () => {
     expect(language?.querySelector('.set-r')?.textContent).toBe('Русский');
   });
 
+  it('B593: time zones read as in the mockup — «Москва, UTC+3»', async () => {
+    const { container } = await render();
+    const zone = [...container.querySelectorAll('.set-t')].find((item) => item.textContent === 'Часовой пояс')?.closest('.set-row');
+    const options = [...(zone?.querySelectorAll('option') ?? [])].map((item) => item.textContent);
+    expect(options).toContain('Москва, UTC+3');
+    expect(options.every((text) => !text?.includes('('))).toBe(true);
+  });
+
   it('B722: automatic updates switch saves on this computer and tells the updater at once', async () => {
     const { container } = await render();
     await act(async () => switchFor(container, 'Обновлять автоматически').click());

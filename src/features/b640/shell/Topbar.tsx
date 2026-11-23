@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react';
 import { Icon } from '../kit/Icon';
+import { InfoTip } from '../kit/InfoTip';
 import type { B640Nav } from '../routes';
 import { Link } from './Link';
 import { CONSULTANT_PATH, NOTIFICATIONS_PATH, TARIFFS_PATH } from './navigation';
@@ -8,6 +9,8 @@ import { useShell } from './ShellContext';
 
 export interface TopbarProps {
   readonly title: string;
+  /** ⓘ «Кто видит» у заголовка, как `data-title-tip` макета. */
+  readonly titleTip?: string;
   readonly active: B640Nav | null;
   readonly bellCount: number;
   readonly bellCritical: boolean;
@@ -134,7 +137,15 @@ function MobCoach({ dot }: { readonly dot: boolean }) {
  * Верхняя полоса. 1440 и 1176: заголовок, колокольчик, «Консультант», «Тарифы».
  * 390: «колокольчик или Назад · раздел · консультант», размеры по `--career-ios-*`.
  */
-export function Topbar({ title, active, bellCount, bellCritical, coachDot, back }: TopbarProps) {
+export function Topbar({
+  title,
+  titleTip,
+  active,
+  bellCount,
+  bellCritical,
+  coachDot,
+  back,
+}: TopbarProps) {
   const bell: BellState = { active: active === 'bell', count: bellCount, critical: bellCritical };
   return (
     <header className="topbar">
@@ -147,7 +158,14 @@ export function Topbar({ title, active, bellCount, bellCritical, coachDot, back 
           <Bell className="icon-btn bell mob-bell" {...bell} />
         )}
       </div>
-      <h1>{title}</h1>
+      <h1>
+        {title}
+        {titleTip ? (
+          <span className="top-tip">
+            <InfoTip label="Кто видит" text={titleTip} />
+          </span>
+        ) : null}
+      </h1>
       <TopActions bell={bell} tariffs={active === 'tariffs'} />
       <MobCoach dot={coachDot} />
     </header>
