@@ -90,9 +90,11 @@ async function readList(
   context: B640ListContext,
   query: Query,
 ) {
+  const startedAt = performance.now();
   const order = savedOrder(deps, candidateId);
   const filters = listFilters(query, order);
   const read = await prepareMatchedRead(deps, candidateId, context.targetRoles, order, request.log);
+  const snapshotAt = performance.now();
   const snapshot = await readMatchedSnapshot(
     deps.multiSourceEngine,
     candidateId,
@@ -102,7 +104,8 @@ async function readList(
     context.geography,
   );
   const { registry: sourceRegistry } = cachedMatchedSourceRegistry(deps.multiSourceEngine);
-  const { list } = await readMatchedList(
+  const listAt = performance.now();
+  const { list, served } = await readMatchedList(
     {
       ...context,
       candidateStore: deps.candidateStore,
@@ -119,7 +122,41 @@ async function readList(
     },
     request.log,
   );
-  return { list, saved: order, fitLimit: read.fitLimit, targetLevel: read.targetLevel };
+  const timing: ListReadTiming = {
+    served,
+    setupMs: roundMs(snapshotAt - startedAt),
+    snapshotMs: roundMs(listAt - snapshotAt),
+    listReadMs: roundMs(performance.now() - listAt),
+    ...(served === 'built'
+      ? { prepareMs: list.prepareMs, listMs: list.listMs, phasesMs: list.phasesMs }
+      : {}),
+  };
+  return { list, saved: order, fitLimit: read.fitLimit, targetLevel: read.targetLevel, timing };
+}
+
+/** B770: what the b640 list spent, by step; built lists carry their phases. */
+interface ListReadTiming {
+  readonly served: string;
+  readonly setupMs: number;
+  readonly snapshotMs: number;
+  readonly listReadMs: number;
+  readonly prepareMs?: number;
+  readonly listMs?: number;
+  readonly phasesMs?: Readonly<Record<string, number>>;
+}
+
+const roundMs = (ms: number): number => Number(ms.toFixed(2));
+
+function logListTiming(
+  request: FastifyRequest,
+  query: Query,
+  timing: ListReadTiming,
+  orderMs: number,
+): void {
+  request.log.info(
+    { ...timing, orderMs: roundMs(orderMs), offset: query.offset, sort: query.sort },
+    'b640-matched-timing',
+  );
 }
 
 type Rows = readonly MatchedVacancyItem[];
@@ -237,7 +274,9 @@ const getMatchedVacancies = async (
   if (sealed) return sealed;
   const read = await readList(deps, request, candidate.id, context, query);
   const { list, fitLimit, targetLevel } = read;
+  const orderStartedAt = performance.now();
   const ordered = await orderRows(deps, request, candidate.id, context, read, query);
+  logListTiming(request, query, read.timing, performance.now() - orderStartedAt);
   const { byFit } = ordered;
   const rows = withinDays(ordered.rows, query);
   const shown = rows.slice(query.offset, query.offset + query.limit).map(trim);
