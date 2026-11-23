@@ -1,3 +1,4 @@
+import { GO_OR_GOLANG } from '../../shared/goLanguage';
 import {
   CORE_API,
   DOMAINS,
@@ -46,7 +47,7 @@ const STACK_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
   ['PostgreSQL', /\bpostgres(?:ql)?\b/i],
   ['Redis', /\bredis\b/i],
   ['ClickHouse', /\bclickhouse\b/i],
-  ['Go', /\b(?:Go|Golang|golang)\b/],
+  ['Go', GO_OR_GOLANG],
   ['Java', /\bjava\b(?!script)/i],
   ['Python', /\bpython\b/i],
   ['RabbitMQ', /\brabbitmq\b/i],

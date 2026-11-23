@@ -41,6 +41,11 @@
       "family": "sales.core",
       "titleEn": "Sales Representative / Account Executive",
       "titleRu": "Менеджер по продажам / аккаунт-менеджер",
+      "forms": {
+        "toBecome": "менеджеры по продажам",
+        "genitive": "менеджера по продажам",
+        "instrumental": "менеджером по продажам"
+      },
       "levels": [
         "ic"
       ],

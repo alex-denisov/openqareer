@@ -34,6 +34,11 @@
       "family": "ai-ml.engineering",
       "titleEn": "Machine Learning Engineer",
       "titleRu": "Инженер машинного обучения",
+      "forms": {
+        "toBecome": "ML-инженеры",
+        "genitive": "ML-инженера",
+        "instrumental": "ML-инженером"
+      },
       "levels": [
         "ic"
       ],

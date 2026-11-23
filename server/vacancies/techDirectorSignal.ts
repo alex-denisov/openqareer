@@ -1,3 +1,4 @@
+import { GO_LANGUAGE } from '../../shared/goLanguage';
 import { sameCareerRole } from './careerRoleKey';
 
 /**
@@ -33,10 +34,12 @@ const IT_GROUPS: readonly RegExp[] = [
   /архитектур\S* (?:систем|приложен|it|ит)|system design|solution architect|microservice|микросервис|\bapi\b|\bhighload|высоконагруж/iu,
   /\bcloud\b|облач|\baws\b|\bgcp\b|\bazure\b|kubernetes|\bk8s\b|docker|terraform/iu,
   /devops|ci\/cd|\bsre\b|observability/iu,
-  /\b(?:python|java|golang|go|typescript|javascript|node\.?js|php|c#|\.net|kotlin|swift|rust|scala|react|vue|angular)\b/iu,
+  /\b(?:python|java|golang|typescript|javascript|node\.?js|php|c#|\.net|kotlin|swift|rust|scala|react|vue|angular)\b/iu,
   /\bsql\b|postgres|mysql|clickhouse|mongodb|redis|kafka|баз\S* данных/iu,
   /\bdata (?:platform|engineering|pipeline)|\bmachine learning|\bml\b|\bllm\b|\bai\b|искусственн\S* интеллект|машинн\S* обучен|big data|\bdwh\b/iu,
   /(?<!\p{L})ИИ(?!\p{L})/u,
+  // Go — только язык: «go-to-market» и «go live» не ИТ (B741).
+  GO_LANGUAGE,
   /(?:it|ит)[- ]инфраструктур|\bit infrastructure|информационн|кибербезопасн|cybersecurity|\blinux\b|\bwindows server|vmware|виртуализац|zabbix|сетев\S* оборудован/iu,
   /\bweb\b|веб|мобильн\S* приложен|\bmobile app|\bios\b|\bandroid\b|backend|frontend|бэкенд|фронтенд|full-?stack/iu,
   /\bscrum\b|\bagile\b|\bsdlc\b|code review|ревью кода|техническ\S* долг|tech(?:nical)? debt/iu,

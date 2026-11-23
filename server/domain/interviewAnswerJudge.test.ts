@@ -133,6 +133,14 @@ describe('B780: критерии ответа оценивает модель, �
     expect(mergeJudgement(rules, null)).toBe(rules);
   });
 
+  it('правила без модели: расплывчатое «всё получилось хорошо» — не результат (прод 23.11)', () => {
+    const rules = scoreInterviewAnswerWithQuotes(
+      'Была сложная ситуация на проекте, мы с командой её решили, всё получилось хорошо.',
+      'behavioral',
+    );
+    expect(rules.criteria.result?.points).toBeLessThan(2);
+  });
+
   it('правила без модели: «руководил, разбил, договорился, вёл» — это личные действия', () => {
     const rules = scoreInterviewAnswerWithQuotes(KUBERNETES, 'behavioral');
     expect(rules.criteria.action?.points).toBe(2);

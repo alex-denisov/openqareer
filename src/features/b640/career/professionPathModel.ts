@@ -6,6 +6,40 @@ export interface ProfessionRequirement {
   readonly inProfile: boolean;
 }
 
+/** Падежные формы профессии: «продакт-менеджеры», «продакта», «продактом». */
+export interface ProfessionForms {
+  readonly toBecome: string;
+  readonly genitive: string;
+  readonly instrumental: string;
+}
+
+export interface ProfessionTexts {
+  readonly path: string;
+  readonly owned: string;
+  readonly check: string;
+  readonly responses: string;
+}
+
+/** B669: тексты пути склоняют профессию; без форм — общие тексты с её названием. */
+export function professionTexts(
+  target: string,
+  forms: ProfessionForms | null | undefined,
+): ProfessionTexts {
+  if (!forms)
+    return {
+      path: `Путь в профессию «${target}»`,
+      owned: 'Что уже есть для новой профессии',
+      check: 'Проверка навыков профессии',
+      responses: 'Отклики в новой профессии',
+    };
+  return {
+    path: `Путь в ${forms.toBecome}`,
+    owned: `Что уже есть для ${forms.genitive}`,
+    check: `Проверка навыков ${forms.genitive}`,
+    responses: `Отклики ${forms.instrumental}`,
+  };
+}
+
 const key = (value: string): string => value.trim().toLocaleLowerCase('ru');
 
 function requirementWord(total: number): string {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ProposedRole } from '../../../../shared/roleProposals';
 import {
+  sourcesLine,
   buildRoleRows,
   compareCheckTag,
   searchStrip,
@@ -190,14 +191,11 @@ describe('B764: проверка, пройденная под другим на�
     COO: 'Операционный директор (COO)',
   };
 
-  it('строка по псевдониму называет роль проверки и её счёт, ссылка — на сам прогон', () => {
+  it('B645-2: столбец роли показывает проверку своей роли — чужая по псевдониму «не начата»', () => {
     const rows = buildRoleRows([vp, coo], ['VP of Operations', 'COO'], checked, titlesRu);
     const vpRow = rows.find((row) => row.title === 'VP of Operations')!;
-    expect(compareCheckTag(vpRow)).toEqual({
-      text: 'пройдена для «Операционный директор (COO)» · 4 из 6',
-      ok: true,
-      role: 'Chief Operating Officer',
-    });
+    // Решение оркестратора 23.11: результат другой роли в столбце этой роли не показываем.
+    expect(compareCheckTag(vpRow)).toEqual({ text: 'не начата', ok: false });
     const cooRow = rows.find((row) => row.title === 'COO')!;
     // B645 (прод c6dac4fe): столбец COO писал «6 из 6» по модели роли — счёт той же проверки.
     expect(compareCheckTag(cooRow)).toEqual({ text: 'пройдена · 4 из 6', ok: true });
@@ -239,5 +237,15 @@ describe('role label (B737)', () => {
       'Операционный директор (COO) и ещё 1',
     );
     expect(searchStrip([COO], null)?.title).toBe(COO);
+  });
+});
+
+describe('B645-2 s09: строка источников короткая', () => {
+  it('главный источник и «и ещё N»', () => {
+    expect(sourcesLine(['hh.ru'])).toBe('hh.ru');
+    expect(sourcesLine(['hh.ru', 'Indeed', 'сайты компаний', 'LinkedIn', 'RSS-лента'])).toBe(
+      'hh.ru и ещё 4',
+    );
+    expect(sourcesLine([])).toBe('');
   });
 });

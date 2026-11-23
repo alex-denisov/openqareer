@@ -3,7 +3,8 @@
  * npx tsx scripts/cluster-split-dry-run.ts <путь к копии базы> [--limit N]
  *   только чтение: сколько кластеров разобьётся, переездов, переадресаций, объём журнала.
  * npx tsx scripts/cluster-split-dry-run.ts <путь к копии базы> --write-copy
- *   настоящие шаги без пауз на КОПИИ: время каждого шага и итог. Прод-файл не принимается.
+ *   настоящие шаги без пауз на КОПИИ: время шага и его транзакции записи (writeMs), итог.
+ *   Прод-файл не принимается.
  */
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -56,6 +57,7 @@ function writeCopy(path: string): void {
   const totals = { steps: 0, scanned: 0, split: 0, pieces: 0, catalogMoved: 0, skipped: 0 };
   const started = performance.now();
   let maxStepMs = 0;
+  let maxWriteMs = 0;
   for (;;) {
     const at = performance.now();
     const step = splitClustersStep(db);
@@ -63,17 +65,22 @@ function writeCopy(path: string): void {
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     if (step.completed) break;
     maxStepMs = Math.max(maxStepMs, ms);
+    maxWriteMs = Math.max(maxWriteMs, step.writeMs);
     totals.steps += 1;
     totals.scanned += step.scanned;
     totals.split += step.split;
     totals.pieces += step.pieces;
     totals.catalogMoved += step.catalogMoved;
     totals.skipped += step.skippedCandidateRef + step.skippedIdTaken;
-    process.stdout.write(`${JSON.stringify({ stepId: step.stepId, ms, split: step.split })}\n`);
+    process.stdout.write(
+      `${JSON.stringify({ stepId: step.stepId, ms, writeMs: step.writeMs, split: step.split, pieces: step.pieces })}\n`,
+    );
   }
   db.close();
   const elapsedMs = Math.round(performance.now() - started);
-  process.stdout.write(`${JSON.stringify({ ...totals, maxStepMs, elapsedMs }, null, 2)}\n`);
+  process.stdout.write(
+    `${JSON.stringify({ ...totals, maxStepMs, maxWriteMs, elapsedMs }, null, 2)}\n`,
+  );
 }
 
 const args = parseArgs(process.argv.slice(2));

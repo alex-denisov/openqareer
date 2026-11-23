@@ -5,6 +5,8 @@
  * - `cluster_split_state` — курсор по `vacancy_clusters.rowid` и счётчики;
  * - `cluster_split_journal` — прежнее состояние каждого разбитого кластера
  *   (строка, ключи, строки каталога), по нему шаг откатывается целиком;
+ * - `cluster_split_progress` — большой кластер, который пишется частями
+ *   (куски шаг за шагом, основатель последним), и шаг, открывший его журнал;
  * - `vacancy_catalog_redirects` — старый ключ карточки → новый кластер, когда
  *   страница каталога переехала к куску.
  */
@@ -40,6 +42,15 @@ CREATE TABLE IF NOT EXISTS cluster_split_journal (
   created_at INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS cluster_split_journal_step ON cluster_split_journal(step_id);
+CREATE TABLE IF NOT EXISTS cluster_split_progress (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  cluster_id TEXT NOT NULL,
+  cluster_rowid INTEGER NOT NULL,
+  journal_step_id TEXT NOT NULL,
+  next_index INTEGER NOT NULL,
+  cluster_json_sha1 TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+) STRICT;
 CREATE TABLE IF NOT EXISTS vacancy_catalog_redirects (
   old_key TEXT PRIMARY KEY,
   old_path TEXT NOT NULL,
