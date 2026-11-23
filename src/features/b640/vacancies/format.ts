@@ -4,7 +4,7 @@ import { workFormatLabel } from '../../../../shared/vacancyWorkFormat';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { compactPlaceLabel } from '../../vacancies/VacancyScreenRowCells';
 import { formatCompensationCompact } from '../../vacancies/vacancyCompensation';
-import { vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
+import { hasRemoteMark, vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
 import { vacancyFormat } from '../../vacancies/vacancyScreenCriteria';
 
 /** Валюта показа денег: рубли, доллары, евро или «Как в вакансии». */
@@ -85,6 +85,8 @@ export function remoteLabel(cluster: {
 export function rowGeo(item: MatchedVacancyItem): string {
   const { cluster } = item;
   if (cluster.isRemote && vacancyFormat(item) === 'remote') return remoteLabel(cluster);
+  // B764: «Remote» в месте — подпись удалёнки по-русски, даже если формат указан иначе.
+  if (hasRemoteMark(cluster.canonicalLocation)) return remoteLabel(cluster);
   if (cluster.canonicalLocation) return compactPlaceLabel(cluster.canonicalLocation);
   return cluster.isRemote ? 'Удалённо' : 'Не указана';
 }

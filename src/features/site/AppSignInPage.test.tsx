@@ -61,7 +61,9 @@ describe('B755: «Войти в приложение openqareer на этом Ma
     );
     expect(container.textContent).toContain('Можно вернуться в приложение.');
     expect(container.innerHTML).not.toContain('oqa_code');
-    expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual(['/']);
+    expect([...container.querySelectorAll('a')].map((link) => link.getAttribute('href'))).toEqual([
+      '/',
+    ]);
     act(() => button('Открыть приложение').click());
     expect(openCallback).toHaveBeenCalledTimes(2);
     expect(openCallback).toHaveBeenLastCalledWith(
@@ -86,6 +88,12 @@ describe('B755: «Войти в приложение openqareer на этом Ma
     expect(
       appSignInReturnPath(`?from=app-sign-in&challenge=${CHALLENGE}&state=${STATE}&client=dev`),
     ).toBe(`/app-sign-in${QUERY}&client=dev`);
+  });
+
+  it('вкладка браузера называется по экрану', () => {
+    document.title = 'Страница не найдена | openqareer';
+    render(USER);
+    expect(document.title).toBe('Вход в приложение | openqareer');
   });
 
   it('«Отмена» возвращает в приложение без кода', () => {

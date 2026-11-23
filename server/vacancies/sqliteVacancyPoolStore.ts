@@ -19,6 +19,10 @@ import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriori
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
 import { readUnclusteredPoolPage, type UnclusteredPoolPage } from './unclusteredPoolPage';
+import {
+  createUnclusteredCatchUpCursor,
+  type UnclusteredCatchUpCursor,
+} from './unclusteredCatchUpCursor';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -344,6 +348,8 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly onWrite?: (event: PoolWriteEvent) => void;
   /** Подбор по смыслу вместо LIKE по описанию (B267 S3); по умолчанию старое поведение. */
   readonly matchMode?: 'legacy' | 'semantic';
+  /** Потолок корзины токена (B230/B761); по умолчанию `BUCKET_SIZE_CAP`, меньше — в тестах. */
+  readonly bucketSizeCap?: number;
 }
 
 interface CatalogListingRow {
@@ -425,7 +431,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private descriptionSkillsCursor = 0;
   /** Позиция прохода очистки сирот (B535): сначала кластеры, потом карточки. */
   /** Курсор прохода записей без кластера (B763), как у сирот — в памяти процесса. */
-  private unclusteredCursor = 0;
+  private unclusteredCursor: UnclusteredCatchUpCursor | undefined;
+  private readonly bucketSizeCap: number;
   private orphanCursor: { phase: 'clusters' | 'entries'; rowid: number } = {
     phase: 'clusters',
     rowid: 0,
@@ -439,9 +446,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.clusterWritePause = options.clusterWritePause;
     this.onWrite = options.onWrite;
     this.matchMode = options.matchMode ?? 'legacy';
-    if (options.databasePath !== ':memory:') {
+    this.bucketSizeCap = Math.max(1, Math.floor(options.bucketSizeCap ?? BUCKET_SIZE_CAP));
+    if (options.databasePath !== ':memory:')
       mkdirSync(dirname(options.databasePath), { recursive: true });
-    }
     this.databasePath = options.databasePath;
     this.database = new DatabaseSync(options.databasePath);
     this.database.exec('PRAGMA journal_mode = WAL;');
@@ -2671,16 +2678,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     lookup: VacancyClusterLookup,
     bucketSizes: Map<string, number>,
   ): Array<{ cluster_id: string }> {
-    const size = (kind: string, keys: readonly string[]): number =>
-      keys.reduce((total, key) => total + this.bucketSize(kind, key, bucketSizes), 0);
-    const companySide = size('company_token', lookup.companyTokens);
-    if (companySide === 0) return [];
-    const titleSide = size('title_token', lookup.titleTokens);
-    if (titleSide === 0) return [];
+    const company = this.matchTokens('company_token', lookup.companyTokens, bucketSizes);
+    if (company.size === 0) return [];
+    const title = this.matchTokens('title_token', lookup.titleTokens, bucketSizes);
+    if (title.size === 0) return [];
     const [outerKind, outerKeys, innerKind, innerKeys] =
-      companySide <= titleSide
-        ? (['company_token', lookup.companyTokens, 'title_token', lookup.titleTokens] as const)
-        : (['title_token', lookup.titleTokens, 'company_token', lookup.companyTokens] as const);
+      company.size <= title.size
+        ? (['company_token', company.keys, 'title_token', title.keys] as const)
+        : (['title_token', title.keys, 'company_token', company.keys] as const);
     const outerMarks = outerKeys.map(() => '?').join(', ');
     const innerMarks = innerKeys.map(() => '?').join(', ');
     return this.database
@@ -2698,6 +2703,46 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /**
+   * B761: токены стороны для сопоставления. Корзина не меньше потолка — слово
+   * вроде «group» (29 тыс. кластеров) или «manager» (95 тыс.): соседей по нему
+   * обход ищет десятки миллисекунд на запись, а различает он мало. Такие токены
+   * не участвуют — список берётся из счёта корзин. Если редких на стороне нет,
+   * остаётся самый редкий по точному счёту: у крупного работодателя двойники
+   * всё равно встречаются.
+   */
+  private matchTokens(
+    kind: string,
+    tokens: readonly string[],
+    bucketSizes: Map<string, number>,
+  ): { keys: readonly string[]; size: number } {
+    const sized = tokens.map((key) => ({ key, size: this.bucketSize(kind, key, bucketSizes) }));
+    const present = sized.filter((token) => token.size > 0);
+    const rare = present.filter((token) => token.size < this.bucketSizeCap);
+    if (rare.length > 0) {
+      return { keys: rare.map((token) => token.key), size: sum(rare.map((token) => token.size)) };
+    }
+    if (present.length === 0) return { keys: [], size: 0 };
+    const counted = present.map((token) => ({
+      key: token.key,
+      size: this.exactBucketSize(kind, token.key, bucketSizes),
+    }));
+    const rarest = counted.reduce((best, token) => (token.size < best.size ? token : best));
+    return { keys: [rarest.key], size: rarest.size };
+  }
+
+  /** Точный размер корзины — только для стороны, где все токены за потолком. */
+  private exactBucketSize(kind: string, key: string, cache: Map<string, number>): number {
+    const cacheKey = `exact\u0000${kind}\u0000${key}`;
+    const cached = cache.get(cacheKey);
+    if (cached !== undefined) return cached;
+    const row = this.database
+      .prepare('SELECT count(*) AS n FROM vacancy_cluster_keys WHERE kind = ? AND key = ?')
+      .get(kind, key) as { n: number };
+    cache.set(cacheKey, row.n);
+    return row.n;
+  }
+
+  /**
    * Размер корзины ключа — по индексу, с кэшем на время одной партии и с
    * потолком: чтобы выбрать меньшую сторону, точный счёт корзины «dev» на
    * сотни тысяч записей не нужен.
@@ -2709,7 +2754,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const row = this.database
       .prepare(
         `SELECT count(*) AS n FROM (
-           SELECT 1 FROM vacancy_cluster_keys WHERE kind = ? AND key = ? LIMIT ${BUCKET_SIZE_CAP}
+           SELECT 1 FROM vacancy_cluster_keys WHERE kind = ? AND key = ? LIMIT ${this.bucketSizeCap}
          )`,
       )
       .get(kind, key) as { n: number };
@@ -2913,14 +2958,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * тот же проход снимает карточки, у которых кластера нет вовсе.
    */
   /** Окно пула после курсора: записи, ни один ключ членства которых не лежит в кластерах (B763). */
-  readUnclusteredPoolPage(chunk = 500): UnclusteredPoolPage {
+  readUnclusteredPoolPage(chunk = 500, maxUnclustered?: number): UnclusteredPoolPage {
+    this.unclusteredCursor ??= createUnclusteredCatchUpCursor(this.database);
     const page = readUnclusteredPoolPage(
       this.database,
-      this.unclusteredCursor,
+      this.unclusteredCursor.read(),
       chunk,
       parseVacancy,
+      maxUnclustered,
     );
-    this.unclusteredCursor = page.cursor;
+    this.unclusteredCursor.write(page.cursor);
     return page;
   }
 
@@ -3489,4 +3536,8 @@ export function parseVacancy(payload: string): UnifiedVacancy | undefined {
 /** Текст дочитан этой записью впервые: сведение должно поискать двойника (01.11). */
 function gainedFullText(previous: UnifiedVacancy | undefined, stored: UnifiedVacancy): boolean {
   return Boolean(previous && !previous.fullDescription?.trim() && stored.fullDescription?.trim());
+}
+
+function sum(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0);
 }

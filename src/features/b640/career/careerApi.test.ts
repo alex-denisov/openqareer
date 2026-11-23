@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   getRoleSkillDemand: vi.fn(),
   getCurrentRoleSkillAssessment: vi.fn(),
   changeCareerRole: vi.fn(),
+  readSelectionTotal: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', () => ({ getRoleHypotheses: api.getRoleHypotheses }));
@@ -21,6 +22,7 @@ vi.mock('../../skills/roleSkillAssessmentApi', () => ({
 }));
 vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getRoleSkillDemand }));
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
+vi.mock('../vacancies/list/selectionCount', () => ({ readSelectionTotal: api.readSelectionTotal }));
 
 import {
   addOwnRole,
@@ -49,6 +51,14 @@ beforeEach(() => {
 });
 
 describe('loadRoles', () => {
+  it('B768: таблица ролей не ждёт числа вакансий выбора (на проде 3,6 с)', async () => {
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+    api.readSelectionTotal.mockReturnValue(new Promise(() => {}));
+    const data = await loadRoles(new AbortController().signal);
+    expect(data.searchTitles).toEqual(['Аналитик']);
+    expect(api.readSelectionTotal).not.toHaveBeenCalled();
+  });
+
   it('пробелы считает по роли поиска', async () => {
     api.getRoleSkillDemand.mockResolvedValue({
       state: 'ready',
