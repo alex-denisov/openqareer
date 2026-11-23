@@ -75,6 +75,8 @@ export interface HarnessOptions {
   readonly providerCredentials?: ServerConfig['providerCredentials'];
   /** B751: подставной разбор интервью. */
   readonly interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
+  /** B780: подставной судья критериев ответа. */
+  readonly interviewAnswerJudge?: import('../providers/interviewAnswerJudge').InterviewAnswerJudge;
   /** Подставной автор черновиков LinkedIn: тесты не зовут модель. */
   readonly linkedinDraftWriter?: { writeDraft(input: unknown): Promise<{ text: string }> };
   /** Подставной переписчик фактов (B645: тексты профиля LinkedIn): тесты не зовут модель. */
@@ -123,7 +125,7 @@ export async function createB640Harness(options: HarnessOptions) {
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
-    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), ...(options.interviewDebriefWriter ? { interviewDebriefWriter: options.interviewDebriefWriter } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }), ...(options.contactMessageWriter && { contactMessageWriter: options.contactMessageWriter }),
+    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), ...(options.interviewDebriefWriter ? { interviewDebriefWriter: options.interviewDebriefWriter } : {}), ...(options.interviewAnswerJudge ? { interviewAnswerJudge: options.interviewAnswerJudge } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }), ...(options.contactMessageWriter && { contactMessageWriter: options.contactMessageWriter }),
     ...(options.logLines ? { logDestination: { write: (line: string) => { options.logLines?.push(line); } } } : {}),
   });
   const get = (url: string, user?: HarnessUser) =>

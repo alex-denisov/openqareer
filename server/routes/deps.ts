@@ -106,6 +106,8 @@ export interface RouteDeps {
   recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** B751: разбор интервью моделью; нет подстановки — цепочка письма без Vertex. */
   interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
+  /** B780: оценка критериев ответа тренировки; без подставного — цепочка письма из конфига. */
+  interviewAnswerJudge?: import('../providers/interviewAnswerJudge').InterviewAnswerJudge;
   /** d01: шаги плана адаптации из «Что от вас ждут»; нет — план из шаблона. */
   adaptationStepsWriter?: import('../providers/adaptationStepsWriter').AdaptationStepsWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */
