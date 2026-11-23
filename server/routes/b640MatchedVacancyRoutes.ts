@@ -4,7 +4,9 @@ import {
   B640_SORT_DIRECTIONS,
   B640_SORT_KEYS,
 } from '../../shared/b640Vacancies';
+import { meetsMonthlySalaryMinimum } from '../../shared/monthlySalaryMinimum';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { sortMatchedByColumn, type ColumnSortKey } from '../vacancies/matchedColumnSort';
 import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 import {
@@ -38,6 +40,9 @@ import { titleFactsCount } from './matchedFitRelevance';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 
 
+/** Валюты фильтра «Зарплата» списка (MoneyCurrency без «как в вакансии» — она считается в рублях). */
+const MONEY_FILTER_CURRENCIES = ['RUB', 'USD', 'EUR', 'AED'] as const;
+
 const querySchema = matchedVacanciesQuerySchema
   .omit({ sort: true, dir: true, offset: true })
   .extend({
@@ -50,6 +55,12 @@ const querySchema = matchedVacanciesQuerySchema
      */
     days: z.coerce.number().int().min(0).max(366).optional(),
     tz: z.string().max(64).optional(),
+    /**
+     * B765 (B645 s07): «Зарплата от» в месяц, в валюте `moneyCurrency`, — тоже на сервере, иначе
+     * «Показать N» и «осталось N» не знали числа, пока подборка не дочитана.
+     */
+    money: z.coerce.number().int().min(1).max(1_000_000_000).optional(),
+    moneyCurrency: z.enum(MONEY_FILTER_CURRENCIES).default('RUB'),
   });
 type Query = z.infer<typeof querySchema>;
 
@@ -251,6 +262,14 @@ async function sealedAnswer(
   };
 }
 
+/** Строки с месячной суммой не ниже `money` и строки без месячной суммы; без `money` — все. */
+function withinMoney(rows: Rows, query: Query): Rows {
+  const { money, moneyCurrency } = query;
+  if (!money) return rows;
+  const rates = getCurrencyRates();
+  return rows.filter((item) => meetsMonthlySalaryMinimum(item.cluster.salary, money, moneyCurrency, rates));
+}
+
 /** Строки за последние `days` дней кандидата; без `days` — все. */
 function withinDays(rows: Rows, query: Query): Rows {
   const { days } = query;
@@ -275,8 +294,8 @@ const getMatchedVacancies = async (
   const deps = withRequestScopedCandidateReads(backgroundDeps);
   const context = readB640ListContext(deps, candidate.id);
   if (profileIsEmpty(context)) return emptyResponse(request, query, context);
-  // Запечатанный список прошлого процесса — без окна дат: с «Датой» читаем список как обычно.
-  const sealed = query.days
+  // Запечатанный список прошлого процесса — без окна дат и суммы: с ними читаем список как обычно.
+  const sealed = query.days || query.money
     ? undefined
     : await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
   if (sealed) return sealed;
@@ -286,7 +305,7 @@ const getMatchedVacancies = async (
   const ordered = await orderRows(deps, request, candidate.id, context, read, query);
   logListTiming(request, query, read.timing, performance.now() - orderStartedAt);
   const { byFit } = ordered;
-  const rows = withinDays(ordered.rows, query);
+  const rows = withinMoney(withinDays(ordered.rows, query), query);
   const shown = rows.slice(query.offset, query.offset + query.limit).map(trim);
   const levels = addStoredVacancyLevels(shown, targetLevel, (key) => deps.titleParseStore.getByKey(key));
   const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidate.id, levels));

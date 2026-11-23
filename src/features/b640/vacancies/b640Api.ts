@@ -64,11 +64,18 @@ function candidateTimeZone(): string {
 }
 
 /** `days` — фильтр «Дата» (B726): сервер режет и считает подборку сам; `null` — без даты. */
+/** «Зарплата от» для сервера (B765): сумма в месяц в валюте фильтра. */
+export interface ServerMoney {
+  readonly from: number;
+  readonly currency: 'RUB' | 'USD' | 'EUR' | 'AED';
+}
+
 export function matchedPageQuery(
   sort: SortState,
   roles: readonly string[],
   offset: number,
   days: number | null = null,
+  money: ServerMoney | null = null,
 ): string {
   const query = new URLSearchParams(matchedVacancyQuery(offset, { roles, regions: [], remoteOnly: false }));
   query.set('sort', SERVER_KEY[sort.key]);
@@ -77,6 +84,10 @@ export function matchedPageQuery(
   if (days !== null) {
     query.set('days', String(days));
     query.set('tz', candidateTimeZone());
+  }
+  if (money !== null) {
+    query.set('money', String(money.from));
+    query.set('moneyCurrency', money.currency);
   }
   return query.toString();
 }
@@ -87,8 +98,9 @@ export async function getSortedMatchedPage(
   offset: number,
   signal?: AbortSignal,
   days: number | null = null,
+  money: ServerMoney | null = null,
 ): Promise<PageResult<MatchedVacancyItem>> {
-  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset, days)}`, {
+  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset, days, money)}`, {
     signal,
   });
   return readPage<MatchedVacancyItem>(response);

@@ -54,6 +54,16 @@ describe('подборка с серверной сортировкой', () => 
     expect(plain.has('tz')).toBe(false);
   });
 
+  it('«Зарплата от» уходит серверу суммой в месяц и валютой (B765)', () => {
+    const money = { from: 350_000, currency: 'RUB' } as const;
+    const query = new URLSearchParams(matchedPageQuery({ key: 'fit', dir: 'desc' }, [], 0, null, money));
+    expect(query.get('money')).toBe('350000');
+    expect(query.get('moneyCurrency')).toBe('RUB');
+    expect(query.has('days')).toBe(false);
+    const plain = new URLSearchParams(matchedPageQuery({ key: 'fit', dir: 'desc' }, [], 0));
+    expect(plain.has('money')).toBe(false);
+  });
+
   it('читает строки, всего и следующее смещение', async () => {
     fetchMock.mockResolvedValue(json({ data: [row('a'), row('b')], meta: { total: 9, nextOffset: null } }));
     const page = await getSortedMatchedPage({ key: 'money', dir: 'desc' }, [], 0);

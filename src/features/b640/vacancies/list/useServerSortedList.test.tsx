@@ -2,7 +2,7 @@
 import { act, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
-import { getSortedMatchedPage } from '../b640Api';
+import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
 import { makeItem } from './fixtures';
 import type { SortState } from './sortModel';
 import { useServerSortedList } from './useServerSortedList';
@@ -21,10 +21,12 @@ function Probe({ active, sort: initial }: { active: boolean; sort: SortState }) 
   const [sort, setSort] = useState(initial);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [days, setDays] = useState<number | null>(null);
-  const list = useServerSortedList(active, sort, ['CTO'], hidden, days);
+  const [money, setMoney] = useState<ServerMoney | null>(null);
+  const list = useServerSortedList(active, sort, ['CTO'], hidden, days, money);
   return (
     <div>
       <button id="days" onClick={() => setDays(30)} />
+      <button id="money" onClick={() => setMoney({ from: 350_000, currency: 'RUB' })} />
       <button id="sort" onClick={() => setSort(OTHER)} />
       <button id="hide" onClick={() => setHidden(new Set(['a']))} />
       <button id="unhide" onClick={() => setHidden(new Set())} />
@@ -62,6 +64,7 @@ describe('серверная сортировка неполной подбор�
       0,
       expect.anything(),
       null,
+      null,
     );
     expect(out(view.container).textContent).toBe('a,b');
     expect(out(view.container).dataset.more).toBe('true');
@@ -72,6 +75,7 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       2,
       expect.anything(),
+      null,
       null,
     );
     expect(out(view.container).textContent).toBe('a,b,c');
@@ -95,6 +99,7 @@ describe('серверная сортировка неполной подбор�
       0,
       expect.anything(),
       null,
+      null,
     );
     expect(out(next.container).textContent).toBe('z');
     next.unmount();
@@ -113,6 +118,7 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       0,
       expect.anything(),
+      null,
       null,
     );
     expect(out(view.container).dataset.status).toBe('ready');
@@ -133,6 +139,7 @@ describe('серверная сортировка неполной подбор�
       1,
       expect.anything(),
       null,
+      null,
     );
     view.unmount();
   });
@@ -152,6 +159,7 @@ describe('серверная сортировка неполной подбор�
       ['CTO'],
       0,
       expect.anything(),
+      null,
       null,
     );
     expect(out(view.container).dataset.total).toBe('5');
@@ -189,6 +197,26 @@ describe('серверная сортировка неполной подбор�
       0,
       expect.anything(),
       30,
+      null,
+    );
+    expect(out(view.container).textContent).toBe('c');
+    expect(out(view.container).dataset.total).toBe('1');
+    view.unmount();
+  });
+
+  it('«Зарплата от» читает подборку заново с первой порции, число — от сервера (B765)', async () => {
+    read.mockResolvedValueOnce(page(['a', 'b'], 9, 2)).mockResolvedValueOnce(page(['c'], 1, null));
+    const view = mount(<Probe active sort={{ key: 'fit', dir: 'desc' }} />);
+    await flush();
+    click(view.container.querySelector('#money'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(
+      { key: 'fit', dir: 'desc' },
+      ['CTO'],
+      0,
+      expect.anything(),
+      null,
+      { from: 350_000, currency: 'RUB' },
     );
     expect(out(view.container).textContent).toBe('c');
     expect(out(view.container).dataset.total).toBe('1');
