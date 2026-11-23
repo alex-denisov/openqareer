@@ -27,4 +27,19 @@ describe('RoleContextCache', () => {
 
     expect(build).toHaveBeenCalledTimes(3);
   });
+
+  it('B775: a settled context lives as long as its snapshot; an unsettled one expires', () => {
+    let now = 0;
+    const cache = new RoleContextCache<string>(1_000, () => now);
+    const build = vi.fn(() => 'context');
+    const snapshot = {};
+
+    cache.read(snapshot, 'cto', build, () => true);
+    cache.read(snapshot, 'coo', build, () => false);
+    now = 10_000_000;
+    cache.read(snapshot, 'cto', build, () => true);
+    cache.read(snapshot, 'coo', build, () => false);
+
+    expect(build).toHaveBeenCalledTimes(3);
+  });
 });
