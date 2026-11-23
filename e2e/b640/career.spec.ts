@@ -147,6 +147,28 @@ test.describe('B653: «Карьера» — роли и условия поис�
     await expect(link).toHaveAttribute('href', '/app/career/skills');
   });
 
+  test('B764: проверка под другим названием — строка называет её роль и счёт, ссылка ведёт к прогону', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career/roles', {
+      searchRoles: ['Директор по разработке', 'Руководитель разработки'],
+      roleAliases: { 'Директор по разработке': ['Head of Engineering'] },
+      checkedRoles: [
+        {
+          roleTitle: 'Head of Engineering',
+          roleTitleRu: 'Руководитель направления разработки',
+          completedAt: '2026-11-22',
+          confirmedSkills: ['Найм', 'Бюджет', 'Управление командой'],
+          skillCount: 5,
+        },
+      ],
+    });
+    const tag = node(page, 's10')
+      .getByRole('link', { name: 'пройдена для «Руководитель направления разработки» · 3 из 5' })
+      .first();
+    await expect(tag).toHaveAttribute('href', '/app/career/skills?role=Head%20of%20Engineering');
+  });
+
   test('S10: «Искать в роли» сохраняет отмеченную роль', async ({ page }) => {
     const calls = await openCareer(page, '/app/career/roles', { searchRoles: [] });
     await node(page, 's10')

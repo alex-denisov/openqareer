@@ -95,6 +95,22 @@ describe('format: строка вакансии B640', () => {
     expect(view.title).toContain('1 AED = 24,8 ₽');
   });
 
+  it('B765: годовая зарплата (Egen, прод 23.11) — в месяц, как вся колонка; в подсказке — «в год»', () => {
+    const egen = item({ salary: { from: 218000, to: 265000, currency: 'USD', period: 'year' } });
+    const view = moneyView(egen, { currency: 'RUB', rates: RATES });
+    expect(view.text).toMatch(/^≈ 1\s650–2\s005 тыс\. ₽$/u);
+    expect(view.title).toContain('В вакансии $218–265 тыс. в год');
+    expect(moneyView(egen, { currency: 'ORIG', rates: RATES }).text).toBe('$218–265 тыс. в год');
+  });
+
+  it('B765: почасовая ставка (Arootah, прод 23.11) — ставка в рублях «в час», без месячной суммы', () => {
+    const hourly = item({ salary: { from: 250, to: 400, currency: 'USD', period: 'hour' } });
+    const view = moneyView(hourly, { currency: 'RUB', rates: RATES });
+    expect(view.text).toBe('≈ 23–36 тыс. ₽ в час');
+    expect(view.title).toContain('В вакансии $250–400 в час');
+    expect(moneyView(hourly, { currency: 'ORIG', rates: RATES }).text).toBe('$250–400 в час');
+  });
+
   it('нет курса или «Как в вакансии» — исходная сумма без «≈»', () => {
     const usd = item({ salary: { from: 6000, to: 7000, currency: 'USD' } });
     expect(moneyView(usd, { currency: 'RUB', rates: undefined }).text).toBe('$6–7 тыс.');

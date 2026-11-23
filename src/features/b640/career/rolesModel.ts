@@ -11,6 +11,8 @@ export type RoleOrigin = 'search' | 'experience' | 'own';
 export interface RoleCheck {
   readonly confirmed: number;
   readonly total: number;
+  /** B764: проверка пройдена под другим названием роли — какой и куда ведёт ссылка. */
+  readonly source?: { readonly title: string; readonly label: string };
 }
 
 /** Строка роли на вкладке «Роли» и столбец сравнения (s09, s10). */
@@ -82,6 +84,7 @@ function rowOf(
     ),
   });
   const sample = wageSample(role);
+  const label = role.titleRu || roleLabel(role.title, titlesRu);
   const wageNote = model.isWageCalculated
     ? [model.sources.join(', '), formatVacancyCount(sample), model.observedDate]
         .filter(Boolean)
@@ -90,7 +93,7 @@ function rowOf(
   return {
     id: role.id,
     title: role.title,
-    label: role.titleRu || roleLabel(role.title, titlesRu),
+    label,
     wage: model.isWageCalculated ? model.wageDisplay : null,
     wageNote,
     vacancies: model.vacancyCount > 0 ? model.vacancyCount : null,
@@ -102,10 +105,32 @@ function rowOf(
     check:
       model.status === 'hypothesis'
         ? null
-        : {
+        : (aliasCheck(role, label, checked) ?? {
             confirmed: model.confirmedItems.length,
             total: model.confirmedItems.length + model.missingItems.length,
-          },
+          }),
+  };
+}
+
+/**
+ * B764: проверка «Chief Operating Officer» засчитана и строке «VP of Operations» — у обеих
+ * это название среди псевдонимов. Такая строка честно называет роль проверки и её счёт.
+ */
+function aliasCheck(
+  role: ProposedRole,
+  label: string,
+  checked: readonly CheckedRole[],
+): RoleCheck | null {
+  const names = namesOf(role);
+  const entry = checked.find((item) => names.includes(key(item.roleTitle)));
+  if (!entry || key(entry.roleTitle) === key(role.title)) return null;
+  const sourceLabel = entry.roleTitleRu ?? entry.roleTitle;
+  if (key(sourceLabel) === key(label)) return null;
+  const confirmed = entry.confirmedSkills?.length ?? 0;
+  return {
+    confirmed,
+    total: entry.skillCount ?? confirmed,
+    source: { title: entry.roleTitle, label: sourceLabel },
   };
 }
 
@@ -170,9 +195,16 @@ export function skillStripText(count: number): string {
   return `Проверьте ${pluralRu(count, ['навык', 'навыка', 'навыков'])} — точнее подбор`;
 }
 
-export function compareCheckTag(row: RoleRow): { readonly text: string; readonly ok: boolean } {
+export function compareCheckTag(row: RoleRow): {
+  readonly text: string;
+  readonly ok: boolean;
+  /** B764: роль прогона, если проверка пройдена под другим названием, — ссылка на него. */
+  readonly role?: string;
+} {
   if (!row.check) return { text: 'не начата', ok: false };
   const share = row.check.total > 0 ? ` · ${row.check.confirmed} из ${row.check.total}` : '';
+  const { source } = row.check;
+  if (source) return { text: `пройдена для «${source.label}»${share}`, ok: true, role: source.title };
   return { text: `пройдена${share}`, ok: true };
 }
 

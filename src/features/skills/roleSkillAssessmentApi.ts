@@ -81,6 +81,9 @@ export interface CheckedRole {
   readonly completedAt: string;
   /** B565: навыки, которые проверка подтвердила. */
   readonly confirmedSkills?: readonly string[];
+  /** B764: русское название роли проверки и число её навыков. */
+  readonly roleTitleRu?: string;
+  readonly skillCount?: number;
 }
 
 /** Роли с завершённой проверкой навыков (B445). */
