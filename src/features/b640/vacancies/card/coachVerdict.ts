@@ -43,11 +43,10 @@ export function coachVerdict(view: VacancyFitView | undefined): string | null {
   const percent = vacancyFitPercent(view);
   if (percent === null) return null;
   const { matched, total } = view!.result!.coverage;
-  const implied = new Set(view!.result!.implied?.map((item) => item.requirementId));
   const rows = ranked(view!, fitRows(view));
-  const strongest = rows.find((row) => row.status === 'matched' || implied.has(row.id));
+  const strongest = rows.find((row) => row.status === 'matched');
   const missing = rows.find((row) => row.status === 'unmatched');
-  const partial = rows.find((row) => row.status === 'partial' && !implied.has(row.id));
+  const partial = rows.find((row) => row.status === 'partial');
   const count = `${matched} из ${total} требований есть в профиле`;
   const head = strongest
     ? `${OPENING[vacancyFitTier(percent)]}: ${count}, самое сильное — «${strongest.text}».`

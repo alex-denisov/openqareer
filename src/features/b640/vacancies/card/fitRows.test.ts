@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
+import { vacancyFitSentence } from '../../../vacancies/vacancyFitModel';
 import { fitBlockState, fitRows, requirementsLabel, sourceLine } from './fitRows';
 
 function req(id: string, text: string, skill = true) {
@@ -75,9 +76,41 @@ describe('fitRows', () => {
 
   it('условия (не навыки) в список не попадают', () => {
     const rows = fitRows(
-      view({ requirements: [req('a', 'Kubernetes'), req('z', 'Высшее образование', false)] }),
+      view({ requirements: [req('a', 'Kubernetes'), { ...req('z', 'Высшее образование', false), kind: 'education' as const }] }),
     );
     expect(rows.map((row) => row.id)).toEqual(['a']);
+  });
+
+  it('навык, который следует из опыта, — «есть», как в предложении «Без проверки навыков»', () => {
+    const base = view();
+    const implied = view({
+      requirements: base.requirements.map((item) => ({ ...item, label: item.text })),
+      result: { ...base.result!, implied: [{ requirementId: 'b', role: 'VP of Engineering' }] },
+    });
+    expect(fitRows(implied)[1]).toMatchObject({
+      status: 'matched',
+      evidence: 'нанимали разработчиков',
+      canCheck: false,
+    });
+    const bare = view({
+      result: { ...base.result!, implied: [{ requirementId: 'c', role: 'VP of Engineering' }] },
+    });
+    expect(fitRows(bare)[2]).toMatchObject({
+      status: 'matched',
+      evidence: 'следует из опыта: VP of Engineering',
+    });
+    expect(vacancyFitSentence(implied)).toContain('Найм руководителей');
+  });
+
+  it('в строках ровно посчитанное: опыт без метки навыка есть, обязанность — нет', () => {
+    const base = view();
+    const rows = fitRows(
+      view({
+        requirements: [req('a', 'Kubernetes'), req('b', 'Опыт найма', false), req('d', 'Вести планёрки')],
+        result: { ...base.result!, duties: ['d'] },
+      }),
+    );
+    expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
   });
 
   it('без оценки требование неизвестно', () => {
