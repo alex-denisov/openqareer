@@ -16,6 +16,7 @@ import { useToast } from '../kit/Toast';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { useShell } from '../shell/ShellContext';
+import { HhRowResult, useHhRowActions } from './HhRowActions';
 import { getHhSessionState } from './hhSessionApi';
 import { connectedCount, connectionLine, emailConfirmed, PLATFORM_NAME, updatedLine } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
@@ -77,6 +78,14 @@ interface PlatformRowProps {
   readonly connection: CandidateConnection;
   readonly onDisconnected: () => void;
   readonly expired?: boolean;
+  /** hh.ru в приложении: обновить профиль из резюме и сменить резюме откликов. */
+  readonly onRefreshed?: () => void;
+}
+
+/** Пункты меню, которые есть только у hh.ru в приложении. */
+interface HhMenuItems {
+  readonly onRefresh: () => void;
+  readonly onChange: () => void;
 }
 
 interface ConfirmProps {
@@ -139,10 +148,28 @@ function useDisconnect(platform: Platform, onDone: () => void) {
 interface MenuProps {
   readonly open: boolean;
   readonly updated: string | null;
+  readonly hh: HhMenuItems | null;
   readonly onDisconnect: () => void;
 }
 
-function ActionsMenu({ open, updated, onDisconnect }: MenuProps) {
+function HhItems({ hh }: { readonly hh: HhMenuItems }) {
+  return (
+    <>
+      <li role="none">
+        <button role="menuitem" type="button" onClick={hh.onRefresh}>
+          Обновить сейчас
+        </button>
+      </li>
+      <li role="none">
+        <button role="menuitem" type="button" onClick={hh.onChange}>
+          Сменить резюме
+        </button>
+      </li>
+    </>
+  );
+}
+
+function ActionsMenu({ open, updated, hh, onDisconnect }: MenuProps) {
   return (
     <ul className="lk-menu-l" role="menu" hidden={!open}>
       {updated ? (
@@ -150,6 +177,7 @@ function ActionsMenu({ open, updated, onDisconnect }: MenuProps) {
           {updated}
         </li>
       ) : null}
+      {hh ? <HhItems hh={hh} /> : null}
       <li role="none">
         <button role="menuitem" type="button" className="is-danger" onClick={onDisconnect}>
           Отключить
@@ -159,8 +187,22 @@ function ActionsMenu({ open, updated, onDisconnect }: MenuProps) {
   );
 }
 
+/** Пункт меню сначала закрывает меню, потом действует. */
+function closingFirst(hh: HhMenuItems, close: () => void): HhMenuItems {
+  return {
+    onRefresh: () => {
+      close();
+      hh.onRefresh();
+    },
+    onChange: () => {
+      close();
+      hh.onChange();
+    },
+  };
+}
+
 /** Действия подключённой площадки: «Отключить», меню с временем обновления, подтверждение. */
-function PlatformActions({ connection, onDisconnected }: PlatformRowProps) {
+function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & { readonly hh: HhMenuItems | null }) {
   const name = PLATFORM_NAME[connection.platform];
   const [opened, setOpened] = useState<Opened>(null);
   const { busy, failed, disconnect } = useDisconnect(connection.platform, onDisconnected);
@@ -190,7 +232,12 @@ function PlatformActions({ connection, onDisconnected }: PlatformRowProps) {
         >
           <Icon name="more" />
         </button>
-        <ActionsMenu open={opened === 'menu'} updated={updated} onDisconnect={() => setOpened('confirm')} />
+        <ActionsMenu
+          open={opened === 'menu'}
+          updated={updated}
+          hh={hh ? closingFirst(hh, () => setOpened(null)) : null}
+          onDisconnect={() => setOpened('confirm')}
+        />
         {opened === 'confirm' ? (
           <DisconnectConfirm
             name={name}
@@ -205,7 +252,9 @@ function PlatformActions({ connection, onDisconnected }: PlatformRowProps) {
   );
 }
 
-function PlatformRow({ connection, onDisconnected, expired }: PlatformRowProps) {
+function PlatformRow({ connection, onDisconnected, expired, onRefreshed }: PlatformRowProps) {
+  const hhActions = useHhRowActions(onRefreshed ?? (() => undefined));
+  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: hhActions.change } : null;
   return (
     <li className="set-row cn-row">
       <div className="set-l">
@@ -218,9 +267,10 @@ function PlatformRow({ connection, onDisconnected, expired }: PlatformRowProps) 
         ) : (
           <span className="set-v">{connectionLine(connection)}</span>
         )}
+        {hh ? <HhRowResult actions={hhActions} /> : null}
       </div>
       {connection.status === 'connected' ? (
-        <PlatformActions connection={connection} onDisconnected={onDisconnected} />
+        <PlatformActions connection={connection} onDisconnected={onDisconnected} hh={hh} />
       ) : null}
     </li>
   );
@@ -254,6 +304,11 @@ function TelegramRow({ telegram }: { readonly telegram: NonNullable<Connections[
       )}
     </li>
   );
+}
+
+/** Обновить и сменить резюме можно только в приложении: резюме читаются в сессии hh.ru. */
+function hhInApp(connection: CandidateConnection): boolean {
+  return connection.platform === 'hh' && connection.status === 'connected' && isTauriEnvironment();
 }
 
 /** n03 «Подключения»: почта, площадки и Telegram; отключение — на месте строки (N3f). */
@@ -294,6 +349,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
               connection={connection}
               expired={connection.platform === 'hh' && connection.status === 'connected' && hhExpired}
               onDisconnected={() => disconnected(connection.platform)}
+              onRefreshed={hhInApp(connection) ? load.retry : undefined}
             />
           ))}
           {telegram ? <TelegramRow telegram={telegram} /> : null}
