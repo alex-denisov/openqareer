@@ -53,6 +53,19 @@ function opened<T>(read: () => T): T | null {
   }
 }
 
+/**
+ * Обычно расшифровка собирается за один проход. Если какой-то сегмент не открывается, он
+ * пропускается, а остальная расшифровка остаётся.
+ */
+function transcriptOf(sealed: SealedText, recordingId: string, segments: StoredSegment[]): ExportedRecording['transcript'] {
+  const done = segments.filter((segment) => segment.status === 'done' && segment.textCipher);
+  if (done.length === 0) return null;
+  const whole = opened(() => assembleTranscript(sealed, recordingId, done));
+  if (whole) return whole;
+  const readable = done.filter((segment) => opened(() => assembleTranscript(sealed, recordingId, [segment])) !== null);
+  return readable.length > 0 ? assembleTranscript(sealed, recordingId, readable) : null;
+}
+
 function debriefsOf(database: DatabaseSync, sealed: SealedText, recordingId: string): ExportedRecording['debriefs'] {
   if (!tableExists(database, 'interview_debrief_analyses')) return [];
   const rows = database
@@ -92,11 +105,6 @@ export function exportInterviewRecordings(sources: InterviewRecordingSources, ca
     recordings: recordings.map((row) => {
       const recordingId = String(row.id);
       const segments = segmentsOf(database, recordingId);
-      // Сегмент с повреждённым текстом пропускается, остальная расшифровка остаётся.
-      const readable = segments.filter(
-        (segment) =>
-          segment.status === 'done' && segment.textCipher && opened(() => assembleTranscript(sealed, recordingId, [segment])) !== null,
-      );
       return {
         recordingId,
         applicationId: String(row.applicationId),
@@ -104,7 +112,7 @@ export function exportInterviewRecordings(sources: InterviewRecordingSources, ca
         status: String(row.status),
         createdAt: String(row.createdAt),
         finishedAt: typeof row.finishedAt === 'string' ? row.finishedAt : null,
-        transcript: readable.length > 0 ? assembleTranscript(sealed, recordingId, readable) : null,
+        transcript: transcriptOf(sealed, recordingId, segments),
         debriefs: debriefsOf(database, sealed, recordingId),
       };
     }),
