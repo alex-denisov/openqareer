@@ -49,13 +49,15 @@ function IndicatorList({ card, now, quarterView = false }: GoalItemProps) {
     <ul className="dn-inds">
       {indicators.map((goal) => {
         const view = indicatorView(goal);
-        const target = view.target && quarterTarget ? quarterTarget : view.target;
+        const target = view.target && quarterTarget ? ` ${quarterTarget}` : view.target;
+        // B686: у цели из KPI единственный показатель назван как сама цель — второй раз не пишем.
+        const repeat = indicators.length === 1 && goal.title.trim() === card.title.trim();
         return (
           <li className="dn-ind" key={view.id}>
-            <span>{view.title}</span>
+            <span>{repeat ? null : view.title}</span>
             <span className="num">
               <strong>{view.value}</strong>
-              {target ? ` ${target}` : null}
+              {target}
             </span>
             <span className="row-sub">{view.sub}</span>
           </li>

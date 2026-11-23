@@ -45,7 +45,14 @@ function stepProgress(
   id: CareerDiaryAdaptationStepId,
   day: number,
   tasks: readonly CareerDiaryAdaptationTask[],
+  day30Sent: boolean,
 ): CareerDiaryProgress {
+  // Проверка на 30-й день — действие кандидата (B687), а не задачи: «пройдено» только с её
+  // сохранённым итогом; без него после 28-го дня шаг «идёт» и ведёт на проверку d01e.
+  if (id === 'day_30_check') {
+    if (day30Sent) return 'done';
+    return day < STEP_DAYS[id][0] ? 'ahead' : 'active';
+  }
   const open = tasks.some((task) => !task.completed);
   if (tasks.length > 0 && !open) return 'done';
   const [from, to] = STEP_DAYS[id];
@@ -91,6 +98,8 @@ export interface AdaptationViewInput {
   readonly details: CareerDiaryAdaptationDetails;
   /** Сегодняшний день, `ГГГГ-ММ-ДД`. */
   readonly asOf: string;
+  /** Итог проверки на 30-й день сохранён (отметка B687 `day30.sentOn`). */
+  readonly day30Sent?: boolean;
 }
 
 /**
@@ -124,7 +133,7 @@ export function buildAdaptationView(input: AdaptationViewInput): CareerDiaryAdap
     steps: ADAPTATION_STEPS.map((id) => {
       const own = tasks.filter((task) => task.step === id);
       const summary = counted(own, own.some((task) => task.completed));
-      return { id, groups: groupsOf(own), ...summary, status: stepProgress(id, day, own) };
+      return { id, groups: groupsOf(own), ...summary, status: stepProgress(id, day, own, input.day30Sent === true) };
     }),
     probation: details.probation,
     firstMeeting: details.firstMeeting,

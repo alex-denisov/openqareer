@@ -46,7 +46,8 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
     await app.close();
     const stall = log.mock.calls.find(([, msg]) => msg === 'event-loop-stall')?.[0];
     expect(stall?.inFlightCount).toBe(0);
-    expect(stall?.background).toEqual(['list-build']);
+    expect(stall?.background).toEqual([expect.objectContaining({ name: 'list-build' })]);
+    expect(stall?.background[0].overlapMs).toBeGreaterThanOrEqual(200);
     expect(typeof stall?.gcMs).toBe('number');
   });
 
