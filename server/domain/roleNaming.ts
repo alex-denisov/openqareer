@@ -135,7 +135,8 @@ export function checkedTitleRu(title: string, titleRu: string | undefined): stri
   const kept = abbreviations.every(
     (abbr) => text.includes(abbr) || text.includes(CYRILLIC_ABBREVIATIONS[abbr] ?? abbr),
   );
-  return kept ? text : null;
+  // B767: латинское «AI» в русском названии — «ИИ» («ИИ-консультант»).
+  return kept ? text.replace(/(?<!\p{L})AI(?!\p{L})/gu, CYRILLIC_ABBREVIATIONS.AI!) : null;
 }
 
 const namedRoleSchema = z

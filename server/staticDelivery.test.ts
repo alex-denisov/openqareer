@@ -213,7 +213,15 @@ describe('static release delivery', () => {
     const missing = await app.inject({ method: 'GET', url: '/no-such-page' });
     expect(missing.statusCode).toBe(404);
     expect(missing.body).toContain('not found document');
-    for (const url of ['/', '/app/profile', '/login', '/legal/privacy', '/faq/', '/admin/users']) {
+    for (const url of [
+      '/',
+      '/app/profile',
+      '/login',
+      '/app-sign-in?challenge=c&state=s',
+      '/legal/privacy',
+      '/faq/',
+      '/admin/users',
+    ]) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);
       expect(response.body, url).not.toContain('not found document');
