@@ -98,7 +98,7 @@ test.describe('B751: «Разбор интервью» (I4)', () => {
     const calls = await open(page, '/app/responses/r-arka/debrief', 'i04', 'ready');
     await expect(page.getByRole('heading', { name: 'Что спросили и как прошло' })).toBeVisible();
     await expect(page.locator('.lead-sub').first()).toHaveText(
-      'Арка Холдинг · интервью 9 ноября · Видео',
+      'Арка Холдинг · интервью 9 ноября · собеседник: Ирина Петрова',
     );
     await expect(page.getByText('Как снижали затраты на инфраструктуру').first()).toBeVisible();
     await expect(page.getByText('Ответ до пятницы').first()).toBeVisible();
