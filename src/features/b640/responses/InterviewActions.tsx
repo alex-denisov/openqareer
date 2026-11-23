@@ -7,15 +7,15 @@ export interface InterviewActionsProps {
   readonly responseId: string;
   /** Интервью ещё впереди: вход в подготовку (I1); иначе — в разбор (I4). */
   readonly ahead: boolean;
-  /** Отметки ответа после интервью: в макете o01c они в «Другом способе». */
-  readonly marks: readonly Mark[];
+  /** «В архив» в «Другом способе» (макет o01c); остальные отметки — в «Отметить ответ». */
+  readonly archive: Mark | undefined;
   readonly disabled: boolean;
-  readonly onMark: (target: Mark) => void;
+  readonly onArchive: (target: Mark) => void;
 }
 
 /**
  * Действия раскрытого отклика на стадии интервью (O1c): до встречи — «Подготовиться к
- * интервью», после — «Разобрать запись» и «Другой способ» (файл, своими словами, отметки).
+ * интервью», после — «Разобрать запись» и «Другой способ» (файл, своими словами, «В архив»).
  */
 export function InterviewActions(props: InterviewActionsProps) {
   const { responseId, ahead } = props;
@@ -38,7 +38,7 @@ export function InterviewActions(props: InterviewActionsProps) {
   );
 }
 
-function OtherWays({ responseId, marks, disabled, onMark }: InterviewActionsProps) {
+function OtherWays({ responseId, archive, disabled, onArchive }: InterviewActionsProps) {
   const ref = useRef<HTMLDetailsElement>(null);
   const debrief = buildNodePath('i04', { responseId });
   return (
@@ -60,22 +60,22 @@ function OtherWays({ responseId, marks, disabled, onMark }: InterviewActionsProp
             Рассказать своими словами
           </Link>
         </li>
-        {marks.map((target) => (
-          <li key={target.stage}>
+        {archive ? (
+          <li>
             <button
               className="row-act"
               type="button"
               disabled={disabled}
               onClick={() => {
                 if (ref.current) ref.current.open = false;
-                onMark(target);
+                onArchive(archive);
               }}
             >
-              {target.stage === 'archived' ? <Icon name="down" /> : null}
-              {target.label}
+              <Icon name="down" />
+              {archive.label}
             </button>
           </li>
-        ))}
+        ) : null}
       </ul>
     </details>
   );
