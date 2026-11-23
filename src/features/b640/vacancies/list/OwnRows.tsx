@@ -6,7 +6,7 @@ import { Icon } from '../../kit';
 import { fitRows } from '../card/fitRows';
 import { RequirementList } from '../card/RequirementList';
 import { textBlocks } from '../card/textBlocks';
-import { isoRowDate, safeHttpUrl } from '../format';
+import { isoRowDate, safeHttpUrl, salaryMoneyView, type MoneyOptions } from '../format';
 import { getOwnVacancy } from '../ownVacancyApi';
 
 /** «3 из 5» в колонке совпадения: процента у своей вакансии нет. */
@@ -82,6 +82,11 @@ function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
           </div>
         </div>
       ) : null}
+      {detail.fit.state === 'no_requirements' ? (
+        <div className="v4-box">
+          <p className="v4-req-row">Требования в тексте не нашлись</p>
+        </div>
+      ) : null}
       <OwnText text={detail.text} />
       {url ? (
         <a className="row-act vs-open" href={url} target="_blank" rel="noopener noreferrer">
@@ -112,14 +117,27 @@ function OwnDetail({ item }: { item: OwnVacancy }) {
   );
 }
 
+/** B676: деньги своей вакансии — тем же правилом, что у строк подборки (в месяц, в валюте списка). */
+function OwnMoney({ item, money }: { item: OwnVacancy; money: MoneyOptions }) {
+  const view = salaryMoneyView(item.salary ?? undefined, money);
+  const unset = item.salary?.from === undefined && item.salary?.to === undefined;
+  return (
+    <span className={`vt-main num${unset ? ' is-none' : ''}`} title={view.title}>
+      {view.amount ?? view.text}
+      {view.unit ? <span className="vt-cur"> {view.unit}</span> : null}
+    </span>
+  );
+}
+
 interface OwnRowProps {
   readonly item: OwnVacancy;
+  readonly money: MoneyOptions;
   readonly open: boolean;
   readonly onToggle: () => void;
   readonly onRemove: () => void;
 }
 
-function OwnRow({ item, open, onToggle, onRemove }: OwnRowProps) {
+function OwnRow({ item, money, open, onToggle, onRemove }: OwnRowProps) {
   const place = item.location ?? (item.workFormat === 'remote' ? 'Удалённо' : 'Не указана');
   return (
     <tr className={`vt-row${open ? ' is-open' : ''}${item.comparing ? ' is-counting' : ''}`}>
@@ -135,7 +153,7 @@ function OwnRow({ item, open, onToggle, onRemove }: OwnRowProps) {
         </div>
       </td>
       <td className="vt-c vt-company" title={item.company ?? undefined}>{item.company ?? '—'}</td>
-      <td className="vt-c vt-money"><span className="vt-main num">—</span></td>
+      <td className="vt-c vt-money"><OwnMoney item={item} money={money} /></td>
       <td className="vt-c vt-fitc"><CoverageCell item={item} /></td>
       <td className="vt-c vt-geo" title={place}>{place}</td>
       <td className="vt-c vt-format">{item.workFormat ? workFormatLabel(item.workFormat) ?? '' : ''}</td>
@@ -153,11 +171,13 @@ function OwnRow({ item, open, onToggle, onRemove }: OwnRowProps) {
 
 export interface OwnRowsProps {
   readonly items: readonly OwnVacancy[];
+  /** Валюта и курс списка: деньги своей вакансии показываются как у строк подборки. */
+  readonly money: MoneyOptions;
   readonly onRemove: (id: string) => void;
 }
 
 /** Свои вакансии кандидата первыми строками таблицы с меткой «ваша» (макет v06c). */
-export function OwnRows({ items, onRemove }: OwnRowsProps) {
+export function OwnRows({ items, money, onRemove }: OwnRowsProps) {
   const [openId, setOpenId] = useState<string | null>(null);
   if (items.length === 0) return null;
   return (
@@ -165,7 +185,7 @@ export function OwnRows({ items, onRemove }: OwnRowsProps) {
       {items.flatMap((item) => {
         const open = openId === item.id;
         const row = (
-          <OwnRow key={item.id} item={item} open={open} onToggle={() => setOpenId(open ? null : item.id)} onRemove={() => onRemove(item.id)} />
+          <OwnRow key={item.id} item={item} money={money} open={open} onToggle={() => setOpenId(open ? null : item.id)} onRemove={() => onRemove(item.id)} />
         );
         return open ? [row, <OwnDetail key={`${item.id}-detail`} item={item} />] : [row];
       })}

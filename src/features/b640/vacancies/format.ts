@@ -144,12 +144,23 @@ function originalText(salary: ClusterSalary, period: SalaryPeriod): string {
 /** B765: колонка — в месяц (правило периода общее с сервером), ставка в час — как есть. */
 function shownAmounts(salary: ClusterSalary, period: SalaryPeriod): ClusterSalary {
   if (period === 'hour') return salary;
-  return { ...salary, from: monthlyAmount(salary.from, period), to: monthlyAmount(salary.to, period) };
+  return {
+    ...salary,
+    from: monthlyAmount(salary.from, period),
+    to: monthlyAmount(salary.to, period),
+  };
 }
 
 /** Деньги строки и карточки: в выбранной валюте по курсу ЦБ, без курса — как в вакансии. */
 export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): MoneyView {
-  const salary = item.cluster.salary;
+  return salaryMoneyView(item.cluster.salary, options);
+}
+
+/** То же правило для суммы без строки подборки — у своей вакансии кандидата (B676). */
+export function salaryMoneyView(
+  salary: ClusterSalary | undefined,
+  options: MoneyOptions,
+): MoneyView {
   if (!salary || (salary.from === undefined && salary.to === undefined))
     return { text: formatCompensationCompact(salary) };
   const period = salaryPeriodOf(salary, options.rates);
@@ -165,7 +176,8 @@ export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): Mone
   const from = convert(shown.from);
   const to = convert(shown.to);
   const missing =
-    (shown.from !== undefined && from === undefined) || (shown.to !== undefined && to === undefined);
+    (shown.from !== undefined && from === undefined) ||
+    (shown.to !== undefined && to === undefined);
   if (missing || !options.rates) return splitRouble(original);
   const suffix = period === 'hour' ? PERIOD_WORDS.hour : '';
   const converted = `${formatCompensationCompact({ ...salary, from, to, currency: target })}${suffix}`;

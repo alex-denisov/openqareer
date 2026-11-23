@@ -10,6 +10,7 @@ import { OWN_VACANCY_TITLE_MAX } from '../../../shared/b640OwnVacancy';
 import type { OwnVacancyWorkFormat } from '../../../shared/b640OwnVacancy';
 import { detectVacancyWorkFormat } from '../../../shared/vacancyWorkFormat';
 import type { NewOwnVacancy } from '../../data/sqliteOwnVacancyStore';
+import { salaryFromText } from './ownVacancySalary';
 
 /** Текст со строками короче этого на строку уже разбит на строки самим кандидатом. */
 const FLAT_CHARS_PER_LINE = 300;
@@ -25,6 +26,11 @@ const LIST_HEADER =
 const COMPANY_LINE = /^(?:компания|работодатель|company|employer)\s*[:：]\s*(.+)$/iu;
 const LOCATION_LINE = /^(?:город|локация|место работы|location|city)\s*[:：]\s*(.+)$/iu;
 const REMOTE = /удал[её]нн|удал[её]нка|remote/iu;
+/** Слово формата работы: строка «Москва, гибрид» называет город рядом с ним (B676, прод 23.11). */
+const FORMAT_WORD = /удал[её]нн|удал[её]нка|гибрид|офис|remote|hybrid|office|on-?site/iu;
+const FORMAT_LINE_MAX = 60;
+const CITY_MAX = 40;
+const CITY_WORDS_MAX = 3;
 
 /**
  * A run of spaces becomes one first: every later pattern then meets at most one blank in a row,
@@ -105,19 +111,45 @@ function workFormatOf(text: string, location: string | null): OwnVacancyWorkForm
   return format === 'unknown' ? null : format;
 }
 
+function isCityPart(part: string): boolean {
+  return (
+    part.length > 1 &&
+    part.length <= CITY_MAX &&
+    part.split(/\s+/u).length <= CITY_WORDS_MAX &&
+    /^\p{Lu}/u.test(part) &&
+    !/\d/u.test(part) &&
+    !FORMAT_WORD.test(part)
+  );
+}
+
+/** Короткая строка «Город, формат»: город — часть без слова формата; иначе города нет. */
+function cityFromFormatLine(lines: readonly string[]): string | null {
+  for (const line of lines) {
+    if (line.length > FORMAT_LINE_MAX || !FORMAT_WORD.test(line)) continue;
+    const parts = line
+      .split(/\s*[,·|/]\s*|\s+[—–-]\s+/u)
+      .map((part) => trimEndOf(part.trim(), ' .;'));
+    if (parts.length < 2) continue;
+    const city = parts.find(isCityPart);
+    if (city) return city;
+  }
+  return null;
+}
+
 export function ownVacancyFromText(text: string): NewOwnVacancy {
   const structured = structureVacancyText(text);
   const lines = structured
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean);
-  const location = fieldOf(lines, LOCATION_LINE);
+  const location = fieldOf(lines, LOCATION_LINE) ?? cityFromFormatLine(lines);
   return {
     title: titleOf(lines),
     company: fieldOf(lines, COMPANY_LINE),
     location,
     workFormat: workFormatOf(structured, location),
     url: null,
+    salary: salaryFromText(structured),
     text: structured,
   };
 }
