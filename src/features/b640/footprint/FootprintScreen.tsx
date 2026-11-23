@@ -3,7 +3,7 @@ import { Button, StatusLine } from '../kit';
 import type { B640Node } from '../routes';
 import { pageAttrs } from './footprintModel';
 
-import { StartPanel } from './StartPanel';
+import { SearchState, StartPanel } from './StartPanel';
 import { SummaryView } from './SummaryView';
 import { useFootprint, type FootprintData } from './useFootprint';
 
@@ -47,6 +47,7 @@ export function StartPage({
 }: { readonly node: B640Node; readonly data: FootprintData; readonly reload: () => void }) {
   return (
     <div className="page pf" {...pageAttrs(node, 'f01')}>
+      <SearchState data={data} onStarted={reload} />
       <div className="col">
         <StartPanel data={data} onStarted={reload} />
       </div>
