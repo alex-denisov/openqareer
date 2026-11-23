@@ -178,9 +178,9 @@ export class VacancyMechanicsRuntime {
     if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
     return this.fit.hasCache({ ...input, requirements: extracted.requirements });
   }
-  /** B766: разобранные требования вакансии для роли «Технический директор»; `null` — их нет. */
-  latestRequirementTexts(vacancyId: string): readonly VacancyRequirement[] | null {
-    return this.requirements.getLatestOrLegacy(vacancyId)?.requirements ?? null;
+  /** B766: разобранные требования вакансий для роли «Технический директор», одним запросом. */
+  latestRequirementTextsMany(vacancyIds: readonly string[]): ReadonlyMap<string, readonly VacancyRequirement[]> {
+    return new Map([...this.requirements.latestManyOrLegacy(vacancyIds)].map(([id, result]) => [id, result.requirements]));
   }
   /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key and its result stands. */
   fitJobHoldsKey(input: VacancyFitInput): boolean {
