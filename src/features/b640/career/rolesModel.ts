@@ -105,7 +105,7 @@ function rowOf(
     check:
       model.status === 'hypothesis'
         ? null
-        : (aliasCheck(role, label, checked) ?? {
+        : (runCheck(role, label, checked) ?? {
             confirmed: model.confirmedItems.length,
             total: model.confirmedItems.length + model.missingItems.length,
           }),
@@ -115,23 +115,24 @@ function rowOf(
 /**
  * B764: проверка «Chief Operating Officer» засчитана и строке «VP of Operations» — у обеих
  * это название среди псевдонимов. Такая строка честно называет роль проверки и её счёт.
+ * B645 (прод c6dac4fe): строка, чьё название совпадает с ролью проверки, считала по модели роли
+ * («6 из 6» рядом с «3 из 5» той же проверки). Если прогон знает число навыков — счёт прогона.
  */
-function aliasCheck(
+function runCheck(
   role: ProposedRole,
   label: string,
   checked: readonly CheckedRole[],
 ): RoleCheck | null {
   const names = namesOf(role);
-  const entry = checked.find((item) => names.includes(key(item.roleTitle)));
-  if (!entry || key(entry.roleTitle) === key(role.title)) return null;
-  const sourceLabel = entry.roleTitleRu ?? entry.roleTitle;
-  if (key(sourceLabel) === key(label)) return null;
+  const entry =
+    checked.find((item) => key(item.roleTitle) === key(role.title)) ??
+    checked.find((item) => names.includes(key(item.roleTitle)));
+  if (!entry || entry.skillCount === undefined) return null;
   const confirmed = entry.confirmedSkills?.length ?? 0;
-  return {
-    confirmed,
-    total: entry.skillCount ?? confirmed,
-    source: { title: entry.roleTitle, label: sourceLabel },
-  };
+  const counts = { confirmed, total: entry.skillCount };
+  const sourceLabel = entry.roleTitleRu ?? entry.roleTitle;
+  const ownRun = key(entry.roleTitle) === key(role.title) || key(sourceLabel) === key(label);
+  return ownRun ? counts : { ...counts, source: { title: entry.roleTitle, label: sourceLabel } };
 }
 
 function searchOnlyRow(title: string, titlesRu: RoleTitlesRu): RoleRow {
