@@ -147,6 +147,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_goal_markers: { export: 'profileHistory' },
   candidate_import_walks: { export: 'profileHistory' },
   candidate_interview_design_schemas: { export: 'profileHistory' },
+  candidate_interview_design_tasks: { export: 'profileHistory' },
   candidate_interview_review_helpful: { export: 'profileHistory' },
   skill_quiz_attempts: { export: 'profileHistory' },
   consultant_rejections: { export: 'profileHistory' },

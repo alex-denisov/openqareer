@@ -118,6 +118,8 @@ export const MODEL_CHAINS = {
    * OpenRouter с запретом сбора данных (`personal`), без Vertex (выключен решением владельца 20.11).
    */
   goalTaskSuggestions: [DEEPSEEK_FLASH, GLM_FLASH],
+  /** B750: задача System Design под вакансию; вход — только публичный текст вакансии. */
+  systemDesignTasks: [DEEPSEEK_FLASH, GLM_FLASH],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;

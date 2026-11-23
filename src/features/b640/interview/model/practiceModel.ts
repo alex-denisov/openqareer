@@ -19,6 +19,30 @@ const CRITERIA = [
 
 const QUOTE_SHOWN = 120;
 
+/** Задача с сервера пригодна для показа: заголовок, условие, пункты и время. */
+export function isShownTask(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const task = value as Record<string, unknown>;
+  const text = (field: unknown) => typeof field === 'string' && field.trim() !== '';
+  return (
+    text(task.title) &&
+    text(task.prompt) &&
+    Array.isArray(task.points) &&
+    task.points.length > 0 &&
+    task.points.every(text) &&
+    typeof task.timeLimitMinutes === 'number' &&
+    task.timeLimitMinutes > 0
+  );
+}
+
+/** Пункты «Что важно в задаче»: свои у задачи (B750), у старой — предложения условия. */
+export function shownPoints(task: {
+  readonly prompt: string;
+  readonly points?: readonly string[];
+}): string[] {
+  return task.points?.length ? [...task.points] : taskPoints(task.prompt);
+}
+
 /** Условие задачи по предложениям: это пункты «Что важно в задаче». */
 export function taskPoints(prompt: string): string[] {
   return (prompt.match(/[^.!?]+[.!?]?/gu) ?? []).map((part) => part.trim()).filter(Boolean);

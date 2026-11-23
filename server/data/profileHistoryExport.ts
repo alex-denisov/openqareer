@@ -53,6 +53,12 @@ export interface ExportedGoalMarker {
   readonly evidenceKind: string;
 }
 
+export interface ExportedInterviewDesignTask {
+  readonly applicationId: string;
+  readonly task: unknown;
+  readonly createdAt: string;
+}
+
 export interface ExportedImportWalk {
   readonly platform: string;
   readonly state: string;
@@ -72,6 +78,8 @@ export interface ProfileHistoryExport {
   readonly skillQuizAttempts: ReturnType<Store['skillQuizAttempts']['list']>;
   readonly interviewDesignSchemas: readonly ExportedInterviewDesignSchema[];
   readonly interviewReviewHelpful: readonly ExportedInterviewReviewHelpful[];
+  /** B750: задачи System Design по откликам. */
+  readonly interviewDesignTasks: readonly ExportedInterviewDesignTask[];
   readonly goalMarkers: readonly ExportedGoalMarker[];
   readonly importWalks: readonly ExportedImportWalk[];
   readonly consultantRejections: ReturnType<Store['getConsultantRejections']>;
@@ -148,6 +156,13 @@ function readInterviewRows(sources: ProfileHistorySources, candidateId: string) 
       }),
       updatedAt: row.updated_at,
     })),
+    interviewDesignTasks: store.interviewSimulatorRepo.designTasks
+      .listKeys(candidateId)
+      .map(({ applicationId, createdAt }) => ({
+        applicationId,
+        task: store.interviewSimulatorRepo.designTasks.get({ candidateId, applicationId }),
+        createdAt,
+      })),
     interviewReviewHelpful: helpful.map((row) => ({
       sessionId: row.session_id,
       questionId: row.question_id,
