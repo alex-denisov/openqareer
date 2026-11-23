@@ -9,9 +9,11 @@ import { QuestionScreen } from './QuestionScreen';
 import { ReviewScreen } from './ReviewScreen';
 import { SourcesScreen } from './SourcesScreen';
 import { StatusChoiceScreen } from './StatusChoiceScreen';
+import { useB640Title } from '../kit/useB640Title';
 
 /** Вход раздела «Профиль»: экран по коду узла (см. ../README.md). */
 export default function Section({ node, params }: SectionProps) {
+  useB640Title('Профиль');
   if (node.code === 's01') return <ProfileScreen node={node} />;
   if (node.code === 's02') return <StatusChoiceScreen node={node} />;
   if (node.code === 'p06') return <ReviewScreen node={node} />;
