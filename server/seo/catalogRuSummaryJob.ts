@@ -186,11 +186,8 @@ export class CatalogRuSummaryJob {
     const blocked = this.spendBlock(now);
     if (blocked) return { ...tally, skipped: blocked };
     const { store } = this.options;
-    const candidates = store.candidates(
-      now,
-      CATALOG_RU_SUMMARY_VERSION,
-      CANDIDATES_PER_TICK + this.inFlight.size,
-    );
+    const limit = CANDIDATES_PER_TICK + this.inFlight.size;
+    const candidates = store.candidates(now, CATALOG_RU_SUMMARY_VERSION, limit);
     if (candidates.length === 0) {
       // Nothing to do: the candidate query walks the catalog, so it is not repeated every tick.
       this.pausedUntil = now + IDLE_PAUSE_MS;
@@ -198,7 +195,11 @@ export class CatalogRuSummaryJob {
     }
     const due: { candidate: CatalogRuSummaryCandidate; description: string; hash: string }[] = [];
     for (const candidate of candidates) {
-      if (due.length >= free) break;
+      if (due.length >= free) {
+        // The cards this tick did not reach come first next tick, not a lap later (B761).
+        store.resumeAt(candidate.clusterId);
+        break;
+      }
       if (this.inFlight.has(candidate.clusterId)) continue;
       const description = store.sourceText(candidate);
       const hash = catalogSummarySourceHash(candidate.title, description);
