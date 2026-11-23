@@ -112,6 +112,11 @@ function parseDay(text: string): Parsed<string> {
   return { value: iso || undefined };
 }
 
+/** B733: ошибка формата при уходе с поля — как в общем поле даты; остальные поля — при сохранении. */
+export function leftFieldError(key: keyof OfferForm, value: string): string | undefined {
+  return key === 'respondBy' ? readRuDate(value).error : undefined;
+}
+
 /** B733: «Срок ответа» набирается как общее поле даты — точки ставятся сами. */
 export function typedOfferValue(key: keyof OfferForm, raw: string): string {
   return key === 'respondBy' ? formatDateTyping(raw) : raw;

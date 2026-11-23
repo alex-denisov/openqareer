@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import type { CoachTurnStage } from '../../coach/coachApi';
+import type { CoachTurnStage, CoachTurnSubject } from '../../coach/coachApi';
 import { Icon } from '../kit/Icon';
 import { hasOpenModal } from '../kit/useModalFocus';
 import { buildNodePath } from '../routes';
@@ -18,6 +18,8 @@ export interface ConsultantPanelProps {
   readonly view: PanelView;
   /** Тема разговора: раздел, над которым открыта панель. */
   readonly stage: CoachTurnStage;
+  /** B746: объект экрана под панелью (отклик, вакансия); нет — вопрос по разделу. */
+  readonly subject?: CoachTurnSubject;
   /** Раздел под панелью назван в заголовке; `false` — панель открыта сама по себе. */
   readonly named: boolean;
   /** Адрес вида панели: ссылка открывается и в новой вкладке. */
@@ -167,13 +169,22 @@ function backOf(
 interface PanelBodyProps {
   readonly view: PanelView;
   readonly stage: CoachTurnStage;
+  readonly subject?: CoachTurnSubject;
   readonly freshKey: number;
   readonly pathOf: (view: PanelView) => string;
   readonly onView: (view: PanelView) => void;
   readonly onContinued: () => void;
 }
 
-function PanelBody({ view, stage, freshKey, pathOf, onView, onContinued }: PanelBodyProps) {
+function PanelBody({
+  view,
+  stage,
+  subject,
+  freshKey,
+  pathOf,
+  onView,
+  onContinued,
+}: PanelBodyProps) {
   if (view.kind === 'review') return <ReviewView />;
   if (view.kind === 'conversation') {
     return <ConversationView key={view.id} id={view.id} onContinued={onContinued} />;
@@ -191,6 +202,7 @@ function PanelBody({ view, stage, freshKey, pathOf, onView, onContinued }: Panel
     <DialogView
       key={freshKey}
       stage={stage}
+      subject={subject}
       reviewPath={pathOf({ kind: 'review' })}
       onReview={() => onView({ kind: 'review' })}
       tariffsPath={TARIFFS_PATH}
@@ -205,6 +217,7 @@ function PanelBody({ view, stage, freshKey, pathOf, onView, onContinued }: Panel
 export function ConsultantPanel({
   view,
   stage,
+  subject,
   named,
   pathOf,
   onView,
@@ -238,6 +251,7 @@ export function ConsultantPanel({
         <PanelBody
           view={view}
           stage={stage}
+          subject={subject}
           freshKey={fresh.key}
           pathOf={pathOf}
           onView={onView}

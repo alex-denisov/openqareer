@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { revertClusterSplitChunk } from './clusterSplitRevert';
 import { revertClusterSplitStep, splitClustersStep } from './clusterSplitStep';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { createClusterFromVacancy, mergeVacancyIntoCluster } from './vacancyDeduplicator';
@@ -242,5 +243,154 @@ describe('cluster split step within a write budget (B752)', () => {
     expect(pieces).toEqual([{ id: bigId }, { id: otherId }]);
     expect(endState(db)[0].length).toBe((before[0] as unknown[]).length + 1);
     expect(db.prepare('SELECT count(*) AS n FROM cluster_split_progress').get()).toEqual({ n: 0 });
+  });
+});
+
+/** B782: откат частями. Основатель возвращается первым, куски снимаются по бюджету. */
+describe('cluster split revert within a write budget (B782)', () => {
+  function revertToEnd(db: DatabaseSync, stepId: string, maxPieces: number) {
+    const chunks = [];
+    for (let at = 1; at < 100; at += 1) {
+      const chunk = revertClusterSplitChunk(db, stepId, { maxPieces });
+      chunks.push(chunk);
+      if (chunk.done) return chunks;
+    }
+    throw new Error('revert did not finish');
+  }
+
+  const bigIds = (db: DatabaseSync) =>
+    (
+      db
+        .prepare("SELECT count(*) AS n FROM vacancy_clusters WHERE id LIKE 'cluster-src-%:1'")
+        .get() as { n: number }
+    ).n;
+
+  it('a step reverted in parts ends where it started', () => {
+    const db = seed();
+    const before = endState(db).slice(0, 4);
+    const steps = runToEnd(db, { maxPieces: 1_000 });
+
+    const chunks = revertToEnd(db, steps[0]!.stepId!, 2);
+
+    expect(chunks.length).toBeGreaterThan(2);
+    expect(chunks.every((chunk) => chunk.founders + chunk.piecesRemoved <= 2)).toBe(true);
+    expect(chunks.every((chunk) => Number.isInteger(chunk.writeMs))).toBe(true);
+    expect(chunks.reduce((sum, chunk) => sum + chunk.restored, 0)).toBe(3);
+    expect(endState(db).slice(0, 4)).toEqual(before);
+    expect(db.prepare('SELECT count(*) AS n FROM cluster_split_journal').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT completed FROM cluster_split_state').get()).toEqual({ completed: 0 });
+  });
+
+  it('between parts readers see a duplicate, never a gap', () => {
+    const db = seed();
+    const before = jsonOf(db, bigId);
+    const stepId = runToEnd(db, { maxPieces: 1_000 })[0]!.stepId!;
+
+    let duplicateSeen = false;
+    for (let at = 1; at < 100; at += 1) {
+      const chunk = revertClusterSplitChunk(db, stepId, { maxPieces: 2 });
+      const whole = jsonOf(db, bigId) === before;
+      // Либо основатель ещё разбит и все шесть кусков на месте, либо он уже целый.
+      expect(whole || bigIds(db) === 6).toBe(true);
+      if (whole && bigIds(db) > 1) duplicateSeen = true;
+      if (chunk.done) break;
+    }
+
+    expect(duplicateSeen).toBe(true);
+    expect(bigIds(db)).toBe(1);
+    expect(db.prepare('SELECT count(*) AS n FROM vacancy_catalog_redirects').get()).toEqual({
+      n: 0,
+    });
+  });
+
+  it('a large split stopped half way reverts in parts and drops its progress', () => {
+    const db = seed();
+    const before = endState(db).slice(0, 4);
+    const first = splitClustersStep(db, { now: 1_000, maxPieces: 2 });
+    splitClustersStep(db, { now: 1_000, maxPieces: 2 });
+
+    revertToEnd(db, first.stepId!, 1);
+
+    expect(endState(db).slice(0, 4)).toEqual(before);
+    expect(db.prepare('SELECT count(*) AS n FROM cluster_split_progress').get()).toEqual({ n: 0 });
+    // Курсор снова перед большим кластером: следующий проход разобьёт его заново.
+    runToEnd(db, { maxPieces: 2 });
+    const whole = seed();
+    runToEnd(whole, { maxPieces: 1_000 });
+    expect(endState(db).slice(0, 4)).toEqual(endState(whole).slice(0, 4));
+  });
+
+  it('the one-shot revert runs the same parts and counts restored clusters', () => {
+    const db = seed();
+    const before = endState(db).slice(0, 4);
+    const steps = runToEnd(db, { maxPieces: 1_000 });
+
+    expect(revertClusterSplitStep(db, steps[0]!.stepId!, { maxPieces: 1 })).toBe(3);
+    expect(endState(db).slice(0, 4)).toEqual(before);
+  });
+
+  it('a founder changed by ingest after its restore is not restored again', () => {
+    const db = seed();
+    const stepId = runToEnd(db, { maxPieces: 1_000 })[0]!.stepId!;
+    const revertUntilBigWhole = () => {
+      const before = bigIds(db);
+      for (let at = 1; at < 100; at += 1) {
+        revertClusterSplitChunk(db, stepId, { maxPieces: 2 });
+        if (bigIds(db) < before || jsonOf(db, bigId).includes('src-f')) return;
+      }
+    };
+    revertUntilBigWhole();
+    expect(bigIds(db)).toBeGreaterThan(1);
+    // Обход дописал основателю новую площадку между частями отката.
+    const founder = JSON.parse(jsonOf(db, bigId));
+    mergeVacancyIntoCluster(founder, vacancy('src-g', '1', COMPANIES[6]!));
+    const changed = JSON.stringify(founder);
+    db.prepare('UPDATE vacancy_clusters SET cluster_json = ? WHERE id = ?').run(changed, bigId);
+
+    revertToEnd(db, stepId, 2);
+
+    expect(jsonOf(db, bigId)).toBe(changed);
+    expect(bigIds(db)).toBe(1);
+  });
+
+  it('a page key taken by a piece goes back to the founder', () => {
+    const db = seed();
+    const page = (id: string) =>
+      db.prepare('SELECT entry_key FROM catalog_entries WHERE cluster_id = ?').get(id) as
+        { entry_key: string } | undefined;
+    const key = page(bigId)!.entry_key;
+    const stepId = runToEnd(db, { maxPieces: 1_000 })[0]!.stepId!;
+    // Совпадение 32-битного ключа: страница куска получила прежний ключ основателя.
+    db.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(bigId);
+    db.prepare('UPDATE catalog_entries SET entry_key = ? WHERE cluster_id = ?').run(
+      key,
+      'cluster-src-f:1',
+    );
+
+    revertToEnd(db, stepId, 2);
+
+    expect(page(bigId)).toEqual({ entry_key: key });
+  });
+
+  it('a zero time budget still moves one unit per part', () => {
+    const db = seed();
+    const before = endState(db).slice(0, 4);
+    const stepId = runToEnd(db, { maxPieces: 1_000 })[0]!.stepId!;
+    const chunks = [];
+    for (let at = 1; at < 100; at += 1) {
+      const chunk = revertClusterSplitChunk(db, stepId, { maxPieces: 1_000, budgetMs: 0 });
+      chunks.push(chunk);
+      if (chunk.done) break;
+    }
+    expect(chunks.every((chunk) => chunk.founders + chunk.piecesRemoved <= 1)).toBe(true);
+    expect(endState(db).slice(0, 4)).toEqual(before);
+  });
+
+  it('an unknown step is done at once', () => {
+    const db = seed();
+    expect(revertClusterSplitChunk(db, 'split-none', {})).toMatchObject({
+      restored: 0,
+      done: true,
+    });
   });
 });

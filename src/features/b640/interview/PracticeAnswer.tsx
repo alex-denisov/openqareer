@@ -3,6 +3,7 @@ import { apiErrorMessage } from '../../coach/apiClient';
 import type { InterviewSessionView } from '../../interview/interviewSimulatorApi';
 import { Button, Icon, StatusLine } from '../kit';
 import { useVoiceInput } from '../voice/useVoiceInput';
+import { isSessionGone } from './data/mockApi';
 import { finishPractice, type PracticeTask } from './data/practiceApi';
 import {
   liveCriteria,
@@ -46,6 +47,16 @@ function Criteria({ answer }: { readonly answer: string }) {
   );
 }
 
+/**
+ * B780: тренировку заменили в другой вкладке — `onLost` отдаёт набранный ответ экрану, он
+ * перечитывает текущую и возвращает ответ в поле (`draft`); `onFinished` — ответ записан.
+ */
+export interface PracticeRecovery {
+  readonly draft: string | undefined;
+  readonly onLost: (text: string) => void;
+  readonly onFinished: (session: InterviewSessionView) => void;
+}
+
 /** «Закончить и разобрать»: пустой ответ — ошибка поля, иначе ответ, схема и конец тренировки. */
 function useFinish(input: {
   readonly session: InterviewSessionView;
@@ -53,6 +64,7 @@ function useFinish(input: {
   readonly text: string;
   readonly schema: SchemaToSave | null;
   readonly onFinished: (session: InterviewSessionView) => void;
+  readonly onLost: (text: string) => void;
 }) {
   const [empty, setEmpty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -76,6 +88,8 @@ function useFinish(input: {
       });
       input.onFinished(done);
     } catch (reason) {
+      // B780: тренировку заменили в другой вкладке — экран подхватит текущую, ответ останется.
+      if (isSessionGone(reason)) return input.onLost(text);
       setError(apiErrorMessage(reason, 'Не получилось сохранить ответ. Попробуйте ещё раз.'));
     } finally {
       setBusy(false);
@@ -100,11 +114,11 @@ export function PracticeAnswer(props: {
   readonly task: PracticeTask;
   readonly company: string | null;
   readonly session: InterviewSessionView;
-  readonly onFinished: (session: InterviewSessionView) => void;
+  readonly recovery: PracticeRecovery;
 }) {
-  const { task, session } = props;
+  const { task, session, recovery } = props;
   const question = session.currentQuestion ?? session.questions[0] ?? null;
-  const [text, setText] = useState(question?.answer?.text ?? '');
+  const [text, setText] = useState(question?.answer?.text ?? recovery.draft ?? '');
   const [edits, setEdits] = useState<readonly SchemaEdit[]>([]);
   const [hint, setHint] = useState(false);
   const now = useNow();
@@ -115,7 +129,7 @@ export function PracticeAnswer(props: {
     questionId: question?.id ?? null,
     text,
     schema: edits.length > 0 ? schemaToSave(text, blocks) : null,
-    onFinished: props.onFinished,
+    ...recovery,
   });
   const { voice, after } = useSpokenFinish(session.mode === 'voice', setText, finish);
 

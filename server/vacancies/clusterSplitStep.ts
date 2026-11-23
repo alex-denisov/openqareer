@@ -2,6 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { candidateReferencedClusters } from './clusterSplit';
 import {
   budgetSpent,
+  CLUSTER_SPLIT_BUDGET_MS,
+  CLUSTER_SPLIT_MAX_PIECES,
   emptyResult,
   pieceIdTaken,
   saveState,
@@ -27,7 +29,7 @@ import {
 } from './clusterSplitPlan';
 import { prepareSplitWriters, writePiece } from './clusterSplitWrite';
 
-export { revertClusterSplitStep } from './clusterSplitJournal';
+export { revertClusterSplitChunk, revertClusterSplitStep } from './clusterSplitRevert';
 export type { ClusterSplitLog, ClusterSplitStepResult } from './clusterSplitContext';
 
 /**
@@ -49,9 +51,7 @@ export interface ClusterSplitStepOptions {
 
 export const CLUSTER_SPLIT_CHUNK = 200;
 const MAX_CHUNK = 1_000;
-/** 23.11, копия прода: 5–10 мс на кусок с ключами и каталогом, холодный кэш. */
-export const CLUSTER_SPLIT_MAX_PIECES = 40;
-export const CLUSTER_SPLIT_BUDGET_MS = 500;
+export { CLUSTER_SPLIT_BUDGET_MS, CLUSTER_SPLIT_MAX_PIECES };
 
 interface State {
   readonly cursor_rowid: number;
