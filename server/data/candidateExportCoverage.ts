@@ -17,7 +17,6 @@ export type CandidateTableCoverage =
   | { readonly internal: string }
   | { readonly gap: string };
 
-const GAP_ACCOUNT = 'учётная запись и кабинет: в выгрузку пока не входят';
 const GAP_AUTOMATION = 'автоотклики и hh.ru: в выгрузку пока не входят';
 const MIGRATION_COPY = 'временная копия таблицы при перестройке схемы';
 
@@ -159,24 +158,24 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_linkedin_rhythm: { export: 'content' },
   candidate_linkedin_section_events: { export: 'content' },
   candidate_linkedin_sections: { export: 'content' },
-  users: { gap: GAP_ACCOUNT },
-  billing_invoices: { gap: GAP_ACCOUNT },
-  career_partner_assignments: { gap: GAP_ACCOUNT },
-  billing_events: { gap: GAP_ACCOUNT },
-  billing_subscriptions: { gap: GAP_ACCOUNT },
-  billing_pro_trials: { gap: GAP_ACCOUNT },
-  billing_reminders: { gap: GAP_ACCOUNT },
-  candidate_workspaces: { gap: GAP_ACCOUNT },
-  candidate_visits: { gap: GAP_ACCOUNT },
-  plan_requests: { gap: GAP_ACCOUNT },
+  users: { export: 'account' },
+  billing_invoices: { export: 'account' },
+  career_partner_assignments: { internal: 'связь учётных записей кандидата и карьерного партнёра: служебные идентификаторы двух людей' },
+  billing_events: { export: 'account' },
+  billing_subscriptions: { export: 'account' },
+  billing_pro_trials: { export: 'account' },
+  billing_reminders: { internal: 'очередь писем-напоминаний об оплате: попытки и аренда, без содержимого кандидата' },
+  candidate_workspaces: { export: 'account' },
+  candidate_visits: { export: 'account' },
+  plan_requests: { export: 'account' },
   vacancy_subscription_items: { export: 'careerSections' },
-  account_email_change_requests: { gap: GAP_ACCOUNT },
-  candidate_app_preferences: { gap: GAP_ACCOUNT },
-  candidate_telegram_usernames: { gap: GAP_ACCOUNT },
-  search_consents: { gap: GAP_ACCOUNT },
-  candidate_status_changes: { gap: GAP_ACCOUNT },
-  candidate_status_signal_answers: { gap: GAP_ACCOUNT },
-  b640_offer_choices: { gap: GAP_ACCOUNT },
+  account_email_change_requests: { export: 'account' },
+  candidate_app_preferences: { export: 'account' },
+  candidate_telegram_usernames: { export: 'account' },
+  search_consents: { export: 'account' },
+  candidate_status_changes: { export: 'account' },
+  candidate_status_signal_answers: { export: 'account' },
+  b640_offer_choices: { export: 'account' },
   // B642: только тексты расшифровок (аудио не хранится); сегменты висят на записи.
   interview_recordings: { gap: 'записи интервью и их расшифровки: в выгрузку пока не входят' },
   interview_interviewers: { gap: 'имя собеседника из разбора интервью: в выгрузку пока не входит' },
