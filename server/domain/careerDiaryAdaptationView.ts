@@ -37,19 +37,21 @@ const STEP_DAYS: Readonly<Record<CareerDiaryAdaptationStepId, readonly [number, 
 };
 
 /**
- * B685: состояние шага по его дням и задачам (решение оркестратора 23.11): до дней шага —
- * «впереди»; в его дни или после них с открытой задачей — «идёт»; после дней, когда все
- * задачи закрыты или их нет, — «пройдено».
+ * B685: состояние шага по его дням и задачам (решения оркестратора 23.11): все задачи шага
+ * закрыты — «пройдено», даже раньше его дней; иначе до дней шага — «впереди», в его дни —
+ * «идёт»; после них — «идёт» с открытой задачей и «пройдено» без задач.
  */
 function stepProgress(
   id: CareerDiaryAdaptationStepId,
   day: number,
   tasks: readonly CareerDiaryAdaptationTask[],
 ): CareerDiaryProgress {
+  const open = tasks.some((task) => !task.completed);
+  if (tasks.length > 0 && !open) return 'done';
   const [from, to] = STEP_DAYS[id];
   if (day < from) return 'ahead';
   if (day <= to) return 'active';
-  return tasks.some((task) => !task.completed) ? 'active' : 'done';
+  return open ? 'active' : 'done';
 }
 
 /** Шаг задачи прежнего плана, у которой шаг не назван: по этапу и виду задачи. */

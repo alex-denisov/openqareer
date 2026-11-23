@@ -170,12 +170,19 @@ describe('план адаптации для экрана d01', () => {
     expect(status.first_meeting).toBe('done');
   });
 
-  it('B685: до дней шага — «впереди», в его дни — «идёт», даже с закрытыми задачами', () => {
-    const tasks = [task({ id: 'c', stage: 'days_1_30', category: 'people', completed: true })];
-    const before = view(tasks, EMPTY_ADAPTATION_DETAILS, '2026-11-25').steps;
-    const inside = view(tasks, EMPTY_ADAPTATION_DETAILS, '2026-12-05').steps;
-    expect(before.find((step) => step.id === 'first_two_weeks')?.status).toBe('ahead');
-    expect(inside.find((step) => step.id === 'first_two_weeks')?.status).toBe('active');
+  it('B685: в дни шага — все задачи закрыты раньше срока «пройдено», открытая или без задач — «идёт»', () => {
+    const step = (tasks: PlanTask[], asOf: string) =>
+      view(tasks, EMPTY_ADAPTATION_DETAILS, asOf).steps.find((item) => item.id === 'first_two_weeks')
+        ?.status;
+    const closed = [task({ id: 'c', stage: 'days_1_30', category: 'people', completed: true })];
+    const open = [task({ id: 'o', stage: 'days_1_30', category: 'people', completed: false })];
+    // День 5 — внутри дней «Первых двух недель» (1–13).
+    expect(step(closed, '2026-12-05')).toBe('done');
+    expect(step(open, '2026-12-05')).toBe('active');
+    expect(step([], '2026-12-05')).toBe('active');
+    // До выхода — дни шага не начались.
+    expect(step(open, '2026-11-25')).toBe('ahead');
+    expect(step([], '2026-11-25')).toBe('ahead');
   });
 
   it('статус этапа: всё сделано — готово, срок начался — в работе, иначе впереди', () => {
