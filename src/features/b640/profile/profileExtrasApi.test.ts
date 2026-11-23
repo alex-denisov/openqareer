@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '../../coach/apiClient';
 import {
   getIncome,
+  getResumePhoto,
   incomeAmount,
   incomeLabel,
   PHOTO_MAX_BYTES,
@@ -9,6 +10,8 @@ import {
   reapplyChange,
   removePhoto,
   saveIncome,
+  saveResumePhoto,
+  takeLinkedinPhoto,
   uploadPhoto,
 } from './profileExtrasApi';
 
@@ -51,6 +54,26 @@ describe('b640 profile: клиент фото, дохода и повтора п
     await reapplyChange('ch 1');
     expect(spy).toHaveBeenLastCalledWith('/api/v1/candidate/profile/history/ch%201/reapply', {
       method: 'POST',
+    });
+  });
+
+  it('p08: фото из LinkedIn и «Фото в резюме»', async () => {
+    const spy = vi
+      .spyOn(apiClient, 'apiFetch')
+      .mockImplementation(async () => reply({ inResume: false }));
+    await takeLinkedinPhoto();
+    expect(spy).toHaveBeenLastCalledWith('/api/v1/candidate/profile/photo/linkedin', {
+      method: 'POST',
+    });
+    await expect(getResumePhoto()).resolves.toEqual({ inResume: false });
+    expect(spy).toHaveBeenLastCalledWith('/api/v1/candidate/profile/photo/resume', {
+      signal: undefined,
+    });
+    await saveResumePhoto(false);
+    expect(spy).toHaveBeenLastCalledWith('/api/v1/candidate/profile/photo/resume', {
+      method: 'PUT',
+      headers: json,
+      body: JSON.stringify({ inResume: false }),
     });
   });
 

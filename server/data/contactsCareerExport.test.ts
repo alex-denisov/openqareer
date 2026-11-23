@@ -8,6 +8,7 @@ import { SqliteCandidateIncomeRepository } from '../candidate/sqliteCandidateInc
 import { SqliteGrowthGoalRepository } from '../candidate/sqliteGrowthGoalRepository';
 import { SqliteProfessionPathRepository } from '../candidate/sqliteProfessionPathRepository';
 import { SqliteRelocationPlacesRepository } from '../candidate/sqliteRelocationPlacesRepository';
+import { SqliteResumePhotoRepository } from '../candidate/sqliteResumePhotoRepository';
 import { CANDIDATE_CONTACT_MESSAGES_TABLE } from './contactMessageSchema';
 import { CANDIDATE_CONTACT_STATUS_TABLE } from './contactStatusSchema';
 import { forbiddenExportKeys } from './exportForbiddenKeys';
@@ -48,6 +49,7 @@ function seed(database: DatabaseSync, candidateId: string, tag: string) {
   new SqliteGrowthGoalRepository(database).choose(candidateId, `work-${tag}`, 'promotion', AT);
   new SqliteCandidateIncomeRepository(database, KEY).put(candidateId, { current: 300000, expected: 400000 }, AT);
   new SqliteProfessionPathRepository(database).putLowerIncome(candidateId, `target-${tag}`, 'yes', AT);
+  new SqliteResumePhotoRepository(database).setInResume(candidateId, tag !== 'свой', AT);
   new SqliteRelocationPlacesRepository(database).replace(candidateId, [{ kind: 'country', code: 'DE', skipped: [] }], AT);
 }
 
@@ -80,6 +82,7 @@ describe('B738 · 5–6: контакты, переписка и карьерн�
     expect(career.dismissedCompanyProposals).toEqual(['other-свой']);
     expect(career.growthGoals).toEqual([{ workplaceId: 'work-свой', kind: 'promotion', chosenAt: AT }]);
     expect(career.income).toEqual({ current: 300000, expected: 400000 });
+    expect(career.resumePhotoInResume).toBe(false);
     expect(career.professionPath).toEqual([{ targetKey: 'target-свой', lowerIncome: 'yes', updatedAt: AT }]);
     expect(career.relocationPlaces).toMatchObject({ saved: true, places: [{ kind: 'country', code: 'DE', skipped: [] }] });
     expect(career.subscriptionVacancies).toEqual([expect.objectContaining({ source: 'hh', url: 'https://hh.ru/vacancy/own', firstMatchedAt: AT })]);
