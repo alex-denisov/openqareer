@@ -59,6 +59,8 @@ window.matchMedia = ((query: string) => ({
   onchange: null,
   dispatchEvent: () => false,
 })) as unknown as typeof window.matchMedia;
+const primaries = (view: { readonly container: HTMLElement }) =>
+  [...view.container.querySelectorAll('.is-primary')].map((item) => item.textContent?.trim());
 const node = (code: string) => {
   const found = nodeByCode(code);
   if (!found) throw new Error(code);
@@ -162,6 +164,48 @@ describe('a03p, a03b, a05', () => {
     ).toEqual(['Изменить темы']);
     view.unmount();
   });
+  it('a05b: без новых черновиков главная — «Настроить ритм»', async () => {
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    vi.mocked(queue.listFeedPosts).mockResolvedValue({
+      items: [
+        {
+          draftId: 'f1',
+          postUrl: null,
+          postExcerpt: 'Пост',
+          comment: 'К',
+          state: 'queued',
+          createdAt: at,
+          scheduledAt: null,
+        },
+      ],
+      total: 1,
+      offset: 0,
+      limit: 20,
+    } as never);
+    vi.mocked(queue.listQueue).mockResolvedValue({
+      items: [
+        {
+          id: 'q1',
+          draftId: 'c1',
+          kind: 'comment',
+          text: 'В очереди',
+          scheduledAt: at,
+          state: 'queued',
+          updatedAt: at,
+          remindedAt: null,
+          openUrl: null,
+        },
+      ],
+      total: 1,
+      offset: 0,
+      limit: 20,
+      paused: false,
+    } as never);
+    const view = mount(<Section node={node('a05')} params={{}} />);
+    await flush();
+    expect(primaries(view)).toEqual(['Настроить ритм']);
+    view.unmount();
+  });
   it('лента a05: «N постов · Сегодня осталось X из Y», меню «Изменить темы», очередь комментариев с ритмом', async () => {
     const at = new Date(Date.now() + 3_600_000).toISOString();
     vi.mocked(queue.listFeedPosts).mockResolvedValue({
@@ -201,6 +245,8 @@ describe('a03p, a03b, a05', () => {
     } as never);
     const view = mount(<Section node={node('a05')} params={{}} />);
     await flush();
+    // a05: главная одна — «Одобрить» первой карточки; «Подготовить комментарий» и «Настроить ритм» обычные.
+    expect(primaries(view)).toEqual(['Одобрить']);
     const heading = view.container.querySelector('#cm-title')!.textContent!;
     expect(heading).toMatch(/^1 пост · Сегодня осталось [0-2] из 2$/u);
     const menu = view.container.querySelector('.list-head .lk-menu')!;

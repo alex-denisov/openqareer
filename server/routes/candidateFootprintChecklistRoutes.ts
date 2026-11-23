@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { CandidateFootprintFinding } from '../../shared/candidateFootprint';
-import { ARTIFACT_FINDING_KINDS } from '../../shared/footprintChecklist';
+import { profileAddRefusal } from '../../shared/footprintChecklist';
 import { checkResumeFileMetadata } from '../osint/resumeMetadataCheck';
 import type { RouteDeps } from './deps';
 import {
@@ -101,20 +101,37 @@ async function handleMarkFinding(
   return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
 }
 
-/** Почему находку нельзя перенести в профиль; `null` — можно. */
-function addRefusal(
+const ADD_REFUSALS = {
+  not_artifact: {
+    code: 'finding_not_artifact',
+    message: 'В профиль переносятся только ваши доклады, код и публикации.',
+  },
+  already_in_profile: { code: 'finding_already_in_profile', message: 'Эта находка уже в профиле.' },
+} as const;
+
+/**
+ * Нажатие «В профиль» на находке, которую поиск счёл вашей, — подтверждение: находка становится
+ * вашей, а «Отменить» вернёт её в неразобранные (B382).
+ */
+function markAdded(
+  deps: RouteDeps,
+  candidateId: string,
   finding: CandidateFootprintFinding,
-): { readonly code: string; readonly message: string } | null {
-  if (finding.review !== 'confirmed_self' || !ARTIFACT_FINDING_KINDS.has(finding.kind)) {
-    return {
-      code: 'finding_not_artifact',
-      message: 'В профиль переносятся только ваши доклады, код и публикации.',
-    };
+  profileFactId?: string,
+) {
+  const confirmedByAdd = finding.review !== 'confirmed_self';
+  if (confirmedByAdd) {
+    deps.candidateReputationRepo!.updateFootprintFindingReview(
+      candidateId,
+      finding.id,
+      'confirmed_self',
+    );
   }
-  if (finding.checklistMark === 'added_to_profile') {
-    return { code: 'finding_already_in_profile', message: 'Эта находка уже в профиле.' };
-  }
-  return null;
+  return deps.candidateReputationRepo!.updateFootprintFindingChecklist(candidateId, finding.id, {
+    checklistMark: 'added_to_profile',
+    ...(profileFactId ? { profileFactId } : {}),
+    ...(confirmedByAdd ? { confirmedByAdd: true } : {}),
+  });
 }
 
 async function handleAddToProfile(
@@ -125,16 +142,15 @@ async function handleAddToProfile(
   const context = loadFinding(deps, request, reply);
   if (!context) return reply;
   const { finding } = context;
-  const refused = addRefusal(finding);
-  if (refused) return sendError(reply, request, 409, refused.code, refused.message, false);
+  const refusal = profileAddRefusal(finding);
+  if (refusal) {
+    const { code, message } = ADD_REFUSALS[refusal];
+    return sendError(reply, request, 409, code, message, false);
+  }
   const existing = factAlreadyInProfile(deps, context.candidateId, finding.title);
   if (existing) {
     // B382 (B378): тот же факт уже в профиле — второй не пишем, находку отмечаем без своей ссылки.
-    const audit = deps.candidateReputationRepo!.updateFootprintFindingChecklist(
-      context.candidateId,
-      finding.id,
-      { checklistMark: 'added_to_profile' },
-    );
+    const audit = markAdded(deps, context.candidateId, finding);
     return {
       data: { ...toPublicFootprint({ audit }), alreadyInProfile: true },
       meta: { requestId: request.id },
@@ -146,11 +162,7 @@ async function handleAddToProfile(
     platform: 'footprint',
     entries: [{ memoryId, domain: 'role-evidence', statement: finding.title }],
   });
-  const audit = deps.candidateReputationRepo!.updateFootprintFindingChecklist(
-    context.candidateId,
-    finding.id,
-    { checklistMark: 'added_to_profile', profileFactId: memoryId },
-  );
+  const audit = markAdded(deps, context.candidateId, finding, memoryId);
   return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
 }
 
