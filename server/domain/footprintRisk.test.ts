@@ -526,3 +526,32 @@ describe('B645 f03b: строка «Риск» — уровень и почем�
     expect(all.join(' · ')).not.toMatch(/sherlock|maigret|hibp|wayback|exa\b|утечк|парол/iu);
   });
 });
+
+describe('B645 f03b: база контактов — короткое название и одна строка «Где»', () => {
+  it('без заголовка страницы и разметки', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({
+          id: 'broker',
+          url: 'https://aeroleads.com/in/alexeydenisov',
+          title: 'Alexey Denisov Email & Phone Number @ Россети Цифра | AeroLeads',
+          detail: '# Alexey Denisov Email & Phone Number\n\n**Россети Цифра**',
+        }),
+      ]),
+      [],
+    );
+    const [broker] = summary.items;
+    expect(broker.title).toBe('Почта и телефон в базе контактов');
+    expect(broker.detail).toBe('aeroleads.com/in/alexeydenisov');
+  });
+});
+
+describe('описание находки без разметки', () => {
+  it('снимает # и ** из текста страницы', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([finding({ id: 'md', detail: '# Заголовок\n\n**Жирный** текст' })]),
+      [],
+    );
+    expect(summary.items[0].detail).not.toMatch(/[#*]/u);
+  });
+});

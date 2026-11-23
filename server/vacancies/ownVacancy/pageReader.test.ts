@@ -127,3 +127,37 @@ describe('readVacancyPage: ответ', () => {
     }
   });
 });
+
+describe('readVacancyPage: строка журнала о чтении (B676)', () => {
+  it('отказ сайта — домен и код, без пути и запроса', async () => {
+    const { read } = setup(() => res('blocked', { status: 403 }));
+    const onTrace = vi.fn();
+    await read('https://jobs.example.com/acme/123?lever-source=x', { onTrace });
+    expect(onTrace).toHaveBeenCalledWith({ host: 'jobs.example.com', status: 403, bytes: 0, stage: 'http_status', outcome: 'failed' });
+    expect(JSON.stringify(onTrace.mock.calls)).not.toMatch(/acme|lever-source/u);
+  });
+  it('прочитано — код 200 и байты страницы', async () => {
+    const { read } = setup(() => res(HTML));
+    const onTrace = vi.fn();
+    await read('https://example.com/a', { onTrace });
+    expect(onTrace).toHaveBeenCalledWith({ host: 'example.com', status: 200, bytes: HTML.length, stage: 'page', outcome: 'ok' });
+  });
+  it('таймаут — stage timeout', async () => {
+    const { read } = setup(() => new Promise<Response>(() => undefined) as never);
+    const onTrace = vi.fn();
+    await read('https://example.com/a', { timeoutMs: 30, onTrace });
+    expect(onTrace.mock.calls[0]?.[0]).toMatchObject({ host: 'example.com', stage: 'timeout', outcome: 'failed' });
+  });
+  it('страница больше предела — stage too_large', async () => {
+    const { read } = setup(() => res('x'.repeat(200)));
+    const onTrace = vi.fn();
+    await read('https://example.com/a', { maxBytes: 100, onTrace });
+    expect(onTrace.mock.calls[0]?.[0]).toMatchObject({ stage: 'too_large', outcome: 'failed', status: 200 });
+  });
+  it('страница 742 КБ (Lever, прод 23.11) проходит предел', async () => {
+    const big = `<html><body>${'x'.repeat(742_000)}</body></html>`;
+    const { read } = setup(() => res(big));
+    expect((await read('https://example.com/a')).ok).toBe(true);
+  });
+});
+

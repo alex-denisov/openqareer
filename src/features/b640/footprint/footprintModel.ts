@@ -168,6 +168,20 @@ export function opensRemovalPath(item: FootprintRiskItem): boolean {
   return item.action !== null && !USEFUL_ACTIONS.has(item.action.kind);
 }
 
+/** «Проверить» ждёт решения кандидата; «стоит убрать» — остальные действия удаления. */
+const REVIEW_ACTIONS: ReadonlySet<string> = new Set(['check_now', 'confirm_owner']);
+
+/**
+ * B645 f03: главная кнопка — первая находка, которую стоит убрать (как «Убрать телефон» в
+ * макете); убирать нечего — первая страница, которую нужно проверить.
+ */
+export function firstToRemove(
+  risks: readonly FootprintRiskItem[],
+): FootprintRiskItem | undefined {
+  const paths = risks.filter(opensRemovalPath);
+  return paths.find((item) => !REVIEW_ACTIONS.has(item.action?.kind ?? '')) ?? paths[0];
+}
+
 /**
  * B727: страница по нику — кандидат решает, его ли она. Строка ведёт на f03b (B382: из списка
  * внешних ссылок нет, макет p02), а сама страница открывается уже с f03b.
