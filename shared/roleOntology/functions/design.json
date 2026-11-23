@@ -27,6 +27,11 @@
       "family": "design.craft",
       "titleEn": "UX/UI Designer",
       "titleRu": "UX/UI-дизайнер",
+      "forms": {
+        "toBecome": "дизайнеры",
+        "genitive": "дизайнера",
+        "instrumental": "дизайнером"
+      },
       "levels": [
         "ic"
       ],
@@ -59,6 +64,11 @@
       "family": "design.craft",
       "titleEn": "UX Researcher",
       "titleRu": "UX-исследователь",
+      "forms": {
+        "toBecome": "UX-исследователи",
+        "genitive": "UX-исследователя",
+        "instrumental": "UX-исследователем"
+      },
       "levels": [
         "ic"
       ],

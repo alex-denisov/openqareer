@@ -27,6 +27,11 @@
       "family": "product.management",
       "titleEn": "Product Manager",
       "titleRu": "Продакт-менеджер",
+      "forms": {
+        "toBecome": "продакт-менеджеры",
+        "genitive": "продакта",
+        "instrumental": "продактом"
+      },
       "levels": [
         "ic"
       ],

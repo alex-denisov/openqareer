@@ -2,7 +2,7 @@ import { apiFetch, readData } from '../../coach/apiClient';
 import { getCurrentRoleSkillAssessment } from '../../skills/roleSkillAssessmentApi';
 import { getIncome } from '../profile/profileExtrasApi';
 import { loadRoles, type RolesData } from './careerApi';
-import type { ProfessionRequirement } from './professionPathModel';
+import type { ProfessionForms, ProfessionRequirement } from './professionPathModel';
 
 const PATH_API = '/api/v1/candidate/career/profession-path';
 
@@ -20,16 +20,23 @@ export type ProfessionWage =
 
 export type ProfessionPath =
   | { readonly state: 'no_target' }
-  | { readonly state: 'source_unavailable'; readonly target: string }
+  | {
+      readonly state: 'source_unavailable';
+      readonly target: string;
+      readonly forms?: ProfessionForms | null;
+    }
   | {
       readonly state: 'too_few';
       readonly target: string;
+      readonly forms?: ProfessionForms | null;
       readonly sampleSize: number;
       readonly threshold: number;
     }
   | {
       readonly state: 'ready';
       readonly target: string;
+      /** B669: падежные формы профессии из словаря; без них — общие тексты. */
+      readonly forms?: ProfessionForms | null;
       readonly sampleSize: number;
       readonly observedAt: string;
       readonly requirements: readonly ProfessionRequirement[];
