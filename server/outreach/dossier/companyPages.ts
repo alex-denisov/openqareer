@@ -7,7 +7,7 @@ import type { EmailFormat, EmailSample } from './emailFormat';
 import { sharedFootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import { contactBrokerUrl } from '../../../shared/contactBrokers';
 
-/** Источник досье — база контактов; неразборчивый адрес тоже не берём. */
+/** Источник о рекрутёре — база контактов; неразборчивый адрес тоже не берём. */
 export function isContactBroker(url: string): boolean {
   return contactBrokerUrl(url) ?? true;
 }
