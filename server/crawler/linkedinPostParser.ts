@@ -1,3 +1,4 @@
+import { GO_LANGUAGE } from '../../shared/goLanguage';
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
 import { parseSalaryText } from '../connectors/telegramChannelParser';
@@ -176,6 +177,10 @@ function extractContactInfo(text: string, actor: ParsedActor): string {
 function extractSkills(text: string): string[] {
   const found = new Set<string>();
   for (const skill of KNOWN_SKILLS) {
+    if (skill === 'Go') {
+      if (GO_LANGUAGE.test(text)) found.add(skill);
+      continue;
+    }
     const escaped = skill.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
     const regex = new RegExp(`(?:^|[^a-zA-Z0-9_])${escaped}(?:$|[^a-zA-Z0-9_])`, 'i');
     if (regex.test(text)) {
