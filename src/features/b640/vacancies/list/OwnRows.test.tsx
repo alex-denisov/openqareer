@@ -8,7 +8,7 @@ vi.mock('../ownVacancyApi', () => ({
     id: 'own-1', title: 'Руководитель группы бэкенда', company: 'Ритм Ритейл', location: 'Москва', workFormat: 'office', url: 'https://ritm.example/jobs/1',
     createdAt: '2026-11-18T10:00:00.000Z', coverage: { matched: 3, total: 5 }, comparing: false, text: 'О нас\n\nТребования:\n- Go',
     fit: { state: 'ready', requirements: [{ id: 'r1', text: 'Go', sourceQuote: 'Go', origin: 'explicit', importance: 'high', kind: 'other', hard: false, stopFactor: false }],
-      result: { coverage: { matched: 3, total: 5, unknown: 0 }, assessments: [{ requirementId: 'r1', status: 'matched', evidence: [] }] } },
+      result: { status: 'assessed', gates: {}, coverage: { matched: 3, total: 5, unknown: 0 }, assessments: [{ requirementId: 'r1', status: 'matched', evidence: [] }] } },
   })),
 }));
 

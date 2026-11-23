@@ -66,7 +66,7 @@ function fitView(deps: RouteDeps, candidateId: string, record: OwnVacancyRecord)
 
 function summary(record: OwnVacancyRecord, fit: VacancyFitView): OwnVacancy {
   const comparing = ['not_requested', 'processing', 'retrying'].includes(fit.state);
-  const coverage = fit.result && fit.result.coverage.total > 0
+  const coverage = fit.result?.status === 'assessed' && fit.result.coverage.total > 0
     ? { matched: fit.result.coverage.matched, total: fit.result.coverage.total } : null;
   const { text: _text, ...fields } = record;
   return { ...fields, coverage, comparing };

@@ -44,6 +44,9 @@ describe('labelVacancyRequirement: alternatives keep their meaning (B676)', () =
   it('more than three alternatives end with «…»', () => {
     expect(labelVacancyRequirement(requirement('Опыт работы с Python, Go, Java или Kotlin в продакшене')).label).toBe('Python или Go или Java…');
   });
+  it('a fourth option that is not a known skill still gets «…»', () => {
+    expect(labelVacancyRequirement(requirement('AWS или GCP или Azure или Яндекс Облако')).label).toBe('AWS или GCP или Azure…');
+  });
   it('a long list stops at the chip length', () => {
     expect(labelVacancyRequirement(requirement('2 years as Team Lead / Engineering Manager / Head of Engineering')).label).toBe('Team Lead или Engineering Manager…');
   });
