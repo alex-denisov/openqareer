@@ -8,6 +8,7 @@ import {
   vacancyFormat,
 } from '../../../vacancies/vacancyScreenCriteria';
 import type { MoneyCurrency } from '../format';
+import { roleLabel, type RoleTitlesRu } from '../../career/roleLabel';
 
 export type FilterKind = 'roles' | 'locations' | 'formats' | 'money' | 'dates';
 export type DateId = 'any' | 'today' | '7' | '30' | '90';
@@ -123,10 +124,14 @@ export interface FilterChip {
 
 export const CHIP_LIMIT = 3;
 
-export function chipsOf(filters: ListFilters, currency: MoneyCurrency): readonly FilterChip[] {
+export function chipsOf(
+  filters: ListFilters,
+  currency: MoneyCurrency,
+  titlesRu: RoleTitlesRu = {},
+): readonly FilterChip[] {
   const symbol = currencySymbol(currency);
   return [
-    ...filters.roles.map((id) => ({ kind: 'roles' as const, id, label: id })),
+    ...filters.roles.map((id) => ({ kind: 'roles' as const, id, label: roleLabel(id, titlesRu) })),
     ...filters.locations.map((id) => ({ kind: 'locations' as const, id, label: id })),
     ...filters.formats.map((id) => ({ kind: 'formats' as const, id, label: formatLabel(id) })),
     ...(filters.moneyFrom === null

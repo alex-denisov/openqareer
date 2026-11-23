@@ -1,3 +1,4 @@
+import { roleLabel, type RoleTitlesRu } from '../../career/roleLabel';
 import type { MatchedVacancyFacets } from '../../../../../shared/matchedVacancyFacets';
 import type { MatchedFilteredFacets } from '../../../../../shared/listFilterFacets';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -103,6 +104,14 @@ export function buildOptions(
         applyFilters(items, { ...EMPTY_FILTERS, date: option.id }, dateContext).length,
       ),
     })),
+  };
+}
+
+/** B726: роли фильтра и их чипы — русскими названиями ролей поиска (`titlesRu` кампании). */
+export function withRoleLabels(options: FilterOptions, titlesRu: RoleTitlesRu = {}): FilterOptions {
+  return {
+    ...options,
+    roles: options.roles.map((option) => ({ ...option, label: roleLabel(option.id, titlesRu) })),
   };
 }
 

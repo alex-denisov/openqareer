@@ -420,6 +420,8 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly vacancyInitialFilters?: VacanciesScreenState;
   /** B645: роли поиска из «Карьеры» в meta.campaign списка подборки. */
   readonly vacancyCampaignRoles?: readonly string[];
+  /** B726: русские названия ролей поиска в meta.campaign (`titlesRu`). */
+  readonly vacancyCampaignTitlesRu?: Readonly<Record<string, string>>;
   /** B645: число частых требований роли поиска, которых нет в профиле (строка «Проверить N навыков»). */
   readonly roleSkillGap?: number;
   readonly savedVacanciesCount?: number;
@@ -2623,6 +2625,9 @@ export async function mockSignedInCabinet(
                   campaign: {
                     roles: { value: options.vacancyCampaignRoles, origin: 'explicit' },
                     regions: { value: [], origin: 'default' },
+                    ...(options.vacancyCampaignTitlesRu
+                      ? { titlesRu: options.vacancyCampaignTitlesRu }
+                      : {}),
                   },
                 }
               : {}),
