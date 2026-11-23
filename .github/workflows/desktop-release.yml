@@ -5,11 +5,13 @@ name: Desktop release
 # one step, after that commit is live on the web. Installed apps update
 # themselves from /desktop/latest.json; the landing links always serve the
 # current installers, and no older version is kept on the host.
+#
+# B771: the deploy job of «Verify and deploy» starts this workflow with the
+# deployed commit (`sha`) once production answers with it. A workflow_run
+# trigger never fired for batcher deploys: those runs are dispatched with
+# GITHUB_TOKEN, and GitHub creates no workflow_run event for them, so no
+# release shipped after 22.11.
 on:
-  workflow_run:
-    workflows: ['Verify and deploy']
-    types: [completed]
-    branches: [main]
   # A PR that touches the release path builds both clients but publishes nothing.
   pull_request:
     branches: [main]
@@ -21,6 +23,10 @@ on:
       - 'deploy/openqareer-desktop-publish'
   workflow_dispatch:
     inputs:
+      sha:
+        description: Deployed commit to release (set by the deploy job; empty means the branch head)
+        type: string
+        default: ''
       force:
         description: Release even if nothing the app bundles has changed
         type: boolean
@@ -31,10 +37,12 @@ permissions:
 
 concurrency:
   group: desktop-release-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
-  cancel-in-progress: true
+  # A main release is never cut off mid-publish; a newer deploy waits as the one
+  # pending run (GitHub keeps only the latest pending run of a group).
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+  RELEASE_SHA: ${{ inputs.sha || github.event.pull_request.head.sha || github.sha }}
   # Everything the desktop bundle is built from; server-only changes ship no release.
   APP_PATHS: >-
     src shared src-tauri public index.html package.json package-lock.json
@@ -43,9 +51,8 @@ env:
 jobs:
   plan:
     name: Decide the release
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    # Only main publishes; a PR builds both clients and publishes nothing.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -62,8 +69,16 @@ jobs:
         id: plan
         env:
           FORCE: ${{ (inputs.force || github.event_name == 'pull_request') && 'true' || 'false' }}
+          FROM_DEPLOY: ${{ inputs.sha && 'true' || 'false' }}
         run: |
           set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "release commit '$RELEASE_SHA' is not a full SHA" >&2; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            # Only a commit that is on main is ever signed and published.
+            git fetch -q origin main
+            git merge-base --is-ancestor "$RELEASE_SHA" origin/main ||
+              { echo "release commit $RELEASE_SHA is not on main" >&2; exit 1; }
+          fi
           base="$(node -p 'require("./src-tauri/tauri.conf.json").version.split(".").slice(0, 2).join(".")')"
           release_json="$(curl -fsS --max-time 15 https://openqareer.com/api/v1/desktop/release || true)"
           read_release() {
@@ -87,6 +102,20 @@ jobs:
           if [[ "$FORCE" != true && "$published" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$published^{commit}" 2>/dev/null; then
             # shellcheck disable=SC2086
             if git diff --quiet "$published" "$RELEASE_SHA" -- $APP_PATHS; then release=false; fi
+            # Never ship code older than what installed apps already run.
+            if ! git merge-base --is-ancestor "$published" "$RELEASE_SHA"; then
+              echo "published $published is not an ancestor of $RELEASE_SHA: no release" >&2
+              release=false
+            fi
+          fi
+          if [[ "$FORCE" != true && "$FROM_DEPLOY" == true && "$release" == true ]]; then
+            # A newer deploy replaced this one while it waited: that deploy starts
+            # its own release, so this older commit is not published.
+            live="$(curl -fsS --max-time 15 -H 'Cache-Control: no-cache' https://openqareer.com/health || true)"
+            if [[ "$live" != "$RELEASE_SHA" ]]; then
+              echo "production runs '${live:-unknown}', not $RELEASE_SHA: no release" >&2
+              release=false
+            fi
           fi
           printf 'published=%s release=%s version=%s\n' "${published:-none}" "$release" "$version"
           printf 'release=%s\nversion=%s\n' "$release" "$version" >> "$GITHUB_OUTPUT"
