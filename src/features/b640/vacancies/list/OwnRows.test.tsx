@@ -79,6 +79,7 @@ describe('свои вакансии в таблице', () => {
     await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
     expect(view.container.textContent).toContain('Регион вакансии не входит в ваши условия поиска');
     expect(view.container.textContent).toContain('Готовность к командировкам по Европе');
+    expect(view.container.querySelector('.v4-reqs-box .v4-reqs-open .v4-fd-l li')?.textContent).toBe('Готовность к командировкам по Европе');
     view.unmount();
   });
   it('B676: мало навыков для счёта — словами, а не пустое раскрытие', async () => {
@@ -93,6 +94,7 @@ describe('свои вакансии в таблице', () => {
     click(view.container.querySelector('.vt-toggle'));
     await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
     expect(view.container.textContent).toContain('Мало требований для расчёта');
+    expect(view.container.querySelector('.v4-reqs-box')).toBeNull();
     view.unmount();
   });
   it('раскрытие: «не оценка рынка», требования и ссылка на сайт', async () => {
@@ -102,6 +104,7 @@ describe('свои вакансии в таблице', () => {
     expect(view.container.querySelector('.v4-one')!.textContent).toBe('Сравнение с одной вакансией — не оценка рынка');
     expect(view.container.textContent).toContain('Требования: 3 из 5 есть в профиле');
     expect(view.container.querySelector('a.vs-open')!.getAttribute('href')).toBe('https://ritm.example/jobs/1');
+    expect(view.container.querySelector('a.vs-open')!.getAttribute('aria-label')).toBe('Открыть на сайте');
     view.unmount();
   });
   it('B676: на 390 удалить — через «…» → «Удалить», корзины в строке нет', () => {
