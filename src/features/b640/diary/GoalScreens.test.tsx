@@ -154,6 +154,20 @@ afterEach(() => {
 });
 
 describe('d02 «Цели и показатели»', () => {
+  it('B686: цель из KPI — одна строка цели, показатель не повторяет её название', async () => {
+    const kpi = {
+      ...summary('k1', { title: 'Срок релиза' }),
+      details: { setBy: 'manager', agreedOn: null, weight: 50, archive: null },
+      indicators: [summary('k1i', { title: 'Срок релиза', parentGoalId: 'k1' })],
+    };
+    api.listGoalCards.mockResolvedValue({ items: [kpi], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelectorAll('.dn-goal')).toHaveLength(1);
+    expect(page.querySelector('.dn-goal-t')?.textContent).toBe('Срок релиза');
+    expect(page.querySelector('.dn-ind > span:first-child')?.textContent).toBe('');
+    expect(page.querySelector('.dn-ind strong')?.textContent).toBe('не внесено');
+  });
+
   it('заголовок по отстающей цели, показатели, архив с причиной', async () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     expect(page.querySelector('.lead-title')?.textContent).toBe(
