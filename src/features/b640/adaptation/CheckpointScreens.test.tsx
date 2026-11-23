@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../../coach/coachApi';
 import { click, mount, type Mounted } from '../kit/testDom';
 import { nodeByCode } from '../routes';
-import { ShellProvider } from '../shell/ShellContext';
+import { ShellProvider, useShell } from '../shell/ShellContext';
 import { Day30Screen } from './Day30Screen';
 import { ResultsScreen } from './ResultsScreen';
 
@@ -50,6 +50,12 @@ const PEOPLE = { workplaceId: 'w1', total: 2, withoutMeeting: 1, nextMeeting: nu
   ] },
 ] };
 
+/** Какая панель открыта поверх раздела: каркас в этих тестах не рисуется. */
+function PanelProbe() {
+  const { panel } = useShell();
+  return panel ? <i data-panel={panel.kind} /> : null;
+}
+
 let view: Mounted | null = null;
 async function settle() {
   await act(async () => {
@@ -58,7 +64,7 @@ async function settle() {
 }
 async function open(element: ReactElement) {
   const value = { session, path: '/app/diary/adaptation', search: '', match: null, consultantRoute: null, navigate: vi.fn(), signOut: async () => undefined, theme: 'light' as const, setTheme: () => undefined };
-  view = mount(<ShellProvider value={value}>{element}</ShellProvider>);
+  view = mount(<ShellProvider value={value}>{element}<PanelProbe /></ShellProvider>);
   await settle();
   await settle();
   return view.container;
@@ -127,7 +133,7 @@ describe('d01e проверка на 30-й день', () => {
 });
 
 describe('d04 итоги 90 дней', () => {
-  it('цели со статусами, тексты для резюме и разговора копируются', async () => {
+  it('цели со статусами; текст для резюме копируется, разговор готовится с консультантом', async () => {
     checks.getResults90.mockResolvedValue({
       workplaceId: 'w1', periodFrom: '2026-12-01', periodTo: '2027-02-28',
       items: [
@@ -141,7 +147,13 @@ describe('d04 итоги 90 дней', () => {
     expect(page.querySelector('#rs-title')?.textContent).toBe('Итоги 90 дней');
     expect(page.textContent).toContain('отстаёт');
     const copies = [...page.querySelectorAll('button')].filter((item) => item.textContent?.includes('Скопировать'));
-    expect(copies).toHaveLength(2);
+    expect(copies).toHaveLength(1);
+    const talk = button(page, 'Подготовить разговор');
+    expect(talk?.className).toBe('btn');
+    expect(talk?.querySelector('svg')).not.toBeNull();
+    click(talk!);
+    await settle();
+    expect(page.querySelector('[data-panel]')?.getAttribute('data-panel')).toBe('consultant');
     click(copies[0]!);
     await settle();
     expect(writeText).toHaveBeenCalledWith('Руководитель разработки: за первые 90 дней — срок релиза.');
