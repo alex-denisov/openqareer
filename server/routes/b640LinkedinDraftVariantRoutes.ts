@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { MAX_TEXT_VARIANTS } from '../../shared/textVariants';
-import { TARIFF_QUOTAS } from '../billing/tariffQuotas';
+import { linkedinDraftsPerDay } from '../billing/linkedinDraftTariff';
 import { collectDraftFacts } from '../candidate/draftFacts';
 import type { CandidateDraft } from '../candidate/sqliteCandidateDraftRepository';
 import {
@@ -41,14 +41,19 @@ function candidateOf(
   return principal.candidate;
 }
 
-/** На тарифе есть черновики LinkedIn; без учёта тарифов (локальный запуск) — есть. */
-function draftsAllowed(deps: CandidateDraftRouteDeps, candidateId: string): boolean {
-  if (!deps.billingRepository) return true;
-  const plan = deps.billingRepository.getEffectivePlanForCandidate(
-    candidateId,
-    new Date().toISOString(),
+/**
+ * Тариф для варианта: действующий план из биллинга (подписка, срок, пробный Pro), а не
+ * `users.subscription_tier` — вариант не списывает квоту, и другой преграды у него нет.
+ */
+function effectiveTier(
+  deps: CandidateDraftRouteDeps,
+  request: FastifyRequest,
+  candidate: CandidateIdentity,
+): string {
+  return (
+    deps.billingRepository?.getEffectivePlanForCandidate(candidate.id, new Date().toISOString()) ??
+    accountContext(deps, request, candidate).tier
   );
-  return TARIFF_QUOTAS[plan].linkedin_drafts > 0;
 }
 
 /** Текст варианта пишет та же цепочка моделей, что и черновик, с пожеланием кандидата. */
@@ -103,8 +108,8 @@ function prepareJob(
   }
   const draft = deps.candidateDraftRepository.find(candidate.id, params.data.id);
   if (!draft) return refuse(404, 'draft_not_found', 'Черновик не найден.');
-  // Тариф по tariffQuotas.ts (Free/Basic — 0); месячную квоту вариант не расходует — предел три на текст.
-  if (!draftsAllowed(deps, candidate.id)) {
+  // Тариф тот же, что у черновика (B778, tariffQuotas.ts: Free/Basic — 0); месячную квоту вариант не расходует — предел три на текст.
+  if (!linkedinDraftsPerDay(effectiveTier(deps, request, candidate), draft.kind)) {
     return refuse(402, 'paywall_required', 'Для этого черновика нужен другой тариф.');
   }
   const subject = { candidateId: candidate.id, kind: draft.kind, subjectId: draft.id };
