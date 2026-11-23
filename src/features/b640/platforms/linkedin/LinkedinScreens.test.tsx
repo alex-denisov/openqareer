@@ -37,6 +37,7 @@ vi.mock('./linkedinQueueApi', () => ({
   listFeedPosts: vi.fn(),
   createFeedPost: vi.fn(),
   approveFeedPosts: vi.fn(),
+  skipFeedPost: vi.fn(),
 }));
 
 const queue = await import('./linkedinQueueApi');
@@ -257,6 +258,37 @@ describe('a03p, a03b, a05', () => {
     expect(menu.querySelector('[role="menuitem"]')!.textContent).toBe('Изменить темы');
     expect(view.container.querySelector('#cq-title')!.textContent).toBe('1 комментарий в очереди');
     expect(view.container.textContent).toContain('Настроить ритм');
+    view.unmount();
+  });
+  it('лента: после «Пропустить» первая карточка показывает свой черновик, а не прежний', async () => {
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    const item = (draftId: string, comment: string) => ({
+      draftId,
+      postUrl: null,
+      postExcerpt: `Пост ${draftId}`,
+      comment,
+      state: 'draft',
+      createdAt: at,
+      scheduledAt: null,
+    });
+    const page = (items: unknown[]) => ({ items, total: items.length, offset: 0, limit: 20 });
+    vi.mocked(queue.listFeedPosts)
+      .mockResolvedValueOnce(
+        page([item('a', 'Комментарий A'), item('b', 'Комментарий B')]) as never,
+      )
+      .mockResolvedValue(page([item('b', 'Комментарий B')]) as never);
+    vi.mocked(queue.skipFeedPost).mockResolvedValue({ draftId: 'a', skipped: true } as never);
+    const view = mount(<Section node={node('a05')} params={{}} />);
+    await flush();
+    const field = () => view.container.querySelector<HTMLTextAreaElement>('textarea.lk-draft')!;
+    expect(field().value).toBe('Комментарий A');
+    const skip = [...view.container.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Пропустить',
+    );
+    click(skip ?? null);
+    await flush();
+    await flush();
+    expect(field().value).toBe('Комментарий B');
     view.unmount();
   });
   it('лента: карточки, «Одобрить» и пакетное «Одобрить все»', async () => {
