@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sourceLinkLabel } from './sourceLinkLabel';
+import { sourceLinkLabel, sourceLinkTarget } from './sourceLinkLabel';
 
 const telegram = {
   sourceType: 'telegram',
@@ -56,5 +56,30 @@ describe('sourceLinkLabel: ссылка вакансии называется т
         canonicalCompany: 'Ладога',
       }),
     ).toBe('Открыть на сайте работодателя');
+  });
+
+  it('карточка называет свою ссылку, а не основную: второй источник и пост по типу', () => {
+    const hh = { sourceType: 'hh', sourceUrl: 'https://hh.ru/vacancy/1' };
+    const board = {
+      sourceType: 'html',
+      sourceName: 'Himalayas',
+      sourceUrl: 'https://himalayas.app/j/1',
+    };
+    const tg = { sourceType: 'telegram', sourceUrl: 'https://tg.example/p/1' };
+    const base = { primaryUrl: hh.sourceUrl, sources: [hh, board, tg], canonicalCompany: '' };
+    expect(sourceLinkLabel({ ...base, url: board.sourceUrl })).toBe('Открыть на Himalayas');
+    expect(sourceLinkTarget({ ...base, url: board.sourceUrl })).toEqual({
+      kind: 'source',
+      name: 'Himalayas',
+    });
+    expect(sourceLinkTarget({ ...base, url: tg.sourceUrl })).toEqual({ kind: 'telegram' });
+    expect(sourceLinkTarget({ ...base, url: tg.sourceUrl, canonicalCompany: 'Ладога' })).toEqual({
+      kind: 'telegram',
+    });
+    expect(sourceLinkTarget({ ...base, url: board.sourceUrl, canonicalCompany: 'Ладога' })).toEqual(
+      {
+        kind: 'employer',
+      },
+    );
   });
 });

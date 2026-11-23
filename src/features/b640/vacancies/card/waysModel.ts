@@ -1,6 +1,7 @@
 import type { B640PersonMessage } from '../../../../../shared/b640Companies';
 import { pluralRu } from '../../../../../shared/pluralRu';
 import type { IconName } from '../../kit';
+import { sourceLinkLabel, sourceLinkTarget } from '../sourceLinkLabel';
 
 export type WayAction =
   | {
@@ -43,8 +44,8 @@ export interface WaysInput {
   };
   /** Вопросов в анкете работодателя; `undefined` — анкеты нет или её не прочитали. */
   readonly questionCount?: number;
-  /** Компания вакансии; пустая — источник не назвал работодателя, `undefined` — не передали. */
-  readonly company?: string | null;
+  /** Компания вакансии; пустая или `null` — источник не назвал работодателя. */
+  readonly company: string | null;
 }
 
 function safeUrl(value: string | undefined): URL | undefined {
@@ -80,41 +81,26 @@ function siteUrl(input: WaysInput): string | undefined {
   return undefined;
 }
 
-const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me']);
-
-function isTelegram(url: URL, input: WaysInput): boolean {
-  if (TELEGRAM_HOSTS.has(url.hostname)) return true;
-  const href = url.toString();
-  return input.sources.some(
-    (source) =>
-      source.sourceUrl === href &&
-      (source.sourceType === 'telegram' || /^tg-/u.test(source.sourceId ?? '')),
-  );
-}
-
-/** Имя источника по ссылке: так кандидат узнаёт, куда ведёт кнопка. */
-function sourceTitle(url: URL, input: WaysInput): string {
-  const href = url.toString();
-  const named = input.sources.find((source) => source.sourceUrl === href)?.sourceName?.trim();
-  return named || url.hostname.replace(/^www\./u, '');
-}
-
 /**
- * B726: «Сайт компании» — только когда ссылка правда у работодателя. Пост Telegram называется
- * постом; без компании ссылка ведёт на источник вакансии и называется его именем.
+ * B726: название и надпись ссылки — те же, что в меню строки (`sourceLinkLabel`): «Сайт
+ * компании» — только у работодателя, пост Telegram — постом, иначе имя источника.
  */
 function linkWay(url: URL, input: WaysInput): ApplyWay {
-  const external = (title: string, label: string): ApplyWay => ({
+  const href = url.toString();
+  const link = { ...input, url: href, canonicalCompany: input.company };
+  const target = sourceLinkTarget(link);
+  const title =
+    target.kind === 'telegram'
+      ? 'Пост в Telegram'
+      : target.kind === 'employer'
+        ? 'Сайт компании'
+        : (target.name ?? url.hostname);
+  return {
     id: 'site',
     title,
     icon: 'out',
-    action: { kind: 'external', label, url: url.toString() },
-  });
-  if (isTelegram(url, input)) return external('Пост в Telegram', 'Открыть пост в Telegram');
-  const noCompany = input.company !== undefined && !input.company?.trim();
-  if (!noCompany) return external('Сайт компании', 'Открыть на сайте работодателя');
-  const name = sourceTitle(url, input);
-  return external(name, `Открыть на ${name}`);
+    action: { kind: 'external', label: sourceLinkLabel(link), url: href },
+  };
 }
 
 function siteWay(input: WaysInput): ApplyWay | undefined {
