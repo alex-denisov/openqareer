@@ -43,7 +43,7 @@ describe('план адаптации для экрана d01', () => {
       'days_31_60',
       'days_61_90',
     ]);
-    expect(result.steps.every((step) => step.tasksTotal === 0 && step.status === 'ahead')).toBe(true);
+    expect(result.steps.every((step) => step.tasksTotal === 0)).toBe(true);
   });
 
   it('день на новом месте считается от даты выхода', () => {
@@ -118,9 +118,48 @@ describe('план адаптации для экрана d01', () => {
     expect(result.stages[0].tasks.find((t) => t.id === 'b')?.step).toBeNull();
   });
 
-  it('пустой этап и пустой шаг — «впереди», даже если их дни начались', () => {
+  it('пустой этап — «впереди», даже если его дни начались', () => {
     const result = view([task({ id: 'a', stage: 'prep', completed: true })], EMPTY_ADAPTATION_DETAILS);
     expect(result.stages.map((stage) => stage.status)).toEqual(['done', 'ahead', 'ahead', 'ahead']);
+  });
+
+  it('B685: шаг без задач — по дню адаптации и дням шага', () => {
+    const status = (asOf: string) =>
+      Object.fromEntries(view([], EMPTY_ADAPTATION_DETAILS, asOf).steps.map((step) => [step.id, step.status]));
+    // День 39: шаги до 30-го дня пройдены, карта людей идёт весь срок.
+    expect(status('2027-01-08')).toEqual({
+      before_start: 'done',
+      first_two_weeks: 'done',
+      first_meeting: 'done',
+      people_map: 'active',
+      day_30_check: 'done',
+      settling: 'done',
+    });
+    // До выхода: идёт только «До выхода».
+    expect(status('2026-11-25')).toEqual({
+      before_start: 'active',
+      first_two_weeks: 'ahead',
+      first_meeting: 'ahead',
+      people_map: 'ahead',
+      day_30_check: 'ahead',
+      settling: 'ahead',
+    });
+    // День 10: первая встреча позади, проверка 30-го дня впереди.
+    expect(status('2026-12-10')).toMatchObject({
+      first_two_weeks: 'active',
+      first_meeting: 'done',
+      day_30_check: 'ahead',
+      settling: 'active',
+    });
+  });
+
+  it('B685: шаг с задачами — по задачам, как раньше', () => {
+    const result = view(
+      [task({ id: 'a', stage: 'prep', completed: false })],
+      EMPTY_ADAPTATION_DETAILS,
+      '2027-01-08',
+    );
+    expect(result.steps.find((step) => step.id === 'before_start')?.status).toBe('ahead');
   });
 
   it('статус этапа: всё сделано — готово, срок начался — в работе, иначе впереди', () => {
