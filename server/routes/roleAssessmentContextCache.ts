@@ -8,6 +8,8 @@ const CONTEXT_TTL_MS = 2 * 60_000;
 interface Cached<T> {
   readonly at: number;
   readonly value: T;
+  /** B775: a settled context changes only with its snapshot, so it does not expire. */
+  readonly settled: boolean;
 }
 
 export class RoleContextCache<T> {
@@ -18,13 +20,13 @@ export class RoleContextCache<T> {
     private readonly clock: () => number = Date.now,
   ) {}
 
-  read(snapshot: object, key: string, build: () => T): T {
+  read(snapshot: object, key: string, build: () => T, settled: (value: T) => boolean = () => false): T {
     const now = this.clock();
     const known = this.bySnapshot.get(snapshot) ?? new Map<string, Cached<T>>();
     const cached = known.get(key);
-    if (cached && now - cached.at < this.ttlMs) return cached.value;
+    if (cached && (cached.settled || now - cached.at < this.ttlMs)) return cached.value;
     const value = build();
-    known.set(key, { at: now, value });
+    known.set(key, { at: now, value, settled: settled(value) });
     this.bySnapshot.set(snapshot, known);
     return value;
   }
