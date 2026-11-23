@@ -3,6 +3,7 @@ import type { ApplicationView } from '../../../../server/domain/applicationDeriv
 import type { InterviewDebriefView } from '../../../../server/domain/interviewDebriefView';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { InfoTip, Link, StatusLine } from '../kit';
+import { useScreenChrome } from '../shell/ShellContext';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { CtxHead } from '../shell/CtxHead';
@@ -228,6 +229,8 @@ export function DebriefScreen({ responseId }: { readonly responseId: string }) {
   const { state, reload, replaceData } = useAsync(load, 'Разбор не загрузился.');
   const data = state.data;
   usePolling(data, reload);
+  // Макет: плотные мобильные отступы (`data-mtight`), как у I1, I2 и I3.
+  useScreenChrome({ rootData: { mtight: '1' } });
   return (
     <>
       <PrepSteps responseId={data?.response.id ?? responseId} current="debrief" />

@@ -20,6 +20,15 @@ const YEARLY_WITHOUT_PERIOD = 20_000;
 /** …если это не 800 000 тенге: месячная сумма в слабой валюте тоже больше порога (04.11). */
 const YEARLY_WITHOUT_PERIOD_RUB = 1_000_000;
 const MONTHS = 12;
+/**
+ * B765 (прод 23.11, решение оркестратора): иностранная сумма 100–999 без периода — это и месячная
+ * стипендия (450 EUR), и ставка за день (per diem 450–600 USD), и тысячи в год (198–260 USD).
+ * Период неизвестен: суммы в месяц у неё нет.
+ */
+const UNKNOWN_PERIOD_MIN = 100;
+const UNKNOWN_PERIOD_MAX = 999;
+
+export type SalaryPeriod = 'hour' | 'month' | 'year' | 'unknown';
 
 function isRuble(currency: string): boolean {
   return ['RUR', 'RUB', '₽'].includes(currency.trim().toUpperCase());
@@ -32,25 +41,26 @@ function isRuble(currency: string): boolean {
 export function salaryPeriodOf(
   salary: SalaryAmounts,
   rates: CurrencyRates | undefined,
-): 'hour' | 'month' | 'year' {
+): SalaryPeriod {
   if (salary.period === 'hour') return 'hour';
   if (salary.period === 'year') return 'year';
   const currency = salary.currency ?? 'RUR';
   const amounts = [salary.from, salary.to].filter((value): value is number => Boolean(value));
   if (salary.period || isRuble(currency) || amounts.length === 0) return 'month';
   const largest = Math.max(...amounts);
+  if (largest >= UNKNOWN_PERIOD_MIN && largest <= UNKNOWN_PERIOD_MAX) return 'unknown';
   const yearly =
     largest >= YEARLY_WITHOUT_PERIOD &&
     (convertAmount(largest, currency, 'RUB', rates) ?? 0) >= YEARLY_WITHOUT_PERIOD_RUB;
   return yearly ? 'year' : 'month';
 }
 
-/** Сумма в месяц в валюте вакансии; у почасовой ставки месячной суммы нет. */
+/** Сумма в месяц в валюте вакансии; у ставки в час и у неизвестного периода её нет. */
 export function monthlyAmount(
   amount: number | undefined,
-  period: 'hour' | 'month' | 'year',
+  period: SalaryPeriod,
 ): number | undefined {
-  if (!amount || period === 'hour') return undefined;
+  if (!amount || period === 'hour' || period === 'unknown') return undefined;
   return period === 'year' ? amount / MONTHS : amount;
 }
 
@@ -61,7 +71,7 @@ export function monthlyRubSalary(
   const currency = salary.currency ?? 'RUR';
   const amounts = [salary.from, salary.to].filter((value): value is number => Boolean(value));
   const period = salaryPeriodOf(salary, rates);
-  if (amounts.length === 0 || period === 'hour') return undefined;
+  if (amounts.length === 0 || period === 'hour' || period === 'unknown') return undefined;
   const monthly = (amount: number | undefined): number | undefined => {
     const perMonth = monthlyAmount(amount, period);
     if (perMonth === undefined) return undefined;

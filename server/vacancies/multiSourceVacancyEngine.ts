@@ -1986,6 +1986,16 @@ export class MultiSourceVacancyEngine {
     }
   }
 
+  /**
+   * B752: шаг разбиения переписал строки кластеров в базе. Копия в памяти
+   * (старые пути `loadClusters`) устарела и больше не пишется назад;
+   * следующее чтение берёт кластеры из базы.
+   */
+  dropClusterSnapshot(): void {
+    this.clusters = [];
+    this.clusterBuilder = new IncrementalClusterBuilder([]);
+  }
+
   private getOrCreateClusterBuilder(): IncrementalClusterBuilder {
     if (!this.clusterBuilder) {
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);

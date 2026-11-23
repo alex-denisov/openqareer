@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CareerDiaryAdaptationStageView, CareerDiaryAdaptationStepView } from '../../../../shared/careerDiaryCards';
-import { addDays, dayHeading, peopleCount, dayLabel, probationLine, rangeLabel, stageForDate, stepSub } from './adaptationModel';
+import { addDays, PROGRESS_TAG, STEP_TAG, dayHeading, peopleCount, dayLabel, probationLine, rangeLabel, stageForDate, stepSub } from './adaptationModel';
 
 const stage = (over: Partial<CareerDiaryAdaptationStageView>): CareerDiaryAdaptationStageView => ({
   stage: 'days_31_60',
@@ -65,5 +65,12 @@ describe('заголовки', () => {
     const met = { ...details, firstMeeting: { heldOn: '2026-12-02' } as never };
     expect(stepSub(step('first_meeting'), met, null)).toBe('2 декабря · ожидания и критерии 90 дней');
     expect(stepSub(step('settling'), { ...details, relocated: false }, null)).toBe('переезда не было · документы и банк');
+  });
+});
+
+describe('метки этапов и шагов (B645-2)', () => {
+  it('«впереди» — приглушённая метка tag miss, как в макете d01', () => {
+    expect(PROGRESS_TAG.ahead).toEqual(['miss', 'впереди']);
+    expect(STEP_TAG.ahead).toEqual(['miss', 'впереди']);
   });
 });
