@@ -17,6 +17,7 @@ interface AppSignInPageProps {
 }
 
 const openInPlace = (url: string) => window.location.assign(url);
+const PAGE_TITLE = 'Вход в приложение | openqareer';
 
 /**
  * B755: «Войти в приложение openqareer на этом Mac». Код уходит в приложение только по
@@ -30,6 +31,10 @@ export function AppSignInPage({
   const request = readAppSignInRequest(window.location.search);
   // Адрес возврата с кодом живёт только здесь: ни в тексте, ни в ссылках страницы его нет.
   const [sent, setSent] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.title = PAGE_TITLE;
+  }, []);
 
   useEffect(() => {
     if (request && session === null) onNavigate(appSignInLoginPath(request));

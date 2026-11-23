@@ -30,8 +30,12 @@ const INDEX = buildIndex();
 /** Проверенные русские названия ролей одного кандидата: название → перевод. */
 export type OwnTitlesRu = Readonly<Record<string, string>>;
 
+/** B767: модель оставляла латинское «AI» («AI-консультант»); в русском названии — «ИИ». */
+const LATIN_AI = /(?<!\p{L})AI(?!\p{L})/gu;
+
 function ownTitleRu(own: OwnTitlesRu, key: string): string | undefined {
-  for (const [title, titleRu] of Object.entries(own)) if (keyOf(title) === key) return titleRu;
+  for (const [title, titleRu] of Object.entries(own))
+    if (keyOf(title) === key) return titleRu.replace(LATIN_AI, 'ИИ');
   return undefined;
 }
 
