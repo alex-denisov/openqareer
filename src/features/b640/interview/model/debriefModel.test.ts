@@ -42,6 +42,14 @@ describe('debriefModel', () => {
     ).toBe('Арка Холдинг · интервью 12 ноября · с техническим директором');
     expect(
       debriefLeadSub({
+        company: 'Арка Холдинг',
+        scheduledAt: null,
+        format: 'Видео',
+        interviewerName: ' Ирина Петрова ',
+      }),
+    ).toBe('Арка Холдинг · собеседник: Ирина Петрова');
+    expect(
+      debriefLeadSub({
         company: '',
         scheduledAt: null,
         format: null,

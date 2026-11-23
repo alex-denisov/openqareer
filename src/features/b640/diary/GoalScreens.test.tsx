@@ -24,6 +24,11 @@ const api = vi.hoisted(() => ({
   getOverview: vi.fn(),
 }));
 vi.mock('./diaryApi', () => api);
+// B744: подсказки формы цели — в GoalHints.test.tsx; здесь модели нет.
+vi.mock('./goalHintsApi', () => ({
+  getGoalExamples: vi.fn(async () => null),
+  getGoalBaseline: vi.fn(async () => null),
+}));
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../resume/resumeApi', () => resume);
 const people = vi.hoisted(() => ({ getPeople: vi.fn() }));

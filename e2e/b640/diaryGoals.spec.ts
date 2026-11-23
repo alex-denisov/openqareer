@@ -62,6 +62,36 @@ test.describe('B662: «Дневник» — цели и показатели', (
     expect(calls.goals).toEqual([expect.objectContaining({ title: 'Сократить время ревью' })]);
   });
 
+  test('B744: d02b — «Сейчас» из записей черновиком, цитата в ⓘ, «Верно»', async ({ page }) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    await mockDiary(page);
+    const asked: unknown[] = [];
+    await page.route('**/api/v1/candidate/career-diary/goal-baseline', async (route) => {
+      asked.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: {
+          data: { value: 18, quote: 'ревью ждут по полтора-два дня', entryDate: '2026-12-30' },
+          meta: { requestId: 'r' },
+        },
+      });
+    });
+    await page.goto('/app/diary/goals/new', { waitUntil: 'domcontentloaded' });
+    const form = page.locator('[data-b640-node="d02b"]');
+    await expect(form).toBeVisible({ timeout: 15_000 });
+    await form.getByLabel('Показатель').first().fill('Время до первого ревью, часов');
+    await form.getByLabel('Цель', { exact: true }).first().focus();
+    const now = form.getByLabel('Сейчас').first();
+    await expect(now).toHaveValue('18');
+    await expect(now).toHaveClass(/is-draft/u);
+    await expect(form.locator('.gb-sugg-t')).toHaveText('18 — из ваших записей');
+    expect(asked).toEqual([{ indicator: 'Время до первого ревью, часов' }]);
+    await expectGates(page);
+    await form.getByRole('button', { name: 'Верно' }).click();
+    await expect(form.locator('.gb-sugg')).toHaveCount(0);
+    await expect(now).toHaveValue('18');
+    await expect(now).not.toHaveClass(/is-draft/u);
+  });
+
   test('B743: d02a «Задачи» — задачи цели из плана, отметка и «+ Задача»', async ({ page }) => {
     await mockSignedInCabinet(page, { cabinetB640: true });
     await mockDiary(page);

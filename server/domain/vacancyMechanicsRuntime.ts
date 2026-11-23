@@ -237,6 +237,10 @@ export class VacancyMechanicsRuntime {
     logMassRecount(log, 'fit', fit, this.fit.countFailedOnce() + this.fit.countOrphanedRequirementsTimeouts(), limits.fit, total('fit'));
     return { requirements: failures, fit, labels };
   }
+  /** Superseded fit jobs left as `failed` before 23.11: removed at worker start, 5000 per start. */
+  purgeSupersededFit(): number {
+    return this.fit.purgeSuperseded();
+  }
   /** The background refresh of counted rows (a new algorithm version): true while the day's ceiling has room. */
   takeFitRefreshSlot(limit = massRecountLimit('OPENQAREER_MASS_FIT_REFRESH_DAY_LIMIT', MASS_FIT_REFRESH_DAY_LIMIT)): boolean {
     return takeMassRecountSlot(this.database, 'fit_refresh', limit);
@@ -304,6 +308,9 @@ export class VacancyMechanicsRuntime {
     } else if (outcome.channelDown) {
       this.pauseForChannel();
       this.waitForChannel(job);
+    } else if (outcome.staleProfile && this.validateCurrentProfile) {
+      // Superseded: the current profile has its own key and job; without a validator it fails closed below.
+      this.recordFailure(this.fit.discard(job), 'profile_changed');
     } else if (hasClient && result.reason === 'assessment_unavailable' && !outcome.returned) {
       this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && !outcome.tooLarge && job.attempts < 3);
     } else if (this.fit.complete(job, result, undefined, resolved, outcome.answeredBy)) this.stats.completed += 1;
