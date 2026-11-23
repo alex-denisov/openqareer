@@ -6,7 +6,7 @@ import type { VacancyFitFailure, VacancyFitResult, VacancyFitView } from '../../
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { FIT_INPUT_TOO_LARGE, SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
-import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
+import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, type VacancyRequirement } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
 import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
@@ -177,6 +177,10 @@ export class VacancyMechanicsRuntime {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
     if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
     return this.fit.hasCache({ ...input, requirements: extracted.requirements });
+  }
+  /** B766: разобранные требования вакансии для роли «Технический директор»; `null` — их нет. */
+  latestRequirementTexts(vacancyId: string): readonly VacancyRequirement[] | null {
+    return this.requirements.getLatestOrLegacy(vacancyId)?.requirements ?? null;
   }
   /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key and its result stands. */
   fitJobHoldsKey(input: VacancyFitInput): boolean {
