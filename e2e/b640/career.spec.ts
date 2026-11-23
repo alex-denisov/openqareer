@@ -212,6 +212,19 @@ test.describe('B653: «Карьера» — роли и условия поис�
     expect(calls.profiles[0]).toMatchObject({ citizenship: ['РФ'] });
   });
 
+  test('C10 по макету: страница настроек 640 по центру, а не шаблон «Ролей» (B645-2)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'замер макета снят на 1440');
+    await openCareer(page, '/app/career?view=conditions');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-template', 'settings');
+    // Макет c10-usloviya-poiska на 1440: страница 720 с x398, колонка условий 640 с x438.
+    const pageBox = await node(page, 'c10').boundingBox();
+    const column = await node(page, 'c10').locator('.lead.cc').boundingBox();
+    expect([pageBox?.x, pageBox?.width].map((value) => Math.round(value ?? 0))).toEqual([398, 720]);
+    expect([column?.x, column?.width].map((value) => Math.round(value ?? 0))).toEqual([438, 640]);
+  });
+
   test('C10: сбой сохранения — ошибка на месте, введённое осталось', async ({ page }) => {
     const calls = await openCareer(page, '/app/career?view=conditions', { failProfileSave: true });
     const screen = node(page, 'c10');

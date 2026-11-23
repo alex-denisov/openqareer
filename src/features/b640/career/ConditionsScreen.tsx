@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { SearchConditionsDraft } from '../../career-map/careerScreenTypes';
 import { InfoTip, ResultLine, StatusLine } from '../kit';
 import type { B640Node } from '../routes';
+import { useScreenChrome } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import { pageAttrs } from './careerPaths';
@@ -10,6 +11,8 @@ import { loadConditions, saveConditions, type ConditionsData } from './condition
 import { conditionRows, SAVED_TEXT, type ConditionField } from './conditionsModel';
 
 const STATE = 'c10';
+/** Макет c10 — страница настроек 640 по центру (`data-template="settings"`), а не шаблон объекта «Ролей». */
+const SETTINGS_PAGE = { rootData: { template: 'settings' } } as const;
 const TIP =
   'Условия фильтруют подборку по всем ролям. Пустое условие поиск не ограничивает. Каждое значение правится отдельно.';
 
@@ -113,6 +116,7 @@ function ConditionsList({ initial }: { readonly initial: ConditionsData }) {
 
 /** C10 «Условия и география»: состояние вкладки «Роли», каждое условие правится на месте. */
 export function ConditionsScreen({ node }: { readonly node: B640Node }) {
+  useScreenChrome(SETTINGS_PAGE);
   const load = useLoad(loadConditions);
   return (
     <div className="page two" {...pageAttrs(node, STATE)}>
