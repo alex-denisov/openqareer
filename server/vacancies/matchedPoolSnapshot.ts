@@ -90,6 +90,11 @@ export interface MatchedPoolSnapshotsOptions {
 export interface MatchedPoolReadOptions {
   /** For a background pass: its next candidate waits for the rebuild instead of running beside it. */
   readonly awaitRebuild?: boolean;
+  /**
+   * B770 (prod 23.11 04:47Z): «Карьера» right after a restart waited the full 12 s for each of
+   * seven roles with no stored snapshot. A screen that can say «считаем» names a shorter wait.
+   */
+  readonly waitMs?: number;
 }
 
 export class MatchedPoolSnapshots {
@@ -213,7 +218,11 @@ export class MatchedPoolSnapshots {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
-    const waitMs = options.awaitRebuild ? undefined : stored ? this.staleWaitMs : this.waitMs;
+    const waitMs = options.awaitRebuild
+      ? undefined
+      : stored
+        ? this.staleWaitMs
+        : (options.waitMs ?? this.waitMs);
     return this.awaitCompute(key, compute, stored, waitMs);
   }
 

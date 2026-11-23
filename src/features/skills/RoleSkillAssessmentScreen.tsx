@@ -26,6 +26,7 @@ import {
   RoleChangedState,
   RunSkillOverview,
   SkillOverview,
+  CountingState,
   SourceErrorState,
   StartState,
   TooFewVacanciesState,
@@ -436,6 +437,8 @@ function renderEmptyContext(
     return <NoRoleState onOpenOpportunities={onOpenOpportunities} />;
   if (current.state === 'source_unavailable')
     return <SourceErrorState onRetry={() => void actions.loadCurrent()} />;
+  if (current.state === 'counting')
+    return <CountingState onRetry={() => void actions.loadCurrent()} />;
   if (current.state === 'too_few_vacancies')
     return <TooFewVacanciesState current={current} onOpenOpportunities={onOpenOpportunities} />;
   if (current.state === 'insufficient_requirements')

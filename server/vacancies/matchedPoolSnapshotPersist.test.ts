@@ -73,6 +73,24 @@ describe('MatchedPoolSnapshots: the reader waits a bounded time, the build does 
     expect(read[0]?.cluster.id).toBe('slow');
   });
 
+  it('B770: a reader that names its own wait refuses after it, and the build goes on for the retry', async () => {
+    const snapshots = new MatchedPoolSnapshots({ waitMs: 60_000 });
+    let finish!: (items: MatchedVacancyItem[]) => void;
+    const compute = vi.fn(() => new Promise<MatchedVacancyItem[]>((done) => (finish = done)));
+    const started = performance.now();
+
+    const refused = await snapshots
+      .readAsync('one', 'role', compute, { waitMs: 5 })
+      .catch((error: unknown) => error);
+
+    expect((refused as VacancyMatchUnavailable).message).toBe('vacancy_match_timeout');
+    expect(performance.now() - started).toBeLessThan(1_000);
+    finish([item('built')]);
+    await turn();
+    expect((await snapshots.readAsync('one', 'role', compute))[0]?.cluster.id).toBe('built');
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
   it('an old snapshot past 20 minutes is served after the short stale budget, not after the full one', async () => {
     const now = { value: 0 };
     const snapshots = new MatchedPoolSnapshots({

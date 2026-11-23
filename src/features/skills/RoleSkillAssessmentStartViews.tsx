@@ -126,6 +126,17 @@ export function NoRoleState({ onOpenOpportunities }: { onOpenOpportunities: () =
   );
 }
 
+export function CountingState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <EmptyState
+      title="Считаем вакансии роли"
+      text="Проверка откроется, когда подборка будет готова. Обычно это меньше минуты."
+      action="Обновить"
+      onAction={onRetry}
+    />
+  );
+}
+
 export function SourceErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <EmptyState
