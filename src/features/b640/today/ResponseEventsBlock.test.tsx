@@ -1,14 +1,12 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ApplicationView } from '../../applications/applicationsApi';
 import type { AuthUser } from '../../coach/coachApi';
 import { mount, type Mounted } from '../kit/testDom';
 import { application } from '../responses/model/testApplication';
 import { ShellProvider } from '../shell/ShellContext';
 import { ResponseEventsBlock } from './ResponseEventsBlock';
-
-const api = vi.hoisted(() => ({ listApplicationsPool: vi.fn() }));
-vi.mock('../../applications/applicationsApi', () => api);
 
 const session = {
   username: 't',
@@ -24,7 +22,7 @@ afterEach(() => {
   view = null;
 });
 
-async function open(): Promise<HTMLElement> {
+async function open(applications: readonly ApplicationView[] | null): Promise<HTMLElement> {
   const value = {
     session,
     path: '/app/today',
@@ -38,7 +36,7 @@ async function open(): Promise<HTMLElement> {
   };
   view = mount(
     <ShellProvider value={value}>
-      <ResponseEventsBlock />
+      <ResponseEventsBlock applications={applications} />
     </ShellProvider>,
   );
   await act(async () => {
@@ -49,23 +47,20 @@ async function open(): Promise<HTMLElement> {
 
 describe('B650 s05b: блок «События откликов»', () => {
   it('недоставленный отклик — карточка с меткой, причиной и действием, как в макете', async () => {
-    api.listApplicationsPool.mockResolvedValue({
-      items: [
-        application({ id: 'ok' }),
-        application({
-          id: 'a2',
-          vacancy: {
-            title: 'Руководитель платформы',
-            company: 'Карта Технологии',
-            url: '',
-            source: 'hh',
-          },
-          deliveryReceipt: { kind: 'failure_note', value: 'Не доставлено: нужен вход в hh.ru' },
-          deliveryReceiptRecordedAt: '2026-11-22T10:00:00.000Z',
-        }),
-      ],
-    });
-    const root = await open();
+    const root = await open([
+      application({ id: 'ok' }),
+      application({
+        id: 'a2',
+        vacancy: {
+          title: 'Руководитель платформы',
+          company: 'Карта Технологии',
+          url: '',
+          source: 'hh',
+        },
+        deliveryReceipt: { kind: 'failure_note', value: 'Не доставлено: нужен вход в hh.ru' },
+        deliveryReceiptRecordedAt: '2026-11-22T10:00:00.000Z',
+      }),
+    ]);
     const section = root.querySelector('section.re-today')!;
     expect(section.querySelector('h2.vh')!.textContent).toBe('События откликов');
     const cards = section.querySelectorAll('li.re-card');
@@ -85,10 +80,8 @@ describe('B650 s05b: блок «События откликов»', () => {
   });
 
   it('событий нет или чтение не удалось — блока нет', async () => {
-    api.listApplicationsPool.mockResolvedValue({ items: [application()] });
-    expect((await open()).querySelector('.re-today')).toBeNull();
+    expect((await open([application()])).querySelector('.re-today')).toBeNull();
     view?.unmount();
-    api.listApplicationsPool.mockRejectedValue(new Error('down'));
-    expect((await open()).querySelector('.re-today')).toBeNull();
+    expect((await open(null)).querySelector('.re-today')).toBeNull();
   });
 });
