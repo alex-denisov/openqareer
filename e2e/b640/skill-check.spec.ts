@@ -124,10 +124,12 @@ test.describe('B653: «Карьера» — проверка навыков C04'
   test('C4: мало требований — короткая строка и выбор роли на месте (B645)', async ({ page }) => {
     await openSkillCheck(page, `${PATH}?role=${encodeURIComponent('VP of Engineering')}`, {
       ready: true,
-      searchRoles: ['VP of Engineering', 'Руководитель разработки'],
-      insufficient: ['VP of Engineering'],
+      searchRoles: ['VP of Engineering', 'CTO', 'Руководитель разработки'],
+      insufficient: ['VP of Engineering', 'CTO'],
     });
     const screen = node(page, 'c04');
+    // B726 (прод 23.11): роль, которую тоже нельзя проверить, в выбор не попадает — второй тупик.
+    await expect(screen.getByRole('link', { name: /^Проверить «/u })).toHaveCount(1);
     await expect(screen.locator('.re-line')).toHaveText(
       'По роли «VP of Engineering» в вакансиях мало требований для проверки.',
     );

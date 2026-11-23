@@ -113,5 +113,8 @@ describe('B726: меню строки без компании из Telegram', ()
     const link = [...mounted.container.querySelectorAll('a')].find((a) => a.href.startsWith('https://t.me/'));
     expect(link?.textContent).toBe('Открыть пост в Telegram');
     expect(mounted.container.textContent).not.toContain('Открыть на сайте работодателя');
+    // B726 (B645 23.11): без компании отметить некого — пункта «Хочу в компанию» нет.
+    expect(mounted.container.textContent).not.toContain('Хочу в компанию');
+    expect(mounted.container.textContent).toContain('Уже откликнулись');
   });
 });

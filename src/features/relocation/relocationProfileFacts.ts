@@ -4,6 +4,7 @@ import type {
 } from '../../../shared/relocationQuestionnaire';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { worldCountryCode, worldCountryName } from './worldCountries';
+import { languageNameRu } from '../../../shared/languageNames';
 
 /**
  * «Страны и релокация» reads what the profile already knows (diplomas,
@@ -138,33 +139,7 @@ function profileCertificates(draft: ResumeDraft, known: readonly Certificate[]):
   });
 }
 
-const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
-  english: 'Английский',
-  german: 'Немецкий',
-  french: 'Французский',
-  spanish: 'Испанский',
-  italian: 'Итальянский',
-  portuguese: 'Португальский',
-  serbian: 'Сербский',
-  greek: 'Греческий',
-  turkish: 'Турецкий',
-  arabic: 'Арабский',
-  georgian: 'Грузинский',
-  armenian: 'Армянский',
-  kazakh: 'Казахский',
-  chinese: 'Китайский',
-  japanese: 'Японский',
-  dutch: 'Нидерландский',
-  polish: 'Польский',
-  hebrew: 'Иврит',
-  russian: 'Русский',
-  ukrainian: 'Украинский',
-  romanian: 'Румынский',
-};
-
-function languageName(name: string): string {
-  return LANGUAGE_NAMES[name.trim().toLowerCase()] ?? name.trim();
-}
+const languageName = languageNameRu;
 
 function profileLanguages(draft: ResumeDraft, known: readonly Language[]): Language[] {
   const names = new Set(known.map(({ name }) => languageName(name).toLowerCase()));
