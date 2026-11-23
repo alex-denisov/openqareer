@@ -24,9 +24,6 @@ export function GoalItem({ card, now, quarterView = false }: GoalItemProps) {
   const tag = riskTag(card.risk.status);
   const stale = staleFlag(card, now);
   const quarters = quarterLine(card.details.quarterTargets, card.unit);
-  const indicators = indicatorsOf(card);
-  const quarterTarget =
-    quarterView && indicators.length === 1 ? quarterTargetText(card, now) : null;
   return (
     <li className="dn-goal">
       <div className="dn-goal-h">
@@ -36,23 +33,48 @@ export function GoalItem({ card, now, quarterView = false }: GoalItemProps) {
         <span className={tag.className}>{tag.text}</span>
       </div>
       <div className="row-sub">{goalByline(card, now)}</div>
-      <ul className="dn-inds">
-        {indicators.map((goal) => {
-          const view = indicatorView(goal);
-          const target = view.target && quarterTarget ? quarterTarget : view.target;
-          return (
-            <li className="dn-ind" key={view.id}>
-              <span>{view.title}</span>
-              <span className="num">
-                <strong>{view.value}</strong>
-                {target ? ` ${target}` : null}
-              </span>
-              <span className="row-sub">{view.sub}</span>
-            </li>
-          );
-        })}
-      </ul>
+      <IndicatorList card={card} now={now} quarterView={quarterView} />
       {quarters ? <p className="row-sub">{quarters}</p> : null}
+      <GoalFlags card={card} stale={stale} />
+    </li>
+  );
+}
+
+/** Показатели цели; на «Квартале» у годовой цели с одним показателем — цель этого квартала. */
+function IndicatorList({ card, now, quarterView = false }: GoalItemProps) {
+  const indicators = indicatorsOf(card);
+  const quarterTarget =
+    quarterView && indicators.length === 1 ? quarterTargetText(card, now) : null;
+  return (
+    <ul className="dn-inds">
+      {indicators.map((goal) => {
+        const view = indicatorView(goal);
+        const target = view.target && quarterTarget ? quarterTarget : view.target;
+        return (
+          <li className="dn-ind" key={view.id}>
+            <span>{view.title}</span>
+            <span className="num">
+              <strong>{view.value}</strong>
+              {target ? ` ${target}` : null}
+            </span>
+            <span className="row-sub">{view.sub}</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** «Достигнута → Перенести» и «Последний замер … · Внести». */
+function GoalFlags({
+  card,
+  stale,
+}: {
+  readonly card: CareerDiaryGoalCard;
+  readonly stale: string | null;
+}) {
+  return (
+    <>
       {card.risk.status === 'achieved' ? (
         <p className="dn-flag is-done">
           <Icon name="trophy" />
@@ -71,6 +93,6 @@ export function GoalItem({ card, now, quarterView = false }: GoalItemProps) {
           </Link>
         </p>
       ) : null}
-    </li>
+    </>
   );
 }
