@@ -13,8 +13,8 @@ import { VertexJsonClient } from './vertexJson';
 
 /**
  * B686: KPI из текста, таблицы (как текста) или фото слайда — в строки черновика.
- * Цепочка `kpiImport`: Vertex первым, дальше ступени chat-completions. Фото читает только
- * ступень Vertex: у остальных нет входа для изображения, и они его пропускают.
+ * Цепочка `kpiImport` (23.11): ступени chat-completions, Vertex выключен решением владельца 20.11.
+ * Фото уходит картинкой только моделям с входом изображения, остальные его пропускают.
  * KPI работодателя — данные кандидата: бесплатные модели OpenRouter не берём.
  */
 export const KPI_ANSWER_TOKENS = 6_000;
@@ -23,6 +23,9 @@ const KPI_STAGE_TIMEOUT_MS = 60_000;
  * Vertex получает схему отдельным полем, chat-completions — только `json_object`: без схемы
  * в тексте модели угадывали форму ответа и все ответы были `invalid_answer` (прод 20.11).
  */
+/** Вход изображения сверен с каталогом OpenRouter 23.11 (`architecture.input_modalities`). */
+const VISION_MODELS: ReadonlySet<string> = new Set(['gpt-5.6-luna', 'z-ai/glm-5.3-flash']);
+
 const CHAT_SCHEMA_LINE = `Ответ — один JSON-объект по схеме: ${JSON.stringify(KPI_MODEL_JSON_SCHEMA)}`;
 
 export interface KpiExtractInput {
@@ -46,6 +49,10 @@ function userMessage(input: KpiExtractInput): string {
   return input.image ? 'KPI на изображении.' : 'KPI:\n<<<\n' + input.text + '\n>>>';
 }
 
+function imageOf(image: NonNullable<KpiExtractInput['image']>) {
+  return { mimeType: image.mimeType, data: Buffer.from(image.data).toString('base64') };
+}
+
 function stageOf(
   stage: ResolvedChainStage,
   vertexFetch: typeof fetch | undefined,
@@ -62,23 +69,14 @@ function stageOf(
           user: userMessage(input),
           answerTokens: KPI_ANSWER_TOKENS,
           responseSchema: KPI_MODEL_JSON_SCHEMA,
-          ...(input.image
-            ? {
-                images: [
-                  {
-                    mimeType: input.image.mimeType,
-                    data: Buffer.from(input.image.data).toString('base64'),
-                  },
-                ],
-              }
-            : {}),
+          ...(input.image ? { images: [imageOf(input.image)] } : {}),
         }),
     };
   }
   const { route } = stage;
   return {
     label: stage.label,
-    vision: false,
+    vision: VISION_MODELS.has(route.model),
     complete: async (system, input) => {
       if (route.provider === 'openrouter') assertOpenRouterModelForPersonalData(route.model);
       const answer = await requestChatJson(
@@ -89,6 +87,7 @@ function stageOf(
           maxTokens: KPI_ANSWER_TOKENS,
           timeoutMs: KPI_STAGE_TIMEOUT_MS,
           personal: true,
+          ...(input.image ? { images: [imageOf(input.image)] } : {}),
         },
         fetchImpl,
       );

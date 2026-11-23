@@ -136,6 +136,39 @@ describe('B748: русское название роли от модели пр�
     }
   });
 
+  // B748 (prod 23.11): «VP по ИТ-эксплуатации» — уровень латиницей вместо русского слова.
+  it('уровень не латиницей: VP, Head, Lead и редкие CxO вместо русского слова отвергаются', () => {
+    expect(checkedTitleRu('VP of IT Operations', 'VP по ИТ-эксплуатации')).toBeNull();
+    expect(checkedTitleRu('Head of AI / ML', 'Head направления AI/ML')).toBeNull();
+    expect(checkedTitleRu('Lead Product Manager', 'Lead продакт-менеджер')).toBeNull();
+    expect(checkedTitleRu('Chief Customer Officer', 'CCO по работе с клиентами')).toBeNull();
+    expect(checkedTitleRu('SVP of Sales', 'SVP по продажам')).toBeNull();
+  });
+
+  it('уровень по-русски проходит: VP в переводе не обязателен, CxO в скобках как в онтологии', () => {
+    expect(checkedTitleRu('VP of IT Operations', 'Вице-президент по ИТ-эксплуатации')).toBe(
+      'Вице-президент по ИТ-эксплуатации',
+    );
+    expect(checkedTitleRu('Chief Customer Officer', 'Директор по работе с клиентами (CCO)')).toBe(
+      'Директор по работе с клиентами (CCO)',
+    );
+    expect(checkedTitleRu('COO', 'Операционный директор (COO)')).toBe(
+      'Операционный директор (COO)',
+    );
+    expect(checkedTitleRu('CTO', 'CTO')).toBeNull();
+  });
+
+  it('правило уровня — в обеих инструкциях, с примером VP', () => {
+    for (const text of [
+      roleNamingInstructions('en'),
+      roleNamingInstructions('ru'),
+      ROLE_TITLE_TRANSLATION_INSTRUCTIONS,
+    ]) {
+      expect(text).toContain('VP of IT Operations → Вице-президент по ИТ-эксплуатации');
+      expect(text).toContain('CEO, CTO, CIO, CFO, COO');
+    }
+  });
+
   it('русское название роли уже по-русски — перевод не нужен', () => {
     expect(checkedTitleRu('Операционный директор', 'Операционный директор')).toBeNull();
   });

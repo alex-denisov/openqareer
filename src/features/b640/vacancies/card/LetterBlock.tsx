@@ -14,6 +14,8 @@ export interface LetterBlockProps {
   /** Резюме платформы под вакансию или общее; `undefined` — не знаем. */
   readonly resume:
     { readonly available: boolean; readonly kind: 'targeted' | 'master' } | undefined;
+  /** B726: без компании нет и её сайта — строки «Сайт компании» нет. */
+  readonly hasCompany?: boolean;
 }
 
 const FIT_NOTES: Readonly<Record<HhResumeFitStatus, string>> = {
@@ -40,14 +42,15 @@ export function resumeRows(props: Omit<LetterBlockProps, 'vacancyId'>): readonly
         action: 'Выбрать',
       }
     : undefined;
-  const own: ResumeRow | undefined = props.resume?.available
-    ? {
-        key: 'site',
-        title: 'Сайт компании',
-        sub: props.resume.kind === 'targeted' ? 'Резюме под вакансию, PDF' : 'Общее резюме, PDF',
-        action: 'Открыть',
-      }
-    : undefined;
+  const own: ResumeRow | undefined =
+    props.resume?.available && props.hasCompany !== false
+      ? {
+          key: 'site',
+          title: 'Сайт компании',
+          sub: props.resume.kind === 'targeted' ? 'Резюме под вакансию, PDF' : 'Общее резюме, PDF',
+          action: 'Открыть',
+        }
+      : undefined;
   return [hh, own].filter((row): row is ResumeRow => row !== undefined);
 }
 
