@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import { CtxHead } from '../shell/CtxHead';
@@ -6,12 +7,33 @@ import { formatInterviewWhen } from './model/prepModel';
 
 export type InterviewStep = 'prep' | 'debrief';
 
-/** Шаги отклика с интервью: «Отклик · Подготовка · Интервью · Разбор» (I1–I4). */
+/** Место под затухание у края строки, как у `SecTabs`: текущий шаг под него не уходит. */
+const FADE_ROOM = 40;
+
+/** На 390 строка шагов прокручена так, что текущий шаг виден целиком (как в макете i04). */
+function useCurrentStepInView(current: InterviewStep) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const row = rowRef.current;
+    const step = row?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!row || !step) return;
+    const right = step.offsetLeft - row.offsetLeft + step.offsetWidth;
+    if (right > row.clientWidth - FADE_ROOM) row.scrollLeft = right - row.clientWidth + FADE_ROOM;
+  }, [current]);
+  return rowRef;
+}
+
+/**
+ * Шаги отклика с интервью: «Отклик · Подготовка · Интервью · Разбор» (I1–I4). Пройденные — с
+ * галочкой: на подготовке только «Отклик», на разборе — три шага до него (макет i04).
+ */
 export function PrepSteps(props: { readonly responseId: string; readonly current: InterviewStep }) {
   const { responseId, current } = props;
+  const rowRef = useCurrentStepInView(current);
+  const debrief = current === 'debrief';
   return (
     <nav className="tabs sec-tabs r6-steps" aria-label="Шаги">
-      <div className="sec-tabs-in">
+      <div className="sec-tabs-in" ref={rowRef}>
         <Link to={buildNodePath('o01c', { responseId })}>
           <Icon name="check" />
           Отклик
@@ -20,13 +42,14 @@ export function PrepSteps(props: { readonly responseId: string; readonly current
           to={buildNodePath('i01', { responseId })}
           aria-current={current === 'prep' ? 'page' : undefined}
         >
+          {debrief ? <Icon name="check" /> : null}
           Подготовка
         </Link>
-        <Link to={buildNodePath('o01c', { responseId })}>Интервью</Link>
-        <Link
-          to={buildNodePath('i04', { responseId })}
-          aria-current={current === 'debrief' ? 'page' : undefined}
-        >
+        <Link to={buildNodePath('o01c', { responseId })}>
+          {debrief ? <Icon name="check" /> : null}
+          Интервью
+        </Link>
+        <Link to={buildNodePath('i04', { responseId })} aria-current={debrief ? 'page' : undefined}>
           Разбор
         </Link>
       </div>
