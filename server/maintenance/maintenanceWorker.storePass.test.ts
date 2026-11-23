@@ -46,6 +46,8 @@ function markAt(lastMs: number | null) {
       markFinished: (ms: number) => {
         marks.push(ms);
       },
+      progress: () => null,
+      saveProgress: () => undefined,
     },
   };
 }
@@ -191,6 +193,8 @@ function liveMark(lastMs: number | null) {
     markFinished: (ms: number) => {
       last = ms;
     },
+    progress: () => null,
+    saveProgress: () => undefined,
   };
 }
 

@@ -1,3 +1,4 @@
+import { runStorePassSteps, type StorePassOptions } from './storePassSteps';
 import { atsRolloutAdmits } from './freehire/freehireFeeds';
 import { failureMessage } from './requestTimeout';
 import type { HhTextRateController } from './hhTextRate';
@@ -680,32 +681,20 @@ export class MultiSourceVacancyEngine {
   public async maintainStoreAsync(
     nowMs: number = Date.now(),
     shouldStop: () => boolean = () => false,
-    options: { pauseMs?: number; windowRows?: number } = {},
+    options: StorePassOptions = {},
   ): Promise<{ backfillWindows: number }> {
     const oldestPublishedAt = new Date(
       nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
-    const known = Array.from(this.sources.keys());
-    // B759: в фоне между транзакциями пауза, остановка процесса прерывает проход.
-    const pauseMs = Math.max(0, options.pauseMs ?? 0);
-    const control = { pauseMs, shouldStop };
-    if (this.pool.pruneAsync) await this.pool.pruneAsync(known, oldestPublishedAt, control);
-    else this.pool.prune(known, oldestPublishedAt);
-    if (shouldStop()) return { backfillWindows: 0 };
-    if (this.pool.pruneClustersBeforeAsync) {
-      await this.pool.pruneClustersBeforeAsync(oldestPublishedAt, control);
-    } else {
-      this.pruneClusters(oldestPublishedAt);
-    }
-    let backfillWindows = 0;
-    while (this.pool.backfillWindowStep && !shouldStop()) {
-      backfillWindows += 1;
-      if (this.pool.backfillWindowStep(options.windowRows).done) break;
-      await new Promise((resolve) =>
-        pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
-      );
-    }
-    return { backfillWindows };
+    // B759: в фоне между транзакциями пауза, остановка прерывает проход, шаги продолжаются.
+    return runStorePassSteps({
+      pool: this.pool,
+      knownSourceIds: Array.from(this.sources.keys()),
+      oldestPublishedAt,
+      shouldStop,
+      pruneClustersSync: () => this.pruneClusters(oldestPublishedAt),
+      options,
+    });
   }
 
   private pruneStore(nowMs: number): void {

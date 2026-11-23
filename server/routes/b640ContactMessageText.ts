@@ -14,7 +14,7 @@ import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { filterUsablePitchFacts } from '../domain/vacancyPitchService';
 import { candidateGenderFromName } from '../../shared/candidateGender';
 import type { CoverLetterOutcome, CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
-import { localizeRoles, roleTranslations } from '../vacancies/contactMessageRoles';
+import { localizeRoles, roleTranslations, targetRolesRu } from '../vacancies/contactMessageRoles';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 
@@ -45,11 +45,21 @@ function vacancyOf(deps: RouteDeps, vacancyId: string | null): { title: string; 
 }
 
 /** B753: отказ ступени и непринятый текст — в журнал (без текста), иначе запасной текст не объяснить. */
-function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, known: string, kind: B640ContactMessageKind): void {
+/** B753: что проверяем в тексте модели — данные запроса, вид сообщения, английские названия целевых ролей. */
+interface ContactCheck {
+  readonly known: string;
+  readonly kind: B640ContactMessageKind;
+  readonly englishRoles: readonly string[];
+}
+
+const rejectionOf = (body: string | undefined, check: ContactCheck) =>
+  modelMessageRejection(body, check.known, check.kind, check.englishRoles);
+
+function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, check: ContactCheck): void {
   if (outcome.failure) {
     request.log.warn({ ...outcome.failure, code: 'contact_message_stage_failed' }, 'contact-message-stage-failed');
   }
-  const rejected = outcome.body || !outcome.failure ? modelMessageRejection(outcome.body, known, kind) : null;
+  const rejected = outcome.body || !outcome.failure ? rejectionOf(outcome.body, check) : null;
   if (!rejected) return;
   request.log.warn(
     { code: 'contact_message_model_rejected', reason: rejected, stage: outcome.stage ?? null, length: outcome.body?.length ?? 0 },
@@ -70,9 +80,9 @@ function sameCompany(
 }
 
 /** B753: отклонённый проверкой текст идёт следующей ступени цепочки, а не сразу в шаблон. */
-function contactReview(known: string, kind: B640ContactMessageKind, keepLong = false): (body: string) => readonly string[] {
+function contactReview(check: ContactCheck, keepLong = false): (body: string) => readonly string[] {
   return (body) => {
-    const reason = modelMessageRejection(body, known, kind);
+    const reason = rejectionOf(body, check);
     return reason && !(keepLong && reason === 'too_long') ? [`contact_${reason}`] : [];
   };
 }
@@ -85,26 +95,33 @@ async function askContactModel(
   writer: CoverLetterWriter,
   request: FastifyRequest,
   ask: CoverLetterWriteInput,
-  known: string,
-  kind: B640ContactMessageKind,
+  check: ContactCheck,
 ): Promise<string | null> {
-  const first = await writer.writeCoverLetter({ ...ask, review: contactReview(known, kind, true) });
-  logModelOutcome(request, first, known, kind);
-  if (!first.body || modelMessageRejection(first.body, known, kind) !== 'too_long') {
-    return acceptModelMessage(first.body, known, kind);
-  }
+  const accept = (body: string | undefined) => acceptModelMessage(body, check.known, check.kind, check.englishRoles);
+  const first = await writer.writeCoverLetter({ ...ask, review: contactReview(check, true) });
+  logModelOutcome(request, first, check);
+  if (!first.body || rejectionOf(first.body, check) !== 'too_long') return accept(first.body);
   const shorter = await writer.writeCoverLetter({
-    ...ask, correction: shorteningCorrection(first.body), review: contactReview(known, kind),
+    ...ask, correction: shorteningCorrection(first.body), review: contactReview(check),
   });
-  logModelOutcome(request, shorter, known, kind);
-  return acceptModelMessage(shorter.body, known, kind);
+  logModelOutcome(request, shorter, check);
+  return accept(shorter.body);
 }
 
-/** B753: роли кандидата в запросе к модели — по-русски, как их называет платформа (B737). */
-function russianRoles(deps: RouteDeps, candidateId: string, targetRole: string): Readonly<Record<string, string>> {
+/**
+ * B753 (решение CPO 23.11): целевые роли — по-русски отдельной строкой запроса; профиль и прежние
+ * должности идут к модели как есть. Английские названия — для проверки текста модели.
+ */
+function candidateRoles(deps: RouteDeps, candidateId: string, targetRole: string) {
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const titles = [...campaign.roles.value, ...campaign.autoRoles.map((role) => role.title)];
-  return roleTranslations(titles, campaign.ownTitlesRu ?? {}, targetRole);
+  const own = campaign.ownTitlesRu ?? {};
+  const translations = roleTranslations(titles, own, targetRole);
+  return {
+    russian: targetRolesRu(titles, own, targetRole),
+    english: Object.keys(translations),
+    targetRole: localizeRoles(targetRole, translations),
+  };
 }
 
 /**
@@ -120,17 +137,16 @@ export async function writeContactMessageText(
   const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
   const facts = snapshot.memory ?? [];
   const withheld = new Set(facts.filter((fact) => fact.sensitive === true).map((fact) => fact.id));
-  const roles = russianRoles(deps, input.candidateId, draft.targetRole ?? '');
-  const sourceProfile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
-  const profile = localizeRoles(sourceProfile, roles);
-  const targetRole = localizeRoles(draft.targetRole ?? '', roles);
+  const roles = candidateRoles(deps, input.candidateId, draft.targetRole ?? '');
+  const profile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
   const vacancy = vacancyOf(deps, input.vacancyId);
   const also = sameCompany(vacancy, vacancyOf(deps, input.alsoVacancyId ?? null));
   const message: ContactMessageFacts = {
     kind: input.kind,
     recipientName: input.recipient.name,
     recipientCompany: input.recipient.company,
-    targetRole,
+    targetRole: roles.targetRole,
+    ...(roles.russian.length > 0 ? { targetRolesRu: roles.russian } : {}),
     ...(vacancy ? { vacancyTitle: vacancy.title, vacancyCompany: vacancy.company } : {}),
     ...(input.recipient.relationship ? { relationship: input.recipient.relationship } : {}),
     ...(input.recipient.role ? { recipientRole: input.recipient.role } : {}),
@@ -140,7 +156,7 @@ export async function writeContactMessageText(
   const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
   if (!writer || !profile.trim()) return fallback;
   const known = [
-    sourceProfile, profile, targetRole, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
+    profile, roles.targetRole, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
     vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
   ].join('\n');
   try {
@@ -153,7 +169,8 @@ export async function writeContactMessageText(
       chosenLanguage: 'ru',
       wish: contactMessageWish(message),
     };
-    return (await askContactModel(writer, request, ask, known, input.kind)) ?? fallback;
+    const check: ContactCheck = { known, kind: input.kind, englishRoles: roles.english };
+    return (await askContactModel(writer, request, ask, check)) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');
     return fallback;

@@ -51,18 +51,24 @@ export interface MatchedPoolOptions {
    * сервера, остальное — по запросу порциями сервера; без него читается вся подборка.
    */
   readonly pageLimit?: number;
+  /**
+   * B768: фильтры первого чтения. «Вакансии по роли» читали сначала всю подборку,
+   * а потом с ролью — два запроса строк по ~5 с на проде; теперь первый уже с ролью.
+   * Кэш — подборка без фильтров, с начальными фильтрами он не показывается.
+   */
+  readonly initialFilters?: VacanciesScreenState;
 }
 
 /** One cabin-wide read; the owner screen can retry the bounded page sequence. */
 export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptions = {}): MatchedPool {
   // B589: the last unfiltered selection renders at once on a repeat visit.
-  const [cached] = useState(() => (provided ? undefined : readCachedMatchedPool()));
+  const [cached] = useState(() => (provided || options.initialFilters ? undefined : readCachedMatchedPool()));
   const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
   const [initialFilters, setInitialFilters] = useState<VacanciesScreenState | undefined>(
     cached?.initialFilters,
   );
   const [sort, setSort] = useState<VacancySort | undefined>(cached?.sort);
-  const [filters, setFilterState] = useState<VacanciesScreenState>();
+  const [filters, setFilterState] = useState(options.initialFilters);
   const setFilters = useCallback((value: VacanciesScreenState) => {
     const hasServerFilters = hasMatchedPoolFilters(value);
     setFilterState((previous) =>
