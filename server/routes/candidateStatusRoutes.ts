@@ -1,4 +1,5 @@
 import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
+import { startWeeklySelectionJob } from './weeklySelectionSchedule';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { CANDIDATE_STATUSES, TARGET_PROFESSION_MAX_LENGTH } from '../../shared/candidateStatus';
@@ -53,7 +54,10 @@ const choiceSchema = z.object({
     .nullish(),
 });
 const changeSchema = choiceSchema.extend({
-  options: z.object({ pauseAutoApply: z.boolean().optional() }).strict().optional(),
+  options: z
+    .object({ pauseAutoApply: z.boolean().optional(), weeklySelection: z.boolean().optional() })
+    .strict()
+    .optional(),
 });
 
 function signedIn(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): Signed | null {
@@ -171,6 +175,8 @@ export function registerCandidateStatusRoutes(
       encryptionKey: deps.config.dataEncryptionKey,
     });
   if (!deps.candidateStatusRepository) app.addHook('onClose', async () => repository.close());
+  // B779: подборка раз в неделю тем, кто включил её на s02.
+  startWeeklySelectionJob(app, deps, repository);
   const bound: BoundDeps = {
     ...deps,
     status: {

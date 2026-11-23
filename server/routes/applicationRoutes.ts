@@ -303,7 +303,7 @@ const todayQuerySchema = z
  * с (C55). Кандидат без роли/навыков подбирать физически нечем — матчинг не
  * запускается, `matched` — пустой список, а не «неизвестно».
  */
-async function readTodayMatchedVacancies(
+export async function readTodayMatchedVacancies(
   deps: Pick<RouteDeps, 'candidateStore' | 'multiSourceEngine'>,
   candidateId: string,
 ): Promise<{

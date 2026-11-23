@@ -104,6 +104,7 @@ export function previewCandidateStatus(
   const latest = deps.repository.current(candidateId);
   return buildStatusPreview(choiceOf(latest), to, {
     autoApplyPaused: deps.automationPause.isPaused(candidateId, now),
+    weeklySelection: deps.repository.weeklySelectionEnabled(candidateId),
   });
 }
 
@@ -120,6 +121,27 @@ export interface StatusChangeResult {
   readonly applied: { readonly pauseAutoApply: boolean };
 }
 
+function assertChanged(
+  latest: CandidateStatusChange | null,
+  from: StatusChoice,
+  to: StatusChoice,
+): void {
+  if (latest && from.status === to.status && from.targetProfession === to.targetProfession) {
+    throw new StatusUnchangedError();
+  }
+}
+
+/** B779: подборка раз в неделю — отметка кандидата; без поля остаётся как была. */
+function applyWeeklySelection(
+  repository: SqliteCandidateStatusRepository,
+  candidateId: string,
+  options: StatusChangeOptions,
+  now: Date,
+): void {
+  if (options.weeklySelection === undefined) return;
+  repository.setWeeklySelection(candidateId, options.weeklySelection, now);
+}
+
 /** Статус меняется только здесь и только по запросу самого кандидата. */
 export function changeCandidateStatus(
   deps: CandidateStatusDeps,
@@ -128,9 +150,7 @@ export function changeCandidateStatus(
   const { candidateId, to, now } = input;
   const latest = deps.repository.current(candidateId);
   const from = choiceOf(latest);
-  if (latest && from.status === to.status && from.targetProfession === to.targetProfession) {
-    throw new StatusUnchangedError();
-  }
+  assertChanged(latest, from, to);
   const pause =
     shouldPauseAutoApply(to.status, input.options) &&
     !deps.automationPause.isPaused(candidateId, now);
@@ -167,6 +187,7 @@ export function changeCandidateStatus(
     if (snapshot) deps.automationPause.restore(candidateId, snapshot);
     throw error;
   }
+  applyWeeklySelection(deps.repository, candidateId, input.options, now);
   return {
     state: readCandidateStatus(deps, candidateId, now),
     applied: { pauseAutoApply: pause },
