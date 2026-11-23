@@ -19,11 +19,19 @@ const roles = Array.from({ length: 5 }, (_, index) => ({ id: `r${index}` }));
 
 describe('просьба к модели ролей (этап 1, 04.11)', () => {
   it('просит ступени каждой линии карьеры, а не одну роль на линию', async () => {
-    const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ roles }) } }] })),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: JSON.stringify({ roles }) } }] }),
+        ),
     );
     const model = new ChatCampaignRoleModel(
-      { provider: 'openrouter', model: 'm', apiKey: 'k', baseUrl: 'https://example.test/v1' } as never,
+      {
+        provider: 'openrouter',
+        model: 'm',
+        apiKey: 'k',
+        baseUrl: 'https://example.test/v1',
+      } as never,
       fetchImpl as unknown as typeof fetch,
     );
     await model.propose(input);
@@ -35,15 +43,14 @@ describe('просьба к модели ролей (этап 1, 04.11)', () => 
 });
 
 describe('цепочка ролей кампании (28.10)', () => {
-  it('Vertex → deepseek-v4-flash дважды → glm-5.3-flash (04.11)', () => {
+  it('deepseek-v4-flash дважды → glm-5.3-flash, Vertex не ставится и когда настроен (20.11)', () => {
     const model = buildCampaignRoleModel({
       providerCredentials: { openrouter: 'sk-or-test', openai: 'sk-openai-test' },
       vertex,
     }) as QueuedCampaignRoleModel;
 
-    expect(model.stages[0]).toBeInstanceOf(VertexCampaignRoleModel);
+    expect(model.stages.some((stage) => stage instanceof VertexCampaignRoleModel)).toBe(false);
     expect(model.stages.map((stage) => stage.name)).toEqual([
-      'gemini-3.8-flash',
       'deepseek/deepseek-v4-flash',
       'deepseek/deepseek-v4-flash',
       'z-ai/glm-5.3-flash',
