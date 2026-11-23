@@ -66,6 +66,9 @@ const CabinetB640 = lazy(async () => {
   markAppReady();
   return { default: module.CabinetB640 };
 });
+// B760: устройство, где новый кабинет уже открывался, грузит его код рядом с /auth/me,
+// а не после ответа сессии. Сбой загрузки здесь молчит: lazy выше повторит и покажет ошибку.
+if (readRememberedCabinetB640()) void loadCabinetB640().catch(() => undefined);
 const landingPage = preloadablePage(loadLandingPage);
 const LandingPage = landingPage.Page;
 const AuthSiteFrame = lazy(() =>
@@ -302,6 +305,12 @@ export default function App() {
         });
         if (window.location.pathname !== '/verify-email') navigate('/verify-email');
         return;
+      }
+      // B760: новому кабинету нужна только сессия — он открывается сразу, а чтение
+      // рабочего пространства (нужно прежней оболочке) идёт следом, не задерживая строки s07.
+      if (session?.features?.cabinetB640 === true) {
+        const known = session;
+        setState((current) => ({ ...current, session: known }));
       }
       const result = loadWorkspace(window.localStorage, session?.candidateId ?? null);
       // The server is authoritative for the onboarding gate. A local copy may

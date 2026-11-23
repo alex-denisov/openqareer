@@ -177,6 +177,35 @@ describe('admitCardRollout', () => {
     expect(admitCardRollout(db, NOW, 1).dropped).toBe(1);
     expect(admitted(db)).toEqual([]);
   });
+
+  // B761 23.11: on prod the drop was one DELETE whose subquery scanned the whole
+  // table under the write lock: 8.7 s held, longer than busy_timeout (5 s).
+  it('drops in windows by id: each DELETE names at most 500 cards, the scan runs outside it', () => {
+    const cards = Array.from({ length: 1_200 }, (_, index) => ({
+      id: `c${String(index).padStart(4, '0')}`,
+    }));
+    const db = database([...cards, { id: 'keep' }]);
+    admitCardRollout(db, NOW, 8_000);
+    expect(admitted(db)).toHaveLength(1_201);
+    db.prepare("UPDATE vacancy_pool_index SET expired = 1 WHERE id <> 'keep'").run();
+    const deletes: number[] = [];
+    const prepare = db.prepare.bind(db);
+    db.prepare = ((sql: string) => {
+      const statement = prepare(sql);
+      if (!/^\s*DELETE FROM catalog_card_rollout/u.test(sql)) return statement;
+      const run = statement.run.bind(statement);
+      statement.run = ((...params: Parameters<typeof run>) => {
+        deletes.push(params.length);
+        return run(...params);
+      }) as typeof statement.run;
+      return statement;
+    }) as typeof db.prepare;
+
+    expect(admitCardRollout(db, NOW, 8_000).dropped).toBe(1_200);
+    expect(admitted(db)).toEqual(['keep']);
+    expect(deletes.length).toBeGreaterThanOrEqual(3);
+    expect(Math.max(...deletes)).toBeLessThanOrEqual(501);
+  });
 });
 
 describe('the jobs sitemap with the rollout', () => {

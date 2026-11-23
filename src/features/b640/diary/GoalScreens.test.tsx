@@ -28,6 +28,7 @@ vi.mock('./diaryApi', () => api);
 vi.mock('./goalHintsApi', () => ({
   getGoalExamples: vi.fn(async () => null),
   getGoalBaseline: vi.fn(async () => null),
+  getRoleTitleRu: vi.fn(async () => null),
 }));
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../resume/resumeApi', () => resume);
@@ -205,9 +206,52 @@ describe('d02 «Цели и показатели»', () => {
     const flags = [...page.querySelectorAll('.dn-goal')].map(
       (goal) => goal.querySelector('.dn-flag.is-done')?.textContent ?? null,
     );
-    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профиль · Перенести']);
+    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профильПеренести']);
     const move = page.querySelector('.dn-flag.is-done a');
     expect(move?.getAttribute('href')).toBe('/app/diary/results');
+    expect(move?.className).toBe('btn is-quiet is-sm');
+  });
+
+  it('B645: на «Квартале» годовая цель идёт после квартальных — с целью этого квартала', async () => {
+    const yearly = {
+      ...summary('g5', {
+        title: 'Релизы без отката: 95 % за год',
+        horizon: 'year',
+        unit: '%',
+        dueDate: '2099-12-31',
+        targetValue: 95,
+        latestMeasurement: {
+          id: 'm5',
+          goalId: 'g5',
+          value: 82,
+          measuredAt: '2099-01-03',
+          note: null,
+          source: 'candidate_entered',
+          createdAt: '',
+        },
+      }),
+      details: {
+        setBy: 'manager',
+        agreedOn: null,
+        weight: null,
+        archive: null,
+        quarterTargets: [
+          { quarter: 1, value: 85 },
+          { quarter: 2, value: 88 },
+        ],
+      },
+      indicators: [],
+    };
+    api.listGoalCards.mockResolvedValue({ items: [yearly, hiring], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    const titles = () => [...page.querySelectorAll('.dn-goal-t')].map((item) => item.textContent);
+    expect(titles()).toEqual(['Закрыть 2 вакансии в команду', 'Релизы без отката: 95 % за год']);
+    const year = page.querySelectorAll('.dn-goal')[1]!;
+    expect(year.querySelector('.dn-ind .num')?.textContent).toBe('82 % из 85 % в I кв.');
+    expect(year.textContent).toContain('Вклад кварталов: I — 85 %, II — 88 %');
+    click(button(page, 'Год'));
+    expect(titles()).toEqual(['Релизы без отката: 95 % за год']);
+    expect(page.querySelector('.dn-ind .num')?.textContent).toBe('82 % из 95 %');
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {

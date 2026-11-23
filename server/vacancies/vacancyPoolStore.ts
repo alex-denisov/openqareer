@@ -1,3 +1,4 @@
+import type { UnclusteredPoolPage } from './unclusteredPoolPage';
 import type { CatalogChip, ChipCounts } from './catalogChips';
 import type { PruneControl } from './poolPruneBatches';
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
@@ -60,6 +61,11 @@ export interface StoredSourceState {
 }
 
 /** Что снял `mergeSourceSlice`: по этим ссылкам записи покидают кластеры (B230). */
+/** B763: что делать с каждой записанной порцией среза, пока срез ещё пишется. */
+export interface SliceWriteOptions {
+  readonly onChunkWritten?: (chunk: readonly UnifiedVacancy[]) => Promise<void> | void;
+}
+
 export interface MergeSliceResult {
   readonly dropped: readonly VacancyLink[];
 }
@@ -156,7 +162,10 @@ export interface VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
+    options?: SliceWriteOptions,
   ): Promise<MergeSliceResult>;
+  /** B763: окно пула с записями без кластера; курсор живёт в хранилище. */
+  readUnclusteredPoolPage?(chunk?: number): UnclusteredPoolPage;
   /** Without ids — every stored state (start-up); with ids — only those (B736 admin page). */
   loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[];
   /** Only sources with a pending manual request: the 5 s worker poll (B641). */
@@ -174,7 +183,11 @@ export interface VacancyPoolStore {
   /** Swaps everything this source contributed for what it just returned. */
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void;
   /** Async bounded-write variant that yields between SQLite transactions. */
-  replaceSourceSliceAsync?(sourceId: string, vacancies: readonly UnifiedVacancy[]): Promise<void>;
+  replaceSourceSliceAsync?(
+    sourceId: string,
+    vacancies: readonly UnifiedVacancy[],
+    options?: SliceWriteOptions,
+  ): Promise<void>;
   saveSourceState(state: StoredSourceState): void;
   /**
    * Помечает снятые объявления датой смерти, оставляя их в базе. Возвращает,
