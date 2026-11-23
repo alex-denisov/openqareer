@@ -6,7 +6,7 @@ import type {
 import { Icon } from '../kit/Icon';
 import { StatusLine } from '../kit/ResultLine';
 import { listMeasurements } from './diaryApi';
-import { formatValue, longDate } from './goalsModel';
+import { longDate, valueWithTarget } from './goalsModel';
 import { shortDate, today } from './model';
 
 type Rows =
@@ -30,10 +30,7 @@ function useHistory(goalId: string, version: number): Rows {
 }
 
 function ofTarget(goal: CareerDiaryGoalSummary, value: CareerDiaryMeasurement['value']): string {
-  const shown = formatValue(value, goal.unit);
-  return typeof goal.targetValue === 'number'
-    ? `${shown} из ${formatValue(goal.targetValue, goal.unit)}`
-    : shown;
+  return valueWithTarget(goal, value);
 }
 
 interface HistoryRow {

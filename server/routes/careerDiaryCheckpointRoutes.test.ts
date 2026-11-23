@@ -93,11 +93,11 @@ const NEW_ROUTES: ReadonlyArray<[Method, string, unknown?]> = [
 
 function goal(store: SqliteCandidateStore, candidate: string, title: string, values: number[], target = 7) {
   const created = store.careerDiaryRepo.createGoal(candidate, {
-    title, type: 'team', horizon: 'quarter', startDate: '2026-12-01', dueDate: '2027-02-28',
+    title, type: 'team', horizon: 'quarter', startDate: '2026-11-01', dueDate: '2027-02-28',
     unit: 'дней', baselineValue: 14, targetValue: target,
   });
   values.forEach((value, index) => {
-    store.careerDiaryRepo.recordMeasurement(candidate, created.id, { value, measuredAt: `2026-12-${String(10 + index).padStart(2, '0')}` });
+    store.careerDiaryRepo.recordMeasurement(candidate, created.id, { value, measuredAt: `2026-11-${String(10 + index).padStart(2, '0')}` });
   });
   return created.id;
 }
@@ -141,8 +141,16 @@ describe('B687: проверка на 30-й день', () => {
     expect(sent.statusCode, sent.body).toBe(200);
     expect(sent.json().data.sentOn).toBe('2026-12-30');
     expect((await call(app, 'GET', at(id, 'day-30'), flagged)).json().data.sentOn).toBe('2026-12-30');
+    // B687: шаг d01 «Проверка на 30-й день» пройден только с сохранённым итогом.
+    const step = async () => {
+      const plan = await call(app, 'GET', at(id, 'adaptation'), flagged);
+      expect(plan.statusCode, plan.body).toBe(200);
+      return plan.json().data.steps.find((item: { id: string }) => item.id === 'day_30_check').status;
+    };
+    expect(await step()).toBe('done');
     const undone = await call(app, 'DELETE', at(id, 'day-30/sent'), flagged);
     expect(undone.json().data.sentOn).toBeNull();
+    expect(await step()).not.toBe('done');
   });
 
   it('неверная дата — 400, чужое место работы — 404', { timeout: SLOW }, async () => {
@@ -162,7 +170,8 @@ describe('B687: итоги 90 дней', () => {
     const candidate = sessions.get(flagged)!.candidate!.id;
     const id = await workplace(app, flagged);
     goal(candidateStore, candidate, 'Выручка 120 млн ₽', [14, 5]);
-    goal(candidateStore, candidate, 'Инциденты', [14, 10]);
+    // Статус — как у карточки: замер не сдвинулся с 14 — отстаёт (B662).
+    goal(candidateStore, candidate, 'Инциденты', [14, 14]);
     const old = goal(candidateStore, candidate, 'Старая цель', [14, 3]);
     const details = new SqliteDiaryDetailsRepository({ databasePath, encryptionKey: baseConfig.dataEncryptionKey });
     details.saveGoalDetail(candidate, old, { setBy: 'self', agreedOn: null, weight: null, archive: { archivedAt: '2026-12-20T10:00:00.000Z', reason: 'Отменена' }, quarterTargets: null, transfer: null });

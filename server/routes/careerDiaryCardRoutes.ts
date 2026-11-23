@@ -20,6 +20,7 @@ import {
   type CareerDiaryGoalDetails,
 } from '../../shared/careerDiaryCards';
 import { CareerDiaryIdempotencyConflictError } from '../data/sqliteCareerDiaryRepository';
+import { SqliteDiaryCheckpointRepository } from '../data/sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
 import { SqliteGoalTaskSuggestionRepository } from '../data/sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
@@ -44,7 +45,11 @@ export type CareerDiaryCardRouteDeps = RouteDeps & {
   readonly kpiImportRepository?: SqliteKpiImportRepository;
   readonly taskSuggestionRepository?: SqliteGoalTaskSuggestionRepository;
 };
-type BoundDeps = RouteDeps & { readonly details: () => SqliteDiaryDetailsRepository };
+type BoundDeps = RouteDeps & {
+  readonly details: () => SqliteDiaryDetailsRepository;
+  /** B687: отметка проверки на 30-й день — шаг d01 «пройдено» только с ней. */
+  readonly marks: () => SqliteDiaryCheckpointRepository;
+};
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const BASE = '/api/v1/candidate/career-diary';
@@ -381,6 +386,7 @@ function adaptationView(deps: BoundDeps, candidate: string, workplaceId: string)
     tasks: planTasks(workplace),
     details: deps.details().adaptationDetails(candidate, workplaceId),
     asOf: today(),
+    day30Sent: deps.marks().get(candidate, workplaceId, 'day30').sentOn !== null,
   });
 }
 
@@ -472,7 +478,14 @@ export function registerCareerDiaryCardRoutes(
     return repository;
   };
   if (!deps.diaryDetailsRepository) app.addHook('onClose', async () => repository?.close());
-  const bound: BoundDeps = { ...deps, details };
+  let checkpoints: SqliteDiaryCheckpointRepository | null = null;
+  const marks = () =>
+    (checkpoints ??= new SqliteDiaryCheckpointRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: deps.config.dataEncryptionKey,
+    }));
+  app.addHook('onClose', async () => checkpoints?.close());
+  const bound: BoundDeps = { ...deps, details, marks };
   const read = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const write = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   app.get(`${BASE}/goal-cards`, read, withDeps(bound, listCards));

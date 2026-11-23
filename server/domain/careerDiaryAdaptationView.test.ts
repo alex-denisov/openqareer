@@ -126,13 +126,14 @@ describe('план адаптации для экрана d01', () => {
   it('B685: шаг без задач — по дню адаптации и дням шага', () => {
     const status = (asOf: string) =>
       Object.fromEntries(view([], EMPTY_ADAPTATION_DETAILS, asOf).steps.map((step) => [step.id, step.status]));
-    // День 39: шаги до 30-го дня пройдены, карта людей идёт весь срок.
+    // День 39: шаги до 30-го дня пройдены, карта людей идёт весь срок; проверка 30-го дня
+    // без сохранённого итога идёт (B687 — действие, а не задачи).
     expect(status('2027-01-08')).toEqual({
       before_start: 'done',
       first_two_weeks: 'done',
       first_meeting: 'done',
       people_map: 'active',
-      day_30_check: 'done',
+      day_30_check: 'active',
       settling: 'done',
     });
     // До выхода: идёт только «До выхода».
@@ -151,6 +152,19 @@ describe('план адаптации для экрана d01', () => {
       day_30_check: 'ahead',
       settling: 'active',
     });
+  });
+
+  it('B687: «Проверка на 30-й день» пройдена только с сохранённым итогом проверки', () => {
+    const check = (asOf: string, day30Sent: boolean, tasks: PlanTask[] = []) =>
+      buildAdaptationView({ workplace, tasks, details: EMPTY_ADAPTATION_DETAILS, asOf, day30Sent }).steps.find(
+        (item) => item.id === 'day_30_check',
+      )?.status;
+    // День 40, итога нет, задач 0 из 4 — «идёт», а не «пройдено».
+    expect(check('2027-01-09', false)).toBe('active');
+    expect(check('2027-01-09', true)).toBe('done');
+    // До 28-го дня — впереди; итог раньше срока — пройдено.
+    expect(check('2026-12-20', false)).toBe('ahead');
+    expect(check('2026-12-20', true)).toBe('done');
   });
 
   it('B685: день 40 — открытые задачи после дней шага «идёт», закрытые или без задач — «пройдено»', () => {
