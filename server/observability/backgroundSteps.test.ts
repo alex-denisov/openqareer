@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backgroundStep, heldBackgroundSteps, resetBackgroundSteps, type HeldStep } from './backgroundSteps';
+import { backgroundStep, heldBackgroundSteps, labelledTimer, resetBackgroundSteps, type HeldStep } from './backgroundSteps';
 
 describe('B769: фоновые шаги веб-процесса для журнала задержек', () => {
   it('шаг виден, пока идёт, и после конца — в окне задержки', async () => {
@@ -41,5 +41,21 @@ describe('B769: фоновые шаги веб-процесса для журн�
     await expect(backgroundStep('snapshot', async () => { throw new Error('x'); })).rejects.toThrow('x');
     const now = performance.now() + 1;
     expect(heldBackgroundSteps(now, now)).toEqual([]);
+  });
+
+  it('B776: синхронный таймер веб-процесса подписан шагом — его задержка не уходит в «без шага»', () => {
+    resetBackgroundSteps();
+    const start = performance.now();
+    const failures: unknown[] = [];
+    const tick = labelledTimer('web:sitemap-refresh', () => {
+      const until = performance.now() + 30;
+      while (performance.now() < until) { /* держим цикл */ }
+    }, (error) => failures.push(error));
+    tick();
+    const held = heldBackgroundSteps(start, performance.now());
+    expect(held[0]?.name).toBe('web:sitemap-refresh');
+    expect(held[0]!.overlapMs).toBeGreaterThanOrEqual(25);
+    labelledTimer('web:broken', () => { throw new Error('x'); }, (error) => failures.push(error))();
+    return new Promise((resolve) => setImmediate(resolve)).then(() => expect(failures).toHaveLength(1));
   });
 });

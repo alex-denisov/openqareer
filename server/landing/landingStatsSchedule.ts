@@ -4,6 +4,7 @@
  * - Web server: read that one row every 5 minutes into the in-memory cache.
  */
 import { DatabaseSync } from 'node:sqlite';
+import { labelledTimer } from '../observability/backgroundSteps';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { setLandingStats } from './landingStatsCache';
@@ -61,7 +62,7 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
 
 /** Web server: a primary-key read of one row, then the cache is replaced. */
 export function scheduleLandingStatsRefresh(databasePath: string, log: StatsLog): () => void {
-  const refresh = () => {
+  const read = () => {
     let database: DatabaseSync | undefined;
     try {
       database = new DatabaseSync(databasePath, { readOnly: true });
@@ -75,6 +76,9 @@ export function scheduleLandingStatsRefresh(databasePath: string, log: StatsLog)
       database?.close();
     }
   };
+  const refresh = labelledTimer('web:landing-refresh', read, (error) =>
+    log.error({ errorName: errorName(error) }, 'landing-stats-refresh-failed'),
+  );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);
   every.unref();
