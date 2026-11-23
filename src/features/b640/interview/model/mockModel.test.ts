@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { criteriaRows, mockEyebrow, sessionChoice } from './mockModel';
 
 describe('sessionChoice', () => {
-  const session = (status: string, applicationId: string | null) => ({ status, applicationId });
+  const session = (
+    status: string,
+    applicationId: string | null,
+    questionTypes = ['behavioral'],
+  ) => ({
+    status,
+    applicationId,
+    questionTypes,
+  });
 
   it('resumes an unfinished session of this response, starts otherwise', () => {
     expect(sessionChoice(null, 'r1')).toBe('start');
@@ -10,6 +18,10 @@ describe('sessionChoice', () => {
     expect(sessionChoice(session('active', 'r1'), 'r1')).toBe('resume');
     expect(sessionChoice(session('paused', 'r1'), 'r1')).toBe('resume');
     expect(sessionChoice(session('active', 'r2'), 'r1')).toBe('other');
+  });
+
+  it('B780: задача System Design этого отклика (i03) в пробном интервью не продолжается — её сначала закончить', () => {
+    expect(sessionChoice(session('active', 'r1', ['system_design']), 'r1')).toBe('other');
   });
 });
 

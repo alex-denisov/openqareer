@@ -44,6 +44,7 @@ import {
 } from './sealedMatchedList';
 import { createStaleListCache, type StaleListAddress, type StaleListServed } from './staleListCache';
 import { primeRoleRequirements } from '../vacancies/techDirectorSignal';
+import { syncSection } from '../observability/syncSections';
 
 type CandidateStore = RouteDeps['candidateStore'];
 type DecisionProfile = ReturnType<CandidateStore['decisionProfileRepo']['get']>;
@@ -360,6 +361,16 @@ export function sealMatchedList(
   enabled: boolean = SEALED_MATCHED_LIST_ENABLED,
 ): void {
   if (!enabled) return;
+  syncSection('list:seal', () => writeSeal(input, choice, list, builtAt, log));
+}
+
+function writeSeal(
+  input: MatchedListInput,
+  choice: string,
+  list: MatchedList,
+  builtAt: number,
+  log: SealLog | undefined,
+): void {
   try {
     const startedAt = performance.now();
     const text = sealedListText(list, choice);
@@ -444,12 +455,14 @@ export function readSealedMatchedList(
   const choice = matchedListChoice(input);
   // B770: a list of another choice in memory does not stop this one's stored list.
   if (matchedListCache.holds(input.candidateId, choice)) return undefined;
-  const row = input.candidateStore.sealedMatchedLists?.read(
-    input.candidateId,
-    now - MATCHED_LIST_MAX_AGE_MS,
-    choice,
-  );
-  return row ? sealedListAnswering(row.text, choice) : undefined;
+  return syncSection('list:sealed-read', () => {
+    const row = input.candidateStore.sealedMatchedLists?.read(
+      input.candidateId,
+      now - MATCHED_LIST_MAX_AGE_MS,
+      choice,
+    );
+    return row ? sealedListAnswering(row.text, choice) : undefined;
+  });
 }
 
 /** Tests: what a new process starts with. */

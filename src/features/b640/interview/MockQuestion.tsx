@@ -11,6 +11,7 @@ import { useVoiceInput } from '../voice/useVoiceInput';
 import { Button, Icon, StatusLine, useDockHeight } from '../kit';
 import { buildNodePath } from '../routes';
 import { useShell } from '../shell/ShellContext';
+import { isSessionGone } from './data/mockApi';
 import { criteriaRows, mockEyebrow } from './model/mockModel';
 import { MockAnswerField } from './MockAnswerField';
 
@@ -19,6 +20,10 @@ interface QuestionProps {
   readonly session: InterviewSessionView;
   readonly question: InterviewQuestionView;
   readonly onSession: (next: InterviewSessionView) => void;
+  /** Тренировку заменили в другой вкладке: экран подхватывает текущую, набранный ответ остаётся. */
+  readonly onLost: (text: string) => void;
+  /** Ответ, набранный до замены тренировки. */
+  readonly draft?: string;
 }
 
 function Criteria({ question }: { readonly question: InterviewQuestionView }) {
@@ -44,15 +49,19 @@ function useQuestionActions(props: QuestionProps) {
   const [busy, setBusy] = useState<'answer' | 'move' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shownAt = useRef(Date.now());
-  async function run(kind: 'answer' | 'move', action: () => Promise<InterviewSessionView>) {
+  async function run(
+    kind: 'answer' | 'move',
+    action: () => Promise<InterviewSessionView>,
+  ): Promise<'ok' | 'failed' | 'gone'> {
     setBusy(kind);
     setError(null);
     try {
       props.onSession(await action());
-      return true;
+      return 'ok';
     } catch (reason) {
+      if (isSessionGone(reason)) return 'gone';
       setError(apiErrorMessage(reason, 'Не получилось. Попробуйте ещё раз.'));
-      return false;
+      return 'failed';
     } finally {
       setBusy(null);
     }
@@ -77,7 +86,7 @@ function useQuestionActions(props: QuestionProps) {
         session.status === 'completed' ||
         (await run('move', () =>
           transitionInterviewSession(session.id, session.version, 'finish'),
-        ));
+        )) !== 'failed';
       if (done) navigate(buildNodePath('i01', { responseId: props.response.id }));
     },
   };
@@ -144,7 +153,7 @@ function QuestionHead({ response, session, question }: QuestionProps) {
 /** Вопрос пробного интервью (I2): ответ текстом, разбор по критериям на месте. */
 export function MockQuestion(props: QuestionProps) {
   const { session, question } = props;
-  const [text, setText] = useState(question.answer?.text ?? '');
+  const [text, setText] = useState(question.answer?.text ?? props.draft ?? '');
   const [again, setAgain] = useState(false);
   const [empty, setEmpty] = useState(false);
   const actions = useQuestionActions(props);
@@ -152,7 +161,10 @@ export function MockQuestion(props: QuestionProps) {
   const answered = Boolean(question.answer) && !again;
   async function answer() {
     setEmpty(!text.trim());
-    if (text.trim() && (await actions.answer(text, again))) setAgain(false);
+    if (!text.trim()) return;
+    const result = await actions.answer(text, again);
+    if (result === 'gone') props.onLost(text);
+    if (result === 'ok') setAgain(false);
   }
   return (
     <section className="lead mi-lead" aria-labelledby="mi-title">
