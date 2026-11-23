@@ -7,6 +7,8 @@
  *   (строка, ключи, строки каталога), по нему шаг откатывается целиком;
  * - `cluster_split_progress` — большой кластер, который пишется частями
  *   (куски шаг за шагом, основатель последним), и шаг, открывший его журнал;
+ * - `cluster_split_revert_marks` — строки журнала, чей основатель уже
+ *   возвращён откатом частями (B782): второй раз его не переписывать;
  * - `vacancy_catalog_redirects` — старый ключ карточки → новый кластер, когда
  *   страница каталога переехала к куску.
  */
@@ -50,6 +52,9 @@ CREATE TABLE IF NOT EXISTS cluster_split_progress (
   next_index INTEGER NOT NULL,
   cluster_json_sha1 TEXT NOT NULL,
   updated_at INTEGER NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS cluster_split_revert_marks (
+  journal_id INTEGER PRIMARY KEY
 ) STRICT;
 CREATE TABLE IF NOT EXISTS vacancy_catalog_redirects (
   old_key TEXT PRIMARY KEY,
