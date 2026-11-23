@@ -13,6 +13,7 @@ import { approveFeedPosts, listFeedPosts } from './linkedinQueueApi';
 import { CommentQueue } from './CommentQueue';
 import { FeedHead, TopicsLink } from './FeedHead';
 import { useCommentPlan, type CommentPlan } from './useCommentPlan';
+import { useScreenChrome } from '../../shell/ShellContext';
 
 const REASONS: Readonly<Record<string, string>> = {
   not_found: 'черновик не найден',
@@ -36,7 +37,7 @@ function Item({
   if (index === 0)
     return (
       <li>
-        <FeedCard post={post} first approve={approve} onChanged={onChanged} />
+        <FeedCard key={post.draftId} post={post} first approve={approve} onChanged={onChanged} />
       </li>
     );
   const title =
@@ -50,7 +51,13 @@ function Item({
           </span>
           <Icon name="down" className="hire-ref-chev" />
         </summary>
-        <FeedCard post={post} first={false} approve={approve} onChanged={onChanged} />
+        <FeedCard
+          key={post.draftId}
+          post={post}
+          first={false}
+          approve={approve}
+          onChanged={onChanged}
+        />
       </details>
     </li>
   );
@@ -138,6 +145,8 @@ export function FeedScreen({ node }: SectionProps) {
   const load = useLoad(readFeed);
   const { plan, reload: reloadPlan } = useCommentPlan();
   const reload = () => (load.retry(), reloadPlan());
+  // a05b: с очередью на экране шаги колонки по макету плотнее (`data-mtight`).
+  useScreenChrome({ rootData: plan?.waiting.length ? { mtight: '1' } : {} });
   if (load.state === 'ready' && !load.data.items.length && !plan?.waiting.length)
     return <Empty node={node} reload={load.retry} />;
   return (

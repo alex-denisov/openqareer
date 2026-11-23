@@ -124,4 +124,16 @@ describe('B694 a05: карточка комментария по макету', 
     expect(button('Пропустить')).toBeUndefined();
     expect(variantsApi.listPostVariants).not.toHaveBeenCalled();
   });
+
+  it('одобрен, но снят с очереди (без слота): «Пропустить» есть, тупика нет', async () => {
+    vi.mocked(queueApi.skipFeedPost).mockResolvedValue({ draftId: 'f1', skipped: true });
+    const { onChanged } = await render(post({ state: 'approved', scheduledAt: null }));
+    expect(field().readOnly).toBe(true);
+    expect(button('Одобрить')).toBeUndefined();
+    expect(button('Другой вариант')).toBeUndefined();
+    await act(async () => click(button('Пропустить')!));
+    await flush();
+    expect(queueApi.skipFeedPost).toHaveBeenCalledWith('f1');
+    expect(onChanged).toHaveBeenCalled();
+  });
 });

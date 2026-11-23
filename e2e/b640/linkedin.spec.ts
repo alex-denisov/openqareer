@@ -270,6 +270,12 @@ test.describe('B664: LinkedIn нового кабинета', () => {
     await expect(page.locator('main .is-primary')).toHaveCount(1);
     await expectGates(page);
     if (testInfo.project.name !== 'mobile-390') return;
+    // Макет a05b (data-mtight): шаг колонки на 390 — 16, а не 24.
+    const gap = await page
+      .locator('.page.two > .col')
+      .first()
+      .evaluate((el) => getComputedStyle(el).rowGap);
+    expect(gap).toBe('16px');
     // На 390 главная кнопка стоит в полосе над навигацией, всплывашка — лист снизу.
     const button = await rhythm.boundingBox();
     expect(button && button.y + button.height).toBeGreaterThan(700);

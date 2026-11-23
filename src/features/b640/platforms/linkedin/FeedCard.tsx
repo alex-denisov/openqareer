@@ -63,6 +63,27 @@ function DraftActions({ post, first, approve, onChanged, text, setText }: DraftA
   );
 }
 
+/** Одобрен, но снят с очереди (без слота): без «Пропустить» карточка была бы тупиком. */
+function SkipOnly({ post, onChanged }: CardProps) {
+  const [failed, setFailed] = useState(false);
+  const onSkip = () => {
+    setFailed(false);
+    skipFeedPost(post.draftId)
+      .then(onChanged)
+      .catch(() => setFailed(true));
+  };
+  return (
+    <>
+      {failed ? <LiError text="Не удалось пропустить пост" onRetry={onSkip} /> : null}
+      <div className="actions">
+        <button className="row-act" type="button" onClick={onSkip}>
+          Пропустить
+        </button>
+      </div>
+    </>
+  );
+}
+
 /** Карточка комментария к посту из ленты (a05). В LinkedIn ничего не уходит: публикует кандидат. */
 export function FeedCard(props: CardProps) {
   const { post, first } = props;
@@ -97,6 +118,7 @@ export function FeedCard(props: CardProps) {
         onChange={(event) => setText(event.currentTarget.value)}
       />
       {draft ? <DraftActions {...props} text={text} setText={setText} /> : null}
+      {post.state === 'approved' && !post.scheduledAt ? <SkipOnly {...props} /> : null}
     </article>
   );
 }
