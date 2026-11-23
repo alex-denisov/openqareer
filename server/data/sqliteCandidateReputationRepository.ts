@@ -353,7 +353,7 @@ export class SqliteCandidateReputationRepository {
   updateFootprintFindingChecklist(
     candidateId: string,
     findingId: string,
-    patch: Pick<CandidateFootprintFinding, 'checklistMark' | 'profileFactId' | 'removal'>,
+    patch: Pick<CandidateFootprintFinding, 'checklistMark' | 'profileFactId' | 'removal' | 'confirmedByAdd'>,
   ): CandidateFootprintAudit | null {
     const audit = this.getLatestFootprintAudit(candidateId);
     if (!audit || !audit.findings.some((finding) => finding.id === findingId)) return null;
@@ -365,14 +365,19 @@ export class SqliteCandidateReputationRepository {
     return updated;
   }
 
-  /** B382: «Отменить» у «В профиль» — отметка и ссылка на факт снимаются с находки. */
+  /**
+   * B382: «Отменить» у «В профиль» — отметка и ссылка на факт снимаются с находки; подтверждение,
+   * которое дало само нажатие, тоже отменяется.
+   */
   clearFootprintProfileFact(candidateId: string, findingId: string): CandidateFootprintAudit | null {
     const audit = this.getLatestFootprintAudit(candidateId);
     if (!audit || !audit.findings.some((finding) => finding.id === findingId)) return null;
     const findings = audit.findings.map((finding) => {
       if (finding.id !== findingId) return finding;
-      const { checklistMark: _mark, profileFactId: _fact, ...rest } = finding;
-      return rest;
+      const { checklistMark: _mark, profileFactId: _fact, confirmedByAdd, ...rest } = finding;
+      return confirmedByAdd
+        ? { ...rest, review: 'unreviewed' as const, match: rest.automatedMatch }
+        : rest;
     });
     const updated = { ...audit, findings };
     this.saveFootprintAudit(updated);

@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import type { FeedPostItem } from '../../../../../shared/b640FeedComments';
-import { Button, Icon, StatusLine } from '../../kit';
+import { Icon, StatusLine } from '../../kit';
 import type { SectionProps } from '../../sections';
 import { useLoad } from '../../today/useLoad';
-import { formatSlot } from '../format';
 import { PlatformRetry } from '../PlatformRetry';
 import { BringPost } from './BringPost';
-import { CopyButton } from './CopyButton';
+import { FeedCard, type Approve } from './FeedCard';
 import { LiError } from './LiError';
 import { LinkedinList } from './LinkedinList';
 import { LinkedinNav } from './LinkedinNav';
@@ -22,68 +21,22 @@ const REASONS: Readonly<Record<string, string>> = {
   no_slot: 'нет свободного слота ритма',
 };
 
-type Approve = (ids: readonly string[]) => void;
-
-function Card({
-  post,
-  first,
-  approve,
-}: {
-  readonly post: FeedPostItem;
-  readonly first: boolean;
-  readonly approve: Approve;
-}) {
-  const id = `dr-${post.draftId}`;
-  const slot = formatSlot(post.scheduledAt);
-  return (
-    <article className={first ? 'lk-card is-next' : 'lk-card'} aria-label="Комментарий к посту">
-      {post.postExcerpt ? <p className="lk-lines">{post.postExcerpt}</p> : null}
-      {post.postUrl ? (
-        <a className="row-act" href={post.postUrl} target="_blank" rel="noopener noreferrer">
-          <Icon name="out" />
-          Открыть в LinkedIn
-        </a>
-      ) : null}
-      <div className="lk-dr-top">
-        <label className="lk-lbl" htmlFor={id}>
-          Черновик
-        </label>
-        {post.state === 'queued' ? (
-          <span className="tag">{slot ? `в очереди · ${slot}` : 'в очереди'}</span>
-        ) : null}
-        {post.state === 'published' ? <span className="tag ok">опубликован</span> : null}
-      </div>
-      <textarea className="lk-draft" id={id} rows={3} readOnly value={post.comment} />
-      <div className="actions">
-        {post.state === 'draft' ? (
-          <Button
-            variant={first ? 'primary' : 'default'}
-            icon="check"
-            onClick={() => approve([post.draftId])}
-          >
-            Одобрить
-          </Button>
-        ) : null}
-        <CopyButton text={post.comment} label="комментарий" caption="Скопировать" className="btn" />
-      </div>
-    </article>
-  );
-}
-
 /** Первый комментарий раскрыт, остальные свёрнуты до начала поста. */
 function Item({
   post,
   index,
   approve,
+  onChanged,
 }: {
   readonly post: FeedPostItem;
   readonly index: number;
   readonly approve: Approve;
+  readonly onChanged: () => void;
 }) {
   if (index === 0)
     return (
       <li>
-        <Card post={post} first approve={approve} />
+        <FeedCard post={post} first approve={approve} onChanged={onChanged} />
       </li>
     );
   const title =
@@ -97,7 +50,7 @@ function Item({
           </span>
           <Icon name="down" className="hire-ref-chev" />
         </summary>
-        <Card post={post} first={false} approve={approve} />
+        <FeedCard post={post} first={false} approve={approve} onChanged={onChanged} />
       </details>
     </li>
   );
@@ -150,7 +103,9 @@ function Comments({
       <LinkedinList
         items={posts}
         listClassName="col"
-        renderItem={(post, index) => <Item post={post} index={index} approve={approve.run} />}
+        renderItem={(post, index) => (
+          <Item post={post} index={index} approve={approve.run} onChanged={reload} />
+        )}
       />
     </>
   );
@@ -200,6 +155,8 @@ export function FeedScreen({ node }: SectionProps) {
         ) : null}
         {plan?.waiting.length ? (
           <CommentQueue
+            // a05b: без нового черновика наверху главная кнопка — «Настроить ритм».
+            primary={load.state === 'ready' && load.data.items[0]?.state !== 'draft'}
             rhythm={plan.rhythm}
             items={plan.waiting}
             onChanged={reloadPlan}
@@ -208,7 +165,8 @@ export function FeedScreen({ node }: SectionProps) {
         ) : null}
       </div>
       <div className="col">
-        {load.state === 'ready' ? <BringPost onCreated={load.retry} /> : null}
+        {/* Главная на ленте — «Одобрить» или «Настроить ритм»: «Подготовить комментарий» обычная. */}
+        {load.state === 'ready' ? <BringPost onCreated={load.retry} primary={false} /> : null}
       </div>
     </div>
   );

@@ -90,4 +90,60 @@ describe('источники схемы из metafile сборки веб-про
       'server/vacancies/indexes.ts',
     ]);
   });
+
+  it('правка кода рядом с DDL не меняет источник схемы, правка самого DDL — меняет', () => {
+    const before = {
+      'server/vacancies/sqliteVacancyPoolStore.ts':
+        'const SCHEMA = `CREATE TABLE IF NOT EXISTS pool (id TEXT);\nCREATE INDEX IF NOT EXISTS pool_id ON pool (id)`;\nexport function read() { return 1; }',
+    };
+    const metafile = { inputs: { 'server/vacancies/sqliteVacancyPoolStore.ts': {} } };
+    const of = (texts) => schemaSourcesOf(metafile, (path) => texts[path]);
+    const codeOnly = {
+      'server/vacancies/sqliteVacancyPoolStore.ts': before[
+        'server/vacancies/sqliteVacancyPoolStore.ts'
+      ].replace('return 1', 'return 2'),
+    };
+    expect(of(codeOnly)).toEqual(of(before));
+    const ddl = {
+      'server/vacancies/sqliteVacancyPoolStore.ts': before[
+        'server/vacancies/sqliteVacancyPoolStore.ts'
+      ].replace('id TEXT)', 'id TEXT, at INTEGER)'),
+    };
+    expect(of(ddl)).not.toEqual(of(before));
+  });
+
+  describe('перезапуск не теряется, когда схема меняется', () => {
+    const FILE = 'server/data/someStore.ts';
+    const metafile = { inputs: { [FILE]: {} } };
+    const BASE =
+      'const SCHEMA = `CREATE TABLE IF NOT EXISTS t (id TEXT)`;\nexport function read() { return 1; }';
+    const sources = (text) => schemaSourcesOf(metafile, () => text);
+    const changes = (next) => expect(sources(next)).not.toEqual(sources(BASE));
+
+    it('добавлен CREATE INDEX', () =>
+      changes(BASE.replace('`;', ';\nCREATE INDEX IF NOT EXISTS t_id ON t (id)`;')));
+    it('добавлен CREATE TRIGGER', () =>
+      changes(
+        BASE.replace('`;', ';\nCREATE TRIGGER t_ai AFTER INSERT ON t BEGIN SELECT 1; END`;'),
+      ));
+    it('добавлен ALTER TABLE … ADD COLUMN', () =>
+      changes(`${BASE}\ndb.exec('ALTER TABLE t ADD COLUMN at INTEGER');`));
+    it('добавлен DROP', () => changes(`${BASE}\ndb.exec('DROP INDEX IF EXISTS t_old');`));
+    it('файл без DDL получил схему', () => {
+      expect(sources('export const ok = 1')).toEqual([]);
+      expect(sources(BASE)).toHaveLength(1);
+    });
+
+    it('DDL из шаблонной строки: новая колонка в списке рядом — другой источник схемы', () => {
+      const templated = (columns) =>
+        `const COLUMNS = ${JSON.stringify(columns)};\nfor (const c of COLUMNS) db.exec(\`ALTER TABLE t ADD COLUMN \${c}\`);`;
+      expect(sources(templated(['a TEXT', 'b TEXT']))).not.toEqual(sources(templated(['a TEXT'])));
+    });
+
+    it('DDL из шаблонной строки: новое имя таблицы в константе — другой источник схемы', () => {
+      const named = (table) =>
+        `const TABLE = '${table}';\nconst SQL = \`CREATE TABLE IF NOT EXISTS \${TABLE} (id TEXT)\`;`;
+      expect(sources(named('t2'))).not.toEqual(sources(named('t1')));
+    });
+  });
 });

@@ -181,15 +181,19 @@ function RhythmForm({
 export function RhythmPopover({
   rhythm,
   onSaved,
+  primary = false,
 }: {
   readonly rhythm: LinkedinRhythm;
   readonly onSaved: (rhythm: LinkedinRhythm) => void;
+  /** a05b: на 390 главная кнопка уходит в полосу над навигацией, всплывашка — листом. */
+  readonly primary?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
   return (
     <span className="va-popwrap">
       <Button
+        variant={primary ? 'primary' : 'default'}
         icon="sliders"
         aria-haspopup="dialog"
         aria-expanded={open}
