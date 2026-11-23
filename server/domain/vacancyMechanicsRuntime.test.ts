@@ -430,6 +430,21 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(complete).toHaveBeenCalledTimes(asked);
   });
 
+  it('a job whose profile changed before the call is removed, not left failed, and asks no model', async () => {
+    const runtime = setup(() => false); const original = input();
+    const source: VacancyFitInput = { ...original, gates: {
+      role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
+      region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },
+    } };
+    const complete = vi.fn();
+    runtime.enqueue(source);
+    await runtime.runNext(fitClient(complete));
+    expect(complete).not.toHaveBeenCalled();
+    expect(runtime.takeStats()).toMatchObject({ failed: 1, lastError: 'profile_changed' });
+    const rows = runtime.database.prepare('SELECT COUNT(*) AS n FROM vacancy_fit_queue').get() as { n: number };
+    expect(rows.n).toBe(0);
+  });
+
   it('bounds automatic retries and lets an explicit request retry a failed job after recovery', async () => {
     const runtime = setup(); const original = input();
     const source: VacancyFitInput = { ...original, gates: {
