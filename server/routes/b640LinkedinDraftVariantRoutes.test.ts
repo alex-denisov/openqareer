@@ -20,7 +20,7 @@ function numberedWriter() {
   return vi.fn<Writer>(async () => ({ text: `Другой пост номер ${(calls += 1)}.` }));
 }
 
-async function setup(tier: 'pro' | 'free' = 'pro', writer = numberedWriter()) {
+async function setup(tier: 'executive' | 'pro' | 'free' = 'executive', writer = numberedWriter()) {
   const h = await createB640Harness({
     pool: () => [],
     linkedinDraftWriter: { writeDraft: writer },
@@ -119,19 +119,21 @@ describe('B694 a03b: «Другой вариант» поста', () => {
     expect(writer).toHaveBeenCalledTimes(3);
   });
 
-  it('Free — 402 по правилам тарифа, модель не зовётся', async () => {
-    const { send, writer, draftOf } = await setup('free');
-    const response = await send(variantsUrl(draftOf('flagged.test')), {});
-    expect(response.statusCode).toBe(402);
-    expect(response.json().error.code).toBe('paywall_required');
-    expect(writer).not.toHaveBeenCalled();
+  it('Free и Pro (постов на Pro нет, B778) — 402 по правилам тарифа, модель не зовётся', async () => {
+    for (const tier of ['free', 'pro'] as const) {
+      const { send, writer, draftOf } = await setup(tier);
+      const response = await send(variantsUrl(draftOf('flagged.test')), {});
+      expect(response.statusCode, tier).toBe(402);
+      expect(response.json().error.code).toBe('paywall_required');
+      expect(writer).not.toHaveBeenCalled();
+    }
   });
 
   it('сбой модели — 503 и ничего не сохранено; плохое пожелание — 400', async () => {
     const failing = vi.fn<Writer>(async () => {
       throw new Error('down');
     });
-    const { send, draftOf, stored } = await setup('pro', failing);
+    const { send, draftOf, stored } = await setup('executive', failing);
     const id = draftOf('flagged.test');
     expect((await send(variantsUrl(id), {})).statusCode).toBe(503);
     expect(stored()).toEqual([]);

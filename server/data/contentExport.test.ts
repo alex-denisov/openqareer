@@ -7,7 +7,7 @@ import { SqliteCandidateDraftRepository } from '../candidate/sqliteCandidateDraf
 import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
 import { forbiddenExportKeys } from './exportForbiddenKeys';
 import { FEED_POST_TABLES } from './feedPostSchema';
-import { LINKEDIN_QUEUE_TABLES } from './linkedinQueueSchema';
+import { ensureCommentRhythmColumns, LINKEDIN_QUEUE_TABLES } from './linkedinQueueSchema';
 import { LINKEDIN_SECTION_TABLES } from './linkedinSectionsSchema';
 import { createCandidate, createStore, directories } from './sqliteTestHarness';
 
@@ -41,7 +41,11 @@ function seed(database: DatabaseSync, candidateId: string, tag: string) {
   database.prepare('INSERT INTO candidate_linkedin_sections VALUES (?,?,?,?,?)').run(candidateId, 'about', `О себе ${tag}`, 'paste', AT);
   database.prepare('INSERT INTO candidate_linkedin_section_events VALUES (?,?,?,?)').run(candidateId, 'about', AT, null);
   database.prepare('INSERT INTO candidate_linkedin_offer_variants VALUES (?,?,?,?,?)').run(candidateId, 'headline', 1, `Заголовок ${tag}`, AT);
-  database.prepare('INSERT INTO candidate_linkedin_rhythm VALUES (?,?,?,?,?,?)').run(candidateId, 2, '["mon","thu"]', '09:00', 'Europe/Berlin', AT);
+  database.prepare('INSERT INTO candidate_linkedin_rhythm (candidate_id, posts_per_week, days, time, timezone, updated_at) VALUES (?,?,?,?,?,?)')
+    .run(candidateId, 2, '["mon","thu"]', '09:00', 'Europe/Berlin', AT);
+  ensureCommentRhythmColumns(database);
+  database.prepare("UPDATE candidate_linkedin_rhythm SET comments_per_day = 3, comment_days = '[\"mon\"]', comment_from = '09:00', comment_to = '12:00' WHERE candidate_id = ?")
+    .run(candidateId);
   database.prepare(`INSERT INTO candidate_linkedin_queue(id,candidate_id,draft_id,kind,scheduled_at,state,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?)`).run(`queue-${tag}`, candidateId, draft.id, 'post', AT, 'queued', AT, AT);
   new SqliteTextVariantRepository(database, KEY).add({
@@ -71,7 +75,10 @@ describe('B738 · 4: черновики, посты, варианты текст
     expect(content.linkedin.sections).toEqual([{ section: 'about', text: 'О себе свой', source: 'paste', capturedAt: AT }]);
     expect(content.linkedin.sectionEvents).toEqual([{ section: 'about', copiedAt: AT, pastedAt: null }]);
     expect(content.linkedin.offerVariants).toEqual([{ offerKey: 'headline', position: 1, text: 'Заголовок свой', createdAt: AT }]);
-    expect(content.linkedin.rhythm).toEqual({ postsPerWeek: 2, days: '["mon","thu"]', time: '09:00', timezone: 'Europe/Berlin', updatedAt: AT });
+    expect(content.linkedin.rhythm).toEqual({
+      postsPerWeek: 2, days: '["mon","thu"]', time: '09:00', timezone: 'Europe/Berlin', updatedAt: AT,
+      commentsPerDay: 3, commentDays: '["mon"]', commentFrom: '09:00', commentTo: '12:00',
+    });
     expect(content.linkedin.queue).toEqual([expect.objectContaining({ id: 'queue-свой', draftId, state: 'queued' })]);
     expect(JSON.stringify(content)).not.toContain('чужой');
     expect(forbiddenExportKeys(content)).toEqual([]);

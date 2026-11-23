@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
-  DEFAULT_LINKEDIN_POSTS_PER_WEEK, DEFAULT_LINKEDIN_RHYTHM_DAYS, DEFAULT_LINKEDIN_RHYTHM_TIME,
+  DEFAULT_LINKEDIN_COMMENT_RHYTHM, DEFAULT_LINKEDIN_POSTS_PER_WEEK, DEFAULT_LINKEDIN_RHYTHM_DAYS, DEFAULT_LINKEDIN_RHYTHM_TIME,
   LINKEDIN_POST_OPEN_URL, LINKEDIN_QUEUE_PREVIEW_MAX,
-  type LinkedinQueueItem, type LinkedinQueuePage, type LinkedinQueueState, type LinkedinRhythm, type LinkedinRhythmDay,
+  type LinkedinCommentRhythm, type LinkedinQueueItem, type LinkedinQueuePage, type LinkedinQueueState, type LinkedinRhythm, type LinkedinRhythmDay,
 } from '../../shared/b640LinkedinQueue';
-import { LINKEDIN_QUEUE_TABLES } from '../data/linkedinQueueSchema';
+import { ensureCommentRhythmColumns, LINKEDIN_QUEUE_TABLES } from '../data/linkedinQueueSchema';
 import { isLinkedinUrl } from './linkedinUrl';
-import { nextFreeSlot, weekKeyOfInstant } from './rhythmSlots';
+import { nextCommentSlot, nextFreeSlot, weekKeyOfInstant } from './rhythmSlots';
 
 interface QueueRow {
   id: string; draft_id: string; kind: 'post' | 'comment'; scheduled_at: string; state: string;
@@ -16,6 +16,16 @@ interface QueueRow {
 
 const SELECT = `SELECT q.id, q.draft_id, q.kind, q.scheduled_at, q.state, q.updated_at, q.reminded_at, d.text, d.target_post_url
   FROM candidate_linkedin_queue q JOIN candidate_drafts d ON d.id = q.draft_id AND d.candidate_id = q.candidate_id`;
+
+interface RhythmRow {
+  posts_per_week: number; days: string; time: string; timezone: string;
+  comments_per_day: number | null; comment_days: string | null; comment_from: string | null; comment_to: string | null;
+}
+
+function commentRhythmOf(row: RhythmRow): LinkedinCommentRhythm {
+  if (row.comments_per_day === null || !row.comment_days || !row.comment_from || !row.comment_to) return DEFAULT_LINKEDIN_COMMENT_RHYTHM;
+  return { perDay: row.comments_per_day, days: JSON.parse(row.comment_days) as LinkedinRhythmDay[], from: row.comment_from, to: row.comment_to };
+}
 
 export type EnqueueResult =
   | { readonly ok: true; readonly item: LinkedinQueueItem }
@@ -39,23 +49,63 @@ function toItem(row: QueueRow, now: number): LinkedinQueueItem {
 export class LinkedinQueueRepository {
   constructor(private readonly database: DatabaseSync, private readonly clock: () => number = Date.now) {
     database.exec(LINKEDIN_QUEUE_TABLES);
+    ensureCommentRhythmColumns(database);
   }
 
   getRhythm(candidateId: string, fallbackTimezone: string): LinkedinRhythm {
-    const row = this.database.prepare('SELECT posts_per_week, days, time, timezone FROM candidate_linkedin_rhythm WHERE candidate_id = ?')
-      .get(candidateId) as { posts_per_week: number; days: string; time: string; timezone: string } | undefined;
+    const row = this.database.prepare(`SELECT posts_per_week, days, time, timezone, comments_per_day, comment_days, comment_from, comment_to
+      FROM candidate_linkedin_rhythm WHERE candidate_id = ?`).get(candidateId) as RhythmRow | undefined;
     if (!row) {
-      return { postsPerWeek: DEFAULT_LINKEDIN_POSTS_PER_WEEK, days: DEFAULT_LINKEDIN_RHYTHM_DAYS, time: DEFAULT_LINKEDIN_RHYTHM_TIME, timezone: fallbackTimezone };
+      return {
+        postsPerWeek: DEFAULT_LINKEDIN_POSTS_PER_WEEK, days: DEFAULT_LINKEDIN_RHYTHM_DAYS, time: DEFAULT_LINKEDIN_RHYTHM_TIME,
+        timezone: fallbackTimezone, comments: DEFAULT_LINKEDIN_COMMENT_RHYTHM,
+      };
     }
-    return { postsPerWeek: row.posts_per_week, days: JSON.parse(row.days) as LinkedinRhythmDay[], time: row.time, timezone: row.timezone };
+    return {
+      postsPerWeek: row.posts_per_week, days: JSON.parse(row.days) as LinkedinRhythmDay[], time: row.time, timezone: row.timezone,
+      comments: commentRhythmOf(row),
+    };
   }
 
+  /** a05e: сохраняет ритм и ставит комментарии очереди (ещё не наступившие) на слоты нового ритма. */
   setRhythm(candidateId: string, rhythm: LinkedinRhythm): LinkedinRhythm {
-    this.database.prepare(`INSERT INTO candidate_linkedin_rhythm (candidate_id, posts_per_week, days, time, timezone, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(candidate_id) DO UPDATE SET posts_per_week = excluded.posts_per_week,
-      days = excluded.days, time = excluded.time, timezone = excluded.timezone, updated_at = excluded.updated_at`)
-      .run(candidateId, rhythm.postsPerWeek, JSON.stringify(rhythm.days), rhythm.time, rhythm.timezone, new Date(this.clock()).toISOString());
+    const { comments } = rhythm;
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database.prepare(`INSERT INTO candidate_linkedin_rhythm (candidate_id, posts_per_week, days, time, timezone, updated_at,
+        comments_per_day, comment_days, comment_from, comment_to)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(candidate_id) DO UPDATE SET posts_per_week = excluded.posts_per_week,
+        days = excluded.days, time = excluded.time, timezone = excluded.timezone, updated_at = excluded.updated_at,
+        comments_per_day = excluded.comments_per_day, comment_days = excluded.comment_days,
+        comment_from = excluded.comment_from, comment_to = excluded.comment_to`)
+        .run(candidateId, rhythm.postsPerWeek, JSON.stringify(rhythm.days), rhythm.time, rhythm.timezone, new Date(this.clock()).toISOString(),
+          comments.perDay, JSON.stringify(comments.days), comments.from, comments.to);
+      this.replanComments(candidateId, rhythm);
+      this.database.exec('COMMIT');
+    } catch (error: unknown) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
     return rhythm;
+  }
+
+  /** Строки комментариев, время которых ещё не пришло, по очереди занимают слоты ритма. */
+  private replanComments(candidateId: string, rhythm: LinkedinRhythm): void {
+    const nowIso = new Date(this.clock()).toISOString();
+    const moving = this.database.prepare(`SELECT id FROM candidate_linkedin_queue WHERE candidate_id = ? AND kind = 'comment'
+      AND state = 'queued' AND scheduled_at > ? ORDER BY scheduled_at ASC, rowid ASC`).all(candidateId, nowIso) as Array<{ id: string }>;
+    if (!moving.length) return;
+    const ids = new Set(moving.map((row) => row.id));
+    const kept = (this.database.prepare("SELECT id, scheduled_at FROM candidate_linkedin_queue WHERE candidate_id = ? AND state IN ('queued', 'done')")
+      .all(candidateId) as Array<{ id: string; scheduled_at: string }>).filter((row) => !ids.has(row.id)).map((row) => row.scheduled_at);
+    const update = this.database.prepare('UPDATE candidate_linkedin_queue SET scheduled_at = ?, reminded_at = NULL, updated_at = ? WHERE id = ?');
+    const taken = [...kept];
+    for (const row of moving) {
+      const slot = nextCommentSlot({ rhythm: rhythm.comments, timezone: rhythm.timezone, now: this.clock(), takenAt: taken });
+      if (!slot) return;
+      taken.push(slot);
+      update.run(slot, nowIso, row.id);
+    }
   }
 
   /**
@@ -128,7 +178,9 @@ export class LinkedinQueueRepository {
       const key = weekKeyOfInstant(row.scheduled_at, rhythm.timezone);
       postsByWeek.set(key, (postsByWeek.get(key) ?? 0) + 1);
     }
-    return nextFreeSlot({ rhythm, now: this.clock(), takenAt: rows.map((r) => r.scheduled_at), postsByWeek, respectWeeklyCap: kind === 'post' });
+    const takenAt = rows.map((r) => r.scheduled_at);
+    if (kind === 'comment') return nextCommentSlot({ rhythm: rhythm.comments, timezone: rhythm.timezone, now: this.clock(), takenAt });
+    return nextFreeSlot({ rhythm, now: this.clock(), takenAt, postsByWeek, respectWeeklyCap: true });
   }
 
   /** B695: строки, которые ждут публикации (и наступившие), — им положено напоминание. */
