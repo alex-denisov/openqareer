@@ -33,6 +33,7 @@ import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography'
 import { matchedRoleCountSteps } from '../vacancies/vacancyRoleCounts';
 import { runStepsYielding, type Steps } from '../vacancies/yieldingSteps';
 import { readCampaign } from './campaignContext';
+import { createPhaseTimer, type ListPhasesMs, type PhaseTimer } from './matchedListPhases';
 import type { RouteDeps } from './deps';
 import type { MatchedOrder } from './matchedVacancyFit';
 import {
@@ -122,6 +123,8 @@ export interface MatchedList {
   readonly prepareMs: number;
   readonly prepareRows: number;
   readonly listMs: number;
+  /** B770: время каждой фазы сборки без чужих ходов event loop. */
+  readonly phasesMs: ListPhasesMs;
 }
 
 export interface MatchedListInput {
@@ -252,32 +255,47 @@ function* levelGateSteps(
   return kept;
 }
 
-function* matchedListSteps(input: MatchedListInput) {
-  const { campaign, candidateStore, candidateId, filters, targetRoles, snapshot } = input;
-  const limits = readRowLimits(candidateStore, candidateId);
-  yield;
-  const finished = yield* finishMatchedRowSteps(snapshot, targetRoles, campaign, limits);
-  const matched = input.order(yield* levelGateSteps(finished, input));
-  // B766: requirements of every plain «Технический директор» in one query, before the role checks.
-  primeRoleRequirements(hypothesisRows(input));
-  yield;
-  const hypotheses = hypothesisRows(input);
-  const counts = yield* matchedRoleCountSteps(hypotheses, targetRoles);
+function* facetAndFilterSteps(
+  input: MatchedListInput,
+  matched: readonly MatchedVacancyItem[],
+  phase: PhaseTimer,
+) {
+  const { filters, targetRoles } = input;
   const readLevel = (item: MatchedVacancyItem) =>
     input.titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const facets = yield* matchedVacancyFacetSteps(
-    matched,
-    targetRoles,
-    readLevel,
-    input.sourceRegistry,
+  const facets = yield* phase.steps(
+    'facets',
+    matchedVacancyFacetSteps(matched, targetRoles, readLevel, input.sourceRegistry),
   );
-  const filtered = yield* matchedVacancyFilterSteps(
-    matched,
-    filters,
-    targetRoles,
-    readLevel,
-    input.sourceRegistry.map(({ id }) => id),
+  const filtered = yield* phase.steps(
+    'filters',
+    matchedVacancyFilterSteps(
+      matched,
+      filters,
+      targetRoles,
+      readLevel,
+      input.sourceRegistry.map(({ id }) => id),
+    ),
   );
+  return { facets, filtered };
+}
+
+function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
+  const { campaign, candidateStore, candidateId, targetRoles, snapshot } = input;
+  const limits = phase.run('limits', () => readRowLimits(candidateStore, candidateId));
+  yield;
+  const finished = yield* phase.steps(
+    'finish',
+    finishMatchedRowSteps(snapshot, targetRoles, campaign, limits),
+  );
+  const gated = yield* phase.steps('levelGate', levelGateSteps(finished, input));
+  const matched = phase.run('order', () => input.order(gated));
+  // B766: requirements of every plain «Технический директор» in one query, before the role checks.
+  phase.run('roleRequirements', () => primeRoleRequirements(hypothesisRows(input)));
+  yield;
+  const hypotheses = phase.run('hypotheses', () => hypothesisRows(input));
+  const counts = yield* phase.steps('roleCounts', matchedRoleCountSteps(hypotheses, targetRoles));
+  const { facets, filtered } = yield* facetAndFilterSteps(input, matched, phase);
   const catalogSummary = matchedCatalogSummary(
     input.catalogTotals?.(),
     roleLevelCount(hypotheses, targetRoles),
@@ -288,8 +306,10 @@ function* matchedListSteps(input: MatchedListInput) {
     },
   );
   yield;
-  const pageOffsets = yield* matchedPagePlanSteps(filtered);
-  const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
+  const pageOffsets = yield* phase.steps('pagePlan', matchedPagePlanSteps(filtered));
+  const campaignWithHypotheses = phase.run('campaign', () =>
+    readCampaign(candidateStore, candidateId, counts),
+  );
   const { observed, ...filteredCounts } = filteredFacetsOf(filtered);
   const withFiltered = { ...facets, filtered: filteredCounts };
   return {
@@ -308,12 +328,14 @@ async function buildMatchedList(input: MatchedListInput): Promise<MatchedList> {
   const startedAt = performance.now();
   const prepareRows = await input.order.prepare(input.snapshot);
   const listStartedAt = performance.now();
-  const list = await runStepsYielding(matchedListSteps(input));
+  const phase = createPhaseTimer();
+  const list = await runStepsYielding(matchedListSteps(input, phase));
   return {
     ...list,
     prepareMs: roundMs(listStartedAt - startedAt),
     prepareRows,
     listMs: roundMs(performance.now() - listStartedAt),
+    phasesMs: { ...input.order.preparePhases?.(), ...phase.read() },
   };
 }
 
@@ -338,7 +360,7 @@ export function sealMatchedList(
   try {
     const text = sealedListText(list, choice);
     if (!text) return;
-    const written = input.candidateStore.sealedMatchedLists?.write(input.candidateId, builtAt, text);
+    const written = input.candidateStore.sealedMatchedLists?.write(input.candidateId, builtAt, text, choice);
     if (written) log?.info({ ...written, bytes: text.length, rows: list.filtered.length }, 'matched-list-sealed');
   } catch (error) {
     log?.error({ errorName: errorName(error) }, 'matched-list-seal-failed');
@@ -371,8 +393,11 @@ export async function readMatchedList(
     buildAndSeal(input, address.choice, log),
     {
       continuing: input.filters.offset > 0,
-      onRebuilt: ({ prepareMs, prepareRows, listMs, filtered }) =>
-        log.info({ prepareMs, prepareRows, listMs, rows: filtered.length }, 'matched-list-rebuilt'),
+      onRebuilt: ({ prepareMs, prepareRows, listMs, phasesMs, filtered }) =>
+        log.info(
+          { prepareMs, prepareRows, listMs, phasesMs, rows: filtered.length },
+          'matched-list-rebuilt',
+        ),
       onRebuildFailed: (error) =>
         log.warn({ errorName: errorName(error) }, 'matched-list-rebuild-failed'),
     },
@@ -409,6 +434,7 @@ export function readSealedMatchedList(
   const row = input.candidateStore.sealedMatchedLists?.read(
     input.candidateId,
     now - MATCHED_LIST_MAX_AGE_MS,
+    choice,
   );
   return row ? sealedListAnswering(row.text, choice) : undefined;
 }

@@ -10,11 +10,14 @@ import { computeCatalogSalaryStats } from '../../vacancies/catalogSalaryStatsSto
 import { computeCatalogChips } from '../../vacancies/catalogChipStore';
 import { computeSalaryMarketSnapshots } from '../../salaryMarket/salaryMarketSnapshot';
 import { computeCatalogSitemaps } from '../../seo/catalogSitemapJob';
+import { chooseCardRolloutCandidates } from '../../seo/catalogCardRollout';
 import { computeAndWriteLanding } from '../../landing/landingResultWrite';
 import { applySqliteBusyTimeout } from '../../data/sqliteBusyTimeout';
 
 export interface HeavyReadArgs {
   readonly nowMs: number;
+  /** B761: сколько карточек выбрать в порцию открытия (`cardRolloutCandidates`). */
+  readonly quota?: number;
 }
 
 const JOBS = {
@@ -28,6 +31,8 @@ const JOBS = {
     computeSalaryMarketSnapshots(database, new Date(nowMs)),
   sitemaps: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
     computeCatalogSitemaps(database, new Date(nowMs)),
+  cardRolloutCandidates: (database: DatabaseSync, { nowMs, quota }: HeavyReadArgs) =>
+    chooseCardRolloutCandidates(database, new Date(nowMs), quota ?? 0),
   // B649-5: в процессе (тесты, dev) читатель и писатель — одно соединение.
   landingWrite: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
     computeAndWriteLanding(database, () => database, nowMs),

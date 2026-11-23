@@ -7,17 +7,13 @@ import type { CandidateExport } from './candidateStore';
  *
  * - `export` — данные лежат в выгрузке под этим ключом;
  * - `internal` — служебная строка без содержимого кандидата (счётчик, индекс, секрет, кэш);
- * - `gap` — данные кандидата, которых в выгрузке ещё нет; закрываются отдельной задачей.
- *   Таблицы дневника (`career_diary_*`) сюда не допускаются.
  */
 export type CandidateTableCoverage =
   | { readonly export: keyof CandidateExport }
   /** Ключ, который маршрут выгрузки добавляет поверх хранилища (`handleExportCandidate`). */
   | { readonly routeExport: 'reputationAudits' | 'footprintAudits' }
-  | { readonly internal: string }
-  | { readonly gap: string };
+  | { readonly internal: string };
 
-const GAP_AUTOMATION = 'автоотклики и hh.ru: в выгрузку пока не входят';
 const MIGRATION_COPY = 'временная копия таблицы при перестройке схемы';
 
 export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCoverage>> = {
@@ -125,6 +121,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_application_operations: { internal: 'кэш повторов запросов трекера' },
   matched_snapshot_seals: { internal: 'кэш подборки вакансий, пересчитывается' },
   sealed_matched_lists: { internal: 'кэш подборки вакансий, пересчитывается' },
+  sealed_matched_list_choices: { internal: 'кэш подборки вакансий, пересчитывается' },
   // Ещё не в выгрузке.
   candidate_notifications: { export: 'notifications' },
   candidate_notification_deliveries: { export: 'notifications' },
@@ -177,18 +174,18 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_status_signal_answers: { export: 'account' },
   b640_offer_choices: { export: 'account' },
   // B642: только тексты расшифровок (аудио не хранится); сегменты висят на записи.
-  interview_recordings: { gap: 'записи интервью и их расшифровки: в выгрузку пока не входят' },
-  interview_interviewers: { gap: 'имя собеседника из разбора интервью: в выгрузку пока не входит' },
-  candidate_auto_apply_consents: { gap: GAP_AUTOMATION },
-  candidate_auto_apply_journal: { gap: GAP_AUTOMATION },
-  candidate_auto_apply_queue: { gap: GAP_AUTOMATION },
-  candidate_auto_apply_schedule: { gap: GAP_AUTOMATION },
-  candidate_auto_apply_settings: { gap: GAP_AUTOMATION },
-  candidate_auto_apply_stops: { gap: GAP_AUTOMATION },
-  hh_apply_attempts: { gap: GAP_AUTOMATION },
-  hh_raise_schedules: { gap: GAP_AUTOMATION },
-  hh_raise_tasks: { gap: GAP_AUTOMATION },
-  hh_resume_snapshots: { gap: GAP_AUTOMATION },
+  interview_recordings: { export: 'interviewRecordings' },
+  interview_interviewers: { export: 'interviewRecordings' },
+  candidate_auto_apply_consents: { export: 'automation' },
+  candidate_auto_apply_journal: { export: 'automation' },
+  candidate_auto_apply_queue: { export: 'automation' },
+  candidate_auto_apply_schedule: { export: 'automation' },
+  candidate_auto_apply_settings: { export: 'automation' },
+  candidate_auto_apply_stops: { export: 'automation' },
+  hh_apply_attempts: { export: 'automation' },
+  hh_raise_schedules: { export: 'automation' },
+  hh_raise_tasks: { internal: 'очередь задач подъёма резюме: статус и время, без содержимого кандидата' },
+  hh_resume_snapshots: { export: 'automation' },
   recruiter_contacts: { export: 'contacts' },
   recruiter_contact_channels: { export: 'contacts' },
   recruiter_contact_jobs: { internal: 'очередь поиска контакта: статус задачи и время, без содержимого кандидата' },
