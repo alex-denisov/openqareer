@@ -212,7 +212,8 @@ test.describe('B654: раздел «Вакансии», подборка и со
       return route.fallback();
     });
     page.on('request', (request) => {
-      if (/\/assets\/CabinetB640-[^/]+\.js$/u.test(request.url()) && !authAnswered) chunkBeforeAuth = true;
+      if (/\/assets\/CabinetB640-[^/]+\.js$/u.test(request.url()) && !authAnswered)
+        chunkBeforeAuth = true;
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.locator(ROWS).first()).toBeVisible();
