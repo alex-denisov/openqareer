@@ -1,5 +1,5 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
-import { sameCareerRole } from './careerRoleKey';
+import { vacancyInCareerRole } from './techDirectorSignal';
 import { filterInSteps, runSteps, type Steps } from './yieldingSteps';
 
 /**
@@ -22,9 +22,7 @@ export function* matchedRoleCountSteps(
 ): Steps<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (const role of roles) {
-    const rows = yield* filterInSteps(matched, (item) =>
-      sameCareerRole(item.cluster.canonicalTitle, role),
-    );
+    const rows = yield* filterInSteps(matched, (item) => vacancyInCareerRole(item, role));
     counts[role] = rows.length;
   }
   return counts;

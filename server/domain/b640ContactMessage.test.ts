@@ -109,7 +109,7 @@ describe('B753: целевые роли по-русски и одна форма
 
   const base = { recipientName: 'Anton Zhabolenko', recipientCompany: 'Wildberries', targetRole: '' };
   it('строка целевых ролей по-русски в просьбе к модели', () => {
-    const wish = contactMessageWish({ ...base, kind: 'known_contact', targetRolesRu: ['Технический директор', 'Операционный директор'] });
+    const wish = contactMessageWish({ ...base, kind: 'known_contact', targetRoles: ['Технический директор', 'Операционный директор'] });
     expect(wish).toContain('«Технический директор», «Операционный директор»');
     expect(wish).toContain('английских названий целевых ролей');
   });
@@ -117,5 +117,37 @@ describe('B753: целевые роли по-русски и одна форма
   it('знакомому — одна форма обращения, по умолчанию «вы»', () => {
     expect(contactMessageWish({ ...base, kind: 'known_contact' })).toContain('на «вы»');
     expect(contactMessageWish({ ...base, kind: 'recruiter' })).not.toContain('на «вы»');
+  });
+});
+
+describe('B753: без вакансии, конец и язык (решение CPO 23.11)', () => {
+  const known = 'VP of Technology & IT Operations, Россети Цифра';
+  const base = { recipientName: 'Pavel Khudyakov', recipientCompany: 'Lamoda', targetRole: '' };
+
+  it('без вакансии в запросе текст о вакансии не принимается', () => {
+    const text = 'Здравствуйте, Pavel! Пишу по поводу открытой вакансии в Lamoda.';
+    expect(modelMessageRejection(text, known, 'known_contact', [], { withoutVacancy: true })).toBe('mentions_vacancy');
+    expect(modelMessageRejection(text, known, 'known_contact', [], { withoutVacancy: false })).toBeNull();
+  });
+
+  it('просьба к модели без вакансии: повод — компания и роль', () => {
+    const wish = contactMessageWish({ ...base, kind: 'known_contact' });
+    expect(wish).toContain('Вакансии в запросе нет');
+  });
+
+  it('просьба к модели: заканчивать просьбой, без «С уважением»', () => {
+    expect(contactMessageWish({ ...base, kind: 'known_contact' })).toContain('без «С уважением»');
+  });
+
+  it('английский черновик: язык назван, роли по-английски, правила «вы» и русских ролей нет', () => {
+    const wish = contactMessageWish({ ...base, kind: 'recruiter', language: 'en', targetRoles: ['CTO', 'COO'] });
+    expect(wish).toContain('на английском');
+    expect(wish).toContain('«CTO», «COO»');
+    expect(wish).not.toContain('по-русски');
+  });
+
+  it('английский черновик: английская роль не повод для повтора', () => {
+    const text = 'Hello Pavel! I am looking for a CTO role.';
+    expect(modelMessageRejection(text, known, 'known_contact', ['CTO'], { language: 'en' })).toBeNull();
   });
 });

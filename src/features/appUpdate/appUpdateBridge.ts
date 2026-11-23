@@ -122,6 +122,12 @@ export async function downloadAndInstall(
   }
 }
 
+/** B771: the version the installed app really runs (the release sets it, not package.json). */
+export async function installedAppVersion(): Promise<string | null> {
+  if (!isTauriEnvironment()) return null;
+  return invoke<string>('plugin:app|version');
+}
+
 export async function relaunch(): Promise<UpdateActionResult> {
   if (!isTauriEnvironment()) return { status: 'unavailable_in_web' };
   await invoke<void>('plugin:process|restart');

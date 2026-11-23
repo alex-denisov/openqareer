@@ -120,3 +120,37 @@ describe('careerRoleListKey: строка списка ролей по роли 
     );
   });
 });
+
+describe('sameCareerRole: аббревиатура в скобках роль не решает (B766)', () => {
+  it('Chief Transformation Officer (CTO) — не CTO: решает полное название', () => {
+    expect(
+      sameCareerRole('Chief Transformation Officer (CTO) – Insurance & Investments', 'CTO'),
+    ).toBe(false);
+  });
+
+  it('настоящие технические директора остаются в роли', () => {
+    for (const title of [
+      'Технический директор (CTO)',
+      'Технический директор (СТО)',
+      'CTO/Технический директор',
+      'Chief Technology Officer / Технический директор',
+      'Chief Technology Officer (CTO)',
+      'CTO',
+    ])
+      expect(sameCareerRole(title, 'CTO')).toBe(true);
+  });
+
+  it('скобка с другим смыслом, чем слова перед ней, роль решает, как раньше', () => {
+    expect(
+      sameCareerRole(
+        'Chief AI & Technology Officer (CTO) - Global Business Services - Dubai',
+        'CTO',
+      ),
+    ).toBe(true);
+    expect(sameCareerRole('Руководитель направления робототехники (CTO)', 'CTO')).toBe(true);
+  });
+
+  it('название из одной аббревиатуры в скобках сравнивается как есть', () => {
+    expect(sameCareerRole('(CTO)', 'CTO')).toBe(true);
+  });
+});

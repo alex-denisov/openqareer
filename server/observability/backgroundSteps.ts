@@ -31,13 +31,30 @@ export async function backgroundStep<T>(name: string, run: () => Promise<T>): Pr
   }
 }
 
-/** Шаги, которые шли в окне задержки: идущие и закончившиеся после начала окна. */
-export function heldBackgroundSteps(windowStart: number, now: number): string[] {
+/** Шаг в окне задержки и сколько миллисекунд окна он шёл. */
+export interface HeldStep {
+  readonly name: string;
+  readonly overlapMs: number;
+}
+
+/**
+ * Шаги, которые шли в окне задержки, по перекрытию с окном: длинное первым. Прод 23.11: список
+ * имён без длительности назвал 8 шагов в одной задержке 2,2 с — виновника было не отличить.
+ */
+export function heldBackgroundSteps(windowStart: number, now: number): HeldStep[] {
   const held = [
     ...active.values(),
     ...finished.filter((step) => (step.finishedAt ?? now) >= windowStart && step.startedAt <= now),
   ];
-  return [...new Set(held.map((step) => step.name))].slice(0, MAX_NAMED);
+  const byName = new Map<string, number>();
+  for (const step of held) {
+    const overlap = Math.min(step.finishedAt ?? now, now) - Math.max(step.startedAt, windowStart);
+    byName.set(step.name, Math.max(byName.get(step.name) ?? 0, overlap));
+  }
+  return [...byName.entries()]
+    .map(([name, overlap]) => ({ name, overlapMs: Math.max(0, Math.round(overlap)) }))
+    .sort((a, b) => b.overlapMs - a.overlapMs)
+    .slice(0, MAX_NAMED);
 }
 
 export function resetBackgroundSteps(): void {
