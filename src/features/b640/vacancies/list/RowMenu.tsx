@@ -7,6 +7,7 @@ import { safeHttpUrl } from '../format';
 import { HIDE_REASONS } from '../skipApi';
 import { parseShortDate } from '../vacancyLinks';
 import { sourceLinkLabel } from '../sourceLinkLabel';
+import { companyNodePath } from '../companyPath';
 
 export type MenuView = 'list' | 'hide' | 'applied';
 
@@ -154,7 +155,10 @@ function ListView({ item, runner, actions, onView }: { item: MatchedVacancyItem;
   return (
     <>
       <ul className="va-m-list">
-        <MenuButton icon="building" label="Хочу в компанию" disabled={runner.pending} onClick={() => runner.run(actions.want)} />
+        {/* B726: без компании отметить некого — как v04 без «О компании» (companyNodePath). */}
+        {companyNodePath(cluster.canonicalCompany) ? (
+          <MenuButton icon="building" label="Хочу в компанию" disabled={runner.pending} onClick={() => runner.run(actions.want)} />
+        ) : null}
         <MenuButton icon="check" label="Уже откликнулись" go onClick={() => onView('applied')} />
         <MenuButton icon="close" label="Не подходит" go cls="va-mi only-mob" onClick={() => onView('hide')} />
         {href ? (
