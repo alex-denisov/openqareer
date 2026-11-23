@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { CandidateMemory, CoachTurnStage } from '../../coach/coachApi';
+import type { CandidateMemory, CoachTurnStage, CoachTurnSubject } from '../../coach/coachApi';
 import { useTariffQuotas } from '../../tariffs/useTariffQuotas';
 import { Composer } from '../kit/Composer';
 import { Icon } from '../kit/Icon';
@@ -20,6 +20,8 @@ import { useVoiceInput } from '../voice/useVoiceInput';
 
 export interface DialogViewProps {
   readonly stage: CoachTurnStage;
+  /** B746: объект открытого экрана (отклик, вакансия); вопросы уходят с ним. */
+  readonly subject?: CoachTurnSubject;
   /** Записи на проверку открываются в этой же панели. */
   readonly reviewPath: string;
   readonly onReview: () => void;
@@ -149,8 +151,8 @@ function Ask({ onSubmit, busy, limit, tariffsPath }: AskProps) {
 }
 
 /** Разговор по теме раздела (макеты K1, K1b, K3, K7 и состояния K2, K3b, K4). */
-export function DialogView({ stage, reviewPath, onReview, tariffsPath }: DialogViewProps) {
-  const dialog = useDialog(stage);
+export function DialogView({ stage, subject, reviewPath, onReview, tariffsPath }: DialogViewProps) {
+  const dialog = useDialog(stage, subject);
   const quotas = useTariffQuotas(dialog.turnCount);
   // Записи, по которым решение принято здесь: их итог остаётся в ленте.
   const [decided, setDecided] = useState<readonly string[]>([]);

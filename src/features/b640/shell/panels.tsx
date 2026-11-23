@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ComponentType, type LazyExoticComponent } from 'react';
 import { panelPath } from '../consultant/panelRoute';
 import { stageOfNav } from '../consultant/model';
+import { subjectOfScreen } from '../consultant/screenSubject';
 import type { B640Nav } from '../routes';
 import { useShell } from './ShellContext';
 
@@ -27,7 +28,7 @@ export const NOTIFICATIONS_PANEL_ID = 'notif-pop';
 
 /** Панели поверх раздела: соседи `main` в сетке `.app`. */
 export function ShellPanels({ nav }: { readonly nav: B640Nav | null }) {
-  const { panel, openConsultant, closePanel } = useShell();
+  const { panel, match, openConsultant, closePanel } = useShell();
   const Notifications = NOTIFICATIONS_PANEL;
   if (!panel) return null;
   return (
@@ -36,6 +37,7 @@ export function ShellPanels({ nav }: { readonly nav: B640Nav | null }) {
         <ConsultantPanel
           view={panel.view}
           stage={stageOfNav(nav)}
+          subject={subjectOfScreen(match?.params ?? null)}
           named
           pathOf={panelPath}
           onView={openConsultant}

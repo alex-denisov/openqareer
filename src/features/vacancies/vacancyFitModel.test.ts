@@ -117,7 +117,7 @@ function mockupView(): VacancyFitView {
 describe('vacancyFitSentence: the 29.10 mockup text', () => {
   it('counts every requirement in the profile and names the unchecked ones as a label (01.11)', () => {
     expect(vacancyFitSentence(mockupView())).toBe(
-      '12 из 12 требований вакансии есть в профиле. Не проверены квизом: Kafka, Kubernetes.',
+      '12 из 12 требований вакансии есть в профиле. Без проверки навыков: Kafka, Kubernetes.',
     );
   });
   it('drops the second sentence when nothing is unchecked', () => {
@@ -160,7 +160,7 @@ describe('29.10 tails', () => {
       },
     };
     expect(vacancyFitSentence(marked)).toBe(
-      '5 из 5 требований вакансии есть в профиле. Не проверены квизом: Опыт.',
+      '5 из 5 требований вакансии есть в профиле. Без проверки навыков: Опыт.',
     );
   });
   it('offers the quiz even when the unchecked requirement is experience', () => {

@@ -4,7 +4,7 @@ import { MessageDraft } from '../../messages/MessageDraft';
 import { CtxHead } from '../../shell/CtxHead';
 import { rowFormat, rowGeo, type MoneyCurrency } from '../format';
 import { companyFacts } from './CompanyBlock';
-import { coachVerdict } from './fitRows';
+import { coachVerdict } from './coachVerdict';
 import { Fold } from './Fold';
 import { HireBlock } from './HireBlock';
 import { MoneyBlock, useTargetCurrency } from './MoneyBlock';
