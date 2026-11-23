@@ -5,23 +5,11 @@ import type { DossierDeps } from './collectRecruiterDossier';
 import { formatsOf, inferEmailFormat, samplesFromText } from './emailFormat';
 import type { EmailFormat, EmailSample } from './emailFormat';
 import { sharedFootprintRequestGate } from '../../osint/adapters/requestScheduler';
+import { contactBrokerUrl } from '../../../shared/contactBrokers';
 
-/** Базы контактов и «форматы почты»: чужие сборки, не публикация человека или компании. */
-export const CONTACT_BROKERS = [
-  'clay.com', 'rocketreach.co', 'zoominfo.com', 'leadiq.com', 'signalhire.com', 'contactout.com', 'hunter.io',
-  'apollo.io', 'lusha.com', 'email-format.com', 'emailformat.net', 'adapt.io', 'snov.io', 'skrapp.io', 'voilanorbert.com',
-  'peopledatalabs.com', 'spokeo.com', 'whitepages.com', 'truepeoplesearch.com', 'beenverified.com', 'radaris.com',
-  'nuwber.com', 'datanyze.com', 'uplead.com', 'kaspr.io', 'getprospect.com', 'findemails.com', 'emailsherlock.com',
-  'aeroleads.com', 'salesql.com', 'lead411.com', 'seamless.ai', 'wiza.co',
-];
-
+/** Источник досье — база контактов; неразборчивый адрес тоже не берём. */
 export function isContactBroker(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./u, '');
-    return CONTACT_BROKERS.some((site) => host === site || host.endsWith(`.${site}`)) || /email[-_]?format/iu.test(url);
-  } catch {
-    return true;
-  }
+  return contactBrokerUrl(url) ?? true;
 }
 
 /** Страницы сайта, где компании обычно публикуют людей и адреса. */

@@ -23,6 +23,8 @@ export interface CandidateFootprintFinding extends FootprintFinding {
   readonly staleAccount?: boolean;
   /** B544: the profile fact «Добавить в профиль» created from this finding. */
   readonly profileFactId?: string;
+  /** B382: «В профиль» само подтвердило находку; «Отменить» возвращает её в неразобранные. */
+  readonly confirmedByAdd?: boolean;
   /** B382: removal request sent by the candidate and the last recheck of the finding URL. */
   readonly removal?: FootprintRemoval;
 }

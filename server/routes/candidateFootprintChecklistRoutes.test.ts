@@ -36,6 +36,8 @@ const LEAK = 'a'.repeat(24);
 const TALK = 'b'.repeat(24);
 const OLD = 'c'.repeat(24);
 const TALK_AGAIN = 'd'.repeat(24);
+const LIKELY = 'e'.repeat(24);
+const BROKER = 'f'.repeat(24);
 
 async function setup() {
   const candidateStore = new SqliteCandidateStore({
@@ -59,6 +61,19 @@ async function setup() {
       finding(OLD, { staleAccount: true, title: 'Старый аккаунт' }),
       // Тот же доклад с другой площадки: другой регистр и пробелы.
       finding(TALK_AGAIN, { kind: 'mention', title: '  доклад о платёжной архитектуре,  2023.' }),
+      // Поиск счёл находку вашей, кандидат её ещё не разбирал.
+      finding(LIKELY, {
+        kind: 'publication',
+        title: 'Статья о тестировании платежей',
+        match: 'likely_self',
+        automatedMatch: 'likely_self',
+        review: 'unreviewed',
+      }),
+      finding(BROKER, {
+        kind: 'mention',
+        title: 'AeroLeads: контакты',
+        url: 'https://aeroleads.com/people/maria-sokolova',
+      }),
     ],
     ownershipConfirmedAt: '2026-10-05T09:00:00.000Z',
     startedAt: '2026-10-06T09:00:00.000Z',
@@ -182,6 +197,54 @@ describe('footprint checklist routes (B544)', () => {
         .memory.filter((entry) => entry.id !== 'resume-talk')
         .filter((entry) => /платёжной/u.test(entry.statement)),
     ).toHaveLength(0);
+  });
+
+  it('B382: «В профиль» на неразобранной находке, которую поиск счёл вашей, — подтверждение', async () => {
+    const { app, headers, candidateStore, candidate } = await setup();
+    const url = `/api/v1/candidate/footprint/findings/${LIKELY}/profile-fact`;
+    const added = await app.inject({ method: 'POST', url, headers });
+    expect(added.statusCode).toBe(200);
+    const stored = (added.json().data.audit.findings as CandidateFootprintFinding[]).find(
+      (entry) => entry.id === LIKELY,
+    );
+    expect(stored?.review).toBe('confirmed_self');
+    expect(stored?.checklistMark).toBe('added_to_profile');
+
+    // «Отменить» откатывает и факт, и подтверждение.
+    const undone = await app.inject({ method: 'DELETE', url, headers });
+    expect(undone.statusCode).toBe(200);
+    const back = (undone.json().data.audit.findings as CandidateFootprintFinding[]).find(
+      (entry) => entry.id === LIKELY,
+    );
+    expect(back?.review).toBe('unreviewed');
+    expect(back?.checklistMark).toBeUndefined();
+    expect(
+      candidateStore
+        .getSnapshot(candidate.id)
+        .memory.some((entry) => entry.id === stored?.profileFactId),
+    ).toBe(false);
+  });
+
+  it('B382: «Отменить» у подтверждённой раньше находки подтверждение не снимает', async () => {
+    const { app, headers } = await setup();
+    const url = `/api/v1/candidate/footprint/findings/${TALK}/profile-fact`;
+    await app.inject({ method: 'POST', url, headers });
+    const undone = await app.inject({ method: 'DELETE', url, headers });
+    const back = (undone.json().data.audit.findings as CandidateFootprintFinding[]).find(
+      (entry) => entry.id === TALK,
+    );
+    expect(back?.review).toBe('confirmed_self');
+  });
+
+  it('B382: базу контактов в профиль не перенести', async () => {
+    const { app, headers } = await setup();
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/footprint/findings/${BROKER}/profile-fact`,
+      headers,
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('finding_not_artifact');
   });
 
   it('B382: «Отменить» убирает факт, созданный из находки, и снимает отметку', async () => {
