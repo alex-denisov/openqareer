@@ -28,9 +28,9 @@ import type { RoleNameLanguage } from './roleNameLanguage';
  * Версия инструкции: входит в ключ кэша названных ролей, иначе новая
  * инструкция неделю не доходила бы до кандидатов с прежними фактами (27.10).
  */
-export const ROLE_NAMING_PROMPT_VERSION = 8;
+export const ROLE_NAMING_PROMPT_VERSION = 7;
 
-/** B748 (v8): уровень должности в titleRu — русским словом, латиницей только устоявшиеся C-level. */
+/** B748 (переводы v8): уровень должности в titleRu — русским словом, латиницей только устоявшиеся C-level. */
 const LEVEL_RULE = [
   'Уровень в titleRu — русским словом: VP — вице-президент, Head — руководитель, Lead — ведущий;',
   'латиницей остаются только CEO, CTO, CIO, CFO, COO, другие C-level — в скобках после русского',

@@ -206,6 +206,12 @@ describe('B748: переводы прошлой версии пересчиты�
 });
 
 describe('B748 v8: уровень латиницей пересчитывается по версии', () => {
+  it('версия переводов своя: правка проверки не сбрасывает кэш называния ролей', async () => {
+    const { ROLE_NAMING_PROMPT_VERSION } = await import('../domain/roleNaming');
+    expect(ROLE_TITLES_RU_VERSION).toBe(8);
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(7);
+  });
+
   it('«VP по ИТ-эксплуатации» прошлой версии заменяется русским названием уровня', async () => {
     const store = fakeStore({
       campaign: {
