@@ -148,6 +148,31 @@ describe('B744 · d02c: примеры целей под роль', () => {
     );
   });
 
+  it('B768: пока примеры под роль готовятся — «Загружаем примеры», общих нет; готовы — встают без перезагрузки', async () => {
+    let ready: (items: readonly { title: string; measure: string }[] | null) => void = () =>
+      undefined;
+    hints.getGoalExamples.mockReturnValue(new Promise((resolve) => (ready = resolve)));
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.ghost .re-line')?.textContent).toBe('Загружаем примеры');
+    expect(page.querySelectorAll('.gc-ex')).toHaveLength(0);
+    expect(page.querySelector('.ghost-cap')?.textContent).toBe(
+      'Пример для роли «Коммерческий директор»',
+    );
+    await act(async () => ready([{ title: 'Выполнить план выручки отдела', measure: 'от плана' }]));
+    expect(page.querySelector('.ghost .re-line')).toBeNull();
+    expect([...page.querySelectorAll('.gc-ex strong')].map((item) => item.textContent)).toEqual([
+      'Выполнить план выручки отдела',
+    ]);
+  });
+
+  it('B768: сбой модели — общие примеры с подписью «Пример»', async () => {
+    hints.getGoalExamples.mockRejectedValue(new Error('down'));
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.ghost .re-line')).toBeNull();
+    expect(page.querySelector('.ghost-cap')?.textContent).toBe('Пример');
+    expect(page.querySelectorAll('.gc-ex')).toHaveLength(3);
+  });
+
   it('примеров под роль нет — общие, подпись «Пример»; без роли модель не спрашиваем', async () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     expect(page.querySelector('.ghost-cap')?.textContent).toBe('Пример');

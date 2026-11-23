@@ -42,6 +42,18 @@ async function launched(autoInstall = false) {
 }
 
 describe('useDesktopUpdater', () => {
+  it('B771: a check says what it found — latest, available or failed', async () => {
+    const updater = createDesktopUpdater();
+    bridge.checkForUpdate.mockResolvedValueOnce({ status: 'up_to_date' });
+    await expect(updater.check()).resolves.toBe('latest');
+    bridge.checkForUpdate.mockRejectedValueOnce(new Error('offline'));
+    await expect(updater.check()).resolves.toBe('failed');
+    expect(updater.getStatus().state).toBe('idle');
+    bridge.checkForUpdate.mockResolvedValueOnce({ status: 'available', version: '1.1.196', currentVersion: '1.1.195' });
+    await expect(updater.check()).resolves.toBe('available');
+    await expect(updater.check()).resolves.toBe('busy');
+  });
+
   it('stays idle when the installation is current', async () => {
     bridge.checkForUpdate.mockResolvedValue({ status: 'up_to_date' });
     const { result } = await launched();
