@@ -44,7 +44,8 @@ async function withKey() {
     )
     .run(userId);
   const keys = () => database.prepare('SELECT id FROM user_passkeys').all();
-  return { auth, userId, keys, resets, added, close: () => database.close() };
+  const token = registered.sessionToken;
+  return { auth, userId, token, keys, resets, added, close: () => database.close() };
 }
 
 describe('B755: сброс пароля удаляет ключи входа', () => {
@@ -65,6 +66,22 @@ describe('B755: сброс пароля удаляет ключи входа', (
     try {
       await owner.auth.adminSetUserPassword(owner.userId, 'new-password-for-tests');
       expect(owner.keys()).toEqual([]);
+    } finally {
+      owner.close();
+    }
+  });
+
+  it('смена пароля удаляет ключи владельца вместе с сеансами', async () => {
+    const owner = await withKey();
+    try {
+      const changed = await owner.auth.changePassword(
+        owner.token,
+        PASSWORD,
+        'new-password-for-tests',
+      );
+      expect(changed?.sessionToken).toBeTruthy();
+      expect(owner.keys()).toEqual([]);
+      expect(owner.auth.authenticate(owner.token)).toBeNull();
     } finally {
       owner.close();
     }

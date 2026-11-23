@@ -270,7 +270,7 @@ function namedRoleHygieneIsWired(namer: unknown): boolean {
 }
 
 describe('buildRoleNamer', () => {
-  it('цепочка называния: deepseek-v4.1-flash → luna → Vertex, без бесплатных и Gemini AI Studio (B580)', () => {
+  it('цепочка называния: deepseek-v4.1-flash дважды → luna, без Vertex, бесплатных и Gemini AI Studio', () => {
     const built = buildRoleNamer({
       providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k', nvidia: 'k' },
       vertex: {
@@ -283,7 +283,6 @@ describe('buildRoleNamer', () => {
     });
 
     expect(describeRoleNamerQueue(built)).toEqual([
-      'vertex:gemini-3.8-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
@@ -291,7 +290,7 @@ describe('buildRoleNamer', () => {
     expect(namedRoleHygieneIsWired(built)).toBe(true);
   });
 
-  it('ставит Vertex первым, когда он настроен (решение владельца 04.11)', () => {
+  it('Vertex в называние не ставится и когда настроен (выключен решением владельца 20.11)', () => {
     const built = buildRoleNamer({
       providerCredentials: { openrouter: 'k' },
       vertex: {
@@ -303,7 +302,7 @@ describe('buildRoleNamer', () => {
       },
     });
 
-    expect(describeRoleNamerQueue(built)[0]).toBe('vertex:gemini-3.8-flash');
+    expect(describeRoleNamerQueue(built)).not.toContain('vertex:gemini-3.8-flash');
   });
 
   it('ступень Gemini передаёт thinkingLevel и заголовок доступа Vertex', async () => {
