@@ -60,3 +60,11 @@ describe('B753: сообщение знакомому — не отклик ра
     expect(wish).toContain('рекрутёру');
   });
 });
+
+describe('B753: длина сообщения в просьбе к модели', () => {
+  it('просит 3–4 коротких предложения и не длиннее 400 знаков', () => {
+    const wish = contactMessageWish({ kind: 'recruiter', recipientName: 'Ольга', recipientCompany: 'СБЕР', targetRole: '' });
+    expect(wish).toContain('3–4 коротких предложения');
+    expect(wish).toContain('Не длиннее 400 знаков');
+  });
+});
