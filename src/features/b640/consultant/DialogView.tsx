@@ -6,6 +6,7 @@ import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
 import { FactCard } from './FactCard';
 import {
+  dayMarks,
   factsByMessage,
   limitOf,
   pendingLabel,
@@ -64,6 +65,7 @@ function Feed({ dialog, placed, onDecide }: FeedProps) {
     () => new Map(dialog.replies.map((item) => [item.messageId, item])),
     [dialog.replies],
   );
+  const days = useMemo(() => dayMarks(dialog.messages), [dialog.messages]);
   const chat = useRef<HTMLDivElement>(null);
   const lastId = dialog.messages[dialog.messages.length - 1]?.id;
   useEffect(() => {
@@ -79,6 +81,7 @@ function Feed({ dialog, placed, onDecide }: FeedProps) {
         const extra = extras.get(message.id);
         return (
           <Fragment key={message.id}>
+            {days.has(message.id) ? <span className="day">{days.get(message.id)}</span> : null}
             <Message
               message={message}
               extra={extra ? <ReplyExtras extras={extra} memory={dialog.memory} /> : null}

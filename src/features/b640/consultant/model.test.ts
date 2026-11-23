@@ -4,6 +4,7 @@ import type { TariffQuotaSummary } from '../../tariffs/tariffQuotaApi';
 import {
   conversationTitle,
   dayLabel,
+  dayMarks,
   factsByMessage,
   limitOf,
   panelTitle,
@@ -143,5 +144,28 @@ describe('модель «Консультанта»', () => {
     expect(dayLabel(new Date(2026, 10, 16, 15, 2).toISOString(), now)).toBe('Сегодня, 15:02');
     expect(dayLabel(new Date(2026, 10, 11, 9, 30).toISOString(), now)).toBe('11 ноября');
     expect(dayLabel('не дата', now)).toBeNull();
+  });
+
+  // B645-2: в k01 разговор начинается меткой дня «Сегодня, 15:02», как в макете.
+  it('метка дня стоит у первого сообщения каждого дня разговора', () => {
+    const now = new Date(2026, 10, 16, 20, 0);
+    const at = (day: number, hour: number, minute: number) =>
+      new Date(2026, 10, day, hour, minute).toISOString();
+    const marks = dayMarks(
+      [
+        { id: 'a', role: 'user', content: 'q', at: at(11, 9, 30) },
+        { id: 'b', role: 'assistant', content: 'r', at: at(11, 9, 31) },
+        { id: 'c', role: 'user', content: 'q', at: at(15, 18, 5) },
+        { id: 'd', role: 'user', content: 'q', at: at(16, 15, 2) },
+        { id: 'e', role: 'assistant', content: 'r', at: at(16, 15, 3) },
+        { id: 'f', role: 'user', content: 'q' },
+      ],
+      now,
+    );
+    expect([...marks]).toEqual([
+      ['a', '11 ноября'],
+      ['c', 'Вчера, 18:05'],
+      ['d', 'Сегодня, 15:02'],
+    ]);
   });
 });
