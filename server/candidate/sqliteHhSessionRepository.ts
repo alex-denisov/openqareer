@@ -65,6 +65,11 @@ function toAttempt(row: AttemptRow): HhAttemptRow {
   };
 }
 
+/** Связанные данные снимка резюме hh.ru; выгрузка открывает снимок тем же ключом (B738 · 8). */
+export function hhResumeSnapshotScope(candidateId: string): string {
+  return `hh-resumes:${candidateId}`;
+}
+
 export class SqliteHhSessionRepository {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
@@ -82,7 +87,7 @@ export class SqliteHhSessionRepository {
   }
 
   private scope(candidateId: string): string {
-    return `hh-resumes:${candidateId}`;
+    return hhResumeSnapshotScope(candidateId);
   }
 
   getSnapshot(candidateId: string): HhResumeSnapshot | null {

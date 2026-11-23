@@ -16,9 +16,13 @@ import {
 import { isRoleTitleLabel } from '../domain/roleTitleLabel';
 import type { CandidateIdentity, ResumeEvidenceImport } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
-import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
+import { readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
-import { readRoleLevel } from './vacancyRoleContext';
+import {
+  CURRENT_SNAPSHOT_WAIT_MS,
+  readRoleSnapshot,
+  readRoleSnapshotOrCounting,
+} from './roleSnapshotRead';
 import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { roleTitleRu } from '../vacancies/roleTitleRu';
@@ -120,6 +124,8 @@ const DIALOGUE_QUESTIONS = [
 export type AssessmentContext =
   | { readonly state: 'role_not_selected' }
   | { readonly state: 'source_unavailable' }
+  /** B770: the role's vacancies are still being selected; the build goes on, a retry gets it. */
+  | { readonly state: 'counting' }
   | {
       readonly state: 'too_few_vacancies';
       readonly roleTitle: string;
@@ -144,14 +150,10 @@ export type AssessmentContext =
       readonly cases: ReturnType<typeof buildRoleSkillCases>;
     };
 
-type MatchedRoleSnapshot =
-  | { readonly state: 'source_unavailable' }
-  | {
-      readonly state: 'matched';
-      readonly vacancies: Awaited<ReturnType<typeof readMatchedSnapshot>>;
-    };
 
 const activeStarts = new WeakMap<RouteDeps, Map<string, Promise<unknown>>>();
+
+export { CURRENT_SNAPSHOT_WAIT_MS, readRoleSnapshot };
 
 export function registerRoleSkillAssessmentRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get(
@@ -187,6 +189,7 @@ export function registerRoleSkillAssessmentRoutes(app: FastifyInstance, deps: Ro
   registerRoleSkillAssessmentCaseRoutes(app, deps);
 }
 
+
 async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const candidate = authenticateCandidate(
     request,
@@ -216,7 +219,9 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
     return send({ state: 'result', run: latest, stale });
   }
 
-  const context = await readAssessmentContext(deps, candidate.id, role, true);
+  const context = await readAssessmentContext(deps, candidate.id, role, true, {
+    waitMs: CURRENT_SNAPSHOT_WAIT_MS,
+  });
   return send(context.state === 'ready' ? await withRussianContextNames(deps, reply, context) : context);
 }
 
@@ -411,44 +416,23 @@ async function readAssessmentContext(
   candidateId: string,
   role: AssessedRole | null,
   cached = false,
+  snapshotRead: MatchedPoolReadOptions = {},
 ): Promise<AssessmentContext> {
   if (!role) return { state: 'role_not_selected' };
-  const snapshot = await readRoleSnapshot(deps, candidateId, role.title);
+  const snapshot = await readRoleSnapshotOrCounting(deps, candidateId, role.title, snapshotRead);
+  if (!snapshot) return { state: 'counting' };
   if (snapshot.state !== 'matched') return snapshot;
   const reader = createRoleRequirementReader(deps);
   const build = () => summarizeAssessmentContext(role.title, role.version, snapshot.vacancies, reader);
   const key = `${titleKey(role.title)}\u0000${role.version}`;
-  return cached ? contextCache.read(snapshot.vacancies, key, build) : build();
+  // B775: a context with no requirements still being read changes only with its snapshot.
+  const settled = () => (reader?.pendingCount() ?? 0) === 0;
+  return cached ? contextCache.read(snapshot.vacancies, key, build, settled) : build();
 }
 
 /** The background pass builds what «Карьера» will read for a role (prod 19.11). */
 export async function warmAssessmentContext(deps: RouteDeps, candidateId: string, role: string) {
   await readAssessmentContext(deps, candidateId, resolveAssessedRole(deps, candidateId, role), true);
-}
-
-export async function readRoleSnapshot(
-  deps: RouteDeps,
-  candidateId: string,
-  roleTitle: string,
-  options: MatchedPoolReadOptions = {},
-): Promise<MatchedRoleSnapshot> {
-  const targetRoles = [roleTitle];
-  const { confirmedSkills } = readMatchProfile(deps.candidateStore, candidateId);
-  const targetLevel = readRoleLevel(deps.candidateStore, candidateId, roleTitle);
-  try {
-    const vacancies = await readMatchedSnapshot(
-      deps.multiSourceEngine,
-      candidateId,
-      confirmedSkills,
-      targetRoles,
-      targetLevel,
-      undefined,
-      options,
-    );
-    return { state: 'matched', vacancies };
-  } catch {
-    return { state: 'source_unavailable' };
-  }
 }
 
 export function summarizeAssessmentContext(

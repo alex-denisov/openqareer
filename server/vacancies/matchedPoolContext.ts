@@ -4,6 +4,7 @@ import type { deriveCandidateTargetLevel } from './candidateLevel';
 import {
   MatchedPoolSnapshots,
   type MatchedPoolReadOptions,
+  type MatchedSnapshotMiss,
   type MatchedSnapshotStore,
 } from './matchedPoolSnapshot';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
@@ -181,6 +182,14 @@ export function preloadMatchedSnapshots(
   candidateIds: readonly string[],
 ): Promise<number> {
   return snapshotsOf(engine).preload(candidateIds);
+}
+
+/** B770: a reader with no snapshot for its profile, for the journal. */
+export function setMatchedSnapshotMissLog(
+  engine: RouteDeps['multiSourceEngine'],
+  log: (miss: MatchedSnapshotMiss) => void,
+): void {
+  snapshotsOf(engine).setMissLog(log);
 }
 
 /** A rebuild behind an expired snapshot has no request to fail: its failure goes here. */

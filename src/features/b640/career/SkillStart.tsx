@@ -89,6 +89,14 @@ export function SkillStart({
       </section>
     );
   if (current.state === 'ready') return <AutoStart busy={busy} failed={failed} onStart={onStart} />;
+  if (current.state === 'counting')
+    return failed ? (
+      <BlockError text="Не удалось загрузить проверку навыков." onRetry={onRetry} />
+    ) : (
+      <section className="lead" aria-label="Проверка навыков" aria-live="polite">
+        <StatusLine state="wait" text="Считаем вакансии роли…" />
+      </section>
+    );
   if (current.state !== 'role_changed')
     return <BlockError text="Не удалось загрузить проверку навыков." onRetry={onRetry} />;
   return (
