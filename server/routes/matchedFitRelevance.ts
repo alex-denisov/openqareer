@@ -47,6 +47,39 @@ function roleKeyOf(role: string): string | null {
   return key.endsWith(':head') && roleOfTitle(role) ? key : null;
 }
 
+interface TitleFacts {
+  readonly roleId: string | undefined;
+  readonly grade: GradeRange | null;
+  readonly plain: string;
+  readonly rowKey: string | null;
+}
+
+/**
+ * B770 (prod 23.11, #1040): `prepareRoles` — 1,2–2,1 с своего времени на каждую сборку, это разбор
+ * названий, а не уступки event loop. Разбор зависит только от названия: он один на процесс.
+ */
+const MAX_TITLE_FACTS = 50_000;
+const titleFactsCache = new Map<string, TitleFacts>();
+
+/** Записей в кэше разбора — для журнала: 100 000 реальных названий прода заняли 54,8 МБ кучи. */
+export function titleFactsCount(): number {
+  return titleFactsCache.size;
+}
+
+function titleFacts(title: string): TitleFacts {
+  const known = titleFactsCache.get(title);
+  if (known) return known;
+  const facts: TitleFacts = {
+    roleId: roleOfTitle(title),
+    grade: gradeRangeOfTitle(title),
+    plain: plainWords(title),
+    rowKey: careerRoleRowKey(title),
+  };
+  if (titleFactsCache.size >= MAX_TITLE_FACTS) titleFactsCache.clear();
+  titleFactsCache.set(title, facts);
+  return facts;
+}
+
 /**
  * Та же роль: одна запись словаря и подходящий грейд, название дословно содержит роль либо один ключ роли.
  * `sameCareerRole` здесь не годится: он сводит всех «руководителей» функции и считает любые два
@@ -62,13 +95,11 @@ export function exactRoleTest(targetRoles: readonly string[]): ExactRoleTest {
   const roleKeys = new Set(targetRoles.map(roleKeyOf).filter((key) => key !== null));
   const known = new Map<string, boolean>();
   const decide = (title: string): boolean => {
-    const roleId = roleOfTitle(title);
-    const grades = roleId ? rolesById.get(roleId) : undefined;
-    if (grades?.some((grade) => gradesMeet(grade, gradeRangeOfTitle(title)))) return true;
-    const plain = plainWords(title);
-    if (words.some((role) => plain.includes(role))) return true;
-    const rowKey = careerRoleRowKey(title);
-    return rowKey !== null && roleKeys.has(rowKey);
+    const facts = titleFacts(title);
+    const grades = facts.roleId ? rolesById.get(facts.roleId) : undefined;
+    if (grades?.some((grade) => gradesMeet(grade, facts.grade))) return true;
+    if (words.some((role) => facts.plain.includes(role))) return true;
+    return facts.rowKey !== null && roleKeys.has(facts.rowKey);
   };
   return (title) => {
     const stored = known.get(title);
