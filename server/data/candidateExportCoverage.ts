@@ -104,6 +104,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   two_factor_login_challenges: { internal: 'отпечатки одноразовых проверок входа' },
   user_passkeys: { export: 'passkeys' },
   passkey_challenges: { internal: 'отпечатки одноразовых вызовов ключа доступа' },
+  app_sign_in_codes: { internal: 'отпечатки одноразовых кодов входа в приложение (60 с)' },
   assessments_product_case_only: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v14: { internal: MIGRATION_COPY },
   vacancy_subscriptions_v15: { internal: MIGRATION_COPY },
