@@ -2,10 +2,12 @@ import type { ReactNode } from 'react';
 import type { ApplicationStage } from '../../../../../shared/applicationStage';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../../kit';
+import { useIsMobile } from '../../kit/useMediaQuery';
 import { buildNodePath } from '../../routes';
 import { moneyView, rowDate, rowFormat } from '../../vacancies/format';
 import { FitCell } from '../../vacancies/list/VacancyRow';
 import { applicationTag, formatCount } from '../format';
+import { CompanyRolesTable } from './CompanyRolesTable';
 
 export interface CompanyVacanciesProps {
   readonly vacancies: readonly MatchedVacancyItem[];
@@ -48,12 +50,21 @@ function othersSub(item: MatchedVacancyItem): string {
   return [money, date].filter(Boolean).join(' · ');
 }
 
+/** B655: название ведёт в карточку вакансии v04, как «Открыть полностью» в подборке s07. */
+function VacancyTitle({ item }: { readonly item: MatchedVacancyItem }) {
+  return (
+    <Link className="row-title" to={buildNodePath('v04', { vacancyId: item.cluster.id })}>
+      {item.cluster.canonicalTitle}
+    </Link>
+  );
+}
+
 function RoleRow({ item, stage }: { readonly item: MatchedVacancyItem; readonly stage: ApplicationStage | undefined }) {
   const tag = applicationTag(stage);
   return (
     <li className="row co-vrow">
       <div className="co-vmain">
-        <div className="row-title">{item.cluster.canonicalTitle}</div>
+        <VacancyTitle item={item} />
         <RoleSub item={item} />
       </div>
       <span className="co-vfit">
@@ -84,7 +95,7 @@ function Others({ others, total }: { readonly others: readonly MatchedVacancyIte
         {others.map((item) => (
           <li className="row" key={item.cluster.id}>
             <div>
-              <div className="row-title">{item.cluster.canonicalTitle}</div>
+              <VacancyTitle item={item} />
               <div className="row-sub num">{othersSub(item)}</div>
             </div>
           </li>
@@ -94,10 +105,11 @@ function Others({ others, total }: { readonly others: readonly MatchedVacancyIte
   );
 }
 
-/** «Вакансии по вашим ролям»: совпадение, деньги, формат, статус отклика; ниже — остальные вакансии. */
+/** «Вакансии по вашим ролям»: на 1440 таблица s07, на 390 строки со статусом отклика; ниже — остальные вакансии. */
 export function CompanyVacancies(props: CompanyVacanciesProps) {
   const { vacancies, total, applications, moreBusy, moreFailed, onMore } = props;
   const left = total - vacancies.length;
+  const mobile = useIsMobile();
   return (
     <section className="mod" aria-labelledby="co-vac">
       {/* tabIndex: сюда переводит фокус «Откликнуться на вакансию» из пустых «Людей компании». */}
@@ -106,6 +118,8 @@ export function CompanyVacancies(props: CompanyVacanciesProps) {
       </h3>
       {vacancies.length === 0 ? (
         <p className="row-sub" role="status">Подходящих вакансий сейчас нет</p>
+      ) : !mobile ? (
+        <CompanyRolesTable vacancies={vacancies} />
       ) : (
         <ul className="rows co-vlist">
           {vacancies.map((item) => (

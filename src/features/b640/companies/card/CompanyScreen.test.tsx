@@ -16,7 +16,16 @@ vi.mock('../companiesApi', () => ({ getB640Company: vi.fn(), getB640CompanyPeopl
 vi.mock('../../../vacancies/candidateCompaniesApi', () => ({
   setCandidateCompanyWant: vi.fn(async () => undefined),
   removeCandidateCompanyWant: vi.fn(async () => undefined),
+  listCandidateCompanyWants: vi.fn(async () => []),
 }));
+// Таблица s07 на 1440: отклики кандидата и курсы ЦБ читает сама.
+vi.mock('../../../applications/applicationsApi', () => ({
+  listApplications: vi.fn(async () => []),
+  createApplication: vi.fn(),
+  patchApplication: vi.fn(),
+  restoreApplicationFromArchive: vi.fn(),
+}));
+vi.mock('../../../coach/coachApi', () => ({ getCurrencyRates: vi.fn(async () => undefined) }));
 
 // Ширина экрана для `useIsMobile`: в jsdom своего matchMedia нет.
 let mobile = false;
@@ -82,10 +91,9 @@ describe('v10b: карточка компании', () => {
     const view = mount(<CompanyScreen companyId={KEY} />);
     await flush();
     expect(view.container.querySelector('#co-name')!.textContent).toContain('Ладога Банк');
-    expect(view.container.querySelector('.lead-text')!.textContent).toBe('Москва · Банки');
-    const row = view.container.querySelector('.co-vrow')!;
-    expect(row.querySelector('div.row-title')!.textContent).toBe('Руководитель разработки');
-    expect(row.querySelector('.row-sub')!.textContent).toMatch(/480.*580.*гибрид · 11\.11/u);
+    expect(view.container.querySelector('.lead-text')!.textContent).toBe('Москва · Банки · данные с hh.ru, 10.11');
+    const row = view.container.querySelector('.vt .vt-row')!;
+    expect(row.querySelector('.vt-toggle')!.textContent).toBe('Руководитель разработки');
     expect(row.querySelector('.vt-fit')!.textContent).toContain('86');
     expect(view.container.querySelector('.more-n summary')!.textContent).toBe('Другие вакансии компании · 1');
     const rows = [...view.container.querySelectorAll('.co-person')];
@@ -130,7 +138,73 @@ describe('v10b: карточка компании', () => {
     view.unmount();
   });
 
+  it('B655: на 1440 — таблица s07 с сортировкой по столбцам макета', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card({}, [vacancy('cl-1', 'Руководитель разработки', 70), vacancy('cl-2', 'Тимлид', 90)]));
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    const heads = [...view.container.querySelectorAll('.vt thead .vt-sort')].map((node) => node.textContent);
+    expect(heads).toEqual(['Роль', 'Компания', 'Деньги', 'Совпадение', 'Локация', 'Формат', 'Дата']);
+    expect(view.container.querySelector('.vt .vt-acts-h')!.textContent).toBe('Действия');
+    expect(view.container.querySelector('.co-vrow')).toBeNull();
+    const titles = () => [...view.container.querySelectorAll('.vt .vt-toggle')].map((node) => node.textContent);
+    click(view.container.querySelector<HTMLButtonElement>('.vt-th.vt-fit .vt-sort')!);
+    await flush();
+    const first = titles();
+    click(view.container.querySelector<HTMLButtonElement>('.vt-th.vt-fit .vt-sort')!);
+    await flush();
+    expect(titles()).toEqual([...first].reverse());
+    view.unmount();
+  });
+
+  it('B655: на 1440 название раскрывает строку со ссылкой на карточку вакансии', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    click(view.container.querySelector<HTMLButtonElement>('.vt .vt-toggle')!);
+    await flush();
+    expect(view.container.querySelector('.vt a[href="/app/vacancies/cl-1"]')).not.toBeNull();
+    view.unmount();
+  });
+
+  it('B655: на 390 строки как были, название — ссылка на карточку вакансии', async () => {
+    mobile = true;
+    vi.mocked(api.getB640Company).mockResolvedValue(card());
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    expect(view.container.querySelector('.vt')).toBeNull();
+    const row = view.container.querySelector('.co-vrow')!;
+    const title = row.querySelector<HTMLAnchorElement>('a.row-title')!;
+    expect(title.textContent).toBe('Руководитель разработки');
+    expect(title.getAttribute('href')).toBe('/app/vacancies/cl-1');
+    expect(row.querySelector('.row-sub')!.textContent).toMatch(/480.*580.*гибрид · 11\.11/u);
+    expect(row.querySelector('.vt-fit')!.textContent).toContain('86');
+    const other = view.container.querySelector<HTMLAnchorElement>('.more-n a.row-title')!;
+    expect(other.getAttribute('href')).toBe('/app/vacancies/cl-9');
+    view.unmount();
+  });
+
+  it('B655: подпись шапки — город, отрасль, источники и дата; без отрасли её нет', async () => {
+    vi.mocked(api.getB640Company).mockResolvedValue(
+      card({
+        industry: null,
+        sources: [
+          { name: 'hh.ru', observedAt: '2026-11-08T09:00:00.000Z' },
+          { name: 'LinkedIn', observedAt: '2026-11-10T09:00:00.000Z' },
+        ],
+      }),
+    );
+    people([]);
+    const view = mount(<CompanyScreen companyId={KEY} />);
+    await flush();
+    expect(view.container.querySelector('.lead-text')!.textContent).toBe('Москва · данные с hh.ru и LinkedIn, 10.11');
+    view.unmount();
+  });
+
   it('статус отклика вместо кнопки «Откликнуться»', async () => {
+    mobile = true;
     vi.mocked(api.getB640Company).mockResolvedValue({ ...card(), applications: { 'cl-1': 'interview' } });
     people([]);
     const view = mount(<CompanyScreen companyId={KEY} />);

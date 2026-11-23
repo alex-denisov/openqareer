@@ -3,7 +3,7 @@ import type { B640CompanyPerson } from '../../../../../shared/b640Companies';
 import { ActionDock, Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { useScreenChrome } from '../../shell/ShellContext';
-import { companyAbout } from '../format';
+import { companyAbout, companyFacts } from '../format';
 import { WantButton } from '../list/CompanyRow';
 import { RetryLine } from '../RetryLine';
 import { writeToLabel } from '../writeTo';
@@ -80,7 +80,7 @@ function HeadActions({ card, want, known, onWrite }: HeadProps) {
  *  Рендерятся оба блока, ширину переключает CSS: так шапка не зависит от того, успел ли сработать медиазапрос в JS. */
 function Head(props: HeadProps) {
   const { company } = props.card.details;
-  const facts = [company.location, company.industry].filter(Boolean).join(' · ');
+  const facts = companyFacts(company);
   const about = companyAbout(company);
   const hasActions = Boolean(props.known) || !company.want;
   return (

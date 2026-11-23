@@ -32,6 +32,18 @@ export function shortDate(iso: string): string {
   return `${day}.${month}`;
 }
 
+/** B655, подпись шапки по макету v10b: «Москва · Банки · данные с hh.ru и LinkedIn, 10.11»; пустая часть выпадает. */
+export function companyFacts(input: {
+  readonly industry: string | null;
+  readonly location: string | null;
+  readonly sources: readonly { readonly name: string; readonly observedAt: string }[];
+}): string {
+  const names = [...new Set(input.sources.map((source) => source.name))];
+  const latest = input.sources.map((source) => source.observedAt).sort().at(-1);
+  const data = names.length ? `данные с ${names.join(' и ')}${latest ? `, ${shortDate(latest)}` : ''}` : '';
+  return [input.location, input.industry, data].filter(Boolean).join(' · ');
+}
+
 /** Подпись ⓘ компании: отрасль, город, источники с датой. */
 export function companyAbout(input: {
   readonly industry: string | null;
