@@ -1,0 +1,9 @@
+{
+  "productName": "OpenQareer Dev",
+  "identifier": "com.openqareer.desktop.dev",
+  "bundle": {
+    "macOS": {
+      "infoPlist": "Info.dev.plist"
+    }
+  }
+}

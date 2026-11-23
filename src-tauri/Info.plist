@@ -6,5 +6,16 @@
   <string>openqareer записывает ваш голос: на собеседовании — чтобы разобрать встречу, в ответах — чтобы вы могли диктовать текст.</string>
   <key>NSScreenCaptureUsageDescription</key>
   <string>openqareer записывает звук собеседника на собеседовании, чтобы разобрать его после встречи.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.openqareer.desktop.sign-in</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>openqareer</string>
+      </array>
+    </dict>
+  </array>
 </dict>
 </plist>

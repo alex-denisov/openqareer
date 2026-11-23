@@ -46,3 +46,12 @@ export async function getGoalBaseline(indicator: string): Promise<GoalBaseline |
   if (!isText(data.quote) || !/^\d{4}-\d{2}-\d{2}$/u.test(String(data.entryDate))) return null;
   return { value: data.value, quote: data.quote, entryDate: String(data.entryDate) };
 }
+
+/** Русское название роли для текста d02c, как на «Карьере»; `null` — русского нет. */
+export async function getRoleTitleRu(title: string): Promise<string | null> {
+  const data = await readData<{ titleRu?: unknown } | null>(
+    await apiFetch(`${ROOT}/role-title-ru?title=${encodeURIComponent(title)}`),
+  );
+  const resolved = data?.titleRu;
+  return isText(resolved) ? resolved : null;
+}

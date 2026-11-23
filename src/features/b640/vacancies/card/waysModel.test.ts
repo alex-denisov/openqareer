@@ -21,7 +21,7 @@ const friend = {
 };
 
 function input(overrides: Partial<WaysInput> = {}): WaysInput {
-  return { sources: [hh], primaryUrl: 'https://hh.ru/vacancy/1', ...overrides };
+  return { sources: [hh], primaryUrl: 'https://hh.ru/vacancy/1', company: 'Ладога', ...overrides };
 }
 
 describe('applyWays', () => {

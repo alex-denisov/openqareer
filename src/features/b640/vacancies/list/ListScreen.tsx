@@ -184,7 +184,7 @@ export function ListScreen() {
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
         />
-        <SkillLine roles={pool.campaign?.roles.value ?? []} />
+        <SkillLine roles={pool.campaign?.roles.value ?? []} ready={!pool.loading} />
         <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {empty && (pool.loading || retrying) ? <LoadingLine /> : null}

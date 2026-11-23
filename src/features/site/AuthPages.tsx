@@ -6,6 +6,7 @@ import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/le
 import { AuthCardHeader, AuthInputField } from './AuthPageComponents';
 import { TwoFactorLoginStep } from './TwoFactorLoginStep';
 import { usePasskeyAutofill } from './usePasskeyAutofill';
+import { BrowserSignInButton } from './BrowserSignInButton';
 
 export { AuthCardHeader, AuthInputField };
 export type { AuthInputFieldProps } from './AuthPageComponents';
@@ -171,6 +172,7 @@ function LoginForm({
           {form.busy ? 'Входим...' : 'Войти в кабинет'}
         </button>
       </form>
+      <BrowserSignInButton disabled={form.busy} onSignedIn={onSignedIn} />
     </>
   );
 }

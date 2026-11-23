@@ -90,6 +90,13 @@ describe('B698: POST contact-messages', () => {
     expect(b.text).not.toContain('300');
   });
 
+  it('B753: знакомому «Откликаюсь на вакансию…» не принимается — шаблон', async () => {
+    const formula = await setup('Анна, добрый день! Откликаюсь на вакансию директора по данным в Альфа.');
+    const text = (await formula.draft()).json().data.text as string;
+    expect(text).not.toContain('Откликаюсь');
+    expect(text).toContain('Анна');
+  });
+
   it('проверяет тело: нужен ровно один получатель, вид из списка, чужой контакт — 404', async () => {
     const { send, draft, seed } = await setup();
     await draft();
@@ -118,6 +125,25 @@ describe('B698: POST contact-messages', () => {
     expect(JSON.stringify(res.json())).not.toMatch(/maria@|\+7000|email|phone/iu);
     expect(writer.calls[0]?.vacancy.title).toBe('Директор по данным');
     expect((await send('POST', BASE, 'flagged.test', { recruiterId: 'rec1', kind: 'recruiter' })).statusCode).toBe(404);
+  });
+});
+
+describe('B753: своя цепочка сообщения', () => {
+  it('черновик пишет писатель сообщений, писатель письма не вызывается', async () => {
+    const letter = stubWriter('Письмо работодателю');
+    const contact = stubWriter('Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?');
+    const h = await createB640Harness({ pool: () => [], coverLetterWriter: letter, contactMessageWriter: contact });
+    closers.push(h.close);
+    const own = h.candidateIds['flagged.test'];
+    h.candidates.saveResumeDraft(own, { ...EMPTY_RESUME_DRAFT, targetRole: 'Директор по данным',
+      candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline: 'Руководитель аналитики' } }, []);
+    const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
+    await h.app.inject({ method: 'PUT', url: `${OLD}/anna`, headers,
+      payload: { fullName: 'Анна Ким', companyName: 'Альфа', roleTitle: 'Рекрутер', relationship: 'Коллега', strength: 'strong' } });
+    const res = await h.app.inject({ method: 'POST', url: BASE, headers, payload: { contactId: 'anna', kind: 'known_contact' } });
+    expect(res.json().data.text).toContain('Давно не общались');
+    expect(contact.calls).toHaveLength(1);
+    expect(letter.calls).toHaveLength(0);
   });
 });
 
