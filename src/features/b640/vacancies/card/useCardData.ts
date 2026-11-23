@@ -76,7 +76,8 @@ const GONE_CODES: ReadonlySet<string> = new Set(['vacancy_not_found', 'vacancy_g
 
 /**
  * B715: вакансии нет в загруженной подборке (ссылка hh.ru из «Своей вакансии», вакансия после
- * отклика, прямой адрес) — карточка читает её отдельно по тому же id.
+ * отклика, прямой адрес) — карточка читает её отдельно по тому же id. B654: и пока подборка
+ * ещё читается — карточка не ждёт её страниц.
  */
 function useSingleVacancy(
   vacancyId: string,
@@ -125,7 +126,8 @@ export function useCardData(vacancyId: string): CardData {
   const rates = useCurrencyRates();
   const links = useVacancyLinks();
   const pooled = pool.matched.find((entry) => entry.cluster.id === vacancyId);
-  const single = useSingleVacancy(vacancyId, !pooled && !pool.loading);
+  // B654: не ждём подборку (страницами — секунды): своя вакансия одним запросом по id.
+  const single = useSingleVacancy(vacancyId, !pooled);
   const item = pooled ?? (single.read?.state === 'ready' ? single.read.item : undefined);
   const contacts = useOptional(() => getRecruiterContacts(vacancyId), vacancyId);
   const circles = useOptional(() => getVacancyConnectionCircles(vacancyId), vacancyId);

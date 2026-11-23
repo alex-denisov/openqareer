@@ -40,6 +40,8 @@ import {
   ROLE_DIGEST_SOURCE_TYPE,
   roleDigestKey,
 } from '../domain/roleVacancyDigest';
+import { salaryAboveFloor, type DigestFloor, type DigestVacancy } from '../domain/roleDigestMarks';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
@@ -368,6 +370,24 @@ function todayNewVacancies(
 }
 
 /** B671: одна запись «Новые вакансии по вашей роли» на роли поиска в сутки; набор дня дописывается. */
+/** Порог — «Зарплата от» в решениях кандидата; без него подписи «выше …» нет. */
+function digestFloorOf(deps: RouteDeps, candidateId: string): DigestFloor | null {
+  const profile = deps.candidateStore.decisionProfileRepo?.get(candidateId) ?? null;
+  const amount = profile?.salaryFloor;
+  return amount && amount > 0 ? { amount, currency: profile?.salaryCurrency ?? 'RUB' } : null;
+}
+
+function digestVacanciesOf(
+  vacancies: readonly TodayNewVacancy[],
+  floor: DigestFloor | null,
+): DigestVacancy[] {
+  const rates = floor ? getCurrencyRates() : undefined;
+  return vacancies.map((vacancy) => ({
+    id: vacancy.clusterId,
+    aboveFloor: floor ? salaryAboveFloor(vacancy.salary, floor, rates) : false,
+  }));
+}
+
 function recordFreshVacancyNotification(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -377,7 +397,8 @@ function recordFreshVacancyNotification(
 ): void {
   if (!vacancies.length) return;
   const now = new Date();
-  const ids = vacancies.map((vacancy) => vacancy.clusterId);
+  const floor = digestFloorOf(deps, candidateId);
+  const marked = digestVacanciesOf(vacancies, floor);
   recordMergedNotification(
     deps,
     request,
@@ -389,7 +410,7 @@ function recordFreshVacancyNotification(
       idempotencyKey: roleDigestKey(digestDay(now), roles),
       createdAt: now.toISOString(),
     },
-    (stored) => mergeDigestMarks(stored, ids),
+    (stored) => mergeDigestMarks(stored, marked, floor),
   );
 }
 

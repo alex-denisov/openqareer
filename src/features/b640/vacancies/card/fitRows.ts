@@ -3,7 +3,6 @@ import type {
   VacancyFitView,
 } from '../../../../../shared/vacancyFit';
 import { vacancyFitPercent } from '../../../../../shared/vacancyFitPercent';
-import { vacancyFitSentence } from '../../../vacancies/vacancyFitModel';
 import { pluralRu } from '../format';
 
 export type FitStatus = VacancyFitRequirementAssessment['status'];
@@ -82,14 +81,4 @@ export function sourceLine(view: VacancyFitView | undefined, sourceName: string)
   const date = shortDate(view?.result?.calculatedAt);
   const head = ['из текста вакансии', sourceName, date].filter(Boolean).join(', ');
   return `Требования — ${head} · ${count} ${pluralRu(count, 'требование', 'требования', 'требований')}`;
-}
-
-/** «Вывод консультанта» на шаге «Отклик» (a02d): сколько требований есть в профиле и каких нет. */
-export function coachVerdict(view: VacancyFitView | undefined): string | null {
-  const sentence = vacancyFitSentence(view);
-  if (sentence === null) return null;
-  const missing = fitRows(view)
-    .filter((row) => row.status === 'unmatched')
-    .map((row) => row.text);
-  return missing.length > 0 ? `${sentence} Нет в профиле: ${missing.join(', ')}.` : sentence;
 }

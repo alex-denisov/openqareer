@@ -9,6 +9,8 @@ import {
   roleGenitiveRu,
 } from './roleVacancyDigest';
 
+const plain = (id: string) => ({ id, aboveFloor: false });
+
 describe('roleGenitiveRu', () => {
   it.each([
     ['Руководитель разработки', 'руководителя разработки'],
@@ -47,11 +49,11 @@ describe('roleDigestTitle', () => {
 
 describe('подборка дня', () => {
   it('набор того же дня дописывается: число растёт, уже учтённые не считаются дважды', () => {
-    const first = mergeDigestMarks('', ['a', 'b', 'c']);
+    const first = mergeDigestMarks('', ['a', 'b', 'c'].map(plain));
     expect(digestCount(ROLE_DIGEST_SOURCE_TYPE, first)).toBe(3);
-    const second = mergeDigestMarks(first, ['c', 'd']);
+    const second = mergeDigestMarks(first, ['c', 'd'].map(plain));
     expect(digestCount(ROLE_DIGEST_SOURCE_TYPE, second)).toBe(4);
-    expect(mergeDigestMarks(second, ['a', 'd'])).toBe(second);
+    expect(mergeDigestMarks(second, ['a', 'd'].map(plain))).toBe(second);
   });
 
   it('прежние записи по хэшу набора числа не несут', () => {

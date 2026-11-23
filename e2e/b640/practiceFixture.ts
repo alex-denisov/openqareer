@@ -8,6 +8,8 @@ export interface PracticeOptions {
   readonly paywall?: boolean;
   /** Тренировка уже отвечена: экран открывает разбор. */
   readonly answered?: string;
+  /** Тренировку заменили в другой вкладке: первый ответ получает 404, текущей тренировки нет. */
+  readonly replaced?: boolean;
 }
 
 export interface PracticeState {
@@ -130,6 +132,20 @@ async function sessions(
     return fulfillSession(route, ref.session, 201);
   }
   const session = ref.session!;
+  if (path.endsWith('/answers') && options.replaced && !calls.includes('answer 404')) {
+    calls.push('answer 404');
+    ref.session = null;
+    return route.fulfill({
+      status: 404,
+      json: {
+        error: {
+          code: 'interview_session_not_found',
+          message: 'Тренировка не найдена.',
+          retryable: false,
+        },
+      },
+    });
+  }
   if (path.endsWith('/answers')) {
     calls.push(`answer ${String(body.questionId)}${body.feedback === false ? '' : ' +feedback'}`);
     ref.session = { ...session, version: session.version + 1, answer: String(body.answer) };

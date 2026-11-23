@@ -8,6 +8,8 @@ import {
 } from './b640Notifications';
 import { mergeDigestMarks, ROLE_DIGEST_SOURCE_TYPE } from './roleVacancyDigest';
 
+const plain = (id: string) => ({ id, aboveFloor: false });
+
 let counter = 0;
 function source(overrides: Partial<B640NotificationSource> = {}): B640NotificationSource {
   counter += 1;
@@ -190,7 +192,7 @@ describe('B671: «Новые вакансии по вашей роли» — р�
     const row = source({
       kind: 'new_vacancies_by_role',
       sourceType: ROLE_DIGEST_SOURCE_TYPE,
-      sourceId: mergeDigestMarks('', ['c1', 'c2', 'c3', 'c4', 'c5', 'c6']),
+      sourceId: mergeDigestMarks('', ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].map(plain)),
     });
     const [item] = feed([row], {}, { searchRoles: ['Руководитель разработки'] }).items;
     expect(item).toMatchObject({
@@ -204,7 +206,7 @@ describe('B671: «Новые вакансии по вашей роли» — р�
     const row = source({
       kind: 'new_vacancies_by_role',
       sourceType: ROLE_DIGEST_SOURCE_TYPE,
-      sourceId: mergeDigestMarks('', ['c1']),
+      sourceId: mergeDigestMarks('', [plain('c1')]),
     });
     const [item] = feed([row], {}, { searchRoles: ['CTO', 'CIO'] }).items;
     expect(item).toMatchObject({ title: '1 новая вакансия по вашим ролям', role: 'CTO и ещё 1' });

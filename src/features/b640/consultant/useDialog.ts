@@ -14,6 +14,7 @@ import {
   sendCoachTurn,
   type CandidateMemory,
   type CoachTurnStage,
+  type CoachTurnSubject,
 } from '../../coach/coachApi';
 import { consultantTurns } from '../../journey/consultantHistory';
 import { confirmFact, fetchCurrentConversation } from './consultantApi';
@@ -183,6 +184,19 @@ function newTurn(content: string): PendingTurn {
 }
 
 /** Отказ по тарифу; `null` — сбой другого рода. */
+type TurnInput = Parameters<typeof sendCoachTurn>[0];
+
+/** B746: объекта экрана нет у кандидата (удалён, чужой) — тот же вопрос уходит без него. */
+async function sendAboutScreen(input: TurnInput) {
+  try {
+    return await sendCoachTurn(input);
+  } catch (error) {
+    const missing = error instanceof CoachApiError && error.code === 'subject_not_found';
+    if (!input.subject || !missing) throw error;
+    return sendCoachTurn({ ...input, subject: undefined });
+  }
+}
+
 function refusalIn(error: unknown): TurnRefusal | null {
   const spent = error instanceof CoachApiError && error.code === 'quota_exhausted';
   return spent ? refusalOf(error.details) : null;
@@ -205,7 +219,7 @@ function answerOf(turn: PendingTurn, content: string): ChatMessage {
  * Отправка вопроса: ответ по мере записи, сбой с повтором тем же ключом, отказ по тарифу.
  * После ответа снимок перечитывается: с ним приходят записи в профиль из этого хода.
  */
-function useTurns(feed: FeedInternals): Turns {
+function useTurns(feed: FeedInternals, subject: CoachTurnSubject | undefined): Turns {
   const { alive, asking, refresh, setMessages, turnStage: stage } = feed;
   const [reply, setReply] = useState<string | null>(null);
   const [sendFailed, setSendFailed] = useState(false);
@@ -221,7 +235,7 @@ function useTurns(feed: FeedInternals): Turns {
       setReply('');
       try {
         const onMessageText = (text: string) => alive.current && setReply(text);
-        const result = await sendCoachTurn({ ...turn, stage, onMessageText });
+        const result = await sendAboutScreen({ ...turn, stage, subject, onMessageText });
         if (!alive.current) return;
         pending.current = null;
         setMessages((current) => [...current, answerOf(turn, result.message)]);
@@ -238,7 +252,7 @@ function useTurns(feed: FeedInternals): Turns {
         if (alive.current) setReply(null);
       }
     },
-    [stage, alive, asking, refresh, setMessages],
+    [stage, subject, alive, asking, refresh, setMessages],
   );
 
   const send = useCallback(
@@ -259,9 +273,9 @@ function useTurns(feed: FeedInternals): Turns {
 }
 
 /** Текущий разговор по теме раздела: лента, отправка с ответом по мере записи, записи в профиль. */
-export function useDialog(stage: CoachTurnStage): DialogState {
+export function useDialog(stage: CoachTurnStage, subject?: CoachTurnSubject): DialogState {
   const feed = useFeed(stage);
-  const turns = useTurns(feed);
+  const turns = useTurns(feed, subject);
   const { messages, memory, replies, loading, loadFailed, reload, decideFact } = feed;
   return { messages, memory, replies, loading, loadFailed, reload, decideFact, ...turns };
 }

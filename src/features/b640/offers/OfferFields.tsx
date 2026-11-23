@@ -1,6 +1,11 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Icon } from '../kit';
-import { typedOfferValue, type OfferForm, type OfferFormErrors } from './model/offerForm';
+import {
+  leftFieldError,
+  typedOfferValue,
+  type OfferForm,
+  type OfferFormErrors,
+} from './model/offerForm';
 
 type Key = keyof OfferForm;
 
@@ -78,7 +83,9 @@ function Field(props: {
 }
 
 function TextField({ spec, ...props }: OfferFieldsProps & { readonly spec: TextSpec }) {
-  const error = props.errors[spec.key];
+  const [left, setLeft] = useState(false);
+  const value = props.form[spec.key];
+  const error = (left ? leftFieldError(spec.key, value) : undefined) ?? props.errors[spec.key];
   const mark = markOf(props, spec.key);
   return (
     <Field id={spec.key} label={spec.label} wide={spec.wide} error={error} mark={mark}>
@@ -86,13 +93,14 @@ function TextField({ spec, ...props }: OfferFieldsProps & { readonly spec: TextS
         id={`of-${spec.key}`}
         type="text"
         inputMode={spec.mode}
-        value={props.form[spec.key]}
+        value={value}
         placeholder={spec.placeholder}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(spec.key, error, mark)}
         onChange={(event) =>
           props.onChange(spec.key, typedOfferValue(spec.key, event.currentTarget.value))
         }
+        onBlur={() => setLeft(true)}
       />
     </Field>
   );
