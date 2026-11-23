@@ -47,3 +47,15 @@ describe('«Деньги от» сравнивает сумму в месяц (B
     expect(ids(from(2_500_000, true))).toEqual(['arootah-hour']);
   });
 });
+
+describe('«Деньги от» не берёт сумму без периода 100–999 (B765, решение 23.11)', () => {
+  it('per diem 450–600 USD не проходит ни «от 30 тыс.», ни «от 1 тыс.»', () => {
+    const perDiem = [item('per-diem', { from: 450, to: 600, currency: 'USD' })];
+    const pick = (salaryMinimum: number) =>
+      filterByScreenState(perDiem, from(salaryMinimum), '2026-11-23', rates).map(
+        (e) => e.cluster.id,
+      );
+    expect(pick(30_000)).toEqual([]);
+    expect(pick(1_000)).toEqual([]);
+  });
+});

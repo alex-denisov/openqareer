@@ -99,9 +99,9 @@ function comparableSalary(
 ): { readonly lower?: number; readonly upper?: number } | undefined {
   const salary = item.cluster.salary;
   if (salary) {
-    // B765: the threshold is per month — a yearly range is divided, an hourly rate has no month.
+    // B765: the threshold is per month — a yearly range is divided; an hourly rate or an unknown period has no month.
     const period = salaryPeriodOf(salary, rates);
-    if (period === 'hour') return undefined;
+    if (period === 'hour' || period === 'unknown') return undefined;
     const lower = monthlyAmount(salary.from ?? salary.to, period);
     const upper = monthlyAmount(salary.to ?? salary.from, period);
     return convertedRange(lower, upper, salary.currency, state, rates);
