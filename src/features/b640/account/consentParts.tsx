@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Dialog } from '../kit/Dialog';
 
 /** Общие части строк согласий n05: действие с ожиданием и переключатель. */
 
@@ -43,5 +44,25 @@ export function ConsentSwitch({ label, checked, disabled, onChange }: ConsentSwi
         />
       </span>
     </div>
+  );
+}
+
+interface ConsentTextLinkProps {
+  readonly title: string;
+  readonly children: ReactNode;
+}
+
+/** «Текст согласия» под уже данным согласием: тот же текст для чтения, без кнопки выдачи (B774). */
+export function ConsentTextLink({ title, children }: ConsentTextLinkProps) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span>
+      <button className="row-act" type="button" onClick={() => setOpen(true)}>
+        Текст согласия
+      </button>
+      <Dialog open={open} title={title} onClose={() => setOpen(false)}>
+        {children}
+      </Dialog>
+    </span>
   );
 }
