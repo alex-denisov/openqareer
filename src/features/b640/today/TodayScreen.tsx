@@ -17,6 +17,8 @@ import {
   NextActionModule,
   ProfileQuestionModule,
 } from './searchModules';
+import { listApplicationsPool, type ApplicationView } from '../../applications/applicationsApi';
+import { funnelLine } from './funnelLineModel';
 import { getStatusToday } from './statusApi';
 import { StatusSignalBlock } from './StatusSignalBlock';
 import { StatusStrip } from './StatusStrip';
@@ -65,6 +67,10 @@ function TodayModule({ module, status, today, lead }: ModuleProps) {
   }
 }
 
+async function loadApplications(signal: AbortSignal): Promise<readonly ApplicationView[]> {
+  return (await listApplicationsPool({}, signal)).items;
+}
+
 interface TodayBodyProps {
   readonly status: CandidateStatusToday;
   readonly today: TodayDay;
@@ -74,6 +80,10 @@ interface TodayBodyProps {
 
 function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps) {
   const layout = moduleLayout(status.status, status.modules);
+  // Сбой чтения откликов строку пути прячет: она второстепенна, а «Отклики» покажут ошибку сами.
+  const applications = useLoad(loadApplications);
+  const funnel =
+    applications.state === 'ready' ? funnelLine(applications.data, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
   const signal = <StatusSignalBlock statusTitle={status.title} wide={wideSignal} />;
@@ -93,6 +103,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
         status={status}
         revertedTitle={revertedTitle}
         onReverted={onReverted}
+        funnel={funnel}
       />
       {wideSignal ? signal : null}
       <div className="col">
