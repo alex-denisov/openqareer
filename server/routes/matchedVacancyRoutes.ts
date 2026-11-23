@@ -60,6 +60,7 @@ import { readTargetLevel } from './vacancyRoleContext';
 import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import type { ListPhasesMs } from './matchedListPhases';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -288,6 +289,11 @@ type MatchedPageRead = Omit<MatchedListInput, 'snapshot' | 'geography' | 'catalo
   readonly targetLevel: ReturnType<typeof readTargetLevel>;
 };
 
+/** B770: фазы сборки в журнале — плоские числа, как остальные шаги: `phase:finish` и т. д. */
+function phaseSteps(phasesMs: ListPhasesMs): Record<string, number> {
+  return Object.fromEntries(Object.entries(phasesMs).map(([name, ms]) => [`phase:${name}`, ms]));
+}
+
 async function readMatchedPage(
   engine: RouteDeps['multiSourceEngine'],
   read: MatchedPageRead,
@@ -333,6 +339,7 @@ async function readMatchedPage(
       prepareMs: built ? list.prepareMs : 0,
       prepareRows: built ? list.prepareRows : 0,
       listMs: built ? list.listMs : 0,
+      ...(built ? phaseSteps(list.phasesMs) : {}),
     },
   };
 }
