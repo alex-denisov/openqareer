@@ -217,7 +217,7 @@ test.describe('B652: «Цифровой след»', () => {
   test('сбой поиска: строка ошибки с «Повторить» на месте', async ({ page }) => {
     const calls = await openFootprint(page, '/app/profile/footprint', 'failed');
     const screen = node(page, 'f01');
-    await expect(screen.getByRole('alert')).toContainText('Проверили не всё');
+    await expect(screen.getByRole('alert')).toContainText(/категори[яий] не проверен/u);
     await screen.getByRole('button', { name: 'Повторить' }).click();
     await expect(screen.locator('progress.pf-prog')).toBeVisible();
     expect(calls.started).toHaveLength(1);

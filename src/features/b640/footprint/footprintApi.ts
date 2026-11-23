@@ -3,7 +3,6 @@ import type { FootprintRiskSummary } from '../../../../shared/footprintRisk';
 import { apiFetch, readData } from '../../coach/apiClient';
 
 export {
-  addCandidateFootprintFindingToProfile,
   getCandidateFootprintPlan,
   reviewCandidateFootprintFinding,
   startCandidateFootprintAudit,
@@ -58,4 +57,21 @@ export async function recheckFinding(findingId: string): Promise<FootprintRemova
     { method: 'POST' },
   );
   return (await readData<RemovalResponse>(response)).removal;
+}
+
+const profileFactUrl = (findingId: string): string =>
+  `/api/v1/candidate/footprint/findings/${encodeURIComponent(findingId)}/profile-fact`;
+
+/** B382: «В профиль»; `alreadyInProfile` — такой факт уже был, второй не записан («Уже в профиле»). */
+export async function addFindingToProfile(
+  findingId: string,
+): Promise<{ readonly alreadyInProfile: boolean }> {
+  const response = await apiFetch(profileFactUrl(findingId), { method: 'POST' });
+  const data = await readData<{ readonly alreadyInProfile?: boolean }>(response);
+  return { alreadyInProfile: data.alreadyInProfile === true };
+}
+
+/** B382: «Отменить» после «В профиль» — факт из находки удаляется, отметка снимается. */
+export async function removeFindingFromProfile(findingId: string): Promise<void> {
+  await readData<unknown>(await apiFetch(profileFactUrl(findingId), { method: 'DELETE' }));
 }

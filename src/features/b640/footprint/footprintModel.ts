@@ -88,6 +88,15 @@ export function failedChecks(audit: CandidateFootprintAudit | null): number {
   return audit.state === 'failed' ? Math.max(failed, 1) : failed;
 }
 
+/** Строка сбоя F2б, как в макете: «2 категории не проверены». */
+export function uncheckedLine(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} категория не проверена`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} категории не проверены`;
+  return `${count} категорий не проверены`;
+}
+
 const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
 const SHORT = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
 
@@ -154,8 +163,20 @@ export function letterText(item: FootprintRiskItem): string {
       `${item.mismatch.field} — «${item.mismatch.foundValue}». Это неточно: верно — ` +
       `«${item.mismatch.profileValue}». Прошу исправить и ответить на это письмо.`;
   }
-  return `Здравствуйте. ${capitalize(where.trim() || 'на вашем сайте')} опубликованы мои данные: ` +
-    `${item.title.toLowerCase()}. Прошу удалить их и ответить на это письмо.`;
+  const what = titleIsSite(item) ? '' : `: ${item.title.toLowerCase()}`;
+  return `Здравствуйте. ${capitalize(where.trim() || 'на вашем сайте')} опубликованы мои данные${what}. ` +
+    'Прошу удалить их и ответить на это письмо.';
+}
+
+/** Заголовок находки — просто адрес сайта: он ничего не говорит о данных. */
+function titleIsSite(item: FootprintRiskItem): boolean {
+  const title = item.title.trim().toLowerCase().replace(/^www\./u, '');
+  if (!item.url) return false;
+  try {
+    return new URL(item.url).hostname.toLowerCase().replace(/^www\./u, '') === title;
+  } catch {
+    return false;
+  }
 }
 
 function capitalize(text: string): string {

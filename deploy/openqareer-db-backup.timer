@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenQareer B777 nightly database backup, 02:30 MSK (23:30 UTC)
+
+[Timer]
+# Окно оценки зарплат 01:30 UTC не задевается: копия с проверкой укладывается в 2 ч.
+OnCalendar=*-*-* 23:30:00 UTC
+Persistent=false
+Unit=openqareer-db-backup.service
+
+[Install]
+WantedBy=timers.target

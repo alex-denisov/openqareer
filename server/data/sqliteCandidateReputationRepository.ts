@@ -365,6 +365,20 @@ export class SqliteCandidateReputationRepository {
     return updated;
   }
 
+  /** B382: «Отменить» у «В профиль» — отметка и ссылка на факт снимаются с находки. */
+  clearFootprintProfileFact(candidateId: string, findingId: string): CandidateFootprintAudit | null {
+    const audit = this.getLatestFootprintAudit(candidateId);
+    if (!audit || !audit.findings.some((finding) => finding.id === findingId)) return null;
+    const findings = audit.findings.map((finding) => {
+      if (finding.id !== findingId) return finding;
+      const { checklistMark: _mark, profileFactId: _fact, ...rest } = finding;
+      return rest;
+    });
+    const updated = { ...audit, findings };
+    this.saveFootprintAudit(updated);
+    return updated;
+  }
+
   deleteFootprintAuditsByCandidateId(candidateId: string): number {
     return Number(this.database.prepare(
       'DELETE FROM candidate_footprint_audits WHERE candidate_id = ?',
