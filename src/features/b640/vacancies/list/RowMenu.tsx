@@ -6,6 +6,7 @@ import { buildNodePath } from '../../routes';
 import { safeHttpUrl } from '../format';
 import { HIDE_REASONS } from '../skipApi';
 import { parseShortDate } from '../vacancyLinks';
+import { sourceLinkLabel } from '../sourceLinkLabel';
 
 export type MenuView = 'list' | 'hide' | 'applied';
 
@@ -160,7 +161,7 @@ function ListView({ item, runner, actions, onView }: { item: MatchedVacancyItem;
           <li>
             <a className="va-mi" href={href} target="_blank" rel="noopener noreferrer">
               <Icon name="out" />
-              Открыть на сайте работодателя
+              {sourceLinkLabel(cluster)}
             </a>
           </li>
         ) : null}
