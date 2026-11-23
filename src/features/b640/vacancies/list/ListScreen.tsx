@@ -7,6 +7,7 @@ import { FilterSheet } from './FilterSheet';
 import { HiddenRows } from './HiddenRows';
 import { FiltersBar } from './FiltersBar';
 import { withoutKind, type FilterKind } from './filterModel';
+import { withRoleLabels } from './filterOptions';
 import {
   CountTitle,
   EmptyByFilters,
@@ -48,7 +49,8 @@ function filterProps(list: VacancyList, section: HiddenSection) {
     showHidden: section.show,
     onShowHidden: section.setShow,
     filters: list.filters,
-    options: list.options,
+    options: withRoleLabels(list.options, list.pool.campaign?.titlesRu),
+    roleTitlesRu: list.pool.campaign?.titlesRu,
     currency: list.currency,
     onChange: list.setFilters,
     onCurrency: list.setCurrency,

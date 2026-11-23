@@ -14,6 +14,7 @@ async function openCabinet(
     readonly total?: number;
     readonly own?: readonly unknown[];
     readonly campaignRoles?: readonly string[];
+    readonly titlesRu?: Readonly<Record<string, string>>;
     readonly skillGap?: number;
   } = {},
 ): Promise<void> {
@@ -21,6 +22,7 @@ async function openCabinet(
     cabinetB640: true,
     vacancyTotal: options.total ?? 45,
     ...(options.campaignRoles ? { vacancyCampaignRoles: options.campaignRoles } : {}),
+    ...(options.titlesRu ? { vacancyCampaignTitlesRu: options.titlesRu } : {}),
     ...(options.skillGap !== undefined ? { roleSkillGap: options.skillGap } : {}),
     vacancyFacets: {
       total: options.total ?? 45,
@@ -276,6 +278,18 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await page.locator('.vt-chips').getByRole('button', { name: 'Сбросить всё' }).click();
     await expect(chips).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Все роли/ })).toBeVisible();
+  });
+
+  test('B726: чип роли из «Вакансий по роли» — русское название роли поиска', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
+      campaignRoles: ['CTO', 'Руководитель продукта'],
+      titlesRu: { CTO: 'Технический директор (CTO)' },
+    });
+    const chips = page.locator('.vt-chips .vt-chip');
+    await expect(chips.first()).toHaveText('Технический директор (CTO)');
+    await expect(
+      page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }),
+    ).toBeVisible();
   });
 
   test('B645: строка «Проверить N навыка» ведёт в проверку навыков', async ({ page }) => {
