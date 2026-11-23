@@ -119,14 +119,14 @@ describe('B694 a03b: «Другой вариант» поста', () => {
     expect(writer).toHaveBeenCalledTimes(3);
   });
 
-  it('Free и Pro (постов на Pro нет, B778) — 402 по правилам тарифа, модель не зовётся', async () => {
-    for (const tier of ['free', 'pro'] as const) {
-      const { send, writer, draftOf } = await setup(tier);
-      const response = await send(variantsUrl(draftOf('flagged.test')), {});
-      expect(response.statusCode, tier).toBe(402);
-      expect(response.json().error.code).toBe('paywall_required');
-      expect(writer).not.toHaveBeenCalled();
-    }
+  it('Free — 402 по правилам тарифа, модель не зовётся; Pro — посты есть (B778)', async () => {
+    const free = await setup('free');
+    const response = await free.send(variantsUrl(free.draftOf('flagged.test')), {});
+    expect(response.statusCode).toBe(402);
+    expect(response.json().error.code).toBe('paywall_required');
+    expect(free.writer).not.toHaveBeenCalled();
+    const pro = await setup('pro');
+    expect((await pro.send(variantsUrl(pro.draftOf('flagged.test')), {})).statusCode).toBe(201);
   });
 
   it('сбой модели — 503 и ничего не сохранено; плохое пожелание — 400', async () => {

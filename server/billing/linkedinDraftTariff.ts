@@ -9,8 +9,9 @@ const LEGACY_PLANS: Readonly<Record<string, QuotaPlanId>> = {
 };
 
 /**
- * B778: черновики LinkedIn в день — ровно то, что обещает страница тарифов
- * (src/features/tariffs/tariffTypes.ts): Pro — 3 комментария, Executive/Max — 5 комментариев
+ * B778: черновики LinkedIn в день — ровно то, что обещают тарифы: Pro — 3 комментария
+ * (src/features/tariffs/tariffTypes.ts) и 3 поста («Посты LinkedIn 90» в месяц на t01,
+ * src/features/b640/account/billingModel.ts, 90 / 30), Executive/Max — 5 комментариев
  * и 2 поста; Free/Basic — ничего. Сверх дня действует месячная квота `linkedin_drafts`.
  */
 export const LINKEDIN_DRAFTS_PER_DAY: Readonly<
@@ -18,7 +19,7 @@ export const LINKEDIN_DRAFTS_PER_DAY: Readonly<
 > = {
   free: { comment: 0, post: 0 },
   basic: { comment: 0, post: 0 },
-  pro: { comment: 3, post: 0 },
+  pro: { comment: 3, post: 3 },
   max: { comment: 5, post: 2 },
 };
 

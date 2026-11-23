@@ -140,7 +140,7 @@ describe('candidate draft HTTP boundary', () => {
       (await post(undefined, { authorization: '', origin: 'https://evil.example' })).statusCode,
     ).toBe(403);
   });
-  it('uses the server tier: Free and Basic have no drafts, Pro has no posts (B778)', async () => {
+  it('uses the server tier: Free and Basic have no drafts (B778)', async () => {
     for (const tier of ['free', 'basic']) {
       const plan = await setup(tier);
       for (const kind of ['comment', 'post']) {
@@ -150,8 +150,17 @@ describe('candidate draft HTTP boundary', () => {
       }
       expect(plan.writer).not.toHaveBeenCalled();
     }
-    const pro = await setup();
-    expect((await pro.post({ kind: 'post', topic: 'Опыт' })).statusCode).toBe(402);
+  });
+  it('gives Pro 3 posts a day from «Посты LinkedIn 90» (B778)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-29T09:00:00Z'));
+    const { post } = await setup();
+    for (let i = 0; i < 3; i++)
+      expect((await post({ kind: 'post', topic: 'Опыт' })).statusCode).toBe(200);
+    const fourth = await post({ kind: 'post', topic: 'Опыт' });
+    expect(fourth.statusCode).toBe(429);
+    expect(fourth.json().error.code).toBe('draft_daily_limit');
+    expect((await post()).statusCode).toBe(200);
   });
   it('fails closed when server tier is unknown', async () => {
     const { post } = await setup('unexpected');
