@@ -210,6 +210,7 @@
   .b640 .kp-t { font-size: var(--career-text-sm); font-weight: 600; }
   .b640 .kp-v { font-size: var(--career-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
   .b640 .kp-s { grid-column: 1 / -1; color: var(--career-text-soft); font-size: var(--career-text-xs); }
+  .b640 .kp-s.va-err { color: var(--career-danger); }
   .b640 .kp-ok { display: grid; place-items: center; min-inline-size: var(--career-target-min); min-block-size: var(--career-target-min); }
   .b640 .act-dock { display: none; }
   @media (max-width: 767px) {

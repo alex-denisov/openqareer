@@ -569,7 +569,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
   // B766: роль «Технический директор» читает требования вакансии; runtime ставится после маршрутов.
-  setRequirementsReader((clusterId) => deps.vacancyMechanics?.latestRequirementTexts(clusterId));
+  setRequirementsReader((clusterIds) => deps.vacancyMechanics?.latestRequirementTextsMany(clusterIds));
   app.get(
     '/api/v1/candidate/matched-vacancies',
     withDeps(deps, async (routeDeps, request, reply) => {

@@ -195,7 +195,7 @@ export async function writeContactMessageText(
   if (!writer || !profile.trim()) return fallback;
   const known = [
     profile, roles.targetRole, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
-    vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
+    vacancy?.title ?? '', vacancy?.company ?? '', also?.title ?? '', draft.targetRole ?? '',
   ].join('\n');
   try {
     const gender = candidateGenderFromName(draft.candidate?.fullName);
@@ -207,7 +207,9 @@ export async function writeContactMessageText(
       chosenLanguage: language,
       wish: contactMessageWish(message),
     };
-    const options = { withoutVacancy: !vacancy, language };
+    const options: ContactCheckOptions = {
+      withoutVacancy: !vacancy, language, recipientName: input.recipient.name, relationship: input.recipient.relationship,
+    };
     const check: ContactCheck = { known, kind: input.kind, englishRoles: roles.english, options };
     return (await askContactModel(writer, request, ask, check)) ?? fallback;
   } catch (error) {
