@@ -3,7 +3,7 @@ import type { InterviewAnswerMode } from '../../interview/interviewSimulatorApi'
 import type { TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
 import { Button, Icon, InfoTip } from '../kit';
 import type { PracticeTask as Task } from './data/practiceApi';
-import { taskPoints } from './model/practiceModel';
+import { shownPoints } from './model/practiceModel';
 
 const SOURCE_TIP: Readonly<Record<Task['basis'], string>> = {
   vacancy: 'Из описания вакансии, сохранённого при отклике.',
@@ -51,7 +51,7 @@ function Requirements({ task }: { readonly task: Task }) {
         <InfoTip label="Источник" text={SOURCE_TIP[task.basis]} />
       </h3>
       <ul className="sd-reqs">
-        {taskPoints(task.prompt).map((point) => (
+        {shownPoints(task).map((point) => (
           <li key={point}>
             <span>{point}</span>
           </li>

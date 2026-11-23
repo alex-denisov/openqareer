@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { AuthService } from '../auth/authService';
+import { AppCodeStore } from '../auth/appCodeStore';
 import { PasskeyStore } from '../auth/passkeyStore';
 import { TwoFactorStore } from '../auth/twoFactorStore';
 import { SealedText } from '../data/sealedText';
@@ -28,6 +29,8 @@ export function openSideTablesForPurgeTest(
   new AuthService({ databasePath }).close();
   new TwoFactorStore(options).close();
   new PasskeyStore({ databasePath }).close();
+  // B755: коды входа в приложение создаются при первом запросе кода.
+  new AppCodeStore({ databasePath }).close();
   new SqliteDiaryDetailsRepository(options).close();
   new SqliteDiaryCheckpointRepository(options).close();
   new SqliteDiaryPeopleRepository(options).close();

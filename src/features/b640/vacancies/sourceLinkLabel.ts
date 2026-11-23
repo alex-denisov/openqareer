@@ -8,7 +8,15 @@ export interface SourceLinkInput {
     readonly sourceUrl: string;
   }[];
   readonly canonicalCompany?: string | null;
+  /** Ссылка, которую называем; по умолчанию основная (`primaryUrl`). */
+  readonly url?: string;
 }
+
+/** Куда ведёт ссылка: пост Telegram, сайт работодателя или источник вакансии (`name` — его имя). */
+export type SourceLinkTarget =
+  | { readonly kind: 'telegram' }
+  | { readonly kind: 'employer' }
+  | { readonly kind: 'source'; readonly name: string | null };
 
 const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me']);
 
@@ -20,12 +28,13 @@ function parsed(value: string): URL | undefined {
   }
 }
 
-function isTelegram(url: URL, input: SourceLinkInput): boolean {
-  if (TELEGRAM_HOSTS.has(url.hostname)) return true;
-  return input.sources.some(
+/** Источник этой ссылки: по адресу как есть или после разбора (`URL` дописывает «/»). */
+function sourceOf(input: SourceLinkInput, link: string, url: URL | undefined) {
+  const href = url?.toString();
+  return input.sources.find(
     (source) =>
-      source.sourceUrl === input.primaryUrl &&
-      (source.sourceType === 'telegram' || /^tg-/u.test(source.sourceId ?? '')),
+      source.sourceUrl === link ||
+      (href !== undefined && parsed(source.sourceUrl)?.toString() === href),
   );
 }
 
@@ -33,13 +42,23 @@ function isTelegram(url: URL, input: SourceLinkInput): boolean {
  * B726 (B645, прод 23.11): «сайт работодателя» — только когда ссылка правда у работодателя.
  * Пост Telegram называется постом; без компании ссылка ведёт на источник — его именем.
  */
+export function sourceLinkTarget(input: SourceLinkInput): SourceLinkTarget {
+  const link = input.url ?? input.primaryUrl;
+  const url = parsed(link);
+  const source = sourceOf(input, link, url);
+  const telegram =
+    (url && TELEGRAM_HOSTS.has(url.hostname)) ||
+    source?.sourceType === 'telegram' ||
+    /^tg-/u.test(source?.sourceId ?? '');
+  if (telegram) return { kind: 'telegram' };
+  if (input.canonicalCompany?.trim()) return { kind: 'employer' };
+  const name = source?.sourceName?.trim() || url?.hostname.replace(/^www\./u, '');
+  return { kind: 'source', name: name || null };
+}
+
 export function sourceLinkLabel(input: SourceLinkInput): string {
-  const url = parsed(input.primaryUrl);
-  if (url && isTelegram(url, input)) return 'Открыть пост в Telegram';
-  if (input.canonicalCompany?.trim()) return 'Открыть на сайте работодателя';
-  const named = input.sources
-    .find((source) => source.sourceUrl === input.primaryUrl)
-    ?.sourceName?.trim();
-  const name = named || url?.hostname.replace(/^www\./u, '');
-  return name ? `Открыть на ${name}` : 'Открыть вакансию';
+  const target = sourceLinkTarget(input);
+  if (target.kind === 'telegram') return 'Открыть пост в Telegram';
+  if (target.kind === 'employer') return 'Открыть на сайте работодателя';
+  return target.name ? `Открыть на ${target.name}` : 'Открыть вакансию';
 }

@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_sign_in;
 mod automation_worker;
 mod connector_session;
 mod desktop_notify;
@@ -637,6 +638,7 @@ fn main() {
             desktop_notify::request_desktop_notification_permission,
             desktop_notify::show_desktop_notification,
             desktop_notify::focus_main_window,
+            app_sign_in::desktop_open_sign_in,
             device_settings::get_device_settings,
             device_settings::save_device_settings,
             recording::recording_permissions,
@@ -662,6 +664,12 @@ fn main() {
     }
 
     app.run(|app_handle, event| {
+        // B755: браузер вернул вход по адресу openqareer://signed-in — передаём главному окну.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = &event {
+            app_sign_in::deliver_opened_urls(app_handle, urls.iter().map(|url| url.as_str()));
+            return;
+        }
         // Dock: без значка в строке меню спрятанное окно возвращает только он.
         #[cfg(target_os = "macos")]
         if let tauri::RunEvent::Reopen { .. } = event {

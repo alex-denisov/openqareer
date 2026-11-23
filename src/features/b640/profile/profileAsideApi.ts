@@ -3,14 +3,14 @@ import { getCandidateCampaign } from '../../coach/matchedVacancyApi';
 import { listCandidateConnectionContacts } from '../../outreach/connectionContactsApi';
 import { getResumeVersions } from '../../resume/resumeVersionsApi';
 import { loadConditions } from '../career/conditionsApi';
-import { termsRows, type TermsRow } from './profileAsideModel';
+import { searchRole, termsRows, type TermsRow } from './profileAsideModel';
 
 /** Сколько резюме под вакансии видно в профиле; остальные — в «Откликах». */
 export const VERSIONS_SHOWN = 3;
 
 export interface ProfileTerms {
   readonly rows: readonly TermsRow[];
-  /** Первая роль поиска; `null` — роли не выбраны. */
+  /** Первая роль поиска, по-русски, если её назвала платформа; `null` — роли не выбраны. */
   readonly role: string | null;
 }
 
@@ -19,11 +19,8 @@ export async function loadTerms(signal: AbortSignal): Promise<ProfileTerms> {
     getCandidateCampaign(signal),
     loadConditions(signal),
   ]);
-  const roles = campaign.roles.value;
-  return {
-    rows: termsRows(roles, conditions.conditions),
-    role: roles[0]?.trim() || null,
-  };
+  const role = searchRole(campaign.roles, campaign.titlesRu);
+  return { rows: termsRows(role ? [role] : [], conditions.conditions), role };
 }
 
 export async function loadLinksTotal(): Promise<number> {

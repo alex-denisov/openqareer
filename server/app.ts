@@ -12,6 +12,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
   type FastifyInstance,
+  type FastifyReply,
   type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify';
@@ -135,6 +136,8 @@ interface BuildAppOptions {
   /** B734: русские названия навыков проверки роли. */
   skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
+  /** B753: сообщение знакомому и рекрутёру — своя цепочка (GLM первым). */
+  contactMessageWriter?: CoverLetterWriter;
   /** B642: Whisper для записей собеседований; без подстановки — OpenRouter. */
   recordingTranscriber?: RouteDeps['recordingTranscriber'];
   /** B751: разбор интервью; без подстановки — цепочка письма. */
@@ -261,6 +264,13 @@ async function registerRateLimits(
   await app.register(rateLimit, { global: false, keyGenerator: (request) => request.ip });
 }
 
+/** B755: «Войти в приложение» нельзя вставить в чужую рамку и подсунуть нажатие «Войти». */
+function denyFramingOfAppSignIn(url: string, reply: FastifyReply): void {
+  if (url !== '/app-sign-in' && !url.startsWith('/app-sign-in?')) return;
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Content-Security-Policy', "frame-ancestors 'none'");
+}
+
 async function createFastifyBase(
   config: ServerConfig,
   isSignedIn: (request: FastifyRequest) => boolean,
@@ -305,6 +315,7 @@ async function createFastifyBase(
     if (request.url.startsWith('/api/') && !request.url.startsWith('/api/v1/candidate/media/')) {
       reply.header('Cache-Control', 'no-store');
     }
+    denyFramingOfAppSignIn(request.url, reply);
   });
 
   app.get('/health', async (_request, reply) => {
@@ -460,7 +471,7 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter, contactMessageWriter: options.contactMessageWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor

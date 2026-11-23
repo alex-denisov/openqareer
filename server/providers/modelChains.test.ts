@@ -57,6 +57,13 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
+  it('сообщение знакомому и рекрутёру: GLM, затем DeepSeek, без Vertex (B753)', () => {
+    expect(labels('contactMessages')).toEqual([
+      'openrouter:z-ai/glm-5.3-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+    ]);
+  });
+
   it('роли кампании: голова дважды, потом glm, без Vertex', () => {
     expect(labels('campaignRoles')).toEqual([
       'openrouter:deepseek/deepseek-v4-flash',

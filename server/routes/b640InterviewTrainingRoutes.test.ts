@@ -124,7 +124,9 @@ describe('B681: задача System Design под вакансию', () => {
     const body = (
       await harness.get(`${BASE}/session-flagged.test/system-design-task`, 'flagged.test')
     ).json();
-    expect(body.data).toMatchObject({ basis: 'role', domain: 'core_api' });
+    // B750: роль без отклика — шаблон семьи роли, а не общий «Основной API продукта».
+    expect(body.data).toMatchObject({ basis: 'role', domain: 'data' });
+    expect(body.data.points).toHaveLength(4);
     expect(body.data.prompt).toContain('«Инженер данных»');
   });
 

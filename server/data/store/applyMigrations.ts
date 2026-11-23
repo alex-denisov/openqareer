@@ -51,6 +51,7 @@ import { MIGRATION_49 as MIGRATION_INTERVIEW_SIMULATOR } from '../interviewSimul
 import { COMPANY_DIRECTORY_MIGRATION } from '../companyDirectorySchema';
 import { MIGRATION_INTERVIEW_REVIEW_HELPFUL } from '../interviewReviewHelpfulSchema';
 import { MIGRATION_INTERVIEW_DESIGN_SCHEMA } from '../interviewDesignSchemaSchema';
+import { MIGRATION_INTERVIEW_DESIGN_TASK } from '../interviewDesignTaskSchema';
 
 export const MIGRATIONS = [
   MIGRATION_1,
@@ -112,6 +113,8 @@ export const MIGRATIONS = [
   MIGRATION_INTERVIEW_REVIEW_HELPFUL,
   // B647: только новая таблица исправленной схемы System Design.
   MIGRATION_INTERVIEW_DESIGN_SCHEMA,
+  // B750: только новая таблица задачи System Design по отклику.
+  MIGRATION_INTERVIEW_DESIGN_TASK,
 ] as const;
 
 export function applyMigrations(

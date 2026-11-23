@@ -14,6 +14,7 @@ import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
 import { buildSkillNameTranslator } from './providers/skillNameTranslator';
 import {
+  buildContactMessageWriter,
   buildEnabledCoverLetterWriter,
   COVER_LETTER_VERTEX_TIMEOUT_MS,
 } from './providers/coverLetterWriter';
@@ -37,6 +38,7 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { readSmmConfig, startSmmAssistant } from './smm/smmRuntime';
 import { AuthService } from './auth/authService';
 import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
+import { buildAppSignInNotifier } from './auth/appSignInEmail';
 import { buildPasskeyAddedNotifier } from './auth/passkeyAddedEmail';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
@@ -89,6 +91,11 @@ const authService = new AuthService({
           publicBaseUrl: config.accountEmail.publicBaseUrl,
         }),
         onPasskeyAdded: buildPasskeyAddedNotifier({
+          apiKey: config.accountEmail.apiKey,
+          from: config.accountEmail.from,
+          publicBaseUrl: config.accountEmail.publicBaseUrl,
+        }),
+        onAppSignIn: buildAppSignInNotifier({
           apiKey: config.accountEmail.apiKey,
           from: config.accountEmail.from,
           publicBaseUrl: config.accountEmail.publicBaseUrl,
@@ -300,6 +307,8 @@ const app = await buildApp({
       COVER_LETTER_VERTEX_TIMEOUT_MS,
     ),
   }),
+  // B753: сообщение знакомому и рекрутёру — своя цепочка, GLM первым, без Vertex.
+  contactMessageWriter: buildContactMessageWriter({ providerCredentials: config.providerCredentials }),
   serveStatic: process.env.NODE_ENV === 'production',
 });
 matchedPoolPrecompute.setLogger(app.log);

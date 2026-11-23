@@ -14,6 +14,8 @@ import {
   schemaBlocks,
   schemaToSave,
   taskPoints,
+  isShownTask,
+  shownPoints,
 } from './practiceModel';
 
 const ANSWER =
@@ -179,5 +181,31 @@ describe('I3c: заголовок схемы', () => {
     expect(blockCountTitle(5)).toBe('Пять блоков');
     expect(blockCountTitle(21)).toBe('21 блок');
     expect(blockCountTitle(12)).toBe('12 блоков');
+  });
+});
+
+describe('B750 · задача с сервера', () => {
+  const task = {
+    title: 'Ассистент на LLM',
+    prompt: 'Спроектируйте ассистента. Начните с требований.',
+    points: ['RAG', 'Оценка', 'Доступы', 'Стоимость'],
+    timeLimitMinutes: 45,
+  };
+
+  it('пункты — свои у задачи, у старой без пунктов — предложения условия', () => {
+    expect(shownPoints(task)).toEqual(['RAG', 'Оценка', 'Доступы', 'Стоимость']);
+    expect(shownPoints({ prompt: task.prompt })).toEqual([
+      'Спроектируйте ассистента.',
+      'Начните с требований.',
+    ]);
+  });
+
+  it('показываем только целую задачу', () => {
+    expect(isShownTask(task)).toBe(true);
+    expect(isShownTask({ ...task, points: [] })).toBe(false);
+    expect(isShownTask({ ...task, points: ['RAG', ''] })).toBe(false);
+    expect(isShownTask({ ...task, title: ' ' })).toBe(false);
+    expect(isShownTask({ ...task, timeLimitMinutes: 0 })).toBe(false);
+    expect(isShownTask(null)).toBe(false);
   });
 });

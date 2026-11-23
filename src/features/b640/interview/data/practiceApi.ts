@@ -14,10 +14,16 @@ import {
 } from '../../../interview/interviewSimulatorApi';
 import type { TariffQuotaStatus } from '../../../tariffs/tariffQuotaApi';
 import { trainingQuota } from './trainingQuota';
-import { practiceChoice, type ReviewEvaluation, type SchemaToSave } from '../model/practiceModel';
+import {
+  isShownTask,
+  practiceChoice,
+  type ReviewEvaluation,
+  type SchemaToSave,
+} from '../model/practiceModel';
 import { findResponse } from './prepApi';
 
 const URL = '/api/v1/candidate/b640/interview-sessions';
+const TASKS = '/api/v1/candidate/b640/interview-tasks';
 
 export type PracticeTask = Omit<SystemDesignTask, 'exampleAnswer'>;
 
@@ -61,12 +67,38 @@ export function practiceTask(response: ApplicationView): PracticeTask {
   return task;
 }
 
+/**
+ * B750: задача по отклику с сервера — по вакансии и роли, та же при каждом открытии.
+ * Сервер не ответил — шаблон на месте, чтобы тренировку можно было начать.
+ */
+export async function fetchPracticeTask(
+  response: ApplicationView,
+  signal: AbortSignal,
+): Promise<PracticeTask> {
+  try {
+    const reply = await apiFetch(TASKS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicationId: response.id }),
+      signal,
+    });
+    const task = await readDataObject<PracticeTask>(reply);
+    return isShownTask(task) ? task : practiceTask(response);
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return practiceTask(response);
+  }
+}
+
 /** Тренировка System Design по отклику: продолжить начатую или показать задачу. */
 export async function loadPractice(responseId: string, signal: AbortSignal): Promise<PracticeLoad> {
   const response = await findResponse(responseId, signal);
   if (!response) return { kind: 'none' };
-  const task = practiceTask(response);
-  const [current, quota] = await Promise.all([getCurrentInterviewSession(signal), trainingQuota()]);
+  const [task, current, quota] = await Promise.all([
+    fetchPracticeTask(response, signal),
+    getCurrentInterviewSession(signal),
+    trainingQuota(),
+  ]);
   const choice = practiceChoice(current, response.id);
   if (current && choice === 'other') return { kind: 'other', response, task, session: current };
   const kept = choice === 'resume' || choice === 'review' ? current : null;

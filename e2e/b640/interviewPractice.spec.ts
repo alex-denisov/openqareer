@@ -1,7 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
 import { PREP_NOW } from './interviewFixture';
-import { mockPractice, PRACTICE_ANSWER, type PracticeOptions } from './practiceFixture';
+import {
+  mockPractice,
+  PRACTICE_ANSWER,
+  PRACTICE_TASK,
+  type PracticeOptions,
+} from './practiceFixture';
 
 const PATH = '/app/responses/r-arka/interview/practice';
 
@@ -53,7 +58,9 @@ test.describe('B750: «Тренировка System Design» (I3)', () => {
       'step',
     );
     await expect(page.getByRole('heading', { name: 'Что важно в задаче' })).toBeVisible();
-    await expect(page.locator('.sd-reqs li').first()).toBeVisible();
+    // B750: пункты — те, что сервер написал по вакансии, ровно четыре.
+    await expect(page.locator('.sd-reqs li')).toHaveText(PRACTICE_TASK.points);
+    await expect(page.getByRole('heading', { name: PRACTICE_TASK.title })).toBeVisible();
     await expect(page.locator('.sd-time')).toHaveText('45 минут на ответ');
     await expect(page.getByText('Пробные интервью: осталось 27 из 30')).toBeVisible();
     await expectGates(page);
