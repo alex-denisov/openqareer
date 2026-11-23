@@ -36,19 +36,29 @@ function singleLine(item: B640Notification): PinnedLine {
   };
 }
 
+const OTHER_CONNECTION = 'другое подключение';
+
+/** Список сводки: каждая площадка один раз, события без площадки — одной строкой. */
+function loginNames(items: readonly B640Notification[]): readonly string[] {
+  const names = items.map(loginName);
+  const known = [...new Set(names.filter((name): name is string => !!name))];
+  return names.some((name) => !name) ? [...known, OTHER_CONNECTION] : known;
+}
+
+/** Число в заголовке — длина списка внутри: два события hh.ru — одно подключение. */
 function loginSummary(items: readonly B640Notification[]): PinnedLine {
-  const count = items.length;
+  const names = loginNames(items);
+  const count = names.length;
   const forms: [string, string, string] = [
     'подключение требует входа',
     'подключения требуют входа',
     'подключений требуют входа',
   ];
-  const names = [...new Set(items.map(loginName).filter((name): name is string => !!name))];
   return {
     key: `login:${items.map((item) => item.id).join(',')}`,
     items,
     title: `${count} ${pluralWordRu(count, forms)}`,
-    detail: names.length ? names.join(', ') : null,
+    detail: names.join(', '),
     action: { label: 'Подключить', path: buildNodePath('n03'), icon: 'refresh' },
   };
 }

@@ -58,6 +58,22 @@ describe('n01b «Важно»: сводка входов', () => {
     expect(lines[0]!.items.map((entry) => entry.id)).toEqual(['hh', 'l1']);
   });
 
+  it('два события одной площадки — одно подключение, название в списке один раз', () => {
+    const hhAgain = { ...hhSession, id: 'hh2' };
+    const [line] = pinnedLines([hhSession, hhAgain]);
+    expect(line).toMatchObject({ title: '1 подключение требует входа', detail: 'hh.ru' });
+    expect(line!.items.map((entry) => entry.id)).toEqual(['hh', 'hh2']);
+  });
+
+  it('событие без площадки — «другое подключение» и +1 к числу', () => {
+    const nameless = { ...loginLadoga, id: 'l2', company: null };
+    const [line] = pinnedLines([hhSession, nameless, loginLadoga]);
+    expect(line).toMatchObject({
+      title: '3 подключения требуют входа',
+      detail: 'hh.ru, Ладога Банк, другое подключение',
+    });
+  });
+
   it('один вход остаётся своей строкой; сессия hh.ru не называется «Отклик не дошёл»', () => {
     const lines = pinnedLines([failed, hhSession]);
     expect(lines.map((line) => line.title)).toEqual([
