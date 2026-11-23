@@ -15,6 +15,7 @@ function stepResult(completed: boolean): ClusterSplitStepResult {
     catalogMoved: 0,
     newPieceIds: [],
     completed,
+    writeMs: completed ? 0 : 120,
   };
 }
 
@@ -99,6 +100,14 @@ describe('cluster split driver (B752)', () => {
       expect.objectContaining({ reason }),
       'cluster_split_paused',
     );
+  });
+
+  it('its own step blocking the loop (planning a large cluster) does not pause it', async () => {
+    // Первое чтение после шага — задержка самого шага, второе — задержка за паузу.
+    let reads = 0;
+    const { options, log } = probes({ lagP99Ms: () => (++reads % 2 === 1 ? 7_800 : 10) });
+    expect(await runClusterSplitDriver(options)).toEqual({ steps: 3, reason: 'completed' });
+    expect(log.info).toHaveBeenCalledWith({ steps: 3, maxWriteMs: 120 }, 'cluster_split_completed');
   });
 
   it('pauses when the step asks to stop', async () => {

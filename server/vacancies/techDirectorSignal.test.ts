@@ -163,3 +163,17 @@ describe('primeRoleRequirements: требования одним запросо�
     expect(vacancyInCareerRole(item('new', 'Технический директор'), 'CTO')).toBe(true);
   });
 });
+
+describe('B741: «go-to-market» — не навык ИТ', () => {
+  it('go-to-market и go live с одним облаком — признака ИТ нет', () => {
+    expect(
+      hasItSignal(
+        req('Own the go-to-market strategy and go live plan', 'AWS budget'),
+        'Технический директор',
+      ),
+    ).toBe(false);
+  });
+  it('язык Go с облаком — признак ИТ есть', () => {
+    expect(hasItSignal(req('Backend: Go', 'AWS'), 'Технический директор')).toBe(true);
+  });
+});

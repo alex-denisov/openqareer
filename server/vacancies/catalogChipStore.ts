@@ -9,6 +9,7 @@
  * Both tables are created here, never by a startup migration.
  */
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { readInWindows, type WindowedReadOptions } from '../data/windowedRead';
 import { salaryStatsKey } from './catalogSalaryStatsStore';
 import {
   FRESH_WINDOW_MS,
@@ -86,22 +87,20 @@ function listKeysOf(row: SourceRow): string[] {
 }
 
 /** Maintenance process only: one scan of the materialized catalog. */
-export function computeCatalogChips(database: DatabaseSync, nowMs: number): ChipSnapshot {
+export function computeCatalogChips(
+  database: DatabaseSync,
+  nowMs: number,
+  options: WindowedReadOptions = {},
+): ChipSnapshot {
   const counts = new Map<string, ChipCounts>();
   const entries: ChipEntry[] = [];
   if (!tableExists(database, 'catalog_entries')) return { counts, entries };
-  const rows = database
-    .prepare(
-      `SELECT entry_key, place_slug, role_slug, is_remote, salary_label, title, summary, published_ms
-         FROM catalog_entries WHERE status = 'active' AND path <> ''`,
-    )
-    .all() as unknown as SourceRow[];
   const add = (listKey: string, chip: CatalogChip, row: SourceRow) => {
     entries.push({ listKey, chip, publishedMs: row.published_ms, entryKey: row.entry_key });
     const current = counts.get(listKey) ?? {};
     counts.set(listKey, { ...current, [chip]: (current[chip] ?? 0) + 1 });
   };
-  for (const row of rows) {
+  const addRow = (row: SourceRow) => {
     const fields = {
       isRemote: row.is_remote === 1,
       salaryLabel: row.salary_label,
@@ -115,7 +114,19 @@ export function computeCatalogChips(database: DatabaseSync, nowMs: number): Chip
       if (!chipMatches(id, fields, nowMs)) continue;
       for (const listKey of lists) add(listKey, id, row);
     }
-  }
+  };
+  // B776: окнами rowid — один снимок на весь каталог держал контрольную точку WAL.
+  readInWindows<SourceRow>(
+    database,
+    {
+      table: 'catalog_entries',
+      sql: `SELECT entry_key, place_slug, role_slug, is_remote, salary_label, title, summary, published_ms
+              FROM catalog_entries NOT INDEXED
+             WHERE rowid > ? AND rowid <= ? AND status = 'active' AND path <> ''`,
+    },
+    (rows) => rows.forEach(addRow),
+    options,
+  );
   return { counts, entries };
 }
 

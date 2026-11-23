@@ -68,7 +68,6 @@ export interface ClusterSplitDriverReport {
 
 function pauseReason(options: ClusterSplitDriverOptions, result: ClusterSplitStepResult) {
   if (result.stop) return 'step_stop';
-  if (options.lagP99Ms() > CLUSTER_SPLIT_LAG_P99_LIMIT_MS) return 'event_loop_lag';
   if (options.rssBytes() > CLUSTER_SPLIT_RSS_LIMIT_BYTES) return 'rss';
   if (options.walBytes() > options.config.walLimitBytes) return 'wal';
   return undefined;
@@ -79,21 +78,30 @@ export async function runClusterSplitDriver(
 ): Promise<ClusterSplitDriverReport> {
   if (!options.config.enabled) return { steps: 0, reason: 'disabled' };
   let steps = 0;
+  let maxWriteMs = 0;
+  const paused = (reason: string, stepId: string | null) => {
+    options.log.warn({ steps, reason, stepId, maxWriteMs }, 'cluster_split_paused');
+    return { steps, reason };
+  };
   while (!options.isStopped()) {
     const result = options.step();
     steps += 1;
+    maxWriteMs = Math.max(maxWriteMs, result.writeMs);
     options.dropClusterSnapshot();
     options.checkpoint();
     if (result.completed) {
-      options.log.info({ steps }, 'cluster_split_completed');
+      options.log.info({ steps, maxWriteMs }, 'cluster_split_completed');
       return { steps, reason: 'completed' };
     }
+    // Задержка цикла за сам шаг (сведение кусков большого кластера — секунды процессора,
+    // без блокировки базы) сторожа не останавливает: он судит по паузе между шагами.
+    options.lagP99Ms();
     const reason = pauseReason(options, result);
-    if (reason) {
-      options.log.warn({ steps, reason, stepId: result.stepId }, 'cluster_split_paused');
-      return { steps, reason };
-    }
+    if (reason) return paused(reason, result.stepId);
     await options.sleep(options.config.pauseMs);
+    if (options.lagP99Ms() > CLUSTER_SPLIT_LAG_P99_LIMIT_MS) {
+      return paused('event_loop_lag', result.stepId);
+    }
   }
   return { steps, reason: 'stopped' };
 }

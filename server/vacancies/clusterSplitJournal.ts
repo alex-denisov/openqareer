@@ -55,6 +55,21 @@ function snapshotCatalog(db: DatabaseSync, ids: readonly string[]): Record<strin
 }
 
 /** Прежнее состояние кластера и всех id его кусков — одной строкой журнала. */
+/**
+ * Список кусков разбиения, недописанного частями, после смены плана. Снятые
+ * куски уже удалены, новые до записи свободны: откат удалит ровно этот список.
+ */
+export function setJournalPieces(
+  db: DatabaseSync,
+  stepId: string,
+  clusterId: string,
+  pieceIds: readonly string[],
+): void {
+  db.prepare(
+    'UPDATE cluster_split_journal SET new_piece_ids_json = ? WHERE step_id = ? AND old_cluster_id = ?',
+  ).run(JSON.stringify(pieceIds), stepId, clusterId);
+}
+
 export function journalClusterSplit(db: DatabaseSync, input: JournalInput): void {
   const ids = [input.clusterId, ...input.pieceIds];
   const old = db
@@ -169,6 +184,8 @@ export function revertClusterSplitStep(db: DatabaseSync, stepId: string): number
     for (const entry of entries) restoreCluster(db, entry);
     rewindCursor(db, entries);
     db.prepare('DELETE FROM vacancy_catalog_redirects WHERE step_id = ?').run(stepId);
+    // Большой кластер, недописанный частями, откатывается целиком: его ход тоже снимается.
+    db.prepare('DELETE FROM cluster_split_progress WHERE journal_step_id = ?').run(stepId);
     db.prepare('DELETE FROM cluster_split_journal WHERE step_id = ?').run(stepId);
     db.exec('COMMIT');
   } catch (error) {

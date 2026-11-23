@@ -15,12 +15,13 @@ import {
   isOpenRouterBaseUrl,
   openRouterRouting,
 } from './openRouterPrivacy';
+import { openRouterReasoning } from './openRouterReasoning';
 import type { ChatCompletionClient } from './roleNamer';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /**
  * B780: критерии ответа тренировки оценивает модель цепочки письма (как разбор интервью, без
- * Vertex). Расход ограничен: один вызов на один текст ответа (кэш), выход до 1 200 токенов,
+ * Vertex). Расход ограничен: один вызов на один текст ответа (кэш), выход до 4 000 токенов без рассуждения,
  * ответ до 4 000 знаков (схема маршрута), 20 с на все ступени, маршруты под часовым лимитом.
  */
 export interface InterviewAnswerJudge {
@@ -29,7 +30,11 @@ export interface InterviewAnswerJudge {
 
 /** Кандидат ждёт оценку на экране; дольше — оценка правил. */
 export const JUDGE_BUDGET_MS = 20_000;
-const OUTPUT_TOKENS = 1_200;
+/**
+ * Прод 23.11: при 1 200 рассуждение DeepSeek и GLM съедало выход — JSON обрывался или приходил
+ * пустым, и решали правила. Рассуждение выключено (`openRouterReasoning`), запас — на четыре вердикта.
+ */
+const OUTPUT_TOKENS = 4_000;
 const CACHED_JUDGEMENTS = 500;
 const FAILURE_HOLD_MS = 60_000;
 
@@ -71,6 +76,7 @@ export class LlmInterviewAnswerJudge implements InterviewAnswerJudge {
         ? { max_tokens: OUTPUT_TOKENS }
         : { max_completion_tokens: OUTPUT_TOKENS }),
       response_format: { type: 'json_schema', json_schema: judgeJsonSchema(input.type) },
+      ...(openRouter ? { reasoning: openRouterReasoning(this.options.model) } : {}),
       ...openRouterRouting({ personal: openRouter }),
     });
     try {
