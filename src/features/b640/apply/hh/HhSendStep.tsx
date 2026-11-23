@@ -164,7 +164,7 @@ export function HhSendStep(props: HhSendStepProps) {
         onClose={resumes.closePicker}
         onSignIn={resumes.signIn}
         onRetry={resumes.openPicker}
-        onChoose={resumes.choose}
+        onChoose={(item, optimize) => resumes.choose(item, () => setReviewing(optimize))}
       />
     </section>
   );

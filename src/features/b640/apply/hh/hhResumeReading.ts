@@ -1,5 +1,6 @@
 import {
   HH_REVIEW_RESUMES_MAX,
+  HH_REVIEW_SECTIONS_MAX_LENGTH,
   HH_REVIEW_TEXT_MAX_LENGTH,
   type HhResumeContent,
 } from '../../../../../shared/hhCandidateSession';
@@ -35,10 +36,11 @@ function cached(item: HhResumeItem, now: number): HhResumeContent | undefined {
 const pause = (pace: ReadPace) =>
   new Promise<void>((resolve) => setTimeout(resolve, pace.minMs + Math.random() * (pace.maxMs - pace.minMs)));
 
-/** Текст для сверки — начало резюме; целиком страница сохраняется только у выбранного. */
+/** Для сверки — начало текста и разделы, по которым считаются правки; текст целиком страница сохраняется только у выбранного. */
 export function forReview(content: HhResumeContent): HhResumeContent {
-  const { sections: _sections, ...rest } = content;
-  return { ...rest, text: content.text.slice(0, HH_REVIEW_TEXT_MAX_LENGTH) };
+  const { sections, ...rest } = content;
+  const fits = sections && JSON.stringify(sections).length <= HH_REVIEW_SECTIONS_MAX_LENGTH;
+  return { ...rest, ...(fits ? { sections } : {}), text: content.text.slice(0, HH_REVIEW_TEXT_MAX_LENGTH) };
 }
 
 export async function readResumesForReview(

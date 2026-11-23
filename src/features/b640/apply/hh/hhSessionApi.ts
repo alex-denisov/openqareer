@@ -37,9 +37,9 @@ export interface HhResumeVacancyReview extends HhResumeReview {
   readonly vacancyId: string;
 }
 
-/** B678: какое из прочитанных резюме hh.ru подходит вакансии и чего в каждом не хватает. */
-export async function getHhResumeReview(vacancyId: string): Promise<HhResumeVacancyReview> {
-  const query = new URLSearchParams({ vacancyId }).toString();
+/** B678: какое из прочитанных резюме hh.ru подходит вакансии и чего в каждом не хватает; по просьбе — с числом правок. */
+export async function getHhResumeReview(vacancyId: string, withEdits = false): Promise<HhResumeVacancyReview> {
+  const query = new URLSearchParams({ vacancyId, ...(withEdits ? { edits: '1' } : {}) }).toString();
   const response = await apiFetch(`${BASE}/resumes/review?${query}`);
   return readDataObject<HhResumeVacancyReview>(response);
 }
