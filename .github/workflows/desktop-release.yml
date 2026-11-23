@@ -73,6 +73,12 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "release commit '$RELEASE_SHA' is not a full SHA" >&2; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
+            # Only a commit that is on main is ever signed and published.
+            git fetch -q origin main
+            git merge-base --is-ancestor "$RELEASE_SHA" origin/main ||
+              { echo "release commit $RELEASE_SHA is not on main" >&2; exit 1; }
+          fi
           base="$(node -p 'require("./src-tauri/tauri.conf.json").version.split(".").slice(0, 2).join(".")')"
           release_json="$(curl -fsS --max-time 15 https://openqareer.com/api/v1/desktop/release || true)"
           read_release() {
