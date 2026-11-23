@@ -8,6 +8,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { readSalaryMarketIndex } from '../salaryMarket/salaryMarketSnapshot';
 import { parseSalaryRangeEvidence } from '../salaryMarket/salaryMarketRanges';
+import { readInWindows, type WindowedReadOptions } from '../data/windowedRead';
 import { salaryStats, type ProvenRange, type SalaryStats } from './catalogSalaryStats';
 
 const TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_salary_stats (
@@ -39,7 +40,10 @@ function provenRange(json: string | null): ProvenRange | undefined {
 }
 
 /** Maintenance process only: one scan of the materialized catalog joined to its clusters. */
-export function computeCatalogSalaryStats(database: DatabaseSync): Map<string, SalaryStats> {
+export function computeCatalogSalaryStats(
+  database: DatabaseSync,
+  options: WindowedReadOptions = {},
+): Map<string, SalaryStats> {
   const result = new Map<string, SalaryStats>();
   const exists = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalog_entries'")
@@ -51,19 +55,27 @@ export function computeCatalogSalaryStats(database: DatabaseSync): Map<string, S
   const salarySql = clusters
     ? `(SELECT json_extract(c.cluster_json, '$.salary') FROM vacancy_clusters c WHERE c.id = e.cluster_id)`
     : 'NULL';
-  const rows = database
-    .prepare(
-      `SELECT e.place_slug, e.role_slug, ${salarySql} AS salary_json FROM catalog_entries e
-        WHERE e.status = 'active' AND e.path <> '' AND e.place_slug IS NOT NULL
-          AND e.salary_label IS NOT NULL AND e.salary_label <> ''`,
-    )
-    .all() as Array<{ place_slug: string; role_slug: string | null; salary_json: string | null }>;
+  // B776: окнами rowid — json_extract по кластеру стоит ~1,5 мс на строку (30 с на 20 тыс., прод).
   const byList = new Map<string, ListFacts>();
-  for (const row of rows) {
-    const range = provenRange(row.salary_json);
-    add(byList, row.place_slug, range);
-    if (row.role_slug) add(byList, `${row.place_slug}|${row.role_slug}`, range);
-  }
+  readInWindows<{ place_slug: string; role_slug: string | null; salary_json: string | null }>(
+    database,
+    {
+      table: 'catalog_entries',
+      sql: `SELECT e.place_slug, e.role_slug, ${salarySql} AS salary_json
+              FROM catalog_entries e NOT INDEXED
+             WHERE e.rowid > ? AND e.rowid <= ?
+               AND e.status = 'active' AND e.path <> '' AND e.place_slug IS NOT NULL
+               AND e.salary_label IS NOT NULL AND e.salary_label <> ''`,
+    },
+    (rows) => {
+      for (const row of rows) {
+        const range = provenRange(row.salary_json);
+        add(byList, row.place_slug, range);
+        if (row.role_slug) add(byList, `${row.place_slug}|${row.role_slug}`, range);
+      }
+    },
+    options,
+  );
   // A role page exists only for roles in the prepared salary directory.
   const salaryRoles = new Set(readSalaryMarketIndex(database).map((entry) => entry.role));
   for (const [key, facts] of byList) {

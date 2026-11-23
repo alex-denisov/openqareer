@@ -1,3 +1,4 @@
+import { GO_LANGUAGE } from '../../shared/goLanguage';
 import { classifyTelegramPost } from './telegramPostType';
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
@@ -93,14 +94,6 @@ function parseNumberWithK(raw: string): number | undefined {
 }
 
 const MIN_TECH_TERMS_FOR_TECH_ONLY = 3;
-
-/**
- * B741 (прод 22.11): «Go» без учёта регистра находил язык в «go-to-market», «go live» и
- * «go above and beyond» — у вице-президентов по продукту Go стоял четвёртым требованием.
- * Язык — только отдельное слово с заглавной; «Go-разработчик» — язык, «go-to» и «go-live» — нет.
- */
-const GO_LANGUAGE =
-  /(?<![\p{L}\p{N}-])Go(?![\p{L}\p{N}])(?!-(?:[Tt]o|[Ll]ive)\b)(?!\s+(?:live|above|ahead|beyond|to|through|for|with|after|back)\b)/u;
 
 function keywordPattern(keyword: string): RegExp {
   if (keyword === 'Go') return GO_LANGUAGE;

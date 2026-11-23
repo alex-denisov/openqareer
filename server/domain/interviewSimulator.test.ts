@@ -104,3 +104,25 @@ describe('interview simulator domain', () => {
     ]);
   });
 });
+
+describe('B780: текст вопроса System Design (прод 23.11 «Для для вакансии»)', () => {
+  const plan = (vacancyTitle?: string) =>
+    buildInterviewQuestionPlan({
+      roleTitle: 'Инженер данных',
+      ...(vacancyTitle ? { vacancyTitle } : {}),
+      questionTypes: ['system_design'],
+      stories: [],
+      stressMode: false,
+      questionIds: ['q1'],
+    })[0]!.prompt;
+
+  it('начинается с «Для вакансии «…»» без повтора предлога', () => {
+    const prompt = plan('Технический директор');
+    expect(prompt.startsWith('Для вакансии «Технический директор»')).toBe(true);
+    expect(prompt).not.toMatch(/для для/iu);
+  });
+
+  it('без вакансии — «Для роли «…»»', () => {
+    expect(plan().startsWith('Для роли «Инженер данных»')).toBe(true);
+  });
+});

@@ -10,6 +10,8 @@ vi.mock('./landingStatsJob', () => ({
 }));
 vi.mock('../vacancies/catalogSources', () => ({
   computeCatalogSources: vi.fn(() => []),
+  readPoolCounts: vi.fn(() => ({ active: 0, remote: 0, bySource: new Map() })),
+  catalogSourcesOf: vi.fn(() => []),
   writeCatalogSources: vi.fn(),
   readCatalogSources: vi.fn(),
   setCatalogSources: vi.fn(),
