@@ -57,6 +57,36 @@ describe('свои вакансии в таблице', () => {
     expect(view.container.textContent).toContain('Требования в тексте не нашлись');
     view.unmount();
   });
+  it('B676: без счёта раскрытие говорит почему и показывает найденное требование (Lever, регион)', async () => {
+    const { getOwnVacancy } = await import('../ownVacancyApi');
+    const gates = { role: { status: 'matched' }, level: { status: 'unknown' }, region: { status: 'blocked' }, workAuthorization: { status: 'unknown' }, workFormat: { status: 'unknown' } };
+    vi.mocked(getOwnVacancy).mockResolvedValueOnce({
+      ...item, coverage: null, text: 'Travel',
+      fit: { state: 'ready', requirements: [{ id: 'r9', text: 'Готовность к командировкам по Европе', sourceQuote: 'x', origin: 'structural', importance: 'high', kind: 'other', hard: false, stopFactor: false, skill: false }],
+        result: { status: 'blocked', reason: 'blocked_gate', gates, coverage: { matched: 0, total: 0, unknown: 0 }, assessments: [] } },
+    } as never);
+    const view = mount(<table><OwnRows items={[{ ...item, coverage: null }]} money={RUB} onRemove={vi.fn()} /></table>);
+    expect(view.container.querySelector('.vt-fitc')!.textContent).toContain('—');
+    click(view.container.querySelector('.vt-toggle'));
+    await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
+    expect(view.container.textContent).toContain('Регион вакансии не входит в ваши условия поиска');
+    expect(view.container.textContent).toContain('Готовность к командировкам по Европе');
+    view.unmount();
+  });
+  it('B676: мало навыков для счёта — словами, а не пустое раскрытие', async () => {
+    const { getOwnVacancy } = await import('../ownVacancyApi');
+    const matched = { status: 'unknown' };
+    const gates = { role: matched, level: matched, region: matched, workAuthorization: matched, workFormat: matched };
+    vi.mocked(getOwnVacancy).mockResolvedValueOnce({
+      ...item, coverage: null, text: 'x',
+      fit: { state: 'ready', requirements: [], result: { status: 'unknown', reason: 'too_few_skills', gates, coverage: { matched: 0, total: 0, unknown: 0 }, assessments: [] } },
+    } as never);
+    const view = mount(<table><OwnRows items={[{ ...item, coverage: null }]} money={RUB} onRemove={vi.fn()} /></table>);
+    click(view.container.querySelector('.vt-toggle'));
+    await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
+    expect(view.container.textContent).toContain('Мало требований для расчёта');
+    view.unmount();
+  });
   it('раскрытие: «не оценка рынка», требования и ссылка на сайт', async () => {
     const view = mount(<table><OwnRows items={[item]} money={RUB} onRemove={vi.fn()} /></table>);
     click(view.container.querySelector('.vt-toggle'));

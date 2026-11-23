@@ -1,5 +1,5 @@
 import { formatLocalDate } from '../../shared/timezoneUtils';
-import type { LinkedinRhythm, LinkedinRhythmDay } from '../../shared/b640LinkedinQueue';
+import type { LinkedinCommentRhythm, LinkedinRhythm, LinkedinRhythmDay } from '../../shared/b640LinkedinQueue';
 
 const DAY_MS = 86_400_000;
 const HORIZON_DAYS = 120;
@@ -59,6 +59,46 @@ export function nextFreeSlot(input: SlotInput): string | null {
     const key = weekKey(date);
     if (input.respectWeeklyCap && (planned.get(key) ?? 0) >= rhythm.postsPerWeek) continue;
     return new Date(moment).toISOString();
+  }
+  return null;
+}
+
+const minutesOf = (time: string): number => {
+  const [hour, minute] = time.split(':').map(Number);
+  return hour * 60 + minute;
+};
+const clockOf = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+/** a05e: `perDay` слотов дня делят окно поровну: 2 в 10:00–18:00 → 10:00 и 14:00. */
+export function commentDayTimes(rhythm: LinkedinCommentRhythm): string[] {
+  const from = minutesOf(rhythm.from);
+  const step = (minutesOf(rhythm.to) - from) / rhythm.perDay;
+  return Array.from({ length: rhythm.perDay }, (_, index) => clockOf(from + Math.round(index * step)));
+}
+
+export interface CommentSlotInput {
+  readonly rhythm: LinkedinCommentRhythm;
+  readonly timezone: string;
+  readonly now: number;
+  /** Занятые моменты (ISO) очереди: слот не повторяется. */
+  readonly takenAt: readonly string[];
+}
+
+/** Ближайший свободный слот ритма комментариев после `now`; `null` за горизонтом. */
+export function nextCommentSlot(input: CommentSlotInput): string | null {
+  const { rhythm, timezone, now } = input;
+  const taken = new Set(input.takenAt.map((iso) => new Date(iso).getTime()));
+  const times = commentDayTimes(rhythm);
+  const start = Date.parse(`${formatLocalDate(new Date(now), timezone)}T00:00:00Z`);
+  for (let step = 0; step < HORIZON_DAYS; step += 1) {
+    const civil = new Date(start + step * DAY_MS);
+    if (!rhythm.days.includes(DAY_BY_INDEX[civil.getUTCDay()])) continue;
+    const date = civil.toISOString().slice(0, 10);
+    for (const time of times) {
+      const moment = localToUtc(date, time, timezone);
+      if (moment > now && !taken.has(moment)) return new Date(moment).toISOString();
+    }
   }
   return null;
 }
