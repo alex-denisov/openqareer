@@ -3,9 +3,19 @@ import { apiFetch, readData } from '../../coach/apiClient';
 
 const URL = '/api/v1/candidate/b640/app-preferences';
 
-/** Без кэша между экранами: после выхода и входа другого кандидата прежний выбор не всплывёт. */
-export async function getAppPreferences(): Promise<B640AppPreferences> {
-  return readData<B640AppPreferences>(await apiFetch(URL));
+let inflight: Promise<B640AppPreferences> | null = null;
+
+/**
+ * Без кэша между экранами: после выхода и входа другого кандидата прежний выбор не всплывёт.
+ * Одновременные чтения (тема кабинета и экран n06 при открытии) делят один запрос.
+ */
+export function getAppPreferences(): Promise<B640AppPreferences> {
+  inflight ??= apiFetch(URL)
+    .then((response) => readData<B640AppPreferences>(response))
+    .finally(() => {
+      inflight = null;
+    });
+  return inflight;
 }
 
 /** Валюта показа сумм; не прочиталась — `null`, экран берёт свою по умолчанию. */
