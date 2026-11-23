@@ -40,8 +40,9 @@ export function debriefLeadSub(input: {
           timeZone: input.timeZone,
         }).format(new Date(input.scheduledAt))
       : null;
-  const who =
-    input.format?.trim() || (input.interviewerName ? `собеседник: ${input.interviewerName}` : null);
+  // Макет кончает строку собеседником; имя не склоняем, поэтому «собеседник: имя», без имени — формат.
+  const name = input.interviewerName?.trim();
+  const who = name ? `собеседник: ${name}` : input.format?.trim() || null;
   return [input.company?.trim() || null, day ? `интервью ${day}` : null, who]
     .filter((part): part is string => Boolean(part))
     .join(' · ');

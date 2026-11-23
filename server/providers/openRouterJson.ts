@@ -11,6 +11,19 @@ export interface ChatJsonRequest {
   readonly timeoutMs: number;
   /** Данные кандидата: OpenRouter не отдаёт их провайдерам, которые собирают данные. */
   readonly personal?: boolean;
+  /** Картинки к сообщению пользователя (base64): только модели с входом изображения. */
+  readonly images?: readonly { readonly mimeType: string; readonly data: string }[];
+}
+
+function userContent(request: ChatJsonRequest) {
+  if (!request.images?.length) return request.user;
+  return [
+    { type: 'text', text: request.user },
+    ...request.images.map((image) => ({
+      type: 'image_url',
+      image_url: { url: `data:${image.mimeType};base64,${image.data}` },
+    })),
+  ];
 }
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
@@ -33,7 +46,7 @@ export async function requestChatJson(
       model: route.model,
       messages: [
         { role: 'system', content: request.system },
-        { role: 'user', content: request.user },
+        { role: 'user', content: userContent(request) },
       ],
       response_format: { type: 'json_object' },
       ...(route.provider === 'openai'
