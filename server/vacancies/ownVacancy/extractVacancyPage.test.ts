@@ -21,6 +21,17 @@ describe('extractVacancyPage', () => {
     expect(out.text).toContain('- Python 5 лет');
     expect(out.text.split('\n\n').length).toBeGreaterThan(2);
   });
+  it('B676: baseSalary JSON-LD — деньги вакансии; «\\n» из описания — перевод строки', () => {
+    const paid = {
+      ...posting,
+      description: `${DESC}\\n<p>Benefits</p>`,
+      baseSalary: { '@type': 'MonetaryAmount', currency: 'USD', value: { minValue: 114000, maxValue: 130000, unitText: 'YEAR' } },
+    };
+    const out = extractVacancyPage(page(ld(paid)));
+    expect(out.salary).toEqual({ from: 114_000, to: 130_000, currency: 'USD', period: 'year' });
+    expect(out.text).not.toContain('\\n');
+    expect(extractVacancyPage(page(ld(posting))).salary).toBeNull();
+  });
   it('@graph и массив', () => {
     expect(extractVacancyPage(page(ld({ '@graph': [{ '@type': 'WebSite' }, posting] }))).title).toBe('Инженер данных');
     expect(extractVacancyPage(page(ld([{ '@type': 'Organization' }, posting]))).title).toBe('Инженер данных');
