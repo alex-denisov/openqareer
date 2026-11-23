@@ -161,6 +161,10 @@ export interface CandidateExport extends CandidateSnapshot {
   careerSections: import('./contactsCareerExport').CareerSectionsExport;
   /** B738 · 7: логин, оплаты и подписка, настройки, согласия, статусы — без паролей, кодов и ключей провайдера. */
   account: import('./accountExport').AccountExport;
+  /** B738 · 8: автоотклики и hh.ru — настройки, очередь с письмами, журнал, попытки, подъём, снимок резюме. */
+  automation: import('./automationExport').AutomationExport;
+  /** B738 · 9: записи интервью с расшифровкой и разбором, имя собеседника. */
+  interviewRecordings: import('./interviewRecordingExport').InterviewRecordingExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];

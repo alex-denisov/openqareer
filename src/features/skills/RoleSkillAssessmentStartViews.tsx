@@ -126,6 +126,15 @@ export function NoRoleState({ onOpenOpportunities }: { onOpenOpportunities: () =
   );
 }
 
+export function CountingState() {
+  return (
+    <section className="career-role-assessment-state" aria-live="polite">
+      <Info size={24} aria-hidden="true" />
+      <h2>Считаем вакансии роли…</h2>
+    </section>
+  );
+}
+
 export function SourceErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <EmptyState

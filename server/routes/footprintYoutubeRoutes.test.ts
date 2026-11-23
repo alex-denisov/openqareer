@@ -8,6 +8,7 @@ import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
+import { forbiddenExportKeys } from '../data/exportForbiddenKeys';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 
@@ -248,5 +249,7 @@ describe('B740: ответы цифрового следа без названи
     expect(response.statusCode).toBe(200);
     expect(response.body).not.toMatch(TOOL_NAMES);
     expect(response.json().data.footprintAudits[0].findings[0].adapter).toBe('web');
+    // B738: запретные имена полей убраны со всего ответа, включая отчёты репутации и следа.
+    expect(forbiddenExportKeys(response.json().data)).toEqual([]);
   });
 });

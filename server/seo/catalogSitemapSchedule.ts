@@ -12,10 +12,7 @@ import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
 import { snapshotDue, snapshotSitemapCards } from './catalogArchive';
 import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
-import {
-  readCatalogSitemaps,
-  writeCatalogSitemaps,
-} from './catalogSitemapJob';
+import { readCatalogSitemaps, writeCatalogSitemaps } from './catalogSitemapJob';
 import type { ListingIndexHistory } from './catalogIndexing';
 import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
 import { createGoogleIndexingNotifier } from './googleIndexing';
@@ -65,11 +62,14 @@ function errorName(error: unknown): string {
 }
 
 /** A failed step leaves the set as it is and never stops the sitemap files. */
-function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): void {
+async function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): Promise<void> {
   try {
     const cap = cardRolloutDailyCap(process.env.OPENQAREER_CARD_ROLLOUT_DAILY_CAP);
     const started = Date.now();
-    const report = admitCardRollout(database, now, cap);
+    const report = await admitCardRollout(database, now, cap, {
+      choose: (quota) =>
+        heavyRead(database, 'cardRolloutCandidates', { nowMs: now.getTime(), quota }, log),
+    });
     log.info({ ...report, cap, ms: Date.now() - started }, 'catalog-card-rollout');
   } catch (error: unknown) {
     log.error({ errorName: errorName(error) }, 'catalog-card-rollout-failed');
@@ -123,7 +123,7 @@ export function scheduleCatalogSitemapJob(
     const started = Date.now();
     try {
       const now = new Date();
-      runCardRollout(database, log, now);
+      await runCardRollout(database, log, now);
       runMarketReport(database, log, now);
       // B649-3: grouping the catalog held the loop ~40 s; read in its own thread.
       const files = await heavyRead(database, 'sitemaps', { nowMs: now.getTime() }, log);

@@ -69,6 +69,17 @@ export interface MatchedSnapshotStore {
 
 const WAIT_EXPIRED = Symbol('wait-expired');
 
+/**
+ * B770: a reader found no snapshot for its profile, neither in the process nor in the store.
+ * `keyInStore` with no snapshot means the stored row did not open; `seals` near the cap of 24
+ * means the row was pushed out; neither means the warm pass had not reached the candidate yet.
+ */
+export interface MatchedSnapshotMiss {
+  readonly candidateId: string;
+  readonly keyInStore: boolean;
+  readonly seals: number;
+}
+
 interface Snapshot {
   readonly items: MatchedVacancyItem[];
   readonly storedAt: number;
@@ -90,6 +101,11 @@ export interface MatchedPoolSnapshotsOptions {
 export interface MatchedPoolReadOptions {
   /** For a background pass: its next candidate waits for the rebuild instead of running beside it. */
   readonly awaitRebuild?: boolean;
+  /**
+   * B770 (prod 23.11 04:47Z): «Карьера» right after a restart waited the full 12 s for each of
+   * seven roles with no stored snapshot. A screen that can say «считаем» names a shorter wait.
+   */
+  readonly waitMs?: number;
 }
 
 export class MatchedPoolSnapshots {
@@ -100,6 +116,7 @@ export class MatchedPoolSnapshots {
   private readonly maxAgeMs: number;
   private readonly minStaleRebuildMs: number;
   private onRebuildFailed: ((error: unknown) => void) | undefined;
+  private onMiss: ((miss: MatchedSnapshotMiss) => void) | undefined;
   private readonly maxEntries: number;
   private readonly waitMs: number;
   private readonly staleWaitMs: number;
@@ -119,6 +136,10 @@ export class MatchedPoolSnapshots {
 
   setRebuildFailureLog(log: (error: unknown) => void): void {
     this.onRebuildFailed = log;
+  }
+
+  setMissLog(log: (miss: MatchedSnapshotMiss) => void): void {
+    this.onMiss = log;
   }
 
   setStore(store: MatchedSnapshotStore): void {
@@ -213,8 +234,19 @@ export class MatchedPoolSnapshots {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
-    const waitMs = options.awaitRebuild ? undefined : stored ? this.staleWaitMs : this.waitMs;
+    if (!stored && !options.awaitRebuild) this.reportMiss(candidateId, profileKey);
+    const waitMs = options.awaitRebuild
+      ? undefined
+      : stored
+        ? this.staleWaitMs
+        : (options.waitMs ?? this.waitMs);
     return this.awaitCompute(key, compute, stored, waitMs);
+  }
+
+  private reportMiss(candidateId: string, profileKey: string): void {
+    if (!this.onMiss) return;
+    const keys = this.guard(() => this.store?.keys(candidateId)) ?? [];
+    this.onMiss({ candidateId, keyInStore: keys.includes(profileKey), seals: keys.length });
   }
 
   /** A snapshot of the previous process: it counts as read after the current pool writes. */
