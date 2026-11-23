@@ -5,6 +5,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { labelledTimer } from '../observability/backgroundSteps';
+import { nextTurn } from '../data/chunkedRows';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { setLandingStats } from './landingStatsCache';
@@ -60,20 +61,26 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
   });
 }
 
-/** Web server: a primary-key read of one row, then the cache is replaced. */
+/** Web server: one row and the sources list (57 thousand rows, B776: read in portions). */
 export function scheduleLandingStatsRefresh(databasePath: string, log: StatsLog): () => void {
-  const read = () => {
+  let running = false;
+  const read = async () => {
+    if (running) return;
+    running = true;
     let database: DatabaseSync | undefined;
     try {
+      await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
       const stats = readLandingStats(database);
       if (stats) setLandingStats(stats);
-      setCatalogSources(readCatalogSources(database));
+      await nextTurn();
+      setCatalogSources(await readCatalogSources(database));
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'landing-stats-refresh-failed');
     } finally {
       database?.close();
+      running = false;
     }
   };
   const refresh = labelledTimer('web:landing-refresh', read, (error) =>

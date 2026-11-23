@@ -33,6 +33,20 @@ export const CATALOG_SITEMAPS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_si
   updated_at TEXT NOT NULL
 ) STRICT`;
 
+/**
+ * B776: одна строка о сборке файлов. Веб-процесс сверяет её, а не строки catalog_sitemaps:
+ * их столбцы лежат после 17 МБ xml, и подпись по ним шла 0,5 с цикла событий (прод 23.11).
+ */
+export const CATALOG_SITEMAPS_BUILD_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_sitemaps_build (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  signature TEXT NOT NULL
+) STRICT`;
+
+function buildSignature(files: readonly SitemapFile[], now: Date): string {
+  const at = now.toISOString();
+  return files.map((file) => `${file.name}:${file.urlCount}:${file.lastmod ?? ''}:${at}`).join('|');
+}
+
 const DAY_MS = 86_400_000;
 
 /**
@@ -153,6 +167,7 @@ export function writeCatalogSitemaps(
   now: Date,
 ): void {
   database.exec(CATALOG_SITEMAPS_TABLE_SQL);
+  database.exec(CATALOG_SITEMAPS_BUILD_TABLE_SQL);
   const insert = database.prepare(
     `INSERT INTO catalog_sitemaps (name, position, xml, url_count, lastmod, updated_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -170,6 +185,9 @@ export function writeCatalogSitemaps(
         now.toISOString(),
       );
     });
+    database
+      .prepare('INSERT OR REPLACE INTO catalog_sitemaps_build (id, signature) VALUES (1, ?)')
+      .run(buildSignature(files, now));
     database.exec('COMMIT');
   } catch (error: unknown) {
     database.exec('ROLLBACK');
