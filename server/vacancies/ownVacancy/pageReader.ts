@@ -16,7 +16,7 @@ export interface PageReadTrace {
   readonly host: string;
   readonly status: number | null;
   readonly bytes: number;
-  readonly stage: 'page' | 'robots' | 'timeout' | 'blocked' | 'error';
+  readonly stage: 'page' | 'robots' | 'timeout' | 'blocked' | 'error' | 'too_large' | 'http_status' | 'not_html';
   readonly outcome: 'ok' | OwnVacancyUnreadable;
 }
 
@@ -33,7 +33,7 @@ export interface PageReaderOptions {
  * по 260–330 мс) чтение по кускам заняло 8 056 мс и упёрлось в прежние 8 с — «не открылась».
  */
 const TIMEOUT_MS = 20_000;
-const MAX_BYTES = 1_500_000;
+const MAX_BYTES = 2_000_000;
 const MAX_REDIRECTS = 3;
 const REFUSED_STATUS = new Set([401, 403, 429, 451]);
 
@@ -130,12 +130,15 @@ async function readPage(start: URL, context: Context): Promise<PageReadResult> {
   if (hop.kind === 'fail') return { ok: false, reason: hop.reason };
   const { response } = hop;
   const type = response.headers.get('content-type') ?? '';
-  if (!response.ok || REFUSED_STATUS.has(response.status) || !/^text\/html|^application\/xhtml\+xml/iu.test(type)) {
+  const htmlType = /^text\/html|^application\/xhtml\+xml/iu.test(type);
+  if (!response.ok || REFUSED_STATUS.has(response.status) || !htmlType) {
+    context.last.stage = htmlType ? 'http_status' : 'not_html';
     await response.body?.cancel().catch(() => undefined);
     return { ok: false, reason: 'failed' };
   }
   const html = await readBody(response, context.maxBytes);
   context.last.bytes = html === null ? context.maxBytes : Buffer.byteLength(html);
+  if (html === null) context.last.stage = 'too_large';
   return html === null ? { ok: false, reason: 'failed' } : { ok: true, html };
 }
 
