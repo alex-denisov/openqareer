@@ -1,5 +1,7 @@
 import type { RejectionReviewChecks } from '../../../../../shared/rejectionReview';
 import type { IconName } from '../../kit';
+import { conditionsPath } from '../../career/careerPaths';
+import { buildNodePath } from '../../routes';
 import { longDate, pluralRu } from './responseRow';
 
 /** Проверка экрана «Мало данных» (O7c): что сделать и почему. */
@@ -9,7 +11,8 @@ export interface CheckCard {
   readonly why: string;
   readonly action: string;
   readonly icon: IconName;
-  readonly node: 's07' | 'o01';
+  /** Куда ведёт кнопка. */
+  readonly to: string;
 }
 
 const CURRENCY_SIGNS: Readonly<Record<string, string>> = { RUB: '₽', USD: '$', EUR: '€' };
@@ -18,50 +21,51 @@ function money(amount: number, currency: string): string {
   return `${amount.toLocaleString('ru-RU').replace(/\s/gu, ' ')} ${CURRENCY_SIGNS[currency] ?? currency}`;
 }
 
-/** Три проверки, которым порог в 20 откликов не нужен; вилок нет без ожиданий по деньгам. */
+/** Вилки: с «Зарплатой от» — сколько вакансий ниже неё; без неё — просьба указать сумму (c10b). */
+function salaryCard(salaryBelow: RejectionReviewChecks['salaryBelow']): CheckCard {
+  const base = {
+    key: 'salary',
+    title: 'Сверить ожидания по деньгам с вилкой',
+    icon: 'wallet',
+  } as const;
+  if (!salaryBelow) {
+    return {
+      ...base,
+      why: 'Сколько хотите получать? Зарплата от — не указана.',
+      action: 'Указать',
+      to: conditionsPath(),
+    };
+  }
+  return {
+    ...base,
+    why: `В ${salaryBelow.count} из ${salaryBelow.total} ${pluralRu(salaryBelow.total, ['вакансии', 'вакансий', 'вакансий'])} верх вилки ниже ваших ${money(salaryBelow.floor, salaryBelow.currency)}.`,
+    action: 'Открыть вилки',
+    to: buildNodePath('s07'),
+  };
+}
+
+/** Три проверки, которым порог в 20 откликов не нужен (макет o07c). */
 export function checkCards(checks: RejectionReviewChecks): readonly CheckCard[] {
   const { unfinished, salaryBelow, late } = checks;
-  const cards: CheckCard[] = [
+  return [
     {
       key: 'unfinished',
       title: 'Обновить статусы откликов',
       why: `Незавершённых откликов — ${unfinished.count} из ${unfinished.total}.`,
       action: 'Обновить статусы',
       icon: 'refresh',
-      node: 'o01',
+      to: buildNodePath('o01'),
+    },
+    salaryCard(salaryBelow),
+    {
+      key: 'late',
+      title: 'Откликаться на свежие вакансии',
+      why: `${late.count} из ${late.total} ${pluralRu(late.total, ['отклика', 'откликов', 'откликов'])} — позже 10 дней после публикации.`,
+      action: 'Показать свежие',
+      icon: 'clock',
+      to: buildNodePath('s07'),
     },
   ];
-  if (salaryBelow) {
-    cards.push({
-      key: 'salary',
-      title: 'Сверить ожидания по деньгам с вилкой',
-      why: `В ${salaryBelow.count} из ${salaryBelow.total} ${pluralRu(salaryBelow.total, ['вакансии', 'вакансий', 'вакансий'])} верх вилки ниже ваших ${money(salaryBelow.floor, salaryBelow.currency)}.`,
-      action: 'Открыть вилки',
-      icon: 'wallet',
-      node: 's07',
-    });
-  }
-  cards.push({
-    key: 'late',
-    title: 'Откликаться на свежие вакансии',
-    why: `${late.count} из ${late.total} ${pluralRu(late.total, ['отклика', 'откликов', 'откликов'])} — позже 10 дней после публикации.`,
-    action: 'Показать свежие',
-    icon: 'clock',
-    node: 's07',
-  });
-  return cards;
-}
-
-const COUNT_WORDS: Readonly<Record<number, string>> = {
-  1: 'Одна проверка',
-  2: 'Две проверки',
-  3: 'Три проверки',
-};
-
-/** Заголовок блока: «Три проверки…», а без проверки вилок — «Две проверки…». */
-export function checksHeading(count: number): string {
-  const which = count === 1 ? 'которой' : 'которым';
-  return `${COUNT_WORDS[count] ?? `${count} проверки`}, ${which} данные не нужны`;
 }
 
 /** Основание чисел: «Отклики со 2 октября. Порог — 20 откликов, как в сводке воронки.» */

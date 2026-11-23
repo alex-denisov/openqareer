@@ -443,6 +443,30 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect(writing).toHaveBeenCalledOnce();
   });
 
+  it('B776: a busy database skips the seal without an exception, a slow seal is logged with its size', () => {
+    const list = { filtered: pool(1), pageOffsets: [0], facets: {}, campaignWithHypotheses: {} } as never;
+    const store = (written: object) => ({ sealedMatchedLists: { write: () => written } });
+    const log = { info: vi.fn(), error: vi.fn() };
+    const busy = { candidateId: 'c1', candidateStore: store({ skipped: 'busy', lockWaitMs: 51 }) } as never;
+    expect(() => sealMatchedList(busy, 'all', list, 1, log, true)).not.toThrow();
+    expect(log.info).toHaveBeenCalledWith(expect.objectContaining({ lockWaitMs: 51, bytes: expect.any(Number) }), 'matched-list-seal-skipped');
+    expect(log.error).not.toHaveBeenCalled();
+
+    log.info.mockClear();
+    const slow = { candidateId: 'c1', candidateStore: store({ heldMs: 700, lockWaitMs: 3 }) } as never;
+    sealMatchedList(slow, 'all', list, 1, log, true);
+    expect(log.info).toHaveBeenCalledWith(
+      expect.objectContaining({ heldMs: 700, sealMs: expect.any(Number), bytes: expect.any(Number) }),
+      'matched-list-seal-slow',
+    );
+
+    log.info.mockClear();
+    const quick = { candidateId: 'c1', candidateStore: store({ heldMs: 20, lockWaitMs: 0 }) } as never;
+    sealMatchedList(quick, 'all', list, 1, log, true);
+    expect(log.info).toHaveBeenCalledTimes(1);
+    expect(log.info).toHaveBeenCalledWith(expect.anything(), 'matched-list-sealed');
+  });
+
   it('the switch off stops the read', async () => {
     const { read, candidateStore, candidate } = await sealedApp();
     await read();

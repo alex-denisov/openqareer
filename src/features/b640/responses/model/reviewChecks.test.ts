@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RejectionReviewChecks } from '../../../../../shared/rejectionReview';
-import { checkCards, checksBasis, checksHeading } from './reviewChecks';
+import { checkCards, checksBasis } from './reviewChecks';
 
 const CHECKS: RejectionReviewChecks = {
   since: '2026-10-02T10:00:00.000Z',
@@ -29,19 +29,17 @@ describe('B645: три проверки «Мало данных»', () => {
     ]);
   });
 
-  it('без ожиданий по деньгам проверки вилок нет', () => {
-    expect(checkCards({ ...CHECKS, salaryBelow: null }).map((card) => card.action)).toEqual([
-      'Обновить статусы',
-      'Показать свежие',
-    ]);
-  });
-
-  // B645-2: при двух карточках заголовок «Три проверки» врал.
-  it('заголовок называет столько проверок, сколько карточек', () => {
-    expect(checksHeading(checkCards(CHECKS).length)).toBe('Три проверки, которым данные не нужны');
-    expect(checksHeading(checkCards({ ...CHECKS, salaryBelow: null }).length)).toBe(
-      'Две проверки, которым данные не нужны',
-    );
+  // Оркестратор 23.11: третья карточка остаётся и без ожиданий — просит указать «Зарплату от».
+  it('без ожиданий по деньгам карточка вилок просит указать сумму в условиях поиска', () => {
+    const salary = checkCards({ ...CHECKS, salaryBelow: null })[1];
+    expect(salary).toMatchObject({
+      key: 'salary',
+      title: 'Сверить ожидания по деньгам с вилкой',
+      why: 'Сколько хотите получать? Зарплата от — не указана.',
+      action: 'Указать',
+      to: '/app/career?view=conditions',
+    });
+    expect(checkCards(CHECKS)[1]?.to).toBe('/app/vacancies');
   });
 
   it('основание: с какого дня отклики и порог', () => {

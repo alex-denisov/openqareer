@@ -460,6 +460,11 @@ try {
     info: (details: Record<string, unknown>, message: string) => app.log.info(details, message),
     error: (details: Record<string, unknown>, message: string) => app.log.error(details, message),
   };
+  // B776: periodic web work under its own name, so a stall is not blamed on a catalog page waiting behind it.
+  const webStep = (name: string, run: () => unknown) =>
+    labelledTimer(name, run, (error) =>
+      app.log.error({ step: name, errorName: error instanceof Error ? error.name : 'UnknownError' }, 'web-step-failed'),
+    );
   scheduleLandingStatsRefresh(config.databasePath, scheduleLog);
   scheduleCurrencyRatesRefresh(config.databasePath, scheduleLog);
   // Sitemap files written by the maintenance process; the HTTP path reads memory only.
@@ -472,8 +477,8 @@ try {
       { mode: 'lazy-read', clusters: 'deferred', sourceSync: 'maintenance-process' },
       'vacancy-pool-ready',
     );
-    runDocumentRetentionPurge();
-    runRetentionSweep();
+    webStep('web:document-retention', runDocumentRetentionPurge)();
+    webStep('web:retention-sweep', runRetentionSweep)();
   }, 30_000)?.unref();
   // Первый semantic-read не платит за создание отдельного SQLite-процесса.
   // Это только запуск reader: данные и SQL остаются запросом кандидата, а
@@ -491,11 +496,6 @@ try {
     5 * 60 * 1_000,
   );
   matchedPoolPrecomputeTimer.unref();
-  // B776: periodic web work under its own name, so a stall is not blamed on a catalog page waiting behind it.
-  const webStep = (name: string, run: () => unknown) =>
-    labelledTimer(name, run, (error) =>
-      app.log.error({ step: name, errorName: error instanceof Error ? error.name : 'UnknownError' }, 'web-step-failed'),
-    );
   vacancyRefreshTimer = setInterval(webStep('web:vacancy-refresh', runVacancyRefresh), 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
   recruiterIntelligenceTimer = setInterval(webStep('web:recruiter-intelligence', runRecruiterIntelligence), 5_000);
@@ -510,13 +510,16 @@ try {
   if (process.env.OPENQAREER_HH_AUTO_RAISE === '1') {
     const hhRaiseRepository = new SqliteHhRaiseRepository({ databasePath: config.databasePath });
     const hhRaiseFlag = candidateFlagLookup(new DatabaseSync(config.databasePath, { readOnly: true }), config);
-    hhRaiseQueueTimer = setInterval(() => {
-      try {
-        queueDueRaises(hhRaiseRepository, new Date(), hhRaiseFlag);
-      } catch (error) {
-        app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'hh-raise-queue-failed');
-      }
-    }, 60_000);
+    hhRaiseQueueTimer = setInterval(
+      webStep('web:hh-raise-queue', () => {
+        try {
+          queueDueRaises(hhRaiseRepository, new Date(), hhRaiseFlag);
+        } catch (error) {
+          app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'hh-raise-queue-failed');
+        }
+      }),
+      60_000,
+    );
     hhRaiseQueueTimer.unref();
   }
   // Expired LinkedIn bearer cookies are removed at most fifteen minutes after li_at expiry.

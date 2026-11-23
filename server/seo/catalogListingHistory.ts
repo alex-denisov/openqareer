@@ -9,6 +9,7 @@
  * a copy in memory, so the HTTP path never reads it from disk.
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { readRowsChunked } from '../data/chunkedRows';
 import { MIN_LISTING_SIZE } from '../vacancies/vacancyCatalogFacets';
 import { listingQualifies, type ListingIndexHistory } from './catalogIndexing';
 
@@ -80,11 +81,25 @@ function tableExists(database: DatabaseSync, name: string): boolean {
   );
 }
 
-function readImpressions(database: DatabaseSync): Map<string, string> {
+interface ImpressionRow {
+  readonly place_slug: string;
+  readonly role_slug: string;
+  readonly last_impression_at: string;
+}
+
+interface HistoryRow {
+  readonly place_slug: string;
+  readonly role_slug: string;
+  readonly first_qualified_at: string | null;
+  readonly last_qualified_at: string | null;
+}
+
+/** B776: 11 тысяч строк каждые 5 минут — порциями, с тактом между ними. */
+async function readImpressions(database: DatabaseSync): Promise<Map<string, string>> {
   if (!tableExists(database, 'catalog_listing_search_evidence')) return new Map();
-  const rows = database
-    .prepare('SELECT place_slug, role_slug, last_impression_at FROM catalog_listing_search_evidence')
-    .all() as Array<{ place_slug: string; role_slug: string; last_impression_at: string }>;
+  const rows = await readRowsChunked<ImpressionRow>(
+    database.prepare('SELECT place_slug, role_slug, last_impression_at FROM catalog_listing_search_evidence'),
+  );
   return new Map(
     rows.map((row) => [
       listingHistoryKey(row.place_slug, row.role_slug || undefined),
@@ -94,19 +109,16 @@ function readImpressions(database: DatabaseSync): Map<string, string> {
 }
 
 /** Empty when the maintenance process has not created the tables yet. */
-export function readListingHistory(database: DatabaseSync): Map<string, ListingIndexHistory> {
-  const impressions = readImpressions(database);
+export async function readListingHistory(
+  database: DatabaseSync,
+): Promise<Map<string, ListingIndexHistory>> {
+  const impressions = await readImpressions(database);
   const rows = tableExists(database, 'catalog_listing_history')
-    ? (database
-        .prepare(
+    ? await readRowsChunked<HistoryRow>(
+        database.prepare(
           'SELECT place_slug, role_slug, first_qualified_at, last_qualified_at FROM catalog_listing_history',
-        )
-        .all() as Array<{
-        place_slug: string;
-        role_slug: string;
-        first_qualified_at: string | null;
-        last_qualified_at: string | null;
-      }>)
+        ),
+      )
     : [];
   const history = new Map<string, ListingIndexHistory>(
     [...impressions].map(([key, lastImpressionAt]) => [key, { lastImpressionAt }]),

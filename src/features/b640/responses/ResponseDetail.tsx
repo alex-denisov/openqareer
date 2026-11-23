@@ -9,6 +9,7 @@ import { RejectionReasonForm } from './RejectionReasonForm';
 import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
 import { InterviewActions } from './InterviewActions';
+import { useRecordingLine } from './useRecordingLine';
 import {
   marksFor,
   useResponseActions,
@@ -165,7 +166,11 @@ function NextActions({ item, actions, draft }: ActionsProps) {
   const busy = actions.outcome.kind === 'busy';
   const interview = application.stage === 'interview';
   const interviewAhead = interview && row.tag.tone !== 'ok';
+  const past = interview && !interviewAhead;
   const marks = marksFor(application.stage);
+  // Макет o01c: после интервью «В архив» — в «Другом способе», остальные отметки — в меню.
+  const archive = past ? marks.find((mark) => mark.stage === 'archived') : undefined;
+  const menuMarks = archive ? marks.filter((mark) => mark !== archive) : marks;
   return (
     <div className="actions">
       {row.action && row.action.kind !== 'debrief' ? (
@@ -188,9 +193,9 @@ function NextActions({ item, actions, draft }: ActionsProps) {
         <InterviewActions
           responseId={application.id}
           ahead={interviewAhead}
-          marks={marks}
+          archive={archive}
           disabled={busy}
-          onMark={actions.mark}
+          onArchive={actions.mark}
         />
       ) : null}
       {application.stage === 'archived' ? (
@@ -198,20 +203,32 @@ function NextActions({ item, actions, draft }: ActionsProps) {
           Вернуть из архива
         </Button>
       ) : null}
-      {interview && !interviewAhead ? null : (
-        <MarkMenu marks={marks} disabled={busy} onMark={actions.mark} />
-      )}
+      <MarkMenu marks={menuMarks} disabled={busy} onMark={actions.mark} />
     </div>
   );
 }
 
-/** Что дальше: после интервью — вопрос, как оно прошло (макет o01c). */
-function nextLine(item: ListedResponse): string {
-  const { application, row } = item;
-  if (application.stage === 'interview' && row.tag.tone === 'ok') {
-    return `Как прошло интервью с ${row.company}?`;
+function pastInterview(item: ListedResponse): boolean {
+  return item.application.stage === 'interview' && item.row.tag.tone === 'ok';
+}
+
+/** Что дальше: после интервью — вопрос, как оно прошло, и есть ли запись (макет o01c). */
+function NextLine({ item }: { readonly item: ListedResponse }) {
+  const past = pastInterview(item);
+  const recording = useRecordingLine(item.application.id, past);
+  if (!past) {
+    return (
+      <p>
+        <b>{item.row.next}</b>
+      </p>
+    );
   }
-  return row.next;
+  return (
+    <p>
+      <b>{`Как прошло интервью с ${item.row.company}?`}</b>
+      {recording ? ` ${recording}` : null}
+    </p>
+  );
 }
 
 interface NoteProps {
@@ -267,9 +284,7 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
         Что дальше
       </h3>
       {row.failure ? <StatusLine state="err" text={`Не доставлен · ${row.failure}`} /> : null}
-      <p>
-        <b>{nextLine(item)}</b>
-      </p>
+      <NextLine item={item} />
       {row.remind ? (
         <ReminderDraft fieldId={`${titleId}-drt`} draft={draft} onChange={setDraft} />
       ) : null}

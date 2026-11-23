@@ -24,28 +24,25 @@ const SHELL = {
   setTheme: () => undefined,
 } as never;
 
-const MARKS = [
-  { stage: 'offer', label: 'Прислали оффер' },
-  { stage: 'archived', label: 'В архив' },
-] as never;
+const ARCHIVE = { stage: 'archived', label: 'В архив' } as never;
 
-async function render(ahead: boolean, onMark = vi.fn()) {
+async function render(ahead: boolean, onArchive = vi.fn()) {
   await act(async () => {
     view = mount(
       <ShellProvider value={SHELL}>
         <InterviewActions
           responseId="r1"
           ahead={ahead}
-          marks={MARKS}
+          archive={ARCHIVE}
           disabled={false}
-          onMark={onMark}
+          onArchive={onArchive}
         />
       </ShellProvider>,
     );
   });
   const root = view!.container;
   const links = [...root.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]);
-  return { root, links, onMark };
+  return { root, links, onArchive };
 }
 
 // B645-2: o01c вёл в тупик — входа в подготовку и разбор не было.
@@ -55,16 +52,17 @@ describe('InterviewActions: вход в подготовку и разбор и�
     expect(links).toEqual([['Подготовиться к интервью', '/app/responses/r1/interview']]);
   });
 
-  it('после интервью — «Разобрать запись» и «Другой способ», как в макете o01c', async () => {
-    const { root, links, onMark } = await render(false);
+  it('после интервью — «Разобрать запись» и «Другой способ»: два способа и «В архив», как в макете o01c', async () => {
+    const { root, links, onArchive } = await render(false);
     expect(links).toEqual([
       ['Разобрать запись', '/app/responses/r1/debrief'],
       ['Загрузить файл', '/app/responses/r1/debrief/upload'],
       ['Рассказать своими словами', '/app/responses/r1/debrief#own'],
     ]);
     expect(root.querySelector('summary')?.textContent).toBe('Другой способ');
-    const archive = [...root.querySelectorAll('button')].find((b) => b.textContent === 'В архив');
-    await act(async () => archive!.click());
-    expect(onMark).toHaveBeenCalledWith({ stage: 'archived', label: 'В архив' });
+    const buttons = [...root.querySelectorAll('.ways-list button')];
+    expect(buttons.map((button) => button.textContent)).toEqual(['В архив']);
+    await act(async () => (buttons[0] as HTMLButtonElement).click());
+    expect(onArchive).toHaveBeenCalledWith({ stage: 'archived', label: 'В архив' });
   });
 });
