@@ -32,6 +32,8 @@ const REQUEUE_PRIORITY = 1.5;
 /** A job keyed by another release waits this long before this release looks at it again. */
 const OTHER_RELEASE_WAIT_MS = 60_000;
 
+const LATEST_MANY_CHUNK = 500;
+
 export class SqliteVacancyRequirementsStore {
   constructor(private readonly db: DatabaseSync) { this.ensureSchema(); }
 
@@ -85,6 +87,27 @@ export class SqliteVacancyRequirementsStore {
       if (result) return result;
     }
     return null;
+  }
+
+  /**
+   * B766: the latest requirements of many vacancies in one query per 500 ids, current labels first,
+   * then a legacy cache, as `getLatestOrLegacy`. A vacancy with no row is absent from the map.
+   */
+  latestManyOrLegacy(vacancyIds: readonly string[]): Map<string, VacancyRequirementsResult> {
+    const preference = [VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, ...LEGACY_REQUIREMENTS_EXTRACTOR_VERSIONS];
+    const best = new Map<string, { rank: number; json: string }>();
+    for (let start = 0; start < vacancyIds.length; start += LATEST_MANY_CHUNK) {
+      const chunk = vacancyIds.slice(start, start + LATEST_MANY_CHUNK);
+      const rows = this.db.prepare(`SELECT vacancy_id AS id, extractor_version AS version, result_json AS json
+        FROM vacancy_requirements_cache WHERE vacancy_id IN (${chunk.map(() => '?').join(',')})
+        ORDER BY updated_at DESC, rowid DESC`).all(...chunk) as { id: string; version: string; json: string }[];
+      for (const row of rows) {
+        const rank = preference.indexOf(row.version);
+        const held = best.get(row.id);
+        if (rank >= 0 && (!held || rank < held.rank)) best.set(row.id, { rank, json: row.json });
+      }
+    }
+    return new Map([...best].map(([id, row]) => [id, JSON.parse(row.json) as VacancyRequirementsResult]));
   }
 
   /**

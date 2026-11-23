@@ -42,6 +42,7 @@ import {
   type SealedMatchedList,
 } from './sealedMatchedList';
 import { createStaleListCache, type StaleListAddress, type StaleListServed } from './staleListCache';
+import { primeRoleRequirements } from '../vacancies/techDirectorSignal';
 
 type CandidateStore = RouteDeps['candidateStore'];
 type DecisionProfile = ReturnType<CandidateStore['decisionProfileRepo']['get']>;
@@ -257,6 +258,8 @@ function* matchedListSteps(input: MatchedListInput) {
   yield;
   const finished = yield* finishMatchedRowSteps(snapshot, targetRoles, campaign, limits);
   const matched = input.order(yield* levelGateSteps(finished, input));
+  // B766: requirements of every plain «Технический директор» in one query, before the role checks.
+  primeRoleRequirements(hypothesisRows(input));
   yield;
   const hypotheses = hypothesisRows(input);
   const counts = yield* matchedRoleCountSteps(hypotheses, targetRoles);
