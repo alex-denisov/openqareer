@@ -26,6 +26,8 @@ const ORPHANED_REQUIREMENTS_SINCE = '2026-11-01T21:00:00.000Z';
 const MAX_REKEYS_PER_CLAIM = 50;
 /** Rows one worker-start requeue write touches: each holds the write lock a few ms per row. */
 const REQUEUE_BATCH = 20;
+const SUPERSEDED = "status='failed' AND last_error='profile_changed'";
+const SUPERSEDED_PURGE_LIMIT = 5000;
 const RETRY_BASE_MS = 30_000;
 const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
@@ -411,6 +413,28 @@ export class SqliteVacancyFitStore {
     const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),last_error=?,updated_at=?
       WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(until, reason, now, job.key, job.leaseToken, now);
     return Number(update.changes) === 1;
+  }
+
+  /**
+   * A job for a profile that changed before its model call: its key (facts and profile stamp) is
+   * never asked again, so the row goes. Kept as `failed`, 18.5K of them held 2 GB of sealed input
+   * on prod (23.11) and a revision bump would requeue them into the day's recount ceiling.
+   */
+  discard(job: VacancyFitJob, now = new Date().toISOString()): boolean {
+    const removed = this.database.prepare("DELETE FROM vacancy_fit_queue WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?")
+      .run(job.key, job.leaseToken, now);
+    return Number(removed.changes) === 1;
+  }
+
+  /** The `profile_changed` rows written before `discard`: found by a read, deleted by rowid in small batches. */
+  purgeSuperseded(limit = SUPERSEDED_PURGE_LIMIT): number {
+    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${SUPERSEDED} ORDER BY rowid LIMIT ?`).all(Math.max(0, Math.floor(limit))) as { id: number }[]).map((row) => row.id);
+    let removed = 0;
+    for (let start = 0; start < ids.length; start += REQUEUE_BATCH) {
+      const batch = ids.slice(start, start + REQUEUE_BATCH);
+      removed += Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE rowid IN (${batch.map(() => '?').join(',')}) AND ${SUPERSEDED}`).run(...batch).changes);
+    }
+    return removed;
   }
 
   /** A retried job waits 30 s, 60 s, 120 s… before the next model call; the reason is an error class only. */

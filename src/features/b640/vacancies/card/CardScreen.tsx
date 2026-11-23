@@ -34,6 +34,7 @@ function waysFor(item: LoadedItem, data: CardData): readonly ApplyWay[] {
   return applyWays({
     sources: item.cluster.sources,
     primaryUrl: item.cluster.primaryUrl,
+    company: item.cluster.canonicalCompany ?? '',
     ...(friend
       ? {
           friend: {
@@ -86,6 +87,7 @@ function RightColumn({ vacancyId, item, data, ways, companyPath }: RightColumnPr
         hhTitle={data.hhResumeTitle}
         hhFit={data.hhResumeFit}
         resume={data.circles?.resume}
+        hasCompany={companyPath !== null}
       />
     </div>
   );
