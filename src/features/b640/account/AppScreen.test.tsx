@@ -60,13 +60,13 @@ describe('n06 «Приложение» в .app', () => {
     expect(container.textContent).toContain('Работа приложения');
   });
 
-  it('B722: «Интерфейс» in mockup order, «Язык» offers only «Русский»', async () => {
+  it('B722/B774: «Интерфейс» in mockup order; the only language is text, not a one-option list', async () => {
     const { container } = await render();
     const titles = [...container.querySelectorAll('.set-group')][0]?.querySelectorAll('.set-t') ?? [];
     expect([...titles].map((item) => item.textContent)).toEqual(['Тема', 'Язык', 'Часовой пояс', 'Валюта зарплат']);
-    const language = [...titles].find((item) => item.textContent === 'Язык');
-    const select = container.querySelector<HTMLSelectElement>(`select[aria-labelledby="${language?.id}"]`);
-    expect([...(select?.options ?? [])].map((item) => item.textContent)).toEqual(['Русский']);
+    const language = [...titles].find((item) => item.textContent === 'Язык')?.closest('.set-row');
+    expect(language?.querySelector('select')).toBeNull();
+    expect(language?.querySelector('.set-r')?.textContent).toBe('Русский');
   });
 
   it('B722: automatic updates switch saves on this computer and tells the updater at once', async () => {

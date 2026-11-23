@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { profileImportSchema } from './schemas';
 import {
   deriveImportedFactSources,
+  connectionAccount,
   listCandidateConnectionViews,
 } from '../connectors/nativeSourceConnection';
 
@@ -92,13 +93,22 @@ async function handleListConnections(
       source.walk ? [[source.platform, source.walk]] : [],
     ),
   );
+  const native = deps.candidateStore.listNativeSourceConnections(candidate.id);
+  const resumeName = snapshot.resume?.draft.candidate.fullName;
+  const accounts = new Map(
+    native.map((stored) => [stored.platform, connectionAccount(stored, resumeName)]),
+  );
   return {
     data: listCandidateConnectionViews(
-      deps.candidateStore.listNativeSourceConnections(candidate.id),
+      native,
       deriveImportedFactSources(snapshot.messages, snapshot.memory),
     ).map((view) => {
       const walk = walks.get(view.platform);
-      return walk ? { ...view, walk } : view;
+      const withAccount =
+        view.status === 'connected'
+          ? { ...view, account: accounts.get(view.platform) ?? null }
+          : view;
+      return walk ? { ...withAccount, walk } : withAccount;
     }),
     meta: { requestId: request.id },
   };

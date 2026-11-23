@@ -3,9 +3,11 @@ import { SEARCH_CONSENT_TEXT } from '../../../../shared/searchConsent';
 import { setSearchConsent } from '../../vacancies/recruiterContactsApi';
 import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
-import { ConsentSwitch, useAction } from './consentParts';
+import { ConsentSwitch, ConsentTextLink, useAction } from './consentParts';
 import { SEARCH_CONSENT_ROW } from './dataModel';
 import { ErrorLine } from './parts';
+
+const CONSENT_TEXT = <p className="c5-lead">{SEARCH_CONSENT_TEXT}</p>;
 
 interface SearchConsentRowProps {
   /** null — согласие не прочиталось: строка остаётся с ошибкой и «Повторить». */
@@ -30,6 +32,9 @@ export function SearchConsentRow({ granted, onChanged }: SearchConsentRowProps) 
       <div className="set-l">
         <span className="set-t">{SEARCH_CONSENT_ROW.title}</span>
         <span className="set-v">{SEARCH_CONSENT_ROW.line}</span>
+        {granted ? (
+          <ConsentTextLink title={SEARCH_CONSENT_ROW.title}>{CONSENT_TEXT}</ConsentTextLink>
+        ) : null}
         {failed && !asking ? <ErrorLine text="Не сохранилось" /> : null}
         {granted === null ? <ErrorLine text="Не загрузилось" onRetry={onChanged} /> : null}
       </div>
@@ -42,7 +47,7 @@ export function SearchConsentRow({ granted, onChanged }: SearchConsentRowProps) 
         />
       )}
       <Dialog open={asking} title={SEARCH_CONSENT_ROW.title} onClose={() => setAsking(false)}>
-        <p className="c5-lead">{SEARCH_CONSENT_TEXT}</p>
+        {CONSENT_TEXT}
         {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}
         <div className="actions">
           <button
