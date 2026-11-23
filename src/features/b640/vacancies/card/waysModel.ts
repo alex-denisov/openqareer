@@ -43,6 +43,8 @@ export interface WaysInput {
   };
   /** Вопросов в анкете работодателя; `undefined` — анкеты нет или её не прочитали. */
   readonly questionCount?: number;
+  /** Компания вакансии; пустая — источник не назвал работодателя, `undefined` — не передали. */
+  readonly company?: string | null;
 }
 
 function safeUrl(value: string | undefined): URL | undefined {
@@ -78,6 +80,43 @@ function siteUrl(input: WaysInput): string | undefined {
   return undefined;
 }
 
+const TELEGRAM_HOSTS = new Set(['t.me', 'telegram.me']);
+
+function isTelegram(url: URL, input: WaysInput): boolean {
+  if (TELEGRAM_HOSTS.has(url.hostname)) return true;
+  const href = url.toString();
+  return input.sources.some(
+    (source) =>
+      source.sourceUrl === href &&
+      (source.sourceType === 'telegram' || /^tg-/u.test(source.sourceId ?? '')),
+  );
+}
+
+/** Имя источника по ссылке: так кандидат узнаёт, куда ведёт кнопка. */
+function sourceTitle(url: URL, input: WaysInput): string {
+  const href = url.toString();
+  const named = input.sources.find((source) => source.sourceUrl === href)?.sourceName?.trim();
+  return named || url.hostname.replace(/^www\./u, '');
+}
+
+/**
+ * B726: «Сайт компании» — только когда ссылка правда у работодателя. Пост Telegram называется
+ * постом; без компании ссылка ведёт на источник вакансии и называется его именем.
+ */
+function linkWay(url: URL, input: WaysInput): ApplyWay {
+  const external = (title: string, label: string): ApplyWay => ({
+    id: 'site',
+    title,
+    icon: 'out',
+    action: { kind: 'external', label, url: url.toString() },
+  });
+  if (isTelegram(url, input)) return external('Пост в Telegram', 'Открыть пост в Telegram');
+  const noCompany = input.company !== undefined && !input.company?.trim();
+  if (!noCompany) return external('Сайт компании', 'Открыть на сайте работодателя');
+  const name = sourceTitle(url, input);
+  return external(name, `Открыть на ${name}`);
+}
+
 function siteWay(input: WaysInput): ApplyWay | undefined {
   if (input.questionCount) {
     return {
@@ -88,14 +127,7 @@ function siteWay(input: WaysInput): ApplyWay | undefined {
     };
   }
   const url = siteUrl(input);
-  return url
-    ? {
-        id: 'site',
-        title: 'Сайт компании',
-        icon: 'out',
-        action: { kind: 'external', label: 'Открыть на сайте работодателя', url },
-      }
-    : undefined;
+  return url ? linkWay(new URL(url), input) : undefined;
 }
 
 /** Способы отклика по порядку макета: знакомый (рекомендуем), hh.ru, сайт. Только известные по вакансии. */

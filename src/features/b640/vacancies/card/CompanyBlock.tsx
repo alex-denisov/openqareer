@@ -93,6 +93,8 @@ function MoreLink({
 /** «О компании»: отрасль, город, рекрутёр вакансии, «Откликнуться напрямую», ссылка на компанию. */
 export function CompanyBlock(props: CompanyBlockProps) {
   const { recruiter, vacancyId, companyPath } = props;
+  // B726: без компании и рекрутёра блоку нечего сказать — пустой «О компании» не показываем.
+  if (!companyPath && !recruiter) return null;
   const facts = companyFacts(props);
   return (
     <Fold title="О компании" className="v4-about-co" openOnDesktop>
