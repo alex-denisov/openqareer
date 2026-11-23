@@ -100,6 +100,8 @@ export interface RouteDeps {
   skillNameTranslator?: import('../providers/skillNameTranslator').SkillNameTranslator;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
+  /** B753: сообщение знакомому и рекрутёру — своя цепочка (GLM первым); нет — писатель письма. */
+  contactMessageWriter?: CoverLetterWriter;
   /** B642: расшифровка сегмента записи; нет подстановки — Whisper на OpenRouter. */
   recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** B751: разбор интервью моделью; нет подстановки — цепочка письма без Vertex. */

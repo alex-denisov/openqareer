@@ -30,20 +30,47 @@ describe('buildSystemDesignTask', () => {
     expect(task.domain).toBe('logistics');
   });
 
-  it('falls back to the role when the description has no domain', () => {
+  it('falls back to the role family when the description has no domain', () => {
     const task = buildSystemDesignTask({
       vacancyTitle: 'Инженер платформы',
       description: 'Дружная команда, ДМС.',
     });
     expect(task.basis).toBe('role');
-    expect(task.domain).toBe('core_api');
+    expect(task.domain).toBe('infra');
     expect(task.prompt).toContain('«Инженер платформы»');
   });
 
-  it('names the role task by its core API', () => {
-    expect(buildSystemDesignTask({ vacancyTitle: 'Инженер данных' }).title).toBe(
-      'Основной API продукта',
-    );
+  it('B750: GenAI Architect — задача про LLM, четыре пункта, не «Основной API продукта»', () => {
+    const task = buildSystemDesignTask({
+      vacancyTitle: 'GenAI Architect',
+      company: 'Himalayas',
+      description:
+        'We build generative AI products for enterprise clients. Remote, flexible hours.',
+    });
+    expect(task.domain).toBe('ml_genai');
+    expect(task.points).toHaveLength(4);
+    expect(task.title).not.toBe('Основной API продукта');
+    expect(task.prompt).not.toContain('основной API продукта');
+    expect(task.points.join(' ')).toMatch(/RAG|модел/u);
+    expect(task.origin).toBe('rules');
+  });
+
+  it('B750: семья роли по названию', () => {
+    const family = (vacancyTitle: string) => buildSystemDesignTask({ vacancyTitle }).domain;
+    expect(family('Инженер данных')).toBe('data');
+    expect(family('Data Scientist')).toBe('ml_genai');
+    expect(family('Senior Frontend-разработчик')).toBe('frontend');
+    expect(family('DevOps / SRE')).toBe('infra');
+    expect(family('VP of Engineering')).toBe('management');
+    expect(family('Руководитель разработки')).toBe('management');
+    expect(family('Go-разработчик')).toBe('backend');
+    expect(family('Менеджер по продажам')).toBe('core_api');
+  });
+
+  it('general task only without a domain and a role family', () => {
+    const task = buildSystemDesignTask({ vacancyTitle: 'Специалист' });
+    expect(task.title).toBe('Основной API продукта');
+    expect(task.points).toHaveLength(4);
   });
 
   it('falls back to the role without a description', () => {
@@ -73,6 +100,13 @@ describe('buildSystemDesignTask', () => {
       const task = buildSystemDesignTask({ vacancyTitle: 'Роль', description });
       const score = scoreInterviewAnswer(task.exampleAnswer, 'system_design');
       expect(score.points, `${task.domain}`).toBe(score.maxPoints);
+      expect(task.points, `${task.domain}`).toHaveLength(4);
+    }
+    for (const vacancyTitle of ['ML Engineer', 'Data Engineer', 'iOS', 'SRE', 'CTO', 'Java']) {
+      const task = buildSystemDesignTask({ vacancyTitle });
+      const score = scoreInterviewAnswer(task.exampleAnswer, 'system_design');
+      expect(score.points, `${task.domain}`).toBe(score.maxPoints);
+      expect(task.points, `${task.domain}`).toHaveLength(4);
     }
   });
 });

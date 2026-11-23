@@ -32,6 +32,19 @@ export function termsRows(
   return rows.flatMap(([label, value]) => (value ? [{ label, value }] : []));
 }
 
+/**
+ * B645 23.11: роль поиска по-русски, как на «Карьере», — если её назвала платформа (модель или
+ * онтология) и русское название есть. Роль из резюме кандидата — его слова: как есть.
+ */
+export function searchRole(
+  roles: { readonly value: readonly string[]; readonly origin: string },
+  titlesRu: Readonly<Record<string, string>> = {},
+): string | null {
+  const role = roles.value[0]?.trim();
+  if (!role) return null;
+  return roles.origin === 'profile' ? role : (titlesRu[role] ?? role);
+}
+
 /** Свёрнутая строка условий на телефоне: роль, деньги и место. */
 export function termsSummary(rows: readonly TermsRow[]): string {
   return rows

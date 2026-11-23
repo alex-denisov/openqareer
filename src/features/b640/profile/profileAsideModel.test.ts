@@ -3,6 +3,7 @@ import type { SearchConditionsDraft } from '../../career-map/careerScreenTypes';
 import {
   answerLabel,
   moreVersionsLabel,
+  searchRole,
   termsRows,
   termsSummary,
   versionDate,
@@ -59,5 +60,28 @@ describe('s01 правая колонка', () => {
     expect(answerLabel(3)).toBe('Ответить на 3 вопроса');
     expect(moreVersionsLabel(14, 3)).toBe('Ещё 11 — в «Откликах»');
     expect(moreVersionsLabel(3, 3)).toBeNull();
+  });
+});
+
+describe('B645 23.11: роль поиска в s01', () => {
+  const titlesRu = { 'VP of Engineering / Technology': 'Руководитель разработки (VP)' };
+
+  it('роль, названная платформой (модель или онтология), — по-русски, как на «Карьере»', () => {
+    expect(
+      searchRole({ value: ['VP of Engineering / Technology'], origin: 'explicit' }, titlesRu),
+    ).toBe('Руководитель разработки (VP)');
+    expect(
+      searchRole({ value: ['VP of Engineering / Technology'], origin: 'model' }, titlesRu),
+    ).toBe('Руководитель разработки (VP)');
+  });
+
+  it('роль из резюме кандидата и роль без русского названия — как есть', () => {
+    expect(
+      searchRole({ value: ['VP of Engineering / Technology'], origin: 'profile' }, titlesRu),
+    ).toBe('VP of Engineering / Technology');
+    expect(searchRole({ value: ['Head of Ops'], origin: 'explicit' }, titlesRu)).toBe(
+      'Head of Ops',
+    );
+    expect(searchRole({ value: [], origin: 'default' }, titlesRu)).toBeNull();
   });
 });

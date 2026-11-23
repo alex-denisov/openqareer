@@ -425,14 +425,18 @@ export interface CoverLetterWriterConfig {
   readonly vertexFetch?: typeof fetch;
 }
 
+/** Цепочки, по которым пишет писатель письма: само письмо и сообщение знакомому или рекрутёру. */
+type LetterChain = 'coverLetters' | 'contactMessages';
+
 /**
  * Цепочка письма (решение владельца, B601; B640): по одному вызову deepseek-v4.1-flash → glm-5.3-flash → Gemini на Vertex;
  * если отказали все, маршрут отвечает ошибкой с повтором, а не шаблоном.
  */
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
+  chain: LetterChain = 'coverLetters',
 ): CoverLetterWriter | undefined {
-  const stages = coverLetterStages(config);
+  const stages = coverLetterStages(config, chain);
   if (stages.length === 0) return undefined;
   return new QueuedCoverLetterWriter(
     stages.map((stage) => stage.writer),
@@ -445,8 +449,9 @@ export function buildCoverLetterWriter(
 /** Ступени цепочки по отдельности: контрольный прогон зовёт каждую модель тем же путём, что и прод. */
 export function coverLetterStages(
   config: CoverLetterWriterConfig,
+  chain: LetterChain = 'coverLetters',
 ): readonly { readonly label: string; readonly writer: CoverLetterWriter }[] {
-  return resolveChain(MODEL_CHAINS.coverLetters, config.providerCredentials ?? {}, config.vertex).map((stage) => ({
+  return resolveChain(MODEL_CHAINS[chain], config.providerCredentials ?? {}, config.vertex).map((stage) => ({
     label: stage.label,
     writer: stage.kind === 'vertex'
       ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch)
@@ -463,6 +468,14 @@ export function buildEnabledCoverLetterWriter(
   enabled: boolean = LETTER_MODEL_ENABLED,
 ): CoverLetterWriter | undefined {
   return enabled ? buildCoverLetterWriter(config) : undefined;
+}
+
+/** B753: сообщение знакомому и рекрутёру — тот же писатель по своей цепочке (GLM первым, без Vertex). */
+export function buildContactMessageWriter(
+  config: CoverLetterWriterConfig,
+  enabled: boolean = LETTER_MODEL_ENABLED,
+): CoverLetterWriter | undefined {
+  return enabled ? buildCoverLetterWriter(config, 'contactMessages') : undefined;
 }
 
 function vertexCoverLetterWriter(vertex: VertexConfig, fetchImpl?: typeof fetch): CoverLetterWriter {
