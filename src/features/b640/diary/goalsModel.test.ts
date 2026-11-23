@@ -57,10 +57,10 @@ const card = (extra: Record<string, unknown> = {}) =>
   }) as unknown as CareerDiaryGoalCard;
 
 describe('B662: значение и цель на карточке и в истории', () => {
-  it('убывающая цель — «9, цель — 4», растущая — «0 из 2»', () => {
+  it('убывающая цель — «9 из 4 и меньше», как в макете d02; растущая — «0 из 2»', () => {
     const down = summary('d', { baselineValue: 12, targetValue: 4, unit: '' });
     const up = summary('u', { baselineValue: 0, targetValue: 2, unit: '' });
-    expect(valueWithTarget(down as never, 9)).toBe('9, цель — 4');
+    expect(valueWithTarget(down as never, 9)).toBe('9 из 4 и меньше');
     expect(valueWithTarget(up as never, 0)).toBe('0 из 2');
     expect(valueWithTarget(summary('t', { targetValue: 'да' }) as never, 'нет')).toBe('нет');
   });
@@ -82,11 +82,11 @@ describe('цели: подписи', () => {
     );
   });
 
-  it('показатель: убывающая цель — «, цель — 7 и меньше», без замера — «не внесено»', () => {
+  it('показатель: убывающая цель — «из 7 и меньше», без замера — «не внесено»', () => {
     expect(indicatorView(card().indicators[0]!)).toMatchObject({
       title: 'Показатель i1, дней',
       value: '5',
-      target: ', цель — 7 и меньше',
+      target: ' из 7 и меньше',
       sub: '3 ноя · было 14',
     });
     expect(indicatorView(summary('x') as never)).toMatchObject({ value: 'не внесено', target: '' });

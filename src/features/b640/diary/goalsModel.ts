@@ -150,12 +150,12 @@ export interface IndicatorView {
   readonly title: string;
   /** Значение замера или «не внесено». */
   readonly value: string;
-  /** « из 2» или «, цель — 7 и меньше» — с разделителем; пусто, если цель не числовая. */
+  /** « из 2» или « из 7 и меньше» — с пробелом впереди; пусто, если цель не числовая. */
   readonly target: string;
   readonly sub: string;
 }
 
-/** Цель ниже старта (срок, инциденты): «из 4» тут ничего не значит — пишем «цель — 4». */
+/** Цель ниже старта (срок, инциденты): как в макете d02 — «5 из 7 и меньше». */
 function decreasing(goal: CareerDiaryGoalSummary): boolean {
   return (
     typeof goal.targetValue === 'number' &&
@@ -164,14 +164,14 @@ function decreasing(goal: CareerDiaryGoalSummary): boolean {
   );
 }
 
-/** Хвост после значения в списке: « из 2» или «, цель — 4 и меньше». */
+/** Хвост после значения в списке: « из 2» или « из 4 и меньше». */
 function targetText(goal: CareerDiaryGoalSummary): string {
   if (typeof goal.targetValue !== 'number') return '';
   const target = formatValue(goal.targetValue, goal.unit);
-  return decreasing(goal) ? `, цель — ${target} и меньше` : ` из ${target}`;
+  return decreasing(goal) ? ` из ${target} и меньше` : ` из ${target}`;
 }
 
-/** Значение и цель на карточке и в истории (B662): «0 из 2» или «9, цель — 4». */
+/** Значение и цель на карточке и в истории (B662) — как в списке: «0 из 2» или «9 из 4 и меньше». */
 export function valueWithTarget(
   goal: CareerDiaryGoalSummary,
   value: Parameters<typeof formatValue>[0],
@@ -179,7 +179,7 @@ export function valueWithTarget(
   const shown = formatValue(value, goal.unit);
   if (typeof goal.targetValue !== 'number') return shown;
   const target = formatValue(goal.targetValue, goal.unit);
-  return decreasing(goal) ? `${shown}, цель — ${target}` : `${shown} из ${target}`;
+  return decreasing(goal) ? `${shown} из ${target} и меньше` : `${shown} из ${target}`;
 }
 
 export function indicatorView(goal: CareerDiaryGoalSummary): IndicatorView {
