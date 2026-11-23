@@ -21,11 +21,12 @@ import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
 import { ResultLine } from '../kit/ResultLine';
-import type { B640Node } from '../routes';
+import { buildNodePath, type B640Node } from '../routes';
+import { Link } from '../shell/Link';
 import { AccountDeletionGroup } from './AccountDeletion';
 import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
 import { countScheduledPosts } from '../platforms/linkedin/linkedinQueueApi';
-import { ConsentSwitch, useAction } from './consentParts';
+import { ConsentSwitch, ConsentTextLink, useAction } from './consentParts';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
 import { SearchConsentRow } from './SearchConsentRow';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
@@ -88,16 +89,21 @@ interface ConsentDialogProps {
   readonly onClose: () => void;
 }
 
+function ConsentItems({ capability }: { readonly capability: CandidateCapability }) {
+  return (
+    <ul className="c5-list">
+      {CAPABILITY_CONSENT_DOCUMENTS[capability].items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
 /** Текст согласия перед выдачей: согласие даётся только после него. */
 function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: ConsentDialogProps) {
-  const document = CAPABILITY_CONSENT_DOCUMENTS[capability];
   return (
-    <Dialog open={open} title={document.title} onClose={onClose}>
-      <ul className="c5-list">
-        {document.items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
+    <Dialog open={open} title={CAPABILITY_CONSENT_DOCUMENTS[capability].title} onClose={onClose}>
+      <ConsentItems capability={capability} />
       {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}
       <div className="actions">
         <button className="btn is-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onGrant}>
@@ -168,6 +174,11 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
       <div className="set-l">
         <span className="set-t">{row.title}</span>
         <span className="set-v">{row.line}</span>
+        {granted ? (
+          <ConsentTextLink title={CAPABILITY_CONSENT_DOCUMENTS[row.capability].title}>
+            <ConsentItems capability={row.capability} />
+          </ConsentTextLink>
+        ) : null}
         {failed && !asking && !revoking ? <ErrorLine text="Не сохранилось" /> : null}
       </div>
       <ConsentSwitch label={row.title} checked={granted} disabled={busy} onChange={toggle} />
@@ -188,6 +199,50 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
         onClose={() => setAsking(false)}
       />
     </li>
+  );
+}
+
+interface StopDialogProps {
+  readonly open: boolean;
+  readonly busy: boolean;
+  readonly failed: boolean;
+  readonly onStop: () => void;
+  readonly onClose: () => void;
+}
+
+/** N5c: подтверждение «Остановить всё». */
+function StopDialog({ open, busy, failed, onStop, onClose }: StopDialogProps) {
+  return (
+    <Dialog open={open} title="Остановить всё?" onClose={onClose}>
+      <p className="c5-lead">Остановятся автоотклики на hh.ru и публикации в LinkedIn.</p>
+      {failed ? <ErrorLine text="Остановить не получилось" /> : null}
+      <div className="actions">
+        <button
+          className="btn is-primary"
+          type="button"
+          disabled={busy}
+          aria-busy={busy || undefined}
+          onClick={onStop}
+        >
+          <Icon name="pause" />
+          Остановить всё
+        </button>
+        <button className="btn" type="button" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+/** Выключенные действия включают над списком откликов — туда и ведёт строка (B774). */
+function SetUpAutomation() {
+  return (
+    <div className="set-r">
+      <Link className="btn is-sm" to={buildNodePath('o01')} aria-label="Настроить автоотклики">
+        Настроить
+      </Link>
+    </div>
   );
 }
 
@@ -219,26 +274,15 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
             </button>
           </div>
         ) : null}
+        {line.text === 'выключены' ? <SetUpAutomation /> : null}
       </li>
-      <Dialog open={asking} title="Остановить всё?" onClose={() => setAsking(false)}>
-        <p className="c5-lead">Остановятся автоотклики на hh.ru и публикации в LinkedIn.</p>
-        {failed ? <ErrorLine text="Остановить не получилось" /> : null}
-        <div className="actions">
-          <button
-            className="btn is-primary"
-            type="button"
-            disabled={busy}
-            aria-busy={busy || undefined}
-            onClick={() => run(() => pauseCandidateAutomation(STOP_DAYS))}
-          >
-            <Icon name="pause" />
-            Остановить всё
-          </button>
-          <button className="btn" type="button" onClick={() => setAsking(false)}>
-            Отмена
-          </button>
-        </div>
-      </Dialog>
+      <StopDialog
+        open={asking}
+        busy={busy}
+        failed={failed}
+        onStop={() => run(() => pauseCandidateAutomation(STOP_DAYS))}
+        onClose={() => setAsking(false)}
+      />
     </Group>
   );
 }

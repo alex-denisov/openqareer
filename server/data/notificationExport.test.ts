@@ -50,7 +50,8 @@ describe('B738 · 2: выгрузка отдаёт уведомления', () =
     expect(exported.items.find((item) => item.kind === 'import_completed')?.invitation).toBe(false);
     expect(exported.preferences).toContainEqual({ key: 'ev-reminder', app: true, email: false, telegram: true });
     expect(exported.invitationPreference).toEqual({ app: true, email: true, telegram: false });
-    expect(exported.telegram).toMatchObject({ chatId: '1110001', linkedAt: expect.any(String) });
+    expect(exported.telegram).toEqual({ linked: true, linkedAt: expect.any(String) });
+    expect(JSON.stringify(exported)).not.toContain('1110001');
     const text = JSON.stringify(exported);
     expect(text).not.toContain('чужой');
     expect(text).not.toContain('9990009');

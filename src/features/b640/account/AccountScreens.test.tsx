@@ -261,6 +261,17 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-menu-t')?.textContent).toBe('Обновлено 3 ноября');
   });
 
+  it('B774: у подключённой площадки — чей аккаунт, как в макете', async () => {
+    api.getConnections.mockResolvedValue([
+      { ...hh, account: 'Марина Соколова' },
+      { ...hh, platform: 'linkedin', account: 'linkedin.com/in/msokolova' },
+    ]);
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const lines = [...root.querySelectorAll('.set-row.cn-row .set-v')].map((item) => item.textContent);
+    expect(lines).toContain('Марина Соколова · подключено');
+    expect(lines).toContain('linkedin.com/in/msokolova · подключено');
+  });
+
   it('отключение подтверждается на месте; сбой показан там же, успех перечитывает список', async () => {
     const root = await open(<ConnectionsScreen node={node('n03')} />);
     click(root.querySelector('.cn-off'));

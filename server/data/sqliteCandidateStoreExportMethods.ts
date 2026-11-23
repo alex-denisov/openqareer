@@ -20,6 +20,7 @@ import { exportNotifications, type NotificationExportStore } from './notificatio
 import { exportProfileHistory, type ProfileHistoryExportStore } from './profileHistoryExport';
 import { exportContent } from './contentExport';
 import { exportCareerSections, exportContacts } from './contactsCareerExport';
+import { type AccountExportStore, exportAccount } from './accountExport';
 import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
@@ -59,7 +60,7 @@ interface CandidateExportDependencies {
 }
 
 /** Хранилище глазами выгрузки: методы трекера, уведомлений и истории профиля. */
-export type OwnStorageStore = TrackerExportStore & NotificationExportStore & ProfileHistoryExportStore;
+export type OwnStorageStore = TrackerExportStore & NotificationExportStore & ProfileHistoryExportStore & AccountExportStore;
 
 export function createSqliteCandidateStoreExportMethods(
   dependencies: CandidateExportDependencies,
@@ -93,6 +94,7 @@ export function createSqliteCandidateStoreExportMethods(
         content: exportContent(dependencies.ownStorage, candidateId),
         contacts: exportContacts(dependencies.ownStorage, candidateId),
         careerSections: exportCareerSections(dependencies.ownStorage, candidateId),
+        account: exportAccount(dependencies.ownStorage, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {

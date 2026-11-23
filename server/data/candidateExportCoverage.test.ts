@@ -259,4 +259,29 @@ describe('B689: выгрузка данных покрывает все табл
       database.close();
     }
   });
+
+  it('запечатанные подборки по выбору (B770): кэш — не в выгрузке, и уходят с аккаунтом', () => {
+    const { databasePath, store } = fileStore();
+    const own = createCandidate(store);
+    const other = createCandidate(store);
+    store.sealedMatchedLists.write(own.id, 100, '"Подборка своя"', 'all');
+    store.sealedMatchedLists.write(own.id, 101, '"Подборка по роли"', 'role=CTO');
+    store.sealedMatchedLists.write(other.id, 102, '"Подборка чужая"', 'all');
+
+    expect(CANDIDATE_TABLE_COVERAGE.sealed_matched_list_choices).toEqual({
+      internal: 'кэш подборки вакансий, пересчитывается',
+    });
+    expect(JSON.stringify(store.exportCandidate(own.id))).not.toContain('Подборка');
+
+    expect(store.deleteCandidate(own.id)).toBe(true);
+    const database = new DatabaseSync(databasePath);
+    try {
+      const rows = database
+        .prepare('SELECT candidate_id AS id FROM sealed_matched_list_choices')
+        .all() as { id: string }[];
+      expect(rows.map((row) => row.id)).toEqual([other.id]);
+    } finally {
+      database.close();
+    }
+  });
 });

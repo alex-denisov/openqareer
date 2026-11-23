@@ -12,6 +12,7 @@ import { Link } from '../shell/Link';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { checkoutLines, safePaymentUrl, tierOf } from './billingModel';
 import { ErrorLine } from './parts';
+import { emailConfirmed } from './model';
 
 export interface CheckoutScreenProps {
   readonly node: B640Node;
@@ -129,7 +130,7 @@ export function CheckoutScreen({ node, summary, planId, onPaid }: CheckoutScreen
     toast.show({ text: `${name} подключён` });
     navigate(buildNodePath('t03'));
   });
-  const verified = session.emailVerified === true;
+  const verified = emailConfirmed(session);
   const { problem } = flow;
   return (
     <div className="page" data-b640-node={node.code} data-b640-section={node.section} data-b640-view="checkout">

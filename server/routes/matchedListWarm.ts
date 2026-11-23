@@ -66,9 +66,9 @@ export async function warmMatchedList(
   };
   const list = await backgroundStep('list:build', () => warmMatchedListCache(input, log));
   if (!list) return;
-  const { prepareMs, prepareRows, listMs, filtered } = list;
+  const { prepareMs, prepareRows, listMs, phasesMs, filtered } = list;
   log?.info(
-    { warmFitIdsMs, prepareMs, prepareRows, listMs, rows: filtered.length },
+    { warmFitIdsMs, prepareMs, prepareRows, listMs, phasesMs, rows: filtered.length },
     'matched-list-warmed',
   );
 }

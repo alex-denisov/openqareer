@@ -17,7 +17,7 @@ import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { useShell } from '../shell/ShellContext';
 import { getHhSessionState } from './hhSessionApi';
-import { connectedCount, connectionLine, PLATFORM_NAME, updatedLine } from './model';
+import { connectedCount, connectionLine, emailConfirmed, PLATFORM_NAME, updatedLine } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 import { prefetch } from './prefetch';
 
@@ -271,7 +271,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
   }
   const { platforms, telegram, hhExpired } = load.data;
   const count = connectedCount({
-    emailVerified: session.emailVerified === true,
+    emailVerified: emailConfirmed(session),
     connections: platforms,
     telegram: telegram ? telegram.connected : null,
   });
@@ -287,7 +287,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
           Подключено {count.connected} из {count.total}
         </h3>
         <ul className="set-list">
-          <MailRow email={session.email} verified={session.emailVerified === true} />
+          <MailRow email={session.email} verified={emailConfirmed(session)} />
           {rows.map((connection) => (
             <PlatformRow
               key={connection.platform}

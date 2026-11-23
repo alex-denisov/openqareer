@@ -5,7 +5,8 @@ import { mockOffers } from './offersFixture';
 /**
  * n06 (B645, 22.11): в .app (системный WebKit) «Язык» и «Часовой пояс» рисовались
  * нативным меню macOS — 24 px вместо 44 и скругление 6 вместо 12; «Обновления»
- * и «Скачать» из-за этого поднимались на 10 px. `.sec-sel` есть только на n06.
+ * и «Скачать» из-за этого поднимались на 10 px. `.sec-sel` есть только на n06; с B774
+ * «Язык» — текст, список остался один — «Часовой пояс».
  * o06a (B645, 22.11): «Период оклада», «Валюта», «Формат работы» — те же 22 px.
  */
 async function expectControlShape(selects: Locator, theme: string, info: TestInfo) {
@@ -45,7 +46,7 @@ for (const theme of ['light', 'dark'] as const) {
     await mockSignedInCabinet(page, { cabinetB640: true });
     await page.goto('/app/account/app', { waitUntil: 'domcontentloaded' });
     const selects = page.locator('[data-b640-node="n06"] .sec-sel');
-    await expect(selects).toHaveCount(2, { timeout: 15_000 });
+    await expect(selects).toHaveCount(1, { timeout: 15_000 });
     await expectControlShape(selects, theme, info);
   });
 }

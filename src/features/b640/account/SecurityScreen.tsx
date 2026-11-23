@@ -8,7 +8,7 @@ import { getAccount, revokeAccountSession, revokeOtherSessions } from '../../coa
 import { ResultLine } from '../kit/ResultLine';
 import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
-import { deviceLine, deviceName, devicesTitle, type AccountSession } from './model';
+import { deviceLine, deviceName, devicesTitle, emailConfirmed, type AccountSession } from './model';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 import { EmailCodeForm, EmailForm, NameForm, PasswordForm } from './securityForms';
 import { PasskeyForm, PasskeyRow, usePasskeys, type PasskeyState } from './PasskeySection';
@@ -94,7 +94,7 @@ function Identity({ data, load }: SectionProps) {
     <Group title="Почта и имя">
       <Row
         title="Почта для входа"
-        value={emailLine(account.email, session.emailVerified === true, pendingEmail)}
+        value={emailLine(account.email, emailConfirmed(session), pendingEmail)}
         action={editing === 'email' ? undefined : 'Изменить'}
         onAction={() => setEditing('email')}
       />
