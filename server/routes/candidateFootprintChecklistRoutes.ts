@@ -101,6 +101,22 @@ async function handleMarkFinding(
   return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
 }
 
+/** Почему находку нельзя перенести в профиль; `null` — можно. */
+function addRefusal(
+  finding: CandidateFootprintFinding,
+): { readonly code: string; readonly message: string } | null {
+  if (finding.review !== 'confirmed_self' || !ARTIFACT_FINDING_KINDS.has(finding.kind)) {
+    return {
+      code: 'finding_not_artifact',
+      message: 'В профиль переносятся только ваши доклады, код и публикации.',
+    };
+  }
+  if (finding.checklistMark === 'added_to_profile') {
+    return { code: 'finding_already_in_profile', message: 'Эта находка уже в профиле.' };
+  }
+  return null;
+}
+
 async function handleAddToProfile(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -109,25 +125,20 @@ async function handleAddToProfile(
   const context = loadFinding(deps, request, reply);
   if (!context) return reply;
   const { finding } = context;
-  if (finding.review !== 'confirmed_self' || !ARTIFACT_FINDING_KINDS.has(finding.kind)) {
-    return sendError(
-      reply,
-      request,
-      409,
-      'finding_not_artifact',
-      'В профиль переносятся только ваши доклады, код и публикации.',
-      false,
+  const refused = addRefusal(finding);
+  if (refused) return sendError(reply, request, 409, refused.code, refused.message, false);
+  const existing = factAlreadyInProfile(deps, context.candidateId, finding.title);
+  if (existing) {
+    // B382 (B378): тот же факт уже в профиле — второй не пишем, находку отмечаем без своей ссылки.
+    const audit = deps.candidateReputationRepo!.updateFootprintFindingChecklist(
+      context.candidateId,
+      finding.id,
+      { checklistMark: 'added_to_profile' },
     );
-  }
-  if (finding.checklistMark === 'added_to_profile') {
-    return sendError(
-      reply,
-      request,
-      409,
-      'finding_already_in_profile',
-      'Эта находка уже в профиле.',
-      false,
-    );
+    return {
+      data: { ...toPublicFootprint({ audit }), alreadyInProfile: true },
+      meta: { requestId: request.id },
+    };
   }
   const memoryId = randomUUID();
   deps.candidateStore.importResumeEvidence(context.candidateId, {
@@ -139,6 +150,54 @@ async function handleAddToProfile(
     context.candidateId,
     finding.id,
     { checklistMark: 'added_to_profile', profileFactId: memoryId },
+  );
+  return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
+}
+
+/** Текст факта без регистра, знаков и лишних пробелов: «Доклад, 2023» и «доклад 2023.» — один факт. */
+function factKey(statement: string): string {
+  return statement
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/gu, 'е')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function factAlreadyInProfile(deps: RouteDeps, candidateId: string, statement: string): boolean {
+  const key = factKey(statement);
+  return deps.candidateStore
+    .getSnapshot(candidateId)
+    .memory.some((entry) => factKey(entry.statement) === key);
+}
+
+/**
+ * B382: «Отменить» после «В профиль». Факт, созданный из этой находки, удаляется; факт, который уже
+ * был в профиле (дубликат), остаётся. Факт, удалённый кандидатом раньше, — не ошибка.
+ */
+async function handleRemoveFromProfile(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<unknown> {
+  const context = loadFinding(deps, request, reply);
+  if (!context) return reply;
+  const { finding } = context;
+  if (finding.checklistMark !== 'added_to_profile') {
+    return sendError(
+      reply,
+      request,
+      409,
+      'finding_not_in_profile',
+      'Эта находка не в профиле.',
+      false,
+    );
+  }
+  if (finding.profileFactId) {
+    deps.candidateStore.reviewMemories(context.candidateId, [finding.profileFactId], 'delete');
+  }
+  const audit = deps.candidateReputationRepo!.clearFootprintProfileFact(
+    context.candidateId,
+    finding.id,
   );
   return { data: toPublicFootprint({ audit }), meta: { requestId: request.id } };
 }
@@ -183,5 +242,10 @@ export function registerCandidateFootprintChecklistRoutes(
     '/api/v1/candidate/footprint/findings/:findingId/profile-fact',
     { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
     withDeps(deps, handleAddToProfile),
+  );
+  app.delete(
+    '/api/v1/candidate/footprint/findings/:findingId/profile-fact',
+    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRemoveFromProfile),
   );
 }

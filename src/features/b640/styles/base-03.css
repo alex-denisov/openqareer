@@ -226,6 +226,7 @@
   .b640 .pf .lead { padding: var(--career-space-6); }
   .b640 .pf .lead-title { font-size: var(--career-text-xl); }
   .b640 .pf-sub { font-size: var(--career-text-sm); font-weight: 600; color: var(--career-text-soft); }
+  .b640 .pf-state { margin-block: var(--career-space-2); }
   .b640 .pf-prog { appearance: none; display: block; inline-size: 100%; block-size: var(--career-space-2); border: 0; border-radius: var(--career-radius-pill); background: var(--career-line); overflow: hidden; }
   .b640 .pf-prog::-webkit-progress-bar { background: var(--career-line); }
   .b640 .pf-prog::-webkit-progress-value { background: var(--career-accent); border-radius: var(--career-radius-pill); }
