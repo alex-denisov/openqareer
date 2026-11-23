@@ -122,74 +122,112 @@ const node = (page: Page, code: string) => page.locator(`[data-b640-node="${code
 const photoFile = { name: 'me.png', mimeType: 'image/png', buffer: PIXEL };
 
 test.describe('B666: «Фото» (p08)', () => {
-  test('загрузка своего фото: результат на месте, фото в шапке профиля; гейты', async ({
+  const dialog = (page: Page) => page.getByRole('dialog', { name: 'Фото профиля' });
+
+  test('окно над «Профилем»: фото видно сразу, уходит по «Сохранить», шапка обновлена; гейты', async ({
     page,
   }) => {
     const calls = await openCabinet(page, '/app/profile/photo');
-    const screen = node(page, 'p08');
-    await expect(screen.getByText('Фото пока нет')).toBeVisible();
-    await expect(screen.getByRole('button', { name: 'Убрать фото' })).toHaveCount(0);
+    const photo = dialog(page);
+    // Под окном — сам профиль, как в макете p08.
+    await expect(node(page, 'p08').locator('.phead')).toBeVisible();
+    await expect(photo.getByText('Фото пока нет')).toBeVisible();
+    await expect(photo.getByRole('button', { name: 'Убрать фото' })).toHaveCount(0);
+    await expect(photo.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
     await expectGates(page);
 
-    await screen.locator('input[type="file"]').setInputFiles(photoFile);
-    await expect(screen.locator('.res-row')).toHaveText('Фото обновлено');
-    await expect(screen.locator('img.ph-big')).toBeVisible();
+    await photo.locator('input[type="file"]').setInputFiles(photoFile);
+    await expect(photo.locator('img.ph-big')).toBeVisible();
+    expect(calls.uploads).toHaveLength(0);
+    await photo.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(page.getByText('Фото обновлено')).toBeVisible();
+    await expect(photo).toHaveCount(0);
+    await expect(page).toHaveURL(/\/app\/profile$/u);
     expect(calls.uploads).toHaveLength(1);
     // Уходит пересобранный JPEG, а не исходный файл: без имени, типа и метаданных.
     const sent = Buffer.from(String(calls.uploads[0].contentBase64), 'base64');
     expect(Object.keys(calls.uploads[0])).toEqual(['contentBase64']);
     expect(sent.subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
-
-    await page.goto('/app/profile', { waitUntil: 'domcontentloaded' });
     await expect(node(page, 's01').locator('img.phead-photo')).toBeVisible();
   });
 
-  test('сервер отклонил файл: причина на месте, фото не меняется', async ({ page }) => {
+  test('«Отмена» и Esc ничего не отправляют и возвращают в профиль', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/photo');
+    await dialog(page).locator('input[type="file"]').setInputFiles(photoFile);
+    await dialog(page).getByRole('button', { name: 'Отмена' }).click();
+    await expect(page).toHaveURL(/\/app\/profile$/u);
+    await page.goto('/app/profile/photo', { waitUntil: 'domcontentloaded' });
+    await expect(dialog(page)).toBeVisible({ timeout: 15_000 });
+    await page.keyboard.press('Escape');
+    await expect(page).toHaveURL(/\/app\/profile$/u);
+    expect(calls.uploads).toHaveLength(0);
+  });
+
+  test('сервер отклонил файл: причина в окне, окно открыто', async ({ page }) => {
     await openCabinet(page, '/app/profile/photo', {
       uploadError: { status: 400, code: 'photo_format', message: 'Подойдёт фото в JPEG или PNG.' },
     });
-    const screen = node(page, 'p08');
-    await screen.locator('input[type="file"]').setInputFiles(photoFile);
-    await expect(screen.getByRole('alert')).toContainText('Подойдёт фото в JPEG или PNG.');
-    await expect(screen.getByText('Фото пока нет')).toBeVisible();
-    await expect(screen.getByRole('button', { name: 'Загрузить' })).toBeEnabled();
+    const photo = dialog(page);
+    await photo.locator('input[type="file"]').setInputFiles(photoFile);
+    await photo.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(photo.getByRole('alert')).toContainText('Подойдёт фото в JPEG или PNG.');
+    await expect(photo.getByRole('button', { name: 'Загрузить' })).toBeEnabled();
   });
 
-  test('файл не открывается как картинка: причина на месте, на сервер ничего не ушло', async ({
+  test('файл не открывается как картинка: причина в окне, на сервер ничего не ушло', async ({
     page,
   }) => {
     const calls = await openCabinet(page, '/app/profile/photo');
-    const screen = node(page, 'p08');
-    await screen.locator('input[type="file"]').setInputFiles({
+    const photo = dialog(page);
+    await photo.locator('input[type="file"]').setInputFiles({
       name: 'photo.jpg',
       mimeType: 'image/jpeg',
       buffer: Buffer.from(
         '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
       ),
     });
-    await expect(screen.getByRole('alert')).toContainText('Файл не открылся как фото.');
+    await expect(photo.getByRole('alert')).toContainText('Файл не открылся как фото.');
+    await expect(photo.getByRole('button', { name: 'Сохранить' })).toBeDisabled();
     expect(calls.uploads).toHaveLength(0);
   });
 
   test('слишком тяжёлый файл не уходит на сервер', async ({ page }) => {
     const calls = await openCabinet(page, '/app/profile/photo');
-    const screen = node(page, 'p08');
-    await screen.locator('input[type="file"]').setInputFiles({
+    const photo = dialog(page);
+    await photo.locator('input[type="file"]').setInputFiles({
       ...photoFile,
       buffer: Buffer.alloc(5 * 1024 * 1024 + 1, 1),
     });
-    await expect(screen.getByRole('alert')).toContainText('Фото больше 5 МБ.');
+    await expect(photo.getByRole('alert')).toContainText('Фото больше 5 МБ.');
     expect(calls.uploads).toHaveLength(0);
   });
 
-  test('фото можно убрать', async ({ page }) => {
+  test('фото можно убрать: по «Сохранить»', async ({ page }) => {
     const calls = await openCabinet(page, '/app/profile/photo', { photo: true });
-    const screen = node(page, 'p08');
-    await expect(screen.locator('img.ph-big')).toBeVisible();
-    await screen.getByRole('button', { name: 'Убрать фото' }).click();
-    await expect(screen.locator('.res-row')).toHaveText('Фото убрано');
-    await expect(screen.getByText('Фото пока нет')).toBeVisible();
+    const photo = dialog(page);
+    await expect(photo.locator('img.ph-big')).toBeVisible();
+    await photo.getByRole('button', { name: 'Убрать фото' }).click();
+    await expect(photo.getByText('Фото пока нет')).toBeVisible();
+    expect(calls.photoRemoved).toBe(0);
+    await photo.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(page.getByText('Фото убрано')).toBeVisible();
     expect(calls.photoRemoved).toBe(1);
+  });
+
+  test('1440: окно 512 по центру, как в макете p08', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'только 1440');
+    await openCabinet(page, '/app/profile/photo');
+    const box = await dialog(page).boundingBox();
+    expect([box?.x, box?.width].map((value) => Math.round(value ?? 0))).toEqual([464, 512]);
+  });
+
+  test('390: нижний лист во всю ширину', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'только 390');
+    await openCabinet(page, '/app/profile/photo');
+    const box = await dialog(page).boundingBox();
+    const viewport = page.viewportSize();
+    expect(Math.round(box?.width ?? 0)).toBe(viewport?.width);
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(viewport?.height);
   });
 });
 

@@ -1,20 +1,14 @@
-import { useRef, useState, type ChangeEvent } from 'react';
-import { apiErrorMessage } from '../../coach/apiClient';
+import { useRef, type ChangeEvent } from 'react';
 import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
 import { getResumeStudio } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
-import { Button, Icon, Link, ResultLine } from '../kit';
+import { Button, Dialog, Icon, Link, useToast } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
+import { useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
-import { PROFILE_CHANGED } from './ExperienceEditScreen';
-import {
-  photoFileError,
-  preparePhoto,
-  removePhoto,
-  UNREADABLE_PHOTO,
-  uploadPhoto,
-} from './profileExtrasApi';
+import { ProfileScreen } from './ProfileScreen';
+import { usePhotoDraft, type PhotoStep } from './usePhotoDraft';
 
 interface PhotoProfile {
   readonly hasProfile: boolean;
@@ -30,92 +24,61 @@ async function loadPhoto(): Promise<PhotoProfile> {
   };
 }
 
-type Work =
-  | { readonly step: 'idle' }
-  | { readonly step: 'upload' | 'remove' }
-  | { readonly step: 'done'; readonly text: string }
-  | { readonly step: 'error'; readonly message: string };
-
-/** Загрузка и удаление фото; после успеха профиль и шапка перечитываются. */
-function usePhotoWork(onChanged: () => void) {
-  const [work, setWork] = useState<Work>({ step: 'idle' });
-
-  async function run(step: 'upload' | 'remove', action: () => Promise<unknown>, done: string) {
-    setWork({ step });
-    try {
-      await action();
-      forgetSharedRead('resume');
-      window.dispatchEvent(new Event(PROFILE_CHANGED));
-      setWork({ step: 'done', text: done });
-      onChanged();
-    } catch (reason) {
-      const fallback = step === 'upload' ? 'Не удалось загрузить фото.' : 'Не удалось убрать фото.';
-      const unreadable = reason instanceof Error && reason.message === UNREADABLE_PHOTO;
-      setWork({
-        step: 'error',
-        message: unreadable ? UNREADABLE_PHOTO : apiErrorMessage(reason, fallback),
-      });
-    }
-  }
-
-  function upload(file: File) {
-    const refused = photoFileError(file);
-    if (refused) setWork({ step: 'error', message: refused });
-    else void run('upload', async () => uploadPhoto(await preparePhoto(file)), 'Фото обновлено');
-  }
-
-  return { work, upload, remove: () => void run('remove', removePhoto, 'Фото убрано') };
-}
-
-function WorkLine({ work }: { readonly work: Work }) {
-  if (work.step === 'upload' || work.step === 'remove') {
+function WorkLine({ work }: { readonly work: PhotoStep }) {
+  if (work.step === 'reading' || work.step === 'saving') {
     return (
       <p className="ph-st" role="status">
         <Icon name="upload" />
-        {work.step === 'upload' ? 'Загружаем…' : 'Убираем…'}
+        {work.step === 'reading' ? 'Готовим фото…' : 'Сохраняем…'}
       </p>
     );
   }
-  if (work.step === 'error') {
-    return (
-      <p className="st-var-line" role="alert">
-        <Icon name="warn" />
-        <span>{work.message}</span>
-      </p>
-    );
-  }
-  return work.step === 'done' ? <ResultLine text={work.text} /> : null;
+  if (work.step !== 'error') return null;
+  return (
+    <p className="st-var-line" role="alert">
+      <Icon name="warn" />
+      <span>{work.message}</span>
+    </p>
+  );
 }
 
-function CurrentPhoto({ src }: { readonly src: string | undefined }) {
+function CurrentPhoto({ src }: { readonly src: string | null | undefined }) {
   if (!src) return <p className="mod-text">Фото пока нет</p>;
   return (
     <div className="ph-crop">
-      <img className="ph-big" src={src} alt="Текущее фото" width={144} height={144} />
+      <img
+        className="ph-big"
+        src={src}
+        alt="Фото профиля, обрезка кругом"
+        width={144}
+        height={144}
+      />
     </div>
   );
 }
 
 interface EditorProps {
   readonly photoMediaId: string | null;
-  readonly onChanged: () => void;
+  readonly draft: ReturnType<typeof usePhotoDraft>;
 }
 
-function PhotoEditor({ photoMediaId, onChanged }: EditorProps) {
+function PhotoEditor({ photoMediaId, draft }: EditorProps) {
   const input = useRef<HTMLInputElement>(null);
-  const src = useCandidateMediaSrc(photoMediaId ?? undefined);
-  const { work, upload, remove } = usePhotoWork(onChanged);
-  const busy = work.step === 'upload' || work.step === 'remove';
+  const saved = useCandidateMediaSrc(photoMediaId ?? undefined);
+  const { pending, work } = draft;
+  const shown =
+    pending?.kind === 'file' ? pending.preview : pending?.kind === 'remove' ? null : saved;
+  const busy = work.step === 'reading' || work.step === 'saving';
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = '';
-    if (file) upload(file);
+    if (file) draft.pick(file);
   }
 
   return (
     <>
-      <CurrentPhoto src={src} />
+      <CurrentPhoto src={shown} />
       <WorkLine work={work} />
       <input
         ref={input}
@@ -129,20 +92,14 @@ function PhotoEditor({ photoMediaId, onChanged }: EditorProps) {
       <div className="ph-acts">
         <Button
           icon="upload"
-          busy={work.step === 'upload'}
+          busy={work.step === 'reading'}
           disabled={busy}
           onClick={() => input.current?.click()}
         >
           Загрузить
         </Button>
-        {photoMediaId ? (
-          <Button
-            variant="danger"
-            icon="trash"
-            busy={work.step === 'remove'}
-            disabled={busy}
-            onClick={remove}
-          >
+        {shown ? (
+          <Button variant="danger" icon="trash" disabled={busy} onClick={draft.remove}>
             Убрать фото
           </Button>
         ) : null}
@@ -165,26 +122,50 @@ function NoProfile() {
   );
 }
 
-/** p08 «Фото»: своё фото профиля — загрузить, заменить, убрать (B666). */
-export function PhotoScreen({ node }: { readonly node: B640Node }) {
+/** Окно «Фото профиля»: изменения уходят на сервер по «Сохранить», «Отмена» возвращает в профиль. */
+function PhotoDialog({ onClose }: { readonly onClose: () => void }) {
   const photo = useLoad(loadPhoto);
+  const toast = useToast();
+  const draft = usePhotoDraft((text) => {
+    toast.show({ text });
+    onClose();
+  });
+  const ready = photo.state === 'ready' && photo.data.hasProfile;
+  const footer = ready ? (
+    <>
+      <Button
+        variant="primary"
+        icon="check"
+        busy={draft.work.step === 'saving'}
+        disabled={!draft.pending}
+        onClick={draft.save}
+      >
+        Сохранить
+      </Button>
+      <Button variant="quiet" icon="close" onClick={onClose}>
+        Отмена
+      </Button>
+    </>
+  ) : undefined;
   return (
-    <div className="page pf" data-b640-node={node.code} data-b640-section={node.section}>
-      <div className="col">
-        <section className="lead" aria-labelledby="ph-t">
-          <h2 className="lead-title is-long" id="ph-t">
-            Фото профиля
-          </h2>
-          {photo.state === 'loading' ? <BlockSkeleton label="Загружаем фото" /> : null}
-          {photo.state === 'error' ? (
-            <BlockError text="Не удалось загрузить профиль." onRetry={photo.retry} />
-          ) : null}
-          {photo.state === 'ready' && photo.data.hasProfile ? (
-            <PhotoEditor photoMediaId={photo.data.photoMediaId} onChanged={photo.retry} />
-          ) : null}
-          {photo.state === 'ready' && !photo.data.hasProfile ? <NoProfile /> : null}
-        </section>
-      </div>
-    </div>
+    <Dialog open title="Фото профиля" onClose={onClose} footer={footer}>
+      {photo.state === 'loading' ? <BlockSkeleton label="Загружаем фото" /> : null}
+      {photo.state === 'error' ? (
+        <BlockError text="Не удалось загрузить профиль." onRetry={photo.retry} />
+      ) : null}
+      {ready ? <PhotoEditor photoMediaId={photo.data.photoMediaId} draft={draft} /> : null}
+      {photo.state === 'ready' && !photo.data.hasProfile ? <NoProfile /> : null}
+    </Dialog>
+  );
+}
+
+/** p08 «Фото» по макету: окно над «Профилем», на 390 — нижний лист (B666, B645). */
+export function PhotoScreen({ node }: { readonly node: B640Node }) {
+  const { navigate } = useShell();
+  return (
+    <>
+      <ProfileScreen node={node} />
+      <PhotoDialog onClose={() => navigate(buildNodePath('s01'))} />
+    </>
   );
 }
