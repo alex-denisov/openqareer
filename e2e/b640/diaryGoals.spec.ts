@@ -15,6 +15,54 @@ async function openGoals(page: Page, path: string, node: string): Promise<DiaryC
 }
 
 test.describe('B662: «Дневник» — цели и показатели', () => {
+  test('B768 · d02c: пока примеры под роль готовятся — «Загружаем примеры», затем они без перезагрузки', async ({
+    page,
+  }) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    await mockDiary(page);
+    const ROOT = '**/api/v1/candidate/career-diary';
+    await page.route(ROOT, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            asOf: '2026-11-23',
+            platformStartedAt: '2026-10-26',
+            primaryWorkplace: { id: 'w1', company: 'Вектор', title: 'Коммерческий директор' },
+            summary: {},
+          },
+        },
+      }),
+    );
+    await page.route(`${ROOT}/goal-cards`, (route) =>
+      route.fulfill({ json: { data: { items: [], archived: [] } } }),
+    );
+    await page.route(`${ROOT}/role-title-ru**`, (route) =>
+      route.fulfill({ json: { data: { titleRu: 'Коммерческий директор' } } }),
+    );
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    await page.route(`${ROOT}/goal-examples`, async (route) => {
+      // Модель отвечает долго: держим ответ, пока тест не проверит ожидание.
+      await answered;
+      await route.fulfill({
+        json: {
+          data: {
+            items: [{ title: 'Выполнить план выручки отдела', measure: 'от плана квартала' }],
+          },
+        },
+      });
+    });
+    await page.goto('/app/diary/goals', { waitUntil: 'domcontentloaded' });
+    const ghost = page.locator('[data-b640-node="d02"] .ghost');
+    await expect(ghost.getByRole('status')).toHaveText('Загружаем примеры', { timeout: 15_000 });
+    await expect(ghost.locator('.gc-ex')).toHaveCount(0);
+    await expect(ghost.locator('.ghost-cap')).toHaveText('Пример для роли «Коммерческий директор»');
+    await expectGates(page);
+    answer();
+    await expect(ghost.locator('.gc-ex strong')).toHaveText(['Выполнить план выручки отдела']);
+    await expect(ghost.getByRole('status')).toHaveCount(0);
+  });
+
   test('d02 → d02a: отстающая цель в заголовке, замер, в архив', async ({ page }) => {
     const calls = await openGoals(page, '/app/diary/goals', 'd02');
     const list = page.locator('[data-b640-node="d02"]');
