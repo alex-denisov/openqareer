@@ -10,9 +10,8 @@ const VACANCY_PREFIX = 'cluster-';
 
 /**
  * B746: над чем открыта панель консультанта. Отклик и его шаги (письмо, интервью, разбор) —
- * отклик, карточка вакансии — вакансия. Компанию не передаём: ключ адреса карточки
- * не совпадает с ключом компании у консультанта. Сервер строит контекст только по
- * объекту этого кандидата.
+ * отклик, карточка вакансии — вакансия, карточка компании — компания по ключу адреса
+ * (B783). Сервер строит контекст только по объекту этого кандидата.
  */
 export function subjectOfScreen(params: ScreenParams | null): CoachTurnSubject | undefined {
   const response = params?.responseId;
@@ -21,5 +20,6 @@ export function subjectOfScreen(params: ScreenParams | null): CoachTurnSubject |
       ? { kind: 'vacancy', id: response }
       : { kind: 'application', id: response };
   }
-  return params?.vacancyId ? { kind: 'vacancy', id: params.vacancyId } : undefined;
+  if (params?.vacancyId) return { kind: 'vacancy', id: params.vacancyId };
+  return params?.companyId ? { kind: 'company', id: params.companyId } : undefined;
 }

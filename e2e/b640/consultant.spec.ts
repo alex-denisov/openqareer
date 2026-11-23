@@ -527,6 +527,18 @@ test.describe('B660: «Консультант» нового кабинета', 
     expect(calls.sent[0]?.subject).toEqual({ kind: 'application', id: 'app-intouch' });
   });
 
+  test('B783: вопрос с карточки компании уходит с компанией по ключу адреса', async ({
+    page,
+  }, testInfo) => {
+    const calls = await mockConsultant(page);
+    await page.goto('/app/vacancies/companies/intouchgroup', { waitUntil: 'domcontentloaded' });
+    const panel = await openPanelOver(page, testInfo.project.name === 'mobile-390');
+    await panel.getByLabel('Ваш вопрос консультанту').fill('Стоит ли сюда откликаться?');
+    await panel.getByLabel('Ваш вопрос консультанту').press('Enter');
+    await expect.poll(() => calls.sent.length).toBe(1);
+    expect(calls.sent[0]?.subject).toEqual({ kind: 'company', id: 'intouchgroup' });
+  });
+
   test('B746: объект не найден — тот же вопрос уходит без него, ответ приходит', async ({
     page,
   }, testInfo) => {
