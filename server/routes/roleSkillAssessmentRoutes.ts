@@ -14,21 +14,18 @@ import {
   type RoleSkillAssessmentRun,
 } from '../domain/roleSkillAssessment';
 import { isRoleTitleLabel } from '../domain/roleTitleLabel';
-import type { ResumeEvidenceImport } from '../data/candidateStore';
-import type { CandidateIdentity } from '../data/candidateStore';
+import type { CandidateIdentity, ResumeEvidenceImport } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
 import { readRoleLevel } from './vacancyRoleContext';
 import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
 import { russianSkillNames, withRussianContextNames, withRussianSkillNames } from './roleSkillNamesStep';
-import {
-  createRoleRequirementReader,
-  type RoleRequirementReader,
-} from './roleSkillRequirementSource';
+import { createRoleRequirementReader, type RoleRequirementReader } from './roleSkillRequirementSource';
 import { focusSchema, validateFocus, type ValidatedFocus } from './roleSkillAssessmentFocus';
 import { startFocusedRun } from './roleSkillAssessmentFocusRun';
 import {
@@ -233,6 +230,7 @@ async function handleCheckedRoles(deps: RouteDeps, request: FastifyRequest, repl
     deps.config,
   );
   if (!candidate) return undefined;
+  const { ownTitlesRu } = readCampaign(deps.candidateStore, candidate.id);
   const seen = new Set<string>();
   const checked = deps.candidateStore.roleSkillAssessments
     .list(candidate.id)
@@ -245,6 +243,8 @@ async function handleCheckedRoles(deps: RouteDeps, request: FastifyRequest, repl
     })
     .map((run) => ({
       roleTitle: run.roleTitle,
+      roleTitleRu: roleTitleRu(run.roleTitle, ownTitlesRu), // B764: роль проверки на s10
+      skillCount: run.skills.length,
       completedAt: run.completedAt,
       confirmedSkills: russianSkillNames(
         run.skills.filter((skill) => skill.grade === 'confirmed').map((skill) => skill.name),

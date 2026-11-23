@@ -109,6 +109,9 @@ export interface CareerOptions {
   readonly relocationCityPay?: Readonly<Record<string, unknown>>;
   /** B737: русские названия ролей поиска в ответе кампании. */
   readonly titlesRu?: Readonly<Record<string, string>>;
+  /** B764: псевдонимы ролей по названию и ответ «checked-roles» вместо прежнего. */
+  readonly roleAliases?: Readonly<Record<string, readonly string[]>>;
+  readonly checkedRoles?: readonly unknown[];
 }
 
 function campaign(roles: string[], titlesRu?: Readonly<Record<string, string>>) {
@@ -174,7 +177,16 @@ export async function openCareer(
   // «Карьера» шлёт пояс кандидата (`?tz=`, B726): ловим по пути, без запроса.
   await page.route(
     (url) => url.pathname.endsWith('/candidate/role-hypotheses'),
-    (route) => route.fulfill({ json: { data: ROLES } }),
+    (route) =>
+      route.fulfill({
+        json: {
+          data: ROLES.map((role) =>
+            options.roleAliases?.[role.title]
+              ? { ...role, aliases: options.roleAliases[role.title] }
+              : role,
+          ),
+        },
+      }),
   );
   await page.route(`${API}/candidate/campaign`, (route) => {
     if (route.request().method() === 'POST') {
@@ -193,7 +205,7 @@ export async function openCareer(
   await page.route(`${API}/candidate/role-skill-assessments/checked-roles`, (route) =>
     route.fulfill({
       json: {
-        data: [
+        data: options.checkedRoles ?? [
           {
             roleTitle: 'Технический продакт-менеджер',
             completedAt: '2026-11-09',
