@@ -28,6 +28,8 @@ interface Rule {
   readonly category: FootprintRiskCategoryId;
   readonly level: FootprintRiskLevel;
   readonly action: FootprintRiskAction;
+  /** Почему такой уровень — вторая половина строки «Риск» (B645 f03b). */
+  readonly reason: string;
 }
 
 const CLOSE: FootprintRiskAction = { kind: 'close_account', label: 'Закрыть аккаунты' };
@@ -39,10 +41,32 @@ const CONFIRM: FootprintRiskAction = { kind: 'confirm_owner', label: 'Прове
 /** «Проверить» ждёт кандидата и в «стоит убрать» не идёт (B645 p02). */
 const REVIEW_KINDS: ReadonlySet<string> = new Set([CHECK.kind, CONFIRM.kind]);
 
-const NEEDS_CHECK: Rule = { category: 'needs_check', level: 'important', action: CHECK };
-const STALE: Rule = { category: 'stale_profile', level: 'low', action: HIDE };
-const USEFUL: Rule = { category: 'useful_evidence', level: 'useful', action: ADD };
-const OWNER_UNKNOWN: Rule = { category: 'needs_check', level: 'important', action: CONFIRM };
+const NEEDS_CHECK: Rule = {
+  category: 'needs_check',
+  level: 'important',
+  action: CHECK,
+  reason: 'совпадение по имени не подтверждено',
+};
+const STALE: Rule = {
+  category: 'stale_profile',
+  level: 'low',
+  action: HIDE,
+  reason: 'старая копия страницы ещё открыта',
+};
+const STALE_ACCOUNT: Rule = { ...STALE, reason: 'заброшенный профиль ещё открыт' };
+const USEFUL: Rule = {
+  category: 'useful_evidence',
+  level: 'useful',
+  action: ADD,
+  reason: 'подтверждает ваш опыт',
+};
+const OWNER_UNKNOWN: Rule = {
+  category: 'needs_check',
+  level: 'important',
+  action: CONFIRM,
+  reason: 'страницу находят по нику, чья она — неизвестно',
+};
+const SECRET: Rule = { ...NEEDS_CHECK, reason: 'в открытом коде виден ключ доступа' };
 
 /** Поиск по нику: находит открытую страницу, но не знает, чья она. */
 const NICK_SEARCH = new Set(['sherlock', 'maigret']);
@@ -65,15 +89,25 @@ function ruleFor(finding: CandidateFootprintFinding): Rule {
   const unsure = finding.review === 'unreviewed' && finding.automatedMatch === 'unknown';
   switch (finding.kind) {
     case 'breach':
-      return { category: 'personal_data', level: 'high', action: CLOSE };
+      return {
+        category: 'personal_data',
+        level: 'high',
+        action: CLOSE,
+        reason: 'старые аккаунты на эту почту ещё открыты',
+      };
     case 'metadata':
-      return { category: 'personal_data', level: 'low', action: HIDE };
+      return {
+        category: 'personal_data',
+        level: 'low',
+        action: HIDE,
+        reason: 'в файле остались служебные данные',
+      };
     case 'secret':
-      return NEEDS_CHECK;
+      return SECRET;
     case 'archive':
       return STALE;
     case 'profile':
-      if (finding.staleAccount) return STALE;
+      if (finding.staleAccount) return STALE_ACCOUNT;
       if (ownerUnconfirmed(finding)) return OWNER_UNKNOWN;
       return unsure ? NEEDS_CHECK : USEFUL;
     case 'mention':
@@ -198,6 +232,7 @@ function findingItem(finding: CandidateFootprintFinding): FootprintRiskItem {
     category: rule.category,
     level: rule.level,
     levelLabel: FOOTPRINT_LEVEL_LABELS[rule.level],
+    levelReason: rule.reason,
     title: cleanTitle(finding.title) || 'Находка',
     detail: detailWithAddress(cleanDetail(finding.detail), safeUrl(finding.url)),
     url: safeUrl(finding.url),
@@ -253,6 +288,7 @@ function mismatchItem(
     category: 'resume_mismatch',
     level,
     levelLabel: FOOTPRINT_LEVEL_LABELS[level],
+    levelReason: 'расходится с резюме',
     title:
       cleanTitle(`${discrepancy.field}: «${discrepancy.externalValue}»`) || 'Расхождение с резюме',
     detail: cleanDetail(discrepancy.suggestion),

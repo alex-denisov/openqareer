@@ -201,7 +201,35 @@ interface Mocks {
   readonly statusFailures?: number;
   readonly notes?: Note[];
   readonly hasMore?: boolean;
+  /** B650 s05b: отклики кандидата; без них список пуст и событий нет. */
+  readonly responses?: readonly Record<string, unknown>[];
 }
+
+/** Отклик, который не дошёл: нужен вход в hh.ru (макет s05b). */
+const UNDELIVERED = {
+  id: 'r-karta',
+  candidateId: 'c',
+  clusterId: 'cl-karta',
+  stage: 'applied',
+  closedReason: null,
+  archiveReason: null,
+  archivePreviousStage: null,
+  processProfile: 'standard',
+  vacancy: { title: 'Руководитель платформы', company: 'Карта Технологии', url: '', source: 'hh' },
+  notes: null,
+  followUpDueAt: null,
+  stageChangedAt: '2026-11-20T10:00:00.000Z',
+  version: 1,
+  createdAt: '2026-11-20T10:00:00.000Z',
+  updatedAt: '2026-11-20T10:00:00.000Z',
+  appliedAt: '2026-11-20T10:00:00.000Z',
+  followUp: null,
+  whoseTurn: 'candidate',
+  materials: { coverLetter: true, resume: true },
+  nearestInterview: null,
+  deliveryReceipt: { kind: 'failure_note', value: 'Не доставлено: нужен вход в hh.ru' },
+  deliveryReceiptRecordedAt: '2026-11-21T10:00:00.000Z',
+};
 
 interface Calls {
   readonly answers: string[];
@@ -217,6 +245,12 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
   let failures = mocks.statusFailures ?? 0;
   let notes = mocks.notes ?? firstPage();
   await mockSignedInCabinet(page, { cabinetB640: true });
+  const responses = mocks.responses ?? [];
+  await page.route(`${API}/applications?**`, (route) =>
+    route.fulfill({
+      json: { data: responses, meta: { total: responses.length, offset: 0, limit: 100 } },
+    }),
+  );
   await page.route(`${API}/status/today`, (route) => {
     if (failures > 0) {
       failures -= 1;
@@ -608,9 +642,32 @@ test.describe('B650: флаг выключен', () => {
   });
 });
 
+test.describe('B650 s05b: «События откликов»', () => {
+  test('недоставленный отклик — карточка в левой колонке с «Войти в hh.ru»', async ({ page }) => {
+    await openCabinet(page, '/app/today', { responses: [UNDELIVERED] });
+    const events = page.locator('.b640 section.re-today');
+    await expect(events.locator('li.re-card')).toHaveCount(1);
+    await expect(events.locator('.tag.miss')).toHaveText('Не доставлен');
+    await expect(events.locator('.re-why')).toHaveText(
+      'Руководитель платформы · Нужен вход в hh.ru',
+    );
+    await expect(events.getByRole('link', { name: 'Войти в hh.ru' })).toHaveAttribute(
+      'href',
+      '/app/account/connections',
+    );
+  });
+
+  test('событий нет — блока нет', async ({ page }) => {
+    await openCabinet(page, '/app/today');
+    await expect(page.locator('.b640 .col').first()).toBeVisible();
+    await expect(page.locator('.b640 section.re-today')).toHaveCount(0);
+  });
+});
+
 test.describe('B650: снимки для сверки с макетами', () => {
   const SCREENS: readonly (readonly [string, string, Mocks])[] = [
     ['today-job-search', '/app/today', {}],
+    ['today-response-events', '/app/today', { responses: [UNDELIVERED] }],
     ['today-after-change', '/app/today', { status: 'changing_profession', revert: true }],
     ['today-choosing-role', '/app/today', { status: 'choosing_role' }],
     ['today-looking', '/app/today', { status: 'looking' }],

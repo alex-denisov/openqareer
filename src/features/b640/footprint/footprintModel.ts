@@ -97,6 +97,20 @@ export function uncheckedLine(count: number): string {
   return `${count} категорий не проверены`;
 }
 
+const SHORT_LEVEL: Record<FootprintRiskLevel, string> = {
+  high: 'высокий',
+  important: 'важно',
+  low: 'низкий',
+  useful: 'полезно',
+};
+
+/** Строка «Риск» находки, как в макете f03b: «высокий: номер находят по имени». */
+export function riskLine(
+  item: Pick<FootprintRiskItem, 'level' | 'levelLabel' | 'levelReason'>,
+): string {
+  return item.levelReason ? `${SHORT_LEVEL[item.level]}: ${item.levelReason}` : item.levelLabel;
+}
+
 const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' });
 const SHORT = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' });
 

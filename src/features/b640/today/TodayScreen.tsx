@@ -4,6 +4,7 @@ import { pluralRu } from '../../../../shared/pluralRu';
 import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from './parts';
+import { ResponseEventsBlock } from './ResponseEventsBlock';
 import {
   OnboardingPlanModule,
   ProfessionFitModule,
@@ -94,7 +95,11 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
         onReverted={onReverted}
       />
       {wideSignal ? signal : null}
-      <div className="col">{modules(layout.main, true)}</div>
+      <div className="col">
+        {/* Макет s05b: события откликов первыми в левой колонке; нет событий — блока нет. */}
+        <ResponseEventsBlock />
+        {modules(layout.main, true)}
+      </div>
       {layout.side.length > 0 ? (
         <div className="col">
           {wideSignal ? null : signal}
