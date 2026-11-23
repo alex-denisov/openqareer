@@ -22,7 +22,14 @@ vi.mock('../../skills/roleSkillAssessmentApi', () => ({
 vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getRoleSkillDemand }));
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
 
-import { addOwnRole, loadRoles, loadSkillStrip, readSkillGap, saveSearchRoles } from './careerApi';
+import {
+  addOwnRole,
+  loadRoles,
+  loadSkillRoles,
+  loadSkillStrip,
+  readSkillGap,
+  saveSearchRoles,
+} from './careerApi';
 
 const campaign = (roles: string[]) => ({
   roles: { value: roles, origin: 'explicit' },
@@ -230,5 +237,25 @@ describe('readSkillGap (строка навыков в «Вакансиях», s
     api.getCurrentRoleSkillAssessment.mockResolvedValue({ state: 'insufficient_requirements', roleTitle: 'VP' });
     api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
     expect(await readSkillGap(['VP'])).toEqual({ gap: 0, role: null });
+  });
+});
+
+describe('loadSkillRoles (выбор роли на C04)', () => {
+  it('B726: на выбор только роли, проверку которых можно открыть; непрочитанная роль остаётся', async () => {
+    api.getCandidateCampaign.mockResolvedValue(campaign(['CTO', 'COO', 'Head of IT', 'CIO', 'VP', 'Lead']));
+    const answers: Record<string, unknown> = {
+      CTO: { state: 'insufficient_requirements', roleTitle: 'CTO', collecting: false },
+      COO: { state: 'result', run: {} },
+      'Head of IT': { state: 'too_few_vacancies', roleTitle: 'Head of IT' },
+      CIO: { state: 'ready', roleTitle: 'CIO', skills: [] },
+      VP: { state: 'insufficient_requirements', roleTitle: 'VP', collecting: true },
+    };
+    api.getCurrentRoleSkillAssessment.mockImplementation((title: string) =>
+      title in answers ? Promise.resolve(answers[title]) : Promise.reject(new Error('net')),
+    );
+    const roles = await loadSkillRoles(new AbortController().signal);
+    expect(roles.checkable).toEqual(['COO', 'CIO', 'Lead']);
+    expect(roles.ready).toBe('CIO');
+    expect(api.getCurrentRoleSkillAssessment).toHaveBeenCalledTimes(6);
   });
 });
