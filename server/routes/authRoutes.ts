@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { labelDevice, startSession } from './sessionDevice';
 import type { RouteDeps } from './deps';
+import { registerAppCodeRoutes } from './appCodeRoutes';
 import { registerPasskeyLoginRoutes } from './passkeyLoginRoutes';
 import { registerPasskeyAccountRoutes } from './passkeyRoutes';
 import { registerTwoFactorRoutes } from './twoFactorRoutes';
@@ -744,6 +745,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
   registerTwoFactorRoutes(app, deps);
   registerPasskeyAccountRoutes(app, deps);
   registerPasskeyLoginRoutes(app, deps);
+  registerAppCodeRoutes(app, deps);
 
   registerEmailVerificationRoutes(app, deps);
 

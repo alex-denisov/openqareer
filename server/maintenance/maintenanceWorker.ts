@@ -1,3 +1,4 @@
+import { UnclusteredCatchUp, type RunUnclusteredCatchUp } from './unclusteredCatchUpStep';
 import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
 import type { PlacementBackfillTicker } from '../companyDirectory/placement/placementBackfill';
 import type { CareersPruneTicker } from '../companyDirectory/siteDiscovery/careersPrune';
@@ -65,6 +66,7 @@ export interface MaintenanceEngine {
     removed: number;
     passFinished: boolean;
   };
+  runUnclusteredCatchUpStep?: RunUnclusteredCatchUp; // B763: записи пула без кластера
   readonly clusterKeysReady: boolean;
   /** B485: итоги каталога для сводки подборки после сведения пула. */
   refreshCatalogTotals?(observedAt: string): unknown;
@@ -93,6 +95,7 @@ export interface MaintenanceIntervals {
   readonly workdayDescriptionMs?: number;
   readonly hhCatalogTextMs?: number;
   readonly orphanClustersMs?: number;
+  readonly unclusteredCatchUpMs?: number;
   readonly linkedinPoolExecutorMs: number;
   readonly recruiterPurgeMs: number;
   /** Через сколько после старта идёт фоновая чистка пула (B759). */
@@ -158,6 +161,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   hhCatalogTextMs: 3 * 1_000,
   // 500 кластеров за 2 с: проход прода (~710 тыс.) ≈ 47 мин, потом час покоя (B535).
   orphanClustersMs: 2 * 1_000,
+  unclusteredCatchUpMs: 2 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
   recruiterPurgeMs: 24 * 60 * 60 * 1_000,
   storePassDelayMs: STORE_PASS_DELAY_MS,
@@ -233,6 +237,7 @@ export class MaintenanceWorker {
   private readonly storePassMark?: StorePassMark;
   private readonly now: () => number;
   private orphanRestUntil = 0;
+  private readonly catchUp: UnclusteredCatchUp;
   /** Время последнего расчёта итогов; `undefined`, пока не прочитано из базы. */
   private catalogTotalsAt: number | undefined;
   private catalogTotalsRunning = false;
@@ -284,6 +289,7 @@ export class MaintenanceWorker {
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
     this.memoryGuard = new MemoryGuard(this.readHeap);
+    this.catchUp = new UnclusteredCatchUp(this.engine, this.log, this.now, () => this.stopped);
   }
 
   /**
@@ -769,7 +775,8 @@ export class MaintenanceWorker {
 
   /** Заводит таймеры; первая волна — сразу, остальное по расписанию. */
   start(): void {
-    const every = (ms: number, tick: () => unknown, name = stepName(tick)) => {
+    const every = (ms: number | undefined, tick: () => unknown, name = stepName(tick)) => {
+      if (!ms) return;
       const timed = timedStep(name, tick);
       const timer = setInterval(() => guardStep(this.log, name, timed), ms);
       this.timers.push(timer);
@@ -778,18 +785,12 @@ export class MaintenanceWorker {
     every(this.intervals.syncMs, () => this.runSyncWave());
     every(this.intervals.livenessMs, () => this.runLivenessProbe());
     every(this.intervals.catalogMs, () => this.runCatalogStep());
-    if (this.intervals.descriptionSkillsMs) {
-      every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
-    }
-    if (this.intervals.workdayDescriptionMs) {
-      every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
-    }
-    if (this.intervals.orphanClustersMs) {
-      every(this.intervals.orphanClustersMs, () => this.runOrphanClusterStep());
-    }
-    if (this.intervals.hhCatalogTextMs) {
-      every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());
-    }
+    every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
+    every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
+    every(this.intervals.orphanClustersMs, () => this.runOrphanClusterStep());
+    // B763: догон записей без кластера, см. `unclusteredCatchUpStep.ts`.
+    every(this.intervals.unclusteredCatchUpMs, () => this.catchUp.run(), 'runUnclusteredCatchUp');
+    every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());
     every(this.intervals.reportMs, () => this.reportMemory());
     if (this.purgeRecruiters) {
       every(this.intervals.recruiterPurgeMs, () =>

@@ -51,7 +51,7 @@ describe('a job superseded by a profile change goes instead of staying failed', 
     expect(store.enqueue(input, later).status).toBe('pending');
   });
 
-  it('purgeSuperseded removes old profile_changed rows up to the limit and nothing else', () => {
+  it('a purge batch removes old profile_changed rows only, a batch at a time', () => {
     const database = new DatabaseSync(':memory:');
     const store = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
     const insert = database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,created_at,updated_at,last_error)
@@ -59,9 +59,7 @@ describe('a job superseded by a profile change goes instead of staying failed', 
     for (let index = 0; index < 45; index += 1) insert.run(`s${index}`, 'failed', now, now, 'profile_changed');
     insert.run('other-failed', 'failed', now, now, 'assessment_model_unavailable');
     insert.run('waiting', 'pending', now, now, 'profile_changed');
-    expect(store.purgeSuperseded(30)).toBe(30);
-    expect(store.purgeSuperseded()).toBe(15);
-    expect(store.purgeSuperseded()).toBe(0);
+    expect([store.purgeSupersededBatch(), store.purgeSupersededBatch(), store.purgeSupersededBatch(), store.purgeSupersededBatch()]).toEqual([20, 20, 5, 0]);
     const left = database.prepare('SELECT cache_key FROM vacancy_fit_queue ORDER BY cache_key').all().map((row) => row.cache_key);
     expect(left).toEqual(['other-failed', 'waiting']);
   });

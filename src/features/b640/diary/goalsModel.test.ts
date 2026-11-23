@@ -12,6 +12,7 @@ import {
   plural,
   quarterLabel,
   quarterLine,
+  quarterTargetText,
   riskTag,
   staleFlag,
 } from './goalsModel';
@@ -196,5 +197,36 @@ describe('B742: вклад кварталов годовой цели', () => {
     expect(quarterLine(targets, '%')).toBe('Вклад кварталов: I — 85 %, II — 88 %');
     expect(quarterLine([{ quarter: 4, value: 2 }], 'шт.')).toBe('Вклад кварталов: IV — 2 шт.');
     expect(quarterLine(null, '%')).toBeNull();
+  });
+});
+
+describe('quarterTargetText', () => {
+  const yearly = (dueDate: string) =>
+    card({
+      horizon: 'year',
+      unit: '%',
+      dueDate,
+      details: {
+        setBy: 'manager',
+        agreedOn: null,
+        weight: null,
+        archive: null,
+        quarterTargets: [
+          { quarter: 1, value: 85 },
+          { quarter: 2, value: 88 },
+          { quarter: 4, value: 95 },
+        ],
+      },
+    });
+
+  it('цель текущего квартала; год не начался — первый, прошёл — последний', () => {
+    expect(quarterTargetText(yearly('2026-12-31'), '2026-05-10')).toBe('из 88 % в II кв.');
+    expect(quarterTargetText(yearly('2027-12-31'), '2026-11-23')).toBe('из 85 % в I кв.');
+    expect(quarterTargetText(yearly('2025-12-31'), '2026-11-23')).toBe('из 95 % в IV кв.');
+  });
+
+  it('нет вклада этого квартала или цель квартальная — null', () => {
+    expect(quarterTargetText(yearly('2026-12-31'), '2026-08-01')).toBeNull();
+    expect(quarterTargetText(card(), '2026-08-01')).toBeNull();
   });
 });

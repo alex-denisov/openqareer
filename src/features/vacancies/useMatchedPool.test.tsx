@@ -144,7 +144,7 @@ describe('B338 изолированное чтение фильтров', () => 
 describe('B725: фасеты отдельным запросом', () => {
   afterEach(() => vi.clearAllMocks());
 
-  it('фасеты просятся рядом со страницей 0 и приходят, не дожидаясь строк', async () => {
+  it('B760: фасеты просятся после страницы 0 — строки не делят с ними цикл сервера', async () => {
     const rows = deferred();
     vi.mocked(getMatchedVacancyPage).mockReturnValueOnce(rows.promise);
     vi.mocked(getMatchedVacancyFacets).mockResolvedValueOnce({ ...initial.facets!, total: 4 });
@@ -156,10 +156,10 @@ describe('B725: фасеты отдельным запросом', () => {
     const root = createRoot(document.createElement('div'));
     await act(async () => root.render(<Reader />));
     await act(async () => pool.setFilters?.(selected));
-    expect(getMatchedVacancyFacets).toHaveBeenCalledWith(expect.any(AbortSignal), selected);
     expect(getMatchedVacancyPage).toHaveBeenCalledWith(0, expect.any(AbortSignal), selected, 'rows');
-    expect(pool.facets?.total).toBe(4);
+    expect(getMatchedVacancyFacets).not.toHaveBeenCalled();
     await act(async () => rows.resolve({ items: [], total: 4, nextOffset: null }));
+    expect(getMatchedVacancyFacets).toHaveBeenCalledWith(expect.any(AbortSignal), selected);
     expect(pool.facets?.total).toBe(4);
     expect(pool.total).toBe(4);
     await act(async () => root.unmount());

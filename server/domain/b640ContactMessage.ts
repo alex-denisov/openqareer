@@ -36,7 +36,7 @@ const KIND_TASK: Readonly<Record<B640ContactMessageKind, string>> = {
  */
 const COMPANY_TASK: Readonly<Record<Exclude<B640ContactMessageKind, 'recruiter'>, (company: string) => string>> = {
   known_contact: (company) =>
-    `знакомому, который связан с компанией ${company}: напомни о себе, скажи, что тебя интересует вакансия ${company}, и спроси, не порекомендует ли он тебя или не подскажет, кто нанимает на эту роль`,
+    `знакомому, который связан с компанией ${company}: напомни о себе, скажи, что тебя интересует вакансия ${company}, и спроси, не порекомендует ли он тебя или не расскажет ли о команде и о том, кто нанимает на эту роль`,
   ask_introduction: (company) =>
     `знакомому: попроси представить кандидата тому, кто нанимает на вакансию в компании ${company}`,
 };
@@ -54,6 +54,18 @@ export function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/u)[0] ?? '';
 }
 
+/**
+ * B753 (прод 23.11): знакомому модель писала «Откликаюсь на вакансию VK…» — письмо работодателю.
+ * Сообщение знакомому — человеку, которого кандидат знает; у рекрутёра свой тон.
+ */
+const ACQUAINTANCE_RULES = [
+  'Это сообщение знакомому, а не отклик работодателю: не пиши «Откликаюсь», «Прошу рассмотреть», «Рассмотрите мою кандидатуру», «Направляю резюме» и похожие слова отклика.',
+  'Порядок: короткое приветствие по имени; зачем пишешь; конкретная просьба — порекомендовать тебя или рассказать о команде; один факт из профиля, связанный с вакансией.',
+];
+
+/** Слова отклика работодателю: в сообщении знакомому такой текст не принимается (B753). */
+const RESPONSE_FORMULA = /(откликаюсь|хочу откликнуться|прошу рассмотреть|рассмотрите[\s,]+(пожалуйста[\s,]+)?мою кандидатуру|направляю (вам )?(своё |свое |моё |мое )?резюме)/iu;
+
 /** Просьба к модели вместо письма работодателю: короткое личное сообщение, без темы и подписи. */
 export function contactMessageWish(facts: ContactMessageFacts): string {
   const lines = [
@@ -68,6 +80,7 @@ export function contactMessageWish(facts: ContactMessageFacts): string {
       : '',
     `Не длиннее ${B640_CONTACT_MESSAGE_DRAFT_MAX - 100} знаков, без темы, без подписи, без приветствия «Уважаемый».`,
     'Пиши только то, что есть в профиле кандидата; не добавляй цифр, достижений и обещаний, которых там нет.',
+    ...(facts.kind === 'recruiter' ? [] : ACQUAINTANCE_RULES),
   ];
   return lines.filter(Boolean).join('\n');
 }
@@ -99,13 +112,18 @@ function digitGroups(text: string): string[] {
   return text.match(/\d+/gu) ?? [];
 }
 
-export type ModelMessageRejection = 'empty' | 'too_long' | 'new_digits';
+export type ModelMessageRejection = 'empty' | 'too_long' | 'new_digits' | 'response_formula';
 
 /** B753: почему текст модели не принят — в журнал вместо молчаливого запасного текста. */
-export function modelMessageRejection(text: string | undefined, knownText: string): ModelMessageRejection | null {
+export function modelMessageRejection(
+  text: string | undefined,
+  knownText: string,
+  kind: B640ContactMessageKind = 'recruiter',
+): ModelMessageRejection | null {
   const body = text?.trim().replace(/\r\n?/gu, '\n');
   if (!body) return 'empty';
   if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
+  if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
   return digitGroups(body).every((group) => knownText.includes(group)) ? null : 'new_digits';
 }
 
@@ -113,8 +131,12 @@ export function modelMessageRejection(text: string | undefined, knownText: strin
  * Текст модели принимаем, только если он непустой, в пределе длины и не вводит чисел, которых нет
  * в профиле или данных запроса; иначе вызывающий берёт запасной текст.
  */
-export function acceptModelMessage(text: string | undefined, knownText: string): string | null {
-  if (modelMessageRejection(text, knownText)) return null;
+export function acceptModelMessage(
+  text: string | undefined,
+  knownText: string,
+  kind: B640ContactMessageKind = 'recruiter',
+): string | null {
+  if (modelMessageRejection(text, knownText, kind)) return null;
   return text!.trim().replace(/\r\n?/gu, '\n');
 }
 
