@@ -11,14 +11,28 @@ import { isClosedSite } from './closedSites';
  */
 export type PageReadResult = { readonly ok: true; readonly html: string } | { readonly ok: false; readonly reason: OwnVacancyUnreadable };
 
+/** Что видно в журнале про чтение: домен, код, байты, где остановились. Без пути, запроса и данных кандидата. */
+export interface PageReadTrace {
+  readonly host: string;
+  readonly status: number | null;
+  readonly bytes: number;
+  readonly stage: 'page' | 'robots' | 'timeout' | 'blocked' | 'error';
+  readonly outcome: 'ok' | OwnVacancyUnreadable;
+}
+
 export interface PageReaderOptions {
+  readonly onTrace?: (trace: PageReadTrace) => void;
   readonly fetchImpl?: typeof fetch;
   readonly resolve?: (host: string) => Promise<readonly string[]>;
   readonly timeoutMs?: number;
   readonly maxBytes?: number;
 }
 
-const TIMEOUT_MS = 8_000;
+/**
+ * Прод 23.11: Lever отдаёт 743 КБ за 0,3 с, но под нагрузкой веб-процесса (стоянки цикла
+ * по 260–330 мс) чтение по кускам заняло 8 056 мс и упёрлось в прежние 8 с — «не открылась».
+ */
+const TIMEOUT_MS = 20_000;
 const MAX_BYTES = 1_500_000;
 const MAX_REDIRECTS = 3;
 const REFUSED_STATUS = new Set([401, 403, 429, 451]);
@@ -52,6 +66,8 @@ interface Context {
   readonly signal: AbortSignal;
   readonly maxBytes: number;
   readonly robotsChecked: Set<string>;
+  /** Последний ответ: для строки журнала (B676). */
+  readonly last: { host: string; status: number | null; bytes: number; stage: PageReadTrace['stage'] };
 }
 
 const HEADERS = { 'user-agent': OWN_VACANCY_USER_AGENT, accept: 'text/html,application/xhtml+xml;q=0.9' };
@@ -65,6 +81,7 @@ async function safeGet(start: URL, context: Context, checkRobots: boolean): Prom
     const response = await context.fetchImpl(url.toString(), {
       method: 'GET', headers: HEADERS, redirect: 'manual', credentials: 'omit', signal: context.signal,
     });
+    Object.assign(context.last, { host: url.hostname, status: response.status, stage: checkRobots ? 'page' : 'robots' });
     if (response.status < 300 || response.status >= 400) return { kind: 'response', response, url };
     await response.body?.cancel().catch(() => undefined);
     const location = response.headers.get('location');
@@ -118,31 +135,51 @@ async function readPage(start: URL, context: Context): Promise<PageReadResult> {
     return { ok: false, reason: 'failed' };
   }
   const html = await readBody(response, context.maxBytes);
+  context.last.bytes = html === null ? context.maxBytes : Buffer.byteLength(html);
   return html === null ? { ok: false, reason: 'failed' } : { ok: true, html };
 }
 
 export async function readVacancyPage(link: string, options: PageReaderOptions = {}): Promise<PageReadResult> {
   const start = parseLink(link);
   if (!start) return { ok: false, reason: 'failed' };
+  const context = contextFor(start, options);
+  const result = await raceTimeout(readPage(start, context), context, options.timeoutMs ?? TIMEOUT_MS);
+  const { host, status, bytes, stage } = context.last;
+  options.onTrace?.({ host, status, bytes, stage, outcome: result.ok ? 'ok' : result.reason });
+  return result;
+}
+
+type ReaderContext = Context & { readonly controller: AbortController };
+
+function contextFor(start: URL, options: PageReaderOptions): ReaderContext {
   const resolve = options.resolve ?? defaultResolve;
   const controller = new AbortController();
-  const timeoutMs = options.timeoutMs ?? TIMEOUT_MS;
-  const context: Context = {
+  return {
     // Один агент на процесс: новый `Agent` на каждое чтение не закрывался бы.
     fetchImpl: options.fetchImpl ?? (options.resolve ? createPinnedFetch(resolve) : pinnedFetch), resolve, signal: controller.signal,
-    maxBytes: options.maxBytes ?? MAX_BYTES, robotsChecked: new Set(),
+    maxBytes: options.maxBytes ?? MAX_BYTES, robotsChecked: new Set(), controller,
+    last: { host: start.hostname, status: null, bytes: 0, stage: 'page' },
   };
+}
+
+async function raceTimeout(read: Promise<PageReadResult>, context: ReaderContext, timeoutMs: number): Promise<PageReadResult> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<PageReadResult>((resolveTimeout) => {
     timer = setTimeout(() => {
-      controller.abort();
+      context.controller.abort();
+      context.last.stage = 'timeout';
       resolveTimeout({ ok: false, reason: 'failed' });
     }, timeoutMs);
   });
   try {
-    return await Promise.race([readPage(start, context), timeout]);
+    return await Promise.race([read, timeout]);
   } catch (error) {
-    return { ok: false, reason: error instanceof ReadStop ? error.reason : 'failed' };
+    if (error instanceof ReadStop) {
+      context.last.stage = 'blocked';
+      return { ok: false, reason: error.reason };
+    }
+    context.last.stage = 'error';
+    return { ok: false, reason: 'failed' };
   } finally {
     clearTimeout(timer);
   }

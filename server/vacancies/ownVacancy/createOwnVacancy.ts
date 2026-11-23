@@ -6,7 +6,7 @@ import { resolvePoolVacancyCluster } from '../poolVacancyCluster';
 import { extractVacancyPage } from './extractVacancyPage';
 import { isClosedSite } from './closedSites';
 import { takeLinkReadSlot } from './linkReadLimit';
-import { readVacancyPage } from './pageReader';
+import { readVacancyPage, type PageReadTrace } from './pageReader';
 import { ownVacancyFromText } from './ownVacancyText';
 import { salaryFromText } from './ownVacancySalary';
 import { ownVacancySummary, startOwnVacancyComparison } from './ownVacancyComparison';
@@ -32,7 +32,7 @@ function hostOf(link: string): URL | null {
   }
 }
 
-async function fromLink(deps: RouteDeps, candidateId: string, link: string): Promise<LinkOutcome> {
+async function fromLink(deps: RouteDeps, candidateId: string, link: string, onTrace?: (trace: PageReadTrace) => void): Promise<LinkOutcome> {
   const poolId = poolIdFromVacancyLink(link);
   if (poolId) {
     const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, poolId);
@@ -42,7 +42,7 @@ async function fromLink(deps: RouteDeps, candidateId: string, link: string): Pro
   if (url && isClosedSite(url)) return { result: { outcome: 'unreadable', reason: 'site_closed' } };
   const slot = takeLinkReadSlot(candidateId);
   if (!slot.ok) throw new OwnVacancyReadBusy();
-  const page = await readVacancyPage(link).finally(slot.release);
+  const page = await readVacancyPage(link, { onTrace }).finally(slot.release);
   if (!page.ok) return { result: { outcome: 'unreadable', reason: page.reason } };
   const extracted = extractVacancyPage(page.html);
   if (extracted.botWall) return { result: { outcome: 'unreadable', reason: 'failed' } };
@@ -58,9 +58,10 @@ export async function createOwnVacancy(
   store: SqliteOwnVacancyStore,
   candidateId: string,
   source: OwnVacancySource,
+  onTrace?: (trace: PageReadTrace) => void,
 ): Promise<OwnVacancyCreateResult> {
   if (store.count(candidateId) >= OWN_VACANCY_MAX) return { outcome: 'limit' };
-  const outcome: LinkOutcome = 'text' in source ? { vacancy: ownVacancyFromText(source.text) } : await fromLink(deps, candidateId, source.link);
+  const outcome: LinkOutcome = 'text' in source ? { vacancy: ownVacancyFromText(source.text) } : await fromLink(deps, candidateId, source.link, onTrace);
   if ('result' in outcome) return outcome.result;
   const record = store.create(candidateId, outcome.vacancy);
   startOwnVacancyComparison(deps, candidateId, record);
