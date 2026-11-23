@@ -1,14 +1,14 @@
 import type { RejectionReviewChecks } from '../../../../shared/rejectionReview';
 import { Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
-import { checkCards } from './model/reviewChecks';
+import { checkCards, checksHeading } from './model/reviewChecks';
 
-/** «Три проверки, которым данные не нужны» (O7c): что сделать, пока откликов меньше порога. */
+/** «Три проверки, которым данные не нужны» (O7c; без ожиданий по деньгам — две): что сделать, пока откликов меньше порога. */
 export function ReviewChecks({ checks }: { readonly checks: RejectionReviewChecks }) {
   const cards = checkCards(checks);
   return (
     <>
-      <h3 className="mod-title">Три проверки, которым данные не нужны</h3>
+      <h3 className="mod-title">{checksHeading(cards.length)}</h3>
       <ol className="rec-list">
         {cards.map((card, index) => (
           <li className={index === 0 ? 'rec-card is-next' : 'rec-card'} key={card.key}>

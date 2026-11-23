@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RejectionReviewChecks } from '../../../../../shared/rejectionReview';
-import { checkCards, checksBasis } from './reviewChecks';
+import { checkCards, checksBasis, checksHeading } from './reviewChecks';
 
 const CHECKS: RejectionReviewChecks = {
   since: '2026-10-02T10:00:00.000Z',
@@ -34,6 +34,14 @@ describe('B645: три проверки «Мало данных»', () => {
       'Обновить статусы',
       'Показать свежие',
     ]);
+  });
+
+  // B645-2: при двух карточках заголовок «Три проверки» врал.
+  it('заголовок называет столько проверок, сколько карточек', () => {
+    expect(checksHeading(checkCards(CHECKS).length)).toBe('Три проверки, которым данные не нужны');
+    expect(checksHeading(checkCards({ ...CHECKS, salaryBelow: null }).length)).toBe(
+      'Две проверки, которым данные не нужны',
+    );
   });
 
   it('основание: с какого дня отклики и порог', () => {

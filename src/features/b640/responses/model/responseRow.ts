@@ -10,9 +10,9 @@ export interface ResponseTag {
   readonly label: string;
 }
 
-/** Кнопка строки: куда ведёт — письмо (o02) или оффер (o06a). */
+/** Кнопка строки: куда ведёт — письмо (o02), оффер (o06a) или раскрытый отклик к разбору (o01c). */
 export interface ResponseRowAction {
-  readonly kind: 'letter' | 'offer';
+  readonly kind: 'letter' | 'offer' | 'debrief';
   readonly label: string;
   readonly short: string;
   readonly icon: IconName;
@@ -143,6 +143,13 @@ const RESEND_ACTION: ResponseRowAction = {
   short: 'Повторить',
   icon: 'send',
 };
+// Макет o01c: прошедшее интервью — «Разобрать запись», кнопка раскрывает отклик.
+const DEBRIEF_ACTION: ResponseRowAction = {
+  kind: 'debrief',
+  label: 'Разобрать запись',
+  short: 'Разобрать',
+  icon: 'play',
+};
 const OFFER_ACTION: ResponseRowAction = {
   kind: 'offer',
   label: 'Ответить на оффер',
@@ -209,9 +216,9 @@ function interviewFace(application: ApplicationView, now: Date): Face {
   if (past) {
     return {
       tag: { tone: 'ok', label: 'интервью прошло' },
-      next: 'Расскажите, как прошло',
+      next: 'Разобрать запись',
       event: withDate('интервью', dotDate(past)),
-      action: null,
+      action: DEBRIEF_ACTION,
       yours: true,
       remind: false,
       urgency: 2,
