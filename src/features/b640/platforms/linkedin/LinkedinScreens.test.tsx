@@ -152,6 +152,10 @@ describe('a03p, a03b, a05', () => {
         a.textContent?.includes('Изменить темы'),
       ),
     ).toBe(true);
+    // B645-2: «Изменить темы» внутри пустого блока, сразу под «Новых постов нет».
+    expect(
+      view.container.querySelector('.vl-empty-t + .actions a.btn.is-primary')?.textContent,
+    ).toBe('Изменить темы');
     // Главная кнопка на a05h одна — «Изменить темы»; «Подготовить комментарий» обычная.
     expect(
       [...view.container.querySelectorAll('.is-primary')].map((item) => item.textContent),

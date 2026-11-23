@@ -166,9 +166,9 @@ function Empty({ node, reload }: Pick<SectionProps, 'node'> & { readonly reload:
         </h2>
         <div className="vl-empty" role="status">
           <p className="vl-empty-t">Новых постов нет</p>
-        </div>
-        <div className="actions">
-          <TopicsLink />
+          <div className="actions">
+            <TopicsLink />
+          </div>
         </div>
         <BringPost onCreated={reload} primary={false} />
       </section>
