@@ -438,7 +438,11 @@ function renderEmptyContext(
   if (current.state === 'source_unavailable')
     return <SourceErrorState onRetry={() => void actions.loadCurrent()} />;
   if (current.state === 'counting')
-    return <CountingState onRetry={() => void actions.loadCurrent()} />;
+    return state.error ? (
+      <SourceErrorState onRetry={() => void actions.loadCurrent()} />
+    ) : (
+      <CountingState />
+    );
   if (current.state === 'too_few_vacancies')
     return <TooFewVacanciesState current={current} onOpenOpportunities={onOpenOpportunities} />;
   if (current.state === 'insufficient_requirements')

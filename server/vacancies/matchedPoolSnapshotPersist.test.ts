@@ -276,3 +276,35 @@ describe('MatchedPoolSnapshots: a new process loads the stored snapshots before 
     ).toBe('held');
   });
 });
+
+describe('MatchedPoolSnapshots: a miss says why (B770)', () => {
+  function storeWith(keys: string[]): MatchedSnapshotStore {
+    return { read: () => null, write: () => undefined, delete: () => undefined, keys: () => keys };
+  }
+
+  it('a reader with no snapshot logs whether its key was stored and how many seals there are', async () => {
+    const snapshots = new MatchedPoolSnapshots({ waitMs: 1 });
+    const misses: unknown[] = [];
+    snapshots.setStore(storeWith(['other', 'role']));
+    snapshots.setMissLog((miss) => misses.push(miss));
+    await snapshots
+      .readAsync('one', 'role', () => new Promise(() => undefined))
+      .catch(() => undefined);
+    await snapshots
+      .readAsync('one', 'fresh', () => new Promise(() => undefined))
+      .catch(() => undefined);
+    expect(misses).toEqual([
+      { candidateId: 'one', keyInStore: true, seals: 2 },
+      { candidateId: 'one', keyInStore: false, seals: 2 },
+    ]);
+  });
+
+  it('the warm pass and a reader with a snapshot log nothing', async () => {
+    const snapshots = new MatchedPoolSnapshots();
+    const misses: unknown[] = [];
+    snapshots.setMissLog((miss) => misses.push(miss));
+    await snapshots.readAsync('one', 'role', async () => [item('a')], { awaitRebuild: true });
+    await snapshots.readAsync('one', 'role', async () => [item('b')]);
+    expect(misses).toEqual([]);
+  });
+});

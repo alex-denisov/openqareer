@@ -126,14 +126,12 @@ export function NoRoleState({ onOpenOpportunities }: { onOpenOpportunities: () =
   );
 }
 
-export function CountingState({ onRetry }: { onRetry: () => void }) {
+export function CountingState() {
   return (
-    <EmptyState
-      title="Считаем вакансии роли"
-      text="Проверка откроется, когда подборка будет готова. Обычно это меньше минуты."
-      action="Обновить"
-      onAction={onRetry}
-    />
+    <section className="career-role-assessment-state" aria-live="polite">
+      <Info size={24} aria-hidden="true" />
+      <h2>Считаем вакансии роли…</h2>
+    </section>
   );
 }
 
