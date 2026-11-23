@@ -1253,8 +1253,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       const placeholders = selected.map(() => '?').join(', ');
       const rows = this.database
         .prepare(
+          // `+source_id`: with ~800 bound ids the planner otherwise walks the
+          // whole source index (458k hh rows on prod, 82 s of a 90 s profile, B761).
           `SELECT id, payload FROM vacancy_pool
-            WHERE source_id = ? AND id IN (${placeholders})
+            WHERE +source_id = ? AND id IN (${placeholders})
               AND CASE WHEN json_valid(payload) THEN (
                 length(trim(coalesce(json_extract(payload, '$.description'), ''))) > 0 OR
                 length(trim(coalesce(json_extract(payload, '$.fullDescription'), ''))) > 0 OR
