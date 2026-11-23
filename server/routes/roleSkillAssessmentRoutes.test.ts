@@ -396,10 +396,12 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
     expect(responseData(after)).toEqual([
       {
         roleTitle: OTHER_ROLE,
+        roleTitleRu: expect.any(String),
         completedAt: OBSERVED_AT,
         confirmedSkills: run.skills
           .filter((skill: { grade: string }) => skill.grade === 'confirmed')
           .map((skill: { name: string }) => skill.name),
+        skillCount: run.skills.length,
       },
     ]);
   });
@@ -430,9 +432,11 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
       url: `${BASE_PATH}/checked-roles`,
       headers: headersFor(rig.candidate),
     });
-    expect(responseData(after)).toEqual([
+    expect(responseData(after)).toMatchObject([
       { roleTitle: OTHER_ROLE, completedAt: OBSERVED_AT, confirmedSkills: [first.name] },
     ]);
+    // B764: название проверки по-русски и её собственный счёт — для строки, взявшей проверку по псевдониму.
+    expect((responseData(after) as unknown[])[0]).toMatchObject({ skillCount: run.skills.length });
   });
 });
 
@@ -465,7 +469,7 @@ describe('B747: проверенные навыки отдаются русск�
       url: `${BASE_PATH}/checked-roles`,
       headers: headersFor(rig.candidate),
     });
-    expect(responseData(after)).toEqual([
+    expect(responseData(after)).toMatchObject([
       {
         roleTitle: OTHER_ROLE,
         completedAt: OBSERVED_AT,

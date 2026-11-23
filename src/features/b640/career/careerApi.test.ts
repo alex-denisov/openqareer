@@ -268,4 +268,27 @@ describe('loadSkillRoles (выбор роли на C04)', () => {
     expect(roles.ready).toBe('CIO');
     expect(api.getCurrentRoleSkillAssessment).toHaveBeenCalledTimes(6);
   });
+
+  it('B767: два варианта одной роли с одним русским названием — на выбор одна роль, пройденная проверка первой', async () => {
+    api.getCandidateCampaign.mockResolvedValue({
+      ...campaign(['Head of Technical Support', 'CTO', 'Customer Support Director']),
+      titlesRu: {
+        'Head of Technical Support': 'Руководитель службы поддержки',
+        'Customer Support Director': 'Руководитель службы поддержки',
+        CTO: 'Технический директор (CTO)',
+      },
+    });
+    const answers: Record<string, unknown> = {
+      'Head of Technical Support': { state: 'ready', roleTitle: 'Head of Technical Support', skills: [] },
+      CTO: { state: 'ready', roleTitle: 'CTO', skills: [] },
+      'Customer Support Director': { state: 'result', run: {} },
+    };
+    api.getCurrentRoleSkillAssessment.mockImplementation((title: string) =>
+      Promise.resolve(answers[title]),
+    );
+    const roles = await loadSkillRoles(new AbortController().signal);
+    expect(roles.searchTitles).toEqual(['Customer Support Director', 'CTO']);
+    expect(roles.checkable).toEqual(['Customer Support Director', 'CTO']);
+    expect(roles.ready).toBe('CTO');
+  });
 });

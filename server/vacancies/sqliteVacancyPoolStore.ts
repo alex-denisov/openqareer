@@ -350,6 +350,8 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly matchMode?: 'legacy' | 'semantic';
   /** Потолок корзины токена (B230/B761); по умолчанию `BUCKET_SIZE_CAP`, меньше — в тестах. */
   readonly bucketSizeCap?: number;
+  /** Часы для памяти о токенах за потолком (B761); по умолчанию `Date.now`. */
+  readonly now?: () => number;
 }
 
 interface CatalogListingRow {
@@ -437,6 +439,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     phase: 'clusters',
     rowid: 0,
   };
+  private readonly overCapTokens = new OverCapTokens();
+  private readonly clock: () => number;
 
   constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
@@ -447,6 +451,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.onWrite = options.onWrite;
     this.matchMode = options.matchMode ?? 'legacy';
     this.bucketSizeCap = Math.max(1, Math.floor(options.bucketSizeCap ?? BUCKET_SIZE_CAP));
+    this.clock = options.now ?? Date.now;
     if (options.databasePath !== ':memory:')
       mkdirSync(dirname(options.databasePath), { recursive: true });
     this.databasePath = options.databasePath;
@@ -455,17 +460,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     applySqliteBusyTimeout(this.database);
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(MIGRATION_23);
-    this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
-    this.ensureColumn(
-      'vacancy_source_state',
-      'sync_requested_at',
-      VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
-    );
-    this.ensureColumn(
-      'vacancy_source_state',
-      'sync_started_at',
-      VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
-    );
+    this.ensureSourceStateColumns();
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
     this.ensurePoolIndex();
     // Match LIMIT must stop in index order; CASE remote sorting previously
@@ -503,6 +498,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private ensurePoolIndex(): void {
     this.database.exec(`${VACANCY_POOL_INDEX_TABLE};${SOURCE_SYNC_REQUESTED_INDEX};`);
     this.ensureColumn('vacancy_pool_index', 'first_seen_ms', VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN);
+  }
+
+  private ensureSourceStateColumns(): void {
+    this.ensureColumn('vacancy_source_state', 'observations', VACANCY_SOURCE_OBSERVATIONS_COLUMN);
+    this.ensureColumn(
+      'vacancy_source_state',
+      'sync_requested_at',
+      VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
+    );
+    this.ensureColumn(
+      'vacancy_source_state',
+      'sync_started_at',
+      VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
+    );
   }
 
   private ensureColumn(table: string, column: string, ddl: string): void {
@@ -2754,6 +2763,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const cacheKey = `${kind}\u0000${key}`;
     const cached = cache.get(cacheKey);
     if (cached !== undefined) return cached;
+    if (this.overCapTokens.has(cacheKey, this.clock())) return this.bucketSizeCap;
     const row = this.database
       .prepare(
         `SELECT count(*) AS n FROM (
@@ -2762,6 +2772,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       )
       .get(kind, key) as { n: number };
     cache.set(cacheKey, row.n);
+    if (row.n >= this.bucketSizeCap) this.overCapTokens.add(cacheKey);
     return row.n;
   }
 
@@ -3543,4 +3554,29 @@ function gainedFullText(previous: UnifiedVacancy | undefined, stored: UnifiedVac
 
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
+}
+
+/** Сколько живёт память о токенах за потолком: корзина «group» за час не станет редкой. */
+export const OVER_CAP_TOKENS_TTL_MS = 60 * 60_000;
+
+/**
+ * B761: токены, чья корзина достигла потолка. Без памяти каждый такой токен в каждой
+ * партии заново читал 2 000 строк индекса (12,5 % профиля после стоп-листа). Раз в
+ * `OVER_CAP_TOKENS_TTL_MS` память сбрасывается — токен, ставший редким, вернётся.
+ */
+class OverCapTokens {
+  private keys = new Set<string>();
+  private since: number | undefined;
+
+  has(key: string, nowMs: number): boolean {
+    if (this.since === undefined || nowMs - this.since >= OVER_CAP_TOKENS_TTL_MS) {
+      this.keys = new Set();
+      this.since = nowMs;
+    }
+    return this.keys.has(key);
+  }
+
+  add(key: string): void {
+    this.keys.add(key);
+  }
 }

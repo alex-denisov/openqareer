@@ -173,6 +173,36 @@ describe('compareCheckTag', () => {
   });
 });
 
+describe('B764: проверка, пройденная под другим названием роли', () => {
+  const checked = [
+    {
+      roleTitle: 'Chief Operating Officer',
+      roleTitleRu: 'Операционный директор (COO)',
+      completedAt: '2026-11-22',
+      confirmedSkills: ['Управление командой', 'Бюджет', 'Найм', 'OKR'],
+      skillCount: 6,
+    },
+  ];
+  const vp = observed('vp', 'VP of Operations', 20, null, { aliases: ['Chief Operating Officer'] });
+  const coo = observed('coo', 'COO', 30, null, { aliases: ['Chief Operating Officer'] });
+  const titlesRu = {
+    'VP of Operations': 'Вице-президент по операциям',
+    COO: 'Операционный директор (COO)',
+  };
+
+  it('строка по псевдониму называет роль проверки и её счёт, ссылка — на сам прогон', () => {
+    const rows = buildRoleRows([vp, coo], ['VP of Operations', 'COO'], checked, titlesRu);
+    const vpRow = rows.find((row) => row.title === 'VP of Operations')!;
+    expect(compareCheckTag(vpRow)).toEqual({
+      text: 'пройдена для «Операционный директор (COO)» · 4 из 6',
+      ok: true,
+      role: 'Chief Operating Officer',
+    });
+    const cooRow = rows.find((row) => row.title === 'COO')!;
+    expect(compareCheckTag(cooRow).text).toMatch(/^пройдена · \d+ из \d+$/u);
+  });
+});
+
 /** B737: роль — ключ на английском, кандидату её название показывается по-русски. */
 describe('role label (B737)', () => {
   const COO = 'Chief Operating Officer';

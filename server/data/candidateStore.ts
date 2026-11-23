@@ -153,6 +153,8 @@ export interface CandidateExport extends CandidateSnapshot {
   /** B755: ключи доступа — название устройства и даты, без ключей. */
   passkeys: import('./passkeyExport').ExportedPasskey[];
   profileHistory: import('./profileHistoryExport').ProfileHistoryExport;
+  /** B738 · 4: черновики, посты ленты, варианты текстов и LinkedIn. */
+  content: import('./contentExport').ContentExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
