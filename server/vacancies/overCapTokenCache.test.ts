@@ -65,9 +65,18 @@ async function setup() {
   await engine.syncSource('alpha');
   const database = (pool as unknown as { database: DatabaseSync }).database;
   const sized: string[] = [];
+  const exact: string[] = [];
   const prepare = database.prepare.bind(database);
   database.prepare = ((sql: string) => {
     const statement = prepare(sql);
+    if (sql.includes('SELECT count(*) AS n FROM vacancy_cluster_keys WHERE kind = ?')) {
+      const getExact = statement.get.bind(statement);
+      statement.get = ((...params: Parameters<typeof getExact>) => {
+        exact.push(String(params[1]));
+        return getExact(...params);
+      }) as typeof statement.get;
+      return statement;
+    }
     if (!/SELECT count\(\*\) AS n FROM \(\s*SELECT 1 FROM vacancy_cluster_keys/.test(sql))
       return statement;
     const get = statement.get.bind(statement);
@@ -77,11 +86,11 @@ async function setup() {
     }) as typeof statement.get;
     return statement;
   }) as DatabaseSync['prepare'];
-  const sync = async (key: string, title: string) => {
-    readings.set('beta', [vacancy('beta', key, title, `${key}co Group`)]);
+  const sync = async (key: string, title: string, company = `${key}co Group`) => {
+    readings.set('beta', [vacancy('beta', key, title, company)]);
     await engine.syncSource('beta');
   };
-  return { pool, sized, sync, advance: (ms: number) => (clock += ms) };
+  return { pool, sized, exact, sync, advance: (ms: number) => (clock += ms) };
 }
 
 describe('over-cap tokens are remembered between batches (B761)', () => {
@@ -97,6 +106,21 @@ describe('over-cap tokens are remembered between batches (B761)', () => {
     advance(OVER_CAP_TOKENS_TTL_MS);
     await sync('b3', 'Senior Manager Audit');
     expect(groupReads()).toBe(2);
+    pool.close();
+  });
+
+  it('a side of generic tokens only counts their exact sizes once across batches', async () => {
+    const { pool, exact, sync, advance } = await setup();
+    await sync('g1', 'Senior Manager', 'Group');
+    const first = exact.length;
+    expect(first).toBeGreaterThan(0);
+
+    await sync('g2', 'Senior Manager', 'Group');
+    expect(exact.length).toBe(first);
+
+    advance(OVER_CAP_TOKENS_TTL_MS);
+    await sync('g3', 'Senior Manager', 'Group');
+    expect(exact.length).toBeGreaterThan(first);
     pool.close();
   });
 });

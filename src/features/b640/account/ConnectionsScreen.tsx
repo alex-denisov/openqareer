@@ -19,6 +19,7 @@ import { useShell } from '../shell/ShellContext';
 import { getHhSessionState } from './hhSessionApi';
 import { connectedCount, connectionLine, PLATFORM_NAME, updatedLine } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+import { prefetch } from './prefetch';
 
 interface Connections {
   readonly platforms: readonly CandidateConnection[];
@@ -28,7 +29,7 @@ interface Connections {
   readonly hhExpired: boolean;
 }
 
-async function loadConnections(): Promise<Connections> {
+async function fetchConnections(): Promise<Connections> {
   const [platforms, channels, hhSession] = await Promise.all([
     getConnections(),
     getNotificationChannelStatus().catch(() => null),
@@ -40,6 +41,9 @@ async function loadConnections(): Promise<Connections> {
     hhExpired: hhSession?.expired === true,
   };
 }
+
+/** B773: n03 читает подключения рядом с вопросом о сессии (`preload` раздела). */
+export const connectionsRead = prefetch(fetchConnections);
 
 type Platform = CandidateConnection['platform'];
 const ORDER: readonly Platform[] = ['hh', 'linkedin'];
@@ -256,7 +260,7 @@ function TelegramRow({ telegram }: { readonly telegram: NonNullable<Connections[
 export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
   const { session } = useShell();
   const toast = useToast();
-  const load = useLoad(loadConnections);
+  const load = useLoad(connectionsRead.read);
   const titleId = useId();
   if (load.state !== 'ready') {
     return (
