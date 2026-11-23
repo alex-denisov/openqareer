@@ -293,6 +293,41 @@ test.describe('B697: «Контакты» нового кабинета (a02)', 
     await expect(noCompany.locator('a.row-title.ct-n')).toHaveCount(1);
   });
 
+  test('B698: на 390 черновик под строкой не раздвигает страницу вбок', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!testInfo.project.name.includes('390'), 'проверка ширины 390');
+    await open(page, 'nocompany');
+    const text =
+      'Анна, добрый день! Видел, что вы работаете в Арка Холдинг, и хотел попросить о небольшой помощи с рекомендацией.';
+    await page.route('**/api/v1/candidate/b640/contact-messages', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            id: 'm1',
+            kind: 'ask_introduction',
+            text,
+            recipient: { name: 'Анна Ветрова', linkedinUrl: null },
+            createdAt: '2026-11-12T12:00:00.000Z',
+          },
+        },
+      }),
+    );
+    const row = page.locator('li.ct-row').first();
+    await row.locator('a.row-title.ct-n').click();
+    await expect(row.locator('textarea')).toHaveValue(text);
+    const probe = await page.evaluate(() => {
+      const skip = [...document.querySelectorAll('li.ct-row .lk-inline button')].at(-1);
+      return {
+        scroll: document.documentElement.scrollWidth,
+        width: document.documentElement.clientWidth,
+        right: Math.round(skip?.getBoundingClientRect().right ?? 0),
+      };
+    });
+    expect(probe.scroll, 'страница прокручивается вбок').toBeLessThanOrEqual(probe.width);
+    expect(probe.right).toBeLessThanOrEqual(probe.width);
+  });
+
   test('компания в подписи ведёт на карточку компании (v10b)', async ({ page }) => {
     await open(page, 'list');
     const company = page.locator('li.ct-row').first().locator('.ct-w a');
