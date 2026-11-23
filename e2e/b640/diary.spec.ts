@@ -51,6 +51,11 @@ test.describe('B662: «Дневник» нового кабинета — зап
       /^План на неделю/u,
     ]);
     await expectGates(page);
+    // B645: «Что мешает» с текстом макета d00d — 96 px на 1440 и 68 px на 390 (корень `data-mtight`).
+    const mobile = (page.viewportSize()?.width ?? 1440) < 768;
+    const blockers = screen.locator('#wk-bad');
+    await blockers.fill('Тестовая среда общая с соседней командой: ждали 4 дня.');
+    expect(Math.round((await blockers.boundingBox())?.height ?? 0)).toBe(mobile ? 68 : 96);
     await screen.getByLabel('Срок релиза, дней').fill('5');
     await screen.getByRole('button', { name: 'Сохранить итог' }).click();
     await expect(page.locator('[data-b640-node="d00"]')).toBeVisible();
