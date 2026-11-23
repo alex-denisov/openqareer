@@ -4,6 +4,7 @@ import type { SealedText } from './sealedText';
 import { interviewSessionAssociatedData } from './interviewSimulatorSchema';
 import { SqliteInterviewReviewHelpfulRepository } from './sqliteInterviewReviewHelpfulRepository';
 import { SqliteInterviewDesignSchemaRepository } from './sqliteInterviewDesignSchemaRepository';
+import { SqliteInterviewDesignTaskRepository } from './sqliteInterviewDesignTaskRepository';
 
 interface InterviewSessionRow {
   readonly candidate_id: string;
@@ -20,6 +21,8 @@ export class SqliteInterviewSimulatorRepository {
   readonly reviewHelpful: SqliteInterviewReviewHelpfulRepository;
   /** B647: исправленная кандидатом схема System Design по вопросу. */
   readonly designSchemas: SqliteInterviewDesignSchemaRepository;
+  /** B750: задача System Design по отклику — та же при повторном открытии. */
+  readonly designTasks: SqliteInterviewDesignTaskRepository;
 
   constructor(
     private readonly database: DatabaseSync,
@@ -27,6 +30,7 @@ export class SqliteInterviewSimulatorRepository {
   ) {
     this.reviewHelpful = new SqliteInterviewReviewHelpfulRepository(database);
     this.designSchemas = new SqliteInterviewDesignSchemaRepository(database, sealedText);
+    this.designTasks = new SqliteInterviewDesignTaskRepository(database, sealedText);
   }
 
   getCurrent(candidateId: string): InterviewSession | null {

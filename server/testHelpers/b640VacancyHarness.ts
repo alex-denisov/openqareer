@@ -69,6 +69,8 @@ export interface HarnessOptions {
   readonly recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** B642: флаг записи разговоров; по умолчанию включён, чтобы маршруты были. */
   readonly interviewRecording?: boolean;
+  /** B750: ключи моделей для маршрутов, что сами строят провайдера; fetch подменяет тест. */
+  readonly providerCredentials?: ServerConfig['providerCredentials'];
   /** B751: подставной разбор интервью. */
   readonly interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
   /** Подставной автор черновиков LinkedIn: тесты не зовут модель. */
@@ -108,7 +110,7 @@ export async function createB640Harness(options: HarnessOptions) {
     model: 'gpt-5.6-sol', staticRoot: directory, release: 'test', logLevel: options.logLines ? 'info' : 'fatal',
     secureCookies: false, allowedOrigins: ['http://localhost:3000'], seedAccounts: [],
     cabinetB640Usernames: ['flagged.test', 'other.test'], interviewRecordingEnabled: options.interviewRecording ?? true,
-    ...(options.billing ? { billingEnforcement: true } : {}),
+    ...(options.billing ? { billingEnforcement: true } : {}), ...(options.providerCredentials && { providerCredentials: options.providerCredentials }),
   } as ServerConfig;
   let poolReads = 0;
   let poolHangs = false;
