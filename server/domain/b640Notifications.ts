@@ -1,6 +1,7 @@
 import { presentNotification, type NotificationEventKind } from '../data/notificationPolicy';
 import { pluralWordRu } from '../../shared/pluralRu';
 import { digestCount, roleDigestTitle, roleInDigestTitle } from './roleVacancyDigest';
+import { digestSalaryNote } from './roleDigestMarks';
 
 /** B671: лента уведомлений нового кабинета поверх прежней таблицы уведомлений. */
 export type B640NotificationKind =
@@ -21,6 +22,8 @@ export interface B640Notification {
   readonly company: string | null;
   readonly role: string | null;
   readonly eventAt: string | null;
+  /** n01b: «выше 450 тыс. ₽» у подборки — только при пороге зарплаты кандидата. */
+  readonly note: string | null;
   readonly createdAt: string;
   readonly readAt: string | null;
   readonly sourceType: string;
@@ -214,6 +217,7 @@ export function classifyB640Notification(
     company,
     role,
     eventAt: eventAtOf(kind, application),
+    note: digest ? digestSalaryNote(row.sourceType, row.sourceId) : null,
     createdAt: row.createdAt,
     readAt: row.readAt,
     sourceType: row.sourceType,

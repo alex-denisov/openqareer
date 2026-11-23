@@ -3,19 +3,17 @@ import { pluralWordRu } from '../../shared/pluralRu';
 
 /**
  * B671 (n01b): «Новые вакансии по вашей роли» — одна запись на роль в сутки. Следующий
- * набор того же дня дописывается в неё: в `source_id` хранятся короткие отпечатки
- * вакансий дня (не текст вакансий), число в заголовке — сколько их.
+ * набор того же дня дописывается в неё (`roleDigestMarks`), число в заголовке — сколько
+ * вакансий за день.
  */
-export const ROLE_DIGEST_SOURCE_TYPE = 'matched_vacancy_day';
 /** Сутки уведомления — по московскому календарю: аудитория кабинета в основном там. */
 export const ROLE_DIGEST_TIME_ZONE = 'Europe/Moscow';
-const MARK_LENGTH = 10;
-const MAX_MARKS = 400;
-const SEPARATOR = ',';
 
 function shortHash(value: string, length: number): string {
   return createHash('sha256').update(value).digest('hex').slice(0, length);
 }
+
+export { digestCount, mergeDigestMarks, ROLE_DIGEST_SOURCE_TYPE } from './roleDigestMarks';
 
 /** «2026-11-23» в часовом поясе суток уведомления. */
 export function digestDay(now: Date, timeZone = ROLE_DIGEST_TIME_ZONE): string {
@@ -34,26 +32,6 @@ export function roleDigestKey(day: string, roles: readonly string[]): string {
     .sort()
     .join('\0');
   return `new-vacancies:${day}:${shortHash(roleSet, 12)}`;
-}
-
-function marksOf(sourceId: string): string[] {
-  return sourceId.split(SEPARATOR).filter((mark) => /^[0-9a-f]+$/u.test(mark));
-}
-
-/** Объединение отпечатков дня с новым набором; уже учтённые вакансии не считаются дважды. */
-export function mergeDigestMarks(stored: string, vacancyIds: readonly string[]): string {
-  const marks = new Set(marksOf(stored));
-  for (const id of vacancyIds) {
-    if (marks.size >= MAX_MARKS) break;
-    marks.add(shortHash(id, MARK_LENGTH));
-  }
-  return [...marks].join(SEPARATOR);
-}
-
-export function digestCount(sourceType: string, sourceId: string): number | null {
-  if (sourceType !== ROLE_DIGEST_SOURCE_TYPE) return null;
-  const count = marksOf(sourceId).length;
-  return count > 0 ? count : null;
 }
 
 const CONSONANT_END = /[бвгджзклмнпрстфхцчшщ]$/u;
