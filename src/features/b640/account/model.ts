@@ -1,9 +1,18 @@
 import type { AccountSnapshot } from '../../coach/cabinetTypes';
-import type { CandidateConnection } from '../../coach/coachApi';
+import type { AuthUser, CandidateConnection } from '../../coach/coachApi';
 import type { NotificationChannelPreference } from '../../account/notificationPreferencesApi';
 import type { B640PreferenceKey } from './invitationPreferenceApi';
 
 export type AccountSession = AccountSnapshot['sessions'][number];
+
+/**
+ * Почта подтверждена, если сервер не говорит обратного: без поля проверка не требуется
+ * (тестовый или доверенный адрес) — так же решает сервер (`requireVerifiedEmail`, B774).
+ * Неподтверждённая почта в кабинет не попадает: `App` ведёт её на /verify-email.
+ */
+export function emailConfirmed(session: Pick<AuthUser, 'emailVerified'>): boolean {
+  return session.emailVerified !== false;
+}
 
 function plural(count: number, one: string, few: string, many: string): string {
   const tens = count % 100;
@@ -36,7 +45,9 @@ export function connectionsSummary(connections: readonly CandidateConnection[]):
 }
 
 export function connectionLine(connection: CandidateConnection): string {
-  if (connection.status === 'connected') return 'подключено';
+  if (connection.status === 'connected') {
+    return connection.account ? `${connection.account} · подключено` : 'подключено';
+  }
   return connection.status === 'imported' ? 'данные загружены, вход не выполнен' : 'не подключено';
 }
 

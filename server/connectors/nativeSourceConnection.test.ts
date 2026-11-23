@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  connectionAccount,
   deriveImportedFactSources,
   summarizeImportedFactSources,
   listCandidateConnectionViews,
@@ -131,5 +132,34 @@ describe('summarizeImportedFactSources', () => {
         factCount: 1,
       },
     ]);
+  });
+});
+
+describe('connectionAccount (n03, B774)', () => {
+  const stored = (platform: 'linkedin' | 'hh', sourceUrl: string) =>
+    ({
+      id: 'c',
+      candidateId: 'cand',
+      platform,
+      accessMode: 'native_session_snapshot',
+      connectedAt: '2026-10-01T00:00:00.000Z',
+      lastImportedAt: '2026-10-01T00:00:00.000Z',
+      receipt: { sourceUrl, capturedAt: '', sourceMessageId: 'm', memoryIds: [], factCount: 0 },
+    }) as const;
+
+  it('LinkedIn — адрес профиля из снимка; чужой адрес не показываем', () => {
+    expect(
+      connectionAccount(stored('linkedin', 'https://www.linkedin.com/in/msokolova/'), 'Марина'),
+    ).toBe('linkedin.com/in/msokolova');
+    expect(connectionAccount(stored('linkedin', 'https://example.com/in/x'), null)).toBeNull();
+    expect(connectionAccount(stored('linkedin', 'не адрес'), null)).toBeNull();
+  });
+
+  it('hh.ru — имя из резюме; без имени — null', () => {
+    expect(
+      connectionAccount(stored('hh', 'https://hh.ru/resume/abc'), '  Марина   Соколова '),
+    ).toBe('Марина Соколова');
+    expect(connectionAccount(stored('hh', 'https://hh.ru/resume/abc'), '')).toBeNull();
+    expect(connectionAccount(stored('hh', 'https://hh.ru/resume/abc'), undefined)).toBeNull();
   });
 });
