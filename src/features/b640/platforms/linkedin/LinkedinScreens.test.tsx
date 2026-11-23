@@ -141,6 +141,10 @@ describe('a03p, a03b, a05', () => {
         a.textContent?.includes('Изменить темы'),
       ),
     ).toBe(true);
+    // Главная кнопка на a05h одна — «Изменить темы»; «Подготовить комментарий» обычная.
+    expect(
+      [...view.container.querySelectorAll('.is-primary')].map((item) => item.textContent),
+    ).toEqual(['Изменить темы']);
     view.unmount();
   });
   it('лента a05: «N постов · Сегодня осталось X из Y», меню «Изменить темы», очередь комментариев с ритмом', async () => {

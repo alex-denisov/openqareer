@@ -170,7 +170,7 @@ function Empty({ node, reload }: Pick<SectionProps, 'node'> & { readonly reload:
         <div className="actions">
           <TopicsLink />
         </div>
-        <BringPost onCreated={reload} />
+        <BringPost onCreated={reload} primary={false} />
       </section>
     </div>
   );
