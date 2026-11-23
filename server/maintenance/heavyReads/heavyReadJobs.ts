@@ -5,7 +5,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { computeLandingStats } from '../../landing/landingStatsJob';
-import { computeCatalogSources } from '../../vacancies/catalogSources';
+import { catalogSourcesOf, readPoolCounts } from '../../vacancies/catalogSources';
 import { computeCatalogSalaryStats } from '../../vacancies/catalogSalaryStatsStore';
 import { computeCatalogChips } from '../../vacancies/catalogChipStore';
 import { computeSalaryMarketSnapshots } from '../../salaryMarket/salaryMarketSnapshot';
@@ -21,12 +21,15 @@ export interface HeavyReadArgs {
 }
 
 const JOBS = {
-  landing: (database: DatabaseSync, { nowMs }: HeavyReadArgs) => ({
-    landing: computeLandingStats(database, new Date(nowMs)),
-    sources: computeCatalogSources(database),
-    salaryStats: computeCatalogSalaryStats(database),
-    chips: computeCatalogChips(database, nowMs),
-  }),
+  landing: (database: DatabaseSync, { nowMs }: HeavyReadArgs) => {
+    const pool = readPoolCounts(database);
+    return {
+      landing: computeLandingStats(database, new Date(nowMs), { pool }),
+      sources: catalogSourcesOf(pool),
+      salaryStats: computeCatalogSalaryStats(database),
+      chips: computeCatalogChips(database, nowMs),
+    };
+  },
   salarySnapshots: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
     computeSalaryMarketSnapshots(database, new Date(nowMs)),
   sitemaps: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
