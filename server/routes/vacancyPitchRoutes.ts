@@ -104,9 +104,13 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
 export function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
-  cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
+  storedCluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
   poolVacancy: ReturnType<NonNullable<RouteDeps['multiSourceEngine']['getVacancy']>> | undefined,
 ) {
+  // B778 (прод 23.11): строка подборки `cluster-<запись>` по ключу `member` находит сохранённый кластер,
+  // склеенный вокруг другого основателя (Arootah → Himalayas «Fractional CAO»). Его название и требования
+  // не берём: кластер годится, только если он и есть выбранная вакансия.
+  const cluster = storedCluster?.id === vacancyId ? storedCluster : undefined;
   return {
     id: vacancyId,
     title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
