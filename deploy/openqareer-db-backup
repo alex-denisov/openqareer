@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-# B777: ночная копия базы в S3 Cloud.ru, зашифрованная age, с отчётом владельцу в Telegram.
-#  1. VACUUM INTO из соединения только на чтение (одна читающая транзакция: копия согласованная).
-#     Сторож: WAL > 2 ГБ или задержка веб-процесса > 5 с → стоп и отчёт об ошибке.
-#  2. PRAGMA integrity_check (или quick_check: OPENQAREER_BACKUP_CHECK=quick) на копии.
-#  3. zstd -T2 | age -R <публичный ключ> → архив, sha256.
-#  4. Загрузка в s3://$BUCKET/db/YYYY/MM/openqareer-YYYYMMDD-HHMM.db.zst.age + манифест .json,
-#     сверка размера в бакете.
-#  5. Ротация (dbBackupRotation.mjs), локально остаётся только последний архив.
-#  6. Сообщение владельцу: готово со ссылкой на 7 дней или шаг, на котором не удалось.
+# B777: ночные копии базы в S3 Cloud.ru, зашифрованные age, с отчётом владельцу в Telegram.
+# Два уровня (решение владельца 23.11: полная копия каждую ночь в S3 слишком дорога):
+#  users — каждую ночь: схема целиком и данные всех таблиц, кроме собираемых заново
+#          (db-backup-recollectable.txt), PRAGMA integrity_check. Хранится 14 дней + 6 первых чисел.
+#  full  — по воскресеньям (или OPENQAREER_BACKUP_TIER=full): вся база, PRAGMA quick_check
+#          (integrity_check по 33 ГБ шёл 50 мин). Хранятся 2 последние; локально не остаётся.
+# Каждый уровень: копия → проверка → zstd -T2 | age -R <публичный ключ> → загрузка с манифестом
+# и сверкой размера → сообщение владельцу. Сторож копии: WAL > 2 ГБ или задержка сайта > 5 с.
 # Секреты: /etc/openqareer/backup.env (CLOUDRU_*), Telegram — две строки из openqareer.env.
 # Закрытый ключ age на хосте не хранится: расшифровка только у владельца.
 set -Eeuo pipefail
@@ -18,21 +17,22 @@ readonly WORK="${OPENQAREER_BACKUP_DIR:-/var/lib/openqareer-backup}"
 readonly BACKUP_ENV=/etc/openqareer/backup.env
 readonly APP_ENV=/etc/openqareer/openqareer.env
 readonly RECIPIENT=/etc/openqareer/backup-age.pub
-readonly ROTATION=/usr/local/lib/openqareer/dbBackupRotation.mjs
+readonly LIB=/usr/local/lib/openqareer
 readonly NODE=/opt/openqareer/node-v24.14.1-linux-x64/bin/node
 readonly BUCKET="${OPENQAREER_BACKUP_BUCKET:-openqareer-data}"
-readonly CHECK="${OPENQAREER_BACKUP_CHECK:-integrity}"
 readonly WAL_MAX=$((2 * 1024 * 1024 * 1024))
 readonly STALL_MAX_MS=5000
 readonly GIB=$((1024 * 1024 * 1024))
-# Перед копией: если места меньше 40 ГБ, прошлый локальный архив удаляется.
-readonly KEEP_LOCAL_MIN_FREE=$((40 * GIB))
 
 step=start
+tier=users
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 free_bytes() { df --output=avail -B1 "$WORK" | tail -1; }
 gb() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1073741824 }' | tr . ,; }
+# «7,0 ГБ» или «4,2 МБ»: копия незаменимых данных весит мегабайты.
+human() { awk -v b="$1" 'BEGIN { if (b >= 1073741824) printf "%.1f ГБ", b / 1073741824; else printf "%.1f МБ", b / 1048576 }' | tr . ,; }
 minutes() { awk -v s="$1" 'BEGIN { m = int(s / 60 + 0.5); if (m < 1) m = 1; print m }'; }
+tier_word() { [[ "$tier" == full ]] && printf 'полная копия' || printf 'копия данных'; }
 
 # Значение одной переменной из env-файла без чтения остальных.
 env_value() {
@@ -43,10 +43,10 @@ env_value() {
 telegram() {
   local -r text="$1"
   local token chat
-  token="$(env_value OPENQAREER_TELEGRAM_BOT_TOKEN "$APP_ENV")"
-  chat="$(env_value OPENQAREER_TELEGRAM_OWNER_CHAT_ID "$APP_ENV")"
   # Прогон на пробной базе: сообщение только в журнал.
   if [[ "${OPENQAREER_BACKUP_NOTIFY:-on}" == off ]]; then log "telegram (off): $text"; return 0; fi
+  token="$(env_value OPENQAREER_TELEGRAM_BOT_TOKEN "$APP_ENV")"
+  chat="$(env_value OPENQAREER_TELEGRAM_OWNER_CHAT_ID "$APP_ENV")"
   if [[ -z "$token" || -z "$chat" ]]; then log 'telegram: no bot settings'; return 0; fi
   # Токен — в конфиге curl на stdin, не в аргументах процесса.
   if ! printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" |
@@ -59,9 +59,9 @@ telegram() {
 
 on_error() {
   local -r reason="${1:-код $?}"
-  log "FAILED at $step: $reason"
-  telegram "Бэкап базы $(TZ=Europe/Moscow date +%d.%m) — не удался на шаге «$step»: $reason"
-  rm -f -- "$WORK"/copy.db "$WORK"/copy.db-* "$WORK"/*.partial
+  log "FAILED $tier at $step: $reason"
+  telegram "Бэкап базы $(TZ=Europe/Moscow date +%d.%m), $(tier_word) — не удался на шаге «$step»: $reason"
+  rm -f -- "$WORK"/*.copy.db "$WORK"/*.copy.db-* "$WORK"/*.partial
   exit 1
 }
 trap 'on_error "команда завершилась с ошибкой (строка $LINENO)"' ERR
@@ -87,13 +87,13 @@ web_stall_since() {
     grep -o '"stallMs":[0-9]*' | cut -d: -f2 | sort -n | tail -1 || true
 }
 
-# Ждёт процесс $1, каждые 10 с сверяя WAL и задержки; при превышении — стоп.
+# Ждёт процесс $1, каждые 5 с сверяя WAL и задержки; при превышении — стоп.
 guard() {
   local -r pid="$1"
   local since wal stall now
   since="$(date +%s)"
   while kill -0 "$pid" 2>/dev/null; do
-    sleep 10
+    sleep 5
     now="$(date +%s)"
     wal="$(stat -c %s "$DB-wal" 2>/dev/null || echo 0)"
     stall="$(web_stall_since "$since")"
@@ -104,37 +104,58 @@ guard() {
   wait "$pid"
 }
 
-copy_database() {
-  step='копия базы'
+# Незаменимые данные: секунды в одной читающей транзакции, 15 МБ на 23.11.
+copy_users() {
+  step='копия данных'
+  "$NODE" "$LIB/dbBackupUserData.mjs" "$DB" "$copy" "$LIB/db-backup-recollectable.txt" &
+  guard $!
+}
+
+# Прод 23.11: VACUUM INTO шёл ~17 МБ/с, за 9 мин WAL вырос до 2 ГБ (читатель держит чекпойнт).
+# Здесь читающая транзакция держится только на время копирования файлов на скорости диска
+# (33 ГБ за 2,3 мин): сначала файл базы, затем WAL. Чекпойнт не пишет в базу кадры новее нашей
+# отметки, а всё, что он успел перенести, есть и в копии WAL, поэтому пара файлов — согласованная
+# копия «как после сбоя питания»; WAL накатывается на копии перед проверкой.
+copy_full() {
+  step='полная копия базы'
   local -r need=$(( $(stat -c %s "$DB") + 2 * GIB ))
-  if (( $(free_bytes) < KEEP_LOCAL_MIN_FREE )); then rm -f -- "$WORK"/*.db.zst.age; fi
   if (( $(free_bytes) < need )); then on_error "мало места: свободно $(gb "$(free_bytes)") ГБ, нужно $(gb "$need") ГБ"; fi
-  log "copy: wal=$(stat -c %s "$DB-wal" 2>/dev/null || echo 0) free=$(free_bytes)"
-  nice -n 19 ionice -c3 "$NODE" -e '
+  log "copy full: wal=$(stat -c %s "$DB-wal" 2>/dev/null || echo 0) free=$(free_bytes)"
+  nice -n 10 "$NODE" -e '
     const { DatabaseSync } = require("node:sqlite");
-    const source = new DatabaseSync(process.argv[1], { readOnly: true });
-    source.prepare("VACUUM INTO ?").run(process.argv[2]);
-    source.close();' "$DB" "$WORK/copy.db" &
+    const { execFileSync } = require("node:child_process");
+    const [db, copy] = process.argv.slice(1);
+    const source = new DatabaseSync(db, { readOnly: true });
+    source.exec("BEGIN");
+    source.prepare("SELECT COUNT(*) FROM sqlite_master").get();
+    const cp = (from, to) => execFileSync("ionice", ["-c2", "-n7", "cp", "--sparse=never", from, to]);
+    cp(db, copy);
+    try { cp(db + "-wal", copy + "-wal"); } catch (error) { if (error.status !== 1) throw error; }
+    source.exec("COMMIT");
+    source.close();' "$DB" "$copy" &
   guard $!
 }
 
 check_copy() {
   step='проверка целостности'
-  local result
-  result="$(nice -n 19 ionice -c3 "$NODE" -e '
+  local -r pragma="$1"
+  integrity="$(nice -n 19 ionice -c3 "$NODE" -e '
     const { DatabaseSync } = require("node:sqlite");
+    // Копия своя: накатить WAL и свернуть его в один файл, затем проверять.
+    const writable = new DatabaseSync(process.argv[1]);
+    writable.exec("PRAGMA wal_checkpoint(TRUNCATE); PRAGMA journal_mode=DELETE");
+    writable.close();
     const copy = new DatabaseSync(process.argv[1], { readOnly: true });
-    const rows = copy.prepare(process.argv[2] === "quick" ? "PRAGMA quick_check" : "PRAGMA integrity_check").all();
-    console.log(rows.map((row) => Object.values(row)[0]).join("; ").slice(0, 300));' "$WORK/copy.db" "$CHECK")"
-  [[ "$result" == ok ]] || on_error "${CHECK}_check: $result"
-  integrity="$result"
+    const rows = copy.prepare(`PRAGMA ${process.argv[2]}`).all();
+    console.log(rows.map((row) => Object.values(row)[0]).join("; ").slice(0, 300));' "$copy" "$pragma")"
+  [[ "$integrity" == ok ]] || on_error "$pragma: $integrity"
 }
 
 pack_copy() {
   step='сжатие и шифрование'
-  nice -n 19 ionice -c3 zstd -T2 -q -c "$WORK/copy.db" | age -R "$RECIPIENT" > "$archive.partial"
+  nice -n 19 ionice -c3 zstd -T2 -q -c "$copy" | age -R "$RECIPIENT" > "$archive.partial"
   mv -- "$archive.partial" "$archive"
-  rm -f -- "$WORK/copy.db"
+  rm -f -- "$copy"
   sha="$(sha256sum "$archive" | cut -d' ' -f1)"
   size="$(stat -c %s "$archive")"
 }
@@ -147,43 +168,65 @@ upload() {
   (( remote == size )) || on_error "размер в бакете $remote не равен $size"
 }
 
+manifest() {
+  step='манифест'
+  local -r commit="$(basename "$(readlink -f /srv/openqareer/current)")"
+  printf '{"key":"%s","tier":"%s","bytes":%s,"sha256":"%s","check":"%s","result":"%s","sourceBytes":%s,"copySec":%s,"checkSec":%s,"packSec":%s,"uploadSec":%s,"commit":"%s","createdAt":"%s"}\n' \
+    "$key" "$tier" "$size" "$sha" "$1" "$integrity" "$(stat -c %s "$DB")" "${@:2:4}" \
+    "$commit" "$(date -u +%FT%TZ)" > "$WORK/manifest.json"
+  rclone copyto "$WORK/manifest.json" "oqs3:$BUCKET/${key%.db.zst.age}.json"
+}
+
+# Один уровень: копия → проверка → архив → загрузка → манифест → сообщение.
+run_tier() {
+  tier="$1"
+  local -r pragma="$2"
+  local stamp
+  stamp="$(TZ=Europe/Moscow date +%Y%m%d-%H%M)"
+  key="db/$tier/${stamp:0:4}/${stamp:4:2}/openqareer-$tier-$stamp.db.zst.age"
+  archive="$WORK/openqareer-$tier-$stamp.db.zst.age"
+  copy="$WORK/$tier.copy.db"
+  rm -f -- "$copy" "$copy"-*
+  local t0 t1 t2 t3 t4
+  t0="$(date +%s)"; "copy_$tier"
+  t1="$(date +%s)"; check_copy "$pragma"
+  t2="$(date +%s)"; pack_copy
+  t3="$(date +%s)"; upload
+  t4="$(date +%s)"
+  manifest "$pragma" $((t1 - t0)) $((t2 - t1)) $((t3 - t2)) $((t4 - t3))
+  step='ссылка'
+  local link
+  link="$(rclone link --expire 7d "oqs3:$BUCKET/$key")"
+  log "done $tier: key=$key bytes=$size copy=$((t1 - t0))s check=$((t2 - t1))s pack=$((t3 - t2))s upload=$((t4 - t3))s"
+  local -r check_word="$([[ "$pragma" == quick_check ]] && printf 'проверка целостности (быстрая)' || printf 'проверка целостности')"
+  telegram "Бэкап базы $(TZ=Europe/Moscow date +'%d.%m %H:%M'), $(tier_word) — готово. $(human "$size"), $check_word: $integrity, загрузка $(minutes $((t4 - t3))) мин. Скачать (ссылка 7 дней): $link"
+  # Локально остаётся только последняя копия данных; полная — только в S3.
+  if [[ "$tier" == full ]]; then rm -f -- "$archive"; else
+    find "$WORK" -maxdepth 1 -name 'openqareer-users-*.db.zst.age' ! -name "$(basename "$archive")" -delete
+  fi
+}
+
 rotate() {
   step='ротация'
   local doomed
-  doomed="$(rclone lsf -R --files-only "oqs3:$BUCKET/db" | sed 's|^|db/|' | "$NODE" "$ROTATION")"
+  doomed="$(rclone lsf -R --files-only "oqs3:$BUCKET/db" | sed 's|^|db/|' | "$NODE" "$LIB/dbBackupRotation.mjs")"
   while IFS= read -r stale; do
-    [[ -n "$stale" ]] && rclone deletefile "oqs3:$BUCKET/$stale"
+    if [[ -n "$stale" ]]; then rclone deletefile "oqs3:$BUCKET/$stale"; fi
   done <<< "$doomed"
-  # Локально только последний архив: быстрое восстановление без скачивания.
-  find "$WORK" -maxdepth 1 -name '*.db.zst.age' ! -name "$(basename "$archive")" -delete
 }
 
 main() {
   [[ "${EUID}" -eq 0 ]] || { printf 'run as root\n' >&2; exit 1; }
   install -d -m 0700 "$WORK"
-  rm -f -- "$WORK"/copy.db "$WORK"/copy.db-* "$WORK"/*.partial
+  rm -f -- "$WORK"/*.copy.db "$WORK"/*.copy.db-* "$WORK"/*.partial
   rclone_env
-  local -r stamp="$(TZ=Europe/Moscow date +%Y%m%d-%H%M)" started="$(date +%s)"
-  key="db/${stamp:0:4}/${stamp:4:2}/openqareer-$stamp.db.zst.age"
-  archive="$WORK/openqareer-$stamp.db.zst.age"
-  local t0 t1 t2 t3 t4
-  t0="$(date +%s)"; copy_database
-  t1="$(date +%s)"; check_copy
-  t2="$(date +%s)"; pack_copy
-  t3="$(date +%s)"; upload
-  t4="$(date +%s)"
-  step='манифест'
-  local -r commit="$(basename "$(readlink -f /srv/openqareer/current)")"
-  printf '{"key":"%s","bytes":%s,"sha256":"%s","check":"%s","result":"%s","sourceBytes":%s,"copySec":%s,"checkSec":%s,"packSec":%s,"uploadSec":%s,"commit":"%s","createdAt":"%s"}\n' \
-    "$key" "$size" "$sha" "$CHECK" "$integrity" "$(stat -c %s "$DB")" $((t1 - t0)) $((t2 - t1)) $((t3 - t2)) $((t4 - t3)) \
-    "$commit" "$(date -u +%FT%TZ)" > "$WORK/manifest.json"
-  rclone copyto "$WORK/manifest.json" "oqs3:$BUCKET/${key%.db.zst.age}.json"
+  local -r requested="${OPENQAREER_BACKUP_TIER:-auto}"
+  if [[ "$requested" != full ]]; then run_tier users integrity_check; fi
+  if [[ "$requested" == full || ( "$requested" == auto && "$(TZ=Europe/Moscow date +%u)" == 7 ) ]]; then
+    run_tier full quick_check
+  fi
+  tier=users
   rotate
-  step='ссылка'
-  local link
-  link="$(rclone link --expire 7d "oqs3:$BUCKET/$key")"
-  log "done: key=$key bytes=$size copy=$((t1 - t0))s check=$((t2 - t1))s pack=$((t3 - t2))s upload=$((t4 - t3))s total=$(( $(date +%s) - started ))s"
-  telegram "Бэкап базы $(TZ=Europe/Moscow date +'%d.%m %H:%M') — готов. $(gb "$size") ГБ, проверка целостности: $integrity, загрузка $(minutes $((t4 - t3))) мин. Скачать (ссылка 7 дней): $link"
 }
 
 main "$@"

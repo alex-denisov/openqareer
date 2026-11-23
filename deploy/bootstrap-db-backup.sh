@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# B777: ночная зашифрованная копия базы в S3 Cloud.ru. Идемпотентно:
+# B777: ночные зашифрованные копии базы в S3 Cloud.ru (данные — каждую ночь, вся база — по
+# воскресеньям). Идемпотентно:
 #  1. пакеты age, rclone, zstd (только недостающие);
-#  2. скрипт /usr/local/sbin/openqareer-db-backup и ротация /usr/local/lib/openqareer/dbBackupRotation.mjs;
+#  2. скрипты /usr/local/sbin/openqareer-db-backup и -restore-drill; в /usr/local/lib/openqareer —
+#     ротация, копия незаменимых данных и список таблиц, собираемых заново;
 #  3. публичный ключ age /etc/openqareer/backup-age.pub (закрытый — только у владельца);
 #  4. openqareer-db-backup.service + .timer (02:30 МСК), timer enable --now.
 # Секреты S3 кладутся отдельно в /etc/openqareer/backup.env (0600 root): CLOUDRU_PROJECT_ID,
@@ -40,6 +42,8 @@ changed=0
 install_if_changed "$SCRIPT_DIR/openqareer-db-backup" /usr/local/sbin/openqareer-db-backup 0755 || true
 install_if_changed "$SCRIPT_DIR/openqareer-db-restore-drill" /usr/local/sbin/openqareer-db-restore-drill 0755 || true
 install_if_changed "$SCRIPT_DIR/dbBackupRotation.mjs" /usr/local/lib/openqareer/dbBackupRotation.mjs 0644 || true
+install_if_changed "$SCRIPT_DIR/dbBackupUserData.mjs" /usr/local/lib/openqareer/dbBackupUserData.mjs 0644 || true
+install_if_changed "$SCRIPT_DIR/db-backup-recollectable.txt" /usr/local/lib/openqareer/db-backup-recollectable.txt 0644 || true
 install_if_changed "$SCRIPT_DIR/backup-age.pub" /etc/openqareer/backup-age.pub 0644 || true
 install_if_changed "$SCRIPT_DIR/openqareer-db-backup.service" "$UNIT_DIR/openqareer-db-backup.service" 0644 && changed=1
 install_if_changed "$SCRIPT_DIR/openqareer-db-backup.timer" "$UNIT_DIR/openqareer-db-backup.timer" 0644 && changed=1

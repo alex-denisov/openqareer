@@ -2,7 +2,7 @@
 # B777: учебное восстановление последней копии из S3. Закрытый ключ age приходит на stdin
 # (с Mac владельца: OPENQAREER_BACKUP_AGE_KEY) и живёт только в памяти этого процесса.
 #   grep '^OPENQAREER_BACKUP_AGE_KEY=' ~/.openqareer/openqareer.env | cut -d= -f2- |
-#     ssh openqareer-de-1 'bash /usr/local/sbin/openqareer-db-restore-drill'
+#     ssh openqareer-de-1 'bash /usr/local/sbin/openqareer-db-restore-drill [users|full]'
 # Скачивает последний архив во временную папку, сверяет sha256 с манифестом, расшифровывает,
 # распаковывает, PRAGMA integrity_check, печатает итог и всё удаляет. Живую базу не трогает.
 set -Eeuo pipefail
@@ -11,6 +11,11 @@ umask 077
 readonly BUCKET="${OPENQAREER_BACKUP_BUCKET:-openqareer-data}"
 readonly NODE=/opt/openqareer/node-v24.14.1-linux-x64/bin/node
 readonly ROOT="${OPENQAREER_DRILL_DIR:-/var/lib/openqareer-backup}"
+# Уровень: users (по умолчанию) или full — первый аргумент.
+readonly TIER="${1:-users}"
+[[ "$TIER" == users || "$TIER" == full ]] || { printf 'tier: users or full\n' >&2; exit 1; }
+# Полная база: quick_check (integrity_check по 33 ГБ — около 50 мин).
+readonly PRAGMA="$([[ "$TIER" == full ]] && printf quick_check || printf integrity_check)"
 
 [[ "${EUID}" -eq 0 ]] || { printf 'run as root\n' >&2; exit 1; }
 IFS= read -r identity
@@ -30,9 +35,9 @@ export RCLONE_CONFIG_OQS3_TYPE=s3 RCLONE_CONFIG_OQS3_PROVIDER=Other \
 drill="$(mktemp -d "$ROOT/drill.XXXXXX")"
 trap 'rm -rf -- "$drill"' EXIT
 
-key="$(rclone lsf -R --files-only "oqs3:$BUCKET/db" | grep '\.db\.zst\.age$' | sort | tail -1)"
-[[ -n "$key" ]] || { printf 'no archives in the bucket\n' >&2; exit 1; }
-key="db/$key"
+key="$(rclone lsf -R --files-only "oqs3:$BUCKET/db/$TIER" | grep '\.db\.zst\.age$' | sort | tail -1)"
+[[ -n "$key" ]] || { printf 'no %s archives in the bucket\n' "$TIER" >&2; exit 1; }
+key="db/$TIER/$key"
 started="$(date +%s)"
 rclone copyto "oqs3:$BUCKET/$key" "$drill/archive"
 rclone copyto "oqs3:$BUCKET/${key%.db.zst.age}.json" "$drill/manifest.json"
@@ -47,9 +52,9 @@ restored="$(date +%s)"
 result="$(nice -n 19 ionice -c3 "$NODE" -e '
   const { DatabaseSync } = require("node:sqlite");
   const db = new DatabaseSync(process.argv[1], { readOnly: true });
-  const check = db.prepare("PRAGMA integrity_check").all().map((row) => Object.values(row)[0]).join("; ").slice(0, 300);
-  const clusters = db.prepare("SELECT COUNT(*) AS n FROM vacancy_clusters").get().n;
-  console.log(JSON.stringify({ check, clusters }));' "$drill/restored.db")"
+  const check = db.prepare(`PRAGMA ${process.argv[2]}`).all().map((row) => Object.values(row)[0]).join("; ").slice(0, 300);
+  const count = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
+  console.log(JSON.stringify({ check, users: count("users"), candidates: count("candidates"), applications: count("applications"), clusters: count("vacancy_clusters") }));' "$drill/restored.db" "$PRAGMA")"
 checked="$(date +%s)"
 printf '{"key":"%s","sha256":"ok","bytes":%s,"downloadSec":%s,"decryptSec":%s,"checkSec":%s,"result":%s}\n' \
   "$key" "$(stat -c %s "$drill/restored.db")" $((downloaded - started)) $((restored - downloaded)) \

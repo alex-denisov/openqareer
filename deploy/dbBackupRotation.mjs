@@ -1,20 +1,22 @@
-// B777: какие ночные копии базы в S3 оставить. 7 последних дней, 4 последних воскресенья,
-// 6 последних первых чисел месяца; остальные удаляются вместе с манифестом.
+// B777: какие копии базы в S3 оставить.
+//  users — незаменимые данные каждую ночь: 14 последних дней и 6 последних первых чисел месяца;
+//  full  — полная база по воскресеньям: 2 последние.
+// Архив и манифест удаляются вместе; ключи не по схеме не трогаются.
 // CLI: ключи бакета построчно на stdin → ключи к удалению построчно на stdout.
 
-const KEY = /^db\/\d{4}\/\d{2}\/openqareer-(\d{8})-(\d{4})\.(?:db\.zst\.age|json)$/u;
-const DAILY = 7;
-const WEEKLY = 4;
-const MONTHLY = 6;
+const KEY =
+  /^db\/(users|full)\/\d{4}\/\d{2}\/openqareer-\1-(\d{8})-(\d{4})\.(?:db\.zst\.age|json)$/u;
+const POLICY = {
+  users: { daily: 14, monthly: 6 },
+  full: { daily: 2, monthly: 0 },
+};
 
-function isSunday(date) {
-  const day = new Date(
-    Date.UTC(Number(date.slice(0, 4)), Number(date.slice(4, 6)) - 1, Number(date.slice(6, 8))),
-  );
-  return day.getUTCDay() === 0;
+/** Ключ копии: db/<уровень>/YYYY/MM/openqareer-<уровень>-YYYYMMDD-HHMM.<расширение>. */
+export function backupKey(tier, stamp, ext = 'db.zst.age') {
+  return `db/${tier}/${stamp.slice(0, 4)}/${stamp.slice(4, 6)}/openqareer-${tier}-${stamp}.${ext}`;
 }
 
-/** Последняя копия каждого дня, свежие дни первыми. */
+/** Последняя копия каждого дня, свежие дни первыми: [[YYYYMMDD, отметка], …]. */
 function latestPerDay(stamps) {
   const byDay = new Map();
   for (const stamp of [...stamps].sort().reverse()) {
@@ -24,28 +26,33 @@ function latestPerDay(stamps) {
   return [...byDay.entries()];
 }
 
-export function planRotation(keys) {
-  const ours = keys.filter((key) => KEY.test(key));
-  const stampOf = (key) => {
-    const [, date, time] = key.match(KEY);
-    return `${date}-${time}`;
-  };
-  const days = latestPerDay(new Set(ours.map(stampOf)));
-  const kept = new Set([
-    ...days.slice(0, DAILY).map(([, stamp]) => stamp),
-    ...days
-      .filter(([date]) => isSunday(date))
-      .slice(0, WEEKLY)
-      .map(([, stamp]) => stamp),
+function keptStamps(stamps, { daily, monthly }) {
+  const days = latestPerDay(stamps);
+  return new Set([
+    ...days.slice(0, daily).map(([, stamp]) => stamp),
     ...days
       .filter(([date]) => date.endsWith('01'))
-      .slice(0, MONTHLY)
+      .slice(0, monthly)
       .map(([, stamp]) => stamp),
   ]);
-  const sorted = [...ours].sort().reverse();
+}
+
+export function planRotation(keys) {
+  const parsed = keys.flatMap((key) => {
+    const match = key.match(KEY);
+    return match ? [{ key, tier: match[1], stamp: `${match[2]}-${match[3]}` }] : [];
+  });
+  const kept = new Set();
+  for (const tier of Object.keys(POLICY)) {
+    const stamps = parsed.filter((item) => item.tier === tier).map((item) => item.stamp);
+    for (const stamp of keptStamps(new Set(stamps), POLICY[tier])) kept.add(`${tier}:${stamp}`);
+  }
+  const sorted = [...parsed].sort((a, b) => (a.key < b.key ? 1 : -1));
   return {
-    keep: sorted.filter((key) => kept.has(stampOf(key))),
-    remove: sorted.filter((key) => !kept.has(stampOf(key))),
+    keep: sorted.filter((item) => kept.has(`${item.tier}:${item.stamp}`)).map((item) => item.key),
+    remove: sorted
+      .filter((item) => !kept.has(`${item.tier}:${item.stamp}`))
+      .map((item) => item.key),
   };
 }
 
