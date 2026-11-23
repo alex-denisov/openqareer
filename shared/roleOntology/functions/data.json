@@ -34,6 +34,11 @@
       "family": "data.engineering",
       "titleEn": "Data Engineer",
       "titleRu": "Инженер данных",
+      "forms": {
+        "toBecome": "инженеры данных",
+        "genitive": "инженера данных",
+        "instrumental": "инженером данных"
+      },
       "levels": [
         "ic"
       ],
@@ -67,6 +72,11 @@
       "family": "data.analytics",
       "titleEn": "Data Analyst",
       "titleRu": "Аналитик данных",
+      "forms": {
+        "toBecome": "аналитики данных",
+        "genitive": "аналитика данных",
+        "instrumental": "аналитиком данных"
+      },
       "levels": [
         "ic"
       ],

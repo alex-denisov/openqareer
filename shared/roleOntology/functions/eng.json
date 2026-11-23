@@ -55,6 +55,11 @@
       "family": "eng.backend",
       "titleEn": "Backend Engineer",
       "titleRu": "Backend-разработчик",
+      "forms": {
+        "toBecome": "бэкенд-разработчики",
+        "genitive": "бэкенд-разработчика",
+        "instrumental": "бэкенд-разработчиком"
+      },
       "levels": [
         "ic"
       ],
@@ -140,6 +145,11 @@
       "family": "eng.frontend",
       "titleEn": "Frontend Engineer",
       "titleRu": "Frontend-разработчик",
+      "forms": {
+        "toBecome": "фронтенд-разработчики",
+        "genitive": "фронтенд-разработчика",
+        "instrumental": "фронтенд-разработчиком"
+      },
       "levels": [
         "ic"
       ],
@@ -215,6 +225,11 @@
       "family": "eng.fullstack",
       "titleEn": "Full-Stack Engineer",
       "titleRu": "Full-stack разработчик",
+      "forms": {
+        "toBecome": "фулстек-разработчики",
+        "genitive": "фулстек-разработчика",
+        "instrumental": "фулстек-разработчиком"
+      },
       "levels": [
         "ic"
       ],
@@ -246,6 +261,11 @@
       "family": "eng.mobile",
       "titleEn": "Mobile Engineer",
       "titleRu": "Мобильный разработчик",
+      "forms": {
+        "toBecome": "мобильные разработчики",
+        "genitive": "мобильного разработчика",
+        "instrumental": "мобильным разработчиком"
+      },
       "levels": [
         "ic"
       ],
