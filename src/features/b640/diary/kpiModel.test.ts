@@ -102,6 +102,18 @@ describe('kpiModel', () => {
     expect(broken).toEqual({ errors: { r1: 'Укажите цель и срок' } });
   });
 
+  it('B686: строка без «кто ставит» называет именно это поле, а не цель и срок', () => {
+    const rows = draftRows(draft([row({}), row({ id: 'r2' })]));
+    const result = acceptRows(
+      [
+        { ...rows[0]!, setBy: '' },
+        { ...rows[1]!, horizon: '' },
+      ],
+      '2027-01-03',
+    );
+    expect(result).toEqual({ errors: { r1: 'Укажите, кто ставит цель', r2: 'Укажите срок' } });
+  });
+
   it('вес не на 100 % — ошибка суммы; без отмеченных строк — нечего принимать', () => {
     const rows = draftRows(draft([row({ weight: 30 }), row({ id: 'r2', weight: 30 })]));
     expect(acceptRows(rows, '2027-01-03')).toEqual({ sum: 'Вес в сумме — 60 %, нужно 100 %' });

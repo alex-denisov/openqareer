@@ -1,13 +1,12 @@
 import { useId, useState } from 'react';
 import { desktopUpdater } from '../../appUpdate/useDesktopUpdater';
-import { ResultLine } from '../kit/ResultLine';
 import { Switch } from '../kit/Settings';
 import { DESKTOP_DOWNLOAD_PATH } from '../../site/DesktopDownload';
 import { appBuildLine } from './appBuild';
+import { AppVersionRow } from './AppVersionRow';
 import { getDeviceSettings, saveDeviceSettings, type DeviceSettings } from './deviceSettingsApi';
 import { ErrorLine, useLoad, type Load } from './parts';
 
-type CheckResult = 'latest' | 'available' | null;
 type SettingKey = keyof DeviceSettings;
 
 /** macOS называет место значка строкой меню, Windows — областью уведомлений. */
@@ -61,41 +60,8 @@ function SwitchRow({ title, field, load, onSaved }: SwitchRowProps) {
   );
 }
 
+/** На сайте — сборка сайта; в приложении строку ведёт `AppVersionRow`. */
 const VERSION_LINE = appBuildLine(__APP_VERSION__, __APP_COMMIT__, __APP_BUILD_DATE__);
-
-function VersionRow() {
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<CheckResult>(null);
-  async function check() {
-    setBusy(true);
-    await desktopUpdater.check();
-    setResult(desktopUpdater.getStatus().state === 'available' ? 'available' : 'latest');
-    setBusy(false);
-  }
-  return (
-    <li className="set-row">
-      <div className="set-l">
-        <span className="set-t">{VERSION_LINE}</span>
-        {result ? (
-          <ResultLine
-            text={result === 'available' ? 'Есть новая версия' : 'У вас последняя версия'}
-          />
-        ) : null}
-      </div>
-      <div className="set-r">
-        <button
-          className="btn is-sm"
-          type="button"
-          disabled={busy}
-          aria-busy={busy || undefined}
-          onClick={() => void check()}
-        >
-          Проверить обновления
-        </button>
-      </div>
-    </li>
-  );
-}
 
 /** n06 в приложении: «Обновления» и «Работа приложения» — настройки этого компьютера (B722). */
 export function DeviceSettingsSection() {
@@ -106,7 +72,7 @@ export function DeviceSettingsSection() {
         <section className="set-group" aria-label="Обновления">
           <h3 className="set-h">Обновления</h3>
           <ul className="set-list">
-            <VersionRow />
+            <AppVersionRow />
             <SwitchRow
               title="Обновлять автоматически"
               field="autoUpdate"

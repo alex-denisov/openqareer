@@ -80,12 +80,23 @@ function accepted(row: KpiDraftRow, today: string): CareerDiaryKpiAcceptRow | nu
   };
 }
 
+/** Чего не хватает строке, чтобы стать целью; `null` — всё есть. Разбор «кто ставит» не додумывает. */
+export function missingField(row: KpiDraftRow): string | null {
+  if (!row.title.trim()) return 'Укажите показатель';
+  if (!row.target.trim() && !row.horizon) return 'Укажите цель и срок';
+  if (!row.target.trim()) return 'Укажите цель';
+  if (!row.horizon) return 'Укажите срок';
+  if (!row.setBy) return 'Укажите, кто ставит цель';
+  return null;
+}
+
 export function acceptRows(rows: readonly KpiDraftRow[], today: string): KpiAcceptResult {
   const chosen = rows.filter((row) => row.ok);
   const errors = Object.fromEntries(
-    chosen
-      .filter((row) => accepted(row, today) === null)
-      .map((row) => [row.id, 'Укажите цель и срок']),
+    chosen.flatMap((row) => {
+      const missing = missingField(row);
+      return missing ? [[row.id, missing]] : [];
+    }),
   );
   if (chosen.length === 0 || Object.keys(errors).length > 0) return { errors };
   const result = chosen.map((row) => accepted(row, today)!);
