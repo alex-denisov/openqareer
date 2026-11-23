@@ -3,7 +3,7 @@ import { VACANCY_SORT_DIRECTIONS, VACANCY_SORT_KEYS } from '../../shared/vacancy
 import { CANDIDATE_REGIONS } from '../../src/features/workspace/candidateRegions';
 import { MATCHED_VACANCY_FACET_LEVELS } from '../../shared/matchedVacancyFacets';
 import { matchesLocationSelection } from '../../shared/locationTree';
-import { sameCareerRole } from './careerRoleKey';
+import { vacancyInCareerRole } from './techDirectorSignal';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import {
   matchedVacancyLevel,
@@ -97,7 +97,7 @@ export function* matchedVacancyFilterSteps(
         filters.role.some(
           (role) =>
             item.explanation.roleMatch !== 'none' &&
-            sameCareerRole(item.cluster.canonicalTitle, role),
+            vacancyInCareerRole(item, role),
         )),
   );
 }

@@ -129,9 +129,32 @@ export function careerRoleListKey(title: string): string | null {
  * та же функция и уровень. Им считают «Мои роли на рынке» и фильтр «Роли».
  */
 export function sameCareerRole(vacancyTitle: string, role: string): boolean {
-  if (titleMatchesRole(vacancyTitle, role)) return true;
+  const title = withoutBracketed(vacancyTitle);
+  if (titleMatchesRole(title, role)) return true;
   const roleKey = careerRoleKey(role);
-  return roleKey !== null && careerRoleKey(vacancyTitle) === roleKey;
+  return roleKey !== null && careerRoleKey(title) === roleKey;
+}
+
+/**
+ * B766: скобка, которая лишь сокращает слова перед ней, роль не решает — решают сами слова.
+ * «Chief Transformation Officer (CTO)» не технический директор. Скобка с другим смыслом
+ * остаётся: «Руководитель направления робототехники (CTO)», «Chief AI & Technology Officer (CTO)».
+ */
+function withoutBracketed(title: string): string {
+  const outside = title.replace(/\(([^)]*)\)/gu, (whole, inner: string, at: number) =>
+    abbreviates(inner, title.slice(0, at)) ? ' ' : whole,
+  );
+  return outside.replace(/\s+/gu, ' ').trim() || title;
+}
+
+/** «CTO» сокращает «Chief Transformation Officer»: первые буквы слов перед скобкой. */
+function abbreviates(inner: string, before: string): boolean {
+  const abbreviation = inner.trim().toUpperCase();
+  if (!/^[A-Z]{2,6}$/u.test(abbreviation)) return false;
+  const initials = (before.match(/[A-Za-z][A-Za-z]*/gu) ?? [])
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+  return initials.endsWith(abbreviation);
 }
 
 /**

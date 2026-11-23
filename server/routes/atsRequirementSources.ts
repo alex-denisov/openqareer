@@ -1,5 +1,5 @@
 import { requirementLabels, topRoleKeywords, type RoleKeywords } from '../domain/atsRoleKeywords';
-import { sameCareerRole } from '../vacancies/careerRoleKey';
+import { vacancyInCareerRole } from '../vacancies/techDirectorSignal';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { RouteDeps } from './deps';
 
@@ -27,9 +27,7 @@ export async function readRoleKeywords(
   if (!requirements) return EMPTY;
   const ids = matched
     .filter(
-      (item) =>
-        item.explanation?.roleMatch !== 'none' &&
-        sameCareerRole(item.cluster.canonicalTitle, roleTitle),
+      (item) => item.explanation?.roleMatch !== 'none' && vacancyInCareerRole(item, roleTitle),
     )
     .slice(0, MAX_ROLE_LOOKUPS)
     .map((item) => item.cluster.id);
