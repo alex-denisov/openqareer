@@ -3,9 +3,22 @@ import { SEARCH_CONSENT_TEXT } from '../../../../shared/searchConsent';
 import { setSearchConsent } from '../../vacancies/recruiterContactsApi';
 import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
-import { ConsentSwitch, useAction } from './consentParts';
+import { ConsentSwitch, ConsentTextButton, useAction } from './consentParts';
 import { SEARCH_CONSENT_ROW } from './dataModel';
 import { ErrorLine } from './parts';
+
+/** B774: текст данного согласия «Вы в поиске» — только чтение. */
+function SearchConsentText() {
+  const [reading, setReading] = useState(false);
+  return (
+    <>
+      <ConsentTextButton onClick={() => setReading(true)} />
+      <Dialog open={reading} title={SEARCH_CONSENT_ROW.title} onClose={() => setReading(false)}>
+        <p className="c5-lead">{SEARCH_CONSENT_TEXT}</p>
+      </Dialog>
+    </>
+  );
+}
 
 interface SearchConsentRowProps {
   /** null — согласие не прочиталось: строка остаётся с ошибкой и «Повторить». */
@@ -30,6 +43,7 @@ export function SearchConsentRow({ granted, onChanged }: SearchConsentRowProps) 
       <div className="set-l">
         <span className="set-t">{SEARCH_CONSENT_ROW.title}</span>
         <span className="set-v">{SEARCH_CONSENT_ROW.line}</span>
+        {granted === true ? <SearchConsentText /> : null}
         {failed && !asking ? <ErrorLine text="Не сохранилось" /> : null}
         {granted === null ? <ErrorLine text="Не загрузилось" onRetry={onChanged} /> : null}
       </div>

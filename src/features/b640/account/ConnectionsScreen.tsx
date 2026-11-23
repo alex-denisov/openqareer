@@ -17,7 +17,7 @@ import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { useShell } from '../shell/ShellContext';
 import { getHhSessionState } from './hhSessionApi';
-import { connectedCount, connectionLine, PLATFORM_NAME, updatedLine } from './model';
+import { accountName, connectedCount, connectionLine, PLATFORM_NAME, updatedLine } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
 
 interface Connections {
@@ -71,6 +71,7 @@ function useDismiss(open: boolean, close: () => void) {
 
 interface PlatformRowProps {
   readonly connection: CandidateConnection;
+  readonly account?: string | null;
   readonly onDisconnected: () => void;
   readonly expired?: boolean;
 }
@@ -201,7 +202,7 @@ function PlatformActions({ connection, onDisconnected }: PlatformRowProps) {
   );
 }
 
-function PlatformRow({ connection, onDisconnected, expired }: PlatformRowProps) {
+function PlatformRow({ connection, account = null, onDisconnected, expired }: PlatformRowProps) {
   return (
     <li className="set-row cn-row">
       <div className="set-l">
@@ -212,7 +213,7 @@ function PlatformRow({ connection, onDisconnected, expired }: PlatformRowProps) 
             вход истёк
           </span>
         ) : (
-          <span className="set-v">{connectionLine(connection)}</span>
+          <span className="set-v">{connectionLine(connection, account)}</span>
         )}
       </div>
       {connection.status === 'connected' ? (
@@ -222,13 +223,16 @@ function PlatformRow({ connection, onDisconnected, expired }: PlatformRowProps) 
   );
 }
 
+/**
+ * B774: «не подтверждена» в B640 не бывает — неподтверждённую сессию App ведёт в прежний экран,
+ * а при выключенной проверке сервер статус не отдаёт. Без статуса — только адрес, без тупика.
+ */
 function MailRow({ email, verified }: { readonly email: string | null; readonly verified: boolean }) {
-  const state = verified ? 'подтверждена' : 'не подтверждена';
   return (
     <li className="set-row cn-row">
       <div className="set-l">
         <span className="set-t">Почта</span>
-        <span className="set-v">{[email, state].filter(Boolean).join(' · ')}</span>
+        <span className="set-v">{[email, verified ? 'подтверждена' : null].filter(Boolean).join(' · ')}</span>
       </div>
     </li>
   );
@@ -252,6 +256,33 @@ function TelegramRow({ telegram }: { readonly telegram: NonNullable<Connections[
   );
 }
 
+interface PlatformListProps {
+  readonly data: Connections;
+  readonly displayName: string | null;
+  readonly onDisconnected: (platform: Platform) => void;
+}
+
+function PlatformRows({ data, displayName, onDisconnected }: PlatformListProps) {
+  const rows = ORDER.flatMap((platform) =>
+    data.platforms.filter((item) => item.platform === platform),
+  );
+  return (
+    <>
+      {rows.map((connection) => (
+        <PlatformRow
+          key={connection.platform}
+          connection={connection}
+          account={accountName(connection, displayName)}
+          expired={
+            connection.platform === 'hh' && connection.status === 'connected' && data.hhExpired
+          }
+          onDisconnected={() => onDisconnected(connection.platform)}
+        />
+      ))}
+    </>
+  );
+}
+
 /** n03 «Подключения»: почта, площадки и Telegram; отключение — на месте строки (N3f). */
 export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
   const { session } = useShell();
@@ -265,13 +296,12 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
       </SettingsPage>
     );
   }
-  const { platforms, telegram, hhExpired } = load.data;
+  const { platforms, telegram } = load.data;
   const count = connectedCount({
     emailVerified: session.emailVerified === true,
     connections: platforms,
     telegram: telegram ? telegram.connected : null,
   });
-  const rows = ORDER.flatMap((platform) => platforms.filter((item) => item.platform === platform));
   const disconnected = (platform: Platform) => {
     toast.show({ text: `${PLATFORM_NAME[platform]}: отключено` });
     load.retry();
@@ -284,14 +314,11 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
         </h3>
         <ul className="set-list">
           <MailRow email={session.email} verified={session.emailVerified === true} />
-          {rows.map((connection) => (
-            <PlatformRow
-              key={connection.platform}
-              connection={connection}
-              expired={connection.platform === 'hh' && connection.status === 'connected' && hhExpired}
-              onDisconnected={() => disconnected(connection.platform)}
-            />
-          ))}
+          <PlatformRows
+            data={load.data}
+            displayName={session.displayName}
+            onDisconnected={disconnected}
+          />
           {telegram ? <TelegramRow telegram={telegram} /> : null}
         </ul>
       </section>

@@ -100,6 +100,8 @@ export type CandidateConnection = {
       connectedAt: string;
       lastImportedAt: string;
       factCount: number;
+      /** B774: адрес, с которого читали; старый сервер поля не присылает. */
+      sourceUrl?: string;
     }
 );
 

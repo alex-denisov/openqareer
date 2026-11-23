@@ -251,7 +251,8 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
     await screen.getByRole('radio', { name: 'Светлая' }).check();
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-theme', 'light');
     await expect(bar).toHaveAttribute('content', /^rgb\(2[3-5]\d, 2[3-5]\d, 2[3-5]\d\)$/u);
-    await expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveValue('ru');
+    // B774: язык один — показан текстом, выпадающего списка нет.
+    await expect(screen.getByRole('combobox', { name: 'Язык' })).toHaveCount(0);
     await expect(screen.getByRole('combobox', { name: 'Часовой пояс' })).toHaveValue(
       'Europe/Moscow',
     );

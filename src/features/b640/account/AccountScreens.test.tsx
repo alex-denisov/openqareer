@@ -142,9 +142,9 @@ async function settle(): Promise<void> {
   });
 }
 
-async function open(element: ReactElement): Promise<HTMLElement> {
+async function open(element: ReactElement, override: Partial<AuthUser> = {}): Promise<HTMLElement> {
   const value = {
-    session,
+    session: { ...session, ...override },
     path: '/app/account',
     search: '',
     match: null,
@@ -249,7 +249,7 @@ describe('n03 «Подключения»', () => {
     ]);
     expect(rows).toEqual([
       ['Почта', 'm.sokolova@mail.test · подтверждена'],
-      ['hh.ru', 'подключено'],
+      ['hh.ru', 'Марина Соколова · подключено'],
       ['LinkedIn', 'не подключено'],
       ['Telegram', null],
     ]);
@@ -298,7 +298,9 @@ describe('n03 «Подключения»', () => {
     view?.unmount();
     const again = await open(<ConnectionsScreen node={node('n03')} />);
     expect(again.querySelector('.set-v.is-warn')).toBeNull();
-    expect(again.querySelectorAll('.set-row.cn-row .set-v')[1]?.textContent).toBe('подключено');
+    expect(again.querySelectorAll('.set-row.cn-row .set-v')[1]?.textContent).toBe(
+      'Марина Соколова · подключено',
+    );
   });
 
   it('«Оставить» закрывает подтверждение без запроса', async () => {
@@ -307,6 +309,27 @@ describe('n03 «Подключения»', () => {
     click(root.querySelector('.cn-pop .row-act'));
     expect(root.querySelector('.cn-pop')).toBeNull();
     expect(api.disconnectConnection).not.toHaveBeenCalled();
+  });
+
+  it('B774: у площадки видно, чей аккаунт: имя у hh.ru, адрес профиля у LinkedIn', async () => {
+    api.getConnections.mockResolvedValue([
+      hh,
+      { ...hh, platform: 'linkedin', sourceUrl: 'https://www.linkedin.com/in/msokolova/?trk=nav' },
+    ]);
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const lines = [...root.querySelectorAll('.set-row.cn-row .set-v')].map(
+      (line) => line.textContent,
+    );
+    expect(lines).toContain('Марина Соколова · подключено');
+    expect(lines).toContain('linkedin.com/in/msokolova · подключено');
+  });
+
+  it('B774: статус почты сервер не отдал (проверка выключена) — только адрес, без «не подтверждена»', async () => {
+    const root = await open(<ConnectionsScreen node={node('n03')} />, { emailVerified: undefined });
+    const mail = root.querySelector('.set-row.cn-row') as HTMLElement;
+    expect(mail.querySelector('.set-v')?.textContent).toBe('m.sokolova@mail.test');
+    expect(mail.querySelector('button')).toBeNull();
+    expect(root.textContent).not.toContain('не подтверждена');
   });
 
   it('список не загрузился: строка с «Повторить»', async () => {

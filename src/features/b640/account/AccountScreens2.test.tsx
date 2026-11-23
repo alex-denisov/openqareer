@@ -399,11 +399,39 @@ describe('n05 «Согласия и данные»', () => {
     expect(button(root, 'Остановить всё')).toBeNull();
   });
 
-  it('автоотклики выключены — останавливать нечего', async () => {
+  it('автоотклики выключены — останавливать нечего, «Включить» ведёт в «Отклики» (B774)', async () => {
     api.getAutomation.mockResolvedValue({ settings: { enabled: false, pausedUntil: null } });
     const root = await open(<DataScreen node={node('n05')} />);
     expect(root.querySelectorAll('.set-group')[1].querySelector('.set-v')?.textContent).toBe('выключены');
     expect(button(root, 'Остановить всё')).toBeNull();
+    expect(button(root, 'Включить')?.getAttribute('href')).toBe('/app/responses');
+  });
+
+  it('B774: у данного согласия текст читается без кнопки выдачи', async () => {
+    const root = await open(<DataScreen node={node('n05')} />);
+    const footprint = [...root.querySelectorAll('.set-row')].find(
+      (row) => row.querySelector('.set-t')?.textContent === 'Цифровой след',
+    ) as HTMLElement;
+    click(button(footprint, 'Текст согласия'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.querySelector('h2')?.textContent).toBeTruthy();
+    expect(dialog.querySelectorAll('.c5-list li').length).toBeGreaterThan(0);
+    expect(button(dialog, 'Дать согласие')).toBeNull();
+    expect(api.grantConsent).not.toHaveBeenCalled();
+    const notGranted = [...root.querySelectorAll('.set-row')].find(
+      (row) => row.querySelector('.set-t')?.textContent === 'Подключённый профиль',
+    ) as HTMLElement;
+    expect(button(notGranted, 'Текст согласия')).toBeNull();
+  });
+
+  it('B774: текст «Вы в поиске» открывается и у данного согласия', async () => {
+    const root = await open(<DataScreen node={node('n05')} />);
+    const row = root.querySelector('.set-row') as HTMLElement;
+    click(button(row, 'Текст согласия'));
+    const dialog = document.querySelector('.pf-dialog[role=dialog]') as HTMLElement;
+    expect(dialog.textContent).toContain('мы будем искать контакты нанимающих');
+    expect(button(dialog, 'Дать согласие')).toBeNull();
+    expect(api.setSearchConsent).not.toHaveBeenCalled();
   });
 
   it('B695: автоотклики выключены, но в очереди LinkedIn есть посты — «Остановить всё» есть', async () => {
@@ -471,9 +499,22 @@ describe('n06 «Приложение»', () => {
     await settle();
     expect(api.updateAccountProfile).toHaveBeenCalledWith({ timezone: 'Europe/Moscow' });
     expect(api.saveAppPreferences).toHaveBeenCalledWith({ theme: 'dark' });
-    expect(root.textContent).not.toMatch(/строке меню|Запуск при входе|Проверить обновления|Обновлять автоматически/u);
-    expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual(['Интерфейс', 'Обновления']);
-    expect(root.querySelector('.only-desk')?.textContent).toMatch(/^ОбновленияВерсия \d+\.\d+\.\d+.*Приложение для MacСкачать$/u);
+    // B774: язык один — показан текстом, выбирать не из чего.
+    const language = [...root.querySelectorAll('.set-row')].find(
+      (row) => row.querySelector('.set-t')?.textContent === 'Язык',
+    );
+    expect(language?.querySelector('select')).toBeNull();
+    expect(language?.querySelector('.set-r')?.textContent).toBe('Русский');
+    expect(root.textContent).not.toMatch(
+      /строке меню|Запуск при входе|Проверить обновления|Обновлять автоматически/u,
+    );
+    expect([...root.querySelectorAll('.set-h')].map((item) => item.textContent)).toEqual([
+      'Интерфейс',
+      'Обновления',
+    ]);
+    expect(root.querySelector('.only-desk')?.textContent).toMatch(
+      /^ОбновленияВерсия \d+\.\d+\.\d+.*Приложение для MacСкачать$/u,
+    );
     const download = [...root.querySelectorAll('a')].find((item) => item.textContent === 'Скачать');
     expect(download?.getAttribute('href')).toBe('/downloads/openqareer-macos.dmg');
   });

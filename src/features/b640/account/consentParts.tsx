@@ -45,3 +45,12 @@ export function ConsentSwitch({ label, checked, disabled, onChange }: ConsentSwi
     </div>
   );
 }
+
+/** B774: текст уже данного согласия — прочитать, не отзывая. */
+export function ConsentTextButton({ onClick }: { readonly onClick: () => void }) {
+  return (
+    <button className="row-act" type="button" onClick={onClick}>
+      Текст согласия
+    </button>
+  );
+}

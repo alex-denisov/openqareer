@@ -21,11 +21,12 @@ import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
 import { ResultLine } from '../kit/ResultLine';
-import type { B640Node } from '../routes';
+import { buildNodePath, type B640Node } from '../routes';
 import { AccountDeletionGroup } from './AccountDeletion';
 import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
 import { countScheduledPosts } from '../platforms/linkedin/linkedinQueueApi';
-import { ConsentSwitch, useAction } from './consentParts';
+import { ConsentSwitch, ConsentTextButton, useAction } from './consentParts';
+import { Link } from '../shell/Link';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
 import { SearchConsentRow } from './SearchConsentRow';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
@@ -84,11 +85,12 @@ interface ConsentDialogProps {
   readonly open: boolean;
   readonly busy: boolean;
   readonly failed: boolean;
-  readonly onGrant: () => void;
+  /** Нет — согласие уже дано, окно только для чтения. */
+  readonly onGrant?: () => void;
   readonly onClose: () => void;
 }
 
-/** Текст согласия перед выдачей: согласие даётся только после него. */
+/** Текст согласия: перед выдачей — с кнопкой, у данного согласия (B774) — только чтение. */
 function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: ConsentDialogProps) {
   const document = CAPABILITY_CONSENT_DOCUMENTS[capability];
   return (
@@ -98,6 +100,23 @@ function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: Con
           <li key={item}>{item}</li>
         ))}
       </ul>
+      {onGrant ? (
+        <GrantActions busy={busy} failed={failed} onGrant={onGrant} onClose={onClose} />
+      ) : null}
+    </Dialog>
+  );
+}
+
+interface GrantActionsProps {
+  readonly busy: boolean;
+  readonly failed: boolean;
+  readonly onGrant: () => void;
+  readonly onClose: () => void;
+}
+
+function GrantActions({ busy, failed, onGrant, onClose }: GrantActionsProps) {
+  return (
+    <>
       {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}
       <div className="actions">
         <button className="btn is-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onGrant}>
@@ -108,7 +127,7 @@ function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: Con
           Отмена
         </button>
       </div>
-    </Dialog>
+    </>
   );
 }
 
@@ -140,6 +159,23 @@ function RevokeDialog({ row, open, busy, failed, onRevoke, onClose }: RevokeDial
   );
 }
 
+/** B774: текст уже данного согласия — окно только для чтения, без выдачи. */
+function ConsentText({ capability }: { readonly capability: CandidateCapability }) {
+  const [reading, setReading] = useState(false);
+  return (
+    <>
+      <ConsentTextButton onClick={() => setReading(true)} />
+      <ConsentDialog
+        capability={capability}
+        open={reading}
+        busy={false}
+        failed={false}
+        onClose={() => setReading(false)}
+      />
+    </>
+  );
+}
+
 interface ConsentProps {
   readonly row: ConsentRow;
   readonly granted: boolean;
@@ -168,6 +204,7 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
       <div className="set-l">
         <span className="set-t">{row.title}</span>
         <span className="set-v">{row.line}</span>
+        {granted ? <ConsentText capability={row.capability} /> : null}
         {failed && !asking && !revoking ? <ErrorLine text="Не сохранилось" /> : null}
       </div>
       <ConsentSwitch label={row.title} checked={granted} disabled={busy} onChange={toggle} />
@@ -191,6 +228,53 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
   );
 }
 
+/** B774: автоотклики включаются в «Откликах» — строка ведёт туда, а не в тупик. */
+function EnableLink() {
+  return (
+    <div className="set-r">
+      <Link
+        className="btn is-sm"
+        to={buildNodePath('o01')}
+        aria-label="Включить автоотклики в «Откликах»"
+      >
+        Включить
+      </Link>
+    </div>
+  );
+}
+
+interface StopDialogProps {
+  readonly open: boolean;
+  readonly busy: boolean;
+  readonly failed: boolean;
+  readonly onStop: () => void;
+  readonly onClose: () => void;
+}
+
+function StopDialog({ open, busy, failed, onStop, onClose }: StopDialogProps) {
+  return (
+    <Dialog open={open} title="Остановить всё?" onClose={onClose}>
+      <p className="c5-lead">Остановятся автоотклики на hh.ru и публикации в LinkedIn.</p>
+      {failed ? <ErrorLine text="Остановить не получилось" /> : null}
+      <div className="actions">
+        <button
+          className="btn is-primary"
+          type="button"
+          disabled={busy}
+          aria-busy={busy || undefined}
+          onClick={onStop}
+        >
+          <Icon name="pause" />
+          Остановить всё
+        </button>
+        <button className="btn" type="button" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
 /** «Действия от вашего имени»: остановить всё с подтверждением (N5c) и возобновить. */
 function Automation({ state, onChanged }: { readonly state: AutomationState; readonly onChanged: () => void }) {
   const [asking, setAsking] = useState(false);
@@ -207,6 +291,7 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
           <span className="set-v">{line.text}</span>
           {failed && !asking ? <ErrorLine text="Не получилось" /> : null}
         </div>
+        {line.action === null && !state.enabled && !state.emergencyPaused ? <EnableLink /> : null}
         {line.action ? (
           <div className="set-r">
             <button
@@ -220,25 +305,13 @@ function Automation({ state, onChanged }: { readonly state: AutomationState; rea
           </div>
         ) : null}
       </li>
-      <Dialog open={asking} title="Остановить всё?" onClose={() => setAsking(false)}>
-        <p className="c5-lead">Остановятся автоотклики на hh.ru и публикации в LinkedIn.</p>
-        {failed ? <ErrorLine text="Остановить не получилось" /> : null}
-        <div className="actions">
-          <button
-            className="btn is-primary"
-            type="button"
-            disabled={busy}
-            aria-busy={busy || undefined}
-            onClick={() => run(() => pauseCandidateAutomation(STOP_DAYS))}
-          >
-            <Icon name="pause" />
-            Остановить всё
-          </button>
-          <button className="btn" type="button" onClick={() => setAsking(false)}>
-            Отмена
-          </button>
-        </div>
-      </Dialog>
+      <StopDialog
+        open={asking}
+        busy={busy}
+        failed={failed}
+        onStop={() => run(() => pauseCandidateAutomation(STOP_DAYS))}
+        onClose={() => setAsking(false)}
+      />
     </Group>
   );
 }

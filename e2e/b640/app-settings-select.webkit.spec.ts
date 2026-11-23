@@ -45,7 +45,8 @@ for (const theme of ['light', 'dark'] as const) {
     await mockSignedInCabinet(page, { cabinetB640: true });
     await page.goto('/app/account/app', { waitUntil: 'domcontentloaded' });
     const selects = page.locator('[data-b640-node="n06"] .sec-sel');
-    await expect(selects).toHaveCount(2, { timeout: 15_000 });
+    // B774: «Язык» с одним вариантом стал текстом — выпадающим остался «Часовой пояс».
+    await expect(selects).toHaveCount(1, { timeout: 15_000 });
     await expectControlShape(selects, theme, info);
   });
 }

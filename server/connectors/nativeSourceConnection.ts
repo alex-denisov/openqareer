@@ -13,6 +13,8 @@ export interface NativeSourceConnectionView {
   connectedAt: string;
   lastImportedAt: string;
   factCount: number;
+  /** B774: адрес, с которого читали, — у LinkedIn это профиль; строка n03 показывает его. */
+  sourceUrl: string;
 }
 
 export interface DisconnectedConnectionView {
@@ -107,6 +109,7 @@ export function nativeSourceConnectionView(
     connectedAt: stored.connectedAt,
     lastImportedAt: stored.lastImportedAt,
     factCount: stored.receipt.factCount,
+    sourceUrl: stored.receipt.sourceUrl,
   };
 }
 

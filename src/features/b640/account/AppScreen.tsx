@@ -48,9 +48,15 @@ function ThemeRow() {
   );
 }
 
-/** Язык интерфейса: пока один — русский, как в макете n06. */
+/** Языки интерфейса. */
+const LANGUAGES: readonly { readonly value: string; readonly label: string }[] = [
+  { value: 'ru', label: 'Русский' },
+];
+
+/** Язык интерфейса; B774: пока он один, выбирать не из чего — показан текстом. */
 function LanguageRow() {
   const labelId = useId();
+  const [only] = LANGUAGES;
   return (
     <li className="set-row">
       <div className="set-l">
@@ -59,9 +65,17 @@ function LanguageRow() {
         </span>
       </div>
       <div className="set-r">
-        <select className="sec-sel" aria-labelledby={labelId} defaultValue="ru">
-          <option value="ru">Русский</option>
-        </select>
+        {LANGUAGES.length === 1 && only ? (
+          <span className="set-v">{only.label}</span>
+        ) : (
+          <select className="sec-sel" aria-labelledby={labelId} defaultValue="ru">
+            {LANGUAGES.map((language) => (
+              <option key={language.value} value={language.value}>
+                {language.label}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
     </li>
   );

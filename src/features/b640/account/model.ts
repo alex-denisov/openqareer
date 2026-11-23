@@ -35,8 +35,36 @@ export function connectionsSummary(connections: readonly CandidateConnection[]):
   return names.length === 1 ? `${names[0]} подключён` : `${names.join(' и ')} подключены`;
 }
 
-export function connectionLine(connection: CandidateConnection): string {
-  if (connection.status === 'connected') return 'подключено';
+/**
+ * B774: чей аккаунт подключён, как в макете n03. У LinkedIn — адрес профиля, с которого читали;
+ * у hh.ru адреса аккаунта нет (читается резюме), поэтому имя кандидата.
+ */
+export function accountName(
+  connection: CandidateConnection,
+  displayName: string | null,
+): string | null {
+  if (connection.status !== 'connected') return null;
+  if (connection.platform === 'hh') return displayName?.trim() || null;
+  return linkedinProfileAddress(connection.sourceUrl);
+}
+
+function linkedinProfileAddress(sourceUrl: string | undefined): string | null {
+  if (!sourceUrl) return null;
+  try {
+    const url = new URL(sourceUrl);
+    const slug = /^\/in\/([^/]+)/u.exec(url.pathname)?.[1];
+    if (!/(^|\.)linkedin\.com$/u.test(url.hostname) || !slug) return null;
+    return `linkedin.com/in/${decodeURIComponent(slug)}`;
+  } catch {
+    return null;
+  }
+}
+
+export function connectionLine(
+  connection: CandidateConnection,
+  account: string | null = null,
+): string {
+  if (connection.status === 'connected') return account ? `${account} · подключено` : 'подключено';
   return connection.status === 'imported' ? 'данные загружены, вход не выполнен' : 'не подключено';
 }
 
