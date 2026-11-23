@@ -18,6 +18,7 @@ import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
+import { readUnclusteredPoolPage, type UnclusteredPoolPage } from './unclusteredPoolPage';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -76,6 +77,7 @@ import type {
   CatalogChipQuery,
   CatalogTotalsRow,
   MergeSliceResult,
+  SliceWriteOptions,
   StoredSourceState,
   VacancyLink,
   VacancyPoolStore,
@@ -422,6 +424,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Докуда дошло обогащение управленческими навыками по описаниям (B307). */
   private descriptionSkillsCursor = 0;
   /** Позиция прохода очистки сирот (B535): сначала кластеры, потом карточки. */
+  /** Курсор прохода записей без кластера (B763), как у сирот — в памяти процесса. */
+  private unclusteredCursor = 0;
   private orphanCursor: { phase: 'clusters' | 'entries'; rowid: number } = {
     phase: 'clusters',
     rowid: 0,
@@ -1360,14 +1364,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     tally: WriteTally,
+    onChunkWritten?: SliceWriteOptions['onChunkWritten'],
   ): Promise<string> {
     const storedAt = this.nextSliceTimestamp(sourceId);
     const statements = this.prepareUpsertStatements();
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
-      let pending = this.prepareUpsertRows(
-        sourceId,
-        vacancies.slice(offset, offset + this.writeChunkSize),
-      );
+      const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
+      let pending = this.prepareUpsertRows(sourceId, chunk);
       await yieldToEventLoop();
       while (pending.length > 0) {
         const rows = pending;
@@ -1378,6 +1381,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         );
         await yieldToEventLoop();
       }
+      // B763: порция сводится сразу — остановка посреди среза не оставит её без кластера.
+      await onChunkWritten?.(chunk);
     }
     return storedAt;
   }
@@ -1564,10 +1569,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   async replaceSourceSliceAsync(
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
+    options: SliceWriteOptions = {},
   ): Promise<void> {
     const startedAt = performance.now();
     const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
-    const storedAt = await this.upsertAllAsync(sourceId, vacancies, tally);
+    const storedAt = await this.upsertAllAsync(sourceId, vacancies, tally, options.onChunkWritten);
     const stale = this.database.prepare(
       `SELECT p.rowid AS row, p.id, i.url FROM vacancy_pool p
          LEFT JOIN vacancy_pool_index i ON i.id = p.id
@@ -1647,11 +1653,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
+    options: SliceWriteOptions = {},
   ): Promise<MergeSliceResult> {
     const startedAt = performance.now();
     const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
     const dropBeforeMs = parseMs(dropObservedBefore);
-    await this.upsertAllAsync(sourceId, vacancies, tally);
+    await this.upsertAllAsync(sourceId, vacancies, tally, options.onChunkWritten);
     let dropped: VacancyLink[] = [];
     if (dropBeforeMs !== undefined) {
       dropped = this.database
@@ -2905,6 +2912,18 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * основателя) нет в индексе пула; похороненная запись — ещё запись. Потом
    * тот же проход снимает карточки, у которых кластера нет вовсе.
    */
+  /** Окно пула после курсора: записи, ни один ключ членства которых не лежит в кластерах (B763). */
+  readUnclusteredPoolPage(chunk = 500): UnclusteredPoolPage {
+    const page = readUnclusteredPoolPage(
+      this.database,
+      this.unclusteredCursor,
+      chunk,
+      parseVacancy,
+    );
+    this.unclusteredCursor = page.cursor;
+    return page;
+  }
+
   removeOrphanClustersStep(chunk = 500): {
     inspected: number;
     removed: number;

@@ -2,7 +2,7 @@ import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
 import type { ServerConfig } from '../config';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
@@ -12,6 +12,8 @@ import { AuthService } from '../auth/authService';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from '../vacancies/memoryVacancyPoolStore';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { CachedRoleNamer, type RoleNamer, type RoleNamingCacheEntry } from '../providers/roleNamer';
+import { ROLE_TITLES_RU_VERSION } from './careerRoleTitleRuBackfill';
 
 const resources: Array<{
   app: Awaited<ReturnType<typeof buildApp>>;
@@ -35,7 +37,22 @@ afterEach(async () => {
   }
 });
 
-async function createApp(clusters: VacancyCluster[] = []) {
+const XRAY_NAMER: RoleNamer = {
+  async nameRoles() {
+    return {
+      roles: [
+        {
+          title: 'Xray Technician',
+          reason: 'семь лет в рентген-кабинете',
+          evidenceRefs: ['memory:1', 'memory:1b'],
+        },
+      ],
+      stage: 'test',
+    };
+  },
+};
+
+async function createApp(clusters: VacancyCluster[] = [], roleNamer: RoleNamer = XRAY_NAMER) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-career-counts-'));
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({
@@ -109,20 +126,7 @@ async function createApp(clusters: VacancyCluster[] = []) {
     authService: auth,
     multiSourceVacancyEngine: multiSourceEngine,
     // Роль называет модель (не кандидат): её число раньше считалось по сырому пулу.
-    roleNamer: {
-      async nameRoles() {
-        return {
-          roles: [
-            {
-              title: 'Xray Technician',
-              reason: 'семь лет в рентген-кабинете',
-              evidenceRefs: ['memory:1', 'memory:1b'],
-            },
-          ],
-          stage: 'test',
-        };
-      },
-    },
+    roleNamer,
     serveStatic: false,
   });
 
@@ -252,5 +256,57 @@ describe('B726: число роли «Карьеры» равно строкам
     );
     expect(recent.length).toBeGreaterThan(0);
     expect(xray!.confirmation).toMatchObject({ sampleSize: recent.length });
+  });
+});
+
+/**
+ * B748 (переводы v8): пересчёт переводов идёт фоном. GET «Карьеры» на кампании прошлой версии
+ * переводов берёт названные роли из кэша и модель не зовёт — первый вход после выката не ждёт.
+ */
+describe('B748: старая версия переводов не зовёт модель на GET «Карьеры»', () => {
+  it('кэш называния переживает рестарт, кампания с titlesRuVersion 7 — без вызова', async () => {
+    const rows = new Map<string, RoleNamingCacheEntry>();
+    const inner = { nameRoles: vi.fn(XRAY_NAMER.nameRoles) };
+    // ttl 0: память процесса пуста на каждом чтении, как после выката — ответ из хранилища.
+    const namer = new CachedRoleNamer(inner, {
+      ttlMs: 0,
+      store: { read: (key) => rows.get(key), write: (key, entry) => void rows.set(key, entry) },
+    });
+    const { app, candidates } = await createApp(
+      [cluster('a', 'Xray Technician', daysAgo(1))],
+      namer,
+    );
+    const { cookie, candidateId } = await login(app);
+    const campaign = {
+      roles: ['Xray Technician'],
+      regions: [],
+      revision: 1,
+      updatedAt: new Date().toISOString(),
+      titlesRuVersion: ROLE_TITLES_RU_VERSION,
+    };
+    candidates.saveCandidateWorkspace(candidateId, {
+      resumeText: 'Xray Technician, seven years in radiology.',
+      resumeSource: 'text',
+      targetDirection: 'Xray Technician',
+      regions: [],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign,
+    });
+    const read = () =>
+      app.inject({ method: 'GET', url: '/api/v1/candidate/role-hypotheses', headers: { cookie } });
+
+    expect((await read()).statusCode).toBe(200);
+    const named = inner.nameRoles.mock.calls.length;
+    expect(named).toBe(1);
+    const workspace = candidates.getCandidateWorkspace(candidateId)!;
+    candidates.saveCandidateWorkspace(candidateId, {
+      ...workspace,
+      campaign: { ...campaign, ...workspace.campaign, titlesRuVersion: 7 },
+    });
+
+    expect((await read()).statusCode).toBe(200);
+    expect(inner.nameRoles).toHaveBeenCalledTimes(named);
   });
 });

@@ -189,7 +189,14 @@ function GoalsLead({ data }: { readonly data: CareerDiaryGoalCards }) {
   const now = today();
   const [horizon, setHorizon] = useState<CareerDiaryHorizon>('quarter');
   const lead = goalsLead(data.items);
-  const shown = data.items.filter((card) => card.horizon === horizon);
+  // Макет d02: на «Квартале» после квартальных целей идут и годовые — с целью этого квартала.
+  const shown =
+    horizon === 'quarter'
+      ? [
+          ...data.items.filter((card) => card.horizon === 'quarter'),
+          ...data.items.filter((card) => card.horizon === 'year'),
+        ]
+      : data.items.filter((card) => card.horizon === horizon);
   return (
     <section className="lead" aria-labelledby="kp-title">
       <div className="lead-head">
@@ -211,7 +218,7 @@ function GoalsLead({ data }: { readonly data: CareerDiaryGoalCards }) {
       {shown.length > 0 ? (
         <ul className="dn-goals">
           {shown.map((card) => (
-            <GoalItem key={card.id} card={card} now={now} />
+            <GoalItem key={card.id} card={card} now={now} quarterView={horizon === 'quarter'} />
           ))}
         </ul>
       ) : (
