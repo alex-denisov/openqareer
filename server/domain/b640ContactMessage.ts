@@ -2,6 +2,7 @@ import {
   B640_CONTACT_MESSAGE_DRAFT_MAX,
   type B640ContactMessageKind,
 } from '../../shared/b640ContactMessage';
+import { dropCourtesyClosing } from './contactMessageStyle';
 import { distortedWords } from './letterWordDistortion';
 
 /**
@@ -15,8 +16,10 @@ export interface ContactMessageFacts {
   readonly recipientCompany: string;
   /** Целевая роль кандидата из профиля; пусто — не называем. */
   readonly targetRole: string;
-  /** B753: целевые роли кандидата по-русски, как их называет платформа (B737). */
-  readonly targetRolesRu?: readonly string[];
+  /** B753: целевые роли кандидата на языке черновика (по-русски — как их называет платформа, B737). */
+  readonly targetRoles?: readonly string[];
+  /** B753: язык черновика; английский — по контакту и вакансии (contactMessageLanguage). */
+  readonly language?: 'en' | 'ru';
   readonly vacancyTitle?: string;
   readonly vacancyCompany?: string;
   /** Вторая вакансия той же компании (карточка компании, B698): только для текста. */
@@ -89,14 +92,32 @@ function namesEnglishTargetRole(body: string, englishRoles: readonly string[]): 
 /** Слова отклика работодателю: в сообщении знакомому такой текст не принимается (B753). */
 const RESPONSE_FORMULA = /(откликаюсь|хочу откликнуться|прошу рассмотреть|рассмотрите[\s,]+(пожалуйста[\s,]+)?мою кандидатуру|направляю (вам )?(своё |свое |моё |мое )?резюме)/iu;
 
+const quotedList = (items: readonly string[]) => items.map((item) => `«${item}»`).join(', ');
+
+/** Язык, имя и целевые роли: русские правила только для русского черновика (B753). */
+function languageLines(facts: ContactMessageFacts): string[] {
+  const roles = facts.targetRoles ?? [];
+  const name = firstName(facts.recipientName);
+  if (facts.language === 'en') {
+    return [
+      'Пиши сообщение на английском языке: получатель и вакансия — вне России и СНГ.',
+      `Обращайся по имени: «${name}», как в карточке.`,
+      roles.length ? `Целевые роли кандидата: ${quotedList(roles)}.` : '',
+    ];
+  }
+  return [
+    `Обращайся по имени: «${name}», как в карточке, или то же имя кириллицей.`,
+    roles.length
+      ? `Целевые роли кандидата называй только по-русски: ${quotedList(roles)}; английских названий целевых ролей не пиши. Прежние должности — как в профиле.`
+      : '',
+  ];
+}
+
 /** Просьба к модели вместо письма работодателю: короткое личное сообщение, без темы и подписи. */
 export function contactMessageWish(facts: ContactMessageFacts): string {
   const lines = [
     `ВАЖНО: это не письмо работодателю, а личное сообщение в LinkedIn ${taskOf(facts)}.`,
-    `Обращайся по имени: «${firstName(facts.recipientName)}», как в карточке, или то же имя кириллицей.`,
-    facts.targetRolesRu?.length
-      ? `Целевые роли кандидата называй только по-русски: ${facts.targetRolesRu.map((role) => `«${role}»`).join(', ')}; английских названий целевых ролей не пиши. Прежние должности — как в профиле.`
-      : '',
+    ...languageLines(facts),
     `Получатель: ${facts.recipientName}${facts.recipientRole ? `, ${facts.recipientRole}` : ''}${facts.recipientCompany ? `, ${facts.recipientCompany}` : ''}.`,
     facts.relationship ? `Как знакомы: ${facts.relationship}.` : '',
     facts.vacancyTitle
@@ -105,8 +126,11 @@ export function contactMessageWish(facts: ContactMessageFacts): string {
     facts.vacancyTitle && facts.kind !== 'recruiter'
       ? 'Назови компанию и вакансию; общий вопрос о поиске работы без компании не подходит.'
       : '',
+    // B753 (решение CPO 23.11): без вакансии модель придумывала «открытую вакансию».
+    facts.vacancyTitle ? '' : 'Вакансии в запросе нет: не упоминай вакансию; повод — компания получателя и целевая роль кандидата.',
     // B753 (прод 23.11): при «500 знаков» GLM писал 610–760 и уходил в шаблон.
     `3–4 коротких предложения. Не длиннее ${CONTACT_MESSAGE_TARGET_CHARS} знаков, без темы, без подписи, без приветствия «Уважаемый».`,
+    'Заканчивай просьбой или «Буду рад обсудить…», без «С уважением» и других заключительных вежливостей.',
     'Пиши только то, что есть в профиле кандидата; не добавляй цифр, достижений и обещаний, которых там нет.',
     ...(facts.kind === 'recruiter' ? [] : ACQUAINTANCE_RULES),
   ];
@@ -141,7 +165,15 @@ function digitGroups(text: string): string[] {
 }
 
 export type ModelMessageRejection =
-  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted';
+  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted' | 'mentions_vacancy';
+
+/** B753: условия запроса для проверки — без вакансии и язык черновика. */
+export interface ContactCheckOptions {
+  readonly withoutVacancy?: boolean;
+  readonly language?: 'en' | 'ru';
+}
+
+const MENTIONS_VACANCY = /(ваканси|vacanc)/iu;
 
 /** B753: почему текст модели не принят — в журнал вместо молчаливого запасного текста. */
 export function modelMessageRejection(
@@ -149,12 +181,14 @@ export function modelMessageRejection(
   knownText: string,
   kind: B640ContactMessageKind = 'recruiter',
   englishRoles: readonly string[] = [],
+  options: ContactCheckOptions = {},
 ): ModelMessageRejection | null {
   const body = text?.trim().replace(/\r\n?/gu, '\n');
   if (!body) return 'empty';
   if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
   if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
-  if (namesEnglishTargetRole(body, englishRoles)) return 'english_role';
+  if (options.withoutVacancy && MENTIONS_VACANCY.test(body)) return 'mentions_vacancy';
+  if (options.language !== 'en' && namesEnglishTargetRole(body, englishRoles)) return 'english_role';
   if (!digitGroups(body).every((group) => knownText.includes(group))) return 'new_digits';
   // Та же узкая проверка русского, что у письма (B640): лишние заглавные, обрезанные окончания.
   return distortedWords(body, [knownText]).length > 0 ? 'distorted' : null;
@@ -181,9 +215,10 @@ export function acceptModelMessage(
   knownText: string,
   kind: B640ContactMessageKind = 'recruiter',
   englishRoles: readonly string[] = [],
+  options: ContactCheckOptions = {},
 ): string | null {
-  if (modelMessageRejection(text, knownText, kind, englishRoles)) return null;
-  return text!.trim().replace(/\r\n?/gu, '\n');
+  if (modelMessageRejection(text, knownText, kind, englishRoles, options)) return null;
+  return dropCourtesyClosing(text!.trim().replace(/\r\n?/gu, '\n'));
 }
 
 /** Только https и сам linkedin.com, без логина в адресе; всё остальное — null. */
