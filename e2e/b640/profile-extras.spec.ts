@@ -31,6 +31,10 @@ function change(index: number, overrides: Record<string, unknown> = {}) {
 
 interface Mocks {
   readonly photo?: boolean;
+  /** Профиль импортирован из LinkedIn с фото: есть «Взять из LinkedIn». */
+  readonly linkedinPhoto?: boolean;
+  /** «Фото в резюме» на сервере. */
+  readonly inResume?: boolean;
   readonly income?: { current: number | null; expected: number | null };
   /** Ответ сервера на загрузку фото вместо успеха. */
   readonly uploadError?: { status: number; code: string; message: string };
@@ -41,18 +45,30 @@ interface Calls {
   photoRemoved: number;
   readonly incomePuts: unknown[];
   readonly reapplied: string[];
+  linkedinTaken: number;
+  readonly inResumePuts: unknown[];
 }
 
 async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise<Calls> {
-  const calls: Calls = { uploads: [], photoRemoved: 0, incomePuts: [], reapplied: [] };
+  const calls: Calls = {
+    uploads: [],
+    photoRemoved: 0,
+    incomePuts: [],
+    reapplied: [],
+    linkedinTaken: 0,
+    inResumePuts: [],
+  };
   let photoMediaId: string | null = mocks.photo ? 'photo-1' : null;
+  let inResume = mocks.inResume ?? true;
+  const linkedin = mocks.linkedinPhoto ? { linkedinPhotoMediaId: 'photo-li' } : {};
   let income = mocks.income ?? { current: null, expected: null };
   const reverted = new Set(['ch-0']);
   await mockSignedInCabinet(page, { cabinetB640: true });
   await page.route(`${API}/resume`, (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const base = candidateSnapshot.resume.draft;
-    const candidate = photoMediaId ? { ...base.candidate, photoMediaId } : base.candidate;
+    const withLinkedin = { ...base.candidate, ...linkedin };
+    const candidate = photoMediaId ? { ...withLinkedin, photoMediaId } : withLinkedin;
     return route.fulfill({
       json: {
         data: {
@@ -80,6 +96,18 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
     }
     photoMediaId = `photo-${calls.uploads.length + 1}`;
     return route.fulfill({ json: { data: { photoMediaId } } });
+  });
+  await page.route(`${API}/profile/photo/linkedin`, (route) => {
+    calls.linkedinTaken += 1;
+    photoMediaId = 'photo-li';
+    return route.fulfill({ json: { data: { photoMediaId } } });
+  });
+  await page.route(`${API}/profile/photo/resume`, (route) => {
+    if (route.request().method() === 'PUT') {
+      calls.inResumePuts.push(route.request().postDataJSON());
+      inResume = route.request().postDataJSON().inResume;
+    }
+    return route.fulfill({ json: { data: { inResume } } });
   });
   await page.route(`${API}/profile/income`, (route) => {
     if (route.request().method() === 'PUT') {
@@ -214,6 +242,44 @@ test.describe('B666: «Фото» (p08)', () => {
     expect(calls.photoRemoved).toBe(1);
   });
 
+  test('«Взять из LinkedIn» ставит фото импорта по «Сохранить»', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/photo', {
+      photo: true,
+      linkedinPhoto: true,
+    });
+    const photo = dialog(page);
+    const save = photo.getByRole('button', { name: 'Сохранить' });
+    await expect(save).toBeDisabled();
+    await photo.getByRole('button', { name: 'Взять из LinkedIn' }).click();
+    expect(calls.linkedinTaken).toBe(0);
+    await save.click();
+    await expect(page.getByText('Фото обновлено')).toBeVisible();
+    expect(calls.linkedinTaken).toBe(1);
+    await expect(page).toHaveURL(/\/app\/profile$/u);
+  });
+
+  test('без импорта из LinkedIn кнопки нет', async ({ page }) => {
+    await openCabinet(page, '/app/profile/photo', { photo: true });
+    const photo = dialog(page);
+    await expect(photo.getByRole('button', { name: 'Загрузить' })).toBeVisible();
+    await expect(photo.getByRole('button', { name: 'Взять из LinkedIn' })).toHaveCount(0);
+  });
+
+  test('«Фото в резюме» включено по умолчанию, выключение уходит по «Сохранить»', async ({
+    page,
+  }) => {
+    const calls = await openCabinet(page, '/app/profile/photo', { photo: true });
+    const photo = dialog(page);
+    const toggle = photo.getByRole('switch', { name: 'Фото в резюме' });
+    await expect(toggle).toBeChecked();
+    await toggle.click();
+    expect(calls.inResumePuts).toEqual([]);
+    await photo.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(page.getByText('Сохранено')).toBeVisible();
+    expect(calls.inResumePuts).toEqual([{ inResume: false }]);
+    expect(calls.uploads).toEqual([]);
+  });
+
   test('1440: окно 512 по центру, как в макете p08', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'только 1440');
     await openCabinet(page, '/app/profile/photo');
@@ -228,6 +294,19 @@ test.describe('B666: «Фото» (p08)', () => {
     const viewport = page.viewportSize();
     expect(Math.round(box?.width ?? 0)).toBe(viewport?.width);
     expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(viewport?.height);
+  });
+});
+
+test.describe('B666: «Фото в резюме» в «Резюме под роль» (s01)', () => {
+  test('переключатель сохраняется сразу и показывает сохранённое', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile', { inResume: false });
+    const resume = page.locator('section[aria-labelledby="cv-title"]');
+    const toggle = resume.getByRole('switch', { name: 'Фото в резюме' });
+    await expect(toggle).not.toBeChecked();
+    await expect(resume.getByText('На hh.ru резюме с фото принято.')).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+    expect(calls.inResumePuts).toEqual([{ inResume: true }]);
   });
 });
 

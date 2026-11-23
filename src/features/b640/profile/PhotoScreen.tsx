@@ -7,20 +7,28 @@ import { buildNodePath, type B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
+import { PhotoInResumeSwitch } from './PhotoInResume';
+import { getResumePhoto } from './profileExtrasApi';
 import { ProfileScreen } from './ProfileScreen';
 import { usePhotoDraft, type PhotoStep } from './usePhotoDraft';
 
 interface PhotoProfile {
   readonly hasProfile: boolean;
   readonly photoMediaId: string | null;
+  /** Фото из последнего импорта LinkedIn; `null` — из LinkedIn не импортировали. */
+  readonly linkedinPhotoMediaId: string | null;
+  readonly inResume: boolean;
 }
 
-async function loadPhoto(): Promise<PhotoProfile> {
+async function loadPhoto(signal: AbortSignal): Promise<PhotoProfile> {
   forgetSharedRead('resume');
-  const view = await getResumeStudio();
+  const [view, setting] = await Promise.all([getResumeStudio(), getResumePhoto(signal)]);
+  const candidate = view.draft?.candidate;
   return {
     hasProfile: view.draft !== null,
-    photoMediaId: view.draft?.candidate.photoMediaId ?? null,
+    photoMediaId: candidate?.photoMediaId ?? null,
+    linkedinPhotoMediaId: candidate?.linkedinPhotoMediaId ?? null,
+    inResume: setting.inResume,
   };
 }
 
@@ -57,17 +65,64 @@ function CurrentPhoto({ src }: { readonly src: string | null | undefined }) {
   );
 }
 
-interface EditorProps {
-  readonly photoMediaId: string | null;
-  readonly draft: ReturnType<typeof usePhotoDraft>;
+type PhotoDraft = ReturnType<typeof usePhotoDraft>;
+
+function shownPhoto(
+  pending: PhotoDraft['pending'],
+  saved: string | undefined,
+  linkedin: string | undefined,
+) {
+  if (pending?.kind === 'file') return pending.preview;
+  if (pending?.kind === 'linkedin') return linkedin;
+  return pending?.kind === 'remove' ? null : saved;
 }
 
-function PhotoEditor({ photoMediaId, draft }: EditorProps) {
+interface ActionsProps {
+  readonly draft: PhotoDraft;
+  readonly linkedinId: string | null;
+  readonly hasPhoto: boolean;
+  readonly onUpload: () => void;
+}
+
+/** «Взять из LinkedIn» — только после импорта из LinkedIn, где было фото. */
+function PhotoActions({ draft, linkedinId, hasPhoto, onUpload }: ActionsProps) {
+  const busy = draft.work.step === 'reading' || draft.work.step === 'saving';
+  return (
+    <div className="ph-acts">
+      {linkedinId ? (
+        <Button icon="linkedin" disabled={busy} onClick={() => draft.takeLinkedin(linkedinId)}>
+          Взять из LinkedIn
+        </Button>
+      ) : null}
+      <Button icon="upload" busy={draft.work.step === 'reading'} disabled={busy} onClick={onUpload}>
+        Загрузить
+      </Button>
+      {hasPhoto ? (
+        <button
+          className="btn is-quiet is-danger"
+          type="button"
+          disabled={busy}
+          onClick={draft.remove}
+        >
+          <Icon name="trash" />
+          Убрать фото
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+interface EditorProps {
+  readonly profile: PhotoProfile;
+  readonly draft: PhotoDraft;
+}
+
+function PhotoEditor({ profile, draft }: EditorProps) {
   const input = useRef<HTMLInputElement>(null);
-  const saved = useCandidateMediaSrc(photoMediaId ?? undefined);
+  const saved = useCandidateMediaSrc(profile.photoMediaId ?? undefined);
+  const linkedin = useCandidateMediaSrc(profile.linkedinPhotoMediaId ?? undefined);
   const { pending, work } = draft;
-  const shown =
-    pending?.kind === 'file' ? pending.preview : pending?.kind === 'remove' ? null : saved;
+  const shown = shownPhoto(pending, saved, linkedin);
   const busy = work.step === 'reading' || work.step === 'saving';
 
   function onFile(event: ChangeEvent<HTMLInputElement>) {
@@ -89,21 +144,18 @@ function PhotoEditor({ photoMediaId, draft }: EditorProps) {
         tabIndex={-1}
         onChange={onFile}
       />
-      <div className="ph-acts">
-        <Button
-          icon="upload"
-          busy={work.step === 'reading'}
-          disabled={busy}
-          onClick={() => input.current?.click()}
-        >
-          Загрузить
-        </Button>
-        {shown ? (
-          <Button variant="danger" icon="trash" disabled={busy} onClick={draft.remove}>
-            Убрать фото
-          </Button>
-        ) : null}
-      </div>
+      <PhotoActions
+        draft={draft}
+        linkedinId={profile.linkedinPhotoMediaId}
+        hasPhoto={Boolean(shown)}
+        onUpload={() => input.current?.click()}
+      />
+      <PhotoInResumeSwitch
+        id="ph-cv"
+        checked={draft.inResume}
+        disabled={busy}
+        onChange={draft.setInResume}
+      />
     </>
   );
 }
@@ -122,22 +174,14 @@ function NoProfile() {
   );
 }
 
-/** Окно «Фото профиля»: изменения уходят на сервер по «Сохранить», «Отмена» возвращает в профиль. */
-function PhotoDialog({ onClose }: { readonly onClose: () => void }) {
-  const photo = useLoad(loadPhoto);
-  const toast = useToast();
-  const draft = usePhotoDraft((text) => {
-    toast.show({ text });
-    onClose();
-  });
-  const ready = photo.state === 'ready' && photo.data.hasProfile;
-  const footer = ready ? (
+function Footer({ draft, onClose }: { readonly draft: PhotoDraft; readonly onClose: () => void }) {
+  return (
     <>
       <Button
         variant="primary"
         icon="check"
         busy={draft.work.step === 'saving'}
-        disabled={!draft.pending}
+        disabled={!draft.changed}
         onClick={draft.save}
       >
         Сохранить
@@ -146,15 +190,31 @@ function PhotoDialog({ onClose }: { readonly onClose: () => void }) {
         Отмена
       </Button>
     </>
-  ) : undefined;
+  );
+}
+
+/** Окно «Фото профиля»: изменения уходят по «Сохранить», «Отмена» ничего не меняет. */
+function PhotoDialog({ onClose }: { readonly onClose: () => void }) {
+  const photo = useLoad(loadPhoto);
+  const toast = useToast();
+  const ready = photo.state === 'ready' && photo.data.hasProfile ? photo.data : null;
+  const draft = usePhotoDraft(ready?.inResume ?? null, (text) => {
+    toast.show({ text });
+    onClose();
+  });
   return (
-    <Dialog open title="Фото профиля" onClose={onClose} footer={footer}>
+    <Dialog
+      open
+      title="Фото профиля"
+      onClose={onClose}
+      footer={ready ? <Footer draft={draft} onClose={onClose} /> : undefined}
+    >
       {photo.state === 'loading' ? <BlockSkeleton label="Загружаем фото" /> : null}
       {photo.state === 'error' ? (
         <BlockError text="Не удалось загрузить профиль." onRetry={photo.retry} />
       ) : null}
-      {ready ? <PhotoEditor photoMediaId={photo.data.photoMediaId} draft={draft} /> : null}
-      {photo.state === 'ready' && !photo.data.hasProfile ? <NoProfile /> : null}
+      {ready ? <PhotoEditor profile={ready} draft={draft} /> : null}
+      {photo.state === 'ready' && !ready ? <NoProfile /> : null}
     </Dialog>
   );
 }

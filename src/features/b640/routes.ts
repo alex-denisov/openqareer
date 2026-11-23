@@ -89,7 +89,7 @@ const ROWS: readonly NodeRow[] = [
   ['p10', 'p10-istoriya-izmenenij', 'profile', 'profile', '/app/profile/history', 'Профиль', 'list', { tabs: 'profile', crumb: 'История изменений' }],
   ['p11', 'p11-svyazi', 'profile', 'profile', '/app/profile/connections', 'Связи', 'list', { parent: 's01' }],
   // Цифровой след
-  ['p02', 'p02-profil-cifrovoj-sled', 'footprint', 'profile', '/app/profile/footprint', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след' }],
+  ['p02', 'p02-profil-cifrovoj-sled', 'footprint', 'profile', '/app/profile/footprint', 'Профиль', 'list', { tabs: 'profile', parent: 's01', crumb: 'Цифровой след' }],
   ['f01', 'f01-cifrovoj-sled-do-poiska', 'footprint', 'profile', '/app/profile/footprint/start', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след', tabOf: 'p02' }],
   ['f03', 'f03-razbor-po-odnoj', 'footprint', 'profile', '/app/profile/footprint/findings', 'Профиль', 'focus', { parent: 'p02', crumb: 'Сводка' }],
   ['f03b', 'f03b-nahodka-put-udaleniya', 'footprint', 'profile', '/app/profile/footprint/findings/:findingId', 'Профиль', 'focus', { parent: 'f03', crumb: 'Находка' }],

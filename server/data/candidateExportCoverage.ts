@@ -197,4 +197,5 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_income: { export: 'careerSections' },
   candidate_profession_path: { export: 'careerSections' },
   candidate_relocation_places: { export: 'careerSections' },
+  candidate_resume_photo: { export: 'careerSections' },
 };
