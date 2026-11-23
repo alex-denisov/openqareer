@@ -10,6 +10,8 @@ import {
   type GoalExample,
 } from '../domain/goalHints';
 import { buildGoalHints, type GoalHints } from '../providers/goalHintModel';
+import { roleTitleRu } from '../vacancies/roleTitleRu';
+import { readCampaign } from './campaignContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -17,6 +19,8 @@ import { sendError, withDeps } from './helpers';
 /**
  * B744: подсказки формы цели «Дневника» под флагом B640.
  * - POST goal-examples {role} — три примера целей под роль (d02c). Вход — только роль.
+ * - GET role-title-ru?title= — русское название роли для текста d02c (онтология и свои
+ *   названия кампании, как на «Карьере»); модель не зовётся, ничего не пишется.
  * - POST goal-baseline {indicator} — значение «Сейчас» из записей кандидата с цитатой (d02b).
  * Ответы держатся в памяти процесса по входу: повтор не зовёт модель. Провал модели — не
  * ошибка, а «подсказки нет»: экран остаётся как без неё.
@@ -29,6 +33,8 @@ const TEXT_CHARS = 400;
 const CACHE_MAX = 500;
 
 const roleSchema = z.object({ role: z.string().trim().min(1).max(GOAL_ROLE_MAX) });
+const titleSchema = z.object({ title: z.string().trim().min(1).max(GOAL_ROLE_MAX) });
+const CYRILLIC = /[а-яё]/iu;
 const indicatorSchema = z.object({
   indicator: z.string().trim().min(2).max(GOAL_INDICATOR_MAX),
 });
@@ -74,6 +80,25 @@ function recentEntries(deps: RouteDeps, candidate: string): BaselineEntry[] {
     .filter((entry) => entry.text !== '');
 }
 
+/** Русское название роли без модели и без записи: онтология и свои названия кампании. */
+function registerRoleTitleRoute(app: FastifyInstance, deps: RouteDeps): void {
+  app.get(
+    `${ROOT}/role-title-ru`,
+    withDeps(deps, async (bound, request, reply) => {
+      const candidate = candidateId(bound, request, reply);
+      if (!candidate) return undefined;
+      const query = titleSchema.safeParse(request.query);
+      if (!query.success) return invalid(reply, request);
+      const title = query.data.title;
+      const own = readCampaign(bound.candidateStore, candidate).ownTitlesRu;
+      const named = roleTitleRu(title, own);
+      // Русского нет — `null`: клиент оставляет название как есть.
+      const titleRu = named !== title || CYRILLIC.test(title) ? named : null;
+      return { data: { titleRu }, meta: { requestId: request.id } };
+    }),
+  );
+}
+
 export function registerCareerDiaryGoalHintRoutes(
   app: FastifyInstance,
   deps: GoalHintRouteDeps,
@@ -97,6 +122,8 @@ export function registerCareerDiaryGoalHintRoutes(
       return { data: items ? { items } : null, meta: { requestId: request.id } };
     }),
   );
+
+  registerRoleTitleRoute(app, deps);
 
   app.post(
     `${ROOT}/goal-baseline`,

@@ -16,7 +16,11 @@ const api = vi.hoisted(() => ({
   getOverview: vi.fn(),
 }));
 vi.mock('./diaryApi', () => api);
-const hints = vi.hoisted(() => ({ getGoalExamples: vi.fn(), getGoalBaseline: vi.fn() }));
+const hints = vi.hoisted(() => ({
+  getGoalExamples: vi.fn(),
+  getGoalBaseline: vi.fn(),
+  getRoleTitleRu: vi.fn(),
+}));
 vi.mock('./goalHintsApi', () => hints);
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../resume/resumeApi', () => resume);
@@ -87,6 +91,7 @@ beforeEach(() => {
   resume.getResumeStudio.mockResolvedValue({ projection: { master: null } });
   hints.getGoalExamples.mockResolvedValue(null);
   hints.getGoalBaseline.mockResolvedValue(null);
+  hints.getRoleTitleRu.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -111,6 +116,36 @@ describe('B744 · d02c: примеры целей под роль', () => {
       'Снизить отток клиентов',
       'Собрать команду продаж',
     ]);
+  });
+
+  it('B645 23.11: роль по-английски — вопрос и подпись по-русски, модель спрашиваем английской', async () => {
+    api.getOverview.mockResolvedValue({
+      primaryWorkplace: { id: 'w1', company: 'Вектор', title: 'VP of Engineering' },
+    });
+    hints.getRoleTitleRu.mockResolvedValue('Вице-президент по разработке');
+    hints.getGoalExamples.mockResolvedValue([
+      { title: 'Сократить срок выпуска', measure: 'дней от задачи до прода' },
+    ]);
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(hints.getRoleTitleRu).toHaveBeenCalledWith('VP of Engineering');
+    expect(hints.getGoalExamples).toHaveBeenCalledWith('VP of Engineering');
+    expect(page.querySelector('.gc-title')?.textContent).toBe(
+      'Какие цели в роли «Вице-президент по разработке» в первом квартале?',
+    );
+    expect(page.querySelector('.ghost-cap')?.textContent).toBe(
+      'Пример для роли «Вице-президент по разработке»',
+    );
+  });
+
+  it('русского названия нет или сбой — роль как есть', async () => {
+    api.getOverview.mockResolvedValue({
+      primaryWorkplace: { id: 'w1', company: 'Вектор', title: 'Chief Vibe Officer' },
+    });
+    hints.getRoleTitleRu.mockRejectedValue(new Error('down'));
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelector('.gc-title')?.textContent).toBe(
+      'Какие цели в роли «Chief Vibe Officer» в первом квартале?',
+    );
   });
 
   it('примеров под роль нет — общие, подпись «Пример»; без роли модель не спрашиваем', async () => {

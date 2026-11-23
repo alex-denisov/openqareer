@@ -28,6 +28,7 @@ vi.mock('./diaryApi', () => api);
 vi.mock('./goalHintsApi', () => ({
   getGoalExamples: vi.fn(async () => null),
   getGoalBaseline: vi.fn(async () => null),
+  getRoleTitleRu: vi.fn(async () => null),
 }));
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../resume/resumeApi', () => resume);
