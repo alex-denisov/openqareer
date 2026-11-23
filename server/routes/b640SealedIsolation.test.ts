@@ -59,9 +59,10 @@ async function setup(
     try {
       return database
         .prepare(
-          'SELECT candidate_id, built_at, cipher FROM sealed_matched_lists WHERE candidate_id = ?',
+          `SELECT candidate_id, choice, built_at, cipher FROM sealed_matched_list_choices
+           WHERE candidate_id = ? ORDER BY choice`,
         )
-        .get(id);
+        .all(id);
     } finally {
       database.close();
     }
@@ -131,7 +132,7 @@ describe('B674: the new route leaves what the old route reads', () => {
     const h = await setup();
     expect((await h.get(OLD, h.user)).statusCode).toBe(200);
     const before = h.sealedRow();
-    expect(before).toBeTruthy();
+    expect(before).toHaveLength(1);
     for (const sort of SORTS) {
       for (const direction of ['asc', 'desc']) {
         expect((await h.get(`${NEW}?sort=${sort}&direction=${direction}`, h.user)).statusCode).toBe(
