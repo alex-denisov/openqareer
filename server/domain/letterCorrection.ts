@@ -13,6 +13,7 @@ const RULE_TEXT: Readonly<Record<string, string>> = {
   contact_response_formula: 'Это сообщение знакомому, не отклик работодателю: без «Откликаюсь», «Прошу рассмотреть» и похожих слов.',
   contact_new_digits: 'Не пиши цифр, которых нет в профиле кандидата.',
   contact_empty: 'Напиши само сообщение.',
+  contact_distorted: 'Пиши слова без искажений: проверь заглавные буквы и окончания.',
 };
 
 const RESUME_TEXT = {

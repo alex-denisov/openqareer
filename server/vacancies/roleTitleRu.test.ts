@@ -46,3 +46,17 @@ describe('B748: русские названия ролей, придуманны
     expect(roleTitleRu('Head of IT Operations')).toBe('Руководитель ИТ-эксплуатации');
   });
 });
+
+describe('B767: «AI» в названиях, которые перевела модель', () => {
+  it('становится «ИИ»; онтология и слова, где AI — часть слова, не меняются', () => {
+    const own = {
+      'AI Consultant': 'AI-консультант',
+      'AI Solutions Architect': 'AI-архитектор решений',
+      Mail: 'MAIL-менеджер',
+    };
+    expect(roleTitleRu('AI Consultant', own)).toBe('ИИ-консультант');
+    expect(roleTitleRu('AI Solutions Architect', own)).toBe('ИИ-архитектор решений');
+    expect(roleTitleRu('Mail', own)).toBe('MAIL-менеджер');
+    expect(roleTitleRu('CTO')).toBe('Технический директор (CTO)');
+  });
+});
