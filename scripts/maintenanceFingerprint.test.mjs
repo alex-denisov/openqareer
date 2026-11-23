@@ -90,4 +90,25 @@ describe('источники схемы из metafile сборки веб-про
       'server/vacancies/indexes.ts',
     ]);
   });
+
+  it('правка кода рядом с DDL не меняет источник схемы, правка самого DDL — меняет', () => {
+    const before = {
+      'server/vacancies/sqliteVacancyPoolStore.ts':
+        'const SCHEMA = `CREATE TABLE IF NOT EXISTS pool (id TEXT);\nCREATE INDEX IF NOT EXISTS pool_id ON pool (id)`;\nexport function read() { return 1; }',
+    };
+    const metafile = { inputs: { 'server/vacancies/sqliteVacancyPoolStore.ts': {} } };
+    const of = (texts) => schemaSourcesOf(metafile, (path) => texts[path]);
+    const codeOnly = {
+      'server/vacancies/sqliteVacancyPoolStore.ts': before[
+        'server/vacancies/sqliteVacancyPoolStore.ts'
+      ].replace('return 1', 'return 2'),
+    };
+    expect(of(codeOnly)).toEqual(of(before));
+    const ddl = {
+      'server/vacancies/sqliteVacancyPoolStore.ts': before[
+        'server/vacancies/sqliteVacancyPoolStore.ts'
+      ].replace('id TEXT)', 'id TEXT, at INTEGER)'),
+    };
+    expect(of(ddl)).not.toEqual(of(before));
+  });
 });
