@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createB640Harness } from '../testHelpers/b640VacancyHarness';
+import { SqliteNotificationRepository } from '../data/sqliteNotificationRepository';
 
 const APPS = '/api/v1/candidate/applications';
 const DAY_MS = 86_400_000;
@@ -58,7 +59,18 @@ async function setup() {
   const createInterview = async (scheduledAt: string) =>
     (await send('POST', `${APPS}/${application.id}/interviews`, { round: 1, scheduledAt })).json()
       .data.id as string;
-  return { send, application, deliveries, createInterview };
+  /** То, что заберёт отправщик в момент `now`: только напоминания этого интервью. */
+  const claimedAt = (interviewId: string, now: string) => {
+    const repository = new SqliteNotificationRepository({ databasePath: h.databasePath });
+    try {
+      return repository
+        .claimDueDeliveries(now, 100)
+        .filter((row) => row.source.type === 'interview' && row.source.id === interviewId);
+    } finally {
+      repository.close();
+    }
+  };
+  return { send, application, deliveries, createInterview, claimedAt };
 }
 
 const at = (ms: number) => new Date(Date.now() + ms).toISOString();
@@ -74,6 +86,20 @@ describe('B731: напоминание об интервью уходит за �
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ channel: 'email', status: 'pending' });
     expect(Date.parse(rows[0]!.next_attempt_at)).toBe(Date.parse(scheduledAt) - DAY_MS);
+  });
+
+  it('отправщик не берёт напоминание раньше срока — только с момента «за сутки»', async () => {
+    const { claimedAt, createInterview } = await setup();
+    const scheduledAt = at(7 * DAY_MS);
+    const due = Date.parse(scheduledAt) - DAY_MS;
+
+    const id = await createInterview(scheduledAt);
+
+    expect(claimedAt(id, new Date().toISOString())).toEqual([]);
+    expect(claimedAt(id, new Date(due - 60_000).toISOString())).toEqual([]);
+    expect(claimedAt(id, new Date(due).toISOString())).toMatchObject([
+      { channel: 'email', notification: { kind: 'interview_reminder' } },
+    ]);
   });
 
   it('если до интервью меньше суток, сразу ничего не отправляет', async () => {
