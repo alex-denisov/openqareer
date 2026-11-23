@@ -121,17 +121,17 @@ function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string
 /** Шаг «Отправка» в приложении (a01): отклик через hh.ru от имени кандидата после подтверждения. */
 export function HhSendStep(props: HhSendStepProps) {
   const resumes = useHhResumes(props.vacancyId);
-  const edits = useHhResumeEdits(props.vacancyId, resumes.snapshot);
+  const { edits, loading: editsLoading } = useHhResumeEdits(props.vacancyId, resumes.snapshot);
   const [reviewing, setReviewing] = useState(false);
-  const resumeId = resumes.snapshot?.selected?.id ?? null;
+  const selected = resumes.snapshot?.selected;
+  const resumeId = selected?.id ?? null;
   const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
   const marked = useMarkSent(props.onSent);
-  const sentHere = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
-  const done = sentHere || marked.state.kind === 'done';
+  const done = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire' || marked.state.kind === 'done';
   const busy = apply.state.kind === 'sending';
   const responsePath = buildNodePath('o01c', { responseId: props.applicationId });
-  if (reviewing && resumes.snapshot?.selected && edits.length > 0) {
-    const { selected } = resumes.snapshot;
+  if (reviewing && editsLoading) return <StatusLine state="wait" text="Готовим правки" />;
+  if (reviewing && selected && edits.length > 0) {
     return <HhResumeEdits resumeId={selected.id} resumeTitle={selected.title} edits={edits} onBack={() => setReviewing(false)} />;
   }
   return (
