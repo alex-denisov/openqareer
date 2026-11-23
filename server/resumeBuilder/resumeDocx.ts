@@ -2,6 +2,7 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  ImageRun,
   Packer,
   Paragraph,
   TabStopType,
@@ -14,7 +15,29 @@ import {
   type BuilderResume,
   type ResumeTemplate,
 } from '../../shared/resumeBuilder/model';
+import { RESUME_PHOTO_GAP_PT, RESUME_PHOTO_PT, type ResumePhoto } from './resumePhoto';
 import { TEMPLATE_STYLES, type TemplateStyle } from './templateStyle';
+
+/** 1 pt = 12 700 EMU; the gap between the photo and the head text. */
+const PHOTO_GAP_EMU = RESUME_PHOTO_GAP_PT * 12_700;
+/** 72 pt in pixels at 96 dpi: docx sizes a picture in pixels. */
+const PHOTO_PX = Math.round((RESUME_PHOTO_PT * 96) / 72);
+
+/** Фото справа вверху, обтекание текстом шапки. */
+function photoRun(photo: ResumePhoto): ImageRun {
+  return new ImageRun({
+    type: photo.format,
+    data: photo.bytes,
+    transformation: { width: PHOTO_PX, height: PHOTO_PX },
+    altText: { name: 'photo', title: 'Фото', description: 'Фото' },
+    floating: {
+      horizontalPosition: { relative: 'margin', align: 'right' },
+      verticalPosition: { relative: 'paragraph', offset: 0 },
+      wrap: { type: 1, side: 'left' },
+      margins: { left: PHOTO_GAP_EMU },
+    },
+  });
+}
 
 /** DOCX sizes are half-points; page width A4 minus margins, in twips. */
 const half = (points: number) => Math.round(points * 2);
@@ -25,12 +48,17 @@ function rightTab(style: TemplateStyle) {
   return [{ type: TabStopType.RIGHT, position: twips(A4_WIDTH_PT - style.margin * 2) }];
 }
 
-function headParagraphs(resume: BuilderResume, style: TemplateStyle): Paragraph[] {
+function headParagraphs(
+  resume: BuilderResume,
+  style: TemplateStyle,
+  photo: ResumePhoto | null,
+): Paragraph[] {
   const alignment = style.centeredHead ? AlignmentType.CENTER : AlignmentType.LEFT;
   const rows = [
     new Paragraph({
       alignment,
       children: [
+        ...(photo ? [photoRun(photo)] : []),
         new TextRun({
           text: style.nameUpper ? resume.fullName.toUpperCase() : resume.fullName,
           bold: true,
@@ -141,7 +169,11 @@ function bodyParagraphs(resume: BuilderResume, style: TemplateStyle): Paragraph[
 }
 
 /** An editable Word document: real paragraphs, bullets and tab stops, no tables. */
-export function renderResumeDocx(input: BuilderResume, template: ResumeTemplate): Promise<Buffer> {
+export function renderResumeDocx(
+  input: BuilderResume,
+  template: ResumeTemplate,
+  photo: ResumePhoto | null = null,
+): Promise<Buffer> {
   const resume = compactBuilderResume(input);
   const style = TEMPLATE_STYLES[template];
   const document = new Document({
@@ -163,7 +195,7 @@ export function renderResumeDocx(input: BuilderResume, template: ResumeTemplate)
             },
           },
         },
-        children: [...headParagraphs(resume, style), ...bodyParagraphs(resume, style)],
+        children: [...headParagraphs(resume, style, photo), ...bodyParagraphs(resume, style)],
       },
     ],
   });

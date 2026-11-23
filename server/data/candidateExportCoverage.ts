@@ -171,6 +171,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_telegram_usernames: { export: 'account' },
   search_consents: { export: 'account' },
   candidate_status_changes: { export: 'account' },
+  candidate_weekly_selection: { export: 'account' },
   candidate_status_signal_answers: { export: 'account' },
   b640_offer_choices: { export: 'account' },
   // B642: только тексты расшифровок (аудио не хранится); сегменты висят на записи.

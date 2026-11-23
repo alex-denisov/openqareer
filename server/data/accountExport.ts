@@ -37,6 +37,8 @@ export interface AccountExport {
   readonly lastVisit: Row | null;
   readonly pendingEmailChange: Row | null;
   readonly appPreferences: Row | null;
+  /** B779: «Подборку в своей роли — раз в неделю»: включена ли и когда менялась. */
+  readonly weeklySelection: Row | null;
   readonly telegramUsername: string | null;
   readonly searchConsent: Row | null;
   readonly statusChanges: readonly CandidateStatusChange[];
@@ -121,6 +123,12 @@ function readSettings(database: DatabaseSync, candidateId: string) {
       database,
       'candidate_app_preferences',
       'SELECT theme, money_currency AS moneyCurrency, updated_at AS updatedAt FROM candidate_app_preferences WHERE candidate_id = ?',
+      candidateId,
+    ),
+    weeklySelection: one(
+      database,
+      'candidate_weekly_selection',
+      'SELECT enabled, updated_at AS updatedAt FROM candidate_weekly_selection WHERE candidate_id = ?',
       candidateId,
     ),
     searchConsent: one(
