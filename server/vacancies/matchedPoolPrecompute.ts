@@ -9,6 +9,7 @@ import {
   readMatchProfile,
   setMatchedRecentTitlesReader,
   setMatchedSnapshotFailureLog,
+  setMatchedSnapshotMissLog,
   setMatchedSnapshotStore,
   preloadMatchedSnapshots,
 } from './matchedPoolContext';
@@ -59,6 +60,9 @@ export class MatchedPoolPrecompute {
   private warmList: MatchedListWarmer | undefined;
   /** Each candidate is checked once per process: new facts rebuild roles on their own routes. */
   private readonly rolesChecked = new Set<string>();
+  /** B770: who the running pass is on and who is still ahead of it, for the miss log. */
+  private current: string | undefined;
+  private readonly ahead = new Set<string>();
   /** The first pass loads the stored snapshots before it builds anything (prod 19.11). */
   private preloaded = false;
   private readonly pauseMs: number;
@@ -82,6 +86,9 @@ export class MatchedPoolPrecompute {
         'matched-snapshot-rebuild-failed',
       ),
     );
+    setMatchedSnapshotMissLog(options.engine, (miss) =>
+      this.log?.info({ ...miss, precompute: this.stateOf(miss.candidateId) }, 'matched-snapshot-miss'),
+    );
     const sealedSnapshots = options.candidateStore.sealedMatchedLists?.snapshots;
     if (sealedSnapshots) setMatchedSnapshotStore(options.engine, sealedSnapshots);
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
@@ -93,6 +100,12 @@ export class MatchedPoolPrecompute {
     const index = this.priority.indexOf(candidateId);
     if (index >= 0) this.priority.splice(index, 1);
     this.priority.unshift(candidateId);
+  }
+
+  /** `on` — the pass is building this candidate now; `ahead` — it will; `idle` — it is not. */
+  stateOf(candidateId: string): 'on' | 'ahead' | 'idle' {
+    if (this.current === candidateId) return 'on';
+    return this.ahead.has(candidateId) ? 'ahead' : 'idle';
   }
 
   setLogger(log: Logger): void {
@@ -122,6 +135,7 @@ export class MatchedPoolPrecompute {
   private async runOnce(): Promise<void> {
     const startedAt = this.now();
     const candidates = this.nextCandidates();
+    candidates.forEach((candidateId) => this.ahead.add(candidateId));
     if (!this.preloaded) {
       this.preloaded = true;
       const loaded = await preloadMatchedSnapshots(this.options.engine, candidates);
@@ -131,6 +145,8 @@ export class MatchedPoolPrecompute {
     let errors = 0;
     for (const candidateId of candidates) {
       const candidateStartedAt = this.now();
+      this.ahead.delete(candidateId);
+      this.current = candidateId;
       try {
         await this.precompute(candidateId);
       } catch (error) {
@@ -140,6 +156,7 @@ export class MatchedPoolPrecompute {
           'matched-precompute-candidate-failed',
         );
       }
+      this.current = undefined;
       durationsMs.push(this.now() - candidateStartedAt);
       if (this.pauseMs > 0) await pause(this.pauseMs);
     }

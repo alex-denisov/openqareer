@@ -10,6 +10,8 @@ import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAss
 export type RoleSkillAssessmentCurrent =
   | { state: 'role_not_selected' }
   | { state: 'source_unavailable' }
+  /** B770: вакансии роли ещё подбираются; повтор через минуту получит проверку. */
+  | { state: 'counting' }
   | { state: 'too_few_vacancies'; roleTitle: string; sampleSize: number; threshold: number }
   | {
       state: 'insufficient_requirements';

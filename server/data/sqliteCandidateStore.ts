@@ -673,6 +673,8 @@ export class SqliteCandidateStore implements CandidateStore {
   declare setDocumentRetention: SqliteCandidateStoreDocumentMethods['setDocumentRetention'];
   declare purgeExpiredDocuments: SqliteCandidateStoreDocumentMethods['purgeExpiredDocuments'];
   declare exportCandidate: CandidateStore['exportCandidate'];
+  /** B738: что последний шаг выгрузки убрал как служебное (см. `withoutForbiddenKeys`). */
+  declare exportCandidateStripReport: (candidateId: string) => string[];
   declare createExecutiveRequest: NonNullable<CandidateStore['createExecutiveRequest']>;
   declare listExecutiveRequests: NonNullable<CandidateStore['listExecutiveRequests']>;
   declare getExecutiveRequest: NonNullable<CandidateStore['getExecutiveRequest']>;
