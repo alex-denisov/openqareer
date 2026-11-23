@@ -41,6 +41,8 @@ const MAX_ALTERNATIVES = 3;
 /** Between two skills: «или», «or», «/» or a comma of the same list («Python, Go или Java»). */
 const JOINT = /^\s*(?:,|\/|или|or)\s*$/iu;
 const ALTERNATIVE = /\/|или|\bor\b/iu;
+/** После последнего навыка списка — ещё вариант: «… или Яндекс Облако». */
+const MORE_AFTER = /^\s*(?:\/|или|or)\s*[\p{L}\p{N}]/iu;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
@@ -76,7 +78,9 @@ function alternativesLabel(text: string, skills: readonly string[]): string | un
   if (!joints.every((joint) => JOINT.test(joint)) || !joints.some((joint) => ALTERNATIVE.test(joint))) return undefined;
   const names = ordered.map((item) => item.skill);
   const shown = fittingAlternatives(names);
-  return shown.length < names.length ? `${shown.join(' или ')}…` : shown.join(' или ');
+  // «AWS или GCP или Azure или Яндекс Облако»: последний вариант — не известный навык, но он есть.
+  const more = MORE_AFTER.test(text.slice(ordered[ordered.length - 1].span!.end));
+  return shown.length < names.length || more ? `${shown.join(' или ')}…` : shown.join(' или ');
 }
 
 /**
