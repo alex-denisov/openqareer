@@ -1,5 +1,6 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
+import { syncSection } from '../observability/syncSections';
 
 /**
  * Один снимок подбора на одно чтение пула.
@@ -251,7 +252,9 @@ export class MatchedPoolSnapshots {
 
   /** A snapshot of the previous process: it counts as read after the current pool writes. */
   private loadStored(candidateId: string, profileKey: string, key: string): Snapshot | undefined {
-    const persisted = this.guard(() => this.store?.read(candidateId, profileKey));
+    const persisted = syncSection('snapshot:load', () =>
+      this.guard(() => this.store?.read(candidateId, profileKey)),
+    );
     if (!persisted) return undefined;
     const snapshot = {
       items: persisted.items,
@@ -363,7 +366,11 @@ export class MatchedPoolSnapshots {
     const split = key.indexOf(' ');
     const candidateId = key.slice(0, split);
     const profileKey = key.slice(split + 1);
-    setImmediate(() => this.guard(() => store.write(candidateId, profileKey, snapshot)));
+    setImmediate(() =>
+      syncSection('snapshot:store', () =>
+        this.guard(() => store.write(candidateId, profileKey, snapshot)),
+      ),
+    );
   }
 
   private evict(now: number): void {
