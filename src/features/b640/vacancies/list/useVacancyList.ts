@@ -9,6 +9,7 @@ import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { MoneyCurrency } from '../format';
 import type { VacancyLinks } from '../vacancyLinks';
 import {
+  DATE_OPTIONS,
   EMPTY_FILTERS,
   applyFilters,
   blockersOf,
@@ -18,7 +19,7 @@ import {
   type ListFilters,
 } from './filterModel';
 import { defaultRoles } from './defaultRoles';
-import { buildOptions, listCount, type FilterOptions } from './filterOptions';
+import { buildOptions, listCount, serverCountState, type FilterOptions } from './filterOptions';
 import {
   useServerSortedList,
   type ServerListStatus,
@@ -144,6 +145,11 @@ function useBlockers(
   return useMemo(() => (empty ? blockersOf(base, filters, context) : []), [empty, base, filters, currency, rates, now]);
 }
 
+/** «Дата» в днях для сервера (B726); «Любая» — `null`. */
+export function serverDays(filters: ListFilters): number | null {
+  return DATE_OPTIONS.find((option) => option.id === filters.date)?.days ?? null;
+}
+
 /** Выбраны фильтры, которые считает клиент (локации, формат, деньги, дата, релокация): сервер их не знает. */
 export function isNarrowed(filters: ListFilters): boolean {
   const { locations, formats, reloc, moneyFrom, date } = filters;
@@ -172,9 +178,16 @@ function useListRows(input: RowsInput): DerivedRows {
     () => buildOptions(poolBase, pool.facets, now, pool.complete),
     [poolBase, pool.facets, now, pool.complete],
   );
-  const narrowed = isNarrowed(filters);
+  // B726: «Дату» в серверном порядке режет и считает сервер — число известно сразу.
+  const narrowed = isNarrowed(serverMode ? { ...filters, date: 'any' } : filters);
   // Серверный итог уже без скрытых в этой сессии (их вычел список порций), пул — нет.
-  const known = serverMode && server.total > 0 ? server.total : pool.total - hidden.size;
+  const { serverKnows, serverPending } = serverCountState({
+    serverMode,
+    dated: serverDays(filters) !== null,
+    total: server.total,
+    loadingFirst: server.rows.length === 0 && server.status === 'loading',
+  });
+  const known = serverKnows ? server.total : pool.total - hidden.size;
   const counted = listCount({ narrowed, complete: pool.complete, serverMode, known, filtered: all.length });
   const { count } = counted;
   const visible = serverMode ? all : visibleSlice(all, shown);
@@ -193,7 +206,7 @@ function useListRows(input: RowsInput): DerivedRows {
     count,
     blockers,
     more,
-    countKnown: counted.countKnown && (!serverMode || foot.countKnown),
+    countKnown: counted.countKnown && (!serverMode || foot.countKnown) && !serverPending,
   };
 }
 
@@ -230,7 +243,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
   const serverMode = serverSortApplies(pool);
-  const server = useServerSortedList(serverMode, sortState, filters.roles, hidden);
+  const server = useServerSortedList(serverMode, sortState, filters.roles, hidden, serverDays(filters));
   // Порядок по умолчанию на время первой порции сервера показываем из пула, чтобы таблица не мигала пустой.
   const waitingFirst = server.status === 'loading' && server.rows.length === 0 && sortState === DEFAULT_LIST_SORT;
   const derived = useListRows({

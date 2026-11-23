@@ -215,6 +215,8 @@ function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacan
     cluster.canonicalCompany = vacancy.company;
     if (vacancy.employerIsPerson === true) cluster.employerIsPerson = true;
     else delete cluster.employerIsPerson;
+    if ((vacancy.company ?? '').trim()) delete cluster.companyUnspecified;
+    else cluster.companyUnspecified = true;
   }
 }
 
@@ -361,6 +363,8 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     id: `cluster-${vacancy.id}`,
     canonicalTitle: vacancy.title,
     canonicalCompany: vacancy.company,
+    // B756: пустая компания — явный признак, а не только пустая строка.
+    ...((vacancy.company ?? '').trim() ? {} : { companyUnspecified: true as const }),
     ...(vacancy.employerIsPerson === true ? { employerIsPerson: true } : {}),
     canonicalLocation: vacancy.location,
     isRemote: Boolean(vacancy.isRemote),
