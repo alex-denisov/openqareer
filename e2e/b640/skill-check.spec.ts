@@ -139,6 +139,25 @@ test.describe('B653: «Карьера» — проверка навыков C04'
     await expect(screen.getByText('Управление сроками · вопрос 5 из 6')).toBeVisible();
   });
 
+  test('B767: два варианта одной роли с одним русским названием — на выбор одна роль', async ({
+    page,
+  }) => {
+    await openSkillCheck(page, `${PATH}?role=${encodeURIComponent('VP of Engineering')}`, {
+      ready: true,
+      searchRoles: ['VP of Engineering', 'Head of Technical Support', 'Customer Support Director'],
+      insufficient: ['VP of Engineering'],
+      titlesRu: {
+        'Head of Technical Support': 'Руководитель службы поддержки',
+        'Customer Support Director': 'Руководитель службы поддержки',
+      },
+    });
+    const screen = node(page, 'c04');
+    await expect(screen.getByRole('link', { name: /^Проверить «/u })).toHaveCount(1);
+    await expect(
+      screen.getByRole('link', { name: 'Проверить «Руководитель службы поддержки»' }),
+    ).toBeVisible();
+  });
+
   test('C4: «Пропустить · продолжу позже» ведёт к ролям', async ({ page }) => {
     await openSkillCheck(page, PATH);
     await node(page, 'c04').getByRole('button', { name: 'Пропустить · продолжу позже' }).click();

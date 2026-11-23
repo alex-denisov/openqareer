@@ -1,9 +1,10 @@
 import { convertAmount, type CurrencyRates } from '../../../../shared/currencyRates';
+import { monthlyAmount, salaryPeriodOf } from '../../../../shared/monthlyRubSalary';
 import type { VacancyFitTier } from '../../../../shared/vacancyFitPercent';
 import { workFormatLabel } from '../../../../shared/vacancyWorkFormat';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { compactPlaceLabel } from '../../vacancies/VacancyScreenRowCells';
-import { formatCompensationCompact } from '../../vacancies/vacancyCompensation';
+import { formatCompensationCompact, formatRateAmounts } from '../../vacancies/vacancyCompensation';
 import { hasRemoteMark, vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
 import { vacancyFormat } from '../../vacancies/vacancyScreenCriteria';
 
@@ -121,27 +122,52 @@ function ratesNote(rates: CurrencyRates, target: MoneyCurrency): string {
   return `курс ЦБ на ${day}.${month}${pairs.length > 0 ? `: ${pairs.join(', ')}` : ''}`;
 }
 
+type SalaryPeriod = 'hour' | 'month' | 'year';
+type ClusterSalary = NonNullable<MatchedVacancyItem['cluster']['salary']>;
+
+const PERIOD_WORDS: Readonly<Record<SalaryPeriod, string>> = {
+  hour: ' в час',
+  month: '',
+  year: ' в год',
+};
+
+/** Сумма как в вакансии, с периодом: «$218–265 тыс. в год», «$250–400 в час». */
+function originalText(salary: ClusterSalary, period: SalaryPeriod): string {
+  if (period === 'hour') return `${formatRateAmounts(salary)}${PERIOD_WORDS.hour}`;
+  return `${formatCompensationCompact(salary)}${PERIOD_WORDS[period]}`;
+}
+
+/** B765: колонка — в месяц (правило периода общее с сервером), ставка в час — как есть. */
+function shownAmounts(salary: ClusterSalary, period: SalaryPeriod): ClusterSalary {
+  if (period === 'hour') return salary;
+  return { ...salary, from: monthlyAmount(salary.from, period), to: monthlyAmount(salary.to, period) };
+}
+
 /** Деньги строки и карточки: в выбранной валюте по курсу ЦБ, без курса — как в вакансии. */
 export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): MoneyView {
   const salary = item.cluster.salary;
-  const original = formatCompensationCompact(salary);
-  if (!salary || (salary.from === undefined && salary.to === undefined)) return { text: original };
+  if (!salary || (salary.from === undefined && salary.to === undefined))
+    return { text: formatCompensationCompact(salary) };
+  const period = salaryPeriodOf(salary, options.rates);
+  const original = originalText(salary, period);
   const target = options.currency;
   const source = salary.currency ?? '';
   if (target === 'ORIG' || !source) return splitRouble(original);
-  if (target === 'RUB' && isRouble(source)) return splitRouble(original);
-  const from =
-    salary.from === undefined ? undefined : convertAmount(salary.from, source, target, options.rates);
-  const to =
-    salary.to === undefined ? undefined : convertAmount(salary.to, source, target, options.rates);
+  if (target === 'RUB' && isRouble(source) && period === 'month') return splitRouble(original);
+  const shown = shownAmounts(salary, period);
+  const convert = (amount: number | undefined) =>
+    amount === undefined ? undefined : convertAmount(amount, source, target, options.rates);
+  const from = convert(shown.from);
+  const to = convert(shown.to);
   const missing =
-    (salary.from !== undefined && from === undefined) ||
-    (salary.to !== undefined && to === undefined);
+    (shown.from !== undefined && from === undefined) || (shown.to !== undefined && to === undefined);
   if (missing || !options.rates) return splitRouble(original);
-  const converted = formatCompensationCompact({ ...salary, from, to, currency: target });
+  const suffix = period === 'hour' ? PERIOD_WORDS.hour : '';
+  const converted = `${formatCompensationCompact({ ...salary, from, to, currency: target })}${suffix}`;
   if (converted === original) return splitRouble(original);
+  const view = suffix ? { text: `≈ ${converted}` } : splitRouble(`≈ ${converted}`);
   return {
-    ...splitRouble(`≈ ${converted}`),
+    ...view,
     title: `В вакансии ${original}; ${ratesNote(options.rates, target)}`,
   };
 }

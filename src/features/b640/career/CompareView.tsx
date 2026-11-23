@@ -27,7 +27,15 @@ function market(row: RoleRow): string {
 
 function CheckTag({ row }: { readonly row: RoleRow }) {
   const tag = compareCheckTag(row);
-  return <span className={tag.ok ? 'tag ok' : 'tag miss'}>{tag.text}</span>;
+  const className = tag.ok ? 'tag ok' : 'tag miss';
+  // B764: проверка под другим названием роли — ссылка на сам прогон, а не на «мало требований».
+  if (tag.role)
+    return (
+      <Link className={className} to={skillCheckPath(tag.role)}>
+        {tag.text}
+      </Link>
+    );
+  return <span className={className}>{tag.text}</span>;
 }
 
 interface PickProps {

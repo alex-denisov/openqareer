@@ -19,7 +19,6 @@ export type CandidateTableCoverage =
 
 const GAP_ACCOUNT = 'учётная запись и кабинет: в выгрузку пока не входят';
 const GAP_AUTOMATION = 'автоотклики и hh.ru: в выгрузку пока не входят';
-const GAP_CONTENT = 'черновики, посты, тексты и LinkedIn: в выгрузку пока не входят';
 const GAP_CONTACTS = 'контакты и переписка: в выгрузку пока не входят';
 const GAP_CAREER = 'карьерные разделы кабинета: в выгрузку пока не входят';
 const MIGRATION_COPY = 'временная копия таблицы при перестройке схемы';
@@ -152,6 +151,16 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   skill_quiz_attempts: { export: 'profileHistory' },
   consultant_rejections: { export: 'profileHistory' },
   consultant_summaries: { export: 'consultantConversations' },
+  candidate_drafts: { export: 'content' },
+  candidate_draft_topic_decisions: { export: 'content' },
+  candidate_draft_workflow: { export: 'content' },
+  candidate_feed_posts: { export: 'content' },
+  text_variants: { export: 'content' },
+  candidate_linkedin_offer_variants: { export: 'content' },
+  candidate_linkedin_queue: { export: 'content' },
+  candidate_linkedin_rhythm: { export: 'content' },
+  candidate_linkedin_section_events: { export: 'content' },
+  candidate_linkedin_sections: { export: 'content' },
   users: { gap: GAP_ACCOUNT },
   billing_invoices: { gap: GAP_ACCOUNT },
   career_partner_assignments: { gap: GAP_ACCOUNT },
@@ -183,16 +192,6 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   hh_raise_schedules: { gap: GAP_AUTOMATION },
   hh_raise_tasks: { gap: GAP_AUTOMATION },
   hh_resume_snapshots: { gap: GAP_AUTOMATION },
-  candidate_drafts: { gap: GAP_CONTENT },
-  candidate_draft_topic_decisions: { gap: GAP_CONTENT },
-  candidate_draft_workflow: { gap: GAP_CONTENT },
-  candidate_feed_posts: { gap: GAP_CONTENT },
-  text_variants: { gap: GAP_CONTENT },
-  candidate_linkedin_offer_variants: { gap: GAP_CONTENT },
-  candidate_linkedin_queue: { gap: GAP_CONTENT },
-  candidate_linkedin_rhythm: { gap: GAP_CONTENT },
-  candidate_linkedin_section_events: { gap: GAP_CONTENT },
-  candidate_linkedin_sections: { gap: GAP_CONTENT },
   recruiter_contacts: { gap: GAP_CONTACTS },
   recruiter_contact_channels: { gap: GAP_CONTACTS },
   recruiter_contact_jobs: { gap: GAP_CONTACTS },

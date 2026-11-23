@@ -137,6 +137,8 @@ export interface SkillOptions {
   readonly searchRoles?: readonly string[];
   /** Роли, требований которых мало: `insufficient_requirements`, сбор не идёт. */
   readonly insufficient?: readonly string[];
+  /** B767: русские названия ролей поиска в ответе кампании. */
+  readonly titlesRu?: Readonly<Record<string, string>>;
 }
 
 function answered(run: SkillRun, caseId: string, answer: string): SkillRun {
@@ -216,6 +218,7 @@ export async function openSkillCheck(
         data: {
           roles: { value: searchRoles, origin: 'explicit' },
           regions: { value: [], origin: 'default' },
+          ...(options.titlesRu ? { titlesRu: options.titlesRu } : {}),
         },
       },
     }),
