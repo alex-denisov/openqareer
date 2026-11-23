@@ -35,10 +35,12 @@ function cached(item: HhResumeItem, now: number): HhResumeContent | undefined {
 const pause = (pace: ReadPace) =>
   new Promise<void>((resolve) => setTimeout(resolve, pace.minMs + Math.random() * (pace.maxMs - pace.minMs)));
 
-/** Текст для сверки — начало резюме; целиком страница сохраняется только у выбранного. */
+/**
+ * Текст для сверки — начало резюме; целиком страница сохраняется только у выбранного.
+ * Разделы остаются: по ним сервер считает «N правок» каждого резюме в листе a01b.
+ */
 export function forReview(content: HhResumeContent): HhResumeContent {
-  const { sections: _sections, ...rest } = content;
-  return { ...rest, text: content.text.slice(0, HH_REVIEW_TEXT_MAX_LENGTH) };
+  return { ...content, text: content.text.slice(0, HH_REVIEW_TEXT_MAX_LENGTH) };
 }
 
 export async function readResumesForReview(

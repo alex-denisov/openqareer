@@ -1,40 +1,39 @@
 import { useId, useState } from 'react';
-import type { HhResumeFit } from '../../../../../shared/hhCandidateSession';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
-import { Button, Dialog, InfoTip, StatusLine } from '../../kit';
-import type { HhResumeVacancyReview } from './hhSessionApi';
+import { Button, Dialog, StatusLine } from '../../kit';
+import { editsWord } from './HhResumeEdits';
 import type { HhPicker } from './useHhResumes';
 
 interface ResumeChoicesProps {
   readonly resumes: readonly HhResumeItem[];
-  readonly review: HhResumeVacancyReview | null;
+  readonly edits: ReadonlyMap<string, number>;
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
+  readonly plain: ReadonlySet<string>;
+  readonly onOptimize: (id: string, on: boolean) => void;
 }
 
-/** B678: «подходит» или «не хватает: …»; сверка — в ⓘ. Несверенное резюме метки не получает. */
-function FitTag({ fit, recommended }: { readonly fit: HhResumeFit | undefined; readonly recommended: boolean }) {
-  if (!fit || fit.status === 'unread') return null;
-  const label = fit.status === 'fits' ? 'подходит' : `не хватает: ${fit.missing.join(', ')}`;
-  const detail = [
-    fit.matched.length > 0 ? `Есть в резюме: ${fit.matched.join(', ')}.` : 'Требований вакансии в резюме нет.',
-    fit.missing.length > 0 ? `Нет в резюме: ${fit.missing.join(', ')}.` : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+/** a01b: «5 правок» или «Без правок»; правки не посчитаны — метки нет. */
+function EditsTag({ count }: { readonly count: number | undefined }) {
+  if (count === undefined) return null;
   return (
     <span className="hh2-st">
-      {recommended ? <span className="tag ok">Рекомендуем</span> : null}
-      <span className={fit.status === 'fits' ? 'tag ok' : 'tag part'}>{label}</span>
-      <InfoTip label="Сверка с вакансией" text={detail} />
+      <span className={count > 0 ? 'tag part' : 'tag'}>{editsWord(count)}</span>
     </span>
   );
 }
 
-function ResumeChoices({ resumes, review, selectedId, onSelect }: ResumeChoicesProps) {
+function ResumeChoices({
+  resumes,
+  edits,
+  selectedId,
+  onSelect,
+  plain,
+  onOptimize,
+}: ResumeChoicesProps) {
   const name = useId();
   return (
-    <ul className="hh2-picks" aria-label="Резюме на hh.ru">
+    <ul className="hh2-picks" aria-label="Резюме hh.ru">
       {resumes.map((resume) => (
         <li className="hh2-pick" key={resume.id}>
           <label className="vt-opt">
@@ -49,10 +48,17 @@ function ResumeChoices({ resumes, review, selectedId, onSelect }: ResumeChoicesP
               {resume.updatedLabel ? <span className="hh2-sub"> · {resume.updatedLabel}</span> : null}
             </span>
           </label>
-          <FitTag
-            fit={review?.resumes.find((fit) => fit.resumeId === resume.id)}
-            recommended={review?.recommendedId === resume.id}
-          />
+          <EditsTag count={edits.get(resume.id)} />
+          {(edits.get(resume.id) ?? 0) > 0 ? (
+            <label className="hh2-opt">
+              <input
+                type="checkbox"
+                checked={!plain.has(resume.id)}
+                onChange={(event) => onOptimize(resume.id, event.target.checked)}
+              />
+              Оптимизировать
+            </label>
+          ) : null}
         </li>
       ))}
     </ul>
@@ -63,6 +69,8 @@ interface SheetBodyProps {
   readonly picker: HhPicker;
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
+  readonly plain: ReadonlySet<string>;
+  readonly onOptimize: (id: string, on: boolean) => void;
   readonly onSignIn: () => void;
   readonly onRetry: () => void;
 }
@@ -79,7 +87,11 @@ function stopLine(picker: HhPicker, onSignIn: () => void) {
 }
 
 /** Нет входа, нет резюме или сбой: строка состояния и под ней «Прочитать снова». */
-function SheetStop({ picker, onSignIn, onRetry }: Omit<SheetBodyProps, 'selectedId' | 'onSelect'>) {
+function SheetStop({
+  picker,
+  onSignIn,
+  onRetry,
+}: Pick<SheetBodyProps, 'picker' | 'onSignIn' | 'onRetry'>) {
   return (
     <div className="hh2-sec">
       {stopLine(picker, onSignIn)}
@@ -99,9 +111,11 @@ function SheetBody(props: SheetBodyProps) {
     return (
       <ResumeChoices
         resumes={picker.resumes}
-        review={picker.review}
+        edits={picker.edits}
         selectedId={props.selectedId}
         onSelect={props.onSelect}
+        plain={props.plain}
+        onOptimize={props.onOptimize}
       />
     );
   }
@@ -116,20 +130,35 @@ interface SheetProps {
   readonly onClose: () => void;
   readonly onSignIn: () => void;
   readonly onRetry: () => void;
-  readonly onChoose: (item: HhResumeItem) => void;
+  /** `optimize` — у выбранного есть правки и «Оптимизировать» отмечено: дальше разбор правок. */
+  readonly onChoose: (item: HhResumeItem, optimize: boolean) => void;
 }
 
 /** Лист a01b «Какими резюме откликаться»: список из сессии hh.ru кандидата. */
 export function HhResumeSheet(props: SheetProps) {
   const { picker, currentId, saving, onClose, onChoose, onRetry } = props;
   const [picked, setPicked] = useState<string | null>(null);
+  // «Оптимизировать» отмечено по умолчанию (a01b); здесь — резюме, у которых его сняли.
+  const [plain, setPlain] = useState<ReadonlySet<string>>(new Set());
+  const optimizeChange = (id: string, on: boolean) =>
+    setPlain(
+      (current) => new Set([...current].filter((item) => item !== id).concat(on ? [] : [id])),
+    );
   const recommendedId = picker.kind === 'choose' ? (picker.review?.recommendedId ?? null) : null;
   // B678: пока кандидат не выбрал сам, выбрано рекомендованное; без сверки — то, которым он откликается.
   const selectedId = picked ?? recommendedId ?? currentId;
   const chosen = picker.kind === 'choose' ? picker.resumes.find((item) => item.id === selectedId) : undefined;
   const footer =
     picker.kind === 'choose' ? (
-      <Button variant="primary" busy={saving} disabled={!chosen} onClick={() => chosen && onChoose(chosen)}>
+      <Button
+        variant="primary"
+        busy={saving}
+        disabled={!chosen}
+        onClick={() =>
+          chosen &&
+          onChoose(chosen, (picker.edits.get(chosen.id) ?? 0) > 0 && !plain.has(chosen.id))
+        }
+      >
         Продолжить
       </Button>
     ) : undefined;
@@ -145,6 +174,8 @@ export function HhResumeSheet(props: SheetProps) {
         picker={picker}
         selectedId={selectedId}
         onSelect={setPicked}
+        plain={plain}
+        onOptimize={optimizeChange}
         onSignIn={props.onSignIn}
         onRetry={onRetry}
       />

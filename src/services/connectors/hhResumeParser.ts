@@ -314,7 +314,47 @@ function resumeCardTitle(linkHtml: string): string {
   return name || text;
 }
 
-export function parseHhResumesList(html: string): Array<{
+const MONTHS = 'января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря';
+const UPDATE_STAMP = new RegExp(
+  `Обновлено\\s+(?:(сегодня|вчера)|(\\d{1,2})\\s+(${MONTHS})(?:\\s+(\\d{4}))?)`,
+  'iu',
+);
+
+/**
+ * B678, лист a01b: дата обновления резюме словами hh.ru, коротко, как в макете —
+ * «обновлено 3 ноября» в этом году, «обновлено в 2023» раньше. Нет даты на карточке — нет и подписи.
+ */
+function updatedLabelOf(cardHtml: string, now: Date): string | undefined {
+  const stamp = UPDATE_STAMP.exec(plainText(cardHtml));
+  if (!stamp) return undefined;
+  const [, relative, day, month, year] = stamp;
+  if (relative) return `обновлено ${relative}`;
+  if (year && Number(year) !== now.getFullYear()) return `обновлено в ${year}`;
+  return `обновлено ${day} ${month}`;
+}
+
+interface ResumeLink {
+  readonly id: string;
+  readonly at: number;
+  readonly title: string;
+}
+
+function resumeLinks(html: string): ResumeLink[] {
+  const links: ResumeLink[] = [];
+  const resumeLinkRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
+  let match: RegExpExecArray | null;
+  while ((match = resumeLinkRegex.exec(html)) !== null) {
+    const href = /(?:^|\s)href=["']([^"']+)["']/iu.exec(match[1])?.[1];
+    const id = href ? resumeIdFromHref(href) : undefined;
+    if (id) links.push({ id, at: match.index, title: resumeCardTitle(match[2]) });
+  }
+  return links;
+}
+
+export function parseHhResumesList(
+  html: string,
+  now: Date = new Date(),
+): Array<{
   id: string;
   title: string;
   url: string;
@@ -336,30 +376,27 @@ export function parseHhResumesList(html: string): Array<{
   // resume list, read inside their own signed-in session, already identifies a
   // resume; the caller has verified both the host and that the page really is
   // that list.
-  const resumeLinkRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
-  let match: RegExpExecArray | null;
-  while ((match = resumeLinkRegex.exec(html)) !== null) {
-    const attributes = match[1];
-    const href = /(?:^|\s)href=["']([^"']+)["']/iu.exec(attributes)?.[1];
-    const resumeId = href ? resumeIdFromHref(href) : undefined;
-    if (!resumeId) continue;
-    const title = resumeCardTitle(match[2]);
-    const existing = resumes.find((resume) => resume.id === resumeId);
+  const links = resumeLinks(html);
+  links.forEach((link, index) => {
+    const existing = resumes.find((resume) => resume.id === link.id);
     if (!existing) {
+      // Карточка — от её первой ссылки до ссылки на другое резюме.
+      const next = links.slice(index + 1).find((other) => other.id !== link.id);
+      const updatedLabel = updatedLabelOf(html.slice(link.at, next?.at ?? html.length), now);
       resumes.push({
-        id: resumeId,
-        title: title || 'Резюме hh.ru',
-        url: `https://hh.ru/resume/${resumeId}`,
-        updatedLabel: 'Готово к импорту',
+        id: link.id,
+        title: link.title || 'Резюме hh.ru',
+        url: `https://hh.ru/resume/${link.id}`,
+        ...(updatedLabel ? { updatedLabel } : {}),
       });
-      continue;
+      return;
     }
     // One card links the same resume more than once — from its title and from
     // an icon with no text. Keep the label a human can recognise.
-    if (title.length > existing.title.length || existing.title === 'Резюме hh.ru') {
-      if (title) existing.title = title;
+    if (link.title.length > existing.title.length || existing.title === 'Резюме hh.ru') {
+      if (link.title) existing.title = link.title;
     }
-  }
+  });
 
   return resumes;
 }

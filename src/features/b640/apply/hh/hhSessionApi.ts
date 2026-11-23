@@ -73,9 +73,13 @@ export interface HhResumeEdits {
   readonly edits: readonly HhResumeEdit[];
 }
 
-/** B678: правки выбранного резюме hh.ru «было → станет» по профилю платформы. */
-export async function getHhResumeEdits(vacancyId: string, signal?: AbortSignal): Promise<HhResumeEdits> {
-  const query = new URLSearchParams({ vacancyId }).toString();
+/** B678: правки резюме hh.ru «было → станет» по профилю платформы; без `resumeId` — выбранного. */
+export async function getHhResumeEdits(
+  vacancyId: string,
+  signal?: AbortSignal,
+  resumeId?: string,
+): Promise<HhResumeEdits> {
+  const query = new URLSearchParams({ vacancyId, ...(resumeId ? { resumeId } : {}) }).toString();
   const response = await apiFetch(`${BASE}/resumes/edits?${query}`, { signal });
   return readDataObject<HhResumeEdits>(response);
 }

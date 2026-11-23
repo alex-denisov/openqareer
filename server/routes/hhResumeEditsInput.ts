@@ -16,6 +16,18 @@ export function selectedWithSections(snapshot: HhResumeSnapshot | null): Selecte
   return selected?.sections ? { ...selected, sections: selected.sections } : null;
 }
 
+/**
+ * Резюме с прочитанными разделами: выбранное или любое прочитанное для сверки (лист a01b
+ * показывает «N правок» у каждого). Без `resumeId` — выбранное.
+ */
+export function resumeWithSections(snapshot: HhResumeSnapshot | null, resumeId?: string): SelectedWithSections | null {
+  const id = resumeId ?? snapshot?.selected?.id;
+  const selected = selectedWithSections(snapshot);
+  if (selected && selected.id === id) return selected;
+  const content = snapshot?.contents?.find((item) => item.id === id);
+  return content?.sections ? { ...content, sections: content.sections } : null;
+}
+
 function platformPlaces(deps: RouteDeps, candidateId: string, cluster: VacancyCluster) {
   const master = currentMaster(deps, candidateId);
   const targeted = buildTargetedResumeSlice(master.document, {

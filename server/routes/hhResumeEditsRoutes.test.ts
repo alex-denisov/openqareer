@@ -92,9 +92,51 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     const places = Array.from({ length: 30 }, () => ({ employer: 'Компания', title: 'Должность', period: '2020 — 2021', text: 'я'.repeat(4_000) }));
     const response = await call('PUT', RESUMES, {
       resumes,
-      selected: { id: 'r0', title: 'Резюме 0', text, sections: { ...SECTIONS, about: 'я'.repeat(4_000), places } },
-      contents: resumes.map((resume) => ({ ...resume, text })),
+      selected: {
+        id: 'r0',
+        title: 'Резюме 0',
+        text,
+        sections: { ...SECTIONS, about: 'я'.repeat(4_000), places },
+      },
+      contents: resumes.map((resume) => ({
+        ...resume,
+        text,
+        sections: { ...SECTIONS, about: 'я'.repeat(4_000), places },
+      })),
     });
     expect(response.statusCode).toBe(200);
+  });
+
+  it('правки любого прочитанного резюме списка — по его разделам (метка «N правок» в листе a01b)', async () => {
+    const { call } = await harness();
+    const other = {
+      id: 'lead',
+      title: 'Тимлид',
+      text: 'Тимлид. Kubernetes.',
+      sections: { ...SECTIONS, skills: ['Kubernetes', 'PostgreSQL', 'Node.js', 'TypeScript'] },
+    };
+    await call('PUT', RESUMES, {
+      resumes: [...SNAPSHOT.resumes, { id: 'lead', title: 'Тимлид' }],
+      selected: SNAPSHOT.selected,
+      contents: [other],
+    });
+
+    const response = await call('GET', `${EDITS}&resumeId=lead`);
+    expect(response.statusCode).toBe(200);
+    const { data } = response.json();
+    expect(data.resumeId).toBe('lead');
+    expect(
+      data.edits.find((edit: { section: string }) => edit.section === 'skills'),
+    ).toBeUndefined();
+    const missing = await call('GET', `${EDITS}&resumeId=nope`);
+    expect(missing.statusCode).toBe(409);
+  });
+
+  it('выбранное без разделов, но прочитанное для сверки — правки по прочитанному', async () => {
+    const { call } = await harness();
+    const { sections, ...plain } = SNAPSHOT.selected;
+    await call('PUT', RESUMES, { ...SNAPSHOT, selected: plain, contents: [{ ...plain, sections }] });
+    expect((await call('GET', `${EDITS}&resumeId=dev`)).statusCode).toBe(200);
+    expect((await call('GET', EDITS)).statusCode).toBe(200);
   });
 });
