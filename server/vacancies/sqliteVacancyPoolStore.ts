@@ -2649,6 +2649,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private candidateClusterIds(lookups: readonly VacancyClusterLookup[]): string[] {
     const ids = new Set<string>();
     const bucketSizes = new Map<string, number>();
+    // B761: в срезе ATS-доски одна компания и горстка названий — пара читается раз за партию.
+    const pairs = new Map<string, readonly string[]>();
     const direct = this.database.prepare(
       'SELECT cluster_id FROM vacancy_cluster_keys WHERE kind = ? AND key = ?',
     );
@@ -2659,8 +2661,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         }
       }
       if (lookup.companyTokens.length === 0 || lookup.titleTokens.length === 0) continue;
-      for (const row of this.clustersSharingCompanyAndTitle(lookup, bucketSizes)) {
-        ids.add(row.cluster_id);
+      for (const id of this.clustersSharingCompanyAndTitle(lookup, bucketSizes, pairs)) {
+        ids.add(id);
       }
     }
     return this.orderByCreation(Array.from(ids));
@@ -2689,18 +2691,31 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private clustersSharingCompanyAndTitle(
     lookup: VacancyClusterLookup,
     bucketSizes: Map<string, number>,
-  ): Array<{ cluster_id: string }> {
+    pairs: Map<string, readonly string[]>,
+  ): readonly string[] {
     const company = this.matchTokens('company_token', lookup.companyTokens, bucketSizes);
     if (company.size === 0) return [];
     const title = this.matchTokens('title_token', lookup.titleTokens, bucketSizes);
     if (title.size === 0) return [];
+    const pairKey = `${[...company.keys].sort().join('\u0001')}\u0000${[...title.keys].sort().join('\u0001')}`;
+    const known = pairs.get(pairKey);
+    if (known) return known;
+    const found = this.companyAndTitleNeighbours(company, title);
+    pairs.set(pairKey, found);
+    return found;
+  }
+
+  private companyAndTitleNeighbours(
+    company: { keys: readonly string[]; size: number },
+    title: { keys: readonly string[]; size: number },
+  ): readonly string[] {
     const [outerKind, outerKeys, innerKind, innerKeys] =
       company.size <= title.size
         ? (['company_token', company.keys, 'title_token', title.keys] as const)
         : (['title_token', title.keys, 'company_token', company.keys] as const);
     const outerMarks = outerKeys.map(() => '?').join(', ');
     const innerMarks = innerKeys.map(() => '?').join(', ');
-    return this.database
+    const rows = this.database
       .prepare(
         `SELECT DISTINCT o.cluster_id AS cluster_id FROM vacancy_cluster_keys o
           WHERE o.kind = ? AND o.key IN (${outerMarks})
@@ -2712,6 +2727,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .all(outerKind, ...outerKeys, innerKind, ...innerKeys) as unknown as Array<{
       cluster_id: string;
     }>;
+    return rows.map((row) => row.cluster_id);
   }
 
   /**
