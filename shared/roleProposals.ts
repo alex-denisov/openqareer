@@ -156,6 +156,24 @@ function aliasesOf(title: string, group: RoleGroup | undefined): string[] {
   return [title, ...titles.filter((alias) => alias !== title)];
 }
 
+/** Названия модели по ключу роли: вторая формулировка той же роли не теряется (B767). */
+function titlesByKey(
+  named: readonly NamedRole[],
+  keyOf: (title: string) => string,
+): Map<string, string[]> {
+  const byKey = new Map<string, string[]>();
+  for (const role of named) {
+    const key = keyOf(role.title.trim());
+    if (key) byKey.set(key, [...(byKey.get(key) ?? []), role.title.trim()]);
+  }
+  return byKey;
+}
+
+/** Псевдонимы роли и другие названия модели для неё же: по ним идут проверки и роль поиска. */
+function withNamed(aliases: readonly string[], named: readonly string[] = []): string[] {
+  return [...aliases, ...named.filter((title) => !aliases.includes(title))];
+}
+
 /** Руководящее слово без функции: «Директор» — не роль. */
 const BARE_LEADER_TITLES: ReadonlySet<string> = new Set([
   'директор',
@@ -187,33 +205,33 @@ export function proposeRoles(input: {
   const skills = new Set(input.candidateSkills.map((skill) => skill.toLowerCase().trim()));
   const claimed = new Set<string>();
 
-  const fromModel = input.named
-    // Роль без опоры на резюме — шум: объяснение обязательно, имя — нет.
-    .filter(
-      (role) =>
-        role.title.trim() &&
-        role.reason.trim() &&
-        hasExperienceBasis(role, input.workplaceRefs ?? new Set()),
-    )
-    .flatMap<ProposedRole>((role) => {
-      const key = keyOf(role.title.trim());
-      if (!key || claimed.has(key)) return [];
-      claimed.add(key);
-      const group = groups.get(key);
-      return [
-        {
-          id: careerRoleId(role.title),
-          title: role.title.trim(),
-          ...(role.titleRu ? { titleRu: role.titleRu } : {}),
-          origin: 'model',
-          reason: role.reason.trim(),
-          evidenceRefs: role.evidenceRefs,
-          confirmation: confirmationFor(group, skills),
-          family: roleWorkFamily(role.title),
-          aliases: aliasesOf(role.title.trim(), group),
-        },
-      ];
-    });
+  // Роль без опоры на резюме — шум: объяснение обязательно, имя — нет.
+  const grounded = input.named.filter(
+    (role) =>
+      role.title.trim() &&
+      role.reason.trim() &&
+      hasExperienceBasis(role, input.workplaceRefs ?? new Set()),
+  );
+  const namedOfKey = titlesByKey(grounded, keyOf);
+  const fromModel = grounded.flatMap<ProposedRole>((role) => {
+    const key = keyOf(role.title.trim());
+    if (!key || claimed.has(key)) return [];
+    claimed.add(key);
+    const group = groups.get(key);
+    return [
+      {
+        id: careerRoleId(role.title),
+        title: role.title.trim(),
+        ...(role.titleRu ? { titleRu: role.titleRu } : {}),
+        origin: 'model',
+        reason: role.reason.trim(),
+        evidenceRefs: role.evidenceRefs,
+        confirmation: confirmationFor(group, skills),
+        family: roleWorkFamily(role.title),
+        aliases: withNamed(aliasesOf(role.title.trim(), group), namedOfKey.get(key)),
+      },
+    ];
+  });
 
   const fromMarket = [...groups.entries()]
     .filter(([key, group]) => !claimed.has(key) && group.items.length >= MIN_ROLE_SAMPLE)

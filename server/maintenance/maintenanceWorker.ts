@@ -20,6 +20,7 @@ import { timedStep } from './stepTiming';
 import { nextStorePassDelayMs, runStorePass, STORE_PASS_DELAY_MS } from './storePass';
 import { guardStep } from './guardStep';
 import type { StorePassMark } from './storePassMark';
+import type { StorePassOptions } from '../vacancies/storePassSteps';
 
 export { STORE_PASS_MIN_GAP_MS } from './storePass';
 
@@ -41,7 +42,7 @@ export interface MaintenanceEngine {
   maintainStoreAsync(
     nowMs?: number,
     shouldStop?: () => boolean,
-    options?: { pauseMs?: number; windowRows?: number },
+    options?: StorePassOptions,
   ): Promise<{ backfillWindows: number }>;
   syncSource(sourceId: string): Promise<SourceSyncOutcome>;
   syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
