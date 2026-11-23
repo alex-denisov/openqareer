@@ -99,6 +99,12 @@ export const MODEL_CHAINS = {
    * (`vertexCredit.ts`, кончился 09.11).
    */
   coverLetters: [DEEPSEEK_FLASH, GLM_FLASH, VERTEX],
+  /**
+   * B753 (решение CPO 23.11): сообщение знакомому и рекрутёру — короткий текст, DeepSeek на нём
+   * упирался в 8 с потолка в каждом черновике (прод 22–23.11), отвечал GLM. GLM первым, DeepSeek
+   * запасом, без Vertex; после отказа обоих — шаблон. Цепочка письма (B601) не меняется.
+   */
+  contactMessages: [GLM_FLASH, DEEPSEEK_FLASH],
   linkedinDrafts: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому

@@ -14,6 +14,7 @@ import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
 import { buildSkillNameTranslator } from './providers/skillNameTranslator';
 import {
+  buildContactMessageWriter,
   buildEnabledCoverLetterWriter,
   COVER_LETTER_VERTEX_TIMEOUT_MS,
 } from './providers/coverLetterWriter';
@@ -306,6 +307,8 @@ const app = await buildApp({
       COVER_LETTER_VERTEX_TIMEOUT_MS,
     ),
   }),
+  // B753: сообщение знакомому и рекрутёру — своя цепочка, GLM первым, без Vertex.
+  contactMessageWriter: buildContactMessageWriter({ providerCredentials: config.providerCredentials }),
   serveStatic: process.env.NODE_ENV === 'production',
 });
 matchedPoolPrecompute.setLogger(app.log);

@@ -65,6 +65,8 @@ export interface HarnessOptions {
   readonly engine?: Record<string, unknown>;
   /** Подставной писатель писем: реальных вызовов моделей в тестах нет. */
   readonly coverLetterWriter?: CoverLetterWriter;
+  /** B753: подставной писатель сообщений знакомому и рекрутёру. */
+  readonly contactMessageWriter?: CoverLetterWriter;
   /** B642: подставной Whisper; реальных вызовов в тестах нет. */
   readonly recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** B642: флаг записи разговоров; по умолчанию включён, чтобы маршруты были. */
@@ -119,7 +121,7 @@ export async function createB640Harness(options: HarnessOptions) {
   };
   const app = await buildApp({
     config, coachProvider: successProvider, candidateStore: candidates, authService: auth,
-    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), ...(options.interviewDebriefWriter ? { interviewDebriefWriter: options.interviewDebriefWriter } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }),
+    multiSourceVacancyEngine: engine as never, serveStatic: false, ...(options.recordingTranscriber ? { recordingTranscriber: options.recordingTranscriber } : {}), ...(options.interviewDebriefWriter ? { interviewDebriefWriter: options.interviewDebriefWriter } : {}), linkedinDraftWriter: options.linkedinDraftWriter as never, ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter as never } : {}), ...(options.coverLetterWriter && { coverLetterWriter: options.coverLetterWriter }), ...(options.contactMessageWriter && { contactMessageWriter: options.contactMessageWriter }),
     ...(options.logLines ? { logDestination: { write: (line: string) => { options.logLines?.push(line); } } } : {}),
   });
   const get = (url: string, user?: HarnessUser) =>

@@ -136,6 +136,8 @@ interface BuildAppOptions {
   /** B734: русские названия навыков проверки роли. */
   skillNameTranslator?: RouteDeps['skillNameTranslator'];
   coverLetterWriter?: CoverLetterWriter;
+  /** B753: сообщение знакомому и рекрутёру — своя цепочка (GLM первым). */
+  contactMessageWriter?: CoverLetterWriter;
   /** B642: Whisper для записей собеседований; без подстановки — OpenRouter. */
   recordingTranscriber?: RouteDeps['recordingTranscriber'];
   /** B751: разбор интервью; без подстановки — цепочка письма. */
@@ -469,7 +471,7 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter, contactMessageWriter: options.contactMessageWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor
