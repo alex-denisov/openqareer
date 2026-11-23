@@ -8,6 +8,7 @@ import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { roleTitleRu } from '../vacancies/roleTitleRu';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -176,6 +177,52 @@ describe('B744 · POST goal-baseline: значение «Сейчас» из з�
       expect(model.fetchMock).not.toHaveBeenCalled();
       expect((await post(app, 'goal-baseline', plain, { indicator: 'Выручка' })).statusCode).toBe(
         404,
+      );
+    },
+    SLOW,
+  );
+});
+
+const get = (app: App, path: string, token: string) =>
+  app.inject({
+    method: 'GET',
+    url: `${DIARY}/${path}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+/** B744 (B645, прод 23.11): d02c писал «в роли «VP of Engineering»» — роль показывается по-русски. */
+describe('B744 · GET role-title-ru: русское название роли для d02c', () => {
+  it(
+    'вариант онтологии — русское название без модели; неизвестная — null; русская — она же',
+    async () => {
+      const model = stubModel();
+      const { app } = await setup();
+      const vp = await get(app, 'role-title-ru?title=VP%20of%20Engineering', flagged);
+      expect(vp.statusCode).toBe(200);
+      expect(vp.json().data.titleRu).toBe(roleTitleRu('VP of Engineering'));
+      expect(vp.json().data.titleRu).toMatch(/[а-яё]/iu);
+      const unknown = await get(app, 'role-title-ru?title=Chief%20Vibe%20Officer', flagged);
+      expect(unknown.json().data.titleRu).toBeNull();
+      const russian = await get(
+        app,
+        `role-title-ru?title=${encodeURIComponent('Операционный директор')}`,
+        flagged,
+      );
+      expect(russian.json().data.titleRu).toBe('Операционный директор');
+      expect(model.fetchMock).not.toHaveBeenCalled();
+    },
+    SLOW,
+  );
+
+  it(
+    'без флага адреса нет; пустое или длинное название — 400',
+    async () => {
+      stubModel();
+      const { app } = await setup();
+      expect((await get(app, 'role-title-ru?title=CTO', plain)).statusCode).toBe(404);
+      expect((await get(app, 'role-title-ru?title=', flagged)).statusCode).toBe(400);
+      expect((await get(app, `role-title-ru?title=${'a'.repeat(200)}`, flagged)).statusCode).toBe(
+        400,
       );
     },
     SLOW,

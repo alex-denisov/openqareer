@@ -30,6 +30,7 @@ import {
   normalizeUsername,
 } from './authServiceCore';
 import type {
+  AppSignInDelivery,
   AccountProfileUpdate,
   AccountSnapshot,
   AdminUserRecord,
@@ -85,14 +86,20 @@ export interface AuthServiceOptions extends AuthServiceCoreOptions {
   emailVerificationHashKey?: Buffer;
   emailVerificationFixedCode?: string;
   onEmailVerification?: (input: EmailVerificationDelivery) => Promise<void>;
+  onAppSignIn?: (input: AppSignInDelivery) => Promise<void>;
 }
+
+/** B755: так сессия приложения, открытая через системный лист, видна в «Вход и безопасность». */
+export const APP_SESSION_LABEL = 'Приложение openqareer · Mac';
 
 export class AuthService extends AuthServiceCore {
   private readonly emailVerification: EmailVerificationService;
   private readonly emailVerificationRequired: boolean;
+  private readonly onAppSignIn?: AuthServiceOptions['onAppSignIn'];
 
   constructor(options: AuthServiceOptions) {
     super(options);
+    this.onAppSignIn = options.onAppSignIn;
     this.emailVerificationRequired = options.emailVerificationRequired ?? false;
     this.emailVerification = new EmailVerificationService({
       database: this.database,
@@ -403,6 +410,26 @@ export class AuthService extends AuthServiceCore {
     const user = this.findUserById(userId);
     if (!user || user.blocked_at) return null;
     return this.issueSession(user, clientDeviceId);
+  }
+
+  issueAppSession(
+    userId: string,
+    clientDeviceId?: string,
+  ): { principal: AuthPrincipal; sessionToken: string } | null {
+    const issued = this.issueSessionForUser(userId, clientDeviceId);
+    if (issued) this.labelSession(issued.sessionToken, APP_SESSION_LABEL);
+    return issued;
+  }
+
+  async notifyAppSignIn(userId: string, at: Date): Promise<void> {
+    const user = this.findUserById(userId);
+    if (!user?.email || !this.onAppSignIn) return;
+    await this.onAppSignIn({
+      email: user.email,
+      displayName: user.display_name,
+      deviceLabel: APP_SESSION_LABEL,
+      at,
+    });
   }
 
   /** B401: пароль вместо кода, чтобы отключить защиту или получить новые коды. */

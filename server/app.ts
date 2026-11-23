@@ -12,6 +12,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
   type FastifyInstance,
+  type FastifyReply,
   type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify';
@@ -263,6 +264,13 @@ async function registerRateLimits(
   await app.register(rateLimit, { global: false, keyGenerator: (request) => request.ip });
 }
 
+/** B755: «Войти в приложение» нельзя вставить в чужую рамку и подсунуть нажатие «Войти». */
+function denyFramingOfAppSignIn(url: string, reply: FastifyReply): void {
+  if (url !== '/app-sign-in' && !url.startsWith('/app-sign-in?')) return;
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Content-Security-Policy', "frame-ancestors 'none'");
+}
+
 async function createFastifyBase(
   config: ServerConfig,
   isSignedIn: (request: FastifyRequest) => boolean,
@@ -307,6 +315,7 @@ async function createFastifyBase(
     if (request.url.startsWith('/api/') && !request.url.startsWith('/api/v1/candidate/media/')) {
       reply.header('Cache-Control', 'no-store');
     }
+    denyFramingOfAppSignIn(request.url, reply);
   });
 
   app.get('/health', async (_request, reply) => {
