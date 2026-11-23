@@ -60,6 +60,12 @@ export interface CatalogRuSummaryCandidate {
   readonly stored?: CatalogRuSummaryRow;
 }
 
+/** A card's place in the newest-first order (`catalog_entries_order`). */
+interface CardPosition {
+  readonly publishedMs: number;
+  readonly entryKey: string;
+}
+
 interface CandidateRecord {
   cluster_id: string;
   title: string;
@@ -72,6 +78,8 @@ interface CandidateRecord {
   status: CatalogRuSummaryStatus | null;
   attempts: number | null;
   next_attempt_ms: number | null;
+  published_ms: number;
+  entry_key: string;
 }
 
 /** A pool row id from a catalog cluster id, the same rule the card page uses. */
@@ -86,32 +94,34 @@ export class CatalogRuSummaryStore {
     this.database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
   }
 
-  /** Cards to write, re-check or retry, newest postings first. */
+  /**
+   * Where the last read stopped (B761). Each tick reads on from here and wraps to
+   * the newest card at the end, so a pass reads the catalog once: before, every
+   * 20 s tick re-read ~18.8k finished cards from the top to find eight due ones.
+   */
+  private cursor: CardPosition | undefined;
+  /** The last read and where it started: `resumeAt` steps back to a card the tick did not reach. */
+  private lastRead: {
+    readonly from: CardPosition | undefined;
+    readonly ids: string[];
+    readonly at: CardPosition[];
+  } = {
+    from: undefined,
+    ids: [],
+    at: [],
+  };
+
+  /** Cards to write, re-check or retry, newest postings first, continuing the last read. */
   candidates(now: number, version: number, limit: number): CatalogRuSummaryCandidate[] {
-    const rows = this.database
-      .prepare(
-        `SELECT c.cluster_id, c.title, c.company, c.location, c.is_remote, c.summary,
-                s.source_hash, s.version, s.status, s.attempts, s.next_attempt_ms
-           FROM catalog_entries c
-           LEFT JOIN catalog_ru_summaries s ON s.cluster_id = c.cluster_id
-          WHERE c.status = 'active' AND c.path <> ''
-            AND c.salary_label IS NOT NULL AND c.salary_label GLOB '*[1-9]*'
-            AND trim(c.company) <> '' AND c.role_slug IS NOT NULL
-            AND c.last_seen_ms >= ?
-            AND ${notExcludedSourceUrlSql('c.source_url')}
-            AND (s.cluster_id IS NULL OR s.version <> ? OR s.checked_ms < ?
-                 OR (s.status = 'failed' AND s.attempts < ? AND s.next_attempt_ms <= ?))
-          ORDER BY c.published_ms DESC, c.entry_key ASC
-          LIMIT ?`,
-      )
-      .all(
-        now - CARD_SEEN_WITHIN_DAYS * DAY_MS,
-        version,
-        now - SUMMARY_RECHECK_MS,
-        SUMMARY_MAX_ATTEMPTS,
-        now,
-        limit,
-      ) as unknown as CandidateRecord[];
+    let from = this.cursor;
+    let rows = this.readCandidates(now, version, limit, from);
+    if (rows.length === 0 && from) {
+      from = undefined;
+      rows = this.readCandidates(now, version, limit, from);
+    }
+    const at = rows.map((row) => ({ publishedMs: row.published_ms, entryKey: row.entry_key }));
+    this.lastRead = { from, ids: rows.map((row) => row.cluster_id), at };
+    this.cursor = at.at(-1);
     return rows.map((row) => ({
       clusterId: row.cluster_id,
       title: row.title,
@@ -132,6 +142,53 @@ export class CatalogRuSummaryStore {
           }
         : {}),
     }));
+  }
+
+  /** The tick stopped at this card of the last read: the next read starts with it. */
+  resumeAt(clusterId: string): void {
+    const index = this.lastRead.ids.indexOf(clusterId);
+    if (index < 0) return;
+    this.cursor = index === 0 ? this.lastRead.from : this.lastRead.at[index - 1];
+  }
+
+  private readCandidates(
+    now: number,
+    version: number,
+    limit: number,
+    after: CardPosition | undefined,
+  ): CandidateRecord[] {
+    // `published_ms <= ?` is a range on `catalog_entries_order`, so the read seeks
+    // instead of walking from the top; the same millisecond continues by entry_key.
+    const resume = after
+      ? 'AND c.published_ms <= ? AND NOT (c.published_ms = ? AND c.entry_key <= ?)'
+      : '';
+    const resumeParams = after ? [after.publishedMs, after.publishedMs, after.entryKey] : [];
+    return this.database
+      .prepare(
+        `SELECT c.cluster_id, c.title, c.company, c.location, c.is_remote, c.summary,
+                c.published_ms, c.entry_key,
+                s.source_hash, s.version, s.status, s.attempts, s.next_attempt_ms
+           FROM catalog_entries c
+           LEFT JOIN catalog_ru_summaries s ON s.cluster_id = c.cluster_id
+          WHERE c.status = 'active' AND c.path <> '' ${resume}
+            AND c.salary_label IS NOT NULL AND c.salary_label GLOB '*[1-9]*'
+            AND trim(c.company) <> '' AND c.role_slug IS NOT NULL
+            AND c.last_seen_ms >= ?
+            AND ${notExcludedSourceUrlSql('c.source_url')}
+            AND (s.cluster_id IS NULL OR s.version <> ? OR s.checked_ms < ?
+                 OR (s.status = 'failed' AND s.attempts < ? AND s.next_attempt_ms <= ?))
+          ORDER BY c.published_ms DESC, c.entry_key ASC
+          LIMIT ?`,
+      )
+      .all(
+        ...resumeParams,
+        now - CARD_SEEN_WITHIN_DAYS * DAY_MS,
+        version,
+        now - SUMMARY_RECHECK_MS,
+        SUMMARY_MAX_ATTEMPTS,
+        now,
+        limit,
+      ) as unknown as CandidateRecord[];
   }
 
   /** The text the card page shows: the pool row's full text, its description, else the snippet. */
