@@ -152,7 +152,14 @@ function WishPop({ popId, variants }: WishProps) {
 }
 
 /** Кнопка «Другой вариант · N» со всплывашкой пожелания. Вариантов не осталось — кнопки нет. */
-export function VariantButton({ variants }: { readonly variants: VariantControlsState }) {
+export function VariantButton({
+  variants,
+  className = 'btn',
+}: {
+  readonly variants: VariantControlsState;
+  /** На ленте a05 кнопка — строчное действие `row-act`, как в макете. */
+  readonly className?: string;
+}) {
   const popId = useId();
   const mobile = useIsMobile();
   const button = useRef<HTMLButtonElement>(null);
@@ -172,7 +179,7 @@ export function VariantButton({ variants }: { readonly variants: VariantControls
     <span className="va-popwrap" ref={(element) => setCabinet(element?.closest('.b640') ?? null)}>
       <button
         ref={button}
-        className="btn"
+        className={className}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={variants.wishOpen}
