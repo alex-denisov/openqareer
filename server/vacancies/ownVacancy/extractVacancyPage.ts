@@ -1,7 +1,13 @@
-import { OWN_VACANCY_PAGE_TEXT_MIN, OWN_VACANCY_TITLE_MAX, type OwnVacancyWorkFormat } from '../../../shared/b640OwnVacancy';
+import {
+  OWN_VACANCY_PAGE_TEXT_MIN,
+  OWN_VACANCY_TITLE_MAX,
+  type OwnVacancySalary,
+  type OwnVacancyWorkFormat,
+} from '../../../shared/b640OwnVacancy';
 import { decodeFeedEntities } from '../../connectors/feedText';
 import { record, text as textOf } from '../jsonVacancyRecord';
 import { attrValue, findElement, findElements, findItemprop, htmlToText } from './htmlScan';
+import { salaryFromJsonLd } from './ownVacancySalary';
 
 /**
  * B676: вакансия из HTML одной страницы без выполнения скриптов и без DOM, линейным проходом:
@@ -12,6 +18,8 @@ export interface ExtractedVacancyPage {
   readonly company: string | null;
   readonly location: string | null;
   readonly workFormat: OwnVacancyWorkFormat | null;
+  /** Только из `baseSalary` JSON-LD; строку зарплаты в тексте читает создание вакансии. */
+  readonly salary: OwnVacancySalary | null;
   readonly text: string;
   readonly thin: boolean;
   readonly botWall: boolean;
@@ -66,7 +74,9 @@ function fromJsonLd(html: string): Fields | null {
     company: clean(textOf(record(posting.hiringOrganization).name)),
     location: ldLocation(posting.jobLocation),
     workFormat: remote ? 'remote' : null,
-    text: htmlToText(description),
+    salary: salaryFromJsonLd(posting.baseSalary),
+    // Lever кладёт в описание «\n» буквами (экранировано дважды): это перевод строки (прод 23.11).
+    text: htmlToText(description.replace(/\\[nr]/gu, '\n')),
   };
 }
 
@@ -83,6 +93,7 @@ function fromMicrodata(html: string): Fields | null {
     company: company ? clean(htmlToText(company)) : null,
     location: null,
     workFormat: null,
+    salary: null,
     text: htmlToText(description),
   };
 }
@@ -100,7 +111,7 @@ function mainText(html: string): string {
 
 function fromPage(html: string, text: string): Fields {
   const title = meta(html, 'og:title') ?? clean(htmlToText(findElement(html, 'title')?.inner ?? ''));
-  return { title, company: null, location: null, workFormat: null, text };
+  return { title, company: null, location: null, workFormat: null, salary: null, text };
 }
 
 export function extractVacancyPage(html: string): ExtractedVacancyPage {

@@ -8,6 +8,7 @@ import { isClosedSite } from './closedSites';
 import { takeLinkReadSlot } from './linkReadLimit';
 import { readVacancyPage } from './pageReader';
 import { ownVacancyFromText } from './ownVacancyText';
+import { salaryFromText } from './ownVacancySalary';
 import { ownVacancySummary, startOwnVacancyComparison } from './ownVacancyComparison';
 
 /** B676: своя вакансия по ссылке (одно чтение одной страницы) или по вставленному тексту. */
@@ -48,7 +49,8 @@ async function fromLink(deps: RouteDeps, candidateId: string, link: string): Pro
   if (extracted.thin) return { result: { outcome: 'unreadable', reason: 'thin' } };
   const text = normalizeText(extracted.text).slice(0, OWN_VACANCY_TEXT_MAX);
   const title = extracted.title ?? text.split('\n').find(Boolean)?.slice(0, OWN_VACANCY_TITLE_MAX) ?? '';
-  return { vacancy: { title, company: extracted.company, location: extracted.location, workFormat: extracted.workFormat, url: link, text } };
+  const salary = extracted.salary ?? salaryFromText(text);
+  return { vacancy: { title, company: extracted.company, location: extracted.location, workFormat: extracted.workFormat, salary, url: link, text } };
 }
 
 export async function createOwnVacancy(

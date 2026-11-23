@@ -347,6 +347,9 @@ interface SealLog {
 const errorName = (error: unknown): string =>
   error instanceof Error ? error.name : 'UnknownError';
 
+/** B776: a seal longer than this held the event loop noticeably; logged with its size. */
+const SLOW_SEAL_MS = 500;
+
 /** A failed write costs the next process a cold read, never this one its list. */
 export function sealMatchedList(
   input: MatchedListInput,
@@ -358,10 +361,20 @@ export function sealMatchedList(
 ): void {
   if (!enabled) return;
   try {
+    const startedAt = performance.now();
     const text = sealedListText(list, choice);
     if (!text) return;
     const written = input.candidateStore.sealedMatchedLists?.write(input.candidateId, builtAt, text, choice);
-    if (written) log?.info({ ...written, bytes: text.length, rows: list.filtered.length }, 'matched-list-sealed');
+    if (!written) return;
+    const fields = { ...written, bytes: text.length, rows: list.filtered.length };
+    // B776: another writer holds the database (the other slot starting) — the next build seals again.
+    if ('skipped' in written) {
+      log?.info(fields, 'matched-list-seal-skipped');
+      return;
+    }
+    log?.info(fields, 'matched-list-sealed');
+    const sealMs = Math.round(performance.now() - startedAt);
+    if (sealMs > SLOW_SEAL_MS || written.heldMs > SLOW_SEAL_MS) log?.info({ ...fields, sealMs }, 'matched-list-seal-slow');
   } catch (error) {
     log?.error({ errorName: errorName(error) }, 'matched-list-seal-failed');
   }

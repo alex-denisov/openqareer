@@ -2,12 +2,21 @@ import type { VacancyFitView } from './vacancyFit';
 
 /** B676: «Своя вакансия» — кандидат приносит ссылку или текст; вакансия видна только ему. */
 export type OwnVacancyWorkFormat = 'remote' | 'hybrid' | 'office';
+/** Деньги как в вакансии; перевод в месяц и в валюту подборки — общими правилами списка. */
+export interface OwnVacancySalary {
+  readonly from?: number;
+  readonly to?: number;
+  readonly currency: string;
+  readonly period?: 'hour' | 'month' | 'year';
+}
 export interface OwnVacancy {
   readonly id: string;
   readonly title: string;
   readonly company: string | null;
   readonly location: string | null;
   readonly workFormat: OwnVacancyWorkFormat | null;
+  /** Нет у вакансий, добавленных до 23.11, и у вакансий без суммы. */
+  readonly salary?: OwnVacancySalary | null;
   /** Адрес, по которому прочитана; null — вставлен текст. */
   readonly url: string | null;
   readonly createdAt: string;

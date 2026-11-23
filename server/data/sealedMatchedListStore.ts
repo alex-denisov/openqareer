@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { isSqliteBusy } from './sqliteBusyRetry';
 import { SealedMatchedSnapshotStore } from './sealedMatchedSnapshotStore';
 import type { SealedText } from './sealedText';
 
@@ -30,11 +31,20 @@ export interface SealedMatchedListRow {
   readonly choice: string;
 }
 
-export interface SealedMatchedListWrite {
-  /** BEGIN IMMEDIATE to COMMIT: how long other writers of the database were held. */
-  readonly heldMs: number;
-  readonly lockWaitMs: number;
-}
+export type SealedMatchedListWrite =
+  | {
+      /** BEGIN IMMEDIATE to COMMIT: how long other writers of the database were held. */
+      readonly heldMs: number;
+      readonly lockWaitMs: number;
+    }
+  | { readonly skipped: 'busy'; readonly lockWaitMs: number };
+
+/**
+ * B776 (prod 23.11): the write waited 6.9 s on the event loop for the lock of the other slot while
+ * it started. The sealed list is a cache: past this wait the write is skipped and the next build
+ * seals again.
+ */
+export const SEAL_BUSY_TIMEOUT_MS = 50;
 
 const associatedData = (candidateId: string, choice: string): string =>
   `sealed-matched-list:${candidateId}:${choice}`;
@@ -83,7 +93,9 @@ export class SealedMatchedListStore {
   write(candidateId: string, builtAt: number, text: string, choice: string): SealedMatchedListWrite {
     const cipher = this.sealedText.seal(text, associatedData(candidateId, choice));
     const startedAt = performance.now();
-    this.database.exec('BEGIN IMMEDIATE');
+    if (!this.lockBriefly()) {
+      return { skipped: 'busy', lockWaitMs: roundMs(performance.now() - startedAt) };
+    }
     const lockedAt = performance.now();
     try {
       // An older build that finished late does not replace a newer one, as in the list cache.
@@ -108,5 +120,20 @@ export class SealedMatchedListStore {
       throw error;
     }
     return { heldMs: roundMs(performance.now() - lockedAt), lockWaitMs: roundMs(lockedAt - startedAt) };
+  }
+
+  /** BEGIN IMMEDIATE with a short wait; the connection's own wait is restored for its other writers. */
+  private lockBriefly(): boolean {
+    const { timeout } = this.database.prepare('PRAGMA busy_timeout').get() as { timeout: number };
+    this.database.exec(`PRAGMA busy_timeout = ${SEAL_BUSY_TIMEOUT_MS}`);
+    try {
+      this.database.exec('BEGIN IMMEDIATE');
+      return true;
+    } catch (error) {
+      if (isSqliteBusy(error)) return false;
+      throw error;
+    } finally {
+      this.database.exec(`PRAGMA busy_timeout = ${timeout}`);
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { OwnVacancyWorkFormat } from '../../shared/b640OwnVacancy';
+import type { OwnVacancySalary, OwnVacancyWorkFormat } from '../../shared/b640OwnVacancy';
 import { SealedText } from './sealedText';
 
 /**
@@ -15,6 +15,8 @@ export interface OwnVacancyRecord {
   readonly company: string | null;
   readonly location: string | null;
   readonly workFormat: OwnVacancyWorkFormat | null;
+  /** Внутри запечатанного содержимого: таблица не меняется, у прежних записей поля нет. */
+  readonly salary?: OwnVacancySalary | null;
   readonly url: string | null;
   readonly text: string;
 }

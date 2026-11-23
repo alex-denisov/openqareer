@@ -117,7 +117,7 @@ function ListTable({ list, rows, section, env, links, triage, own }: ListTablePr
         rows={rows}
         rates={list.rates}
         hidden={hidden}
-        own={<OwnRows items={own.items} onRemove={own.removeWithToast} />}
+        own={<OwnRows items={own.items} money={env} onRemove={own.removeWithToast} />}
         pickFor={(item) => pickOf(triage, item)}
       />
       {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
