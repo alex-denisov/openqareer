@@ -8,7 +8,7 @@ import { TARGET_PROFESSION_MAX_LENGTH } from '../../../../shared/candidateStatus
 import { CoachApiError } from '../../coach/apiClient';
 import { ActionDock, Button, Icon, InfoTip, Link } from '../kit';
 import { B640_HOME_PATH, buildNodePath, type B640Node } from '../routes';
-import { useShell } from '../shell/ShellContext';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import {
@@ -121,10 +121,10 @@ function PreviewChanges({ preview, options, onToggle }: ChangesProps) {
       ) : null}
       {preview.options.length > 0 ? (
         <fieldset className="optin">
-          <legend className="vh">Что можно поменять</legend>
+          <legend className="vh">Можно сразу</legend>
           <h3 aria-hidden="true">
             <Icon name="sliders" />
-            Что можно поменять
+            Можно сразу
           </h3>
           {preview.options.map((option) => (
             <label key={option.key} htmlFor={`st-opt-${option.key}`} aria-label={option.label}>
@@ -273,20 +273,20 @@ function StatusChoice({
   const preview = usePreview(choice);
   const unchanged = sameChoice(choice, state);
 
+  // Макет s02: список справа во всю высоту, «Что изменится» и история слева (классы, а не
+  // порядок детей: строка ошибки появляется только при сбое и не сдвигает колонки).
   return (
     <>
-      {failed ? (
-        <div className="col-wide">
+      <div className="col st-pick-col">
+        <StatusPick state={state} choice={choice} onPick={pick} />
+      </div>
+      <div className="col st-lead-col">
+        {failed ? (
           <p className="li-err" role="alert">
             <Icon name="warn" />
             Статус не сохранился
           </p>
-        </div>
-      ) : null}
-      <div className="col">
-        <StatusPick state={state} choice={choice} onPick={pick} />
-      </div>
-      <div className="col">
+        ) : null}
         <PreviewLead
           choice={choice}
           preview={preview}
@@ -298,7 +298,7 @@ function StatusChoice({
           onToggle={(option, checked) => setOptions({ ...options, [option.key]: checked })}
         />
       </div>
-      <div className="col">
+      <div className="col st-hist-col">
         <StatusHistoryLink />
       </div>
     </>
@@ -309,6 +309,8 @@ function StatusChoice({
 export function StatusChoiceScreen({ node }: { readonly node: B640Node }) {
   const { search } = useShell();
   const status = useLoad(getStatus);
+  // Макет s02: `data-main-right` и `data-mtight` — страница во всю ширину рабочей области.
+  useScreenChrome({ rootData: { 'main-right': '1', mtight: '1' } });
   return (
     <div className="page two is-pick" data-b640-node={node.code} data-b640-section={node.section}>
       {status.state === 'loading' ? (
