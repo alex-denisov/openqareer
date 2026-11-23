@@ -159,6 +159,8 @@ export interface CandidateExport extends CandidateSnapshot {
   contacts: import('./contactsCareerExport').ContactsExport;
   /** B738 · 6: компании, цели роста, доход, путь профессии, места переезда, вакансии подписки. */
   careerSections: import('./contactsCareerExport').CareerSectionsExport;
+  /** B738 · 7: логин, оплаты и подписка, настройки, согласия, статусы — без паролей, кодов и ключей провайдера. */
+  account: import('./accountExport').AccountExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
