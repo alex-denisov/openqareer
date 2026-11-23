@@ -399,12 +399,15 @@ export function readSealedMatchedList(
   input: MatchedListChoiceInput,
   { enabled = SEALED_MATCHED_LIST_ENABLED, now = Date.now() }: { enabled?: boolean; now?: number } = {},
 ): SealedMatchedList | undefined {
-  if (!enabled || matchedListCache.holds(input.candidateId)) return undefined;
+  if (!enabled) return undefined;
+  const choice = matchedListChoice(input);
+  // B770: a list of another choice in memory does not stop this one's stored list.
+  if (matchedListCache.holds(input.candidateId, choice)) return undefined;
   const row = input.candidateStore.sealedMatchedLists?.read(
     input.candidateId,
     now - MATCHED_LIST_MAX_AGE_MS,
   );
-  return row ? sealedListAnswering(row.text, matchedListChoice(input)) : undefined;
+  return row ? sealedListAnswering(row.text, choice) : undefined;
 }
 
 /** Tests: what a new process starts with. */
