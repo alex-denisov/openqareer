@@ -1,3 +1,4 @@
+import type { IconName } from '../kit';
 import { buildNodePath } from '../routes';
 import type {
   B640Notification,
@@ -74,4 +75,33 @@ export function feedSubtitle(item: B640Notification, now: Date, timeZone: string
   ]
     .filter(Boolean)
     .join(' · ');
+}
+
+/** Действие в блоке «Важно»: по макету n01b у кнопки есть иконка. */
+export interface PinnedAction extends NotificationAction {
+  readonly icon?: IconName;
+}
+
+/**
+ * n01b «Важно»: сбой доставки — «Отклик не дошёл · компания · роль» и «Повторить» к письму
+ * отклика (там «Отправить ещё раз»); вход на площадку — «Подключить» с иконкой обновления.
+ */
+export function pinnedTitle(item: B640Notification): string {
+  const title =
+    item.kind === 'delivery_error'
+      ? ['Отклик не дошёл', item.company].filter(Boolean).join(' · ')
+      : item.title;
+  return [title, item.role].filter(Boolean).join(' · ');
+}
+
+export function pinnedAction(item: B640Notification): PinnedAction {
+  if (item.kind === 'delivery_error' && item.sourceType === 'application') {
+    return {
+      label: 'Повторить',
+      path: buildNodePath('o02', { responseId: item.sourceId }),
+      icon: 'repeat',
+    };
+  }
+  const action = feedAction(item);
+  return item.kind === 'platform_login_required' ? { ...action, icon: 'refresh' } : action;
 }
