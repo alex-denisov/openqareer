@@ -41,11 +41,15 @@ function filesUnder(root, entry) {
  */
 const DDL_STATEMENT = new RegExp(`${DDL.source}[^;\`]*`, 'gi');
 
-/** Только операторы DDL файла: правка кода рядом со схемой не перезапускает обслуживание. */
+/**
+ * Только операторы DDL файла: правка кода рядом со схемой не перезапускает обслуживание.
+ * Оператор с подстановкой (`ALTER TABLE x ADD COLUMN ${name}`) зависит от кода файла —
+ * списка колонок, имени таблицы, — поэтому такой файл входит в отпечаток целиком.
+ */
 export function schemaStatementsOf(text) {
-  return (text.match(DDL_STATEMENT) ?? [])
-    .map((statement) => statement.replace(/\s+/g, ' ').trim())
-    .join('\n');
+  const statements = text.match(DDL_STATEMENT) ?? [];
+  if (statements.some((statement) => statement.includes('${'))) return text;
+  return statements.map((statement) => statement.replace(/\s+/g, ' ').trim()).join('\n');
 }
 
 /** Модули сервера из сборки веб-процесса, в которых есть DDL, по порядку пути, — их операторы DDL. */
