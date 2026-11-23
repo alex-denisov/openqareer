@@ -137,6 +137,16 @@ test.describe('B653: «Карьера» — роли и условия поис�
     expect(calls.ownRoles).toEqual([{ action: 'add', title: 'Архитектор решений' }]);
   });
 
+  test('B764: «Проверить вторую роль» не называет роль — C04 сам берёт роль, проверку которой можно начать', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career/roles', {
+      searchRoles: ['Технический продакт-менеджер', 'Директор по разработке'],
+    });
+    const link = node(page, 's10').getByRole('link', { name: 'Проверить вторую роль' });
+    await expect(link).toHaveAttribute('href', '/app/career/skills');
+  });
+
   test('S10: «Искать в роли» сохраняет отмеченную роль', async ({ page }) => {
     const calls = await openCareer(page, '/app/career/roles', { searchRoles: [] });
     await node(page, 's10')
