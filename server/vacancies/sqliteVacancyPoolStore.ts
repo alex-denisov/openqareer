@@ -2954,12 +2954,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * тот же проход снимает карточки, у которых кластера нет вовсе.
    */
   /** Окно пула после курсора: записи, ни один ключ членства которых не лежит в кластерах (B763). */
-  readUnclusteredPoolPage(chunk = 500): UnclusteredPoolPage {
+  readUnclusteredPoolPage(chunk = 500, maxUnclustered?: number): UnclusteredPoolPage {
     const page = readUnclusteredPoolPage(
       this.database,
       this.unclusteredCursor,
       chunk,
       parseVacancy,
+      maxUnclustered,
     );
     this.unclusteredCursor = page.cursor;
     return page;
