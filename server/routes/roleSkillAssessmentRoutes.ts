@@ -425,7 +425,9 @@ async function readAssessmentContext(
   const reader = createRoleRequirementReader(deps);
   const build = () => summarizeAssessmentContext(role.title, role.version, snapshot.vacancies, reader);
   const key = `${titleKey(role.title)}\u0000${role.version}`;
-  return cached ? contextCache.read(snapshot.vacancies, key, build) : build();
+  // B775: a context with no requirements still being read changes only with its snapshot.
+  const settled = () => (reader?.pendingCount() ?? 0) === 0;
+  return cached ? contextCache.read(snapshot.vacancies, key, build, settled) : build();
 }
 
 /** The background pass builds what «Карьера» will read for a role (prod 19.11). */
