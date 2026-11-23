@@ -118,7 +118,7 @@ describe('B656: строка отклика', () => {
     expect(view.event).toBe('приглашение 10.11');
   });
 
-  it('прошедшее интервью просит рассказать, как прошло', () => {
+  it('прошедшее интервью ведёт к разбору записи (макет o01c)', () => {
     const view = row({
       stage: 'interview',
       whoseTurn: 'candidate',
@@ -126,8 +126,14 @@ describe('B656: строка отклика', () => {
       interviewScheduledAt: ['2026-11-11T12:00:00.000Z'],
     });
     expect(view.tag).toEqual({ tone: 'ok', label: 'интервью прошло' });
-    expect(view.next).toBe('Расскажите, как прошло');
+    expect(view.next).toBe('Разобрать запись');
     expect(view.event).toBe('интервью 11.11');
+    expect(view.action).toEqual({
+      kind: 'debrief',
+      label: 'Разобрать запись',
+      short: 'Разобрать',
+      icon: 'play',
+    });
   });
 
   it('оффер показывает срок ответа', () => {

@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ApplicationView } from '../../applications/applicationsApi';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
-import { buildNodePath } from '../routes';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
 import { onPlatform, platformOf } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
@@ -9,6 +8,7 @@ import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
 import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
+import { InterviewActions } from './InterviewActions';
 import {
   marksFor,
   useResponseActions,
@@ -36,12 +36,6 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
     </ul>
   );
 }
-
-/**
- * Экраны раздела «Интервью» (i01, i04) пока заглушки: кнопки «Подготовиться» и «Рассказать,
- * как прошло» вели в тупик (B645). Включить, когда раздел подключён в `interview/index.tsx`.
- */
-const INTERVIEW_SCREENS_READY = false;
 
 function History({ application }: { readonly application: ApplicationView }) {
   const messages = useSentMessages(application.clusterId);
@@ -169,10 +163,12 @@ function NextActions({ item, actions, draft }: ActionsProps) {
   const { application, row } = item;
   const copy = useCopy(draft);
   const busy = actions.outcome.kind === 'busy';
-  const interviewAhead = application.stage === 'interview' && row.tag.tone !== 'ok';
+  const interview = application.stage === 'interview';
+  const interviewAhead = interview && row.tag.tone !== 'ok';
+  const marks = marksFor(application.stage);
   return (
     <div className="actions">
-      {row.action ? (
+      {row.action && row.action.kind !== 'debrief' ? (
         <Link className="btn is-primary" to={actionPath(row)}>
           <Icon name={row.action.icon} />
           {row.action.label}
@@ -188,23 +184,34 @@ function NextActions({ item, actions, draft }: ActionsProps) {
           </Button>
         </>
       ) : null}
-      {INTERVIEW_SCREENS_READY && application.stage === 'interview' ? (
-        <Link
-          className="btn is-primary"
-          to={buildNodePath(interviewAhead ? 'i01' : 'i04', { responseId: application.id })}
-        >
-          <Icon name={interviewAhead ? 'checkc' : 'mic'} />
-          {interviewAhead ? 'Подготовиться к интервью' : 'Рассказать, как прошло'}
-        </Link>
+      {interview ? (
+        <InterviewActions
+          responseId={application.id}
+          ahead={interviewAhead}
+          marks={marks}
+          disabled={busy}
+          onMark={actions.mark}
+        />
       ) : null}
       {application.stage === 'archived' ? (
         <Button icon="undo" busy={busy} onClick={actions.restore}>
           Вернуть из архива
         </Button>
       ) : null}
-      <MarkMenu marks={marksFor(application.stage)} disabled={busy} onMark={actions.mark} />
+      {interview && !interviewAhead ? null : (
+        <MarkMenu marks={marks} disabled={busy} onMark={actions.mark} />
+      )}
     </div>
   );
+}
+
+/** Что дальше: после интервью — вопрос, как оно прошло (макет o01c). */
+function nextLine(item: ListedResponse): string {
+  const { application, row } = item;
+  if (application.stage === 'interview' && row.tag.tone === 'ok') {
+    return `Как прошло интервью с ${row.company}?`;
+  }
+  return row.next;
 }
 
 interface NoteProps {
@@ -261,7 +268,7 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
       </h3>
       {row.failure ? <StatusLine state="err" text={`Не доставлен · ${row.failure}`} /> : null}
       <p>
-        <b>{row.next}</b>
+        <b>{nextLine(item)}</b>
       </p>
       {row.remind ? (
         <ReminderDraft fieldId={`${titleId}-drt`} draft={draft} onChange={setDraft} />

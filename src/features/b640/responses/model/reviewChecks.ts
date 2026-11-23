@@ -52,6 +52,18 @@ export function checkCards(checks: RejectionReviewChecks): readonly CheckCard[] 
   return cards;
 }
 
+const COUNT_WORDS: Readonly<Record<number, string>> = {
+  1: 'Одна проверка',
+  2: 'Две проверки',
+  3: 'Три проверки',
+};
+
+/** Заголовок блока: «Три проверки…», а без проверки вилок — «Две проверки…». */
+export function checksHeading(count: number): string {
+  const which = count === 1 ? 'которой' : 'которым';
+  return `${COUNT_WORDS[count] ?? `${count} проверки`}, ${which} данные не нужны`;
+}
+
 /** Основание чисел: «Отклики со 2 октября. Порог — 20 откликов, как в сводке воронки.» */
 export function checksBasis(checks: RejectionReviewChecks, threshold: number): string {
   const date = longDate(checks.since);
