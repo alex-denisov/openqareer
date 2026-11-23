@@ -1952,7 +1952,10 @@ export class MultiSourceVacancyEngine {
    * B763: один шаг догона — окно пула, записи без кластера сводятся по ключам.
    * Только в режиме `keyed`; в остальных пересборка и так видит весь пул.
    */
-  public async runUnclusteredCatchUpStep(chunk?: number): Promise<{
+  public async runUnclusteredCatchUpStep(
+    chunk?: number,
+    maxClustered?: number,
+  ): Promise<{
     inspected: number;
     clustered: number;
     passFinished: boolean;
@@ -1960,7 +1963,7 @@ export class MultiSourceVacancyEngine {
     if (this.reclusterMode.mode !== 'keyed' || !this.pool.readUnclusteredPoolPage) {
       return { inspected: 0, clustered: 0, passFinished: true };
     }
-    const page = this.pool.readUnclusteredPoolPage(chunk);
+    const page = this.pool.readUnclusteredPoolPage(chunk, maxClustered);
     const clustered = await this.clusterInBatches(this.keyedStore(), page.unclustered);
     return { inspected: page.inspected, clustered, passFinished: page.passFinished };
   }
