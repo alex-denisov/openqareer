@@ -76,6 +76,12 @@ export function shortDate(date: string): string {
   return `${day} ${MONTHS_SHORT[month]}`;
 }
 
+/** «30 декабря». */
+export function longDate(date: string): string {
+  const { day, month } = parts(date);
+  return `${day} ${MONTHS_LONG[month]}`;
+}
+
 /** «Чт, 14 янв». */
 export function weekdayDate(date: string): string {
   return `${WEEKDAYS[parts(date).weekday]}, ${shortDate(date)}`;

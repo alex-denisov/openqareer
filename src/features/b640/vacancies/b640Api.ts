@@ -58,11 +58,26 @@ export function poolFilterQuery(roles: readonly string[]): string {
 }
 
 /** Запрос порции подборки: прежние фильтры (роли), `sort`, `direction`, `offset`, `limit`. */
-export function matchedPageQuery(sort: SortState, roles: readonly string[], offset: number): string {
+/** Пояс кандидата для границы дня фильтра «Дата» — та же, что у числа роли «Карьеры». */
+function candidateTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+/** `days` — фильтр «Дата» (B726): сервер режет и считает подборку сам; `null` — без даты. */
+export function matchedPageQuery(
+  sort: SortState,
+  roles: readonly string[],
+  offset: number,
+  days: number | null = null,
+): string {
   const query = new URLSearchParams(matchedVacancyQuery(offset, { roles, regions: [], remoteOnly: false }));
   query.set('sort', SERVER_KEY[sort.key]);
   query.set('direction', sort.dir);
   query.set('limit', String(B640_PAGE_SIZE));
+  if (days !== null) {
+    query.set('days', String(days));
+    query.set('tz', candidateTimeZone());
+  }
   return query.toString();
 }
 
@@ -71,8 +86,11 @@ export async function getSortedMatchedPage(
   roles: readonly string[],
   offset: number,
   signal?: AbortSignal,
+  days: number | null = null,
 ): Promise<PageResult<MatchedVacancyItem>> {
-  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset)}`, { signal });
+  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset, days)}`, {
+    signal,
+  });
   return readPage<MatchedVacancyItem>(response);
 }
 

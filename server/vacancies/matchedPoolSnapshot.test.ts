@@ -192,11 +192,29 @@ describe('MatchedPoolSnapshots: an expired snapshot is served while it rebuilds'
     expect(changed[0]?.cluster.id).toBe('changed');
   });
 
-  it('a snapshot of 20 minutes or older is rebuilt on the read', async () => {
+  // Prod 23.11: «Карьера» after 20 idle minutes waited 89 s and got 503 while the roles rebuilt.
+  it('a snapshot older than 20 minutes is served at once and rebuilt behind the read', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    const old = await first;
+    now.value = TWENTY + 60_000;
+    await snapshots.readAsync('two', 'profile', async () => [item('two')]);
+    let finish!: (items: MatchedVacancyItem[]) => void;
+    const rebuild = vi.fn(() => new Promise<MatchedVacancyItem[]>((done) => (finish = done)));
+
+    expect(await snapshots.readAsync('one', 'profile', rebuild)).toBe(old);
+    await turn();
+    expect(rebuild).toHaveBeenCalledTimes(1);
+    finish([item('new')]);
+    await turn();
+    expect((await snapshots.readAsync('one', 'profile', rebuild))[0]?.cluster.id).toBe('new');
+  });
+
+  it('a snapshot of a day or older is not an answer: the read waits for the rebuild', async () => {
     const now = { value: 0 };
     const { snapshots, first } = stored(now);
     await first;
-    now.value = TWENTY;
+    now.value = 24 * 60 * 60_000;
 
     const read = await snapshots.readAsync('one', 'profile', async () => [item('rebuilt')]);
 
@@ -244,12 +262,12 @@ describe('MatchedPoolSnapshots: an expired snapshot is served while it rebuilds'
     expect(read[0]?.cluster.id).toBe('new');
   });
 
-  it('a read that has to wait gets the old snapshot when the pool read fails, even past 20 minutes', async () => {
+  it('a read that has to wait gets the old snapshot when the pool read fails, even past a day', async () => {
     const now = { value: 0 };
     const log = vi.fn();
     const { snapshots, first } = stored(now, log);
     const old = await first;
-    now.value = TWENTY;
+    now.value = 24 * 60 * 60_000;
     const failure = new VacancyMatchUnavailable('vacancy_match_timeout', 12_000, 1);
 
     expect(await snapshots.readAsync('one', 'profile', () => Promise.reject(failure))).toBe(old);
@@ -279,9 +297,9 @@ describe('MatchedPoolSnapshots: an expired snapshot is served while it rebuilds'
     const snapshots = new MatchedPoolSnapshots({ clock: () => now.value });
     const failure = new VacancyMatchUnavailable('vacancy_match_timeout', 12_000, 1);
 
-    await expect(
-      snapshots.readAsync('one', 'profile', () => Promise.reject(failure)),
-    ).rejects.toBe(failure);
+    await expect(snapshots.readAsync('one', 'profile', () => Promise.reject(failure))).rejects.toBe(
+      failure,
+    );
     const read = await snapshots.readAsync('one', 'profile', async () => [item('new')]);
     expect(read[0]?.cluster.id).toBe('new');
   });
@@ -377,15 +395,18 @@ describe('MatchedPoolSnapshots: a shared text write marks snapshots stale', () =
     expect(compute).not.toHaveBeenCalled();
   });
 
-  it('the 20-minute limit still holds: a marked snapshot that old is rebuilt on the read', async () => {
+  it('a marked snapshot 20 minutes old is still served while it rebuilds', async () => {
     const now = { value: 0 };
     const snapshots = await stored(now);
+    const old = await snapshots.readAsync('one', 'profile', async () => [item('unused')]);
 
     snapshots.markAllStale();
     now.value = 20 * 60_000;
-    const read = await snapshots.readAsync('one', 'profile', async () => [item('new')]);
+    const rebuild = vi.fn(async () => [item('new')]);
 
-    expect(read[0]?.cluster.id).toBe('new');
+    expect(await snapshots.readAsync('one', 'profile', rebuild)).toBe(old);
+    await turn();
+    expect(rebuild).toHaveBeenCalledTimes(1);
   });
 
   it('a write during a rebuild leaves its result stale: the next interval reads the write', async () => {

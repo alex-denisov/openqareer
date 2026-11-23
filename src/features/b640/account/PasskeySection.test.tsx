@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   twoFactor: vi.fn(),
   start: vi.fn(),
   supported: vi.fn(() => true),
+  changePassword: vi.fn(),
 }));
 vi.mock('./passkeyApi', () => ({
   listPasskeys: api.list,
@@ -34,6 +35,7 @@ vi.mock('../../account/accountEmailChangeApi', () => ({
 }));
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
+  changePassword: api.changePassword,
   getAccount: async () => ({
     username: 'f.test',
     email: 'm@mail.test',
@@ -213,5 +215,38 @@ describe('B755: Touch ID / Face ID в n04', () => {
     expect(root.querySelector('.set-res.is-err')?.textContent).toBe(
       'Не удалось добавить устройство',
     );
+  });
+});
+
+describe('B755: смена пароля удаляет ключи входа', () => {
+  it('с ключом — строка о том, что ключи удалены, и список ключей перечитан', async () => {
+    api.list.mockResolvedValueOnce([KEY]).mockResolvedValue([]);
+    api.changePassword.mockResolvedValue(session);
+    const root = await open();
+    expect(api.list).toHaveBeenCalledTimes(1);
+    act(() => button(root, 'Сменить пароль')?.click());
+    const inputs = [...root.querySelectorAll('form.c5-form input[type=password]')];
+    type(inputs[0], 'old-secret');
+    type(inputs[1], 'new-secret-1');
+    type(inputs[2], 'new-secret-1');
+    act(() => (root.querySelector('form.c5-form .btn.is-primary') as HTMLButtonElement).click());
+    await settle();
+    expect(root.querySelector('.res-row')?.textContent).toBe(
+      'Пароль изменён. Ключи входа удалены — добавьте Touch ID заново',
+    );
+    expect(api.list).toHaveBeenCalledTimes(2);
+  });
+
+  it('без ключей — прежняя строка «Пароль изменён»', async () => {
+    api.changePassword.mockResolvedValue(session);
+    const root = await open();
+    act(() => button(root, 'Сменить пароль')?.click());
+    const inputs = [...root.querySelectorAll('form.c5-form input[type=password]')];
+    type(inputs[0], 'old-secret');
+    type(inputs[1], 'new-secret-1');
+    type(inputs[2], 'new-secret-1');
+    act(() => (root.querySelector('form.c5-form .btn.is-primary') as HTMLButtonElement).click());
+    await settle();
+    expect(root.querySelector('.res-row')?.textContent).toBe('Пароль изменён');
   });
 });

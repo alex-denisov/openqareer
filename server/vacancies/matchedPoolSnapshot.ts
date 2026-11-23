@@ -27,8 +27,12 @@ const DEFAULT_TTL_MS = 10 * 60_000;
  * PRB-041 (prod 03.11): the first read past the window waited 5–6 s for the rebuild, on whichever
  * offset came first. Until this age it gets the old snapshot and the rebuild runs behind it; the
  * key still carries the profile, so a candidate's own edit never reads the old list.
+ *
+ * Prod 23.11: at 20 minutes «Карьера» after an idle spell waited 89 s and got 503 while twelve
+ * roles rebuilt one by one. An old list of the same profile beats a refusal, so the limit is the
+ * one a stored snapshot already had: a day.
  */
-const DEFAULT_MAX_AGE_MS = 20 * 60_000;
+const DEFAULT_MAX_AGE_MS = 24 * 60 * 60_000;
 
 /**
  * PRB-041: a rebuild costs one large selection 7–8 s of the match reader (prod 04.11); once per
@@ -63,9 +67,6 @@ export interface MatchedSnapshotStore {
   keys(candidateId: string): string[];
 }
 
-/** A snapshot of the previous process stays an answer this long; a rebuild runs behind it. */
-const STORED_MAX_AGE_MS = 24 * 60 * 60_000;
-
 const WAIT_EXPIRED = Symbol('wait-expired');
 
 interface Snapshot {
@@ -73,8 +74,6 @@ interface Snapshot {
   readonly storedAt: number;
   /** The shared-write count this list was read after; an older count marks it stale. */
   readonly poolWrites: number;
-  /** Read from the store: after a deploy it is the only answer that does not wait. */
-  readonly stored?: boolean;
 }
 
 export interface MatchedPoolSnapshotsOptions {
@@ -209,7 +208,7 @@ export class MatchedPoolSnapshots {
     const stored = this.entries.get(key) ?? this.loadStored(candidateId, profileKey, key);
     const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
     if (stored && this.isCurrent(stored, age)) return stored.items;
-    const servable = age < (stored?.stored ? STORED_MAX_AGE_MS : this.maxAgeMs);
+    const servable = age < this.maxAgeMs;
     if (stored && servable && !options.awaitRebuild) {
       this.rebuildBehind(key, compute);
       return stored.items;
@@ -226,7 +225,6 @@ export class MatchedPoolSnapshots {
       items: persisted.items,
       storedAt: persisted.storedAt,
       poolWrites: this.poolWrites,
-      stored: true,
     };
     this.entries.set(key, snapshot);
     return snapshot;

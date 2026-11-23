@@ -31,6 +31,7 @@ import { withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyF
 import { readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
 import { readB640Sealed } from './b640SealedAnswer';
+import { careerTimeZone, observedWithinDays } from './careerRoleCounts';
 import { selectionFitLimit } from './fitSelectionSweep';
 import { candidatePlan, withDeps } from './helpers';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
@@ -42,6 +43,12 @@ const querySchema = matchedVacanciesQuerySchema
     ...pagingSchema,
     sort: z.enum(B640_SORT_KEYS).default('fit'),
     direction: z.enum(B640_SORT_DIRECTIONS).default('desc'),
+    /**
+     * B726: фильтр «Дата» на сервере — те же дни и та же граница дня, что у числа роли «Карьеры».
+     * Без него в серверном порядке число подборки с «Датой» было неизвестно, пока не дочитаны все порции.
+     */
+    days: z.coerce.number().int().min(0).max(366).optional(),
+    tz: z.string().max(64).optional(),
   });
 type Query = z.infer<typeof querySchema>;
 
@@ -199,6 +206,15 @@ async function sealedAnswer(
   };
 }
 
+/** Строки за последние `days` дней кандидата; без `days` — все. */
+function withinDays(rows: Rows, query: Query): Rows {
+  const { days } = query;
+  if (!days) return rows;
+  const now = new Date();
+  const timeZone = careerTimeZone(query);
+  return rows.filter((item) => observedWithinDays(item, days, now, timeZone));
+}
+
 const getMatchedVacancies = async (
   backgroundDeps: RouteDeps,
   request: FastifyRequest,
@@ -214,11 +230,16 @@ const getMatchedVacancies = async (
   const deps = withRequestScopedCandidateReads(backgroundDeps);
   const context = readB640ListContext(deps, candidate.id);
   if (profileIsEmpty(context)) return emptyResponse(request, query, context);
-  const sealed = await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
+  // Запечатанный список прошлого процесса — без окна дат: с «Датой» читаем список как обычно.
+  const sealed = query.days
+    ? undefined
+    : await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
   if (sealed) return sealed;
   const read = await readList(deps, request, candidate.id, context, query);
   const { list, fitLimit, targetLevel } = read;
-  const { rows, byFit } = await orderRows(deps, request, candidate.id, context, read, query);
+  const ordered = await orderRows(deps, request, candidate.id, context, read, query);
+  const { byFit } = ordered;
+  const rows = withinDays(ordered.rows, query);
   const shown = rows.slice(query.offset, query.offset + query.limit).map(trim);
   const levels = addStoredVacancyLevels(shown, targetLevel, (key) => deps.titleParseStore.getByKey(key));
   const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidate.id, levels));

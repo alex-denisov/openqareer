@@ -45,6 +45,15 @@ describe('подборка с серверной сортировкой', () => 
     expect(query.has('dir')).toBe(false);
   });
 
+  it('B726: «Дата» — дни и пояс кандидата; без даты их нет', () => {
+    const dated = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0, 30));
+    expect(dated.get('days')).toBe('30');
+    expect(dated.get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const plain = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0));
+    expect(plain.has('days')).toBe(false);
+    expect(plain.has('tz')).toBe(false);
+  });
+
   it('читает строки, всего и следующее смещение', async () => {
     fetchMock.mockResolvedValue(json({ data: [row('a'), row('b')], meta: { total: 9, nextOffset: null } }));
     const page = await getSortedMatchedPage({ key: 'money', dir: 'desc' }, [], 0);
