@@ -5,9 +5,11 @@ import { FunnelScreen } from './FunnelScreen';
 import { ResponsesScreen } from './ResponsesScreen';
 import { ReviewScreen } from './ReviewScreen';
 import './responses.css';
+import { useB640Title } from '../kit/useB640Title';
 
 /** Вход раздела «Отклики»: экран по коду узла (см. ../README.md). */
 export default function Section({ node, params }: SectionProps) {
+  useB640Title('Отклики');
   switch (node.code) {
     case 'o01':
       return <ResponsesScreen nodeCode="o01" openId={null} />;
