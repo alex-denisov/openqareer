@@ -38,6 +38,7 @@ vi.mock('./linkedinQueueApi', () => ({
   createFeedPost: vi.fn(),
   approveFeedPosts: vi.fn(),
   skipFeedPost: vi.fn(),
+  removeQueueItem: vi.fn(),
 }));
 
 const queue = await import('./linkedinQueueApi');
@@ -205,6 +206,16 @@ describe('a03p, a03b, a05', () => {
     const view = mount(<Section node={node('a05')} params={{}} />);
     await flush();
     expect(primaries(view)).toEqual(['Настроить ритм']);
+    // «Снять с очереди» меняет и ленту: карточка этого поста больше не «в очереди».
+    vi.mocked(queue.removeQueueItem).mockResolvedValue(undefined as never);
+    const feedReads = vi.mocked(queue.listFeedPosts).mock.calls.length;
+    const menuItem = [...view.container.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === 'Снять с очереди',
+    );
+    click(menuItem ?? null);
+    await flush();
+    expect(queue.removeQueueItem).toHaveBeenCalledWith('q1');
+    expect(vi.mocked(queue.listFeedPosts).mock.calls.length).toBeGreaterThan(feedReads);
     view.unmount();
   });
   it('лента a05: «N постов · Сегодня осталось X из Y», меню «Изменить темы», очередь комментариев с ритмом', async () => {

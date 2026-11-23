@@ -168,7 +168,7 @@ export function FeedScreen({ node }: SectionProps) {
             primary={load.state === 'ready' && load.data.items[0]?.state !== 'draft'}
             rhythm={plan.rhythm}
             items={plan.waiting}
-            onChanged={reloadPlan}
+            onChanged={reload}
             onRhythm={reloadPlan}
           />
         ) : null}
