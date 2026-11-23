@@ -729,6 +729,42 @@ test.describe('B676: своя вакансия', () => {
     await expect(page).toHaveURL(/\/app\/vacancies\/cluster-hh-1$/u);
   });
 
+  test('удалить свою вакансию: 1440 — корзина, 390 — «…» → «Удалить»', async ({
+    page,
+  }, testInfo) => {
+    const mobile = isMobile(testInfo.project.name);
+    await openCabinet(page, '/app/vacancies', { own: [OWN] });
+    const deleted: string[] = [];
+    await page.route('**/api/v1/candidate/b640/own-vacancies/*', (route) => {
+      if (route.request().method() !== 'DELETE') return route.fallback();
+      deleted.push(route.request().url().split('/').pop() ?? '');
+      return route.fulfill({ status: 204 });
+    });
+    const row = page.locator(ROWS).first();
+    await expect(row.locator('.va-mine')).toBeVisible();
+    const trash = row.getByRole('button', { name: `Удалить: ${OWN.title}` });
+    const more = row.getByRole('button', { name: 'Ещё действия' });
+    await expect(mobile ? more : trash).toBeVisible();
+    await expect(mobile ? trash : more).toBeHidden();
+    const target = mobile ? more : trash;
+    const hit = await target.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return Boolean(top && node.contains(top));
+    });
+    expect(hit).toBe(true);
+    if (mobile) {
+      await more.click();
+      await page
+        .getByRole('dialog', { name: `Действия: ${OWN.title}` })
+        .getByRole('button', { name: 'Удалить' })
+        .click();
+    } else {
+      await trash.click();
+    }
+    await expect.poll(() => deleted).toEqual([OWN.id]);
+  });
+
   test('снимки панели и строки «ваша» для сверки с макетом', async ({ page }, testInfo) => {
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
     mkdirSync('.s13-shots', { recursive: true });

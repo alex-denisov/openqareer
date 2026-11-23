@@ -46,7 +46,11 @@ export function useReview(onChanged: () => void) {
     }
   }
 
-  async function mark(target: ReviewTarget, review: 'hidden' | 'not_self', text: string) {
+  async function mark(
+    target: ReviewTarget,
+    review: 'hidden' | 'not_self' | 'confirmed_self',
+    text: string,
+  ) {
     if (busy) return;
     setBusy(true);
     setError(null);
@@ -64,7 +68,12 @@ export function useReview(onChanged: () => void) {
     });
   }
 
-  return { error, busy, mark };
+  /** «Это моё»: находка подтверждена, «Отменить» вернёт её в неразобранные. */
+  function confirm(target: ReviewTarget, text: string) {
+    return mark(target, 'confirmed_self', text);
+  }
+
+  return { error, busy, mark, confirm };
 }
 
 /** «В профиль» с отменой в тосте; тот же факт уже в профиле — «Уже в профиле» (B382). */
@@ -108,25 +117,33 @@ function AddToProfile({ findingId }: { readonly findingId: string }) {
   );
 }
 
-/** B727: страница найдена по нику — открыть её и сказать «не моё», если ник чужой. */
-function OwnerActions({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
+/** «Это не моё» у находки: страница чужая — уходит из сводки, в тосте «Отменить». */
+function NotMine({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
   const review = useReview(onChanged);
-  const { findingId, url, action } = item;
-  if (!url || !action) return null;
+  const { findingId } = item;
+  if (!findingId) return null;
+  return (
+    <>
+      <button className="row-act" type="button" disabled={review.busy}
+        onClick={() => void review.mark({ kind: 'finding', id: findingId }, 'not_self', 'Отмечено: это не ваша страница')}>
+        Это не моё
+      </button>
+      {review.error ? <StatusLine state="err" text={review.error} /> : null}
+    </>
+  );
+}
+
+/** B727/B382: страница по нику — «Проверить» ведёт на f03b, сама страница открывается там. */
+function OwnerActions({ item, onChanged }: { readonly item: FootprintRiskItem; readonly onChanged: () => void }) {
+  const { action } = item;
+  if (!action) return null;
   return (
     <div className="fp-acts">
-      <a className="btn is-sm" href={url} rel="noopener noreferrer" target="_blank"
-        aria-label={`${action.label}: ${item.title}, откроется в новой вкладке`}>
+      <Link className="btn is-sm" to={buildNodePath('f03b', { findingId: item.id })}>
         <Icon name={ACTION_ICON[action.kind]} />
         {action.label}
-      </a>
-      {findingId ? (
-        <button className="row-act" type="button" disabled={review.busy}
-          onClick={() => void review.mark({ kind: 'finding', id: findingId }, 'not_self', 'Отмечено: это не ваша страница')}>
-          Это не моё
-        </button>
-      ) : null}
-      {review.error ? <StatusLine state="err" text={review.error} /> : null}
+      </Link>
+      <NotMine item={item} onChanged={onChanged} />
     </div>
   );
 }
@@ -136,6 +153,13 @@ function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; rea
   const { action, findingId } = item;
   if (!action) return null;
   if (confirmsOwner(item)) return <OwnerActions item={item} onChanged={onChanged} />;
+  if (action.kind === 'not_mine') {
+    return (
+      <div className="fp-acts">
+        <NotMine item={item} onChanged={onChanged} />
+      </div>
+    );
+  }
   const target = reviewTarget(item);
   return (
     <div className="fp-acts">
@@ -146,7 +170,7 @@ function RowActions({ item, onChanged }: { readonly item: FootprintRiskItem; rea
           {action.label}
         </Link>
       ) : null}
-      {target && action.kind !== 'add_to_profile' ? (
+      {target && opensRemovalPath(item) ? (
         <button className="row-act" type="button"
           onClick={() => void review.mark(target, 'hidden', 'Отмечено: не проблема')}>
           Это не проблема

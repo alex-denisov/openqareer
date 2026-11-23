@@ -83,10 +83,11 @@ describe('находки', () => {
     expect(opensRemovalPath(item)).toBe(true);
     expect(opensRemovalPath({ ...item, action: { kind: 'add_to_profile', label: 'В профиль' } })).toBe(false);
     expect(opensRemovalPath({ ...item, action: null })).toBe(false);
-    // B727: страница по нику — «Проверить» ведёт на саму страницу, а не на путь удаления.
+    expect(opensRemovalPath({ ...item, action: { kind: 'not_mine', label: 'Это не моё' } })).toBe(false);
+    // B382: страница по нику — «Проверить» ведёт на f03b, сама страница открывается там.
     const nick = { ...item, action: { kind: 'confirm_owner' as const, label: 'Проверить' } };
     expect(confirmsOwner(nick)).toBe(true);
-    expect(opensRemovalPath(nick)).toBe(false);
+    expect(opensRemovalPath(nick)).toBe(true);
     expect(confirmsOwner({ ...nick, url: null })).toBe(false);
     expect(confirmsOwner(item)).toBe(false);
   });
