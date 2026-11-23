@@ -14,6 +14,11 @@ export type MockLoad =
   | { readonly kind: 'other'; readonly response: ApplicationView; readonly session: InterviewSessionView }
   | { readonly kind: 'ready'; readonly response: ApplicationView; readonly session: InterviewSessionView };
 
+/** Тренировки больше нет: её заменили в другой вкладке или в приложении. */
+export function isSessionGone(reason: unknown): boolean {
+  return isCode(reason, 'interview_session_not_found');
+}
+
 function isCode(reason: unknown, code: string): boolean {
   return reason instanceof CoachApiError && reason.code === code;
 }
@@ -34,7 +39,8 @@ async function startFor(response: ApplicationView): Promise<MockLoad> {
     // Начатую параллельно (второй заход экрана) продолжаем, а не заводим новую.
     const current = await getCurrentInterviewSession();
     if (!current) throw reason;
-    return { kind: current.applicationId === response.id ? 'ready' : 'other', response, session: current };
+    const own = sessionChoice(current, response.id) === 'resume';
+    return { kind: own ? 'ready' : 'other', response, session: current };
   }
 }
 
@@ -46,5 +52,20 @@ export async function loadMock(responseId: string, signal: AbortSignal): Promise
   const choice = sessionChoice(current, response.id);
   if (current && choice === 'resume') return { kind: 'ready', response, session: current };
   if (current && choice === 'other') return { kind: 'other', response, session: current };
+  return startFor(response);
+}
+
+/**
+ * Тренировку заменили в другой вкладке или в приложении (ответ — 404): своя текущая по этому
+ * отклику подхватывается, иначе начинается новая. Набранный ответ держит экран.
+ */
+export async function recoverMock(response: ApplicationView): Promise<MockLoad> {
+  const current = await getCurrentInterviewSession();
+  if (current && sessionChoice(current, response.id) === 'resume') {
+    return { kind: 'ready', response, session: current };
+  }
+  if (current && sessionChoice(current, response.id) === 'other') {
+    return { kind: 'other', response, session: current };
+  }
   return startFor(response);
 }
