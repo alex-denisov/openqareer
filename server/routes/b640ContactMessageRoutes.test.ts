@@ -153,7 +153,8 @@ describe('B753: своя цепочка сообщения', () => {
 });
 
 describe('B753: сокращение и роли по-русски', () => {
-  async function harness(bodies: string[], targetRole = 'Директор по данным', headline = 'Руководитель аналитики') {
+  type Cluster = { canonicalTitle: string; canonicalCompany: string; descriptionSummary?: string; canonicalLocation?: string };
+  async function harness(bodies: string[], targetRole = 'Директор по данным', headline = 'Руководитель аналитики', cluster?: Cluster) {
     const calls: CoverLetterWriteInput[] = [];
     const contact: CoverLetterWriter = {
       async writeCoverLetter(input) {
@@ -162,16 +163,39 @@ describe('B753: сокращение и роли по-русски', () => {
         return body ? { body, stage: 'stub' } : { stage: 'stub', failure: { stage: 'stub', kind: 'timeout' } };
       },
     };
-    const h = await createB640Harness({ pool: () => [], contactMessageWriter: contact });
+    const h = await createB640Harness({
+      pool: () => [], contactMessageWriter: contact, ...(cluster ? { engine: { getActiveCluster: () => cluster } } : {}),
+    });
     closers.push(h.close);
     h.candidates.saveResumeDraft(h.candidateIds['flagged.test'], { ...EMPTY_RESUME_DRAFT, targetRole,
       candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline } }, []);
     const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
     await h.app.inject({ method: 'PUT', url: `${OLD}/anna`, headers,
       payload: { fullName: 'Анна Ким', companyName: 'Альфа', roleTitle: 'Рекрутер', relationship: 'Коллега', strength: 'strong' } });
-    const post = async () => (await h.app.inject({ method: 'POST', url: BASE, headers, payload: { contactId: 'anna', kind: 'known_contact' } })).json().data.text as string;
+    const payload = { contactId: 'anna', kind: 'known_contact', ...(cluster ? { vacancyId: 'cluster-src-x:1' } : {}) };
+    const post = async () => (await h.app.inject({ method: 'POST', url: BASE, headers, payload })).json().data.text as string;
     return { calls, post };
   }
+
+  it('без вакансии текст «по поводу открытой вакансии» не принимается — шаблон без вакансии', async () => {
+    const { post } = await harness(['Анна, здравствуйте! Пишу по поводу открытой вакансии в Альфа.', 'Анна, здравствуйте! Пишу по поводу вакансии.']);
+    expect(await post()).not.toMatch(/ваканси/iu);
+  });
+
+  it('язык: английская вакансия — английский черновик, русская — русский', async () => {
+    const en = await harness(['Hello Anna! Happy to discuss.'], 'CTO', 'CTO', {
+      canonicalTitle: 'Senior Lead AI Engineer', canonicalCompany: 'Capital One',
+      descriptionSummary: 'We are looking for a lead engineer to build agentic AI platform services.', canonicalLocation: 'McLean, VA, United States',
+    });
+    await en.post();
+    expect(en.calls[0]?.chosenLanguage).toBe('en');
+    const ru = await harness(['Анна, здравствуйте!'], 'CTO', 'CTO', {
+      canonicalTitle: 'Директор по кредитным продуктам (CPO)', canonicalCompany: 'СБЕР',
+      descriptionSummary: 'Ищем руководителя кредитных продуктов.', canonicalLocation: 'Москва',
+    });
+    await ru.post();
+    expect(ru.calls[0]?.chosenLanguage).toBe('ru');
+  });
 
   it('длинный текст — та же модель сокращает свой текст, шаблон не нужен', async () => {
     const long = `Анна, привет! Давно не общались. ${'Очень длинное пояснение. '.repeat(30)}`;
