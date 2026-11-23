@@ -29,4 +29,14 @@ describe('titleMatchesRole (B248)', () => {
   it('returns false for a blank role instead of matching everything', () => {
     expect(titleMatchesRole('VP Technology Ops', '   ')).toBe(false);
   });
+
+  it('B766: роль совпадает только целыми словами — «CTO» не внутри «Director»', () => {
+    expect(titleMatchesRole('Director of Customer Success', 'CTO')).toBe(false);
+    expect(titleMatchesRole('Director, Pharmacovigilance Operations', 'CTO')).toBe(false);
+    expect(titleMatchesRole('Технический директор / Tech lead / CTO', 'CTO')).toBe(true);
+    expect(titleMatchesRole('CTO', 'Chief Technology Officer CTO')).toBe(true);
+    // Два общих слова — тоже целые слова: «ops» не находится в «Operations».
+    expect(titleMatchesRole('Head of Development Operations', 'VP Development Ops')).toBe(false);
+    expect(titleMatchesRole('Head of IT', 'Head of IT Operations')).toBe(true);
+  });
 });
