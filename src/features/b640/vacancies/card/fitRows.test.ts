@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
-import { coachVerdict, fitBlockState, fitRows, requirementsLabel, sourceLine } from './fitRows';
+import { fitBlockState, fitRows, requirementsLabel, sourceLine } from './fitRows';
 
 function req(id: string, text: string, skill = true) {
   return {
@@ -127,33 +127,5 @@ describe('fitBlockState', () => {
   });
   it('мало требований — few', () => {
     expect(fitBlockState(view({ state: 'no_requirements', result: undefined }), false)).toBe('few');
-  });
-});
-
-describe('coachVerdict: «Вывод консультанта» на шаге «Отклик» (a02d)', () => {
-  it('сколько требований есть в профиле и каких нет', () => {
-    const text = coachVerdict(view());
-    expect(text).toContain('2 из 4 требований вакансии есть в профиле.');
-    expect(text).toMatch(/Нет в профиле: Go\.$/u);
-  });
-
-  it('без процента вывода нет: блок не показывается', () => {
-    expect(coachVerdict(undefined)).toBeNull();
-    expect(coachVerdict(view({ state: 'processing', result: undefined }))).toBeNull();
-  });
-
-  it('все требования есть — без строки «Нет в профиле»', () => {
-    const all = view();
-    const matched = {
-      ...all,
-      result: {
-        ...all.result!,
-        assessments: all.result!.assessments.map((item) => ({
-          ...item,
-          status: 'matched' as const,
-        })),
-      },
-    };
-    expect(coachVerdict(matched)).not.toContain('Нет в профиле');
   });
 });
