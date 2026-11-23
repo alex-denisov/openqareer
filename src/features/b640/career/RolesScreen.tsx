@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useShell } from '../shell/ShellContext';
 import { Icon, Link } from '../kit';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
-import { loadRoles, loadSkillStrip, type RolesData } from './careerApi';
+import { loadRoles, loadSelectionTotal, loadSkillStrip, type RolesData } from './careerApi';
 import { conditionsPath, pageAttrs } from './careerPaths';
 import { RolePickDialog } from './RolePickDialog';
 import { RoleTable } from './RoleTable';
@@ -34,6 +34,21 @@ export function RolesLoad({
   );
 }
 
+/** B768: число вакансий выбора догружается в полосу роли, таблица его не ждёт. */
+function useSelectionTotal(titles: readonly string[]): number | null {
+  const [total, setTotal] = useState<number | null>(null);
+  const key = titles.join('\n');
+  useEffect(() => {
+    const controller = new AbortController();
+    setTotal(null);
+    void loadSelectionTotal(key ? key.split('\n') : [], controller.signal).then((value) => {
+      if (!controller.signal.aborted) setTotal(value);
+    });
+    return () => controller.abort();
+  }, [key]);
+  return total;
+}
+
 function SearchRoleStrip({
   data,
   onEdit,
@@ -41,7 +56,8 @@ function SearchRoleStrip({
   readonly data: RolesData;
   readonly onEdit: () => void;
 }) {
-  const strip = searchStrip(data.searchTitles, data.selectionTotal, data.campaign.titlesRu);
+  const total = useSelectionTotal(data.searchTitles);
+  const strip = searchStrip(data.searchTitles, total, data.campaign.titlesRu);
   return (
     <section className="role-strip" aria-labelledby="role-title">
       <p className="role-strip-t">

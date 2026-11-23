@@ -50,7 +50,39 @@ CREATE TABLE IF NOT EXISTS ${RESOLUTION_TABLE} (
 CREATE INDEX IF NOT EXISTS idx_company_linkedin_resolution_retry ON ${RESOLUTION_TABLE}(retry_at);
 `;
 
+/** Как часто новые строки перечитываются с начала реестра: так находится строка с новым сайтом. */
+export const NEW_ROWS_RESCAN_MS = 60 * 60_000;
+
+const QUEUE_COLUMNS = 'd.company_key, d.company_name, d.website_url, d.careers_url, d.linkedin_url';
+const QUEUE_FILTER = `(d.linkedin_org_id IS NULL OR d.linkedin_org_id = '')
+  AND ((d.linkedin_url IS NOT NULL AND d.linkedin_url <> '') OR (d.website_url IS NOT NULL AND d.website_url <> ''))`;
+
+const NEW_ROW_SQL = `SELECT d.rowid AS row_id, ${QUEUE_COLUMNS}
+  FROM company_directory d
+  WHERE d.rowid >= ? AND ${QUEUE_FILTER}
+    AND NOT EXISTS (SELECT 1 FROM ${RESOLUTION_TABLE} r WHERE r.company_key = d.company_key)
+  ORDER BY d.rowid
+  LIMIT 1`;
+
+const RETRY_ROW_SQL = `SELECT ${QUEUE_COLUMNS}
+  FROM ${RESOLUTION_TABLE} r
+  JOIN company_directory d ON d.company_key = r.company_key
+  WHERE r.retry_at IS NOT NULL AND r.retry_at <= ? AND ${QUEUE_FILTER}
+  ORDER BY r.retry_at
+  LIMIT 1`;
+
+type DueRow = Record<string, string | number | null> & {
+  company_key: string;
+  company_name: string;
+  website_url: string | null;
+  careers_url: string | null;
+  linkedin_url: string | null;
+};
+
 export class LinkedinOrgStore {
+  private newCursor = 0;
+  private lapStartedMs = Number.NEGATIVE_INFINITY;
+
   constructor(private readonly db: DatabaseSync) {
     db.exec(COMPANY_DIRECTORY_MIGRATION);
     db.exec(MIGRATION);
@@ -60,21 +92,11 @@ export class LinkedinOrgStore {
    * Следующая строка без ID: новые — первыми, затем просроченные повторы.
    * B645: только строки со ссылкой LinkedIn или сайтом (по нему резолвер ищет LinkedIn);
    * ~500 тыс. компаний freehire без того и другого в очередь не идут.
+   * B761: новые строки читаются по rowid от курсора, повторы — по индексу retry_at;
+   * сортировки всего реестра на каждый вызов больше нет (было 8,3 с на профиле).
    */
   nextDue(now: Date): QueueRow | undefined {
-    const iso = now.toISOString();
-    const row = this.db
-      .prepare(
-        `SELECT d.company_key, d.company_name, d.website_url, d.careers_url, d.linkedin_url
-         FROM company_directory d
-         LEFT JOIN ${RESOLUTION_TABLE} r ON r.company_key = d.company_key
-         WHERE (d.linkedin_org_id IS NULL OR d.linkedin_org_id = '')
-           AND ((d.linkedin_url IS NOT NULL AND d.linkedin_url <> '') OR (d.website_url IS NOT NULL AND d.website_url <> ''))
-           AND (r.company_key IS NULL OR r.retry_at IS NULL OR r.retry_at <= ?)
-         ORDER BY (r.company_key IS NOT NULL), r.retry_at, d.company_key
-         LIMIT 1`,
-      )
-      .get(iso) as Record<string, string | null> | undefined;
+    const row = this.nextNew(now.getTime()) ?? this.nextRetry(now.toISOString());
     if (!row) return undefined;
     return {
       companyKey: row.company_key!,
@@ -83,6 +105,41 @@ export class LinkedinOrgStore {
       careersUrl: row.careers_url ?? null,
       linkedinUrl: row.linkedin_url ?? null,
     };
+  }
+
+  /** Планы обоих чтений очереди — для проверки, что реестр не сортируется целиком. */
+  nextDuePlans(now: Date): string[] {
+    const plan = (sql: string, arg: number | string) =>
+      (this.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(arg) as { detail: string }[]).map(
+        (r) => r.detail,
+      );
+    return [...plan(NEW_ROW_SQL, 0), ...plan(RETRY_ROW_SQL, now.toISOString())];
+  }
+
+  /**
+   * Курсор включительный: строка, прочитанная, но не записанная (пауза 429), вернётся снова.
+   * Новая компания получает rowid за курсором и берётся сразу; строка, у которой сайт
+   * появился позади курсора, — на следующем круге, раз в `NEW_ROWS_RESCAN_MS`.
+   */
+  private nextNew(nowMs: number): DueRow | undefined {
+    if (nowMs - this.lapStartedMs >= NEW_ROWS_RESCAN_MS) {
+      this.newCursor = 0;
+      this.lapStartedMs = nowMs;
+    }
+    const row = this.db.prepare(NEW_ROW_SQL).get(this.newCursor) as DueRow | undefined;
+    if (row) {
+      this.newCursor = Number(row.row_id);
+      return row;
+    }
+    const last = this.db.prepare('SELECT max(rowid) AS top FROM company_directory').get() as {
+      top: number | null;
+    };
+    this.newCursor = Number(last.top ?? 0) + 1;
+    return undefined;
+  }
+
+  private nextRetry(iso: string): DueRow | undefined {
+    return this.db.prepare(RETRY_ROW_SQL).get(iso) as DueRow | undefined;
   }
 
   record(companyKey: string, outcome: ResolutionOutcome, now: Date): void {

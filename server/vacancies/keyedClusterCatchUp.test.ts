@@ -121,4 +121,30 @@ describe('B763: rows written before a stop still get clusters', () => {
     expect(pool.countClusters()).toBe(3);
     pool.close();
   });
+
+  it('inspects a wide window but clusters at most the given count per step', async () => {
+    const { pool, engine } = build([]);
+    pool.replaceSourceSlice(
+      'alpha',
+      ['a1', 'a2', 'a3', 'a4', 'a5'].map((key) => vacancy('alpha', key)),
+    );
+
+    const first = await engine.runUnclusteredCatchUpStep(10, 2);
+    expect(first).toMatchObject({ clustered: 2, passFinished: false });
+    expect(clusteredIds(pool)).toEqual(['alpha:a1', 'alpha:a2']);
+
+    const second = await engine.runUnclusteredCatchUpStep(10, 2);
+    expect(second.clustered).toBe(2);
+    expect(clusteredIds(pool)).toEqual(['alpha:a1', 'alpha:a2', 'alpha:a3', 'alpha:a4']);
+
+    let rest = 0;
+    for (let i = 0; i < 5; i += 1) {
+      const step = await engine.runUnclusteredCatchUpStep(10, 2);
+      rest += step.clustered;
+      if (step.passFinished) break;
+    }
+    expect(rest).toBe(1);
+    expect(pool.countClusters()).toBe(5);
+    pool.close();
+  });
 });

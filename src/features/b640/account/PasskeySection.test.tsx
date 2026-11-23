@@ -17,6 +17,15 @@ const api = vi.hoisted(() => ({
   start: vi.fn(),
   supported: vi.fn(() => true),
   changePassword: vi.fn(),
+  desktop: vi.fn(() => false),
+  openExternal: vi.fn(async () => true),
+}));
+vi.mock('../../../services/desktop/desktopBridge', async (original) => ({
+  ...(await original<typeof import('../../../services/desktop/desktopBridge')>()),
+  isTauriEnvironment: api.desktop,
+}));
+vi.mock('../../../services/desktop/openExternalLink', () => ({
+  openExternalLink: api.openExternal,
 }));
 vi.mock('./passkeyApi', () => ({
   listPasskeys: api.list,
@@ -74,6 +83,7 @@ let view: Mounted | null = null;
 beforeEach(() => {
   vi.clearAllMocks();
   api.supported.mockReturnValue(true);
+  api.desktop.mockReturnValue(false);
   api.list.mockResolvedValue([]);
   api.twoFactor.mockResolvedValue({ enabled: false, backupCodesLeft: 0 });
   api.options.mockResolvedValue(OPTIONS);
@@ -188,6 +198,18 @@ describe('B755: Touch ID / Face ID в n04', () => {
     expect(button(root, 'Добавить')?.disabled).toBe(true);
     type(field(root, 'Код из приложения-аутентификатора'), '123456');
     expect(button(root, 'Добавить')?.disabled).toBe(false);
+  });
+
+  it('in the .app: «ключей: N», and «Добавить устройство» opens n04 in the browser', async () => {
+    api.desktop.mockReturnValue(true);
+    api.supported.mockReturnValue(false);
+    api.list.mockResolvedValue([KEY, { ...KEY, id: 'k2', deviceLabel: 'iPhone · Safari' }]);
+    const root = await open();
+    expect(row(root)?.textContent).toContain('ключей: 2');
+    act(() => button(row(root) as Element, 'Добавить устройство')?.click());
+    expect(api.openExternal).toHaveBeenCalledWith(`${window.location.origin}/app/account/security`);
+    expect(field(root, 'Текущий пароль')).toBeNull();
+    expect(api.start).not.toHaveBeenCalled();
   });
 
   it('cancel in the system dialog changes nothing and shows nothing', async () => {
