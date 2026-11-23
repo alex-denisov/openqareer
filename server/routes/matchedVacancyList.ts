@@ -338,7 +338,7 @@ export function sealMatchedList(
   try {
     const text = sealedListText(list, choice);
     if (!text) return;
-    const written = input.candidateStore.sealedMatchedLists?.write(input.candidateId, builtAt, text);
+    const written = input.candidateStore.sealedMatchedLists?.write(input.candidateId, builtAt, text, choice);
     if (written) log?.info({ ...written, bytes: text.length, rows: list.filtered.length }, 'matched-list-sealed');
   } catch (error) {
     log?.error({ errorName: errorName(error) }, 'matched-list-seal-failed');
@@ -409,6 +409,7 @@ export function readSealedMatchedList(
   const row = input.candidateStore.sealedMatchedLists?.read(
     input.candidateId,
     now - MATCHED_LIST_MAX_AGE_MS,
+    choice,
   );
   return row ? sealedListAnswering(row.text, choice) : undefined;
 }

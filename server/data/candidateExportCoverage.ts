@@ -125,6 +125,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_application_operations: { internal: 'кэш повторов запросов трекера' },
   matched_snapshot_seals: { internal: 'кэш подборки вакансий, пересчитывается' },
   sealed_matched_lists: { internal: 'кэш подборки вакансий, пересчитывается' },
+  sealed_matched_list_choices: { internal: 'кэш подборки вакансий, пересчитывается' },
   // Ещё не в выгрузке.
   candidate_notifications: { export: 'notifications' },
   candidate_notification_deliveries: { export: 'notifications' },
