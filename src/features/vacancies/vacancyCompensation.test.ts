@@ -42,3 +42,19 @@ describe('formatCompensationCompact (B446-g4: thousands, ₽ at the end)', () =>
     );
   });
 });
+
+describe('formatCompensationCompact: суммы меньше тысячи (B765, B645 23.11)', () => {
+  it('почасовая ставка — целыми суммами с «в час», без «$0–0 тыс.»', () => {
+    expect(formatCompensationCompact({ from: 200, to: 300, currency: 'USD', period: 'hour' })).toBe(
+      '$200–300 в час',
+    );
+    expect(formatCompensationCompact({ from: 115, to: 130, currency: 'EUR' })).toBe('€115–130');
+    expect(formatCompensationCompact({ from: 900, currency: 'USD' })).toBe('от $900');
+  });
+
+  it('тысячи и больше — как прежде', () => {
+    expect(
+      formatCompensationCompact({ from: 218000, to: 265000, currency: 'USD', period: 'year' }),
+    ).toBe('$218–265 тыс.');
+  });
+});

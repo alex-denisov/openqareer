@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
+import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { matchCandidateWithVacancy } from '../vacancies/vacancyMatcher';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readB640ListContext, sessionCandidate } from './b640VacancyContext';
@@ -13,7 +13,7 @@ const ID_MAX = 200;
 
 /** Объяснение совпадения для одной вакансии — тем же сравнением, что и строка подборки. */
 function cardItem(deps: RouteDeps, candidateId: string, clusterId: string): MatchedVacancyItem | undefined {
-  const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, clusterId);
+  const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, clusterId);
   if (!cluster) return undefined;
   const context = readB640ListContext(deps, candidateId);
   const explanation = matchCandidateWithVacancy(

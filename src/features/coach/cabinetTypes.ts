@@ -154,6 +154,8 @@ interface VacancyCluster {
     to?: number;
     currency?: string;
     gross?: boolean;
+    /** Период из источника; без него `salaryPeriodOf` решает по сумме. */
+    period?: 'hour' | 'month' | 'year';
   };
   descriptionSummary: string;
   skills: string[];
