@@ -14,7 +14,7 @@ import { useVoiceInput } from '../voice/useVoiceInput';
 import { loadPractice, startPractice, type PracticeLoad } from './data/practiceApi';
 import { practiceChoice } from './model/practiceModel';
 import { formatInterviewWhen } from './model/prepModel';
-import { PracticeAnswer } from './PracticeAnswer';
+import { PracticeAnswer, type PracticeRecovery } from './PracticeAnswer';
 import { answerModeOf } from './PracticeAnswerInput';
 import { PracticeReview } from './PracticeReview';
 import { PracticeTask } from './PracticeTask';
@@ -184,6 +184,7 @@ function Body(props: {
   readonly load: PracticeLoad;
   readonly asked: string | null;
   readonly onSession: (session: InterviewSessionView) => void;
+  readonly recovery: PracticeRecovery;
   readonly reload: () => void;
 }) {
   const { load } = props;
@@ -219,12 +220,31 @@ function Body(props: {
           task={load.task}
           company={companyOf(load.response)}
           session={load.session}
-          onFinished={props.onSession}
+          recovery={props.recovery}
         />
       </div>
       <div className="col" />
     </>
   );
+}
+
+/** B780: тренировку заменили в другой вкладке — перечитать текущую, набранный ответ сохранить. */
+function useRecovery(
+  reload: () => void,
+  onSession: (session: InterviewSessionView) => void,
+): PracticeRecovery {
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  return {
+    draft,
+    onLost: (text) => {
+      setDraft(text);
+      reload();
+    },
+    onFinished: (session) => {
+      setDraft(undefined);
+      onSession(session);
+    },
+  };
 }
 
 /** «Тренировка System Design» (I3): задача по вакансии отклика, ответ со схемой, разбор. */
@@ -242,13 +262,22 @@ export function PracticeScreen({ responseId }: { readonly responseId: string }) 
     replaceData({ ...data, session });
     if (asked) navigate(stepPath(data.response.id, 'answer'));
   };
+  const recovery = useRecovery(reload, onSession);
   return (
     <>
       <PrepSteps responseId={response?.id ?? responseId} current="prep" />
       <PracticeSteps responseId={response?.id ?? responseId} current={current} />
       <div className="page two" data-b640-node="i03" data-b640-section="interview">
         {response ? <InterviewHead response={response} /> : null}
-        {data ? <Body load={data} asked={asked} onSession={onSession} reload={reload} /> : null}
+        {data ? (
+          <Body
+            load={data}
+            asked={asked}
+            onSession={onSession}
+            recovery={recovery}
+            reload={reload}
+          />
+        ) : null}
         {!data && state.status === 'error' ? (
           <StatusLine
             state="err"
