@@ -1898,29 +1898,71 @@ export class MultiSourceVacancyEngine {
     dropObservedBefore?: string,
   ): Promise<void> {
     const store = this.keyedStore();
+    // B763: каждая записанная порция сводится сразу. Раньше сведение шло после
+    // записи всего среза, и остановка посреди записи (выкат) оставляла уже
+    // записанные строки без кластера навсегда.
+    const clustered = new Set<string>();
+    const clusterChunk = async (chunk: readonly UnifiedVacancy[]) => {
+      await this.clusterInBatches(store, chunk);
+      for (const vacancy of chunk) clustered.add(vacancy.id);
+    };
     let gone: readonly VacancyLink[];
     if (partial) {
       const result = this.pool.mergeSourceSliceAsync
-        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore)
+        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore, {
+            onChunkWritten: clusterChunk,
+          })
         : this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
       gone = result.dropped;
     } else {
       const fetchedIds = new Set(freshFetched.map((vacancy) => vacancy.id));
       gone = this.pool.loadSourceLinks(source.id).filter((link) => !fetchedIds.has(link.id));
       if (this.pool.replaceSourceSliceAsync) {
-        await this.pool.replaceSourceSliceAsync(source.id, freshFetched);
+        await this.pool.replaceSourceSliceAsync(source.id, freshFetched, {
+          onChunkWritten: clusterChunk,
+        });
       } else {
         this.pool.replaceSourceSlice(source.id, freshFetched);
       }
     }
     if (gone.length > 0) detachVacanciesByKeys(store, gone);
+    // Хранилище без порций (синхронная запись) — сведение после записи, как раньше.
+    await this.clusterInBatches(
+      store,
+      freshFetched.filter((vacancy) => !clustered.has(vacancy.id)),
+    );
+    this.keyedClusterings += 1;
+  }
+
+  /** Партиями `batchSize`, с уступкой циклу событий между партиями (B230). */
+  private async clusterInBatches(
+    store: KeyedClusterStore,
+    vacancies: readonly UnifiedVacancy[],
+  ): Promise<number> {
     const batchSize =
       this.reclusterMode.mode === 'keyed' ? this.reclusterMode.batchSize : DEFAULT_KEYED_BATCH_SIZE;
-    for (let offset = 0; offset < freshFetched.length; offset += batchSize) {
+    for (let offset = 0; offset < vacancies.length; offset += batchSize) {
       if (offset > 0) await new Promise<void>((resolve) => setImmediate(resolve));
-      clusterBatchByKeys(store, freshFetched.slice(offset, offset + batchSize));
+      clusterBatchByKeys(store, vacancies.slice(offset, offset + batchSize));
     }
-    this.keyedClusterings += 1;
+    return vacancies.length;
+  }
+
+  /**
+   * B763: один шаг догона — окно пула, записи без кластера сводятся по ключам.
+   * Только в режиме `keyed`; в остальных пересборка и так видит весь пул.
+   */
+  public async runUnclusteredCatchUpStep(chunk?: number): Promise<{
+    inspected: number;
+    clustered: number;
+    passFinished: boolean;
+  }> {
+    if (this.reclusterMode.mode !== 'keyed' || !this.pool.readUnclusteredPoolPage) {
+      return { inspected: 0, clustered: 0, passFinished: true };
+    }
+    const page = this.pool.readUnclusteredPoolPage(chunk);
+    const clustered = await this.clusterInBatches(this.keyedStore(), page.unclustered);
+    return { inspected: page.inspected, clustered, passFinished: page.passFinished };
   }
 
   private keyedStore(): KeyedClusterStore {

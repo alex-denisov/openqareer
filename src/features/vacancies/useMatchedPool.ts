@@ -227,13 +227,15 @@ async function loadMatchedPool(
   // A silent refresh replaces the cached list in one step when the read is
   // done, so the table never shrinks to the first page and grows back (B589).
   let lastPoolSize = 0;
-  readMatchedFacets(setters, isActive, filters);
   try {
     const pool = await collectMatchedPool<MatchedVacancyItem>(
       (offset) =>
         withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters, 'rows')).then((page) => {
           if (offset === 0 && isActive()) {
+            // B760: фасеты — после первой страницы, иначе на холодном сервере они делят
+            // с ней цикл событий, и строки приходят на 1,5–3 с позже.
             if (page.facets) setters.setFacets(page.facets);
+            else readMatchedFacets(setters, isActive, filters);
             if (page.initialFilters) setters.setInitialFilters(page.initialFilters);
             if (page.sort) setters.setSort(page.sort);
             if (page.campaign) setters.setCampaign(page.campaign);
@@ -272,7 +274,7 @@ async function loadMatchedPool(
 }
 
 /**
- * B725: фасеты идут своим запросом рядом со страницей 0. Их неудача не роняет список:
+ * B725: фасеты идут своим запросом, с B760 — после страницы 0. Их неудача не роняет список:
  * фильтры остаются с прежними числами, а строки и счёт выдачи приходят своим чтением.
  */
 function readMatchedFacets(

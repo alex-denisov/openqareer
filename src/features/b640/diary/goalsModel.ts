@@ -94,6 +94,22 @@ export function quarterLine(
   return `Вклад кварталов: ${parts.join(', ')}`;
 }
 
+/**
+ * B645 d02: на вкладке «Квартал» годовая цель показывает цель этого квартала — «из 85 % в I кв.».
+ * Год цели ещё не начался — первый квартал, уже прошёл — последний. Вклада по кварталу нет — null.
+ */
+export function quarterTargetText(card: CareerDiaryGoalCard, now: string): string | null {
+  const targets = card.details.quarterTargets;
+  if (card.horizon !== 'year' || !targets || targets.length === 0) return null;
+  const goalYear = card.dueDate.slice(0, 4);
+  const nowYear = now.slice(0, 4);
+  const current = Math.floor((Number(now.slice(5, 7)) - 1) / 3) + 1;
+  const quarter = nowYear < goalYear ? 1 : nowYear > goalYear ? 4 : current;
+  const target = targets.find((item) => item.quarter === quarter);
+  if (!target) return null;
+  return `из ${formatValue(target.value, card.unit)} в ${QUARTERS[quarter - 1]} кв.`;
+}
+
 /** «IV квартал 2026». */
 export function quarterLabel(day: string): string {
   const month = Number(day.slice(5, 7));

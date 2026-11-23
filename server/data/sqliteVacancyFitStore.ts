@@ -27,7 +27,6 @@ const MAX_REKEYS_PER_CLAIM = 50;
 /** Rows one worker-start requeue write touches: each holds the write lock a few ms per row. */
 const REQUEUE_BATCH = 20;
 const SUPERSEDED = "status='failed' AND last_error='profile_changed'";
-const SUPERSEDED_PURGE_LIMIT = 5000;
 const RETRY_BASE_MS = 30_000;
 const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
@@ -426,15 +425,11 @@ export class SqliteVacancyFitStore {
     return Number(removed.changes) === 1;
   }
 
-  /** The `profile_changed` rows written before `discard`: found by a read, deleted by rowid in small batches. */
-  purgeSuperseded(limit = SUPERSEDED_PURGE_LIMIT): number {
-    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${SUPERSEDED} ORDER BY rowid LIMIT ?`).all(Math.max(0, Math.floor(limit))) as { id: number }[]).map((row) => row.id);
-    let removed = 0;
-    for (let start = 0; start < ids.length; start += REQUEUE_BATCH) {
-      const batch = ids.slice(start, start + REQUEUE_BATCH);
-      removed += Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE rowid IN (${batch.map(() => '?').join(',')}) AND ${SUPERSEDED}`).run(...batch).changes);
-    }
-    return removed;
+  /** One small batch of the `profile_changed` rows written before `discard`; the caller paces the batches. */
+  purgeSupersededBatch(size = REQUEUE_BATCH): number {
+    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${SUPERSEDED} LIMIT ?`).all(Math.max(0, Math.floor(size))) as { id: number }[]).map((row) => row.id);
+    if (ids.length === 0) return 0;
+    return Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE rowid IN (${ids.map(() => '?').join(',')}) AND ${SUPERSEDED}`).run(...ids).changes);
   }
 
   /** A retried job waits 30 s, 60 s, 120 s… before the next model call; the reason is an error class only. */
