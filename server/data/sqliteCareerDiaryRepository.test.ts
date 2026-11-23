@@ -86,8 +86,9 @@ describe('career diary storage', () => {
     expect(repository.listMeasurements('candidate-b', goal.id)).toEqual([]);
     repository.deleteGoal('candidate-a', goal.id);
     expect(repository.listMeasurements('candidate-a', goal.id)).toEqual([]);
-    expect(repository.getGoal('candidate-a', child.id)?.parentGoalId).toBeNull();
-    expect(repository.listMeasurements('candidate-a', child.id)).toHaveLength(1);
+    // B686: показатель уходит вместе с целью — сиротой на d02 он не всплывает.
+    expect(repository.getGoal('candidate-a', child.id)).toBeNull();
+    expect(repository.listMeasurements('candidate-a', child.id)).toEqual([]);
 
     const secondGoal = repository.createGoal('candidate-a', goalInput, '2026-12-21T10:00:00.000Z');
     repository.recordMeasurement('candidate-a', secondGoal.id, {

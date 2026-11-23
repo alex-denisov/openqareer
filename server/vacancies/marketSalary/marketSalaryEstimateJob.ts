@@ -57,7 +57,8 @@ export interface MarketSalarySliceOptions {
   readonly pause?: () => Promise<void>;
 }
 
-const DEFAULT_SLICE_ROWS = 2000;
+// B761: холодная порция в 2 000 строк держала очередь до 1,2 с; 500 — около 0,3 с.
+const DEFAULT_SLICE_ROWS = 500;
 const SLICE_PAUSE_MS = 50;
 
 /**

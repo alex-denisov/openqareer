@@ -12,22 +12,21 @@ export interface RequirementText {
 }
 
 /**
- * Требования вакансии по id кластера; `null` — их ещё не разобрали, `undefined` — хранилища
- * требований в процессе нет: тогда остаётся прежнее совпадение по названию.
+ * Требования вакансий пачкой по id кластеров: нет id в ответе — их ещё не разобрали; `undefined` —
+ * хранилища требований в процессе нет, тогда остаётся прежнее совпадение по названию.
  */
 export type RequirementsReader = (
-  clusterId: string,
-) => readonly RequirementText[] | null | undefined;
+  clusterIds: readonly string[],
+) => ReadonlyMap<string, readonly RequirementText[]> | undefined;
 
 interface RoleItem {
   readonly cluster: { readonly id: string; readonly canonicalTitle: string };
 }
 
-const MIN_IT_GROUPS = 2;
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const MIN_IT_SKILLS = 2;
 const MAX_CACHED = 20_000;
 
-/** Группы словаря ИТ и разработки: одна группа — один навык, сколько бы раз он ни встретился. */
+/** Словарь ИТ и разработки по группам; навык — каждое разное слово словаря в требованиях. */
 const IT_GROUPS: readonly RegExp[] = [
   /\bsoftware\b|программн\S* (?:обеспечен|продукт)|(?<!\p{L})ПО(?!\p{L})|\bsaas\b/u,
   /разработк\S* (?:по|продукт|програм|сервис|систем|приложен|платформ)|software development|\b(?:development|engineering) team|команд\S* разработ|процесс\S* разработ|заказн\S* разработ|тимлид|team ?lead/iu,
@@ -65,33 +64,66 @@ export function hasItSignal(
 ): boolean {
   if (!requirements || requirements.length === 0) return IT_TITLE_MARKER.test(title);
   const text = requirements.map((item) => `${item.label ?? ''} ${item.text}`).join('\n');
-  return IT_GROUPS.filter((group) => group.test(text)).length >= MIN_IT_GROUPS;
+  return itSkills(text).size >= MIN_IT_SKILLS;
+}
+
+/** Разные навыки ИТ в тексте: «Linux» и «VMware» — два, хоть и из одной группы (решение 23.11). */
+function itSkills(text: string): ReadonlySet<string> {
+  return new Set(
+    IT_GROUPS.flatMap((group) =>
+      [...text.matchAll(new RegExp(group.source, `${group.flags}g`))].map((match) =>
+        match[0].toLowerCase(),
+      ),
+    ),
+  );
 }
 
 let reader: RequirementsReader | undefined;
-const verdicts = new Map<string, { readonly it: boolean; readonly at: number }>();
+let verdicts = new Map<string, boolean>();
 
 /** Ставит процесс, у которого есть хранилище требований; без него — прежнее совпадение по названию. */
 export function setRequirementsReader(next: RequirementsReader | undefined): void {
   reader = next;
-  verdicts.clear();
+  verdicts = new Map();
 }
 
-function itVerdict(item: RoleItem, read: RequirementsReader, now: number): boolean {
+/**
+ * Одно чтение подборки — один запрос требований на все общие «Технический директор» в ней
+ * (решение оркестратора 23.11): до проверки ролей, а не по запросу на вакансию.
+ */
+export function primeRoleRequirements(items: readonly RoleItem[]): void {
+  if (!reader) return;
+  const generic = items.filter((row) => needsItSignal(row.cluster.canonicalTitle));
+  verdicts = generic.length ? verdictsOf(generic, reader) : new Map();
+}
+
+function verdictsOf(items: readonly RoleItem[], read: RequirementsReader): Map<string, boolean> {
+  const ids = [...new Set(items.map((row) => row.cluster.id))];
+  const found = read(ids);
+  if (!found) return new Map();
+  return new Map(
+    items.map((row) => [
+      row.cluster.id,
+      hasItSignal(found.get(row.cluster.id) ?? null, row.cluster.canonicalTitle),
+    ]),
+  );
+}
+
+function itVerdict(item: RoleItem, read: RequirementsReader): boolean {
   const known = verdicts.get(item.cluster.id);
-  if (known && now - known.at < CACHE_TTL_MS) return known.it;
-  const requirements = read(item.cluster.id);
-  if (requirements === undefined) return true;
-  const it = hasItSignal(requirements, item.cluster.canonicalTitle);
-  if (verdicts.size >= MAX_CACHED) verdicts.clear();
-  verdicts.set(item.cluster.id, { it, at: now });
+  if (known !== undefined) return known;
+  const found = read([item.cluster.id]);
+  if (!found) return true;
+  const it = hasItSignal(found.get(item.cluster.id) ?? null, item.cluster.canonicalTitle);
+  if (verdicts.size >= MAX_CACHED) verdicts = new Map();
+  verdicts.set(item.cluster.id, it);
   return it;
 }
 
 /** `sameCareerRole` плюс признак ИТ для общего «Технический директор». */
-export function vacancyInCareerRole(item: RoleItem, role: string, now = Date.now()): boolean {
+export function vacancyInCareerRole(item: RoleItem, role: string): boolean {
   const title = item.cluster.canonicalTitle;
   if (!sameCareerRole(title, role)) return false;
   if (!reader || !needsItSignal(title)) return true;
-  return itVerdict(item, reader, now);
+  return itVerdict(item, reader);
 }
