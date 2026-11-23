@@ -269,6 +269,15 @@ describe('weighted fit after 03.11', () => {
     // weights: hard 1.5, plain 1, soft 0.25 -> (1.5 + 1) / 2.75 = 91
     expect(evaluateVacancyFit(base('Wrote ITIL docs and runbooks')).coveragePercent).toBe(91);
   });
+  // B654 23.11: «7 из 14 есть… Ещё 8 — частично» — подразумеваемый навык считался и «есть», и «частично».
+  it.each(['partial', 'unknown'] as const)('an implied %s soft skill counts once: met + partial + missing + unknown = total', (soft) => {
+    const result = evaluateVacancyFit(base(vip, soft));
+    const { matched, partial = 0, unknown, total } = result.coverage;
+    const missing = result.assessments.filter((item) => item.status === 'unmatched').length;
+    expect(result.implied?.[0]).toMatchObject({ requirementId: 'c' });
+    expect(matched).toBe(3);
+    expect(matched + partial + unknown + missing).toBe(total);
+  });
   it('an explicit contradiction stays unmatched', () => {
     const result = evaluateVacancyFit(base(vip, 'unmatched'));
     expect(result.coveragePercent).toBe(91);

@@ -164,6 +164,32 @@ test.describe('B750: «Тренировка System Design» (I3)', () => {
     expect(state.schemas[0]).toMatchObject({ nodes: expect.any(Array), links: expect.any(Array) });
   });
 
+  test('B780: тренировку заменили в другой вкладке — «Закончить и разобрать» не теряет ответ', async ({
+    page,
+  }) => {
+    const state = await open(page, { replaced: true });
+    await page.getByRole('radiogroup', { name: 'Как отвечать' }).getByLabel('Текстом').check();
+    await page.getByRole('button', { name: 'Начать' }).click();
+    await page.getByLabel('Ваш ответ').fill(PRACTICE_ANSWER);
+    await page.getByRole('button', { name: 'Закончить и разобрать' }).click();
+    await expect(page.getByText('Тренировка не найдена.')).toHaveCount(0);
+    await page.getByRole('radiogroup', { name: 'Как отвечать' }).getByLabel('Текстом').check();
+    await page.getByRole('button', { name: 'Начать' }).click();
+    await expect(page.getByLabel('Ваш ответ')).toHaveValue(PRACTICE_ANSWER);
+    await page.getByRole('button', { name: 'Закончить и разобрать' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Четыре критерия: два закрыты, два — не полностью' }),
+    ).toBeVisible();
+    expect(
+      state.calls.filter((call) => call.startsWith('start') || call.startsWith('answer')),
+    ).toEqual([
+      'start text system_design',
+      'answer 404',
+      'start text system_design',
+      'answer q-sd-1',
+    ]);
+  });
+
   test('возврат к отвеченной тренировке открывает разбор; «Задача» — снова условие', async ({
     page,
   }) => {
