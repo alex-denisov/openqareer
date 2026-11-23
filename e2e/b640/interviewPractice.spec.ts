@@ -49,6 +49,30 @@ async function open(page: Page, options: PracticeOptions = {}, query = '') {
 const steps = (page: Page) => page.getByRole('list', { name: 'Шаги тренировки' });
 
 test.describe('B750: «Тренировка System Design» (I3)', () => {
+  test('B768 · I3a: задача готовится долго — «Готовим задачу…» на месте, без пустого экрана', async ({
+    page,
+  }) => {
+    await speechStub(page);
+    await page.clock.setFixedTime(new Date(PREP_NOW));
+    await mockPractice(page);
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    // Первый запрос задачи на проде идёт около 10 с: держим ответ, пока тест не проверит ожидание.
+    await page.route('**/api/v1/candidate/b640/interview-tasks', async (route) => {
+      await released;
+      await route.fulfill({ json: { data: PRACTICE_TASK, meta: { requestId: 'e2e-task' } } });
+    });
+    await page.goto(PATH, { waitUntil: 'domcontentloaded' });
+    const screen = page.locator('[data-b640-node="i03"]');
+    const waiting = screen.getByRole('status');
+    await expect(waiting).toHaveText('Готовим задачу…', { timeout: 15_000 });
+    await expect(waiting).toBeInViewport();
+    await expect(steps(page)).toBeVisible();
+    release();
+    await expect(page.getByRole('heading', { name: 'Что важно в задаче' })).toBeVisible();
+    await expect(screen.getByText('Готовим задачу…')).toHaveCount(0);
+  });
+
   test('задача → ответ со схемой и критериями → разбор, схема в подготовку, «Разбор помог?»', async ({
     page,
   }) => {
