@@ -124,6 +124,47 @@ describe('B396: список и пакетное одобрение', () => {
   });
 });
 
+describe('B694 a05: «Пропустить» снимает пост с ленты', () => {
+  it('черновик отклонён и пропадает из списка; повтор — 404', async () => {
+    const { send, sql, h } = await setup();
+    const id = (await send(BASE, { text: 'Пост' })).json().data.draftId;
+    const skip = await send(`${BASE}/${id}/skip`, {});
+    expect(skip.statusCode).toBe(200);
+    expect(skip.json().data).toEqual({ draftId: id, skipped: true });
+    expect(sql('SELECT status FROM candidate_drafts WHERE id = ?', id)).toEqual([{ status: 'rejected' }]);
+    expect((await h.get(BASE, 'flagged.test')).json().data.total).toBe(0);
+    expect((await send(`${BASE}/${id}/skip`, {})).statusCode).toBe(404);
+  });
+
+  it('в очереди — 409 и строка очереди на месте; чужой — 404; без флага — 404', async () => {
+    const { send, sql } = await setup();
+    const id = (await send(BASE, { text: 'Пост' })).json().data.draftId;
+    await send(`${BASE}/approve`, { draftIds: [id] });
+    const queued = await send(`${BASE}/${id}/skip`, {});
+    expect(queued.statusCode).toBe(409);
+    expect(queued.json().error.code).toBe('already_queued');
+    expect(sql('SELECT status FROM candidate_drafts WHERE id = ?', id)).toEqual([{ status: 'draft' }]);
+    const other = (await send(BASE, { text: 'Пост' }, 'other.test')).json().data.draftId;
+    expect((await send(`${BASE}/${other}/skip`, {})).statusCode).toBe(404);
+    expect((await send(`${BASE}/${other}/skip`, {}, 'plain.test')).statusCode).toBe(404);
+  });
+
+  it('одобренный без слота снимается вместе с отметкой одобрения', async () => {
+    const { send, sql } = await setup();
+    const id = (await send(BASE, { text: 'Пост' })).json().data.draftId;
+    const now = new Date().toISOString();
+    sql(
+      `INSERT INTO candidate_draft_workflow (candidate_id, draft_id, approved_at, updated_at)
+       SELECT candidate_id, id, ?, ? FROM candidate_drafts WHERE id = ?`,
+      now,
+      now,
+      id,
+    );
+    expect((await send(`${BASE}/${id}/skip`, {})).statusCode).toBe(200);
+    expect(sql('SELECT COUNT(*) AS n FROM candidate_draft_workflow WHERE draft_id = ?', id)).toEqual([{ n: 0 }]);
+  });
+});
+
 describe('B396: прежние черновики не меняются', () => {
   it('POST /candidate/drafts пишет комментарий по-старому и не попадает в посты ленты', async () => {
     const { h, sql } = await setup();

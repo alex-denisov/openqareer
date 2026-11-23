@@ -115,10 +115,18 @@ export interface CommentQueueProps {
   readonly items: readonly LinkedinQueueItem[];
   readonly onChanged: () => void;
   readonly onRhythm: (rhythm: LinkedinRhythm) => void;
+  /** a05b: «Настроить ритм» — главная кнопка, когда наверху ленты нет черновика. */
+  readonly primary?: boolean;
 }
 
 /** a05b: комментарии в очереди с точным временем; «Настроить ритм» (a05e) — у ближайшего. */
-export function CommentQueue({ rhythm, items, onChanged, onRhythm }: CommentQueueProps) {
+export function CommentQueue({
+  rhythm,
+  items,
+  onChanged,
+  onRhythm,
+  primary = false,
+}: CommentQueueProps) {
   const now = Date.now();
   const tz = rhythm.timezone;
   const count = `${items.length} ${countWord(items.length, 'комментарий', 'комментария', 'комментариев')} в очереди`;
@@ -134,7 +142,7 @@ export function CommentQueue({ rhythm, items, onChanged, onRhythm }: CommentQueu
             Следующий — <span className="num">{nextText(first.scheduledAt, tz, now)}</span>
           </p>
         ) : null}
-        <RhythmPopover rhythm={rhythm} onSaved={onRhythm} />
+        <RhythmPopover rhythm={rhythm} onSaved={onRhythm} primary={primary} />
       </div>
       <ul className="rows exp-rows" aria-labelledby="cq-title">
         {items.map((item) => (

@@ -35,13 +35,30 @@ function filesUnder(root, entry) {
     .flatMap((name) => filesUnder(root, relative(root, join(path, name))));
 }
 
-/** Модули сервера из сборки веб-процесса, в которых есть DDL, по порядку пути. */
+/**
+ * Оператор DDL целиком: от ключевого слова до `;` или конца шаблонной строки.
+ * Пробелы схлопываются: перенос строки в схеме — не смена схемы.
+ */
+const DDL_STATEMENT = new RegExp(`${DDL.source}[^;\`]*`, 'gi');
+
+/**
+ * Только операторы DDL файла: правка кода рядом со схемой не перезапускает обслуживание.
+ * Оператор с подстановкой (`ALTER TABLE x ADD COLUMN ${name}`) зависит от кода файла —
+ * списка колонок, имени таблицы, — поэтому такой файл входит в отпечаток целиком.
+ */
+export function schemaStatementsOf(text) {
+  const statements = text.match(DDL_STATEMENT) ?? [];
+  if (statements.some((statement) => statement.includes('${'))) return text;
+  return statements.map((statement) => statement.replace(/\s+/g, ' ').trim()).join('\n');
+}
+
+/** Модули сервера из сборки веб-процесса, в которых есть DDL, по порядку пути, — их операторы DDL. */
 export function schemaSourcesOf(metafile, readText = (path) => readFileSync(path, 'utf8')) {
   return Object.keys(metafile.inputs)
     .filter((path) => path.startsWith('server/'))
     .sort()
-    .map((path) => ({ path, text: readText(path) }))
-    .filter((source) => DDL.test(source.text));
+    .map((path) => ({ path, text: schemaStatementsOf(readText(path)) }))
+    .filter((source) => source.text.length > 0);
 }
 
 export function fingerprintOf(distDir, entries, release, schemaSources) {

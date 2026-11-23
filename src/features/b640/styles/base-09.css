@@ -578,6 +578,7 @@
   }
   .b640 .lk-dr-top + .lk-draft { margin-block-start: calc(var(--career-space-1) * -1); }
   .b640 .lk-dr-top:has(.var-sw) { align-items: flex-end; }
+  .b640 .lk-dr-top:has(.tag) { align-items: flex-end; }
   @media (max-width: 767px) { .b640 .np-full { row-gap: var(--career-space-4); } }
   .b640 .co-list > .co-novac-s,
   .b640 .co-list > .vl-empty { margin-block-start: 0; }

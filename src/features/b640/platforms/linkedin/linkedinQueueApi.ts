@@ -62,6 +62,13 @@ export const createFeedPost = (input: { readonly url?: string; readonly text: st
 export const approveFeedPosts = (draftIds: readonly string[]) =>
   request<FeedApproveResponse>(`${BASE}/feed-posts/approve`, post({ draftIds }));
 
+/** a05 «Пропустить»: пост снимается с ленты, черновик отклоняется. */
+export const skipFeedPost = (draftId: string) =>
+  request<{ readonly draftId: string; readonly skipped: true }>(
+    `${BASE}/feed-posts/${encodeURIComponent(draftId)}/skip`,
+    post({}),
+  );
+
 /** a05e: ритм сохраняется на сервере, комментарии очереди встают на его слоты. */
 export const saveRhythm = (rhythm: LinkedinRhythm) =>
   request<LinkedinRhythm>(`${BASE}/rhythm`, { ...post(rhythm), method: 'PUT' });

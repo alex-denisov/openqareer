@@ -152,7 +152,8 @@ describe('buildFootprintRiskSummary', () => {
     expect([byId.gh.category, byId.gh.level, byId.gh.action]).toEqual([
       'useful_evidence',
       'useful',
-      { kind: 'add_to_profile', label: 'В профиль' },
+      // B382: профиль площадки в профиль не переносится — только «Это не моё».
+      { kind: 'not_mine', label: 'Это не моё' },
     ]);
     expect([byId.who.category, byId.who.level]).toEqual(['needs_check', 'important']);
     expect(byId.odd.category).toBe('needs_check');

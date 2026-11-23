@@ -3,6 +3,7 @@
  * counted from the stored audit and the candidate's own marks — never assumed.
  */
 import type { CandidateFootprintAudit, CandidateFootprintFinding } from './candidateFootprint';
+import { contactBrokerUrl } from './contactBrokers';
 import type { FootprintStepStatus } from './footprintSteps';
 
 export type FootprintChecklistItemId =
@@ -43,6 +44,24 @@ export const ARTIFACT_FINDING_KINDS: ReadonlySet<string> = new Set([
   'code',
   'talk',
 ]);
+
+/**
+ * B382: почему находку нельзя перенести в профиль; `null` — можно. Одно правило для сервера
+ * (принимает «В профиль») и сводки (предлагает его): кнопка не обещает того, что сервер отклонит.
+ * База контактов — всегда риск, а не доказательство. Неразобранную находку, которую поиск счёл
+ * вашей, переносит само нажатие: оно и есть подтверждение.
+ */
+export function profileAddRefusal(
+  finding: CandidateFootprintFinding,
+): 'not_artifact' | 'already_in_profile' | null {
+  const yours =
+    finding.review === 'confirmed_self' ||
+    (finding.review === 'unreviewed' && finding.automatedMatch === 'likely_self');
+  if (!yours || !ARTIFACT_FINDING_KINDS.has(finding.kind) || contactBrokerUrl(finding.url)) {
+    return 'not_artifact';
+  }
+  return finding.checklistMark === 'added_to_profile' ? 'already_in_profile' : null;
+}
 
 const TITLES: Readonly<Record<FootprintChecklistItemId, string>> = {
   review: 'Находки разобраны',
@@ -114,7 +133,8 @@ function confirmedItem(
   const matches = (finding: CandidateFootprintFinding) =>
     id === 'old_accounts'
       ? Boolean(finding.staleAccount)
-      : ARTIFACT_FINDING_KINDS.has(finding.kind);
+      : // База контактов — риск, а не артефакт (B382).
+        ARTIFACT_FINDING_KINDS.has(finding.kind) && !contactBrokerUrl(finding.url);
   const handled = (finding: CandidateFootprintFinding) =>
     id === 'old_accounts'
       ? finding.checklistMark === 'account_closed' || finding.checklistMark === 'account_kept'
