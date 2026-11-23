@@ -23,10 +23,16 @@ describe('subjectOfScreen (B746): объект экрана для консул�
     });
   });
 
-  it('«ближайшее интервью» без id, компания и экраны без объекта — без subject', () => {
+  it('«ближайшее интервью» без id и экраны без объекта — без subject', () => {
     expect(subjectOfScreen({ responseId: 'next' })).toBeUndefined();
-    expect(subjectOfScreen({ companyId: 'интачгруп' })).toBeUndefined();
     expect(subjectOfScreen({})).toBeUndefined();
     expect(subjectOfScreen(null)).toBeUndefined();
+  });
+
+  it('карточка компании — компания по ключу адреса (B783)', () => {
+    expect(subjectOfScreen({ companyId: 'интачгруп' })).toEqual({
+      kind: 'company',
+      id: 'интачгруп',
+    });
   });
 });
