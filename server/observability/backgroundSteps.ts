@@ -1,4 +1,5 @@
 import { PerformanceObserver, performance } from 'node:perf_hooks';
+import { syncSection } from './syncSections';
 
 /**
  * B769 (прод 23.11): за 3 часа 438 задержек event loop ≥250 мс без запросов, 395 из них — внутри
@@ -38,7 +39,8 @@ export async function backgroundStep<T>(name: string, run: () => Promise<T>): Pr
  */
 export function labelledTimer(name: string, run: () => unknown, onError: (error: unknown) => void): () => void {
   return () => {
-    backgroundStep(name, async () => run()).catch(onError);
+    // B770a-0: синхронная часть таймера (карты сайта, лендинг) — своим временем в журнал задержки.
+    backgroundStep(name, async () => syncSection(name, run)).catch(onError);
   };
 }
 
