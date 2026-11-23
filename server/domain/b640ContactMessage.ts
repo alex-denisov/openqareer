@@ -15,6 +15,8 @@ export interface ContactMessageFacts {
   readonly recipientCompany: string;
   /** Целевая роль кандидата из профиля; пусто — не называем. */
   readonly targetRole: string;
+  /** B753: целевые роли кандидата по-русски, как их называет платформа (B737). */
+  readonly targetRolesRu?: readonly string[];
   readonly vacancyTitle?: string;
   readonly vacancyCompany?: string;
   /** Вторая вакансия той же компании (карточка компании, B698): только для текста. */
@@ -65,7 +67,24 @@ export const CONTACT_MESSAGE_TARGET_CHARS = B640_CONTACT_MESSAGE_DRAFT_MAX - 200
 const ACQUAINTANCE_RULES = [
   'Это сообщение знакомому, а не отклик работодателю: не пиши «Откликаюсь», «Прошу рассмотреть», «Рассмотрите мою кандидатуру», «Направляю резюме» и похожие слова отклика.',
   'Порядок: короткое приветствие по имени; зачем пишешь; конкретная просьба — порекомендовать тебя или рассказать о команде; один факт из профиля, связанный с вакансией.',
+  // B753 (решение CPO 23.11): на проде «привет» шло вместе с «вам», а другой черновик был на «ты».
+  'Одна форма обращения во всём сообщении: на «вы»; на «ты» — только если в карточке или в переписке видно, что вы на «ты».',
 ];
+
+/** Слова поиска работы: английская роль рядом с ними — целевая, а не прошлая должность (B753). */
+const SEEKING = /(ищу|ищем|в поиске|рассматриваю|открыт|интересу|следующ\p{L}* роль|нов\p{L}* роль|на роль|роль уровня|на позици|на должност)/iu;
+
+const roleMention = (role: string) =>
+  new RegExp(`(?<![\\p{L}\\d(])${role.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\d])`, 'iu');
+
+/** Целевая роль названа по-английски: фраза о поиске работы с английским названием роли. */
+function namesEnglishTargetRole(body: string, englishRoles: readonly string[]): boolean {
+  if (englishRoles.length === 0) return false;
+  const patterns = englishRoles.map(roleMention);
+  return body
+    .split(/(?<=[.!?…])\s+/u)
+    .some((sentence) => SEEKING.test(sentence) && patterns.some((pattern) => pattern.test(sentence)));
+}
 
 /** Слова отклика работодателю: в сообщении знакомому такой текст не принимается (B753). */
 const RESPONSE_FORMULA = /(откликаюсь|хочу откликнуться|прошу рассмотреть|рассмотрите[\s,]+(пожалуйста[\s,]+)?мою кандидатуру|направляю (вам )?(своё |свое |моё |мое )?резюме)/iu;
@@ -74,7 +93,10 @@ const RESPONSE_FORMULA = /(откликаюсь|хочу откликнутьс�
 export function contactMessageWish(facts: ContactMessageFacts): string {
   const lines = [
     `ВАЖНО: это не письмо работодателю, а личное сообщение в LinkedIn ${taskOf(facts)}.`,
-    `Обращайся по имени так, как оно написано в карточке: «${firstName(facts.recipientName)}» — не переводи и не транслитерируй.`,
+    `Обращайся по имени: «${firstName(facts.recipientName)}», как в карточке, или то же имя кириллицей.`,
+    facts.targetRolesRu?.length
+      ? `Целевые роли кандидата называй только по-русски: ${facts.targetRolesRu.map((role) => `«${role}»`).join(', ')}; английских названий целевых ролей не пиши. Прежние должности — как в профиле.`
+      : '',
     `Получатель: ${facts.recipientName}${facts.recipientRole ? `, ${facts.recipientRole}` : ''}${facts.recipientCompany ? `, ${facts.recipientCompany}` : ''}.`,
     facts.relationship ? `Как знакомы: ${facts.relationship}.` : '',
     facts.vacancyTitle
@@ -118,18 +140,21 @@ function digitGroups(text: string): string[] {
   return text.match(/\d+/gu) ?? [];
 }
 
-export type ModelMessageRejection = 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'distorted';
+export type ModelMessageRejection =
+  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted';
 
 /** B753: почему текст модели не принят — в журнал вместо молчаливого запасного текста. */
 export function modelMessageRejection(
   text: string | undefined,
   knownText: string,
   kind: B640ContactMessageKind = 'recruiter',
+  englishRoles: readonly string[] = [],
 ): ModelMessageRejection | null {
   const body = text?.trim().replace(/\r\n?/gu, '\n');
   if (!body) return 'empty';
   if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
   if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
+  if (namesEnglishTargetRole(body, englishRoles)) return 'english_role';
   if (!digitGroups(body).every((group) => knownText.includes(group))) return 'new_digits';
   // Та же узкая проверка русского, что у письма (B640): лишние заглавные, обрезанные окончания.
   return distortedWords(body, [knownText]).length > 0 ? 'distorted' : null;
@@ -155,8 +180,9 @@ export function acceptModelMessage(
   text: string | undefined,
   knownText: string,
   kind: B640ContactMessageKind = 'recruiter',
+  englishRoles: readonly string[] = [],
 ): string | null {
-  if (modelMessageRejection(text, knownText, kind)) return null;
+  if (modelMessageRejection(text, knownText, kind, englishRoles)) return null;
   return text!.trim().replace(/\r\n?/gu, '\n');
 }
 

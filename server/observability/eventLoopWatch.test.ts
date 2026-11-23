@@ -2,6 +2,7 @@ import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
+import { backgroundStep } from './backgroundSteps';
 import { namedInFlight, registerEventLoopWatch } from './eventLoopWatch';
 
 function busy(ms: number): void {
@@ -30,6 +31,23 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
     expect(stall?.inFlight).toEqual([
       expect.objectContaining({ url: '/slow?offset=7&token=%5BREDACTED%5D' }),
     ]);
+  });
+
+  it('B769: names the background step and the GC time of a stall without requests', async () => {
+    const log = vi.fn();
+    const app = Fastify();
+    registerEventLoopWatch(app, { log, stallMs: 100, tickMs: 10, reportMs: 60_000 });
+    await app.ready();
+    await backgroundStep('list-build', async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      busy(250);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    await app.close();
+    const stall = log.mock.calls.find(([, msg]) => msg === 'event-loop-stall')?.[0];
+    expect(stall?.inFlightCount).toBe(0);
+    expect(stall?.background).toEqual(['list-build']);
+    expect(typeof stall?.gcMs).toBe('number');
   });
 
   it('forgets a request the client dropped (prod 03.11: 78 dropped reads named in every stall for hours)', async () => {

@@ -26,3 +26,19 @@ export function localizeRoles(text: string, translations: Readonly<Record<string
   const pattern = new RegExp(`(?<![\\p{L}\\d])(?:${keys.join('|')})(?![\\p{L}\\d])`, 'giu');
   return text.replace(pattern, (match) => byKey.get(match.toLocaleLowerCase('en')) ?? roleTitleRu(match));
 }
+
+const ABBREVIATION = /\s*\([^)]*\)\s*$/u;
+const MAX_TARGET_ROLES = 3;
+
+/**
+ * B753 (решение CPO 23.11): целевые роли — отдельной строкой запроса, по-русски и без сокращения
+ * в скобках («Технический директор (CTO)» модель сокращала обратно до «CTO»). Сначала роли из профиля.
+ */
+export function targetRolesRu(campaignTitles: readonly string[], own: OwnTitlesRu, targetRole: string): string[] {
+  const parts = targetRole.split(PART_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+  const russian = [...parts, ...campaignTitles]
+    .map((title) => roleTitleRu(title, own))
+    .filter((title) => /\p{Script=Cyrillic}/u.test(title))
+    .map((title) => title.replace(ABBREVIATION, '').trim());
+  return [...new Set(russian)].slice(0, MAX_TARGET_ROLES);
+}

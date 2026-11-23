@@ -139,7 +139,8 @@ export interface VacancyPoolStore {
    */
   backfillStep?(chunk?: number): number;
   /** Шаг дочитывания по окну строк: каждый шаг ограничен и по чтению (B649-2). */
-  backfillWindowStep?(windowRows?: number): { done: boolean };
+  /** B759: `from` — `rowid`, с которого продолжить; `cursor` — откуда следующее окно. */
+  backfillWindowStep?(windowRows?: number, from?: number): { done: boolean; cursor?: number };
   /** Чистка, отпускающая цикл событий между транзакциями (B649-2). */
   pruneAsync?(
     knownSourceIds: readonly string[],
