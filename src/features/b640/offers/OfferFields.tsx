@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Icon } from '../kit';
-import type { OfferForm, OfferFormErrors } from './model/offerForm';
+import { typedOfferValue, type OfferForm, type OfferFormErrors } from './model/offerForm';
 
 type Key = keyof OfferForm;
 
@@ -90,7 +90,9 @@ function TextField({ spec, ...props }: OfferFieldsProps & { readonly spec: TextS
         placeholder={spec.placeholder}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(spec.key, error, mark)}
-        onChange={(event) => props.onChange(spec.key, event.currentTarget.value)}
+        onChange={(event) =>
+          props.onChange(spec.key, typedOfferValue(spec.key, event.currentTarget.value))
+        }
       />
     </Field>
   );
