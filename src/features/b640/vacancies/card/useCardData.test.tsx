@@ -49,10 +49,20 @@ describe('B715: карточка v04 по id вакансии пула', () => {
     expect(readCard).not.toHaveBeenCalled();
     expect(seen?.load).toBe('ready');
   });
-  it('пока подборка читается — «загружаем», без отдельного чтения', async () => {
+  // B654 23.11: подборка читается страницами (40+ запросов, ~9 с) — карточка не ждёт её, а читает
+  // свою вакансию одним запросом по id. «Не найдена» до конца подборки остаётся «загружаем».
+  it('пока подборка читается — карточка читает вакансию по id и показывается сразу', async () => {
     vi.mocked(useMatchedPool).mockReturnValue(pool({ loading: true }));
+    readCard.mockResolvedValue(item(HH_ID));
     await render(HH_ID);
-    expect(readCard).not.toHaveBeenCalled();
+    expect(readCard).toHaveBeenCalledTimes(1);
+    expect(seen?.load).toBe('ready');
+    expect(seen?.item?.cluster.id).toBe(HH_ID);
+  });
+  it('пока подборка читается, «не найдена» ещё не окончательно — «загружаем»', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ loading: true }));
+    readCard.mockRejectedValueOnce(new CoachApiError('Вакансия не найдена.', 'vacancy_not_found', false));
+    await render(HH_ID);
     expect(seen?.load).toBe('loading');
   });
   it('сервер не знает вакансию — «не найдена»; сбой сети — «не удалось загрузить»', async () => {
