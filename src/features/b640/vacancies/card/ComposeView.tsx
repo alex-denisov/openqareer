@@ -4,12 +4,14 @@ import { MessageDraft } from '../../messages/MessageDraft';
 import { CtxHead } from '../../shell/CtxHead';
 import { rowFormat, rowGeo, type MoneyCurrency } from '../format';
 import { companyFacts } from './CompanyBlock';
+import { coachVerdict } from './fitRows';
 import { Fold } from './Fold';
 import { HireBlock } from './HireBlock';
 import { MoneyBlock, useTargetCurrency } from './MoneyBlock';
 import { moneyLines } from './moneyLines';
 import { SrcTip } from './SrcTip';
 import type { CardData } from './useCardData';
+import { useVacancyFit } from './useVacancyFit';
 import type { ComposeAction } from './waysModel';
 
 type LoadedItem = NonNullable<CardData['item']>;
@@ -67,7 +69,10 @@ function longDate(item: LoadedItem): string {
 }
 
 /** Строки шапки контекста: «Город, формат», вилка, «площадка, дата». */
-function headMeta({ item, data, sourceName }: HeadProps, currency: MoneyCurrency): readonly string[] {
+function headMeta(
+  { item, data, sourceName }: HeadProps,
+  currency: MoneyCurrency,
+): readonly string[] {
   const geo = rowGeo(item);
   const place = [geo, geo.startsWith('Удалённо') ? '' : rowFormat(item).toLowerCase()];
   const date = longDate(item);
@@ -102,7 +107,18 @@ function Head(props: HeadProps) {
   );
 }
 
-function LeftColumn({ item, data, action, onBack }: ComposeViewProps) {
+/** Свёрнут по умолчанию; без процента совпадения вывода нет — и блока нет. */
+function CoachFold({ vacancyId }: { readonly vacancyId: string }) {
+  const verdict = coachVerdict(useVacancyFit(vacancyId).view);
+  if (verdict === null) return null;
+  return (
+    <Fold title="Вывод консультанта" summaryId="v4-coach">
+      <p className="mod-text">{verdict}</p>
+    </Fold>
+  );
+}
+
+function LeftColumn({ item, data, action, onBack, vacancyId }: ComposeViewProps) {
   const company = item.cluster.canonicalCompany;
   const evidence = evidenceOf(data, action);
   return (
@@ -121,6 +137,7 @@ function LeftColumn({ item, data, action, onBack }: ComposeViewProps) {
           onClose={onBack}
         />
       </section>
+      <CoachFold vacancyId={vacancyId} />
     </div>
   );
 }

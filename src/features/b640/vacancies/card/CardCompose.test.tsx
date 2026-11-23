@@ -27,8 +27,9 @@ vi.mock('../../messages/contactMessageApi', () => ({
   approveB640ContactMessage: vi.fn(),
   markB640ContactMessageSent: vi.fn(),
 }));
+let fitView: unknown;
 vi.mock('./useVacancyFit', () => ({
-  useVacancyFit: () => ({ view: undefined, failed: false, retry: () => undefined }),
+  useVacancyFit: () => ({ view: fitView, failed: false, retry: () => undefined }),
 }));
 vi.mock('./useSave', () => ({
   useSave: () => ({ button: null, failed: false, retry: () => undefined }),
@@ -67,7 +68,71 @@ const byText = (root: ParentNode, selector: string, text: string) =>
   [...root.querySelectorAll(selector)].find((node) => node.textContent?.includes(text)) ?? null;
 
 let view: Mounted | undefined;
-afterEach(() => view?.unmount());
+afterEach(() => {
+  view?.unmount();
+  fitView = undefined;
+});
+
+const readyFit = {
+  state: 'ready',
+  requirements: [
+    {
+      id: 'a',
+      text: 'Платёжные системы',
+      sourceQuote: 'x',
+      origin: 'explicit',
+      importance: 'high',
+      kind: 'experience',
+      hard: false,
+      stopFactor: false,
+      skill: true,
+    },
+    {
+      id: 'c',
+      text: 'Kotlin',
+      sourceQuote: 'x',
+      origin: 'explicit',
+      importance: 'high',
+      kind: 'experience',
+      hard: false,
+      stopFactor: false,
+      skill: true,
+    },
+    {
+      id: 'b',
+      text: 'Найм руководителей',
+      sourceQuote: 'x',
+      origin: 'explicit',
+      importance: 'high',
+      kind: 'experience',
+      hard: false,
+      stopFactor: false,
+      skill: true,
+    },
+  ],
+  result: {
+    candidateId: 'c',
+    vacancyId: 'v1',
+    algorithmVersion: 'x',
+    status: 'assessed',
+    calculatedAt: '2026-11-11T09:00:00Z',
+    dataState: 'confirmed',
+    coveragePercent: 67,
+    coverage: { matched: 2, total: 3, unknown: 0 },
+    requiredCoverage: { matched: 2, total: 3, percent: 67 },
+    reason: 'assessed',
+    gates: {},
+    assessments: [
+      {
+        requirementId: 'a',
+        status: 'matched',
+        evidence: [{ factId: 'f', quote: 'Сфера Платежи' }],
+      },
+      { requirementId: 'c', status: 'matched', evidence: [{ factId: 'f', quote: 'Kotlin' }] },
+      { requirementId: 'b', status: 'unmatched', evidence: [] },
+    ],
+  },
+};
 
 function open(message: B640CompanyPerson['message']): HTMLElement {
   people = [roman(message)];
@@ -105,7 +170,12 @@ describe('карточка вакансии: «Написать» открыва
   it('имя в «Кто нанимает» — ссылка: переключает черновик на этого человека (макет: имя ведёт к письму)', () => {
     people = [
       roman({ kind: 'known_contact', target: { contactId: 'c-p1' } }),
-      { ...roman({ kind: 'ask_introduction', target: { contactId: 'c-via' } }), id: 'p2', circle: 2, name: 'Ольга Ким' },
+      {
+        ...roman({ kind: 'ask_introduction', target: { contactId: 'c-via' } }),
+        id: 'p2',
+        circle: 2,
+        name: 'Ольга Ким',
+      },
     ];
     view = mount(<CardScreen vacancyId="v1" />);
     const root = view.container;
@@ -115,5 +185,24 @@ describe('карточка вакансии: «Написать» открыва
     click(olga);
     expect(root.querySelector('h2.lead-title')?.textContent).toContain('Написать Ольге Ким');
     expect(root.querySelector('.lk-inline')?.textContent).toContain('Черновик');
+  });
+
+  it('«Вывод консультанта» — свёрнутый блок сразу под черновиком (макет a02d, #v4-coach)', () => {
+    fitView = readyFit;
+    const root = open({ kind: 'known_contact', target: { contactId: 'c-p1' } });
+    click(byText(root, 'button', 'Написать Роману'));
+    const summary = root.querySelector('summary#v4-coach');
+    expect(summary?.textContent).toBe('Вывод консультанта');
+    const fold = summary?.closest('details');
+    expect(fold?.open).toBe(false);
+    expect(fold?.previousElementSibling?.matches('section.lead')).toBe(true);
+    expect(fold?.textContent).toContain('2 из 3 требований вакансии есть в профиле.');
+    expect(fold?.textContent).toContain('Нет в профиле: Найм руководителей.');
+  });
+
+  it('без процента совпадения блока «Вывод консультанта» нет', () => {
+    const root = open({ kind: 'known_contact', target: { contactId: 'c-p1' } });
+    click(byText(root, 'button', 'Написать Роману'));
+    expect(root.querySelector('#v4-coach')).toBeNull();
   });
 });

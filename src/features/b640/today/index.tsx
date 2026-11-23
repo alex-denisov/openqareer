@@ -1,3 +1,4 @@
+import './today.css';
 import { NodeStub } from '../shell/NodeStub';
 import { useShell } from '../shell/ShellContext';
 import type { SectionProps } from '../sections';
