@@ -34,6 +34,7 @@ import { readB640Sealed } from './b640SealedAnswer';
 import { careerTimeZone, observedWithinDays } from './careerRoleCounts';
 import { selectionFitLimit } from './fitSelectionSweep';
 import { candidatePlan, withDeps } from './helpers';
+import { titleFactsCount } from './matchedFitRelevance';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 
 
@@ -154,7 +155,14 @@ function logListTiming(
   orderMs: number,
 ): void {
   request.log.info(
-    { ...timing, orderMs: roundMs(orderMs), offset: query.offset, sort: query.sort },
+    {
+      ...timing,
+      orderMs: roundMs(orderMs),
+      offset: query.offset,
+      sort: query.sort,
+      titleFacts: titleFactsCount(),
+      heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1_048_576),
+    },
     'b640-matched-timing',
   );
 }

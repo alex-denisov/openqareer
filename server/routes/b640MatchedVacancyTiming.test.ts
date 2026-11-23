@@ -28,6 +28,8 @@ describe('b640-matched-timing: шаги списка b640 в журнале (B77
       snapshotMs: expect.any(Number),
       listReadMs: expect.any(Number),
       orderMs: expect.any(Number),
+      titleFacts: expect.any(Number),
+      heapUsedMb: expect.any(Number),
       phasesMs: expect.objectContaining({
         finish: expect.any(Number),
         filters: expect.any(Number),

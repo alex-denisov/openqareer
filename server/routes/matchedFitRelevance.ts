@@ -58,8 +58,13 @@ interface TitleFacts {
  * B770 (prod 23.11, #1040): `prepareRoles` — 1,2–2,1 с своего времени на каждую сборку, это разбор
  * названий, а не уступки event loop. Разбор зависит только от названия: он один на процесс.
  */
-const MAX_TITLE_FACTS = 100_000;
+const MAX_TITLE_FACTS = 50_000;
 const titleFactsCache = new Map<string, TitleFacts>();
+
+/** Записей в кэше разбора — для журнала: 100 000 реальных названий прода заняли 54,8 МБ кучи. */
+export function titleFactsCount(): number {
+  return titleFactsCache.size;
+}
 
 function titleFacts(title: string): TitleFacts {
   const known = titleFactsCache.get(title);
