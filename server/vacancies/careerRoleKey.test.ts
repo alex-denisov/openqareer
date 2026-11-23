@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { careerRoleKey, sameCareerRole } from './careerRoleKey';
+import {
+  careerRoleKey,
+  careerRoleListKey,
+  careerRoleRowKey,
+  sameCareerRole,
+} from './careerRoleKey';
 
 describe('careerRoleKey', () => {
   it('одна функция и уровень под разными названиями — один ключ', () => {
@@ -90,5 +95,28 @@ describe('careerRoleKey: название вне словаря (27.10)', () => 
 
   it('разные названия вне словаря остаются разными', () => {
     expect(careerRoleKey('Исполнительный директор')).not.toBe(careerRoleKey('Chief of Staff'));
+  });
+});
+
+describe('careerRoleListKey: строка списка ролей по роли словаря (B767)', () => {
+  it('варианты одной роли словаря разных ступеней — одна строка', () => {
+    expect(careerRoleListKey('Customer Support Director')).toBe(
+      careerRoleListKey('Head of Technical Support'),
+    );
+  });
+
+  it('разные роли словаря и первые лица остаются разными строками', () => {
+    expect(careerRoleListKey('VP of Customer Support')).not.toBe(
+      careerRoleListKey('Customer Support Director'),
+    );
+    expect(careerRoleListKey('CTO')).not.toBe(careerRoleListKey('VP of Engineering'));
+    expect(careerRoleListKey('CIO')).toBe(careerRoleListKey('IT Director'));
+    expect(careerRoleListKey('COO')).not.toBe(careerRoleListKey('VP of Operations'));
+  });
+
+  it('название вне словаря — как ключ строки', () => {
+    expect(careerRoleListKey('Transformation Director')).toBe(
+      careerRoleRowKey('Transformation Director'),
+    );
   });
 });
