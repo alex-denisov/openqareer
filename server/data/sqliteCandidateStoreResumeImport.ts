@@ -475,6 +475,7 @@ function draftMemoryIds(draft: ResumeImportCommit['draft']): ReadonlySet<string>
 export function referencedMediaIds(draft: ResumeImportCommit['draft']): string[] {
   return [
     draft.candidate.photoMediaId,
+    draft.candidate.linkedinPhotoMediaId,
     ...draft.experience.map((role) => role.employerLogoMediaId),
   ].filter((value): value is string => Boolean(value));
 }

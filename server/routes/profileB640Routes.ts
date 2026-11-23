@@ -8,11 +8,14 @@ import {
   type ProfileIncomeDeps,
 } from '../candidate/profileIncomeService';
 import {
+  LinkedinPhotoMissingError,
   ProfileMissingError,
   removeProfilePhoto,
   setProfilePhoto,
+  takeLinkedinPhoto,
   type ProfilePhotoDeps,
 } from '../candidate/profilePhotoService';
+import { SqliteResumePhotoRepository } from '../candidate/sqliteResumePhotoRepository';
 import { SqliteCandidateIncomeRepository } from '../candidate/sqliteCandidateIncomeRepository';
 import { SealedText } from '../data/sealedText';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
@@ -36,6 +39,7 @@ import { sendError, withDeps } from './helpers';
 type BoundDeps = RouteDeps & {
   readonly photo: ProfilePhotoDeps;
   readonly income: ProfileIncomeDeps;
+  readonly resumePhoto: SqliteResumePhotoRepository;
 };
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -46,6 +50,7 @@ const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/u;
 const photoSchema = z.object({ contentBase64: z.string().min(1).max(PHOTO_BODY_LIMIT) }).strict();
 const amountSchema = z.number().int().min(1).max(INCOME_MAX_RUBLES).nullable();
 const incomeSchema = z.object({ current: amountSchema, expected: amountSchema }).strict();
+const resumePhotoSchema = z.object({ inResume: z.boolean() }).strict();
 const changeParams = z.object({ changeId: z.string().trim().min(1).max(120) });
 
 function candidateIdOf(
@@ -144,6 +149,40 @@ const deletePhoto: Handler = async (deps, request, reply) => {
   return { data: result, meta: { requestId: request.id } };
 };
 
+const takeLinkedin: Handler = async (deps, request, reply) => {
+  const candidateId = candidateIdOf(deps, request, reply);
+  if (!candidateId) return reply;
+  try {
+    const result = takeLinkedinPhoto(deps.photo, candidateId, new Date());
+    return { data: result, meta: { requestId: request.id } };
+  } catch (error) {
+    if (error instanceof LinkedinPhotoMissingError) {
+      return sendError(reply, request, 409, 'linkedin_photo_missing', error.message, false);
+    }
+    throw error;
+  }
+};
+
+const getResumePhoto: Handler = async (deps, request, reply) => {
+  const candidateId = candidateIdOf(deps, request, reply);
+  if (!candidateId) return reply;
+  reply.header('Cache-Control', 'no-store');
+  const inResume = deps.resumePhoto.inResume(candidateId);
+  return { data: { inResume }, meta: { requestId: request.id } };
+};
+
+const putResumePhoto: Handler = async (deps, request, reply) => {
+  const candidateId = candidateIdOf(deps, request, reply);
+  if (!candidateId) return reply;
+  const parsed = resumePhotoSchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    return sendError(reply, request, 400, 'invalid_resume_photo', 'Не удалось сохранить.', false);
+  }
+  const now = new Date().toISOString();
+  const inResume = deps.resumePhoto.setInResume(candidateId, parsed.data.inResume, now);
+  return { data: { inResume }, meta: { requestId: request.id } };
+};
+
 const getIncome: Handler = async (deps, request, reply) => {
   const candidateId = candidateIdOf(deps, request, reply);
   if (!candidateId) return reply;
@@ -222,6 +261,7 @@ export function registerProfileB640Routes(app: FastifyInstance, deps: RouteDeps)
     ...deps,
     photo: { media, store: deps.candidateStore },
     income: { income, changeLog: deps.candidateStore.profileChangeLog },
+    resumePhoto: new SqliteResumePhotoRepository(database),
   };
   const write = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
   const upload = {
@@ -230,6 +270,9 @@ export function registerProfileB640Routes(app: FastifyInstance, deps: RouteDeps)
   };
   app.put('/api/v1/candidate/profile/photo', upload, withDeps(bound, putPhoto));
   app.delete('/api/v1/candidate/profile/photo', write, withDeps(bound, deletePhoto));
+  app.post('/api/v1/candidate/profile/photo/linkedin', write, withDeps(bound, takeLinkedin));
+  app.get('/api/v1/candidate/profile/photo/resume', withDeps(bound, getResumePhoto));
+  app.put('/api/v1/candidate/profile/photo/resume', write, withDeps(bound, putResumePhoto));
   app.get('/api/v1/candidate/profile/income', withDeps(bound, getIncome));
   app.put('/api/v1/candidate/profile/income', write, withDeps(bound, putIncome));
   app.post(

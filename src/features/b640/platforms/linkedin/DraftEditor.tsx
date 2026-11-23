@@ -1,19 +1,25 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 import { ResultLine, RowAction, StatusLine, Button } from '../../kit';
 import { updateDraft, type LinkedinDraft } from '../../../today/linkedinDraftApi';
-import { CopyButton } from './CopyButton';
+import {
+  VariantButton,
+  VariantSwitch,
+  type VariantControlsState,
+} from '../../apply/VariantControls';
 import { LiError } from './LiError';
 import { enqueueDraft } from './linkedinQueueApi';
+import { PostTip } from './PostTip';
+import { usePostVariants } from './usePostVariants';
 
 type Save = 'idle' | 'busy' | 'done' | 'error';
 
 function Actions({
-  text,
+  variants,
   dirty,
   busy,
   on,
 }: {
-  readonly text: string;
+  readonly variants: VariantControlsState;
   readonly dirty: boolean;
   readonly busy: boolean;
   readonly on: {
@@ -27,7 +33,8 @@ function Actions({
       <Button variant="primary" icon="check" disabled={busy} onClick={on.approve}>
         Одобрить и поставить в план
       </Button>
-      <CopyButton text={text} label="пост" caption="Скопировать" className="btn" />
+      <VariantButton variants={variants} />
+      <VariantSwitch variants={variants} label="Варианты поста" />
       {dirty ? (
         <RowAction type="button" icon="check" onClick={on.save}>
           Сохранить
@@ -95,7 +102,8 @@ function useDraftActions(
 }
 
 /**
- * Текущий черновик: правка текста, «Одобрить и поставить в план», «Скопировать», «Не публиковать».
+ * Текущий черновик: правка текста, «Одобрить и поставить в план», «Другой вариант · N»
+ * с листанием вариантов (B694), «Не публиковать».
  * В LinkedIn платформа ничего не отправляет: в назначенное время кандидат публикует сам.
  */
 export function DraftEditor({
@@ -111,6 +119,7 @@ export function DraftEditor({
   const dirty = text !== draft.text;
   const actions = useDraftActions(draft, text, { onChanged, onPlaced });
   const { save, on } = actions;
+  const variants = usePostVariants(draft.id, { draftText: draft.text, text, setText });
   const edit = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value);
     actions.setSave('idle');
@@ -120,8 +129,9 @@ export function DraftEditor({
     <section className="lead" aria-labelledby="po-title">
       <h2 className="po-name" id="po-title">
         {draft.topic}
+        <PostTip />
       </h2>
-      <Actions text={text} dirty={dirty} busy={save === 'busy'} on={on} />
+      <Actions variants={variants} dirty={dirty} busy={save === 'busy'} on={on} />
       <label className="vh" htmlFor="po-text">
         Текст поста
       </label>

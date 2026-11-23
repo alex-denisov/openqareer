@@ -99,6 +99,8 @@ describe('a05c: журнал LinkedIn', () => {
     await flush();
     expect(view.container.querySelectorAll('li.row')).toHaveLength(20);
     expect(view.container.querySelector('#jl-title')!.textContent).toBe('Журнал LinkedIn');
+    // B645-2: заголовок раздела — заголовок страницы (--career-text-xl), а не малый h2 списка.
+    expect(view.container.querySelector('#jl-title')!.className).toBe('gt-h');
     expect(view.container.querySelector('#jn-sum')!.textContent).toBe('За ноябрь');
     expect(view.container.textContent).not.toMatch(/Реакции|реакци/);
     expect(view.container.querySelector('.lead')).toBeNull();
