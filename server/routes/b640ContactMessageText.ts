@@ -3,6 +3,7 @@ import type { B640ContactMessageKind } from '../../shared/b640ContactMessage';
 import {
   acceptModelMessage,
   modelMessageRejection,
+  shorteningCorrection,
   contactMessageWish,
   fallbackContactMessage,
   type ContactMessageFacts,
@@ -12,7 +13,9 @@ import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { filterUsablePitchFacts } from '../domain/vacancyPitchService';
 import { candidateGenderFromName } from '../../shared/candidateGender';
-import type { CoverLetterOutcome } from '../providers/coverLetterWriter';
+import type { CoverLetterOutcome, CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
+import { localizeRoles, roleTranslations } from '../vacancies/contactMessageRoles';
+import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 
 export interface MessageRecipient {
@@ -66,6 +69,44 @@ function sameCompany(
   return candidateCompanyKey(also.company) === candidateCompanyKey(vacancy.company) ? also : null;
 }
 
+/** B753: отклонённый проверкой текст идёт следующей ступени цепочки, а не сразу в шаблон. */
+function contactReview(known: string, kind: B640ContactMessageKind, keepLong = false): (body: string) => readonly string[] {
+  return (body) => {
+    const reason = modelMessageRejection(body, known, kind);
+    return reason && !(keepLong && reason === 'too_long') ? [`contact_${reason}`] : [];
+  };
+}
+
+/**
+ * B753 (решение CPO 23.11): длинный текст сначала сокращает та же модель — свой текст с просьбой
+ * и фактом; затем следующая ступень цепочки; шаблон — последним. По знакам мы не режем.
+ */
+async function askContactModel(
+  writer: CoverLetterWriter,
+  request: FastifyRequest,
+  ask: CoverLetterWriteInput,
+  known: string,
+  kind: B640ContactMessageKind,
+): Promise<string | null> {
+  const first = await writer.writeCoverLetter({ ...ask, review: contactReview(known, kind, true) });
+  logModelOutcome(request, first, known, kind);
+  if (!first.body || modelMessageRejection(first.body, known, kind) !== 'too_long') {
+    return acceptModelMessage(first.body, known, kind);
+  }
+  const shorter = await writer.writeCoverLetter({
+    ...ask, correction: shorteningCorrection(first.body), review: contactReview(known, kind),
+  });
+  logModelOutcome(request, shorter, known, kind);
+  return acceptModelMessage(shorter.body, known, kind);
+}
+
+/** B753: роли кандидата в запросе к модели — по-русски, как их называет платформа (B737). */
+function russianRoles(deps: RouteDeps, candidateId: string, targetRole: string): Readonly<Record<string, string>> {
+  const campaign = readCampaign(deps.candidateStore, candidateId);
+  const titles = [...campaign.roles.value, ...campaign.autoRoles.map((role) => role.title)];
+  return roleTranslations(titles, campaign.ownTitlesRu ?? {}, targetRole);
+}
+
 /**
  * Текст сообщения: модель через тот же писатель, что и письмо получателю; при отказе, пустом ответе
  * или новых цифрах — шаблон на данных профиля. Реальный запрос B613 заменит `contactMessageWish`.
@@ -79,14 +120,17 @@ export async function writeContactMessageText(
   const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
   const facts = snapshot.memory ?? [];
   const withheld = new Set(facts.filter((fact) => fact.sensitive === true).map((fact) => fact.id));
-  const profile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
+  const roles = russianRoles(deps, input.candidateId, draft.targetRole ?? '');
+  const sourceProfile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
+  const profile = localizeRoles(sourceProfile, roles);
+  const targetRole = localizeRoles(draft.targetRole ?? '', roles);
   const vacancy = vacancyOf(deps, input.vacancyId);
   const also = sameCompany(vacancy, vacancyOf(deps, input.alsoVacancyId ?? null));
   const message: ContactMessageFacts = {
     kind: input.kind,
     recipientName: input.recipient.name,
     recipientCompany: input.recipient.company,
-    targetRole: draft.targetRole ?? '',
+    targetRole,
     ...(vacancy ? { vacancyTitle: vacancy.title, vacancyCompany: vacancy.company } : {}),
     ...(input.recipient.relationship ? { relationship: input.recipient.relationship } : {}),
     ...(input.recipient.role ? { recipientRole: input.recipient.role } : {}),
@@ -95,22 +139,21 @@ export async function writeContactMessageText(
   const fallback = fallbackContactMessage(message);
   const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
   if (!writer || !profile.trim()) return fallback;
+  const known = [
+    sourceProfile, profile, targetRole, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
+    vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
+  ].join('\n');
   try {
     const gender = candidateGenderFromName(draft.candidate?.fullName);
-    const outcome = await writer.writeCoverLetter({
+    const ask: CoverLetterWriteInput = {
       profile,
       vacancy: { title: vacancy?.title ?? 'Личное сообщение', ...(vacancy?.company ? { company: vacancy.company } : {}) },
       ...(gender ? { gender } : {}),
       resumeAttached: false,
       chosenLanguage: 'ru',
       wish: contactMessageWish(message),
-    });
-    const known = [
-      profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
-      vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
-    ].join('\n');
-    logModelOutcome(request, outcome, known, input.kind);
-    return acceptModelMessage(outcome.body, known, input.kind) ?? fallback;
+    };
+    return (await askContactModel(writer, request, ask, known, input.kind)) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');
     return fallback;

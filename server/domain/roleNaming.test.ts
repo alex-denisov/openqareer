@@ -97,7 +97,7 @@ describe('B748: русское название роли от модели пр�
     ).toBe('Руководитель управления ИТ-услугами (IT)');
     expect(checkedTitleRu('Co-Founder', 'Сооснователь')).toBe('Сооснователь');
     expect(checkedTitleRu('AI Solutions Architect', 'Архитектор AI-решений')).toBe(
-      'Архитектор AI-решений',
+      'Архитектор ИИ-решений',
     );
   });
 
@@ -199,5 +199,14 @@ describe('B748: русское название роли от модели пр�
     expect(item.properties.titleRu).toEqual({ type: 'string' });
     expect(roleNamingInstructions('en')).toContain('titleRu');
     expect(ROLE_NAMING_PROMPT_VERSION).toBe(7);
+  });
+});
+
+describe('B767: «AI» в русском названии от модели', () => {
+  it('становится «ИИ»', () => {
+    expect(checkedTitleRu('AI Consultant', 'AI-консультант')).toBe('ИИ-консультант');
+    expect(checkedTitleRu('Head of AI / ML', 'Руководитель направления AI/ML')).toBe(
+      'Руководитель направления ИИ/ML',
+    );
   });
 });

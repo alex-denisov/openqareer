@@ -35,6 +35,7 @@ export function readUnclusteredPoolPage(
   cursor: number,
   chunk: number,
   parse: (projection: string) => UnifiedVacancy | undefined,
+  maxUnclustered = Number.POSITIVE_INFINITY,
 ): UnclusteredPoolPage {
   const size = Math.max(1, Math.min(Math.trunc(chunk), MAX_PAGE_ROWS));
   const rows = database
@@ -49,18 +50,23 @@ export function readUnclusteredPoolPage(
   const member = database.prepare(
     "SELECT 1 FROM vacancy_cluster_keys WHERE kind = 'member' AND key = ? LIMIT 1",
   );
-  const unclustered = rows.flatMap((row) => {
+  const unclustered: UnifiedVacancy[] = [];
+  let inspected = 0;
+  for (const row of rows) {
+    inspected += 1;
     const vacancy = parse(row.projection);
-    if (!vacancy) return [];
+    if (!vacancy) continue;
     const keys = memberKeysOfRow(vacancy);
     // Без ключей членства нельзя отличить «без кластера» от «в кластере».
-    if (keys.length === 0 || keys.some((key) => member.get(key))) return [];
-    return [vacancy];
-  });
+    if (keys.length === 0 || keys.some((key) => member.get(key))) continue;
+    unclustered.push(vacancy);
+    // B763: окно широкое, а сведение за шаг ограничено — остаток окна читается следующим шагом.
+    if (unclustered.length >= maxUnclustered) break;
+  }
   return {
-    inspected: rows.length,
+    inspected,
     unclustered,
-    cursor: rows[rows.length - 1]!.rowid,
+    cursor: rows[inspected - 1]!.rowid,
     passFinished: false,
   };
 }

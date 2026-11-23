@@ -144,6 +144,50 @@ describe('B753: своя цепочка сообщения', () => {
     expect(res.json().data.text).toContain('Давно не общались');
     expect(contact.calls).toHaveLength(1);
     expect(letter.calls).toHaveLength(0);
+    const review = contact.calls[0]?.review;
+    // Длинный текст первая проверка пропускает: его сокращает та же модель (решение CPO 23.11).
+    expect(review?.('Анна, привет! ' + 'а'.repeat(700))).toEqual([]);
+    expect(review?.('Анна, привет! Откликаюсь на вакансию в Альфа.')).toEqual(['contact_response_formula']);
+    expect(review?.('Анна, привет! Давно не общались.')).toEqual([]);
+  });
+});
+
+describe('B753: сокращение и роли по-русски', () => {
+  async function harness(bodies: string[], targetRole = 'Директор по данным', headline = 'Руководитель аналитики') {
+    const calls: CoverLetterWriteInput[] = [];
+    const contact: CoverLetterWriter = {
+      async writeCoverLetter(input) {
+        calls.push(input);
+        const body = bodies.shift();
+        return body ? { body, stage: 'stub' } : { stage: 'stub', failure: { stage: 'stub', kind: 'timeout' } };
+      },
+    };
+    const h = await createB640Harness({ pool: () => [], contactMessageWriter: contact });
+    closers.push(h.close);
+    h.candidates.saveResumeDraft(h.candidateIds['flagged.test'], { ...EMPTY_RESUME_DRAFT, targetRole,
+      candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline } }, []);
+    const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
+    await h.app.inject({ method: 'PUT', url: `${OLD}/anna`, headers,
+      payload: { fullName: 'Анна Ким', companyName: 'Альфа', roleTitle: 'Рекрутер', relationship: 'Коллега', strength: 'strong' } });
+    const post = async () => (await h.app.inject({ method: 'POST', url: BASE, headers, payload: { contactId: 'anna', kind: 'known_contact' } })).json().data.text as string;
+    return { calls, post };
+  }
+
+  it('длинный текст — та же модель сокращает свой текст, шаблон не нужен', async () => {
+    const long = `Анна, привет! Давно не общались. ${'Очень длинное пояснение. '.repeat(30)}`;
+    const { calls, post } = await harness([long, 'Анна, привет! Давно не общались. Расскажешь о команде данных?']);
+    expect(await post()).toBe('Анна, привет! Давно не общались. Расскажешь о команде данных?');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.correction).toContain('Сократи');
+    expect(calls[1]?.correction).toContain(long.trim().slice(0, 40));
+  });
+
+  it('в запросе к модели нет английского названия роли, у которой есть русское', async () => {
+    const { calls, post } = await harness(['Анна, привет! Давно не общались.'], 'Chief Operating Officer', 'Chief Operating Officer в Альфа');
+    await post();
+    const input = `${calls[0]?.profile}\n${calls[0]?.wish}`;
+    expect(input).not.toMatch(/Chief Operating Officer/iu);
+    expect(input).toContain('Операционный директор (COO)');
   });
 });
 

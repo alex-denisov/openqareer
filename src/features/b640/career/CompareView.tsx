@@ -138,7 +138,9 @@ function SearchActions({
   const busy = pick.state === 'busy';
   const first = columns.find((row) => row.title === pick.selected[0]);
   const checkLabel = first?.check ? 'Проверить вторую роль' : 'Проверить навыки';
-  const checkRole = first?.check ? pick.selected[1] : pick.selected[0];
+  // B764: вторую роль выбирает C04 — первую роль поиска, проверку которой можно начать;
+  // названная здесь роль могла оказаться без требований (тупик «мало требований»).
+  const checkRole = first?.check ? undefined : pick.selected[0];
   return (
     <>
       {pick.state === 'error' ? <StatusLine state="err" text={PICK_ERROR} /> : null}

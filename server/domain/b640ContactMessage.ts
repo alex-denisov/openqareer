@@ -2,6 +2,7 @@ import {
   B640_CONTACT_MESSAGE_DRAFT_MAX,
   type B640ContactMessageKind,
 } from '../../shared/b640ContactMessage';
+import { distortedWords } from './letterWordDistortion';
 
 /**
  * B698: сборка короткого сообщения знакомому или рекрутёру. Здесь только запрос к модели и шаблон
@@ -58,6 +59,9 @@ export function firstName(fullName: string): string {
  * B753 (прод 23.11): знакомому модель писала «Откликаюсь на вакансию VK…» — письмо работодателю.
  * Сообщение знакомому — человеку, которого кандидат знает; у рекрутёра свой тон.
  */
+/** Целевая длина ответа модели: запас до предела черновика (B753). */
+export const CONTACT_MESSAGE_TARGET_CHARS = B640_CONTACT_MESSAGE_DRAFT_MAX - 200;
+
 const ACQUAINTANCE_RULES = [
   'Это сообщение знакомому, а не отклик работодателю: не пиши «Откликаюсь», «Прошу рассмотреть», «Рассмотрите мою кандидатуру», «Направляю резюме» и похожие слова отклика.',
   'Порядок: короткое приветствие по имени; зачем пишешь; конкретная просьба — порекомендовать тебя или рассказать о команде; один факт из профиля, связанный с вакансией.',
@@ -70,6 +74,7 @@ const RESPONSE_FORMULA = /(откликаюсь|хочу откликнутьс�
 export function contactMessageWish(facts: ContactMessageFacts): string {
   const lines = [
     `ВАЖНО: это не письмо работодателю, а личное сообщение в LinkedIn ${taskOf(facts)}.`,
+    `Обращайся по имени так, как оно написано в карточке: «${firstName(facts.recipientName)}» — не переводи и не транслитерируй.`,
     `Получатель: ${facts.recipientName}${facts.recipientRole ? `, ${facts.recipientRole}` : ''}${facts.recipientCompany ? `, ${facts.recipientCompany}` : ''}.`,
     facts.relationship ? `Как знакомы: ${facts.relationship}.` : '',
     facts.vacancyTitle
@@ -78,7 +83,8 @@ export function contactMessageWish(facts: ContactMessageFacts): string {
     facts.vacancyTitle && facts.kind !== 'recruiter'
       ? 'Назови компанию и вакансию; общий вопрос о поиске работы без компании не подходит.'
       : '',
-    `Не длиннее ${B640_CONTACT_MESSAGE_DRAFT_MAX - 100} знаков, без темы, без подписи, без приветствия «Уважаемый».`,
+    // B753 (прод 23.11): при «500 знаков» GLM писал 610–760 и уходил в шаблон.
+    `3–4 коротких предложения. Не длиннее ${CONTACT_MESSAGE_TARGET_CHARS} знаков, без темы, без подписи, без приветствия «Уважаемый».`,
     'Пиши только то, что есть в профиле кандидата; не добавляй цифр, достижений и обещаний, которых там нет.',
     ...(facts.kind === 'recruiter' ? [] : ACQUAINTANCE_RULES),
   ];
@@ -112,7 +118,7 @@ function digitGroups(text: string): string[] {
   return text.match(/\d+/gu) ?? [];
 }
 
-export type ModelMessageRejection = 'empty' | 'too_long' | 'new_digits' | 'response_formula';
+export type ModelMessageRejection = 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'distorted';
 
 /** B753: почему текст модели не принят — в журнал вместо молчаливого запасного текста. */
 export function modelMessageRejection(
@@ -124,7 +130,21 @@ export function modelMessageRejection(
   if (!body) return 'empty';
   if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
   if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
-  return digitGroups(body).every((group) => knownText.includes(group)) ? null : 'new_digits';
+  if (!digitGroups(body).every((group) => knownText.includes(group))) return 'new_digits';
+  // Та же узкая проверка русского, что у письма (B640): лишние заглавные, обрезанные окончания.
+  return distortedWords(body, [knownText]).length > 0 ? 'distorted' : null;
+}
+
+/**
+ * B753 (решение CPO 23.11): длинный текст модель сокращает сама — свой же текст, с просьбой и фактом.
+ * Мы не режем по знакам: предложение не должно обрываться.
+ */
+export function shorteningCorrection(text: string): string {
+  return [
+    `Прошлый вариант сообщения длиннее предела. Сократи его до ${CONTACT_MESSAGE_TARGET_CHARS} знаков: сохрани просьбу и один факт из профиля, не обрывай предложения.`,
+    'Прошлый вариант:',
+    text.trim(),
+  ].join('\n');
 }
 
 /**

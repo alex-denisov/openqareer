@@ -118,6 +118,24 @@ describe('итог недели: модель', () => {
     expect(summaryInput(form).plan).toEqual([{ text: 'P', goalId: null, done: true }]);
   });
 
+  it('B683: сохранённый пустой план не прячет предложение сервера; остальное — из сохранённого', () => {
+    const emptyPlan = {
+      ...draft,
+      saved: {
+        weekStart: '2025-12-29',
+        achievedEntryIds: ['x'],
+        achievedNotes: ['n'],
+        blockers: 'b',
+        plan: [],
+        createdAt: '',
+        updatedAt: '',
+      },
+    };
+    const form = initialForm(emptyPlan, cards);
+    expect(form).toMatchObject({ achievedIds: ['x'], notes: ['n'], blockers: 'b' });
+    expect(form.plan.map((row) => row.text)).toEqual(['Обещание', 'По цели']);
+  });
+
   it('ⓘ плана называет перенос обещания', () => {
     expect(planSourceText(draft)).toContain('перенесено');
     expect(planSourceText({ ...draft, plan: [] })).not.toContain('перенесено');

@@ -165,7 +165,7 @@ export interface VacancyPoolStore {
     options?: SliceWriteOptions,
   ): Promise<MergeSliceResult>;
   /** B763: окно пула с записями без кластера; курсор живёт в хранилище. */
-  readUnclusteredPoolPage?(chunk?: number): UnclusteredPoolPage;
+  readUnclusteredPoolPage?(chunk?: number, maxUnclustered?: number): UnclusteredPoolPage;
   /** Without ids — every stored state (start-up); with ids — only those (B736 admin page). */
   loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[];
   /** Only sources with a pending manual request: the 5 s worker poll (B641). */

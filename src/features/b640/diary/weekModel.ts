@@ -94,7 +94,8 @@ export function initialForm(
   cards: readonly CareerDiaryGoalCard[],
 ): WeekForm {
   const saved = draft.saved;
-  const plan: readonly PlanRow[] = saved
+  // B683: сохранённый пустой план — плана нет; тогда показывается предложение сервера.
+  const plan: readonly PlanRow[] = saved?.plan.length
     ? saved.plan.map((item, index) => ({
         ...item,
         key: `s${index}`,
