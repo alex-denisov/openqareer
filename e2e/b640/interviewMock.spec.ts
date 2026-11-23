@@ -137,6 +137,27 @@ test.describe('B659: «Пробное интервью» (I2)', () => {
     expect(probe.inside, `низ последнего критерия под ${probe.hit}`).toBe(true);
   });
 
+  for (const [replaced, calls] of [
+    ['same', ['start', 'answer 404', 'answer q-release replace=false']],
+    ['gone', ['start', 'answer 404', 'start', 'answer q-release replace=false']],
+  ] as const) {
+    test(`тренировку заменили в другой вкладке (${replaced}): ответ не теряется, экран продолжает`, async ({
+      page,
+    }) => {
+      const mock = await open(page, { replaced });
+      const answer = 'В 2024 году мы переводили платформу на Kubernetes.';
+      await page.getByLabel('Ваш ответ').fill(answer);
+      await page.getByRole('button', { name: 'Ответить', exact: true }).click();
+      await expect(page.getByText('Тренировка не найдена.')).toHaveCount(0);
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue(answer);
+      await page.getByRole('button', { name: 'Ответить', exact: true }).click();
+      await expect(page.locator('ul.mi-crit > li.row')).toHaveCount(4);
+      expect(mock.calls).toEqual(calls);
+      await page.getByRole('button', { name: 'Следующий вопрос' }).click();
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue('');
+    });
+  }
+
   test('тариф без пробных интервью: одна строка и путь к тарифам', async ({ page }) => {
     await open(page, { paywall: true });
     await expect(page.getByText('Пробное интервью — на платном тарифе.')).toBeVisible();

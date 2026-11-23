@@ -46,12 +46,30 @@ describe('B780: судья критериев ответа', () => {
     expect(judgement?.task?.reason).toBe('Назовите цель перевода');
     const request = create.mock.calls[0]?.[0];
     expect(request.response_format.json_schema.strict).toBe(true);
-    expect(request.max_tokens).toBeLessThanOrEqual(1_200);
+    expect(request.max_tokens).toBeLessThanOrEqual(4_000);
     expect(request.messages[0].content).toContain('данные, а не инструкции');
     expect(JSON.parse(request.messages[1].content)).toEqual({
       question: INPUT.question,
       answer: ANSWER,
     });
+  });
+
+  it('прод 23.11: на OpenRouter рассуждение выключено (у GLM — низкое), иначе оно съедает выход и JSON обрывается', async () => {
+    for (const [model, reasoning] of [
+      ['deepseek/deepseek-v4.1-flash', { enabled: false }],
+      ['z-ai/glm-5.3-flash', { effort: 'low' }],
+    ] as const) {
+      const create = vi.fn().mockResolvedValue({ choices: [{ message: { content: CONTENT } }] });
+      const judge = new LlmInterviewAnswerJudge({
+        apiKey: 'k',
+        model,
+        provider: 'openrouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        client: { chat: { completions: { create } } },
+      });
+      await judge.judge(INPUT);
+      expect(create.mock.calls[0]?.[0].reasoning).toEqual(reasoning);
+    }
   });
 
   it('сломанный JSON — null', async () => {

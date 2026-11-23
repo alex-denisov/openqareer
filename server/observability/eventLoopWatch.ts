@@ -2,6 +2,7 @@ import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import type { FastifyInstance } from 'fastify';
 import { gcWatch, heldBackgroundSteps } from './backgroundSteps';
 import { redactRequestUrlForLogs } from './redactRequestUrl';
+import { heldSyncSections, recordSyncSection, syncSection } from './syncSections';
 
 type WatchLog = (fields: Record<string, unknown>, message: string) => void;
 
@@ -85,7 +86,50 @@ function trackRequests(app: FastifyInstance): Map<string, Tracked> {
   // Prod 03.11: a read the client dropped never reached onResponse and stayed «in flight» for hours,
   // crowding the requests that really held the loop out of the named eight.
   app.addHook('onRequestAbort', finish);
+  timeSerialization(app);
+  timeHandlers(app);
   return tracked;
+}
+
+/**
+ * B770a-0: синхронная часть обработчика — до первого `await` (страница каталога, разбор строк
+ * SQLite). Маршруты, объявленные после наблюдателя, — это все маршруты приложения.
+ */
+function timeHandlers(app: FastifyInstance): void {
+  app.addHook('onRoute', (route) => {
+    const handler = route.handler;
+    const name = `handler ${[route.method].flat().join(',')} ${route.url}`;
+    route.handler = function timedHandler(this: unknown, request, reply) {
+      return syncSection(name, () => handler.call(this as never, request, reply));
+    };
+  });
+}
+
+/**
+ * B770a-0: ответ в 400–700 КБ сериализуется синхронно между preSerialization и onSend. Участок
+ * назван методом и шаблоном маршрута — без адреса и данных.
+ */
+function timeSerialization(app: FastifyInstance): void {
+  // Колбэки, а не async: async-хук откладывает запись ответа на микрозадачу, и preHandler,
+  // отправивший 401 без `return reply`, видел `reply.sent === false` — обработчик шёл дальше.
+  const started = new WeakMap<object, number>();
+  app.addHook('preSerialization', (request, _reply, payload, done) => {
+    started.set(request, performance.now());
+    done(null, payload);
+  });
+  app.addHook('onSend', (request, _reply, payload, done) => {
+    const startedAt = started.get(request);
+    if (startedAt !== undefined) {
+      started.delete(request);
+      const route = request.routeOptions.url ?? 'unknown';
+      recordSyncSection(
+        `serialize ${request.method} ${route}`,
+        startedAt,
+        performance.now() - startedAt,
+      );
+    }
+    done(null, payload);
+  });
 }
 
 function stallTicker(
@@ -116,6 +160,8 @@ function stallTicker(
           // B769: фоновый шаг и сборка мусора в том же окне — задержки без запросов было не объяснить.
           background: heldBackgroundSteps(windowStart, now),
           gcMs: gcMsIn(windowStart, now),
+          // B770a-0: кто держал поток сам — синхронные участки окна по своему времени.
+          sync: heldSyncSections(windowStart, now),
         },
         'event-loop-stall',
       );

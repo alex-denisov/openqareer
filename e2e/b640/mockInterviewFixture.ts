@@ -8,6 +8,11 @@ export interface MockInterviewOptions {
   readonly paywall?: boolean;
   /** Не закончено интервью по другому отклику. */
   readonly otherSession?: boolean;
+  /**
+   * Тренировку заменили в другой вкладке или в приложении: первый ответ получает 404.
+   * `same` — текущая теперь другая по этому же отклику, `gone` — текущей нет.
+   */
+  readonly replaced?: 'same' | 'gone';
 }
 
 export interface MockInterviewState {
@@ -86,7 +91,7 @@ function bump(session: Session, change: Partial<Session>): Session {
 
 async function handle(
   route: Route,
-  state: { session: Session | null },
+  state: { session: Session | null; starts: number; replacedDone: boolean },
   options: MockInterviewOptions,
   calls: string[],
 ) {
@@ -105,8 +110,9 @@ async function handle(
         json: { error: { code: 'paywall_required', message: 'Нужен тариф', retryable: false } },
       });
     }
+    state.starts += 1;
     state.session = {
-      id: 's-1',
+      id: `s-${state.starts}`,
       version: 1,
       status: 'active',
       applicationId: 'r-arka',
@@ -120,6 +126,24 @@ async function handle(
   if (!session)
     return route.fulfill({ status: 404, json: { error: { code: 'not_found', message: 'нет' } } });
   const body = request.postDataJSON() as Json;
+  if (path.endsWith('/answers') && options.replaced && !state.replacedDone) {
+    state.replacedDone = true;
+    calls.push('answer 404');
+    state.session =
+      options.replaced === 'same'
+        ? { ...session, id: 's-tab', version: 1, index: 0, answers: {} }
+        : null;
+    return route.fulfill({
+      status: 404,
+      json: {
+        error: {
+          code: 'interview_session_not_found',
+          message: 'Тренировка не найдена.',
+          retryable: false,
+        },
+      },
+    });
+  }
   if (path.endsWith('/answers')) {
     calls.push(`answer ${String(body.questionId)} replace=${String(body.replaceAnswer)}`);
     state.session = bump(session, {
@@ -142,7 +166,9 @@ export async function mockInterview(
 ): Promise<MockInterviewState> {
   const calls: string[] = [];
   await mockPrep(page);
-  const state: { session: Session | null } = {
+  const state: { session: Session | null; starts: number; replacedDone: boolean } = {
+    starts: 0,
+    replacedDone: false,
     session: options.otherSession
       ? {
           id: 's-old',

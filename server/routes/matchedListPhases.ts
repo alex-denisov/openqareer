@@ -1,4 +1,5 @@
 import type { Steps } from '../vacancies/yieldingSteps';
+import { recordSyncSection } from '../observability/syncSections';
 
 /**
  * B770: холодная сборка подборки — prepareMs 1,6–1,9 с и listMs 1,2–1,6 с, под нагрузкой до
@@ -27,7 +28,9 @@ export function createPhaseTimer(now: () => number = () => performance.now()): P
       for (;;) {
         const startedAt = now();
         const step = steps.next();
-        add(name, now() - startedAt);
+        const ms = now() - startedAt;
+        add(name, ms);
+        recordSyncSection(`list:${name}`, startedAt, ms);
         if (step.done) return step.value;
         yield;
       }
@@ -37,7 +40,9 @@ export function createPhaseTimer(now: () => number = () => performance.now()): P
       try {
         return work();
       } finally {
-        add(name, now() - startedAt);
+        const ms = now() - startedAt;
+        add(name, ms);
+        recordSyncSection(`list:${name}`, startedAt, ms);
       }
     },
     read: () => Object.fromEntries([...spent].map(([name, ms]) => [name, roundMs(ms)])),
