@@ -27,25 +27,49 @@ export function closeNotificationRepositoryFor(deps: RouteDeps): void {
   repositories.delete(deps);
 }
 
+function writeNotification(
+  request: FastifyRequest,
+  candidateId: string,
+  kind: NotificationEventInput['kind'],
+  write: () => void,
+): void {
+  try {
+    write();
+  } catch (error) {
+    request.log.error(
+      {
+        code: 'notification_source_write_failed',
+        candidateId,
+        eventKind: kind,
+        failureType: error instanceof Error ? error.name : 'UnknownError',
+      },
+      'candidate-notification-source-write-failed',
+    );
+  }
+}
+
 export function recordNotificationFromSource(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
   input: NotificationEventInput,
 ): void {
-  try {
+  writeNotification(request, candidateId, input.kind, () => {
     notificationRepositoryFor(deps).recordEvent(candidateId, input);
-  } catch (error) {
-    request.log.error(
-      {
-        code: 'notification_source_write_failed',
-        candidateId,
-        eventKind: input.kind,
-        failureType: error instanceof Error ? error.name : 'UnknownError',
-      },
-      'candidate-notification-source-write-failed',
-    );
-  }
+  });
+}
+
+/** B671: запись за сутки, в которую дописывается следующий набор того же дня. */
+export function recordMergedNotification(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  input: NotificationEventInput,
+  merge: (storedSourceId: string) => string,
+): void {
+  writeNotification(request, candidateId, input.kind, () => {
+    notificationRepositoryFor(deps).recordOrMergeEvent(candidateId, input, merge);
+  });
 }
 
 export function recordImportCompletedNotification(

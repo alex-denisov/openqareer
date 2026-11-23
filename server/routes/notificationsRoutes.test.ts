@@ -6,12 +6,44 @@ import { apps, candidateAuthorization, config, createApp, noSessions, stores, su
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import { digestCount, ROLE_DIGEST_SOURCE_TYPE } from '../domain/roleVacancyDigest';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
+import { invalidateMatchedVacancies } from '../vacancies/matchedPoolContext';
 
 const footprintRepositories: SqliteCandidateReputationRepository[] = [];
 afterEach(() => footprintRepositories.splice(0).forEach((repository) => repository.close()));
 
-async function createAppWithFreshMatches() {
+function freshMatch(id: string): MatchedVacancyItem {
+  const now = new Date().toISOString();
+  return {
+    cluster: {
+      id,
+      canonicalTitle: 'Инженер данных',
+      canonicalCompany: 'Компания',
+      canonicalLocation: 'Москва',
+      isRemote: false,
+      skills: [],
+      descriptionSummary: 'Роль инженера данных.',
+      primaryUrl: `https://example.test/vacancy/${id}`,
+      sources: [],
+      firstObservedAt: now,
+      lastSeenAt: now,
+      status: 'active',
+      vacanciesCount: 1,
+    },
+    explanation: {
+      clusterId: id,
+      roleMatch: 'target',
+      requirements: { matched: 1, total: 1 },
+      matchingPoints: [],
+      missingPoints: [],
+      summary: 'Вакансия совпала с выбранной ролью.',
+      calculatedAt: now,
+    },
+  } as unknown as MatchedVacancyItem;
+}
+
+async function createAppWithFreshMatches(matches?: () => MatchedVacancyItem[]) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -45,7 +77,7 @@ async function createAppWithFreshMatches() {
     },
   } as unknown as MatchedVacancyItem;
   const engine = {
-    getMatchedVacanciesAsync: async () => [match],
+    getMatchedVacanciesAsync: async () => (matches ? matches() : [match]),
     isKnownVacancyGone: () => false,
     restore: () => ({ clusters: 0, sources: 0 }),
   };
@@ -59,7 +91,13 @@ async function createAppWithFreshMatches() {
   });
   apps.push(app);
   stores.push(candidateStore);
-  return { app, authorization: `Bearer ${candidate.accessToken}` };
+  return {
+    app,
+    authorization: `Bearer ${candidate.accessToken}`,
+    candidateStore,
+    candidateId: candidate.id,
+    engine,
+  };
 }
 
 describe('candidate notification routes', () => {
@@ -321,6 +359,32 @@ describe('candidate notification routes', () => {
       headers: { authorization },
     });
     expect(repeated.json().data.items.filter((item: { kind: string }) => item.kind === 'new_vacancies_by_role')).toHaveLength(1);
+  });
+
+  it('B671: one role notification a day; a later set of the same day raises its count', async () => {
+    const current = [freshMatch('day-1'), freshMatch('day-2')];
+    const fixture = await createAppWithFreshMatches(() => [...current]);
+    const { app, authorization } = fixture;
+    const todayUrl = '/api/v1/candidate/today?tz=Europe/Moscow';
+    const roleRows = async () =>
+      fixture.candidateStore.notificationRepository
+        .listForFeed(fixture.candidateId, { max: 50, now: new Date().toISOString() })
+        .rows.filter((row) => row.kind === 'new_vacancies_by_role');
+    await app.inject({ url: todayUrl, headers: { authorization } });
+    const first = await roleRows();
+    expect(first).toHaveLength(1);
+    expect(digestCount(first[0]!.sourceType, first[0]!.sourceId)).toBe(2);
+
+    current.push(freshMatch('day-3'));
+    invalidateMatchedVacancies(fixture.engine as never, fixture.candidateId);
+    await app.inject({ url: todayUrl, headers: { authorization } });
+    await app.inject({ url: todayUrl, headers: { authorization } });
+    const later = await roleRows();
+    expect(later).toHaveLength(1);
+    expect(later[0]!.sourceType).toBe(ROLE_DIGEST_SOURCE_TYPE);
+    expect(later[0]!.id).toBe(first[0]!.id);
+    expect(later[0]!.createdAt >= first[0]!.createdAt).toBe(true);
+    expect(digestCount(later[0]!.sourceType, later[0]!.sourceId)).toBe(3);
   });
 
   it('materializes a notification when a completed footprint audit has findings', async () => {

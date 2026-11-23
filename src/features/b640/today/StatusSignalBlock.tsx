@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   StatusSignal,
   StatusSignalAnswer,
@@ -59,11 +59,27 @@ function SignalCard({ signal, busy, onAnswer }: SignalCardProps) {
   );
 }
 
+/** Прочитанный сигнал; после ответа — то, что вернул сервер. */
+function useSignalState(): [StatusSignalState | null, (next: StatusSignalState) => void] {
+  const loaded = useLoad(getStatusSignal);
+  const [local, setLocal] = useState<StatusSignalState | null>(null);
+  return [local ?? (loaded.state === 'ready' ? loaded.data : null), setLocal];
+}
+
+/** Сообщает экрану, показан ли вопрос: от этого зависит кнопка ведущего блока на 390. */
+function useReportShown(shown: boolean, onShown?: (shown: boolean) => void): void {
+  useEffect(() => {
+    onShown?.(shown);
+  }, [onShown, shown]);
+}
+
 export interface StatusSignalBlockProps {
   /** Нынешний статус: его называет строка после «Нет». */
   readonly statusTitle: string;
   /** Блок во всю ширину над колонками (макет s04) или в правой колонке (s05b). */
   readonly wide: boolean;
+  /** Показан ли сейчас вопрос с ответами. */
+  readonly onShown?: (shown: boolean) => void;
 }
 
 /**
@@ -71,14 +87,11 @@ export interface StatusSignalBlockProps {
  * «Верно» ведёт к выбору статуса, «Нет» и «Не сейчас» убирают вопрос;
  * ответ «Нет» можно отменить до конца дня. Статус сигнал не меняет.
  */
-export function StatusSignalBlock({ statusTitle, wide }: StatusSignalBlockProps) {
+export function StatusSignalBlock({ statusTitle, wide, onShown }: StatusSignalBlockProps) {
   const { navigate } = useShell();
-  const loaded = useLoad(getStatusSignal);
-  const [local, setLocal] = useState<StatusSignalState | null>(null);
+  const [state, setLocal] = useSignalState();
   const [busy, setBusy] = useState<StatusSignalAnswer | 'undo' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const state = local ?? (loaded.state === 'ready' ? loaded.data : null);
-
   async function run(step: StatusSignalAnswer | 'undo', signal: StatusSignal | null) {
     if (busy) return;
     setBusy(step);
@@ -99,6 +112,7 @@ export function StatusSignalBlock({ statusTitle, wide }: StatusSignalBlockProps)
     }
   }
 
+  useReportShown(Boolean(state?.signal), onShown);
   // «Нет» можно отменить до конца дня, даже если уже показан другой вопрос.
   const refused = state?.answered?.answer === 'no';
   if (!state || (!state.signal && !refused)) return null;

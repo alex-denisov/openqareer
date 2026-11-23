@@ -272,8 +272,10 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const canScore = reason === 'assessed';
   const { implied, impliedIds, percent } = weighting(requirements, skills, facts, canScore);
   const placed = placeCoveredIds(input, requirements, assessments);
+  // B654 23.11: a requirement met by implication or by place is met only — never also partial or unknown.
+  const met = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) || placed.has(item.requirementId);
   const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
-    matched: items.filter((item) => item.status === 'matched' || impliedIds.has(item.requirementId) || placed.has(item.requirementId)).length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
+    matched: items.filter(met).length, total: items.length, unknown: items.filter((item) => item.status === 'unknown' && !met(item)).length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial' && !met(item)).length,
   });
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,

@@ -3,7 +3,7 @@ import { Button, Icon, Link, StatusLine } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome } from '../shell/ShellContext';
 import type { B640Notification } from './b640NotificationsApi';
-import { FEED_FILTERS, feedAction, feedSubtitle } from './feedModel';
+import { FEED_FILTERS, feedAction, feedSubtitle, pinnedAction, pinnedTitle } from './feedModel';
 import { groupNotifications, unreadHeading } from './notificationsModel';
 import { BlockError, BlockSkeleton } from './parts';
 import { LOAD_ERROR, useFeed, type Feed } from './useFeed';
@@ -48,12 +48,13 @@ function Pinned({ feed }: { readonly feed: Feed }) {
   return (
     <ul className="np-crit" aria-label="Важно: нужно ваше действие">
       {feed.pinned.map((item, index) => {
-        const action = feedAction(item);
+        const action = pinnedAction(item);
         return (
           <li className="np-crit-i is-one" key={item.id}>
             {index === 0 ? <span className="np-crit-l">Важно</span> : null}
-            <span className="np-crit-t">{[item.title, item.role].filter(Boolean).join(' · ')}</span>
+            <span className="np-crit-t">{pinnedTitle(item)}</span>
             <Link className="btn is-sm" to={action.path} onClick={() => void feed.markRead(item)}>
+              {action.icon ? <Icon name={action.icon} /> : null}
               {action.label}
             </Link>
           </li>
@@ -143,7 +144,10 @@ function NotificationsFeed({ feed, now }: { readonly feed: Feed; readonly now: D
 /** n01b «Все уведомления»: важное сверху, фильтр по категории, события по дням. */
 export function NotificationsScreen({ node }: { readonly node: B640Node }) {
   const feed = useFeed();
-  useScreenChrome({ bellCount: feed.unreadCount });
+  useScreenChrome({
+    bellCount: feed.unreadCount,
+    bellCritical: feed.status === 'ready' && feed.pinned.length > 0,
+  });
   const now = useMemo(() => new Date(), []);
   return (
     <div className="page" data-b640-node={node.code} data-b640-section={node.section}>

@@ -94,7 +94,7 @@ export function ShellFrame() {
   const tabs = match ? tabsOf(match) : null;
   const back = match ? mobileBackOf(match, trail) : null;
   const title = chrome.title ?? (isKit ? 'Общие компоненты' : (node?.title ?? 'Кабинет'));
-  const bellCount = chrome.bellCount ?? counted;
+  const bellCount = chrome.bellCount ?? counted.count;
   const Section = node ? SECTION_ENTRIES[node.section] : null;
 
   return (
@@ -105,7 +105,7 @@ export function ShellFrame() {
         titleTip={chrome.title ? undefined : chrome.titleTip}
         active={node?.nav ?? null}
         bellCount={bellCount}
-        bellCritical={chrome.bellCritical ?? false}
+        bellCritical={chrome.bellCritical ?? counted.critical}
         coachDot={chrome.coachDot ?? false}
         back={back}
       />
