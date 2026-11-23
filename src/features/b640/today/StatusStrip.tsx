@@ -11,6 +11,8 @@ export interface StatusStripProps {
   readonly revertedTitle: string | null;
   /** Статус вернули: экран запоминает название и перечитывает модули. */
   readonly onReverted: (title: string) => void;
+  /** B650 s05b: «С 2 октября: 13 откликов → 1 интервью → 1 оффер»; `null` — откликов нет. */
+  readonly funnel?: string | null;
 }
 
 type RevertState =
@@ -48,9 +50,14 @@ function UndoStrip({ title, busy, error, onRevert }: UndoStripProps) {
 
 /**
  * Строка статуса над «Сегодня». Сразу после смены — «Вернуть прежний»
- * (до конца дня), дальше — статус и «Сменить» (макет s03: строки пути откликов нет).
+ * (до конца дня), дальше — статус, путь откликов (s05b; без откликов строки нет) и «Сменить».
  */
-export function StatusStrip({ status, revertedTitle, onReverted }: StatusStripProps) {
+export function StatusStrip({
+  status,
+  revertedTitle,
+  onReverted,
+  funnel = null,
+}: StatusStripProps) {
   const [revert, setRevert] = useState<RevertState>({ step: 'idle' });
 
   async function handleRevert() {
@@ -84,6 +91,7 @@ export function StatusStrip({ status, revertedTitle, onReverted }: StatusStripPr
         <span>
           Статус: <strong>{revertedTitle ?? status.title}</strong>
         </span>
+        {funnel ? <span className="num">{funnel}</span> : null}
         <Link className="row-act is-sm" to={buildNodePath('s02')}>
           Сменить
         </Link>

@@ -58,11 +58,19 @@ function readTextVariants(sources: ContentExportSources, candidateId: string): E
   }));
 }
 
+/** a05e: столбцы ритма комментариев есть, только если таблицу уже дополнил репозиторий очереди. */
+function commentRhythmColumns(database: DatabaseSync): string {
+  if (!tableExists(database, 'candidate_linkedin_rhythm')) return '';
+  const columns = database.prepare('PRAGMA table_info(candidate_linkedin_rhythm)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'comments_per_day')) return '';
+  return ', comments_per_day AS commentsPerDay, comment_days AS commentDays, comment_from AS commentFrom, comment_to AS commentTo';
+}
+
 function readLinkedin(database: DatabaseSync, candidateId: string): ContentExport['linkedin'] {
   const rhythm = rows(
     database,
     'candidate_linkedin_rhythm',
-    `SELECT posts_per_week AS postsPerWeek, days, time, timezone, updated_at AS updatedAt
+    `SELECT posts_per_week AS postsPerWeek, days, time, timezone, updated_at AS updatedAt${commentRhythmColumns(database)}
      FROM candidate_linkedin_rhythm WHERE candidate_id = ?`,
     candidateId,
   );

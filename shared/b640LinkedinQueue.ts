@@ -2,6 +2,25 @@
 export const LINKEDIN_RHYTHM_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type LinkedinRhythmDay = (typeof LINKEDIN_RHYTHM_DAYS)[number];
 
+/** a05e: ритм комментариев — сколько в день, в какие дни и в каком окне местного времени. */
+export interface LinkedinCommentRhythm {
+  /** 1..3 комментария в день; слоты делят окно поровну. */
+  readonly perDay: number;
+  readonly days: readonly LinkedinRhythmDay[];
+  /** Начало и конец окна `HH:MM`, `from` раньше `to`. */
+  readonly from: string;
+  readonly to: string;
+}
+
+export const LINKEDIN_COMMENTS_PER_DAY_MAX = 3;
+/** mechanics.md п. 64: по умолчанию 2 в будни; окно — из макета a05e. */
+export const DEFAULT_LINKEDIN_COMMENT_RHYTHM: LinkedinCommentRhythm = {
+  perDay: 2,
+  days: ['mon', 'tue', 'wed', 'thu', 'fri'],
+  from: '10:00',
+  to: '18:00',
+};
+
 export interface LinkedinRhythm {
   /** 1..7 постов в неделю; при дне из `days` берётся не больше этого числа на неделю. */
   readonly postsPerWeek: number;
@@ -10,6 +29,8 @@ export interface LinkedinRhythm {
   readonly time: string;
   /** IANA-пояс. */
   readonly timezone: string;
+  /** Ритм комментариев (a05e); у постов — `postsPerWeek`, `days`, `time`. */
+  readonly comments: LinkedinCommentRhythm;
 }
 
 export const LINKEDIN_QUEUE_STATES = ['queued', 'due', 'done', 'removed'] as const;

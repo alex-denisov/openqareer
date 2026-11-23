@@ -156,6 +156,26 @@ function resultFor(input: VacancyRequirementsInput, requirements: readonly Vacan
   };
 }
 
+const LIST_PART_MAX_WORDS = 2;
+
+/** «Kubernetes, PostgreSQL»: a comma list splits only when every item is a short name. */
+function listItems(piece: string): string[] {
+  const items = piece.split(/\s*,\s*/u).filter(Boolean);
+  const short = items.every((item) => item.split(/\s+/u).length <= LIST_PART_MAX_WORDS);
+  return items.length > 1 && short ? items : [piece];
+}
+
+/**
+ * B676: «Требования: опыт …; Kubernetes, PostgreSQL; английский B2.» is several requirements
+ * (own vacancy, prod 23.11: one requirement left the fit at «too few»). A line that does not
+ * split stays byte for byte, so requirement ids of other texts do not change.
+ */
+function requirementPieces(content: string): string[] {
+  const pieces = content.split(/\s*;\s*/u).map((piece) => piece.replace(/[.;]+$/u, '').trim()).filter((piece) => piece.length >= 2);
+  if (pieces.length < 2) return [content];
+  return pieces.flatMap(listItems);
+}
+
 export function extractVacancyRequirements(input: VacancyRequirementsInput): VacancyRequirementsResult {
   if (!input.description?.trim()) return resultFor(input, [], 'none');
   const lines = plainText(input.description).split(/\n+/u).map((line) => line.trim()).filter(Boolean);
@@ -172,17 +192,21 @@ export function extractVacancyRequirements(input: VacancyRequirementsInput): Vac
       excludedSection = false;
       preferredSection = /^preferred /iu.test(content);
       const inline = content.split(/[:：]/u).slice(1).join(':').trim();
-      if (inline && !seen.has(inline)) {
-        requirements.push(makeRequirement(inline, inline, EXPLICIT.test(inline) ? 'explicit' : 'structural', preferredSection));
-        seen.add(inline);
+      for (const piece of inline ? requirementPieces(inline) : []) {
+        if (seen.has(piece)) continue;
+        requirements.push(makeRequirement(piece, piece, EXPLICIT.test(piece) ? 'explicit' : 'structural', preferredSection));
+        seen.add(piece);
       }
       continue;
     }
     if (excludedSection || (!inSection && !EXPLICIT.test(content)) || content.length < 2 || content.length > 1500 || seen.has(content) || isCompensationLine(content)) continue;
     // Model-directed instructions are untrusted vacancy data, never requirements.
     if (/ignore (?:all |previous )?instructions|system prompt|api.?key|credentials|игнорируй.*инструкц/iu.test(content)) continue;
-    requirements.push(makeRequirement(content, content, EXPLICIT.test(content) ? 'explicit' : 'structural', preferredSection));
-    seen.add(content);
+    for (const piece of requirementPieces(content)) {
+      if (seen.has(piece)) continue;
+      requirements.push(makeRequirement(piece, piece, EXPLICIT.test(piece) ? 'explicit' : 'structural', preferredSection));
+      seen.add(piece);
+    }
     if (requirements.length >= 50) break;
   }
   return resultFor(input, requirements, 'rules');

@@ -74,7 +74,7 @@ export function JournalScreen({ node }: SectionProps) {
         {lead ? <Lead contact={lead} /> : null}
         <section className="col" aria-labelledby="jl-title">
           <div className="list-head">
-            <h2 id="jl-title">Журнал LinkedIn</h2>
+            <h2 className="gt-h" id="jl-title">Журнал LinkedIn</h2>
           </div>
           {data.state === 'loading' ? <StatusLine state="wait" text="Загружаем журнал…" /> : null}
           {data.state === 'error' ? <PlatformRetry text="Не удалось загрузить журнал" onRetry={journal.retry} /> : null}

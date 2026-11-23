@@ -69,7 +69,7 @@ import { humanSourceLabel } from './sourceLabels';
 /**
  * Проверяет, проходила ли карточка через указанный этап воронки.
  */
-function applicationReachedStage(app: ApplicationView, targetStage: ApplicationStage): boolean {
+export function applicationReachedStage(app: ApplicationView, targetStage: ApplicationStage): boolean {
   return app.stage === targetStage || app.archivePreviousStage === targetStage || (app.reachedStages?.includes(targetStage) ?? false);
 }
 

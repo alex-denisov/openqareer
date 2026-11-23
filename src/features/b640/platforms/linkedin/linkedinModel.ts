@@ -27,19 +27,18 @@ export function draftDate(draft: LinkedinDraft): string | null {
   return draft.status === 'published' ? formatDay(draft.publishedAt) : null;
 }
 
-/** «3 поста»: число постов, к которым готов комментарий. */
-export function postsCount(count: number): string {
+/** Слово к числу: 1 пост, 2 поста, 5 постов. */
+export function countWord(count: number, one: string, few: string, many: string): string {
   const tail = count % 100;
   const last = count % 10;
-  const word =
-    tail >= 11 && tail <= 14
-      ? 'постов'
-      : last === 1
-        ? 'пост'
-        : last >= 2 && last <= 4
-          ? 'поста'
-          : 'постов';
-  return `${count} ${word}`;
+  if (tail >= 11 && tail <= 14) return many;
+  if (last === 1) return one;
+  return last >= 2 && last <= 4 ? few : many;
+}
+
+/** «3 поста»: число постов, к которым готов комментарий. */
+export function postsCount(count: number): string {
+  return `${count} ${countWord(count, 'пост', 'поста', 'постов')}`;
 }
 
 export function draftsOfKind(
