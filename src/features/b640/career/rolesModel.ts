@@ -203,25 +203,11 @@ export function skillStripText(count: number): string {
   return `Проверьте ${pluralRu(count, ['навык', 'навыка', 'навыков'])} — точнее подбор`;
 }
 
-export function compareCheckTag(row: RoleRow): {
-  readonly text: string;
-  /** Полное имя ссылки: чья это проверка (видимая строка короткая, по макету). */
-  readonly label?: string;
-  readonly ok: boolean;
-  /** B764: роль прогона, если проверка пройдена под другим названием, — ссылка на него. */
-  readonly role?: string;
-} {
-  if (!row.check) return { text: 'не начата', ok: false };
+export function compareCheckTag(row: RoleRow): { readonly text: string; readonly ok: boolean } {
+  // B645-2 (решение оркестратора 23.11): столбец роли показывает проверку только этой роли;
+  // пройденная под другим названием (B764) здесь «не начата».
+  if (!row.check || row.check.source) return { text: 'не начата', ok: false };
   const share = row.check.total > 0 ? ` · ${row.check.confirmed} из ${row.check.total}` : '';
-  const { source } = row.check;
-  // B645-2: столбец роли узкий — видна строка макета, роль проверки называет ссылка.
-  if (source)
-    return {
-      text: `пройдена${share}`,
-      label: `пройдена для «${source.label}»${share}`,
-      ok: true,
-      role: source.title,
-    };
   return { text: `пройдена${share}`, ok: true };
 }
 

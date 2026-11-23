@@ -167,7 +167,7 @@ test.describe('B653: «Карьера» — роли и условия поис�
     await expect(link).toHaveAttribute('href', '/app/career/skills');
   });
 
-  test('B764: проверка под другим названием — строка называет её роль и счёт, ссылка ведёт к прогону', async ({
+  test('B645-2: проверка под другим названием не попадает в столбец этой роли', async ({
     page,
   }) => {
     await openCareer(page, '/app/career/roles', {
@@ -183,10 +183,12 @@ test.describe('B653: «Карьера» — роли и условия поис�
         },
       ],
     });
-    const tag = node(page, 's10')
-      .getByRole('link', { name: 'пройдена для «Руководитель направления разработки» · 3 из 5' })
-      .first();
-    await expect(tag).toHaveAttribute('href', '/app/career/skills?role=Head%20of%20Engineering');
+    const screen = node(page, 's10');
+    await expect(screen.getByText(/пройдена для/u)).toHaveCount(0);
+    if (desk(page)) {
+      const cell = screen.locator('table.cmp td[data-col="Директор по разработке"] .tag').last();
+      await expect(cell).toHaveText('не начата');
+    }
   });
 
   test('S10: «Искать в роли» сохраняет отмеченную роль', async ({ page }) => {
