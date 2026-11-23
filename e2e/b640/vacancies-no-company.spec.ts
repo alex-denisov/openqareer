@@ -84,3 +84,22 @@ test('B726: карточка вакансии без компании — ист
   await expect(page.getByText('Сайт компании')).toHaveCount(0);
   await expect(page.locator('.b640 .v4-about-co')).toHaveCount(0);
 });
+
+/** B726 (B645 23.11): без компании «Хочу в компанию» отметить нечего — в меню строки его нет. */
+test('B726: меню строки без компании — без «Хочу в компанию», пост Telegram на месте', async ({
+  page,
+}) => {
+  await open(page, '/app/vacancies');
+  const bare = page.locator('.b640 tr.vt-row', {
+    hasText: 'Технический директор / Tech lead / CTO',
+  });
+  await expect(bare).toBeVisible({ timeout: 15_000 });
+  await bare.getByRole('button', { name: 'Ещё действия' }).click();
+  const menu = page.locator('.va-pop.va-m');
+  await expect(menu.getByRole('link', { name: 'Открыть пост в Telegram' })).toHaveAttribute(
+    'href',
+    TG_POST,
+  );
+  await expect(menu.getByText('Уже откликнулись')).toBeVisible();
+  await expect(menu.getByText('Хочу в компанию')).toHaveCount(0);
+});
