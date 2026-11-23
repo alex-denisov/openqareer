@@ -19,6 +19,7 @@ import { createTrackerExport, type TrackerExportSources, type TrackerExportStore
 import { exportNotifications, type NotificationExportStore } from './notificationExport';
 import { exportProfileHistory, type ProfileHistoryExportStore } from './profileHistoryExport';
 import { exportContent } from './contentExport';
+import { exportCareerSections, exportContacts } from './contactsCareerExport';
 import { createCareerDiaryExportSources, exportCareerDiary } from './careerDiaryExport';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
@@ -90,6 +91,8 @@ export function createSqliteCandidateStoreExportMethods(
         notifications: exportNotifications(database, dependencies.ownStorage.store, candidateId),
         profileHistory: exportProfileHistory(dependencies.ownStorage, candidateId),
         content: exportContent(dependencies.ownStorage, candidateId),
+        contacts: exportContacts(dependencies.ownStorage, candidateId),
+        careerSections: exportCareerSections(dependencies.ownStorage, candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
