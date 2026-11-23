@@ -53,8 +53,8 @@ function IndicatorList({ card, now, quarterView = false }: GoalItemProps) {
         // B686: у цели из KPI единственный показатель назван как сама цель — второй раз не пишем.
         const repeat = indicators.length === 1 && goal.title.trim() === card.title.trim();
         return (
-          <li className="dn-ind" key={view.id}>
-            <span>{repeat ? null : view.title}</span>
+          <li className={repeat ? 'dn-ind is-solo' : 'dn-ind'} key={view.id}>
+            {repeat ? null : <span>{view.title}</span>}
             <span className="num">
               <strong>{view.value}</strong>
               {target}

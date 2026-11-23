@@ -164,7 +164,10 @@ describe('d02 «Цели и показатели»', () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     expect(page.querySelectorAll('.dn-goal')).toHaveLength(1);
     expect(page.querySelector('.dn-goal-t')?.textContent).toBe('Срок релиза');
-    expect(page.querySelector('.dn-ind > span:first-child')?.textContent).toBe('');
+    // Название не повторяется и колонку не занимает: значение с начала строки.
+    const solo = page.querySelector('.dn-ind');
+    expect(solo?.className).toBe('dn-ind is-solo');
+    expect(solo?.firstElementChild?.className).toBe('num');
     expect(page.querySelector('.dn-ind strong')?.textContent).toBe('не внесено');
   });
 
