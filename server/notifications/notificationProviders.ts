@@ -54,6 +54,19 @@ export function buildNotificationTelegramSender(
   };
 }
 
+/** Telegram ответил на setWebhook отказом; в журнал идёт только HTTP-статус. */
+export class TelegramWebhookSetupError extends Error {
+  constructor(readonly status: number) {
+    super('telegram_webhook_setup_failed');
+    this.name = 'TelegramWebhookSetupError';
+  }
+}
+
+/** Адрес вебхука без токена бота — для запроса и для журнала. */
+export function telegramWebhookUrl(publicBaseUrl: string): string {
+  return new URL('/api/v1/integrations/telegram/webhook', publicBaseUrl).toString();
+}
+
 export function buildTelegramWebhookConfigurator(
   botToken: string,
   publicBaseUrl: string,
@@ -61,7 +74,7 @@ export function buildTelegramWebhookConfigurator(
   fetchImpl: typeof fetch = fetch,
 ): () => Promise<void> {
   return async () => {
-    const webhookUrl = new URL('/api/v1/integrations/telegram/webhook', publicBaseUrl).toString();
+    const webhookUrl = telegramWebhookUrl(publicBaseUrl);
     const response = await fetchImpl(`https://api.telegram.org/bot${botToken}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'User-Agent': 'openqareer/1.0' },
@@ -73,7 +86,7 @@ export function buildTelegramWebhookConfigurator(
       }),
     });
     const result = (await response.json().catch(() => null)) as { ok?: unknown } | null;
-    if (!response.ok || result?.ok !== true) throw new Error('telegram_webhook_setup_failed');
+    if (!response.ok || result?.ok !== true) throw new TelegramWebhookSetupError(response.status);
   };
 }
 

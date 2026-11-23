@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { TELEGRAM_LINK_START, telegramUpdateRoute } from '../notifications/telegramUpdateRoute';
+import { createTelegramWebhookRegistrar } from '../notifications/telegramWebhookRegistration';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
 import {
   closeNotificationRepositoryFor,
@@ -16,6 +17,7 @@ import {
   buildNotificationEmailSender,
   buildNotificationTelegramSender,
   buildTelegramWebhookConfigurator,
+  telegramWebhookUrl,
 } from '../notifications/notificationProviders';
 import { createNotificationUnsubscribeToken } from '../notifications/notificationToken';
 
@@ -593,25 +595,13 @@ function startTelegramWebhookRegistration(
   webhookSecret: string,
   publicBaseUrl: string,
 ): void {
-  const configureWebhook = buildTelegramWebhookConfigurator(botToken, publicBaseUrl, webhookSecret);
-  let configuring = false;
+  const register = createTelegramWebhookRegistrar(
+    buildTelegramWebhookConfigurator(botToken, publicBaseUrl, webhookSecret),
+    app.log,
+    telegramWebhookUrl(publicBaseUrl),
+  );
   const registerWebhook = async () => {
-    if (configuring || telegramWebhookReady.get(deps)) return;
-    configuring = true;
-    try {
-      await configureWebhook();
-      telegramWebhookReady.set(deps, true);
-    } catch (error) {
-      app.log.error(
-        {
-          code: 'telegram_webhook_setup_failed',
-          failureType: error instanceof Error ? error.name : 'UnknownError',
-        },
-        'candidate-telegram-webhook-setup-failed',
-      );
-    } finally {
-      configuring = false;
-    }
+    if (await register()) telegramWebhookReady.set(deps, true);
   };
   const timer = setInterval(() => void registerWebhook(), 5 * 60_000);
   timer.unref();

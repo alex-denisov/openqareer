@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 
 /** Свои данные «Карьеры» для B653: роли по профилю, кампания, условия поиска. */
@@ -359,4 +359,31 @@ export async function openCareer(
   );
   await page.goto(path, { waitUntil: 'domcontentloaded' });
   return calls;
+}
+
+/**
+ * B645-2 s10: длины последнего слова заголовка, при которых «Как посчитано» уходит
+ * со строки этого слова, или он выходит за край блока. Перед заголовком с прода
+ * («Вице-президент по операциям») — короткие слова растущей длины, чтобы последнее
+ * слово встало ровно в край строки.
+ */
+export function tipAloneLengths(head: Locator): Promise<string[]> {
+  return head.evaluate((el) => {
+    const title = el.querySelector('.lead-title')!;
+    const misses: string[] = [];
+    for (let extra = 0; extra < 60; extra += 1) {
+      const lead = 'и'
+        .repeat(extra)
+        .replace(/(.{5})/gu, '$1 ')
+        .trim();
+      title.textContent = `${lead} Ближе всего — Вице-президент по операциям`;
+      const lines = title.getClientRects();
+      const last = lines[lines.length - 1];
+      const tip = el.querySelector('.tip')!.getBoundingClientRect();
+      const mid = tip.top + tip.height / 2;
+      const edge = el.getBoundingClientRect().right;
+      if (mid < last.top || mid > last.bottom || tip.right > edge + 0.5) misses.push(`+${extra}`);
+    }
+    return misses;
+  });
 }
