@@ -136,4 +136,21 @@ describe('B593: цвет полосы браузера (theme-color) по дей
     meta.remove();
     root.remove();
   });
+
+  it('B593: признак первого кадра на <html> следует за темой кабинета и снимается после выхода', () => {
+    mediaStub();
+    const page = document.documentElement;
+    page.setAttribute('data-oq-theme', 'light');
+    const root = document.createElement('div');
+    document.body.append(root);
+    root.style.colorScheme = 'dark';
+    const view = mount(root, 'dark');
+    expect(page.getAttribute('data-oq-theme')).toBe('dark');
+    root.style.colorScheme = 'light';
+    view.rerender('light');
+    expect(page.getAttribute('data-oq-theme')).toBe('light');
+    view.unmount();
+    expect(page.hasAttribute('data-oq-theme')).toBe(false);
+    root.remove();
+  });
 });

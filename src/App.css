@@ -56,6 +56,29 @@ body,
   background: var(--bg-dark);
 }
 
+/* B593: тема нового кабинета до бандла — атрибут ставит /assets/oq-theme-1.js.
+   Цвета — фон светлой и тёмной темы из b640/tokens.css. */
+html[data-oq-theme='light'],
+html[data-oq-theme='light'] body,
+html[data-oq-theme='light'] #root {
+  background: oklch(98.2% 0.004 200);
+  color-scheme: light;
+}
+
+html[data-oq-theme='dark'],
+html[data-oq-theme='dark'] body,
+html[data-oq-theme='dark'] #root {
+  background: oklch(15.5% 0.012 200);
+  color-scheme: dark;
+}
+
+/* B593: на /app устройства нового кабинета готовый лендинг из index.html не показывается —
+   первый кадр в цвете темы кабинета. Правило в основной таблице стилей: стили оболочки
+   грузятся позже первого кадра. */
+html[data-oq-theme] [data-bootstrap-shell='true'] {
+  display: none !important;
+}
+
 body {
   min-height: 100dvh;
   color: var(--text-main);
