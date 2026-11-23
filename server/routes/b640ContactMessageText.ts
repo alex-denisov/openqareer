@@ -66,6 +66,14 @@ function sameCompany(
   return candidateCompanyKey(also.company) === candidateCompanyKey(vacancy.company) ? also : null;
 }
 
+/** B753: отклонённый проверкой текст идёт следующей ступени цепочки, а не сразу в шаблон. */
+function contactReview(known: string, kind: B640ContactMessageKind): (body: string) => readonly string[] {
+  return (body) => {
+    const reason = modelMessageRejection(body, known, kind);
+    return reason ? [`contact_${reason}`] : [];
+  };
+}
+
 /**
  * Текст сообщения: модель через тот же писатель, что и письмо получателю; при отказе, пустом ответе
  * или новых цифрах — шаблон на данных профиля. Реальный запрос B613 заменит `contactMessageWish`.
@@ -95,6 +103,11 @@ export async function writeContactMessageText(
   const fallback = fallbackContactMessage(message);
   const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
   if (!writer || !profile.trim()) return fallback;
+  const known = [
+    profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
+    vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
+  ].join('\n');
+  const review = contactReview(known, input.kind);
   try {
     const gender = candidateGenderFromName(draft.candidate?.fullName);
     const outcome = await writer.writeCoverLetter({
@@ -104,11 +117,8 @@ export async function writeContactMessageText(
       resumeAttached: false,
       chosenLanguage: 'ru',
       wish: contactMessageWish(message),
+      review,
     });
-    const known = [
-      profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
-      vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
-    ].join('\n');
     logModelOutcome(request, outcome, known, input.kind);
     return acceptModelMessage(outcome.body, known, input.kind) ?? fallback;
   } catch (error) {
