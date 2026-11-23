@@ -42,11 +42,11 @@ function vacancyOf(deps: RouteDeps, vacancyId: string | null): { title: string; 
 }
 
 /** B753: отказ ступени и непринятый текст — в журнал (без текста), иначе запасной текст не объяснить. */
-function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, known: string): void {
+function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, known: string, kind: B640ContactMessageKind): void {
   if (outcome.failure) {
     request.log.warn({ ...outcome.failure, code: 'contact_message_stage_failed' }, 'contact-message-stage-failed');
   }
-  const rejected = outcome.body || !outcome.failure ? modelMessageRejection(outcome.body, known) : null;
+  const rejected = outcome.body || !outcome.failure ? modelMessageRejection(outcome.body, known, kind) : null;
   if (!rejected) return;
   request.log.warn(
     { code: 'contact_message_model_rejected', reason: rejected, stage: outcome.stage ?? null, length: outcome.body?.length ?? 0 },
@@ -93,10 +93,11 @@ export async function writeContactMessageText(
     ...(also && also.title !== vacancy?.title ? { alsoVacancyTitle: also.title } : {}),
   };
   const fallback = fallbackContactMessage(message);
-  if (!deps.coverLetterWriter || !profile.trim()) return fallback;
+  const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
+  if (!writer || !profile.trim()) return fallback;
   try {
     const gender = candidateGenderFromName(draft.candidate?.fullName);
-    const outcome = await deps.coverLetterWriter.writeCoverLetter({
+    const outcome = await writer.writeCoverLetter({
       profile,
       vacancy: { title: vacancy?.title ?? 'Личное сообщение', ...(vacancy?.company ? { company: vacancy.company } : {}) },
       ...(gender ? { gender } : {}),
@@ -108,8 +109,8 @@ export async function writeContactMessageText(
       profile, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
       vacancy?.title ?? '', also?.title ?? '', draft.targetRole ?? '',
     ].join('\n');
-    logModelOutcome(request, outcome, known);
-    return acceptModelMessage(outcome.body, known) ?? fallback;
+    logModelOutcome(request, outcome, known, input.kind);
+    return acceptModelMessage(outcome.body, known, input.kind) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');
     return fallback;
