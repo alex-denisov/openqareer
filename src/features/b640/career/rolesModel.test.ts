@@ -199,7 +199,15 @@ describe('B764: проверка, пройденная под другим на�
       role: 'Chief Operating Officer',
     });
     const cooRow = rows.find((row) => row.title === 'COO')!;
-    expect(compareCheckTag(cooRow).text).toMatch(/^пройдена · \d+ из \d+$/u);
+    // B645 (прод c6dac4fe): столбец COO писал «6 из 6» по модели роли — счёт той же проверки.
+    expect(compareCheckTag(cooRow)).toEqual({ text: 'пройдена · 4 из 6', ok: true });
+  });
+
+  it('прогон под своим названием с числом навыков — его счёт, без «для»', () => {
+    const { roleTitleRu: _ru, ...run } = checked[0]!;
+    const own = [{ ...run, roleTitle: 'COO' }];
+    const [row] = buildRoleRows([coo], ['COO'], own, titlesRu);
+    expect(compareCheckTag(row!)).toEqual({ text: 'пройдена · 4 из 6', ok: true });
   });
 });
 
