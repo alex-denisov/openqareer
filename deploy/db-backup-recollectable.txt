@@ -1,0 +1,70 @@
+# B777: таблицы, которые собираются заново, — в ежедневную копию незаменимых данных не идут
+# (они есть в еженедельной полной). Имя таблицы или префикс со «*». Всё, чего здесь нет,
+# копируется каждый день: новая таблица по умолчанию попадает в копию.
+# Размеры — dbstat на проде 23.11, МБ.
+
+# Пул вакансий, склейка и индексы (≈26 ГБ)
+vacancy_pool
+vacancy_pool_index
+vacancy_cluster_input
+vacancy_cluster_keys
+vacancy_clusters
+vacancy_semantic
+vacancy_company
+vacancy_source_state
+vacancy_source_health
+vacancy_grade
+vacancy_role
+vacancy_demand_terms
+vacancy_versions
+vacancies
+cluster_*
+unclustered_catch_up_state
+remote_scope_backfill_state
+
+# Кэши и очереди моделей: требования, процент, разбор названий
+vacancy_fit_cache
+vacancy_fit_queue
+vacancy_fit_latest
+vacancy_requirements_cache
+vacancy_requirements_jobs
+title_parse*
+role_naming_cache
+role_skill_assessment_runs
+hiring_manager_cache
+recruiter_dossier_cache
+mass_recount_daily
+matched_snapshot_seals
+sealed_matched_lists
+bulk_llm_*
+
+# Публичный каталог, карты сайта, индексация
+catalog_*
+vacancy_catalog_redirects
+sitemap_health_runs
+landing_stats
+
+# Источники и каталог компаний
+freehire_*
+company_directory
+company_placement
+company_discovery_queue
+company_direct_ats_check
+company_email_format_cache
+company_mail_domain_cache
+company_linkedin_resolution
+hh_crawl_*
+hh_text_*
+linkedin_guest_budget_state
+linkedin_pool_exa_company_cache
+linkedin_pool_audit
+
+# Рынок зарплат и курсы
+salary_market_*
+market_salary_estimates
+market_reports
+market_profiles
+currency_rates
+
+# Служебные проходы обслуживания
+maintenance_*
