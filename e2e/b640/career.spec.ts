@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { openCareer, type CareerOptions } from './careerFixture';
+import { openCareer, tipAloneLengths, type CareerOptions } from './careerFixture';
 import { expectGates } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -155,6 +155,16 @@ test.describe('B653: «Карьера» — роли и условия поис�
     await screen.getByRole('button', { name: 'Добавить роль' }).click();
     await expect(screen.getByText('Роль добавлена в поиск')).toBeVisible();
     expect(calls.ownRoles).toEqual([{ action: 'add', title: 'Архитектор решений' }]);
+  });
+
+  test('B645-2: длинный заголовок S10 — «Как посчитано» на строке последнего слова, 1440 и 390', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career', { status: 'choosing_role', searchRoles: [] });
+    const head = node(page, 's10').locator('.lead-head').first();
+    await expect(head.locator('.lead-title')).toBeVisible();
+    const alone = await tipAloneLengths(head);
+    expect(alone).toEqual([]);
   });
 
   test('B764: «Проверить вторую роль» не называет роль — C04 сам берёт роль, проверку которой можно начать', async ({
