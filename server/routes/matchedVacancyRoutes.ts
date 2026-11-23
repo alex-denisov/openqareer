@@ -36,6 +36,7 @@ import {
   filterMatchedVacancies,
   type MatchedVacancyFilters,
 } from '../vacancies/matchedVacancyFilters';
+import { setRequirementsReader } from '../vacancies/techDirectorSignal';
 import {
   markMatchedVacanciesStale,
   readMatchedSnapshot,
@@ -567,6 +568,8 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  // B766: роль «Технический директор» читает требования вакансии; runtime ставится после маршрутов.
+  setRequirementsReader((clusterId) => deps.vacancyMechanics?.latestRequirementTexts(clusterId));
   app.get(
     '/api/v1/candidate/matched-vacancies',
     withDeps(deps, async (routeDeps, request, reply) => {

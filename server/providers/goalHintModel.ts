@@ -23,6 +23,11 @@ import { assertOpenRouterModelForPersonalData } from './openRouterPrivacy';
  */
 const ANSWER_TOKENS = 500;
 const STAGE_TIMEOUT_MS = 15_000;
+/**
+ * B768: общий срок примеров d02c — экран ждёт их со строкой «Загружаем примеры». Срок прошёл —
+ * «примеров нет», экран показывает общие. Одна ступень, а не вся цепочка: кандидат ждёт не дольше.
+ */
+export const GOAL_EXAMPLES_DEADLINE_MS = STAGE_TIMEOUT_MS;
 
 export interface GoalHints {
   /** `null` — ни одна ступень не дала трёх годных примеров. */
@@ -66,8 +71,10 @@ async function firstAccepted<T>(
   question: readonly [string, string, object],
   accept: (raw: unknown) => T | null,
   onFailure: OnFailure,
+  deadline = Number.POSITIVE_INFINITY,
 ): Promise<T | null> {
   for (const stage of stages) {
+    if (Date.now() >= deadline) return null;
     try {
       const accepted = accept(await stage.ask(...question));
       if (accepted !== null) return accepted;
@@ -77,6 +84,15 @@ async function firstAccepted<T>(
     }
   }
   return null;
+}
+
+/** Ответ работы или `null`, когда срок вышел раньше. */
+function withDeadline<T>(work: Promise<T | null>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  return Promise.race([work, expired]).finally(() => clearTimeout(timer));
 }
 
 class ChainGoalHints implements GoalHints {
@@ -91,7 +107,11 @@ class ChainGoalHints implements GoalHints {
       goalExamplesUserMessage(role),
       GOAL_EXAMPLES_JSON_SCHEMA,
     ] as const;
-    return firstAccepted(this.stages, question, parseGoalExamples, this.onFailure);
+    const deadline = Date.now() + GOAL_EXAMPLES_DEADLINE_MS;
+    return withDeadline(
+      firstAccepted(this.stages, question, parseGoalExamples, this.onFailure, deadline),
+      GOAL_EXAMPLES_DEADLINE_MS,
+    );
   }
 
   baseline(indicator: string, entries: readonly BaselineEntry[]) {

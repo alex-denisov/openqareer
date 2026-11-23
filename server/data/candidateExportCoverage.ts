@@ -19,8 +19,6 @@ export type CandidateTableCoverage =
 
 const GAP_ACCOUNT = 'учётная запись и кабинет: в выгрузку пока не входят';
 const GAP_AUTOMATION = 'автоотклики и hh.ru: в выгрузку пока не входят';
-const GAP_CONTACTS = 'контакты и переписка: в выгрузку пока не входят';
-const GAP_CAREER = 'карьерные разделы кабинета: в выгрузку пока не входят';
 const MIGRATION_COPY = 'временная копия таблицы при перестройке схемы';
 
 export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCoverage>> = {
@@ -171,7 +169,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_workspaces: { gap: GAP_ACCOUNT },
   candidate_visits: { gap: GAP_ACCOUNT },
   plan_requests: { gap: GAP_ACCOUNT },
-  vacancy_subscription_items: { gap: 'вакансии, найденные подпиской: в выгрузку пока не входят' },
+  vacancy_subscription_items: { export: 'careerSections' },
   account_email_change_requests: { gap: GAP_ACCOUNT },
   candidate_app_preferences: { gap: GAP_ACCOUNT },
   candidate_telegram_usernames: { gap: GAP_ACCOUNT },
@@ -192,15 +190,15 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   hh_raise_schedules: { gap: GAP_AUTOMATION },
   hh_raise_tasks: { gap: GAP_AUTOMATION },
   hh_resume_snapshots: { gap: GAP_AUTOMATION },
-  recruiter_contacts: { gap: GAP_CONTACTS },
-  recruiter_contact_channels: { gap: GAP_CONTACTS },
-  recruiter_contact_jobs: { gap: GAP_CONTACTS },
-  candidate_contact_messages: { gap: GAP_CONTACTS },
-  candidate_contact_status: { gap: GAP_CONTACTS },
-  candidate_company_wants: { gap: GAP_CAREER },
-  candidate_company_proposal_dismissals: { gap: GAP_CAREER },
-  candidate_growth_goals: { gap: GAP_CAREER },
-  candidate_income: { gap: GAP_CAREER },
-  candidate_profession_path: { gap: GAP_CAREER },
-  candidate_relocation_places: { gap: GAP_CAREER },
+  recruiter_contacts: { export: 'contacts' },
+  recruiter_contact_channels: { export: 'contacts' },
+  recruiter_contact_jobs: { internal: 'очередь поиска контакта: статус задачи и время, без содержимого кандидата' },
+  candidate_contact_messages: { export: 'contacts' },
+  candidate_contact_status: { export: 'contacts' },
+  candidate_company_wants: { export: 'careerSections' },
+  candidate_company_proposal_dismissals: { export: 'careerSections' },
+  candidate_growth_goals: { export: 'careerSections' },
+  candidate_income: { export: 'careerSections' },
+  candidate_profession_path: { export: 'careerSections' },
+  candidate_relocation_places: { export: 'careerSections' },
 };

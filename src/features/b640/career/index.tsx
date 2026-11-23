@@ -11,9 +11,11 @@ import { RelocationScreen } from './RelocationScreen';
 import { RolesLoad } from './RolesScreen';
 import { ProfessionScreen } from './ProfessionScreen';
 import { SkillCheckScreen } from './SkillCheckScreen';
+import { useB640Title } from '../kit/useB640Title';
 
 /** Вход раздела «Карьера»: экран по коду узла (см. ../README.md). */
 export default function Section({ node }: SectionProps) {
+  useB640Title('Карьера');
   const { search } = useShell();
   if (node.code === 's09') {
     return isConditionsView(search) ? <ConditionsScreen node={node} /> : <CareerRoot node={node} />;

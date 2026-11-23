@@ -8,9 +8,11 @@ import { NotificationSettingsScreen } from './NotificationSettingsScreen';
 import { SectionsScreen } from './SectionsScreen';
 import { SecurityScreen } from './SecurityScreen';
 import { TariffsScreen } from './TariffsScreen';
+import { useB640Title } from '../kit/useB640Title';
 
 /** Вход раздела «Аккаунт»: экран по коду узла (B661). */
 export default function Section({ node }: SectionProps) {
+  useB640Title(node.nav === 'tariffs' ? 'Тарифы' : 'Аккаунт');
   if (node.code === 'n00') return <SectionsScreen node={node} />;
   if (node.code === 'n03') return <ConnectionsScreen node={node} />;
   if (node.code === 'n02') return <NotificationSettingsScreen node={node} />;

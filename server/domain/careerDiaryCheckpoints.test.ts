@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CareerDiaryGoal, CareerDiaryMeasurement } from '../../shared/careerDiary';
+import { evaluateCareerGoalRisk, type CareerDiaryGoal, type CareerDiaryMeasurement } from '../../shared/careerDiary';
 import { buildDay30Check, buildResults90, withoutEmployerFigures, type GoalTrack } from './careerDiaryCheckpoints';
 
 const goal = (id: string, over: Partial<CareerDiaryGoal> = {}): CareerDiaryGoal => ({
@@ -115,6 +115,19 @@ describe('buildResults90', () => {
     expect(results.resumeText).toBe('Руководитель разработки: за первые 90 дней — срок релиза.');
     expect(results.resumeText).not.toMatch(/14|5 дней/u);
     expect(results.talkText).toContain('Прошу зафиксировать критерии итоговой оценки');
+  });
+
+  it('B662: статус в «Итогах» совпадает со статусом карточки d02/d02a', () => {
+    const asOf = '2026-12-20';
+    const make = (value: number) =>
+      track(goal('k', { title: 'Инциденты', unit: '', baselineValue: 12, targetValue: 4, startDate: '2026-12-01', dueDate: '2027-02-28' }), [[value, '2026-12-19']]);
+    // 9 при ровном пути ≈ 10,3 — по плану; 12 — отстаёт.
+    for (const [value, status] of [[9, 'open'], [12, 'behind']] as const) {
+      const one = make(value);
+      const card = evaluateCareerGoalRisk(one.goal, one.measurements.at(-1)!, asOf).status;
+      expect(card).toBe(status === 'behind' ? 'at_risk' : 'on_track');
+      expect(buildResults90({ workplace, goals: [one], asOf }).items[0]?.status).toBe(status);
+    }
   });
 
   it('без достигнутых целей текста для резюме нет', () => {

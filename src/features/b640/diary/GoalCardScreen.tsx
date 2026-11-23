@@ -10,7 +10,7 @@ import { listGoalCards } from './diaryApi';
 import { GoalEntries } from './GoalEntries';
 import { GoalHistory } from './GoalHistory';
 import { GoalMenu } from './GoalMenu';
-import { SETTERS, formatValue, indicatorsOf, longDate, riskTag } from './goalsModel';
+import { SETTERS, indicatorsOf, longDate, riskTag, valueWithTarget } from './goalsModel';
 import { GoalTasks } from './GoalTasks';
 import { MeasureDialog } from './MeasureDialog';
 import { today } from './model';
@@ -49,10 +49,7 @@ function useGoalCard(goalId: string, version: number): readonly [Loaded, () => v
 function stateNumber(goal: CareerDiaryGoalSummary): string {
   const current = goal.latestMeasurement?.value ?? goal.baselineValue;
   if (current === null) return 'не внесено';
-  const value = formatValue(current, goal.unit);
-  return typeof goal.targetValue === 'number'
-    ? `${value} из ${formatValue(goal.targetValue, goal.unit)}`
-    : value;
+  return valueWithTarget(goal, current);
 }
 
 function GoalHead({

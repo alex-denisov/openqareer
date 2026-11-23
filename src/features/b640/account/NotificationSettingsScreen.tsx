@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   getNotificationChannelStatus,
   getNotificationPreferences,
@@ -13,8 +13,10 @@ import {
 } from './invitationPreferenceApi';
 import type { B640Node } from '../routes';
 import { DeliverySettingsGroup } from './DeliverySettingsGroup';
+import { deliverySettingsRead } from './deliverySettingsApi';
 import { CHANNEL_LABEL, NOTIFICATION_ROWS, type NotificationChannel, type NotificationRow } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+import { telegramStateRead } from './telegramStateApi';
 import { useTelegramLink, type TelegramLink } from './useTelegramLink';
 
 interface Settings {
@@ -227,8 +229,25 @@ function SettingsTable({ settings, load }: { settings: Settings; load: ReturnTyp
   );
 }
 
+/** Чтения групп ниже таблицы идут вместе с чтением таблицы, а не после неё. */
+function useEarlyReads() {
+  useState(() => {
+    deliverySettingsRead.start();
+    telegramStateRead.start();
+    return null;
+  });
+  useEffect(
+    () => () => {
+      deliverySettingsRead.drop();
+      telegramStateRead.drop();
+    },
+    [],
+  );
+}
+
 /** n02 «Уведомления»: что и куда присылать, привязка Telegram на месте, как часто и с компанией ли. */
 export function NotificationSettingsScreen({ node }: { readonly node: B640Node }) {
+  useEarlyReads();
   const load = useLoad(loadSettings);
   return (
     <SettingsPage node={node} heading="Настройки уведомлений" busy={load.state === 'loading'}>

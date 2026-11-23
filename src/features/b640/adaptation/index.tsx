@@ -6,12 +6,14 @@ import { PeopleScreen } from './PeopleScreen';
 import { PlanScreen } from './PlanScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { StepScreen, STEP_OF_NODE } from './StepScreen';
+import { useB640Title } from '../kit/useB640Title';
 
 /**
  * Вход раздела «Адаптация» (B663): экран узла выбирается по `node.code`.
  * d01e и d04 — проверка на 30-й день и итоги 90 дней (B687).
  */
 export default function Section({ node }: SectionProps) {
+  useB640Title('Дневник');
   if (node.code === 'd01') return <PlanScreen node={node} />;
   if (node.code === 'd01c') return <MeetingScreen node={node} />;
   if (node.code === 'd01d') return <PeopleScreen node={node} />;

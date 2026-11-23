@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { MatchedPool } from '../../../vacancies/useMatchedPool';
+import type { MatchedPool, MatchedPoolOptions } from '../../../vacancies/useMatchedPool';
 import { useMatchedPool } from '../../../vacancies/useMatchedPool';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
 import { linkedDate, linkedRole } from '../../career/careerPaths';
@@ -82,11 +82,13 @@ function useServerRoles(
   pool: MatchedPool,
   roles: readonly string[],
   seed: (roles: readonly string[], date?: DateId) => void,
+  /** Роли, с которыми пул уже читается с первого запроса (B768). */
+  readingRoles: string,
 ): void {
   const { search } = useShell();
   const linked = linkedRole(search);
   const linkedPeriod = linkedDate(search);
-  const sent = useRef('');
+  const sent = useRef(readingRoles);
   const seeded = useRef(false);
   const initial = pool.initialFilters;
   const campaign = pool.campaign;
@@ -225,21 +227,46 @@ function usePreferredListCurrency() {
  * B645 s07: первая страница пула и число от сервера; дальше и в другом порядке строки дают
  * порции сервера по 20 «Показать ещё» (useServerSortedList), всю подборку не читаем.
  */
-const S07_POOL = { pageLimit: 1 } as const;
+const S07_POOL: MatchedPoolOptions = { pageLimit: 1 };
+
+/**
+ * B768: роль и «Дата» из адреса — фильтры с первого кадра, и пул читается сразу с ролью.
+ * Прежде список читал всю подборку и параллельно её же с ролью: на проде ~5 с каждый.
+ */
+function linkedStart(search: string): {
+  readonly filters: ListFilters;
+  readonly pool: MatchedPoolOptions;
+  readonly roles: string;
+} {
+  const role = linkedRole(search);
+  if (!role) return { filters: EMPTY_FILTERS, pool: S07_POOL, roles: '' };
+  const date = linkedDate(search);
+  return {
+    filters: { ...EMPTY_FILTERS, roles: [role], ...(date ? { date } : {}) },
+    pool: { ...S07_POOL, initialFilters: { roles: [role], regions: [], remoteOnly: false } },
+    roles: role,
+  };
+}
+
+/** Роли и «Дата», которыми сервер или адрес открывают список. */
+function seedWith(setFilters: (update: (current: ListFilters) => ListFilters) => void) {
+  return (roles: readonly string[], date?: DateId) =>
+    setFilters((current) => ({ ...current, roles, ...(date ? { date } : {}) }));
+}
 
 export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>): VacancyList {
-  const pool = useMatchedPool(undefined, S07_POOL);
+  const { search } = useShell();
+  const [start] = useState(() => linkedStart(search));
+  const pool = useMatchedPool(undefined, start.pool);
   const rates = useCurrencyRates();
-  const [filters, setFilters] = useState<ListFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<ListFilters>(start.filters);
   const [currency, setCurrency] = usePreferredListCurrency();
   const [sortState, setSortState] = useState<SortState>(DEFAULT_LIST_SORT);
   const [openKind, setOpenKind] = useState<FilterKind | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
   const now = useMemo(() => new Date(), [pool.matched]);
-  useServerRoles(pool, filters.roles, (roles, date) =>
-    setFilters((current) => ({ ...current, roles, ...(date ? { date } : {}) })),
-  );
+  useServerRoles(pool, filters.roles, seedWith(setFilters), start.roles);
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
   const serverMode = serverSortApplies(pool);
