@@ -17,6 +17,8 @@ import type { B640ThemeState } from '../theme';
 export interface ScreenChrome {
   /** Заголовок в верхней полосе вместо заголовка узла. */
   readonly title?: string;
+  /** ⓘ у заголовка узла (макет `data-title-tip`); при своём `title` экрана не показывается. */
+  readonly titleTip?: string;
   /** Подпись последнего звена пути: имя вакансии, компании, цели. */
   readonly crumb?: string;
   /** Число новых уведомлений у колокольчика, если экран знает его точнее оболочки. */
