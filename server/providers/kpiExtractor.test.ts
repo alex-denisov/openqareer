@@ -57,20 +57,18 @@ describe('buildKpiExtractor', () => {
     expect(buildKpiExtractor({})).toBeUndefined();
   });
 
-  it('текст: Vertex отвечает мусором — следующая ступень', async () => {
+  it('Vertex не зовётся и когда настроен (выключен решением владельца 20.11)', async () => {
     const vertexCalls: unknown[] = [];
     const chatCalls: string[] = [];
-    const failures: string[] = [];
     const extractor = buildKpiExtractor({
       vertex,
-      vertexFetch: vertexFetch({ nope: true }, vertexCalls),
+      vertexFetch: vertexFetch(ANSWER, vertexCalls),
       providerCredentials: { openai: 'sk-test' },
       fetchImpl: chatFetch(ANSWER, chatCalls),
-      onStageFailure: (label) => failures.push(label),
     })!;
     const answer = await extractor.extract({ text: '2 вакансии закрыть', today: '2026-11-19' });
     expect(answer?.rows[0]?.title).toBe('Закрыто вакансий');
-    expect(failures).toEqual(['vertex:gemini-test']);
+    expect(vertexCalls).toEqual([]);
     expect(chatCalls[0]).toContain('/chat/completions');
   });
 
@@ -87,26 +85,25 @@ describe('buildKpiExtractor', () => {
     expect(system).toContain(JSON.stringify(KPI_MODEL_JSON_SCHEMA));
   });
 
-  it('фото уходит только в Vertex, картинкой в сообщении', async () => {
-    const vertexCalls: Array<{ contents: Array<{ parts: unknown[] }> }> = [];
-    const chatCalls: string[] = [];
-    const extractor = buildKpiExtractor({
-      vertex,
-      vertexFetch: vertexFetch({ nope: true }, vertexCalls as unknown[]),
-      providerCredentials: { openai: 'sk-test' },
-      fetchImpl: chatFetch(ANSWER, chatCalls),
-      onStageFailure: () => undefined,
-    })!;
+  it('фото уходит в ступень chat-completions картинкой в сообщении пользователя', async () => {
+    const bodies: Array<{ messages: Array<{ content: unknown }> }> = [];
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify(ANSWER) } }] }),
+      );
+    }) as unknown as typeof fetch;
+    const extractor = buildKpiExtractor({ providerCredentials: { openai: 'sk-test' }, fetchImpl })!;
     const answer = await extractor.extract({
       text: '',
       image: { mimeType: 'image/png', data: new Uint8Array([1, 2, 3]) },
       today: '2026-11-19',
     });
-    expect(answer).toBeNull();
-    expect(chatCalls).toEqual([]);
-    expect(vertexCalls[0]?.contents[0]?.parts[1]).toEqual({
-      inlineData: { mimeType: 'image/png', data: 'AQID' },
-    });
+    expect(answer?.rows[0]?.title).toBe('Закрыто вакансий');
+    expect(bodies[0]?.messages[1]?.content).toEqual([
+      { type: 'text', text: 'KPI на изображении.' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AQID' } },
+    ]);
   });
 
   it('OpenRouter получает запрет на сбор данных', async () => {

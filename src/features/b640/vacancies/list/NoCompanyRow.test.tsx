@@ -95,3 +95,47 @@ describe('B726 · карточка вакансии без компании', ()
     expect(html).not.toContain('href=');
   });
 });
+
+/** B726 (B645, prod 23.11): у поста Telegram без компании «О компании» раскрывался пустым. */
+describe('B726 · карточка v04 без компании', () => {
+  const bare = makeItem({ id: 'cluster-tg-it_vakansii_udalenka-2838', title: 'CTO', company: '' });
+
+  it('«О компании» не показывается без компании и без рекрутёра', async () => {
+    const { CompanyBlock } = await import('../card/CompanyBlock');
+    const html = renderToStaticMarkup(
+      <CompanyBlock
+        item={bare}
+        recruiter={undefined}
+        vacancyId={bare.cluster.id}
+        companyPath={null}
+        acquaintCount={0}
+      />,
+    );
+    expect(html).toBe('');
+  });
+
+  it('с рекрутёром блок остаётся: «Откликнуться напрямую» есть и без компании', async () => {
+    const { CompanyBlock } = await import('../card/CompanyBlock');
+    const recruiter = { fullName: 'Ирина Смирнова', roleTitle: 'HR' } as never;
+    const html = renderToStaticMarkup(
+      <CompanyBlock
+        item={bare}
+        recruiter={recruiter}
+        vacancyId={bare.cluster.id}
+        companyPath={null}
+        acquaintCount={0}
+      />,
+    );
+    expect(html).toContain('О компании');
+    expect(html).toContain('Откликнуться напрямую');
+  });
+
+  it('в «Письме и резюме» нет строки «Сайт компании», когда компании нет', async () => {
+    const { resumeRows } = await import('../card/LetterBlock');
+    const resume = { available: true, kind: 'master' as const };
+    expect(resumeRows({ hasHh: false, hhTitle: null, resume, hasCompany: false })).toEqual([]);
+    expect(
+      resumeRows({ hasHh: false, hhTitle: null, resume, hasCompany: true }).map((row) => row.title),
+    ).toEqual(['Сайт компании']);
+  });
+});

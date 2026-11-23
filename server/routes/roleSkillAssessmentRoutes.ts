@@ -24,7 +24,7 @@ import { RoleContextCache } from './roleAssessmentContextCache';
 import { readCampaign } from './campaignContext';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
-import { russianSkillNames, withRussianSkillNames } from './roleSkillNamesStep';
+import { russianSkillNames, withRussianContextNames, withRussianSkillNames } from './roleSkillNamesStep';
 import {
   createRoleRequirementReader,
   type RoleRequirementReader,
@@ -201,7 +201,9 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
   if (!candidate) return undefined;
   const { role: requested } = currentQuerySchema.parse(request.query ?? {});
   const role = resolveAssessedRole(deps, candidate.id, requested);
-  const latest = latestRunFor(deps, candidate.id, role);
+  const stored = latestRunFor(deps, candidate.id, role);
+  // B747: проверки до B734 хранят английские названия; чтение отдаёт русские, запись не меняет.
+  const latest = stored ? await withRussianSkillNames(deps, reply, stored) : stored;
   const send = (data: Record<string, unknown>) =>
     reply.send({ data: withConversation(deps, candidate.id, data) });
   if (latest) {
@@ -218,7 +220,7 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
   }
 
   const context = await readAssessmentContext(deps, candidate.id, role, true);
-  return send(context);
+  return send(context.state === 'ready' ? await withRussianContextNames(deps, reply, context) : context);
 }
 
 /** Роли с завершённой проверкой: «Карьера» ставит им статус «Навыки проверены» (B445). */

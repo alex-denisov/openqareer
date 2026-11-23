@@ -237,9 +237,9 @@ export class VacancyMechanicsRuntime {
     logMassRecount(log, 'fit', fit, this.fit.countFailedOnce() + this.fit.countOrphanedRequirementsTimeouts(), limits.fit, total('fit'));
     return { requirements: failures, fit, labels };
   }
-  /** Superseded fit jobs left as `failed` before 23.11: removed at worker start, 5000 per start. */
-  purgeSupersededFit(): number {
-    return this.fit.purgeSuperseded();
+  /** One batch of superseded fit jobs left as `failed` before 23.11 (`runSupersededPurge` paces them). */
+  purgeSupersededFitBatch(): number {
+    return this.fit.purgeSupersededBatch();
   }
   /** The background refresh of counted rows (a new algorithm version): true while the day's ceiling has room. */
   takeFitRefreshSlot(limit = massRecountLimit('OPENQAREER_MASS_FIT_REFRESH_DAY_LIMIT', MASS_FIT_REFRESH_DAY_LIMIT)): boolean {
