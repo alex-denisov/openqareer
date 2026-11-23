@@ -591,8 +591,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * недочитанную строку и на пуле, где дочитывать нечего, проходил его весь
    * одним запросом (172 с на проде 12.11). Окно ограничивает и чтение.
    */
-  backfillWindowStep(windowRows: number = BACKFILL_WINDOW_ROWS): { done: boolean } {
-    const from = this.backfillWindowCursor;
+  backfillWindowStep(
+    windowRows: number = BACKFILL_WINDOW_ROWS,
+    fromCursor?: number,
+  ): { done: boolean; cursor: number } {
+    const from = fromCursor ?? this.backfillWindowCursor;
     const upper = from + windowRows;
     const rows = this.database
       .prepare(
@@ -612,7 +615,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     ).n;
     const done = upper >= max;
     this.backfillWindowCursor = done ? 0 : upper;
-    return { done };
+    return { done, cursor: this.backfillWindowCursor };
   }
 
   private readVacancies(sql: string, params: SQLInputValue[]): UnifiedVacancy[] {

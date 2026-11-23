@@ -32,3 +32,32 @@ describe('отметка полной чистки пула (B759)', () => {
     });
   });
 });
+
+describe('прогресс прохода переживает рестарт (B759)', () => {
+  it('нет прогресса — null; сохранённый шаг и позиция читаются после нового открытия', () => {
+    const database = open();
+    expect(createStorePassMark(database).progress()).toBeNull();
+    createStorePassMark(database).saveProgress({ step: 'backfill', backfillCursor: 42_000 });
+    expect(createStorePassMark(database).progress()).toEqual({
+      step: 'backfill',
+      backfillCursor: 42_000,
+    });
+  });
+
+  it('законченный проход стирает прогресс: следующий начнётся с начала и только по таймеру', () => {
+    const database = open();
+    const mark = createStorePassMark(database);
+    mark.saveProgress({ step: 'clusters', backfillCursor: 0 });
+    mark.markFinished(5);
+    expect(mark.progress()).toBeNull();
+    expect(mark.lastFinishedMs()).toBe(5);
+  });
+
+  it('неизвестный шаг в таблице — прогресса нет, проход идёт с начала', () => {
+    const database = open();
+    const mark = createStorePassMark(database);
+    mark.saveProgress({ step: 'pool', backfillCursor: 0 });
+    database.exec("UPDATE maintenance_store_pass_progress SET step = 'vacuum'");
+    expect(mark.progress()).toBeNull();
+  });
+});
