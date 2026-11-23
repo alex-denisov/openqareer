@@ -182,12 +182,13 @@ describe('B753: сокращение и роли по-русски', () => {
     expect(calls[1]?.correction).toContain(long.trim().slice(0, 40));
   });
 
-  it('в запросе к модели нет английского названия роли, у которой есть русское', async () => {
+  it('профиль идёт к модели как есть; целевые роли — отдельной строкой по-русски; английская целевая роль — повтор', async () => {
     const { calls, post } = await harness(['Анна, привет! Давно не общались.'], 'Chief Operating Officer', 'Chief Operating Officer в Альфа');
     await post();
-    const input = `${calls[0]?.profile}\n${calls[0]?.wish}`;
-    expect(input).not.toMatch(/Chief Operating Officer/iu);
-    expect(input).toContain('Операционный директор (COO)');
+    expect(calls[0]?.profile).toContain('Chief Operating Officer в Альфа');
+    expect(calls[0]?.wish).toContain('«Операционный директор»');
+    expect(calls[0]?.review?.('Анна, привет! Ищу роль Chief Operating Officer.')).toEqual(['contact_english_role']);
+    expect(calls[0]?.review?.('Анна, привет! Был Chief Operating Officer в Альфа.')).toEqual([]);
   });
 });
 
