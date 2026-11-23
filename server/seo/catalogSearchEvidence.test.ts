@@ -47,7 +47,7 @@ describe('catalog search evidence', () => {
 
     await refreshCatalogSearchEvidence(database, tokens, log, fetcher, NOW);
 
-    const history = readListingHistory(database);
+    const history = await readListingHistory(database);
     expect([...history.keys()].sort()).toEqual([
       listingHistoryKey('chicago'),
       listingHistoryKey('dubai', 'electrical-engineer'),
@@ -86,7 +86,7 @@ describe('catalog search evidence', () => {
 
     await refreshCatalogSearchEvidence(database, tokens, memoryLog().log, fetcher, NOW);
 
-    expect(readListingHistory(database).get(listingHistoryKey('dubai'))).toEqual({
+    expect((await readListingHistory(database)).get(listingHistoryKey('dubai'))).toEqual({
       firstQualifiedAt: NOW.toISOString(),
       lastQualifiedAt: NOW.toISOString(),
       lastImpressionAt: NOW.toISOString(),
@@ -101,7 +101,7 @@ describe('catalog search evidence', () => {
     const { log, lines } = memoryLog();
     await refreshCatalogSearchEvidence(database, tokens, log, answer([], 403).fetcher, NOW);
 
-    expect(readListingHistory(database).has(listingHistoryKey('dubai'))).toBe(true);
+    expect((await readListingHistory(database)).has(listingHistoryKey('dubai'))).toBe(true);
     expect(lines).toEqual([
       {
         level: 'error',

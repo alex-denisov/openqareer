@@ -23,16 +23,16 @@ function pool(): DatabaseSync {
 
 /** CPO 26.10: фильтр «Источники» показывал 35 из 322 живых источников пула. */
 describe('catalog sources', () => {
-  it('counts every live source in maintenance and reads them back by table', () => {
+  it('counts every live source in maintenance and reads them back by table', async () => {
     const database = pool();
-    expect(readCatalogSources(database)).toEqual([]);
+    expect(await readCatalogSources(database)).toEqual([]);
     const rows = computeCatalogSources(database);
     expect(rows).toEqual([
       { sourceId: 'src-hh-search', count: 2 },
       { sourceId: 'ats-greenhouse-stripe', count: 1 },
     ]);
     writeCatalogSources(database, rows, new Date('2026-10-26T00:00:00Z'));
-    expect(readCatalogSources(database)).toEqual(rows);
+    expect(await readCatalogSources(database)).toEqual(rows);
   });
 
   it('keeps the last known list when a refresh brings nothing', () => {

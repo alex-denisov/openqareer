@@ -3,6 +3,7 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { ResumeCandidateInput } from '../domain/resumeDraft';
 import { SmmAgent } from './smmAgent';
 import { SmmBot } from './smmBot';
+import { backgroundStep } from '../observability/backgroundSteps';
 import { createSmmModel } from './smmModel';
 import { SmmStore } from './smmStore';
 import { createSmmTelegram, type TelegramUpdate } from './smmTelegram';
@@ -115,9 +116,9 @@ export function startSmmAssistant(deps: SmmRuntimeDeps): SmmAssistant {
     now: Date.now,
     log: deps.log,
   });
+  // B776: такт ассистента виден журналу задержек веб-процесса под своим именем.
   const timer = setInterval(() => {
-    bot
-      .tick()
+    backgroundStep('web:smm-tick', () => bot.tick())
       .catch((error: unknown) =>
         deps.log('smm-tick-failed', { error: error instanceof Error ? error.name : 'unknown' }),
       );

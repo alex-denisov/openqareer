@@ -15,6 +15,7 @@ import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
 import { writeCatalogSitemaps } from './catalogSitemapJob';
 import { CatalogSitemapReader } from './catalogSitemapChanged';
 import { labelledTimer } from '../observability/backgroundSteps';
+import { nextTurn } from '../data/chunkedRows';
 import type { ListingIndexHistory } from './catalogIndexing';
 import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
 import { createGoogleIndexingNotifier } from './googleIndexing';
@@ -161,21 +162,32 @@ export function scheduleCatalogSitemapJob(
   };
 }
 
-/** Web server: a read of a handful of rows, then the in-memory set is replaced. */
+/**
+ * Web server: the in-memory set is replaced from a read-only connection. B776: every read is its
+ * own turn of the loop (the history is 11 thousand rows, read in portions), and a slow run is
+ * never overlapped by the next timer.
+ */
 export function scheduleCatalogSitemapRefresh(databasePath: string, log: SitemapLog): () => void {
   const sitemaps = new CatalogSitemapReader();
-  const read = () => {
+  let running = false;
+  const read = async () => {
+    if (running) return;
+    running = true;
     let database: DatabaseSync | undefined;
     try {
+      await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
       setCatalogSitemaps(sitemaps.readIfChanged(database));
-      setListingHistory(readListingHistory(database));
+      await nextTurn();
+      setListingHistory(await readListingHistory(database));
+      await nextTurn();
       setMarketReports(readMarketReports(database));
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed');
     } finally {
       database?.close();
+      running = false;
     }
   };
   const refresh = labelledTimer('web:sitemap-refresh', read, (error) =>
