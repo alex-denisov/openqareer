@@ -13,6 +13,7 @@ import {
   mailtoHref,
   openRisks,
   pageAttrs,
+  riskLine,
 } from './footprintModel';
 import type { FootprintData } from './useFootprint';
 import { reportFailure } from './reportFailure';
@@ -33,7 +34,7 @@ function Facts({ item }: { readonly item: FootprintRiskItem }) {
           <dd>{item.mismatch.field}: «{item.mismatch.foundValue}», в профиле — «{item.mismatch.profileValue}»</dd>
         </>
       ) : null}
-      {item.levelLabel ? (<><dt>Риск</dt><dd>{item.levelLabel}</dd></>) : null}
+      {item.levelLabel ? (<><dt>Риск</dt><dd>{riskLine(item)}</dd></>) : null}
     </dl>
   );
 }

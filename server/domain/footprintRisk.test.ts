@@ -503,3 +503,20 @@ describe('buildFootprintRiskSummary', () => {
   });
 });
 
+
+describe('B645 f03b: строка «Риск» — уровень и почему', () => {
+  const reasonOf = (overrides: Partial<CandidateFootprintFinding>): string | undefined =>
+    buildFootprintRiskSummary(audit([finding(overrides)]), []).items[0]?.levelReason;
+
+  it('у каждой находки есть причина уровня по её виду', () => {
+    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe('почта есть в утечке данных');
+    expect(reasonOf({ review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
+      'страницу находят по нику, чья она — неизвестно',
+    );
+    expect(reasonOf({ kind: 'mention', adapter: 'exa', review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
+      'совпадение по имени не подтверждено',
+    );
+    expect(reasonOf({ kind: 'profile', review: 'confirmed_self' })).toBe('подтверждает ваш опыт');
+    expect(reasonOf({ kind: 'archive', adapter: 'wayback' })).toBe('старая копия страницы ещё открыта');
+  });
+});
