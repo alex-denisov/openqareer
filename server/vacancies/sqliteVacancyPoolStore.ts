@@ -19,6 +19,10 @@ import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriori
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
 import { readUnclusteredPoolPage, type UnclusteredPoolPage } from './unclusteredPoolPage';
+import {
+  createUnclusteredCatchUpCursor,
+  type UnclusteredCatchUpCursor,
+} from './unclusteredCatchUpCursor';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -427,7 +431,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private descriptionSkillsCursor = 0;
   /** Позиция прохода очистки сирот (B535): сначала кластеры, потом карточки. */
   /** Курсор прохода записей без кластера (B763), как у сирот — в памяти процесса. */
-  private unclusteredCursor = 0;
+  private unclusteredCursor: UnclusteredCatchUpCursor | undefined;
   private readonly bucketSizeCap: number;
   private orphanCursor: { phase: 'clusters' | 'entries'; rowid: number } = {
     phase: 'clusters',
@@ -2955,14 +2959,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    */
   /** Окно пула после курсора: записи, ни один ключ членства которых не лежит в кластерах (B763). */
   readUnclusteredPoolPage(chunk = 500, maxUnclustered?: number): UnclusteredPoolPage {
+    this.unclusteredCursor ??= createUnclusteredCatchUpCursor(this.database);
     const page = readUnclusteredPoolPage(
       this.database,
-      this.unclusteredCursor,
+      this.unclusteredCursor.read(),
       chunk,
       parseVacancy,
       maxUnclustered,
     );
-    this.unclusteredCursor = page.cursor;
+    this.unclusteredCursor.write(page.cursor);
     return page;
   }
 
