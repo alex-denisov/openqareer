@@ -36,6 +36,8 @@ export interface CareerSectionsExport {
   readonly income: CandidateIncome | null;
   readonly professionPath: readonly Row[];
   readonly relocationPlaces: SavedRelocationPlaces | null;
+  /** «Фото в резюме»; `null` — кандидат не менял (фото включено). */
+  readonly resumePhotoInResume: boolean | null;
   readonly subscriptionVacancies: readonly Row[];
 }
 
@@ -80,6 +82,11 @@ function companyWants(sources: ContactsCareerSources, candidateId: string) {
   return { wants: repository.list(candidateId), dismissed: [...repository.listDismissedContactProposals(candidateId)].sort() };
 }
 
+function resumePhotoSetting(database: DatabaseSync, candidateId: string): boolean | null {
+  const [row] = rows(database, 'candidate_resume_photo', 'SELECT in_resume AS inResume FROM candidate_resume_photo WHERE candidate_id = ?', candidateId);
+  return row ? row.inResume === 1 : null;
+}
+
 export function exportCareerSections(sources: ContactsCareerSources, candidateId: string): CareerSectionsExport {
   const { database, encryptionKey } = sources;
   const { wants, dismissed } = companyWants(sources, candidateId);
@@ -102,6 +109,7 @@ export function exportCareerSections(sources: ContactsCareerSources, candidateId
       candidateId,
     ),
     relocationPlaces: placesStored ? new SqliteRelocationPlacesRepository(database).read(candidateId) : null,
+    resumePhotoInResume: resumePhotoSetting(database, candidateId),
     subscriptionVacancies: rows(
       database,
       'vacancy_subscription_items',
