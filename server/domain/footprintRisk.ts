@@ -18,13 +18,15 @@ import {
   type FootprintRiskState,
   type FootprintRiskSummary,
 } from '../../shared/footprintRisk';
+import { contactBrokerUrl } from '../../shared/contactBrokers';
+import { profileAddRefusal } from '../../shared/footprintChecklist';
 
 /**
  * B667: сводка следа из уже сохранённых находок. Чистый расчёт: ничего не
  * ищет и не пишет. Наружу уходят только заголовок, описание и ссылка находки —
  * без инструмента, запроса и квитанций.
  */
-interface Rule {
+export interface Rule {
   readonly category: FootprintRiskCategoryId;
   readonly level: FootprintRiskLevel;
   readonly action: FootprintRiskAction;
@@ -38,6 +40,7 @@ const HIDE: FootprintRiskAction = { kind: 'hide', label: 'Скрыть' };
 const ADD: FootprintRiskAction = { kind: 'add_to_profile', label: 'В профиль' };
 const FIX: FootprintRiskAction = { kind: 'ask_to_fix', label: 'Попросить исправить' };
 const CONFIRM: FootprintRiskAction = { kind: 'confirm_owner', label: 'Проверить' };
+const NOT_MINE: FootprintRiskAction = { kind: 'not_mine', label: 'Это не моё' };
 /** «Проверить» ждёт кандидата и в «стоит убрать» не идёт (B645 p02). */
 const REVIEW_KINDS: ReadonlySet<string> = new Set([CHECK.kind, CONFIRM.kind]);
 
@@ -67,6 +70,15 @@ const OWNER_UNKNOWN: Rule = {
   reason: 'страницу находят по нику, чья она — неизвестно',
 };
 const SECRET: Rule = { ...NEEDS_CHECK, reason: 'в открытом коде виден ключ доступа' };
+/** B382: полезное, которое сервер в профиль не примет (профиль площадки), — только «Это не моё». */
+const USEFUL_ONLY: Rule = { ...USEFUL, action: NOT_MINE };
+/** B382: база контактов публикует чужие почту и телефон — всегда риск, путь удаления. */
+const BROKER: Rule = {
+  category: 'personal_data',
+  level: 'important',
+  action: HIDE,
+  reason: 'база контактов показывает вашу почту или телефон',
+};
 
 /** Поиск по нику: находит открытую страницу, но не знает, чья она. */
 const NICK_SEARCH = new Set(['sherlock', 'maigret']);
@@ -85,8 +97,11 @@ function ownerUnconfirmed(finding: CandidateFootprintFinding): boolean {
 }
 
 /** Категория, уровень и действие по виду находки. Неизвестный вид — «нужно проверить». */
-function ruleFor(finding: CandidateFootprintFinding): Rule {
+export function ruleFor(finding: CandidateFootprintFinding): Rule {
   const unsure = finding.review === 'unreviewed' && finding.automatedMatch === 'unknown';
+  if (contactBrokerUrl(finding.url)) return BROKER;
+  // «В профиль» — ровно там, где его примет сервер (одно правило, B382).
+  const useful = profileAddRefusal(finding) === 'not_artifact' ? USEFUL_ONLY : USEFUL;
   switch (finding.kind) {
     case 'breach':
       return {
@@ -109,9 +124,12 @@ function ruleFor(finding: CandidateFootprintFinding): Rule {
     case 'profile':
       if (finding.staleAccount) return STALE_ACCOUNT;
       if (ownerUnconfirmed(finding)) return OWNER_UNKNOWN;
-      return unsure ? NEEDS_CHECK : USEFUL;
+      return unsure ? NEEDS_CHECK : useful;
     case 'mention':
-      return unsure ? NEEDS_CHECK : USEFUL;
+    case 'publication':
+    case 'code':
+    case 'talk':
+      return unsure ? NEEDS_CHECK : useful;
     default:
       return NEEDS_CHECK;
   }
