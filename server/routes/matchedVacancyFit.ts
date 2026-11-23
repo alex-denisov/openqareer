@@ -82,7 +82,7 @@ export function withVacancyFitOrder(
   isExact?: ExactRoleTest,
 ) {
   const relevance = sort.by === 'fit' && sort.dir === 'desc' ? isExact : undefined;
-  const money = sort.by === 'money' ? createMoneyReader() : undefined;
+  const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
   const reader = createFitViewReader(deps, candidateId, log, use);
   const stamp = reader ? fitProfileStamp(deps, candidateId) : 'none';
   const key = `${candidateId}|${stamp}`;

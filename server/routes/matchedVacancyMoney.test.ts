@@ -17,7 +17,10 @@ function item(salary: {
 
 describe('порядок «Деньги» — сумма в рублях в месяц (B765)', () => {
   setCurrencyRates({ date: '2026-11-23', rubPerUnit: { USD: 90 } });
-  const money = createMoneyReader();
+  const money = createMoneyReader({
+    marketSalaryEstimates: undefined,
+    titleParseStore: { getByKey: () => undefined },
+  } as unknown as Parameters<typeof createMoneyReader>[0]);
 
   it('годовая вилка делится на 12, месячная — как есть', () => {
     // 218–265 тыс. USD в год: середина 241 500 / 12 × 90 ≈ 1,81 млн ₽.
@@ -38,23 +41,32 @@ describe('порядок «Деньги» — сумма в рублях в ме
   });
 });
 
-describe('порядок «Деньги»: суммы, затем ставки, затем «не указана» (B765, решение 23.11)', () => {
+describe('порядок «Деньги»: суммы и оценка рынка, затем ставки, затем «не указана» (B765)', () => {
   setCurrencyRates({ date: '2026-11-23', rubPerUnit: { USD: 90 } });
-  const money = createMoneyReader();
+  const money = createMoneyReader({
+    marketSalaryEstimates: undefined,
+    titleParseStore: { getByKey: () => undefined },
+  } as unknown as Parameters<typeof createMoneyReader>[0]);
   const row = (id: string, salary?: Parameters<typeof item>[0], market?: object) =>
     ({
       cluster: { id, canonicalTitle: 'CTO', ...(salary ? { salary } : {}) },
       explanation: market ? { marketSalary: market } : {},
     }) as unknown as MatchedVacancyItem;
 
-  it('скрытая оценка рынка порядок не задаёт: строка без суммы — «не указана»', () => {
-    const noSalary = row('n', undefined, { low: 900_000, high: 1_200_000, currency: 'RUR' });
-    expect(money(noSalary)).toEqual({ tier: 'none' });
+  it('строка без суммы идёт по оценке рынка, которую показывает (владелец 29.10)', () => {
+    const estimated = row('n', undefined, { low: 900_000, high: 1_200_000, currency: 'RUR' });
+    expect(money(estimated)).toEqual({ tier: 'month', value: 1_050_000 });
+    expect(money(row('bare'))).toEqual({ tier: 'none' });
+    // Сумма без периода 100–999 (per diem 450–600 USD): месяца нет — с «не указана».
+    expect(money(row('perDiem', { from: 450, to: 600, currency: 'USD' }))).toEqual({
+      tier: 'none',
+    });
   });
 
-  it('«не указана» после всех сумм и ставок в обе стороны', () => {
+  it('ставки после сумм и оценок, «не указана» — последней в обе стороны', () => {
     const rows = [
-      row('none', undefined, { low: 5_000_000, high: 6_000_000, currency: 'RUR' }),
+      row('none'),
+      row('estimate', undefined, { low: 5_000_000, high: 6_000_000, currency: 'RUR' }),
       row('hour', { from: 250, to: 400, currency: 'USD', period: 'hour' }),
       row('low', { from: 200_000, to: 250_000, currency: 'RUR' }),
       row('high', { from: 218_000, to: 265_000, currency: 'USD', period: 'year' }),
@@ -62,7 +74,7 @@ describe('порядок «Деньги»: суммы, затем ставки, 
     ];
     const order = (dir: 'asc' | 'desc') =>
       [...rows].sort((a, b) => compareMoneyRank(money(a), money(b), dir)).map((r) => r.cluster.id);
-    expect(order('desc')).toEqual(['high', 'low', 'hour', 'hourLow', 'none']);
-    expect(order('asc')).toEqual(['low', 'high', 'hourLow', 'hour', 'none']);
+    expect(order('desc')).toEqual(['estimate', 'high', 'low', 'hour', 'hourLow', 'none']);
+    expect(order('asc')).toEqual(['low', 'high', 'estimate', 'hourLow', 'hour', 'none']);
   });
 });

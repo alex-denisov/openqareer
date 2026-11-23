@@ -3,8 +3,10 @@ import { salaryPeriodOf } from '../../shared/monthlyRubSalary';
 import { salaryMidpoint } from '../../shared/marketSalaryEstimate';
 import type { VacancySortDirection } from '../../shared/vacancySort';
 import { getCurrencyRates } from '../currency/cbrRates';
+import { estimateFor } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { monthlyRubSalary } from '../vacancies/roleWageSalary';
+import type { RouteDeps } from './deps';
 
 /**
  * Место строки в порядке «Деньги»: сумма в рублях в месяц, затем почасовая ставка в рублях в час,
@@ -36,20 +38,39 @@ function rankOf(salary: Salary, rates: CurrencyRates | undefined): MoneyRank {
     const value = hourlyRub(salary, rates);
     return value === undefined ? NONE : { tier: 'hour', value };
   }
+  return monthRank(salary, rates);
+}
+
+function monthRank(salary: Salary, rates: CurrencyRates | undefined): MoneyRank {
   const monthly = monthlyRubSalary(salary, rates);
   const value = monthly ? salaryMidpoint(monthly) : undefined;
   return value === undefined ? NONE : { tier: 'month', value };
 }
 
 /**
- * «Деньги» (решение оркестратора 23.11, B645): только сумма из вакансии. Оценка рынка порядок не
- * задаёт — по DESIGN.md денег без источника нет; раньше (29.10) строки без суммы шли по оценке.
+ * «Деньги» order (owner 29.10): the stated salary, else the market estimate the row shows, both
+ * normalised to RUB per month. Two primary-key reads per vacancy without salary at most.
+ * B765: an hourly rate goes in its own group after them; a stated amount whose period is unknown
+ * (foreign 100–999 without a period) has no month and goes with «не указана».
  */
-export function createMoneyReader(): MoneyReader {
+export function createMoneyReader(
+  deps: Pick<RouteDeps, 'marketSalaryEstimates' | 'titleParseStore'>,
+): MoneyReader {
   const rates = getCurrencyRates();
+  const store = deps.marketSalaryEstimates;
   return (item) => {
     const salary = item.cluster.salary;
-    return salary && (salary.from || salary.to) ? rankOf(salary, rates) : NONE;
+    if (salary && (salary.from || salary.to)) return rankOf(salary, rates);
+    const estimate =
+      item.explanation.marketSalary ??
+      (store
+        ? estimateFor(item, {
+            store,
+            readTitle: (key) => deps.titleParseStore.getByKey(key) ?? undefined,
+          })
+        : undefined);
+    if (!estimate || estimate.low === undefined || estimate.high === undefined) return NONE;
+    return monthRank({ from: estimate.low, to: estimate.high, currency: estimate.currency }, rates);
   };
 }
 
