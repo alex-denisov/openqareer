@@ -25,6 +25,14 @@ export async function loadDebrief(responseId: string, signal: AbortSignal): Prom
   return { response, debrief };
 }
 
+/** Разбор по id отклика без поиска самого отклика: для строки «Запись … есть» в O1c. */
+export async function loadInterviewDebrief(
+  applicationId: string,
+  signal: AbortSignal,
+): Promise<InterviewDebriefView | null> {
+  return readDebrief(await apiFetch(debriefPath(applicationId), { signal }));
+}
+
 /** Один вызов модели на расшифровку; повтор по той же расшифровке берёт сохранённый разбор. */
 export async function analyzeDebrief(applicationId: string): Promise<InterviewDebriefView> {
   const response = await apiFetch(debriefPath(applicationId, '/analysis'), { method: 'POST' });
