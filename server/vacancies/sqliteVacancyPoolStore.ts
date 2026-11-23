@@ -2742,15 +2742,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return { keys: [rarest.key], size: rarest.size };
   }
 
-  /** Точный размер корзины — только для стороны, где все токены за потолком. */
+  /**
+   * Точный размер корзины — только для стороны, где все токены за потолком. B761: размер
+   * помнится между партиями рядом с токенами за потолком (14 % профиля без памяти).
+   */
   private exactBucketSize(kind: string, key: string, cache: Map<string, number>): number {
     const cacheKey = `exact\u0000${kind}\u0000${key}`;
-    const cached = cache.get(cacheKey);
+    const cached = cache.get(cacheKey) ?? this.overCapTokens.exactSize(cacheKey, this.clock());
     if (cached !== undefined) return cached;
     const row = this.database
       .prepare('SELECT count(*) AS n FROM vacancy_cluster_keys WHERE kind = ? AND key = ?')
       .get(kind, key) as { n: number };
     cache.set(cacheKey, row.n);
+    this.overCapTokens.rememberExact(cacheKey, row.n);
     return row.n;
   }
 
@@ -3563,20 +3567,35 @@ export const OVER_CAP_TOKENS_TTL_MS = 60 * 60_000;
  * B761: токены, чья корзина достигла потолка. Без памяти каждый такой токен в каждой
  * партии заново читал 2 000 строк индекса (12,5 % профиля после стоп-листа). Раз в
  * `OVER_CAP_TOKENS_TTL_MS` память сбрасывается — токен, ставший редким, вернётся.
+ * Там же точные размеры таких корзин: их считает сторона, где все токены за потолком.
  */
 class OverCapTokens {
   private keys = new Set<string>();
+  private exact = new Map<string, number>();
   private since: number | undefined;
 
   has(key: string, nowMs: number): boolean {
-    if (this.since === undefined || nowMs - this.since >= OVER_CAP_TOKENS_TTL_MS) {
-      this.keys = new Set();
-      this.since = nowMs;
-    }
+    this.expire(nowMs);
     return this.keys.has(key);
   }
 
   add(key: string): void {
     this.keys.add(key);
+  }
+
+  exactSize(key: string, nowMs: number): number | undefined {
+    this.expire(nowMs);
+    return this.exact.get(key);
+  }
+
+  rememberExact(key: string, size: number): void {
+    this.exact.set(key, size);
+  }
+
+  private expire(nowMs: number): void {
+    if (this.since !== undefined && nowMs - this.since < OVER_CAP_TOKENS_TTL_MS) return;
+    this.keys = new Set();
+    this.exact = new Map();
+    this.since = nowMs;
   }
 }

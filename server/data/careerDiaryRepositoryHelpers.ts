@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { SealedText } from './sealedText';
+import type { CareerDiaryGoal } from '../../shared/careerDiary';
 
 export interface PayloadRow {
   readonly id: string;
@@ -152,4 +153,21 @@ export function pagePayloadRows(
       ? encodeDiaryCursor(table, cursorSortValue(last, orderColumn), last.id)
       : null,
   };
+}
+
+/** Все потомки цели по `parentGoalId`, без самой цели; цикл в данных не зацикливает обход. */
+export function descendantsOf(goals: readonly Pick<CareerDiaryGoal, 'id' | 'parentGoalId'>[], rootId: string): string[] {
+  const found: string[] = [];
+  const seen = new Set([rootId]);
+  const queue = [rootId];
+  while (queue.length > 0) {
+    const parent = queue.shift();
+    for (const goal of goals) {
+      if (goal.parentGoalId !== parent || seen.has(goal.id)) continue;
+      seen.add(goal.id);
+      found.push(goal.id);
+      queue.push(goal.id);
+    }
+  }
+  return found;
 }

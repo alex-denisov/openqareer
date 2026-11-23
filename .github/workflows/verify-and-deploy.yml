@@ -545,6 +545,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
+    permissions:
+      contents: read
+      # B771: starts «Desktop release» for the deployed commit.
+      actions: write
     steps:
       - name: Fetch release archive
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -765,3 +769,14 @@ jobs:
       - name: Remove runner SSH material
         if: always()
         run: rm -f "$HOME/.ssh/openqareer_deploy" "$HOME/.ssh/known_hosts"
+
+      # B771: batcher deploys are dispatched with GITHUB_TOKEN, so no workflow_run
+      # event reaches «Desktop release»; a dispatch is the one event that does.
+      # It decides itself whether the app changed and skips an outdated commit.
+      - name: Start the desktop release
+        if: github.ref == 'refs/heads/main'
+        # The site is already live; a failed start must not mark the deploy failed.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run desktop-release.yml --repo "$GITHUB_REPOSITORY" --ref main -f sha="$GITHUB_SHA"

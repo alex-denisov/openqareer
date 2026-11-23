@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   hasItSignal,
   needsItSignal,
+  primeRoleRequirements,
   setRequirementsReader,
   vacancyInCareerRole,
   type RequirementText,
@@ -14,6 +15,12 @@ function item(id: string, canonicalTitle: string, roleMatch: 'target' | 'none' =
 }
 
 afterEach(() => setRequirementsReader(undefined));
+
+/** Читатель пачкой: то, что есть в таблице, по запрошенным id. */
+const readerOf =
+  (table: ReadonlyMap<string, RequirementText[]>) =>
+  (ids: readonly string[]): ReadonlyMap<string, readonly RequirementText[]> =>
+    new Map(ids.flatMap((id) => (table.has(id) ? [[id, table.get(id)!] as const] : [])));
 
 describe('needsItSignal: «Технический директор» без CTO в названии (B766)', () => {
   it('общее «Технический директор» и «Technical Director» требуют признака ИТ', () => {
@@ -47,9 +54,18 @@ describe('hasItSignal: два навыка ИТ в требованиях, бе�
     ).toBe(true);
   });
 
-  it('одна группа словаря — мало: системный администратор не CTO', () => {
+  it('два навыка одной группы — признак есть: системный администратор (Linux, VMware) — ИТ', () => {
     expect(
       hasItSignal(req('Администрирование Linux', 'VMware и виртуализация'), 'Технический директор'),
+    ).toBe(true);
+  });
+
+  it('один навык ИТ среди заводских требований — мало', () => {
+    expect(
+      hasItSignal(
+        req('Внедрение ИИ на производстве', 'Ремонт оборудования', 'Охрана труда'),
+        'Технический директор',
+      ),
     ).toBe(false);
   });
 
@@ -72,13 +88,13 @@ describe('hasItSignal: два навыка ИТ в требованиях, бе�
 });
 
 describe('vacancyInCareerRole: роль кандидата с признаком ИТ (B766)', () => {
-  const reader = new Map<string, RequirementText[] | null>([
+  const table = new Map<string, RequirementText[]>([
     ['it', req('Микросервисная архитектура', 'Python и PostgreSQL')],
     ['factory', req('Опыт на пищевом производстве', 'Ремонт оборудования')],
   ]);
 
   it('заводской «Технический директор» уходит из роли CTO, ИТ-шный остаётся', () => {
-    setRequirementsReader((id) => reader.get(id) ?? null);
+    setRequirementsReader(readerOf(table));
     expect(vacancyInCareerRole(item('it', 'Технический директор (CTO)'), 'CTO')).toBe(true);
     expect(
       vacancyInCareerRole(item('factory', 'Технический директор (пищевое производство)'), 'CTO'),
@@ -88,7 +104,7 @@ describe('vacancyInCareerRole: роль кандидата с признаком
   });
 
   it('CTO в названии роли хватает без требований', () => {
-    setRequirementsReader(() => null);
+    setRequirementsReader(() => new Map());
     expect(vacancyInCareerRole(item('x', 'Chief Technology Officer'), 'CTO')).toBe(true);
   });
 
@@ -106,7 +122,44 @@ describe('vacancyInCareerRole: роль кандидата с признаком
   });
 
   it('вакансия не той роли не проходит, как раньше', () => {
-    setRequirementsReader((id) => reader.get(id) ?? null);
+    setRequirementsReader(readerOf(table));
     expect(vacancyInCareerRole(item('it', 'Product Manager'), 'CTO')).toBe(false);
+  });
+});
+
+describe('primeRoleRequirements: требования одним запросом на чтение подборки (B766)', () => {
+  it('один запрос на все общие «Технический директор», CTO в названии его не просит', () => {
+    const many = vi.fn(readerOf(new Map([['it', req('Python', 'PostgreSQL')]])));
+    setRequirementsReader(many);
+    const items = [
+      item('it', 'Технический директор (CTO)'),
+      item('factory', 'Технический директор (пищевое производство)'),
+      item('cto', 'Chief Technology Officer'),
+    ];
+    primeRoleRequirements(items);
+    expect(many).toHaveBeenCalledTimes(1);
+    expect(many).toHaveBeenCalledWith(['it', 'factory']);
+
+    expect(items.map((row) => vacancyInCareerRole(row, 'CTO'))).toEqual([true, false, true]);
+    expect(many).toHaveBeenCalledTimes(1);
+  });
+
+  it('без общих названий запроса нет; не подготовленная вакансия читается сама', () => {
+    const many = vi.fn(readerOf(new Map()));
+    setRequirementsReader(many);
+    primeRoleRequirements([item('cto', 'CTO')]);
+    expect(many).not.toHaveBeenCalled();
+    expect(vacancyInCareerRole(item('late', 'Технический директор'), 'CTO')).toBe(false);
+    expect(many).toHaveBeenCalledWith(['late']);
+  });
+
+  it('следующее чтение подборки читает требования заново', () => {
+    const table = new Map<string, RequirementText[]>();
+    setRequirementsReader(readerOf(table));
+    primeRoleRequirements([item('new', 'Технический директор')]);
+    expect(vacancyInCareerRole(item('new', 'Технический директор'), 'CTO')).toBe(false);
+    table.set('new', req('Kubernetes', 'Go'));
+    primeRoleRequirements([item('new', 'Технический директор')]);
+    expect(vacancyInCareerRole(item('new', 'Технический директор'), 'CTO')).toBe(true);
   });
 });
