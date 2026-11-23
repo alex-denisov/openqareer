@@ -11,6 +11,7 @@ import {
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { monthlyRubSalary } from './roleWageSalary';
+import { rolePlatformCode } from './rolePlatformCode';
 
 /**
  * Роли считаются на сервере (B180, срез 1б).
@@ -29,7 +30,7 @@ function observations(matched: readonly MatchedVacancyItem[]): RoleObservation[]
     canonicalTitle: item.cluster.canonicalTitle,
     firstObservedAt: item.cluster.firstObservedAt,
     skills: item.cluster.skills,
-    sources: item.cluster.sources,
+    sources: item.cluster.sources.map((source) => ({ sourceType: rolePlatformCode(source) })),
     salary: item.cluster.salary ? monthlyRubSalary(item.cluster.salary, rates) : undefined,
   }));
 }

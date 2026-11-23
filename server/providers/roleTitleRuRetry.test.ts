@@ -51,7 +51,7 @@ describe('B748: перевод роли от модели доходит до р
     });
     const outcome = await namer.nameRoles(facts, 'en');
     expect(outcome.roles.map((r) => [r.title, r.titleRu])).toEqual([
-      ['AI Consultant', 'AI-консультант'],
+      ['AI Consultant', 'ИИ-консультант'],
       ['Transformation Director', undefined],
     ]);
   });
