@@ -1,5 +1,5 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
-import type { B640Node, B640Section } from './routes';
+import { matchNode, type B640Node, type B640Section } from './routes';
 
 /** Что получает вход раздела: узел карты и параметры его адреса. */
 export interface SectionProps {
@@ -9,21 +9,43 @@ export interface SectionProps {
 
 type SectionEntry = LazyExoticComponent<ComponentType<SectionProps>>;
 
-/** Каждый раздел — свой кусок сборки: код раздела грузится при первом заходе. */
-export const SECTION_ENTRIES: Readonly<Record<B640Section, SectionEntry>> = {
-  today: lazy(() => import('./today/index')),
-  profile: lazy(() => import('./profile/index')),
-  footprint: lazy(() => import('./footprint/index')),
-  career: lazy(() => import('./career/index')),
-  vacancies: lazy(() => import('./vacancies/index')),
-  companies: lazy(() => import('./companies/index')),
-  platforms: lazy(() => import('./platforms/index')),
-  responses: lazy(() => import('./responses/index')),
-  apply: lazy(() => import('./apply/index')),
-  offers: lazy(() => import('./offers/index')),
-  interview: lazy(() => import('./interview/index')),
-  consultant: lazy(() => import('./consultant/index')),
-  account: lazy(() => import('./account/index')),
-  diary: lazy(() => import('./diary/index')),
-  adaptation: lazy(() => import('./adaptation/index')),
+/** Модуль входа раздела: экран по умолчанию и, если есть, раннее чтение данных узла. */
+interface SectionModule {
+  readonly default: ComponentType<SectionProps>;
+  readonly preload?: (code: string) => void;
+}
+
+const SECTION_LOADERS: Readonly<Record<B640Section, () => Promise<SectionModule>>> = {
+  today: () => import('./today/index'),
+  profile: () => import('./profile/index'),
+  footprint: () => import('./footprint/index'),
+  career: () => import('./career/index'),
+  vacancies: () => import('./vacancies/index'),
+  companies: () => import('./companies/index'),
+  platforms: () => import('./platforms/index'),
+  responses: () => import('./responses/index'),
+  apply: () => import('./apply/index'),
+  offers: () => import('./offers/index'),
+  interview: () => import('./interview/index'),
+  consultant: () => import('./consultant/index'),
+  account: () => import('./account/index'),
+  diary: () => import('./diary/index'),
+  adaptation: () => import('./adaptation/index'),
 };
+
+/** Каждый раздел — свой кусок сборки: код раздела грузится при первом заходе. */
+export const SECTION_ENTRIES = Object.fromEntries(
+  Object.entries(SECTION_LOADERS).map(([section, load]) => [section, lazy(load)]),
+) as Readonly<Record<B640Section, SectionEntry>>;
+
+/**
+ * B773: код раздела и данные экрана — вместе с вопросом о сессии, а не после него и
+ * отрисовки оболочки. Сбой здесь не мешает: экран прочитает сам, как прежде.
+ */
+export function preloadSection(pathname: string): Promise<void> {
+  const match = matchNode(pathname);
+  if (!match) return Promise.resolve();
+  return SECTION_LOADERS[match.node.section]()
+    .then((module) => module.preload?.(match.node.code))
+    .catch(() => undefined);
+}
