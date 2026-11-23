@@ -141,8 +141,16 @@ describe('B687: проверка на 30-й день', () => {
     expect(sent.statusCode, sent.body).toBe(200);
     expect(sent.json().data.sentOn).toBe('2026-12-30');
     expect((await call(app, 'GET', at(id, 'day-30'), flagged)).json().data.sentOn).toBe('2026-12-30');
+    // B687: шаг d01 «Проверка на 30-й день» пройден только с сохранённым итогом.
+    const step = async () => {
+      const plan = await call(app, 'GET', at(id, 'adaptation'), flagged);
+      expect(plan.statusCode, plan.body).toBe(200);
+      return plan.json().data.steps.find((item: { id: string }) => item.id === 'day_30_check').status;
+    };
+    expect(await step()).toBe('done');
     const undone = await call(app, 'DELETE', at(id, 'day-30/sent'), flagged);
     expect(undone.json().data.sentOn).toBeNull();
+    expect(await step()).not.toBe('done');
   });
 
   it('неверная дата — 400, чужое место работы — 404', { timeout: SLOW }, async () => {
