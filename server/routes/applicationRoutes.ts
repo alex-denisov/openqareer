@@ -26,6 +26,7 @@ import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { registerCandidateAutomationRoutes } from './candidateAutomationRoutes';
 import {
   notificationRepositoryFor,
+  recordMergedNotification,
   recordNotificationFromSource,
 } from './notificationRepositoryAccess';
 import { readCampaign } from './campaignContext';
@@ -33,6 +34,12 @@ import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolC
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readTargetLevel } from './vacancyRoleContext';
 import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
+import {
+  digestDay,
+  mergeDigestMarks,
+  ROLE_DIGEST_SOURCE_TYPE,
+  roleDigestKey,
+} from '../domain/roleVacancyDigest';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
@@ -360,27 +367,30 @@ function todayNewVacancies(
     : undefined;
 }
 
+/** B671: одна запись «Новые вакансии по вашей роли» на роли поиска в сутки; набор дня дописывается. */
 function recordFreshVacancyNotification(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
   vacancies: readonly TodayNewVacancy[],
+  roles: readonly string[],
 ): void {
   if (!vacancies.length) return;
-  const sourceId = createHash('sha256')
-    .update(
-      vacancies
-        .map((vacancy) => vacancy.clusterId)
-        .sort()
-        .join('\0'),
-    )
-    .digest('hex');
-  recordNotificationFromSource(deps, request, candidateId, {
-    kind: 'new_vacancies_by_role',
-    sourceType: 'matched_vacancy_batch',
-    sourceId,
-    idempotencyKey: `new-vacancies:${sourceId}`,
-  });
+  const now = new Date();
+  const ids = vacancies.map((vacancy) => vacancy.clusterId);
+  recordMergedNotification(
+    deps,
+    request,
+    candidateId,
+    {
+      kind: 'new_vacancies_by_role',
+      sourceType: ROLE_DIGEST_SOURCE_TYPE,
+      sourceId: '',
+      idempotencyKey: roleDigestKey(digestDay(now), roles),
+      createdAt: now.toISOString(),
+    },
+    (stored) => mergeDigestMarks(stored, ids),
+  );
 }
 
 const TODAY_QUEUE_INITIAL_COUNT = 5;
@@ -445,7 +455,7 @@ async function readTodaySnapshot(
     changesDismissedAt: candidateStore.getCandidateWorkspace(candidateId)?.todayChangesDismissedAt,
     now: now.toISOString(),
   });
-  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
+  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies, targetRoles);
   return {
     snapshot: {
       ...snapshot,

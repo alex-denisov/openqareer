@@ -289,6 +289,27 @@ export class SqliteNotificationRepository {
     }));
   }
 
+  /**
+   * B671: запись, которая копит источник за сутки («Новые вакансии по вашей роли»): первый
+   * вызов создаёт её как `recordEvent`, следующие только меняют `source_id` через `merge`.
+   */
+  recordOrMergeEvent(
+    candidateId: string,
+    input: NotificationEventInput,
+    merge: (storedSourceId: string) => string,
+  ): void {
+    const existing = this.readByIdempotencyKey(candidateId, input.idempotencyKey);
+    if (!existing) {
+      this.recordEvent(candidateId, { ...input, sourceId: merge('') });
+      return;
+    }
+    const next = merge(existing.source_id);
+    if (next === existing.source_id) return;
+    this.database
+      .prepare('UPDATE candidate_notifications SET source_id = ? WHERE id = ?')
+      .run(next, existing.id);
+  }
+
   /** B543: отмена ручной отметки снимает её уведомление и неотправленные доставки. */
   withdrawEvent(candidateId: string, idempotencyKey: string): boolean {
     const row = this.readByIdempotencyKey(candidateId, idempotencyKey);

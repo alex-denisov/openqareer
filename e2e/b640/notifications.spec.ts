@@ -97,9 +97,8 @@ test.describe('B671: лента уведомлений', () => {
     const pinned = screen.locator('.np-crit-i');
     await expect(pinned).toHaveCount(1, { timeout: 15_000 });
     await expect(pinned).toContainText('Важно');
-    await expect(pinned).toContainText(
-      'Отклик не доставлен · Ладога Банк · Руководитель разработки',
-    );
+    // n01b: в «Важно» — «Отклик не дошёл» и «Повторить» с иконкой.
+    await expect(pinned).toContainText('Отклик не дошёл · Ладога Банк · Руководитель разработки');
     await expect(pinned.getByRole('link')).toHaveCount(1);
     const invite = screen.locator('.notif').filter({ hasText: 'Арка Холдинг приглашает' });
     await expect(invite.locator('.notif-s')).toHaveText(
@@ -110,8 +109,10 @@ test.describe('B671: лента уведомлений', () => {
       '/app/responses/app-2',
     );
     await expectGates(page);
-    await pinned.getByRole('link', { name: 'Открыть отклик' }).click();
-    await expect(page).toHaveURL(/\/app\/responses\/app-1$/u);
+    const retry = pinned.getByRole('link', { name: 'Повторить' });
+    await expect(retry.locator('svg')).toHaveCount(1);
+    await retry.click();
+    await expect(page).toHaveURL(/\/app\/responses\/app-1\/letter$/u);
     expect(calls.read).toEqual([PINNED[0]!.id]);
   });
 
