@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react';
 import type { OwnVacancy, OwnVacancyDetail } from '../../../../../shared/b640OwnVacancy';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { workFormatLabel } from '../../../../../shared/vacancyWorkFormat';
-import { Icon } from '../../kit';
+import { Icon, useIsMobile } from '../../kit';
 import { fitRows } from '../card/fitRows';
 import { RequirementList } from '../card/RequirementList';
 import { textBlocks } from '../card/textBlocks';
 import { isoRowDate, safeHttpUrl, salaryMoneyView, type MoneyOptions } from '../format';
 import { getOwnVacancy } from '../ownVacancyApi';
 import { ownNoScoreReason } from './ownNoScore';
+import { OwnMenu } from './OwnMenu';
 
 /** «3 из 5» в колонке совпадения: процента у своей вакансии нет. */
 function CoverageCell({ item }: { item: OwnVacancy }) {
@@ -151,9 +152,13 @@ interface OwnRowProps {
   readonly open: boolean;
   readonly onToggle: () => void;
   readonly onRemove: () => void;
+  /** Окно «…» на 390 (B676): одно на список, как у строк подборки. */
+  readonly menuOpen: boolean;
+  readonly onMenu: (open: boolean) => void;
 }
 
-function OwnRow({ item, money, open, onToggle, onRemove }: OwnRowProps) {
+function OwnRow({ item, money, open, onToggle, onRemove, menuOpen, onMenu }: OwnRowProps) {
+  const mobile = useIsMobile();
   const place = item.location ?? (item.workFormat === 'remote' ? 'Удалённо' : 'Не указана');
   return (
     <tr className={`vt-row${open ? ' is-open' : ''}${item.comparing ? ' is-counting' : ''}`}>
@@ -175,10 +180,14 @@ function OwnRow({ item, money, open, onToggle, onRemove }: OwnRowProps) {
       <td className="vt-c vt-format">{item.workFormat ? workFormatLabel(item.workFormat) ?? '' : ''}</td>
       <td className="vt-c vt-date num">{isoRowDate(item.createdAt)}</td>
       <td className="vt-c vt-acts">
-        <div className="va" role="group" aria-label={`Действия: ${item.title}`}>
+        <div className={`va${menuOpen ? ' has-m' : ''}`} role="group" aria-label={`Действия: ${item.title}`}>
           <button className="va-b va-no" type="button" title="Удалить" aria-label={`Удалить: ${item.title}`} onClick={onRemove}>
             <Icon name="trash" />
           </button>
+          {mobile ? <button className="va-b va-more" type="button" title="Ещё действия" aria-label="Ещё действия" aria-expanded={menuOpen} aria-controls={menuOpen ? `va-m-${item.id}` : undefined} onClick={() => onMenu(!menuOpen)}>
+            <Icon name="more" />
+          </button> : null}
+          {menuOpen ? <OwnMenu id={item.id} title={item.title} onRemove={onRemove} onClose={() => onMenu(false)} /> : null}
         </div>
       </td>
     </tr>
@@ -195,13 +204,14 @@ export interface OwnRowsProps {
 /** Свои вакансии кандидата первыми строками таблицы с меткой «ваша» (макет v06c). */
 export function OwnRows({ items, money, onRemove }: OwnRowsProps) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<string | null>(null);
   if (items.length === 0) return null;
   return (
     <tbody className="vt-own">
       {items.flatMap((item) => {
         const open = openId === item.id;
         const row = (
-          <OwnRow key={item.id} item={item} money={money} open={open} onToggle={() => setOpenId(open ? null : item.id)} onRemove={() => onRemove(item.id)} />
+          <OwnRow key={item.id} item={item} money={money} open={open} onToggle={() => setOpenId(open ? null : item.id)} onRemove={() => onRemove(item.id)} menuOpen={menuId === item.id} onMenu={(next) => setMenuId(next ? item.id : null)} />
         );
         return open ? [row, <OwnDetail key={`${item.id}-detail`} item={item} />] : [row];
       })}
