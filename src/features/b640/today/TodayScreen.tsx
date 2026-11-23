@@ -3,7 +3,8 @@ import type { CandidateStatusToday, TodayStatusModule } from '../../../../shared
 import { pluralRu } from '../../../../shared/pluralRu';
 import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
-import { BlockError, BlockSkeleton } from './parts';
+import { useIsMobile } from '../kit/useMediaQuery';
+import { BlockError, BlockSkeleton, LeadQuietContext } from './parts';
 import { ResponseEventsBlock } from './ResponseEventsBlock';
 import {
   OnboardingPlanModule,
@@ -86,7 +87,11 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
   const funnel = items ? funnelLine(items, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
-  const signal = <StatusSignalBlock statusTitle={status.title} wide={wideSignal} />;
+  const [signalShown, setSignalShown] = useState(false);
+  const mobile = useIsMobile();
+  const signal = (
+    <StatusSignalBlock statusTitle={status.title} wide={wideSignal} onShown={setSignalShown} />
+  );
   const modules = (list: readonly TodayStatusModule[], withLead: boolean) =>
     list.map((module, index) => (
       <TodayModule
@@ -98,7 +103,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
       />
     ));
   return (
-    <>
+    <LeadQuietContext.Provider value={mobile && wideSignal && signalShown}>
       <StatusStrip
         status={status}
         revertedTitle={revertedTitle}
@@ -117,7 +122,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
           {modules(layout.side, false)}
         </div>
       ) : null}
-    </>
+    </LeadQuietContext.Provider>
   );
 }
 
