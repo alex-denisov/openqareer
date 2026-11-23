@@ -55,8 +55,8 @@ import type { CatalogArchiveCard } from '../seo/catalogArchive';
 import type { CatalogEntry } from '../vacancies/vacancyCatalogPage';
 import { getCatalogSitemaps, getListingHistory } from '../seo/catalogSitemapSchedule';
 import { isValidIndexNowKey } from '../seo/indexNow';
+import { LiveJobsCache } from '../seo/liveJobsCache';
 import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
-import { liveJobsXml } from '../seo/liveSitemap';
 import {
   RELOCATION_LIST_KEY,
   RELOCATION_PLACE,
@@ -572,26 +572,26 @@ function sitemapFileHandler(name: (request: FastifyRequest) => string) {
     const found = sitemapFiles().find((file) => file.name === wanted);
     if (!found) return reply.status(404).send({ error: 'not_found' });
     if (!found.name.startsWith('jobs-')) return sendXml(reply, found.xml);
-    return sendXml(reply, liveJobsFile(deps, found));
+    return sendXml(reply, await liveJobsFile(deps, request, found));
   };
 }
 
-const LIVE_JOBS_TTL_MS = 60_000;
-const liveJobsMemo = new Map<string, { source: string; xml: string; at: number }>();
+/** B776: the job file follows closed and moved cards within the HTTP cache interval (900 s). */
+const LIVE_JOBS_TTL_MS = 15 * 60_000;
+const liveJobsByEngine = new WeakMap<object, LiveJobsCache>();
 
 /** 11.11: the job file minus cards closed since the build, with moved slugs followed. */
-function liveJobsFile(deps: RouteDeps, file: SitemapFile): string {
-  const cached = liveJobsMemo.get(file.name);
-  const now = Date.now();
-  if (cached && cached.source === file.xml && now - cached.at < LIVE_JOBS_TTL_MS) return cached.xml;
-  const xml = liveJobsXml(file.xml, (key) => {
+function liveJobsFile(deps: RouteDeps, request: FastifyRequest, file: SitemapFile): Promise<string> {
+  const engine = deps.multiSourceEngine;
+  const liveJobs = liveJobsByEngine.get(engine)
+    ?? new LiveJobsCache(LIVE_JOBS_TTL_MS, Date.now, (error) => request.log.warn({ err: error }, 'live-jobs-sitemap-failed'));
+  liveJobsByEngine.set(engine, liveJobs);
+  return liveJobs.read(file.name, file.xml, (key) => {
     const entry = deps.multiSourceEngine.getPublicCatalogEntry(key);
     return entry && deps.multiSourceEngine.getPublicCatalogCluster(entry.clusterId)
       ? entry.path
       : undefined;
   });
-  liveJobsMemo.set(file.name, { source: file.xml, xml, at: now });
-  return xml;
 }
 
 /** Cities and roles that have a public list, with counts, for the search box. */
