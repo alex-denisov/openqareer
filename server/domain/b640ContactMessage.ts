@@ -3,6 +3,7 @@ import {
   type B640ContactMessageKind,
 } from '../../shared/b640ContactMessage';
 import { dropCourtesyClosing } from './contactMessageStyle';
+import { toneRejection, type ToneRejection } from './contactMessageTone';
 import { distortedWords } from './letterWordDistortion';
 
 /**
@@ -165,12 +166,15 @@ function digitGroups(text: string): string[] {
 }
 
 export type ModelMessageRejection =
-  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted' | 'mentions_vacancy';
+  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted' | 'mentions_vacancy' | ToneRejection;
 
 /** B753: условия запроса для проверки — без вакансии и язык черновика. */
 export interface ContactCheckOptions {
   readonly withoutVacancy?: boolean;
   readonly language?: 'en' | 'ru';
+  /** Получатель из карточки: с ним проверяем тон (B753); без него проверки тона нет. */
+  readonly recipientName?: string;
+  readonly relationship?: string | null;
 }
 
 const MENTIONS_VACANCY = /(ваканси|vacanc)/iu;
@@ -189,6 +193,10 @@ export function modelMessageRejection(
   if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
   if (options.withoutVacancy && MENTIONS_VACANCY.test(body)) return 'mentions_vacancy';
   if (options.language !== 'en' && namesEnglishTargetRole(body, englishRoles)) return 'english_role';
+  const tone = options.recipientName
+    ? toneRejection(body, { ...options, recipientName: options.recipientName, known: knownText, language: options.language ?? 'ru' })
+    : null;
+  if (tone) return tone;
   if (!digitGroups(body).every((group) => knownText.includes(group))) return 'new_digits';
   // Та же узкая проверка русского, что у письма (B640): лишние заглавные, обрезанные окончания.
   return distortedWords(body, [knownText]).length > 0 ? 'distorted' : null;
