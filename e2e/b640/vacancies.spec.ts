@@ -292,6 +292,31 @@ test.describe('B654: раздел «Вакансии», подборка и со
     ).toBeVisible();
   });
 
+  test('B768: «Вакансии по роли» читают подборку сразу с ролью, снятая роль — вся подборка', async ({
+    page,
+  }) => {
+    const rows: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (
+        url.pathname.endsWith('/candidate/matched-vacancies') &&
+        url.searchParams.get('part') === 'rows'
+      )
+        rows.push(url.searchParams.getAll('role').join('|'));
+    });
+    await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
+      campaignRoles: ['CTO', 'Руководитель продукта'],
+      titlesRu: { CTO: 'Технический директор (CTO)' },
+    });
+    await expect(page.locator('.vt-chips .vt-chip').first()).toHaveText(
+      'Технический директор (CTO)',
+    );
+    await expect.poll(() => rows.length).toBeGreaterThan(0);
+    expect(rows.every((roles) => roles !== '')).toBe(true);
+    await page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }).click();
+    await expect.poll(() => rows.includes('')).toBe(true);
+  });
+
   test('B645: строка «Проверить N навыка» ведёт в проверку навыков', async ({ page }) => {
     await openCabinet(page, '/app/vacancies', {
       campaignRoles: ['Руководитель разработки'],
