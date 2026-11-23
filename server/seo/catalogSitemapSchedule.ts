@@ -12,7 +12,9 @@ import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
 import { snapshotDue, snapshotSitemapCards } from './catalogArchive';
 import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
-import { readCatalogSitemaps, writeCatalogSitemaps } from './catalogSitemapJob';
+import { writeCatalogSitemaps } from './catalogSitemapJob';
+import { CatalogSitemapReader } from './catalogSitemapChanged';
+import { labelledTimer } from '../observability/backgroundSteps';
 import type { ListingIndexHistory } from './catalogIndexing';
 import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
 import { createGoogleIndexingNotifier } from './googleIndexing';
@@ -161,12 +163,13 @@ export function scheduleCatalogSitemapJob(
 
 /** Web server: a read of a handful of rows, then the in-memory set is replaced. */
 export function scheduleCatalogSitemapRefresh(databasePath: string, log: SitemapLog): () => void {
-  const refresh = () => {
+  const sitemaps = new CatalogSitemapReader();
+  const read = () => {
     let database: DatabaseSync | undefined;
     try {
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
-      setCatalogSitemaps(readCatalogSitemaps(database));
+      setCatalogSitemaps(sitemaps.readIfChanged(database));
       setListingHistory(readListingHistory(database));
       setMarketReports(readMarketReports(database));
     } catch (error: unknown) {
@@ -175,6 +178,9 @@ export function scheduleCatalogSitemapRefresh(databasePath: string, log: Sitemap
       database?.close();
     }
   };
+  const refresh = labelledTimer('web:sitemap-refresh', read, (error) =>
+    log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed'),
+  );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);
   every.unref();

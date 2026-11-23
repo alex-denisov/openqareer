@@ -63,6 +63,7 @@ import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirector
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { FOREIGN_COMMIT_GRACE_MS } from './data/sqliteSnapshotMemo';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
+import { labelledTimer } from './observability/backgroundSteps';
 import { openVacancyDemandStore } from './vacancies/vacancyDemandStore';
 
 const config = readServerConfig(process.env);
@@ -490,14 +491,19 @@ try {
     5 * 60 * 1_000,
   );
   matchedPoolPrecomputeTimer.unref();
-  vacancyRefreshTimer = setInterval(runVacancyRefresh, 5 * 60 * 1_000);
+  // B776: periodic web work under its own name, so a stall is not blamed on a catalog page waiting behind it.
+  const webStep = (name: string, run: () => unknown) =>
+    labelledTimer(name, run, (error) =>
+      app.log.error({ step: name, errorName: error instanceof Error ? error.name : 'UnknownError' }, 'web-step-failed'),
+    );
+  vacancyRefreshTimer = setInterval(webStep('web:vacancy-refresh', runVacancyRefresh), 5 * 60 * 1_000);
   vacancyRefreshTimer.unref();
-  recruiterIntelligenceTimer = setInterval(runRecruiterIntelligence, 5_000);
+  recruiterIntelligenceTimer = setInterval(webStep('web:recruiter-intelligence', runRecruiterIntelligence), 5_000);
   recruiterIntelligenceTimer.unref();
-  documentRetentionTimer = setInterval(runDocumentRetentionPurge, 5 * 60 * 1_000);
+  documentRetentionTimer = setInterval(webStep('web:document-retention', runDocumentRetentionPurge), 5 * 60 * 1_000);
   documentRetentionTimer.unref();
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
-  retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
+  retentionSweepTimer = setInterval(webStep('web:retention-sweep', runRetentionSweep), 60 * 60 * 1_000);
   retentionSweepTimer.unref();
   // B699: только ставит поднятия резюме в очередь кандидатам с флагом; в hh не ходит.
   // Включается OPENQAREER_HH_AUTO_RAISE=1 после первого живого подъёма, показанного оркестратору.
@@ -514,7 +520,7 @@ try {
     hhRaiseQueueTimer.unref();
   }
   // Expired LinkedIn bearer cookies are removed at most fifteen minutes after li_at expiry.
-  linkedinPoolSessionExpiryTimer = setInterval(runLinkedinPoolSessionExpiryPurge, 15 * 60 * 1_000);
+  linkedinPoolSessionExpiryTimer = setInterval(webStep('web:linkedin-session-purge', runLinkedinPoolSessionExpiryPurge), 15 * 60 * 1_000);
   linkedinPoolSessionExpiryTimer.unref();
 } catch (error) {
   app.log.fatal(

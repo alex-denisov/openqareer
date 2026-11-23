@@ -31,6 +31,17 @@ export async function backgroundStep<T>(name: string, run: () => Promise<T>): Pr
   }
 }
 
+/**
+ * B776 (прод 23.11): треть секунд задержек шла «без шага» — синхронные таймеры веб-процесса
+ * (обновление карт сайта, вакансий, удержание) не были подписаны, и задержку приписывали
+ * страницам каталога, которые в это время ждали. Таймер под своим именем; ошибка — в onError.
+ */
+export function labelledTimer(name: string, run: () => unknown, onError: (error: unknown) => void): () => void {
+  return () => {
+    backgroundStep(name, async () => run()).catch(onError);
+  };
+}
+
 /** Шаг в окне задержки и сколько миллисекунд окна он шёл. */
 export interface HeldStep {
   readonly name: string;
