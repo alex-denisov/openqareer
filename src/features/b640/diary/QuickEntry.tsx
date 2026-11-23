@@ -4,7 +4,7 @@ import {
   type CareerDiaryEntry,
   type CareerDiaryEntryKind,
 } from '../../../../shared/careerDiaryEntries';
-import { useDictation } from '../consultant/useDictation';
+import { useVoiceInput } from '../voice/useVoiceInput';
 import { Icon } from '../kit/Icon';
 import type { ComposerDictation } from '../kit/Composer';
 import { StatusLine } from '../kit/ResultLine';
@@ -73,7 +73,7 @@ function MicButton({
 export function QuickEntry(props: QuickEntryProps) {
   const { text, setText, busy, failed, submit } = useQuickSubmit(props);
   const onDictated = useCallback((value: string) => setText(value), [setText]);
-  const dictation = useDictation(onDictated);
+  const dictation = useVoiceInput(onDictated);
   return (
     <>
       <form

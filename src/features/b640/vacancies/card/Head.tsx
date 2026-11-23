@@ -1,11 +1,13 @@
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { Icon, Link } from '../../kit';
 import { rowFormat, rowGeo } from '../format';
+import { NO_COMPANY } from '../companyPath';
 import { SaveButton, type SaveButtonProps } from './SaveButton';
 
 export interface HeadProps {
   readonly item: MatchedVacancyItem;
-  readonly companyPath: string;
+  /** `null` — у вакансии нет компании: ссылки на её карточку нет. */
+  readonly companyPath: string | null;
   readonly save: Omit<SaveButtonProps, 'mobile'> | null;
 }
 
@@ -21,10 +23,17 @@ export function Head({ item, companyPath, save }: HeadProps) {
   return (
     <section className="lead vd-lead v4-head" aria-labelledby="vc-title">
       <p className="v4-coname">
-        <Link className="v4-co-a" to={companyPath}>
-          <Icon name="building" />
-          {cluster.canonicalCompany}
-        </Link>
+        {companyPath ? (
+          <Link className="v4-co-a" to={companyPath}>
+            <Icon name="building" />
+            {cluster.canonicalCompany}
+          </Link>
+        ) : (
+          <span className="v4-co-a">
+            <Icon name="building" />
+            {cluster.canonicalCompany?.trim() || NO_COMPANY}
+          </span>
+        )}
       </p>
       <p className="v4-co-sub">{sub}</p>
       <h2 className={cluster.canonicalTitle.length > LONG_TITLE ? 'lead-title is-long' : 'lead-title'} id="vc-title">

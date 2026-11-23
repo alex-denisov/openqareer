@@ -15,7 +15,7 @@ import {
 import { ErrorRow, Message, Reply } from './parts';
 import { ReplyExtras } from './ReplyExtras';
 import { useDialog, type DialogState, type FactDecision } from './useDialog';
-import { useDictation } from './useDictation';
+import { useVoiceInput } from '../voice/useVoiceInput';
 
 export interface DialogViewProps {
   readonly stage: CoachTurnStage;
@@ -130,7 +130,7 @@ interface AskProps {
 /** Ввод вопроса: текст или диктовка (K1b), предел сообщений (K3). */
 function Ask({ onSubmit, busy, limit, tariffsPath }: AskProps) {
   const [text, setText] = useState('');
-  const dictation = useDictation(setText);
+  const dictation = useVoiceInput(setText);
   return (
     <Composer
       label="Ваш вопрос консультанту"

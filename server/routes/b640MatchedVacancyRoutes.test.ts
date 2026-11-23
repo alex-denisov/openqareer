@@ -145,3 +145,28 @@ describe('B640 sort does not touch the old route', () => {
     expect((await get(`${OLD}?sort=company`, 'plain.test')).statusCode).toBe(400);
   });
 });
+
+describe('GET b640/matched-vacancies: «Дата» на сервере (B726)', () => {
+  const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const RECENT: PoolRow[] = [
+    { id: 'fresh-1', title: 'CTO', company: 'Альфа', observedAt: daysAgo(2) },
+    { id: 'fresh-2', title: 'CTO', company: 'Бета', observedAt: daysAgo(20) },
+    { id: 'old-1', title: 'CTO', company: 'Гамма', observedAt: daysAgo(45) },
+  ];
+
+  it('days=30 — только строки за 30 дней, число подборки по ним', async () => {
+    const { get } = await setup(RECENT);
+    const response = await get(`${NEW}?sort=date&direction=desc&days=30&tz=Europe%2FMoscow`, 'flagged.test');
+    expect(response.statusCode).toBe(200);
+    expect(ids(response)).toEqual(['fresh-1', 'fresh-2']);
+    expect(response.json().meta.total).toBe(2);
+    expect(response.json().meta.nextOffset).toBeNull();
+  });
+
+  it('без days — все строки; неверные days — 400', async () => {
+    const { get } = await setup(RECENT);
+    expect(ids(await get(`${NEW}?sort=date&direction=desc`, 'flagged.test'))).toHaveLength(3);
+    expect((await get(`${NEW}?days=-1`, 'flagged.test')).statusCode).toBe(400);
+    expect((await get(`${NEW}?days=abc`, 'flagged.test')).statusCode).toBe(400);
+  });
+});
