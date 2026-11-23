@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { HhResumeItem } from '../../connections/hhSessionPoll';
 import { Button, Dialog, ResultLine, StatusLine } from '../kit';
 import { chooseHhResume, readHhResumeList, refreshHhProfile } from './hhResumeSession';
+import { refreshLinkedInProfile, type LinkedInRefreshOutcome } from './linkedinSession';
 import { ErrorLine } from './parts';
 
 export type HhRowState =
@@ -24,11 +25,43 @@ const FAILED: Record<Flow, string> = {
   change: 'Резюме hh.ru не прочитались',
 };
 
-/** «Обновить сейчас» и «Сменить резюме» строки hh.ru: итог — строкой под ней. */
-export function useHhRowActions(onRefreshed: () => void) {
+const READING = {
+  hh: 'Читаем резюме на hh.ru…',
+  linkedin: 'Читаем профиль в LinkedIn…',
+} as const;
+
+/** Окно входа hh.ru; код сессии грузится по нажатию. */
+async function openHhSignIn(): Promise<void> {
+  const desktop = await import('../apply/hh/hhDesktop');
+  await desktop.openHhSignIn().catch(() => false);
+}
+
+/** Фоновый импорт LinkedIn; сбой без своего текста — общий. */
+function linkedInOutcome(): Promise<LinkedInRefreshOutcome> {
+  return refreshLinkedInProfile().catch(() => ({
+    ok: false,
+    message: 'Профиль из LinkedIn не обновился',
+  }));
+}
+
+/** «Обновить сейчас» и «Сменить резюме» строки hh.ru (у LinkedIn — только «Обновить сейчас»): итог — строкой под ней. */
+export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linkedin' = 'hh') {
   const [state, setState] = useState<HhRowState>({ kind: 'idle' });
 
+  async function refreshLinkedIn() {
+    setState({ kind: 'reading' });
+    const outcome = await linkedInOutcome();
+    if (outcome.ok) onRefreshed();
+    const retry = () => void refreshLinkedIn();
+    setState(
+      outcome.ok
+        ? { kind: 'done', text: outcome.message }
+        : { kind: 'error', text: outcome.message, retry },
+    );
+  }
+
   async function run(flow: Flow) {
+    if (platform === 'linkedin') return refreshLinkedIn();
     setState({ kind: 'reading' });
     try {
       const list = await readHhResumeList();
@@ -53,18 +86,16 @@ export function useHhRowActions(onRefreshed: () => void) {
     setState({ kind: 'done', text: `Резюме для откликов: ${chosen.title}` });
   }
 
-  async function signIn() {
-    const { openHhSignIn } = await import('../apply/hh/hhDesktop');
-    setState({ kind: 'idle' });
-    await openHhSignIn().catch(() => false);
-  }
-
   return {
     state,
+    platform,
     refresh: () => void run('refresh'),
     change: () => void run('change'),
     choose,
-    signIn: () => void signIn(),
+    signIn: () => {
+      setState({ kind: 'idle' });
+      void openHhSignIn();
+    },
     close: () => setState({ kind: 'idle' }),
   };
 }
@@ -131,7 +162,7 @@ export function HhRowResult({ actions }: { readonly actions: ReturnType<typeof u
   const { state } = actions;
   switch (state.kind) {
     case 'reading':
-      return <StatusLine state="wait" text="Читаем резюме на hh.ru…" />;
+      return <StatusLine state="wait" text={READING[actions.platform]} />;
     case 'signin': {
       const signIn = (
         <button className="res-act" type="button" onClick={actions.signIn}>

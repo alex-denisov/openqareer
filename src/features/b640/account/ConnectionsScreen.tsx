@@ -82,10 +82,10 @@ interface PlatformRowProps {
   readonly onRefreshed?: () => void;
 }
 
-/** Пункты меню, которые есть только у hh.ru в приложении. */
+/** Пункты меню площадки в приложении: «Обновить сейчас»; у hh.ru ещё «Сменить резюме». */
 interface HhMenuItems {
   readonly onRefresh: () => void;
-  readonly onChange: () => void;
+  readonly onChange?: () => void;
 }
 
 interface ConfirmProps {
@@ -160,11 +160,13 @@ function HhItems({ hh }: { readonly hh: HhMenuItems }) {
           Обновить сейчас
         </button>
       </li>
-      <li role="none">
-        <button role="menuitem" type="button" onClick={hh.onChange}>
-          Сменить резюме
-        </button>
-      </li>
+      {hh.onChange ? (
+        <li role="none">
+          <button role="menuitem" type="button" onClick={hh.onChange}>
+            Сменить резюме
+          </button>
+        </li>
+      ) : null}
     </>
   );
 }
@@ -194,10 +196,12 @@ function closingFirst(hh: HhMenuItems, close: () => void): HhMenuItems {
       close();
       hh.onRefresh();
     },
-    onChange: () => {
-      close();
-      hh.onChange();
-    },
+    onChange: hh.onChange
+      ? () => {
+          close();
+          hh.onChange?.();
+        }
+      : undefined,
   };
 }
 
@@ -253,8 +257,9 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
 }
 
 function PlatformRow({ connection, onDisconnected, expired, onRefreshed }: PlatformRowProps) {
-  const hhActions = useHhRowActions(onRefreshed ?? (() => undefined));
-  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: hhActions.change } : null;
+  const hhActions = useHhRowActions(onRefreshed ?? (() => undefined), connection.platform);
+  const change = connection.platform === 'hh' ? hhActions.change : undefined;
+  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: change } : null;
   return (
     <li className="set-row cn-row">
       <div className="set-l">
@@ -306,9 +311,9 @@ function TelegramRow({ telegram }: { readonly telegram: NonNullable<Connections[
   );
 }
 
-/** Обновить и сменить резюме можно только в приложении: резюме читаются в сессии hh.ru. */
-function hhInApp(connection: CandidateConnection): boolean {
-  return connection.platform === 'hh' && connection.status === 'connected' && isTauriEnvironment();
+/** Обновить профиль с площадки можно только в приложении: он читается в сессии площадки. */
+function refreshInApp(connection: CandidateConnection): boolean {
+  return connection.status === 'connected' && isTauriEnvironment();
 }
 
 /** n03 «Подключения»: почта, площадки и Telegram; отключение — на месте строки (N3f). */
@@ -349,7 +354,7 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
               connection={connection}
               expired={connection.platform === 'hh' && connection.status === 'connected' && hhExpired}
               onDisconnected={() => disconnected(connection.platform)}
-              onRefreshed={hhInApp(connection) ? load.retry : undefined}
+              onRefreshed={refreshInApp(connection) ? load.retry : undefined}
             />
           ))}
           {telegram ? <TelegramRow telegram={telegram} /> : null}
