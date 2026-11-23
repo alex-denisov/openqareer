@@ -133,4 +133,28 @@ describe('Linkedin post parser (#hiring feed)', () => {
 
     expect(vacancies).toHaveLength(0);
   });
+
+  it('B741: «go-to-market» и «go live» — не язык Go, «Go, Kubernetes» — язык', () => {
+    const post = (text: string) => `
+      <div class="feed-shared-update-v2" data-urn="urn:li:activity:7000000000000000001">
+        <div class="update-components-actor">
+          <a class="update-components-actor__meta-link" href="https://www.linkedin.com/in/x">
+            <span class="update-components-actor__name">X</span>
+            <span class="update-components-actor__description">CEO at Acme</span>
+          </a>
+        </div>
+        <div class="update-components-text"><span class="break-words">${text}</span></div>
+      </div>`;
+    const skills = (text: string) => {
+      const parsed = parseLinkedinPostCards(post(text), { observedAt: '2026-11-23T00:00:00.000Z' });
+      expect(parsed).toHaveLength(1);
+      return parsed[0].requiredSkills;
+    };
+    const gtm =
+      'We are hiring a Backend Engineer (Python) to help our go-to-market and go live in new regions. Remote. #hiring';
+    expect(skills(gtm)).not.toContain('Go');
+    expect(skills('We are hiring a Backend Engineer: Go, Kubernetes. Remote. #hiring')).toContain(
+      'Go',
+    );
+  });
 });

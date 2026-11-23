@@ -1,201 +1,193 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { candidateReferencedClusters } from './clusterSplit';
 import {
-  candidateReferencedClusters,
-  hasCrossSourceIdCollision,
-  loadMemberVacancies,
-  parseCluster,
-  planClusterSplit,
-} from './clusterSplit';
-import { prepareCatalogProjectionStatements, writeCatalogEntry } from './catalogEntryWriter';
+  budgetSpent,
+  emptyResult,
+  pieceIdTaken,
+  saveState,
+  type ClusterSplitLog,
+  type ClusterSplitStepResult,
+  type StepContext,
+} from './clusterSplitContext';
 import { journalClusterSplit } from './clusterSplitJournal';
-import { clusterKeys, serializeRepresentative } from './vacancyDeduplicator';
+import {
+  clearProgress,
+  continueLargeSplit,
+  finishSplit,
+  readProgress,
+  startLargeSplit,
+  type SplitProgress,
+} from './clusterSplitLarge';
+import {
+  planChunk,
+  planOf,
+  rememberPlan,
+  type PlannedItem,
+  type PlannedSplit,
+} from './clusterSplitPlan';
+import { prepareSplitWriters, writePiece } from './clusterSplitWrite';
 
 export { revertClusterSplitStep } from './clusterSplitJournal';
+export type { ClusterSplitLog, ClusterSplitStepResult } from './clusterSplitContext';
 
 /**
- * B752: шаг разбиения склеенных кластеров. Одна короткая транзакция на
- * `chunk` кластеров после курсора; каждый разбитый кластер сперва ложится
- * в журнал, затем пишутся куски, ключи и переезд страницы каталога.
+ * B752: шаг разбиения склеенных кластеров. План (чтение пула и сведение
+ * кусков) строится до транзакции; транзакция записи держит не больше
+ * `maxPieces` строк кластеров и `budgetMs` времени. Кластер, чьих кусков
+ * больше бюджета, пишется частями в следующих шагах (`clusterSplitLarge`).
  */
-
-export type ClusterSplitLog = (event: string, fields: Record<string, unknown>) => void;
 
 export interface ClusterSplitStepOptions {
   readonly chunk?: number;
   readonly now?: number;
   readonly log?: ClusterSplitLog;
-}
-
-export interface ClusterSplitStepResult {
-  stepId: string | null;
-  scanned: number;
-  split: number;
-  pieces: number;
-  skippedCandidateRef: number;
-  skippedIdTaken: number;
-  catalogMoved: number;
-  /** Кластеры шага с кусками: id всех кусков, кроме основателя. */
-  newPieceIds: string[];
-  completed: boolean;
-  /** Шаг просит остановить разбиение. */
-  stop?: boolean;
+  /** Строк кластеров (кусков и основателей) на одну транзакцию записи. */
+  readonly maxPieces?: number;
+  /** Время транзакции записи, после которого шаг не начинает новый кусок. */
+  readonly budgetMs?: number;
 }
 
 export const CLUSTER_SPLIT_CHUNK = 200;
 const MAX_CHUNK = 1_000;
+/** 23.11, копия прода: 5–10 мс на кусок с ключами и каталогом, холодный кэш. */
+export const CLUSTER_SPLIT_MAX_PIECES = 40;
+export const CLUSTER_SPLIT_BUDGET_MS = 500;
 
-interface StepContext {
-  readonly db: DatabaseSync;
-  readonly stepId: string;
-  readonly now: number;
-  readonly referenced: ReadonlyMap<string, string>;
-  readonly log: ClusterSplitLog;
-  readonly result: ClusterSplitStepResult;
+interface State {
+  readonly cursor_rowid: number;
+  readonly completed: number;
 }
 
-function emptyResult(stepId: string | null, completed: boolean): ClusterSplitStepResult {
-  return {
-    stepId,
-    scanned: 0,
-    split: 0,
-    pieces: 0,
-    skippedCandidateRef: 0,
-    skippedIdTaken: 0,
-    catalogMoved: 0,
-    newPieceIds: [],
-    completed,
-  };
-}
-
-function writePieces(context: StepContext, cluster: VacancyCluster, pieces: VacancyCluster[]) {
-  const { db, now } = context;
-  const upsert = db.prepare(
-    `INSERT INTO vacancy_clusters (
-       id, fingerprint, title, company, cluster_json, items_count, updated_at, representative
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET fingerprint = excluded.fingerprint, title = excluded.title,
-       company = excluded.company, cluster_json = excluded.cluster_json,
-       items_count = excluded.items_count, updated_at = excluded.updated_at,
-       representative = excluded.representative`,
-  );
-  const insertKey = db.prepare(
-    'INSERT OR IGNORE INTO vacancy_cluster_keys (kind, key, cluster_id) VALUES (?, ?, ?)',
-  );
-  db.prepare('DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?').run(cluster.id);
-  for (const piece of pieces) {
-    upsert.run(
-      piece.id,
-      piece.id,
-      piece.canonicalTitle,
-      piece.canonicalCompany,
-      JSON.stringify(piece),
-      piece.vacanciesCount,
-      now,
-      serializeRepresentative(piece),
-    );
-    for (const { kind, key } of clusterKeys(piece)) insertKey.run(kind, key, piece.id);
-  }
-}
-
-interface CatalogEntryRow {
-  entry_key: string;
-  path: string;
-  source_url: string;
-}
-
-/**
- * Страницы каталога пишутся той же проекцией, что у пула: основатель
- * сохраняет id, а значит ключ и адрес; куски получают свои страницы.
- * Старый ключ уходит в переадресацию, только если у основателя страницы
- * больше нет, а ссылка прежней страницы досталась куску.
- */
-function rewriteCatalogPages(context: StepContext, oldId: string, pieces: VacancyCluster[]): void {
-  const { db } = context;
-  const before = db
-    .prepare('SELECT entry_key, path, source_url FROM catalog_entries WHERE cluster_id = ?')
-    .get(oldId) as CatalogEntryRow | undefined;
-  const statements = prepareCatalogProjectionStatements(db);
-  for (const piece of pieces) writeCatalogEntry(piece, statements);
-  if (!before) return;
-  context.result.catalogMoved += 1;
-  if (db.prepare('SELECT 1 FROM catalog_entries WHERE cluster_id = ?').get(oldId)) return;
-  const holder = pieces.find(
-    (piece, index) =>
-      index > 0 && piece.sources.some((source) => source.sourceUrl === before.source_url),
-  );
-  const moved = holder
-    ? (db.prepare('SELECT entry_key FROM catalog_entries WHERE cluster_id = ?').get(holder.id) as
-        { entry_key: string } | undefined)
-    : undefined;
-  if (!holder || !moved) return;
-  db.prepare(
-    `INSERT OR REPLACE INTO vacancy_catalog_redirects
-       (old_key, old_path, new_cluster_id, new_key, step_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(before.entry_key, before.path, holder.id, moved.entry_key, context.stepId, context.now);
-}
-
-function pieceIdTaken(db: DatabaseSync, pieceIds: readonly string[]): boolean {
-  const exists = db.prepare('SELECT 1 FROM vacancy_clusters WHERE id = ?');
-  return pieceIds.some((id) => exists.get(id) !== undefined);
-}
-
-function splitOne(context: StepContext, cluster: VacancyCluster): void {
-  const { db, result } = context;
-  if (!hasCrossSourceIdCollision(cluster)) return;
-  const pieces = planClusterSplit(cluster, loadMemberVacancies(db, cluster));
-  if (pieces.length <= 1) return;
-  const table = context.referenced.get(cluster.id);
-  if (table) {
-    result.skippedCandidateRef += 1;
-    context.log('cluster_split_skipped_candidate_ref', { clusterId: cluster.id, table });
-    return;
-  }
-  const pieceIds = pieces.slice(1).map((piece) => piece.id);
-  if (pieceIdTaken(db, pieceIds)) {
-    result.skippedIdTaken += 1;
-    return;
-  }
-  journalClusterSplit(db, {
-    stepId: context.stepId,
-    clusterId: cluster.id,
-    pieceIds,
-    now: context.now,
-  });
-  writePieces(context, cluster, pieces);
-  rewriteCatalogPages(context, cluster.id, pieces);
-  result.split += 1;
-  result.pieces += pieceIds.length;
-  result.newPieceIds.push(...pieceIds);
-}
-
-function saveState(db: DatabaseSync, cursor: number, result: ClusterSplitStepResult, now: number) {
-  db.prepare(
-    `UPDATE cluster_split_state SET cursor_rowid = ?, completed = ?, steps = steps + 1,
-       clusters_split = clusters_split + ?, pieces_created = pieces_created + ?,
-       skipped_candidate_ref = skipped_candidate_ref + ?, catalog_moved = catalog_moved + ?,
-       updated_at = ? WHERE id = 1`,
-  ).run(
-    cursor,
-    result.completed ? 1 : 0,
-    result.split,
-    result.pieces,
-    result.skippedCandidateRef,
-    result.catalogMoved,
-    now,
-  );
-}
-
-function inTransaction<T>(db: DatabaseSync, operation: () => T): T {
+/** Транзакция записи; её длительность ложится в `writeMs` результата. */
+function inTransaction(
+  db: DatabaseSync,
+  operation: () => ClusterSplitStepResult,
+): ClusterSplitStepResult {
+  const at = performance.now();
   db.exec('BEGIN IMMEDIATE');
   try {
-    const value = operation();
+    const result = operation();
     db.exec('COMMIT');
-    return value;
+    return { ...result, writeMs: Math.round(performance.now() - at) };
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
   }
+}
+
+function clusterJson(db: DatabaseSync, id: string): string | undefined {
+  const row = db.prepare('SELECT cluster_json FROM vacancy_clusters WHERE id = ?').get(id) as
+    { cluster_json: string } | undefined;
+  return row?.cluster_json;
+}
+
+/** Кластер целиком в одной транзакции: журнал, куски, основатель. */
+function splitWhole(context: StepContext, plan: PlannedSplit): void {
+  const pieceIds = plan.pieces.slice(1).map((piece) => piece.id);
+  if (pieceIdTaken(context.db, pieceIds)) {
+    context.result.skippedIdTaken += 1;
+    return;
+  }
+  journalClusterSplit(context.db, {
+    stepId: context.stepId,
+    clusterId: plan.cluster.id,
+    pieceIds,
+    now: context.now,
+  });
+  for (const piece of plan.pieces.slice(1)) {
+    writePiece(context.writers, piece);
+    context.units += 1;
+  }
+  context.result.pieces += pieceIds.length;
+  context.result.newPieceIds.push(...pieceIds);
+  finishSplit(context, plan, context.stepId);
+}
+
+function applyItem(context: StepContext, item: PlannedItem): 'done' | 'partial' {
+  if (item.kind === 'pass') return 'done';
+  if (item.kind === 'ref') {
+    context.result.skippedCandidateRef += 1;
+    context.log('cluster_split_skipped_candidate_ref', {
+      clusterId: item.clusterId,
+      table: item.table,
+    });
+    return 'done';
+  }
+  if (item.pieces.length > context.maxPieces) return startLargeSplit(context, item);
+  splitWhole(context, item);
+  return 'done';
+}
+
+/** Пункты плана по порядку, пока есть бюджет; курсор встаёт на последний пройденный. */
+function writeItems(context: StepContext, items: readonly PlannedItem[], cursor: number): void {
+  context.result.completed = items.length === 0;
+  let at = cursor;
+  for (const item of items) {
+    if (item.kind === 'split') {
+      if (budgetSpent(context, Math.min(item.pieces.length, context.maxPieces))) break;
+      // Строка сменилась после плана: следующий шаг построит план заново.
+      if (clusterJson(context.db, item.cluster.id) !== item.json) break;
+    }
+    if (applyItem(context, item) === 'partial') break;
+    context.result.scanned += 1;
+    at = item.rowid;
+  }
+  saveState(context, at);
+}
+
+function contextFor(
+  db: DatabaseSync,
+  cursor: number,
+  options: ClusterSplitStepOptions,
+  journalStepId?: string,
+): StepContext {
+  const now = options.now ?? Date.now();
+  // Часть большого кластера — под id шага, открывшего журнал: откат по нему снимает весь кластер.
+  const stepId = journalStepId ?? `split-${cursor}-${now}`;
+  return {
+    db,
+    stepId,
+    now,
+    log: options.log ?? (() => undefined),
+    writers: prepareSplitWriters(db, now),
+    maxPieces: Math.max(1, Math.trunc(options.maxPieces ?? CLUSTER_SPLIT_MAX_PIECES)),
+    budgetMs: Math.max(0, options.budgetMs ?? CLUSTER_SPLIT_BUDGET_MS),
+    startedAt: 0,
+    result: emptyResult(stepId, false),
+    units: 0,
+  };
+}
+
+/** Начать отсчёт бюджета, когда транзакция записи уже открыта. */
+const started = (context: StepContext): StepContext => ({
+  ...context,
+  startedAt: performance.now(),
+});
+
+function continueStep(
+  db: DatabaseSync,
+  state: State,
+  progress: SplitProgress,
+  options: ClusterSplitStepOptions,
+): ClusterSplitStepResult {
+  const row = db
+    .prepare('SELECT rowid, cluster_json FROM vacancy_clusters WHERE id = ?')
+    .get(progress.cluster_id) as { rowid: number; cluster_json: string } | undefined;
+  const plan = row ? planOf(db, row.rowid, row.cluster_json) : undefined;
+  if (plan) rememberPlan(plan);
+  const referenced = candidateReferencedClusters(db);
+  return inTransaction(db, () => {
+    const context = started(contextFor(db, state.cursor_rowid, options, progress.journal_step_id));
+    if (row && clusterJson(db, progress.cluster_id) !== row.cluster_json) return context.result;
+    // Основателя кто-то удалил: записанные куски остаются, ход снимается.
+    if (!row) clearProgress(db);
+    const finished = row
+      ? continueLargeSplit(context, progress, plan, referenced.get(progress.cluster_id))
+      : true;
+    if (finished) context.result.scanned += 1;
+    saveState(context, finished ? progress.cluster_rowid : state.cursor_rowid);
+    return context.result;
+  });
 }
 
 /** Один шаг разбиения. Резюмируем: курсор — `vacancy_clusters.rowid`. */
@@ -205,31 +197,20 @@ export function splitClustersStep(
 ): ClusterSplitStepResult {
   const state = db
     .prepare('SELECT cursor_rowid, completed FROM cluster_split_state WHERE id = 1')
-    .get() as { cursor_rowid: number; completed: number };
+    .get() as unknown as State;
   if (state.completed === 1) return emptyResult(null, true);
-  const now = options.now ?? Date.now();
-  const chunk = Math.max(1, Math.min(Math.trunc(options.chunk ?? CLUSTER_SPLIT_CHUNK), MAX_CHUNK));
-  const context: StepContext = {
-    db,
-    now,
-    stepId: `split-${state.cursor_rowid}-${now}`,
+  const progress = readProgress(db);
+  if (progress) return continueStep(db, state, progress, options);
+  const base = contextFor(db, state.cursor_rowid, options);
+  const items = planChunk(db, {
+    cursor: state.cursor_rowid,
+    chunk: Math.max(1, Math.min(Math.trunc(options.chunk ?? CLUSTER_SPLIT_CHUNK), MAX_CHUNK)),
+    maxPieces: base.maxPieces,
     referenced: candidateReferencedClusters(db),
-    log: options.log ?? (() => undefined),
-    result: emptyResult(`split-${state.cursor_rowid}-${now}`, false),
-  };
+  });
   return inTransaction(db, () => {
-    const rows = db
-      .prepare(
-        'SELECT rowid, cluster_json FROM vacancy_clusters WHERE rowid > ? ORDER BY rowid LIMIT ?',
-      )
-      .all(state.cursor_rowid, chunk) as { rowid: number; cluster_json: string }[];
-    context.result.completed = rows.length === 0;
-    for (const row of rows) {
-      context.result.scanned += 1;
-      const cluster = parseCluster(row.cluster_json);
-      if (cluster) splitOne(context, cluster);
-    }
-    saveState(db, rows.at(-1)?.rowid ?? state.cursor_rowid, context.result, now);
+    const context = started(base);
+    writeItems(context, items, state.cursor_rowid);
     return context.result;
   });
 }

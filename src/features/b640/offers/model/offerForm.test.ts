@@ -4,6 +4,7 @@ import {
   formFromCard,
   parseOfferForm,
   previewTerms,
+  typedOfferValue,
   type OfferForm,
 } from './offerForm';
 import type { OfferCard } from './offerModel';
@@ -131,5 +132,16 @@ describe('previewTerms', () => {
       salaryPeriod: 'month',
       currency: 'RUB',
     });
+  });
+});
+
+describe('typedOfferValue (B733)', () => {
+  it('«Срок ответа» набирается как общее поле даты: точки ставятся сами', () => {
+    expect(typedOfferValue('respondBy', '25122026')).toBe('25.12.2026');
+    expect(typedOfferValue('respondBy', '2512')).toBe('25.12');
+  });
+
+  it('остальные поля — как набраны', () => {
+    expect(typedOfferValue('base', '250000')).toBe('250000');
   });
 });

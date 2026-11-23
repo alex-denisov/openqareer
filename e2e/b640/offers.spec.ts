@@ -114,7 +114,8 @@ test.describe('B658: «Офферы» нового кабинета', () => {
     await page.getByRole('button', { name: 'Сохранить условия' }).click();
     await expect(page.getByText('Дата в виде дд.мм.гггг')).toBeVisible();
     expect(mock.calls).toEqual([]);
-    await page.getByLabel('Срок ответа').fill('20.11.2026');
+    // B733: цифры без точек — точки ставит общее поле даты.
+    await page.getByLabel('Срок ответа').fill('20112026');
     await page.getByRole('button', { name: 'Сохранить условия' }).click();
     await expect(page.getByRole('alert')).toContainText('Условия не сохранились');
     await expect(page.getByLabel('Срок ответа')).toHaveValue('20.11.2026');

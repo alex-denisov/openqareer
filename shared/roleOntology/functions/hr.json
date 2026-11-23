@@ -104,6 +104,11 @@
       "family": "hr.talent-acquisition",
       "titleEn": "Recruiter / Talent Acquisition Specialist",
       "titleRu": "Рекрутер / специалист по подбору персонала",
+      "forms": {
+        "toBecome": "рекрутеры",
+        "genitive": "рекрутера",
+        "instrumental": "рекрутером"
+      },
       "levels": [
         "ic"
       ],

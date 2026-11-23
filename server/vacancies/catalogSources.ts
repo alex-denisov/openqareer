@@ -6,6 +6,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { readRowsChunked } from '../data/chunkedRows';
+import { readInWindows, type WindowedReadOptions } from '../data/windowedRead';
 
 export interface CatalogSourceCount {
   readonly sourceId: string;
@@ -20,16 +21,58 @@ CREATE TABLE IF NOT EXISTS catalog_sources (
 ) STRICT;
 `;
 
-export function computeCatalogSources(database: DatabaseSync): CatalogSourceCount[] {
-  return (
-    database
-      .prepare(
-        `SELECT source_id, count(*) AS n FROM vacancy_pool_index
-         WHERE is_active = 1 AND expired = 0 AND source_id IS NOT NULL
-         GROUP BY source_id ORDER BY n DESC, source_id`,
-      )
-      .all() as { source_id: string; n: number }[]
-  ).map((row) => ({ sourceId: row.source_id, count: Number(row.n) }));
+export interface PoolCounts {
+  readonly active: number;
+  readonly remote: number;
+  readonly bySource: ReadonlyMap<string, number>;
+}
+
+/**
+ * B776: живые записи пула по источникам — один проход окнами rowid вместо двух
+ * сплошных просмотров (подсчёт лендинга 137 с на проде 23.11, GROUP BY — столько же).
+ */
+export function readPoolCounts(
+  database: DatabaseSync,
+  options: WindowedReadOptions = {},
+): PoolCounts {
+  const bySource = new Map<string, number>();
+  let active = 0;
+  let remote = 0;
+  readInWindows<{ source_id: string; n: number; remote: number | null }>(
+    database,
+    {
+      table: 'vacancy_pool_index',
+      sql: `SELECT source_id, count(*) AS n, sum(is_remote = 1) AS remote
+              FROM vacancy_pool_index NOT INDEXED
+             WHERE rowid > ? AND rowid <= ? AND is_active = 1 AND expired = 0
+             GROUP BY source_id`,
+    },
+    (rows) => {
+      for (const row of rows) {
+        active += Number(row.n);
+        remote += Number(row.remote ?? 0);
+        if (row.source_id)
+          bySource.set(row.source_id, (bySource.get(row.source_id) ?? 0) + Number(row.n));
+      }
+    },
+    options,
+  );
+  return { active, remote, bySource };
+}
+
+export function catalogSourcesOf(counts: PoolCounts): CatalogSourceCount[] {
+  return Array.from(counts.bySource, ([sourceId, count]) => ({ sourceId, count })).sort(
+    (left, right) =>
+      right.count - left.count ||
+      (left.sourceId < right.sourceId ? -1 : left.sourceId > right.sourceId ? 1 : 0),
+  );
+}
+
+export function computeCatalogSources(
+  database: DatabaseSync,
+  options: WindowedReadOptions = {},
+): CatalogSourceCount[] {
+  return catalogSourcesOf(readPoolCounts(database, options));
 }
 
 export function writeCatalogSources(
