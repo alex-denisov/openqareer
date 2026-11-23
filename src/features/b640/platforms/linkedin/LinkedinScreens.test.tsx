@@ -42,6 +42,17 @@ const flush = () =>
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
+// jsdom без matchMedia: широкий экран (Fold и useIsMobile читают медиа-запрос).
+window.matchMedia = ((query: string) => ({
+  matches: false,
+  media: query,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+  addListener: () => undefined,
+  removeListener: () => undefined,
+  onchange: null,
+  dispatchEvent: () => false,
+})) as unknown as typeof window.matchMedia;
 const node = (code: string) => {
   const found = nodeByCode(code);
   if (!found) throw new Error(code);
