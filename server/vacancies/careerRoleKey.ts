@@ -103,6 +103,27 @@ export function careerRoleRowKey(title: string): string | null {
   return key;
 }
 
+const listKeys = new Map<string, string | null>();
+
+/**
+ * B767: ключ строки на вкладке «Роли». Варианты одной роли словаря — одна строка, даже если
+ * по словам они разных ступеней: «Customer Support Director» и «Head of Technical Support» —
+ * оба «Руководитель службы поддержки». Ступень берётся по основному названию роли словаря.
+ * Только для списка ролей: подбор и проценты считают по `careerRoleRowKey`, как раньше.
+ */
+export function careerRoleListKey(title: string): string | null {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  const known = listKeys.get(trimmed);
+  if (known !== undefined) return known;
+  const roleId = rulesParse(trimmed).roleId;
+  const canonical = roleId ? ontology.rolesById.get(roleId)?.titleEn : undefined;
+  const key = careerRoleRowKey(canonical ?? trimmed);
+  if (listKeys.size >= MAX_CACHED_KEYS) listKeys.clear();
+  listKeys.set(trimmed, key);
+  return key;
+}
+
 /**
  * Относится ли вакансия к роли кандидата: прежнее совпадение по словам или
  * та же функция и уровень. Им считают «Мои роли на рынке» и фильтр «Роли».

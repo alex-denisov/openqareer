@@ -1,6 +1,6 @@
 import type { RoleObservation } from '../../shared/poolRoleHypotheses';
 import type { WorkPreferenceResult } from '../../shared/workPreferences';
-import { careerRoleRowKey, sameCareerRole } from './careerRoleKey';
+import { careerRoleListKey, sameCareerRole } from './careerRoleKey';
 import {
   confirmRoleObservations,
   proposeRoles,
@@ -56,7 +56,7 @@ export function buildRoleProposals(input: {
     named: input.named,
     pool: observations(input.matched),
     candidateSkills: input.candidateSkills,
-    roleKey: careerRoleRowKey,
+    roleKey: careerRoleListKey,
     ...(input.workplaceRefs ? { workplaceRefs: input.workplaceRefs } : {}),
     ...(input.preferences ? { preferences: input.preferences } : {}),
   });

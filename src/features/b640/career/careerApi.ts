@@ -172,14 +172,37 @@ export async function loadSkillRoles(signal: AbortSignal): Promise<{
   readonly titlesRu: Readonly<Record<string, string>>;
 }> {
   const campaign = await getCandidateCampaign(signal);
-  const searchTitles = campaign.roles.value;
-  const answers = await readAnswers(searchTitles);
+  const titlesRu = campaign.titlesRu ?? {};
+  const all = campaign.roles.value;
+  const allAnswers = await readAnswers(all);
+  const picked = onePerLabel(all, allAnswers, titlesRu);
+  const searchTitles = picked.map((index) => all[index]!);
+  const answers = picked.map((index) => allAnswers[index] ?? null);
   return {
     searchTitles,
     checkable: searchTitles.filter((_, index) => opensCheck(answers[index] ?? null)),
     ready: pickReady(searchTitles, answers, false)?.title ?? null,
-    titlesRu: campaign.titlesRu ?? {},
+    titlesRu,
   };
+}
+
+/**
+ * B767: варианты одной роли с одним русским названием — одна роль на выбор. Остаётся
+ * вариант с пройденной проверкой, иначе первый; место — первого варианта.
+ */
+function onePerLabel(
+  titles: readonly string[],
+  answers: readonly Answer[],
+  titlesRu: Readonly<Record<string, string>>,
+): readonly number[] {
+  const byLabel = new Map<string, number[]>();
+  titles.forEach((title, index) => {
+    const label = key(titlesRu[title] ?? title);
+    byLabel.set(label, [...(byLabel.get(label) ?? []), index]);
+  });
+  return [...byLabel.values()].map(
+    (group) => group.find((index) => answers[index]?.state === 'result') ?? group[0]!,
+  );
 }
 
 /** Роли поиска целиком: подборка пересчитывается по ним. */

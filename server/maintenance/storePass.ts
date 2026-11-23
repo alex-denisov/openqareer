@@ -1,5 +1,6 @@
 import { PrunePassStopped } from '../vacancies/poolPruneBatches';
 import type { StorePassMark } from './storePassMark';
+import type { StorePassOptions } from '../vacancies/storePassSteps';
 
 /** Не чаще: частые рестарты не повторяют полную чистку пула (B759). */
 export const STORE_PASS_MIN_GAP_MS = 6 * 60 * 60 * 1_000;
@@ -27,7 +28,7 @@ export interface StorePassDeps {
   readonly maintainStoreAsync: (
     nowMs?: number,
     shouldStop?: () => boolean,
-    options?: { pauseMs?: number; windowRows?: number },
+    options?: StorePassOptions,
   ) => Promise<{ backfillWindows: number }>;
   readonly mark?: StorePassMark;
   readonly stopped: () => boolean;
@@ -47,24 +48,33 @@ export async function runStorePass(deps: StorePassDeps): Promise<void> {
   if (deps.stopped()) return;
   const last = deps.mark?.lastFinishedMs() ?? null;
   const startedAt = deps.now();
-  if (last !== null && startedAt - last < STORE_PASS_MIN_GAP_MS) {
+  // Незаконченный проход продолжается с сохранённого шага, срок отметки ему не помеха.
+  const from = deps.mark?.progress() ?? null;
+  if (!from && last !== null && startedAt - last < STORE_PASS_MIN_GAP_MS) {
     deps.log.info({ lastFinishedMs: last }, 'maintenance-store-pass-skipped');
     return;
   }
+  if (from) deps.log.info({ ...from }, 'maintenance-store-pass-resumed');
+  let reached = from;
   try {
     const { backfillWindows } = await deps.maintainStoreAsync(startedAt, deps.stopped, {
       pauseMs: STORE_PASS_PAUSE_MS,
       windowRows: STORE_PASS_WINDOW_ROWS,
+      ...(from ? { from } : {}),
+      onProgress: (progress) => {
+        reached = progress;
+        deps.mark?.saveProgress(progress);
+      },
     });
     if (deps.stopped()) {
-      deps.log.info({ ms: deps.now() - startedAt }, 'maintenance-store-pass-stopped');
+      deps.log.info({ ms: deps.now() - startedAt, ...reached }, 'maintenance-store-pass-stopped');
       return;
     }
     deps.mark?.markFinished(deps.now());
     deps.log.info({ backfillWindows, ms: deps.now() - startedAt }, 'maintenance-store-pass');
   } catch (error) {
     if (error instanceof PrunePassStopped || deps.stopped()) {
-      deps.log.info({ ms: deps.now() - startedAt }, 'maintenance-store-pass-stopped');
+      deps.log.info({ ms: deps.now() - startedAt, ...reached }, 'maintenance-store-pass-stopped');
       return;
     }
     // Чистка не условие работы: сбой виден в журнале, волны идут дальше.

@@ -66,21 +66,33 @@ const GOAL_EXAMPLES: readonly GoalExample[] = [
   { title: 'Сократить срок ключевого процесса', measure: 'дней от начала до результата' },
 ];
 
-/** B744: примеры под роль кандидата (d02c); `null` — их нет, остаются общие. */
-function useRoleExamples(role: string | null | undefined): readonly GoalExample[] | null {
-  const [examples, setExamples] = useState<readonly GoalExample[] | null>(null);
+/** Примеры d02c: ещё готовятся, готовы под роль или их нет (нет роли, модель не ответила). */
+type RoleExamples =
+  | { readonly state: 'loading' }
+  | { readonly state: 'ready'; readonly items: readonly GoalExample[] }
+  | { readonly state: 'none' };
+
+/**
+ * B744: примеры под роль кандидата (d02c). B768: пока роль или примеры не пришли —
+ * «loading», общие примеры только при отказе модели или без роли.
+ */
+function useRoleExamples(role: string | null | undefined): RoleExamples {
+  const [answer, setAnswer] = useState<{ role: string; items: readonly GoalExample[] | null }>();
   useEffect(() => {
     if (!role) return undefined;
     let active = true;
     getGoalExamples(role).then(
-      (items) => active && setExamples(items),
-      () => active && setExamples(null),
+      (items) => active && setAnswer({ role, items }),
+      () => active && setAnswer({ role, items: null }),
     );
     return () => {
       active = false;
     };
   }, [role]);
-  return role ? examples : null;
+  if (role === undefined) return { state: 'loading' };
+  if (role === null) return { state: 'none' };
+  if (answer?.role !== role) return { state: 'loading' };
+  return answer.items ? { state: 'ready', items: answer.items } : { state: 'none' };
 }
 
 /** Название роли в тексте экрана по-русски; модели уходит роль как есть. */
@@ -105,7 +117,6 @@ function NoGoals() {
   const role = useRoleTitle();
   const forRole = useRoleExamples(role);
   const label = useRoleLabel(role);
-  const examples = forRole ?? GOAL_EXAMPLES;
   return (
     <section className="lead" aria-labelledby="gc-t">
       <div className="lead-head">
@@ -129,16 +140,34 @@ function NoGoals() {
           Загрузить KPI
         </Link>
       </div>
-      <div className="ghost" aria-label={forRole ? 'Пример целей для роли' : 'Пример целей'}>
-        <p className="ghost-cap">{forRole && label ? `Пример для роли «${label}»` : 'Пример'}</p>
-        {examples.map((example) => (
+      <GoalExamples examples={forRole} label={label} />
+    </section>
+  );
+}
+
+function GoalExamples({
+  examples,
+  label,
+}: {
+  readonly examples: RoleExamples;
+  readonly label: string | null | undefined;
+}) {
+  const forRole = examples.state !== 'none' && label;
+  const rows = examples.state === 'ready' ? examples.items : GOAL_EXAMPLES;
+  return (
+    <div className="ghost" aria-label={forRole ? 'Пример целей для роли' : 'Пример целей'}>
+      <p className="ghost-cap">{forRole ? `Пример для роли «${label}»` : 'Пример'}</p>
+      {examples.state === 'loading' ? (
+        <StatusLine state="wait" text="Загружаем примеры" />
+      ) : (
+        rows.map((example) => (
           <p className="gc-ex" key={example.title}>
             <strong>{example.title}</strong>
             <span className="row-sub"> · {example.measure}</span>
           </p>
-        ))}
-      </div>
-    </section>
+        ))
+      )}
+    </div>
   );
 }
 
