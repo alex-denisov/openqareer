@@ -11,7 +11,10 @@ vi.mock('../../../services/desktop/desktopBridge', async (original) => ({
   ...(await original<typeof import('../../../services/desktop/desktopBridge')>()),
   isTauriEnvironment: () => true,
 }));
-const updater = vi.hoisted(() => ({ check: vi.fn(async () => undefined), getStatus: () => ({ state: 'idle' }), setAutoInstall: vi.fn() }));
+const updater = vi.hoisted(() => {
+  const idle = { state: 'idle', info: { version: '' } };
+  return { check: vi.fn(async () => 'latest'), getStatus: () => idle, subscribe: () => () => undefined, setAutoInstall: vi.fn(), actions: {} };
+});
 vi.mock('../../appUpdate/useDesktopUpdater', () => ({ desktopUpdater: updater }));
 const device = vi.hoisted(() => ({
   get: vi.fn(async () => ({ trayIcon: true, autoUpdate: true, launchAtLogin: false })),
