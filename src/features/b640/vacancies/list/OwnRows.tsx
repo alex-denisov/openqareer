@@ -82,6 +82,11 @@ function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
           </div>
         </div>
       ) : null}
+      {detail.fit.state === 'no_requirements' ? (
+        <div className="v4-box">
+          <p className="v4-req-row">Требования в тексте не нашлись</p>
+        </div>
+      ) : null}
       <OwnText text={detail.text} />
       {url ? (
         <a className="row-act vs-open" href={url} target="_blank" rel="noopener noreferrer">
