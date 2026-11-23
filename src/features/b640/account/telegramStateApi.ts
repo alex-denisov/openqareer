@@ -1,4 +1,5 @@
 import { apiFetch, readData } from '../../coach/apiClient';
+import { prefetch } from './prefetch';
 
 /** B690: состояние привязки Telegram с сервера; имя — только у подключённого. */
 export interface TelegramServerState {
@@ -7,6 +8,13 @@ export interface TelegramServerState {
   readonly username: string | null;
 }
 
-export async function getTelegramLinkState(): Promise<TelegramServerState> {
+async function fetchTelegramLinkState(): Promise<TelegramServerState> {
   return readData<TelegramServerState>(await apiFetch('/api/v1/candidate/notifications/telegram/state'));
+}
+
+/** n02 начинает это чтение вместе со своим; привязка Telegram берёт его готовым. */
+export const telegramStateRead = prefetch(fetchTelegramLinkState);
+
+export function getTelegramLinkState(): Promise<TelegramServerState> {
+  return telegramStateRead.read();
 }

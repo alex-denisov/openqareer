@@ -6,14 +6,17 @@ import {
   shorteningCorrection,
   contactMessageWish,
   fallbackContactMessage,
+  type ContactCheckOptions,
   type ContactMessageFacts,
 } from '../domain/b640ContactMessage';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
+import { englishFallbackMessage } from '../domain/contactMessageStyle';
 import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { filterUsablePitchFacts } from '../domain/vacancyPitchService';
 import { candidateGenderFromName } from '../../shared/candidateGender';
 import type { CoverLetterOutcome, CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
+import { contactMessageLanguage } from '../vacancies/contactMessageLanguage';
 import { localizeRoles, roleTranslations, targetRolesRu } from '../vacancies/contactMessageRoles';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
@@ -38,10 +41,24 @@ interface TextInput {
   readonly alsoVacancyId?: string | null;
 }
 
-function vacancyOf(deps: RouteDeps, vacancyId: string | null): { title: string; company: string } | null {
+interface MessageVacancy {
+  readonly title: string;
+  readonly company: string;
+  /** B753: выжимка текста и место — только для выбора языка черновика. */
+  readonly summary: string;
+  readonly location: string;
+}
+
+function vacancyOf(deps: RouteDeps, vacancyId: string | null): MessageVacancy | null {
   if (!vacancyId) return null;
   const cluster = deps.multiSourceEngine?.getActiveCluster?.(vacancyId);
-  return cluster?.canonicalTitle ? { title: cluster.canonicalTitle, company: cluster.canonicalCompany ?? '' } : null;
+  if (!cluster?.canonicalTitle) return null;
+  return {
+    title: cluster.canonicalTitle,
+    company: cluster.canonicalCompany ?? '',
+    summary: cluster.descriptionSummary ?? '',
+    location: cluster.canonicalLocation ?? '',
+  };
 }
 
 /** B753: отказ ступени и непринятый текст — в журнал (без текста), иначе запасной текст не объяснить. */
@@ -50,10 +67,11 @@ interface ContactCheck {
   readonly known: string;
   readonly kind: B640ContactMessageKind;
   readonly englishRoles: readonly string[];
+  readonly options: ContactCheckOptions;
 }
 
 const rejectionOf = (body: string | undefined, check: ContactCheck) =>
-  modelMessageRejection(body, check.known, check.kind, check.englishRoles);
+  modelMessageRejection(body, check.known, check.kind, check.englishRoles, check.options);
 
 function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, check: ContactCheck): void {
   if (outcome.failure) {
@@ -71,10 +89,7 @@ function logModelOutcome(request: FastifyRequest, outcome: CoverLetterOutcome, c
  * Вторая вакансия — только той же компании: у разных источников бывает один id кластера
  * (B698, prod: VK 55418 = Tata Capital), и чужая вакансия попадала в черновик знакомому.
  */
-function sameCompany(
-  vacancy: { title: string; company: string } | null,
-  also: { title: string; company: string } | null,
-): { title: string; company: string } | null {
+function sameCompany(vacancy: MessageVacancy | null, also: MessageVacancy | null): MessageVacancy | null {
   if (!vacancy || !also) return null;
   return candidateCompanyKey(also.company) === candidateCompanyKey(vacancy.company) ? also : null;
 }
@@ -97,7 +112,8 @@ async function askContactModel(
   ask: CoverLetterWriteInput,
   check: ContactCheck,
 ): Promise<string | null> {
-  const accept = (body: string | undefined) => acceptModelMessage(body, check.known, check.kind, check.englishRoles);
+  const accept = (body: string | undefined) =>
+    acceptModelMessage(body, check.known, check.kind, check.englishRoles, check.options);
   const first = await writer.writeCoverLetter({ ...ask, review: contactReview(check, true) });
   logModelOutcome(request, first, check);
   if (!first.body || rejectionOf(first.body, check) !== 'too_long') return accept(first.body);
@@ -112,16 +128,49 @@ async function askContactModel(
  * B753 (решение CPO 23.11): целевые роли — по-русски отдельной строкой запроса; профиль и прежние
  * должности идут к модели как есть. Английские названия — для проверки текста модели.
  */
-function candidateRoles(deps: RouteDeps, candidateId: string, targetRole: string) {
+function candidateRoles(deps: RouteDeps, candidateId: string, targetRole: string, language: 'en' | 'ru') {
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const titles = [...campaign.roles.value, ...campaign.autoRoles.map((role) => role.title)];
   const own = campaign.ownTitlesRu ?? {};
   const translations = roleTranslations(titles, own, targetRole);
+  const english = Object.keys(translations);
+  if (language === 'en') return { named: english.slice(0, 3), english, targetRole };
   return {
-    russian: targetRolesRu(titles, own, targetRole),
-    english: Object.keys(translations),
+    named: targetRolesRu(titles, own, targetRole),
+    english,
     targetRole: localizeRoles(targetRole, translations),
   };
+}
+
+interface MessageContext {
+  readonly vacancy: MessageVacancy | null;
+  readonly also: MessageVacancy | null;
+  readonly language: 'en' | 'ru';
+  readonly roles: ReturnType<typeof candidateRoles>;
+}
+
+function messageFacts(input: TextInput, context: MessageContext): ContactMessageFacts {
+  const { vacancy, also, roles } = context;
+  return {
+    kind: input.kind,
+    recipientName: input.recipient.name,
+    recipientCompany: input.recipient.company,
+    targetRole: roles.targetRole,
+    language: context.language,
+    ...(roles.named.length > 0 ? { targetRoles: roles.named } : {}),
+    ...(vacancy ? { vacancyTitle: vacancy.title, vacancyCompany: vacancy.company } : {}),
+    ...(input.recipient.relationship ? { relationship: input.recipient.relationship } : {}),
+    ...(input.recipient.role ? { recipientRole: input.recipient.role } : {}),
+    ...(also && also.title !== vacancy?.title ? { alsoVacancyTitle: also.title } : {}),
+  };
+}
+
+/** B753: язык черновика по контакту и вакансии; английскому черновику — английский шаблон. */
+function messageContext(deps: RouteDeps, input: TextInput, targetRole: string): MessageContext {
+  const vacancy = vacancyOf(deps, input.vacancyId);
+  const also = sameCompany(vacancy, vacancyOf(deps, input.alsoVacancyId ?? null));
+  const language = contactMessageLanguage(input.recipient.name, vacancy);
+  return { vacancy, also, language, roles: candidateRoles(deps, input.candidateId, targetRole, language) };
 }
 
 /**
@@ -137,22 +186,11 @@ export async function writeContactMessageText(
   const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
   const facts = snapshot.memory ?? [];
   const withheld = new Set(facts.filter((fact) => fact.sensitive === true).map((fact) => fact.id));
-  const roles = candidateRoles(deps, input.candidateId, draft.targetRole ?? '');
   const profile = letterProfileText({ draft, facts: filterUsablePitchFacts(facts), withheldEvidenceIds: withheld });
-  const vacancy = vacancyOf(deps, input.vacancyId);
-  const also = sameCompany(vacancy, vacancyOf(deps, input.alsoVacancyId ?? null));
-  const message: ContactMessageFacts = {
-    kind: input.kind,
-    recipientName: input.recipient.name,
-    recipientCompany: input.recipient.company,
-    targetRole: roles.targetRole,
-    ...(roles.russian.length > 0 ? { targetRolesRu: roles.russian } : {}),
-    ...(vacancy ? { vacancyTitle: vacancy.title, vacancyCompany: vacancy.company } : {}),
-    ...(input.recipient.relationship ? { relationship: input.recipient.relationship } : {}),
-    ...(input.recipient.role ? { recipientRole: input.recipient.role } : {}),
-    ...(also && also.title !== vacancy?.title ? { alsoVacancyTitle: also.title } : {}),
-  };
-  const fallback = fallbackContactMessage(message);
+  const context = messageContext(deps, input, draft.targetRole ?? '');
+  const { vacancy, also, roles, language } = context;
+  const message = messageFacts(input, context);
+  const fallback = language === 'en' ? englishFallbackMessage(message) : fallbackContactMessage(message);
   const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
   if (!writer || !profile.trim()) return fallback;
   const known = [
@@ -166,10 +204,11 @@ export async function writeContactMessageText(
       vacancy: { title: vacancy?.title ?? 'Личное сообщение', ...(vacancy?.company ? { company: vacancy.company } : {}) },
       ...(gender ? { gender } : {}),
       resumeAttached: false,
-      chosenLanguage: 'ru',
+      chosenLanguage: language,
       wish: contactMessageWish(message),
     };
-    const check: ContactCheck = { known, kind: input.kind, englishRoles: roles.english };
+    const options = { withoutVacancy: !vacancy, language };
+    const check: ContactCheck = { known, kind: input.kind, englishRoles: roles.english, options };
     return (await askContactModel(writer, request, ask, check)) ?? fallback;
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');

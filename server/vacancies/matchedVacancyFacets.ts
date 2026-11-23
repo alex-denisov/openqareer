@@ -6,7 +6,7 @@ import {
   type MatchedVacancySourceGroup,
   type MatchedVacancySourceGroupId,
 } from '../../shared/matchedVacancyFacets';
-import { sameCareerRole } from './careerRoleKey';
+import { vacancyInCareerRole } from './techDirectorSignal';
 import { inferSeniorityLevel, levelFromRank } from './levelMatcher';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancySourceConfig, VacancySourceType } from '../domain/unifiedVacancy';
@@ -191,8 +191,7 @@ function* roleFacetSteps(
   for (const role of targetRoles) {
     const rows = yield* filterInSteps(
       items,
-      (item) =>
-        item.explanation.roleMatch !== 'none' && sameCareerRole(item.cluster.canonicalTitle, role),
+      (item) => item.explanation.roleMatch !== 'none' && vacancyInCareerRole(item, role),
     );
     if (rows.length > 0) counted.push({ role, count: rows.length });
   }
