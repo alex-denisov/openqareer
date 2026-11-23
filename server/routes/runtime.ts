@@ -58,7 +58,7 @@ function isClientRoute(path: string): boolean {
     bare.startsWith('/app/') ||
     bare === '/admin' ||
     bare.startsWith('/admin/') ||
-    ['/login', '/signup', '/reset-password', '/verify-email'].includes(bare) ||
+    ['/login', '/signup', '/reset-password', '/verify-email', '/app-sign-in'].includes(bare) ||
     bare in HELP_DOCUMENTS ||
     legalSlugFromPath(bare) !== undefined
   );
