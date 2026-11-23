@@ -144,7 +144,10 @@ function NotificationsFeed({ feed, now }: { readonly feed: Feed; readonly now: D
 /** n01b «Все уведомления»: важное сверху, фильтр по категории, события по дням. */
 export function NotificationsScreen({ node }: { readonly node: B640Node }) {
   const feed = useFeed();
-  useScreenChrome({ bellCount: feed.unreadCount });
+  useScreenChrome({
+    bellCount: feed.unreadCount,
+    bellCritical: feed.status === 'ready' && feed.pinned.length > 0,
+  });
   const now = useMemo(() => new Date(), []);
   return (
     <div className="page" data-b640-node={node.code} data-b640-section={node.section}>

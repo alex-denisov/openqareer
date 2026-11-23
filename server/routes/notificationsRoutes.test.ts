@@ -382,6 +382,8 @@ describe('candidate notification routes', () => {
     const later = await roleRows();
     expect(later).toHaveLength(1);
     expect(later[0]!.sourceType).toBe(ROLE_DIGEST_SOURCE_TYPE);
+    expect(later[0]!.id).toBe(first[0]!.id);
+    expect(later[0]!.createdAt >= first[0]!.createdAt).toBe(true);
     expect(digestCount(later[0]!.sourceType, later[0]!.sourceId)).toBe(3);
   });
 
