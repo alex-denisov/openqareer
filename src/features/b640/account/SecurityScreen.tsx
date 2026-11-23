@@ -142,7 +142,8 @@ interface SignInProps {
 function SignIn({ onChanged, twoFactor, passkeys, deviceLabel }: SignInProps) {
   const needsCode = twoFactor.load.state === 'ready' && twoFactor.load.data.enabled;
   const [open, setOpen] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const hadPasskeys = passkeys.load.state === 'ready' && passkeys.load.data.length > 0;
   return (
     <Group title={open ? 'Сменить пароль' : 'Вход'}>
       {open ? (
@@ -151,9 +152,14 @@ function SignIn({ onChanged, twoFactor, passkeys, deviceLabel }: SignInProps) {
           onCancel={() => setOpen(false)}
           onDone={() => {
             setOpen(false);
-            setSaved(true);
-            // Смена пароля завершает остальные сеансы: список устройств перечитывается.
+            setSaved(
+              hadPasskeys
+                ? 'Пароль изменён. Ключи входа удалены — добавьте Touch ID заново'
+                : 'Пароль изменён',
+            );
+            // Смена пароля завершает остальные сеансы и удаляет ключи входа: оба списка перечитываются.
             onChanged();
+            if (hadPasskeys) passkeys.load.retry();
           }}
         />
       ) : (
@@ -166,7 +172,7 @@ function SignIn({ onChanged, twoFactor, passkeys, deviceLabel }: SignInProps) {
       )}
       {saved && !open ? (
         <li className="set-foot">
-          <ResultLine text="Пароль изменён" />
+          <ResultLine text={saved} />
         </li>
       ) : null}
     </Group>

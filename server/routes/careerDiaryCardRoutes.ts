@@ -29,6 +29,7 @@ import { cardRisk } from '../domain/careerDiaryCardRisk';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import { registerCareerDiaryGoalTransferRoutes } from './careerDiaryGoalTransferRoutes';
 import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
+import { registerCareerDiaryGoalHintRoutes } from './careerDiaryGoalHintRoutes';
 import { registerCareerDiaryTaskSuggestionRoutes } from './careerDiaryTaskSuggestionRoutes';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -496,6 +497,7 @@ export function registerCareerDiaryCardRoutes(
       changeDetails(bound, candidate, goalId, (details) => ({ ...details, transfer })),
     rateLimit: write,
   });
+  registerCareerDiaryGoalHintRoutes(app, deps);
 }
 
 /** Задачи цели в плане основного места работы; `null` — основного места нет, задаче негде жить. */

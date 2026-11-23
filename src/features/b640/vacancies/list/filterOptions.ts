@@ -131,6 +131,21 @@ export function listCount(input: ListCountInput): { count: number; countKnown: b
   };
 }
 
+/**
+ * B726: в серверном порядке «Дату» режет и считает сервер. Его итог — число подборки, даже ноль;
+ * пока первая порция с «Датой» не пришла, числа нет (иначе мелькнуло бы число всего пула).
+ */
+export function serverCountState(input: {
+  readonly serverMode: boolean;
+  readonly dated: boolean;
+  readonly total: number;
+  readonly loadingFirst: boolean;
+}): { readonly serverKnows: boolean; readonly serverPending: boolean } {
+  const { serverMode, dated, total, loadingFirst } = input;
+  const serverPending = serverMode && dated && loadingFirst;
+  return { serverKnows: serverMode && (total > 0 || (dated && !serverPending)), serverPending };
+}
+
 export function splitOptions(options: readonly FilterOption[], query: string): {
   readonly top: readonly FilterOption[];
   readonly rest: readonly FilterOption[];

@@ -11,7 +11,7 @@ import { DebriefNotes } from './DebriefNotes';
 import { DebriefQuestions, ShareLine } from './DebriefQuestions';
 import { DebriefSteps } from './DebriefSteps';
 import { analyzeDebrief, loadDebrief, type DebriefData } from './data/debriefApi';
-import { durationText, measuresTip } from './model/debriefModel';
+import { debriefLeadSub, durationText, measuresTip } from './model/debriefModel';
 import { formatInterviewWhen } from './model/prepModel';
 import { PrepSteps } from './PrepSteps';
 
@@ -34,6 +34,21 @@ function DebriefHead({ data }: { readonly data: DebriefData }) {
         label: 'Открыть: интервью',
       }}
     />
+  );
+}
+
+/** «Арка Холдинг · интервью 12 ноября · с техническим директором» — видна сразу, как в макете. */
+function LeadSub(props: { readonly data: DebriefData; readonly debrief: InterviewDebriefView }) {
+  const { vacancy } = props.data.response;
+  return (
+    <p className="lead-sub">
+      {debriefLeadSub({
+        company: vacancy?.companyHidden ? undefined : vacancy?.company,
+        scheduledAt: props.debrief.scheduledAt,
+        format: props.debrief.format,
+        interviewerName: props.debrief.interviewerName,
+      })}
+    </p>
   );
 }
 
@@ -135,6 +150,7 @@ function DebriefLead(props: {
           />
         ) : null}
       </div>
+      <LeadSub data={props.data} debrief={debrief} />
       <DebriefSteps responseId={response.id} current="debrief" inApp={isTauriEnvironment()} />
       <RecordingState debrief={debrief} response={response} />
       {ready && debrief.metrics ? <ShareLine metrics={debrief.metrics} /> : null}
