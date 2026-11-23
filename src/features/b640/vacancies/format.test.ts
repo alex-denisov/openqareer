@@ -52,6 +52,15 @@ describe('format: строка вакансии B640', () => {
     expect(rowGeo(item({ workFormat: 'office' }))).toBe('Не указана');
   });
 
+  it('B764: место — только слово об удалёнке, формат «в офисе» — без английского «Remote»', () => {
+    const remote = (canonicalLocation: string) =>
+      rowGeo(item({ canonicalLocation, isRemote: true, workFormat: 'office' }));
+    expect(remote('Remote')).toBe('Удалённо');
+    expect(remote('Remote job')).toBe('Удалённо');
+    expect(remote('Berlin, Remote')).toBe('Удалённо · Berlin');
+    expect(rowGeo(item({ canonicalLocation: 'Remote', workFormat: 'office' }))).toBe('Удалённо');
+  });
+
   it('формат словами, неизвестный — пусто', () => {
     expect(rowFormat(item({ workFormat: 'hybrid' }))).toBe('гибрид');
     expect(rowFormat(item({ workFormat: 'remote', isRemote: true }))).toBe('удалённо');
