@@ -9,12 +9,24 @@ import {
 import { Button, Icon, StatusLine, useIsMobile } from '../kit';
 import type { LetterVariantsState } from './useLetterVariants';
 
+/** То, что нужно кнопке и листанию: у письма и у поста (B694) одно и то же. */
+export type VariantControlsState = Pick<
+  LetterVariantsState,
+  'total' | 'index' | 'locked' | 'select' | 'remaining' | 'wishOpen' | 'setWishOpen' | 'busy' | 'error' | 'create'
+>;
+
 /** Листание вариантов «‹ 2 из 3 ›»; у единственного текста листать нечего. */
-export function VariantSwitch({ variants }: { readonly variants: LetterVariantsState }) {
+export function VariantSwitch({
+  variants,
+  label = 'Варианты письма',
+}: {
+  readonly variants: VariantControlsState;
+  readonly label?: string;
+}) {
   if (variants.total < 2) return null;
   const { index, total } = variants;
   return (
-    <div className="var-sw" role="group" aria-label="Варианты письма">
+    <div className="var-sw" role="group" aria-label={label}>
       <button
         className="icon-btn"
         type="button"
@@ -40,7 +52,7 @@ export function VariantSwitch({ variants }: { readonly variants: LetterVariantsS
 
 interface WishProps {
   readonly popId: string;
-  readonly variants: LetterVariantsState;
+  readonly variants: VariantControlsState;
 }
 
 interface ChipsProps {
@@ -140,7 +152,7 @@ function WishPop({ popId, variants }: WishProps) {
 }
 
 /** Кнопка «Другой вариант · N» со всплывашкой пожелания. Вариантов не осталось — кнопки нет. */
-export function VariantButton({ variants }: { readonly variants: LetterVariantsState }) {
+export function VariantButton({ variants }: { readonly variants: VariantControlsState }) {
   const popId = useId();
   const mobile = useIsMobile();
   const button = useRef<HTMLButtonElement>(null);

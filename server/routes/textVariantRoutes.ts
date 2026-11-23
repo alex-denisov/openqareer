@@ -36,7 +36,7 @@ type BoundDeps = RouteDeps & { readonly variants: SqliteTextVariantRepository };
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const SUBJECT_ID_MAX_LENGTH = 200;
-const wishSchema = z
+export const wishSchema = z
   .object({
     chips: z.array(z.enum(VARIANT_WISH_CHIPS)).max(VARIANT_WISH_CHIPS.length).optional(),
     text: z.string().max(VARIANT_WISH_MAX_LENGTH).optional(),
@@ -92,7 +92,7 @@ const listVariants: Handler = async (deps, request, reply) => {
   };
 };
 
-function limitReached(reply: FastifyReply, request: FastifyRequest) {
+export function limitReached(reply: FastifyReply, request: FastifyRequest) {
   return sendError(
     reply,
     request,
@@ -151,7 +151,7 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
 
 const inFlight = new Set<string>();
 
-function generationFailed(reply: FastifyReply, request: FastifyRequest) {
+export function generationFailed(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 503, 'variant_generation_failed', 'Не удалось подготовить другой вариант. Попробуйте ещё раз.', true);
 }
 
