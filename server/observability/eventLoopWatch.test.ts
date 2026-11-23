@@ -84,6 +84,25 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
     expect(JSON.stringify(stalls)).not.toContain('secret');
   });
 
+  it('B770a-0: a preHandler that sends 401 without returning reply still stops the handler (app.test 18:11Z)', async () => {
+    const app = Fastify();
+    registerEventLoopWatch(app, { log: vi.fn(), stallMs: 100, tickMs: 10, reportMs: 60_000 });
+    const handler = vi.fn(async () => ({ created: true }));
+    app.post(
+      '/guarded',
+      {
+        preHandler: async (_request, reply) => {
+          reply.code(401).send({ error: 'unauthorized' });
+        },
+      },
+      handler,
+    );
+    const response = await app.inject({ method: 'POST', url: '/guarded' });
+    await app.close();
+    expect(response.statusCode).toBe(401);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('forgets a request the client dropped (prod 03.11: 78 dropped reads named in every stall for hours)', async () => {
     const log = vi.fn();
     const app = Fastify();

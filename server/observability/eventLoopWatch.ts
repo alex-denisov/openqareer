@@ -110,12 +110,14 @@ function timeHandlers(app: FastifyInstance): void {
  * назван методом и шаблоном маршрута — без адреса и данных.
  */
 function timeSerialization(app: FastifyInstance): void {
+  // Колбэки, а не async: async-хук откладывает запись ответа на микрозадачу, и preHandler,
+  // отправивший 401 без `return reply`, видел `reply.sent === false` — обработчик шёл дальше.
   const started = new WeakMap<object, number>();
-  app.addHook('preSerialization', async (request, _reply, payload) => {
+  app.addHook('preSerialization', (request, _reply, payload, done) => {
     started.set(request, performance.now());
-    return payload;
+    done(null, payload);
   });
-  app.addHook('onSend', async (request, _reply, payload) => {
+  app.addHook('onSend', (request, _reply, payload, done) => {
     const startedAt = started.get(request);
     if (startedAt !== undefined) {
       started.delete(request);
@@ -126,7 +128,7 @@ function timeSerialization(app: FastifyInstance): void {
         performance.now() - startedAt,
       );
     }
-    return payload;
+    done(null, payload);
   });
 }
 
