@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { warmRoleSnapshots } from './roleSnapshotWarm';
+import { describe, expect, it, vi } from 'vitest';
+import { RoleWarmMemo, ROLE_REWARM_MS, warmRoleSnapshots } from './roleSnapshotWarm';
 import { createRig, CURRENT_PATH, headersFor, ROLE_TITLE } from './roleSkillAssessmentRouteTestRig';
 
 /**
@@ -33,5 +33,29 @@ describe('warmRoleSnapshots', () => {
     await warmRoleSnapshots(deps, rig.otherCandidate.id, undefined);
 
     expect(rig.getMatchedVacanciesAsync).not.toHaveBeenCalled();
+  });
+
+  it('B775: a second pass with the same inputs reads nothing; after the rewarm interval it warms again', async () => {
+    const rig = await createRig();
+    const memo = new RoleWarmMemo();
+    const info = vi.fn();
+    await warmRoleSnapshots(rig.deps, rig.candidate.id, { info }, { memo, now: 0 });
+    await warmRoleSnapshots(rig.deps, rig.candidate.id, { info }, { memo, now: ROLE_REWARM_MS - 1 });
+    expect(rig.getMatchedVacanciesAsync).toHaveBeenCalledTimes(1);
+    await warmRoleSnapshots(rig.deps, rig.candidate.id, { info }, { memo, now: ROLE_REWARM_MS });
+    expect(info.mock.calls.map(([fields]) => fields.skipped)).toEqual([0, 1, 0]);
+  });
+});
+
+describe('B775: RoleWarmMemo', () => {
+  it('warms a role once per inputs; new inputs or an old warm warm again', () => {
+    const memo = new RoleWarmMemo();
+    expect(memo.due('c1', 'cto', 'skills:a', 0)).toBe(true);
+    memo.remember('c1', 'cto', 'skills:a', 0);
+    expect(memo.due('c1', 'cto', 'skills:a', 60_000)).toBe(false);
+    expect(memo.due('c1', 'cto', 'skills:a,b', 60_000)).toBe(true);
+    expect(memo.due('c1', 'coo', 'skills:a', 60_000)).toBe(true);
+    expect(memo.due('c2', 'cto', 'skills:a', 60_000)).toBe(true);
+    expect(memo.due('c1', 'cto', 'skills:a', ROLE_REWARM_MS)).toBe(true);
   });
 });
