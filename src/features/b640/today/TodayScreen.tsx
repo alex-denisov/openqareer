@@ -82,8 +82,8 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
   const layout = moduleLayout(status.status, status.modules);
   // Сбой чтения откликов строку пути прячет: она второстепенна, а «Отклики» покажут ошибку сами.
   const applications = useLoad(loadApplications);
-  const funnel =
-    applications.state === 'ready' ? funnelLine(applications.data, status.since) : null;
+  const items = applications.state === 'ready' ? applications.data : null;
+  const funnel = items ? funnelLine(items, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
   const signal = <StatusSignalBlock statusTitle={status.title} wide={wideSignal} />;
@@ -108,7 +108,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
       {wideSignal ? signal : null}
       <div className="col">
         {/* Макет s05b: события откликов первыми в левой колонке; нет событий — блока нет. */}
-        <ResponseEventsBlock />
+        <ResponseEventsBlock applications={items} />
         {modules(layout.main, true)}
       </div>
       {layout.side.length > 0 ? (

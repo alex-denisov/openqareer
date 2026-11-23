@@ -1,12 +1,7 @@
-import { listApplicationsPool } from '../../applications/applicationsApi';
+import type { ApplicationView } from '../../applications/applicationsApi';
 import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
 import { responseEvents, type ResponseEvent } from './responseEventsModel';
-import { useLoad } from './useLoad';
-
-async function loadEvents(signal: AbortSignal): Promise<readonly ResponseEvent[]> {
-  return responseEvents((await listApplicationsPool({}, signal)).items);
-}
 
 function EventCard({ event, first }: { readonly event: ResponseEvent; readonly first: boolean }) {
   return (
@@ -35,16 +30,21 @@ function EventCard({ event, first }: { readonly event: ResponseEvent; readonly f
  * Сбой чтения блок тоже прячет: «Отклики» покажут ошибку с «Повторить», а «Сегодня» не держит
  * пустую рамку ради второстепенного блока.
  */
-export function ResponseEventsBlock() {
-  const events = useLoad(loadEvents);
-  if (events.state !== 'ready' || events.data.length === 0) return null;
+export function ResponseEventsBlock({
+  applications,
+}: {
+  /** Отклики кандидата — одно чтение на «Сегодня» с путём откликов; `null` — не прочитаны. */
+  readonly applications: readonly ApplicationView[] | null;
+}) {
+  const events = applications ? responseEvents(applications) : [];
+  if (events.length === 0) return null;
   return (
     <section className="re-today" aria-labelledby="re-today-t">
       <h2 className="vh" id="re-today-t">
         События откликов
       </h2>
       <ul className="re-list">
-        {events.data.map((event, index) => (
+        {events.map((event, index) => (
           <EventCard key={event.id} event={event} first={index === 0} />
         ))}
       </ul>
