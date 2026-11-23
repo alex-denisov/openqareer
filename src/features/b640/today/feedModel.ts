@@ -72,6 +72,7 @@ export function feedSubtitle(item: B640Notification, now: Date, timeZone: string
     item.eventAt === item.createdAt
       ? null
       : notificationWhen(item.createdAt, now, timeZone) || null,
+    item.note ?? null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -88,7 +89,7 @@ export interface PinnedAction extends NotificationAction {
  */
 export function pinnedTitle(item: B640Notification): string {
   const title =
-    item.kind === 'delivery_error'
+    item.kind === 'delivery_error' && item.sourceType === 'application'
       ? ['Отклик не дошёл', item.company].filter(Boolean).join(' · ')
       : item.title;
   return [title, item.role].filter(Boolean).join(' · ');

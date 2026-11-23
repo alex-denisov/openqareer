@@ -50,6 +50,17 @@ describe('B671 лента уведомлений', () => {
     );
   });
 
+  it('подборка с порогом зарплаты: «выше 450 тыс. ₽» после времени (n01b)', () => {
+    const digest = item({
+      kind: 'new_vacancies_by_role',
+      role: null,
+      eventAt: null,
+      createdAt: '2026-11-09T07:05:00.000Z',
+      note: 'выше 450 тыс. ₽',
+    });
+    expect(feedSubtitle(digest, NOW, TZ)).toBe('9 ноября · выше 450 тыс. ₽');
+  });
+
   it('действие ведёт к отклику, подключениям или подборке', () => {
     expect(feedAction(item({}))).toEqual({ label: 'Ответить', path: '/app/responses/app-7' });
     expect(feedAction(item({ kind: 'offer' }))).toEqual({

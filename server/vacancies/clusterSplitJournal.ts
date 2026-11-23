@@ -15,7 +15,7 @@ export const CATALOG_CLUSTER_TABLES: readonly { table: string; rowid: boolean }[
   { table: 'catalog_ru_summaries', rowid: true },
 ];
 
-type Row = Record<string, SQLInputValue>;
+export type Row = Record<string, SQLInputValue>;
 const ROWID = '__rowid';
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/u;
 
@@ -54,7 +54,6 @@ function snapshotCatalog(db: DatabaseSync, ids: readonly string[]): Record<strin
   return rows;
 }
 
-/** Прежнее состояние кластера и всех id его кусков — одной строкой журнала. */
 /**
  * Список кусков разбиения, недописанного частями, после смены плана. Снятые
  * куски уже удалены, новые до записи свободны: откат удалит ровно этот список.
@@ -70,6 +69,7 @@ export function setJournalPieces(
   ).run(JSON.stringify(pieceIds), stepId, clusterId);
 }
 
+/** Прежнее состояние кластера и всех id его кусков — одной строкой журнала. */
 export function journalClusterSplit(db: DatabaseSync, input: JournalInput): void {
   const ids = [input.clusterId, ...input.pieceIds];
   const old = db
@@ -105,7 +105,9 @@ export function journalClusterSplit(db: DatabaseSync, input: JournalInput): void
   );
 }
 
-interface JournalRow {
+export interface JournalRow {
+  id: number;
+  step_id: string;
   old_cluster_id: string;
   old_rowid: number;
   old_fingerprint: string;
@@ -120,7 +122,7 @@ interface JournalRow {
   new_piece_ids_json: string;
 }
 
-function restoreRows(db: DatabaseSync, table: string, rows: readonly Row[]): void {
+export function restoreRows(db: DatabaseSync, table: string, rows: readonly Row[]): void {
   for (const row of rows) {
     const columns = Object.keys(row);
     if (!columns.every((column) => column === ROWID || IDENTIFIER.test(column))) {
@@ -131,66 +133,4 @@ function restoreRows(db: DatabaseSync, table: string, rows: readonly Row[]): voi
       `INSERT INTO ${table} (${names.join(', ')}) VALUES (${placeholders(names.length)})`,
     ).run(...columns.map((column) => row[column]!));
   }
-}
-
-function restoreCluster(db: DatabaseSync, entry: JournalRow): void {
-  const ids = [entry.old_cluster_id, ...(JSON.parse(entry.new_piece_ids_json) as string[])];
-  const inIds = `IN (${placeholders(ids.length)})`;
-  db.prepare(`DELETE FROM vacancy_clusters WHERE id ${inIds}`).run(...ids);
-  db.prepare(
-    `INSERT INTO vacancy_clusters (rowid, id, fingerprint, title, company, cluster_json,
-       items_count, updated_at, representative) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    entry.old_rowid,
-    entry.old_cluster_id,
-    entry.old_fingerprint,
-    entry.old_title,
-    entry.old_company,
-    entry.old_cluster_json,
-    entry.old_items_count,
-    entry.old_updated_at,
-    entry.old_representative,
-  );
-  db.prepare(`DELETE FROM vacancy_cluster_keys WHERE cluster_id ${inIds}`).run(...ids);
-  restoreRows(db, 'vacancy_cluster_keys', JSON.parse(entry.old_keys_json) as Row[]);
-  const catalog = JSON.parse(entry.old_catalog_json) as Record<string, Row[]>;
-  for (const [table, rows] of Object.entries(catalog)) {
-    if (!CATALOG_CLUSTER_TABLES.some((known) => known.table === table)) continue;
-    db.prepare(`DELETE FROM ${table} WHERE cluster_id ${inIds}`).run(...ids);
-    restoreRows(db, table, rows);
-  }
-}
-
-/** Курсор встаёт перед первым откаченным кластером: исправленный шаг пройдёт его снова. */
-function rewindCursor(db: DatabaseSync, entries: readonly JournalRow[]): void {
-  if (entries.length === 0) return;
-  const first = Math.min(...entries.map((entry) => entry.old_rowid));
-  db.prepare(
-    `UPDATE cluster_split_state SET cursor_rowid = MIN(cursor_rowid, ?), completed = 0 WHERE id = 1`,
-  ).run(first - 1);
-}
-
-/**
- * Откат шага разбиения: кластеры, ключи, каталог и переадресации шага
- * возвращаются к журналу одной транзакцией, журнал шага удаляется.
- * Возвращает число восстановленных кластеров.
- */
-export function revertClusterSplitStep(db: DatabaseSync, stepId: string): number {
-  const entries = db
-    .prepare('SELECT * FROM cluster_split_journal WHERE step_id = ? ORDER BY id DESC')
-    .all(stepId) as unknown as JournalRow[];
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    for (const entry of entries) restoreCluster(db, entry);
-    rewindCursor(db, entries);
-    db.prepare('DELETE FROM vacancy_catalog_redirects WHERE step_id = ?').run(stepId);
-    // Большой кластер, недописанный частями, откатывается целиком: его ход тоже снимается.
-    db.prepare('DELETE FROM cluster_split_progress WHERE journal_step_id = ?').run(stepId);
-    db.prepare('DELETE FROM cluster_split_journal WHERE step_id = ?').run(stepId);
-    db.exec('COMMIT');
-  } catch (error) {
-    db.exec('ROLLBACK');
-    throw error;
-  }
-  return entries.length;
 }

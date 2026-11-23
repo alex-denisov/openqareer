@@ -80,6 +80,8 @@ interface ConsultantMocks {
   readonly replies?: readonly unknown[];
   /** Сколько первых чтений разговора фоновый разбор ещё идёт: до того ответов с действиями нет. */
   readonly pendingReads?: number;
+  /** B746: первый ход с объектом экрана получает «Объект не найден». */
+  readonly subjectMissing?: boolean;
 }
 
 async function openConsultant(page: Page, path: string, mocks: ConsultantMocks = {}) {
@@ -89,10 +91,21 @@ async function openConsultant(page: Page, path: string, mocks: ConsultantMocks =
   return calls;
 }
 
+/** Открыть панель кнопкой над экраном: на 390 — ссылкой в шапке, на 1440 — кнопкой панели. */
+async function openPanelOver(page: Page, mobile: boolean) {
+  const open = mobile
+    ? page.getByRole('link', { name: /Консультант: открыть/u })
+    : page.locator('.b640 .top-actions .btn-panel');
+  await open.click({ timeout: 15_000 });
+  const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
+  await expect(panel).toBeVisible();
+  return panel;
+}
+
 async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
   await mockSignedInCabinet(page, { cabinetB640: true });
   const memory = [...(mocks.memory ?? [FACT])];
-  const sent: { key: string | undefined; content: string }[] = [];
+  const sent: { key: string | undefined; content: string; subject?: unknown }[] = [];
   // Раздел под панелью живой: «Сегодня» и число у колокольчика.
   await page.route('**/api/v1/candidate/status/today', (route) =>
     route.fulfill({ json: { data: { today: STATUS_TODAY } } }),
@@ -150,8 +163,20 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
     return route.fulfill({ status: 200, json: { data: { ok: true } } });
   });
   await page.route('**/api/v1/coach/turn*', (route) => {
-    const body = route.request().postDataJSON() as { content: string };
-    sent.push({ key: route.request().headers()['idempotency-key'], content: body.content });
+    const body = route.request().postDataJSON() as { content: string; subject?: unknown };
+    sent.push({
+      key: route.request().headers()['idempotency-key'],
+      content: body.content,
+      subject: body.subject,
+    });
+    if (mocks.subjectMissing && body.subject) {
+      return route.fulfill({
+        status: 404,
+        json: {
+          error: { code: 'subject_not_found', message: 'Объект не найден.', retryable: false },
+        },
+      });
+    }
     if (mocks.turn === 'limit') {
       return route.fulfill({
         status: 402,
@@ -487,6 +512,35 @@ test.describe('B660: «Консультант» нового кабинета', 
     await expect(page).toHaveURL(/\/app\/vacancies$/u);
     await expect(page.locator('[data-b640-node="s07"]')).toBeVisible();
     await expect(page.getByTestId('cabinet-b640')).not.toHaveAttribute('data-dialog', '1');
+  });
+
+  test('B746: вопрос с подготовки к интервью уходит с откликом экрана', async ({
+    page,
+  }, testInfo) => {
+    const calls = await mockConsultant(page);
+    await page.goto('/app/responses/app-intouch/interview', { waitUntil: 'domcontentloaded' });
+    const panel = await openPanelOver(page, testInfo.project.name === 'mobile-390');
+    await panel.getByLabel('Ваш вопрос консультанту').fill('Что меня спросят на этом интервью?');
+    await panel.getByLabel('Ваш вопрос консультанту').press('Enter');
+    await expect(panel.locator('.msg.me').last()).toHaveText('Что меня спросят на этом интервью?');
+    await expect.poll(() => calls.sent.length).toBe(1);
+    expect(calls.sent[0]?.subject).toEqual({ kind: 'application', id: 'app-intouch' });
+  });
+
+  test('B746: объект не найден — тот же вопрос уходит без него, ответ приходит', async ({
+    page,
+  }, testInfo) => {
+    const calls = await mockConsultant(page, { subjectMissing: true });
+    await page.goto('/app/responses/app-gone/interview', { waitUntil: 'domcontentloaded' });
+    const panel = await openPanelOver(page, testInfo.project.name === 'mobile-390');
+    await panel.getByLabel('Ваш вопрос консультанту').fill('Что меня спросят?');
+    await panel.getByLabel('Ваш вопрос консультанту').press('Enter');
+    await expect(panel.locator('.msg').last()).toContainText('Гринкод');
+    expect(calls.sent.map((turn) => turn.subject)).toEqual([
+      { kind: 'application', id: 'app-gone' },
+      undefined,
+    ]);
+    expect(calls.sent[1]?.key).toBe(calls.sent[0]?.key);
   });
 
   test('B700: адрес консультанта открывает панель над «Сегодня», гейты', async ({ page }) => {

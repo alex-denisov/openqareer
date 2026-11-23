@@ -47,7 +47,7 @@ export function vacancyFitMark(view: VacancyFitView | undefined): VacancyFitMark
 }
 
 /**
- * «X из Y требований вакансии есть в профиле. Не проверены квизом: A, B.» Since 01.11 a stated
+ * «X из Y требований вакансии есть в профиле. Без проверки навыков: A, B.» Since 01.11 a stated
  * requirement counts in full; the check is a label, not a multiplier.
  */
 export function vacancyFitSentence(view: VacancyFitView | undefined): string | null {
@@ -56,7 +56,7 @@ export function vacancyFitSentence(view: VacancyFitView | undefined): string | n
   const stated = fitRequirementChips(view)?.stated ?? [];
   const parts = [`${matched} из ${total} требований вакансии есть в профиле.`];
   if (partial > 0) parts.push(`Ещё ${partial} — частично, они считаются наполовину.`);
-  if (stated.length > 0) parts.push(`Не проверены квизом: ${stated.join(', ')}.`);
+  if (stated.length > 0) parts.push(`Без проверки навыков: ${stated.join(', ')}.`);
   return parts.join(' ');
 }
 

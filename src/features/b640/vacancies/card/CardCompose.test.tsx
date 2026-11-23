@@ -196,8 +196,8 @@ describe('карточка вакансии: «Написать» открыва
     const fold = summary?.closest('details');
     expect(fold?.open).toBe(false);
     expect(fold?.previousElementSibling?.matches('section.lead')).toBe(true);
-    expect(fold?.textContent).toContain('2 из 3 требований вакансии есть в профиле.');
-    expect(fold?.textContent).toContain('Нет в профиле: Найм руководителей.');
+    expect(fold?.textContent).toContain('2 из 3 требований есть в профиле, самое сильное');
+    expect(fold?.textContent).toContain('Спросят про «Найм руководителей» — в профиле этого нет');
   });
 
   it('без процента совпадения блока «Вывод консультанта» нет', () => {
