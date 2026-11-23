@@ -146,6 +146,7 @@ export function listCount(input: ListCountInput): { count: number; countKnown: b
  */
 export function serverCountState(input: {
   readonly serverMode: boolean;
+  /** Сервер режет подборку «Датой» или «Зарплатой от» (B765). */
   readonly dated: boolean;
   readonly total: number;
   readonly loadingFirst: boolean;

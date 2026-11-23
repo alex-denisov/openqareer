@@ -170,3 +170,20 @@ describe('GET b640/matched-vacancies: «Дата» на сервере (B726)', 
     expect((await get(`${NEW}?days=abc`, 'flagged.test')).statusCode).toBe(400);
   });
 });
+
+describe('GET b640/matched-vacancies: «Зарплата от» на сервере (B765, B645 s07)', () => {
+  it('money — суммы в месяц не ниже порога и строки без суммы, число подборки по ним', async () => {
+    const { get } = await setup();
+    const response = await get(`${NEW}?sort=date&direction=desc&money=200000&moneyCurrency=RUB`, 'flagged.test');
+    expect(response.statusCode).toBe(200);
+    expect([...ids(response)].sort()).toEqual(['cluster-1', 'cluster-3', 'cluster-4', 'cluster-5']);
+    expect(response.json().meta.total).toBe(4);
+  });
+
+  it('без money — все строки; неверные money и валюта — 400', async () => {
+    const { get } = await setup();
+    expect(ids(await get(`${NEW}?sort=date&direction=desc`, 'flagged.test'))).toHaveLength(5);
+    expect((await get(`${NEW}?money=-1&moneyCurrency=RUB`, 'flagged.test')).statusCode).toBe(400);
+    expect((await get(`${NEW}?money=100000&moneyCurrency=XYZ`, 'flagged.test')).statusCode).toBe(400);
+  });
+});

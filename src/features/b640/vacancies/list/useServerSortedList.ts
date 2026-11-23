@@ -8,7 +8,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
-import { getSortedMatchedPage } from '../b640Api';
+import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
 import type { SortState } from './sortModel';
 
 export type ServerListStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -37,6 +37,7 @@ interface ReadArgs {
   readonly sort: SortState;
   readonly roles: readonly string[];
   readonly days: number | null;
+  readonly money: ServerMoney | null;
   readonly offset: number;
   readonly base: State;
   readonly seq: MutableRefObject<number>;
@@ -49,6 +50,7 @@ function readPortion({
   sort,
   roles,
   days,
+  money,
   offset,
   base,
   seq,
@@ -57,7 +59,7 @@ function readPortion({
   const id = ++seq.current;
   const controller = new AbortController();
   setState({ ...base, key, status: 'loading', pending: offset });
-  getSortedMatchedPage(sort, roles, offset, controller.signal, days)
+  getSortedMatchedPage(sort, roles, offset, controller.signal, days, money)
     .then((page) => {
       if (seq.current !== id) return;
       const rows = [...base.rows, ...page.rows];
@@ -88,16 +90,19 @@ export function useServerSortedList(
   hidden: ReadonlySet<string>,
   /** Фильтр «Дата» в днях (B726): его режет и считает сервер; `null` — без даты. */
   days: number | null = null,
+  /** «Зарплата от» (B765): её тоже режет и считает сервер; `null` — без порога. */
+  money: ServerMoney | null = null,
 ): ServerSortedList {
   const [reload, setReload] = useState(0);
-  const key = `${sort.key}:${sort.dir}:${roles.join('\n')}:${days ?? ''}:${reload}`;
+  const moneyKey = money ? `${money.from}${money.currency}` : '';
+  const key = `${sort.key}:${sort.dir}:${roles.join('\n')}:${days ?? ''}:${moneyKey}:${reload}`;
   const [state, setState] = useState<State | null>(null);
   const seq = useRef(0);
 
   const fetchFrom = useCallback(
     (offset: number, base: State) =>
-      readPortion({ key, sort, roles, days, offset, base, seq, setState }),
-    // sort, roles и days закрыты над key.
+      readPortion({ key, sort, roles, days, money, offset, base, seq, setState }),
+    // sort, roles, days и money закрыты над key.
     [key],
   );
 
