@@ -204,6 +204,10 @@ describe('d00 «Записи»', () => {
     const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
     click(page.querySelector('.dn-entry .row-act'));
     const form = page.querySelector('form.dn-edit')!;
+    // B662: имя поля — не выбранное значение («Заметка», «Без цели»).
+    expect(
+      [...form.querySelectorAll('select')].map((item) => item.getAttribute('aria-label')),
+    ).toEqual(['Тип записи', 'Цель']);
     typeInto(form.querySelector('textarea'), 'Релиз за 4 дня');
     api.updateEntry.mockResolvedValue({ ...entry('e1', 'result', 'Релиз за 4 дня', 'goal-1') });
     click(form.querySelector('button[type="submit"]'));
