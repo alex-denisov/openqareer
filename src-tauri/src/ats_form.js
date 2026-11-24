@@ -6,7 +6,8 @@
   var SKIPPED_TYPES = ['hidden', 'submit', 'button', 'image', 'reset'];
   var CAPTCHA_FRAMES =
     'iframe[src*="recaptcha"][src*="bframe"], iframe[src*="hcaptcha.com"][src*="challenge"], iframe[src*="challenges.cloudflare.com"]';
-  var DONE_TEXT = /thank you for applying|application (has been |was )?(submitted|received)|we('ve| have) received your application/i;
+  var DONE_TEXT =
+    /thank you for applying|application (has been |was )?(submitted|received)|we('ve| have) received your application/i;
   var MENU_WAIT_MS = 120;
   var MENU_TRIES = 15;
 
@@ -67,7 +68,17 @@
     if (node.tagName === 'TEXTAREA') return 'textarea';
     if (node.getAttribute('role') === 'combobox') return 'combobox';
     var type = (node.getAttribute('type') || 'text').toLowerCase();
-    return ['file', 'checkbox', 'radio', 'email', 'tel', 'url', 'number', 'date', 'password'].indexOf(type) >= 0
+    return [
+      'file',
+      'checkbox',
+      'radio',
+      'email',
+      'tel',
+      'url',
+      'number',
+      'date',
+      'password',
+    ].indexOf(type) >= 0
       ? type
       : 'text';
   }
@@ -88,7 +99,11 @@
   function controls(form) {
     return Array.prototype.slice.call(form.querySelectorAll(CONTROLS)).filter(function (node) {
       var type = (node.getAttribute('type') || '').toLowerCase();
-      return SKIPPED_TYPES.indexOf(type) < 0 && node.getAttribute('aria-hidden') !== 'true' && !node.disabled;
+      return (
+        SKIPPED_TYPES.indexOf(type) < 0 &&
+        node.getAttribute('aria-hidden') !== 'true' &&
+        !node.disabled
+      );
     });
   }
   function linkOf(node) {
@@ -110,14 +125,18 @@
     return [];
   }
   function radios(form, name) {
-    return Array.prototype.slice.call(form.querySelectorAll('input[type="radio"]')).filter(function (radio) {
-      return radio.name === name;
-    });
+    return Array.prototype.slice
+      .call(form.querySelectorAll('input[type="radio"]'))
+      .filter(function (radio) {
+        return radio.name === name;
+      });
   }
   function submitButtons(form) {
-    return Array.prototype.slice.call(
-      form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])'),
-    ).filter(shown);
+    return Array.prototype.slice
+      .call(
+        form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])'),
+      )
+      .filter(shown);
   }
   function captcha() {
     return Array.prototype.slice.call(document.querySelectorAll(CAPTCHA_FRAMES)).some(shown);
@@ -155,7 +174,9 @@
     var form = findForm();
     var base = { host: location.hostname, path: location.pathname, captcha: captcha() };
     if (!form) {
-      base.state = document.querySelector('input[type="password"]') ? 'account_required' : 'form_missing';
+      base.state = document.querySelector('input[type="password"]')
+        ? 'account_required'
+        : 'form_missing';
       return base;
     }
     var result = readFields(form);
@@ -195,7 +216,9 @@
     }
     if (kind === 'combobox') {
       var shell = node.closest('.select__control') || node.parentElement;
-      return text(shell && shell.querySelector('.select__single-value, .select__multi-value__label'));
+      return text(
+        shell && shell.querySelector('.select__single-value, .select__multi-value__label'),
+      );
     }
     return node.value;
   }
@@ -214,7 +237,8 @@
     node.dispatchEvent(new Event(type, { bubbles: true }));
   }
   function setText(node, value) {
-    var proto = node.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    var proto =
+      node.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(node, value);
     fire(node, 'input');
     fire(node, 'change');
@@ -240,7 +264,9 @@
       node.files = transfer.files;
       fire(node, 'input');
       fire(node, 'change');
-      return node.files.length === 1 && node.files[0].size === bytes.length ? 'set' : 'file_not_attached';
+      return node.files.length === 1 && node.files[0].size === bytes.length
+        ? 'set'
+        : 'file_not_attached';
     } catch (_) {
       return 'file_not_attached';
     }
@@ -252,7 +278,10 @@
   }
   function menuOptions(node) {
     var menuId = node.getAttribute('aria-controls') || node.getAttribute('aria-owns');
-    var scope = (menuId && document.getElementById(menuId)) || node.closest('.select-shell, .select') || document;
+    var scope =
+      (menuId && document.getElementById(menuId)) ||
+      node.closest('.select-shell, .select') ||
+      document;
     return Array.prototype.slice.call(scope.querySelectorAll('[role="option"], .select__option'));
   }
   async function setCombobox(node, value) {
@@ -317,7 +346,9 @@
   }
   function job() {
     var current = window.__oqAtsJob;
-    return current ? { done: current.done, results: current.results } : { done: false, missing: true };
+    return current
+      ? { done: current.done, results: current.results }
+      : { done: false, missing: true };
   }
 
   function submit() {
@@ -339,7 +370,8 @@
     var onConfirm = Boolean(confirmPath && location.pathname.indexOf(confirmPath) >= 0);
     var form = findForm();
     var body = text(document.body).slice(0, 4000);
-    if (onConfirm || (!form && DONE_TEXT.test(body))) return { state: 'confirmed', path: location.pathname };
+    if (onConfirm || (!form && DONE_TEXT.test(body)))
+      return { state: 'confirmed', path: location.pathname };
     if (captcha()) return { state: 'captcha' };
     if (form) {
       var invalid = Array.prototype.slice
@@ -353,7 +385,14 @@
     return { state: 'pending' };
   }
 
-  var ops = { read: read, snapshot: snapshot, fill: fill, job: job, submit: submit, outcome: outcome };
+  var ops = {
+    read: read,
+    snapshot: snapshot,
+    fill: fill,
+    job: job,
+    submit: submit,
+    outcome: outcome,
+  };
   try {
     return JSON.stringify(ops[OP] ? ops[OP]() : { state: 'unknown_op' });
   } catch (_) {
