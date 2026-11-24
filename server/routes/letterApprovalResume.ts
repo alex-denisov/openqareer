@@ -3,6 +3,7 @@ import type { StoredCandidateDocument } from '../data/candidateStore';
 import type { ResumeDocument } from '../domain/resumeStudioTypes';
 import type { StoredResumeVersion } from '../domain/resumeVersions';
 import { buildTargetedResumeSlice } from '../domain/resumeStudio';
+import { translatedDocument } from '../domain/resumeTranslation';
 import { tailorResumeSlice } from '../domain/resumeVacancyEdits';
 import { NO_EDIT_CHOICES, type ResumeEditChoices } from '../../shared/resumeVacancyEdits';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
@@ -78,7 +79,9 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
 export const TARGETED_RESUME_BUILD = 'b785';
 
 function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string, choices: ResumeEditChoices): string {
-  const decided = canonicalJson(choices);
+  // Без выбранного языка переводы на версию не влияют.
+  const { translations, ...rest } = choices;
+  const decided = canonicalJson(choices.lang ? { ...rest, translations } : rest);
   const hex = createHash('sha256')
     .update(['letter-approval-resume', TARGETED_RESUME_BUILD, candidateId, vacancyId, masterRevision, decided].join('\u0000'))
     .digest('hex');
@@ -100,6 +103,12 @@ export function targetedSliceFor(master: CandidateResumeMaster, cluster: Vacancy
   return buildTargetedResumeSlice(master.document, versionTarget(cluster));
 }
 
+/** Резюме под вакансию с правками и на выбранном языке. */
+export function preparedSlice(slice: ReturnType<typeof targetedSliceFor>, choices: ResumeEditChoices) {
+  const tailored = tailorResumeSlice(slice, choices);
+  return { ...tailored, document: translatedDocument(tailored.document, choices.lang, choices.translations ?? {}) };
+}
+
 /** Существующая механика версий: черновик из мастер-резюме, затем одобрение тем же содержимым. */
 function approvedVersion(
   deps: RouteDeps,
@@ -108,7 +117,7 @@ function approvedVersion(
   cluster: VacancyCluster,
   choices: ResumeEditChoices,
 ): StoredResumeVersion {
-  const tailor = (slice: ReturnType<typeof targetedSliceFor>) => tailorResumeSlice(slice, choices);
+  const tailor = (slice: ReturnType<typeof targetedSliceFor>) => preparedSlice(slice, choices);
   const { candidateStore } = deps;
   const versionId = stableVersionId(candidateId, cluster.id, master.revision, choices);
   const { title, requirements } = versionTarget(cluster);

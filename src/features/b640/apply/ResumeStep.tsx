@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ResumeEditDecision } from '../../../../shared/resumeVacancyEdits';
+import type {
+  ResumeEditDecision,
+  ResumeEditsState,
+  ResumeLang,
+} from '../../../../shared/resumeVacancyEdits';
 import type { ResumeTemplate } from '../../../../shared/resumeBuilder/model';
 import type { ResumeDocument } from '../../resume/resumeTypes';
+import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import {
   loadLetterResumePreview,
   type LetterResumePreview,
 } from '../../vacancies/vacancyLetterResumePreview';
-import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
+import { Button, Icon, InfoTip, Link, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { HhResumeSelect } from './HhResumeSelect';
@@ -15,7 +20,7 @@ import { editsWord } from './hh/HhResumeEdits';
 import { decideResumeEdit, getResumeEdits } from './model/resumeEditsApi';
 import { ResumeEdits } from './ResumeEdits';
 import { sheetFromDocument } from './model/resumeSheet';
-import { ResumeBar } from './ResumeBar';
+import { ResumeBar, type ResumeLangControl } from './ResumeBar';
 import { ResumePage } from './ResumePage';
 
 const TITLES: Readonly<Record<LetterResumePreview['kind'], string>> = {
@@ -32,12 +37,18 @@ const SOURCES: Readonly<Record<LetterResumePreview['kind'], string>> = {
 };
 const SKELETON = ['w1', 'w2', 'w3', 'w4', 'w5', 'w2', 'w3', 'w4'] as const;
 
-function ResumeFile({ document }: { readonly document: ResumeDocument }) {
+function ResumeFile({
+  document,
+  lang,
+}: {
+  readonly document: ResumeDocument;
+  readonly lang: ResumeLangControl | null;
+}) {
   const [template, setTemplate] = useState<ResumeTemplate>('strict');
   const resume = useMemo(() => sheetFromDocument(document), [document]);
   return (
     <>
-      <ResumeBar resume={resume} template={template} onTemplate={setTemplate} />
+      <ResumeBar resume={resume} template={template} onTemplate={setTemplate} lang={lang} />
       <ResumePage resume={resume} template={template} />
     </>
   );
@@ -119,25 +130,61 @@ function StepActions({ kind, confirmed, disabled, onConfirm }: StepActionsProps)
   );
 }
 
+/** Переключение языка: пока строки переводятся, лист прежний. */
+function useLang(
+  value: ResumeLang | null | undefined,
+  decide: (decision: ResumeEditDecision) => Promise<void>,
+  reading: boolean,
+): ResumeLangControl | null {
+  const toast = useToast();
+  const [wanted, setWanted] = useState<ResumeLang | null>(null);
+  if (!value) return null;
+  const onChange = async (lang: ResumeLang) => {
+    setWanted(lang);
+    try {
+      await decide({ action: 'lang', lang });
+    } catch (reason) {
+      toast.show({ text: apiErrorMessage(reason, 'Перевод не собрался. Повторите.') });
+    } finally {
+      setWanted(null);
+    }
+  };
+  return {
+    value: wanted ?? value,
+    busy: wanted !== null || reading,
+    onChange: (lang) => void onChange(lang),
+  };
+}
+
+const NO_EDITS: ResumeEditsState = { edits: [], lang: null };
+
 /** Лист и правки читаются вместе: после решения кандидата лист собирается заново. */
 function useResumeStep(vacancyId: string, approved: ResumeStepProps['approved']) {
   const load = useCallback(
     async (signal: AbortSignal) => {
       const preview = await loadLetterResumePreview(vacancyId, approved ?? null, signal);
       // Правок без листа под вакансию не бывает; сбой их чтения лист не закрывает.
-      const edits =
-        preview.kind === 'targeted' ? await getResumeEdits(vacancyId, signal).catch(() => []) : [];
-      return { preview, edits };
+      const choices =
+        preview.kind === 'targeted'
+          ? await getResumeEdits(vacancyId, signal).catch(() => NO_EDITS)
+          : NO_EDITS;
+      return { preview, choices };
     },
     [vacancyId, approved],
   );
   const { state, reload, setData } = useAsync(load, 'Резюме не собралось.');
+  const reading = state.status === 'loading';
   const decide = async (decision: ResumeEditDecision) => {
-    const edits = await decideResumeEdit(vacancyId, decision);
-    setData((current) => ({ ...current, edits }));
+    const choices = await decideResumeEdit(vacancyId, decision);
+    setData((current) => ({ ...current, choices }));
     reload();
   };
-  return { state, reload, decide };
+  return { state, reload, decide, lang: useLang(state.data?.choices.lang, decide, reading) };
+}
+
+function titleOf(preview: LetterResumePreview, edits: ResumeEditsState['edits']): string {
+  const active = edits.filter((item) => !item.cancelled).length;
+  return active > 0 ? `${editsWord(active)} под эту вакансию` : TITLES[preview.kind];
 }
 
 /** Шаг «Резюме» (O3): то резюме, которое уйдёт с откликом. */
@@ -149,12 +196,10 @@ export function ResumeStep({
   onHh,
   onDocument,
 }: ResumeStepProps) {
-  const { state, reload, decide } = useResumeStep(vacancyId, approved);
+  const { state, reload, decide, lang } = useResumeStep(vacancyId, approved);
   const preview = state.data?.preview;
-  const edits = state.data?.edits ?? [];
-  const active = edits.filter((item) => !item.cancelled).length;
-  const document = preview?.document ?? null;
-  useEffect(() => onDocument(document), [onDocument, document]);
+  const edits = state.data?.choices.edits ?? [];
+  useEffect(() => onDocument(preview?.document ?? null), [onDocument, preview?.document]);
   if (!preview) {
     return <ResumePending error={state.status === 'error' ? state.error : null} onRetry={reload} />;
   }
@@ -162,7 +207,7 @@ export function ResumeStep({
     <section className="lead cv-lead" aria-labelledby="rs-title">
       <div className="lead-head">
         <h2 className="lead-title is-long" id="rs-title">
-          {active > 0 ? `${editsWord(active)} под эту вакансию` : TITLES[preview.kind]}
+          {titleOf(preview, edits)}
         </h2>
         <InfoTip label="Источник" text={SOURCES[preview.kind]} />
       </div>
@@ -181,11 +226,13 @@ export function ResumeStep({
           }
         />
       ) : null}
-      {preview.document ? <ResumeFile document={preview.document} /> : null}
+      {preview.document ? (
+        <ResumeFile document={preview.document} lang={approved ? null : lang} />
+      ) : null}
       <StepActions
         kind={preview.kind}
         confirmed={confirmed}
-        disabled={state.status !== 'ready'}
+        disabled={state.status !== 'ready' || Boolean(lang?.busy)}
         onConfirm={onConfirm}
       />
     </section>

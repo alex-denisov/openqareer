@@ -93,7 +93,7 @@ const FULL = {
 async function open(
   page: Page,
   document: object,
-  edits = (route: Route) => route.fulfill({ json: { data: { edits: [] } } }),
+  edits = (route: Route) => route.fulfill({ json: { data: { edits: [], lang: 'ru' } } }),
   hhResumes = (route: Route) => route.fulfill({ json: { data: null } }),
 ) {
   await mockResponses(page);
@@ -177,7 +177,7 @@ test.describe('B785: шаг «Резюме» по макету o03', () => {
         if (body.action === 'text') state.text = body.text;
         else state.cancelled = body.action === 'cancel';
       }
-      return route.fulfill({ json: { data: { edits: edits() } } });
+      return route.fulfill({ json: { data: { edits: edits(), lang: 'ru' } } });
     };
     const gap = { ...FULL.experience[1]!, endDate: null };
     await open(page, { ...FULL, experience: [FULL.experience[0], gap] }, handler);
@@ -227,6 +227,37 @@ test.describe('B785: шаг «Резюме» по макету o03', () => {
     await expect(select.locator('option', { hasText: 'CTO' })).toBeDisabled();
     await select.selectOption('b');
     await expect(select).toHaveValue('b');
+    await expectGates(page);
+  });
+
+  test('RU/EN: сбой оставляет язык, успех показывает английский лист', async ({ page }) => {
+    let fails = true;
+    let lang = 'ru';
+    await open(page, FULL, (route) => {
+      if (route.request().method() === 'PUT') {
+        if (fails)
+          return route.fulfill({
+            status: 503,
+            json: { error: { code: 'x', message: 'Перевод не собрался. Повторите.' } },
+          });
+        lang = route.request().postDataJSON().lang;
+      }
+      return route.fulfill({ json: { data: { edits: [], lang } } });
+    });
+    const group = page.getByRole('group', { name: 'Язык резюме' });
+    const english = group.getByRole('button', { name: 'English' });
+    await expect(group.getByRole('button', { name: 'Русский' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await english.click();
+    await expect(page.getByText('Перевод не собрался')).toBeVisible();
+    await expect(english).toHaveAttribute('aria-pressed', 'false');
+    fails = false;
+    await english.click();
+    await expect(english).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('button', { name: 'Одобрить резюме' })).toBeEnabled();
+    await expect(page.getByText('Перевод не собрался')).toBeHidden({ timeout: 15_000 });
     await expectGates(page);
   });
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { DebriefOutcome } from '../providers/interviewDebriefWriter';
+import type { DebriefOutcome, VoiceOutcome } from '../providers/interviewDebriefWriter';
 import type { AudioFormat, WhisperSegment } from '../providers/whisperTranscriber';
 import { createB640Harness, type HarnessUser } from '../testHelpers/b640VacancyHarness';
 
@@ -50,17 +50,21 @@ function multipart(fields: Record<string, string>, file: { data: Buffer; type: s
   return { body: Buffer.concat(parts), type: `multipart/form-data; boundary=${boundary}` };
 }
 
-async function setup(outcomes: Array<DebriefOutcome | null> = [OUTCOME]) {
+async function setup(
+  outcomes: Array<DebriefOutcome | null> = [OUTCOME],
+  voices: Array<VoiceOutcome | null> = [],
+) {
   const formats: Array<AudioFormat | undefined> = [];
   const transcriber = vi.fn(async (_audio: Buffer, _signal: AbortSignal, format?: AudioFormat) => {
     formats.push(format);
     return SPEECH;
   });
   const writeDebrief = vi.fn(async () => outcomes.shift() ?? null);
+  const labelVoices = vi.fn(async () => voices.shift() ?? null);
   const h = await createB640Harness({
     pool: () => [],
     recordingTranscriber: transcriber,
-    interviewDebriefWriter: { writeDebrief },
+    interviewDebriefWriter: { writeDebrief, labelVoices },
   });
   closers.push(h.close);
   const send = (method: 'GET' | 'POST' | 'PUT', url: string, user: HarnessUser, payload?: object) =>
@@ -143,7 +147,18 @@ async function setup(outcomes: Array<DebriefOutcome | null> = [OUTCOME]) {
       database.close();
     }
   };
-  return { h, application, interview, debrief, record, finished, sql, formats, writeDebrief };
+  return {
+    h,
+    application,
+    interview,
+    debrief,
+    record,
+    finished,
+    sql,
+    formats,
+    writeDebrief,
+    labelVoices,
+  };
 }
 
 describe('B751: разбор после интервью', () => {
@@ -239,6 +254,72 @@ describe('B751: разбор после интервью', () => {
     expect(view.transcript[2].startMs).toBe(1_200_000);
     const foreign = await record('app', 'mic', 'audio/mp4', { continues: randomUUID() });
     expect(foreign.segment.statusCode).toBe(400);
+  });
+});
+
+describe('B642: «Чей голос» у загруженного файла (I4c)', () => {
+  const VOICES: VoiceOutcome = { labels: [2, 1], answeredBy: 'openrouter deepseek' };
+
+  it('модель делит голоса один раз; кандидат подтверждает — доля речи и новый разбор', async () => {
+    const { debrief, record, finished, labelVoices, writeDebrief, sql } = await setup(
+      [OUTCOME, OUTCOME],
+      [VOICES],
+    );
+    const { recordingId } = await record('upload', 'upload', 'audio/wav');
+    await finished(recordingId);
+    expect((await debrief()).json().data.voices).toEqual({
+      status: 'none',
+      candidate: null,
+      items: [],
+    });
+    const split = (await debrief('/voices', 'POST')).json().data;
+    expect(split.voices.status).toBe('ready');
+    expect(split.voices.items).toEqual([
+      {
+        voice: 1,
+        sharePercent: 84,
+        quote: 'Мы перенесли кластеры и сократили счёт на тридцать процентов.',
+      },
+      {
+        voice: 2,
+        sharePercent: 16,
+        quote: 'Расскажите, как вы снижали затраты на инфраструктуру.',
+      },
+    ]);
+    await debrief('/voices', 'POST');
+    expect(labelVoices).toHaveBeenCalledTimes(1);
+    expect(sql<{ labels: string }>('SELECT labels FROM interview_recording_voices')).toEqual([
+      { labels: '[2,1]' },
+    ]);
+    expect((await debrief('/voices', 'PUT', { candidate: 3 })).statusCode).toBe(400);
+    const confirmed = (await debrief('/voices', 'PUT', { candidate: 1 })).json().data;
+    expect(confirmed.voices.candidate).toBe(1);
+    expect(confirmed.transcript.map((line: { speaker: string }) => line.speaker)).toEqual([
+      'interviewer',
+      'candidate',
+    ]);
+    expect(confirmed.metrics.candidateShare).toBeGreaterThan(0.5);
+    await debrief('/analysis', 'POST');
+    expect((writeDebrief.mock.calls.at(-1) as unknown[] | undefined)?.[0]).toMatchObject([{ speaker: 'interviewer' }, {}]);
+  });
+
+  it('модель не разделила — «failed», повтор зовёт её снова; подтверждать нечего', async () => {
+    const { debrief, record, finished, labelVoices } = await setup([OUTCOME], [null, VOICES]);
+    const { recordingId } = await record('upload', 'upload', 'audio/wav');
+    await finished(recordingId);
+    expect((await debrief('/voices', 'POST')).json().data.voices.status).toBe('failed');
+    expect((await debrief('/voices', 'PUT', { candidate: 1 })).statusCode).toBe(409);
+    expect((await debrief('/voices', 'POST')).json().data.voices.status).toBe('ready');
+    expect(labelVoices).toHaveBeenCalledTimes(2);
+  });
+
+  it('у записи .app голоса по дорожкам: деления нет, модель не зовётся', async () => {
+    const { debrief, record, finished, labelVoices } = await setup();
+    const { recordingId } = await record('app', 'mic', 'audio/mp4');
+    await finished(recordingId);
+    const view = (await debrief('/voices', 'POST')).json().data;
+    expect(view.voices).toBeNull();
+    expect(labelVoices).not.toHaveBeenCalled();
   });
 });
 
