@@ -1,7 +1,12 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
-import { mockResponses, responseFixtures, type ResponsesMockOptions } from './responsesFixture';
+import {
+  mockResponses,
+  RESUME_BULLET,
+  responseFixtures,
+  type ResponsesMockOptions,
+} from './responsesFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 
@@ -308,6 +313,32 @@ test.describe('B656: «Отклики» нового кабинета', () => {
       'true',
     );
     expect(mock.calls).toContain('PUT feedback true');
+  });
+
+  test('«Поправить резюме»: готовая правка у консультанта, пишет её кандидат (o07 → k06)', async ({
+    page,
+  }, info) => {
+    const options = { reviewReady: true, resumeFact: true };
+    const mock = await open(page, '/app/responses/review', 'o07', options);
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Поправить резюме' }).click();
+    const panel = page.getByRole('dialog', { name: 'Консультант · Резюме' });
+    const card = panel.locator('.ec');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await expect(panel.locator('.msg.bot')).toContainText('из беседы 11.11');
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-${info.project.name}.png` });
+    }
+    expect(mock.calls).toEqual([]);
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    expect(mock.calls).toEqual(['apply e1#0']);
+    await panel.getByRole('button', { name: 'Отменить' }).click();
+    await expect(card).toBeVisible();
+    expect(mock.calls).toEqual(['apply e1#0', 'revert']);
   });
 
   test('отказ в раскрытом отклике: догадка и отметка «чего не хватило»', async ({ page }) => {

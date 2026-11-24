@@ -54,8 +54,13 @@ test.describe('B662: «Дневник» — цели и показатели', (
     });
     await page.goto('/app/diary/goals', { waitUntil: 'domcontentloaded' });
     const ghost = page.locator('[data-b640-node="d02"] .ghost');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
     await expect(ghost.getByRole('status')).toHaveText('Загружаем примеры', { timeout: 15_000 });
     await expect(ghost.locator('.gc-ex')).toHaveCount(0);
+    await expect(page.locator('[data-b640-node="d02"]')).toHaveCSS(
+      'padding-top',
+      phone ? '12px' : '16px',
+    );
     await expect(ghost.locator('.ghost-cap')).toHaveText('Пример для роли «Коммерческий директор»');
     await expectGates(page);
     answer();
@@ -66,6 +71,8 @@ test.describe('B662: «Дневник» — цели и показатели', (
   test('d02 → d02a: отстающая цель в заголовке, замер, в архив', async ({ page }) => {
     const calls = await openGoals(page, '/app/diary/goals', 'd02');
     const list = page.locator('[data-b640-node="d02"]');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(list).toHaveCSS('padding-top', phone ? '12px' : '16px');
     await expect(list.locator('.lead-title')).toHaveText('Отстаёт «Закрыть 2 вакансии в команду»');
     await expect(list.locator('.dn-goal')).toHaveCount(2);
     await expect(list.getByText('Перевести сборку на общий конвейер')).toBeVisible();
@@ -74,6 +81,7 @@ test.describe('B662: «Дневник» — цели и показатели', (
     await list.locator('.lead').getByRole('link').first().click();
     const card = page.locator('[data-b640-node="d02a"]');
     await expect(card.locator('.gt-h')).toHaveText('Закрыть 2 вакансии в команду');
+    await expect(card).toHaveCSS('padding-top', phone ? '12px' : '8px');
     await expectGates(page);
     await card.getByRole('button', { name: 'Внести замер' }).click();
     const dialog = page.getByRole('dialog');
@@ -97,6 +105,8 @@ test.describe('B662: «Дневник» — цели и показатели', (
   test('d02b: ошибки на месте, затем новая цель открывается карточкой', async ({ page }) => {
     const calls = await openGoals(page, '/app/diary/goals/new', 'd02b');
     const form = page.locator('[data-b640-node="d02b"]');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(form).toHaveCSS('padding-top', phone ? '12px' : '8px');
     await expectGates(page);
     await form.getByRole('button', { name: 'Сохранить цель' }).click();
     await expect(form.locator('.va-err').first()).toHaveText('Назовите цель');

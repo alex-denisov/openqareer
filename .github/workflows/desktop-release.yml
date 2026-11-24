@@ -179,7 +179,14 @@ jobs:
           ditto "$app" staging/OpenQareer.app
           ln -s /Applications staging/Applications
           name="OpenQareer-$VERSION-macos-universal"
-          hdiutil create -volname OpenQareer -srcfolder staging -format UDZO "out/$name.dmg"
+          # hdiutil иногда отвечает «No space left on device» (24.11): три попытки.
+          df -h .
+          for attempt in 1 2 3; do
+            hdiutil create -ov -volname OpenQareer -srcfolder staging -format UDZO "out/$name.dmg" && break
+            [[ "$attempt" -lt 3 ]] || exit 1
+            rm -rf src-tauri/target/{aarch64,x86_64}-apple-darwin
+            sleep 10
+          done
           hdiutil verify "out/$name.dmg"
           cp "$bundle/OpenQareer.app.tar.gz" "out/$name.app.tar.gz"
           cp "$bundle/OpenQareer.app.tar.gz.sig" "out/$name.app.tar.gz.sig"
