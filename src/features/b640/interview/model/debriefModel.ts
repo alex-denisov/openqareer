@@ -1,5 +1,6 @@
 import { pluralRu } from '../../../../../shared/pluralRu';
 import type { DebriefLine, DebriefMetrics } from '../../../../../server/domain/interviewDebrief';
+import type { InterviewDebriefView } from '../../../../../server/domain/interviewDebriefView';
 
 /** «04:12», после часа — «1:02:05». */
 export function clock(ms: number): string {
@@ -82,4 +83,21 @@ export function speakerLabel(
   if (speaker === 'candidate') return 'Вы';
   if (speaker === 'interviewer') return interviewerName?.trim() || 'Интервьюер';
   return null;
+}
+
+const MEGABYTE = 1_048_576;
+/** Меньше мегабайта — в килобайтах: «83 КБ», а не «0 МБ». */
+export const fileSize = (bytes: number) =>
+  bytes < MEGABYTE - 512
+    ? `${Math.max(1, Math.round(bytes / 1024))}\u00a0КБ`
+    : `${Math.round(bytes / MEGABYTE)}\u00a0МБ`;
+
+/** Загруженный файл ещё расшифровывается или делится на голоса; разделён или сбой — уже нет. */
+export function transcriptPending(
+  debrief: Pick<InterviewDebriefView, 'recording' | 'voices'> | null,
+): boolean {
+  const status = debrief?.recording?.status;
+  if (status === 'failed') return false;
+  const voices = debrief?.voices?.status ?? 'none';
+  return status !== 'ready' || voices === 'none';
 }

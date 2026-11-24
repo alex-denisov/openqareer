@@ -190,6 +190,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_auto_apply_schedule: { export: 'automation' },
   candidate_auto_apply_settings: { export: 'automation' },
   candidate_auto_apply_stops: { export: 'automation' },
+  apply_consent_journal: { export: 'automation' },
+  apply_consent_results: { export: 'automation' },
   hh_apply_attempts: { export: 'automation' },
   hh_raise_schedules: { export: 'automation' },
   hh_raise_choices: { export: 'automation' },

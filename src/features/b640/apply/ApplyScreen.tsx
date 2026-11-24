@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import { listApplications, type ApplicationView } from '../../applications/applicationsApi';
 import { fetchTariffQuotas, type TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
@@ -16,8 +23,9 @@ import { CtxHead } from '../shell/CtxHead';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { FormStep, useQuestionnaire, type QuestionnaireState } from './FormStep';
 import { LetterStep } from './LetterStep';
+import { useVisibilityQuestion, type VisibilityState } from './visibilityQuestion';
 import type { HhSendStepProps } from './hh/HhSendStep';
-import { copyText, readiness } from './model/formModel';
+import { copyText, hhAnswers, readiness } from './model/formModel';
 import {
   stepsFor,
   applyRoute,
@@ -26,6 +34,7 @@ import {
   paragraphs,
   parseStep,
   resolveTarget,
+  stepOpening,
   type ApplyHead,
   type ApplyStep,
   type ApplyTarget,
@@ -134,6 +143,14 @@ interface FlowProps {
   readonly cluster: Parameters<typeof buildHead>[0]['cluster'];
 }
 
+interface SendAsk {
+  /** o04: отправка открыта кнопкой «Отправить отклик с анкетой». */
+  readonly askNow: boolean;
+  readonly onAsked: () => void;
+  readonly sendWithForm: () => void;
+  readonly visibility: VisibilityState;
+}
+
 interface BodyProps {
   readonly vacancyId: string;
   readonly head: ApplyHead;
@@ -146,6 +163,7 @@ interface BodyProps {
   readonly answers: string;
   readonly hhForm: HhSendStepProps['form'];
   readonly onHhForm: HhSendStepProps['onForm'];
+  readonly ask: SendAsk;
   readonly resumeOk: boolean;
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
@@ -155,7 +173,8 @@ interface BodyProps {
 }
 
 function SendBody(props: BodyProps) {
-  const { vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, manual } = props;
+  const { vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, ask, manual } =
+    props;
   // hh.ru в приложении уходит из входа кандидата: там же и вход, и проверка.
   const inApp = isTauriEnvironment() && Boolean(head.url && hhVacancyIdFromUrl(head.url));
   if (manual && !inApp) {
@@ -165,6 +184,8 @@ function SendBody(props: BodyProps) {
           <ManualSendStep
             manual={manual}
             letterText={letter.draft.text}
+            letterStale={letter.approval.stale === true}
+            letterLoading={letter.draft.loading}
             resume={letter.approval.saved?.resume ?? null}
             questionnaire={props.questionnaire}
             onStep={setStep}
@@ -186,6 +207,8 @@ function SendBody(props: BodyProps) {
           answersText={answers}
           form={hhForm}
           onForm={onHhForm}
+          askNow={ask.askNow}
+          onAsked={ask.onAsked}
           onLetter={() => setStep('letter')}
         />
       </div>
@@ -273,6 +296,8 @@ interface FlowState {
   readonly quota: TariffQuotaStatus | null;
   readonly questionnaire: QuestionnaireState;
   readonly done: Readonly<Record<ApplyStep, boolean>>;
+  /** Ещё не известно, что показать на шаге: читается одобрение письма или анкета из адреса. */
+  readonly opening: boolean;
   /** Два окна: вакансия и редактор. */
   readonly wide: boolean;
 }
@@ -286,12 +311,16 @@ function useApplyLetter(vacancyId: string) {
   });
   const variants = useLetterVariants(vacancyId, draft);
   const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
-  return { letter, variants };
+  // B678: до чтения одобрения шаг не показывает ни «Сначала одобрите», ни «Собираем письмо».
+  // Письмо с опровергнутыми фактами уже прочитано, хотя одобрения у него больше нет.
+  const known = Boolean(letter.approval.saved) || letter.approval.stale === true;
+  return { letter, variants, approvalPending: approvalHold.hold && !known };
 }
 
 /** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
 function applyForm(
   questionnaire: QuestionnaireState,
+  visibility: VisibilityState,
   setStep: Dispatch<SetStateAction<ApplyStep>>,
 ): Pick<BodyProps, 'answers' | 'hhForm' | 'onHhForm'> {
   const { form, draft } = questionnaire;
@@ -304,6 +333,13 @@ function applyForm(
           answered: ready.answered,
           complete: ready.missingRequired === 0,
           answersText: answers,
+          answers: form ? hhAnswers(form.questions, draft) : [],
+          onSubmitted: questionnaire.markSubmitted,
+          visibilityAgreed: visibility.agreed,
+          askVisibility: () => {
+            visibility.ask();
+            setStep((now) => (now === 'send' ? 'form' : now));
+          },
           open: () => setStep('form'),
         }
       : null,
@@ -312,6 +348,26 @@ function applyForm(
       if ((await questionnaire.takeHhForm(hhForm)) && open) {
         setStep((now) => (now === 'send' ? 'form' : now));
       }
+    },
+  };
+}
+
+/** o04: «Отправить отклик с анкетой» сохраняет ответы и открывает подтверждение отправки. */
+function useSendAsk(
+  questionnaire: QuestionnaireState,
+  setStep: Dispatch<SetStateAction<ApplyStep>>,
+): SendAsk {
+  const [askNow, setAskNow] = useState(false);
+  const visibility = useVisibilityQuestion();
+  const onAsked = useCallback(() => setAskNow(false), []);
+  return {
+    askNow,
+    onAsked,
+    visibility,
+    sendWithForm: () => {
+      questionnaire.save();
+      setAskNow(true);
+      setStep('send');
     },
   };
 }
@@ -327,6 +383,20 @@ function useQueuedQuestions(
   }, [state, reload]);
 }
 
+/** Пройденные шаги отклика. */
+function doneSteps(
+  resume: boolean,
+  letter: LetterScreenState,
+  questionnaire: QuestionnaireState,
+): FlowState['done'] {
+  return {
+    resume,
+    letter: Boolean(letter.approval.saved),
+    form: questionnaire.submitted.kind === 'done',
+    send: false,
+  };
+}
+
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
 function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState {
   const { search } = useShell();
@@ -334,9 +404,10 @@ function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState 
   const [resumeOk, setResumeOk] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
-  const { letter, variants } = useApplyLetter(target.vacancyId);
+  const { letter, variants, approvalPending } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
+  const ask = useSendAsk(questionnaire, setStep);
   const form = questionnaire.form;
   useQueuedQuestions(manual, questionnaire);
   // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
@@ -344,7 +415,6 @@ function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState 
   // Название вакансии: из связей по вакансии, а если их нет — из ответа об анкете.
   const known = letter.circles.data ?? questionnaire.known;
   const head = buildHead({ application: target.application, known, cluster });
-  const saved = Boolean(letter.approval.saved);
   // Письмо одобрено вместе с резюме: вкладка и сам шаг показывают одно состояние.
   const resumeDone = resumeOk || Boolean(letter.approval.saved?.resume);
   return {
@@ -353,13 +423,9 @@ function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState 
     head,
     quota,
     questionnaire,
+    opening: stepOpening({ step, approvalPending, formLoading: questionnaire.loading }),
     wide: shown !== 'send' && shown !== 'form' && !quota,
-    done: {
-      resume: resumeDone,
-      letter: saved,
-      form: questionnaire.submitted.kind === 'done',
-      send: false,
-    },
+    done: doneSteps(resumeDone, letter, questionnaire),
     body: {
       vacancyId: target.vacancyId,
       head,
@@ -368,7 +434,8 @@ function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState 
       setStep,
       letter,
       variants,
-      ...applyForm(questionnaire, setStep),
+      ask,
+      ...applyForm(questionnaire, ask.visibility, setStep),
       manual,
       questionnaire,
       resumeOk: resumeDone,
@@ -383,7 +450,9 @@ function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState 
 
 function ApplyFlow(props: FlowProps) {
   const flow = useApplyFlow(props);
-  const { shown, head, quota, questionnaire, wide, body } = flow;
+  const { shown, head, quota, questionnaire, opening, body } = flow;
+  const wide = flow.wide && !opening;
+  const ready = !quota && !opening;
   const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
@@ -408,9 +477,17 @@ function ApplyFlow(props: FlowProps) {
       >
         <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
-        {!quota && shown === 'send' ? <SendBody {...body} /> : null}
-        {!quota && shown === 'form' && form ? <FormStep state={questionnaire} form={form} /> : null}
-        {!quota && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
+        {opening && !quota ? <LoadingApply /> : null}
+        {ready && shown === 'send' ? <SendBody {...body} /> : null}
+        {ready && shown === 'form' && form ? (
+          <FormStep
+            state={questionnaire}
+            form={form}
+            visibility={body.ask.visibility}
+            onSend={body.ask.sendWithForm}
+          />
+        ) : null}
+        {ready && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>
   );
@@ -448,7 +525,10 @@ function LoadFailed({ text, onRetry }: { readonly text: string; readonly onRetry
 
 /** До отправки: отклик, который кандидат отправляет сам, собран заранее (B787). */
 function WithManual({ target, cluster }: FlowProps) {
-  const manual = useManualApply(target, applyRoute({ application: target.application, cluster }).source);
+  const manual = useManualApply(
+    target,
+    applyRoute({ application: target.application, cluster }).source,
+  );
   if (manual === 'loading') {
     return (
       <Pending>

@@ -15,6 +15,11 @@ import {
 } from '../candidate/sqliteManualApplyRepository';
 import { SqliteQuestionnaireRepository } from '../candidate/sqliteQuestionnaireRepository';
 import { knownAnswers, skillYearAnswers, standardQuestions } from '../domain/manualApplyQuestions';
+import {
+  letterFactSource,
+  letterFreshness,
+  type LetterFactSource,
+} from '../domain/letterFreshness';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { snapshotWithDescription } from './applicationVacancyText';
@@ -22,6 +27,7 @@ import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 import { latestLetterApproval } from './letterApprovalRead';
+import { letterVacancyTexts } from './letterDraftRoutes';
 import { prepareLetterResume } from './letterApprovalResume';
 import { poolReader, questionnaireView, type Signed } from './questionnaireRoutes';
 import type { ResumeEditDeps } from './resumeEditRoutes';
@@ -138,6 +144,33 @@ function prepareResume(
   }
 }
 
+function factSource(deps: RouteDeps, candidateId: string): LetterFactSource {
+  return letterFactSource(deps.candidateStore.getSnapshot(candidateId));
+}
+
+const pitchProfileSchema = z.object({ profileHash: z.string() });
+
+/** Профиль, по которому собрано письмо очереди. */
+function pitchProfile(pitch: unknown): string | null {
+  return pitchProfileSchema.safeParse(pitch).data?.profileHash ?? null;
+}
+
+/** Письмо отклика; текст с опровергнутым числом профиля не отдаём. */
+function currentLetter(
+  deps: Bound,
+  candidateId: string,
+  item: StoredManualApply,
+  source: LetterFactSource,
+): string | null {
+  const approved = latestLetterApproval(deps, candidateId, item.vacancyId, source);
+  if (approved) return approved.factsChanged ? null : approved.body;
+  if (!item.letter) return null;
+  const profileHash = pitchProfile(item.pitch);
+  const mark = profileHash ? { profileHash, ownNumbers: [] } : null;
+  const texts = letterVacancyTexts(deps, item.vacancyId);
+  return letterFreshness(source, item.letter, texts, mark).factsChanged ? null : item.letter;
+}
+
 async function prepare(
   deps: Bound,
   request: LogContext,
@@ -147,7 +180,8 @@ async function prepare(
   const { vacancyId } = item;
   await prepareQuestions(deps, candidateId, item);
   prepareResume(deps, request, candidateId, vacancyId);
-  if (!item.letter && !latestLetterApproval(deps, candidateId, vacancyId)) {
+  const source = factSource(deps, candidateId);
+  if (!item.letter && !latestLetterApproval(deps, candidateId, vacancyId, source)) {
     const letter = await deps.writeLetter(deps, request, candidateId, vacancyId);
     if (!letter) throw new Error('manual_apply_letter_failed');
     deps.queue.saveLetter(candidateId, vacancyId, letter.text, letter.pitch);
@@ -205,7 +239,12 @@ function startTick(app: FastifyInstance, deps: Bound): void {
   app.addHook('onClose', async () => clearInterval(timer));
 }
 
-function toItem(deps: Bound, who: Who, item: StoredManualApply): ManualApplyItem {
+function toItem(
+  deps: Bound,
+  who: Who,
+  item: StoredManualApply,
+  source = factSource(deps, who.candidateId),
+): ManualApplyItem {
   const { vacancyId, applicationId, title, company, url, reason, host, createdAt } = item;
   const preparing = !item.prepared && item.attempts <= MAX_ATTEMPTS;
   const stored = deps.forms.get(who.candidateId, vacancyId);
@@ -213,7 +252,7 @@ function toItem(deps: Bound, who: Who, item: StoredManualApply): ManualApplyItem
     ? questionnaireView(deps, { ...who, vacancyId }, stored, { state: 'ready', formUrl: null })
         .missingRequired
     : 0;
-  const letter = latestLetterApproval(deps, who.candidateId, vacancyId)?.body ?? item.letter;
+  const letter = currentLetter(deps, who.candidateId, item, source);
   const ready = missingAnswers > 0 ? 'needs_answer' : 'ready';
   // Вопросы видны сразу, как прочитаны: кандидат отвечает, пока остальное собирается.
   const state = preparing && missingAnswers === 0 ? 'preparing' : ready;
@@ -237,7 +276,11 @@ const listQueue: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const open = deps.queue.listOpen(who.candidateId);
-  return { data: open.map((item) => toItem(deps, who, item)), meta: { requestId: request.id } };
+  const source = factSource(deps, who.candidateId);
+  return {
+    data: open.map((item) => toItem(deps, who, item, source)),
+    meta: { requestId: request.id },
+  };
 };
 
 const notFound = (request: FastifyRequest, reply: FastifyReply) =>
@@ -424,7 +467,9 @@ export function registerManualApplyRoutes(
   return {
     async preparedPitch(candidateId, vacancyId) {
       await bound.inFlight.get(flightKey(candidateId, vacancyId));
-      return bound.queue.get(candidateId, vacancyId)?.pitch ?? null;
+      const pitch = bound.queue.get(candidateId, vacancyId)?.pitch ?? null;
+      // Профиль изменился: письмо собирается заново, иначе «Пересобрать» вернула бы прежнее.
+      return pitchProfile(pitch) === factSource(bound, candidateId).profileHash ? pitch : null;
     },
   };
 }

@@ -7,7 +7,8 @@
  * - digital_footprint: аудит открытого профессионального следа
  * - actions_on_behalf: действия от имени кандидата (отклики и поднятие резюме)
  *
- * Тексты согласий утверждены владельцем 19.10.2026.
+ * Тексты согласий утверждены владельцем 19.10.2026;
+ * actions_on_behalf-v1.1 — 25.11.2026 (B787).
  */
 
 export const CAPABILITY_CONSENTS_APPROVED = true;
@@ -27,7 +28,7 @@ export function isCandidateCapability(value: string): value is CandidateCapabili
 export const CAPABILITY_CONSENT_CURRENT_VERSION: Record<CandidateCapability, string> = {
   profile_activity: 'profile_activity-v1.0',
   digital_footprint: 'digital_footprint-v1.2',
-  actions_on_behalf: 'actions_on_behalf-v1.0',
+  actions_on_behalf: 'actions_on_behalf-v1.1',
 };
 
 export interface CapabilityConsentDocument {
@@ -64,13 +65,37 @@ export const CAPABILITY_CONSENT_DOCUMENTS: Record<CandidateCapability, Capabilit
     },
     actions_on_behalf: {
       capability: 'actions_on_behalf',
-      versionId: 'actions_on_behalf-v1.0',
+      versionId: 'actions_on_behalf-v1.1',
       title: 'Действия от имени кандидата',
       items: [
-        'Платформа помогает направлять согласованные отклики на выбранные вами вакансии и обновлять дату актуальности резюме на карьерных площадках.',
-        'Ни один отклик не направляется работодателю автоматически без вашего предварительного выбора вакансии и одобрения текста.',
-        'Платформа действует строго в рамках предоставленных полномочий и фиксирует каждое совершённое действие в журнале событий.',
-        'Вы можете в любой момент отозвать согласие, что немедленно прекратит любые действия платформы от вашего имени.',
+        'Поручаю OpenQareer по моей команде направлять отклик выбранному работодателю и от моего имени подтверждать согласие на обработку моих данных для рассмотрения этого отклика на hh, LinkedIn и сайте работодателя; текст сохраняется и доступен мне.',
       ],
     },
   };
+
+/** Прежние тексты: кандидат видит ту версию, которую принял. */
+const CAPABILITY_CONSENT_HISTORY: readonly CapabilityConsentDocument[] = [
+  {
+    capability: 'actions_on_behalf',
+    versionId: 'actions_on_behalf-v1.0',
+    title: 'Действия от имени кандидата',
+    items: [
+      'Платформа помогает направлять согласованные отклики на выбранные вами вакансии и обновлять дату актуальности резюме на карьерных площадках.',
+      'Ни один отклик не направляется работодателю автоматически без вашего предварительного выбора вакансии и одобрения текста.',
+      'Платформа действует строго в рамках предоставленных полномочий и фиксирует каждое совершённое действие в журнале событий.',
+      'Вы можете в любой момент отозвать согласие, что немедленно прекратит любые действия платформы от вашего имени.',
+    ],
+  },
+];
+
+/** Текст принятой версии; неизвестная версия показывается действующим текстом. */
+export function capabilityConsentDocument(
+  capability: CandidateCapability,
+  versionId: string | undefined,
+): CapabilityConsentDocument {
+  return (
+    CAPABILITY_CONSENT_HISTORY.find(
+      (item) => item.capability === capability && item.versionId === versionId,
+    ) ?? CAPABILITY_CONSENT_DOCUMENTS[capability]
+  );
+}

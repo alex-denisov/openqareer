@@ -148,6 +148,8 @@ export interface SendStepProps {
   /** Анкета hh.ru в приложении (B641). */
   readonly form: HhSendStepProps['form'];
   readonly onForm: HhSendStepProps['onForm'];
+  readonly askNow?: boolean;
+  readonly onAsked?: () => void;
   readonly onLetter: () => void;
 }
 
@@ -170,6 +172,8 @@ export function SendStep(props: SendStepProps) {
       onLetter={props.onLetter}
       form={props.form}
       onForm={props.onForm}
+      askNow={props.askNow}
+      onAsked={props.onAsked}
     />
   );
 }

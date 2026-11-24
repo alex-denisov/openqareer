@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StarStoryView } from '../../../../../shared/starStories';
 import {
+  answeredQuestions,
   buildPrepRows,
   formatInterviewWhen,
   paragraphsFromStory,
@@ -109,6 +110,24 @@ describe('answers', () => {
     expect(prepHeadline(3, 5)).toBe('Готовы ответы на 3 вопроса из 5');
     expect(prepHeadline(1, 5)).toBe('Готов ответ на 1 вопрос из 5');
     expect(prepHeadline(0, 4)).toBe('Готовы ответы на 0 вопросов из 4');
+  });
+});
+
+describe('answeredQuestions (B635)', () => {
+  it('ответ на вопрос, которого больше нет в списке, остаётся со своим вопросом', () => {
+    const paragraph = (questionId: string): PrepParagraph => ({
+      questionId,
+      field: 'action',
+      text: 'ответ',
+      sourceFactId: null,
+    });
+    const list = answeredQuestions(
+      [{ id: 'req:Kafka', question: 'Про Kafka' }],
+      [{ id: 'star-q9', question: 'Общий' }],
+      [paragraph('req:Kafka'), paragraph('star-q9'), paragraph('duty:Ремонт СЭС'), paragraph('x')],
+    );
+    expect(list.map((item) => item.id)).toEqual(['req:Kafka', 'star-q9', 'duty:Ремонт СЭС']);
+    expect(list[2]?.question).toContain('«Ремонт СЭС»');
   });
 });
 

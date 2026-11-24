@@ -1,4 +1,6 @@
+import { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
+import { candidateFlagLookup } from '../candidate/hhRaiseQueue';
 import type { SqliteCandidateStatusRepository } from '../candidate/sqliteCandidateStatusRepository';
 import { runWeeklySelection, type WeeklySelectionJobDeps } from '../candidate/weeklySelectionJob';
 import { readTodayMatchedVacancies } from './applicationRoutes';
@@ -9,13 +11,35 @@ const HOUR_MS = 60 * 60_000;
 /** Первый проход — не в окне здоровья выката. */
 const FIRST_RUN_MS = 5 * 60_000;
 
+/** B649: без флага нового кабинета фоновая задача кандидата не берёт. */
+export function flaggedCandidates(
+  candidates: readonly string[],
+  isFlagged: (candidateId: string) => boolean,
+): readonly string[] {
+  return candidates.filter(isFlagged);
+}
+
+function readCandidates(
+  deps: RouteDeps,
+  repository: SqliteCandidateStatusRepository,
+): readonly string[] {
+  const enabled = repository.weeklySelectionCandidates();
+  if (enabled.length === 0) return [];
+  const users = new DatabaseSync(deps.config.databasePath, { readOnly: true });
+  try {
+    return flaggedCandidates(enabled, candidateFlagLookup(users, deps.config));
+  } finally {
+    users.close();
+  }
+}
+
 function jobDeps(
   app: FastifyInstance,
   deps: RouteDeps,
   repository: SqliteCandidateStatusRepository,
 ): WeeklySelectionJobDeps {
   return {
-    candidates: () => repository.weeklySelectionCandidates(),
+    candidates: () => readCandidates(deps, repository),
     freshVacancies: async (candidateId, since) => {
       const { matched } = await readTodayMatchedVacancies(deps, candidateId);
       const from = since.toISOString();

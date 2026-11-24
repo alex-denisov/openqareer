@@ -52,6 +52,10 @@ export function hhApplyGate(input: HhApplyGateInput): HhApplyGateResult {
   if (input.forVacancy.some((attempt) => inProgress(attempt, input.now))) {
     return { ok: false, refusal: 'hh_apply_in_progress' };
   }
+  // hh.ru сам показал прежний отклик: повтор только тратит попытку.
+  if (input.forVacancy.some((attempt) => attempt.failureCode === 'already_applied')) {
+    return { ok: false, refusal: 'hh_already_applied' };
+  }
   // Анкета после отклика тоже значит, что отклик на hh.ru ушёл.
   if (input.forVacancy.some((attempt) => attempt.outcome === 'sent' || attempt.outcome === 'questionnaire')) {
     return { ok: false, refusal: 'hh_already_applied' };

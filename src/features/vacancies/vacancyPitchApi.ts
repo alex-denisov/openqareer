@@ -48,6 +48,8 @@ export interface VacancyPitchResult {
   readonly resumeAvailable?: boolean;
   /** Резюме под вакансию (Basic и выше) или общее резюме (Free). */
   readonly resumeKind?: 'targeted' | 'master';
+  /** Отпечаток профиля, по которому собрано письмо. */
+  readonly profileHash?: string;
   readonly generatedAt: string;
 }
 
