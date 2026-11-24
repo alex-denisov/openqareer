@@ -54,7 +54,7 @@ test.describe('B653 C06: «Релокация»', () => {
       '/app/vacancies/companies?relocation=true',
     );
     // Главное действие — в ведущем блоке, как в макете c06 (B645): на 390 закреплено
-    // справа (104, 270), на 1440 стоит в левой колонке. «Изменить места» — вторичная ссылка.
+    // у правого поля, на 1440 стоит в левой колонке. «Изменить места» — вторичная ссылка.
     const dock = screen.locator('.lead > .actions');
     await expect(dock.getByRole('button')).toHaveText(['Уточнить: кто едет и бюджет']);
     const places = screen.locator('.lead .row-act', { hasText: 'Изменить места' });
@@ -71,7 +71,8 @@ test.describe('B653 C06: «Релокация»', () => {
     const leadContentX = (leadBox?.x ?? 0) + padding;
     const button = await dock.getByRole('button').boundingBox();
     if ((page.viewportSize()?.width ?? 0) < 768) {
-      expect(Math.round(button?.x ?? 0)).toBe(104);
+      expect(Math.round((button?.x ?? 0) + (button?.width ?? 0))).toBe(374);
+      expect(button?.width ?? 0).toBeLessThan(358);
       await expect(screen).toHaveCSS('padding-top', '12px');
       await expect(screen.locator('.rl-row').first()).toHaveCSS('padding-top', '8px');
     } else {

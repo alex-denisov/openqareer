@@ -69,10 +69,19 @@ test.describe('B663: «Дневник» — адаптация', () => {
     const meeting = page.locator('[data-b640-node="d01c"]');
     await expect(meeting.locator('.fact')).toHaveCount(6);
     await expect(meeting).toHaveCSS('padding-top', phone ? '12px' : '8px');
-    // Главная кнопка — под датой, как в макете d01c: 390 x172/202 в полосе, 1440 в колонке.
+    // Главная кнопка — под датой, как в макете d01c: на 390 прижата к правому полю
+    // полосы, на 1440 левый край — край заголовка. Ширина зависит от шрифта, числом не сверяем.
     const kpi = await meeting.getByRole('link', { name: 'Сделать цели и KPI' }).boundingBox();
-    expect(Math.round(kpi?.x ?? 0)).toBe(phone ? 172 : 218);
-    expect(Math.round(kpi?.width ?? 0)).toBe(202);
+    const title = await meeting.locator('#mt-title').boundingBox();
+    const prep = await meeting.locator('.dn-fs').first().boundingBox();
+    if (phone) {
+      expect(Math.round((kpi?.x ?? 0) + (kpi?.width ?? 0))).toBe(374);
+      expect(kpi?.width ?? 0).toBeLessThan(358);
+    } else {
+      expect(Math.round(kpi?.x ?? 0)).toBe(Math.round(title?.x ?? -1));
+      expect(kpi?.y ?? 0).toBeGreaterThan(title?.y ?? Infinity);
+      expect(kpi?.y ?? Infinity).toBeLessThan(prep?.y ?? 0);
+    }
     await expectGates(page);
 
     await page.goto('/app/diary/adaptation/people');
