@@ -48,7 +48,10 @@ export interface VariantSource {
  * «Другой вариант» поста, комментария или сообщения: черновик — первый текст, сохранённые варианты листаются «‹ N из M ›».
  * Правка руками остаётся за своим текстом; одобряется то, что в поле.
  */
-export function useTextVariants(source: VariantSource, field: VariantField): VariantControlsState {
+export function useTextVariants(
+  source: VariantSource,
+  field: VariantField,
+): VariantControlsState & { readonly variantId?: string } {
   const { load, create } = source;
   const { state, replaceData } = useAsync(load, '');
   const [index, setIndex] = useState(0);
@@ -63,9 +66,11 @@ export function useTextVariants(source: VariantSource, field: VariantField): Var
     setIndex(next);
   };
 
+  const shown = Math.min(index, stored.length);
   return {
+    variantId: shown > 0 ? stored[shown - 1]?.id : undefined,
     total: 1 + stored.length,
-    index: Math.min(index, stored.length),
+    index: shown,
     remaining: state.data?.remaining ?? MAX_TEXT_VARIANTS,
     locked: busy,
     select: (next) => show(next, stored),

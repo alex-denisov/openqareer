@@ -47,6 +47,15 @@ import {
   HH_RESUME_VARIANT_JSON_SCHEMA,
   hhResumeVariantUserMessage,
 } from '../domain/hhResumeVariantPrompt';
+import {
+  checkFactRewriteVariant,
+  FACT_REWRITE_VARIANT_INSTRUCTIONS,
+  FACT_REWRITE_VARIANT_JSON_SCHEMA,
+  factRewriteVariantOutputSchema,
+  factRewriteVariantUserMessage,
+  type FactRewriteVariantOutput,
+  type FactRewriteVariantRequest,
+} from '../domain/factRewriteVariant';
 import { MODEL_CHAINS, resolveChain } from './modelChains';
 import type { VertexConfig } from './vertexAi';
 import { VertexJsonClient } from './vertexJson';
@@ -71,6 +80,8 @@ export interface ExperienceFactRewriter {
   linkedinVariant?(request: LinkedinVariantRequest): Promise<LinkedinVariantOutput | null>;
   /** B682: «Другой вариант» правки резюме hh.ru. */
   hhResumeVariant?(request: HhResumeVariantRequest): Promise<HhResumeVariantOutput | null>;
+  /** B786: «Другой вариант» пункта резюме (k06). */
+  rewriteVariant?(request: FactRewriteVariantRequest): Promise<FactRewriteVariantOutput | null>;
   readonly provenance?: Readonly<{ model: string; promptRevision: string }>;
 }
 
@@ -161,6 +172,17 @@ export class LlmExperienceFactRewriter implements ExperienceFactRewriter {
       HH_RESUME_VARIANT_JSON_SCHEMA,
     );
     return readJsonAnswer(content, hhResumeVariantOutputSchema);
+  }
+
+  async rewriteVariant(request: FactRewriteVariantRequest): Promise<FactRewriteVariantOutput | null> {
+    if (request.facts.length === 0) return null;
+    const content = await this.complete(
+      FACT_REWRITE_VARIANT_INSTRUCTIONS,
+      factRewriteVariantUserMessage(request),
+      'experience_fact_rewrite_variant',
+      FACT_REWRITE_VARIANT_JSON_SCHEMA,
+    );
+    return readJsonAnswer(content, factRewriteVariantOutputSchema);
   }
 
   private async complete(
@@ -283,6 +305,21 @@ export class QueuedExperienceFactRewriter implements ExperienceFactRewriter {
       try {
         const output = await stage.hhResumeVariant(request);
         if (output?.text.trim()) return output;
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
+      } catch (error) {
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', error);
+      }
+    }
+    return null;
+  }
+
+  async rewriteVariant(request: FactRewriteVariantRequest): Promise<FactRewriteVariantOutput | null> {
+    for (const stage of this.stages) {
+      if (!stage.rewriteVariant) continue;
+      try {
+        const output = await stage.rewriteVariant(request);
+        // Не прошедший проверку ответ — неудача ступени: вариант пишет следующая модель.
+        if (output && checkFactRewriteVariant(request, output)) return output;
         this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
       } catch (error) {
         this.onStageFailure(stage.provenance?.model ?? 'unknown', error);

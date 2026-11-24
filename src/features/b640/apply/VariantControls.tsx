@@ -111,7 +111,7 @@ function usePopFocus(onClose: () => void) {
 }
 
 /** «Что поменять»: чипы и своё пожелание к другому варианту. */
-function WishPop({ popId, variants }: WishProps) {
+export function WishPop({ popId, variants }: WishProps) {
   const [chips, setChips] = useState<readonly VariantWishChip[]>([]);
   const [text, setText] = useState('');
   const ref = usePopFocus(() => variants.setWishOpen(false));

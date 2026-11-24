@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { VariantWish } from '../../../../shared/textVariants';
 import { CoachApiError } from '../../coach/apiClient';
 import type { CandidateMemory } from '../../coach/coachApi';
-import { applyFactRewrite, revertFactRewrite } from '../../resume/experienceFactRewriteApi';
+import {
+  applyFactRewrite,
+  createFactRewriteVariant,
+  listFactRewriteVariants,
+  revertFactRewrite,
+} from '../../resume/experienceFactRewriteApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
+import { useTextVariants } from '../apply/useTextVariants';
+import { VariantSwitch, type VariantControlsState } from '../apply/VariantControls';
 import { Icon } from '../kit/Icon';
 import { InfoTip } from '../kit/InfoTip';
 import { ResultLine } from '../kit/ResultLine';
@@ -11,6 +19,7 @@ import { Link } from '../shell/Link';
 import { useScreenChrome } from '../shell/ShellContext';
 import type { ChatMessage } from './model';
 import { ErrorRow, Message, Reply } from './parts';
+import { ResumeEditVariantButton, ResumeEditWish } from './ResumeEditVariant';
 import { declineResumeEdit, loadResumeEdit, type ResumeEdit } from './resumeEdit';
 
 type Loaded =
@@ -73,15 +82,15 @@ function useResumeEdit(factId: string) {
     setFailure(null);
     reload();
   }
-  function apply(edit: ResumeEdit) {
+  function apply(edit: ResumeEdit, variantId?: string) {
     void run(
       async () => {
-        const record = await applyFactRewrite(edit.proposalId, {}, [edit.key]);
+        const record = await applyFactRewrite(edit.proposalId, {}, [edit.key], variantId);
         setState({ kind: 'applied', rewriteId: record.id });
       },
       (reason) => ({
         text: 'Правка не применилась',
-        retry: isStale(reason) ? reread : () => apply(edit),
+        retry: isStale(reason) ? reread : () => apply(edit, variantId),
       }),
     );
   }
@@ -137,15 +146,33 @@ function HalfSheet() {
   return <span ref={end} hidden />;
 }
 
+/** Варианты пункта: показанный текст и его номер; в резюме идёт показанный. */
+function useEditVariants(edit: ResumeEdit) {
+  const { proposalId, key } = edit;
+  const [text, setText] = useState(edit.text);
+  const source = useMemo(
+    () => ({
+      load: (signal: AbortSignal) => listFactRewriteVariants(proposalId, key, signal),
+      create: (wish: VariantWish) => createFactRewriteVariant(proposalId, key, wish),
+    }),
+    [proposalId, key],
+  );
+  return { text, variants: useTextVariants(source, { draftText: edit.text, text, setText }) };
+}
+
 interface EditBodyProps {
   readonly edit: ResumeEdit;
+  readonly text: string;
+  readonly variants: VariantControlsState;
+  readonly popId: string;
   readonly reason?: string;
   readonly busy: boolean;
   readonly onApply: () => void;
   readonly onDecline: () => void;
 }
 
-function EditBody({ edit, reason, busy, onApply, onDecline }: EditBodyProps) {
+function EditBody({ edit, text, variants, popId, reason, busy, onApply, onDecline }: EditBodyProps) {
+  const locked = busy || variants.busy;
   return (
     <>
       <p className="ec-title">
@@ -155,18 +182,20 @@ function EditBody({ edit, reason, busy, onApply, onDecline }: EditBodyProps) {
       <dl className="ec-diff">
         <div className="now">
           <dt>Станет</dt>
-          <dd>{edit.text}</dd>
+          <dd aria-live="polite">{text}</dd>
         </div>
       </dl>
+      <VariantSwitch variants={{ ...variants, locked }} label="Варианты правки" />
       <div className="msg-acts act-row ec-acts">
-        <button className="btn is-sm is-primary" type="button" disabled={busy} onClick={onApply}>
+        <button className="btn is-sm is-primary" type="button" disabled={locked} onClick={onApply}>
           Применить
         </button>
+        <ResumeEditVariantButton variants={variants} popId={popId} disabled={locked} />
         <button
           className="btn is-sm is-line ec-ib"
           type="button"
           aria-label="Отклонить"
-          disabled={busy}
+          disabled={locked}
           onClick={onDecline}
         >
           <Icon name="close" />
@@ -177,6 +206,42 @@ function EditBody({ edit, reason, busy, onApply, onDecline }: EditBodyProps) {
         </button>
       </div>
     </>
+  );
+}
+
+interface EditSectionProps {
+  readonly edit: ResumeEdit;
+  readonly reason?: string;
+  readonly busy: boolean;
+  readonly error: ReactNode;
+  readonly onApply: (variantId?: string) => void;
+  readonly onDecline: () => void;
+}
+
+function EditSection({ edit, reason, busy, error, onApply, onDecline }: EditSectionProps) {
+  const { text, variants } = useEditVariants(edit);
+  const popId = useId();
+  const card = useRef<HTMLElement>(null);
+  return (
+    <section
+      className="ec"
+      ref={card}
+      aria-label={`Правка резюме: ${edit.place}`}
+      aria-busy={busy || variants.busy}
+    >
+      <EditBody
+        edit={edit}
+        text={text}
+        variants={variants}
+        popId={popId}
+        reason={reason}
+        busy={busy}
+        onApply={() => onApply(variants.variantId)}
+        onDecline={onDecline}
+      />
+      <ResumeEditWish variants={variants} popId={popId} card={card} />
+      {error}
+    </section>
   );
 }
 
@@ -219,16 +284,15 @@ export function ResumeEditCard({ factId, reason, memory, messages }: ResumeEditC
       <Message
         message={{ id: edit.key, role: 'assistant', content: editReply(edit, memory, messages) }}
       />
-      <section className="ec" aria-label={`Правка резюме: ${edit.place}`} aria-busy={busy}>
-        <EditBody
-          edit={edit}
-          reason={reason}
-          busy={busy}
-          onApply={() => apply(edit)}
-          onDecline={() => decline(edit)}
-        />
-        {error}
-      </section>
+      <EditSection
+        key={`${edit.proposalId}:${edit.key}`}
+        edit={edit}
+        reason={reason}
+        busy={busy}
+        error={error}
+        onApply={(variantId) => apply(edit, variantId)}
+        onDecline={() => decline(edit)}
+      />
       <HalfSheet />
     </>
   );
