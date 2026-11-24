@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import type { HhResumeEdit, HhResumeEditSection } from '../../../../../shared/hhCandidateSession';
 import { Button, Dialog, Icon, SegControl, useToast } from '../../kit';
-import { HhEditVariantActions, HhEditVariantError } from '../HhEditVariant';
+import { HhEditVariantButton, HhEditVariantError, HhEditVariantSwitch } from '../HhEditVariant';
 import { useHhEditVariants } from '../useHhEditVariants';
 import { canApply, useHhResumeApply, type HhApplyState, type HhResumeApply } from './useHhResumeApply';
 
@@ -96,9 +96,10 @@ function EditRow({ edit, shown, apply, onShow }: EditRowProps) {
       {edit.was ? <Lines text={edit.was} className="hh2-was" hidden="Сейчас: " /> : null}
       <div className="hh2-sugg">
         <Lines text={shown.now} className="hh2-now" hidden="Предложение: " />
+        <HhEditVariantSwitch variants={variants} disabled={settled} />
         <div className="hh2-acts">
           <CopyButton text={shown.now} />
-          {edit.variantOf ? <HhEditVariantActions variants={variants} disabled={settled} /> : null}
+          {edit.variantOf ? <HhEditVariantButton variants={variants} disabled={settled} /> : null}
           <ApplyAction edit={shown} state={state} busy={variants.busy} onApply={() => void apply.apply(shown)} />
         </div>
       </div>

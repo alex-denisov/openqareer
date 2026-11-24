@@ -454,7 +454,7 @@
   .b640 .hh2-r:has(.hh2-sugg) .hh2-was { text-decoration: line-through; text-decoration-color: var(--career-text-dim); }
   .b640 .hh2-sugg { display: flex; align-items: center; flex-wrap: wrap; gap: var(--career-space-2) var(--career-space-3); }
   .b640 .hh2-now { margin: 0; flex: 1 1 18rem; min-inline-size: 0; color: var(--career-text); font-size: var(--career-text-sm); }
-  .b640 .hh2-acts { display: flex; flex-wrap: wrap; max-inline-size: 100%; align-items: center; gap: var(--career-space-1); flex: none; }
+  .b640 .hh2-acts { display: flex; align-items: center; gap: var(--career-space-1); flex: none; }
   .b640 .cb-list { display: grid; gap: var(--career-space-2); margin: 0; padding: 0; list-style: none; }
   .b640 .cb-item { display: flex; align-items: flex-start; gap: var(--career-space-3); padding: var(--career-space-3); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); min-inline-size: 0; }
   .b640 .cb-main { display: grid; gap: var(--career-space-1); flex: 1 1 auto; min-inline-size: 0; }
