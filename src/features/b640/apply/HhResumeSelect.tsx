@@ -13,13 +13,13 @@ function knownContent(snapshot: HhResumeSnapshot, id: string) {
 }
 
 async function select(snapshot: HhResumeSnapshot, item: HhResumeSummary) {
-  const content =
-    knownContent(snapshot, item.id) ??
-    (await readHhResumeContent({
-      id: item.id,
-      title: item.title,
-      url: `https://hh.ru/resume/${item.id}`,
-    }));
+  const known = knownContent(snapshot, item.id);
+  if (known) return saveHhResumes(snapshot.resumes, known, undefined, false);
+  const content = await readHhResumeContent({
+    id: item.id,
+    title: item.title,
+    url: `https://hh.ru/resume/${item.id}`,
+  });
   return saveHhResumes(snapshot.resumes, content);
 }
 
