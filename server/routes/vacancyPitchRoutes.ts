@@ -13,6 +13,7 @@ import { writeCoverLetterBody, type WrittenLetterBody } from './vacancyLetterBod
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
+import { snapshotWithDescription } from './applicationVacancyText';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import {
@@ -555,6 +556,16 @@ const handleApproveVacancyLetter = async (deps: ResumeEditDeps, request: Fastify
   };
 };
 
+function letterVacancySnapshot(deps: RouteDeps, vacancyId: string, cluster: VacancyCluster) {
+  const route = preferredApplySource(cluster);
+  return snapshotWithDescription(deps.multiSourceEngine, vacancyId, {
+    title: cluster.canonicalTitle,
+    company: cluster.canonicalCompany,
+    url: route.url,
+    source: route.source ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
+  });
+}
+
 function persistApprovedLetterSnapshot(
   deps: ResumeEditDeps,
   candidateId: string,
@@ -564,17 +575,12 @@ function persistApprovedLetterSnapshot(
   approvedAt: string,
 ) {
   const { candidateStore } = deps;
-  const route = preferredApplySource(cluster);
+  const manualVacancy = letterVacancySnapshot(deps, vacancyId, cluster);
   return candidateStore.transaction(() => {
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
       stage: 'saved',
-      manualVacancy: {
-        title: cluster.canonicalTitle,
-        company: cluster.canonicalCompany,
-        url: route.url,
-        source: route.source ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
-      },
+      manualVacancy,
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).
     const resume = attachApprovedResume(deps, candidateId, {

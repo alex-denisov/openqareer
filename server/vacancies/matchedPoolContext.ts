@@ -234,6 +234,12 @@ export function readMatchedSnapshot(
         ...(geography ? { matchGeography: geography } : {}),
         ...(gradeRange ? { gradeRange } : {}),
       }),
-    options,
+    // Without roles the facts are the whole search: another profile's list does not stand in.
+    targetRoles.length > 0
+      ? {
+          ...options,
+          scope: matchedSnapshotKey([], targetRoles, targetLevel, geography, gradeRange),
+        }
+      : options,
   );
 }

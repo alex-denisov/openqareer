@@ -18,6 +18,7 @@ import { createGeoBlocker } from './vacancyFitGeoBlocks';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
 import { mapYielding } from '../vacancies/mapYielding';
+import { queueRowsYielding } from './queueRowsYielding';
 import { wantedCompaniesBreakTies, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
@@ -284,7 +285,7 @@ function requeueStaleRows<Input>(
   if (inputs.length === 0) return;
   const rows = inputs.slice(0, STALE_REFIT_LIMIT);
   void yieldToEventLoop()
-    .then(() => mapYielding(rows, (input) => runtime.enqueue(input)))
+    .then(() => queueRowsYielding(rows, (input) => runtime.enqueue(input)))
     .catch((error: unknown) =>
       log?.warn(
         { errorName: error instanceof Error ? error.name : 'UnknownError', rows: rows.length },
@@ -629,7 +630,7 @@ export async function requestFitForVacancyIds(
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  await mapYielding(
+  await queueRowsYielding(
     vacancyIds.map((id, index) => ({ id, index })),
     ({ id, index }) => {
       const target = readVacancyFitTarget(deps, id);
@@ -675,7 +676,7 @@ export async function requestFitForShownPage(
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  await mapYielding(
+  await queueRowsYielding(
     vacanciesAwaitingFit(items),
     (id) => {
       const target = readVacancyFitTarget(deps, id);

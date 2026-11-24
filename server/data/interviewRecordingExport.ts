@@ -6,7 +6,7 @@ import { SealedText } from './sealedText';
 import type { StoredSegment } from './sqliteInterviewRecordingRepository';
 
 /**
- * B738 · 9: записи интервью — по каждой статус, расшифровка обеих дорожек и разбор; имя собеседника.
+ * B738 · 9: записи интервью — по каждой статус, расшифровка обеих дорожек, разметка говорящих и разбор; имя собеседника.
  * Аудио после расшифровки не хранится (B642). Не выгружаются токен загрузки, его срок, хеш
  * расшифровки и модель, которая писала разбор.
  */
@@ -17,6 +17,13 @@ export interface InterviewRecordingSources {
 
 type Row = Record<string, unknown>;
 
+interface ExportedVoices {
+  readonly status: string;
+  readonly labels: unknown;
+  readonly candidateVoice: number | null;
+  readonly updatedAt: string;
+}
+
 export interface ExportedRecording {
   readonly recordingId: string;
   readonly applicationId: string;
@@ -25,6 +32,8 @@ export interface ExportedRecording {
   readonly createdAt: string;
   readonly finishedAt: string | null;
   readonly transcript: ReturnType<typeof assembleTranscript> | null;
+  /** Разметка говорящих загруженного файла: голос (1|2) каждой реплики и голос кандидата. */
+  readonly voices: ExportedVoices | null;
   readonly debriefs: readonly { readonly status: string; readonly findings: unknown; readonly createdAt: string }[];
 }
 
@@ -81,6 +90,26 @@ function debriefsOf(database: DatabaseSync, sealed: SealedText, recordingId: str
   }));
 }
 
+function voicesOf(database: DatabaseSync, recordingId: string): ExportedVoices | null {
+  if (!tableExists(database, 'interview_recording_voices')) return null;
+  const row = database
+    .prepare(
+      `SELECT status, labels, candidate_voice AS candidateVoice, updated_at AS updatedAt
+       FROM interview_recording_voices WHERE recording_id = ?`,
+    )
+    .get(recordingId) as
+    | { status: string; labels: string | null; candidateVoice: number | null; updatedAt: string }
+    | undefined;
+  if (!row) return null;
+  const { status, labels, candidateVoice, updatedAt } = row;
+  return {
+    status,
+    labels: labels ? opened(() => JSON.parse(labels) as unknown) : null,
+    candidateVoice,
+    updatedAt,
+  };
+}
+
 export function exportInterviewRecordings(sources: InterviewRecordingSources, candidateId: string): InterviewRecordingExport {
   const { database } = sources;
   const sealed = new SealedText(sources.encryptionKey);
@@ -113,6 +142,7 @@ export function exportInterviewRecordings(sources: InterviewRecordingSources, ca
         createdAt: String(row.createdAt),
         finishedAt: typeof row.finishedAt === 'string' ? row.finishedAt : null,
         transcript: transcriptOf(sealed, recordingId, segments),
+        voices: voicesOf(database, recordingId),
         debriefs: debriefsOf(database, sealed, recordingId),
       };
     }),

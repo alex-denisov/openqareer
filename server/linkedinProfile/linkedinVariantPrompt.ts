@@ -1,3 +1,4 @@
+import { REJECTED_VARIANT_RULE } from '../domain/checkedVariant';
 import type { LinkedinVariantRequest } from './linkedinVariant';
 
 /** B645 (a03): промпт «Предложить заново». Редакция — в `LINKEDIN_VARIANT_PROMPT_REVISION`. */
@@ -15,7 +16,8 @@ export const LINKEDIN_VARIANT_INSTRUCTIONS = `Ты карьерный консу
 - target "about": от первого лица, 3–5 предложений, до 1200 знаков. Кто кандидат, куда идёт, в чём сильнее всего, чем это подтверждено. Без списка должностей и дат.
 - target "place": 2–3 предложения, до 400 знаков, без «я» и «мы», с действия или результата. Компанию и должность (label) не повторяй.
 - target "skills": только навыки из фактов, через « · », самые важные для целевой роли — первыми, без повторов; можно не все.
-- В factIds — id фактов, на которых стоит текст.
+- В factIds — id фактов, на которых стоит текст: только id из facts, посимвольно.
+${REJECTED_VARIANT_RULE}
 
 Ответ — JSON по схеме.`;
 

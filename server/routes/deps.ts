@@ -74,7 +74,7 @@ export interface RouteDeps {
     Partial<
       Pick<
         import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute,
-        'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'
+        'refreshCampaign' | 'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'
       >
     >;
   /** Роли кандидатов — запросы к площадкам вакансий (27.10). */

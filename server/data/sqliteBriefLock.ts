@@ -10,3 +10,28 @@ export function beginImmediateBriefly(database: DatabaseSync, timeoutMs: number)
     database.exec(`PRAGMA busy_timeout = ${timeout}`);
   }
 }
+
+const BRIEF_WRITE_MS = 50;
+
+/**
+ * The writes in one transaction that waits for the lock no longer than `timeoutMs` (B702, prod
+ * 24.11: rows of a list page queued one statement at a time held the event loop 3.2 s behind
+ * the pool maintenance). Throws `SQLITE_BUSY` when the lock is taken.
+ */
+export function writeBriefly<T>(
+  database: DatabaseSync,
+  work: () => T,
+  timeoutMs = BRIEF_WRITE_MS,
+): T {
+  // Already inside a brief write (a slot taken while a row is queued): one transaction for both.
+  if (database.isTransaction) return work();
+  beginImmediateBriefly(database, timeoutMs);
+  try {
+    const result = work();
+    database.exec('COMMIT');
+    return result;
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+}

@@ -47,6 +47,8 @@ export interface CandidateFootprintAudit {
   readonly ownershipConfirmedAt: string;
   readonly startedAt: string;
   readonly completedAt?: string;
+  /** B668: запросы по ссылкам, добавленным кандидатом после запуска, — для повтора. */
+  readonly addedQueryIds?: readonly string[];
   /** B645 p02: расхождения с резюме, отмеченные «Это не проблема», — по ключу содержания. */
   readonly hiddenMismatches?: readonly string[];
 }

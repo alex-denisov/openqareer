@@ -28,6 +28,17 @@ export function shortRoleTitle(value: string): string {
   return `${atWord.trimEnd()}…`;
 }
 
+/** Работодатели в заголовке («CPO @ Alpha», «ex-Beta», «директор в Гамме»): слово с заглавной до разделителя. */
+const HEADLINE_EMPLOYER = /(?:@\s*|(?<!\p{L})(?:at|в|во|ex|former|экс)[\s-]+)([^|·•,;@()]+)/giu;
+const EMPLOYER_START = /^[«"“]?[\p{Lu}\d]/u;
+
+/** B753: компании, названные в должности знакомого, — сообщение о другой компании их не касается. */
+export function headlineEmployers(roleTitle: string): string[] {
+  return [...roleTitle.matchAll(HEADLINE_EMPLOYER)]
+    .map((match) => match[1]!.trim())
+    .filter((name) => name.length > 1 && EMPLOYER_START.test(name));
+}
+
 /** B645 a02: признаки обрывка заголовка LinkedIn вместо названия компании. */
 const COMPANY_MAX = 80;
 const STARTS_LOWER_CYRILLIC = /^[а-яё]/u;

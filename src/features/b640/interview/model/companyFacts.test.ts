@@ -41,6 +41,30 @@ describe('companyFacts', () => {
     expect(facts.source).toBeNull();
   });
 
+  it('B749: вне подборки берёт вакансию, сохранённую в отклике', () => {
+    const vacancy = {
+      title: 'Инженер',
+      company: 'Арка',
+      url: 'https://x',
+      source: 'hh',
+      description: 'Ищем инженера. Арка строит платформу для логистики. Ждём вас.',
+    };
+    const savedAt = '2026-11-04T10:00:00Z';
+    expect(
+      companyFacts({ company: null, clusterId: null, snapshot: { vacancy, savedAt } }),
+    ).toEqual({
+      rows: [
+        { label: 'Компания', value: 'Арка' },
+        { label: 'В вакансии', value: 'Арка строит платформу для логистики.' },
+      ],
+      source: 'Из вакансии, сохранённой в отклике 4 ноября.',
+    });
+    const hidden = { ...vacancy, companyHidden: true };
+    expect(
+      companyFacts({ company: null, clusterId: null, snapshot: { vacancy: hidden, savedAt } }).rows,
+    ).toEqual([]);
+  });
+
   it('is empty for a response without a company card', () => {
     expect(companyFacts({ company: null, clusterId: null }).rows).toEqual([]);
   });

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { RouteDeps } from './deps';
+import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
 import { authenticateCandidate, hasSafeMutationOrigin, csrfError, sendError } from './helpers';
 import { readVacancyFitTarget, vacancyFitContext } from './vacancyFitContext';
 
@@ -19,7 +20,7 @@ export async function registerVacancyFitRoutes(app: FastifyInstance, deps: Route
       const input = vacancyFitContext(deps, candidate.id, target, []);
       reply.header('Cache-Control', 'private, no-store');
       if (request.method === 'POST' && !['ready', 'no_description', 'no_requirements'].includes(runtime.view(input).state)) {
-        const queued = runtime.enqueue(input);
+        const queued = await retryOnSqliteBusy(() => runtime.enqueue(input));
         return reply.code(202).send({ data: { ...runtime.view(input), state: queued.status === 'failed' ? 'failed' : 'processing' } });
       }
       return { data: runtime.view(input) };
