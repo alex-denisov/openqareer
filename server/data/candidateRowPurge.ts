@@ -23,6 +23,7 @@ export const PURGED_BY_CANDIDATE_ID: readonly string[] = [
   'candidate_linkedin_rhythm',
   'consultant_messages_fts',
   'consultant_rejections',
+  'hh_raise_choices',
   'hh_raise_schedules',
   'hh_raise_tasks',
   'hh_text_role_targets',

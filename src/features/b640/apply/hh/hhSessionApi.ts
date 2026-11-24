@@ -58,11 +58,12 @@ export async function finishHhApply(
   attemptId: string,
   outcome: HhApplyOutcome,
   failureCode?: string,
+  vacancyId?: string,
 ): Promise<void> {
   const response = await apiFetch(`${BASE}/applications/${encodeURIComponent(attemptId)}/result`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}) }),
+    body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}), ...(vacancyId ? { vacancyId } : {}) }),
   });
   await readDataObject<object>(response);
 }

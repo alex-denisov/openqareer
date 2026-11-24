@@ -37,6 +37,7 @@ describe('B738 · 8: автоотклики и hh.ru в выгрузке', () =>
     expect(automation.schedule).toEqual(DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE);
     expect(automation.journal).toEqual([expect.objectContaining({ result: 'error', company: 'Компания own' })]);
     expect(automation.hh.applyAttempts).toEqual([{ vacancyId: 'vacancy-own', resumeId: 'resume-own', outcome: 'applied', startedAt: AT, finishedAt: AT }]);
+    expect(automation.hh.raiseChoice).toEqual([expect.objectContaining({ resumeId: 'resume-own' })]);
     expect(automation.hh.raiseSchedules).toEqual([expect.objectContaining({ resumeId: 'resume-own', enabled: 1 })]);
     expect(automation.hh.resumeSnapshot).toEqual({ resumes: [{ id: 'resume-own', title: 'Резюме own' }], selected: null, readAt: AT });
     const text = JSON.stringify(automation);
