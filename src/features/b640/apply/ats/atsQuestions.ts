@@ -64,12 +64,12 @@ function optionsOf(field: AtsField): readonly AtsOption[] {
 }
 
 function isAsked(field: AtsField): boolean {
-  const category = categoryOf(field.label);
+  const category = categoryOf(field);
   if (field.kind === 'file' || field.kind === 'password' || category === 'marketing') return false;
   if (isCoverLetter(field)) return false;
   if (field.kind === 'checkbox') {
     if (category === 'processing') return false;
-    return category === 'fact' || field.required;
+    return category === 'fact' || category === 'composite' || field.required;
   }
   if (category === 'demographic') return field.required && !declines(field);
   if (category === 'processing') return field.required && !consentOption(field);
@@ -133,7 +133,7 @@ export function isBeyondForm(fields: readonly AtsField[]): boolean {
     fields.some(
       (field) =>
         field.required &&
-        (categoryOf(field.label) === 'marketing' ||
+        (categoryOf(field) === 'marketing' ||
           field.kind === 'password' ||
           (field.kind === 'file' && !isResumeFile(field))),
     )

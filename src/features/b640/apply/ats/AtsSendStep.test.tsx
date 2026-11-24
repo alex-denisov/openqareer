@@ -73,7 +73,7 @@ const onManual = vi.fn();
 const onAsk = vi.fn();
 let draft: Record<string, string> = {};
 
-function Screen({ askNow = false }: { readonly askNow?: boolean }) {
+function Screen() {
   const apply = useAtsApply({
     vacancyId: 'v1',
     address,
@@ -90,13 +90,12 @@ function Screen({ askNow = false }: { readonly askNow?: boolean }) {
     <AtsSendStep
       apply={apply}
       url={address.url}
+      employer="Acme"
       applicationId="a1"
       approvedLabel="одобрено 20.11"
       letterText="Здравствуйте!"
       hasResume
       answered={1}
-      askNow={askNow}
-      onAsked={() => undefined}
       onSent={onSent}
       onStep={() => undefined}
     />
@@ -108,8 +107,8 @@ const settle = () => act(async () => void (await new Promise((done) => setTimeou
 const text = () => document.body.textContent ?? '';
 const button = (label: string) =>
   [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
-async function open(askNow = false) {
-  view = await mount(<Screen askNow={askNow} />);
+async function open() {
+  view = await mount(<Screen />);
   await settle();
   await settle();
 }
@@ -226,10 +225,12 @@ describe('«Отправка» формы работодателя', () => {
     expect(desktop.openAtsForm).toHaveBeenCalledTimes(2);
   });
 
-  it('«Отправить отклик с анкетой» отправляет без второго нажатия', async () => {
-    await open(true);
-    await settle();
-    await settle();
-    expect(desktop.submitAtsForm).toHaveBeenCalledTimes(1);
+  it('до нажатия видны работодатель, площадка и каждый ответ', async () => {
+    await open();
+    expect(text()).toContain('Acme');
+    expect(text()).toContain(HOST);
+    const row = document.querySelector('details .cb-item')!;
+    expect(row.textContent).toBe('Full nameМарина');
+    expect(desktop.submitAtsForm).not.toHaveBeenCalled();
   });
 });

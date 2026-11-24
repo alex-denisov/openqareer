@@ -211,6 +211,21 @@ pub fn submit_refusal(
     (second != first).then_some("form_changed")
 }
 
+/// A refusal allows a new press only when the same form marked fields the app
+/// had filled; anything else may hide an application that did leave.
+pub(crate) fn rejection_of(
+    before: &Values,
+    after: Option<&Values>,
+    invalid: &[String],
+) -> &'static str {
+    let same_form = after.is_some_and(|after| after.keys().eq(before.keys()));
+    let filled = |key: &String| before.get(key).is_some_and(|value| !value.is_empty());
+    if same_form && !invalid.is_empty() && invalid.iter().all(filled) {
+        return "rejected";
+    }
+    "unconfirmed"
+}
+
 /// What the board said after the press; silence is "unconfirmed". Only the
 /// window's own address on the confirmation page confirms.
 pub(crate) fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, Vec<String>) {
@@ -274,6 +289,23 @@ mod tests {
     use crate::ats_apply::store_identifier;
     use crate::ats_target::resolve;
     use serde_json::json;
+
+    #[test]
+    fn a_refusal_stands_only_for_our_fields_of_the_same_form() {
+        let before = values(&[("id:a", "x"), ("id:b", "")]);
+        let invalid = |key: &str| vec![key.to_string()];
+        let same = Some(&before);
+        assert_eq!(rejection_of(&before, same, &invalid("id:a")), "rejected");
+        for (after, keys) in [
+            (same, Vec::new()),
+            (same, invalid("id:b")),
+            (same, invalid("id:other")),
+            (None, invalid("id:a")),
+            (Some(&values(&[("id:a", "x")])), invalid("id:a")),
+        ] {
+            assert_eq!(rejection_of(&before, after, &keys), "unconfirmed");
+        }
+    }
 
     fn values(pairs: &[(&str, &str)]) -> Values {
         pairs

@@ -314,6 +314,15 @@ test.describe('B787: отклик на сайте работодателя в п
     await shot(page, 'form', info.project.name);
     await answerQuestion(page);
     await withForm(page).first().click();
+    await expect(page.locator('.ap-parts')).toContainText(HOST);
+    await page.getByText('Ответы · 3').click();
+    await expect(page.locator('details .cb-item')).toHaveCount(3);
+    await expect(page.locator('details .cb-list')).toContainText('I agree to the privacy policy');
+    await expectLayout(page);
+    await expectGates(page);
+    await shot(page, 'ready', info.project.name);
+    expect(await commands(page, 'ats_form_submit')).toHaveLength(0);
+    await send(page).click();
     await expect(page.getByText(new RegExp(`^Отправлено .* · ${HOST}$`, 'u'))).toBeVisible();
     await expect(send(page)).toHaveCount(0);
     await expectLayout(page);
@@ -342,6 +351,7 @@ test.describe('B787: отклик на сайте работодателя в п
     const calls = await open(page, 'form', { mandate: false });
     await answerQuestion(page);
     await withForm(page).first().click();
+    await send(page).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     expect(await commands(page, 'ats_form_submit')).toHaveLength(0);
@@ -354,6 +364,7 @@ test.describe('B787: отклик на сайте работодателя в п
     const calls = await open(page, 'form', { outcome: 'unconfirmed' });
     await answerQuestion(page);
     await withForm(page).first().click();
+    await send(page).click();
     await expect(page.getByText(`${HOST} не подтвердил отклик.`)).toBeVisible();
     await expect(send(page)).toHaveCount(0);
     await shot(page, 'unconfirmed', info.project.name);

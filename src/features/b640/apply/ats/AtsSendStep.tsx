@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { pluralRu } from '../../../../../shared/pluralRu';
 import { grantAccountCapabilityConsent } from '../../../account/accountCapabilityConsentApi';
 import { CAPABILITY_CONSENT_CURRENT_VERSION } from '../../../legal/capabilityConsents';
@@ -14,15 +13,13 @@ import { canSendAts, type AtsApplyControls, type AtsApplyState } from './useAtsA
 export interface AtsSendStepProps {
   readonly apply: AtsApplyControls;
   readonly url: string | null;
+  readonly employer: string;
   readonly applicationId: string;
   readonly approvedLabel: string;
   readonly letterText: string;
   readonly hasResume: boolean;
   /** Готовых ответов анкеты. */
   readonly answered: number;
-  /** o04: «Отправить отклик с анкетой» уже нажата — отклик уходит сразу. */
-  readonly askNow: boolean;
-  readonly onAsked: () => void;
   readonly onSent: () => Promise<void>;
   readonly onStep: (step: ApplyStep) => void;
 }
@@ -153,17 +150,6 @@ function MandateDialog({ apply }: { readonly apply: AtsApplyControls }) {
   );
 }
 
-function useAskNow({ askNow, onAsked, apply }: AtsSendStepProps): void {
-  const send = useRef(apply.send);
-  send.current = apply.send;
-  const { kind } = apply.state;
-  useEffect(() => {
-    if (!askNow || kind === 'reading') return;
-    onAsked();
-    if (kind === 'ready' && apply.missing === 0) send.current();
-  }, [askNow, kind, apply.missing, onAsked]);
-}
-
 function OpenOnSite({ url }: { readonly url: string }) {
   return (
     <a
@@ -222,6 +208,29 @@ function SendActions({
   );
 }
 
+/** Ответы формы целиком: вопрос и то, что в него встанет. */
+function Answers({ items }: Pick<AtsApplyControls, 'items'>) {
+  if (items.length === 0) return null;
+  return (
+    <details className="more-n">
+      <summary>
+        <Icon name="down" />
+        {`Ответы · ${items.length}`}
+      </summary>
+      <ul className="cb-list" aria-label="Ответы">
+        {items.map((item) => (
+          <li className="cb-item" key={item.key}>
+            <div className="cb-main">
+              <p className="cb-l">{item.question}</p>
+              <p className="cb-t">{item.answer}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 const UNREAD: ReadonlySet<AtsApplyState['kind']> = new Set(['reading', 'read_failed']);
 
 function titleOf({ state, missing }: AtsApplyControls): string {
@@ -234,7 +243,6 @@ export function AtsSendStep(props: AtsSendStepProps) {
   const { apply, onStep, answered } = props;
   const { state } = apply;
   const marking = useMarkSent(props.onSent);
-  useAskNow(props);
   const path = buildNodePath('o01c', { responseId: props.applicationId });
   const done = state.kind === 'sent' || marking.state.kind === 'done';
   const noun = pluralRu(answered, ['ответ', 'ответа', 'ответов']);
@@ -244,6 +252,12 @@ export function AtsSendStep(props: AtsSendStepProps) {
         {titleOf(apply)}
       </h2>
       <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
+        <li className="row">
+          <div>
+            <div className="row-title">{props.employer || apply.host}</div>
+            {props.employer ? <p className="ap-lines">{apply.host}</p> : null}
+          </div>
+        </li>
         <Part
           title={`Письмо · ${props.approvedLabel}`}
           text={props.letterText}
@@ -259,6 +273,7 @@ export function AtsSendStep(props: AtsSendStepProps) {
           />
         ) : null}
       </ul>
+      <Answers items={apply.items} />
       {done ? null : <SendActions props={props} marking={marking} />}
       <Outcome state={state} host={apply.host} path={path} onRetry={apply.retry} />
       {state.kind !== 'sent' && marking.state.kind === 'done' ? (

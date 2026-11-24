@@ -188,10 +188,10 @@ function AtsSendBody({
   const { letter, setStep, head, hhForm, ask, ats } = body;
   const approved = letter.approval.saved;
   const { askNow, onAsked } = ask;
-  // Нажатие до одобрения письма отклик не отправляет: после одобрения нажимают снова.
+  // Анкета открывает «Отправку»: работодатель и все ответы видны до нажатия.
   useEffect(() => {
-    if (askNow && !approved) onAsked();
-  }, [askNow, approved, onAsked]);
+    if (askNow) onAsked();
+  }, [askNow, onAsked]);
   return (
     <>
       <div className="col">
@@ -199,13 +199,12 @@ function AtsSendBody({
           <AtsSendStep
             apply={apply}
             url={head.url}
+            employer={head.company}
             applicationId={approved.applicationId}
             approvedLabel={approvedLabel(approved.approvedAt)}
             letterText={letter.draft.text}
             hasResume={Boolean(approved.resume)}
             answered={hhForm?.answered ?? 0}
-            askNow={ask.askNow}
-            onAsked={ask.onAsked}
             onSent={ats.onSent}
             onStep={setStep}
           />

@@ -56,12 +56,30 @@ export interface PlanContext {
   readonly now: Date;
 }
 
-export type Category = 'marketing' | 'processing' | 'fact' | 'demographic' | 'other';
+export type Category =
+  | 'marketing'
+  /** Обработка данных вместе с рассылкой или резервом: решает кандидат. */
+  | 'composite'
+  | 'processing'
+  | 'fact'
+  | 'demographic'
+  | 'other';
 
 const MARKETING =
-  /marketing|newsletter|job alerts?|talent (community|pool|network)|future (opportunit|opening|position|role|vacanc)|other (roles|positions|opportunit)|retain|keep (my|your) (data|application|details|information|profile)|рассылк|новост|будущ\S* ваканс|кадров\S* резерв|хран(ить|ение)/i;
+  /marketing|newsletter|communications?\b|\bupdates\b|contact me|promotional|job alerts?|talent (community|pool|network)|future (opportunit|opening|position|role|vacanc)|other (roles|positions|opportunit)|retain|keep (my|your) (data|application|details|information|profile)|рассылк|реклам|новост|будущ\S* ваканс|кадров\S* резерв|хран(ить|ение)/i;
 const PROCESSING =
   /privacy (policy|notice|statement)|personal (data|information)|data protection|gdpr|processing of (my|your)|персональн\S* данн|политик\S* конфиденциальности/i;
+/** Своё согласие на обработку, а не только слова о данных в просьбе о рассылке или хранении. */
+const OWN_PROCESSING =
+  /privacy (policy|notice|statement)|data protection|gdpr|processing of (my|your)|обработк|политик\S* конфиденциальности/i;
+/** Рассылку, резерв и хранение отмечают; поле, куда пишут текст, — обычный вопрос. */
+const CHOICES: ReadonlySet<AtsField['kind']> = new Set([
+  'checkbox',
+  'checkbox_group',
+  'radio',
+  'select',
+  'combobox',
+]);
 const FACT =
   /authori[sz]ed to work|right to work|work (permit|authori[sz]ation)|sponsor|visa|convict|criminal|felony|relative|related to|non-?compete|non-?disclosure|\bnda\b|certify|true and (accurate|complete|correct)|previously (worked|employed|applied)|право на работу|разрешени\S* на работу|судим|достоверн|родствен/i;
 const DEMOGRAPHIC =
@@ -69,8 +87,10 @@ const DEMOGRAPHIC =
 const DECLINE =
   /prefer not|decline|don'?t wish|do not wish|not to (say|answer|disclose)|не хочу|предпочитаю не/i;
 
-export function categoryOf(label: string): Category {
-  if (MARKETING.test(label)) return 'marketing';
+export function categoryOf({ label, kind }: Pick<AtsField, 'label' | 'kind'>): Category {
+  if (CHOICES.has(kind) && MARKETING.test(label)) {
+    return OWN_PROCESSING.test(label) ? 'composite' : 'marketing';
+  }
   if (FACT.test(label)) return 'fact';
   if (DEMOGRAPHIC.test(label)) return 'demographic';
   return PROCESSING.test(label) ? 'processing' : 'other';
@@ -109,7 +129,9 @@ function fileStep(field: AtsField, facts: CandidateFacts): Step {
 }
 
 function checkboxStep(field: AtsField, category: Category, context: PlanContext): Step {
-  if (category === 'marketing') return field.required ? { ask: 'optional_consent_required' } : null;
+  if (category === 'marketing' || category === 'composite') {
+    return field.required ? { ask: 'optional_consent_required' } : null;
+  }
   if (category === 'processing') {
     if (!field.required) return null;
     if (!context.mandateAccepted) return { ask: 'consent_needs_mandate' };
@@ -136,8 +158,10 @@ function answerStep(field: AtsField, answer: string, context: PlanContext): Step
   if (![field.label, ...chosen].some((text) => PROCESSING.test(text))) return { entry };
   const agrees = chosen.some((text) => AFFIRMATIVE.test(text.trim()));
   if (field.kind === 'checkbox') {
-    if (!field.required) return null;
-    if (!agrees) return { ask: 'no_answer' };
+    const declined = field.required ? ({ ask: 'no_answer' } as const) : null;
+    if (!agrees) return declined;
+    // Необязательную обработку не ставят; составную необязательную отметил сам кандидат.
+    if (!field.required && categoryOf(field) !== 'composite') return null;
   }
   if (!agrees) return { entry };
   return context.mandateAccepted ? { entry, consent: true } : { ask: 'consent_needs_mandate' };
@@ -148,7 +172,7 @@ const CONSENT_WORD =
 
 /** Вариант списка, которым даётся согласие на обработку; `null` — вопрос не об этом. */
 export function consentOption(field: AtsField): string | null {
-  if (!field.required || categoryOf(field.label) !== 'processing') return null;
+  if (!field.required || categoryOf(field) !== 'processing') return null;
   const yes = field.options.filter((option) => AFFIRMATIVE.test(option.label.trim()));
   if (yes.length !== 1) return null;
   const asked = [field.label, yes[0]!.label].some((text) => CONSENT_WORD.test(text));
@@ -175,7 +199,7 @@ function stepFor(
   context: PlanContext,
 ): Step {
   const answer = facts.answers[field.key];
-  const category = categoryOf(field.label);
+  const category = categoryOf(field);
   if (field.kind === 'file') return fileStep(field, facts);
   if (field.kind === 'password') return null;
   // Ответ самого кандидата сильнее любого шаблона, кроме рассылок и хранения.
@@ -183,7 +207,9 @@ function stepFor(
     return answerStep(field, answer, context);
   }
   if (field.kind === 'checkbox') return checkboxStep(field, category, context);
-  if (category === 'marketing') return field.required ? { ask: 'optional_consent_required' } : null;
+  if (category === 'marketing' || category === 'composite') {
+    return field.required ? { ask: 'optional_consent_required' } : null;
+  }
   if (category === 'fact') return { ask: 'fact_needed' };
   if (category === 'demographic') return demographicStep(field);
   if (category === 'processing') return processingStep(field, context);

@@ -15,6 +15,7 @@ import {
   type AtsApplyState,
   type AtsSession,
 } from './atsSession';
+import { sentItems, type AtsSentItem } from './atsSentItems';
 import type { AtsAddress } from './atsTarget';
 
 export type { AtsApplyState } from './atsSession';
@@ -50,6 +51,8 @@ export interface AtsApplyControls {
   readonly host: string;
   /** Вопросы, на которые кандидат ещё не ответил. */
   readonly missing: number;
+  /** Вопросы формы и то, что в них встанет. */
+  readonly items: readonly AtsSentItem[];
   readonly send: () => void;
   readonly retry: () => void;
   readonly cancel: () => void;
@@ -220,10 +223,16 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
     () => (session ? missingAnswers(allFields(session.form), questionnaire.draft) : 0),
     [session, questionnaire.draft],
   );
+  const host = session?.form.host ?? address?.host ?? '';
+  const items = useMemo(
+    () => (session ? sentItems(allFields(session.form), questionnaire.draft, host) : []),
+    [session, questionnaire.draft, host],
+  );
   return {
     state,
-    host: session?.form.host ?? address?.host ?? '',
+    host,
     missing,
+    items,
     send,
     retry: () => void open(),
     cancel: () => setState((now) => (now.kind === 'mandate' ? { kind: 'ready' } : now)),

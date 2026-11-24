@@ -6,10 +6,15 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
 use uuid::Uuid;
 
 const FILE: &str = "ats-attempts.json";
+const LOCK: &str = "ats-attempts.lock";
+const LOCK_TRIES: u32 = 40;
+const LOCK_PAUSE: Duration = Duration::from_millis(50);
+const LOCK_EXPIRES: Duration = Duration::from_secs(30);
 const TEMPORARY: &str = "ats-attempts.json.tmp";
 
 /// The result names of the consent journal (`POST /apply-consents/:id/result`).
@@ -45,6 +50,37 @@ pub struct Confirmation {
     pub path: String,
     /// The moment of the press; `None` when the confirmation was read later.
     pub pressed_at_ms: Option<u64>,
+}
+
+/// Held while one process reads and rewrites the attempts.
+pub struct Lock(PathBuf);
+
+impl Drop for Lock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// A second run of the app waits its turn; a lock left by a crash expires.
+pub fn lock(directory: &Path) -> Result<Lock, String> {
+    let path = directory.join(LOCK);
+    for _ in 0..LOCK_TRIES {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(_) => return Ok(Lock(path)),
+            Err(error) if error.kind() != std::io::ErrorKind::AlreadyExists => break,
+            Err(_) => {}
+        }
+        let age = fs::symlink_metadata(&path).and_then(|held| held.modified());
+        if age.is_ok_and(|at| at.elapsed().is_ok_and(|age| age > LOCK_EXPIRES)) {
+            let _ = fs::remove_file(&path);
+        }
+        std::thread::sleep(LOCK_PAUSE);
+    }
+    Err("attempts_locked".to_string())
 }
 
 fn load(directory: &Path) -> Result<Vec<Attempt>, String> {
@@ -198,6 +234,23 @@ mod tests {
         finish(&folder.0, first.id, AttemptResult::Failed, None).unwrap();
         assert!(begin(&folder.0, first).is_err());
         begin(&folder.0, attempt("v1", "https://a/1")).unwrap();
+    }
+
+    #[test]
+    fn one_process_at_a_time_and_a_crashed_lock_expires() {
+        let folder = Folder::new();
+        let held = lock(&folder.0).unwrap();
+        assert_eq!(lock(&folder.0).err().unwrap(), "attempts_locked");
+        drop(held);
+        fs::write(folder.0.join(LOCK), b"").unwrap();
+        let old = std::time::SystemTime::now() - LOCK_EXPIRES * 2;
+        let file = fs::File::options()
+            .write(true)
+            .open(folder.0.join(LOCK))
+            .unwrap();
+        file.set_modified(old).unwrap();
+        drop(lock(&folder.0).unwrap());
+        assert!(!folder.0.join(LOCK).exists());
     }
 
     #[test]

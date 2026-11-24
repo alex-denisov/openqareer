@@ -9,8 +9,8 @@ use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
 use crate::ats_model::{
     attempt_result, decode, file_fields_of, form_report, is_id, listed, outcome_of, press_refusal,
-    submit_refusal, validate_fill, values_of, FileFields, FillReport, FillRequest, FormReport,
-    OpenRequest, Receipt, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+    rejection_of, submit_refusal, validate_fill, values_of, FileFields, FillReport, FillRequest,
+    FormReport, OpenRequest, Receipt, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
     is_confirmation, navigation_allowed, on_target, resolve, top_level_allowed, AtsTarget,
@@ -155,6 +155,7 @@ fn with_attempts<T>(
         .attempts
         .lock()
         .map_err(|_| "form_state_unavailable")?;
+    let _held = ats_attempts::lock(&directory)?;
     action(&directory)
 }
 
@@ -454,7 +455,17 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
         return Ok(receipt(app, outcome, Some(reason), keys));
     }
     let pressed_at_ms = now_ms();
-    let (outcome, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
+    let (read, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
+    let outcome = if read == "rejected" {
+        let after = page(app, "snapshot", &Value::Null).await.ok();
+        rejection_of(
+            &second,
+            after.as_ref().map(values_of).as_ref(),
+            &invalid_keys,
+        )
+    } else {
+        read
+    };
     settle(app, attempt, outcome, Some(pressed_at_ms));
     note(app, "submit", &format!("{}_{outcome}", target.adapter));
     Ok(Receipt {
@@ -501,6 +512,10 @@ fn begin_attempt(
             run.attempt = Some(request.attempt_id);
         }
         Ok(None)
+    })
+    .or_else(|error| match error.as_str() {
+        "attempts_locked" => Ok(Some("attempt_unrecorded")),
+        _ => Err(error),
     })
 }
 
