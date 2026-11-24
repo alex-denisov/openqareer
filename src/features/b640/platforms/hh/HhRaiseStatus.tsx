@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { B640HhRaiseState } from '../../../../../shared/b640HhRaise';
-import { openHhSignIn } from '../../apply/hh/hhDesktop';
+import { isTauriEnvironment } from '../../../../services/desktop/desktopBridge';
+import { openHhSignIn, showHhCaptcha } from '../../apply/hh/hhDesktop';
 import { requestHhRaiseStep } from '../../apply/hh/hhRaisePoller';
 import { Button, StatusLine } from '../../kit';
 import { getHhRaise, retryHhRaise, setHhRaiseEnabled } from './hhRaiseApi';
@@ -125,6 +126,10 @@ export function HhRaiseStatus() {
   const line = lineOf(view);
   const retry = <Button size="sm" busy={busy} onClick={() => change(() => retryHhRaise(view.resumeId ?? undefined), true)}>Повторить</Button>;
   const signIn = <Button size="sm" onClick={() => void openHhSignIn()}>Войти</Button>;
+  const captcha = isTauriEnvironment() ? (
+    <Button size="sm" onClick={() => void showHhCaptcha()}>Открыть окно hh.ru</Button>
+  ) : undefined;
+  const actions = { retry, sign_in: signIn, captcha };
   return (
     <>
       <RaiseSwitch
@@ -142,7 +147,7 @@ export function HhRaiseStatus() {
         <StatusLine
           state={line.state}
           text={line.text}
-          action={line.action === 'retry' ? retry : line.action === 'sign_in' ? signIn : undefined}
+          action={line.action ? actions[line.action] : undefined}
         />
       )}
       {failed ? <StatusLine state="err" text="Не получилось, попробуйте ещё раз" /> : null}

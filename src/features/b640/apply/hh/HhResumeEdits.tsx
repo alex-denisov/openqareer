@@ -3,6 +3,7 @@ import type { HhResumeEdit, HhResumeEditSection } from '../../../../../shared/hh
 import { Button, Dialog, Icon, SegControl, useToast } from '../../kit';
 import { HhEditVariantButton, HhEditVariantError, HhEditVariantSwitch } from '../HhEditVariant';
 import { useHhEditVariants } from '../useHhEditVariants';
+import { showHhCaptcha } from './hhDesktop';
 import { canApply, useHhResumeApply, type HhApplyState, type HhResumeApply } from './useHhResumeApply';
 
 /** B678, A1c: разбор резюме hh.ru — разделы hh.ru, сейчас и предложение платформы. */
@@ -107,6 +108,11 @@ function EditRow({ edit, shown, apply, onShow }: EditRowProps) {
       {state.kind === 'failed' ? (
         <p className="hh2-err" role="status">
           {state.message}
+          {state.captcha ? (
+            <button className="res-act" type="button" onClick={() => void showHhCaptcha()}>
+              Открыть окно hh.ru
+            </button>
+          ) : null}
         </p>
       ) : null}
     </li>
