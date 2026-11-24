@@ -259,8 +259,8 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const known = letter.circles.data ?? questionnaire.known;
   const head = buildHead({ application: target.application, known, cluster });
   const saved = Boolean(letter.approval.saved);
-  // Одобренное письмо уходит со своим резюме: вкладка и сам шаг показывают одно состояние.
-  const resumeDone = resumeOk || saved;
+  // Письмо одобрено вместе с резюме: вкладка и сам шаг показывают одно состояние.
+  const resumeDone = resumeOk || Boolean(letter.approval.saved?.resume);
   return {
     shown,
     setStep,
