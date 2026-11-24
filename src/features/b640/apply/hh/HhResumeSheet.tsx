@@ -149,7 +149,7 @@ export function HhResumeSheet(props: SheetProps) {
   const editCount = picker.kind === 'choose' && selectedId ? editCountOf(picker.review, selectedId) : 0;
   const footer =
     picker.kind === 'choose' ? (
-      <Button variant="primary" busy={saving} disabled={!chosen} onClick={() => chosen && onChoose(chosen, optimize && editCount > 0)}>
+      <Button variant="primary" icon="right" busy={saving} disabled={!chosen} onClick={() => chosen && onChoose(chosen, optimize && editCount > 0)}>
         Продолжить
       </Button>
     ) : undefined;
