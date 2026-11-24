@@ -88,6 +88,7 @@ async function mockHh(page: Page, connected: boolean): Promise<void> {
           lastResult: { status: 'ok', reason: null, at: '2026-11-19T06:40:00.000Z' },
           pausedUntil: null,
           pauseReason: null,
+          pending: false,
         },
       },
     });

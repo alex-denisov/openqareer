@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyOutcome, canRaiseAt, nextAllowedAt } from './hhRaiseSchedule';
+import { applyOutcome, canRaiseAt, nextAllowedAt, nextAtMoscowClock } from './hhRaiseSchedule';
 
 const now = new Date('2026-11-19T10:00:00.000Z');
 
@@ -27,8 +27,17 @@ describe('applyOutcome', () => {
   });
   it('too_early shifts to the next permitted time and keeps lastRaisedAt', () => {
     const patch = applyOutcome('too_early', now, () => 0);
+    expect(patch).toMatchObject({ lastResult: 'ok', lastReason: 'too_early' });
     expect(patch.nextRaiseAt).toBe('2026-11-19T14:00:00.000Z');
     expect(patch).not.toHaveProperty('lastRaisedAt');
+  });
+  it('too_early with the hh clock takes the nearest future Moscow time plus a margin', () => {
+    const at = new Date('2026-11-24T15:23:00.000Z');
+    expect(applyOutcome('too_early', at, () => 0, '20:55').nextRaiseAt).toBe('2026-11-24T17:57:00.000Z');
+    expect(nextAtMoscowClock('01:10', at)).toBe('2026-11-24T22:12:00.000Z');
+    expect(nextAtMoscowClock('18:22', at)).toBe('2026-11-24T15:24:00.000Z');
+    expect(nextAtMoscowClock('18:21', at)).toBe('2026-11-25T15:23:00.000Z');
+    expect(nextAtMoscowClock('02:00', new Date('2026-11-24T21:30:00.000Z'))).toBe('2026-11-24T23:02:00.000Z');
   });
   it('foreign_page is an error that does not pause', () => {
     expect(applyOutcome('foreign_page', now)).toMatchObject({ lastResult: 'error', lastReason: 'foreign_page' });

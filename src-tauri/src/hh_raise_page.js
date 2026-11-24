@@ -4,7 +4,7 @@
  * The shell evaluates this file on `https://hh.ru/resume/<id>` and, when that
  * page settles nothing, on the resume list (hh.ru redirects it to the profile);
  * there it acts only inside the card of this very resume. It reads back
- * `{code, pressed, card}`. It never reads views, invitations or any resume content: it only
+ * `{code, pressed, card}` and, with `too_early`, `available` — the HH:MM of the button. It never reads views, invitations or any resume content: it only
  * classifies the page and presses the single raise button, once per run
  * (the click is remembered in sessionStorage, so a repeated poll never clicks
  * again). The placeholders below are replaced by the shell with JSON literals.
@@ -21,7 +21,7 @@
     var GONE = '__oqHhRaiseGone';
     var GONE_POLLS = 2;
     var LABEL_MAX = 40;
-    var RAISED = /^поднять (?:(?:сегодня|завтра) )?в ?\d{1,2}:\d{2}$/i;
+    var RAISED = /^поднять (?:(?:сегодня|завтра) )?в ?(\d{1,2}:\d{2})$/i;
     var NOTICE = /^(?:резюме (?:поднято|обновлено)(?: в поиске)?|поднято в поиске)[.!]?$/i;
     var COUNTDOWN = /(можно будет поднять через|поднять можно через|поднять через)/i;
     var signedSelector = __SIGNED_IN_SELECTOR__;
@@ -163,7 +163,15 @@
       window[GONE] = gone ? (window[GONE] || 0) + 1 : 0;
       return { code: window[GONE] >= GONE_POLLS ? 'ok' : 'waiting', pressed: true };
     }
-    if (raised || countdown || disabled) return { code: 'too_early' };
+    if (raised || countdown || disabled) {
+      var clocks = labels.map(function (l) {
+        return (RAISED.exec(l) || [])[1];
+      });
+      var clock = clocks.filter(Boolean)[0];
+      return clock
+        ? { code: 'too_early', available: ('0' + clock).slice(-5) }
+        : { code: 'too_early' };
+    }
     if (!button) return { code: 'waiting' };
 
     var stamp = resumeId + '|' + Date.now() + '|' + (listMode ? 'list' : 'resume');
