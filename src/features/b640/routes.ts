@@ -137,7 +137,7 @@ const ROWS: readonly NodeRow[] = [
   ['k01', 'k01-konsultant-dialog', 'consultant', null, '/app/consultant', 'Консультант', 'list'],
   ['k05', 'k05-konsultant-istoriya', 'consultant', null, '/app/consultant/history', 'Консультант', 'list', { parent: 'k01', crumb: 'История разговоров' }],
   // Аккаунт и тарифы
-  ['n00', 'n00-akkaunt-razdely', 'account', 'settings', '/app/account', 'Аккаунт', 'list'],
+  ['n00', 'n00-akkaunt-razdely', 'account', 'settings', '/app/account', 'Аккаунт', 'list', { parent: 's03' }],
   ['n03', 'n03-akkaunt', 'account', 'settings', '/app/account/connections', 'Подключения', 'settings', { parent: 'n00', tabs: 'account' }],
   ['n02', 'n02-nastrojki-uvedomlenij', 'account', 'settings', '/app/account/notifications', 'Уведомления', 'settings', { parent: 'n00', tabs: 'account' }],
   ['n04', 'n04-vhod-i-bezopasnost', 'account', 'settings', '/app/account/security', 'Вход и безопасность', 'settings', { parent: 'n00', tabs: 'account' }],

@@ -217,7 +217,11 @@ export function GoalFormScreen({ node }: { readonly node: B640Node }) {
   const goalId = new URLSearchParams(search).get('goal');
   const loaded = useEditedCard(goalId);
   const editing = loaded.state === 'ready' && loaded.card !== null;
-  useScreenChrome(editing ? { title: 'Изменить цель' } : {});
+  // Как у макета d02b (`data-mtight`).
+  useScreenChrome({
+    ...(editing ? { title: 'Изменить цель' } : {}),
+    rootData: { mtight: '1' },
+  });
   return (
     <div className="page gb-page" data-b640-node={node.code} data-b640-section={node.section}>
       <h2 className="lead-title" id="gb-title">

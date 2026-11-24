@@ -143,7 +143,8 @@ function GoalCardView({ card, version, onChanged }: GoalCardViewProps) {
   const [selected, setSelected] = useState(goals[0]!.id);
   const [measuring, setMeasuring] = useState(false);
   const goal = goals.find((item) => item.id === selected) ?? goals[0]!;
-  useScreenChrome({ crumb: card.title });
+  // Как у макета d02a (`data-mtight`).
+  useScreenChrome({ crumb: card.title, rootData: { mtight: '1' } });
   const saved = () => {
     setMeasuring(false);
     onChanged();
