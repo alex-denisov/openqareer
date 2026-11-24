@@ -23,6 +23,8 @@ export interface ManualApplyItem {
   readonly reason: ManualApplyReason;
   readonly host: string;
   readonly state: ManualApplyState;
+  /** Письмо и резюме ещё собираются; вопросы могут быть уже видны. */
+  readonly preparing: boolean;
   /** Обязательные вопросы без ответа кандидата. */
   readonly missingAnswers: number;
   /** Готовое письмо; `null` — ещё собирается или не собралось. */

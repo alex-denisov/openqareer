@@ -26,9 +26,9 @@ export function stepsFor(hasForm: boolean): typeof APPLY_STEPS {
 }
 
 /** Шаг из адреса (`?step=send`); по умолчанию — письмо. */
-export function parseStep(search: string): ApplyStep {
+export function parseStep(search: string, fallback: ApplyStep = 'letter'): ApplyStep {
   const value = new URLSearchParams(search).get('step');
-  return APPLY_STEPS.some((step) => step.id === value) ? (value as ApplyStep) : 'letter';
+  return APPLY_STEPS.some((step) => step.id === value) ? (value as ApplyStep) : fallback;
 }
 
 export interface ApplyTarget {

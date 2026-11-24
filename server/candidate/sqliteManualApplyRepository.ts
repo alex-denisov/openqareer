@@ -116,7 +116,9 @@ export class SqliteManualApplyRepository {
   /** Вся очередь кандидата — для выгрузки данных. */
   exportAll(candidateId: string): StoredManualApply[] {
     const rows = this.database
-      .prepare('SELECT * FROM manual_apply_queue WHERE candidate_id = ? ORDER BY created_at DESC, vacancy_id')
+      .prepare(
+        'SELECT * FROM manual_apply_queue WHERE candidate_id = ? ORDER BY created_at DESC, vacancy_id',
+      )
       .all(candidateId) as unknown as Row[];
     return rows.flatMap((row) => this.toStored(candidateId, row));
   }
@@ -135,13 +137,22 @@ export class SqliteManualApplyRepository {
            application_id = excluded.application_id, status = 'open',
            payload_cipher = excluded.payload_cipher, updated_at = excluded.updated_at`,
       )
-      .run(candidateId, vacancyId, applicationId, this.seal(candidateId, vacancyId, payload), at, at);
+      .run(
+        candidateId,
+        vacancyId,
+        applicationId,
+        this.seal(candidateId, vacancyId, payload),
+        at,
+        at,
+      );
     return this.get(candidateId, vacancyId)!;
   }
 
   startAttempt(candidateId: string, vacancyId: string): void {
     this.database
-      .prepare('UPDATE manual_apply_queue SET attempts = attempts + 1 WHERE candidate_id = ? AND vacancy_id = ?')
+      .prepare(
+        'UPDATE manual_apply_queue SET attempts = attempts + 1 WHERE candidate_id = ? AND vacancy_id = ?',
+      )
       .run(candidateId, vacancyId);
   }
 
@@ -151,13 +162,17 @@ export class SqliteManualApplyRepository {
     const { title, company, url, source, reason, host } = known;
     const payload = { title, company, url, source, reason, host, letter, pitch };
     this.database
-      .prepare('UPDATE manual_apply_queue SET payload_cipher = ? WHERE candidate_id = ? AND vacancy_id = ?')
+      .prepare(
+        'UPDATE manual_apply_queue SET payload_cipher = ? WHERE candidate_id = ? AND vacancy_id = ?',
+      )
       .run(this.seal(candidateId, vacancyId, payload), candidateId, vacancyId);
   }
 
   markPrepared(candidateId: string, vacancyId: string): void {
     this.database
-      .prepare('UPDATE manual_apply_queue SET prepared = 1 WHERE candidate_id = ? AND vacancy_id = ?')
+      .prepare(
+        'UPDATE manual_apply_queue SET prepared = 1 WHERE candidate_id = ? AND vacancy_id = ?',
+      )
       .run(candidateId, vacancyId);
   }
 

@@ -89,7 +89,7 @@ interface Props {
   readonly lang: ResumeLangControl | null;
 }
 
-function DownloadMenu({ resume, template }: Omit<Props, 'onTemplate' | 'lang'>) {
+export function DownloadMenu({ resume, template }: Omit<Props, 'onTemplate' | 'lang'>) {
   const id = useId();
   const toast = useToast();
   const { open, setOpen, root, button } = useMenu();

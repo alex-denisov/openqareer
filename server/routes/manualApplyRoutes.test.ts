@@ -33,7 +33,9 @@ function countingWriter(fail = false) {
       inputs.push(input);
       // Без цифр: проверка письма не пропускает числа, которых нет в фактах профиля.
       const style = ['коротко', 'тепло', 'официально', 'подробно'][inputs.length - 1] ?? 'иначе';
-      return fail ? {} : { body: `Здравствуйте! Пишу по вакансии ${style}.`, stage: 'openai:gpt-test' };
+      return fail
+        ? {}
+        : { body: `Здравствуйте! Пишу по вакансии ${style}.`, stage: 'openai:gpt-test' };
     },
   };
   return { writer, inputs };
@@ -101,8 +103,12 @@ describe('очередь «отправить вручную»', () => {
     await prepared(call);
     expect(inputs).toHaveLength(1);
     const database = new DatabaseSync(databasePath);
-    const quota = database.prepare('SELECT COUNT(*) AS n FROM billing_quota_events').get() as { n: number };
-    const row = database.prepare('SELECT payload_cipher AS c FROM manual_apply_queue').get() as { c: string };
+    const quota = database.prepare('SELECT COUNT(*) AS n FROM billing_quota_events').get() as {
+      n: number;
+    };
+    const row = database.prepare('SELECT payload_cipher AS c FROM manual_apply_queue').get() as {
+      c: string;
+    };
     database.close();
     expect(quota.n).toBe(1);
     expect(row.c).not.toContain('Пишу');
@@ -140,12 +146,49 @@ describe('очередь «отправить вручную»', () => {
     expect((await call('POST', `${QUEUE}/cluster-99/skip`, {})).statusCode).toBe(200);
     expect(candidates.getApplication(candidateId, applicationId)?.stage).toBe('archived');
     expect((await call('GET', QUEUE)).json().data).toEqual([]);
+    expect((await call('POST', QUEUE, put)).statusCode).toBe(200);
+    expect(candidates.getApplication(candidateId, applicationId)?.stage).toBe('saved');
+  });
+
+  it('с чужого origin не ставит, не отмечает и не убирает', async () => {
+    const { call } = await setup();
+    const evil = 'https://evil.example';
+    expect((await call('POST', QUEUE, put, evil)).statusCode).toBe(403);
+    expect((await call('GET', QUEUE)).json().data).toEqual([]);
+    await call('POST', QUEUE, put);
+    await prepared(call);
+    for (const tail of ['sent', 'skip']) {
+      expect((await call('POST', `${QUEUE}/cluster-99/${tail}`, {}, evil)).statusCode).toBe(403);
+    }
+    expect((await call('GET', QUEUE)).json().data).toHaveLength(1);
+  });
+
+  it('очередь другого кандидата не видна и не меняется', async () => {
+    const { call, candidates, databasePath } = await setup();
+    await call('POST', QUEUE, put);
+    await prepared(call);
+    const stranger = candidates.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const database = new DatabaseSync(databasePath);
+    database.prepare('UPDATE manual_apply_queue SET candidate_id = ?').run(stranger.id);
+    database.close();
+    expect((await call('GET', QUEUE)).json().data).toEqual([]);
+    expect((await call('GET', `${QUEUE}/cluster-99`)).statusCode).toBe(404);
+    for (const tail of ['sent', 'skip']) {
+      expect((await call('POST', `${QUEUE}/cluster-99/${tail}`, {})).statusCode).toBe(404);
+    }
   });
 
   it('принимает причину площадки и её хост, чужой текст в хосте — нет', async () => {
     const { call } = await setup();
-    const ok = await call('POST', QUEUE, { ...put, reason: 'account_required', host: 'acme.myworkdayjobs.com' });
-    expect(ok.json().data).toMatchObject({ reason: 'account_required', host: 'acme.myworkdayjobs.com' });
+    const ok = await call('POST', QUEUE, {
+      ...put,
+      reason: 'account_required',
+      host: 'acme.myworkdayjobs.com',
+    });
+    expect(ok.json().data).toMatchObject({
+      reason: 'account_required',
+      host: 'acme.myworkdayjobs.com',
+    });
     expect((await call('POST', QUEUE, { ...put, host: '<b>x</b>' })).statusCode).toBe(400);
   });
 
@@ -172,7 +215,9 @@ describe('очередь «отправить вручную»', () => {
     const database = new DatabaseSync(databasePath);
     database.exec('PRAGMA foreign_keys = ON');
     database.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
-    const left = database.prepare('SELECT COUNT(*) AS n FROM manual_apply_queue').get() as { n: number };
+    const left = database.prepare('SELECT COUNT(*) AS n FROM manual_apply_queue').get() as {
+      n: number;
+    };
     database.close();
     expect(left.n).toBe(0);
   });

@@ -19,7 +19,7 @@ interface CopyItemProps {
   readonly text: string;
 }
 
-function CopyItem({ label, text }: CopyItemProps) {
+export function CopyItem({ label, text }: CopyItemProps) {
   const toast = useToast();
   const labelId = useId();
   const copy = () => {

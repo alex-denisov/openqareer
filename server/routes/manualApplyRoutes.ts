@@ -8,7 +8,10 @@ import {
   type ManualApplyReason,
 } from '../../shared/manualApply';
 import { preferredApplySource } from '../../shared/hhVacancySource';
-import { SqliteManualApplyRepository, type StoredManualApply } from '../candidate/sqliteManualApplyRepository';
+import {
+  SqliteManualApplyRepository,
+  type StoredManualApply,
+} from '../candidate/sqliteManualApplyRepository';
 import { SqliteQuestionnaireRepository } from '../candidate/sqliteQuestionnaireRepository';
 import { knownAnswers, skillYearAnswers, standardQuestions } from '../domain/manualApplyQuestions';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
@@ -68,6 +71,7 @@ const enqueueSchema = z
 
 type Who = Omit<Signed, 'vacancyId'>;
 
+/** `requireCabinetB640` отклоняет и изменяющий запрос с чужого origin. */
 function signed(deps: Bound, request: FastifyRequest, reply: FastifyReply): Who | null {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return null;
@@ -81,10 +85,15 @@ function signed(deps: Bound, request: FastifyRequest, reply: FastifyReply): Who 
   };
 }
 
-const flightKey = (candidateId: string, vacancyId: string): string => `${candidateId}\n${vacancyId}`;
+const flightKey = (candidateId: string, vacancyId: string): string =>
+  `${candidateId}\n${vacancyId}`;
 
 /** Вопросы формы: прочитанные у площадки или типовые, с уже известными ответами. */
-async function prepareQuestions(deps: Bound, candidateId: string, item: StoredManualApply): Promise<void> {
+async function prepareQuestions(
+  deps: Bound,
+  candidateId: string,
+  item: StoredManualApply,
+): Promise<void> {
   const { vacancyId } = item;
   // Анкету hh.ru присылает приложение; прочитанную раньше не трогаем.
   if (deps.forms.get(candidateId, vacancyId) || item.host === 'hh.ru') return;
@@ -92,7 +101,8 @@ async function prepareQuestions(deps: Bound, candidateId: string, item: StoredMa
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
   const skills = cluster?.skills ?? [];
   const questions =
-    source?.questions ?? standardQuestions({ vacancyId, skills, location: cluster?.canonicalLocation });
+    source?.questions ??
+    standardQuestions({ vacancyId, skills, location: cluster?.canonicalLocation });
   if (deps.forms.get(candidateId, vacancyId)) return;
   deps.forms.saveQuestions(candidateId, vacancyId, {
     questions,
@@ -106,7 +116,12 @@ async function prepareQuestions(deps: Bound, candidateId: string, item: StoredMa
 }
 
 /** Резюме под вакансию заранее; не собралось — письмо и ответы всё равно готовятся. */
-function prepareResume(deps: Bound, request: FastifyRequest, candidateId: string, vacancyId: string): void {
+function prepareResume(
+  deps: Bound,
+  request: FastifyRequest,
+  candidateId: string,
+  vacancyId: string,
+): void {
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
   if (!cluster) return;
   try {
@@ -116,7 +131,12 @@ function prepareResume(deps: Bound, request: FastifyRequest, candidateId: string
   }
 }
 
-async function prepare(deps: Bound, request: FastifyRequest, candidateId: string, vacancyId: string) {
+async function prepare(
+  deps: Bound,
+  request: FastifyRequest,
+  candidateId: string,
+  vacancyId: string,
+) {
   const item = deps.queue.get(candidateId, vacancyId);
   if (!item) return;
   deps.queue.startAttempt(candidateId, vacancyId);
@@ -131,7 +151,12 @@ async function prepare(deps: Bound, request: FastifyRequest, candidateId: string
 }
 
 /** Один сбор на отклик: параллельные запросы присоединяются к идущему. */
-function startPreparing(deps: Bound, request: FastifyRequest, candidateId: string, item: StoredManualApply): void {
+function startPreparing(
+  deps: Bound,
+  request: FastifyRequest,
+  candidateId: string,
+  item: StoredManualApply,
+): void {
   const { vacancyId } = item;
   const key = flightKey(candidateId, vacancyId);
   if (item.prepared || item.attempts >= MAX_ATTEMPTS || deps.inFlight.has(key)) return;
@@ -153,13 +178,27 @@ function toItem(deps: Bound, who: Who, item: StoredManualApply): ManualApplyItem
   const preparing = !item.prepared && item.attempts < MAX_ATTEMPTS;
   const stored = deps.forms.get(who.candidateId, vacancyId);
   const missingAnswers = stored
-    ? questionnaireView(deps, { ...who, vacancyId }, stored, { state: 'ready', formUrl: null }).missingRequired
+    ? questionnaireView(deps, { ...who, vacancyId }, stored, { state: 'ready', formUrl: null })
+        .missingRequired
     : 0;
   const letter = latestLetterApproval(deps, who.candidateId, vacancyId)?.body ?? item.letter;
   const ready = missingAnswers > 0 ? 'needs_answer' : 'ready';
   // Вопросы видны сразу, как прочитаны: кандидат отвечает, пока остальное собирается.
   const state = preparing && missingAnswers === 0 ? 'preparing' : ready;
-  return { vacancyId, applicationId, title, company, url, reason, host, state, missingAnswers, letter, createdAt };
+  return {
+    vacancyId,
+    applicationId,
+    title,
+    company,
+    url,
+    reason,
+    host,
+    state,
+    preparing,
+    missingAnswers,
+    letter,
+    createdAt,
+  };
 }
 
 const listQueue: Handler = async (deps, request, reply) => {
@@ -174,7 +213,11 @@ const listQueue: Handler = async (deps, request, reply) => {
 const notFound = (request: FastifyRequest, reply: FastifyReply) =>
   sendError(reply, request, 404, 'manual_application_not_found', 'Отклик не найден.', false);
 
-function openItem(deps: Bound, request: FastifyRequest, candidateId: string): StoredManualApply | null {
+function openItem(
+  deps: Bound,
+  request: FastifyRequest,
+  candidateId: string,
+): StoredManualApply | null {
   const item = deps.queue.get(candidateId, (request.params as { id: string }).id);
   return item?.status === 'open' ? item : null;
 }
@@ -188,7 +231,11 @@ const readItem: Handler = async (deps, request, reply) => {
   return { data: toItem(deps, who, item), meta: { requestId: request.id } };
 };
 
-function vacancyFacts(cluster: VacancyCluster, reason: ManualApplyReason, host: string | undefined) {
+function vacancyFacts(
+  cluster: VacancyCluster,
+  reason: ManualApplyReason,
+  host: string | undefined,
+) {
   const route = preferredApplySource(cluster);
   return {
     title: cluster.canonicalTitle,
@@ -200,22 +247,14 @@ function vacancyFacts(cluster: VacancyCluster, reason: ManualApplyReason, host: 
   };
 }
 
-const enqueue: Handler = async (deps, request, reply) => {
-  const who = signed(deps, request, reply);
-  if (!who) return reply;
-  const parsed = enqueueSchema.safeParse(request.body ?? {});
-  if (!parsed.success) {
-    return sendError(reply, request, 400, 'invalid_manual_application', 'Проверьте вакансию.', false);
-  }
-  const { vacancyId, reason, host } = parsed.data;
-  const { candidateId } = who;
-  const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
-  if (!cluster) return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
-  const known = deps.queue.get(candidateId, vacancyId);
-  const facts = vacancyFacts(cluster, reason, host);
-  if (known?.status !== 'open' && deps.queue.listOpen(candidateId).length >= MAX_OPEN) {
-    return sendError(reply, request, 409, 'manual_queue_full', 'Сначала отправьте отклики из очереди.', false);
-  }
+/** Карточка отклика; после «Не откликаюсь» — возвращённая из архива. */
+function savedApplication(
+  deps: Bound,
+  candidateId: string,
+  vacancyId: string,
+  facts: ReturnType<typeof vacancyFacts>,
+  known: StoredManualApply | null,
+) {
   const application = deps.candidateStore.createApplication(candidateId, {
     clusterId: vacancyId,
     stage: 'saved',
@@ -226,10 +265,60 @@ const enqueue: Handler = async (deps, request, reply) => {
       source: facts.source,
     }),
   });
+  // «Не откликаюсь» положил отклик в архив; снова нажали «Откликнуться» — он возвращается.
+  return application.stage === 'archived' && known?.status === 'skipped'
+    ? deps.candidateStore.restoreApplication(candidateId, application.id, application.version)
+    : application;
+}
+
+const enqueue: Handler = async (deps, request, reply) => {
+  const who = signed(deps, request, reply);
+  if (!who) return reply;
+  const parsed = enqueueSchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_manual_application',
+      'Проверьте вакансию.',
+      false,
+    );
+  }
+  return enqueueVacancy(deps, request, reply, who, parsed.data);
+};
+
+async function enqueueVacancy(
+  deps: Bound,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  who: Who,
+  { vacancyId, reason, host }: z.infer<typeof enqueueSchema>,
+) {
+  const { candidateId } = who;
+  const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
+  if (!cluster)
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  const known = deps.queue.get(candidateId, vacancyId);
+  const facts = vacancyFacts(cluster, reason, host);
+  if (known?.status !== 'open' && deps.queue.listOpen(candidateId).length >= MAX_OPEN) {
+    return sendError(
+      reply,
+      request,
+      409,
+      'manual_queue_full',
+      'Сначала отправьте отклики из очереди.',
+      false,
+    );
+  }
+  const application = savedApplication(deps, candidateId, vacancyId, facts, known);
   if (application.stage !== 'saved') {
     return sendError(reply, request, 409, 'already_applied', 'Отклик уже отправлен.', false);
   }
-  if (!known?.prepared && !requireTariffQuota(deps, request, reply, candidateId, 'applications', vacancyId)) {
+  if (
+    !known?.prepared &&
+    !requireTariffQuota(deps, request, reply, candidateId, 'applications', vacancyId)
+  ) {
     return reply;
   }
   const item = deps.queue.enqueue(candidateId, vacancyId, {
@@ -242,7 +331,7 @@ const enqueue: Handler = async (deps, request, reply) => {
     data: toItem(deps, who, item),
     meta: { requestId: request.id },
   });
-};
+}
 
 const markSent: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);

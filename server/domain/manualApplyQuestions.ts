@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { QuestionnaireAnswer, QuestionnaireQuestion } from '../../shared/applicationQuestionnaire';
+import type {
+  QuestionnaireAnswer,
+  QuestionnaireQuestion,
+} from '../../shared/applicationQuestionnaire';
 
 const MAX_SKILLS = 6;
 /** Длиннее — уже фраза требования, а не навык. */
@@ -36,7 +39,9 @@ const choice = (id: string, label: string): QuestionnaireQuestion => ({
 });
 
 function uniqueSkills(skills: readonly string[]): readonly string[] {
-  const names = skills.map((skill) => skill.trim()).filter((skill) => skill && skill.length <= MAX_SKILL_LENGTH);
+  const names = skills
+    .map((skill) => skill.trim())
+    .filter((skill) => skill && skill.length <= MAX_SKILL_LENGTH);
   const seen = new Set<string>();
   return names
     .filter((skill) => {
@@ -126,7 +131,9 @@ export function knownAnswers(
   previous: readonly QuestionnaireAnswer[],
   years: readonly QuestionnaireAnswer[],
 ): readonly QuestionnaireAnswer[] {
-  const byId = new Map([...years, ...previous.filter((item) => item.text)].map((item) => [item.questionId, item]));
+  const byId = new Map(
+    [...years, ...previous.filter((item) => item.text)].map((item) => [item.questionId, item]),
+  );
   return questions.flatMap(({ id }) => {
     const answer = id.startsWith('std-') ? byId.get(id) : undefined;
     return answer ? [answer] : [];

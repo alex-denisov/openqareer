@@ -5,9 +5,11 @@ const NOW = new Date('2026-11-25T00:00:00Z');
 
 describe('типовые вопросы ручного отклика', () => {
   it('спрашивает контакты, опыт по навыкам, право на работу, визу, зарплату и срок выхода', () => {
-    const texts = standardQuestions({ vacancyId: 'v1', skills: ['Kafka', 'kafka '], location: 'Берлин, Германия' }).map(
-      (question) => question.text,
-    );
+    const texts = standardQuestions({
+      vacancyId: 'v1',
+      skills: ['Kafka', 'kafka '],
+      location: 'Берлин, Германия',
+    }).map((question) => question.text);
     expect(texts).toEqual([
       'Полное имя',
       'Электронная почта',
@@ -32,7 +34,11 @@ describe('типовые вопросы ручного отклика', () => {
   });
 
   it('повторно отвечать не просит: прошлый ответ кандидата главнее подсчёта', () => {
-    const questions = standardQuestions({ vacancyId: 'v1', skills: ['Kafka'], location: 'Берлин, Германия' });
+    const questions = standardQuestions({
+      vacancyId: 'v1',
+      skills: ['Kafka'],
+      location: 'Берлин, Германия',
+    });
     const years = skillYearAnswers(
       ['Kafka'],
       [{ startDate: '2024-01', current: true, skills: ['Kafka'] }],
