@@ -22,6 +22,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly withPath?: boolean;
   /** У вакансии есть анкета работодателя. */
   readonly questionnaire?: boolean;
+  /** Длинный список стран, как у настоящих анкет Greenhouse (B641). */
+  readonly longChoice?: boolean;
   /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
   readonly approvedBody?: string;
   /** Длинный текст вакансии, как у настоящих на hh.ru (B645). */
@@ -216,7 +218,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
         text: 'Country of residence',
         required: true,
         kind: 'choice',
-        options: ['Germany', 'Россия', 'Other'],
+        options: options.longChoice
+          ? Array.from({ length: 255 }, (_, index) => `Country ${index}`)
+          : ['Germany', 'Россия', 'Other'],
       },
     ];
     // Ответы из профиля сервер отдаёт уже подставленными, пока кандидат не сохранил свои.
@@ -389,6 +393,8 @@ test.describe('B657: единый экран отклика', () => {
       'https://hh.ru/vacancy/1',
     );
     await expect(page.locator('.cb-t')).toContainText('вырастила группу разработки');
+    const copy = (await page.locator('.cb-copy').first().boundingBox())!;
+    expect([copy.width, copy.height]).toEqual([44, 44]);
     await expectGates(page);
     await page.getByRole('button', { name: 'Я откликнулся' }).click();
     await expect(page.getByText('Отклик отмечен как отправленный')).toBeVisible();
@@ -625,6 +631,30 @@ test.describe('B657: единый экран отклика', () => {
     expect(mock.calls).toContain('form submitted');
   });
 
+  test('B641: длинный список стран — поиск, «Показать ещё», цели 44 px', async ({ page }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter?step=form', {
+      questionnaire: true,
+      longChoice: true,
+    });
+    const country = page.getByRole('radiogroup', { name: 'Ваш ответ: Country of residence' });
+    // 20 вариантов страницы и сохранённый ответ вне списка.
+    await expect(country.getByRole('radio')).toHaveCount(21);
+    const search = page.getByRole('searchbox', { name: /Найти вариант/u });
+    const more = page.getByRole('button', { name: 'Показать ещё' });
+    for (const target of [search, more, country.locator('label').first()]) {
+      expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    await expectGates(page);
+    await more.click();
+    await expect(country.getByRole('radio')).toHaveCount(41);
+    await search.fill('country 254');
+    await country.getByRole('radio', { name: 'Country 254' }).check();
+    await expect(country.getByRole('radio')).toHaveCount(1);
+    await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
+    await search.fill('zzz');
+    await expect(page.getByText('Ничего не нашлось')).toBeVisible();
+  });
+
   test('без анкеты вкладки «Анкета» нет, адрес шага ведёт к письму', async ({ page }) => {
     await open(page, '/app/responses/a-draft/letter?step=form');
     await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
@@ -769,6 +799,9 @@ test.describe('B657: единый экран отклика', () => {
     }
     await expect(rows.first()).toHaveCSS('border-bottom-width', '1px');
     await expectLastActionReachable(page);
+    await page.getByRole('button', { name: /^Письмо · одобрено/u }).click();
+    await expect(page.getByLabel('Текст письма')).toBeVisible();
+    await page.getByRole('button', { name: 'К отправке' }).click();
 
     await page.getByRole('button', { name: 'Резюме hh.ru «Руководитель разработки»' }).click();
     const next = page.getByRole('dialog').getByRole('button', { name: 'Продолжить' });

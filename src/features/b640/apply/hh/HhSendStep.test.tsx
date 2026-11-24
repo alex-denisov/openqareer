@@ -68,7 +68,7 @@ async function settle(): Promise<void> {
   });
 }
 
-async function render(onSent = vi.fn().mockResolvedValue(undefined)) {
+async function render(onSent = vi.fn().mockResolvedValue(undefined), onLetter = vi.fn()) {
   view = mount(
     <HhSendStep
       vacancyId="cluster-1"
@@ -78,6 +78,7 @@ async function render(onSent = vi.fn().mockResolvedValue(undefined)) {
       approvedLabel="одобрено 18.11"
       letterText="Здравствуйте"
       onSent={onSent}
+      onLetter={onLetter}
     />,
   );
   await settle();
@@ -91,6 +92,13 @@ function button(text: string): HTMLButtonElement {
 }
 
 describe('B704: отклик через hh.ru в приложении', () => {
+  it('название письма открывает шаг «Письмо» (a01)', async () => {
+    const onLetter = vi.fn();
+    await render(undefined, onLetter);
+    click(button('Письмо · одобрено 18.11'));
+    expect(onLetter).toHaveBeenCalledOnce();
+  });
+
   it('без подтверждения ничего не уходит; после «Отправить» — отклик и отметка', async () => {
     const onSent = await render();
     expect(view!.container.textContent).toContain('«CDO»');

@@ -23,6 +23,7 @@ import {
   calculateSourceAuthenticity,
   clusterVacancies,
   clusterVacanciesAsync,
+  clusterVacancySteps,
   IncrementalClusterBuilder,
   memberKeysOf,
 } from './vacancyDeduplicator';
@@ -80,6 +81,7 @@ import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { syncSection } from '../observability/syncSections';
 import { mapYielding } from './mapYielding';
+import { runStepsYielding } from './yieldingSteps';
 import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   COMPANY_LANE_CONCURRENCY,
@@ -2492,11 +2494,12 @@ export class MultiSourceVacancyEngine {
     if (!this.pool.queryMatchCandidatesAsync) return this.getMatchedVacancies(candidate);
     const effective = this.withResolvedSemanticFunctions(candidate);
     const candidates = await this.pool.queryMatchCandidatesAsync(effective);
-    // B770a: the two unyielded stretches of role-snapshot and precompute:snapshot, named for the stall log.
-    const clusters = syncSection('engine:cluster', () =>
-      clusterVacancies(candidates).filter((cluster) => cluster.status === 'active'),
-    );
-    const matched = await mapYielding(clusters, (cluster) => ({
+    // B770: clustering runs in slices; the stall log names 'engine:cluster' only if one vacancy is slow.
+    const clusters = await runStepsYielding(clusterVacancySteps(candidates), {
+      section: 'engine:cluster',
+    });
+    const active = clusters.filter((cluster) => cluster.status === 'active');
+    const matched = await mapYielding(active, (cluster) => ({
       cluster,
       explanation: matchCandidateWithVacancy(effective, cluster),
     }));

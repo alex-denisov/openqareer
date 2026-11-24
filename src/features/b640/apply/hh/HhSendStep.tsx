@@ -20,6 +20,8 @@ export interface HhSendStepProps {
   readonly approvedLabel: string;
   readonly letterText: string;
   readonly onSent: () => Promise<void>;
+  /** a01: название письма открывает шаг «Письмо». */
+  readonly onLetter: () => void;
 }
 
 interface PartsProps {
@@ -35,7 +37,9 @@ function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
     <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
       <li className="row">
         <div>
-          <span className="row-title">Письмо · {props.approvedLabel}</span>
+          <button className="row-title ap-pick" type="button" onClick={props.onLetter}>
+            Письмо · {props.approvedLabel}
+          </button>
           <p className="ap-lines">{props.letterText}</p>
         </div>
         <span className="tag ok">готово</span>
