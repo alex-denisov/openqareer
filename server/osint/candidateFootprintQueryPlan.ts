@@ -38,6 +38,8 @@ export interface PublicFootprintQueryPlanItem {
   readonly preview: string;
   readonly selectedByDefault: boolean;
   readonly available: boolean;
+  /** B668: ссылка из контактов профиля — её можно убрать в «Данных для поиска». */
+  readonly profileLink?: string;
 }
 
 function itemId(adapterId: FootprintAdapterId, kind: FootprintQueryKind, identity: string): string {
@@ -289,6 +291,16 @@ function extractUsernamesAndLinks(draft: ResumeDraft): {
   return { usernames: [...usernames], links: allLinks };
 }
 
+/** Адрес в плане → ссылка, как она записана в контактах профиля. */
+export function profileLinksOf(draft: ResumeDraft): ReadonlyMap<string, string> {
+  return new Map(
+    (draft.candidate.contact?.links ?? []).flatMap((link) => {
+      const url = profileUrl(link);
+      return url ? [[url, link] as const] : [];
+    }),
+  );
+}
+
 const MAX_YOUTUBE_LINKS = 3;
 
 function linkPreview(link: string): string {
@@ -344,12 +356,14 @@ function usernameFromTelegram(value: string | undefined): string | null {
 export function toPublicFootprintQueryPlan(
   plan: readonly FootprintQueryPlanItem[],
   availability: Partial<Record<FootprintAdapterId, boolean>> = {},
+  profileLinks: ReadonlyMap<string, string> = new Map(),
 ): readonly PublicFootprintQueryPlanItem[] {
   return plan.map(({ id, adapterId, kind, preview, selectedByDefault, input }) => {
     let available = availability[adapterId] ?? true;
     if (adapterId === 'hibp' && 'email' in input && !input.email) {
       available = false;
     }
+    const profileLink = 'profileUrl' in input ? profileLinks.get(input.profileUrl) : undefined;
     return {
       id,
       adapterId,
@@ -357,6 +371,7 @@ export function toPublicFootprintQueryPlan(
       preview,
       selectedByDefault: selectedByDefault && available,
       available,
+      ...(profileLink ? { profileLink } : {}),
     };
   });
 }

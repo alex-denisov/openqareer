@@ -75,6 +75,12 @@ function queryText(query: YoutubeChannelQuery): string {
   return `${name}=${value}`;
 }
 
+/** Запрос канала, как он записан в квитанции находки; не канал — `null`. */
+export function youtubeChannelQueryText(raw: string): string | null {
+  const query = youtubeChannelQuery(raw);
+  return query ? queryText(query) : null;
+}
+
 function sourceError(message: string): FootprintSourceError {
   return new FootprintSourceError('youtube', 'source_error', message);
 }

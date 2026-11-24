@@ -3,7 +3,7 @@ import type { HhResumeContent, HhResumeSnapshot } from '../../../../../shared/hh
 import { apiErrorMessage } from '../../../coach/apiClient';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
 import { useAsync } from '../../responses/data/useAsync';
-import { openHhSignIn, readHhResumeContent, readHhResumes, summaryOf } from './hhDesktop';
+import { HH_CAPTCHA, openHhSignIn, readHhResumeContent, readHhResumes, summaryOf } from './hhDesktop';
 import { forReview, readResumesForReview, type ReadPace } from './hhResumeReading';
 import {
   getHhResumeReview,
@@ -23,7 +23,7 @@ export type HhPicker =
       /** B678: сверка с вакансией; `null` — не получилась, выбор всё равно возможен. */
       readonly review: HhResumeVacancyReview | null;
     }
-  | { readonly kind: 'error'; readonly text: string };
+  | { readonly kind: 'error'; readonly text: string; readonly captcha?: boolean };
 
 export interface HhResumesState {
   /** Что прочитано в прошлый раз: выбранное резюме и весь список. */
@@ -94,6 +94,14 @@ function useSectionsRefresh(snapshot: HhResumeSnapshot | null, replaceData: (sav
   return { refreshing, settled };
 }
 
+function listFailure(reason: unknown): HhPicker {
+  return {
+    kind: 'error',
+    text: 'Список резюме hh.ru не прочитался. Повторите.',
+    captcha: reason instanceof Error && reason.message === HH_CAPTCHA,
+  };
+}
+
 /** Резюме hh.ru кандидата: список и содержимое — из его сессии hh.ru; сверка с вакансией — на сервере. */
 export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}): HhResumesState {
   const load = useCallback((signal: AbortSignal) => getHhResumes(signal), []);
@@ -117,7 +125,7 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
         if (outcome.saved) replaceData(outcome.saved);
         return setPicker({ kind: 'choose', resumes: list.resumes, review: outcome.review });
       })
-      .catch(() => setPicker({ kind: 'error', text: 'Список резюме hh.ru не прочитался. Повторите.' }));
+      .catch((reason: unknown) => setPicker(listFailure(reason)));
   };
 
   const choose = (item: HhResumeItem, onChosen?: () => void) => {

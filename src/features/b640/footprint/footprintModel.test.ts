@@ -127,6 +127,15 @@ describe('B668: ссылка YouTube в «Данных для поиска»', (
   });
 });
 
+describe('B668: город — не место работы', () => {
+  it('«2 места работы, город»', () => {
+    const groups = planGroups(['Искать имя и работодателя «А»', 'Искать имя и работодателя «Б»', 'Искать имя и город «Москва»'].map(
+      (preview, index) => ({ id: `${index}`, kind: 'work_context' as const, preview, selectedByDefault: true, available: true }),
+    ));
+    expect(searchByLine(groups, new Set(groups.map((group) => group.key)))).toBe('2 места работы, город');
+  });
+});
+
 describe('B645 f03b: строка «Риск» — уровень и почему', () => {
   const base = { level: 'high', levelLabel: 'высокий риск' } as const;
   it('уровень коротко и причина через двоеточие, как в макете', () => {

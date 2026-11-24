@@ -1,7 +1,10 @@
 import type { FastifyRequest } from 'fastify';
+import '../../shared/geo/serverGeoDirectory';
+import { parseVacancyLocation } from '../../shared/locationTree';
 import { parseRemoteScope, remoteScopeLabel } from '../../shared/remoteScope';
 import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
 import { detectVacancyWorkFormat, workFormatLabel } from '../../shared/vacancyWorkFormat';
+import { selectionSummary, type SelectionContext, type SelectionRow } from '../coach/selectionSummary';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readB640PoolRows } from './b640MatchedVacancyRoutes';
 import { readB640ListContext } from './b640VacancyContext';
@@ -11,25 +14,21 @@ import type { RouteDeps } from './deps';
 /** B735: столько строк подборки консультант видит в ходе — первая страница списка. */
 export const SELECTION_CONTEXT_ROWS = 20;
 
-export interface SelectionContextRow {
-  readonly title: string;
-  readonly company: string | null;
-  /** Место из вакансии; null — площадка его не назвала. */
-  readonly location: string | null;
-  /** «офис», «гибрид», удалёнка с областью; null — в вакансии не сказано. */
-  readonly format: string | null;
-  readonly salary: string | null;
-  readonly fitPercent: number | null;
-}
-
-export interface SelectionContext {
-  readonly total: number;
-  readonly rows: readonly SelectionContextRow[];
-}
-
 type PercentOf = (item: MatchedVacancyItem) => number | null;
 
 const defaultPercentOf: PercentOf = (item) => vacancyFitPercent(item.explanation.fitView);
+
+/** Площадки пишут «Remote» в поле места: это формат, а не место. */
+const REMOTE_PLACE = /^(?:remote(?:ly)?|удал[её]нн?о|удал[её]нка|anywhere|worldwide|hybrid|гибрид)$/iu;
+
+function placeParts(location: string | undefined): readonly string[] {
+  return (location ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+}
+
+function locationOf(location: string | undefined): string | null {
+  const place = placeParts(location).filter((part) => !REMOTE_PLACE.test(part)).join(', ');
+  return place.slice(0, 200) || null;
+}
 
 function formatOf(cluster: MatchedVacancyItem['cluster']): string | null {
   const format =
@@ -39,27 +38,38 @@ function formatOf(cluster: MatchedVacancyItem['cluster']): string | null {
       summary: cluster.descriptionSummary,
       isRemote: cluster.isRemote,
     });
+  // Место «Remote» при формате «офис»: данные вакансии спорят, формат неизвестен.
+  const saysRemote = placeParts(cluster.canonicalLocation).some((part) => /^(?:remote|удал)/iu.test(part));
+  if (format === 'office' && saysRemote) return null;
   if (format !== 'remote') return workFormatLabel(format) ?? null;
   return remoteScopeLabel(parseRemoteScope(cluster.remoteScope)).slice(0, 120);
 }
 
-/** Подборка в порядке списка кандидата: название, компания, место, формат, зарплата и процент совпадения. */
+function rowOf(item: MatchedVacancyItem, index: number, percentOf: PercentOf): SelectionRow {
+  const { cluster } = item;
+  const location = locationOf(cluster.canonicalLocation);
+  return {
+    n: index + 1,
+    title: cluster.canonicalTitle.slice(0, 200),
+    // Имя частного лица — не компания, в ход оно не идёт (INC-023).
+    company: cluster.employerIsPerson ? null : cluster.canonicalCompany.slice(0, 200) || null,
+    location,
+    country: (location && parseVacancyLocation({ location })?.country) || null,
+    format: formatOf(cluster),
+    salary: salaryLine(cluster.salary)?.slice(0, 120) ?? null,
+    fitPercent: percentOf(item),
+  };
+}
+
+/** Пронумерованные строки подборки в порядке списка и готовая сводка по ним (B735). */
 export function selectionContextOf(
   items: readonly MatchedVacancyItem[],
   percentOf: PercentOf = defaultPercentOf,
 ): SelectionContext {
-  return {
-    total: items.length,
-    rows: items.slice(0, SELECTION_CONTEXT_ROWS).map((item) => ({
-      title: item.cluster.canonicalTitle.slice(0, 200),
-      // Имя частного лица — не компания, в ход оно не идёт (INC-023).
-      company: item.cluster.employerIsPerson ? null : item.cluster.canonicalCompany.slice(0, 200) || null,
-      location: item.cluster.canonicalLocation?.trim().slice(0, 200) || null,
-      format: formatOf(item.cluster),
-      salary: salaryLine(item.cluster.salary)?.slice(0, 120) ?? null,
-      fitPercent: percentOf(item),
-    })),
-  };
+  const rows = items
+    .slice(0, SELECTION_CONTEXT_ROWS)
+    .map((item, index) => rowOf(item, index, percentOf));
+  return { total: items.length, summary: selectionSummary(rows), rows };
 }
 
 /** Подборка — подсказка консультанту: её сбой не роняет ход и пишется в журнал. */

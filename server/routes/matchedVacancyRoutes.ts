@@ -22,6 +22,7 @@ import { buildLeanMatchedPage, leanPageOffsets } from '../vacancies/leanMatchedP
 import { cabinetB640Enabled } from '../auth/cabinetB640Access';
 import {
   finishMatchedRows,
+  finishMatchedRowSteps,
   readMatchedList,
   type MatchedList,
   type MatchedListInput,
@@ -44,6 +45,7 @@ import {
 } from '../vacancies/matchedPoolContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
+import { runStepsYielding } from '../vacancies/yieldingSteps';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
 import {
@@ -83,6 +85,24 @@ export function finishMatchedVacancies(
     decisions: candidateStore.listVacancyDecisions(candidateId),
     rates: getCurrencyRates(),
   });
+}
+
+/** B702-2: то же по частям — для чтений, где список строится заново в event loop. */
+export function finishMatchedVacanciesYielding(
+  snapshot: readonly MatchedVacancyItem[],
+  targetRoles: string[],
+  campaign: CampaignResolution,
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): Promise<MatchedVacancyItem[]> {
+  return runStepsYielding(
+    finishMatchedRowSteps(snapshot, targetRoles, campaign, {
+      profile: candidateStore.decisionProfileRepo.get(candidateId),
+      decisions: candidateStore.listVacancyDecisions(candidateId),
+      rates: getCurrencyRates(),
+    }),
+    { section: 'finish-rows' },
+  );
 }
 
 /** Снимок подбора уже отобран по уровню; роль — тот же признак, что в списке (B485). */

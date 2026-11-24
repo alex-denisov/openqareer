@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { readCatalogSitemaps } from './catalogSitemapJob';
+import { readRowsChunked } from '../data/chunkedRows';
 import type { SitemapFile } from './sitemapXml';
 
 /**
@@ -8,7 +9,16 @@ import type { SitemapFile } from './sitemapXml';
  * о сборке; файлы читаются, только когда она сменилась. Подпись по строкам catalog_sitemaps
  * (база до строки сборки) шла 0,5 с: её столбцы лежат после xml, и чтение шло по всему тексту.
  */
-const LEGACY_SIGNATURE_SQL = `SELECT group_concat(name || ':' || url_count || ':' || coalesce(lastmod, '') || ':' || updated_at, '|') AS signature FROM (SELECT name, url_count, lastmod, updated_at FROM catalog_sitemaps ORDER BY position)`;
+const LEGACY_SIGNATURE_SQL = `SELECT name || ':' || url_count || ':' || coalesce(lastmod, '') || ':' || updated_at AS signature FROM catalog_sitemaps ORDER BY position`;
+
+/** B702-2: на проде строки сборки нет, и подпись каждые 5 минут шла по 17 МБ: файл — свой такт. */
+async function readLegacySignature(database: DatabaseSync): Promise<string | null> {
+  const rows = await readRowsChunked<{ signature: string }>(
+    database.prepare(LEGACY_SIGNATURE_SQL),
+    1,
+  );
+  return rows.map((row) => row.signature).join('|') || null;
+}
 
 function tableExists(database: DatabaseSync, name: string): boolean {
   return Boolean(
@@ -16,11 +26,11 @@ function tableExists(database: DatabaseSync, name: string): boolean {
   );
 }
 
-function readSignature(database: DatabaseSync): string | null {
-  const sql = tableExists(database, 'catalog_sitemaps_build')
-    ? 'SELECT signature FROM catalog_sitemaps_build WHERE id = 1'
-    : LEGACY_SIGNATURE_SQL;
-  const row = database.prepare(sql).get() as { signature: string | null } | undefined;
+async function readSignature(database: DatabaseSync): Promise<string | null> {
+  if (!tableExists(database, 'catalog_sitemaps_build')) return readLegacySignature(database);
+  const row = database
+    .prepare('SELECT signature FROM catalog_sitemaps_build WHERE id = 1')
+    .get() as { signature: string | null } | undefined;
   return row?.signature ?? null;
 }
 
@@ -28,9 +38,9 @@ export class CatalogSitemapReader {
   private seen: string | null = null;
 
   /** Новые файлы или null, если сборка та же (или таблицы ещё нет). */
-  readIfChanged(database: DatabaseSync): SitemapFile[] | null {
+  async readIfChanged(database: DatabaseSync): Promise<SitemapFile[] | null> {
     if (!tableExists(database, 'catalog_sitemaps')) return null;
-    const signature = readSignature(database);
+    const signature = await readSignature(database);
     if (!signature || signature === this.seen) return null;
     const files = readCatalogSitemaps(database);
     if (files) this.seen = signature;
