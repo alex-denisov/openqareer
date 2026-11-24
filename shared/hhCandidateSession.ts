@@ -36,6 +36,8 @@ export interface HhResumePlace {
 export interface HhResumeSections {
   readonly title: string;
   readonly about: string;
+  /** Раздел «О себе» виден на странице (с текстом или явно пустой). Нет признака — не прочитан. */
+  readonly aboutRead?: boolean;
   readonly skills: readonly string[];
   readonly places: readonly HhResumePlace[];
 }

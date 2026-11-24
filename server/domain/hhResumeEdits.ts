@@ -157,8 +157,9 @@ function isPositionTerms(text: string): boolean {
 
 function aboutEdit(input: HhEditsInput): HhEditDraft[] {
   const now = input.platform.about?.trim() ?? '';
-  const was = input.resume.sections.about;
-  if (!now || isPositionTerms(was) || normalized(now) === normalized(was)) return [];
+  const { about: was, aboutRead } = input.resume.sections;
+  // Непрочитанный раздел не правим: «станет» затёрло бы текст, которого мы не видели.
+  if (aboutRead !== true || !now || isPositionTerms(was) || normalized(now) === normalized(was)) return [];
   return [{ id: 'about', section: 'about', was, now, language: languageOf(now) }];
 }
 

@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { parseHhResumeHtml, parseHhResumesList } from './hhResumeParser';
 
 describe('hhResumeParser', () => {
+  it('«О себе»: явно пустой раздел отличается от непрочитанного', () => {
+    const about = (html: string) => parseHhResumeHtml(html, 'https://hh.ru/resume/t').about;
+    expect(about('<div data-qa="resume-block-about"> </div>')).toBe('');
+    expect(about('<div data-qa="resume-block-about"><div></div><p>Текст</p></div>')).toBeUndefined();
+    expect(about('<div data-qa="resume-block-salary">Уровень дохода не указан</div>')).toBeUndefined();
+  });
+
   it('parses full structured resume html correctly', () => {
     const html = `
       <div data-qa="resume-personal-name">Мария Иванова</div>

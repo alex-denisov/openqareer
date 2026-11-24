@@ -46,6 +46,7 @@ const sectionsSchema = z
   .object({
     title: z.string().trim().max(HH_RESUME_TITLE_MAX_LENGTH),
     about: sectionText,
+    aboutRead: z.boolean().optional(),
     skills: z.array(z.string().trim().min(1).max(200)).max(HH_SECTION_SKILLS_MAX),
     places: z
       .array(

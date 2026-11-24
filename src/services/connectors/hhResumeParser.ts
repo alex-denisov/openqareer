@@ -41,7 +41,8 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
       html,
       /data-qa=["']resume-block-skills-content["'][^>]*>([\s\S]*?)<\/div>/iu,
     ) ??
-    undefined;
+    // Пусто только у раздела без содержимого: вложенная разметка — раздел не прочитан.
+    (/data-qa=["']resume-block-(?:about|skills-content)["'][^>]*>\s*<\/div>/iu.test(html) ? '' : undefined);
 
   // hh.ru's Magritte profile renders every skill as `skill-tag-<id>` grouped
   // under a level heading; the old `bloko-tag__text` / `skills-element` hooks

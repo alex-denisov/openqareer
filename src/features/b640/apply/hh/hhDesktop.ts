@@ -67,6 +67,7 @@ export function sectionsOf(parsed: ParsedResume, fallbackTitle: string): HhResum
   return {
     title: clip(parsed.targetRole || fallbackTitle, HH_RESUME_TITLE_MAX_LENGTH),
     about: clip(parsed.about, HH_SECTION_TEXT_MAX_LENGTH),
+    aboutRead: parsed.about !== undefined,
     skills: parsed.skills.map((skill) => clip(skill, 200)).filter(Boolean).slice(0, HH_SECTION_SKILLS_MAX),
     places: parsed.experience.slice(0, HH_SECTION_PLACES_MAX).map((place) => ({
       employer: clip(place.employer, 300),
