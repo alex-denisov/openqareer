@@ -21,6 +21,7 @@ import { snapshotWithDescription } from './applicationVacancyText';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { letterFactSource } from '../domain/letterFreshness';
 import { latestLetterApproval } from './letterApprovalRead';
 import { prepareLetterResume } from './letterApprovalResume';
 import { poolReader, questionnaireView, type Signed } from './questionnaireRoutes';
@@ -138,6 +139,9 @@ function prepareResume(
   }
 }
 
+const factSource = (deps: Bound, candidateId: string) =>
+  letterFactSource(deps.candidateStore.getSnapshot(candidateId));
+
 async function prepare(
   deps: Bound,
   request: LogContext,
@@ -147,7 +151,7 @@ async function prepare(
   const { vacancyId } = item;
   await prepareQuestions(deps, candidateId, item);
   prepareResume(deps, request, candidateId, vacancyId);
-  if (!item.letter && !latestLetterApproval(deps, candidateId, vacancyId)) {
+  if (!item.letter && !latestLetterApproval(deps, candidateId, vacancyId, factSource(deps, candidateId))) {
     const letter = await deps.writeLetter(deps, request, candidateId, vacancyId);
     if (!letter) throw new Error('manual_apply_letter_failed');
     deps.queue.saveLetter(candidateId, vacancyId, letter.text, letter.pitch);
@@ -213,7 +217,7 @@ function toItem(deps: Bound, who: Who, item: StoredManualApply): ManualApplyItem
     ? questionnaireView(deps, { ...who, vacancyId }, stored, { state: 'ready', formUrl: null })
         .missingRequired
     : 0;
-  const letter = latestLetterApproval(deps, who.candidateId, vacancyId)?.body ?? item.letter;
+  const letter = latestLetterApproval(deps, who.candidateId, vacancyId, factSource(deps, who.candidateId))?.body ?? item.letter;
   const ready = missingAnswers > 0 ? 'needs_answer' : 'ready';
   // Вопросы видны сразу, как прочитаны: кандидат отвечает, пока остальное собирается.
   const state = preparing && missingAnswers === 0 ? 'preparing' : ready;

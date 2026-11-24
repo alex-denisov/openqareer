@@ -33,6 +33,11 @@ interface ApprovalInput {
   readonly restored?: ApprovedVacancyLetterResult | null;
 }
 
+export interface LetterApprovalState extends ApprovalState {
+  /** Вернуть прежнее одобрение без нового запроса. */
+  readonly keep: (approved: ApprovedVacancyLetterResult) => void;
+}
+
 function approvedSnapshot(
   input: ApprovalInput & { readonly pitch: VacancyPitchResult },
   language: PitchLanguage,
@@ -62,6 +67,7 @@ function approvedSnapshot(
       : { resumeAvailable: input.pitch.resumeAvailable }),
     ...(generalResumeId ? { generalResumeId } : {}),
     ...(input.variantId ? { variantId: input.variantId } : {}),
+    ...(input.pitch.profileHash ? { profileHash: input.pitch.profileHash } : {}),
   };
 }
 
@@ -110,6 +116,9 @@ interface ApprovalFailureSinks {
   readonly onResumeChanged: () => void;
 }
 
+/** Резюме или факты профиля изменились после черновика: письмо готовится заново. */
+const REBUILD_CODES: ReadonlySet<string> = new Set(['letter_resume_changed', 'letter_facts_changed']);
+
 /** Снимок не создался — гейт строки резюме; резюме изменилось — письмо готовится заново. */
 function approvalFailed(reason: unknown, sinks: ApprovalFailureSinks): void {
   if (reason instanceof CoachApiError && reason.code === 'resume_snapshot_failed') {
@@ -119,7 +128,7 @@ function approvalFailed(reason: unknown, sinks: ApprovalFailureSinks): void {
     }));
     return;
   }
-  if (reason instanceof CoachApiError && reason.code === 'letter_resume_changed') {
+  if (reason instanceof CoachApiError && REBUILD_CODES.has(reason.code)) {
     sinks.onResumeChanged();
   }
   sinks.setError(errorMessage(reason, 'Не удалось сохранить снимок письма.'));
@@ -163,7 +172,7 @@ function useRestoredSaved(
  * строка резюме предлагает повторить снимок, а после неудачного повтора — приложить общее резюме.
  * Резюме в профиле изменилось после черновика — письмо готовится заново и одобряется ещё раз.
  */
-export function useLetterApproval(input: ApprovalInput): ApprovalState {
+export function useLetterApproval(input: ApprovalInput): LetterApprovalState {
   const [saved, setSaved] = useState<ApprovedVacancyLetterResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -207,5 +216,9 @@ export function useLetterApproval(input: ApprovalInput): ApprovalState {
     gate,
     submit,
   );
-  return { saved, busy, error, approve, reset, resumeFailure, prepareResume, attachGeneralResume };
+  const keep = useCallback((approved: ApprovedVacancyLetterResult) => {
+    setSaved(approved);
+    setError('');
+  }, []);
+  return { saved, busy, error, approve, reset, keep, resumeFailure, prepareResume, attachGeneralResume };
 }

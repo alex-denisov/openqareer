@@ -52,6 +52,16 @@ export interface ApprovalState {
   readonly resumeFailure: ResumeSnapshotFailure | null;
   readonly prepareResume: () => Promise<void>;
   readonly attachGeneralResume: () => Promise<void>;
+  /** Факты профиля опровергли число письма: до новой сборки и одобрения письмо не уходит. */
+  readonly stale?: boolean;
+  /** Черновик готовится, а в поле остаётся текст кандидата. */
+  readonly keepsText?: boolean;
+  /** Собрать письмо заново по текущим фактам. */
+  readonly rebuild?: () => void;
+  /** Вернуть одобренный текст вместо правки; нет — возвращать нечего. */
+  readonly revert?: () => void;
+  /** Правка не сохранилась на сервере: повторить. */
+  readonly retryDraftSave?: () => void;
 }
 
 export interface LetterScreenState {

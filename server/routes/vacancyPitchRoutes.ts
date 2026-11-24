@@ -25,6 +25,9 @@ import {
 } from './letterApprovalResume';
 import { currentMaster, masterProjectionOf } from './resumeMaster';
 import { APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
+import { letterVacancyTexts, registerLetterDraftRoutes, type LetterDraftDeps } from './letterDraftRoutes';
+import { SqliteLetterDraftRepository } from '../candidate/sqliteLetterDraftRepository';
+import { letterFactMark, letterFactSource, type LetterFactMark } from '../domain/letterFreshness';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -47,6 +50,9 @@ import { registerManualApplyRoutes, type ManualApplyService, type QueuedLetterWr
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { vacancyDescriptionHash } from '../domain/vacancyRequirements';
 import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
+
+type LetterDeps = ResumeEditDeps & LetterDraftDeps;
+type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const vacancyPitchInputSchema = z
   .object({
@@ -94,6 +100,8 @@ const approvedLetterSnapshotSchema = z.object({
   generalResumeId: z.string().trim().min(1).max(200).optional(),
   /** B711: какой вариант письма одобрен — экран вернётся к нему. */
   variantId: z.string().trim().min(1).max(200).optional(),
+  /** Профиль, по которому готовили черновик: он изменился и опроверг число письма — одобрения нет. */
+  profileHash: z.string().max(64).optional(),
 });
 
 /** Перевод результатов идёт до письма: модель цитирует и проверка сверяет один и тот же текст. */
@@ -191,6 +199,7 @@ function readLetterContext(
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
+    profileHash: letterFactSource(snapshot).profileHash,
     resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
     facts: allFacts,
     candidateWorkplaces,
@@ -296,7 +305,7 @@ export async function writeVacancyPitch(
   const context = await retryOnSqliteBusy(() =>
     readLetterContext(deps, candidateId, body, vacancy),
   );
-  const { candidateName, candidateWorkplaces, language, contextMs, resume } = context;
+  const { candidateName, candidateWorkplaces, language, contextMs, resume, profileHash } = context;
   const { toTranslate, translations, translatedFacts, profile } = await translatedLetterInput(
     deps,
     context,
@@ -328,9 +337,10 @@ export async function writeVacancyPitch(
         atsCoverLetter,
         candidateWorkplaces,
         resume,
+        profileHash,
         outputFactChecks: { ...templateChecks, emailBody: written.factCheck, atsCoverLetter: written.factCheck },
       }
-    : { pitch, written, atsCoverLetter, candidateWorkplaces, resume, outputFactChecks: templateChecks };
+    : { pitch, written, atsCoverLetter, candidateWorkplaces, resume, profileHash, outputFactChecks: templateChecks };
 }
 
 function saveGeneratedCoverLetter(
@@ -454,6 +464,7 @@ function pitchData(result: PitchResult) {
     candidateWorkplaces: result.candidateWorkplaces,
     resumeAvailable: result.resume.available,
     resumeKind: result.resume.kind,
+    profileHash: result.profileHash,
     outputFactChecks: result.outputFactChecks,
     ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
     notices: letterNotices(result),
@@ -535,6 +546,10 @@ function changedLetterResume(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 409, 'letter_resume_changed', 'Резюме в профиле изменилось. Письмо подготовлено заново: проверьте его и одобрите.', false);
 }
 
+function changedLetterFacts(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 409, 'letter_facts_changed', 'Факты профиля изменились. Письмо подготовлено заново: проверьте его и одобрите.', false);
+}
+
 /** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
 const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
@@ -553,7 +568,7 @@ const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyR
   }
 };
 
-const handleApproveVacancyLetter = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
+const handleApproveVacancyLetter = async (deps: LetterDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
@@ -563,9 +578,8 @@ const handleApproveVacancyLetter = async (deps: ResumeEditDeps, request: Fastify
   if (!parsed.success) return invalidLetterSnapshot(reply, request);
   const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
-  const evidenceIds = new Set(
-    filterUsablePitchFacts(candidateStore.getSnapshot(candidate.id).memory).map((fact) => fact.id),
-  );
+  const profile = candidateStore.getSnapshot(candidate.id);
+  const evidenceIds = new Set(filterUsablePitchFacts(profile.memory).map((fact) => fact.id));
   if (parsed.data.usedEvidenceIds.some((id) => !evidenceIds.has(id))) {
     return changedLetterEvidence(reply, request);
   }
@@ -573,14 +587,22 @@ const handleApproveVacancyLetter = async (deps: ResumeEditDeps, request: Fastify
   if (parsed.data.resumeAvailable !== undefined && parsed.data.resumeAvailable !== resumeNow.available) {
     return changedLetterResume(reply, request);
   }
+  const source = letterFactSource(profile);
+  const { body, profileHash } = parsed.data;
+  const factMark = letterFactMark(source, body, letterVacancyTexts(deps, vacancyId));
+  if (profileHash && profileHash !== source.profileHash && factMark.ownNumbers.length > 0) {
+    return changedLetterFacts(reply, request);
+  }
   const approvedAt = new Date().toISOString();
   let stored: ReturnType<typeof persistApprovedLetterSnapshot>;
   try {
-    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt);
+    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt, factMark);
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
     throw error;
   }
+  // Одобренный текст и есть черновик: правка больше не нужна.
+  deps.letterDrafts.remove(candidate.id, vacancyId);
   return {
     data: {
       applicationId: stored.application.id,
@@ -605,12 +627,13 @@ function letterVacancySnapshot(deps: RouteDeps, vacancyId: string, cluster: Vaca
 }
 
 function persistApprovedLetterSnapshot(
-  deps: ResumeEditDeps,
+  deps: LetterDeps,
   candidateId: string,
   vacancyId: string,
   cluster: NonNullable<ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>>,
   input: z.infer<typeof approvedLetterSnapshotSchema>,
   approvedAt: string,
+  factMark: LetterFactMark,
 ) {
   const { candidateStore } = deps;
   const manualVacancy = letterVacancySnapshot(deps, vacancyId, cluster);
@@ -631,7 +654,7 @@ function persistApprovedLetterSnapshot(
       circle: input.circle, language: input.language, tone: input.tone,
       recipient: input.recipient ?? null, subject: input.subject ?? null, body: input.body,
       usedEvidenceIds: input.usedEvidenceIds, includedWorkplaceIds: input.includedWorkplaceIds, sent: false,
-      variantId: input.variantId ?? null, resume,
+      variantId: input.variantId ?? null, resume, factMark,
     };
     const document = candidateStore.saveDocumentAndLinkApplicationMaterial(
       candidateId,
@@ -655,12 +678,14 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
   const database = new DatabaseSync(deps.config.databasePath);
   database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   app.addHook('onClose', async () => database.close());
-  const editDeps: ResumeEditDeps = {
+  const editDeps: LetterDeps = {
     ...deps,
+    letterDrafts: new SqliteLetterDraftRepository(database, deps.config.dataEncryptionKey),
     resumeEdits: new SqliteResumeEditChoicesRepository(database, deps.config.dataEncryptionKey),
   };
   registerResumeEditRoutes(app, editDeps);
   const manualApply = registerManualApplyRoutes(app, editDeps, database, writeQueuedLetter);
+  registerLetterDraftRoutes(app, editDeps);
   app.post(
     '/api/v1/candidate/vacancies/:id/pitch',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
@@ -671,7 +696,7 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     withDeps(editDeps, handleApproveVacancyLetter),
   );
-  app.get('/api/v1/candidate/vacancies/:id/letter-approvals/latest', withDeps(deps, handleReadLetterApproval));
+  app.get('/api/v1/candidate/vacancies/:id/letter-approvals/latest', withDeps(editDeps, handleReadLetterApproval));
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-resume',
     { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
