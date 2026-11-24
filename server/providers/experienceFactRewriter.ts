@@ -37,6 +37,16 @@ import {
   LINKEDIN_VARIANT_JSON_SCHEMA,
   linkedinVariantUserMessage,
 } from '../linkedinProfile/linkedinVariantPrompt';
+import {
+  hhResumeVariantOutputSchema,
+  type HhResumeVariantOutput,
+  type HhResumeVariantRequest,
+} from '../domain/hhResumeVariant';
+import {
+  HH_RESUME_VARIANT_INSTRUCTIONS,
+  HH_RESUME_VARIANT_JSON_SCHEMA,
+  hhResumeVariantUserMessage,
+} from '../domain/hhResumeVariantPrompt';
 import { MODEL_CHAINS, resolveChain } from './modelChains';
 import type { VertexConfig } from './vertexAi';
 import { VertexJsonClient } from './vertexJson';
@@ -59,6 +69,8 @@ export interface ExperienceFactRewriter {
   /** B645: «О себе» и «Опыт» для LinkedIn пересказом подтверждённых фактов; `null` — ни одна ступень не смогла. */
   linkedinProfile?(request: LinkedinRewriteRequest): Promise<LinkedinRewriteOutput | null>;
   linkedinVariant?(request: LinkedinVariantRequest): Promise<LinkedinVariantOutput | null>;
+  /** B682: «Другой вариант» правки резюме hh.ru. */
+  hhResumeVariant?(request: HhResumeVariantRequest): Promise<HhResumeVariantOutput | null>;
   readonly provenance?: Readonly<{ model: string; promptRevision: string }>;
 }
 
@@ -138,6 +150,17 @@ export class LlmExperienceFactRewriter implements ExperienceFactRewriter {
       LINKEDIN_VARIANT_JSON_SCHEMA,
     );
     return readJsonAnswer(content, linkedinVariantOutputSchema);
+  }
+
+  async hhResumeVariant(request: HhResumeVariantRequest): Promise<HhResumeVariantOutput | null> {
+    if (request.facts.length === 0) return null;
+    const content = await this.complete(
+      HH_RESUME_VARIANT_INSTRUCTIONS,
+      hhResumeVariantUserMessage(request),
+      'hh_resume_variant',
+      HH_RESUME_VARIANT_JSON_SCHEMA,
+    );
+    return readJsonAnswer(content, hhResumeVariantOutputSchema);
   }
 
   private async complete(
@@ -245,6 +268,20 @@ export class QueuedExperienceFactRewriter implements ExperienceFactRewriter {
       if (!stage.linkedinVariant) continue;
       try {
         const output = await stage.linkedinVariant(request);
+        if (output?.text.trim()) return output;
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
+      } catch (error) {
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', error);
+      }
+    }
+    return null;
+  }
+
+  async hhResumeVariant(request: HhResumeVariantRequest): Promise<HhResumeVariantOutput | null> {
+    for (const stage of this.stages) {
+      if (!stage.hhResumeVariant) continue;
+      try {
+        const output = await stage.hhResumeVariant(request);
         if (output?.text.trim()) return output;
         this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
       } catch (error) {
