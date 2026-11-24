@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import { cluster } from '../testHelpers/letterApprovalHarness';
+import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import { createApp, login } from '../testHelpers/vacancyPitchHarness';
 
 /** B678: правки резюме hh.ru «было → станет» по профилю платформы (cluster-99: Node.js, TypeScript, Kubernetes, PostgreSQL). */
@@ -19,7 +20,10 @@ const SNAPSHOT = {
   selected: { id: 'dev', title: 'Разработчик', text: 'Разработчик. Node.js. Писал сервисы.', sections: SECTIONS },
 };
 
-async function harness(cabinetB640 = true, hhResumeVariant?: (input: { facts: readonly { text: string }[] }) => Promise<unknown>) {
+async function harness(
+  cabinetB640 = true,
+  hhResumeVariant?: (input: { facts: readonly { text: string }[] }) => Promise<unknown>,
+) {
   const { app, candidates } = await createApp([cluster], {
     cabinetB640,
     ...(hhResumeVariant ? { experienceFactRewriter: { rewrite: async () => null, hhResumeVariant } as never } : {}),
@@ -46,7 +50,7 @@ async function harness(cabinetB640 = true, hhResumeVariant?: (input: { facts: re
   candidates.saveResumeDraft(candidateId, draft, []);
   const call = (method: 'GET' | 'PUT' | 'POST', url: string, payload?: object) =>
     app.inject({ method, url, headers: { cookie, origin: ORIGIN }, ...(payload ? { payload } : {}) });
-  return { call };
+  return { call, candidates, candidateId };
 }
 
 describe('B678: правки резюме hh.ru «было → станет»', () => {
@@ -65,6 +69,33 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     expect(skills.now).toBe('Node.js, Kubernetes, PostgreSQL');
     expect(skills.added).toEqual(['Kubernetes', 'PostgreSQL']);
     expect(data.edits.find((edit: { section: string }) => edit.section === 'title').now).toBe('Senior Platform Engineer');
+  });
+
+  it('отклик сохранён под другим названием — должность и навыки чужой вакансии не предлагаются', async () => {
+    const { call, candidates, candidateId } = await harness();
+    candidates.createApplication(candidateId, {
+      clusterId: 'cluster-99',
+      stage: 'saved',
+      manualVacancy: { title: 'Head of DevOps', company: 'Пример', url: 'https://example.test/1', source: 'getmatch' },
+    });
+    await call('PUT', RESUMES, SNAPSHOT);
+    const { data } = (await call('GET', EDITS)).json();
+    expect(data.edits.some((edit: { section: string }) => ['title', 'skills'].includes(edit.section))).toBe(false);
+  });
+
+  it('на вакансию hh.ru с другим названием отклик не уходит', async () => {
+    const { call } = await harness();
+    await call('PUT', RESUMES, SNAPSHOT);
+    const read = vi
+      .spyOn(MultiSourceVacancyEngine.prototype, 'getVacancy')
+      .mockImplementation((id) => (id === 'src-hh-search:777' ? ({ title: 'Receptionist' } as never) : undefined));
+    const send = (vacancyTitle: string) =>
+      call('POST', '/api/v1/candidate/hh/applications', { vacancyId: '777', resumeId: 'dev', confirmed: true, vacancyTitle });
+    const refused = await send('Head of DevOps');
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.code).toBe('hh_vacancy_mismatch');
+    expect((await send('Receptionist')).statusCode).toBe(201);
+    read.mockRestore();
   });
 
   it('у резюме без разделов (прежний снимок) правок нет — просим выбрать его заново', async () => {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { pluralRu } from '../../../../../shared/pluralRu';
 import { Button, Dialog, Icon, Link, ResultLine, StatusLine, useToast } from '../../kit';
 import { buildNodePath } from '../../routes';
-import type { ApplyHead } from '../model/applyModel';
+import { UNKNOWN_VACANCY_TITLE, type ApplyHead } from '../model/applyModel';
 import { editsWord, HhResumeEdits } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
@@ -186,6 +186,7 @@ function useStepApply(props: HhSendStepProps, { snapshot }: HhResumesState): HhA
   return useHhApply({
     vacancyId: props.hhVacancyId,
     resumeId: snapshot?.selected?.id ?? null,
+    vacancyTitle: props.head.title === UNKNOWN_VACANCY_TITLE ? undefined : props.head.title,
     letter: props.letterText,
     uniqueResumeTitle: uniqueResumeTitle(snapshot),
     onSent: props.onSent,

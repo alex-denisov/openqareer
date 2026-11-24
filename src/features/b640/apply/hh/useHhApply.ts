@@ -15,6 +15,8 @@ export type HhApplyState =
 export interface HhApplyInput {
   readonly vacancyId: string;
   readonly resumeId: string | null;
+  /** Название с экрана отклика: сервер сверяет его с вакансией hh.ru. */
+  readonly vacancyTitle?: string;
   readonly letter: string;
   /** Заголовок выбранного резюме, если он у кандидата один. */
   readonly uniqueResumeTitle?: string;
@@ -46,7 +48,7 @@ function useSendingClock(sending: boolean, tick: (seconds: number) => void): voi
 async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () => void): Promise<HhSendResult> {
   let attemptId: string;
   try {
-    ({ attemptId } = await startHhApply(input.vacancyId, resumeId));
+    ({ attemptId } = await startHhApply(input.vacancyId, resumeId, input.vacancyTitle));
   } catch (reason: unknown) {
     return { kind: 'error', text: refusalText(reason instanceof CoachApiError ? reason.code : undefined) };
   }

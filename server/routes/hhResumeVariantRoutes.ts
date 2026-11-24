@@ -52,9 +52,9 @@ function sourceOf(
 }
 
 function variantRequest(
-  deps: RouteDeps, stores: Stores, subject: TextSubject, source: Source, edit: HhResumeEdit,
+  deps: RouteDeps, stores: Stores, subject: TextSubject, source: Source, edit: HhResumeEdit, vacancyId: string,
 ): HhResumeVariantRequest | null {
-  const { platform, vacancy } = hhEditsInput(deps, subject.candidateId, source.snapshot, source.resume, source.cluster);
+  const { platform, vacancy } = hhEditsInput(deps, subject.candidateId, source.snapshot, source.resume, source.cluster, vacancyId);
   return hhResumeVariantRequest({
     edit,
     language: hhResumeLanguage(source.resume.sections),
@@ -76,7 +76,7 @@ async function writeVariant(
     await hhResumeEditsOf(deps, candidateId, source.snapshot, source.resume, source.cluster, vacancyId),
   );
   const edit = edits.find((item) => item.variantOf?.subjectId === subject.subjectId);
-  const input = edit ? variantRequest(deps, stores, subject, source, edit) : null;
+  const input = edit ? variantRequest(deps, stores, subject, source, edit, vacancyId) : null;
   if (!input) return sendError(reply, request, 404, 'hh_edit_not_found', 'Такой правки больше нет. Откройте разбор заново.', false);
   const checked = await writeCheckedVariant({
     request: input,

@@ -52,11 +52,11 @@ export async function getHhResumeReview(vacancyId: string, withEdits = false): P
 }
 
 /** Начать отклик: сервер проверяет подтверждение, резюме и суточный лимит. */
-export async function startHhApply(vacancyId: string, resumeId: string): Promise<HhApplyAttempt> {
+export async function startHhApply(vacancyId: string, resumeId: string, vacancyTitle?: string): Promise<HhApplyAttempt> {
   const response = await apiFetch(`${BASE}/applications`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ vacancyId, resumeId, confirmed: true }),
+    body: JSON.stringify({ vacancyId, resumeId, confirmed: true, ...(vacancyTitle ? { vacancyTitle } : {}) }),
   });
   return readDataObject<HhApplyAttempt>(response);
 }

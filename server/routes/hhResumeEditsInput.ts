@@ -3,8 +3,13 @@ import type { HhResumeContent, HhResumeEdit, HhResumeSections, HhResumeSnapshot 
 import type { HhEditsInput, HhPlatformPlace } from '../domain/hhResumeEdits';
 import { buildTargetedResumeSlice } from '../domain/resumeStudio';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { evaluateTitleRole } from '../vacancies/vacancyMatcher';
+import { sameVacancyTitle } from '../vacancies/vacancyIdentity';
+import { candidateRoleFunctionCodes } from '../vacancies/titleParse/candidateRoleFunctions';
+import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import { currentMaster } from './resumeMaster';
+import { readTargetLevel } from './vacancyRoleContext';
 
 /**
  * B678: из чего платформа предлагает правки резюме hh.ru: мастер-резюме кандидата с его
@@ -51,17 +56,40 @@ function platformPlaces(deps: RouteDeps, candidateId: string, cluster: VacancyCl
   return { about: master.document.about?.trim() || null, places, facts };
 }
 
+/** Название вакансии — роль, родственная целевым ролям кандидата; без ролей сравнивать не с чем. */
+function titleFitsTargetRoles(deps: RouteDeps, candidateId: string, title: string): boolean {
+  const targetRoles = [...readCampaign(deps.candidateStore, candidateId).roles.value];
+  if (targetRoles.length === 0) return false;
+  const functions = candidateRoleFunctionCodes(targetRoles);
+  const level = readTargetLevel(deps.candidateStore, candidateId, targetRoles);
+  return evaluateTitleRole(title, targetRoles, functions, level) !== 'none';
+}
+
+/** Отклик на этот id сохранён под другим названием: вакансия из пула — не его. */
+function matchesApplication(deps: RouteDeps, candidateId: string, cluster: VacancyCluster, vacancyId: string): boolean {
+  return deps.candidateStore
+    .listApplications(candidateId)
+    .filter((item) => item.clusterId === vacancyId && item.vacancy?.title)
+    .every((item) => sameVacancyTitle(item.vacancy!.title, cluster.canonicalTitle));
+}
+
 export function hhEditsInput(
   deps: RouteDeps,
   candidateId: string,
   snapshot: HhResumeSnapshot,
   selected: SelectedWithSections,
   cluster: VacancyCluster,
+  vacancyId: string,
 ): HhEditsInput {
+  const sameVacancy = matchesApplication(deps, candidateId, cluster, vacancyId);
   return {
     resume: { id: selected.id, title: selected.title, sections: selected.sections },
     otherTitles: snapshot.resumes.filter((item) => item.id !== selected.id).map((item) => item.title),
-    vacancy: { title: cluster.canonicalTitle, requirements: cluster.skills },
+    vacancy: {
+      title: cluster.canonicalTitle,
+      titleFits: sameVacancy && titleFitsTargetRoles(deps, candidateId, cluster.canonicalTitle),
+      requirements: sameVacancy ? cluster.skills : [],
+    },
     platform: platformPlaces(deps, candidateId, cluster),
   };
 }

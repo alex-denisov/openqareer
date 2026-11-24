@@ -17,6 +17,7 @@ const FAILURE_TEXT: Readonly<Record<string, string>> = {
   no_confirmation: 'hh.ru не подтвердил отклик. Проверьте его на hh.ru.',
   no_response_button: 'На странице вакансии нет кнопки отклика: возможно, вакансию закрыли.',
   popup_missing: 'hh.ru не открыл окно отклика. Повторите.',
+  hh_vacancy_mismatch: 'На hh.ru по этому адресу другая вакансия. Отклик не отправлен.',
   hh_daily_limit_reached: 'На сегодня отклики через hh.ru закончились. Завтра можно продолжить.',
   hh_already_applied: 'Вы уже откликнулись на эту вакансию через hh.ru.',
   hh_apply_in_progress: 'Отклик на эту вакансию уже отправляется.',

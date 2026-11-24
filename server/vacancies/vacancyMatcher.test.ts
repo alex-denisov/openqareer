@@ -3,6 +3,7 @@ import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import {
   evaluateSemanticRole,
+  evaluateTitleRole,
   matchCandidateWithVacancy,
   type CandidateMatchProfile,
 } from './vacancyMatcher';
@@ -326,5 +327,13 @@ describe('evaluateSemanticRole: функция ролей «Карьеры» (27
     expect(roleOf('Head of Engineering')).not.toBe('none');
     expect(roleOf('Head of Operations')).not.toBe('none');
     expect(roleOf('Head of Product')).not.toBe('none');
+  });
+});
+
+describe('evaluateTitleRole (24.11)', () => {
+  it('a receptionist title is not kin to a COO, an operations director is', () => {
+    const roles = ['Операционный директор (COO)'];
+    expect(evaluateTitleRole('Receptionist', roles, ['ops'])).toBe('none');
+    expect(evaluateTitleRole('Операционный директор', roles, ['ops'])).not.toBe('none');
   });
 });

@@ -26,7 +26,9 @@ import {
   clusterVacancySteps,
   IncrementalClusterBuilder,
   memberKeysOf,
+  sourceMemberKey,
 } from './vacancyDeduplicator';
+import { clusterOfRecord } from './vacancyIdentity';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
 import {
@@ -1117,7 +1119,22 @@ export class MultiSourceVacancyEngine {
    */
   public getActiveCluster(clusterId: string): VacancyCluster | undefined {
     const cluster = this.resolveClusterForId(clusterId);
-    return cluster?.status === 'active' ? cluster : undefined;
+    if (cluster?.status !== 'active') return undefined;
+    const prefix = 'cluster-';
+    return clusterId.startsWith(prefix)
+      ? this.clusterOfRecordId(cluster, clusterId.slice(prefix.length))
+      : cluster;
+  }
+
+  /** Кластер по id не подменяет запись чужой вакансией (24.11, склейки до B752). */
+  private clusterOfRecordId(cluster: VacancyCluster, recordId: string): VacancyCluster | undefined {
+    const read = (id: string) => this.pool.getVacancy(id);
+    return clusterOfRecord(
+      cluster,
+      recordId,
+      read,
+      (id) => this.pool.getVacancyIncludingExpired?.(id) ?? read(id),
+    );
   }
 
   /**
@@ -1128,7 +1145,12 @@ export class MultiSourceVacancyEngine {
     if (!key || typeof this.pool.clusterIdForMemberKey !== 'function') return undefined;
     const clusterId = this.pool.clusterIdForMemberKey(key);
     const cluster = clusterId ? this.getPublicCatalogCluster(clusterId) : undefined;
-    return cluster?.status === 'active' ? cluster : undefined;
+    if (cluster?.status !== 'active') return undefined;
+    const source = cluster.sources.find(
+      (item) => item.sourceUrl === key || sourceMemberKey(item) === key,
+    );
+    const recordId = source ? sourceMemberKey(source) : undefined;
+    return recordId ? this.clusterOfRecordId(cluster, recordId) : cluster;
   }
 
   /**

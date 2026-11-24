@@ -3,6 +3,9 @@ import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { vacancyKey } from '../../shared/vacancyCatalogRoutes';
 import { parseVacancy } from './sqliteVacancyPoolStore';
 import { clusterKeys, clusterVacancies, sourceMemberKey } from './vacancyDeduplicator';
+import { hasCrossSourceIdCollision } from './vacancyIdentity';
+
+export { hasCrossSourceIdCollision };
 
 /**
  * B752: разбиение кластеров, склеенных голым внешним id до перехода на ключ
@@ -21,18 +24,6 @@ export const CANDIDATE_REF_TABLES: readonly { table: string; column: string }[] 
   { table: 'candidate_contact_messages', column: 'vacancy_id' },
   { table: 'recruiter_contacts', column: 'vacancy_id' },
 ];
-
-/** Один внешний id у двух площадок — единственный след склейки голым id. */
-export function hasCrossSourceIdCollision(cluster: VacancyCluster): boolean {
-  const sourcesByExternalId = new Map<string, string>();
-  for (const source of cluster.sources) {
-    if (!source.externalId) continue;
-    const seen = sourcesByExternalId.get(source.externalId);
-    if (seen !== undefined && seen !== source.sourceId) return true;
-    sourcesByExternalId.set(source.externalId, source.sourceId);
-  }
-  return false;
-}
 
 function founderOf(cluster: VacancyCluster): string {
   return cluster.id.startsWith(CLUSTER_PREFIX)

@@ -310,6 +310,18 @@ function summarize(
   return `${coverage} ${roleSentence}`;
 }
 
+/** Родство названия вакансии целевым ролям — то же правило, что у подборки. */
+export function evaluateTitleRole(
+  title: string,
+  targetRoles: readonly string[],
+  roleFunctions: readonly FunctionCode[],
+  targetLevel?: SeniorityLevel,
+): VacancyRoleMatch {
+  return roleFunctions.length > 0
+    ? evaluateSemanticRole(roleFunctions, targetLevel, title, targetRoles).roleMatch
+    : evaluateRole([...targetRoles], title).roleMatch;
+}
+
 export function matchCandidateWithVacancy(
   candidate: CandidateMatchProfile,
   vacancy: VacancyCluster,

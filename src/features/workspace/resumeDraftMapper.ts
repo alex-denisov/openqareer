@@ -10,7 +10,7 @@ export function parsedResumeToDraft(parsed: ParsedResume): ResumeDraft {
       fullName: parsed.fullName,
       photoUrl: parsed.photoUrl,
       headline: parsed.headline,
-      about: parsed.about,
+      about: parsed.about || undefined,
       contact: {
         email: parsed.contact.email,
         phone: parsed.contact.phone,

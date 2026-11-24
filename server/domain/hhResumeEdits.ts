@@ -20,7 +20,12 @@ export interface HhEditsInput {
   readonly resume: { readonly id: string; readonly title: string; readonly sections: HhResumeSections };
   /** Заголовки остальных резюме кандидата: hh.ru требует уникальных. */
   readonly otherTitles: readonly string[];
-  readonly vacancy: { readonly title: string; readonly requirements: readonly string[] };
+  readonly vacancy: {
+    readonly title: string;
+    /** Название — роль, родственная целевым ролям кандидата: иначе должность в резюме не меняется. */
+    readonly titleFits: boolean;
+    readonly requirements: readonly string[];
+  };
   readonly platform: {
     readonly about: string | null;
     readonly places: readonly HhPlatformPlace[];
@@ -83,7 +88,7 @@ function titleEdit(input: HhEditsInput): HhEditDraft[] {
   const was = input.resume.sections.title || input.resume.title;
   const now = input.vacancy.title.trim().slice(0, TITLE_MAX);
   const taken = input.otherTitles.some((title) => normalized(title) === normalized(now));
-  if (!now || taken || contains(was, now)) return [];
+  if (!input.vacancy.titleFits || !now || taken || contains(was, now)) return [];
   return [{ id: 'title', section: 'title', was, now, language: languageOf(now) }];
 }
 
@@ -141,10 +146,20 @@ function skillsEdit(input: HhEditsInput): HhEditDraft[] {
   return [{ id: 'skills', section: 'skills', was, now, language: hhResumeLanguage(sections), added: trimmed }];
 }
 
+/** Условия поиска из старых снимков («Уровень дохода не указан · Постоянная работа …») — не «О себе». */
+function isPositionTerms(text: string): boolean {
+  if (/^\s*уровень дохода не указан/iu.test(text)) return true;
+  const terms = text.match(
+    /постоянная работа|подработка|полная занятость|частичная занятость|гибрид|удал[её]нно|на месте работодателя|командировк/giu,
+  );
+  return text.length < 300 && (terms?.length ?? 0) >= 3;
+}
+
 function aboutEdit(input: HhEditsInput): HhEditDraft[] {
   const now = input.platform.about?.trim() ?? '';
-  const was = input.resume.sections.about;
-  if (!now || normalized(now) === normalized(was)) return [];
+  const { about: was, aboutRead } = input.resume.sections;
+  // Непрочитанный раздел не правим: «станет» затёрло бы текст, которого мы не видели.
+  if (aboutRead !== true || !now || isPositionTerms(was) || normalized(now) === normalized(was)) return [];
   return [{ id: 'about', section: 'about', was, now, language: languageOf(now) }];
 }
 
