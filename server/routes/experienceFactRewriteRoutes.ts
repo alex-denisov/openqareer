@@ -10,11 +10,12 @@ import {
   checkFactRewrite,
   InvalidBulletEditError,
   withBulletEdits,
+  withOnlyBullets,
   type FactRewriteModelOutput,
   type FactRewriteProposal,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
-import { EMPTY_RESUME_DRAFT, type ResumePendingFactRewrite } from '../domain/resumeDraft';
+import { EMPTY_RESUME_DRAFT, MAX_REWRITE_BULLETS, type ResumePendingFactRewrite } from '../domain/resumeDraft';
 import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
 import {
@@ -188,7 +189,11 @@ function proposeHandler(running: RunningRewrites): Handler {
 
 const idParams = z.object({ id: z.string().trim().min(1).max(80) });
 const applyBody = z
-  .object({ edits: z.record(z.string().max(160), z.string().max(400).nullable()).optional() })
+  .object({
+    edits: z.record(z.string().max(160), z.string().max(400).nullable()).optional(),
+    /** Only these bullets are applied; with `only`, edits are not taken. */
+    only: z.array(z.string().max(160)).min(1).max(MAX_REWRITE_BULLETS).optional(),
+  })
   .strict()
   .optional();
 
@@ -218,9 +223,10 @@ function editError(request: FastifyRequest, reply: FastifyReply) {
 function editedProposal(
   proposal: FactRewriteProposal,
   edits: Readonly<Record<string, string | null>>,
+  only: readonly string[] | undefined,
 ): FactRewriteProposal | null {
   try {
-    const edited = withBulletEdits(proposal, edits);
+    const edited = only ? withOnlyBullets(proposal, only) : withBulletEdits(proposal, edits);
     return edited.places.length ? edited : null;
   } catch (error) {
     if (error instanceof InvalidBulletEditError) return null;
@@ -236,7 +242,7 @@ const handleApply: Handler = async (deps, request, reply) => {
   if (!body.success) return editError(request, reply);
   const pending = deps.candidateStore.getSnapshot(candidate.id).resume?.draft.factRewriteProposal;
   if (pending?.proposal.id !== id) return staleError(request, reply);
-  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {});
+  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {}, body.data?.only);
   if (!proposal) return editError(request, reply);
   try {
     const rewrite = deps.candidateStore.applyExperienceFactRewrite(

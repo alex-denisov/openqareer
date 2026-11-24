@@ -118,11 +118,23 @@ async fn step(window: &tauri::Webview, script: &str) -> Result<String, String> {
         .map_err(|_| "step_shape".to_string())
 }
 
+/// A page still drawing may look signed out; the answer counts after this time.
+const SIGNED_OUT_SETTLE: Duration = Duration::from_secs(4);
+
+/// Whether `code` says "signed out" too early to be believed (B708).
+pub(crate) fn is_early_signed_out(code: &str, elapsed: Duration) -> bool {
+    matches!(code, "not_signed_in" | "logged_out") && elapsed < SIGNED_OUT_SETTLE
+}
+
 /// Polls `script` until it answers something other than `waiting`.
 pub(crate) async fn wait_for(window: &tauri::Webview, script: &str, limit: Duration) -> String {
-    let deadline = tokio::time::Instant::now() + limit;
+    let started = tokio::time::Instant::now();
+    let deadline = started + limit;
     loop {
         match step(window, script).await {
+            Ok(code)
+                if is_early_signed_out(&code, started.elapsed())
+                    && tokio::time::Instant::now() < deadline => {}
             Ok(code) if code != "waiting" => return code,
             Err(error) if !is_transient_eval_error(&error) => return "script_error".into(),
             _ => {}
@@ -325,6 +337,15 @@ pub async fn read_hh_apply_window(app: &AppHandle, vacancy_id: &str) -> Result<S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signed_out_counts_only_after_the_page_had_time_to_draw() {
+        for code in ["not_signed_in", "logged_out"] {
+            assert!(is_early_signed_out(code, Duration::ZERO));
+            assert!(!is_early_signed_out(code, SIGNED_OUT_SETTLE));
+        }
+        assert!(!is_early_signed_out("captcha", Duration::ZERO));
+    }
 
     fn request(vacancy: &str, resume: &str, letter: &str) -> HhApplyRequest {
         HhApplyRequest {

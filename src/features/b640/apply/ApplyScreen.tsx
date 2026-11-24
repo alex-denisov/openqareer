@@ -301,7 +301,8 @@ function ApplyFlow(props: FlowProps) {
   useScreenChrome({
     crumb: head.title,
     rootData: {
-      mtight: '1',
+      // Шаг «Резюме» (макет o03) без плотных отступов, письмо и анкета — с ними.
+      ...(shown === 'resume' && !quota ? {} : { mtight: '1' }),
       ...(wide ? { 'main-right': '1' } : {}),
       // Открытое «Что поменять» на 390 — лист снизу (признак макета `data-vsheet`).
       ...(body.variants.wishOpen ? { vsheet: '1' } : {}),

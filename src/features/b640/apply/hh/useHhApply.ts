@@ -79,6 +79,8 @@ export function useHhApply(input: HhApplyInput): HhApplyControls {
     setState((current) => (current.kind === 'sending' ? { kind: 'sending', seconds } : current)),
   );
   useSendingClock(sending, tickRef.current);
+  // Двойное нажатие до перерисовки видит прежнее состояние: попытка всё равно одна.
+  const inFlight = useRef(false);
   const shownVacancy = useRef(input.vacancyId);
   useEffect(() => {
     shownVacancy.current = input.vacancyId;
@@ -89,15 +91,18 @@ export function useHhApply(input: HhApplyInput): HhApplyControls {
     ask: () => setState({ kind: 'confirm' }),
     cancel: () => setState({ kind: 'idle' }),
     confirm: () => {
-      if (state.kind !== 'confirm' || !input.resumeId) return;
+      if (state.kind !== 'confirm' || !input.resumeId || inFlight.current) return;
+      inFlight.current = true;
       setState({ kind: 'sending', seconds: 0 });
       const onLateSent = () => {
         if (shownVacancy.current === input.vacancyId) setState({ kind: 'sent' });
       };
       // Отклик из окна мог отметиться раньше, чем сервер отказал в повторе: «отправлен» не затираем.
-      void sendOnce(input, input.resumeId, onLateSent).then((result) =>
-        setState((shown) => (shown.kind === 'sent' ? shown : result)),
-      );
+      void sendOnce(input, input.resumeId, onLateSent)
+        .then((result) => setState((shown) => (shown.kind === 'sent' ? shown : result)))
+        .finally(() => {
+          inFlight.current = false;
+        });
     },
   };
 }

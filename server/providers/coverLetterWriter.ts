@@ -358,6 +358,9 @@ function reviewed(outcome: CoverLetterOutcome, input: CoverLetterWriteInput): Co
   return { failure: { stage: outcome.stage ?? 'unknown', kind: 'unusable_response', detail } };
 }
 
+/** Повторов с причиной отказа на одно письмо. */
+const MAX_GATE_RETRIES = 2;
+
 interface RefusedByGate {
   readonly stage: number;
   readonly rules: readonly string[];
@@ -411,9 +414,16 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
   private async retry(
     refused: RefusedByGate,
     input: CoverLetterWriteInput,
+    attempt = 1,
   ): Promise<CoverLetterOutcome | undefined> {
     const correction = letterCorrection(refused.rules, input.resumeAttached !== false);
-    return correction ? this.ask(refused.stage, { ...input, correction }) : undefined;
+    if (!correction) return undefined;
+    const outcome = await this.ask(refused.stage, { ...input, correction });
+    // B682: исправила одно, нарушила другое (прод 24.11: name, затем number) — ещё раз со всеми причинами.
+    const fresh = gateRules(outcome.failure?.detail).filter((rule) => !refused.rules.includes(rule));
+    if (fresh.length === 0 || attempt >= MAX_GATE_RETRIES) return outcome;
+    const next = await this.retry({ stage: refused.stage, rules: [...refused.rules, ...fresh] }, input, attempt + 1);
+    return next ?? outcome;
   }
 }
 

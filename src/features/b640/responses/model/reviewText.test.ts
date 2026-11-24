@@ -26,6 +26,10 @@ describe('B679: тексты разбора отказов', () => {
   it('рекомендация ведёт туда, где это правится', () => {
     const resume = recommendationText({ kind: 'show_in_resume', requirement: 'Команда от 20', profileFact: 'команда 9', count: 2, total: 3 });
     expect(resume).toMatchObject({ title: 'Показать в резюме: Команда от 20', node: 's01' });
+    expect(resume.action).toBe('Открыть профиль');
+    expect(
+      recommendationText({ kind: 'show_in_resume', requirement: 'Команда от 20', profileFact: 'команда 9', resumeFactId: 'm1', count: 2, total: 3 }).action,
+    ).toBe('Поправить резюме');
     expect(resume.why).toBe('2 из 3 отказов: в вакансии — Команда от 20, в профиле: команда 9.');
     expect(recommendationText({ kind: 'match_vacancies', requirement: 'Брокеры', profileFact: null, count: 1, total: 3 }).node).toBe('s07');
     expect(recommendationText({ kind: 'update_statuses', requirement: null, profileFact: null, count: 3, total: 6 })).toMatchObject({

@@ -6,7 +6,9 @@ describe('B704: исход отклика через hh.ru на экране', (
     expect(resultOf('sent')).toEqual({ kind: 'sent' });
     expect(resultOf('questionnaire')).toEqual({ kind: 'questionnaire' });
     expect(resultOf('failed', 'not_signed_in')).toEqual({ kind: 'signin' });
-    expect(resultOf('failed', 'session_window_missing')).toEqual({ kind: 'signin' });
+    for (const code of ['session_window_missing', 'hh_window_not_opened', 'hh_window_not_loaded']) {
+      expect(resultOf('failed', code)).toMatchObject({ kind: 'error', text: expect.stringContaining('отклик не отправлен') });
+    }
   });
 
   it('сбой — словами кандидата, без внутренних кодов', () => {

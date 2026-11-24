@@ -20,7 +20,12 @@ export async function runHhRaiseOnce(): Promise<void> {
   if (!task) return;
   let outcome: HhRaiseOutcome = 'error';
   try {
-    const report = await invokeDesktopCommand<HhRaiseReport>('run_hh_raise', { request: { resumeId: task.resumeId } });
+    // Код окна грузится только под задание, чтобы не утяжелять кабинет.
+    const { ensureHhWindow } = await import('./hhWindow');
+    const signedOut = (await ensureHhWindow()) === 'signed_out';
+    const report = signedOut
+      ? { outcome: 'logged_out' }
+      : await invokeDesktopCommand<HhRaiseReport>('run_hh_raise', { request: { resumeId: task.resumeId } });
     if (report?.outcome === 'busy') return;
     const reported = report?.outcome as HhRaiseOutcome | undefined;
     if (reported && OUTCOMES.includes(reported)) outcome = reported;

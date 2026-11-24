@@ -56,9 +56,12 @@ function errorText(error: unknown, fallback: string): string {
   return own ? error.message : fallback;
 }
 
+/** Варианты кончились (например, в другой вкладке): повтор запроса ответа не изменит. */
+const limitReached = (error: unknown) => error instanceof CoachApiError && error.code === 'variant_limit_reached';
+
 function useOfferActions({ offer, onDone, onVariant }: SectionOfferProps) {
   const [busy, setBusy] = useState<Busy>(null);
-  const [failed, setFailed] = useState<{ readonly kind: Exclude<Busy, null>; readonly text: string } | null>(null);
+  const [failed, setFailed] = useState<{ readonly kind: Exclude<Busy, null>; readonly text: string; readonly final: boolean } | null>(null);
   async function run(kind: Exclude<Busy, null>) {
     setBusy(kind);
     setFailed(null);
@@ -66,7 +69,7 @@ function useOfferActions({ offer, onDone, onVariant }: SectionOfferProps) {
       if (kind === 'done') await onDone(offer.key);
       else onVariant(await requestOfferVariant(offer.key));
     } catch (error) {
-      setFailed({ kind, text: errorText(error, kind === 'done' ? DONE_FAILED : VARIANT_FAILED) });
+      setFailed({ kind, text: errorText(error, kind === 'done' ? DONE_FAILED : VARIANT_FAILED), final: limitReached(error) });
     } finally {
       setBusy(null);
     }
@@ -146,7 +149,7 @@ export function SectionOffer(props: SectionOfferProps) {
           <DoneControl offer={offer} label={label} textId={textId} busy={busy === 'done'} onDone={() => void run('done')} />
         </div>
       </div>
-      {failed ? <LiError text={failed.text} onRetry={() => void run(failed.kind)} /> : null}
+      {failed ? <LiError text={failed.text} onRetry={failed.final ? undefined : () => void run(failed.kind)} /> : null}
     </>
   );
 }
