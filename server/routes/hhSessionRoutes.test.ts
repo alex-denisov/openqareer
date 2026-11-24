@@ -290,3 +290,60 @@ describe('B704: hh.ru vacancy number from its address', () => {
     expect(hhVacancyIdFromUrl(null)).toBeNull();
   });
 });
+
+describe('B787: согласие по поручению', () => {
+  const CONSENT = { text: 'Согласен на обработку персональных данных', url: 'https://hh.ru/policy' };
+  const JOURNAL = '/api/v1/candidate/apply-consents';
+
+  async function start() {
+    const { app, databasePath } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const { attemptId, consent } = (await call(app, 'POST', APPLY, flagged, attempt())).json().data;
+    expect(consent).toBe(true);
+    const finish = (result: Record<string, unknown>) =>
+      call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, result);
+    const entries = async () => (await call(app, 'GET', JOURNAL, flagged)).json().data.entries;
+    return { app, databasePath, finish, entries };
+  }
+
+  it('галочка пишется в запечатанный журнал с действующим поручением', async () => {
+    const { finish, entries, databasePath } = await start();
+    const sent = { outcome: 'sent', consents: [CONSENT], employer: 'Ромашка', applicationId: 'foreign' };
+    expect((await finish(sent)).statusCode).toBe(200);
+    expect((await finish(sent)).statusCode).toBe(409);
+    expect(await entries()).toMatchObject([
+      {
+        host: 'hh.ru',
+        employer: 'Ромашка',
+        applicationId: null,
+        checkboxText: CONSENT.text,
+        policyUrl: CONSENT.url,
+        mandateVersion: APPLY_MANDATE_VERSION,
+        results: [{ result: 'sent' }],
+      },
+    ]);
+    expect(JSON.stringify(tableRows(databasePath, 'apply_consent_journal'))).not.toContain(CONSENT.text);
+  });
+
+  it('неподтверждённая отправка записана, поздний отклик дописывает результат', async () => {
+    const { finish, entries } = await start();
+    await finish({ outcome: 'failed', failureCode: 'no_confirmation', consents: [CONSENT] });
+    expect((await entries())[0].results).toMatchObject([{ result: 'unconfirmed' }]);
+    expect((await finish({ outcome: 'sent', vacancyId: '123456' })).statusCode).toBe(200);
+    expect((await entries())[0].results).toMatchObject([{ result: 'unconfirmed' }, { result: 'sent' }]);
+  });
+
+  it.each(['http://hh.ru/policy', 'javascript:alert(1)'])('ссылка на политику только https: %s', async (url) => {
+    const { finish, entries } = await start();
+    expect((await finish({ outcome: 'sent', consents: [{ ...CONSENT, url }] })).statusCode).toBe(400);
+    expect(await entries()).toEqual([]);
+  });
+
+  it('отклик не ушёл — согласие не записано; already_applied закрывает повтор', async () => {
+    const { app, finish, entries } = await start();
+    await finish({ outcome: 'failed', failureCode: 'already_applied', consents: [CONSENT] });
+    expect(await entries()).toEqual([]);
+    const again = await call(app, 'POST', APPLY, flagged, attempt());
+    expect(again.json().error.code).toBe('hh_already_applied');
+  });
+});

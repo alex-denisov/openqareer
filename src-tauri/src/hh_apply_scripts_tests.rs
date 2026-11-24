@@ -191,7 +191,7 @@ fn recognises_the_live_response_modal_and_its_outcomes() {
         (String::new(), "waiting", "waiting"),
     ];
     for (html, popup, result) in cases {
-        let Some(outcome) = run(&html, "", &[popup_script(), result_script()]) else {
+        let Some(outcome) = run(&html, "", &[popup_script(Agreed::default()), result_script(Agreed::default())]) else {
             return;
         };
         assert_eq!(codes(&outcome), [popup, result], "{html}");
@@ -343,7 +343,7 @@ fn embeds_parameters_as_escaped_literals() {
 fn stops_on_a_captcha_in_every_step() {
     for script in [
         open_script("77"),
-        popup_script(),
+        popup_script(Agreed::default()),
         resume_script("abc", None),
         letter_script("x"),
         submit_script("abc123", "x"),
@@ -590,4 +590,70 @@ fn diagnostics_hold_flags_and_counts_only() {
         ]
     );
     assert_eq!(result["clicks"], json!([]));
+}
+
+#[test]
+fn a_closed_vacancy_is_told_from_a_page_not_drawn_yet() {
+    let closed = r#"<div data-qa="mainmenu_applicantProfile"></div><template id="HH-Lux-InitialState">{"userType":"applicant","vacancyView":{"vacancyFull":{"vacancy":{"status":{"archived":true,"disabled":false}}}}}</template>"#;
+    let marked = r#"<div data-qa="mainmenu_applicantProfile"></div><span data-qa="vacancy-title-archived-text">в архиве</span>"#;
+    let alive = closed.replace("true", "false");
+    for (html, code) in [
+        (closed, "vacancy_closed"),
+        (marked, "vacancy_closed"),
+        (alive.as_str(), "no_response_button"),
+    ] {
+        let Some(result) = run(html, "", &[open_script("77")]) else {
+            return;
+        };
+        assert_eq!(codes(&result), [code], "{html}");
+    }
+}
+
+#[test]
+fn hh_questions_stop_until_the_candidate_agrees() {
+    let html = r#"<button data-qa="relocation-warning-confirm">Да</button><button data-qa="countries-profile-visibility-popup-confirm">Да</button>"#;
+    let setup = "document.addEventListener('click',function(e){e.target.remove();});";
+    let both = Agreed {
+        relocation: true,
+        visibility: true,
+    };
+    let one = Agreed {
+        relocation: true,
+        visibility: false,
+    };
+    for (agreed, expected, clicks) in [
+        (Agreed::default(), vec!["relocation_warning"; 3], 0),
+        (
+            one,
+            vec!["waiting", "visibility_warning", "visibility_warning"],
+            1,
+        ),
+        (both, vec!["waiting", "waiting", "waiting"], 2),
+    ] {
+        let script = popup_script(agreed);
+        let Some(result) = run(html, setup, &[script.clone(), script.clone(), script]) else {
+            return;
+        };
+        assert_eq!(codes(&result), expected);
+        assert_eq!(result["clicks"].as_array().expect("clicks").len(), clicks);
+    }
+}
+
+#[test]
+fn submit_is_never_pressed_again_after_the_visibility_question() {
+    let agreed = Agreed {
+        relocation: false,
+        visibility: true,
+    };
+    let html = r#"<button data-qa="vacancy-response-submit-popup">Откликнуться</button><button data-qa="countries-profile-visibility-popup-confirm">Да</button>"#;
+    let setup = "window.__oqSubmitted=1;document.addEventListener('click',function(e){if(/visibility/.test(e.target.getAttribute('data-qa')))e.target.remove();});";
+    for script in [result_script(agreed), page_result_script(agreed)] {
+        let Some(result) = run(html, setup, &vec![script; 12]) else {
+            return;
+        };
+        assert_eq!(
+            result["clicks"],
+            json!(["countries-profile-visibility-popup-confirm"])
+        );
+    }
 }
