@@ -357,6 +357,8 @@ export async function restoreApplicationFromArchive(
 export interface ScheduleApplicationInterviewInput {
   readonly round: number;
   readonly scheduledAt?: string | null;
+  /** Как пройдёт встреча, словами кандидата. */
+  readonly format?: string | null;
 }
 
 export interface CreatedApplicationInterview {

@@ -157,7 +157,7 @@ function DebriefLead(props: {
         ) : null}
       </div>
       <LeadSub data={props.data} debrief={debrief} />
-      <DebriefSteps responseId={response.id} current="debrief" inApp={isTauriEnvironment()} />
+      <DebriefSteps responseId={response.id} current="debrief" debrief={debrief} />
       <RecordingState debrief={debrief} response={response} />
       {ready && debrief.metrics ? <ShareLine metrics={debrief.metrics} /> : null}
       {debrief.analysis.status === 'failed' ? (
