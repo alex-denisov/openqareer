@@ -314,18 +314,21 @@ export class QueuedExperienceFactRewriter implements ExperienceFactRewriter {
   }
 
   async rewriteVariant(request: FactRewriteVariantRequest): Promise<FactRewriteVariantOutput | null> {
+    let rejected: FactRewriteVariantOutput | null = null;
     for (const stage of this.stages) {
       if (!stage.rewriteVariant) continue;
       try {
         const output = await stage.rewriteVariant(request);
         // Не прошедший проверку ответ — неудача ступени: вариант пишет следующая модель.
         if (output && checkFactRewriteVariant(request, output)) return output;
+        rejected = output ?? rejected;
         this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
       } catch (error) {
         this.onStageFailure(stage.provenance?.model ?? 'unknown', error);
       }
     }
-    return null;
+    // B682: отклонённый всеми ответ возвращается с причиной на повтор; текст проверяет вызывающий.
+    return rejected;
   }
 }
 

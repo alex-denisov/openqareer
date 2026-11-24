@@ -2,7 +2,6 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import { listApplications, type ApplicationView } from '../../applications/applicationsApi';
 import { fetchTariffQuotas, type TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
-import { useMatchedPool } from '../../vacancies/useMatchedPool';
 import { useVacancyDetail } from '../../vacancies/vacancyDetailApi';
 import {
   useVacancyLetterController,
@@ -34,6 +33,7 @@ import { ResumeDates } from './ResumeDates';
 import { ResumeStep } from './ResumeStep';
 import { SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
+import { useApplyCluster } from './useApplyCluster';
 import { useApprovalHold, useVariantApproval } from './useVariantApproval';
 
 const COLD_CIRCLE = 3;
@@ -344,19 +344,51 @@ function ApplyFlow(props: FlowProps) {
   );
 }
 
-/** Отклик не отправлен: название, компания и площадка сверяются с подбором. */
-function FromPool({ target }: { readonly target: ApplyTarget }) {
-  const pool = useMatchedPool();
-  const cluster =
-    pool.matched.find((item) => item.cluster.id === target.vacancyId)?.cluster ?? null;
-  return <ApplyFlow target={target} cluster={cluster} />;
-}
-
 function Pending({ children }: { readonly children: ReactNode }) {
   return (
     <div className="page two" data-b640-node="o02" data-b640-section="apply">
       {children}
     </div>
+  );
+}
+
+function LoadingApply() {
+  return (
+    <p className="ls-state" role="status">
+      Загружаем отклик…
+    </p>
+  );
+}
+
+function LoadFailed({ text, onRetry }: { readonly text: string; readonly onRetry: () => void }) {
+  return (
+    <StatusLine
+      state="err"
+      text={text}
+      action={
+        <Button size="sm" onClick={onRetry}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
+/**
+ * Отклик не отправлен: площадка сверяется с вакансией подбора (B678). Пока она не определена,
+ * экран ничего не называет и действий не предлагает: после открытия площадка не меняется.
+ */
+function FromPool({ target }: { readonly target: ApplyTarget }) {
+  const { state, retry } = useApplyCluster(target.vacancyId);
+  if (state.status === 'ready') return <ApplyFlow target={target} cluster={state.cluster} />;
+  return (
+    <Pending>
+      {state.status === 'failed' ? (
+        <LoadFailed text="Отклик не загрузился." onRetry={retry} />
+      ) : (
+        <LoadingApply />
+      )}
+    </Pending>
   );
 }
 
@@ -372,19 +404,9 @@ export function ApplyScreen({ responseId }: { readonly responseId: string }) {
     return (
       <Pending>
         {state.status === 'error' ? (
-          <StatusLine
-            state="err"
-            text={state.error}
-            action={
-              <Button size="sm" onClick={reload}>
-                Повторить
-              </Button>
-            }
-          />
+          <LoadFailed text={state.error} onRetry={reload} />
         ) : (
-          <p className="ls-state" role="status">
-            Загружаем отклик…
-          </p>
+          <LoadingApply />
         )}
       </Pending>
     );
