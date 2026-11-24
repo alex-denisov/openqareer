@@ -272,7 +272,9 @@ export class ApplicationTrackerController {
   }
 
   deleteSkip(candidateId: string, clusterId: string): boolean {
-    return this.skips.delete(candidateId, clusterId);
+    return this.skips.delete(candidateId, clusterId, (id, cluster) =>
+      this.applications.restoreSkippedByCluster(id, cluster),
+    );
   }
 
   /**

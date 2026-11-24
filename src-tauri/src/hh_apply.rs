@@ -14,6 +14,7 @@ use crate::hh_apply_scripts::{
     diagnostic_script, letter_script, open_script, popup_script, result_script, resume_script,
     submit_script, window_script,
 };
+use crate::hh_questionnaire::{read_questionnaire, HhQuestionnaire};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -47,6 +48,9 @@ pub struct HhApplyReport {
     /// `sent`, `questionnaire` or `failed`.
     pub outcome: String,
     pub failure_code: Option<String>,
+    /// B641: the employer's form, when hh.ru asked for one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub questionnaire: Option<HhQuestionnaire>,
 }
 
 impl HhApplyReport {
@@ -54,18 +58,21 @@ impl HhApplyReport {
         Self {
             outcome: "sent".into(),
             failure_code: None,
+            questionnaire: None,
         }
     }
     fn questionnaire() -> Self {
         Self {
             outcome: "questionnaire".into(),
             failure_code: None,
+            questionnaire: None,
         }
     }
     fn failed(code: &str) -> Self {
         Self {
             outcome: "failed".into(),
             failure_code: Some(code.to_string()),
+            questionnaire: None,
         }
     }
 }
@@ -196,6 +203,18 @@ async fn explain_failure(
     let _ = append_connector_diagnostic(app, "hh-apply", "seen", Some(&detail));
 }
 
+/// hh.ru asks for the questionnaire before it takes the response: nothing was sent.
+const QUESTIONNAIRE_REQUIRED: &str = "questionnaire_required";
+
+/// The code of a step that stopped before our submit.
+fn unsent_code(code: &str) -> &str {
+    if code == "questionnaire" {
+        QUESTIONNAIRE_REQUIRED
+    } else {
+        code
+    }
+}
+
 /// Maps the last page answer to the report the response screen records.
 pub fn report_for(code: &str) -> HhApplyReport {
     match code {
@@ -257,9 +276,23 @@ pub async fn run_hh_apply(
     let outcome = respond(&window, &request).await;
     let (at, code) = match &outcome {
         Ok(code) => ("result", code.as_str()),
-        Err((at, code)) => (*at, code.as_str()),
+        Err((at, code)) => (*at, unsent_code(code)),
     };
     let report = report_for(code);
+    if report.outcome == "questionnaire" || code == QUESTIONNAIRE_REQUIRED {
+        let url = window.url().map(|url| url.to_string()).unwrap_or_default();
+        let form = read_questionnaire(&window, url).await;
+        let _ = append_connector_diagnostic(
+            app,
+            "hh-apply",
+            "questionnaire",
+            Some(&format!("q{}", form.questions.len())),
+        );
+        return Ok(HhApplyReport {
+            questionnaire: Some(form),
+            ..report
+        });
+    }
     if report.outcome == "failed" {
         explain_failure(app, &window, &request.vacancy_id, at, code).await;
     }
@@ -430,6 +463,15 @@ mod tests {
             report_for("not_signed_in"),
             HhApplyReport::failed("not_signed_in")
         );
+    }
+
+    #[test]
+    fn a_questionnaire_before_the_submit_is_not_a_response() {
+        assert_eq!(
+            report_for(unsent_code("questionnaire")),
+            HhApplyReport::failed("questionnaire_required")
+        );
+        assert_eq!(unsent_code("captcha"), "captcha");
     }
 
     #[test]

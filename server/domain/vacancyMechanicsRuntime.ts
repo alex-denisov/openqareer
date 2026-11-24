@@ -2,6 +2,8 @@ import { catchupGate, type CatchupDecision } from './requirementsCatchupGate';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sqliteBusyTimeout';
 import { DatabaseSync } from 'node:sqlite';
+import { writeBriefly } from '../data/sqliteBriefLock';
+import { isSqliteBusy } from '../data/sqliteBusyRetry';
 import type { VacancyFitFailure, VacancyFitResult, VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { FIT_INPUT_TOO_LARGE, SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
@@ -135,7 +137,7 @@ export class VacancyMechanicsRuntime {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
     // B510: a shown vacancy without model labels jumps ahead of the background upgrade.
     if (queueRequirements && input.description.trim() && extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) {
-      this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
+      this.queueShownRequirements(input);
     }
     // Until the worker answers, the rules give the chips; the state below stays honest.
     const shown = extracted ?? extractVacancyRequirements({ vacancyId: input.vacancyId, description: input.description });
@@ -171,6 +173,15 @@ export class VacancyMechanicsRuntime {
       ...(result ? { result } : {}),
       ...(state === 'failed' ? { failure: fitFailure(job?.lastError) } : {}),
     };
+  }
+  /** B702: a read does not wait for the write lock; when it is taken, the next read queues the text. */
+  private queueShownRequirements(input: VacancyFitInput): void {
+    try {
+      writeBriefly(this.database, () =>
+        this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY }));
+    } catch (error) {
+      if (!isSqliteBusy(error)) throw error;
+    }
   }
   cachedVacancyIds(candidateId: string): ReadonlySet<string> { return this.fit.cachedVacancyIds(candidateId); }
   warmCachedVacancyIds(candidateId: string): Promise<void> { return this.fit.warmCachedVacancyIds(candidateId); }
@@ -209,15 +220,18 @@ export class VacancyMechanicsRuntime {
    * `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at.
    * `reviveSlot`: a re-read of all requirements loses every result at once, so the sweep counts them
    * under the day's ceiling; a page or a card the candidate opened passes none.
+   * B702: one short lock for the four writes; throws `SQLITE_BUSY`, the caller waits off the loop.
    */
   enqueue(input: VacancyFitInput, options: FitEnqueueOptions & { readonly reviveSlot?: () => boolean } = {}) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
-    // This method is reached only by an explicit authenticated POST, never by the worker retry loop.
-    this.requirements.retryFailed(requirementInput);
-    this.requirements.enqueue(requirementInput, { titleStrategyPriority: options.backgroundRank === undefined ? 1 : BACKGROUND_REQUIREMENTS_PRIORITY });
-    this.fit.retryFailed(input, undefined, options);
-    if (this.lostItsResult(input) && (options.reviveSlot?.() ?? true)) this.fit.reviveCompleted(input, undefined, options);
-    return this.fit.enqueue(input, undefined, options);
+    return writeBriefly(this.database, () => {
+      // This method is reached only by an explicit authenticated POST, never by the worker retry loop.
+      this.requirements.retryFailed(requirementInput);
+      this.requirements.enqueue(requirementInput, { titleStrategyPriority: options.backgroundRank === undefined ? 1 : BACKGROUND_REQUIREMENTS_PRIORITY });
+      this.fit.retryFailed(input, undefined, options);
+      if (this.lostItsResult(input) && (options.reviveSlot?.() ?? true)) this.fit.reviveCompleted(input, undefined, options);
+      return this.fit.enqueue(input, undefined, options);
+    });
   }
   /**
    * Worker start: one requeue of model failures recorded under an older parser revision (B522),
@@ -253,7 +267,7 @@ export class VacancyMechanicsRuntime {
   }
   /** The background refresh of counted rows (a new algorithm version): true while the day's ceiling has room. */
   takeFitRefreshSlot(limit = massRecountLimit('OPENQAREER_MASS_FIT_REFRESH_DAY_LIMIT', MASS_FIT_REFRESH_DAY_LIMIT)): boolean {
-    return takeMassRecountSlot(this.database, 'fit_refresh', limit);
+    return writeBriefly(this.database, () => takeMassRecountSlot(this.database, 'fit_refresh', limit));
   }
   /** Counters since the previous call: the worker writes one journal line per batch. */
   takeStats(): VacancyMechanicsStats {

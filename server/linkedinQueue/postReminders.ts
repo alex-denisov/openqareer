@@ -1,15 +1,22 @@
 import type { FastifyBaseLogger } from 'fastify';
 import type { LinkedinQueueItem } from '../../shared/b640LinkedinQueue';
 import type { SqliteNotificationRepository } from '../data/sqliteNotificationRepository';
+import { LINKEDIN_COMMENT_SOURCE } from '../data/notificationPolicy';
 import type { LinkedinQueueRepository } from './linkedinQueueRepository';
 
 export const POST_REMINDER_SOURCE = 'linkedin_queue';
+
+/** Вид уведомления один; пост и комментарий различает источник. */
+const REMINDER_SOURCE: Readonly<Record<LinkedinQueueItem['kind'], string>> = {
+  post: POST_REMINDER_SOURCE,
+  comment: LINKEDIN_COMMENT_SOURCE,
+};
 
 type Notifications = Pick<SqliteNotificationRepository, 'recordEvent' | 'withdrawUnsentFromSource'>;
 type QueueSlot = Pick<LinkedinQueueItem, 'id' | 'kind' | 'scheduledAt'>;
 
 /**
- * B695: уведомление «Пора опубликовать пост» для строки очереди LinkedIn. Пишется сразу со
+ * B695: уведомление «Пора опубликовать пост» или «Пора оставить комментарий» для строки очереди LinkedIn. Пишется сразу со
  * временем строки (`createdAt` и `deliverAt` — время из ритма): в ленте не видно до него,
  * в Telegram уходит в тот же час по настройке «Напоминания». Перенос ставит новое, удаление,
  * публикация и «Остановить всё» снимают неотправленное. На LinkedIn ничего не уходит.
@@ -24,11 +31,12 @@ export class PostReminders {
   /** Строка встала в очередь или сменила время. */
   schedule(candidateId: string, slot: QueueSlot): void {
     this.guard(candidateId, 'schedule', () => {
-      this.notifications().withdrawUnsentFromSource(candidateId, POST_REMINDER_SOURCE, slot.id);
-      if (slot.kind !== 'post' || this.queue.isPaused(candidateId)) return;
+      const sourceType = REMINDER_SOURCE[slot.kind];
+      this.notifications().withdrawUnsentFromSource(candidateId, sourceType, slot.id);
+      if (this.queue.isPaused(candidateId)) return;
       this.notifications().recordEvent(candidateId, {
         kind: 'post_reminder',
-        sourceType: POST_REMINDER_SOURCE,
+        sourceType,
         sourceId: slot.id,
         idempotencyKey: `post-reminder:${slot.id}:${slot.scheduledAt}`,
         createdAt: slot.scheduledAt,
@@ -40,7 +48,9 @@ export class PostReminders {
   /** Строка удалена или опубликована. */
   withdraw(candidateId: string, queueItemId: string): void {
     this.guard(candidateId, 'withdraw', () => {
-      this.notifications().withdrawUnsentFromSource(candidateId, POST_REMINDER_SOURCE, queueItemId);
+      for (const sourceType of Object.values(REMINDER_SOURCE)) {
+        this.notifications().withdrawUnsentFromSource(candidateId, sourceType, queueItemId);
+      }
     });
   }
 

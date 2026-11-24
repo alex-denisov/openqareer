@@ -182,17 +182,19 @@ const VOICES = {
 };
 
 /** I4c после расшифровки файла: голоса ещё не разделены, POST делит, PUT подтверждает. */
-async function openVoices(page: Page) {
+async function openVoices(page: Page, split: 'none' | 'ready' = 'none') {
   await page.clock.setFixedTime(new Date(PREP_NOW));
   await mockPrep(page, { interviewRecording: true });
   const calls: string[] = [];
+  let confirmed = false;
   await page.route('**/api/v1/candidate/applications/r-arka/debrief**', async (route) => {
     const method = route.request().method();
     const tail = new URL(route.request().url()).pathname.replace(/.*\/debrief/u, '');
     calls.push(`${method} ${tail || '/'} ${route.request().postData() ?? ''}`.trim());
+    if (method === 'PUT' && tail === '/voices') confirmed = true;
     const voices =
-      tail === '/voices'
-        ? { ...VOICES, candidate: method === 'PUT' ? 2 : null }
+      tail === '/voices' || confirmed || split === 'ready'
+        ? { ...VOICES, candidate: confirmed ? 2 : null }
         : { status: 'none', candidate: null, items: [] };
     await route.fulfill({ json: { data: { ...view('none'), voices } } });
   });
@@ -212,25 +214,41 @@ test.describe('B642: «Чей голос» после расшифровки ф�
     const voices = page.locator('section.mod', { hasText: 'Чей голос' });
     await expect(voices.locator('.ir-voice .row-title')).toHaveText([
       'Голос 1 — это вы?',
-      'Голос 2 — интервьюер',
+      'Голос 2',
     ]);
     await expect(voices.locator('.ir-voice').first()).toContainText(
       '84 % речи · «Мы перенесли кластеры',
     );
-    await expect(voices.getByRole('button', { name: 'Да, это я' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const confirm = voices.getByRole('button', { name: 'Подтвердить голоса' });
+    for (const name of ['Да, это я', 'Нет']) {
+      await expect(voices.getByRole('button', { name })).toHaveAttribute('aria-pressed', 'false');
+    }
+    await expect(confirm).toBeDisabled();
     await expectGates(page);
+    await voices.getByRole('button', { name: 'Да, это я' }).click();
+    await expect(voices.locator('.ir-voice .row-title').nth(1)).toHaveText('Голос 2 — интервьюер');
+    await expect(confirm).toBeEnabled();
     await voices.getByRole('button', { name: 'Нет' }).click();
     await expect(voices.locator('.ir-voice .row-title').nth(1)).toHaveText('Голос 2 — это вы');
     await expect(voices.locator('.ir-voice').first().getByLabel('Имя собеседника')).toHaveValue(
       'Ирина Петрова',
     );
-    await voices.getByRole('button', { name: 'Подтвердить голоса' }).click();
+    await confirm.click();
     await expect(page.locator('[data-b640-node="i04"]')).toBeVisible();
     expect(calls.filter((call) => call.startsWith('POST /voices'))).toHaveLength(1);
     expect(calls).toContain('PUT /voices {"candidate":2}');
+  });
+
+  test('разбор до подтверждения голосов ведёт на «Чей голос» и модель не зовёт', async ({
+    page,
+  }) => {
+    const calls = await openVoices(page, 'ready');
+    await page.getByRole('link', { name: 'Разбор', exact: true }).click();
+    await expect(page).toHaveURL(/\/debrief\/upload$/u);
+    await expect(page.getByRole('heading', { name: 'Чей голос' })).toBeVisible();
+    await expect.poll(() => calls.filter((call) => call === 'GET /').length).toBeGreaterThan(2);
+    await expect(page).toHaveURL(/\/debrief\/upload$/u);
+    expect(calls.filter((call) => call.startsWith('POST /analysis'))).toEqual([]);
   });
 });
 

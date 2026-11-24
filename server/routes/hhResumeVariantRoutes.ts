@@ -4,6 +4,7 @@ import type { HhResumeEdit, HhResumeSnapshot } from '../../shared/hhCandidateSes
 import { MAX_TEXT_VARIANTS } from '../../shared/textVariants';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { SqliteTextVariantRepository, type TextSubject } from '../candidate/sqliteTextVariantRepository';
+import { writeCheckedVariant } from '../domain/checkedVariant';
 import { hhResumeLanguage } from '../domain/hhResumeEdits';
 import { checkHhResumeVariant, hhResumeVariantRequest, type HhResumeVariantRequest } from '../domain/hhResumeVariant';
 import { normalizeWish } from '../domain/textVariants';
@@ -77,8 +78,12 @@ async function writeVariant(
   const edit = edits.find((item) => item.variantOf?.subjectId === subject.subjectId);
   const input = edit ? variantRequest(deps, stores, subject, source, edit, vacancyId) : null;
   if (!input) return sendError(reply, request, 404, 'hh_edit_not_found', 'Такой правки больше нет. Откройте разбор заново.', false);
-  const output = await deps.experienceFactRewriter?.hhResumeVariant?.(input);
-  const checked = output ? checkHhResumeVariant(input, output) : null;
+  const checked = await writeCheckedVariant({
+    request: input,
+    write: async (asked) => deps.experienceFactRewriter?.hhResumeVariant?.(asked),
+    check: (output, onReject) => checkHhResumeVariant(input, output, onReject),
+    onReject: (reason, attempt) => request.log.info({ section: input.target, reason, attempt }, 'hh_resume_variant_rejected'),
+  });
   if (!checked) return generationFailed(reply, request);
   const variant = stores.variants.add({
     ...subject,

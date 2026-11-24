@@ -50,6 +50,27 @@ function applicationContexts(
   return contexts;
 }
 
+/** B671: напоминание ссылается на интервью; компания и роль — из его отклика, время — его. */
+function interviewContexts(
+  deps: RouteDeps,
+  candidateId: string,
+  needed: ReadonlySet<string>,
+): Map<string, B640ApplicationContext> {
+  const contexts = new Map<string, B640ApplicationContext>();
+  for (const id of needed) {
+    const interview = deps.candidateStore.getInterviewSubject(candidateId, id);
+    if (!interview) continue;
+    contexts.set(id, {
+      stage: interview.stage,
+      company: interview.vacancyCompany ?? null,
+      role: interview.vacancyTitle ?? null,
+      interviewAt: interview.scheduledAt,
+      failureNote: null,
+    });
+  }
+  return contexts;
+}
+
 type FeedQuery = z.infer<typeof querySchema>;
 
 /** B671: роль поиска нужна только ленте с подборками «Новые вакансии по вашей роли». */
@@ -81,17 +102,21 @@ function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {
   const repository = notificationRepositoryFor(deps);
   const invitation = repository.getInvitationPreference(candidateId);
   const replies = repository.getPreferences(candidateId).find((item) => item.key === 'ev-reply');
+  const now = new Date().toISOString();
   const stored = repository.listForFeed(candidateId, {
     max: FEED_ROW_LIMIT,
-    now: new Date().toISOString(),
+    now,
     keepReplies: invitation.stored,
   });
-  const needed = new Set(
-    stored.rows.filter((row) => row.sourceType === 'application').map((row) => row.sourceId),
-  );
+  const sourceIds = (type: string) =>
+    new Set(stored.rows.filter((row) => row.sourceType === type).map((row) => row.sourceId));
   return buildB640NotificationFeed({
     rows: stored.rows,
-    applications: applicationContexts(deps, candidateId, needed),
+    applications: new Map([
+      ...applicationContexts(deps, candidateId, sourceIds('application')),
+      ...interviewContexts(deps, candidateId, sourceIds('interview')),
+    ]),
+    now,
     unreadCount: stored.unreadCount,
     inApp: invitation.stored
       ? { replies: replies?.app ?? true, invitations: invitation.app }

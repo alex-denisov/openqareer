@@ -91,6 +91,11 @@ describe('B778: строка подборки внутри чужого скле
     const saved = harness.candidates
       .listApplications(harness.candidateId)
       .find((item) => item.clusterId === ROW_ID);
-    expect(saved?.vacancy).toMatchObject({ title: 'Директор по данным', company: 'Ромашка' });
+    expect(saved?.vacancy).toMatchObject({
+      title: 'Директор по данным',
+      company: 'Ромашка',
+      // B635: отклик из письма хранит текст вакансии.
+      description: 'Строим платформу данных',
+    });
   });
 });

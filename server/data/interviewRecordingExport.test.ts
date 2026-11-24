@@ -32,6 +32,7 @@ describe('B738 · 9: записи интервью в выгрузке', () => {
     expect(recordings[0]).toMatchObject({ recordingId: 'rec-own', status: 'finished', interviewId: 'int-own' });
     expect(JSON.stringify(recordings[0].transcript)).toContain('Ответ own');
     expect(recordings[0].debriefs).toEqual([{ status: 'ready', findings: { summary: 'Разбор own' }, createdAt: AT }]);
+    expect(recordings[0].voices).toEqual({ status: 'ready', labels: [1], candidateVoice: 1, updatedAt: AT });
     expect(interviewers).toEqual([{ interviewId: 'int-own', name: 'Ирина own', updatedAt: AT }]);
     const text = JSON.stringify(exported.interviewRecordings);
     expect(text).not.toContain('other');

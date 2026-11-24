@@ -531,6 +531,31 @@ export class SqliteApplicationRepository {
     );
   }
 
+  /**
+   * `DELETE /vacancy-skips` (B654): возвращает в «сохранено» карточку, убранную в архив скрытием.
+   * Снятая звезда причины не пишет, а системный архив — не `candidate`: их не трогаем.
+   */
+  restoreSkippedByCluster(candidateId: string, clusterId: string, now = new Date().toISOString()): void {
+    const existing = this.findByCluster(candidateId, clusterId);
+    if (existing?.stage !== 'archived') return;
+    const result = this.database
+      .prepare(
+        `UPDATE applications SET stage = 'saved', closed_reason = NULL,
+           archive_reason = NULL, archive_previous_stage = NULL,
+           stage_changed_at = ?, version = version + 1, updated_at = ?
+         WHERE candidate_id = ? AND id = ? AND archive_reason = 'candidate'
+           AND archive_previous_stage = 'saved' AND closed_reason IS NOT NULL`,
+      )
+      .run(now, now, candidateId, existing.id);
+    if (result.changes !== 1) return;
+    this.insertEvent(
+      candidateId,
+      existing.id,
+      { kind: 'stage', fromStage: 'archived', toStage: 'saved', occurredAt: now, provenance: 'candidate' },
+      now,
+    );
+  }
+
   /** `PUT /applications/:id/materials/:role`: records the link as a `material` event. */
   recordMaterialEvent(
     candidateId: string,
@@ -791,7 +816,7 @@ function isKnownStage(value: string): value is ApplicationStage {
 }
 
 
-function vacancyAssociatedData(candidateId: string, applicationId: string): string {
+export function vacancyAssociatedData(candidateId: string, applicationId: string): string {
   return `candidate:${candidateId}:application:${applicationId}:vacancy`;
 }
 

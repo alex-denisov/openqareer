@@ -76,6 +76,8 @@ const snapshotSchema = z
       .array(contentSchema.extend({ text: z.string().trim().min(1).max(HH_REVIEW_TEXT_MAX_LENGTH) }))
       .max(HH_REVIEW_RESUMES_MAX)
       .optional(),
+    /** B704: `false` — выбор из прочитанного раньше, hh.ru не читали. */
+    contentRead: z.literal(false).optional(),
   })
   .strict()
   .refine((value) => !value.selected || value.resumes.some((item) => item.id === value.selected?.id), {
@@ -151,12 +153,15 @@ const putResumes: Handler = async (deps, request, reply) => {
   if (!parsed.success) {
     return sendError(reply, request, 400, 'invalid_hh_resumes', 'Резюме hh.ru не прочитались. Повторите.', false);
   }
-  const { contents, ...rest } = parsed.data;
+  const { contents, contentRead, ...rest } = parsed.data;
+  const previous = deps.hh.getSnapshot(candidateId);
+  // B704: дата чтения меняется, только когда прочитано содержимое, а не выбор и не список.
+  const read = contentRead !== false && contents?.length !== 0;
   const listed = new Set(rest.resumes.map((item) => item.id));
   const snapshot: HhResumeSnapshot = {
     ...rest,
-    ...(contents ? { contents } : keptContents(deps.hh.getSnapshot(candidateId), listed)),
-    readAt: new Date().toISOString(),
+    ...(contents ? { contents } : keptContents(previous, listed)),
+    readAt: (read ? null : previous?.readAt) ?? new Date().toISOString(),
   };
   deps.hh.saveSnapshot(candidateId, snapshot);
   // B690: резюме прочитаны в окне hh.ru — вход жив, уведомление «вход истёк» больше не нужно.

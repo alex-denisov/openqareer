@@ -1,5 +1,6 @@
 import { getConnections } from '../../../coach/coachApi';
 import { getCandidateActionUsage } from '../../../applications/applicationsApi';
+import { getHhResumes } from '../../apply/hh/hhSessionApi';
 import { Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import type { SectionProps } from '../../sections';
@@ -14,10 +15,13 @@ interface HhData {
 
 async function loadHh(signal: AbortSignal): Promise<HhData> {
   const connections = await getConnections();
-  const usage: HhUsage | null = await getCandidateActionUsage(signal)
-    .then((value) => value.usage)
-    .catch(() => null);
-  return { view: buildHhView(connections, usage) };
+  const [usage, snapshot] = await Promise.all([
+    getCandidateActionUsage(signal)
+      .then((value): HhUsage | null => value.usage)
+      .catch(() => null),
+    getHhResumes(signal).catch(() => null),
+  ]);
+  return { view: buildHhView(connections, usage, snapshot) };
 }
 
 function NotConnected() {

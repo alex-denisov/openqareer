@@ -192,14 +192,15 @@ describe('B682: «Другой вариант» правки резюме', () =
     expect((await call('POST', VARIANTS, { vacancyId: 'cluster-99', subjectId: 'a'.repeat(64) })).statusCode).toBe(404);
     expect((await call('POST', VARIANTS, { vacancyId: 'cluster-99', subjectId: 'x' })).statusCode).toBe(400);
     expect((await call('POST', VARIANTS, { ...skills.variantOf, vacancyId: 'cluster-0' })).statusCode).toBe(404);
-    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(3); // B682: два повтора с причиной
+    expect((write.mock.calls as unknown[][])[1]![0]).toMatchObject({ rejected: { text: 'Rust\nNode.js', reason: expect.any(String) } });
   });
 
   it('пять неудач за час — 429 без вызова модели', async () => {
     const { call, write, skills } = await opened([]);
     for (let i = 0; i < 5; i += 1) expect((await call('POST', VARIANTS, skills.variantOf)).statusCode).toBe(503);
     expect((await call('POST', VARIANTS, skills.variantOf)).statusCode).toBe(429);
-    expect(write).toHaveBeenCalledTimes(5);
+    expect(write).toHaveBeenCalledTimes(15); // B682: по три попытки на запрос
   });
 
   it('без флага B640 — 404', async () => {

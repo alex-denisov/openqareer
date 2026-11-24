@@ -313,6 +313,36 @@ describe('B642: «Чей голос» у загруженного файла (I4
     expect(labelVoices).toHaveBeenCalledTimes(2);
   });
 
+  it('разбор не строится, пока разделённые голоса не подтверждены', async () => {
+    const { debrief, record, finished, labelVoices, writeDebrief } = await setup(
+      [OUTCOME],
+      [VOICES],
+    );
+    const { recordingId } = await record('upload', 'upload', 'audio/wav');
+    await finished(recordingId);
+    const [waiting] = (
+      await Promise.all([debrief('/analysis', 'POST'), debrief('/voices', 'POST')])
+    ).map((res) => res.json().data);
+    expect(waiting.voices).toMatchObject({ status: 'ready', candidate: null });
+    expect(waiting.analysis.status).toBe('none');
+    expect(labelVoices).toHaveBeenCalledTimes(1);
+    await debrief('/analysis', 'POST');
+    expect(writeDebrief).not.toHaveBeenCalled();
+    await debrief('/voices', 'PUT', { candidate: 1 });
+    expect((await debrief('/analysis', 'POST')).json().data.analysis.status).toBe('ready');
+    expect(writeDebrief).toHaveBeenCalledTimes(1);
+  });
+
+  it('деление не удалось — разбор строится по неразмеченной расшифровке', async () => {
+    const { debrief, record, finished, writeDebrief } = await setup([OUTCOME], [null]);
+    const { recordingId } = await record('upload', 'upload', 'audio/wav');
+    await finished(recordingId);
+    const built = (await debrief('/analysis', 'POST')).json().data;
+    expect(built.voices.status).toBe('failed');
+    expect(built.analysis.status).toBe('ready');
+    expect(writeDebrief).toHaveBeenCalledTimes(1);
+  });
+
   it('у записи .app голоса по дорожкам: деления нет, модель не зовётся', async () => {
     const { debrief, record, finished, labelVoices } = await setup();
     const { recordingId } = await record('app', 'mic', 'audio/mp4');

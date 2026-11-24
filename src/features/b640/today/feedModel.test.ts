@@ -99,6 +99,17 @@ describe('n01b: блок «Важно»', () => {
     });
   });
 
+  it('B671: напоминание об интервью — компания, роль и время', () => {
+    const reminder = item({
+      kind: 'interview_reminder',
+      title: 'Скоро интервью · Карта',
+      eventAt: '2026-11-25T09:00:00.000Z',
+    });
+    expect(pinnedTitle(reminder, 'Europe/Moscow')).toBe(
+      'Скоро интервью · Карта · Руководитель платформы · 25 ноября, 12:00',
+    );
+  });
+
   it('вход на площадку — «Подключить» с иконкой, прочие — без изменений', () => {
     const login = item({ kind: 'platform_login_required', title: 'Отклик не доставлен · Карта' });
     expect(pinnedAction(login)).toMatchObject({ label: 'Подключить', icon: 'refresh' });

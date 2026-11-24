@@ -14,7 +14,7 @@ import { SkillQuestion } from './SkillQuestion';
 import { SkillResult } from './SkillResult';
 import { SkillStart } from './SkillStart';
 import { SkillSuggestions } from './SkillSuggestions';
-import { useSkillCheck, type SkillCheck } from './useSkillCheck';
+import { hasNoSuggestions, useSkillCheck, type SkillCheck } from './useSkillCheck';
 import { loadSkillRoles } from './careerApi';
 import { useLoad } from '../today/useLoad';
 import { RoleTitlesProvider, useRoleLabel } from './roleLabelContext';
@@ -130,10 +130,20 @@ function RunStep({ check, onLater }: { readonly check: SkillCheck; readonly onLa
         record={{ ...resultCase, evaluation: resultCase.evaluation }}
         busy={state.busy}
         failed={Boolean(state.error)}
-        onNext={check.nextAfterResult}
+        onNext={() => void check.nextAfterResult(true)}
+        onSkip={() => void check.nextAfterResult(false)}
         onAgain={check.answerAgain}
         onAppeal={actions.appealCase}
       />
+    );
+  if (hasNoSuggestions(run))
+    return state.error ? (
+      <BlockError
+        text="Не удалось перейти к кейсам."
+        onRetry={() => void actions.saveSuggestions()}
+      />
+    ) : (
+      <BlockSkeleton label="Загружаем кейс" rows={4} />
     );
   const suggestionsFailed =
     run.status === 'model_error' && run.modelError?.action === 'suggestions';

@@ -64,6 +64,10 @@ import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { FOREIGN_COMMIT_GRACE_MS } from './data/sqliteSnapshotMemo';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
 import { labelledTimer } from './observability/backgroundSteps';
+import { backfillApplicationDescriptions } from './data/applicationDescriptionBackfill';
+import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
+import { SealedText } from './data/sealedText';
+import { snapshotWithDescription } from './routes/applicationVacancyText';
 import { openVacancyDemandStore } from './vacancies/vacancyDemandStore';
 
 const config = readServerConfig(process.env);
@@ -402,6 +406,28 @@ function runRetentionSweep(): void {
   }
 }
 
+/** B635: раз за запуск — описание вакансии старым откликам, пока она в пуле. */
+async function runApplicationDescriptionBackfill(): Promise<void> {
+  const database = new DatabaseSync(config.databasePath);
+  try {
+    applySqliteBusyTimeout(database);
+    const result = await backfillApplicationDescriptions({
+      database,
+      sealedText: new SealedText(config.dataEncryptionKey),
+      enrich: (clusterId, snapshot) => snapshotWithDescription(vacancyEngine.engine, clusterId, snapshot),
+      pause: () => new Promise((resolve) => setTimeout(resolve, 50).unref()),
+    });
+    app.log.info({ ...result }, 'application-description-backfill-completed');
+  } catch (error) {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'application-description-backfill-failed',
+    );
+  } finally {
+    database.close();
+  }
+}
+
 function runLinkedinPoolSessionExpiryPurge(): void {
   try {
     const purged = linkedinPool.purgeExpiredSessionCookies();
@@ -480,6 +506,8 @@ try {
     webStep('web:document-retention', runDocumentRetentionPurge)();
     webStep('web:retention-sweep', runRetentionSweep)();
   }, 30_000)?.unref();
+  // После окна здоровья выкатки.
+  setTimeout(() => void runApplicationDescriptionBackfill(), 90_000).unref();
   // Первый semantic-read не платит за создание отдельного SQLite-процесса.
   // Это только запуск reader: данные и SQL остаются запросом кандидата, а
   // HTTP уже слушает, когда OS начинает создавать дочерний процесс.

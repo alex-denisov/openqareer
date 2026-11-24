@@ -59,8 +59,8 @@ describe('SqliteVacancySkipRepository', () => {
       { clusterId: 'cluster-2', reasonId: 'duplicate', origin: 'kanban' },
       () => undefined,
     );
-    expect(skips.delete('candidate-1', 'cluster-2')).toBe(true);
+    expect(skips.delete('candidate-1', 'cluster-2', () => undefined)).toBe(true);
     expect(skips.list('candidate-1')).toHaveLength(0);
-    expect(skips.delete('candidate-1', 'cluster-2')).toBe(false);
+    expect(skips.delete('candidate-1', 'cluster-2', () => undefined)).toBe(false);
   });
 });

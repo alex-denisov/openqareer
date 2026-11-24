@@ -14,6 +14,7 @@ mod hh_resume_edit_scripts;
 mod hh_jsdom_harness;
 mod hh_resume_experience;
 mod hh_resume_experience_scripts;
+mod hh_questionnaire;
 mod hh_raise;
 mod linkedin_read_guard;
 mod network_probe;
@@ -27,6 +28,7 @@ mod recording_upload;
 mod session_token_store;
 mod sidecar_lifecycle;
 mod tunnel_manager;
+mod window_theme;
 #[cfg(windows)]
 mod windows_print;
 
@@ -589,6 +591,7 @@ fn main() {
         ))
         .manage(device_settings::DeviceSettingsState::default())
         .setup(|app| {
+            window_theme::open_main_window(app.handle())?;
             desktop_notify::configure_tray(app)?;
             recording::purge_leftovers(app.handle());
             device_settings::load_on_startup(app.handle());
@@ -655,6 +658,7 @@ fn main() {
             app_sign_in::desktop_open_sign_in,
             device_settings::get_device_settings,
             device_settings::save_device_settings,
+            window_theme::save_window_theme,
             recording::recording_permissions,
             recording::recording_request_permissions,
             recording::recording_start,

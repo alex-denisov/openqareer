@@ -357,6 +357,17 @@ function failedAudit(
   };
 }
 
+/** B668: ссылку могли добавить, пока шёл поиск, — итог её не затирает. */
+function withAddedQueries(
+  input: CandidateFootprintWorkerInput,
+  audit: CandidateFootprintAudit,
+): CandidateFootprintAudit {
+  const stored = input.repo.getLatestFootprintAudit(input.candidateId);
+  return stored?.id === audit.id && stored.addedQueryIds
+    ? { ...audit, addedQueryIds: stored.addedQueryIds }
+    : audit;
+}
+
 function finishRun(active: ActiveRun): void {
   activeRunsByAudit.delete(active.auditId);
   if (activeAuditByCandidate.get(active.candidateId) === active.auditId) {
@@ -390,12 +401,12 @@ export function startCandidateFootprintAudit(
   active.task = executeAudit(input, audit, previous, active.controller.signal)
     .then((completed) => {
       if (!active.controller.signal.aborted && isAuthorized(input)) {
-        input.repo.saveFootprintAudit(completed);
+        input.repo.saveFootprintAudit(withAddedQueries(input, completed));
       }
     })
     .catch(() => {
       if (!active.controller.signal.aborted && isAuthorized(input)) {
-        input.repo.saveFootprintAudit(failedAudit(audit, now));
+        input.repo.saveFootprintAudit(withAddedQueries(input, failedAudit(audit, now)));
       }
     })
     .finally(() => finishRun(active));

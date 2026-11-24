@@ -198,16 +198,19 @@ export class SqliteVacancyFitStore {
    */
   async warmCachedVacancyIds(
     candidateId: string,
-    { batch = 200, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
+    { batch = 50, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
   ): Promise<void> {
     const candidateKey = this.candidateKey(candidateId);
     const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
     // B770a: the batch holds the loop between yields; named so a stall over list:fit-ids shows it.
+    let growing: Set<string> | undefined;
     const warmBatch = () => {
       const known = this.cachedIdsMemo.get(candidateKey);
       const rows = page.all(candidateKey, known?.last ?? 0, batch) as { id: number; cache_key: string; result_cipher: string }[];
       if (rows.length === 0) return 0;
-      const ids = new Set(known?.ids ?? []);
+      // A set nobody reads yet grows in place: copying thousands of ids per batch was most of it (B702).
+      const ids = known && known.ids === growing ? growing : new Set(known?.ids ?? []);
+      growing = ids;
       for (const row of rows) {
         const id = this.openedVacancyId(row, candidateId);
         if (id) ids.add(id);

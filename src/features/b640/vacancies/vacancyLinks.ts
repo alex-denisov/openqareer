@@ -68,6 +68,8 @@ export interface VacancyLinks {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly reload: () => void;
+  /** Перечитать без строки загрузки: сервер сам сменил карточку (скрытие и его отмена). */
+  readonly refresh: () => void;
   /** Сохранить или убрать из сохранённых; при сбое бросает ошибку. */
   readonly toggleSaved: (cluster: Cluster) => Promise<ApplicationView>;
   /** Отметить «уже откликнулись» с датой отклика; при сбое бросает ошибку. */
@@ -118,6 +120,7 @@ interface LoadedApplications {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly reload: () => void;
+  readonly refresh: () => void;
 }
 
 function useLoadedApplications(): LoadedApplications {
@@ -142,16 +145,17 @@ function useLoadedApplications(): LoadedApplications {
     return () => controller.abort();
   }, [attempt]);
 
+  const refresh = useCallback(() => setAttempt((value) => value + 1), []);
   const reload = useCallback(() => {
     setLoading(true);
-    setAttempt((value) => value + 1);
-  }, []);
-  return { applications, setApplications, loading, failed, reload };
+    refresh();
+  }, [refresh]);
+  return { applications, setApplications, loading, failed, reload, refresh };
 }
 
 /** Карточки откликов кандидата: по ним строка знает «сохранена» и «откликнулся». */
 export function useVacancyLinks(): VacancyLinks {
-  const { applications, setApplications, loading, failed, reload } = useLoadedApplications();
+  const { applications, setApplications, loading, failed, reload, refresh } = useLoadedApplications();
 
   const byCluster = useMemo(() => {
     const map = new Map<string, ApplicationView>();
@@ -190,5 +194,5 @@ export function useVacancyLinks(): VacancyLinks {
     [byCluster, write],
   );
 
-  return { applications, byCluster, loading, failed, reload, toggleSaved, markApplied };
+  return { applications, byCluster, loading, failed, reload, refresh, toggleSaved, markApplied };
 }

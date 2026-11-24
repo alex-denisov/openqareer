@@ -62,6 +62,13 @@ describe('B786: варианты пункта резюме', () => {
     expect((await call('GET', `${variants}?key=${encodeURIComponent(KEY)}`)).json().data).toEqual({ variants: [], remaining: 3 });
   });
 
+  it('B682: отклонённый пункт модель пишет ещё раз с причиной', async () => {
+    const { call, variants, rewriteVariant } = await harness(['Вела бэкенд из 30 человек.', 'Вела бэкенд из 18 человек.']);
+    const response = await call('POST', variants, { key: KEY });
+    expect([response.statusCode, response.json().data.variants[0].text]).toEqual([201, 'Вела бэкенд из 18 человек.']);
+    expect(rewriteVariant.mock.calls[1]![0].rejected).toMatchObject({ text: 'Вела бэкенд из 30 человек.' });
+  });
+
   it('после трёх вариантов модель не зовётся, исходный пункт применяется', async () => {
     const { call, id, variants, rewriteVariant, lines } = await harness([
       'Вела бэкенд из 18 человек.', 'Возглавляла бэкенд из 18 человек.', 'Управляла бэкендом из 18 человек.',

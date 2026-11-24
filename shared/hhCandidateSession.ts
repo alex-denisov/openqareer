@@ -128,11 +128,44 @@ export const HH_WINDOW_LEFT_OPEN_FAILURES = [
   'hh_error',
   'script_error',
   'already_applied',
+  'questionnaire_required',
   'not_signed_in',
   'page_load_timeout',
   'eval_timeout',
   'eval_cancelled',
 ] as const;
+
+/** B641: вопрос анкеты, как его прочитало приложение в окне hh.ru кандидата. */
+export interface HhFormQuestion {
+  readonly text: string;
+  readonly required: boolean;
+  readonly kind: 'text' | 'choice';
+  readonly options?: readonly string[];
+  readonly multiple?: boolean;
+}
+
+export interface HhForm {
+  /** Страница анкеты на hh.ru. */
+  readonly url: string;
+  /** Пусто — вопросы не читаются. */
+  readonly questions: readonly HhFormQuestion[];
+}
+
+const HH_FORM_HOST = /^(?:[a-z0-9-]+\.)*hh\.ru$/u;
+
+/** Адрес анкеты на hh.ru: только страница отклика или вакансии с её номером; прочее — `null`. */
+export function hhFormUrl(value: string): string | null {
+  if (!URL.canParse(value)) return null;
+  const url = new URL(value);
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return null;
+  if (!HH_FORM_HOST.test(url.hostname)) return null;
+  const path = url.pathname.replace(/\/$/u, '');
+  if (/^\/vacancy\/[1-9]\d{0,14}$/u.test(path)) return `https://${url.hostname}${path}`;
+  const vacancy = url.searchParams.get('vacancyId') ?? '';
+  return path === '/applicant/vacancy_response' && /^[1-9]\d{0,14}$/u.test(vacancy)
+    ? `https://${url.hostname}${path}?vacancyId=${vacancy}`
+    : null;
+}
 
 export interface HhApplyAttempt {
   readonly attemptId: string;

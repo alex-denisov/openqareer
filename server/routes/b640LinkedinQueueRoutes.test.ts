@@ -191,7 +191,13 @@ describe('B694: очередь', () => {
     draft('flagged.test', { id: 'c1', kind: 'comment' });
     const first = (await call('POST', `${BASE}/queue`, { draftId: 'd1', at: future(2) })).json().data;
     expect(reminders()).toEqual([{ source_type: 'linkedin_queue', source_id: first.id, created_at: first.scheduledAt }]);
-    await call('POST', `${BASE}/queue`, { draftId: 'c1', at: future(4) });
+    const comment = (await call('POST', `${BASE}/queue`, { draftId: 'c1', at: future(4) })).json().data;
+    expect(reminders()).toContainEqual({
+      source_type: 'linkedin_queue_comment',
+      source_id: comment.id,
+      created_at: comment.scheduledAt,
+    });
+    await call('DELETE', `${BASE}/queue/${comment.id}`, undefined);
     expect(reminders()).toHaveLength(1);
 
     const moved = (await call('PATCH', `${BASE}/queue/${first.id}`, { at: future(3) })).json().data;

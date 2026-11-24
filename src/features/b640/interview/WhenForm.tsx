@@ -31,9 +31,33 @@ function WhenField(props: {
   );
 }
 
+const FORMAT_MAX = 120;
+
+function FormatField(props: {
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}) {
+  return (
+    <div className="pf-f iw-f">
+      <label htmlFor="iw-format">
+        Формат<span className="dim"> · необязательно</span>
+      </label>
+      <input
+        id="iw-format"
+        type="text"
+        placeholder="Например, видеозвонок с техническим директором"
+        maxLength={FORMAT_MAX}
+        value={props.value}
+        onChange={(event) => props.onChange(event.currentTarget.value)}
+      />
+    </div>
+  );
+}
+
 /** «Когда интервью?» (I1d): интервью ещё не записано — дата заводит его и открывает подготовку. */
 export function WhenForm(props: { readonly responseId: string; readonly onCreated: () => void }) {
   const [value, setValue] = useState('');
+  const [format, setFormat] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
   async function submit(event: FormEvent) {
@@ -43,7 +67,11 @@ export function WhenForm(props: { readonly responseId: string; readonly onCreate
     if (!when.ok) return;
     setState('saving');
     try {
-      await createApplicationInterview(props.responseId, { round: 1, scheduledAt: when.iso });
+      await createApplicationInterview(props.responseId, {
+        round: 1,
+        scheduledAt: when.iso,
+        format: format.trim() || null,
+      });
       props.onCreated();
     } catch {
       setState('failed');
@@ -55,6 +83,7 @@ export function WhenForm(props: { readonly responseId: string; readonly onCreate
         Когда интервью?
       </h2>
       <WhenField value={value} error={error} onChange={setValue} />
+      <FormatField value={format} onChange={setFormat} />
       {state === 'failed' ? (
         <StatusLine state="err" text="Интервью не записалось. Попробуйте ещё раз." />
       ) : null}

@@ -5,7 +5,7 @@ import type {
   B640NotificationKind,
   NotificationFilter,
 } from './b640NotificationsApi';
-import { notificationWhen, type NotificationAction } from './notificationsModel';
+import { COMMENT_ACTION, notificationWhen, type NotificationAction } from './notificationsModel';
 
 /** Фильтры ленты N01b по категории события. */
 export const FEED_FILTERS: readonly {
@@ -42,6 +42,7 @@ const KIND_ACTION: Record<
 
 /** Одно действие события: отклик по его id, иначе раздел кабинета. */
 export function feedAction(item: B640Notification): NotificationAction {
+  if (item.sourceType === 'linkedin_queue_comment') return COMMENT_ACTION;
   const action = KIND_ACTION[item.kind];
   if (!('response' in action)) return action;
   return item.sourceType === 'application'
@@ -49,7 +50,7 @@ export function feedAction(item: B640Notification): NotificationAction {
     : { label: action.label, path: buildNodePath('o01') };
 }
 
-function eventLabel(eventAt: string, timeZone: string): string | null {
+function eventLabel(eventAt: string, timeZone?: string): string | null {
   const date = new Date(eventAt);
   if (Number.isNaN(date.getTime())) return null;
   const day = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone }).format(
@@ -87,12 +88,15 @@ export interface PinnedAction extends NotificationAction {
  * n01b «Важно»: сбой доставки — «Отклик не дошёл · компания · роль» и «Повторить» к письму
  * отклика (там «Отправить ещё раз»); вход на площадку — «Подключить» с иконкой обновления.
  */
-export function pinnedTitle(item: B640Notification): string {
+export function pinnedTitle(item: B640Notification, timeZone?: string): string {
   const title =
     item.kind === 'delivery_error' && item.sourceType === 'application'
       ? ['Отклик не дошёл', item.company].filter(Boolean).join(' · ')
       : item.title;
-  return [title, item.role].filter(Boolean).join(' · ');
+  // B671: у напоминания об интервью важно и когда оно.
+  const when =
+    item.kind === 'interview_reminder' && item.eventAt ? eventLabel(item.eventAt, timeZone) : null;
+  return [title, item.role, when].filter(Boolean).join(' · ');
 }
 
 export function pinnedAction(item: B640Notification): PinnedAction {

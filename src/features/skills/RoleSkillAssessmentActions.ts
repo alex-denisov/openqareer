@@ -5,6 +5,7 @@ import {
   answerRoleAssessmentCase,
   answerRoleAssessmentDialogue,
   appealRoleAssessmentCase,
+  decideRoleAssessmentCase,
   decideRoleAssessmentSuggestions,
   discussRoleAssessmentCase,
   getCurrentRoleSkillAssessment,
@@ -234,6 +235,17 @@ export class RoleSkillAssessmentActions {
     );
     if (sent) this.patch({ appealOpen: false, appealReason: '' });
     return sent;
+  };
+
+  /** B734: решение по итогу кейса — только после «Верно» оценка меняет навык. */
+  decideCase = async (caseId: string, accepted: boolean): Promise<boolean> => {
+    const run = this.run;
+    if (!run) return false;
+    const payload = { expectedRevision: run.revision, caseId, accepted };
+    const requestId = this.requestId('decision', payload);
+    return this.performMutation(() =>
+      decideRoleAssessmentCase({ runId: run.id, ...payload, requestId }),
+    );
   };
 
   retryModel = async (): Promise<boolean> => {

@@ -53,13 +53,13 @@ function VoiceRow(props: {
   );
 }
 
-function YesNo(props: { readonly yes: boolean; readonly onChange: (yes: boolean) => void }) {
+function YesNo(props: { readonly yes: boolean | null; readonly onChange: (yes: boolean) => void }) {
   return (
     <div className="ir-yn">
       <button
         className="chip"
         type="button"
-        aria-pressed={props.yes}
+        aria-pressed={props.yes === true}
         onClick={() => props.onChange(true)}
       >
         Да, это я
@@ -67,7 +67,7 @@ function YesNo(props: { readonly yes: boolean; readonly onChange: (yes: boolean)
       <button
         className="chip"
         type="button"
-        aria-pressed={!props.yes}
+        aria-pressed={props.yes === false}
         onClick={() => props.onChange(false)}
       >
         Нет
@@ -109,11 +109,18 @@ function useConfirm(data: DebriefData, debrief: InterviewDebriefView) {
   return { state, confirm };
 }
 
+function secondTitle(mineFirst: boolean | null): string {
+  if (mineFirst === null) return 'Голос 2';
+  return mineFirst ? 'Голос 2 — интервьюер' : 'Голос 2 — это вы';
+}
+
 /** I4c «Чей голос»: кандидат отмечает свой голос; имя собеседника — у второго голоса. */
 export function VoicesBlock({ data }: { readonly data: DebriefData }) {
   const debrief = data.debrief!;
   const [first, second] = debrief.voices?.items ?? [];
-  const [mineFirst, setMineFirst] = useState(debrief.voices?.candidate !== 2);
+  const [mineFirst, setMineFirst] = useState<boolean | null>(
+    debrief.voices?.candidate ? debrief.voices.candidate === 1 : null,
+  );
   const [name, setName] = useState(debrief.interviewerName ?? '');
   const { state, confirm } = useConfirm(data, debrief);
   if (!first || !second) return null;
@@ -125,9 +132,9 @@ export function VoicesBlock({ data }: { readonly data: DebriefData }) {
       <ul className="rows">
         <VoiceRow item={first} title="Голос 1 — это вы?">
           <YesNo yes={mineFirst} onChange={setMineFirst} />
-          {mineFirst ? null : <NameField value={name} onChange={setName} />}
+          {mineFirst === false ? <NameField value={name} onChange={setName} /> : null}
         </VoiceRow>
-        <VoiceRow item={second} title={mineFirst ? 'Голос 2 — интервьюер' : 'Голос 2 — это вы'}>
+        <VoiceRow item={second} title={secondTitle(mineFirst)}>
           {mineFirst ? <NameField value={name} onChange={setName} /> : null}
         </VoiceRow>
       </ul>
@@ -137,7 +144,7 @@ export function VoicesBlock({ data }: { readonly data: DebriefData }) {
       <div className="actions m-commit">
         <Button
           variant="primary"
-          disabled={state === 'saving'}
+          disabled={mineFirst === null || state === 'saving'}
           onClick={() => void confirm(mineFirst ? 1 : 2, name)}
         >
           <Icon name="check" />

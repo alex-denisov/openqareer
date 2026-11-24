@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS application_questionnaires (
 ) STRICT;
 `;
 
+/** Анкет на кандидата: вакансии клиент называет сам, поэтому число строк ограничено. */
+export const QUESTIONNAIRE_MAX_PER_CANDIDATE = 200;
+
 export interface StoredQuestionnaire {
   readonly vacancyId: string;
   readonly formUrl: string | null;
@@ -124,6 +127,7 @@ export class SqliteQuestionnaireRepository {
       readonly readAt: string;
     },
   ): void {
+    this.makeRoom(candidateId, vacancyId);
     this.database
       .prepare(
         `INSERT INTO application_questionnaires
@@ -134,6 +138,27 @@ export class SqliteQuestionnaireRepository {
            read_at = excluded.read_at`,
       )
       .run(candidateId, vacancyId, input.formUrl, JSON.stringify(input.questions), input.readAt);
+  }
+
+  /**
+   * Новая анкета при полном лимите вытесняет старые: сначала без ответов, потом самые давние.
+   * Анкета с ответами кандидата уходит последней.
+   */
+  private makeRoom(candidateId: string, vacancyId: string): void {
+    if (this.get(candidateId, vacancyId)) return;
+    const row = this.database
+      .prepare('SELECT COUNT(*) AS n FROM application_questionnaires WHERE candidate_id = ?')
+      .get(candidateId) as unknown as { n: number };
+    const surplus = Number(row.n) - (QUESTIONNAIRE_MAX_PER_CANDIDATE - 1);
+    if (surplus <= 0) return;
+    this.database
+      .prepare(
+        `DELETE FROM application_questionnaires WHERE candidate_id = ? AND vacancy_id IN (
+           SELECT vacancy_id FROM application_questionnaires WHERE candidate_id = ?
+           ORDER BY (answers_cipher IS NOT NULL), (submitted_at IS NOT NULL), read_at, vacancy_id
+           LIMIT ?)`,
+      )
+      .run(candidateId, candidateId, surplus);
   }
 
   /** false — анкеты у кандидата по этой вакансии нет. */

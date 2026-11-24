@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CoachApiError } from '../../../coach/apiClient';
-import { runHhApplyInSession } from './hhDesktop';
+import type { HhForm } from '../../../../../shared/hhCandidateSession';
+import { runHhApplyInSession, type HhDesktopReport } from './hhDesktop';
 import { desktopFailureCode, refusalText, resultOf, type HhSendResult } from './hhSendModel';
 import { finishHhApply, startHhApply } from './hhSessionApi';
 import { stopHhWindowWatch, watchHhWindow } from './hhWindowWatch';
@@ -21,6 +22,8 @@ export interface HhApplyInput {
   readonly uniqueResumeTitle?: string;
   /** Отклик ушёл (в том числе с анкетой): отклик отмечается отправленным. */
   readonly onSent: () => Promise<void>;
+  /** B641: анкета из окна hh.ru; `open` — отклик без неё не ушёл, нужен шаг «Анкета». */
+  readonly onForm: (form: HhForm, open: boolean) => Promise<void>;
 }
 
 export interface HhApplyControls {
@@ -51,7 +54,7 @@ async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () =>
   }
   // Отказ сервера прежнее чтение окна не обрывает; новая попытка уводит окно на свою вакансию.
   stopHhWindowWatch();
-  const report = await runHhApplyInSession({
+  const report: HhDesktopReport = await runHhApplyInSession({
     vacancyId: input.vacancyId,
     resumeId,
     letter: input.letter,
@@ -60,7 +63,7 @@ async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () =>
     (reason: unknown) => ({ outcome: 'failed' as const, failureCode: desktopFailureCode(reason) }),
   );
   await finishHhApply(attemptId, report.outcome, report.failureCode ?? undefined).catch(() => undefined);
-  const result = resultOf(report.outcome, report.failureCode);
+  const result = resultOf(report.outcome, report.failureCode, report.questionnaire);
   if (result.kind === 'sent' || result.kind === 'questionnaire') await input.onSent().catch(() => undefined);
   else {
     void watchHhWindow({
@@ -70,6 +73,7 @@ async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () =>
       onSent: input.onSent,
     }).then((late) => late && onLateSent());
   }
+  if (report.questionnaire) await input.onForm(report.questionnaire, result.kind === 'form').catch(() => undefined);
   return result;
 }
 

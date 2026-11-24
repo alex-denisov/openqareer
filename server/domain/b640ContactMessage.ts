@@ -78,13 +78,13 @@ const ACQUAINTANCE_RULES = [
 /** Слова поиска работы: английская роль рядом с ними — целевая, а не прошлая должность (B753). */
 const SEEKING = /(ищу|ищем|в поиске|рассматриваю|открыт|интересу|следующ\p{L}* роль|нов\p{L}* роль|на роль|роль уровня|на позици|на должност)/iu;
 
-const roleMention = (role: string) =>
-  new RegExp(`(?<![\\p{L}\\d(])${role.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\d])`, 'iu');
+const wordMention = (phrase: string) =>
+  new RegExp(`(?<![\\p{L}\\d(])${phrase.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\p{L}\\d])`, 'iu');
 
 /** Целевая роль названа по-английски: фраза о поиске работы с английским названием роли. */
 function namesEnglishTargetRole(body: string, englishRoles: readonly string[]): boolean {
   if (englishRoles.length === 0) return false;
-  const patterns = englishRoles.map(roleMention);
+  const patterns = englishRoles.map(wordMention);
   return body
     .split(/(?<=[.!?…])\s+/u)
     .some((sentence) => SEEKING.test(sentence) && patterns.some((pattern) => pattern.test(sentence)));
@@ -114,6 +114,13 @@ function languageLines(facts: ContactMessageFacts): string[] {
   ];
 }
 
+/** B753 (прод 24.11): из карточки Wildberries текст спрашивал о компании из должности знакомого. */
+function onlyCompanyLine(facts: ContactMessageFacts): string {
+  const company = facts.vacancyCompany || facts.recipientCompany;
+  if (facts.kind === 'recruiter' || !company) return '';
+  return `Спрашивай только о компании ${company}; другие места работы получателя не называй и о них не спрашивай.`;
+}
+
 /** Просьба к модели вместо письма работодателю: короткое личное сообщение, без темы и подписи. */
 export function contactMessageWish(facts: ContactMessageFacts): string {
   const lines = [
@@ -127,6 +134,7 @@ export function contactMessageWish(facts: ContactMessageFacts): string {
     facts.vacancyTitle && facts.kind !== 'recruiter'
       ? 'Назови компанию и вакансию; общий вопрос о поиске работы без компании не подходит.'
       : '',
+    onlyCompanyLine(facts),
     // B753 (решение CPO 23.11): без вакансии модель придумывала «открытую вакансию».
     facts.vacancyTitle ? '' : 'Вакансии в запросе нет: не упоминай вакансию; повод — компания получателя и целевая роль кандидата.',
     // B753 (прод 23.11): при «500 знаков» GLM писал 610–760 и уходил в шаблон.
@@ -166,7 +174,7 @@ function digitGroups(text: string): string[] {
 }
 
 export type ModelMessageRejection =
-  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted' | 'mentions_vacancy' | ToneRejection;
+  | 'empty' | 'too_long' | 'new_digits' | 'response_formula' | 'english_role' | 'distorted' | 'mentions_vacancy' | 'other_company' | ToneRejection;
 
 /** B753: условия запроса для проверки — без вакансии и язык черновика. */
 export interface ContactCheckOptions {
@@ -175,6 +183,8 @@ export interface ContactCheckOptions {
   /** Получатель из карточки: с ним проверяем тон (B753); без него проверки тона нет. */
   readonly recipientName?: string;
   readonly relationship?: string | null;
+  /** Прочие работодатели из должности знакомого: в сообщении о своей компании их быть не должно (B753). */
+  readonly otherCompanies?: readonly string[];
 }
 
 const MENTIONS_VACANCY = /(ваканси|vacanc)/iu;
@@ -192,6 +202,7 @@ export function modelMessageRejection(
   if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
   if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
   if (options.withoutVacancy && MENTIONS_VACANCY.test(body)) return 'mentions_vacancy';
+  if ((options.otherCompanies ?? []).some((company) => wordMention(company).test(body))) return 'other_company';
   if (options.language !== 'en' && namesEnglishTargetRole(body, englishRoles)) return 'english_role';
   const tone = options.recipientName
     ? toneRejection(body, { ...options, recipientName: options.recipientName, known: knownText, language: options.language ?? 'ru' })
