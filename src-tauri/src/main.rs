@@ -2,6 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_sign_in;
+mod ats_apply;
+mod ats_attempts;
+mod ats_files;
+mod ats_form_scripts;
+mod ats_target;
 mod automation_worker;
 mod connector_session;
 mod desktop_notify;
@@ -134,6 +139,91 @@ async fn run_hh_apply(
         return Err("forbidden_caller".into());
     }
     hh_apply::run_hh_apply(&app, request).await
+}
+
+/// B787: the employer's application form in a hidden window. Only the cabinet
+/// window may ask; a page inside the form window never can.
+fn cabinet_only(webview: &tauri::Webview) -> Result<(), String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn ats_form_open(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_apply::OpenRequest,
+) -> Result<ats_apply::FormReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::open_form(&app, request).await
+}
+
+#[tauri::command]
+async fn ats_form_fill(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_apply::FillRequest,
+) -> Result<ats_apply::FillReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::fill_form(&app, request).await
+}
+
+/// Presses the form's submit button once, after the candidate's confirmation.
+#[tauri::command]
+async fn ats_form_submit(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_apply::SubmitRequest,
+) -> Result<ats_apply::Receipt, String> {
+    cabinet_only(&webview)?;
+    ats_apply::submit_form(&app, request).await
+}
+
+#[tauri::command]
+async fn ats_form_outcome(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<ats_apply::Receipt, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_form_outcome(&app, &vacancy_id).await
+}
+
+#[tauri::command]
+async fn ats_form_attempt(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<Option<ats_attempts::Attempt>, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_attempt(&app, &vacancy_id)
+}
+
+/// Removes the cookies and files of employer forms when the candidate leaves.
+#[tauri::command]
+async fn ats_form_erase(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::erase_bound_form_store(&app).await
+}
+
+/// Shows the form window; the cabinet calls it only for the candidate's press.
+#[tauri::command]
+async fn ats_form_show(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<bool, String> {
+    cabinet_only(&webview)?;
+    ats_apply::show_form_window(&app, &vacancy_id)
+}
+
+#[tauri::command]
+async fn ats_form_close(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::close_form_window(&app);
+    Ok(())
 }
 
 /// B708: reads whether the candidate finished the response in the open hh.ru window.
@@ -613,6 +703,7 @@ fn main() {
         })
         .manage(app_state)
         .manage(CandidateSessionAccount::default())
+        .manage(ats_apply::AtsFormState::default())
         .manage(connector_session::SessionWindowsOnScreen::default())
         .manage(linkedin_read_guard::LinkedInReadGuardState::default())
         .manage(recording::RecordingState::default())
@@ -625,6 +716,14 @@ fn main() {
             execute_local_action,
             run_hh_apply,
             read_hh_apply_window,
+            ats_form_open,
+            ats_form_fill,
+            ats_form_submit,
+            ats_form_outcome,
+            ats_form_attempt,
+            ats_form_erase,
+            ats_form_show,
+            ats_form_close,
             run_hh_resume_edit,
             run_hh_experience_edit,
             run_hh_raise,

@@ -1,4 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { ApplyTarget } from '../../shared/applyTarget';
+import { applyRedirects } from '../vacancies/applyRedirect';
+import { resolveVacancyApplyTarget } from '../vacancies/vacancyApplyTarget';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { matchCandidateWithVacancy } from '../vacancies/vacancyMatcher';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -11,8 +14,14 @@ import { withMarketSalary } from './matchedVacancyRoutes';
 const BASE = '/api/v1/candidate/b640/vacancies';
 const ID_MAX = 200;
 
+type VacancyCard = MatchedVacancyItem & { readonly applyTarget: ApplyTarget | null };
+
 /** Объяснение совпадения для одной вакансии — тем же сравнением, что и строка подборки. */
-function cardItem(deps: RouteDeps, candidateId: string, clusterId: string): MatchedVacancyItem | undefined {
+function cardItem(
+  deps: RouteDeps,
+  candidateId: string,
+  clusterId: string,
+): VacancyCard | undefined {
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, clusterId);
   if (!cluster) return undefined;
   const context = readB640ListContext(deps, candidateId);
@@ -27,7 +36,12 @@ function cardItem(deps: RouteDeps, candidateId: string, clusterId: string): Matc
     cluster,
   );
   const [item] = withMarketSalary(deps, [{ cluster, explanation }]);
-  return item;
+  return (
+    item && {
+      ...item,
+      applyTarget: resolveVacancyApplyTarget(deps.multiSourceEngine, cluster, applyRedirects.peek),
+    }
+  );
 }
 
 /**
@@ -48,6 +62,27 @@ function getVacancyCard(deps: RouteDeps, request: FastifyRequest, reply: Fastify
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
 }
 
+/** B787: кандидат открыл отклик — адрес трекера раскрывается одним переходом и запоминается. */
+async function postApplyTarget(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  const id = (request.params as { id?: string }).id ?? '';
+  const cluster =
+    id && id.length <= ID_MAX ? resolveRowVacancyCluster(deps.multiSourceEngine, id) : undefined;
+  if (!cluster)
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  const read = () =>
+    resolveVacancyApplyTarget(deps.multiSourceEngine, cluster, applyRedirects.peek);
+  const target = read();
+  if (target?.needsRedirect && (await applyRedirects.resolve(target.url, candidate.id))) {
+    return { data: { applyTarget: read() }, meta: { requestId: request.id } };
+  }
+  return { data: { applyTarget: target }, meta: { requestId: request.id } };
+}
+
 export function registerB640VacancyCardRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  app.post(`${BASE}/:id/apply-target`, withDeps(deps, postApplyTarget));
   app.get(`${BASE}/:id`, withDeps(deps, getVacancyCard));
 }

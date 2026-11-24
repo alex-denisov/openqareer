@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { preferredApplySource } from '../../../../shared/hhVacancySource';
 import { CoachApiError } from '../../coach/apiClient';
+import type { ApplyTarget } from '../../../../shared/applyTarget';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { readCachedMatchedPool } from '../../vacancies/matchedPoolCache';
 import { withDeadline } from '../../vacancies/vacancyRead';
-import { getVacancyCard } from '../vacancies/b640Api';
+import { getVacancyCard, postApplyTarget } from '../vacancies/b640Api';
 
-type Cluster = MatchedVacancyItem['cluster'];
+type Cluster = MatchedVacancyItem['cluster'] & { readonly applyTarget?: ApplyTarget | null };
 
 export type ApplyClusterState =
   | { readonly status: 'loading' | 'failed' }
@@ -26,10 +27,28 @@ function settledByCache(vacancyId: string): ApplyClusterState | null {
   return cluster && preferredApplySource(cluster).hh ? { status: 'ready', cluster } : null;
 }
 
+/** Трекер раскрывается до показа экрана; не раскрылся — остаётся его адрес. */
+async function readTarget(
+  vacancyId: string,
+  item: MatchedVacancyItem,
+): Promise<ApplyTarget | null> {
+  const known = item.applyTarget ?? null;
+  if (!known?.needsRedirect) return known;
+  try {
+    return (await withDeadline((signal) => postApplyTarget(vacancyId, signal))) ?? known;
+  } catch {
+    return known;
+  }
+}
+
 async function readCluster(vacancyId: string): Promise<ApplyClusterState> {
   try {
     const item = await withDeadline((signal) => getVacancyCard(vacancyId, signal));
-    return { status: 'ready', cluster: item.cluster };
+    const applyTarget = await readTarget(vacancyId, item);
+    return {
+      status: 'ready',
+      cluster: applyTarget ? { ...item.cluster, applyTarget } : item.cluster,
+    };
   } catch (reason) {
     const gone = reason instanceof CoachApiError && GONE_CODES.has(reason.code);
     return gone ? { status: 'ready', cluster: cachedCluster(vacancyId) } : { status: 'failed' };

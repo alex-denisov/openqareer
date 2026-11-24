@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { eraseAtsForms } from '../apply/ats/atsDesktop';
 import { Dialog } from '../kit/Dialog';
 import { Icon } from '../kit/Icon';
 import { requestAccountDeletion, restoreAccount, type AccountDeletion } from './accountDeletionApi';
@@ -76,7 +77,13 @@ function useAccountDeletion(initial: AccountDeletion | null) {
       setAsking(true);
     },
     close: () => setAsking(false),
-    remove: () => void act(requestAccountDeletion),
+    remove: () =>
+      void act(async () => {
+        const requested = await requestAccountDeletion();
+        // Сбой стирания запрос не отменяет: при выходе приложение сотрёт формы ещё раз.
+        await eraseAtsForms().catch(() => null);
+        return requested;
+      }),
     restore: () =>
       void act(async () => {
         await restoreAccount();

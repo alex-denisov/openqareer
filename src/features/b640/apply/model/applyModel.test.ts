@@ -227,6 +227,39 @@ describe('B657: текст абзацами', () => {
   });
 });
 
+describe('B787: цель отклика называет канал и адрес', () => {
+  const target = {
+    channel: 'ashby',
+    url: 'https://jobs.ashbyhq.com/a/1',
+    formUrl: 'x',
+    origin: 'cluster',
+  } as const;
+  const cluster = {
+    primaryUrl: 'https://www.indeed.com/1',
+    sources: [{ sourceName: 'Indeed' }],
+    canonicalTitle: 'Т',
+    canonicalCompany: 'К',
+  };
+  const head = (applyTarget: object) =>
+    buildHead({ application: null, cluster: { ...cluster, applyTarget: applyTarget as never } });
+
+  it('ATS работодателя вместо агрегатора, сайт — «сайт компании», почта не меняет площадку', () => {
+    expect(head(target)).toMatchObject({ url: target.url, source: 'Ashby' });
+    expect(head({ ...target, channel: 'site' })).toMatchObject({ source: 'сайт компании' });
+    expect(head({ ...target, channel: 'email', url: cluster.primaryUrl })).toMatchObject({
+      source: 'Indeed',
+      url: cluster.primaryUrl,
+    });
+  });
+  it('нераскрытый трекер и чужая схема адреса — прежняя площадка', () => {
+    expect(head({ ...target, needsRedirect: true })).toMatchObject({
+      source: 'Indeed',
+      url: cluster.primaryUrl,
+    });
+    expect(head({ ...target, url: 'javascript:1' })).toMatchObject({ url: cluster.primaryUrl });
+  });
+});
+
 describe('stepOpening (B678)', () => {
   it('шаг ждёт одобрение и анкету, а не показывает чужой кадр', () => {
     const opening = (step: ApplyStep, approvalPending: boolean, formLoading: boolean) =>
