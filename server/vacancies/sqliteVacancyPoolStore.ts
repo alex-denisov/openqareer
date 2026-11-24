@@ -13,7 +13,11 @@ import {
   type PruneLimits,
   type PruneReport,
 } from './poolPruneBatches';
-import { CATALOG_LISTINGS_TABLE, CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import {
+  CATALOG_ENTRIES_TOTAL_TABLE,
+  CATALOG_LISTINGS_TABLE,
+  CATALOG_TOTALS_TABLE,
+} from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
@@ -114,6 +118,8 @@ import { mapYielding } from './mapYielding';
 
 const CATALOG_TOTALS_SLICE_ROWS = 20_000;
 const CATALOG_ACTIVE_CLUSTERS_SQL = `SELECT coalesce(sum(json_extract(cluster_json, '$.status') = 'active'), 0) AS active FROM vacancy_clusters`;
+const PUBLIC_CATALOG_ENTRY = "status = 'active' AND path <> ''";
+const CATALOG_ENTRIES_TOTAL_SQL = `SELECT count(*) AS n FROM catalog_entries WHERE ${PUBLIC_CATALOG_ENTRY}`;
 const CATALOG_LISTINGS_SQL = `SELECT place_slug, max(place_label) AS place_label,
                 NULL AS role_slug, NULL AS role_label, NULL AS role_title,
                 count(*) AS count
@@ -184,7 +190,6 @@ interface CatalogEntrySqlRow {
   published_ms: number;
   last_seen_ms: number;
 }
-
 
 /** 03.11: a sibling process holding an older reading ledger never overwrites a newer one. */
 const OBSERVATIONS_NEWER_WINS = `CASE
@@ -465,7 +470,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
-    this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
+    this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE + CATALOG_ENTRIES_TOTAL_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES + CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
@@ -3050,15 +3055,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     // B641 10.11: на проде первая порция держала цикл до 4,9 с, а свод мест в
     // конце — ещё ~2 с. На файловой базе оба чтения идут в своём потоке.
     if (this.database.location() && options.sliceRows === undefined) {
-      const [activeRows, listingRows] = await Promise.all([
+      const [activeRows, listingRows, entryRows] = await Promise.all([
         readInWorker<{ active: number }>(this.database, CATALOG_ACTIVE_CLUSTERS_SQL),
         readInWorker<CatalogListingRow>(this.database, CATALOG_LISTINGS_SQL),
+        readInWorker<{ n: number }>(this.database, CATALOG_ENTRIES_TOTAL_SQL),
       ]);
       return this.writeCatalogTotals(
         activeRows[0]?.active ?? 0,
         observedAt,
         computedAt,
         listingRows.map(listingSummaryOf),
+        entryRows[0]?.n ?? 0,
       );
     }
     const slice = this.database.prepare(
@@ -3089,6 +3096,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     observedAt: string,
     computedAt: string,
     listings: CatalogListingSummary[] = this.countCatalogListings(),
+    entriesTotal: number = this.countCatalogEntries(PUBLIC_CATALOG_ENTRY, []),
   ): CatalogTotalsRow {
     this.database
       .prepare(
@@ -3105,6 +3113,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            computed_at = excluded.computed_at`,
       )
       .run(JSON.stringify(listings), computedAt);
+    this.database
+      .prepare(
+        `INSERT INTO catalog_entries_total (id, total, computed_at) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET total = excluded.total,
+           computed_at = excluded.computed_at`,
+      )
+      .run(entriesTotal, computedAt);
     return { clusters, updatedAt: observedAt, computedAt };
   }
 
@@ -3115,6 +3130,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return row
       ? { clusters: row.catalog_total, updatedAt: row.observed_at, computedAt: row.computed_at }
       : undefined;
+  }
+
+  readCatalogEntriesTotal(): number | undefined {
+    const row = this.database
+      .prepare('SELECT total FROM catalog_entries_total WHERE id = 1')
+      .get() as { total: number } | undefined;
+    return row?.total;
   }
 
   private catalogEntryFromRow(row: CatalogEntrySqlRow): CatalogEntryRow {
@@ -3152,7 +3174,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
-  /** Walks every active row (`path <> ''` is in no index): ~1.4 s on prod; the engine passes a cached total for big groups. */
+  /** Walks every active row of the group: ~1.4 s on prod for the whole catalog; the engine passes a stored total. */
   private countCatalogEntries(condition: string, params: readonly SQLInputValue[]): number {
     return (
       this.database
@@ -3163,7 +3185,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
     const limit = Math.max(1, Math.min(Math.trunc(query.limit), 50_000));
-    const where = ["status = 'active'", "path <> ''"];
+    const where = [PUBLIC_CATALOG_ENTRY];
     const filterParams: SQLInputValue[] = [];
     if (query.place) {
       where.push('place_slug = ?');
@@ -3178,7 +3200,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const pageWhere = [...where];
     const pageParams = [...filterParams];
     if (query.after) {
-      pageWhere.push('(published_ms < ? OR (published_ms = ? AND entry_key > ?))');
+      // B776: the bound is spelled out so the index seeks; a bare OR of distinct
+      // parameters is no range, and the read walked every row above the cursor.
+      pageWhere.push('published_ms <= ? AND (published_ms < ? OR entry_key > ?)');
       pageParams.push(query.after.publishedMs, query.after.publishedMs, query.after.key);
     }
     pageParams.push(limit + 1);

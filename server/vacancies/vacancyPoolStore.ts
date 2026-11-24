@@ -223,6 +223,8 @@ export interface VacancyPoolStore {
   recomputeCatalogTotalsInSlices?(observedAt: string): Promise<CatalogTotalsRow>;
   /** B485: одна строка итогов по ключу; HTTP-путь, без vacancy_clusters. */
   readCatalogTotals?(): CatalogTotalsRow | undefined;
+  /** B776: entries of the public catalog, one row by key; undefined until maintenance wrote it. */
+  readCatalogEntriesTotal?(): number | undefined;
   /**
    * Сведение по ключам (B230): соседи партии из `vacancy_cluster_keys`,
    * резюмируемое заполнение ключей по старым кластерам и его готовность.
