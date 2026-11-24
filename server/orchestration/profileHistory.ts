@@ -60,24 +60,33 @@ export interface ProfileHistoryItem {
   readonly revertedAt: string | null;
 }
 
+/** Источник правки для отбора на p10: кандидат или консультант. */
+export const PROFILE_HISTORY_SOURCES = ['candidate', 'consultant'] as const;
+export type ProfileHistorySource = (typeof PROFILE_HISTORY_SOURCES)[number];
+
 export interface ProfileHistoryPage {
   readonly entries: readonly ProfileHistoryItem[];
   readonly total: number;
   readonly page: number;
   readonly pageSize: number;
+  /** Счёт правок по источникам, без учёта отбора. */
+  readonly sources: Readonly<Record<'all' | ProfileHistorySource, number>>;
 }
 
 export function listProfileHistory(
   store: CandidateStore,
   candidateId: string,
   page: number,
+  source?: ProfileHistorySource,
 ): ProfileHistoryPage {
-  const legacy = [
+  const allLegacy = [
     ...legacyRevisionItems(store, candidateId),
     ...legacyRewriteItems(store, candidateId, store.getSnapshot(candidateId)),
   ];
+  // Правки до журнала сделаны консультантом.
+  const legacy = source === 'candidate' ? [] : allLegacy;
   const window = (page + 1) * PROFILE_HISTORY_PAGE_SIZE;
-  const { entries, total } = store.profileChangeLog.list(candidateId, 0, window);
+  const { entries, total } = store.profileChangeLog.list(candidateId, 0, window, source);
   const merged = [...entries.map(toHistoryItem), ...legacy]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(page * PROFILE_HISTORY_PAGE_SIZE, window);
@@ -86,6 +95,11 @@ export function listProfileHistory(
     total: total + legacy.length,
     page,
     pageSize: PROFILE_HISTORY_PAGE_SIZE,
+    sources: {
+      all: store.profileChangeLog.count(candidateId) + allLegacy.length,
+      candidate: store.profileChangeLog.count(candidateId, 'candidate'),
+      consultant: store.profileChangeLog.count(candidateId, 'consultant') + allLegacy.length,
+    },
   };
 }
 

@@ -1,10 +1,34 @@
 import { pluralRu } from '../../../../shared/pluralRu';
-import type { ProfileHistoryItem } from '../../resume/profileHistoryApi';
+import type {
+  ProfileHistoryItem,
+  ProfileHistorySource,
+  ProfileHistorySources,
+} from '../../resume/profileHistoryApi';
 
 export function historyHeading(total: number): string {
   return total > 0
     ? pluralRu(total, ['правка профиля', 'правки профиля', 'правок профиля'])
     : 'Правок пока нет';
+}
+
+export interface SourceChip {
+  readonly source: ProfileHistorySource | undefined;
+  readonly label: string;
+}
+
+/** Чипы источника с правками; чипа «Из LinkedIn» нет: журнал не различает импорт LinkedIn, hh и файла. */
+export function sourceChips(sources: ProfileHistorySources | undefined): SourceChip[] {
+  if (!sources) return [];
+  const chips: Array<readonly [ProfileHistorySource, string]> = [
+    ['candidate', 'С ваших слов'],
+    ['consultant', 'Консультант'],
+  ];
+  return [
+    { source: undefined, label: `Все · ${sources.all}` },
+    ...chips
+      .filter(([source]) => sources[source] > 0)
+      .map(([source, name]) => ({ source, label: `${name} · ${sources[source]}` })),
+  ];
 }
 
 const SOURCE: Record<ProfileHistoryItem['actor'], string> = {
