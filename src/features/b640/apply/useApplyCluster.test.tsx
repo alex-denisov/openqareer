@@ -6,8 +6,15 @@ import { CoachApiError } from '../../coach/apiClient';
 import { applyRoute } from './model/applyModel';
 import { useApplyCluster } from './useApplyCluster';
 
-const api = vi.hoisted(() => ({ getVacancyCard: vi.fn(), readCachedMatchedPool: vi.fn() }));
-vi.mock('../vacancies/b640Api', () => ({ getVacancyCard: api.getVacancyCard }));
+const api = vi.hoisted(() => ({
+  getVacancyCard: vi.fn(),
+  postApplyTarget: vi.fn(),
+  readCachedMatchedPool: vi.fn(),
+}));
+vi.mock('../vacancies/b640Api', () => ({
+  getVacancyCard: api.getVacancyCard,
+  postApplyTarget: api.postApplyTarget,
+}));
 vi.mock('../../vacancies/matchedPoolCache', () => ({
   readCachedMatchedPool: api.readCachedMatchedPool,
 }));
@@ -75,5 +82,25 @@ describe('useApplyCluster: порядок состояний площадки (B
     const screen = await mount();
     await screen.retry();
     expect(screen.seen).toEqual(['loading', 'failed', 'loading', HH.sourceUrl]);
+  });
+
+  it('B787: трекер раскрыт до показа экрана; не раскрылся — прежняя площадка', async () => {
+    const tracker = {
+      channel: 'site',
+      url: 'https://grnh.se/a',
+      formUrl: 'https://grnh.se/a',
+      origin: 'url',
+      needsRedirect: true,
+    };
+    const final = {
+      channel: 'greenhouse',
+      url: 'https://boards.greenhouse.io/a/jobs/1',
+      formUrl: 'x',
+      origin: 'redirect',
+    };
+    api.getVacancyCard.mockResolvedValue({ ...item([GETMATCH]), applyTarget: tracker });
+    api.postApplyTarget.mockResolvedValueOnce(final).mockRejectedValueOnce(new Error('сеть'));
+    expect((await mount()).seen).toEqual(['loading', final.url]);
+    expect((await mount()).seen).toEqual(['loading', GETMATCH.sourceUrl]);
   });
 });

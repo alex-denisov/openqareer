@@ -93,6 +93,11 @@ export default tseslint.config(
       'scripts/block-*.mjs',
     ],
   },
+  {
+    // Rust substitutes both placeholders before the page evaluates the script.
+    files: ['src-tauri/src/ats_*.js'],
+    languageOptions: { globals: { __OQ_ATS_OP__: 'readonly', __OQ_ATS_ARG__: 'readonly' } },
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

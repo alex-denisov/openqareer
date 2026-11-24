@@ -43,6 +43,30 @@ describe('B715: GET b640/vacancies/:id — карточка вакансии в�
     expect((await h.get(`${BASE}/cluster-src-hh-search:99999999`, 'flagged.test')).statusCode).toBe(404);
     expect((await h.get(`${BASE}/cluster-src-hh-search:44444444`, 'flagged.test')).statusCode).toBe(410);
   });
+  it('B787: цель отклика — в карточке и по POST; чужому и без флага — 404', async () => {
+    const h = await setup();
+    const path = `${BASE}/${encodeURIComponent('cluster-src-hh-search:139180469')}`;
+    const target = {
+      channel: 'hh',
+      url: 'https://hh.ru/vacancy/139180469',
+      formUrl: 'https://hh.ru/vacancy/139180469',
+      origin: 'url',
+    };
+    expect((await h.get(path, 'flagged.test')).json().data.applyTarget).toEqual(target);
+    const post = await h.post(`${path}/apply-target`, {}, 'flagged.test');
+    expect(post.json().data.applyTarget).toEqual(target);
+    const foreign = await h.app.inject({
+      method: 'POST',
+      url: `${path}/apply-target`,
+      headers: { cookie: `openqareer_session=${h.tokens['flagged.test']}`, origin: 'https://evil.example' },
+    });
+    expect(foreign.statusCode).toBe(403);
+    expect((await h.post(`${path}/apply-target`, {}, 'plain.test')).statusCode).toBe(404);
+    expect(
+      (await h.post(`${BASE}/cluster-src-hh-search:99999999/apply-target`, {}, 'flagged.test'))
+        .statusCode,
+    ).toBe(404);
+  });
   it('без сессии и без флага — 404', async () => {
     const h = await setup();
     expect((await h.get(`${BASE}/cluster-src-hh-search:139180469`)).statusCode).toBe(404);

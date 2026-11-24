@@ -1,0 +1,97 @@
+/** B787: форма работодателя, как её прочитало настольное приложение (src-tauri/src/ats_form.js). */
+export type AtsFieldKind =
+  | 'text'
+  | 'textarea'
+  | 'email'
+  | 'tel'
+  | 'url'
+  | 'number'
+  | 'date'
+  | 'password'
+  | 'select'
+  | 'combobox'
+  | 'radio'
+  | 'checkbox'
+  | 'file';
+
+export interface AtsOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+export interface AtsField {
+  readonly key: string;
+  readonly label: string;
+  readonly kind: AtsFieldKind;
+  readonly role: string | null;
+  readonly required: boolean;
+  readonly options: readonly AtsOption[];
+  readonly accept: string | null;
+  /** Ссылка из подписи галочки: обычно политика работодателя. */
+  readonly link: string | null;
+}
+
+export type AtsFormState =
+  'ready' | 'account_required' | 'form_missing' | 'captcha' | 'off_target' | 'unreadable';
+
+export interface AtsFormReport {
+  readonly state: AtsFormState;
+  readonly adapter: string;
+  readonly host: string;
+  readonly form: { readonly fields?: readonly AtsField[]; readonly submitLabel?: string };
+}
+
+export interface AtsFile {
+  readonly name: string;
+  readonly type: string;
+  readonly base64: string;
+}
+
+export interface AtsEntry {
+  readonly key: string;
+  readonly value: string;
+  readonly file?: AtsFile;
+}
+
+export interface AtsFillReport {
+  readonly results: Readonly<Record<string, string>>;
+  readonly values: Readonly<Record<string, string>>;
+}
+
+export type AtsOutcome = 'confirmed' | 'unconfirmed' | 'rejected' | 'captcha' | 'not_submitted';
+
+/** Почему кнопка не нажата: закрытый список приложения, текста страницы в нём нет. */
+export type AtsReason =
+  | 'off_target'
+  | 'not_confirmed'
+  | 'already_submitted'
+  | 'form_not_filled'
+  | 'confirmed_values_differ'
+  | 'form_changed'
+  | 'attempt_unrecorded'
+  | 'captcha'
+  | 'submit_ambiguous'
+  | 'submit_disabled'
+  | 'form_missing'
+  | 'press_unknown';
+
+/** Попытка отправки на диске приложения: переживает перезапуск; `null` в итоге — он не узнан. */
+export interface AtsAttempt {
+  readonly id: string;
+  readonly vacancyId: string;
+  readonly entryUrl: string;
+  readonly startedAtMs: number;
+  readonly consentIds: readonly string[];
+  readonly result: 'sent' | 'failed' | 'unconfirmed' | null;
+}
+
+/** Квитанция: что нажато, когда и что ответила доска. Значений полей в ней нет. */
+export interface AtsReceipt {
+  readonly outcome: AtsOutcome;
+  readonly reason: AtsReason | null;
+  readonly host: string;
+  readonly path: string;
+  readonly pressedAtMs: number | null;
+  readonly fieldKeys: readonly string[];
+  readonly invalidKeys: readonly string[];
+}

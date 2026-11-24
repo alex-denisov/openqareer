@@ -6,12 +6,16 @@ import {
   VARIANT_WISH_CHIPS,
   VARIANT_WISH_MAX_LENGTH,
   type LetterVariantPayload,
+  type TextVariantList,
 } from '../../shared/textVariants';
 import {
   SqliteTextVariantRepository,
   type TextSubject,
 } from '../candidate/sqliteTextVariantRepository';
 import { normalizeWish, wishInstruction } from '../domain/textVariants';
+import { letterFactSource } from '../domain/letterFreshness';
+import { unbackedLetterNumbers } from '../domain/letterModelGate';
+import { letterVacancyTexts } from './letterDraftRoutes';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -79,6 +83,20 @@ function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyRep
   return principal.candidate.id;
 }
 
+/** Вариант письма с числом, которое профиль больше не подтверждает, не предлагается. */
+function currentVariants(deps: BoundDeps, subject: TextSubject): TextVariantList {
+  const list = deps.variants.list(subject);
+  if (subject.kind !== 'letter' || list.variants.length === 0) return list;
+  const { lines } = letterFactSource(deps.candidateStore.getSnapshot(subject.candidateId));
+  const vacancy = letterVacancyTexts(deps, subject.subjectId);
+  return {
+    ...list,
+    variants: list.variants.filter(
+      (variant) => unbackedLetterNumbers(variant.text, lines, vacancy).length === 0,
+    ),
+  };
+}
+
 const listVariants: Handler = async (deps, request, reply) => {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
@@ -87,7 +105,7 @@ const listVariants: Handler = async (deps, request, reply) => {
     return sendError(reply, request, 400, 'invalid_variant_subject', 'Проверьте текст.', false);
   }
   return {
-    data: deps.variants.list({ candidateId, ...parsed.data }),
+    data: currentVariants(deps, { candidateId, ...parsed.data }),
     meta: { requestId: request.id },
   };
 };
@@ -202,7 +220,7 @@ async function writeLetterVariant(
   });
   if (!variant) return limitReached(reply, request);
   return reply.code(201).send({
-    data: { variant, ...deps.variants.list(subject) },
+    data: { variant, ...currentVariants(deps, subject) },
     meta: { requestId: request.id },
   });
 }

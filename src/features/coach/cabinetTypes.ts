@@ -235,4 +235,6 @@ interface VacancyMatchExplanation {
 export interface MatchedVacancyItem {
   cluster: VacancyCluster;
   explanation: VacancyMatchExplanation;
+  /** Конечная цель отклика (B787): приходит в ответе одной вакансии. */
+  applyTarget?: import('../../../shared/applyTarget').ApplyTarget | null;
 }

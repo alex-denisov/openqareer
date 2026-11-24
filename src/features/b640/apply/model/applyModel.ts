@@ -1,4 +1,8 @@
 import {
+  APPLY_CHANNEL_LABELS,
+  type ApplyTarget as ApplyDestination,
+} from '../../../../../shared/applyTarget';
+import {
   isHhSource,
   preferredApplySource,
   type VacancySourceRef,
@@ -74,6 +78,8 @@ interface HeadSources {
     readonly canonicalCompany: string;
     readonly primaryUrl: string;
     readonly sources: readonly VacancySourceRef[];
+    /** Конечная цель отклика (B787). */
+    readonly applyTarget?: ApplyDestination | null;
   } | null;
 }
 
@@ -98,6 +104,18 @@ export function needsPoolRoute(application: ApplicationView | null): boolean {
 }
 
 /**
+ * Название и адрес цели отклика (B787). У площадки вакансий и почты название остаётся прежним:
+ * кандидат знает, где нашёл вакансию; трекер до раскрытия — тоже.
+ */
+function targetRoute(target: ApplyDestination | null | undefined, poolSource: string | undefined) {
+  const url = safeUrl(target?.url);
+  if (!target || !url || target.needsRedirect) return null;
+  const { channel } = target;
+  if (channel === 'board' || channel === 'email') return { source: poolSource, url };
+  return { source: channel === 'site' ? 'manual' : APPLY_CHANNEL_LABELS[channel], url };
+}
+
+/**
  * Площадка отклика и её адрес (B678): hh.ru первым, как на карточке вакансии. Снимок отклика
  * главнее подборки; на hh.ru переходит только неотправленный со снимком другой площадки.
  */
@@ -113,6 +131,10 @@ export function applyRoute({
   if (pool?.hh && safeUrl(pool.url) && needsPoolRoute(application)) {
     return { source: pool.source, url: pool.url };
   }
+  const target = needsPoolRoute(application)
+    ? targetRoute(cluster?.applyTarget, snapshot?.source || pool?.source)
+    : null;
+  if (target) return target;
   return {
     source: snapshot?.source || pool?.source,
     url: safeUrl(snapshot?.url) ?? safeUrl(pool?.url),

@@ -43,3 +43,19 @@ describe('B716: одобренное письмо открывается сво�
     expect(text).toContain('К отправке');
   });
 });
+
+describe('письмо, чьи факты изменились', () => {
+  it('состояние на месте и пересборка вместо «К отправке», текст не правится', () => {
+    const base = letterOf({});
+    const rebuild = vi.fn();
+    const letter = { ...base, approval: { ...base.approval, saved: null, stale: true, rebuild } };
+    view = mount(<LetterStep letter={letter} variants={variants} head={head} onSend={vi.fn()} />);
+    const text = view.container.textContent ?? '';
+    expect(text).toContain('Факты профиля изменились');
+    expect(text).not.toContain('К отправке');
+    expect(text).not.toContain('Одобрить');
+    expect(view.container.querySelector<HTMLTextAreaElement>('textarea.ap-letter')?.readOnly).toBe(true);
+    [...view.container.querySelectorAll('button')].find((b) => b.textContent?.includes('Пересобрать письмо'))!.click();
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+});
