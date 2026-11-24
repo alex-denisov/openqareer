@@ -87,13 +87,24 @@ function declaredCandidateTables(): string[] {
     (file) => file.endsWith('.ts') && !file.includes('.test.'),
   );
   const tables = new Set<string>();
+  const declared = new Map<string, string>();
   for (const file of files) {
     const statements = readFileSync(join(SERVER, file), 'utf8').split(
       /(?=CREATE\s+(?:VIRTUAL\s+)?(?:TABLE|INDEX|UNIQUE|TRIGGER|VIEW))/i,
     );
     for (const statement of statements) {
       const table = /^CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)/i.exec(statement)?.[1];
-      if (table && /candidate_id|REFERENCES\s+(?:candidates|users|applications)\b/i.test(statement)) tables.add(table);
+      if (!table) continue;
+      declared.set(table, statement);
+      if (/candidate_id|REFERENCES\s+(?:candidates|users|applications)\b/i.test(statement)) tables.add(table);
+    }
+  }
+  // Таблицы, которые висят на таблице кандидата (сегменты и голоса записи), а не на нём самом.
+  for (let before = -1; before !== tables.size; ) {
+    before = tables.size;
+    for (const [table, statement] of declared) {
+      const parents = [...statement.matchAll(/REFERENCES\s+["`]?(\w+)/gi)].map((match) => match[1]);
+      if (parents.some((parent) => tables.has(parent))) tables.add(table);
     }
   }
   return [...tables];

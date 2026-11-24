@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { AddLink } from './AddLink';
 import { Button, Icon, InfoTip, StatusLine } from '../kit';
 import {
   auditProgress,
@@ -68,6 +69,7 @@ function SearchFields({ groups, selected, onToggle }: FieldsProps) {
           <label htmlFor={`fp-q-${index}`}>{group.label}</label>
         </div>
       ))}
+      <AddLink />
     </div>
   );
 }
@@ -79,10 +81,26 @@ function toggled(set: ReadonlySet<string>, key: string): ReadonlySet<string> {
   return next;
 }
 
+/** Отмеченные данные; добавленные сразу отмечены, снятые кандидатом не возвращаются (B668). */
+function useSelection(data: FootprintData, groups: readonly PlanGroup[]) {
+  const [selected, setSelected] = useState(() => defaultSelection(data.plan));
+  const [known, setKnown] = useState<ReadonlySet<string>>(
+    () => new Set(groups.map((group) => group.key)),
+  );
+  useEffect(() => {
+    const added = groups.filter((group) => !known.has(group.key)).map((group) => group.key);
+    if (added.length === 0) return;
+    const byDefault = defaultSelection(data.plan);
+    setKnown((keys) => new Set([...keys, ...added]));
+    setSelected((keys) => new Set([...keys, ...added.filter((key) => byDefault.has(key))]));
+  }, [groups, known, data.plan]);
+  return [selected, setSelected] as const;
+}
+
 /** F1: что ищем, согласие и «Начать поиск». Без галочки согласия кнопка недоступна (F1б). */
 export function StartPanel({ data, onStarted }: StartPanelProps) {
   const groups = useMemo(() => planGroups(data.plan), [data.plan]);
-  const [selected, setSelected] = useState(() => defaultSelection(data.plan));
+  const [selected, setSelected] = useSelection(data, groups);
   const [editing, setEditing] = useState(false);
   const [agreed, setAgreed] = useState(data.consentGranted);
   const search = useStartSearch(data, onStarted);

@@ -374,6 +374,38 @@ describe('vacancy-skips route · one transaction that shifts a saved card to arc
     expect(skips.json().data).toHaveLength(1);
   });
 
+  it('B654: отмена скрытия возвращает карточку в «Сохранённые»; снятую звезду не возвращает', async () => {
+    const { app, authorization } = await createApp();
+    const headers = { authorization, ...ORIGIN };
+    const skipUrl = '/api/v1/candidate/vacancy-skips';
+    const id = await createCard(app, authorization, 'cluster-1', 'saved');
+    const read = async () => {
+      const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+      return list.json().data.find((a: { id: string }) => a.id === id);
+    };
+    const hide = async (reasonId: string) => {
+      const payload = { clusterId: 'cluster-1', reasonId, origin: 'vacancy_card' };
+      expect((await app.inject({ method: 'POST', url: skipUrl, headers, payload })).statusCode).toBe(200);
+    };
+    const undo = async () =>
+      expect((await app.inject({ method: 'DELETE', url: `${skipUrl}/cluster-1`, headers })).statusCode).toBe(204);
+
+    await hide('company');
+    await hide('stale'); // причину сменили — карточка всё равно возвращается
+    await undo();
+    expect(await read()).toMatchObject({ stage: 'saved', closedReason: null, archivePreviousStage: null });
+
+    const { version } = await read();
+    const unstar = await app.inject({
+      method: 'PATCH', url: `${APPLICATIONS_URL}/${id}`, headers,
+      payload: { expectedVersion: version, stage: 'archived' },
+    });
+    expect(unstar.statusCode).toBe(200);
+    await hide('company');
+    await undo();
+    expect((await read()).stage).toBe('archived');
+  });
+
   it('deletes a skip', async () => {
     const { app, authorization } = await createApp();
     await app.inject({

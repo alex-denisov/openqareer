@@ -1,3 +1,4 @@
+import { registerFootprintAddedLinkRoute } from './footprintAddedLinkRoute';
 import { registerFootprintRemovalRoutes } from './footprintRemovalRoutes';
 import { registerFootprintRiskRoutes } from './footprintRiskRoutes';
 import { cabinetB640Enabled } from './cabinetB640Flag';
@@ -370,4 +371,5 @@ export function registerCandidateFootprintRoutes(app: FastifyInstance, deps: Rou
   // B667: сводка по категориям риска; свой маршрут закрыт флагом B640.
   registerFootprintRiskRoutes(app, deps);
   registerFootprintRemovalRoutes(app, deps);
+  registerFootprintAddedLinkRoute(app, deps);
 }

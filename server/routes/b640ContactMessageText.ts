@@ -10,6 +10,7 @@ import {
   type ContactMessageFacts,
 } from '../domain/b640ContactMessage';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
+import { headlineEmployers, shortRoleTitle } from '../domain/contactDisplay';
 import { englishFallbackMessage } from '../domain/contactMessageStyle';
 import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
@@ -162,9 +163,16 @@ function messageFacts(input: TextInput, context: MessageContext): ContactMessage
     ...(roles.named.length > 0 ? { targetRoles: roles.named } : {}),
     ...(vacancy ? { vacancyTitle: vacancy.title, vacancyCompany: vacancy.company } : {}),
     ...(input.recipient.relationship ? { relationship: input.recipient.relationship } : {}),
-    ...(input.recipient.role ? { recipientRole: input.recipient.role } : {}),
+    ...(input.recipient.role ? { recipientRole: shortRoleTitle(input.recipient.role) } : {}),
     ...(also && also.title !== vacancy?.title ? { alsoVacancyTitle: also.title } : {}),
   };
+}
+
+/** B753: компании из должности знакомого, кроме той, о которой сообщение. Рекрутёру не нужны. */
+function otherCompanies(input: TextInput, vacancy: MessageVacancy | null): string[] {
+  if (input.kind === 'recruiter') return [];
+  const own = candidateCompanyKey(vacancy?.company || input.recipient.company);
+  return headlineEmployers(input.recipient.role ?? '').filter((name) => candidateCompanyKey(name) !== own);
 }
 
 /** B753: язык черновика по контакту и вакансии; английскому черновику — английский шаблон. */
@@ -220,7 +228,7 @@ async function writeMessage(
   const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
   if (!writer || !profile.trim()) return { model: null, fallback };
   const known = [
-    profile, roles.targetRole, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
+    profile, roles.targetRole, input.recipient.name, input.recipient.company, message.recipientRole ?? '',
     vacancy?.title ?? '', vacancy?.company ?? '', also?.title ?? '', draft.targetRole ?? '',
   ].join('\n');
   try {
@@ -235,6 +243,7 @@ async function writeMessage(
     };
     const options: ContactCheckOptions = {
       withoutVacancy: !vacancy, language, recipientName: input.recipient.name, relationship: input.recipient.relationship,
+      otherCompanies: otherCompanies(input, vacancy),
     };
     const check: ContactCheck = { known, kind: input.kind, englishRoles: roles.english, options };
     return { model: await askContactModel(writer, request, ask, check), fallback };

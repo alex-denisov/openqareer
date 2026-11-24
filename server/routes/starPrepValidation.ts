@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 const STAR_FIELDS = ['situation', 'task', 'action', 'result'] as const;
 
-/** Абзац ответа: текст кандидата и обязательная ссылка на факт-источник. */
+/** Абзац ответа: факт-источник обязателен; `null` — кандидат написал ответ сам (B659). */
 const paragraphSchema = z.object({
   questionId: z.string().trim().min(1).max(120),
   field: z.enum(STAR_FIELDS),
   text: z.string().trim().min(1).max(2_000),
-  sourceFactId: z.string().trim().min(1, 'У абзаца нет факта-источника').max(160),
+  sourceFactId: z.string().trim().min(1, 'У абзаца нет факта-источника').max(160).nullable(),
 });
 
 export const putStarPrepSchema = z

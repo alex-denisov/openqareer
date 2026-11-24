@@ -17,6 +17,8 @@ const PROFILE_PATH = /^\/in\/([^/?#]+)\/?$/u;
 const NOISE_LINE = /^(сообщение|message|связь установлена|connected on|фото|photo|ещё|more)\b/iu;
 // "Role at Company", "Role в Company", "Role @ Company"; the last separator wins.
 const COMPANY_SEPARATOR = /\s+(?:at|в|во|@)\s+/giu;
+// «… | ex Product at Wildberries»: прошлое место — не компания контакта (B753).
+const PAST_SEGMENT = /(?:^|[|·•,(;])\s*(?:ex|former|formerly|экс|бывш\p{L}*)(?!\p{L})[^|·•,;]*$/iu;
 const HEADLINE_TAIL = /\s*[|·•,]\s*/u;
 
 export function extractLinkedInConnections(html: string): LinkedInConnection[] {
@@ -37,7 +39,9 @@ export function extractLinkedInConnections(html: string): LinkedInConnection[] {
 export function companyFromHeadline(
   headline: string,
 ): { readonly roleTitle: string; readonly companyName: string } | null {
-  const separators = Array.from(headline.matchAll(COMPANY_SEPARATOR));
+  const separators = Array.from(headline.matchAll(COMPANY_SEPARATOR)).filter(
+    (separator) => !PAST_SEGMENT.test(headline.slice(0, separator.index)),
+  );
   const last = separators.at(-1);
   if (!last || last.index === undefined) return null;
   const roleTitle = headline.slice(0, last.index).trim();
