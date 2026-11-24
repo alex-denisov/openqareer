@@ -612,12 +612,13 @@ pub fn bind_candidate_account(app: &AppHandle, key: Option<String>) -> Result<bo
     if *current != key {
         close_session_window(app, "linkedin");
         close_session_window(app, "hh");
+        crate::ats_apply::close_form_window(app);
         *current = key;
     }
     Ok(current.is_some())
 }
 
-fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
+pub(crate) fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
     let key = app
         .state::<CandidateSessionAccount>()
         .0
