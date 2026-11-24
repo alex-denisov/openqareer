@@ -293,7 +293,7 @@ describe('B753: сокращение и роли по-русски', () => {
 
 describe('B698: черновик из карточки компании — о самой компании', () => {
   const TITLES: Record<string, string> = { c1: 'Директор по данным', c2: 'Руководитель отдела AI-трансформации аналитики' };
-  async function companySetup(modelBody?: string) {
+  async function companySetup(modelBody?: string, roleTitle = 'Head of Data') {
     const writer = stubWriter(modelBody);
     const h = await createB640Harness({
       pool: () => [poolItem({ id: 'c1', title: TITLES.c1!, company: 'VK' }), poolItem({ id: 'c2', title: TITLES.c2!, company: 'VK' })],
@@ -305,7 +305,7 @@ describe('B698: черновик из карточки компании — о �
       candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline: 'Руководитель аналитики' } }, []);
     const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
     await h.app.inject({ method: 'PUT', url: `${OLD}/alex`, headers,
-      payload: { fullName: 'Alexandr Alexandrov', companyName: 'VK', roleTitle: 'Head of Data', relationship: 'Коллега', strength: 'strong' } });
+      payload: { fullName: 'Alexandr Alexandrov', companyName: 'VK', roleTitle, relationship: 'Коллега', strength: 'strong' } });
     const post = (payload: object) => h.app.inject({ method: 'POST', url: BASE, headers, payload });
     return { writer, post };
   }
@@ -319,6 +319,15 @@ describe('B698: черновик из карточки компании — о �
     for (const part of ['VK', 'Head of Data', TITLES.c1!, TITLES.c2!]) expect(input.wish).toContain(part);
     expect(input.wish).toMatch(/рекоменд|представ/iu);
     expect(input.wish).not.toContain('куда обратиться с поиском');
+  });
+
+  it('B753: в должности другая компания — запрос и текст только о своей; вопрос о чужой не принимается', async () => {
+    const { writer, post } = await companySetup('Alexandr, здравствуйте! Подскажете, кто нанимает в Positive Technologies?', 'CPO @ Positive Technologies | ex Product Lead');
+    const text = (await post({ contactId: 'alex', kind: 'known_contact' })).json().data.text as string;
+    expect(text).not.toContain('Positive');
+    expect(writer.calls[0]!.wish).not.toContain('Positive');
+    expect(writer.calls[0]!.wish).toContain('CPO');
+    expect(writer.calls[0]!.wish).toContain('Спрашивай только о компании VK');
   });
 
   it('модель не ответила — запасной текст тоже про компанию и вакансию', async () => {

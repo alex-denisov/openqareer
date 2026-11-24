@@ -354,6 +354,8 @@ export const coachTurnInputSchema = z.object({
                 .object({
                   title: z.string().max(200),
                   company: z.string().max(200).nullable(),
+                  location: z.string().max(200).nullable(),
+                  format: z.string().max(120).nullable(),
                   salary: z.string().max(120).nullable(),
                   fitPercent: z.number().min(0).max(100).nullable(),
                 })
