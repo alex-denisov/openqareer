@@ -4,6 +4,8 @@ const session = vi.hoisted(() => ({
   inspectSessionPage: vi.fn(),
   isConnectorSessionOpen: vi.fn(),
   openConnectorSession: vi.fn(),
+  parkConnectorSession: vi.fn(async () => true),
+  showConnectorSession: vi.fn(),
   readSessionPage: vi.fn(),
 }));
 vi.mock('../../../connections/connectorSession', () => session);
@@ -13,7 +15,10 @@ vi.mock('../../../../services/desktop/desktopBridge', () => bridge);
 const { applyHhResumeEditInSession, readHhResumeContent, readHhResumes, runHhApplyInSession } = await import('./hhDesktop');
 const { HH_WINDOW_READY_MS } = await import('./hhWindow');
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  session.parkConnectorSession.mockResolvedValue(true);
+});
 
 describe('B704/B708: список резюме hh.ru в приложении', () => {
   const login = {
@@ -55,7 +60,7 @@ describe('B704/B708: список резюме hh.ru в приложении', (
 
   it('капча и неоткрытое окно — сбой, а не «нужен вход»', async () => {
     session.inspectSessionPage.mockResolvedValue({ ...home, captcha: true });
-    await expect(readHhResumes()).rejects.toThrow('hh_resumes_not_read');
+    await expect(readHhResumes()).rejects.toThrow('hh_captcha');
     session.openConnectorSession.mockResolvedValue({ opened: false });
     await expect(readHhResumes()).rejects.toThrow('hh_window_not_opened');
   });

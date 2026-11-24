@@ -1,4 +1,4 @@
-import { hhFormUrl } from '../../../../../shared/hhCandidateSession';
+import { HH_WINDOW_LEFT_OPEN_FAILURES, hhFormUrl } from '../../../../../shared/hhCandidateSession';
 import type { HhApplyOutcome, HhForm, HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
 
 /** Что показывает шаг после попытки отклика: результат на месте, без перехода. */
@@ -8,7 +8,7 @@ export type HhSendResult =
   | { readonly kind: 'signin' }
   /** hh.ru просит анкету до отклика: отклик не ушёл. `url` — страница анкеты, если известна. */
   | { readonly kind: 'form'; readonly url: string | null }
-  | { readonly kind: 'error'; readonly text: string };
+  | { readonly kind: 'error'; readonly text: string; /** hh.ru ждёт кандидата в своём окне. */ readonly inWindow?: boolean };
 
 const FAILURE_TEXT: Readonly<Record<string, string>> = {
   captcha: 'hh.ru просит пройти проверку. Пройдите её в окне hh.ru и отправьте снова.',
@@ -28,6 +28,7 @@ const FAILURE_TEXT: Readonly<Record<string, string>> = {
   apply_running: 'Другой отклик через hh.ru ещё отправляется.',
 };
 
+const LEFT_OPEN: ReadonlySet<string> = new Set(HH_WINDOW_LEFT_OPEN_FAILURES);
 const DEFAULT_FAILURE = 'Отклик не отправлен. Повторите.';
 
 /** Исход отклика из окна hh.ru — в состояние шага. */
@@ -36,7 +37,12 @@ export function resultOf(outcome: HhApplyOutcome, failureCode?: string | null, f
   if (outcome === 'questionnaire') return { kind: 'questionnaire' };
   if (failureCode === 'not_signed_in') return { kind: 'signin' };
   if (failureCode === 'questionnaire_required') return { kind: 'form', url: form ? hhFormUrl(form.url) : null };
-  return { kind: 'error', text: (failureCode && FAILURE_TEXT[failureCode]) || DEFAULT_FAILURE };
+  const inWindow = LEFT_OPEN.has(failureCode ?? '');
+  return {
+    kind: 'error',
+    text: (failureCode && FAILURE_TEXT[failureCode]) || DEFAULT_FAILURE,
+    ...(inWindow ? { inWindow } : {}),
+  };
 }
 
 const plainTitle = (title: string) => title.replace(/\s+/gu, ' ').trim();

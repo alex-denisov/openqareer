@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { showHhCaptcha } from './hhDesktop';
 import type { HhResumeFit } from '../../../../../shared/hhCandidateSession';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
 import { Button, Dialog, InfoTip, StatusLine } from '../../kit';
@@ -85,7 +86,14 @@ interface SheetBodyProps {
 
 function stopLine(picker: HhPicker, onSignIn: () => void) {
   if (picker.kind === 'empty') return <StatusLine state="err" text="На hh.ru у вас нет резюме" />;
-  if (picker.kind === 'error') return <StatusLine state="err" text={picker.text} />;
+  if (picker.kind === 'error') {
+    const open = (
+      <button className="res-act" type="button" onClick={() => void showHhCaptcha()}>
+        Открыть окно hh.ru
+      </button>
+    );
+    return <StatusLine state="err" text={picker.text} action={picker.captcha ? open : undefined} />;
+  }
   const signIn = (
     <button className="res-act" type="button" onClick={onSignIn}>
       Войти в hh.ru

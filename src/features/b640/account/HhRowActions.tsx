@@ -2,13 +2,20 @@ import { useId, useState } from 'react';
 import type { HhResumeItem } from '../../connections/hhSessionPoll';
 import { Button, Dialog, ResultLine, StatusLine } from '../kit';
 import { chooseHhResume, readHhResumeList, refreshHhProfile } from './hhResumeSession';
-import { refreshLinkedInProfile, type LinkedInRefreshOutcome } from './linkedinSession';
+import {
+  refreshLinkedInProfile,
+  showLinkedInWindow,
+  watchLinkedInNeedsPerson,
+  type LinkedInRefreshOutcome,
+} from './linkedinSession';
 import { ErrorLine } from './parts';
 
 export type HhRowState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'reading' }
   | { readonly kind: 'signin' }
+  | { readonly kind: 'person' }
+  | { readonly kind: 'captcha' }
   | { readonly kind: 'empty' }
   | {
       readonly kind: 'choose';
@@ -36,28 +43,49 @@ async function openHhSignIn(): Promise<void> {
   await desktop.openHhSignIn().catch(() => false);
 }
 
+async function showHhCaptcha(): Promise<void> {
+  const desktop = await import('../apply/hh/hhDesktop');
+  await desktop.showHhCaptcha().catch(() => false);
+}
+
 /** Фоновый импорт LinkedIn; сбой без своего текста — общий. */
-function linkedInOutcome(): Promise<LinkedInRefreshOutcome> {
-  return refreshLinkedInProfile().catch(() => ({
-    ok: false,
-    message: 'Профиль из LinkedIn не обновился',
-  }));
+async function linkedInOutcome(
+  onPerson: (needed: boolean) => void,
+): Promise<LinkedInRefreshOutcome> {
+  const stop = await watchLinkedInNeedsPerson(onPerson).catch(() => () => undefined);
+  return refreshLinkedInProfile()
+    .catch(() => ({ ok: false, message: 'Профиль из LinkedIn не обновился' }))
+    .finally(stop);
+}
+
+function outcomeState(outcome: LinkedInRefreshOutcome, retry: () => void): HhRowState {
+  return outcome.ok
+    ? { kind: 'done', text: outcome.message }
+    : { kind: 'error', text: outcome.message, retry };
+}
+
+function failedState(flow: Flow, reason: unknown, retry: () => void): HhRowState {
+  if (reason instanceof Error && reason.message === 'hh_captcha') return { kind: 'captcha' };
+  return { kind: 'error', text: FAILED[flow], retry };
 }
 
 /** «Обновить сейчас» и «Сменить резюме» строки hh.ru (у LinkedIn — только «Обновить сейчас»): итог — строкой под ней. */
 export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linkedin' = 'hh') {
   const [state, setState] = useState<HhRowState>({ kind: 'idle' });
 
+  const close = () => setState({ kind: 'idle' });
+  const leave = (open: () => Promise<void>) => () => {
+    close();
+    void open();
+  };
+
   async function refreshLinkedIn() {
     setState({ kind: 'reading' });
-    const outcome = await linkedInOutcome();
-    if (outcome.ok) onRefreshed();
-    const retry = () => void refreshLinkedIn();
-    setState(
-      outcome.ok
-        ? { kind: 'done', text: outcome.message }
-        : { kind: 'error', text: outcome.message, retry },
+    const outcome = await linkedInOutcome((needed) =>
+      setState({ kind: needed ? 'person' : 'reading' }),
     );
+    if (outcome.ok) onRefreshed();
+    setState(outcomeState(outcome, () => void refreshLinkedIn()));
   }
 
   async function run(flow: Flow) {
@@ -76,8 +104,8 @@ export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linke
       await refreshHhProfile(list.resumes, list.selectedId);
       setState({ kind: 'done', text: 'Профиль обновлён из hh.ru' });
       onRefreshed();
-    } catch {
-      setState({ kind: 'error', text: FAILED[flow], retry: () => void run(flow) });
+    } catch (reason: unknown) {
+      setState(failedState(flow, reason, () => void run(flow)));
     }
   }
 
@@ -92,11 +120,9 @@ export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linke
     refresh: () => void run('refresh'),
     change: () => void run('change'),
     choose,
-    signIn: () => {
-      setState({ kind: 'idle' });
-      void openHhSignIn();
-    },
-    close: () => setState({ kind: 'idle' }),
+    signIn: leave(openHhSignIn),
+    captcha: leave(showHhCaptcha),
+    close,
   };
 }
 
@@ -170,6 +196,22 @@ export function HhRowResult({ actions }: { readonly actions: ReturnType<typeof u
         </button>
       );
       return <StatusLine state="err" text="Нужен вход в hh.ru" action={signIn} />;
+    }
+    case 'person': {
+      const open = (
+        <button className="res-act" type="button" onClick={() => void showLinkedInWindow()}>
+          Открыть окно
+        </button>
+      );
+      return <StatusLine state="err" text="Нужен вход в LinkedIn" action={open} />;
+    }
+    case 'captcha': {
+      const open = (
+        <button className="res-act" type="button" onClick={actions.captcha}>
+          Открыть окно hh.ru
+        </button>
+      );
+      return <StatusLine state="err" text="hh.ru просит пройти проверку" action={open} />;
     }
     case 'empty':
       return <StatusLine state="err" text="На hh.ru у вас нет резюме" />;

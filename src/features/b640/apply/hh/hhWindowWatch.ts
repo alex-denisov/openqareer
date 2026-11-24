@@ -4,6 +4,7 @@ import {
 } from '../../../../../shared/hhCandidateSession';
 import { CoachApiError } from '../../../coach/apiClient';
 import { readHhApplyWindow } from './hhDesktop';
+import { hideHhWindow } from './hhPersonWindow';
 import { finishHhApply } from './hhSessionApi';
 
 export const HH_WATCH_STEP_MS = 3000;
@@ -51,6 +52,7 @@ export async function watchHhWindow(input: HhWindowWatchInput): Promise<boolean>
     const seen = await readHhApplyWindow(input.vacancyId).catch(() => null);
     if (current !== own || seen === null) return false;
     if (seen === 'sent') {
+      await hideHhWindow();
       const recorded = await record(input);
       if (recorded !== 'retry') return recorded === 'done';
     }

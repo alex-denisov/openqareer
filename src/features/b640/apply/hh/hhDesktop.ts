@@ -14,7 +14,6 @@ import {
 } from '../../../../../shared/hhCandidateSession';
 import {
   inspectSessionPage,
-  openConnectorSession,
   readSessionPage,
 } from '../../../connections/connectorSession';
 import {
@@ -23,7 +22,9 @@ import {
   type HhResumeItem,
 } from '../../../connections/hhSessionPoll';
 import { invokeDesktopCommand } from '../../../../services/desktop/desktopBridge';
-import { ensureHhWindow, ensureSettledHhWindow, HH_LOGIN_URL } from './hhWindow';
+import { hideHhWindow } from './hhPersonWindow';
+import { ensureHhWindow, ensureSettledHhWindow } from './hhWindow';
+export { openHhSignIn, showHhCaptcha, showHhResponse } from './hhPersonWindow';
 import type { ParsedResume } from '../../../workspace/resumeParserTypes';
 
 /**
@@ -42,10 +43,8 @@ export interface HhDesktopReport {
   readonly questionnaire?: HhForm | null;
 }
 
-/** Открывает окно входа hh.ru; вошедшего кандидата hh.ru сам ведёт дальше. */
-export async function openHhSignIn(): Promise<boolean> {
-  return (await openConnectorSession('hh', HH_LOGIN_URL)).opened;
-}
+/** hh.ru просит проверку: её проходит кандидат в окне hh.ru. */
+export const HH_CAPTCHA = 'hh_captcha';
 
 const poller = createHhSessionPoller({
   inspectCurrentPage: () => inspectSessionPage('hh'),
@@ -57,7 +56,10 @@ export async function readHhResumes(): Promise<HhSessionRead> {
   if ((await ensureSettledHhWindow()) === 'signed_out') return { kind: 'signed_out' };
   const result = await poller.poll();
   // Вход только что виден, а страница ушла или просит проверку: это сбой чтения, а не вход.
-  if (result.status === 'waiting_for_sign_in') throw new Error('hh_resumes_not_read');
+  if (result.status === 'waiting_for_sign_in') {
+    const page = await inspectSessionPage('hh').catch(() => null);
+    throw new Error(page?.captcha ? HH_CAPTCHA : 'hh_resumes_not_read');
+  }
   if (result.status === 'authenticated_empty') return { kind: 'empty' };
   const usable = result.resumes.filter((item) => HH_RESUME_ID.test(item.id) && item.title.trim());
   return usable.length > 0 ? { kind: 'ready', resumes: usable.slice(0, HH_RESUMES_MAX) } : { kind: 'empty' };
@@ -114,6 +116,7 @@ export async function runHhApplyInSession(input: {
   readonly uniqueResumeTitle?: string;
 }): Promise<HhDesktopReport> {
   if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
+  await hideHhWindow();
   const report = await invokeDesktopCommand<HhDesktopReport>('run_hh_apply', { request: input });
   if (!report) throw new Error('desktop_unavailable');
   return report;
@@ -153,6 +156,7 @@ export interface HhResumeEditReport {
 /** B678: раздел резюме hh.ru в окне кандидата. Вызывается только после его «Применить». */
 export async function applyHhResumeEditInSession(input: HhResumeEditInput): Promise<HhResumeEditReport> {
   if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
+  await hideHhWindow();
   const report =
     input.section === 'experience'
       ? await invokeDesktopCommand<HhResumeEditReport>('run_hh_experience_edit', {

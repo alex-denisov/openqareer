@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   chooseHhResume: vi.fn(),
   refreshHhProfile: vi.fn(),
   refreshLinkedInProfile: vi.fn(),
+  watchLinkedInNeedsPerson: vi.fn(),
+  showLinkedInWindow: vi.fn(),
 }));
 vi.mock('../../coach/coachApi', async (original) => ({
   ...(await original<typeof import('../../coach/coachApi')>()),
@@ -27,7 +29,11 @@ vi.mock('../../../services/desktop/desktopBridge', async (original) => ({
   ...(await original<typeof import('../../../services/desktop/desktopBridge')>()),
   isTauriEnvironment: api.inApp,
 }));
-vi.mock('./linkedinSession', () => ({ refreshLinkedInProfile: api.refreshLinkedInProfile }));
+vi.mock('./linkedinSession', () => ({
+  refreshLinkedInProfile: api.refreshLinkedInProfile,
+  watchLinkedInNeedsPerson: api.watchLinkedInNeedsPerson,
+  showLinkedInWindow: api.showLinkedInWindow,
+}));
 vi.mock('./hhResumeSession', () => ({
   readHhResumeList: api.readHhResumeList,
   chooseHhResume: api.chooseHhResume,
@@ -102,6 +108,7 @@ beforeEach(() => {
   api.readHhResumeList.mockResolvedValue({ kind: 'ready', resumes, selectedId: 'r2' });
   api.refreshHhProfile.mockResolvedValue(undefined);
   api.chooseHhResume.mockResolvedValue(undefined);
+  api.watchLinkedInNeedsPerson.mockResolvedValue(() => undefined);
 });
 afterEach(() => {
   view?.unmount();
@@ -116,6 +123,15 @@ describe('n03, строка hh.ru: «Обновить сейчас» и «Сме
     expect(menuItem(root, 'Обновить сейчас')).toBeUndefined();
     expect(menuItem(root, 'Сменить резюме')).toBeUndefined();
     expect(menuItem(root, 'Отключить')).toBeDefined();
+  });
+
+  it('капча hh.ru — «Открыть окно hh.ru», а не общий сбой', async () => {
+    api.readHhResumeList.mockRejectedValueOnce(new Error('hh_captcha'));
+    const root = await open();
+    click(menuItem(root, 'Обновить сейчас') ?? null);
+    await settle();
+    expect(root.textContent).toContain('hh.ru просит пройти проверку');
+    expect(root.textContent).toContain('Открыть окно hh.ru');
   });
 
   it('«Обновить сейчас» читает выбранное резюме, итог на месте, список перечитан', async () => {
@@ -186,6 +202,24 @@ describe('n03, строка LinkedIn: «Обновить сейчас» (B645)',
     expect(api.readHhResumeList).not.toHaveBeenCalled();
     expect(result(root)).toContain('Из LinkedIn сохранено 12 фактов.');
     expect(api.getConnections).toHaveBeenCalledTimes(2);
+  });
+
+  it('LinkedIn просит человека — окно открывает только кнопка', async () => {
+    api.getConnections.mockResolvedValue([linkedin]);
+    api.watchLinkedInNeedsPerson.mockImplementationOnce(async (onChange) => {
+      onChange(true);
+      return () => undefined;
+    });
+    api.refreshLinkedInProfile.mockReturnValue(new Promise(() => undefined));
+    const root = await open();
+    click(menuItem(root, 'Обновить сейчас') ?? null);
+    await settle();
+    expect(root.textContent).toContain('Нужен вход в LinkedIn');
+    expect(api.showLinkedInWindow).not.toHaveBeenCalled();
+    const button = [...root.querySelectorAll('button')].find((item) => item.textContent === 'Открыть окно');
+    click(button ?? null);
+    await settle();
+    expect(api.showLinkedInWindow).toHaveBeenCalledOnce();
   });
 
   it('импорт не вышел — его объяснение на месте и «Повторить»', async () => {
