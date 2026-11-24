@@ -3,11 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
 import { SqliteManualApplyRepository } from '../candidate/sqliteManualApplyRepository';
+import { seedResume } from '../testHelpers/letterApprovalHarness';
 import { createApp, login } from '../testHelpers/vacancyPitchHarness';
 
 const ORIGIN = 'http://localhost:3000';
 const QUEUE = '/api/v1/candidate/manual-applications';
 const PITCH = '/api/v1/candidate/vacancies/cluster-99/pitch';
+const APPROVAL = '/api/v1/candidate/vacancies/cluster-99/letter-approvals';
 const FORM = '/api/v1/candidate/vacancies/cluster-99/questionnaire';
 
 const cluster: VacancyCluster = {
@@ -27,7 +29,7 @@ const cluster: VacancyCluster = {
 };
 
 /** Модель-заглушка: помнит запросы и отвечает новым текстом на каждый вызов. */
-function countingWriter(fail = false) {
+function countingWriter(fail = false, resume = false) {
   const inputs: CoverLetterWriteInput[] = [];
   const writer: CoverLetterWriter = {
     writeCoverLetter: async (input) => {
@@ -36,16 +38,25 @@ function countingWriter(fail = false) {
       const style = ['коротко', 'тепло', 'официально', 'подробно'][inputs.length - 1] ?? 'иначе';
       return fail
         ? {}
-        : { body: `Здравствуйте! Пишу по вакансии ${style}.`, stage: 'openai:gpt-test' };
+        : {
+            body: `Здравствуйте! Пишу по вакансии ${style}.${resume ? ' Резюме приложено.' : ''}`,
+            stage: 'openai:gpt-test',
+          };
     },
   };
   return { writer, inputs };
 }
 
 async function setup(
-  options: { cabinetB640?: boolean; fail?: boolean; billing?: boolean; primaryUrl?: string } = {},
+  options: {
+    cabinetB640?: boolean;
+    fail?: boolean;
+    resume?: boolean;
+    billing?: boolean;
+    primaryUrl?: string;
+  } = {},
 ) {
-  const { writer, inputs } = countingWriter(options.fail);
+  const { writer, inputs } = countingWriter(options.fail, options.resume);
   const created = await createApp(
     [{ ...cluster, primaryUrl: options.primaryUrl ?? cluster.primaryUrl }],
     {
@@ -118,6 +129,47 @@ describe('очередь «отправить вручную»', () => {
     database.close();
     expect(quota.n).toBe(1);
     expect(row.c).not.toContain('Пишу');
+  });
+
+  it('факты изменились — экран письма получает новое письмо, а не прежнее из очереди', async () => {
+    const { call, inputs, candidates, candidateId } = await setup({ resume: true });
+    seedResume(candidates, candidateId, 'Head of Platform', ['CSAT вырос с 23% до 68%']);
+    await call('POST', QUEUE, put);
+    await prepared(call);
+    candidates.changeMemory(candidateId, 'import:test:bullet-0', {
+      action: 'correct',
+      statement: 'CSAT вырос с 25% до 85%',
+    });
+    const pitch = await call('POST', PITCH, { tone: 'executive' });
+    expect(pitch.json().data.emailPitch.body).toContain('тепло');
+    expect(inputs).toHaveLength(2);
+  });
+
+  it('одобренное письмо с опровергнутым числом очередь не отдаёт', async () => {
+    const { call, candidates, candidateId } = await setup();
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [{ memoryId: 'mem-202', domain: 'skill', statement: 'CSAT вырос до 68%' }],
+    });
+    candidates.reviewMemories(candidateId, ['mem-202'], 'confirm');
+    await call('POST', QUEUE, put);
+    await prepared(call);
+    const body = 'Добрый день. Повысил CSAT до 68%.';
+    const approved = await call('POST', APPROVAL, {
+      circle: 3,
+      language: 'ru',
+      tone: 'executive',
+      body,
+      usedEvidenceIds: [],
+      includedWorkplaceIds: [],
+    });
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect((await call('GET', `${QUEUE}/cluster-99`)).json().data.letter).toBe(body);
+    candidates.changeMemory(candidateId, 'mem-202', {
+      action: 'correct',
+      statement: 'CSAT вырос до 85%',
+    });
+    expect((await call('GET', `${QUEUE}/cluster-99`)).json().data.letter).toBeNull();
   });
 
   it('после ответов на вопросы отклик готов', async () => {

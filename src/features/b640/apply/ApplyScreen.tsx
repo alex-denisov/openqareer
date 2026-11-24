@@ -231,6 +231,8 @@ function ManualSendBody({
         <ManualSendStep
           manual={manual}
           letterText={body.letter.draft.text}
+          letterStale={body.letter.approval.stale === true}
+          letterLoading={body.letter.draft.loading}
           resume={body.letter.approval.saved?.resume ?? null}
           questionnaire={body.questionnaire}
           onStep={body.setStep}

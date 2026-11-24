@@ -24,6 +24,9 @@ type Closing =
 export interface ManualSendStepProps {
   readonly manual: ManualApplyFlow;
   readonly letterText: string;
+  /** Факты профиля опровергли число письма: такой текст не копируют. */
+  readonly letterStale: boolean;
+  readonly letterLoading: boolean;
   readonly resume: ApprovedVacancyLetterResult['resume'] | null;
   readonly questionnaire: QuestionnaireState;
   readonly onStep: (step: ApplyStep) => void;
@@ -67,23 +70,29 @@ function ResumeItem({
   );
 }
 
-function LetterItem({
+export function LetterItem({
   text,
+  stale,
   pending,
   onLetter,
 }: {
   readonly text: string;
+  readonly stale: boolean;
   readonly pending: boolean;
   readonly onLetter: () => void;
 }) {
-  if (text) return <CopyItem label="Сопроводительное письмо" text={text} />;
+  if (text && !stale) return <CopyItem label="Сопроводительное письмо" text={text} />;
   return (
     <li className="cb-item">
       <div className="cb-main">
         <p className="cb-l">Сопроводительное письмо</p>
-        <p className="cb-t">{pending ? 'Готовим письмо…' : 'Письмо не собралось'}</p>
+        {stale ? (
+          <StatusLine state="err" text="Факты профиля изменились" />
+        ) : (
+          <p className="cb-t">{pending ? 'Готовим письмо…' : 'Письмо не собралось'}</p>
+        )}
       </div>
-      {pending ? null : (
+      {pending && !stale ? null : (
         <Button size="sm" onClick={onLetter}>
           К письму
         </Button>
@@ -187,6 +196,8 @@ export function OpenVacancy({ url }: { readonly url: string | null }) {
 export function ManualSendStep({
   manual,
   letterText,
+  letterStale,
+  letterLoading,
   resume,
   questionnaire,
   onStep,
@@ -208,7 +219,8 @@ export function ManualSendStep({
         <ResumeItem vacancyId={item.vacancyId} resume={resume} />
         <LetterItem
           text={letterText || item.letter || ''}
-          pending={item.preparing}
+          stale={letterStale}
+          pending={item.preparing || letterLoading}
           onLetter={() => onStep('letter')}
         />
         {questions.map((question) => {

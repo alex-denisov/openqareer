@@ -683,8 +683,8 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
     resumeEdits: new SqliteResumeEditChoicesRepository(database, deps.config.dataEncryptionKey),
   };
   registerResumeEditRoutes(app, editDeps);
-  const manualApply = registerManualApplyRoutes(app, editDeps, database, writeQueuedLetter);
   registerLetterDraftRoutes(app, editDeps);
+  const manualApply = registerManualApplyRoutes(app, editDeps, database, writeQueuedLetter);
   app.post(
     '/api/v1/candidate/vacancies/:id/pitch',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
