@@ -261,7 +261,11 @@ describe('candidate notification routes', () => {
       method: 'POST',
       url: `/api/v1/candidate/applications/${applicationId}/interviews`,
       headers: { authorization, origin: 'http://localhost:3000' },
-      payload: { round: 1, scheduledAt: '2026-10-12T12:00:00.000Z', format: 'Video' },
+      payload: {
+        round: 1,
+        scheduledAt: new Date(Date.now() + 12 * 3_600_000).toISOString(),
+        format: 'Video',
+      },
     });
     expect(interview.statusCode).toBe(200);
 

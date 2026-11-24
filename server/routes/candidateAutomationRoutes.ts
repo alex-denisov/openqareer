@@ -28,6 +28,7 @@ import {
 } from '../candidate/sqliteCandidateAutomationRepository';
 import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStore';
 import type { RouteDeps } from './deps';
+import { snapshotWithDescription } from './applicationVacancyText';
 import { createAutomationPausePort } from '../candidate/automationPausePort';
 import { postRemindersFor } from './linkedinPostReminders';
 import { registerCandidateStatusRoutes } from './candidateStatusRoutes';
@@ -545,12 +546,12 @@ function ensureSavedApplication(
     const application = deps.candidateStore.createApplication(candidateId, {
       clusterId: cluster.id,
       stage: 'saved',
-      manualVacancy: {
+      manualVacancy: snapshotWithDescription(deps.multiSourceEngine, cluster.id, {
         title: cluster.canonicalTitle,
         company: cluster.canonicalCompany,
         url: cluster.primaryUrl,
         source: platform === 'hh' ? 'hh.ru' : 'LinkedIn',
-      },
+      }),
     });
     return application.id;
   } catch (error) {

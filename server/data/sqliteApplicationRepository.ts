@@ -791,7 +791,7 @@ function isKnownStage(value: string): value is ApplicationStage {
 }
 
 
-function vacancyAssociatedData(candidateId: string, applicationId: string): string {
+export function vacancyAssociatedData(candidateId: string, applicationId: string): string {
   return `candidate:${candidateId}:application:${applicationId}:vacancy`;
 }
 
