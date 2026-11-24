@@ -12,6 +12,8 @@ import {
   compactBuilderResume,
   contactLine,
   jobPeriod,
+  resumeHeadings,
+  tailSections,
   type BuilderResume,
   type ResumeTemplate,
 } from '../../shared/resumeBuilder/model';
@@ -134,36 +136,38 @@ function bullet(text: string, style: TemplateStyle): Paragraph {
   });
 }
 
+function plain(lines: readonly string[]): Paragraph[] {
+  return lines.map((text) => new Paragraph({ children: [new TextRun({ text })] }));
+}
+
 function bodyParagraphs(resume: BuilderResume, style: TemplateStyle): Paragraph[] {
+  const titles = resumeHeadings(resume);
   const rows: Paragraph[] = [];
+  if (resume.about?.trim()) {
+    rows.push(heading(titles.about, style), ...plain(resume.about.trim().split('\n')));
+  }
   if (style.showResults && resume.results.length) {
-    rows.push(
-      heading('Главные результаты', style),
-      ...resume.results.map((item) => bullet(item, style)),
-    );
+    rows.push(heading(titles.results, style), ...resume.results.map((item) => bullet(item, style)));
   }
   if (resume.jobs.length) {
-    rows.push(heading('Опыт работы', style));
+    rows.push(heading(titles.jobs, style));
     for (const job of resume.jobs) {
       rows.push(
         splitLine(job.company || job.role, job.city, 'bold', style),
-        splitLine(job.company ? job.role : '', jobPeriod(job), 'italic', style),
+        splitLine(job.company ? job.role : '', jobPeriod(job, resume.lang), 'italic', style),
         ...job.bullets.map((item) => bullet(item, style)),
       );
     }
   }
   if (resume.education.length) {
-    rows.push(heading('Образование', style));
+    rows.push(heading(titles.education, style));
     for (const item of resume.education) {
       rows.push(splitLine(item.school, item.year, 'bold', style));
       if (item.degree) rows.push(splitLine(item.degree, '', 'italic', style));
     }
   }
-  if (resume.skills.trim()) {
-    rows.push(
-      heading('Навыки', style),
-      new Paragraph({ children: [new TextRun({ text: resume.skills.trim() })] }),
-    );
+  for (const item of tailSections(resume)) {
+    rows.push(heading(item.title, style), ...plain(item.lines));
   }
   return rows;
 }
@@ -178,7 +182,9 @@ export function renderResumeDocx(
   const style = TEMPLATE_STYLES[template];
   const document = new Document({
     creator: 'openqareer',
-    title: resume.fullName ? `Резюме — ${resume.fullName}` : 'Резюме',
+    title: resume.fullName
+      ? `${resumeHeadings(resume).file} — ${resume.fullName}`
+      : resumeHeadings(resume).file,
     styles: {
       default: { document: { run: { font: style.docxFont, size: half(style.bodySize) } } },
     },
