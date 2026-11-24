@@ -4,12 +4,12 @@ import type {
   CareerDiaryAdaptationStepId,
   CareerDiaryAdaptationTask,
 } from '../../../../shared/careerDiaryCards';
-import { ActionDock } from '../kit/ActionDock';
 import { Button } from '../kit/Button';
 import { Icon } from '../kit/Icon';
 import { InfoTip } from '../kit/InfoTip';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
+import { useScreenChrome } from '../shell/ShellContext';
 import {
   dayHeading,
   dayLabel,
@@ -105,6 +105,8 @@ function Steps({ data }: { readonly data: AdaptationData }) {
 
 function Lead({ data, actions }: { readonly data: AdaptationData; readonly actions: AdaptationActions }) {
   const [adding, setAdding] = useState(false);
+  // Как у макета d01 (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   const { view, workplace } = data;
   const probation = probationLine(view);
   const goalId = view.stages.find((stage) => stage.status === 'active')?.goalId ?? null;
@@ -120,18 +122,15 @@ function Lead({ data, actions }: { readonly data: AdaptationData; readonly actio
         {probation ? <InfoTip label="Испытательный срок" text={probation} /> : null}
       </div>
       <p className="lead-sub">{`${workplace.company} · ${workplace.title} · с ${dayLabel(view.startDate)}`}</p>
-      <ActionDock
-        kind="commit"
-        primary={
-          goalId ? (
-            <Link className="btn is-primary" to={buildNodePath('d02a', { goalId })}>
-              <Icon name="plus" />
-              Внести замер
-            </Link>
-          ) : add
-        }
-        secondary={goalId ? add : undefined}
-      />
+      <div className="actions">
+        {goalId ? (
+          <Link className="btn is-primary" to={buildNodePath('d02a', { goalId })}>
+            <Icon name="plus" />
+            Внести замер
+          </Link>
+        ) : null}
+        {add}
+      </div>
       <ol className="steps dn-plan">
         {view.stages.filter((stage) => stage.stage !== 'prep').map((stage) => (
           <Stage key={stage.stage} stage={stage} onToggle={(id, done) => void actions.toggleTask(id, done)} />

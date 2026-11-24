@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ActionDock, Icon, Link } from '../../kit';
+import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { SaveButton, type SaveButtonProps } from './SaveButton';
 
@@ -30,11 +30,10 @@ export function ActBar({ vacancyId, noProfile, save, onOpenText }: ActBarProps) 
   );
   return (
     <div className="v4-act">
-      <ActionDock
-        kind="commit"
-        primary={noProfile ? addExperience : applyLink(vacancyId, true)}
-        secondary={noProfile ? applyLink(vacancyId, false) : undefined}
-      />
+      <div className="actions v4-act-main">
+        {noProfile ? addExperience : applyLink(vacancyId, true)}
+      </div>
+      {noProfile ? applyLink(vacancyId, false) : null}
       <button className="btn v4-text" type="button" onClick={onOpenText}>
         <Icon name="file" />
         Текст вакансии

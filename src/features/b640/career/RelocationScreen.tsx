@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react';
-import { ActionDock, Button, Icon, InfoTip, Link, SegControl, type SegOption } from '../kit';
+import { useState } from 'react';
+import { Button, Icon, InfoTip, Link, SegControl, type SegOption } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { BlockError } from '../today/parts';
 import { useLoad } from '../today/useLoad';
+import { useScreenChrome } from '../shell/ShellContext';
 import { pageAttrs } from './careerPaths';
 import { loadRelocation, type RelocationData, type RelocationPlace } from './relocationApi';
 import { placesTitle } from './relocationModel';
@@ -121,6 +122,7 @@ function Lists(props: {
 function Head(props: {
   readonly title: string;
   readonly role: string | null;
+  readonly onWho: () => void;
   readonly onPlaces: () => void;
 }) {
   return (
@@ -132,6 +134,11 @@ function Head(props: {
         <InfoTip label="Как посчитано" text={TIP} />
       </div>
       {props.role ? <p className="lead-sub">{props.role}</p> : null}
+      <div className="actions">
+        <Button variant="primary" icon="question" onClick={props.onWho}>
+          Уточнить: кто едет и бюджет
+        </Button>
+      </div>
       {/* «Изменить места» — вторичным действием, не в главной позиции (B645 c06). */}
       <button className="row-act" type="button" onClick={props.onPlaces}>
         <Icon name="pin" />
@@ -144,11 +151,9 @@ function Head(props: {
 interface PlacesProps {
   readonly data: RelocationData;
   readonly reload: () => void;
-  /** Правая колонка: стоит между колонкой мест и полосой действия. */
-  readonly aside: ReactNode;
 }
 
-function Places({ data, reload, aside }: PlacesProps) {
+function Places({ data, reload }: PlacesProps) {
   const [who, setWho] = useState(false);
   const [editPlaces, setEditPlaces] = useState(false);
   const family = familyOf(data.questionnaire?.profile ?? null);
@@ -173,6 +178,7 @@ function Places({ data, reload, aside }: PlacesProps) {
           <Head
             title={placesTitle(abroad.length, inside.length)}
             role={data.role ? (data.titlesRu[data.role] ?? data.role) : null}
+            onWho={() => setWho(true)}
             onPlaces={() => setEditPlaces(true)}
           />
           <RelocationWhoDialog
@@ -192,8 +198,7 @@ function Places({ data, reload, aside }: PlacesProps) {
           <Lists abroad={abroad} inside={inside} context={context} />
         </section>
       </div>
-      {aside}
-      <WhoDock onWho={() => setWho(true)} />
+      <Companies count={data.companies} />
     </>
   );
 }
@@ -217,43 +222,30 @@ function PlacesDialog(props: {
   );
 }
 
-/**
- * Главное действие — полоса act-dock на всю ширину страницы, как в макете c06 (B645):
- * на 1440 у низа окна, на 390 над навигацией во всю ширину.
- */
-function WhoDock({ onWho }: { readonly onWho: () => void }) {
-  return (
-    <ActionDock
-      kind="auto"
-      primary={
-        <Button variant="primary" icon="question" onClick={onWho}>
-          Уточнить: кто едет и бюджет
-        </Button>
-      }
-    />
-  );
-}
-
 function Companies({ count }: { readonly count: number | null }) {
   if (!count) return null;
   return (
-    <section className="mod" aria-labelledby="rl-co">
-      <h3 className="mod-title" id="rl-co">
-        Компании, которые оплачивают релокацию
-      </h3>
-      <div className="actions">
-        <Link className="btn" to={`${buildNodePath('v10')}?relocation=true`}>
-          <Icon name="building" />
-          Смотреть компании · <span className="num">{count}</span>
-        </Link>
-      </div>
-    </section>
+    <div className="col">
+      <section className="mod" aria-labelledby="rl-co">
+        <h3 className="mod-title" id="rl-co">
+          Компании, которые оплачивают релокацию
+        </h3>
+        <div className="actions">
+          <Link className="btn" to={`${buildNodePath('v10')}?relocation=true`}>
+            <Icon name="building" />
+            Смотреть компании · <span className="num">{count}</span>
+          </Link>
+        </div>
+      </section>
+    </div>
   );
 }
 
 /** C06 «Релокация»: страны для переезда — доход на руки, налоги и право работать. */
 export function RelocationScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadRelocation);
+  // Как у макета c06 (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   return (
     <div className="page two" {...pageAttrs(node)}>
       {load.state === 'loading' ? (
@@ -263,15 +255,7 @@ export function RelocationScreen({ node }: { readonly node: B640Node }) {
           <BlockError text="Не удалось посчитать страны." onRetry={load.retry} />
         </div>
       ) : (
-        <Places
-          data={load.data}
-          reload={load.retry}
-          aside={
-            <div className="col">
-              <Companies count={load.data.companies} />
-            </div>
-          }
-        />
+        <Places data={load.data} reload={load.retry} />
       )}
     </div>
   );
