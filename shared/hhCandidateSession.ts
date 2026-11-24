@@ -40,6 +40,8 @@ export interface HhResumeSections {
   readonly places: readonly HhResumePlace[];
 }
 
+/** Разделы резюме для сверки целиком: длиннее — не шлём, снимок с пятью резюме должен уместиться в предел тела запроса. */
+export const HH_REVIEW_SECTIONS_MAX_LENGTH = 30_000;
 export const HH_SECTION_PLACES_MAX = 30;
 export const HH_SECTION_TEXT_MAX_LENGTH = 4_000;
 export const HH_SECTION_SKILLS_MAX = 100;
@@ -89,6 +91,8 @@ export interface HhResumeFit {
   readonly status: HhResumeFitStatus;
   readonly matched: readonly string[];
   readonly missing: readonly string[];
+  /** Сколько правок предложит разбор; нет — разделы резюме не прочитаны. */
+  readonly editCount?: number;
 }
 
 export interface HhResumeReview {

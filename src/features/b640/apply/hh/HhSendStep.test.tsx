@@ -50,8 +50,10 @@ afterEach(() => {
   view = null;
 });
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  desktop.summaryOf.mockImplementation((item) => ({ id: item.id, title: item.title }));
   api.getHhResumes.mockResolvedValue(snapshot);
+  desktop.readHhResumeContent.mockRejectedValue(new Error('hh_resume_not_read'));
   api.getHhResumeEdits.mockResolvedValue({ resumeId: 'abc1', vacancyId: 'cluster-1', edits: [] });
   api.startHhApply.mockResolvedValue({ attemptId: 'att-1', remainingToday: 14 });
   api.finishHhApply.mockResolvedValue(undefined);
@@ -169,6 +171,56 @@ describe('B704: отклик через hh.ru в приложении', () => {
       [{ id: 'abc1', title: 'CDO' }, { id: 'def2', title: 'Head of Data' }],
       { id: 'def2', title: 'Head of Data', text: 'Опыт' },
     );
+  });
+
+  it('B678: лист a01b — «N правок» с «Оптимизировать» ведёт в разбор, «Без правок» — сразу к отправке', async () => {
+    const sections = { title: 'CDO', about: '', skills: [], places: [] };
+    const items = ['abc1', 'def2'].map((id) => ({ id, title: id, url: `https://hh.ru/resume/${id}` }));
+    desktop.readHhResumes.mockResolvedValue({ kind: 'ready', resumes: items });
+    desktop.readHhResumeContent.mockImplementation(async (item: { id: string; title: string }) => ({ ...item, text: 'Опыт', sections }));
+    api.saveHhResumes.mockImplementation(async (resumes, selected) => ({ resumes, selected, readAt: String(Math.random()) }));
+    api.getHhResumeReview.mockResolvedValue({
+      vacancyId: 'cluster-1', requirements: [], recommendedId: 'abc1',
+      resumes: [
+        { resumeId: 'abc1', title: 'abc1', status: 'fits', matched: [], missing: [], editCount: 5 },
+        { resumeId: 'def2', title: 'def2', status: 'fits', matched: [], missing: [], editCount: 0 },
+      ],
+    });
+    api.getHhResumeEdits.mockResolvedValue({
+      resumeId: 'abc1', vacancyId: 'cluster-1', edits: [{ id: 'title', section: 'title', was: 'a', now: 'b' }],
+    });
+    await render();
+    const optimise = () => document.querySelector<HTMLInputElement>('.hh2-opt input');
+    const open = async () => {
+      click(button('Другое резюме'));
+      await settle();
+    };
+    await open();
+    const picks = [...document.querySelectorAll('.hh2-pick')];
+    expect(picks[0]!.textContent).toContain('5 правок');
+    expect(picks[0]!.textContent).toContain('Оптимизировать');
+    expect(picks[1]!.textContent).toContain('Без правок');
+    expect(picks[1]!.textContent).not.toContain('Оптимизировать');
+    expect(optimise()!.checked).toBe(true);
+    click(optimise()!);
+    click(button('Продолжить'));
+    await settle();
+    expect(view!.container.textContent).toContain('Всё одобрено');
+    await open();
+    click(optimise()!);
+    click(button('Продолжить'));
+    await settle();
+    expect(button('К отправке')).toBeTruthy();
+  });
+
+  it('B678: прежний снимок без разделов перечитывается сам, выбирать резюме заново не нужно', async () => {
+    const sections = { title: 'CDO', about: '', skills: [], places: [] };
+    desktop.readHhResumeContent.mockResolvedValue({ ...snapshot.selected, sections });
+    api.saveHhResumes.mockImplementation(async (resumes, selected) => ({ resumes, selected, readAt: 'x' }));
+    await render();
+    expect(desktop.readHhResumeContent).toHaveBeenCalledTimes(1);
+    expect(api.getHhResumeEdits).toHaveBeenCalledTimes(1);
+    expect(button('Отправить отклик').disabled).toBe(false);
   });
 
   it('B678: «N правок» открывает разбор резюме «сейчас → предложение» и возвращает к отправке', async () => {
