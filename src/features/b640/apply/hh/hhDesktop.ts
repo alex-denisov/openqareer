@@ -13,6 +13,7 @@ import {
 } from '../../../../../shared/hhCandidateSession';
 import {
   inspectSessionPage,
+  isConnectorSessionOpen,
   openConnectorSession,
   readSessionPage,
 } from '../../../connections/connectorSession';
@@ -114,6 +115,36 @@ export function summaryOf(item: HhResumeItem): HhResumeSummary {
   };
 }
 
+/** Сколько ждём загрузки окна hh.ru, которое открыли сами. */
+export const HH_WINDOW_READY_MS = 20_000;
+const HH_WINDOW_POLL_MS = 500;
+/** Страница входа может сама увести вошедшего дальше: невошедший — тот, кто на ней остался. */
+const HH_LOGIN_SETTLE_MS = 4_000;
+const HH_PAGE = /^https:\/\/(?:[a-z0-9-]+\.)*hh\.ru\//u;
+
+/**
+ * B708: окна hh.ru после запуска приложения нет, а вход жив. Открывает окно в фоне и ждёт
+ * страницу. Отклик ещё не начат, поэтому ожидание и отказ здесь не дают второй отправки.
+ */
+async function ensureHhWindow(): Promise<'ready' | 'signed_out'> {
+  if (await isConnectorSessionOpen('hh')) return 'ready';
+  const opened = await openConnectorSession('hh', HH_LOGIN_URL, undefined, { background: true });
+  if (!opened.opened) throw new Error('hh_window_not_opened');
+  const deadline = Date.now() + HH_WINDOW_READY_MS;
+  let loginSince: number | null = null;
+  while (Date.now() < deadline) {
+    // Пока страница сменяется, чтение окна обрывается: читаем снова до срока.
+    const page = await inspectSessionPage('hh').catch(() => null);
+    if (page?.ready && HH_PAGE.test(page.url)) {
+      if (!page.login) return 'ready';
+      loginSince ??= Date.now();
+      if (Date.now() - loginSince >= HH_LOGIN_SETTLE_MS) return 'signed_out';
+    } else loginSince = null;
+    await new Promise((resolve) => setTimeout(resolve, HH_WINDOW_POLL_MS));
+  }
+  throw new Error('hh_window_not_loaded');
+}
+
 /** Отклик в окне hh.ru кандидата. Вызывается только после его подтверждения. */
 export async function runHhApplyInSession(input: {
   readonly vacancyId: string;
@@ -122,6 +153,7 @@ export async function runHhApplyInSession(input: {
   /** Заголовок резюме, если он у кандидата один: запасной признак, когда hh.ru не отдал идентификатор. */
   readonly uniqueResumeTitle?: string;
 }): Promise<HhDesktopReport> {
+  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
   const report = await invokeDesktopCommand<HhDesktopReport>('run_hh_apply', { request: input });
   if (!report) throw new Error('desktop_unavailable');
   return report;

@@ -18,6 +18,9 @@ const FAILURE_TEXT: Readonly<Record<string, string>> = {
   hh_already_applied: 'Вы уже откликнулись на эту вакансию через hh.ru.',
   hh_apply_in_progress: 'Отклик на эту вакансию уже отправляется.',
   hh_cooldown: 'hh.ru просил проверку. Следующий отклик через hh.ru — через час.',
+  session_window_missing: 'Окно hh.ru закрылось, отклик не отправлен. Повторите.',
+  hh_window_not_opened: 'Окно hh.ru не открылось, отклик не отправлен. Повторите.',
+  hh_window_not_loaded: 'hh.ru не загрузился, отклик не отправлен. Повторите.',
   apply_running: 'Другой отклик через hh.ru ещё отправляется.',
 };
 
@@ -27,7 +30,7 @@ const DEFAULT_FAILURE = 'Отклик не отправлен. Повторит�
 export function resultOf(outcome: HhApplyOutcome, failureCode?: string | null): HhSendResult {
   if (outcome === 'sent') return { kind: 'sent' };
   if (outcome === 'questionnaire') return { kind: 'questionnaire' };
-  if (failureCode === 'not_signed_in' || failureCode === 'session_window_missing') return { kind: 'signin' };
+  if (failureCode === 'not_signed_in') return { kind: 'signin' };
   return { kind: 'error', text: (failureCode && FAILURE_TEXT[failureCode]) || DEFAULT_FAILURE };
 }
 
