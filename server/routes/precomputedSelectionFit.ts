@@ -4,7 +4,7 @@ import type { RouteDeps } from './deps';
 import { createSelectionFitSweep, selectionFitLimit, selectionStamp } from './fitSelectionSweep';
 import { candidatePlan } from './helpers';
 import { requestFitForVacancyIds } from './matchedVacancyFit';
-import { finishMatchedVacancies } from './matchedVacancyRoutes';
+import { finishMatchedVacanciesYielding } from './matchedVacancyRoutes';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 
 /** Its own window: a precompute pass must not stop the sweep a list read started. */
@@ -17,19 +17,20 @@ const skipText = () => undefined;
  * while rows stayed «пересчитывается». The background precompute now queues the campaign's
  * selection the same way; `requestFitForVacancyIds` skips rows already counted or queued.
  */
-export function queuePrecomputedSelectionFit(
+export async function queuePrecomputedSelectionFit(
   deps: RouteDeps,
   candidateId: string,
   snapshot: readonly MatchedVacancyItem[],
 ): Promise<void> {
   const campaign = readCampaign(deps.candidateStore, candidateId);
-  const ids = finishMatchedVacancies(
+  const finished = await finishMatchedVacanciesYielding(
     snapshot,
     [...campaign.roles.value],
     campaign,
     deps.candidateStore,
     candidateId,
-  )
+  );
+  const ids = finished
     .slice(0, selectionFitLimit(candidatePlan(deps, candidateId)))
     .map((item) => item.cluster.id);
   const stamp = vacancyFitProfileStamp(

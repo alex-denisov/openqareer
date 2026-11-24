@@ -6,8 +6,8 @@
 //! page and presses one button. Anything unexpected is reported, never retried.
 
 use crate::connector_session::{
-    append_connector_diagnostic, eval_json, is_allowed_session_url, is_transient_eval_error,
-    read_session_page, session_window_label, SessionWindowRequest, HH_SIGNED_IN_SELECTOR,
+    append_connector_diagnostic, eval_json, is_allowed_session_url, is_session_window_on_screen,
+    is_transient_eval_error, read_session_page, session_window_label, SessionWindowRequest, HH_SIGNED_IN_SELECTOR,
 };
 use crate::hh_apply::{is_early_signed_out, RunningGuard};
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ pub struct HhRaiseRequest {
 #[serde(rename_all = "camelCase")]
 pub struct HhRaiseReport {
     /// `ok`, `captcha`, `logged_out`, `foreign_page`, `too_early`, `error`,
-    /// or `busy` (the window is taken by a response; nothing was done).
+    /// or `busy` (the window is taken by a response or a person; nothing was done).
     pub outcome: String,
     /// With `too_early`: the HH:MM (Moscow) printed on the button.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -222,6 +222,10 @@ pub async fn run_hh_raise(
     let Some(_running) = RunningGuard::take() else {
         return Ok(HhRaiseReport::of("busy"));
     };
+    // Nor take the page away from a person signing in or passing a captcha.
+    if is_session_window_on_screen(app, "hh") {
+        return Ok(HhRaiseReport::of("busy"));
+    }
     let label = session_window_label("hh").ok_or("unsupported_platform")?;
     let page = SessionWindowRequest {
         platform: "hh".into(),

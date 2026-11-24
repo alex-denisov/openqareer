@@ -26,6 +26,7 @@ remote_scope_backfill_state
 vacancy_fit_cache
 vacancy_fit_queue
 vacancy_fit_latest
+vacancy_fit_seals
 vacancy_requirements_cache
 vacancy_requirements_jobs
 title_parse*

@@ -15,9 +15,10 @@ describe('B704: исход отклика через hh.ru на экране', (
     expect(resultOf('failed', 'captcha')).toEqual({
       kind: 'error',
       text: 'hh.ru просит пройти проверку. Пройдите её в окне hh.ru и отправьте снова.',
+      inWindow: true,
     });
     const unknown = resultOf('failed', 'script_error');
-    expect(unknown).toEqual({ kind: 'error', text: 'Отклик не отправлен. Повторите.' });
+    expect(unknown).toEqual({ kind: 'error', text: 'Отклик не отправлен. Повторите.', inWindow: true });
     expect(refusalText('hh_daily_limit_reached')).toContain('Завтра');
     expect(refusalText(undefined)).toBe('Отклик не отправлен. Повторите.');
   });

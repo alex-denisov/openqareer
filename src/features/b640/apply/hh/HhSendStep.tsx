@@ -3,6 +3,7 @@ import { pluralRu } from '../../../../../shared/pluralRu';
 import { Button, Dialog, Icon, Link, ResultLine, StatusLine, useToast } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { UNKNOWN_VACANCY_TITLE, type ApplyHead } from '../model/applyModel';
+import { showHhResponse } from './hhDesktop';
 import { editsWord, HhResumeEdits } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
@@ -135,7 +136,14 @@ function Outcome({ apply, resumes, responsePath, props }: OutcomeProps) {
   if (state.kind === 'form') {
     return <FormNeeded url={state.url ?? props.head.url} answersText={props.form?.answersText ?? ''} />;
   }
-  if (state.kind === 'error') return <StatusLine state="err" text={state.text} />;
+  if (state.kind === 'error') {
+    const open = (
+      <button className="res-act" type="button" onClick={() => void showHhResponse()}>
+        Открыть окно hh.ru
+      </button>
+    );
+    return <StatusLine state="err" text={state.text} action={state.inWindow ? open : undefined} />;
+  }
   if (state.kind !== 'sent' && state.kind !== 'questionnaire') return null;
   return (
     <>

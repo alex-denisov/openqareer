@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
+import { SqliteContactMessageRepository } from '../data/sqliteContactMessageRepository';
 import { SqliteRecruiterContactsRepository } from '../data/sqliteRecruiterContactsRepository';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { createB640Harness, poolItem, type HarnessUser } from '../testHelpers/b640VacancyHarness';
@@ -40,7 +41,7 @@ async function setup(modelBody: string | undefined = 'Анна, привет! Д
   const own = h.candidateIds['flagged.test'];
   h.candidates.saveResumeDraft(own, { ...EMPTY_RESUME_DRAFT, targetRole: 'Директор по данным',
     candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline: 'Руководитель аналитики' } }, []);
-  const send = (method: 'GET' | 'PUT' | 'POST', url: string, user?: HarnessUser, payload?: object) =>
+  const send = (method: 'GET' | 'PUT' | 'POST' | 'DELETE', url: string, user?: HarnessUser, payload?: object) =>
     h.app.inject({
       method, url, ...(payload ? { payload } : {}),
       headers: { ...(user ? { authorization: `Bearer ${h.tokens[user]}` } : {}), origin: 'http://localhost:3000' },
@@ -203,6 +204,29 @@ describe('B682: POST contact-messages/:id/variants', () => {
   });
 });
 
+describe('B753: «Не отправлять»', () => {
+  it('убирает черновик с вариантами; следующий — новый; чужой и отправленный не трогает', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    writer.body = 'Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?';
+    expect((await send('POST', `${BASE}/${id}/variants`, 'flagged.test', {})).statusCode).toBe(201);
+    for (const user of ['plain.test', 'other.test'] as const) {
+      expect((await send('DELETE', `${BASE}/${id}`, user)).statusCode).toBe(404);
+    }
+    expect((await send('DELETE', `${BASE}/${id}`, 'flagged.test')).statusCode).toBe(204);
+    expect((await send('DELETE', `${BASE}/${id}`, 'flagged.test')).statusCode).toBe(404);
+    const list = await send('GET', `/api/v1/candidate/text-variants?kind=message&subjectId=${id}`, 'flagged.test');
+    expect(list.json().data?.variants ?? []).toEqual([]);
+    const next = await draft();
+    expect(next.statusCode).toBe(201);
+    const nextId = next.json().data.id as string;
+    expect(nextId).not.toBe(id);
+    await send('POST', `${BASE}/${nextId}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${nextId}/sent`, 'flagged.test');
+    expect((await send('DELETE', `${BASE}/${nextId}`, 'flagged.test')).statusCode).toBe(409);
+  });
+});
+
 describe('B753: своя цепочка сообщения', () => {
   it('черновик пишет писатель сообщений, писатель письма не вызывается', async () => {
     const letter = stubWriter('Письмо работодателю');
@@ -307,7 +331,7 @@ describe('B698: черновик из карточки компании — о �
     await h.app.inject({ method: 'PUT', url: `${OLD}/alex`, headers,
       payload: { fullName: 'Alexandr Alexandrov', companyName: 'VK', roleTitle, relationship: 'Коллега', strength: 'strong' } });
     const post = (payload: object) => h.app.inject({ method: 'POST', url: BASE, headers, payload });
-    return { writer, post };
+    return { h, writer, post };
   }
 
   it('в запросе к модели — компания, роль знакомого и обе вакансии; просьба — рекомендовать или представить', async () => {
@@ -328,6 +352,22 @@ describe('B698: черновик из карточки компании — о �
     expect(writer.calls[0]!.wish).not.toContain('Positive');
     expect(writer.calls[0]!.wish).toContain('CPO');
     expect(writer.calls[0]!.wish).toContain('Спрашивай только о компании VK');
+  });
+
+  it('B753: сохранённый черновик о другой компании не продолжается — пишется новый', async () => {
+    const { h, writer, post } = await companySetup('Alexandr, здравствуйте! Подскажете, кто нанимает в VK?', 'CPO @ Positive Technologies');
+    const store = new SqliteContactMessageRepository({ databasePath: h.databasePath });
+    closers.unshift(async () => store.close());
+    store.create({ id: 'old', candidateId: h.candidateIds['flagged.test'], contactId: 'alex', recruiterId: null, vacancyId: null,
+      kind: 'known_contact', text: 'Привет! Как дела в Positive Technologies?', recipientName: 'Alexandr Alexandrov', recipientUrl: null,
+      createdAt: '2026-11-20T00:00:00.000Z' });
+    const first = await post({ contactId: 'alex', kind: 'known_contact' });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().data.text).not.toContain('Positive');
+    const calls = writer.calls.length;
+    const again = await post({ contactId: 'alex', kind: 'known_contact' });
+    expect([again.statusCode, again.json().data.id]).toEqual([200, first.json().data.id]);
+    expect(writer.calls).toHaveLength(calls);
   });
 
   it('модель не ответила — запасной текст тоже про компанию и вакансию', async () => {

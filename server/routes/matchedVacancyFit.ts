@@ -1,4 +1,5 @@
 import { leanFitView } from '../vacancies/leanMatchedPage';
+import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
@@ -227,6 +228,50 @@ interface FitViewReader {
   scoredIds(items: readonly MatchedVacancyItem[]): string[];
   read(ids: readonly string[]): Map<string, VacancyFitView>;
   readYielding(ids: readonly string[]): Promise<Map<string, VacancyFitView>>;
+  /** B702 part 2: the percents of the previous process under this key. */
+  restore(key: string): FitViews | undefined;
+  /** Keeps them for the next one, at most once per `SEAL_VIEWS_EVERY_MS`. */
+  keep(key: string, views: FitViews): void;
+}
+
+const SEAL_VIEWS_EVERY_MS = 5 * 60_000;
+/** A row's shape or rule of another release must not be restored. */
+const SEALED_VIEWS_SHAPE = `views-v1:${VACANCY_FIT_ALGORITHM_VERSION}`;
+const stampOf = (key: string) => `${SEALED_VIEWS_SHAPE}|${key.slice(key.indexOf('|') + 1)}`;
+const viewsSealedAt = new WeakMap<object, Map<string, number>>();
+
+type FitRuntime = NonNullable<RouteDeps['vacancyMechanics']>;
+
+function restoreFitViews(runtime: FitRuntime, candidateId: string, key: string): FitViews | undefined {
+  try {
+    const text = runtime.readSealedFitViews?.(candidateId, stampOf(key));
+    return text === undefined ? undefined : new Map(JSON.parse(text) as [string, VacancyFitView][]);
+  } catch {
+    return undefined;
+  }
+}
+
+async function keepFitViews(
+  runtime: FitRuntime,
+  candidateId: string,
+  key: string,
+  views: FitViews,
+  log: FitOrderLog | undefined,
+): Promise<void> {
+  if (views.size === 0 || !runtime.sealFitViews) return;
+  const sealed = viewsSealedAt.get(runtime) ?? new Map<string, number>();
+  viewsSealedAt.set(runtime, sealed);
+  if (Date.now() - (sealed.get(key) ?? 0) < SEAL_VIEWS_EVERY_MS) return;
+  sealed.set(key, Date.now());
+  try {
+    const rows = await mapYielding([...views], (entry) => JSON.stringify(entry));
+    await runtime.sealFitViews(candidateId, stampOf(key), `[${rows.join(',')}]`);
+  } catch (error) {
+    log?.warn(
+      { errorName: error instanceof Error ? error.name : 'UnknownError', rows: views.size },
+      'fit-views-seal-failed',
+    );
+  }
 }
 
 function createFitViewReader(
@@ -273,6 +318,8 @@ function createFitViewReader(
     },
     read: (ids) => collect(ids.map(readRow)),
     readYielding: async (ids) => collect(await mapYielding(ids, readRow)),
+    restore: (key) => restoreFitViews(runtime, candidateId, key),
+    keep: (key, views) => void keepFitViews(runtime, candidateId, key, views, log),
   };
 }
 
@@ -306,15 +353,24 @@ function prepareFitViews(
   return work;
 }
 
+/** The window is over for them: the list answers with them and they are read again behind it. */
+function restoredViews(key: string, reader: FitViewReader) {
+  const views = reader.restore(key);
+  if (!views) return undefined;
+  fitViewsCache.writeStale(key, views);
+  return fitViewsCache.peek(key);
+}
+
 async function readViewsAhead(
   key: string,
   reader: FitViewReader,
   items: readonly MatchedVacancyItem[],
 ): Promise<PreparedFitViews> {
-  const known = fitViewsCache.peek(key);
+  const known = fitViewsCache.peek(key) ?? restoredViews(key, reader);
   if (!known) {
     const views = await reader.readYielding(reader.scoredIds(items));
     fitViewsCache.write(key, views);
+    reader.keep(key, views);
     return { rows: views.size, views };
   }
   if (known.stale) void refreshFitViews(key, reader, items);
@@ -370,6 +426,7 @@ async function refreshFitViews(
       }
     }
     fitViewsCache.write(key, views);
+    reader.keep(key, views);
   } catch {
     // Прежний порядок остаётся в силе, а следующее чтение после окна
     // попробует пересчёт снова: отказ фона не должен ронять список.
@@ -382,7 +439,8 @@ function rankedRow(item: MatchedVacancyItem) {
   return { title: item.cluster.canonicalTitle, view: item.explanation.fitView };
 }
 
-const ROLE_ROWS_PER_TURN = 50;
+const ROLE_SLICE_MS = 20;
+const ROLE_ROWS_PER_CHECK = 25;
 
 interface RoleTurns {
   readonly busyMs: number;
@@ -399,12 +457,18 @@ async function readRolesYielding(
 ): Promise<RoleTurns> {
   let busyMs = 0;
   let turns = 0;
-  for (let start = 0; start < items.length; start += ROLE_ROWS_PER_TURN) {
+  let sliceMs = 0;
+  for (let start = 0; start < items.length; start += ROLE_ROWS_PER_CHECK) {
     const startedAt = performance.now();
     items
-      .slice(start, start + ROLE_ROWS_PER_TURN)
+      .slice(start, start + ROLE_ROWS_PER_CHECK)
       .forEach((item) => isExact(item.cluster.canonicalTitle));
-    busyMs += performance.now() - startedAt;
+    const ms = performance.now() - startedAt;
+    busyMs += ms;
+    sliceMs += ms;
+    // B702 part 2 (prod 24.11): 10 ms of known titles gave 46 turns away and waited 2.5 s for them.
+    if (sliceMs < ROLE_SLICE_MS) continue;
+    sliceMs = 0;
     turns += 1;
     await new Promise((resolve) => setImmediate(resolve));
   }

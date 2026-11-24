@@ -76,7 +76,7 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
  * Правило сборки версии под вакансию. B713: версии до него перечисляли места работы без пунктов, и
  * одобренная такая версия возвращалась бы для той же вакансии и ревизии; новая сборка даёт новый id.
  */
-export const TARGETED_RESUME_BUILD = 'b785-order';
+export const TARGETED_RESUME_BUILD = 'b785-parity';
 
 function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string, choices: ResumeEditChoices): string {
   // Без выбранного языка переводы на версию не влияют.
@@ -103,12 +103,6 @@ export function targetedSliceFor(master: CandidateResumeMaster, cluster: Vacancy
   return buildTargetedResumeSlice(master.document, versionTarget(cluster));
 }
 
-/** Резюме под вакансию с правками и на выбранном языке. */
-export function preparedSlice(slice: ReturnType<typeof targetedSliceFor>, choices: ResumeEditChoices) {
-  const tailored = tailorResumeSlice(slice, choices);
-  return { ...tailored, document: translatedDocument(tailored.document, choices.lang, choices.translations ?? {}) };
-}
-
 /** Существующая механика версий: черновик из мастер-резюме, затем одобрение тем же содержимым. */
 function approvedVersion(
   deps: RouteDeps,
@@ -117,7 +111,9 @@ function approvedVersion(
   cluster: VacancyCluster,
   choices: ResumeEditChoices,
 ): StoredResumeVersion {
-  const tailor = (slice: ReturnType<typeof targetedSliceFor>) => preparedSlice(slice, choices);
+  const tailor = (slice: ReturnType<typeof targetedSliceFor>) => tailorResumeSlice(slice, choices);
+  const translate = (fitted: ResumeDocument, tailored: ResumeDocument) =>
+    translatedDocument(fitted, choices.lang, choices.translations ?? {}, tailored);
   const { candidateStore } = deps;
   const versionId = stableVersionId(candidateId, cluster.id, master.revision, choices);
   const { title, requirements } = versionTarget(cluster);
@@ -125,7 +121,7 @@ function approvedVersion(
     candidateId,
     versionId,
     master.revision,
-    buildVersionContent(master, title, requirements, 'draft', tailor),
+    buildVersionContent(master, title, requirements, 'draft', tailor, translate),
   );
   const version = created.status === 'id_conflict'
     ? candidateStore.getResumeVersion(candidateId, versionId)
@@ -137,7 +133,7 @@ function approvedVersion(
     versionId,
     version.revision,
     master.revision,
-    buildVersionContent(master, title, requirements, 'approved', tailor),
+    buildVersionContent(master, title, requirements, 'approved', tailor, translate),
   );
   return approved.status === 'updated' ? approved.version : version;
 }

@@ -48,17 +48,20 @@ export function startOfDayIn(now: Date, timeZone: string): number {
 
 /**
  * Та же дата и та же граница, что у фильтра «Дата» в «Подборке»: первый источник или первое
- * появление, от начала сегодняшнего дня кандидата назад на `days` дней.
+ * появление, от начала сегодняшнего дня кандидата назад на `days` дней. B702-2: граница одна на
+ * список — три форматтера Intl на строку держали event loop 1,2 с (прод 24.11).
  */
-export function observedWithinDays(
-  item: MatchedVacancyItem,
+export function withinLastDays(
+  items: readonly MatchedVacancyItem[],
   days: number,
   now: Date,
   timeZone = 'UTC',
-): boolean {
-  const at = Date.parse(item.cluster.sources[0]?.observedAt ?? item.cluster.firstObservedAt);
-  if (Number.isNaN(at)) return false;
-  return at >= startOfDayIn(now, timeZone) - days * DAY_MS;
+): MatchedVacancyItem[] {
+  const since = startOfDayIn(now, timeZone) - days * DAY_MS;
+  // Строка без даты даёт NaN и ни в одно окно не входит.
+  return items.filter(
+    ({ cluster }) => Date.parse(cluster.sources[0]?.observedAt ?? cluster.firstObservedAt) >= since,
+  );
 }
 
 /**
@@ -75,9 +78,7 @@ export function countRolesLikeTheList(
     readonly timeZone?: string;
   },
 ): ProposedRole[] {
-  const recent = listed.filter((item) =>
-    observedWithinDays(item, CAREER_ROLE_WINDOW_DAYS, options.now, options.timeZone),
-  );
+  const recent = withinLastDays(listed, CAREER_ROLE_WINDOW_DAYS, options.now, options.timeZone);
   return roles.map((role) => ({
     ...role,
     confirmation: confirmChosenTitle({
