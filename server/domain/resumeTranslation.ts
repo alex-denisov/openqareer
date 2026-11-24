@@ -1,46 +1,38 @@
 import type { ResumeLang } from '../../shared/resumeVacancyEdits';
-import { checkedBullet } from './experienceFactRewrite';
-import { addsPersonalAction, type LetterFactTranslator } from './letterFactTranslation';
+import type { LetterFactTranslator } from './letterFactTranslation';
 import { transliterate } from './letterLatinEmployers';
 import { textLanguage } from './profileLanguage';
 import type { ResumeDocument, ResumeExperience, ResumeProject } from './resumeStudioTypes';
-import { keepsSourceNumbers } from './resumeVacancyEdits';
+import {
+  checkedTranslation,
+  isFaithful,
+  languageName,
+  needsTranslation,
+  type ResumeLine as Line,
+  type ResumeLineKind as Kind,
+} from './resumeTranslationCheck';
 
 /**
  * B785, o03: резюме под вакансию на другом языке. Строки переводит тот же переводчик, что пункты «Опыта»,
- * и каждая проходит те же проверки: ни числа, ни личного действия сверх исходной строки. Имена людей,
- * компаний и вузов в модель не уходят: в английском резюме они транслитерируются. Строка, которую
- * проверка не пропустила дважды, в переведённое резюме не входит: ни выдумки, ни смеси языков.
+ * и каждая проходит проверку: те же числа и валюты, ни личного действия сверх исходной строки. Имена
+ * людей, компаний и вузов отдельно в модель не уходят: в английском резюме они транслитерируются.
+ * Состав фактов на обоих языках один: непереведённая строка остаётся исходной. Отклонённая дважды
+ * хранится как есть (перевод равен строке), строка без ответа не хранится и спрашивается снова.
  */
 export type ResumeTranslations = Readonly<Record<string, string>>;
 
-type Kind = 'text' | 'label';
-
-interface Line {
-  readonly kind: Kind;
-  readonly text: string;
-}
-
 const CYRILLIC = /\p{Script=Cyrillic}/u;
 const SEGMENT_MAX = 240;
-const LABEL_MAX = 200;
 const ATTEMPTS = 2;
 const PARALLEL = 30;
-/** Больше трети строк не прошло проверку: такое резюме не показываем. */
-const MAX_DROPPED_SHARE = 1 / 3;
-
-function needs({ kind, text }: Line, lang: ResumeLang): boolean {
-  if (lang === 'en') return CYRILLIC.test(text);
-  // Короткие латинские названия (Go, CTO) в русском резюме пишут так же.
-  return kind === 'text' && !CYRILLIC.test(text) && textLanguage(text) === 'en';
-}
+/** Больше трети строк не переведено: такое резюме не показываем. */
+const MAX_SOURCE_SHARE = 1 / 3;
 
 export const translationKey = (lang: ResumeLang, text: string) => `${lang}:${text}`;
 
 type Map1 = (text: string, kind: Kind) => string;
 type Claim = { readonly value: string };
 
-/** Пустой перевод — строки в этом языке нет. */
 function claim<T extends Claim>(item: T | null | undefined, map: Map1, kind: Kind): T | null {
   if (!item) return null;
   const value = map(item.value, kind);
@@ -66,9 +58,9 @@ function mapPlace(place: ResumeExperience, map: Map1, name: (text: string) => st
   const lines: Map1 = (text) => mapLines(text, map);
   return {
     ...place,
-    title: claim(place.title, map, 'text'),
+    title: claim(place.title, map, 'title'),
     employer: claim(place.employer, name, 'label'),
-    location: claim(place.location, map, 'label'),
+    location: claim(place.location, map, 'term'),
     ...(place.description ? { description: claim(place.description, lines, 'text') } : {}),
     bullets: place.bullets.flatMap((bullet) => claim(bullet, lines, 'text') ?? []),
   };
@@ -89,11 +81,11 @@ function mapDocument(document: ResumeDocument, lang: ResumeLang, map: Map1): Res
   const { contact } = document;
   return {
     ...document,
-    targetRole: document.targetRole ? map(document.targetRole, 'text') : document.targetRole,
+    targetRole: document.targetRole ? map(document.targetRole, 'title') : document.targetRole,
     contact: {
       ...contact,
       fullName: contact.fullName ? name(contact.fullName) : contact.fullName,
-      location: contact.location ? map(contact.location, 'label') : contact.location,
+      location: contact.location ? map(contact.location, 'term') : contact.location,
     },
     ...(document.about ? { about: mapLines(document.about, map) } : {}),
     experience: document.experience.map((place) => mapPlace(place, map, name)),
@@ -103,11 +95,11 @@ function mapDocument(document: ResumeDocument, lang: ResumeLang, map: Map1): Res
     education: document.education.map((item) => ({
       ...item,
       institution: claim(item.institution, name, 'label'),
-      qualification: claim(item.qualification, map, 'label'),
+      qualification: claim(item.qualification, map, 'term'),
     })),
     languages: document.languages.map((item) => ({
       ...item,
-      name: claim(item.name, map, 'label'),
+      name: claim(item.name, map, 'term'),
     })),
     ...(document.courses
       ? {
@@ -130,7 +122,12 @@ function collect(document: ResumeDocument, lang: ResumeLang): Line[] {
   mapDocument(document, lang, (text, kind) => {
     const line = { kind, text };
     // Одна строка как «Go» бывает и пунктом, и навыком: строже проверяется текст.
-    if (needs(line, lang) && (!found.has(text) || kind === 'text')) found.set(text, line);
+    if (
+      needsTranslation(line, lang) &&
+      languageName(text, lang) === undefined &&
+      (!found.has(text) || kind === 'text')
+    )
+      found.set(text, line);
     return text;
   });
   return [...found.values()];
@@ -146,23 +143,42 @@ export function documentLang(document: ResumeDocument): ResumeLang {
   return textLanguage([document.about ?? '', ...texts].join(' ')) ?? 'ru';
 }
 
-/** Перевод целиком или прежний документ: половины резюме на другом языке не бывает. */
+/** Названия компаний остаются в переводе как есть. */
+const companiesOf = (document: ResumeDocument) =>
+  document.experience.flatMap(({ employer }) => employer?.value.trim() || []);
+
+type Answered = 'translated' | 'rejected' | 'missing';
+
+function reader(document: ResumeDocument, lang: ResumeLang, translations: ResumeTranslations) {
+  const companies = companiesOf(document);
+  return (line: Line): Answered => {
+    const text = translations[translationKey(lang, line.text)];
+    if (text === line.text) return 'rejected';
+    // Перевод, сохранённый до проверки чисел, спрашивается заново.
+    return text && isFaithful(line, text, lang, companies) ? 'translated' : 'missing';
+  };
+}
+
+/**
+ * Документ на языке `lang` или прежний, если переведено мало. `basis` — резюме до подгонки объёма:
+ * по нему и экран, и версия одинаково решают, показывать ли перевод.
+ */
 export function translatedDocument(
   document: ResumeDocument,
   lang: ResumeLang | undefined,
   translations: ResumeTranslations,
+  basis: ResumeDocument = document,
 ): ResumeDocument {
-  if (!lang || lang === documentLang(document) || missing(document, lang, translations).length > 0)
+  if (!lang || lang === documentLang(basis) || !isTranslated(basis, lang, translations))
     return document;
-  return mapDocument(document, lang, (text, kind) =>
-    needs({ text, kind }, lang) ? (translations[translationKey(lang, text)] ?? text) : text,
-  );
-}
-
-function missing(document: ResumeDocument, lang: ResumeLang, translations: ResumeTranslations) {
-  return collect(document, lang).filter(
-    (line) => translations[translationKey(lang, line.text)] === undefined,
-  );
+  const read = reader(basis, lang, translations);
+  return mapDocument(document, lang, (text, kind) => {
+    const line = { text, kind };
+    if (!needsTranslation(line, lang)) return text;
+    const known = languageName(text, lang);
+    if (known) return known;
+    return read(line) === 'translated' ? (translations[translationKey(lang, text)] ?? text) : text;
+  });
 }
 
 export function isTranslated(
@@ -170,25 +186,15 @@ export function isTranslated(
   lang: ResumeLang,
   translations: ResumeTranslations,
 ): boolean {
-  return missing(document, lang, translations).length === 0;
+  const all = collect(document, lang);
+  const read = reader(document, lang, translations);
+  const source = all.filter((line) => read(line) !== 'translated');
+  return source.length <= all.length * MAX_SOURCE_SHARE;
 }
 
 function segments(text: string): string[] {
   if (text.length <= SEGMENT_MAX) return [text];
   return text.split(/(?<=[.!?;])\s+/u).filter(Boolean);
-}
-
-function checked(line: Line, answer: string, lang: ResumeLang): string | null {
-  const text = answer.trim();
-  if (!text || (lang === 'en' && CYRILLIC.test(text)) || !keepsSourceNumbers(text, line.text))
-    return null;
-  if (addsPersonalAction(line.text, text)) return null;
-  // Короткая строка (должность, навык) короче пункта: длину пункта с неё не спрашиваем.
-  if (line.kind === 'label' || line.text.length <= 60)
-    return text.length <= LABEL_MAX ? text : null;
-  return (
-    checkedBullet({ text, sourceFactIds: ['0'] }, new Map([['0', line.text]]), lang)?.text ?? null
-  );
 }
 
 type Answer = { readonly kind: 'ok'; readonly text: string } | { readonly kind: 'bad' | 'silent' };
@@ -197,16 +203,17 @@ async function askSegment(
   translate: NonNullable<LetterFactTranslator['translate']>,
   line: Line,
   lang: ResumeLang,
+  companies: readonly string[],
 ): Promise<Answer> {
   let answered = false;
   for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
     const output = await translate({
-      bullets: [{ key: '0', language: lang, text: line.text, facts: [line.text] }],
+      bullets: [{ key: '0', language: lang, text: line.text, facts: [line.text], line: line.kind }],
     }).catch(() => null);
     const raw = output?.bullets.find((bullet) => bullet.key === '0')?.text;
     if (raw === undefined) continue;
     answered = true;
-    const text = checked(line, raw, lang);
+    const text = checkedTranslation(line, raw, lang, companies);
     if (text) return { kind: 'ok', text };
   }
   return { kind: answered ? 'bad' : 'silent' };
@@ -216,15 +223,17 @@ async function askLine(
   translate: NonNullable<LetterFactTranslator['translate']>,
   line: Line,
   lang: ResumeLang,
+  companies: readonly string[],
 ): Promise<string | undefined> {
   const parts = await Promise.all(
-    segments(line.text).map((text) => askSegment(translate, { ...line, text }, lang)),
+    segments(line.text).map((text) => askSegment(translate, { ...line, text }, lang, companies)),
   );
   if (parts.some((part) => part.kind === 'silent')) return undefined;
   const texts = parts.flatMap((part) => (part.kind === 'ok' ? [part.text] : []));
   if (texts.length === parts.length) return texts.join(' ');
-  // Город, навык или диплом не теряем: их передаём латиницей.
-  return line.kind === 'label' && lang === 'en' ? transliterate(line.text) : '';
+  // Город, навык или диплом передаём латиницей, остальное остаётся исходным.
+  const short = line.kind === 'label' || line.kind === 'term';
+  return short && lang === 'en' ? transliterate(line.text) : line.text;
 }
 
 export interface TranslationResult {
@@ -241,14 +250,16 @@ export async function translateDocument(
   budgetMs: number,
 ): Promise<TranslationResult> {
   const all = collect(document, lang);
-  const queue = missing(document, lang, known);
+  const companies = companiesOf(document);
+  const read = reader(document, lang, known);
+  const queue = all.filter((line) => read(line) === 'missing');
   const arrived = new Map<string, string>();
   const translate = translator?.translate?.bind(translator);
   if (queue.length > 0 && translate) {
     const deadline = Date.now() + budgetMs;
     const worker = async () => {
       for (let line = queue.shift(); line && Date.now() < deadline; line = queue.shift()) {
-        const text = await askLine(translate, line, lang);
+        const text = await askLine(translate, line, lang, companies);
         if (text !== undefined) arrived.set(translationKey(lang, line.text), text);
       }
     };
@@ -260,8 +271,9 @@ export async function translateDocument(
     clearTimeout(timer);
   }
   const translations = { ...known, ...Object.fromEntries(arrived) };
-  const dropped = all.filter((line) => translations[translationKey(lang, line.text)] === '');
-  if (dropped.length > all.length * MAX_DROPPED_SHARE)
+  const final = reader(document, lang, translations);
+  const rejected = all.filter((line) => final(line) === 'rejected');
+  if (rejected.length > all.length * MAX_SOURCE_SHARE)
     return { translations: known, complete: false };
   return { translations, complete: isTranslated(document, lang, translations) };
 }
