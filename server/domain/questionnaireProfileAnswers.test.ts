@@ -29,6 +29,18 @@ describe('B641: ответы анкеты из профиля', () => {
     expect(answer('Страна')).toBe('Россия');
   });
 
+  it('B641: ссылка LinkedIn без https и с пометкой берётся из контактов полной ссылкой', () => {
+    const link = (value: string) => answer('LinkedIn Profile', { links: [value] });
+    const full = 'https://www.linkedin.com/in/msokolova';
+    expect(link('linkedin.com/in/msokolova')).toBe('https://linkedin.com/in/msokolova');
+    expect(link('www.linkedin.com/in/msokolova/')).toBe(`${full}/`);
+    expect(link('LinkedIn: ru.linkedin.com/in/msokolova')).toBe('https://ru.linkedin.com/in/msokolova');
+    expect(link('http://www.linkedin.com/in/msokolova')).toBe(full);
+    expect(link('https://www.linkedin.com/company/acme')).toBeUndefined();
+    expect(link('https://evil.example/linkedin.com/in/msokolova')).toBeUndefined();
+    expect(link('notlinkedin.com/in/msokolova')).toBeUndefined();
+  });
+
   it('город и страну берёт из места жительства', () => {
     expect(answer('Country of residence')).toBe('Россия');
     expect(answer('В каком городе вы живёте?')).toBe('Москва');
