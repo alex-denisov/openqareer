@@ -3,9 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { gzipSync } from 'node:zlib';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SealedMatchedSnapshotStore } from './sealedMatchedSnapshotStore';
 import { SealedText } from './sealedText';
+
+vi.mock('node:zlib', async (importActual) => {
+  const actual = await importActual<typeof import('node:zlib')>();
+  return { ...actual, gzipSync: vi.fn(actual.gzipSync) };
+});
 
 const cleanups: Array<() => void> = [];
 afterEach(() => cleanups.splice(0).forEach((cleanup) => cleanup()));
@@ -27,47 +32,28 @@ function twoConnections() {
   return { web, store, other };
 }
 
-/** The largest pause between loop turns while `work` runs. */
-async function longestBlock(work: () => void | Promise<void>): Promise<number> {
-  let longest = 0;
-  let last = performance.now();
-  let running = true;
-  const tick = () => {
-    const now = performance.now();
-    longest = Math.max(longest, now - last);
-    last = now;
-    if (running) setImmediate(tick);
-  };
-  setImmediate(tick);
-  await work();
-  await new Promise((resolve) => setImmediate(resolve));
-  running = false;
-  return longest;
-}
-
 describe('SealedMatchedSnapshotStore.write leaves the event loop free (B770, prod 24.11)', () => {
-  it('another connection holds the lock: the loop keeps turning and the row is written after it', async () => {
+  it('another connection holds the lock: the loop runs the timer that frees it, and the row is written', async () => {
     const { web, store, other } = twoConnections();
     other.exec('BEGIN IMMEDIATE');
+    // A write that waits on the loop never lets this timer run and fails as busy.
     setTimeout(() => other.exec('ROLLBACK'), 400);
 
-    const longest = await longestBlock(() => store.write('one', 'profile', 100, '"all"'));
+    await store.write('one', 'profile', 100, '"all"');
 
-    expect(longest).toBeLessThan(350);
     expect(store.read('one', 'profile')?.text).toBe('"all"');
     expect(web.prepare('PRAGMA busy_timeout').get()).toEqual({ timeout: 2000 });
   });
 
   it('the list is compressed off the loop', async () => {
     const { store } = twoConnections();
-    const text = JSON.stringify(Array.from({ length: 300_000 }, (_, id) => `${id}:${id * 7919}`));
-    const startedAt = performance.now();
-    gzipSync(Buffer.from(text, 'utf8'));
-    const gzipMs = performance.now() - startedAt;
+    const text = JSON.stringify(Array.from({ length: 1_000 }, (_, id) => `${id}:${id * 7919}`));
 
-    const longest = await longestBlock(() => store.write('one', 'profile', 100, text));
+    const written = store.write('one', 'profile', 100, text);
+    expect(store.read('one', 'profile')).toBeNull();
+    await written;
 
-    expect(longest).toBeLessThan(gzipMs * 0.75);
+    expect(gzipSync).not.toHaveBeenCalled();
     expect(store.read('one', 'profile')?.text).toBe(text);
   });
 
