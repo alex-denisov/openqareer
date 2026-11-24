@@ -6,6 +6,7 @@ import {
   MIGRATION_INTERVIEW_DEBRIEFS,
   MIGRATION_INTERVIEW_RECORDINGS,
 } from './interviewRecordingSchema';
+import type { VoiceId } from '../domain/interviewVoices';
 
 /** `upload` — загруженный файл (B751): одна дорожка, голоса не разделены. */
 export type RecordingTrack = 'mic' | 'system' | 'upload';
@@ -46,6 +47,13 @@ export interface NewRecording {
 }
 
 /** B751: разбор модели по одной расшифровке; `failed` — модель не ответила или ответ отклонён. */
+export interface StoredRecordingVoices {
+  readonly transcriptHash: string;
+  readonly status: 'ready' | 'failed';
+  readonly labels: readonly VoiceId[] | null;
+  readonly candidateVoice: VoiceId | null;
+}
+
 export interface StoredDebriefAnalysis {
   readonly status: 'ready' | 'failed';
   readonly findingsCipher: string | null;
@@ -243,6 +251,53 @@ export class SqliteInterviewRecordingRepository {
       );
   }
 
+  getVoices(recordingId: string): StoredRecordingVoices | null {
+    const row = this.database
+      .prepare(
+        `SELECT transcript_hash, status, labels, candidate_voice FROM interview_recording_voices
+         WHERE recording_id = ?`,
+      )
+      .get(recordingId) as
+      | { transcript_hash: string; status: 'ready' | 'failed'; labels: string | null; candidate_voice: number | null }
+      | undefined;
+    if (!row) return null;
+    return {
+      transcriptHash: row.transcript_hash,
+      status: row.status,
+      labels: row.labels ? (JSON.parse(row.labels) as VoiceId[]) : null,
+      candidateVoice: row.candidate_voice === 1 || row.candidate_voice === 2 ? row.candidate_voice : null,
+    };
+  }
+
+  /** Новое деление голосов сбрасывает прежний выбор кандидата. */
+  saveVoices(
+    recordingId: string,
+    transcriptHash: string,
+    labels: readonly VoiceId[] | null,
+    now = new Date().toISOString(),
+  ): void {
+    this.database
+      .prepare(
+        `INSERT INTO interview_recording_voices
+           (recording_id, transcript_hash, status, labels, candidate_voice, updated_at)
+         VALUES (?, ?, ?, ?, NULL, ?)
+         ON CONFLICT (recording_id) DO UPDATE SET transcript_hash = excluded.transcript_hash,
+           status = excluded.status, labels = excluded.labels, candidate_voice = NULL,
+           updated_at = excluded.updated_at`,
+      )
+      .run(recordingId, transcriptHash, labels ? 'ready' : 'failed', labels ? JSON.stringify(labels) : null, now);
+  }
+
+  setCandidateVoice(recordingId: string, voice: VoiceId, now = new Date().toISOString()): boolean {
+    const result = this.database
+      .prepare(
+        `UPDATE interview_recording_voices SET candidate_voice = ?, updated_at = ?
+         WHERE recording_id = ? AND status = 'ready'`,
+      )
+      .run(voice, now, recordingId);
+    return Number(result.changes) > 0;
+  }
+
   /** Новый сегмент; false — такой (дорожка, номер) уже принят. */
   insertSegmentIfNew(input: NewSegment, now = new Date().toISOString()): boolean {
     const result = this.database
@@ -319,6 +374,7 @@ export class SqliteInterviewRecordingRepository {
 
   deleteRecording(id: string): void {
     this.database.prepare('DELETE FROM interview_debrief_analyses WHERE recording_id = ?').run(id);
+    this.database.prepare('DELETE FROM interview_recording_voices WHERE recording_id = ?').run(id);
     this.database.prepare('DELETE FROM interview_recording_segments WHERE recording_id = ?').run(id);
     this.database.prepare('DELETE FROM interview_recordings WHERE id = ?').run(id);
   }

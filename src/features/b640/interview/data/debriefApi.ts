@@ -70,3 +70,22 @@ export async function saveInterviewerName(applicationId: string, name: string): 
   });
   await readDataObject<object>(response);
 }
+
+/** I4c «Чей голос»: деление голосов загруженного файла (один вызов модели на расшифровку). */
+export async function splitVoices(applicationId: string): Promise<InterviewDebriefView> {
+  const response = await apiFetch(debriefPath(applicationId, '/voices'), { method: 'POST' });
+  return readDataObject<InterviewDebriefView>(response);
+}
+
+/** «Подтвердить голоса»: какой голос — кандидата. */
+export async function confirmVoices(
+  applicationId: string,
+  candidate: 1 | 2,
+): Promise<InterviewDebriefView> {
+  const response = await apiFetch(debriefPath(applicationId, '/voices'), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ candidate }),
+  });
+  return readDataObject<InterviewDebriefView>(response);
+}

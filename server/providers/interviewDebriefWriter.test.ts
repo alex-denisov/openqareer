@@ -80,3 +80,53 @@ describe('interview debrief writer', () => {
     ).resolves.toBeNull();
   });
 });
+
+describe('B642: голоса загруженного файла', () => {
+  const PLAIN = LINES.map((line) => ({ ...line, speaker: null }));
+
+  it('модель отмечает смены голоса; ответ разворачивается в голос строки', async () => {
+    const { create, writer } = llm(
+      JSON.stringify({
+        changes: [
+          { line: 0, voice: 1 },
+          { line: 1, voice: 2 },
+        ],
+      }),
+    );
+    await expect(writer.labelVoices(PLAIN)).resolves.toEqual({
+      labels: [1, 2],
+      answeredBy: 'openrouter deepseek-v4-flash',
+    });
+    const request = create.mock.calls[0]![0] as {
+      messages: Array<{ content: string }>;
+      response_format: { json_schema: { name: string } };
+    };
+    expect(request.messages[1]!.content).toContain('1 [00:04] В 2024 году');
+    expect(request.response_format.json_schema.name).toBe('interview_voices');
+  });
+
+  it('один голос на всю запись — отказ; очередь идёт к следующей ступени', async () => {
+    const one = llm(JSON.stringify({ changes: [{ line: 0, voice: 1 }] })).writer;
+    const good = llm(
+      JSON.stringify({
+        changes: [
+          { line: 0, voice: 2 },
+          { line: 1, voice: 1 },
+        ],
+      }),
+      'nvidia',
+    ).writer;
+    await expect(one.labelVoices(PLAIN)).resolves.toBeNull();
+    await expect(new QueuedInterviewDebriefWriter([one, good]).labelVoices(PLAIN)).resolves.toEqual(
+      {
+        labels: [2, 1],
+        answeredBy: 'nvidia deepseek-v4-flash',
+      },
+    );
+  });
+
+  it('ступень без деления голосов пропускается', async () => {
+    const plain: InterviewDebriefWriter = { writeDebrief: async () => null };
+    await expect(new QueuedInterviewDebriefWriter([plain]).labelVoices(PLAIN)).resolves.toBeNull();
+  });
+});

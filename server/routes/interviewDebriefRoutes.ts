@@ -12,7 +12,9 @@ import { recordingRuntimeFor, failStaleSegments } from '../recordings/recordingR
 import {
   analyzeDebrief,
   buildDebriefView,
+  confirmDebriefVoices,
   debriefInterview,
+  labelDebriefVoices,
   saveInterviewerName,
   type DebriefContext,
 } from '../recordings/interviewDebriefService';
@@ -22,6 +24,7 @@ type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) =
 const notesSchema = z.object({ notes: z.string().max(10_000) });
 const agreementSchema = z.object({ text: z.string().trim().min(1).max(500) });
 const interviewerSchema = z.object({ name: z.string().max(120) });
+const voicesSchema = z.object({ candidate: z.union([z.literal(1), z.literal(2)]) });
 
 const READ = { config: { rateLimit: { max: 600, timeWindow: '1 hour' } } };
 const WRITE = { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } };
@@ -134,6 +137,26 @@ const handleInterviewer: Handler = async (deps, request, reply) => {
   return { data: { saved: true }, meta: { requestId: request.id } };
 };
 
+/** I4c «Чей голос»: деление голосов загруженного файла — один вызов модели на расшифровку. */
+const handleVoices: Handler = async (deps, request, reply) => {
+  const resolved = resolve(deps, request, reply, true);
+  if (!resolved) return undefined;
+  const data = await labelDebriefVoices(resolved.context, resolved.subject);
+  return reply.header('Cache-Control', 'no-store').send({ data, meta: { requestId: request.id } });
+};
+
+/** «Подтвердить голоса»: какой голос — кандидата. */
+const handleVoicesConfirm: Handler = async (deps, request, reply) => {
+  const resolved = resolve(deps, request, reply, true);
+  if (!resolved) return undefined;
+  const body = voicesSchema.safeParse(request.body);
+  if (!body.success) return invalid(reply, request);
+  if (!confirmDebriefVoices(resolved.context, resolved.subject, body.data.candidate)) {
+    return sendError(reply, request, 409, 'voices_not_ready', 'Голоса ещё не разделены.', false);
+  }
+  return reply.header('Cache-Control', 'no-store').send(viewBody(resolved, request));
+};
+
 /** B751: разбор после интервью — I4, запись I4b и файл I4c читают один ответ. */
 export function registerInterviewDebriefRoutes(app: FastifyInstance, deps: RouteDeps): void {
   const base = '/api/v1/candidate/applications/:id/debrief';
@@ -142,4 +165,6 @@ export function registerInterviewDebriefRoutes(app: FastifyInstance, deps: Route
   app.put(`${base}/notes`, WRITE, withDeps(deps, handleNotes));
   app.post(`${base}/agreements`, WRITE, withDeps(deps, handleAgreement));
   app.put(`${base}/interviewer`, WRITE, withDeps(deps, handleInterviewer));
+  app.post(`${base}/voices`, WRITE, withDeps(deps, handleVoices));
+  app.put(`${base}/voices`, WRITE, withDeps(deps, handleVoicesConfirm));
 }
