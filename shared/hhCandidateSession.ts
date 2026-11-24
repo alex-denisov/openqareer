@@ -111,6 +111,7 @@ export const HH_LATE_SENT_MS = 15 * 60 * 1000;
 
 /** B708: исходы, после которых окно hh.ru осталось на вакансии и кандидат мог завершить отклик сам. */
 export const HH_WINDOW_LEFT_OPEN_FAILURES = [
+  'page_not_ready',
   'popup_missing',
   'no_confirmation',
   'captcha',

@@ -119,6 +119,8 @@ export async function runHhApplyInSession(input: {
   readonly vacancyId: string;
   readonly resumeId: string;
   readonly letter: string;
+  /** Заголовок резюме, если он у кандидата один: запасной признак, когда hh.ru не отдал идентификатор. */
+  readonly uniqueResumeTitle?: string;
 }): Promise<HhDesktopReport> {
   const report = await invokeDesktopCommand<HhDesktopReport>('run_hh_apply', { request: input });
   if (!report) throw new Error('desktop_unavailable');
