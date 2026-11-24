@@ -1,4 +1,5 @@
 import { candidateGenderFromName } from '../../shared/candidateGender';
+import { preferredApplySource } from '../../shared/hhVacancySource';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -560,6 +561,7 @@ function persistApprovedLetterSnapshot(
   approvedAt: string,
 ) {
   const { candidateStore } = deps;
+  const route = preferredApplySource(cluster);
   return candidateStore.transaction(() => {
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
@@ -567,8 +569,8 @@ function persistApprovedLetterSnapshot(
       manualVacancy: {
         title: cluster.canonicalTitle,
         company: cluster.canonicalCompany,
-        url: cluster.primaryUrl,
-        source: cluster.sources[0]?.sourceName ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
+        url: route.url,
+        source: route.source ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
       },
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).
