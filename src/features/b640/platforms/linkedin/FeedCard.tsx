@@ -28,7 +28,7 @@ interface DraftActionsProps extends CardProps {
  * Одобряется то, что в поле: правка сохраняется до постановки в очередь.
  */
 function DraftActions({ post, first, approve, onChanged, text, setText }: DraftActionsProps) {
-  const variants = usePostVariants(post.draftId, { draftText: post.comment, text, setText });
+  const variants = usePostVariants('comment', post.draftId, { draftText: post.comment, text, setText });
   const [error, setError] = useState<{ readonly text: string; readonly retry: () => void } | null>(
     null,
   );

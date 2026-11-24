@@ -6,10 +6,18 @@ import { MessageDraft } from './MessageDraft';
 
 vi.mock('./contactMessageApi', () => ({
   createB640ContactMessage: vi.fn(),
+  createB640ContactMessageVariant: vi.fn(),
   editB640ContactMessage: vi.fn(),
   approveB640ContactMessage: vi.fn(),
   markB640ContactMessageSent: vi.fn(),
 }));
+// jsdom без matchMedia: широкий экран (useIsMobile читает медиа-запрос).
+window.matchMedia = ((query: string) => ({
+  matches: false,
+  media: query,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+})) as unknown as typeof window.matchMedia;
 const api = await import('./contactMessageApi');
 
 const URL_ROMAN = 'https://www.linkedin.com/in/roman-efimov';
@@ -102,18 +110,52 @@ describe('MessageDraft', () => {
     expect(onSent).toHaveBeenCalledWith('2026-11-12T12:05:00.000Z');
   });
 
-  it('«Другой вариант» просит новый текст, счётчик уменьшается до нуля', async () => {
-    const create = vi.mocked(api.createB640ContactMessage);
-    create.mockResolvedValueOnce(message('m1', 'Первый'));
-    create.mockResolvedValueOnce(message('m2', 'Второй'));
+  it('B682: «Что поменять» даёт вариант, варианты листаются, одобряется выбранный', async () => {
+    vi.mocked(api.createB640ContactMessage).mockResolvedValue(message('m1', 'Первый'));
+    const variant = {
+      id: 'v1',
+      position: 1,
+      text: 'Второй',
+      wish: { chips: ['shorter' as const], text: '' },
+      createdAt: 'x',
+      payload: null,
+    };
+    vi.mocked(api.createB640ContactMessageVariant).mockResolvedValue({
+      variant,
+      variants: [variant],
+      remaining: 2,
+    });
+    vi.mocked(api.editB640ContactMessage).mockResolvedValue(message('m1', 'Второй'));
+    vi.mocked(api.approveB640ContactMessage).mockResolvedValue({
+      ...message('m1', 'Второй'),
+      state: 'approved',
+      approvedAt: 'x',
+      openUrl: null,
+    });
     const view = panel();
     await flush();
+    const area = () => view.container.querySelector<HTMLTextAreaElement>('.lk-draft')!;
     expect(button(view.container, 'Другой вариант')!.textContent).toContain('3');
     click(button(view.container, 'Другой вариант'));
+    click(button(view.container, 'Короче'));
+    click(button(view.container, 'Сделать вариант'));
     await flush();
-    expect(view.container.querySelector('textarea')!.value).toBe('Второй');
+    expect(api.createB640ContactMessageVariant).toHaveBeenCalledWith(
+      'm1',
+      { chips: ['shorter'], text: '' },
+      undefined,
+    );
+    expect(api.createB640ContactMessage).toHaveBeenCalledTimes(1);
+    expect(area().value).toBe('Второй');
+    expect(view.container.querySelector('.var-sw .num')!.textContent).toBe('2 из 2');
     expect(button(view.container, 'Другой вариант')!.textContent).toContain('2');
-    expect(create).toHaveBeenCalledTimes(2);
+    click(view.container.querySelector<HTMLElement>('[aria-label="Предыдущий вариант"]'));
+    expect(area().value).toBe('Первый');
+    click(view.container.querySelector<HTMLElement>('[aria-label="Следующий вариант"]'));
+    click(button(view.container, 'Одобрить и отправить'));
+    await flush();
+    expect(api.editB640ContactMessage).toHaveBeenCalledWith('m1', 'Второй');
+    expect(api.approveB640ContactMessage).toHaveBeenCalledWith('m1');
   });
 
   it('ошибка на месте и «Повторить»; «Не отправлять» закрывает панель', async () => {

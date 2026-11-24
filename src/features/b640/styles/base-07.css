@@ -497,11 +497,11 @@
   }
   .b640 .hh-ok-l { display: grid; gap: var(--career-space-2); margin: 0; padding-inline-start: var(--career-space-5); color: var(--career-text-soft); font-size: var(--career-text-sm); }
   @media (max-width: 767px) {
-    div.b640[data-vsheet]::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
-    div.b640[data-vsheet] .va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
-    div.b640[data-vsheet] .va-pop .chip { min-block-size: var(--career-target-min); }
-    div.b640[data-vsheet] .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    div.b640[data-vsheet] .va-pop-chips .chip { white-space: normal; }
+    div.b640:is([data-vsheet], :has(> .va-pop))::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop .chip { min-block-size: var(--career-target-min); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop-chips .chip { white-space: normal; }
   }
   /* a05e на 390: «Настроить ритм» открывается листом снизу, как «Что поменять». */
   @media (max-width: 767px) {

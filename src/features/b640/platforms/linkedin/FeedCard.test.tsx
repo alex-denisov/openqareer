@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FeedPostItem } from '../../../../../shared/b640FeedComments';
 import { click, mount, type Mounted } from '../../kit/testDom';
 import { FeedCard } from './FeedCard';
+import type { PostVariant } from './postVariantsApi';
 
 vi.mock('./postVariantsApi', () => ({ listPostVariants: vi.fn(), createPostVariant: vi.fn() }));
 vi.mock('../../../today/linkedinDraftApi', () => ({ updateDraft: vi.fn() }));
@@ -51,8 +52,18 @@ const button = (text: string) =>
   [...view!.container.querySelectorAll('button')].find((item) => item.textContent?.includes(text));
 const field = () => view!.container.querySelector<HTMLTextAreaElement>('textarea.lk-draft')!;
 
-async function render(item = post(), approve = vi.fn(), onChanged = vi.fn()) {
-  vi.mocked(variantsApi.listPostVariants).mockResolvedValue({ variants: [], remaining: 3 });
+async function render(
+  item = post(),
+  approve = vi.fn(),
+  onChanged = vi.fn(),
+  stored: readonly PostVariant[] = [],
+) {
+  // Сервер хранит вариант под видом черновика: по чужому виду список пуст.
+  vi.mocked(variantsApi.listPostVariants).mockImplementation(async (kind) =>
+    kind === 'comment'
+      ? { variants: stored, remaining: 3 - stored.length }
+      : { variants: [], remaining: 3 },
+  );
   await act(async () => {
     view = mount(<FeedCard post={item} first approve={approve} onChanged={onChanged} />);
   });
@@ -74,7 +85,26 @@ describe('B694 a05: карточка комментария по макету', 
     expect(button('Другой вариант')?.className).toBe('row-act');
     expect(button('Другой вариант')?.textContent).toBe('Другой вариант · 3');
     expect(button('Пропустить')?.className).toBe('row-act');
-    expect(variantsApi.listPostVariants).toHaveBeenCalledWith('f1', expect.anything());
+    expect(variantsApi.listPostVariants).toHaveBeenCalledWith('comment', 'f1', expect.anything());
+  });
+
+  it('B682: после перезагрузки сохранённый вариант комментария листается', async () => {
+    await render(post(), vi.fn(), vi.fn(), [
+      {
+        id: 'v1',
+        position: 1,
+        text: 'Другой комментарий',
+        wish: { chips: [], text: '' },
+        createdAt: '2026-11-23T10:00:00.000Z',
+        payload: null,
+      },
+    ]);
+    expect(view!.container.querySelector('.var-sw .num')?.textContent).toBe('1 из 2');
+    expect(button('Другой вариант')?.textContent).toBe('Другой вариант · 2');
+    await act(async () =>
+      click(view!.container.querySelector<HTMLButtonElement>('[aria-label="Следующий вариант"]')!),
+    );
+    expect(field().value).toBe('Другой комментарий');
   });
 
   it('«Одобрить» сначала сохраняет правку, потом ставит в очередь', async () => {
