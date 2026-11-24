@@ -178,7 +178,7 @@ export function scheduleCatalogSitemapRefresh(databasePath: string, log: Sitemap
       await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
-      setCatalogSitemaps(sitemaps.readIfChanged(database));
+      setCatalogSitemaps(await sitemaps.readIfChanged(database));
       await nextTurn();
       setListingHistory(await readListingHistory(database));
       await nextTurn();

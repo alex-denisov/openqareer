@@ -184,6 +184,8 @@ export class VacancyMechanicsRuntime {
     }
   }
   cachedVacancyIds(candidateId: string): ReadonlySet<string> { return this.fit.cachedVacancyIds(candidateId); }
+  readSealedFitViews(candidateId: string, stamp: string): string | undefined { return this.fit.readSealedViews(candidateId, stamp); }
+  sealFitViews(candidateId: string, stamp: string, text: string): Promise<void> { return this.fit.sealViews(candidateId, stamp, text); }
   warmCachedVacancyIds(candidateId: string): Promise<void> { return this.fit.warmCachedVacancyIds(candidateId); }
   /**
    * The current result exists under this input's key, read without opening it (prod 02.11: the
