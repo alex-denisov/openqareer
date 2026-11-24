@@ -72,7 +72,7 @@ export function recommendationText(item: RejectionRecommendation): Recommendatio
     return {
       title: `Показать в резюме: ${item.requirement}`,
       why: `${share}: в вакансии — ${item.requirement}, в профиле: ${item.profileFact}.`,
-      action: 'Открыть профиль',
+      action: item.resumeFactId ? 'Поправить резюме' : 'Открыть профиль',
       icon: 'edit',
       node: 's01',
     };

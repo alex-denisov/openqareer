@@ -144,6 +144,7 @@ function useFreshDialog(onDialog: () => void): FreshDialog {
 
 function headTitle(view: PanelView, stage: CoachTurnStage | null): string | null {
   if (view.kind === 'history') return null;
+  if (view.kind === 'dialog' && view.resumeFactId) return 'Консультант · Резюме';
   return view.kind === 'review' ? 'Записи на проверку' : panelTitle(stage);
 }
 
@@ -203,6 +204,8 @@ function PanelBody({
       key={freshKey}
       stage={stage}
       subject={subject}
+      resumeFactId={view.resumeFactId}
+      resumeReason={view.resumeReason}
       reviewPath={pathOf({ kind: 'review' })}
       onReview={() => onView({ kind: 'review' })}
       tariffsPath={TARIFFS_PATH}

@@ -60,6 +60,8 @@ export interface RejectionRecommendation {
   /** Требование, на котором стоит рекомендация; у `update_statuses` — `null`. */
   readonly requirement: string | null;
   readonly profileFact: string | null;
+  /** Факт из беседы, которого ещё нет в резюме: из него готовится правка; нет поля — нет правки. */
+  readonly resumeFactId?: string;
   /** Во скольких отказах встретилось и сколько отказов разобрано всего. */
   readonly count: number;
   readonly total: number;

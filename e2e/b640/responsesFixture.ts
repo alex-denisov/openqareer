@@ -154,6 +154,7 @@ function reviewPayload(
   ready: boolean,
   reason: Record<string, unknown> | null,
   helped: boolean | null,
+  resumeFact: boolean,
 ) {
   const rejection = {
     applicationId: 'a-rejected',
@@ -189,7 +190,14 @@ function reviewPayload(
     ...base,
     state: 'ready',
     sentCount: 22,
-    firstStep: { kind: 'show_in_resume', ...TEAM_GUESS, quote: undefined, count: 2, total: 3 },
+    firstStep: {
+      kind: 'show_in_resume',
+      ...TEAM_GUESS,
+      quote: undefined,
+      count: 2,
+      total: 3,
+      ...(resumeFact ? { resumeFactId: RESUME_FACT_ID } : {}),
+    },
     recommendations: [
       {
         kind: 'match_vacancies',
@@ -202,6 +210,94 @@ function reviewPayload(
   };
 }
 
+/** Факт из беседы и готовый пункт резюме из него (k06). */
+const RESUME_FACT_ID = 'fact-team';
+export const RESUME_BULLET = 'Руководил группой бэкенда из 18 человек.';
+
+/** Разговор раздела, запись из него и место работы, куда встанет пункт. */
+async function mockResumeConversation(page: Page): Promise<void> {
+  const said = {
+    id: 'u1',
+    role: 'user',
+    content: 'Команда была 18 человек.',
+    createdAt: '2026-11-11T10:00:00.000Z',
+  };
+  const memory = [
+    {
+      id: RESUME_FACT_ID,
+      kind: 'fact',
+      domain: 'outcome',
+      statement: 'Сфера Платежи: команда 18 человек',
+      confidence: 'candidate-confirmed',
+      sourceMessageIds: ['u1'],
+      sensitive: false,
+      status: 'confirmed',
+    },
+  ];
+  const candidate = {
+    id: 'candidate-1',
+    dataClass: 'synthetic',
+    locale: 'ru-RU',
+    createdAt: iso(40),
+  };
+  await page.route('**/api/v1/candidate/me/messages**', (route) =>
+    route.fulfill({ json: { data: [said], meta: { nextOffset: null } } }),
+  );
+  await page.route('**/api/v1/candidate/me?memoryOffset=*', (route) =>
+    route.fulfill({
+      json: {
+        data: { candidate, messages: [], memory, turns: [] },
+        meta: { memory: { nextOffset: null }, turns: { nextOffset: null } },
+      },
+    }),
+  );
+  const current = {
+    id: 'current',
+    stage: 'responses',
+    startedAt: said.createdAt,
+    closedAt: null,
+    messages: [said],
+    replies: [],
+    analysisPending: false,
+  };
+  await page.route('**/api/v1/candidate/consultant/current**', (route) =>
+    route.fulfill({ json: { data: current } }),
+  );
+  const entry = {
+    id: 'e1',
+    chronologyMemoryId: 'm-e1',
+    title: 'Руководитель группы',
+    employer: 'Сфера Платежи',
+    startDate: '2018',
+    current: false,
+    bulletMemoryIds: [],
+  };
+  await page.route('**/api/v1/candidate/resume', (route) =>
+    route.fulfill({ json: { data: { draft: { candidate: {}, experience: [entry] } } } }),
+  );
+}
+
+/** Предложение консультанта: запись и отмена попадают в `calls`. */
+async function mockFactRewrite(page: Page, calls: string[]): Promise<void> {
+  await page.route('**/api/v1/candidate/experience-fact-rewrite**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/apply')) {
+      const { only } = route.request().postDataJSON() as { only: string[] };
+      calls.push(`apply ${only.join(',')}`);
+      const rewrite = { id: 'p1', appliedAt: iso(0), bullets: [], declinedFactIds: [] };
+      return route.fulfill({ json: { data: { rewrite } } });
+    }
+    if (path.endsWith('/revert')) {
+      calls.push('revert');
+      return route.fulfill({ json: { data: { reverted: true } } });
+    }
+    const bullets = [{ text: RESUME_BULLET, sourceFactIds: [RESUME_FACT_ID] }];
+    const places = [{ experienceId: 'e1', bullets }];
+    const proposal = { id: 'p1', places, leftOutFactIds: [], sourceFactIds: [RESUME_FACT_ID] };
+    return route.fulfill({ json: { data: { proposal } } });
+  });
+}
+
 const reviewState: { reason: Record<string, unknown> | null; helped: boolean | null } = {
   reason: null,
   helped: null,
@@ -212,13 +308,20 @@ async function mockReview(
   route: Route,
   path: string,
   method: string,
-  ready: boolean,
+  options: ResponsesMockOptions,
   calls: string[],
 ) {
   const base = '/api/v1/candidate/applications/rejection-review';
   if (path === base && method === 'GET') {
     await route.fulfill({
-      json: { data: reviewPayload(ready, reviewState.reason, reviewState.helped) },
+      json: {
+        data: reviewPayload(
+          options.reviewReady === true,
+          reviewState.reason,
+          reviewState.helped,
+          options.resumeFact === true,
+        ),
+      },
     });
     return true;
   }
@@ -248,6 +351,8 @@ export interface ResponsesMockOptions {
   readonly failList?: number;
   /** Разбор отказов готов (откликов хватает); иначе — «мало данных». */
   readonly reviewReady?: boolean;
+  /** Факт рекомендации есть в беседе, но не в резюме: «Поправить резюме». */
+  readonly resumeFact?: boolean;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
   /** Сводка B680: какие отклики — автоотклики. Без опции сводка не отвечает. */
@@ -297,7 +402,7 @@ export async function mockResponses(
         });
         return true;
       }
-      if (await mockReview(route, path, method, options.reviewReady === true, calls)) return true;
+      if (await mockReview(route, path, method, options, calls)) return true;
       const match = path.match(/^\/api\/v1\/candidate\/applications\/([^/]+)(\/events)?$/u);
       const record = match
         ? applications.find((item) => item.id === decodeURIComponent(match[1]!))
@@ -320,6 +425,8 @@ export async function mockResponses(
     },
   });
 
+  await mockFactRewrite(page, calls);
+  if (options.resumeFact) await mockResumeConversation(page);
   await page.route('**/api/v1/candidate/automation**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
