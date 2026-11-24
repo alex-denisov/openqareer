@@ -69,6 +69,10 @@ test.describe('B663: «Дневник» — адаптация', () => {
     const meeting = page.locator('[data-b640-node="d01c"]');
     await expect(meeting.locator('.fact')).toHaveCount(6);
     await expect(meeting).toHaveCSS('padding-top', phone ? '12px' : '8px');
+    // Главная кнопка — под датой, как в макете d01c: 390 x172/202 в полосе, 1440 в колонке.
+    const kpi = await meeting.getByRole('link', { name: 'Сделать цели и KPI' }).boundingBox();
+    expect(Math.round(kpi?.x ?? 0)).toBe(phone ? 172 : 218);
+    expect(Math.round(kpi?.width ?? 0)).toBe(202);
     await expectGates(page);
 
     await page.goto('/app/diary/adaptation/people');
