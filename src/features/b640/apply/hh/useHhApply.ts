@@ -15,6 +15,8 @@ export interface HhApplyInput {
   readonly vacancyId: string;
   readonly resumeId: string | null;
   readonly letter: string;
+  /** Заголовок выбранного резюме, если он у кандидата один. */
+  readonly uniqueResumeTitle?: string;
   /** Отклик ушёл (в том числе с анкетой): отклик отмечается отправленным. */
   readonly onSent: () => Promise<void>;
 }
@@ -47,7 +49,12 @@ async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () =>
   }
   // Отказ сервера прежнее чтение окна не обрывает; новая попытка уводит окно на свою вакансию.
   stopHhWindowWatch();
-  const report = await runHhApplyInSession({ vacancyId: input.vacancyId, resumeId, letter: input.letter }).catch(
+  const report = await runHhApplyInSession({
+    vacancyId: input.vacancyId,
+    resumeId,
+    letter: input.letter,
+    uniqueResumeTitle: input.uniqueResumeTitle,
+  }).catch(
     (reason: unknown) => ({ outcome: 'failed' as const, failureCode: desktopFailureCode(reason) }),
   );
   await finishHhApply(attemptId, report.outcome, report.failureCode ?? undefined).catch(() => undefined);
