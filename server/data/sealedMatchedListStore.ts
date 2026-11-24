@@ -23,8 +23,11 @@ CREATE TABLE IF NOT EXISTS sealed_matched_list_choices (
   PRIMARY KEY (candidate_id, choice)
 )`;
 
-/** As many choices as the list cache holds in memory (`CHOICES_PER_CANDIDATE`). */
-export const SEALED_LISTS_PER_CANDIDATE = 4;
+/**
+ * B702 part 2: more than the list cache holds in memory. The general list, the roles list and its
+ * sorts took all four rows, so the list of one role had none after a deploy (23.8 s, prod 24.11).
+ */
+export const SEALED_LISTS_PER_CANDIDATE = 8;
 
 export interface SealedMatchedListRow {
   readonly builtAt: number;

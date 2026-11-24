@@ -34,7 +34,7 @@ import { withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyF
 import { readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
 import { readB640Sealed } from './b640SealedAnswer';
-import { careerTimeZone, observedWithinDays } from './careerRoleCounts';
+import { careerTimeZone, withinLastDays } from './careerRoleCounts';
 import { selectionFitLimit } from './fitSelectionSweep';
 import { candidatePlan, withDeps } from './helpers';
 import { titleFactsCount } from './matchedFitRelevance';
@@ -286,9 +286,7 @@ function withinMoney(rows: Rows, query: Query): Rows {
 function withinDays(rows: Rows, query: Query): Rows {
   const { days } = query;
   if (!days) return rows;
-  const now = new Date();
-  const timeZone = careerTimeZone(query);
-  return rows.filter((item) => observedWithinDays(item, days, now, timeZone));
+  return withinLastDays(rows, days, new Date(), careerTimeZone(query));
 }
 
 const getMatchedVacancies = async (

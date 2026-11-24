@@ -6,6 +6,7 @@ import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, ty
 import { syncSection } from '../observability/syncSections';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
+import { VacancyFitSeals } from './vacancyFitSeals';
 import { MECHANICS_REQUEUE_REVISION } from './sqliteVacancyRequirementsStore';
 
 export interface VacancyFitJob {
@@ -57,11 +58,21 @@ function requestedAtFor(now: string, options: FitEnqueueOptions): string {
   return new Date(BACKGROUND_BASE_MS - Math.max(0, Math.floor(options.backgroundRank))).toISOString();
 }
 
+/** Rows past the sealed ids a new process opens one by one; more than this and the ids are sealed again. */
+const IDS_SEAL_STEP = 200;
+const IDS_STAMP = 'ids-v1';
+const VIEWS_MAX_AGE_MS = 24 * 60 * 60_000;
+
+interface KnownIds { readonly ids: ReadonlySet<string>; readonly count: number; readonly last: number }
+
 /** B757: the fit request is larger than one model call may cost; it is settled for good. */
 export const FIT_INPUT_TOO_LARGE = 'assessment_input_too_large';
 
 export class SqliteVacancyFitStore {
-  private readonly cachedIdsMemo = new Map<string, { readonly ids: ReadonlySet<string>; readonly count: number; readonly last: number }>();
+  private readonly cachedIdsMemo = new Map<string, KnownIds>();
+  /** Rows the sealed ids hold; absent until this process has looked for the seal. */
+  private readonly sealedIdsCount = new Map<string, number>();
+  private readonly seals: VacancyFitSeals;
 
   constructor(private readonly database: DatabaseSync, private readonly sealedText: SealedText) {
     database.exec(`CREATE TABLE IF NOT EXISTS vacancy_fit_cache (
@@ -87,6 +98,7 @@ export class SqliteVacancyFitStore {
     );
     CREATE INDEX IF NOT EXISTS vacancy_fit_own_rows_vacancy ON vacancy_fit_own_rows(vacancy_key);
     CREATE INDEX IF NOT EXISTS vacancy_fit_own_rows_candidate ON vacancy_fit_own_rows(candidate_key);`);
+    this.seals = new VacancyFitSeals(database, sealedText);
     addLateColumns(database, 'vacancy_fit_queue', LATE_COLUMNS);
     addLateColumns(database, 'vacancy_fit_cache', LATE_CACHE_COLUMNS);
   }
@@ -165,6 +177,7 @@ export class SqliteVacancyFitStore {
    */
   cachedVacancyIds(candidateId: string): ReadonlySet<string> {
     const candidateKey = this.candidateKey(candidateId);
+    this.restoreIds(candidateKey);
     const stat = this.database.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(rowid), 0) AS last FROM vacancy_fit_cache WHERE candidate_key = ?')
       .get(candidateKey) as { count: number; last: number };
     const known = this.cachedIdsMemo.get(candidateKey);
@@ -201,6 +214,7 @@ export class SqliteVacancyFitStore {
     { batch = 50, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
   ): Promise<void> {
     const candidateKey = this.candidateKey(candidateId);
+    this.restoreIds(candidateKey);
     const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
     // B770a: the batch holds the loop between yields; named so a stall over list:fit-ids shows it.
     let growing: Set<string> | undefined;
@@ -220,10 +234,50 @@ export class SqliteVacancyFitStore {
     };
     for (;;) {
       const read = syncSection('fit-ids:batch', warmBatch);
-      if (read === 0) return;
+      if (read === 0) break;
       await yieldToLoop();
-      if (read < batch) return;
+      if (read < batch) break;
     }
+    this.sealIds(candidateKey);
+  }
+
+  /** B702 part 2: the ids of the previous process, once; only the rows after them are opened. */
+  private restoreIds(candidateKey: string): void {
+    if (this.sealedIdsCount.has(candidateKey)) return;
+    this.sealedIdsCount.set(candidateKey, 0);
+    if (this.cachedIdsMemo.has(candidateKey)) return;
+    const text = this.seals.read(candidateKey, 'ids', IDS_STAMP);
+    if (text === undefined) return;
+    const stored = JSON.parse(text) as { readonly ids: readonly string[]; readonly count: number; readonly last: number };
+    const { count } = this.database.prepare('SELECT COUNT(*) AS count FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid <= ?')
+      .get(candidateKey, stored.last) as { count: number };
+    // A row was deleted or the table was rebuilt since: read them all again.
+    if (count !== stored.count) return;
+    this.cachedIdsMemo.set(candidateKey, { ids: new Set(stored.ids), count, last: stored.last });
+    this.sealedIdsCount.set(candidateKey, count);
+  }
+
+  private sealIds(candidateKey: string): void {
+    const known = this.cachedIdsMemo.get(candidateKey);
+    const sealed = this.sealedIdsCount.get(candidateKey) ?? 0;
+    if (!known || Math.abs(known.count - sealed) < IDS_SEAL_STEP) return;
+    this.sealedIdsCount.set(candidateKey, known.count);
+    const text = JSON.stringify({ ids: [...known.ids], count: known.count, last: known.last });
+    this.lastSeal = this.seals.write(candidateKey, 'ids', IDS_STAMP, text).catch(() => {
+      // A cache: the next process opens the rows, the next warm seals again.
+      this.sealedIdsCount.set(candidateKey, sealed);
+    });
+  }
+
+  /** Tests and shutdown: the last seal has been written. */
+  lastSeal: Promise<void> = Promise.resolve();
+
+  /** B702 part 2: the order's percents of the previous process, under the same profile. */
+  readSealedViews(candidateId: string, stamp: string): string | undefined {
+    return this.seals.read(this.candidateKey(candidateId), 'views', stamp, Date.now() - VIEWS_MAX_AGE_MS);
+  }
+  sealViews(candidateId: string, stamp: string, text: string): Promise<void> {
+    return this.seals.write(this.candidateKey(candidateId), 'views', stamp, text);
   }
 
   private openedVacancyId(row: { cache_key: string; result_cipher: string }, candidateId: string): string | undefined {
@@ -568,6 +622,7 @@ export class SqliteVacancyFitStore {
       this.database.prepare('DELETE FROM vacancy_fit_queue WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_latest WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_own_rows WHERE candidate_key=?').run(key);
+      this.seals.delete(key);
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }

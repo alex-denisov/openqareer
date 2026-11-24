@@ -9,7 +9,7 @@ vi.mock('./matchedVacancyFit', () => ({
   },
 }));
 vi.mock('./matchedVacancyRoutes', () => ({
-  finishMatchedVacancies: (snapshot: readonly MatchedVacancyItem[]) => [...snapshot],
+  finishMatchedVacanciesYielding: async (snapshot: readonly MatchedVacancyItem[]) => [...snapshot],
 }));
 vi.mock('./campaignContext', () => ({ readCampaign: () => ({ roles: { value: ['CIO'] } }) }));
 vi.mock('../domain/vacancyFitProfileStamp', () => ({ vacancyFitProfileStamp: () => 'profile-1' }));

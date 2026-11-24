@@ -124,6 +124,7 @@ describe('the list is built ahead of the reader (PRB-041)', () => {
     expect(Object.keys(warmed.phasesMs)).toEqual(
       expect.arrayContaining(['finish', 'levelGate', 'order', 'facets', 'filters', 'pagePlan']),
     );
-    expect(warmed.phasesMs.prepareRoleTurns).toBeGreaterThan(0);
+    // B702-2: ход отдаётся по времени, на 40 известных названиях его может не быть.
+    expect(warmed.phasesMs.prepareRoleTurns).toEqual(expect.any(Number));
   });
 });
