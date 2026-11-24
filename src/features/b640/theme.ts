@@ -6,6 +6,8 @@ export type B640Theme = (typeof B640_THEMES)[number];
 
 export const B640_THEME_KEY = 'oq_b640_theme';
 const DEFAULT_THEME: B640Theme = 'light';
+/** B593: атрибут темы на <html>, который до бандла ставит /assets/oq-theme-1.js. */
+const FIRST_FRAME_ATTRIBUTE = 'data-oq-theme';
 
 function isTheme(value: unknown): value is B640Theme {
   return typeof value === 'string' && (B640_THEMES as readonly string[]).includes(value);
@@ -101,6 +103,8 @@ export function useDocumentTheme(root: HTMLElement | null, theme: B640Theme): vo
       const styles = window.getComputedStyle(root);
       page.style.backgroundColor = styles.backgroundColor;
       page.style.colorScheme = styles.colorScheme;
+      // B593: признак первого кадра (oq-theme-1.js) следует за действующей темой кабинета.
+      page.setAttribute(FIRST_FRAME_ATTRIBUTE, /dark/u.test(styles.colorScheme) ? 'dark' : 'light');
       if (bar && styles.backgroundColor) bar.content = barColor(styles.backgroundColor);
     };
     apply();
@@ -110,6 +114,7 @@ export function useDocumentTheme(root: HTMLElement | null, theme: B640Theme): vo
       media.removeEventListener('change', apply);
       page.style.removeProperty('background-color');
       page.style.removeProperty('color-scheme');
+      page.removeAttribute(FIRST_FRAME_ATTRIBUTE);
       if (bar && barBefore !== null) bar.content = barBefore;
     };
   }, [root, theme]);
