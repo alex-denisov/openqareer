@@ -94,11 +94,11 @@ describe('runHeavyRead', () => {
     );
     const result = (await runHeavyRead(
       database,
-      'sitemaps',
+      'sitemapsWrite',
       { nowMs: 5 },
       { workerFile },
     )) as unknown;
-    expect(result).toEqual({ job: 'sitemaps', path: database.location(), args: { nowMs: 5 } });
+    expect(result).toEqual({ job: 'sitemapsWrite', path: database.location(), args: { nowMs: 5 } });
     database.close();
   });
 
