@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { beginImmediateBriefly } from './sqliteBriefLock';
 import { isSqliteBusy } from './sqliteBusyRetry';
 import { SealedMatchedSnapshotStore } from './sealedMatchedSnapshotStore';
 import type { SealedText } from './sealedText';
@@ -124,16 +125,12 @@ export class SealedMatchedListStore {
 
   /** BEGIN IMMEDIATE with a short wait; the connection's own wait is restored for its other writers. */
   private lockBriefly(): boolean {
-    const { timeout } = this.database.prepare('PRAGMA busy_timeout').get() as { timeout: number };
-    this.database.exec(`PRAGMA busy_timeout = ${SEAL_BUSY_TIMEOUT_MS}`);
     try {
-      this.database.exec('BEGIN IMMEDIATE');
+      beginImmediateBriefly(this.database, SEAL_BUSY_TIMEOUT_MS);
       return true;
     } catch (error) {
       if (isSqliteBusy(error)) return false;
       throw error;
-    } finally {
-      this.database.exec(`PRAGMA busy_timeout = ${timeout}`);
     }
   }
 }
