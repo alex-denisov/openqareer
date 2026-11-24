@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useRef, useState, type Dispatch } from 'react';
 import {
   loadInitialAssessment,
   RoleSkillAssessmentActions,
@@ -8,6 +8,7 @@ import {
   getAssessmentRun,
   initialRoleSkillAssessmentState,
   roleSkillAssessmentReducer,
+  type RoleSkillAssessmentUiAction,
   type RoleSkillAssessmentUiState,
 } from '../../skills/roleSkillAssessmentState';
 import type { RoleSkillAssessmentRun } from '../../../../server/domain/roleSkillAssessment';
@@ -22,7 +23,8 @@ export interface SkillCheck {
   /** Кейс, итог которого открыт (C4b); `null` — открыт вопрос. */
   readonly resultCase: RunCase | undefined;
   readonly answerCase: () => Promise<void>;
-  readonly nextAfterResult: () => void;
+  /** «Верно» / «Пропустить» записываются, затем следующий кейс; без вопроса — сразу дальше. */
+  readonly nextAfterResult: (accepted: boolean) => Promise<void>;
   readonly answerAgain: () => void;
 }
 
@@ -30,6 +32,40 @@ export interface SkillCheck {
 function lastEvaluated(run: RoleSkillAssessmentRun | undefined): RunCase | undefined {
   if (!run || run.status !== 'complete') return undefined;
   return [...run.cases].reverse().find((record) => record.evaluation);
+}
+
+/** Оценённый кейс, по которому кандидат ещё не решил: его итог открывается первым (B734). */
+function awaitingDecision(run: RoleSkillAssessmentRun | undefined): string | undefined {
+  if (!run || !['cases', 'complete'].includes(run.status)) return undefined;
+  return run.cases.find((record) => record.decision === 'pending')?.assessmentCase.id;
+}
+
+/** Фактов из разговора нет — шаг «Что добавить в профиль» показывать не с чем (B734). */
+export function hasNoSuggestions(run: RoleSkillAssessmentRun | undefined): boolean {
+  return run?.status === 'suggestions' && run.suggestions.length === 0;
+}
+
+/** Вход в проверку: итог без решения открывается первым, пустой шаг фактов пропускается (B734). */
+function useOnEntry(
+  run: RoleSkillAssessmentRun | undefined,
+  actions: RoleSkillAssessmentActions,
+  dispatch: Dispatch<RoleSkillAssessmentUiAction>,
+  openResult: (caseId: string) => void,
+): void {
+  const runId = run?.id;
+  const awaitingId = awaitingDecision(run);
+  useLayoutEffect(() => {
+    if (!runId || !awaitingId) return;
+    openResult(awaitingId);
+    dispatch({ type: 'focus-case', caseId: awaitingId });
+    // Только при входе в проверку: дальше итог открывает сам ответ на кейс.
+  }, [runId]);
+
+  const skipEmpty = hasNoSuggestions(run);
+  useEffect(() => {
+    if (skipEmpty) void actions.saveSuggestions();
+    // Один раз на шаг: после сбоя повторяет кандидат.
+  }, [runId, skipEmpty]);
 }
 
 /** Состояние C04: проверка роли через действия прежнего экрана навыков, без своей логики сервера. */
@@ -47,6 +83,8 @@ export function useSkillCheck(roleTitle: string | undefined): SkillCheck {
     void loadInitialAssessment(dispatch, roleTitle);
   }, [roleTitle]);
 
+  useOnEntry(run, actions, dispatch, setResultId);
+
   const shown = resultId
     ? run?.cases.find((record) => record.assessmentCase.id === resultId)
     : reopened
@@ -61,7 +99,10 @@ export function useSkillCheck(roleTitle: string | undefined): SkillCheck {
     if (sent) setResultId(record.assessmentCase.id);
   };
 
-  const nextAfterResult = () => {
+  const nextAfterResult = async (accepted: boolean) => {
+    const record = resultCase;
+    const open = record?.decision === 'pending' || (record?.decision === 'declined' && accepted);
+    if (record && open && !(await actions.decideCase(record.assessmentCase.id, accepted))) return;
     setResultId(null);
     setReopened(true);
     actions.focusCase();

@@ -194,6 +194,8 @@ const roleSkillRunCaseSchema = z
     answer: z.string().max(10_000).nullable(),
     evaluation: roleSkillEvaluationSchema.nullable(),
     evaluationHistory: z.array(roleSkillEvaluationSchema).max(5),
+    /** B734: решение кандидата по итогу; без поля оценка записана в навык сразу. */
+    decision: z.enum(['pending', 'accepted', 'declined']).optional(),
     appealReason: z.string().max(2_000).nullable(),
     pendingDiscussionQuestion: z.string().max(2_000).nullable(),
     discussion: z
