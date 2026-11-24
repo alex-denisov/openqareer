@@ -154,7 +154,7 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
       0,
     );
     await expect(
-      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }),
+      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 3' }),
     ).toBeVisible();
     const experience = page.locator('.li-sec').nth(2);
     await expect(experience.locator(':scope > .li-rec .li-rec-l')).toHaveText([
@@ -187,22 +187,22 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
     await expect(page.locator('.li-all')).toHaveCount(0);
   });
 
-  test('«Скопировать», «Предложить заново» и листание «Вариант N из 3»', async ({ page }) => {
+  test('«Скопировать», «Предложить заново» и листание «Вариант N из 4»', async ({ page }) => {
     await mock(page);
     await open(page);
     await page.getByRole('button', { name: 'Скопировать: Заголовок' }).click();
     await expect(page.getByText('Скопировано')).toBeVisible();
-    await page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }).click();
+    await page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 3' }).click();
     await expect(page.locator('#li-new-headline')).toHaveText(
       'Руководитель разработки · финтех · Go, Kubernetes',
     );
     const variants = page.getByRole('group', { name: 'Варианты: Заголовок' });
-    await expect(variants).toContainText('Вариант 2 из 3');
+    await expect(variants).toContainText('Вариант 2 из 4');
     await variants.getByRole('button', { name: 'Предыдущий вариант' }).click();
     await expect(page.locator('#li-new-headline')).toContainText('Engineering Manager');
-    await expect(variants).toContainText('Вариант 1 из 3');
+    await expect(variants).toContainText('Вариант 1 из 4');
     await expect(
-      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 1' }),
+      page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }),
     ).toBeVisible();
     expect(await noOverflow(page)).toBe(true);
   });

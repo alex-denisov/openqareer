@@ -1,6 +1,8 @@
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import type { HhResumeEdit, HhResumeEditSection } from '../../../../../shared/hhCandidateSession';
 import { Button, Dialog, Icon, SegControl, useToast } from '../../kit';
+import { HhEditVariantButton, HhEditVariantError, HhEditVariantSwitch } from '../HhEditVariant';
+import { useHhEditVariants } from '../useHhEditVariants';
 import { canApply, useHhResumeApply, type HhApplyState, type HhResumeApply } from './useHhResumeApply';
 
 /** B678, A1c: разбор резюме hh.ru — разделы hh.ru, сейчас и предложение платформы. */
@@ -59,7 +61,7 @@ function Lines({ text, className, hidden }: { readonly text: string; readonly cl
   );
 }
 
-function ApplyAction({ edit, state, onApply }: { readonly edit: HhResumeEdit; readonly state: HhApplyState; readonly onApply: () => void }) {
+function ApplyAction({ edit, state, busy, onApply }: { readonly edit: HhResumeEdit; readonly state: HhApplyState; readonly busy: boolean; readonly onApply: () => void }) {
   if (!canApply(edit) || (state.kind === 'failed' && !state.retry)) return null;
   if (state.kind === 'applied') {
     return (
@@ -69,25 +71,39 @@ function ApplyAction({ edit, state, onApply }: { readonly edit: HhResumeEdit; re
     );
   }
   return (
-    <Button size="sm" icon="check" busy={state.kind === 'applying'} disabled={state.kind === 'applying'} onClick={onApply}>
+    <Button size="sm" icon="check" busy={state.kind === 'applying'} disabled={busy || state.kind === 'applying'} onClick={onApply}>
       Применить
     </Button>
   );
 }
 
-function EditRow({ edit, apply }: { readonly edit: HhResumeEdit; readonly apply: HhResumeApply }) {
+interface EditRowProps {
+  readonly edit: HhResumeEdit;
+  /** Правка с выбранным вариантом текста: она и копируется, и применяется. */
+  readonly shown: HhResumeEdit;
+  readonly apply: HhResumeApply;
+  readonly onShow: (edit: HhResumeEdit) => void;
+}
+
+function EditRow({ edit, shown, apply, onShow }: EditRowProps) {
   const state = apply.stateOf(edit.id);
+  const variants = useHhEditVariants(edit, shown, onShow);
+  // Текст, который уже переносится или перенесён на hh.ru, не меняем.
+  const settled = apply.busy || state.kind === 'applied';
   return (
     <li className="hh2-r">
       {edit.place ? <p className="hh2-place">{edit.place}</p> : null}
       {edit.was ? <Lines text={edit.was} className="hh2-was" hidden="Сейчас: " /> : null}
       <div className="hh2-sugg">
-        <Lines text={edit.now} className="hh2-now" hidden="Предложение: " />
+        <Lines text={shown.now} className="hh2-now" hidden="Предложение: " />
+        <HhEditVariantSwitch variants={variants} disabled={settled} />
         <div className="hh2-acts">
-          <CopyButton text={edit.now} />
-          <ApplyAction edit={edit} state={state} onApply={() => void apply.apply(edit)} />
+          <CopyButton text={shown.now} />
+          {edit.variantOf ? <HhEditVariantButton variants={variants} disabled={settled} /> : null}
+          <ApplyAction edit={shown} state={state} busy={variants.busy} onApply={() => void apply.apply(shown)} />
         </div>
       </div>
+      <HhEditVariantError variants={variants} />
       {state.kind === 'failed' ? (
         <p className="hh2-err" role="status">
           {state.message}
@@ -163,7 +179,14 @@ function EditsTop({ resumeId, resumeTitle, busy, onApplyAll }: EditsTopProps) {
   );
 }
 
-function EditSections({ edits, apply }: { readonly edits: readonly HhResumeEdit[]; readonly apply: HhResumeApply }) {
+interface EditSectionsProps {
+  readonly edits: readonly HhResumeEdit[];
+  readonly shownOf: (edit: HhResumeEdit) => HhResumeEdit;
+  readonly apply: HhResumeApply;
+  readonly onShow: (edit: HhResumeEdit) => void;
+}
+
+function EditSections({ edits, shownOf, apply, onShow }: EditSectionsProps) {
   const groups = SECTIONS.map(([section, label]) => [label, edits.filter((edit) => edit.section === section)] as const)
     .filter(([, items]) => items.length > 0);
   return (
@@ -175,7 +198,7 @@ function EditSections({ edits, apply }: { readonly edits: readonly HhResumeEdit[
           </h3>
           <ul className="hh2-rows">
             {items.map((edit) => (
-              <EditRow edit={edit} apply={apply} key={edit.id} />
+              <EditRow edit={edit} shown={shownOf(edit)} apply={apply} onShow={onShow} key={edit.variantOf?.subjectId ?? edit.id} />
             ))}
           </ul>
         </section>
@@ -183,6 +206,9 @@ function EditSections({ edits, apply }: { readonly edits: readonly HhResumeEdit[
     </>
   );
 }
+
+/** Выбор держится за содержимым правки: новый разбор того же места прежний вариант не подставит. */
+const choiceKey = (edit: HhResumeEdit) => edit.variantOf?.subjectId ?? edit.id;
 
 export interface HhResumeEditsProps {
   readonly resumeId: string;
@@ -194,7 +220,10 @@ export interface HhResumeEditsProps {
 export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResumeEditsProps) {
   const apply = useHhResumeApply(resumeId);
   const [confirming, setConfirming] = useState(false);
-  const pending = edits.filter((edit) => {
+  const [chosen, setChosen] = useState<Readonly<Record<string, HhResumeEdit>>>({});
+  const show = useCallback((edit: HhResumeEdit) => setChosen((current) => ({ ...current, [choiceKey(edit)]: edit })), []);
+  const shownOf = (edit: HhResumeEdit) => chosen[choiceKey(edit)] ?? edit;
+  const pending = edits.map(shownOf).filter((edit) => {
     const state = apply.stateOf(edit.id);
     return canApply(edit) && state.kind !== 'applied' && !(state.kind === 'failed' && !state.retry);
   });
@@ -213,7 +242,7 @@ export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResume
         busy={apply.busy}
         onApplyAll={pending.length > 0 ? () => setConfirming(true) : null}
       />
-      <EditSections edits={edits} apply={apply} />
+      <EditSections edits={edits} shownOf={shownOf} apply={apply} onShow={show} />
       <div className="actions">
         <Button icon="back" onClick={onBack}>
           К отправке

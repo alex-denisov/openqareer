@@ -1,3 +1,5 @@
+import { MAX_TEXT_VARIANTS } from './textVariants';
+
 /**
  * B692/B645 (a03): разделы профиля LinkedIn — «сейчас» из импорта LinkedIn и предложения по ним.
  * На LinkedIn ничего не отправляется: кандидат копирует текст сам и отмечает «Выполнено».
@@ -18,10 +20,10 @@ export const LINKEDIN_HEADLINE_MAX = 220;
 export const LINKEDIN_ABOUT_MAX = 2600;
 export const LINKEDIN_SKILLS_MAX = 50;
 /**
- * Вариантов у предложения не больше трёх, считая первый (решение владельца 12.11 по генерации):
- * первый бесплатно, «Предложить заново» — ещё два; квоты тарифа это не тратит.
+ * Первый текст и до трёх других вариантов (a03 «осталось 3», решение CPO 24.11); квоты тарифа это
+ * не тратит.
  */
-export const LINKEDIN_VARIANTS_MAX = 3;
+export const LINKEDIN_VARIANTS_MAX = MAX_TEXT_VARIANTS + 1;
 
 /**
  * Ключ предложения: раздел или место работы `experience:<id>`. По нему ставится «Выполнено»
@@ -31,7 +33,7 @@ export const LINKEDIN_OFFER_KEY = /^(headline|about|skills|experience:[A-Za-z0-9
 
 export interface LinkedinOffer {
   readonly key: string;
-  /** Все варианты по порядку, первый — исходное предложение; на экране листаются «Вариант N из 3». */
+  /** Все варианты по порядку, первый — исходное предложение; на экране листаются «Вариант N из 4». */
   readonly variants: readonly string[];
   /** Кандидат вставил текст в LinkedIn и отметил «Выполнено». */
   readonly doneAt: string | null;

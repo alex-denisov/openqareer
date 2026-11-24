@@ -40,6 +40,11 @@
     line-clamp: 2;
     overflow: hidden;
   }
+  /* B678: «не отправлен» переносится только по пробелу, слово не рвётся. */
+  @media (min-width: 768px) {
+    .b640 .ot-th.ot-c-sent,
+    .b640 .ot-c-sent { inline-size: calc(var(--career-space-8) * 3); overflow-wrap: normal; }
+  }
   /* B645: «Настроить» — кнопка, в макете ссылка; без отступа браузера по вертикали. */
   .b640 .ot-auto-b { padding-block: 0; }
   /* B645: строка чисел воронки — высотой с кнопку подсказки, как в макете, и без неё. */

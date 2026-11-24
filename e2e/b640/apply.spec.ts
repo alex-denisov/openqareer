@@ -26,6 +26,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly longChoice?: boolean;
   /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
   readonly approvedBody?: string;
+  /** Вместе с письмом одобрено общее резюме. */
+  readonly approvedResume?: boolean;
   /** Длинный текст вакансии, как у настоящих на hh.ru (B645). */
   readonly longVacancy?: boolean;
 }
@@ -279,6 +281,7 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
   });
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', async (route) => {
     calls.push('approval read');
+    const iso = '2026-11-19T10:00:00.000Z';
     const approved = options.approvedBody
       ? {
           applicationId: 'a-draft',
@@ -286,7 +289,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
           approvedAt: '2026-11-19T10:00:00.000Z',
           status: 'approved',
           sent: false,
-          resume: null,
+          resume: options.approvedResume
+            ? { kind: 'general', versionId: null, documentId: 'doc-2', snapshotAt: iso }
+            : null,
           subject: null,
           body: options.approvedBody,
           variantId: null,
@@ -415,6 +420,23 @@ test.describe('B657: единый экран отклика', () => {
     await expect(page.getByText('Собираем письмо…')).toHaveCount(0);
     expect(mock.calls).toContain('approval read');
     expect(mock.calls.filter((call) => call.startsWith('pitch'))).toEqual([]);
+  });
+
+  test('письмо одобрено — шаг «Резюме» одобрен и на вкладке, и внутри (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=send', {
+      approvedBody: 'Готовый текст.',
+      approvedResume: true,
+    });
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(1);
+    await step(page, 'Резюме').click();
+    await expect(page.getByRole('button', { name: 'К письму' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Одобрить резюме' })).toHaveCount(0);
+  });
+
+  test('письмо одобрено без резюме — шаг «Резюме» без галочки (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter', { approvedBody: 'Готовый текст.' });
+    await expect(page.getByRole('heading', { name: 'Письмо одобрено' })).toBeVisible();
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(0);
   });
 
   test('«Изменить письмо», а черновик не собрался — одобренный текст остаётся в поле (B724)', async ({
@@ -761,10 +783,33 @@ test.describe('B657: единый экран отклика', () => {
             vacancyId: 'v',
             edits: [
               { id: 'title', section: 'title', was: 'Руководитель', now: 'Head of Engineering' },
-              { id: 'about', section: 'about', was: 'Руковожу 5 лет.', now: 'Пять лет руковожу.' },
+              {
+                id: 'about',
+                section: 'about',
+                was: 'Руковожу 5 лет.',
+                now: 'Пять лет руковожу.',
+                variantOf: { vacancyId: 'v', subjectId: 'b'.repeat(64) },
+              },
             ],
           },
         },
+      }),
+    );
+    const variant = {
+      id: 'x1',
+      position: 1,
+      text: 'Веду разработку пять лет.',
+      payload: null,
+      wish: { chips: [], text: '' },
+      createdAt: '2026-11-24T00:00:00.000Z',
+    };
+    await page.route('**/api/v1/candidate/text-variants?kind=resume**', (route) =>
+      route.fulfill({ json: { data: { variants: [], remaining: 3 } } }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/edits/variants', (route) =>
+      route.fulfill({
+        status: 201,
+        json: { data: { variant, variants: [variant], remaining: 2 } },
       }),
     );
     await page.route('**/api/v1/candidate/hh/resumes/review**', (route) =>
@@ -815,6 +860,23 @@ test.describe('B657: единый экран отклика', () => {
     const section = (await page.locator('.hh2-sec').first().boundingBox())!;
     const main = (await page.locator('.page.two').boundingBox())!;
     expect(section.width).toBeGreaterThan(main.width * 0.85);
+    // a01c: значок без окна у «О себе», у должности его нет; вариант встаёт на место.
+    const other = page.getByRole('button', { name: 'Другой вариант', exact: true });
+    await expect(other).toHaveCount(1);
+    const size = (await other.boundingBox())!;
+    const copy = (await other
+      .locator('xpath=preceding-sibling::button[@aria-label="Скопировать"]')
+      .boundingBox())!;
+    expect(size).toMatchObject({ width: copy.width, height: copy.height, y: copy.y });
+    await other.click();
+    await expect(page.getByText('Веду разработку пять лет.')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Варианты правки' })).toContainText('2 из 2');
+    const acts = (await page.locator('.hh2-acts').last().boundingBox())!;
+    const sugg = (await page.locator('.hh2-sugg').last().boundingBox())!;
+    expect(acts.x + acts.width).toBeLessThanOrEqual(sugg.x + sugg.width + 0.5);
+    await page.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(page.getByText('Пять лет руковожу.')).toBeVisible();
+    await page.mouse.move(0, 0);
     await expectLastActionReachable(page);
     await expectGates(page);
   });

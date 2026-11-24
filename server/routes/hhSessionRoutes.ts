@@ -19,6 +19,7 @@ import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepositor
 import { hhApplyGate, type HhApplyRefusal } from '../domain/hhApplyGate';
 import { draftHhResumeEdits, hhResumeLanguage } from '../domain/hhResumeEdits';
 import { localizeHhResumeEdits } from '../domain/hhResumeEditTranslation';
+import { hasVariants, hhResumeVariantSubject } from '../domain/hhResumeVariant';
 import { reviewHhResumes } from '../domain/hhResumeReview';
 import { cachedEdits, editsCacheKey, hhEditsInput, rememberEdits, readWithSections, selectedWithSections, type SelectedWithSections } from './hhResumeEditsInput';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
@@ -110,7 +111,7 @@ const REFUSAL_REPLY: Readonly<Record<HhApplyRefusal, readonly [number, string]>>
   hh_cooldown: [429, 'hh.ru просил проверку. Следующий отклик через hh.ru — через час.'],
 };
 
-function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyReply): string | null {
+export function hhCandidateOf(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply): string | null {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return null;
   if (!principal.candidate) {
@@ -121,7 +122,7 @@ function candidateOf(deps: BoundDeps, request: FastifyRequest, reply: FastifyRep
 }
 
 const getResumes: Handler = async (deps, request, reply) => {
-  const candidateId = candidateOf(deps, request, reply);
+  const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const snapshot = deps.hh.getSnapshot(candidateId);
   // B678: тексты остальных резюме нужны только сверке на сервере, в интерфейс они не уходят.
@@ -136,7 +137,7 @@ function keptContents(previous: HhResumeSnapshot | null, listed: ReadonlySet<str
 }
 
 const putResumes: Handler = async (deps, request, reply) => {
-  const candidateId = candidateOf(deps, request, reply);
+  const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const parsed = snapshotSchema.safeParse(request.body ?? {});
   if (!parsed.success) {
@@ -158,7 +159,7 @@ const putResumes: Handler = async (deps, request, reply) => {
 
 /** B678: какое из прочитанных резюме hh.ru подходит вакансии платформы и чего в каждом не хватает. */
 const getReview: Handler = async (deps, request, reply) => {
-  const candidateId = candidateOf(deps, request, reply);
+  const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const query = reviewCountsSchema.safeParse(request.query ?? {});
   if (!query.success) {
@@ -187,7 +188,7 @@ const EDITS_TRANSLATION_BUDGET_MS = 8_000;
 const RESUMES_BODY_LIMIT = 1_048_576;
 
 async function freshEdits(
-  deps: BoundDeps,
+  deps: RouteDeps,
   candidateId: string,
   snapshot: HhResumeSnapshot,
   selected: SelectedWithSections,
@@ -198,8 +199,8 @@ async function freshEdits(
   return localizeHhResumeEdits(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
 }
 
-async function editsOf(
-  deps: BoundDeps,
+export async function hhResumeEditsOf(
+  deps: RouteDeps,
   candidateId: string,
   snapshot: HhResumeSnapshot,
   resume: SelectedWithSections,
@@ -212,6 +213,24 @@ async function editsOf(
   return edits;
 }
 
+/** B682: ключ вариантов у правок с «Другим вариантом»; считается по правке до перевода. */
+export function withVariantSubjects(
+  deps: RouteDeps,
+  candidateId: string,
+  snapshot: HhResumeSnapshot,
+  resume: SelectedWithSections,
+  cluster: VacancyCluster,
+  vacancyId: string,
+  edits: readonly HhResumeEdit[],
+): HhResumeEdit[] {
+  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, resume, cluster));
+  const subjects = new Map(drafts.filter(hasVariants).map((draft) => [draft.id, hhResumeVariantSubject(vacancyId, resume.id, draft)]));
+  return edits.map((edit) => {
+    const subjectId = subjects.get(edit.id);
+    return subjectId ? { ...edit, variantOf: { vacancyId, subjectId } } : edit;
+  });
+}
+
 /** Число правок у каждого прочитанного резюме — то же, что откроет разбор; сбой одного сверку не роняет. */
 async function editCounts(
   deps: BoundDeps,
@@ -222,7 +241,7 @@ async function editCounts(
 ): Promise<ReadonlyMap<string, number>> {
   const counted = await Promise.allSettled(
     readWithSections(snapshot).map(async (resume) => {
-      const edits = await editsOf(deps, candidateId, snapshot, resume, cluster, vacancyId);
+      const edits = await hhResumeEditsOf(deps, candidateId, snapshot, resume, cluster, vacancyId);
       return [resume.id, edits.length] as const;
     }),
   );
@@ -231,7 +250,7 @@ async function editCounts(
 
 /** B678: правки выбранного резюме hh.ru «было → станет» по подтверждённому профилю платформы. */
 const getEdits: Handler = async (deps, request, reply) => {
-  const candidateId = candidateOf(deps, request, reply);
+  const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const query = reviewQuerySchema.safeParse(request.query ?? {});
   if (!query.success) return sendError(reply, request, 400, 'invalid_hh_review', 'Не указана вакансия.', false);
@@ -242,12 +261,14 @@ const getEdits: Handler = async (deps, request, reply) => {
   }
   const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, query.data.vacancyId);
   if (!cluster) return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
-  const edits = await editsOf(deps, candidateId, snapshot, selected, cluster, query.data.vacancyId);
-  return { data: { resumeId: selected.id, vacancyId: query.data.vacancyId, edits }, meta: { requestId: request.id } };
+  const { vacancyId } = query.data;
+  const found = await hhResumeEditsOf(deps, candidateId, snapshot, selected, cluster, vacancyId);
+  const edits = withVariantSubjects(deps, candidateId, snapshot, selected, cluster, vacancyId, found);
+  return { data: { resumeId: selected.id, vacancyId, edits }, meta: { requestId: request.id } };
 };
 
 const postAttempt: Handler = async (deps, request, reply) => {
-  const candidateId = candidateOf(deps, request, reply);
+  const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const parsed = attemptSchema.safeParse(request.body ?? {});
   if (!parsed.success) {
@@ -274,7 +295,7 @@ const postAttempt: Handler = async (deps, request, reply) => {
 };
 
 const postResult: Handler = async (deps, request, reply) => {
-  const candidateId = candidateOf(deps, request, reply);
+  const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const { attemptId } = request.params as { attemptId: string };
   const parsed = resultSchema.safeParse(request.body ?? {});

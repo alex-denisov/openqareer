@@ -38,15 +38,9 @@ export function formatResumeAsAtsText(doc: ResumeDocument, draft: ResumeDraft): 
   return sections.join('\n\n');
 }
 
+/** Текст уходит работодателю: пробелы требований (`missingRequirements`) сюда не пишем (B713). */
 export function formatTargetedResumeAsAtsText(slice: TargetedResumeSlice): string {
-  const sections = [formatResumeAsAtsText(slice.document, EMPTY_RESUME_DRAFT)];
-  if (slice.missingRequirements.length > 0) {
-    const gaps = slice.missingRequirements
-      .map((requirement) => '- ' + requirement + ' - не найдено в мастер-резюме')
-      .join('\n');
-    sections.push('=== REQUIREMENT GAPS ===\n' + gaps);
-  }
-  return sections.filter(Boolean).join('\n\n');
+  return formatResumeAsAtsText(slice.document, EMPTY_RESUME_DRAFT);
 }
 
 function formatAtsHeader(doc: ResumeDocument, draft: ResumeDraft): string | null {

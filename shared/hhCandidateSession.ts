@@ -70,6 +70,8 @@ export interface HhResumeEdit {
   readonly now: string;
   /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */
   readonly added?: readonly string[];
+  /** B682: чьи варианты у правки («Другой вариант» a01c); у должности вариантов нет. */
+  readonly variantOf?: { readonly vacancyId: string; readonly subjectId: string };
 }
 
 export interface HhResumeSnapshot {
@@ -111,6 +113,7 @@ export const HH_LATE_SENT_MS = 15 * 60 * 1000;
 
 /** B708: исходы, после которых окно hh.ru осталось на вакансии и кандидат мог завершить отклик сам. */
 export const HH_WINDOW_LEFT_OPEN_FAILURES = [
+  'page_not_ready',
   'popup_missing',
   'no_confirmation',
   'captcha',

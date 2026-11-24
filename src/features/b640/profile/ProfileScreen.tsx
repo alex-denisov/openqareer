@@ -224,11 +224,14 @@ function Lists({ draft }: { readonly draft: ResumeDraft }) {
       ) : null}
       <RecordSection id="sec-education" title="Образование" rows={rows.education} />
       <RecordSection id="sec-courses" title="Курсы и сертификаты" rows={rows.courses} />
-      {skills.length > 0 ? (
-        <ProfileSection id="sec-skills" title="Навыки" open count={String(skills.length)}>
-          <SkillChips names={skills} />
-        </ProfileSection>
-      ) : null}
+      <ProfileSection
+        id="sec-skills"
+        title="Навыки"
+        open
+        count={skills.length > 0 ? String(skills.length) : undefined}
+      >
+        <SkillChips names={skills} />
+      </ProfileSection>
       {languages.length > 0 ? (
         <ProfileSection id="sec-languages" title="Языки" open count={String(languages.length)}>
           <LanguageList rows={languages} />

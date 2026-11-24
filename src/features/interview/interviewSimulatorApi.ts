@@ -1,3 +1,4 @@
+import { MAX_ANSWER_SECONDS } from '../../../server/domain/interviewSimulator';
 import { apiFetch, readDataObject } from '../coach/apiClient';
 
 export type InterviewAnswerMode = 'text' | 'voice';
@@ -121,7 +122,10 @@ export async function submitInterviewAnswer(
   const response = await apiFetch(`${INTERVIEW_URL}/${encodeURIComponent(id)}/answers`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      elapsedSeconds: Math.min(input.elapsedSeconds, MAX_ANSWER_SECONDS),
+    }),
   });
   const data = await readDataObject<{ session: InterviewSessionView }>(response);
   return data.session;
