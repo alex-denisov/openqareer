@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
+import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import { listApplications, type ApplicationView } from '../../applications/applicationsApi';
 import { fetchTariffQuotas, type TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
 import { useMatchedPool } from '../../vacancies/useMatchedPool';
@@ -7,6 +8,7 @@ import {
   useVacancyLetterController,
   type LetterScreenState,
 } from '../../vacancies/vacancyLetterController';
+import type { ResumeDocument } from '../../resume/resumeTypes';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
@@ -28,6 +30,7 @@ import {
   type ApplyTarget,
 } from './model/applyModel';
 import { QuotaBlock } from './QuotaBlock';
+import { ResumeDates } from './ResumeDates';
 import { ResumeStep } from './ResumeStep';
 import { SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
@@ -72,9 +75,11 @@ function StepTabs({ step, done, hasForm, onStep }: TabsProps) {
 function VacancyColumn({
   vacancyId,
   head,
+  children,
 }: {
   readonly vacancyId: string;
   readonly head: ApplyHead;
+  readonly children?: ReactNode;
 }) {
   const detail = useVacancyDetail(vacancyId, true);
   const text =
@@ -113,6 +118,7 @@ function VacancyColumn({
           </div>
         ) : null}
       </section>
+      {children}
     </div>
   );
 }
@@ -158,11 +164,13 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: Bod
 }
 
 function EditorBody(props: BodyProps) {
-  const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen, onResumeOk } =
-    props;
+  const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen } = props;
+  const [document, setDocument] = useState<ResumeDocument | null>(null);
   return (
     <>
-      <VacancyColumn vacancyId={vacancyId} head={head} />
+      <VacancyColumn vacancyId={vacancyId} head={head}>
+        {step === 'resume' ? <ResumeDates document={document} /> : null}
+      </VacancyColumn>
       <div className="col">
         {/* Резюме собирается один раз и остаётся при переходе между шагами. */}
         {resumeSeen ? (
@@ -171,7 +179,9 @@ function EditorBody(props: BodyProps) {
               vacancyId={vacancyId}
               approved={letter.approval.saved?.resume ?? null}
               confirmed={resumeOk}
-              onConfirm={onResumeOk}
+              onConfirm={props.onResumeOk}
+              onHh={Boolean(head.url && hhVacancyIdFromUrl(head.url))}
+              onDocument={setDocument}
             />
           </div>
         ) : null}
@@ -300,6 +310,7 @@ function ApplyFlow(props: FlowProps) {
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
     crumb: head.title,
+    ...(shown === 'resume' ? { title: 'Резюме' } : {}),
     rootData: {
       // Шаг «Резюме» (макет o03) без плотных отступов, письмо и анкета — с ними.
       ...(shown === 'resume' && !quota ? {} : { mtight: '1' }),
