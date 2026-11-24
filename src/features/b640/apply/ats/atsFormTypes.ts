@@ -92,6 +92,22 @@ export interface AtsAttempt {
   readonly startedAtMs: number;
   readonly consentIds: readonly string[];
   readonly result: 'sent' | 'failed' | 'unconfirmed' | null;
+  /** Квитанция: где и когда доска подтвердила отклик. */
+  readonly confirmation?: AtsConfirmation;
+}
+
+export interface AtsConfirmation {
+  readonly host: string;
+  readonly path: string;
+  readonly pressedAtMs: number | null;
+}
+
+/** Переход к следующей странице формы; кнопка отправки здесь не нажимается. */
+export interface AtsStepReport {
+  readonly state: 'moved' | 'invalid' | 'captcha' | 'not_moved';
+  readonly reason: string | null;
+  readonly invalidKeys: readonly string[];
+  readonly form: AtsFormReport | null;
 }
 
 /** Квитанция: что нажато, когда и что ответила доска. Значений полей в ней нет. */

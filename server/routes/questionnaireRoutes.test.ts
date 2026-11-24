@@ -24,6 +24,15 @@ const HH_FORM = {
   ],
 };
 
+const ATS_FORM = {
+  url: 'https://jobs.lever.co/acme/fca52e03-9e9d-4dcd-bda8-c27dbdd0e0a4/apply',
+  questions: [
+    { id: 'ats-1', text: 'Full name', required: true, kind: 'text', known: 'Марина Соколова' },
+    { id: 'ats-2', text: 'Why us?', required: true, kind: 'text' },
+    { id: 'ats-3', text: 'Country', required: true, kind: 'choice', options: ['Spain', 'Italy'] },
+  ],
+};
+
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
 const ORIGIN = 'http://localhost:3000';
@@ -140,6 +149,7 @@ describe('questionnaire routes without the B640 flag', () => {
       ['GET', url('v1')],
       ['PUT', url('v1', '/answers'), { answers: [{ questionId: 'q1', text: 'x' }] }],
       ['PUT', url('v1', '/hh-form'), HH_FORM],
+      ['PUT', url('v1', '/ats-form'), ATS_FORM],
       ['POST', url('v1', '/submitted')],
     ];
     for (const [method, path, payload] of routes) {
@@ -508,5 +518,40 @@ describe('B641: анкета hh.ru из окна кандидата', () => {
     expect(kept).not.toContain('old-1');
     expect(kept).toContain('v1');
     repo.close();
+  });
+});
+
+describe('B787: форма работодателя из приложения', () => {
+  it('заменяет вопросы, ставит данные профиля и не возвращает стёртое', async () => {
+    const { app, seed } = await setup();
+    seed(flagged, 'v1');
+    const read = await call(app, 'PUT', url('v1', '/ats-form'), flagged, ATS_FORM);
+    expect(read.statusCode).toBe(200);
+    expect(read.json().data).toMatchObject({
+      state: 'ready',
+      total: 3,
+      missingRequired: 2,
+      answers: [{ questionId: 'ats-1', text: 'Марина Соколова' }],
+    });
+    const answers = [
+      { questionId: 'ats-1', text: '' },
+      { questionId: 'ats-3', text: 'Italy' },
+    ];
+    await call(app, 'PUT', url('v1', '/answers'), flagged, { answers });
+    const again = await call(app, 'PUT', url('v1', '/ats-form'), flagged, ATS_FORM);
+    expect(again.json().data.answers).toEqual([{ questionId: 'ats-3', text: 'Italy' }]);
+    expect((await call(app, 'GET', url('v1'), other)).json().data.total).not.toBe(3);
+  });
+
+  it.each([
+    { ...ATS_FORM, url: 'http://jobs.lever.co/x' },
+    { ...ATS_FORM, questions: [] },
+    { ...ATS_FORM, questions: [{ ...ATS_FORM.questions[0], id: 'a b' }] },
+    { ...ATS_FORM, extra: 1 },
+  ])('не принимает чужое %#', async (body) => {
+    const { app } = await setup();
+    const response = await call(app, 'PUT', url('v1', '/ats-form'), flagged, body);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('invalid_ats_form');
   });
 });

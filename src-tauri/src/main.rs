@@ -25,6 +25,7 @@ mod hh_resume_edit_scripts;
 mod hh_resume_experience;
 mod hh_resume_experience_scripts;
 mod linkedin_read_guard;
+mod native_answer;
 mod network_probe;
 mod recording;
 mod recording_clock;
@@ -161,6 +162,17 @@ async fn ats_form_open(
 ) -> Result<ats_model::FormReport, String> {
     cabinet_only(&webview)?;
     ats_apply::open_form(&app, request).await
+}
+
+/// The open form as it is now. Nothing is filled or sent.
+#[tauri::command]
+async fn ats_form_read(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<ats_model::FormReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_form(&app, &vacancy_id).await
 }
 
 /// Options of one list of the form. Nothing is picked or sent.
@@ -319,6 +331,9 @@ pub struct NativeHttpResponse {
     pub ok: bool,
     pub headers: std::collections::HashMap<String, String>,
     pub body: String,
+    /// A file answer (PDF, DOCX, image): text would lose its bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_base64: Option<String>,
 }
 
 #[tauri::command]
@@ -387,13 +402,14 @@ async fn desktop_native_fetch(
         }
     }
 
-    let body = res.text().await.unwrap_or_default();
+    let (body, body_base64) = native_answer::read(res).await?;
 
     Ok(NativeHttpResponse {
         status,
         ok,
         headers: response_headers,
         body,
+        body_base64,
     })
 }
 
@@ -742,6 +758,7 @@ fn main() {
             run_hh_apply,
             read_hh_apply_window,
             ats_form_open,
+            ats_form_read,
             ats_form_fill,
             ats_form_options,
             ats_form_next,

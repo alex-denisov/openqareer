@@ -33,6 +33,18 @@ pub struct Attempt {
     pub consent_ids: Vec<Uuid>,
     /// `None` — the app stopped between the press and its result.
     pub result: Option<AttemptResult>,
+    /// Where and when the board confirmed the application.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirmation: Option<Confirmation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Confirmation {
+    pub host: String,
+    pub path: String,
+    /// The moment of the press; `None` when the confirmation was read later.
+    pub pressed_at_ms: Option<u64>,
 }
 
 fn load(directory: &Path) -> Result<Vec<Attempt>, String> {
@@ -90,13 +102,19 @@ pub fn begin(directory: &Path, attempt: Attempt) -> Result<(), String> {
 }
 
 /// A confirmed sending is never overwritten by a later, weaker reading.
-pub fn finish(directory: &Path, id: Uuid, result: AttemptResult) -> Result<(), String> {
+pub fn finish(
+    directory: &Path,
+    id: Uuid,
+    result: AttemptResult,
+    confirmation: Option<Confirmation>,
+) -> Result<(), String> {
     let next: Vec<Attempt> = load(directory)?
         .into_iter()
         .map(|attempt| {
             if attempt.id == id && attempt.result != Some(AttemptResult::Sent) {
                 Attempt {
                     result: Some(result),
+                    confirmation: confirmation.clone(),
                     ..attempt
                 }
             } else {
@@ -141,6 +159,7 @@ mod tests {
             started_at_ms: 1,
             consent_ids: vec![Uuid::new_v4()],
             result: None,
+            confirmation: None,
         }
     }
 
@@ -155,7 +174,7 @@ mod tests {
             let first = attempt("v1", "https://a/1");
             begin(&folder.0, first.clone()).unwrap();
             if let Some(result) = result {
-                finish(&folder.0, first.id, result).unwrap();
+                finish(&folder.0, first.id, result, None).unwrap();
             }
             // Nothing is kept in memory: each call reads the disk as a new run would.
             assert!(is_blocked(&folder.0, "v1", "https://a/1").unwrap());
@@ -176,7 +195,7 @@ mod tests {
         let folder = Folder::new();
         let first = attempt("v1", "https://a/1");
         begin(&folder.0, first.clone()).unwrap();
-        finish(&folder.0, first.id, AttemptResult::Failed).unwrap();
+        finish(&folder.0, first.id, AttemptResult::Failed, None).unwrap();
         assert!(begin(&folder.0, first).is_err());
         begin(&folder.0, attempt("v1", "https://a/1")).unwrap();
     }
@@ -186,8 +205,8 @@ mod tests {
         let folder = Folder::new();
         let first = attempt("v1", "https://a/1");
         begin(&folder.0, first.clone()).unwrap();
-        finish(&folder.0, first.id, AttemptResult::Sent).unwrap();
-        finish(&folder.0, first.id, AttemptResult::Failed).unwrap();
+        finish(&folder.0, first.id, AttemptResult::Sent, None).unwrap();
+        finish(&folder.0, first.id, AttemptResult::Failed, None).unwrap();
         assert!(is_blocked(&folder.0, "v1", "https://a/1").unwrap());
     }
 
@@ -217,5 +236,30 @@ mod tests {
             .unwrap()
             .is_symlink());
         assert!(is_blocked(&folder.0, "v1", "https://a.example/1").unwrap());
+    }
+
+    #[test]
+    fn a_confirmation_stays_on_disk_and_older_records_still_open() {
+        let folder = Folder::new();
+        let first = attempt("v1", "https://acme.example/1");
+        begin(&folder.0, first.clone()).unwrap();
+        let shown = Confirmation {
+            host: "job-boards.greenhouse.io".into(),
+            path: "/acme/jobs/1/confirmation".into(),
+            pressed_at_ms: Some(7),
+        };
+        finish(
+            &folder.0,
+            first.id,
+            AttemptResult::Sent,
+            Some(shown.clone()),
+        )
+        .unwrap();
+        let held = latest(&folder.0, "v1").unwrap().unwrap();
+        assert_eq!(held.confirmation, Some(shown));
+        let older = serde_json::json!([{ "id": first.id, "vacancyId": "v1", "entryUrl": "x",
+            "startedAtMs": 1, "consentIds": [], "result": "sent" }]);
+        fs::write(folder.0.join(FILE), older.to_string()).unwrap();
+        assert_eq!(latest(&folder.0, "v1").unwrap().unwrap().confirmation, None);
     }
 }

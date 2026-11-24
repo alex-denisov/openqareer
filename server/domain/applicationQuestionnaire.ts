@@ -3,6 +3,7 @@ import type { HhFormQuestion } from '../../shared/hhCandidateSession';
 import {
   QUESTIONNAIRE_ANSWER_MAX_LENGTH,
   QUESTIONNAIRE_MAX_QUESTIONS,
+  type AtsFormInput,
   type ApplicationQuestionnaire,
   type QuestionnaireAnswer,
   type QuestionnaireQuestion,
@@ -98,6 +99,36 @@ export function hhQuestions(raw: readonly HhFormQuestion[]): readonly Questionna
     );
   }
   return [...byId.values()];
+}
+
+/** Вопросы формы работодателя из окна приложения — тоже чужой текст. */
+export function atsQuestions(raw: AtsFormInput['questions']): readonly QuestionnaireQuestion[] {
+  const byId = new Map<string, QuestionnaireQuestion>();
+  for (const item of raw) {
+    const text = clip(item.text, QUESTION_TEXT_MAX_LENGTH);
+    const options = (item.options ?? []).map((option) => clip(option, OPTION_MAX_LENGTH)).filter(Boolean);
+    if (!text || (item.kind === 'choice' && options.length === 0)) continue;
+    const base = { id: item.id, text, required: item.required };
+    byId.set(
+      item.id,
+      item.kind === 'text'
+        ? { ...base, kind: 'text' }
+        : { ...base, kind: 'choice', options, ...(item.multiple ? { multiple: true } : {}) },
+    );
+  }
+  return [...byId.values()];
+}
+
+/** Ответы после чтения формы: данные профиля встают только туда, где ответа ещё не было. */
+export function withKnownAnswers(
+  saved: readonly QuestionnaireAnswer[],
+  raw: AtsFormInput['questions'],
+): readonly QuestionnaireAnswer[] {
+  const answered = new Set(saved.map((answer) => answer.questionId));
+  const known = raw.flatMap(({ id, known: text }) =>
+    text && !answered.has(id) ? [{ questionId: id, text }] : [],
+  );
+  return [...saved, ...known];
 }
 
 export interface SalaryProfile {

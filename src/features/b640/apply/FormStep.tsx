@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ApplicationQuestionnaire,
+  AtsFormInput,
   QuestionnaireQuestion,
   QuestionnaireSuggestion,
 } from '../../../../shared/applicationQuestionnaire';
@@ -15,6 +16,7 @@ import { ChoiceField } from './ChoiceField';
 import {
   getQuestionnaire,
   markQuestionnaireSubmitted,
+  saveAtsForm,
   saveHhForm,
   saveQuestionnaireAnswers,
 } from './data/questionnaireApi';
@@ -51,6 +53,14 @@ export interface QuestionnaireState {
   readonly reload: () => void;
   /** Анкета hh.ru прочитана в окне кандидата; `false` — вопросов нет или они не сохранились. */
   readonly takeHhForm: (form: HhForm) => Promise<boolean>;
+  /**
+   * Форма сайта работодателя прочитана приложением (B787). `stale` называет ответы, которых среди
+   * вариантов уже нет: они стираются. `false` — вопросы не сохранились.
+   */
+  readonly takeAtsForm: (
+    form: AtsFormInput,
+    stale: (draft: AnswerDraft) => readonly string[],
+  ) => Promise<boolean>;
 }
 
 /** Анкета работодателя по вакансии: загрузка, черновик ответов и их сохранение. */
@@ -94,6 +104,22 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
         .catch((reason: unknown) =>
           setSubmitted({ kind: 'error', text: apiErrorMessage(reason, 'Отметка не сохранилась.') }),
         );
+    },
+    takeAtsForm: async (atsForm, stale) => {
+      try {
+        await queue.current;
+        const read = await saveAtsForm(vacancyId, atsForm);
+        const answers = draftOf(read);
+        const gone = Object.fromEntries(stale(answers).map((id) => [id, '']));
+        const next =
+          Object.keys(gone).length > 0
+            ? await saveQuestionnaireAnswers(vacancyId, answersOf({ ...answers, ...gone }))
+            : read;
+        replaceData(next);
+        return next.state === 'ready';
+      } catch {
+        return false;
+      }
     },
     takeHhForm: async (hhForm) => {
       if (hhForm.questions.length === 0) return false;
@@ -279,15 +305,18 @@ export interface FormStepProps {
   readonly state: QuestionnaireState;
   readonly form: ApplicationQuestionnaire;
   readonly visibility: VisibilityState;
+  /** Форма сайта работодателя уходит из приложения (B787). */
+  readonly viaApp?: boolean;
   readonly onSend: () => void;
 }
 
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form, visibility, onSend }: FormStepProps) {
+export function FormStep({ state, form, visibility, viaApp = false, onSend }: FormStepProps) {
   const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
-  const inApp = onHh && isTauriEnvironment();
+  const hhInApp = onHh && isTauriEnvironment();
+  const inApp = hhInApp || viaApp;
   const send = inApp ? onSend : null;
-  const asked = inApp && visibility.value !== null;
+  const asked = hhInApp && visibility.value !== null;
   const ready = asked
     ? readiness([...form.questions, VISIBILITY_QUESTION], { ...state.draft, [VISIBILITY_QUESTION.id]: visibility.value ?? '' })
     : readiness(form.questions, state.draft);

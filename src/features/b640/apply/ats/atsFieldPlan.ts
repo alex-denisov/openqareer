@@ -1,19 +1,12 @@
 import type { AtsEntry, AtsField, AtsFile, AtsOption } from './atsFormTypes';
+import { identityOf, type IdentityFacts } from './atsIdentity';
 
 /**
  * B787: что приложение ставит в поле формы само, а что спрашивает у кандидата.
  * Узнавание — только по фиксированным шаблонам подписи; поле, которое шаблон не узнал,
  * приложение не заполняет догадкой.
  */
-export interface CandidateFacts {
-  readonly firstName?: string;
-  readonly lastName?: string;
-  readonly email?: string;
-  readonly phone?: string;
-  readonly linkedin?: string;
-  readonly location?: string;
-  readonly country?: string;
-  readonly website?: string;
+export interface CandidateFacts extends IdentityFacts {
   readonly resume?: AtsFile;
   readonly coverLetter?: string;
   /** Ответы кандидата по ключу поля: то, что он ввёл или подтвердил на экране «Анкета». */
@@ -63,7 +56,7 @@ export interface PlanContext {
   readonly now: Date;
 }
 
-type Category = 'marketing' | 'processing' | 'fact' | 'demographic' | 'other';
+export type Category = 'marketing' | 'processing' | 'fact' | 'demographic' | 'other';
 
 const MARKETING =
   /marketing|newsletter|job alerts?|talent (community|pool|network)|future (opportunit|opening|position|role|vacanc)|other (roles|positions|opportunit)|retain|keep (my|your) (data|application|details|information|profile)|рассылк|новост|будущ\S* ваканс|кадров\S* резерв|хран(ить|ение)/i;
@@ -76,28 +69,11 @@ const DEMOGRAPHIC =
 const DECLINE =
   /prefer not|decline|don'?t wish|do not wish|not to (say|answer|disclose)|не хочу|предпочитаю не/i;
 
-const IDENTITY: readonly (readonly [RegExp, keyof CandidateFacts])[] = [
-  [/^(legal )?first name|^given name|^имя$/i, 'firstName'],
-  [/^(legal )?last name|^surname|^family name|^фамилия$/i, 'lastName'],
-  [/^e-?mail|^электронная почта|^почта$/i, 'email'],
-  [/^(mobile |cell )?phone|^телефон/i, 'phone'],
-  [/linkedin/i, 'linkedin'],
-  [/^country|^страна/i, 'country'],
-  [/^(current )?location|^city|^город/i, 'location'],
-  [/^(personal )?website|^portfolio|^сайт|^портфолио/i, 'website'],
-];
-
-function categoryOf(label: string): Category {
+export function categoryOf(label: string): Category {
   if (MARKETING.test(label)) return 'marketing';
   if (FACT.test(label)) return 'fact';
   if (DEMOGRAPHIC.test(label)) return 'demographic';
   return PROCESSING.test(label) ? 'processing' : 'other';
-}
-
-function identityOf(field: AtsField, facts: CandidateFacts): string | undefined {
-  const match = IDENTITY.find(([pattern]) => pattern.test(field.label.trim()));
-  const value = match ? facts[match[1]] : undefined;
-  return typeof value === 'string' && value.trim() ? value : undefined;
 }
 
 function question(field: AtsField, reason: AtsQuestionReason): AtsQuestion {
@@ -110,8 +86,23 @@ type Step =
   | { readonly ask: AtsQuestionReason }
   | null;
 
+const RESUME_FILE =
+  /resume|résumé|\bcv\b|curriculum|currículum|currículo|резюме|lebenslauf|życiorys|meritförteckning/i;
+const COVER_LETTER =
+  /cover letter|сопроводительн|anschreiben|motivationsschreiben|lettre de motivation|carta de (presentación|motivación|apresentação)|lettera di presentazione|motivatiebrief|list motywacyjny|personligt brev/i;
+
+export const isResumeFile = (field: AtsField): boolean =>
+  field.kind === 'file' && RESUME_FILE.test(field.label);
+
+export const isCoverLetter = (field: AtsField): boolean =>
+  field.kind === 'textarea' && COVER_LETTER.test(field.label);
+
+/** Сам отказ отвечать на анкету о поле, национальности и подобном. */
+export const declines = (field: AtsField): boolean =>
+  field.options.some((option) => DECLINE.test(option.label));
+
 function fileStep(field: AtsField, facts: CandidateFacts): Step {
-  if (/resume|\bcv\b|резюме/i.test(field.label) && facts.resume) {
+  if (isResumeFile(field) && facts.resume) {
     return { entry: { key: field.key, value: '', file: facts.resume } };
   }
   return field.required ? { ask: 'no_answer' } : null;
@@ -152,13 +143,37 @@ function answerStep(field: AtsField, answer: string, context: PlanContext): Step
   return context.mandateAccepted ? { entry, consent: true } : { ask: 'consent_needs_mandate' };
 }
 
+const CONSENT_WORD =
+  /agree|consent|accept|acknowledg|соглас|принима|ознаком|einwillig|einverstanden|zustimm|consenti|acepto|aceito/i;
+
+/** Вариант списка, которым даётся согласие на обработку; `null` — вопрос не об этом. */
+export function consentOption(field: AtsField): string | null {
+  if (!field.required || categoryOf(field.label) !== 'processing') return null;
+  const yes = field.options.filter((option) => AFFIRMATIVE.test(option.label.trim()));
+  if (yes.length !== 1) return null;
+  const asked = [field.label, yes[0]!.label].some((text) => CONSENT_WORD.test(text));
+  return asked ? yes[0]!.label : null;
+}
+
 function demographicStep(field: AtsField): Step {
   const decline = field.options.find((option) => DECLINE.test(option.label));
   if (decline) return { entry: { key: field.key, value: decline.label } };
   return field.required ? { ask: 'demographic' } : null;
 }
 
-function stepFor(field: AtsField, facts: CandidateFacts, context: PlanContext): Step {
+/** Согласие списком: под поручением ставится без отдельного вопроса. */
+function processingStep(field: AtsField, context: PlanContext): Step {
+  if (!context.mandateAccepted) return { ask: 'consent_needs_mandate' };
+  const value = consentOption(field);
+  return value ? { entry: { key: field.key, value }, consent: true } : { ask: 'no_answer' };
+}
+
+function stepFor(
+  field: AtsField,
+  fields: readonly AtsField[],
+  facts: CandidateFacts,
+  context: PlanContext,
+): Step {
   const answer = facts.answers[field.key];
   const category = categoryOf(field.label);
   if (field.kind === 'file') return fileStep(field, facts);
@@ -172,10 +187,10 @@ function stepFor(field: AtsField, facts: CandidateFacts, context: PlanContext): 
   if (category === 'fact') return { ask: 'fact_needed' };
   if (category === 'demographic') return demographicStep(field);
   if (category === 'processing')
-    return { ask: context.mandateAccepted ? 'no_answer' : 'consent_needs_mandate' };
-  const known = identityOf(field, facts);
+    return processingStep(field, context);
+  const known = identityOf(field, fields, facts);
   if (known) return { entry: { key: field.key, value: known } };
-  if (/cover letter|сопроводительн/i.test(field.label) && facts.coverLetter) {
+  if (COVER_LETTER.test(field.label) && facts.coverLetter) {
     return { entry: { key: field.key, value: facts.coverLetter } };
   }
   return field.required ? { ask: 'no_answer' } : null;
@@ -187,7 +202,7 @@ export function planForm(
   facts: CandidateFacts,
   context: PlanContext,
 ): AtsPlan {
-  const steps = fields.map((field) => ({ field, step: stepFor(field, facts, context) }));
+  const steps = fields.map((field) => ({ field, step: stepFor(field, fields, facts, context) }));
   const entries = steps.flatMap(({ step }) => (step && 'entry' in step ? [step.entry] : []));
   const questions = steps.flatMap(({ field, step }) =>
     step && 'ask' in step ? [question(field, step.ask)] : [],

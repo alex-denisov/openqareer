@@ -5,7 +5,7 @@
 //! itself; an outcome the board did not state is "unconfirmed", never "sent".
 //! Field values are never written to diagnostics.
 
-use crate::ats_attempts::{self, Attempt};
+use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
 use crate::ats_model::{
     attempt_result, decode, file_fields_of, form_report, is_id, listed, outcome_of, press_refusal,
@@ -158,9 +158,17 @@ fn with_attempts<T>(
     action(&directory)
 }
 
-fn settle(app: &AppHandle, id: Uuid, outcome: &str) {
+fn settle(app: &AppHandle, id: Uuid, outcome: &str, pressed_at_ms: Option<u64>) {
+    let confirmation = (outcome == "confirmed").then(|| {
+        let shown = receipt(app, outcome, None, Vec::new());
+        Confirmation {
+            host: shown.host,
+            path: shown.path,
+            pressed_at_ms,
+        }
+    });
     let result = with_attempts(app, |directory| {
-        ats_attempts::finish(directory, id, attempt_result(outcome))
+        ats_attempts::finish(directory, id, attempt_result(outcome), confirmation)
     });
     // An unsettled attempt keeps blocking: the safe side.
     if result.is_err() {
@@ -278,11 +286,25 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             attempt: None,
         });
     }
+    read_page(app, &target).await
+}
+
+/// The page as it is now: an answer may have brought new questions onto it.
+pub async fn read_form(app: &AppHandle, vacancy_id: &str) -> Result<FormReport, String> {
+    let target = current_target(app, vacancy_id)?;
+    if !still_on_target(app, &target) {
+        return Err("off_target".to_string());
+    }
+    read_page(app, &target).await
+}
+
+async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, String> {
     let form = poll(app, "read", &Value::Null, READ_WAIT, |value| {
         value["state"] == "ready" && (value["submitButtons"] == 1 || value["step"] == "next")
     })
     .await?;
-    if let Some(run) = state
+    if let Some(run) = app
+        .state::<AtsFormState>()
         .run
         .lock()
         .map_err(|_| "form_state_unavailable")?
@@ -291,7 +313,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
         run.file_fields = file_fields_of(&form);
     }
     let form = crate::ats_steps::with_menus(app, form).await;
-    let report = form_report(&target, form, still_on_target(app, &target));
+    let report = form_report(target, form, still_on_target(app, target));
     note(app, "read", &format!("{}_{}", target.adapter, report.state));
     Ok(report)
 }
@@ -411,7 +433,7 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
     let attempt = request.attempt_id;
     // The page may have moved on while the values were read and recorded.
     if !still_on_target(app, &target) {
-        settle(app, attempt, "not_submitted");
+        settle(app, attempt, "not_submitted", None);
         return Ok(receipt(app, "not_submitted", Some("off_target"), keys));
     }
     let press = page(app, "submit", &place_of(&target)).await.ok();
@@ -427,13 +449,13 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
         } else {
             outcome
         };
-        settle(app, attempt, held);
+        settle(app, attempt, held, None);
         note(app, "submit", &format!("{}_{reason}", target.adapter));
         return Ok(receipt(app, outcome, Some(reason), keys));
     }
     let pressed_at_ms = now_ms();
     let (outcome, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
-    settle(app, attempt, outcome);
+    settle(app, attempt, outcome, Some(pressed_at_ms));
     note(app, "submit", &format!("{}_{outcome}", target.adapter));
     Ok(Receipt {
         pressed_at_ms: Some(pressed_at_ms),
@@ -468,6 +490,7 @@ fn begin_attempt(
             started_at_ms: now_ms(),
             consent_ids: request.consent_ids.clone(),
             result: None,
+            confirmation: None,
         };
         match ats_attempts::begin(directory, attempt) {
             Ok(()) => {}
@@ -493,7 +516,7 @@ pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Rece
             .ok()
             .and_then(|run| run.as_ref().and_then(|run| run.attempt));
         if let Some(attempt) = attempt {
-            settle(app, attempt, outcome);
+            settle(app, attempt, outcome, None);
         }
     }
     Ok(Receipt {
