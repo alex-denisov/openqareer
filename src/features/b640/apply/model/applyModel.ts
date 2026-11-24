@@ -199,6 +199,9 @@ function markerTitle(line: string): string | null {
   return null;
 }
 
+/** Названия технологий латиницей не делают русское резюме английским. */
+const ENGLISH_RATIO = 2;
+
 const SECTION_NAMES: Readonly<Record<string, string>> = {
   summary: 'О себе',
   about: 'О себе',
@@ -209,20 +212,40 @@ const SECTION_NAMES: Readonly<Record<string, string>> = {
   skills: 'Навыки',
   languages: 'Языки',
   certifications: 'Сертификаты',
+  'courses and certifications': 'Курсы и сертификаты',
   projects: 'Проекты',
   contacts: 'Контакты',
 };
+
+/** Язык текста резюме — по буквам строк без заголовков: заголовки идут на нём же (B713). */
+function isEnglish(lines: readonly ResumeLine[]): boolean {
+  const body = lines
+    .filter((line) => line.kind === 'line')
+    .map((line) => line.text)
+    .join(' ');
+  const latin = body.match(/[a-z]/giu)?.length ?? 0;
+  return latin > (body.match(/[а-яё]/giu)?.length ?? 0) * ENGLISH_RATIO && latin > 0;
+}
+
+function headingName(title: string, english: boolean): string {
+  const key = title.toLowerCase();
+  if (!Object.hasOwn(SECTION_NAMES, key)) return title;
+  return english ? `${key.charAt(0).toUpperCase()}${key.slice(1)}` : SECTION_NAMES[key]!;
+}
 
 /**
  * Резюме строками для показа. Служебная разметка разделов на экран не выходит: строка
  * `=== SUMMARY ===` становится заголовком «О себе», линия из одних знаков пропадает.
  */
 export function resumeLines(text: string): readonly ResumeLine[] {
-  return paragraphs(text).flatMap((line): ResumeLine[] => {
+  const lines = paragraphs(text).flatMap((line): ResumeLine[] => {
     const title = markerTitle(line)?.trim();
     if (title === undefined) return [{ kind: 'line', text: line }];
     if (!title) return [];
-    const key = title.toLowerCase();
-    return [{ kind: 'heading', text: Object.hasOwn(SECTION_NAMES, key) ? SECTION_NAMES[key]! : title }];
+    return [{ kind: 'heading', text: title }];
   });
+  const english = isEnglish(lines);
+  return lines.map((line) =>
+    line.kind === 'heading' ? { ...line, text: headingName(line.text, english) } : line,
+  );
 }
