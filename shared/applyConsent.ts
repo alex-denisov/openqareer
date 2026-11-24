@@ -2,6 +2,9 @@
 export const APPLY_CONSENT_RESULTS = ['sent', 'failed', 'unconfirmed'] as const;
 export type ApplyConsentResult = (typeof APPLY_CONSENT_RESULTS)[number];
 
+/** Больше записей одному кандидату не храним; прежние записи журнала не вытесняются. */
+export const MAX_APPLY_CONSENTS_PER_CANDIDATE = 5_000;
+
 export interface ApplyConsentInput {
   /** UUID попытки: повтор запроса не создаёт вторую запись. */
   readonly id: string;

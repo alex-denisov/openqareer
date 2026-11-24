@@ -8,6 +8,7 @@ import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+import { MAX_APPLY_CONSENTS_PER_CANDIDATE } from '../../shared/applyConsent';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -59,11 +60,20 @@ async function setup() {
     () => candidateStore.close(),
     () => app.close(),
   );
-  const call = (method: 'GET' | 'POST' | 'DELETE', url: string, token: string, payload?: object) =>
+  const call = (
+    method: 'GET' | 'POST' | 'DELETE',
+    url: string,
+    token: string,
+    payload?: object,
+    foreignOrigin?: string,
+  ) =>
     app.inject({
       method,
       url,
-      headers: { authorization: `Bearer ${token}`, origin: 'http://localhost:3000' },
+      // Чужая страница бывает только у браузера с cookie; у Bearer её проверять не нужно.
+      headers: foreignOrigin
+        ? { cookie: `openqareer_session=${token}`, origin: foreignOrigin }
+        : { authorization: `Bearer ${token}`, origin: 'http://localhost:3000' },
       ...(payload ? { payload } : {}),
     });
   const id = (who: 'a' | 'b') => people[who].candidate!.id;
@@ -148,6 +158,41 @@ describe('B787: журнал согласий по отклику', () => {
       total: 1,
       entries: [{ employer: 'Ромашка' }],
     });
+  });
+
+  it('запись и результат с чужой страницы отклоняются', async () => {
+    const { call, grant } = await setup();
+    grant('a');
+    await call('POST', URL, 'a', entry());
+    const foreign = 'https://evil.example';
+    const other = entry({ id: '00000000-0000-4000-8000-000000000002' });
+    expect((await call('POST', URL, 'a', other, foreign)).statusCode).toBe(403);
+    expect(
+      (await call('POST', `${URL}/${ID}/result`, 'a', { result: 'sent' }, foreign)).statusCode,
+    ).toBe(403);
+    expect((await call('GET', URL, 'a')).json().data).toMatchObject({
+      total: 1,
+      entries: [{ results: [] }],
+    });
+  });
+
+  it('сверх предела записей новая отклоняется, повтор прежней проходит', async () => {
+    const { call, grant, id, raw } = await setup();
+    grant('a');
+    await call('POST', URL, 'a', entry());
+    raw((database) =>
+      database
+        .prepare(
+          `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+           INSERT INTO apply_consent_journal SELECT 'fill-' || i, ?, NULL, ?, ?, '' FROM n`,
+        )
+        .run(MAX_APPLY_CONSENTS_PER_CANDIDATE - 1, id('a'), V11, '2026-01-01T00:00:00.000Z'),
+    );
+    const other = entry({ id: '00000000-0000-4000-8000-000000000002' });
+    const refused = await call('POST', URL, 'a', other);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.code).toBe('apply_consent_limit');
+    expect((await call('POST', URL, 'a', entry())).statusCode).toBe(200);
   });
 
   it.each([

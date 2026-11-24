@@ -58,6 +58,11 @@ const listSchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+const REFUSAL = {
+  conflict: ['apply_consent_conflict', 'Такая запись уже есть.'],
+  full: ['apply_consent_limit', 'Согласие по отклику не записалось.'],
+} as const;
+
 const postEntry: Handler = async (deps, request, reply) => {
   const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
@@ -90,15 +95,9 @@ const postEntry: Handler = async (deps, request, reply) => {
     mandateVersion: APPLY_MANDATE_VERSION,
     now: new Date(),
   });
-  if (outcome === 'conflict') {
-    return sendError(
-      reply,
-      request,
-      409,
-      'apply_consent_conflict',
-      'Такая запись уже есть.',
-      false,
-    );
+  if (outcome === 'conflict' || outcome === 'full') {
+    const [code, message] = REFUSAL[outcome];
+    return sendError(reply, request, 409, code, message, false);
   }
   return reply
     .status(outcome === 'created' ? 201 : 200)
@@ -147,9 +146,8 @@ export function registerApplyConsentRoutes(app: FastifyInstance, deps: RouteDeps
     ...deps,
     journal: new SqliteApplyConsentJournal(database, deps.config.dataEncryptionKey),
   };
-  const write = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
   const base = '/api/v1/candidate/apply-consents';
   app.get(base, withDeps(bound, getEntries));
-  app.post(base, write, withDeps(bound, postEntry));
-  app.post(`${base}/:id/result`, write, withDeps(bound, postResult));
+  app.post(base, withDeps(bound, postEntry));
+  app.post(`${base}/:id/result`, withDeps(bound, postResult));
 }

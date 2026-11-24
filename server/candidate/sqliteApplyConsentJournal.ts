@@ -1,9 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type {
-  ApplyConsentEntry,
-  ApplyConsentInput,
-  ApplyConsentPage,
-  ApplyConsentResult,
+import {
+  type ApplyConsentEntry,
+  type ApplyConsentInput,
+  type ApplyConsentPage,
+  type ApplyConsentResult,
+  MAX_APPLY_CONSENTS_PER_CANDIDATE,
 } from '../../shared/applyConsent';
 import { SealedText } from '../data/sealedText';
 
@@ -73,18 +74,20 @@ export class SqliteApplyConsentJournal {
     );
   }
 
-  /** `conflict` — номер занят другой записью или другим кандидатом. */
+  /** `conflict` — номер занят другой записью или другим кандидатом; `full` — записей уже предельно много. */
   append(
     candidateId: string,
     input: ApplyConsentInput,
     meta: { readonly mandateVersion: string; readonly now: Date },
-  ): 'created' | 'existing' | 'conflict' {
+  ): 'created' | 'existing' | 'conflict' | 'full' {
     const payload = JSON.stringify(payloadOf(input));
     const inserted = this.database
       .prepare(
         `INSERT INTO apply_consent_journal
            (id, candidate_id, application_id, mandate_version, occurred_at, payload_cipher)
-         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+         SELECT ?, ?, ?, ?, ?, ?
+          WHERE (SELECT COUNT(*) FROM apply_consent_journal WHERE candidate_id = ?) < ?
+         ON CONFLICT(id) DO NOTHING`,
       )
       .run(
         input.id,
@@ -93,13 +96,23 @@ export class SqliteApplyConsentJournal {
         meta.mandateVersion,
         meta.now.toISOString(),
         this.sealed.seal(payload, scope(candidateId, input.id)),
+        candidateId,
+        MAX_APPLY_CONSENTS_PER_CANDIDATE,
       );
     if (Number(inserted.changes) === 1) return 'created';
     const [stored] = this.select(candidateId, 'AND id = ?', [input.id]);
+    if (!stored && !this.idTaken(input.id)) return 'full';
     return stored?.application_id === input.applicationId &&
       this.sealed.open(stored.payload_cipher, scope(candidateId, input.id)) === payload
       ? 'existing'
       : 'conflict';
+  }
+
+  private idTaken(id: string): boolean {
+    return (
+      this.database.prepare('SELECT 1 FROM apply_consent_journal WHERE id = ?').get(id) !==
+      undefined
+    );
   }
 
   /** Результаты дописываются: отклик мог подтвердиться позже неудачной попытки. */
