@@ -1,4 +1,4 @@
-import type { HhApplyOutcome } from '../../../../../shared/hhCandidateSession';
+import type { HhApplyOutcome, HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
 
 /** Что показывает шаг после попытки отклика: результат на месте, без перехода. */
 export type HhSendResult =
@@ -29,6 +29,18 @@ export function resultOf(outcome: HhApplyOutcome, failureCode?: string | null): 
   if (outcome === 'questionnaire') return { kind: 'questionnaire' };
   if (failureCode === 'not_signed_in' || failureCode === 'session_window_missing') return { kind: 'signin' };
   return { kind: 'error', text: (failureCode && FAILURE_TEXT[failureCode]) || DEFAULT_FAILURE };
+}
+
+const plainTitle = (title: string) => title.replace(/\s+/gu, ' ').trim();
+
+/** Заголовок выбранного резюме, если в списке кандидата он один; иначе по нему резюме не узнать. */
+export function uniqueResumeTitle(snapshot: HhResumeSnapshot | null): string | undefined {
+  const selected = snapshot?.selected;
+  if (!snapshot || !selected) return undefined;
+  const listed = snapshot.resumes.find((item) => item.id === selected.id);
+  const title = plainTitle(listed?.title ?? '');
+  const same = snapshot.resumes.filter((item) => plainTitle(item.title) === title);
+  return title && same.length === 1 && !/\p{Cc}/u.test(title) ? title : undefined;
 }
 
 /** Отказ сервера до отклика: код ошибки — в те же слова. */

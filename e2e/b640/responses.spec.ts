@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
-import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
+import { mockResponses, responseFixtures, type ResponsesMockOptions } from './responsesFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 
@@ -32,6 +32,34 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await page.getByRole('button', { name: 'Архив · 2' }).click();
     await expect(page.locator('tr.ot-row')).toHaveCount(7);
     await expectGates(page);
+  });
+
+  test('«не отправлен» не рвётся по буквам при окне 1176 (B678)', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'ширина окна приложения');
+    const applications = responseFixtures().map((item) =>
+      item.id === 'a-draft' ? { ...item, materials: { coverLetter: true, resume: true } } : item,
+    );
+    await open(page, '/app/responses', 'o01', { applications });
+    const cell = row(page, 'a-draft').locator('.ot-c-sent');
+    await expect(cell).toHaveText('не отправлен');
+    for (const width of [1176, 1024, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const fit = await cell.evaluate((node) => {
+        const text = node.firstChild!;
+        const at = node.textContent!.indexOf('отправлен');
+        const range = document.createRange();
+        range.setStart(text, at);
+        range.setEnd(text, at + 'отправлен'.length);
+        return {
+          lines: range.getClientRects().length,
+          over: node.scrollWidth - node.clientWidth,
+          page: document.documentElement.scrollWidth - window.innerWidth,
+        };
+      });
+      expect(fit.lines, `${width}`).toBe(1);
+      expect(fit.over, `${width}`).toBeLessThanOrEqual(0);
+      expect(fit.page, `${width}`).toBeLessThanOrEqual(0);
+    }
   });
 
   test('раскрытый отклик: что дальше, что было, отметка ответа на месте', async ({ page }) => {

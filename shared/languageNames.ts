@@ -30,3 +30,23 @@ export function languageNameRu(name: string): string {
   const trimmed = name.trim();
   return LANGUAGE_NAMES_RU[trimmed.toLocaleLowerCase('en')] ?? trimmed;
 }
+
+const LANGUAGE_FORMS: readonly (readonly [key: string, ruStem: string, ruName: string])[] =
+  Object.entries(LANGUAGE_NAMES_RU).map(([key, name]) => {
+    const ruName = name.toLocaleLowerCase('ru');
+    return [key, ruName.replace(/ий$/u, ''), ruName];
+  });
+
+/** Ключ языка по слову на любом из двух языков: «English», «английский», «английского». */
+export function languageKey(word: string): string | null {
+  const token = word.trim().toLocaleLowerCase('ru');
+  const found = LANGUAGE_FORMS.find(
+    ([key, stem, name]) =>
+      token === key ||
+      token === name ||
+      (stem !== name &&
+        /^(?:ий|ого|ому|им|ом)$/u.test(token.slice(stem.length)) &&
+        token.startsWith(stem)),
+  );
+  return found?.[0] ?? null;
+}

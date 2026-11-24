@@ -1233,6 +1233,8 @@ fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> Session
 struct DocumentState {
     ready: String,
     href: String,
+    /// `performance.timeOrigin`: tells one document from another.
+    origin: f64,
 }
 
 /// `eval_with_callback` hands the JSON-encoded result to a `Fn` callback; the
@@ -1259,11 +1261,64 @@ pub(crate) async fn eval_json(window: &Webview, js: &str) -> Result<String, Stri
 async fn read_document_state(window: &Webview) -> Result<DocumentState, String> {
     let raw = eval_json(
         window,
-        "(function(){try{return {ready: document.readyState, href: location.href};}\
-catch(e){return {ready: 'error', href: ''};}})()",
+        "(function(){try{return {ready: document.readyState, href: location.href, origin: performance.timeOrigin || 0};}\
+catch(e){return {ready: 'error', href: '', origin: 0};}})()",
     )
     .await?;
     serde_json::from_str::<DocumentState>(&raw).map_err(|error| format!("eval_shape: {error}"))
+}
+
+/// What the hh.ru window showed before a navigation.
+struct PageBefore {
+    /// `performance.timeOrigin`: every document has its own; `None` if it was unreadable.
+    origin: Option<f64>,
+    url: String,
+}
+
+/// The page in the window right before a navigation. A document that is being
+/// torn down drops the script, so the read is tried a few times.
+async fn page_before(window: &Webview) -> PageBefore {
+    let url = window.url().map(|url| url.to_string()).unwrap_or_default();
+    for _ in 0..3 {
+        match read_document_state(window).await {
+            Ok(state) => {
+                return PageBefore {
+                    origin: Some(state.origin),
+                    url: state.href,
+                }
+            }
+            Err(error) if error == "eval_cancelled" => {
+                tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+            }
+            Err(_) => break,
+        }
+    }
+    PageBefore { origin: None, url }
+}
+
+/// B708: after `navigate()` the window still answers from the previous document,
+/// which is `complete`. Without a navigation (`before` is `None`) the window may
+/// already report an address that is only loading. The check is hh.ru only:
+/// LinkedIn rewrites addresses in place (B448).
+fn is_requested_document(
+    platform: &str,
+    before: Option<&PageBefore>,
+    state: &DocumentState,
+    requested: &str,
+) -> bool {
+    if platform != "hh" {
+        return true;
+    }
+    match before {
+        None => same_page(&state.href, requested),
+        Some(PageBefore {
+            origin: Some(origin),
+            ..
+        }) => state.origin != *origin,
+        Some(PageBefore { origin: None, url }) => {
+            state.href != *url && state.href != "about:blank"
+        }
+    }
 }
 
 /// LinkedIn fills sections after load, so it still waits for `complete`.
@@ -1786,6 +1841,23 @@ pub async fn read_session_page(
     app: &AppHandle,
     request: &SessionWindowRequest,
 ) -> Result<SessionPageReport, String> {
+    read_page(app, request, false).await
+}
+
+/// Like `read_session_page`, but always loads the page anew: no sheet, letter
+/// or script flag of an earlier attempt survives.
+pub(crate) async fn read_fresh_session_page(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+) -> Result<SessionPageReport, String> {
+    read_page(app, request, true).await
+}
+
+async fn read_page(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    fresh: bool,
+) -> Result<SessionPageReport, String> {
     let (label, url, _) = validate(request)?;
     let scroll_budget = lazy_scroll_budget(url.path());
     let requested_url = url.to_string();
@@ -1798,10 +1870,15 @@ pub async fn read_session_page(
 
     // LinkedIn rewrites the query and trailing slash of a page it just
     // served; comparing the whole URL navigated again mid-load (B448).
-    let already_there = window
-        .url()
-        .is_ok_and(|current| same_page(current.as_str(), url.as_str()));
+    let already_there = !fresh
+        && window
+            .url()
+            .is_ok_and(|current| same_page(current.as_str(), url.as_str()));
+    let mut before = None;
     if !already_there {
+        if request.platform == "hh" {
+            before = Some(page_before(&window).await);
+        }
         read_diagnostic(
             app,
             request,
@@ -1832,20 +1909,29 @@ pub async fn read_session_page(
             }
             Err(error) => return Err(error),
         };
-        let interactive_for = if state.ready == "interactive" {
+        let requested_document = is_requested_document(
+            &request.platform,
+            before.as_ref(),
+            &state,
+            &requested_url,
+        );
+        let interactive_for = if requested_document && state.ready == "interactive" {
             interactive_since
                 .get_or_insert_with(tokio::time::Instant::now)
                 .elapsed()
         } else {
             Duration::ZERO
         };
-        if !state.href.is_empty()
+        if requested_document
+            && !state.href.is_empty()
             && page_ready_to_read(&request.platform, &state.ready, interactive_for)
         {
             tokio::time::sleep(PAGE_SETTLE_DELAY).await;
             break;
         }
         if tokio::time::Instant::now() >= deadline {
+            let reason = if requested_document { "slow" } else { "old_document" };
+            read_diagnostic(app, request, "load_timeout", Some(reason));
             return Err("page_load_timeout".to_string());
         }
         tokio::time::sleep(PAGE_POLL_INTERVAL).await;
@@ -2065,16 +2151,22 @@ fn first_path_segment(raw: &str) -> &str {
     }
 }
 
-/// Steps of the candidate's own LinkedIn reads in the local diagnostics log.
+/// Steps of the candidate's own reads in the local diagnostics log.
 fn read_diagnostic(
     app: &AppHandle,
     request: &SessionWindowRequest,
     event: &str,
     detail: Option<&str>,
 ) {
-    if request.platform == "linkedin" && request.session_key.is_none() {
-        let _ = append_connector_diagnostic(app, "linkedin-read", event, detail);
+    if request.session_key.is_some() {
+        return;
     }
+    let scope = match request.platform.as_str() {
+        "linkedin" => "linkedin-read",
+        "hh" => "hh-read",
+        _ => return,
+    };
+    let _ = append_connector_diagnostic(app, scope, event, detail);
 }
 
 /// Kept on this machine only (B448): a sanitized LinkedIn page that yielded
@@ -2318,6 +2410,58 @@ mod tests {
         };
         assert_eq!(next_quiet_readings(3, &state, 5_000.0, 100), 0);
         assert_eq!(next_quiet_readings(3, &state, 5_000.0, 120), 4);
+    }
+
+    fn document(href: &str, origin: f64) -> DocumentState {
+        DocumentState {
+            ready: "complete".into(),
+            href: href.into(),
+            origin,
+        }
+    }
+
+    fn before(origin: Option<f64>, url: &str) -> PageBefore {
+        PageBefore {
+            origin,
+            url: url.into(),
+        }
+    }
+
+    #[test]
+    fn hh_never_reads_the_document_it_is_leaving() {
+        let wanted = "https://hh.ru/vacancy/77";
+        let home = before(Some(1.5), "https://hh.ru/");
+        let ready = |before: Option<&PageBefore>, href: &str, origin: f64| {
+            is_requested_document("hh", before, &document(href, origin), wanted)
+        };
+        assert!(!ready(Some(&home), "https://hh.ru/", 1.5));
+        assert!(ready(Some(&home), wanted, 2.5));
+        // hh.ru may answer from a regional host or send the visitor to sign in.
+        assert!(ready(Some(&home), "https://spb.hh.ru/vacancy/77", 2.5));
+        assert!(ready(Some(&home), "https://hh.ru/account/login", 2.5));
+        // A reload of the same address is a new document too.
+        let same = before(Some(2.5), wanted);
+        assert!(!ready(Some(&same), wanted, 2.5));
+        assert!(ready(Some(&same), wanted, 3.5));
+        // The previous document could not be read.
+        let unread = before(None, "https://hh.ru/account/login");
+        assert!(!ready(Some(&unread), "https://hh.ru/account/login", 4.0));
+        assert!(!ready(Some(&unread), "about:blank", 4.0));
+        assert!(ready(Some(&unread), wanted, 4.0));
+        // No navigation: the address may belong to a load still under way.
+        assert!(!ready(None, "https://hh.ru/", 1.5));
+        assert!(ready(None, "https://hh.ru/vacancy/77?from=x", 1.5));
+    }
+
+    #[test]
+    fn linkedin_readiness_ignores_the_document_check() {
+        let feed = before(Some(1.0), "https://www.linkedin.com/feed/");
+        assert!(is_requested_document(
+            "linkedin",
+            Some(&feed),
+            &document("https://www.linkedin.com/feed/", 1.0),
+            "https://www.linkedin.com/in/x/",
+        ));
     }
 
     #[test]

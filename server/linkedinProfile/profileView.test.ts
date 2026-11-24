@@ -30,9 +30,9 @@ describe('B645 a03: семь разделов', () => {
     expect(sections[5]!.offer).toEqual({ key: 'skills', variants: ['Go · SQL', 'SQL · Go'], doneAt: null });
   });
 
-  it('вариантов не больше трёх, считая первый; прежние тексты идут в «не повторять»', () => {
-    const full = { done: new Map(), variants: new Map([['about', ['b', 'c', 'd']]]) };
-    expect(offerOf('about', 'a', full)?.variants).toEqual(['a', 'b', 'c']);
+  it('других вариантов не больше трёх; прежние тексты идут в «не повторять»', () => {
+    const full = { done: new Map(), variants: new Map([['about', ['b', 'c', 'd', 'e']]]) };
+    expect(offerOf('about', 'a', full)?.variants).toEqual(['a', 'b', 'c', 'd']);
     expect(offerOf('about', null, { done: new Map(), variants: new Map() })).toBeNull();
     expect(shownTexts('skills', suggestions, marks)).toEqual(['Go · SQL', 'SQL · Go']);
     expect(shownTexts('experience:e1', suggestions, marks)).toEqual(['Пересказ']);
