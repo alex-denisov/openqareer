@@ -388,3 +388,36 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     ? [...checked, ...greeted, ...distorted, ...cyrillic]
     : [...checked, ...greeted, ...distorted, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }
+
+function quantityKey(item: Quantity): string {
+  return [item.kind, item.value, item.currency ?? ''].join(':');
+}
+
+/** Переход «с 23% до 68%» держится на фразе профиля, где стоят оба числа: порознь они могут быть о другом. */
+function backedTransition([from, to]: [number, number], source: readonly Quantity[]): boolean {
+  return [from, to].every((number) =>
+    source.some((item) => item.written === number || item.value === number));
+}
+
+/** Числа письма, которых нет в профиле: те же правила, что у проверки готового письма. */
+export function unbackedLetterNumbers(
+  body: string,
+  candidate: readonly string[],
+  vacancy: readonly string[],
+): string[] {
+  const profile = candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence));
+  const perSentence = profile.map(quantities);
+  const known = perSentence.flat();
+  const found = sentencesOf(body).flatMap((sentence) => {
+    const own = withoutVacancyText(sentence, vacancy);
+    return [
+      ...quantities(own)
+        .filter((wanted) => !known.some((item) => backedBy(wanted, item)))
+        .map(quantityKey),
+      ...transitions(own)
+        .filter((pair) => !perSentence.some((source) => backedTransition(pair, source)))
+        .map(([from, to]) => `transition:${from}:${to}`),
+    ];
+  });
+  return [...new Set(found)];
+}
