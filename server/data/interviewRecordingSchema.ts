@@ -68,4 +68,14 @@ CREATE TABLE IF NOT EXISTS interview_interviewers (
   name_cipher TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+-- B642, I4c «Чей голос»: голос (1|2) каждой строки загруженного файла по ключу расшифровки
+-- и подтверждённый голос кандидата. Текста здесь нет, только номера.
+CREATE TABLE IF NOT EXISTS interview_recording_voices (
+  recording_id TEXT PRIMARY KEY REFERENCES interview_recordings(id) ON DELETE CASCADE,
+  transcript_hash TEXT NOT NULL,
+  status TEXT NOT NULL,
+  labels TEXT,
+  candidate_voice INTEGER,
+  updated_at TEXT NOT NULL
+);
 `;

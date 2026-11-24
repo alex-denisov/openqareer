@@ -61,7 +61,7 @@ describe('published legal pack', () => {
     const privacy = plainText('privacy');
 
     expect(terms).not.toContain('доступны только пользователю');
-    expect(terms).toContain('разбор строится автоматически');
+    expect(terms).toContain('разбор строятся автоматически');
     expect(terms).toContain('передаёт технологическим провайдерам обработки текста');
     expect(privacy).not.toContain('провайдер не хранит переданный звук');
     expect(privacy).not.toContain('провайдер не хранит эти данные');
@@ -70,11 +70,26 @@ describe('published legal pack', () => {
     expect(privacy).toContain('оператор не обещает, что провайдер не хранит этот текст');
   });
 
-  it('keeps speaker labelling out of the text until the product does it', () => {
-    for (const slug of LEGAL_DOC_SLUGS) {
-      expect(plainText(slug)).not.toContain('разметк');
-      expect(plainText(slug)).not.toContain('размечает');
-    }
+  it('describes speaker labelling of uploaded files the way the code does it (edition 1.5)', () => {
+    const terms = plainText('terms');
+    const privacy = plainText('privacy');
+
+    expect(terms).toContain('автоматически размечает двумя номерами говорящих');
+    expect(terms).toContain('рассчитана на разговор двух человек');
+    expect(terms).toContain('отдельные реплики сервис исправить не позволяет');
+    expect(terms).toContain('разбор может быть построен и по неразмеченной расшифровке');
+    expect(terms).not.toContain('проверяет её перед использованием');
+    expect(privacy).not.toContain('голоса различаются только по источнику');
+    expect(privacy).toContain('звук для разметки не используется');
+    expect(privacy).toContain('для разметки говорящих и подготовки разбора');
+    expect(privacy).toContain('контрольная сумма расшифровки');
+    expect(plainText('disclaimer')).toContain('разметка говорящих');
+  });
+
+  it('leaves the open legal questions out: no new consent, no claim about biometrics or legal ground', () => {
+    expect(plainText('consent')).not.toContain('разметк');
+    expect(plainText('privacy')).not.toContain('биометрические персональные данные оператор');
+    expect(plainText('privacy')).not.toContain('законный интерес');
   });
 
   it('names the operator and the contact address in the personal-data policy', () => {
