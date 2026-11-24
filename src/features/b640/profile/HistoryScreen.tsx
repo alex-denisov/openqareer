@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { apiErrorMessage, CoachApiError } from '../../coach/apiClient';
-import {
-  getProfileHistory,
-  revertProfileHistoryEntry,
-  type ProfileHistoryItem,
-} from '../../resume/profileHistoryApi';
+import { getProfileHistory, revertProfileHistoryEntry } from '../../resume/profileHistoryApi';
 import { Button, Icon, InfoTip, StatusLine } from '../kit';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import { reapplyChange } from './profileExtrasApi';
-import { historyDays, historyHeading, type HistoryDay, type HistoryRow } from './historyModel';
+import {
+  historyDays,
+  historyHeading,
+  sourceChips,
+  type HistoryDay,
+  type HistoryRow,
+} from './historyModel';
+import { useHistoryFeed, type FeedState } from './useHistoryFeed';
 
 const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const HISTORY_TIP =
@@ -151,82 +154,46 @@ function Days({
   );
 }
 
-interface FeedState {
-  readonly entries: readonly ProfileHistoryItem[];
-  readonly total: number;
-  readonly page: number;
-}
-
-/** Догрузка следующих страниц и отметка отменённых правок поверх первой страницы. */
-function useHistoryFeed(first: FeedState) {
-  const [feed, setFeed] = useState<FeedState>(first);
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  async function more() {
-    if (busy) return;
-    setBusy(true);
-    setFailed(false);
-    try {
-      const next = await getProfileHistory(feed.page + 1);
-      const known = new Set(feed.entries.map((entry) => entry.id));
-      setFeed({
-        entries: [...feed.entries, ...next.entries.filter((entry) => !known.has(entry.id))],
-        total: next.total,
-        page: next.page,
-      });
-    } catch {
-      setFailed(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /**
-   * После отмены в истории появляется новая запись: перечитываем начало списка.
-   * Если чтение не удалось, отмечаем правку отменённой на месте.
-   */
-  async function markReverted(id: string) {
-    try {
-      const fresh = await getProfileHistory(0);
-      setFeed({ entries: fresh.entries, total: fresh.total, page: fresh.page });
-    } catch {
-      setFeed((current) => ({
-        ...current,
-        entries: current.entries.map((entry) =>
-          entry.id === id ? { ...entry, revertedAt: entry.createdAt } : entry,
-        ),
-      }));
-    }
-  }
-
-  return { feed, busy, failed, more, markReverted };
-}
-
 function History({ first }: { readonly first: FeedState }) {
-  const { feed, busy, failed, more, markReverted } = useHistoryFeed(first);
+  const { feed, busy, failed, source, choose, more, markReverted } = useHistoryFeed(first);
+  const chips = sourceChips(feed.sources);
   const left = feed.total - feed.entries.length;
   return (
     <>
       <div className="lead-head">
         <h2 className="lead-title" id="hx-title">
-          {historyHeading(feed.total)}
+          {historyHeading(feed.sources?.all ?? feed.total)}
         </h2>
         <InfoTip label="Как ведётся история" text={HISTORY_TIP} />
       </div>
+      {chips.length > 0 && feed.sources?.all ? (
+        <div className="chips" role="group" aria-label="Источник правки">
+          {chips.map((chip) => (
+            <button
+              className="chip"
+              type="button"
+              key={chip.label}
+              aria-pressed={chip.source === source}
+              onClick={() => choose(chip.source)}
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <Days
         days={historyDays(feed.entries, TIME_ZONE)}
         onReverted={(id) => void markReverted(id)}
       />
       {left > 0 ? (
         <div className="actions">
-          <Button variant="quiet" icon="down" busy={busy} onClick={() => void more()}>
+          <Button variant="quiet" icon="down" busy={busy} onClick={() => more()}>
             {`Показать ещё ${Math.min(20, left)}`}
           </Button>
         </div>
       ) : null}
       {failed ? (
-        <BlockError text="Не удалось загрузить ещё правки." onRetry={() => void more()} />
+        <BlockError text="Не удалось загрузить ещё правки." onRetry={() => more()} />
       ) : null}
     </>
   );

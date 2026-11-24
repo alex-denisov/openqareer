@@ -16,18 +16,28 @@ export interface ProfileHistoryItem {
   readonly revertedAt: string | null;
 }
 
+/** Отбор по источнику правки (p10). */
+export type ProfileHistorySource = 'candidate' | 'consultant';
+export type ProfileHistorySources = Readonly<Record<'all' | ProfileHistorySource, number>>;
+
 export interface ProfileHistoryPage {
   readonly entries: readonly ProfileHistoryItem[];
   readonly total: number;
   readonly page: number;
   readonly pageSize: number;
+  /** Счёт по источникам; до обновления сервера поля нет. */
+  readonly sources?: ProfileHistorySources;
 }
 
 export async function getProfileHistory(
   page: number,
   signal?: AbortSignal,
+  source?: ProfileHistorySource,
 ): Promise<ProfileHistoryPage> {
-  const response = await apiFetch(`/api/v1/candidate/profile/history?page=${page}`, { signal });
+  const filter = source ? `&source=${source}` : '';
+  const response = await apiFetch(`/api/v1/candidate/profile/history?page=${page}${filter}`, {
+    signal,
+  });
   const data = await readDataObject<ProfileHistoryPage>(response);
   if (!Array.isArray(data.entries)) throw malformedResponseError();
   return data;

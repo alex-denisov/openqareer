@@ -5,6 +5,7 @@ import { ResumeRevisionConflictError } from '../orchestration/careerCommandDispa
 import {
   confirmExperience,
   listProfileHistory,
+  PROFILE_HISTORY_SOURCES,
   ProfileChangeAlreadyRevertedError,
   ProfileChangeConflictError,
   ProfileChangeNotFoundError,
@@ -21,7 +22,10 @@ import {
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
-const pageQuery = z.object({ page: z.coerce.number().int().min(0).max(10_000).default(0) });
+const pageQuery = z.object({
+  page: z.coerce.number().int().min(0).max(10_000).default(0),
+  source: z.enum(PROFILE_HISTORY_SOURCES).optional(),
+});
 // Consultant edits accepted before the change log are listed as `revision:<id>`
 // and consultant rewrites accepted in «Опыт» as `rewrite:<id>`.
 const changeParams = z.object({
@@ -43,9 +47,9 @@ function signedInMutation(deps: RouteDeps, request: FastifyRequest, reply: Fasti
 const handleList: Handler = async (deps, request, reply) => {
   const candidate = signedIn(deps, request, reply);
   if (!candidate) return undefined;
-  const { page } = pageQuery.parse(request.query);
+  const { page, source } = pageQuery.parse(request.query);
   return {
-    data: listProfileHistory(deps.candidateStore, candidate.id, page),
+    data: listProfileHistory(deps.candidateStore, candidate.id, page, source),
     meta: { requestId: request.id },
   };
 };
