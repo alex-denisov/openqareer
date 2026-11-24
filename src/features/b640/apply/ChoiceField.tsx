@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import type { QuestionnaireQuestion } from '../../../../shared/applicationQuestionnaire';
-import { Button } from '../kit';
+import { Button, Icon } from '../kit';
 import { choiceValues, toggleChoice, visibleOptions } from './model/choiceModel';
 
 export interface ChoiceFieldProps {
@@ -65,14 +65,17 @@ export function ChoiceField({ fieldId, question, value, onPick }: ChoiceFieldPro
   };
   return (
     <>
-      <input
-        id={fieldId}
-        type="search"
-        aria-label={`Найти вариант: ${question.text}`}
-        placeholder="Найти вариант"
-        value={query}
-        onChange={(event) => search(event.currentTarget.value)}
-      />
+      <label className="search">
+        <Icon name="search" />
+        <input
+          id={fieldId}
+          type="search"
+          aria-label={`Найти вариант: ${question.text}`}
+          placeholder="Найти вариант"
+          value={query}
+          onChange={(event) => search(event.currentTarget.value)}
+        />
+      </label>
       <OptionList {...list} fieldId={undefined} shown={shown} />
       {found === 0 ? <p role="status">Ничего не нашлось</p> : null}
       {found > limit ? (

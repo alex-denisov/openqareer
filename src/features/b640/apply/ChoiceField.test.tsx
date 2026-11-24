@@ -74,6 +74,8 @@ describe('B703: вопрос с выбором показан выбором, а
       click(view.container.querySelector('button'));
       expect(radios()).toBe(40);
       expect(search().id).toBe('qa-q1');
+      // Поле поиска — как в фильтрах макета: рамка и значок у обёртки `.search`.
+      expect(search().closest('.search')?.querySelector('svg')).toBeTruthy();
     });
 
     it('поиск находит вариант в конце списка, выбранный виден всегда', () => {
