@@ -63,7 +63,7 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
   const targetedView = page.locator('.career-resume-ats-view');
   await expect(targetedView.getByRole('heading', { name: 'Что выделено в срезе' })).toBeVisible();
   await expect(targetedView).toContainText('GraphQL');
-  await expect(targetedView).toContainText('не найдено в мастер-резюме');
+  await expect(targetedView).toContainText('Требования без совпадения в тексте Мастер-резюме');
   await expect(targetedView).toContainText('Руководитель продукта — FinCloud');
   await expect(targetedView).toContainText('подробности сохранены');
   await expect(targetedView).toContainText('оставлены роль и даты');
@@ -71,10 +71,9 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
     'Рост выручки платёжного продукта',
   );
   const targetedText = await targetedView.locator('.career-resume-ats-pre').innerText();
-  const gapSectionIndex = targetedText.indexOf('=== REQUIREMENT GAPS ===');
-  expect(gapSectionIndex).toBeGreaterThanOrEqual(0);
-  expect(targetedText.slice(0, gapSectionIndex)).not.toContain('GraphQL');
-  expect(targetedText.slice(gapSectionIndex)).toContain('GraphQL - не найдено в мастер-резюме');
+  // B713: пробелы видны рядом со срезом, в самом резюме их нет.
+  expect(targetedText).not.toContain('REQUIREMENT GAPS');
+  expect(targetedText).not.toContain('GraphQL');
 
   const axe = await new AxeBuilder({ page }).include('.career-resume-ats-view').analyze();
   expect(
@@ -124,7 +123,7 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
     () => (window as Window & { __b387PrintState?: unknown }).__b387PrintState,
   );
   expect(printState).toMatchObject({ targetMode: 'targeted' });
-  expect((printState as { targetText: string }).targetText).toContain('GraphQL');
+  expect((printState as { targetText: string }).targetText).not.toContain('GraphQL');
 
   await page.emulateMedia({ media: 'print' });
   await page.evaluate(() => {

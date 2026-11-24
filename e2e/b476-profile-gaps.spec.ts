@@ -295,7 +295,7 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
 
     await expect(page.getByText('Версия под вакансию «Вектор Банк»')).toBeVisible();
     await expect(page.locator('.career-resume-ats-view code')).toContainText('MILA EXAMPLE');
-    await expect(page.locator('.career-resume-ats-view code')).toContainText('Kubernetes');
+    await expect(page.locator('.career-resume-ats-view code')).not.toContainText('Kubernetes');
 
     await page.getByTestId('close-targeted-version').click();
     const openVersion = isMobile
