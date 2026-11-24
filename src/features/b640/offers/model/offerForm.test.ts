@@ -4,6 +4,8 @@ import {
   formFromCard,
   parseOfferForm,
   previewTerms,
+  typedOfferValue,
+  leftFieldError,
   type OfferForm,
 } from './offerForm';
 import type { OfferCard } from './offerModel';
@@ -131,5 +133,29 @@ describe('previewTerms', () => {
       salaryPeriod: 'month',
       currency: 'RUB',
     });
+  });
+});
+
+describe('typedOfferValue (B733)', () => {
+  it('«Срок ответа» набирается как общее поле даты: точки ставятся сами', () => {
+    expect(typedOfferValue('respondBy', '25122026')).toBe('25.12.2026');
+    expect(typedOfferValue('respondBy', '2512')).toBe('25.12');
+  });
+
+  it('остальные поля — как набраны', () => {
+    expect(typedOfferValue('base', '250000')).toBe('250000');
+  });
+});
+
+describe('leftFieldError (B733): ошибка при уходе с поля, как в общем поле даты', () => {
+  it('невозможная дата «Срока ответа» — ошибка формата', () => {
+    expect(leftFieldError('respondBy', '31.02.2026')).toBe('Дата в виде дд.мм.гггг');
+    expect(leftFieldError('respondBy', '25.12')).toBe('Дата в виде дд.мм.гггг');
+  });
+
+  it('верная, пустая дата и другие поля — без ошибки', () => {
+    expect(leftFieldError('respondBy', '25.12.2026')).toBeUndefined();
+    expect(leftFieldError('respondBy', '')).toBeUndefined();
+    expect(leftFieldError('base', 'abc')).toBeUndefined();
   });
 });

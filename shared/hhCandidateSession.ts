@@ -40,6 +40,8 @@ export interface HhResumeSections {
   readonly places: readonly HhResumePlace[];
 }
 
+/** Разделы резюме для сверки целиком: длиннее — не шлём, снимок с пятью резюме должен уместиться в предел тела запроса. */
+export const HH_REVIEW_SECTIONS_MAX_LENGTH = 30_000;
 export const HH_SECTION_PLACES_MAX = 30;
 export const HH_SECTION_TEXT_MAX_LENGTH = 4_000;
 export const HH_SECTION_SKILLS_MAX = 100;
@@ -68,6 +70,8 @@ export interface HhResumeEdit {
   readonly now: string;
   /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */
   readonly added?: readonly string[];
+  /** B682: чьи варианты у правки («Другой вариант» a01c); у должности вариантов нет. */
+  readonly variantOf?: { readonly vacancyId: string; readonly subjectId: string };
 }
 
 export interface HhResumeSnapshot {
@@ -89,6 +93,8 @@ export interface HhResumeFit {
   readonly status: HhResumeFitStatus;
   readonly matched: readonly string[];
   readonly missing: readonly string[];
+  /** Сколько правок предложит разбор; нет — разделы резюме не прочитаны. */
+  readonly editCount?: number;
 }
 
 export interface HhResumeReview {
@@ -100,6 +106,31 @@ export interface HhResumeReview {
 
 export const HH_APPLY_OUTCOMES = ['sent', 'questionnaire', 'failed'] as const;
 export type HhApplyOutcome = (typeof HH_APPLY_OUTCOMES)[number];
+
+/** B708: сколько после неуспешной попытки приложение читает окно hh.ru; сервер даёт запас на запись. */
+export const HH_WINDOW_WATCH_MS = 10 * 60 * 1000;
+export const HH_LATE_SENT_MS = 15 * 60 * 1000;
+
+/** B708: исходы, после которых окно hh.ru осталось на вакансии и кандидат мог завершить отклик сам. */
+export const HH_WINDOW_LEFT_OPEN_FAILURES = [
+  'page_not_ready',
+  'popup_missing',
+  'no_confirmation',
+  'captcha',
+  'resume_not_found',
+  'resume_unknown',
+  'letter_field_missing',
+  'letter_not_kept',
+  'submit_unavailable',
+  'relocation_warning',
+  'hh_error',
+  'script_error',
+  'already_applied',
+  'not_signed_in',
+  'page_load_timeout',
+  'eval_timeout',
+  'eval_cancelled',
+] as const;
 
 export interface HhApplyAttempt {
   readonly attemptId: string;

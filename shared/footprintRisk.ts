@@ -23,7 +23,9 @@ export type FootprintRiskActionKind =
   | 'hide'
   | 'add_to_profile'
   /** B727: страница найдена по нику — открыть её и решить «моё / не моё». */
-  | 'confirm_owner';
+  | 'confirm_owner'
+  /** B382: полезная страница, которую в профиль не перенести, — только «Это не моё». */
+  | 'not_mine';
 
 export interface FootprintRiskAction {
   readonly kind: FootprintRiskActionKind;
@@ -42,6 +44,8 @@ export interface FootprintRiskItem {
   readonly category: FootprintRiskCategoryId;
   readonly level: FootprintRiskLevel;
   readonly levelLabel: string;
+  /** Почему такой уровень: «номер находят по имени» (B645 f03b); нет — старый ответ. */
+  readonly levelReason?: string;
   readonly title: string;
   readonly detail: string;
   readonly url: string | null;

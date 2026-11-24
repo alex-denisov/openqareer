@@ -19,10 +19,7 @@ export function ReviewChecks({ checks }: { readonly checks: RejectionReviewCheck
               <h4 className="rec-t">{card.title}</h4>
               <p className="rec-why">{card.why}</p>
               <div className="actions">
-                <Link
-                  className={index === 0 ? 'btn is-primary' : 'btn'}
-                  to={buildNodePath(card.node)}
-                >
+                <Link className={index === 0 ? 'btn is-primary' : 'btn'} to={card.to}>
                   <Icon name={card.icon} />
                   {card.action}
                 </Link>

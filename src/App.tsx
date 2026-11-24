@@ -51,6 +51,7 @@ import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
 import { readRememberedCabinetB640, rememberSignedIn } from './features/site/signedInFlag';
+import { APP_SIGN_IN_PATH } from './features/site/appSignIn';
 
 const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
@@ -65,6 +66,9 @@ const CabinetB640 = lazy(async () => {
   markAppReady();
   return { default: module.CabinetB640 };
 });
+// B760: устройство, где новый кабинет уже открывался, грузит его код рядом с /auth/me,
+// а не после ответа сессии. Сбой загрузки здесь молчит: lazy выше повторит и покажет ошибку.
+if (readRememberedCabinetB640()) void loadCabinetB640().catch(() => undefined);
 const landingPage = preloadablePage(loadLandingPage);
 const LandingPage = landingPage.Page;
 const AuthSiteFrame = lazy(() =>
@@ -136,6 +140,9 @@ const EmailVerificationPage = lazy(() =>
 );
 const ResetPasswordPage = lazy(() =>
   loadAuthPages().then((module) => ({ default: module.ResetPasswordPage })),
+);
+const AppSignInPage = lazy(() =>
+  import('./features/site/AppSignInPage').then((module) => ({ default: module.AppSignInPage })),
 );
 
 /** B589: `/` in the .app is the cabinet, the landing is not in its bundle. */
@@ -298,6 +305,12 @@ export default function App() {
         });
         if (window.location.pathname !== '/verify-email') navigate('/verify-email');
         return;
+      }
+      // B760: новому кабинету нужна только сессия — он открывается сразу, а чтение
+      // рабочего пространства (нужно прежней оболочке) идёт следом, не задерживая строки s07.
+      if (session?.features?.cabinetB640 === true) {
+        const known = session;
+        setState((current) => ({ ...current, session: known }));
       }
       const result = loadWorkspace(window.localStorage, session?.candidateId ?? null);
       // The server is authoritative for the onboarding gate. A local copy may
@@ -647,6 +660,9 @@ export default function App() {
     if (currentPath === '/reset-password') {
       return <ResetPasswordPage onNavigate={navigate} onSessionChange={handleSessionChange} />;
     }
+    if (currentPath === APP_SIGN_IN_PATH) {
+      return <AppSignInPage session={state.session} onNavigate={navigate} />;
+    }
     return null;
   };
 
@@ -908,7 +924,8 @@ export function isAuthPath(path: string): boolean {
     path === '/login' ||
     path === '/signup' ||
     path === '/reset-password' ||
-    path === '/verify-email'
+    path === '/verify-email' ||
+    path === APP_SIGN_IN_PATH
   );
 }
 

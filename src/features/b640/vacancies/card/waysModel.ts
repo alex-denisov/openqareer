@@ -1,6 +1,8 @@
 import type { B640PersonMessage } from '../../../../../shared/b640Companies';
+import { isHhHost, isHhSource } from '../../../../../shared/hhVacancySource';
 import { pluralRu } from '../../../../../shared/pluralRu';
 import type { IconName } from '../../kit';
+import { sourceLinkLabel, sourceLinkTarget } from '../sourceLinkLabel';
 
 export type WayAction =
   | {
@@ -43,6 +45,8 @@ export interface WaysInput {
   };
   /** Вопросов в анкете работодателя; `undefined` — анкеты нет или её не прочитали. */
   readonly questionCount?: number;
+  /** Компания вакансии; пустая или `null` — источник не назвал работодателя. */
+  readonly company: string | null;
 }
 
 function safeUrl(value: string | undefined): URL | undefined {
@@ -55,17 +59,6 @@ function safeUrl(value: string | undefined): URL | undefined {
   }
 }
 
-function isHhHost(url: URL): boolean {
-  return url.hostname === 'hh.ru' || url.hostname.endsWith('.hh.ru');
-}
-
-/** hh.ru на проде приходит как `json_api` с `sourceId: hh`: тип один из признаков, не единственный. */
-function isHhSource(source: WaysInput['sources'][number]): boolean {
-  if (source.sourceType === 'hh' || source.sourceId === 'hh') return true;
-  const url = safeUrl(source.sourceUrl);
-  return Boolean(url && isHhHost(url)) || /^hh\.ru\b/iu.test(source.sourceName ?? '');
-}
-
 function siteUrl(input: WaysInput): string | undefined {
   const candidates = [
     ...input.sources.filter((source) => !isHhSource(source)).map((source) => source.sourceUrl),
@@ -73,9 +66,31 @@ function siteUrl(input: WaysInput): string | undefined {
   ];
   for (const candidate of candidates) {
     const url = safeUrl(candidate);
-    if (url && !isHhHost(url)) return url.toString();
+    if (url && !isHhHost(url.hostname)) return url.toString();
   }
   return undefined;
+}
+
+/**
+ * B726: название и надпись ссылки — те же, что в меню строки (`sourceLinkLabel`): «Сайт
+ * компании» — только у работодателя, пост Telegram — постом, иначе имя источника.
+ */
+function linkWay(url: URL, input: WaysInput): ApplyWay {
+  const href = url.toString();
+  const link = { ...input, url: href, canonicalCompany: input.company };
+  const target = sourceLinkTarget(link);
+  const title =
+    target.kind === 'telegram'
+      ? 'Пост в Telegram'
+      : target.kind === 'employer'
+        ? 'Сайт компании'
+        : (target.name ?? url.hostname);
+  return {
+    id: 'site',
+    title,
+    icon: 'out',
+    action: { kind: 'external', label: sourceLinkLabel(link), url: href },
+  };
 }
 
 function siteWay(input: WaysInput): ApplyWay | undefined {
@@ -88,14 +103,7 @@ function siteWay(input: WaysInput): ApplyWay | undefined {
     };
   }
   const url = siteUrl(input);
-  return url
-    ? {
-        id: 'site',
-        title: 'Сайт компании',
-        icon: 'out',
-        action: { kind: 'external', label: 'Открыть на сайте работодателя', url },
-      }
-    : undefined;
+  return url ? linkWay(new URL(url), input) : undefined;
 }
 
 /** Способы отклика по порядку макета: знакомый (рекомендуем), hh.ru, сайт. Только известные по вакансии. */

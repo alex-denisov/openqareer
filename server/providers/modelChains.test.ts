@@ -22,11 +22,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
   });
 
   it('фоновая обработка только через OpenRouter (решение владельца 04.11)', () => {
-    expect(labels('bulk')).toEqual([
-      'vertex',
-      'openrouter:deepseek/deepseek-v4-flash',
-      'openrouter:z-ai/glm-5.3-flash',
-    ]);
+    expect(labels('bulk').every((label) => label.startsWith('openrouter:'))).toBe(true);
   });
 
   it('разбор резюме — только платные маршруты, luna первой', () => {
@@ -37,15 +33,20 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('тексты для человека: Vertex первым, дешёвая ступень дважды, потом luna (04.11)', () => {
-    for (const mechanic of ['roleNames', 'linkedinDrafts'] as const) {
-      expect(labels(mechanic)).toEqual([
-        'vertex',
-        'openrouter:deepseek/deepseek-v4.1-flash',
-        'openrouter:deepseek/deepseek-v4.1-flash',
-        'openai:gpt-5.6-luna',
-      ]);
-    }
+  it('черновики LinkedIn: дешёвая ступень дважды, потом luna, без Vertex', () => {
+    expect(labels('linkedinDrafts')).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
+  });
+
+  it('названия ролей без Vertex (выключен решением владельца 20.11): дешёвая дважды, потом luna', () => {
+    expect(labels('roleNames')).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
   });
 
   it('письмо: по одному вызову — DeepSeek, GLM, Gemini (B640, решение CPO 10.11)', () => {
@@ -56,26 +57,36 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('роли кампании: Vertex первым, потом голова дважды и glm', () => {
-    expect(labels('campaignRoles')).toEqual([
-      'vertex',
-      'openrouter:deepseek/deepseek-v4-flash',
-      ...labels('bulk').slice(1),
+  it('сообщение знакомому и рекрутёру: GLM, затем DeepSeek, без Vertex (B753)', () => {
+    expect(labels('contactMessages')).toEqual([
+      'openrouter:z-ai/glm-5.3-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
     ]);
   });
 
-  it('Vertex стоит только первым и один раз, за ним голова повторена ровно один раз', () => {
-    for (const mechanic of [
-      'roleNames',
-      'linkedinDrafts',
-      'campaignRoles',
-    ] as const) {
-      const stages = labels(mechanic);
-      expect(stages.filter((label) => label === 'vertex')).toEqual(['vertex']);
-      expect(stages[0]).toBe('vertex');
-      expect(stages[1]).toBe(stages[2]);
-      expect(stages.filter((label) => label === stages[1])).toHaveLength(2);
+  it('роли кампании: голова дважды, потом glm, без Vertex', () => {
+    expect(labels('campaignRoles')).toEqual([
+      'openrouter:deepseek/deepseek-v4-flash',
+      ...labels('bulk'),
+    ]);
+  });
+
+  it('фон, пункты резюме и KPI без Vertex, порядок остальных ступеней прежний', () => {
+    expect(labels('bulk')).toEqual([
+      'openrouter:deepseek/deepseek-v4-flash',
+      'openrouter:z-ai/glm-5.3-flash',
+    ]);
+    for (const mechanic of ['experienceBullets', 'kpiImport'] as const) {
+      expect(labels(mechanic)).toEqual(['openai:gpt-5.6-luna', 'openrouter:z-ai/glm-5.3-flash']);
     }
+  });
+
+  it('Vertex выключен решением владельца 20.11: он остаётся только последней ступенью письма', () => {
+    const withVertex = (Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>).filter(
+      (mechanic) => labels(mechanic).includes('vertex'),
+    );
+    expect(withVertex).toEqual(['coverLetters']);
+    expect(labels('coverLetters').at(-1)).toBe('vertex');
   });
 
   it('квиз по навыку профиля идёт по цепочке консультанта (блок A, пакет 3)', () => {

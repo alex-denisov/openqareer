@@ -196,7 +196,9 @@ export class WorkdayDescriptionBackfill {
       const started: Promise<Outcome[]>[] = [];
       for (const sourceId of sources) {
         await new Promise<void>((resolve) => setImmediate(resolve));
-        started.push(this.stepSource(sourceId));
+        // B756 22.11: обработчик — сразу. Площадка, упавшая, пока цикл ещё ждёт оборота,
+        // давала отказ без обработчика и роняла процесс (exit 1 на «database is locked»).
+        started.push(this.stepSource(sourceId).catch((): Outcome[] => ['failed']));
       }
       const outcomes = await Promise.all(started);
       const flat = outcomes.flat();
@@ -254,15 +256,34 @@ export class WorkdayDescriptionBackfill {
     }
     if (response.status === 429) return 'throttled';
     if (response.status === 404 || response.status === 410) {
-      this.pool.markExpired([vacancy.id], new Date().toISOString());
+      if (!this.write(() => this.pool.markExpired([vacancy.id], new Date().toISOString()))) {
+        return 'failed';
+      }
       this.attempts.delete(vacancy.id);
       return 'gone';
     }
     const fullText = response.status === 200 ? source.readText(response.payload) : '';
     if (!fullText) return this.fail(vacancy.id);
-    this.pool.mergeSourceSlice(sourceId, [withWorkdayText(vacancy, fullText)]);
+    if (
+      !this.write(() => this.pool.mergeSourceSlice(sourceId, [withWorkdayText(vacancy, fullText)]))
+    ) {
+      return 'failed';
+    }
     this.attempts.delete(vacancy.id);
     return 'loaded';
+  }
+
+  /**
+   * Запись в пул. База занята дольше busy_timeout — не вина площадки: попытка не
+   * считается, запись повторится на следующем такте.
+   */
+  private write(operation: () => unknown): boolean {
+    try {
+      operation();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private fail(id: string, by = 1): Outcome {

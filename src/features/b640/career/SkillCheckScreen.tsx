@@ -243,7 +243,7 @@ export function SkillCheckScreen({ node }: { readonly node: B640Node }) {
         </div>
       </div>
     );
-  const titles = roles.state === 'ready' ? roles.data.searchTitles : [];
+  const titles = roles.state === 'ready' ? roles.data.checkable : [];
   const role = param ?? (roles.state === 'ready' ? (roles.data.ready ?? titles[0]) : undefined);
   return (
     <RoleTitlesProvider titlesRu={roles.state === 'ready' ? roles.data.titlesRu : undefined}>

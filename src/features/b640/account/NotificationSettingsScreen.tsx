@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   getNotificationChannelStatus,
   getNotificationPreferences,
@@ -13,8 +13,11 @@ import {
 } from './invitationPreferenceApi';
 import type { B640Node } from '../routes';
 import { DeliverySettingsGroup } from './DeliverySettingsGroup';
+import { deliverySettingsRead } from './deliverySettingsApi';
 import { CHANNEL_LABEL, NOTIFICATION_ROWS, type NotificationChannel, type NotificationRow } from './model';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+import { prefetch } from './prefetch';
+import { telegramStateRead } from './telegramStateApi';
 import { useTelegramLink, type TelegramLink } from './useTelegramLink';
 
 interface Settings {
@@ -22,7 +25,7 @@ interface Settings {
   readonly channels: NotificationChannelStatus;
 }
 
-async function loadSettings(): Promise<Settings> {
+async function fetchSettings(): Promise<Settings> {
   const [events, invitation, channels] = await Promise.all([
     getNotificationPreferences(),
     getInvitationPreference(),
@@ -30,6 +33,9 @@ async function loadSettings(): Promise<Settings> {
   ]);
   return { events: [invitation, ...events], channels };
 }
+
+/** B773: таблица n02 читается рядом с вопросом о сессии (`preload` раздела). */
+export const settingsRead = prefetch(fetchSettings);
 
 const OFF = { app: false, email: false, telegram: false };
 
@@ -227,9 +233,26 @@ function SettingsTable({ settings, load }: { settings: Settings; load: ReturnTyp
   );
 }
 
+/** Чтения групп ниже таблицы идут вместе с чтением таблицы, а не после неё. */
+function useEarlyReads() {
+  useState(() => {
+    deliverySettingsRead.start();
+    telegramStateRead.start();
+    return null;
+  });
+  useEffect(
+    () => () => {
+      deliverySettingsRead.drop();
+      telegramStateRead.drop();
+    },
+    [],
+  );
+}
+
 /** n02 «Уведомления»: что и куда присылать, привязка Telegram на месте, как часто и с компанией ли. */
 export function NotificationSettingsScreen({ node }: { readonly node: B640Node }) {
-  const load = useLoad(loadSettings);
+  useEarlyReads();
+  const load = useLoad(settingsRead.read);
   return (
     <SettingsPage node={node} heading="Настройки уведомлений" busy={load.state === 'loading'}>
       {load.state === 'error' ? <ErrorLine text="Настройки не загрузились" onRetry={load.retry} /> : null}

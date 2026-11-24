@@ -156,6 +156,12 @@ test.describe('B661: «Аккаунт» нового кабинета, част�
   test('n00: разделы аккаунта ведут в свои экраны', async ({ page }) => {
     await openAccount(page, '/app/account');
     const screen = page.locator('[data-b640-node="n00"]');
+    // Макет n00 (B645): «Назад: Сегодня» — в пути на 1440, в шапке на 390.
+    await expect(screen).toHaveCSS('padding-top', '8px');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    const back = page.locator(phone ? '.topbar .mob-back' : '.crumbs .crumb-back');
+    await expect(back).toHaveAccessibleName('Назад: Сегодня');
+    await expect(page.locator('.topbar h1')).toHaveCSS('font-size', phone ? '17px' : '20px');
     const links = screen.locator('.set-list a.set-t.set-a');
     await expect(links).toHaveText([
       'Вход и безопасность',

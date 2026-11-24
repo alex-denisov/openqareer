@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { COVER_LETTER_MAX_CHARS } from '../domain/coverLetterWriting';
 import type { ChatCompletionClient } from './roleNamer';
 import {
+  buildContactMessageWriter,
   buildCoverLetterWriter,
   buildEnabledCoverLetterWriter,
   COVER_LETTER_BUDGET_MS,
@@ -313,6 +314,16 @@ describe('QueuedCoverLetterWriter: пустых писем нет (B640, реш�
     expect(letterPrompt(seen[0]!)).not.toContain('Прошлый вариант письма отклонён.');
   });
 
+  it('повтор нарушил другое правило: третий вызов называет обе причины (B682)', async () => {
+    const seen: CoverLetterWriteInput[] = [];
+    const outcomes = ['Resource-Logistics', 'Рост 900', 'Хорошее письмо'].map((body) => ({ body, stage: 'g' }));
+    const queue = new QueuedCoverLetterWriter([recorded('g', outcomes, seen)], ['g'], () => undefined);
+    const review = (body: string) => [...named(body), ...(body.includes('900') ? ['number'] : [])];
+    await expect(queue.writeCoverLetter({ ...input, review })).resolves.toMatchObject({ body: 'Хорошее письмо' });
+    expect(seen[2]?.correction).toContain('Не переводи и не меняй названия');
+    expect(seen[2]?.correction).toContain('Не пиши цифр');
+  });
+
   it('второй отказ — отказ всей цепочки (маршрут отвечает 503)', async () => {
     const bad = { body: 'At GK Resource-Logistics I led.', stage: 'g' };
     const queue = new QueuedCoverLetterWriter([recorded('g', [bad, bad], [])], ['g'], () => undefined);
@@ -359,6 +370,21 @@ describe('цепочка письма (решение владельца, B601)'
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
     ]);
+  });
+});
+
+describe('B753: цепочка сообщения знакомому и рекрутёру отдельно от письма', () => {
+  const config = {
+    providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' },
+    vertex: { projectId: 'p', location: 'l', clientEmail: 'e', privateKey: 'k', model: 'gemini' },
+  } as unknown as Parameters<typeof buildContactMessageWriter>[0];
+  it('GLM первым, затем DeepSeek, без Vertex; письмо по-прежнему с DeepSeek', () => {
+    const contact = buildContactMessageWriter(config, true) as unknown as { descriptors: readonly string[] };
+    expect(contact.descriptors).toEqual(['openrouter:z-ai/glm-5.3-flash', 'openrouter:deepseek/deepseek-v4.1-flash']);
+    expect(coverLetterStages(config)[0]?.label).toBe('openrouter:deepseek/deepseek-v4.1-flash');
+  });
+  it('модель письма выключена — писателя сообщений нет', () => {
+    expect(buildContactMessageWriter(config, false)).toBeUndefined();
   });
 });
 

@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import type { FeedPostItem } from '../../../../../shared/b640FeedComments';
-import { Button, Icon, StatusLine } from '../../kit';
+import { Icon, StatusLine } from '../../kit';
 import type { SectionProps } from '../../sections';
 import { useLoad } from '../../today/useLoad';
-import { formatSlot } from '../format';
 import { PlatformRetry } from '../PlatformRetry';
 import { BringPost } from './BringPost';
-import { CopyButton } from './CopyButton';
+import { FeedCard, type Approve } from './FeedCard';
 import { LiError } from './LiError';
 import { LinkedinList } from './LinkedinList';
 import { LinkedinNav } from './LinkedinNav';
 import { approveFeedPosts, listFeedPosts } from './linkedinQueueApi';
-import { postsCount } from './linkedinModel';
+import { CommentQueue } from './CommentQueue';
+import { FeedHead, TopicsLink } from './FeedHead';
+import { useCommentPlan, type CommentPlan } from './useCommentPlan';
+import { useScreenChrome } from '../../shell/ShellContext';
 
 const REASONS: Readonly<Record<string, string>> = {
   not_found: 'черновик не найден',
@@ -20,68 +22,22 @@ const REASONS: Readonly<Record<string, string>> = {
   no_slot: 'нет свободного слота ритма',
 };
 
-type Approve = (ids: readonly string[]) => void;
-
-function Card({
-  post,
-  first,
-  approve,
-}: {
-  readonly post: FeedPostItem;
-  readonly first: boolean;
-  readonly approve: Approve;
-}) {
-  const id = `dr-${post.draftId}`;
-  const slot = formatSlot(post.scheduledAt);
-  return (
-    <article className={first ? 'lk-card is-next' : 'lk-card'} aria-label="Комментарий к посту">
-      {post.postExcerpt ? <p className="lk-lines">{post.postExcerpt}</p> : null}
-      {post.postUrl ? (
-        <a className="row-act" href={post.postUrl} target="_blank" rel="noopener noreferrer">
-          <Icon name="out" />
-          Открыть в LinkedIn
-        </a>
-      ) : null}
-      <div className="lk-dr-top">
-        <label className="lk-lbl" htmlFor={id}>
-          Черновик
-        </label>
-        {post.state === 'queued' ? (
-          <span className="tag">{slot ? `в очереди · ${slot}` : 'в очереди'}</span>
-        ) : null}
-        {post.state === 'published' ? <span className="tag ok">опубликован</span> : null}
-      </div>
-      <textarea className="lk-draft" id={id} rows={3} readOnly value={post.comment} />
-      <div className="actions">
-        {post.state === 'draft' ? (
-          <Button
-            variant={first ? 'primary' : 'default'}
-            icon="check"
-            onClick={() => approve([post.draftId])}
-          >
-            Одобрить
-          </Button>
-        ) : null}
-        <CopyButton text={post.comment} label="комментарий" caption="Скопировать" className="btn" />
-      </div>
-    </article>
-  );
-}
-
 /** Первый комментарий раскрыт, остальные свёрнуты до начала поста. */
 function Item({
   post,
   index,
   approve,
+  onChanged,
 }: {
   readonly post: FeedPostItem;
   readonly index: number;
   readonly approve: Approve;
+  readonly onChanged: () => void;
 }) {
   if (index === 0)
     return (
       <li>
-        <Card post={post} first approve={approve} />
+        <FeedCard key={post.draftId} post={post} first approve={approve} onChanged={onChanged} />
       </li>
     );
   const title =
@@ -95,7 +51,13 @@ function Item({
           </span>
           <Icon name="down" className="hire-ref-chev" />
         </summary>
-        <Card post={post} first={false} approve={approve} />
+        <FeedCard
+          key={post.draftId}
+          post={post}
+          first={false}
+          approve={approve}
+          onChanged={onChanged}
+        />
       </details>
     </li>
   );
@@ -124,35 +86,33 @@ function useApprove(reload: () => void) {
 
 function Comments({
   posts,
+  plan,
   reload,
 }: {
   readonly posts: readonly FeedPostItem[];
+  readonly plan: CommentPlan | null;
   readonly reload: () => void;
 }) {
   const approve = useApprove(reload);
   const open = posts.filter((post) => post.state === 'draft').map((post) => post.draftId);
   return (
     <>
-      <div className="list-head">
-        <h2 id="cm-title">{postsCount(posts.length)}</h2>
-        {open.length > 1 ? (
-          <Button
-            size="sm"
-            icon="check"
-            busy={approve.busy}
-            onClick={() => approve.run(open.slice(0, 20))}
-          >
-            {`Одобрить все · ${Math.min(open.length, 20)}`}
-          </Button>
-        ) : null}
-      </div>
+      <FeedHead
+        count={posts.length}
+        plan={plan}
+        open={open}
+        busy={approve.busy}
+        onApproveAll={() => approve.run(open.slice(0, 20))}
+      />
       {approve.error ? (
         <LiError text={approve.error} onRetry={() => approve.run(open.slice(0, 20))} />
       ) : null}
       <LinkedinList
         items={posts}
         listClassName="col"
-        renderItem={(post, index) => <Item post={post} index={index} approve={approve.run} />}
+        renderItem={(post, index) => (
+          <Item post={post} index={index} approve={approve.run} onChanged={reload} />
+        )}
       />
     </>
   );
@@ -168,8 +128,11 @@ function Empty({ node, reload }: Pick<SectionProps, 'node'> & { readonly reload:
         </h2>
         <div className="vl-empty" role="status">
           <p className="vl-empty-t">Новых постов нет</p>
+          <div className="actions">
+            <TopicsLink />
+          </div>
         </div>
-        <BringPost onCreated={reload} />
+        <BringPost onCreated={reload} primary={false} />
       </section>
     </div>
   );
@@ -180,7 +143,11 @@ const readFeed = () => listFeedPosts();
 /** Узел a05 и его пустое состояние a05h: радар ленты по постам, которые приносит кандидат. */
 export function FeedScreen({ node }: SectionProps) {
   const load = useLoad(readFeed);
-  if (load.state === 'ready' && !load.data.items.length)
+  const { plan, reload: reloadPlan } = useCommentPlan();
+  const reload = () => (load.retry(), reloadPlan());
+  // a05b: с очередью на экране шаги колонки по макету плотнее (`data-mtight`).
+  useScreenChrome({ rootData: plan?.waiting.length ? { mtight: '1' } : {} });
+  if (load.state === 'ready' && !load.data.items.length && !plan?.waiting.length)
     return <Empty node={node} reload={load.retry} />;
   return (
     <div className="page two" data-b640-node={node.code} data-b640-section={node.section}>
@@ -192,10 +159,23 @@ export function FeedScreen({ node }: SectionProps) {
         {load.state === 'error' ? (
           <PlatformRetry text="Не удалось загрузить комментарии" onRetry={load.retry} />
         ) : null}
-        {load.state === 'ready' ? <Comments posts={load.data.items} reload={load.retry} /> : null}
+        {load.state === 'ready' && load.data.items.length ? (
+          <Comments posts={load.data.items} plan={plan} reload={reload} />
+        ) : null}
+        {plan?.waiting.length ? (
+          <CommentQueue
+            // a05b: без нового черновика наверху главная кнопка — «Настроить ритм».
+            primary={load.state === 'ready' && load.data.items[0]?.state !== 'draft'}
+            rhythm={plan.rhythm}
+            items={plan.waiting}
+            onChanged={reload}
+            onRhythm={reloadPlan}
+          />
+        ) : null}
       </div>
       <div className="col">
-        {load.state === 'ready' ? <BringPost onCreated={load.retry} /> : null}
+        {/* Главная на ленте — «Одобрить» или «Настроить ритм»: «Подготовить комментарий» обычная. */}
+        {load.state === 'ready' ? <BringPost onCreated={load.retry} primary={false} /> : null}
       </div>
     </div>
   );

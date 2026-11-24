@@ -1,10 +1,13 @@
+import type { ParsedUrlQuery } from 'node:querystring';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   B640_SORT_DIRECTIONS,
   B640_SORT_KEYS,
 } from '../../shared/b640Vacancies';
+import { meetsMonthlySalaryMinimum } from '../../shared/monthlySalaryMinimum';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { sortMatchedByColumn, type ColumnSortKey } from '../vacancies/matchedColumnSort';
 import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
 import {
@@ -31,10 +34,15 @@ import { withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyF
 import { readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
 import { readB640Sealed } from './b640SealedAnswer';
+import { careerTimeZone, observedWithinDays } from './careerRoleCounts';
 import { selectionFitLimit } from './fitSelectionSweep';
 import { candidatePlan, withDeps } from './helpers';
+import { titleFactsCount } from './matchedFitRelevance';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 
+
+/** Валюты фильтра «Зарплата» списка (MoneyCurrency без «как в вакансии» — она считается в рублях). */
+const MONEY_FILTER_CURRENCIES = ['RUB', 'USD', 'EUR', 'AED'] as const;
 
 const querySchema = matchedVacanciesQuerySchema
   .omit({ sort: true, dir: true, offset: true })
@@ -42,6 +50,18 @@ const querySchema = matchedVacanciesQuerySchema
     ...pagingSchema,
     sort: z.enum(B640_SORT_KEYS).default('fit'),
     direction: z.enum(B640_SORT_DIRECTIONS).default('desc'),
+    /**
+     * B726: фильтр «Дата» на сервере — те же дни и та же граница дня, что у числа роли «Карьеры».
+     * Без него в серверном порядке число подборки с «Датой» было неизвестно, пока не дочитаны все порции.
+     */
+    days: z.coerce.number().int().min(0).max(366).optional(),
+    tz: z.string().max(64).optional(),
+    /**
+     * B765 (B645 s07): «Зарплата от» в месяц, в валюте `moneyCurrency`, — тоже на сервере, иначе
+     * «Показать N» и «осталось N» не знали числа, пока подборка не дочитана.
+     */
+    money: z.coerce.number().int().min(1).max(1_000_000_000).optional(),
+    moneyCurrency: z.enum(MONEY_FILTER_CURRENCIES).default('RUB'),
   });
 type Query = z.infer<typeof querySchema>;
 
@@ -58,6 +78,17 @@ function savedOrder(deps: RouteDeps, candidateId: string): VacancySort {
 function listFilters(query: Query, order: VacancySort): MatchedVacancyFilters {
   const { region, level, source, role, remote, place, placeRemote } = query;
   return { offset: 0, region, level, source, role, remote, place, placeRemote, sort: order.by, dir: order.dir };
+}
+
+/**
+ * B776: основной вид подборки — только роли. Его список пишется в запечатанную строку, как у
+ * прежнего маршрута, иначе после перезапуска первое открытие строило его заново (прод 23.11,
+ * 13 ролей — 14–18 с). Сужающие фильтры не пишутся (B674): строк на кандидата четыре, и выбор
+ * фильтров вытеснял бы общий список. Ключ строки — тот же выбор, что у чтения (`readB640Sealed`).
+ */
+function sealsMainView(filters: MatchedVacancyFilters): boolean {
+  const { region, level, source, place, remote, placeRemote } = filters;
+  return !remote && !placeRemote && [region, level, source, place].every((values) => !values?.length);
 }
 
 function emptyResponse(request: FastifyRequest, query: Query, context: B640ListContext) {
@@ -83,9 +114,11 @@ async function readList(
   context: B640ListContext,
   query: Query,
 ) {
+  const startedAt = performance.now();
   const order = savedOrder(deps, candidateId);
   const filters = listFilters(query, order);
   const read = await prepareMatchedRead(deps, candidateId, context.targetRoles, order, request.log);
+  const snapshotAt = performance.now();
   const snapshot = await readMatchedSnapshot(
     deps.multiSourceEngine,
     candidateId,
@@ -95,7 +128,8 @@ async function readList(
     context.geography,
   );
   const { registry: sourceRegistry } = cachedMatchedSourceRegistry(deps.multiSourceEngine);
-  const { list } = await readMatchedList(
+  const listAt = performance.now();
+  const { list, served } = await readMatchedList(
     {
       ...context,
       candidateStore: deps.candidateStore,
@@ -105,14 +139,55 @@ async function readList(
       filters,
       sourceRegistry,
       order: read.order,
-      seal: false,
+      seal: sealsMainView(filters),
       ...(typeof deps.multiSourceEngine.getCatalogTotals === 'function'
         ? { catalogTotals: () => deps.multiSourceEngine.getCatalogTotals!() }
         : {}),
     },
     request.log,
   );
-  return { list, saved: order, fitLimit: read.fitLimit, targetLevel: read.targetLevel };
+  const timing: ListReadTiming = {
+    served,
+    setupMs: roundMs(snapshotAt - startedAt),
+    snapshotMs: roundMs(listAt - snapshotAt),
+    listReadMs: roundMs(performance.now() - listAt),
+    ...(served === 'built'
+      ? { prepareMs: list.prepareMs, listMs: list.listMs, phasesMs: list.phasesMs }
+      : {}),
+  };
+  return { list, saved: order, fitLimit: read.fitLimit, targetLevel: read.targetLevel, timing };
+}
+
+/** B770: what the b640 list spent, by step; built lists carry their phases. */
+interface ListReadTiming {
+  readonly served: string;
+  readonly setupMs: number;
+  readonly snapshotMs: number;
+  readonly listReadMs: number;
+  readonly prepareMs?: number;
+  readonly listMs?: number;
+  readonly phasesMs?: Readonly<Record<string, number>>;
+}
+
+const roundMs = (ms: number): number => Number(ms.toFixed(2));
+
+function logListTiming(
+  request: FastifyRequest,
+  query: Query,
+  timing: ListReadTiming,
+  orderMs: number,
+): void {
+  request.log.info(
+    {
+      ...timing,
+      orderMs: roundMs(orderMs),
+      offset: query.offset,
+      sort: query.sort,
+      titleFacts: titleFactsCount(),
+      heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1_048_576),
+    },
+    'b640-matched-timing',
+  );
 }
 
 type Rows = readonly MatchedVacancyItem[];
@@ -199,6 +274,23 @@ async function sealedAnswer(
   };
 }
 
+/** Строки с месячной суммой не ниже `money` и строки без месячной суммы; без `money` — все. */
+function withinMoney(rows: Rows, query: Query): Rows {
+  const { money, moneyCurrency } = query;
+  if (!money) return rows;
+  const rates = getCurrencyRates();
+  return rows.filter((item) => meetsMonthlySalaryMinimum(item.cluster.salary, money, moneyCurrency, rates));
+}
+
+/** Строки за последние `days` дней кандидата; без `days` — все. */
+function withinDays(rows: Rows, query: Query): Rows {
+  const { days } = query;
+  if (!days) return rows;
+  const now = new Date();
+  const timeZone = careerTimeZone(query);
+  return rows.filter((item) => observedWithinDays(item, days, now, timeZone));
+}
+
 const getMatchedVacancies = async (
   backgroundDeps: RouteDeps,
   request: FastifyRequest,
@@ -214,11 +306,18 @@ const getMatchedVacancies = async (
   const deps = withRequestScopedCandidateReads(backgroundDeps);
   const context = readB640ListContext(deps, candidate.id);
   if (profileIsEmpty(context)) return emptyResponse(request, query, context);
-  const sealed = await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
+  // Запечатанный список прошлого процесса — без окна дат и суммы: с ними читаем список как обычно.
+  const sealed = query.days || query.money
+    ? undefined
+    : await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
   if (sealed) return sealed;
   const read = await readList(deps, request, candidate.id, context, query);
   const { list, fitLimit, targetLevel } = read;
-  const { rows, byFit } = await orderRows(deps, request, candidate.id, context, read, query);
+  const orderStartedAt = performance.now();
+  const ordered = await orderRows(deps, request, candidate.id, context, read, query);
+  logListTiming(request, query, read.timing, performance.now() - orderStartedAt);
+  const { byFit } = ordered;
+  const rows = withinMoney(withinDays(ordered.rows, query), query);
   const shown = rows.slice(query.offset, query.offset + query.limit).map(trim);
   const levels = addStoredVacancyLevels(shown, targetLevel, (key) => deps.titleParseStore.getByKey(key));
   const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidate.id, levels));
@@ -250,7 +349,7 @@ export async function readB640PoolRows(
   request: FastifyRequest,
   candidateId: string,
   context: B640ListContext,
-  filters: Readonly<Record<string, string>>,
+  filters: Readonly<ParsedUrlQuery>,
 ): Promise<Rows | null> {
   const parsed = querySchema.safeParse(filters);
   if (!parsed.success) return null;
@@ -258,7 +357,7 @@ export async function readB640PoolRows(
   return read.list.filtered;
 }
 
-/** B674: подборка с сортировкой по любому столбцу; запомненную сортировку и запечатанный список прежнего маршрута читает как он, но не пишет. */
+/** B674: подборка с сортировкой по любому столбцу; запомненную сортировку читает как прежний маршрут, но не пишет; запечатанный список пишет только для основного вида (B776). */
 export function registerB640MatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/b640/matched-vacancies', withDeps(deps, getMatchedVacancies));
 }

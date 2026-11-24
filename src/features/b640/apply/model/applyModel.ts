@@ -1,3 +1,8 @@
+import {
+  isHhSource,
+  preferredApplySource,
+  type VacancySourceRef,
+} from '../../../../../shared/hhVacancySource';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import { platformOf, type Platform } from '../../responses/model/platform';
 import type {
@@ -65,7 +70,7 @@ interface HeadSources {
     readonly canonicalTitle: string;
     readonly canonicalCompany: string;
     readonly primaryUrl: string;
-    readonly sources: readonly { readonly sourceName?: string }[];
+    readonly sources: readonly VacancySourceRef[];
   } | null;
 }
 
@@ -73,12 +78,49 @@ function safeUrl(url: string | null | undefined): string | null {
   return url && /^https?:\/\//u.test(url) ? url : null;
 }
 
+function isHhSnapshot(snapshot: ApplicationView['vacancy']): boolean {
+  return Boolean(
+    snapshot &&
+    isHhSource({
+      sourceType: snapshot.source,
+      sourceName: snapshot.source,
+      sourceUrl: snapshot.url,
+    }),
+  );
+}
+
+/** Отклик не отправлен, а в его снимке не hh.ru: площадку сверяем с подборкой (B678). */
+export function needsPoolRoute(application: ApplicationView | null): boolean {
+  return !application || (application.stage === 'saved' && !isHhSnapshot(application.vacancy));
+}
+
+/**
+ * Площадка отклика и её адрес (B678): hh.ru первым, как на карточке вакансии. Снимок отклика
+ * главнее подборки; на hh.ru переходит только неотправленный со снимком другой площадки.
+ */
+export function applyRoute({
+  application,
+  cluster,
+}: Pick<HeadSources, 'application' | 'cluster'>): {
+  readonly source: string | undefined;
+  readonly url: string | null;
+} {
+  const snapshot = application?.vacancy ?? null;
+  const pool = cluster ? preferredApplySource(cluster) : null;
+  if (pool?.hh && safeUrl(pool.url) && needsPoolRoute(application)) {
+    return { source: pool.source, url: pool.url };
+  }
+  return {
+    source: snapshot?.source || pool?.source,
+    url: safeUrl(snapshot?.url) ?? safeUrl(pool?.url),
+  };
+}
+
 /** Шапка отклика: что известно о вакансии из карточки отклика, сервера и подбора. */
 export function buildHead({ application, known, cluster }: HeadSources): ApplyHead {
   const snapshot = application?.vacancy ?? null;
-  const sourceType = snapshot?.source;
-  const sourceName = cluster?.sources[0]?.sourceName;
-  const platform = sourceType || sourceName ? platformOf(sourceType || sourceName) : null;
+  const route = applyRoute({ application, cluster });
+  const platform = route.source ? platformOf(route.source) : null;
   return {
     title: snapshot?.title || known?.vacancyTitle || cluster?.canonicalTitle || 'Вакансия',
     company:
@@ -86,7 +128,7 @@ export function buildHead({ application, known, cluster }: HeadSources): ApplyHe
       known?.companyName ||
       cluster?.canonicalCompany ||
       '',
-    url: safeUrl(snapshot?.url) ?? safeUrl(cluster?.primaryUrl),
+    url: route.url,
     source: platform?.label ?? null,
     platform,
   };
@@ -138,57 +180,4 @@ export function paragraphs(text: string): readonly string[] {
     .split(/\n+/u)
     .map((line) => line.trim())
     .filter(Boolean);
-}
-
-export interface ResumeLine {
-  readonly kind: 'heading' | 'line';
-  readonly text: string;
-}
-
-/**
- * Служебная разметка раздела из исходного файла. Знаки должны стоять с обеих сторон
- * одинаковые (`=== SUMMARY ===`, `**Опыт**`) либо это заголовок `## Навыки`; строка с
- * тире в начале остаётся пунктом списка.
- */
-const FENCED = /^([=\-_*~]{2,})\s*(.*?)\s*\1$/u;
-const HASHED = /^#{2,6}\s+(.+)$/u;
-/** Длинные строки — это текст, а не разметка: сверять их с шаблоном незачем. */
-const MARKER_MAX_LENGTH = 120;
-
-function markerTitle(line: string): string | null {
-  if (line.length > MARKER_MAX_LENGTH) return null;
-  if (/^[=\-_*~#]{2,}$/u.test(line)) return '';
-  const fenced = FENCED.exec(line);
-  if (fenced) return fenced[2] ?? '';
-  const hashed = HASHED.exec(line);
-  if (hashed) return hashed[1] ?? '';
-  return null;
-}
-
-const SECTION_NAMES: Readonly<Record<string, string>> = {
-  summary: 'О себе',
-  about: 'О себе',
-  profile: 'О себе',
-  experience: 'Опыт работы',
-  'work experience': 'Опыт работы',
-  education: 'Образование',
-  skills: 'Навыки',
-  languages: 'Языки',
-  certifications: 'Сертификаты',
-  projects: 'Проекты',
-  contacts: 'Контакты',
-};
-
-/**
- * Резюме строками для показа. Служебная разметка разделов на экран не выходит: строка
- * `=== SUMMARY ===` становится заголовком «О себе», линия из одних знаков пропадает.
- */
-export function resumeLines(text: string): readonly ResumeLine[] {
-  return paragraphs(text).flatMap((line): ResumeLine[] => {
-    const title = markerTitle(line)?.trim();
-    if (title === undefined) return [{ kind: 'line', text: line }];
-    if (!title) return [];
-    const key = title.toLowerCase();
-    return [{ kind: 'heading', text: Object.hasOwn(SECTION_NAMES, key) ? SECTION_NAMES[key]! : title }];
-  });
 }

@@ -100,6 +100,8 @@ export type CandidateConnection = {
       connectedAt: string;
       lastImportedAt: string;
       factCount: number;
+      /** n03: «linkedin.com/in/…» или имя из резюме hh.ru; старый сервер поля не присылает. */
+      account?: string | null;
     }
 );
 

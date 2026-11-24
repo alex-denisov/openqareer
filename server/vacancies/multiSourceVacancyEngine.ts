@@ -1,3 +1,4 @@
+import { runStorePassSteps, type StorePassOptions } from './storePassSteps';
 import { atsRolloutAdmits } from './freehire/freehireFeeds';
 import { failureMessage } from './requestTimeout';
 import type { HhTextRateController } from './hhTextRate';
@@ -22,6 +23,7 @@ import {
   calculateSourceAuthenticity,
   clusterVacancies,
   clusterVacanciesAsync,
+  clusterVacancySteps,
   IncrementalClusterBuilder,
   memberKeysOf,
 } from './vacancyDeduplicator';
@@ -77,7 +79,9 @@ import {
 } from './hhCatalogText';
 import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { syncSection } from '../observability/syncSections';
 import { mapYielding } from './mapYielding';
+import { runStepsYielding } from './yieldingSteps';
 import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   COMPANY_LANE_CONCURRENCY,
@@ -680,32 +684,20 @@ export class MultiSourceVacancyEngine {
   public async maintainStoreAsync(
     nowMs: number = Date.now(),
     shouldStop: () => boolean = () => false,
-    options: { pauseMs?: number; windowRows?: number } = {},
+    options: StorePassOptions = {},
   ): Promise<{ backfillWindows: number }> {
     const oldestPublishedAt = new Date(
       nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
     ).toISOString();
-    const known = Array.from(this.sources.keys());
-    // B759: в фоне между транзакциями пауза, остановка процесса прерывает проход.
-    const pauseMs = Math.max(0, options.pauseMs ?? 0);
-    const control = { pauseMs, shouldStop };
-    if (this.pool.pruneAsync) await this.pool.pruneAsync(known, oldestPublishedAt, control);
-    else this.pool.prune(known, oldestPublishedAt);
-    if (shouldStop()) return { backfillWindows: 0 };
-    if (this.pool.pruneClustersBeforeAsync) {
-      await this.pool.pruneClustersBeforeAsync(oldestPublishedAt, control);
-    } else {
-      this.pruneClusters(oldestPublishedAt);
-    }
-    let backfillWindows = 0;
-    while (this.pool.backfillWindowStep && !shouldStop()) {
-      backfillWindows += 1;
-      if (this.pool.backfillWindowStep(options.windowRows).done) break;
-      await new Promise((resolve) =>
-        pauseMs > 0 ? setTimeout(resolve, pauseMs) : setImmediate(resolve),
-      );
-    }
-    return { backfillWindows };
+    // B759: в фоне между транзакциями пауза, остановка прерывает проход, шаги продолжаются.
+    return runStorePassSteps({
+      pool: this.pool,
+      knownSourceIds: Array.from(this.sources.keys()),
+      oldestPublishedAt,
+      shouldStop,
+      pruneClustersSync: () => this.pruneClusters(oldestPublishedAt),
+      options,
+    });
   }
 
   private pruneStore(nowMs: number): void {
@@ -1013,7 +1005,7 @@ export class MultiSourceVacancyEngine {
 
   /**
    * A total without the table scan: listed groups (>= 3) come from the cached
-   * summaries, the whole catalog from a TTL copy. Unlisted groups have < 3
+   * summaries, the whole catalog from the stored row (a TTL copy before it exists). Unlisted groups have < 3
    * entries and are counted exactly through an index. Stale by LISTINGS_CACHE_MS.
    */
   private knownCatalogTotal(query: CatalogEntriesQuery): number | undefined {
@@ -1021,6 +1013,9 @@ export class MultiSourceVacancyEngine {
     const now = this.now();
     if (!query.place) {
       if (query.role) return undefined;
+      // B776: maintenance stores the total; the count in the request is the fallback before it.
+      const stored = this.pool.readCatalogEntriesTotal?.();
+      if (stored !== undefined) return stored;
       const root = this.rootTotalCache;
       return root && now - root.at < LISTINGS_CACHE_MS ? root.total : undefined;
     }
@@ -1898,29 +1893,74 @@ export class MultiSourceVacancyEngine {
     dropObservedBefore?: string,
   ): Promise<void> {
     const store = this.keyedStore();
+    // B763: каждая записанная порция сводится сразу. Раньше сведение шло после
+    // записи всего среза, и остановка посреди записи (выкат) оставляла уже
+    // записанные строки без кластера навсегда.
+    const clustered = new Set<string>();
+    const clusterChunk = async (chunk: readonly UnifiedVacancy[]) => {
+      await this.clusterInBatches(store, chunk);
+      for (const vacancy of chunk) clustered.add(vacancy.id);
+    };
     let gone: readonly VacancyLink[];
     if (partial) {
       const result = this.pool.mergeSourceSliceAsync
-        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore)
+        ? await this.pool.mergeSourceSliceAsync(source.id, freshFetched, dropObservedBefore, {
+            onChunkWritten: clusterChunk,
+          })
         : this.pool.mergeSourceSlice(source.id, freshFetched, dropObservedBefore);
       gone = result.dropped;
     } else {
       const fetchedIds = new Set(freshFetched.map((vacancy) => vacancy.id));
       gone = this.pool.loadSourceLinks(source.id).filter((link) => !fetchedIds.has(link.id));
       if (this.pool.replaceSourceSliceAsync) {
-        await this.pool.replaceSourceSliceAsync(source.id, freshFetched);
+        await this.pool.replaceSourceSliceAsync(source.id, freshFetched, {
+          onChunkWritten: clusterChunk,
+        });
       } else {
         this.pool.replaceSourceSlice(source.id, freshFetched);
       }
     }
     if (gone.length > 0) detachVacanciesByKeys(store, gone);
+    // Хранилище без порций (синхронная запись) — сведение после записи, как раньше.
+    await this.clusterInBatches(
+      store,
+      freshFetched.filter((vacancy) => !clustered.has(vacancy.id)),
+    );
+    this.keyedClusterings += 1;
+  }
+
+  /** Партиями `batchSize`, с уступкой циклу событий между партиями (B230). */
+  private async clusterInBatches(
+    store: KeyedClusterStore,
+    vacancies: readonly UnifiedVacancy[],
+  ): Promise<number> {
     const batchSize =
       this.reclusterMode.mode === 'keyed' ? this.reclusterMode.batchSize : DEFAULT_KEYED_BATCH_SIZE;
-    for (let offset = 0; offset < freshFetched.length; offset += batchSize) {
+    for (let offset = 0; offset < vacancies.length; offset += batchSize) {
       if (offset > 0) await new Promise<void>((resolve) => setImmediate(resolve));
-      clusterBatchByKeys(store, freshFetched.slice(offset, offset + batchSize));
+      clusterBatchByKeys(store, vacancies.slice(offset, offset + batchSize));
     }
-    this.keyedClusterings += 1;
+    return vacancies.length;
+  }
+
+  /**
+   * B763: один шаг догона — окно пула, записи без кластера сводятся по ключам.
+   * Только в режиме `keyed`; в остальных пересборка и так видит весь пул.
+   */
+  public async runUnclusteredCatchUpStep(
+    chunk?: number,
+    maxClustered?: number,
+  ): Promise<{
+    inspected: number;
+    clustered: number;
+    passFinished: boolean;
+  }> {
+    if (this.reclusterMode.mode !== 'keyed' || !this.pool.readUnclusteredPoolPage) {
+      return { inspected: 0, clustered: 0, passFinished: true };
+    }
+    const page = this.pool.readUnclusteredPoolPage(chunk, maxClustered);
+    const clustered = await this.clusterInBatches(this.keyedStore(), page.unclustered);
+    return { inspected: page.inspected, clustered, passFinished: page.passFinished };
   }
 
   private keyedStore(): KeyedClusterStore {
@@ -1950,6 +1990,16 @@ export class MultiSourceVacancyEngine {
       this.clusters = typeof this.pool.loadClusters === 'function' ? this.pool.loadClusters() : [];
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
     }
+  }
+
+  /**
+   * B752: шаг разбиения переписал строки кластеров в базе. Копия в памяти
+   * (старые пути `loadClusters`) устарела и больше не пишется назад;
+   * следующее чтение берёт кластеры из базы.
+   */
+  dropClusterSnapshot(): void {
+    this.clusters = [];
+    this.clusterBuilder = new IncrementalClusterBuilder([]);
   }
 
   private getOrCreateClusterBuilder(): IncrementalClusterBuilder {
@@ -2443,14 +2493,17 @@ export class MultiSourceVacancyEngine {
   ): Promise<MatchedVacancyItem[]> {
     if (!this.pool.queryMatchCandidatesAsync) return this.getMatchedVacancies(candidate);
     const effective = this.withResolvedSemanticFunctions(candidate);
-    const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(effective)).filter(
-      (cluster) => cluster.status === 'active',
-    );
-    const matched = await mapYielding(clusters, (cluster) => ({
+    const candidates = await this.pool.queryMatchCandidatesAsync(effective);
+    // B770: clustering runs in slices; the stall log names 'engine:cluster' only if one vacancy is slow.
+    const clusters = await runStepsYielding(clusterVacancySteps(candidates), {
+      section: 'engine:cluster',
+    });
+    const active = clusters.filter((cluster) => cluster.status === 'active');
+    const matched = await mapYielding(active, (cluster) => ({
       cluster,
       explanation: matchCandidateWithVacancy(effective, cluster),
     }));
-    return matched.sort(compareMatchedVacancies);
+    return syncSection('engine:sort', () => matched.sort(compareMatchedVacancies));
   }
 
   public async testSource(

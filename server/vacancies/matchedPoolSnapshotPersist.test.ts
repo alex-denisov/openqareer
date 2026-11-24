@@ -73,6 +73,24 @@ describe('MatchedPoolSnapshots: the reader waits a bounded time, the build does 
     expect(read[0]?.cluster.id).toBe('slow');
   });
 
+  it('B770: a reader that names its own wait refuses after it, and the build goes on for the retry', async () => {
+    const snapshots = new MatchedPoolSnapshots({ waitMs: 60_000 });
+    let finish!: (items: MatchedVacancyItem[]) => void;
+    const compute = vi.fn(() => new Promise<MatchedVacancyItem[]>((done) => (finish = done)));
+    const started = performance.now();
+
+    const refused = await snapshots
+      .readAsync('one', 'role', compute, { waitMs: 5 })
+      .catch((error: unknown) => error);
+
+    expect((refused as VacancyMatchUnavailable).message).toBe('vacancy_match_timeout');
+    expect(performance.now() - started).toBeLessThan(1_000);
+    finish([item('built')]);
+    await turn();
+    expect((await snapshots.readAsync('one', 'role', compute))[0]?.cluster.id).toBe('built');
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
   it('an old snapshot past 20 minutes is served after the short stale budget, not after the full one', async () => {
     const now = { value: 0 };
     const snapshots = new MatchedPoolSnapshots({
@@ -221,6 +239,31 @@ describe('MatchedPoolSnapshots: a snapshot outlives the process', () => {
   });
 });
 
+describe('MatchedPoolSnapshots: writes run one at a time (B770)', () => {
+  it('the next write waits for the one before, and a dropped snapshot is not written', async () => {
+    const store = memoryStore();
+    let finish!: () => void;
+    vi.mocked(store.write).mockImplementationOnce(
+      () => new Promise<void>((done) => (finish = done)),
+    );
+    const snapshots = new MatchedPoolSnapshots();
+    snapshots.setStore(store);
+    await snapshots.readAsync('one', 'a', async () => [item('a')]);
+    await snapshots.readAsync('two', 'b', async () => [item('b')]);
+    await snapshots.readAsync('three', 'c', async () => [item('c')]);
+    await turn();
+    await turn();
+    expect(store.write).toHaveBeenCalledTimes(1);
+
+    snapshots.deleteCandidate('two');
+    finish();
+    for (let i = 0; i < 4; i += 1) await turn();
+
+    expect(store.rows.has('two')).toBe(false);
+    expect(store.rows.get('three')?.items[0]?.cluster.id).toBe('c');
+  });
+});
+
 describe('MatchedPoolSnapshots: a new process loads the stored snapshots before the first read', () => {
   it('preloads every stored profile of a candidate, so the read does not open the store', async () => {
     const store = memoryStore({
@@ -256,5 +299,37 @@ describe('MatchedPoolSnapshots: a new process loads the stored snapshots before 
     expect(
       (await snapshots.readAsync('one', 'profile', async () => [item('x')]))[0]?.cluster.id,
     ).toBe('held');
+  });
+});
+
+describe('MatchedPoolSnapshots: a miss says why (B770)', () => {
+  function storeWith(keys: string[]): MatchedSnapshotStore {
+    return { read: () => null, write: () => undefined, delete: () => undefined, keys: () => keys };
+  }
+
+  it('a reader with no snapshot logs whether its key was stored and how many seals there are', async () => {
+    const snapshots = new MatchedPoolSnapshots({ waitMs: 1 });
+    const misses: unknown[] = [];
+    snapshots.setStore(storeWith(['other', 'role']));
+    snapshots.setMissLog((miss) => misses.push(miss));
+    await snapshots
+      .readAsync('one', 'role', () => new Promise(() => undefined))
+      .catch(() => undefined);
+    await snapshots
+      .readAsync('one', 'fresh', () => new Promise(() => undefined))
+      .catch(() => undefined);
+    expect(misses).toEqual([
+      { candidateId: 'one', keyInStore: true, seals: 2 },
+      { candidateId: 'one', keyInStore: false, seals: 2 },
+    ]);
+  });
+
+  it('the warm pass and a reader with a snapshot log nothing', async () => {
+    const snapshots = new MatchedPoolSnapshots();
+    const misses: unknown[] = [];
+    snapshots.setMissLog((miss) => misses.push(miss));
+    await snapshots.readAsync('one', 'role', async () => [item('a')], { awaitRebuild: true });
+    await snapshots.readAsync('one', 'role', async () => [item('b')]);
+    expect(misses).toEqual([]);
   });
 });

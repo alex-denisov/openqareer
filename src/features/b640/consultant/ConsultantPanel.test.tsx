@@ -538,6 +538,8 @@ describe('адреса видов панели', () => {
       '/app/consultant?conversation=c%201',
     );
     expect(panelPath({ kind: 'history' })).toBe('/app/consultant/history');
+    expect(panelViewOf('k01', '?resume=m%201')).toEqual({ kind: 'dialog', resumeFactId: 'm 1' });
+    expect(panelPath({ kind: 'dialog', resumeFactId: 'm 1' })).toBe('/app/consultant?resume=m%201');
     expect(panelPath({ kind: 'dialog' })).toBe('/app/consultant');
   });
 });

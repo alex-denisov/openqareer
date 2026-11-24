@@ -12,8 +12,10 @@ import {
   plural,
   quarterLabel,
   quarterLine,
+  quarterTargetText,
   riskTag,
   staleFlag,
+  valueWithTarget,
 } from './goalsModel';
 
 const measurement = (value: number, measuredAt: string) => ({
@@ -54,6 +56,16 @@ const card = (extra: Record<string, unknown> = {}) =>
     ...extra,
   }) as unknown as CareerDiaryGoalCard;
 
+describe('B662: значение и цель на карточке и в истории', () => {
+  it('убывающая цель — «9 из 4 и меньше», как в макете d02; растущая — «0 из 2»', () => {
+    const down = summary('d', { baselineValue: 12, targetValue: 4, unit: '' });
+    const up = summary('u', { baselineValue: 0, targetValue: 2, unit: '' });
+    expect(valueWithTarget(down as never, 9)).toBe('9 из 4 и меньше');
+    expect(valueWithTarget(up as never, 0)).toBe('0 из 2');
+    expect(valueWithTarget(summary('t', { targetValue: 'да' }) as never, 'нет')).toBe('нет');
+  });
+});
+
 describe('цели: подписи', () => {
   it('даты, квартал, склонения', () => {
     expect(longDate('2026-12-12', '2026-11-19')).toBe('12 декабря');
@@ -70,14 +82,21 @@ describe('цели: подписи', () => {
     );
   });
 
-  it('показатель: замер «из 7 и меньше», без замера — «не внесено»', () => {
+  it('показатель: убывающая цель — «из 7 и меньше», без замера — «не внесено»', () => {
     expect(indicatorView(card().indicators[0]!)).toMatchObject({
       title: 'Показатель i1, дней',
       value: '5',
-      target: 'из 7 и меньше',
+      target: ' из 7 и меньше',
       sub: '3 ноя · было 14',
     });
     expect(indicatorView(summary('x') as never)).toMatchObject({ value: 'не внесено', target: '' });
+    const up = summary('u', {
+      baselineValue: 0,
+      targetValue: 2,
+      unit: '',
+      latestMeasurement: measurement(1, '2026-11-03'),
+    });
+    expect(indicatorView(up as never).target).toBe(' из 2');
     expect(formatValue(82.5, '%')).toBe('82,5 %');
     expect(formatValue(false)).toBe('не сделано');
   });
@@ -196,5 +215,36 @@ describe('B742: вклад кварталов годовой цели', () => {
     expect(quarterLine(targets, '%')).toBe('Вклад кварталов: I — 85 %, II — 88 %');
     expect(quarterLine([{ quarter: 4, value: 2 }], 'шт.')).toBe('Вклад кварталов: IV — 2 шт.');
     expect(quarterLine(null, '%')).toBeNull();
+  });
+});
+
+describe('quarterTargetText', () => {
+  const yearly = (dueDate: string) =>
+    card({
+      horizon: 'year',
+      unit: '%',
+      dueDate,
+      details: {
+        setBy: 'manager',
+        agreedOn: null,
+        weight: null,
+        archive: null,
+        quarterTargets: [
+          { quarter: 1, value: 85 },
+          { quarter: 2, value: 88 },
+          { quarter: 4, value: 95 },
+        ],
+      },
+    });
+
+  it('цель текущего квартала; год не начался — первый, прошёл — последний', () => {
+    expect(quarterTargetText(yearly('2026-12-31'), '2026-05-10')).toBe('из 88 % в II кв.');
+    expect(quarterTargetText(yearly('2027-12-31'), '2026-11-23')).toBe('из 85 % в I кв.');
+    expect(quarterTargetText(yearly('2025-12-31'), '2026-11-23')).toBe('из 95 % в IV кв.');
+  });
+
+  it('нет вклада этого квартала или цель квартальная — null', () => {
+    expect(quarterTargetText(yearly('2026-12-31'), '2026-08-01')).toBeNull();
+    expect(quarterTargetText(card(), '2026-08-01')).toBeNull();
   });
 });

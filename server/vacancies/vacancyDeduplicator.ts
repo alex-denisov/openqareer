@@ -9,6 +9,7 @@ import type {
 } from '../domain/unifiedVacancy';
 import { createHash } from 'node:crypto';
 import { normalizeTextForComparison } from './vacancyFingerprint';
+import { runSteps, type Steps } from './yieldingSteps';
 
 const ATS_URL_REGEX =
   /(https?:\/\/(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|api\.eu\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|[a-z0-9-]+\.recruitee\.com|[a-z0-9-]+\.pinpointhq\.com|[a-z0-9-]+\.myworkdayjobs\.com)\/[^\s"')]+)/i;
@@ -215,6 +216,8 @@ function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacan
     cluster.canonicalCompany = vacancy.company;
     if (vacancy.employerIsPerson === true) cluster.employerIsPerson = true;
     else delete cluster.employerIsPerson;
+    if ((vacancy.company ?? '').trim()) delete cluster.companyUnspecified;
+    else cluster.companyUnspecified = true;
   }
 }
 
@@ -361,6 +364,8 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     id: `cluster-${vacancy.id}`,
     canonicalTitle: vacancy.title,
     canonicalCompany: vacancy.company,
+    // B756: пустая компания — явный признак, а не только пустая строка.
+    ...((vacancy.company ?? '').trim() ? {} : { companyUnspecified: true as const }),
     ...(vacancy.employerIsPerson === true ? { employerIsPerson: true } : {}),
     canonicalLocation: vacancy.location,
     isRemote: Boolean(vacancy.isRemote),
@@ -526,12 +531,18 @@ function addVacancyToClusterIndex(
 }
 
 export function clusterVacancies(vacancies: Iterable<UnifiedVacancy>): VacancyCluster[] {
+  return runSteps(clusterVacancySteps(vacancies));
+}
+
+/** B770: one vacancy per step; 4000 candidates in one piece held the loop up to 2.6 s on prod. */
+export function* clusterVacancySteps(vacancies: Iterable<UnifiedVacancy>): Steps<VacancyCluster[]> {
   const clusters: VacancyCluster[] = [];
   const prepared: PreparedVacancy[] = [];
   const index = new ClusterIndex();
 
   for (const vacancy of vacancies) {
     addVacancyToClusterIndex(vacancy, clusters, prepared, index);
+    yield;
   }
 
   return clusters;

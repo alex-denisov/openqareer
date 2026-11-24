@@ -7,7 +7,8 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { pauseClusterWrite } from '../vacancies/clusterWritePause';
-import { computeCatalogSources } from '../vacancies/catalogSources';
+import type { WindowedReadOptions } from '../data/windowedRead';
+import { catalogSourcesOf, readPoolCounts } from '../vacancies/catalogSources';
 import { computeCatalogSalaryStats } from '../vacancies/catalogSalaryStatsStore';
 import { computeCatalogChips, writeCatalogChips } from '../vacancies/catalogChipStore';
 import { computeLandingStats, writeLandingStats } from './landingStatsJob';
@@ -106,12 +107,14 @@ export function computeAndWriteLanding(
   openWriter: () => DatabaseSync,
   nowMs: number,
   closeReader: () => void = () => undefined,
+  read: WindowedReadOptions = {},
 ): LandingWriteSummary {
   const now = new Date(nowMs);
-  const landing = computeLandingStats(reader, now);
-  const sources = computeCatalogSources(reader);
-  const salary = computeCatalogSalaryStats(reader);
-  const chips = computeCatalogChips(reader, nowMs);
+  const pool = readPoolCounts(reader, read);
+  const landing = computeLandingStats(reader, now, { ...read, pool });
+  const sources = catalogSourcesOf(pool);
+  const salary = computeCatalogSalaryStats(reader, read);
+  const chips = computeCatalogChips(reader, nowMs, read);
   closeReader();
   const writer = openWriter();
   const computedAt = now.toISOString();

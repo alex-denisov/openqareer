@@ -152,7 +152,8 @@ describe('buildFootprintRiskSummary', () => {
     expect([byId.gh.category, byId.gh.level, byId.gh.action]).toEqual([
       'useful_evidence',
       'useful',
-      { kind: 'add_to_profile', label: 'В профиль' },
+      // B382: профиль площадки в профиль не переносится — только «Это не моё».
+      { kind: 'not_mine', label: 'Это не моё' },
     ]);
     expect([byId.who.category, byId.who.level]).toEqual(['needs_check', 'important']);
     expect(byId.odd.category).toBe('needs_check');
@@ -503,3 +504,54 @@ describe('buildFootprintRiskSummary', () => {
   });
 });
 
+
+describe('B645 f03b: строка «Риск» — уровень и почему', () => {
+  const reasonOf = (overrides: Partial<CandidateFootprintFinding>): string | undefined =>
+    buildFootprintRiskSummary(audit([finding(overrides)]), []).items[0]?.levelReason;
+
+  it('у каждой находки есть причина уровня по её виду', () => {
+    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe('старые аккаунты на эту почту ещё открыты');
+    expect(reasonOf({ review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
+      'страницу находят по нику, чья она — неизвестно',
+    );
+    expect(reasonOf({ kind: 'mention', adapter: 'exa', review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
+      'совпадение по имени не подтверждено',
+    );
+    expect(reasonOf({ kind: 'profile', review: 'confirmed_self' })).toBe('подтверждает ваш опыт');
+    expect(reasonOf({ kind: 'archive', adapter: 'wayback' })).toBe('старая копия страницы ещё открыта');
+    const all = ['breach', 'metadata', 'secret', 'archive', 'profile', 'mention'].map((kind) =>
+      reasonOf({ kind: kind as CandidateFootprintFinding['kind'], staleAccount: kind === 'profile' }),
+    );
+    // Кандидату не называем инструменты и не пугаем словами «утечка», «пароль» (B667).
+    expect(all.join(' · ')).not.toMatch(/sherlock|maigret|hibp|wayback|exa\b|утечк|парол/iu);
+  });
+});
+
+describe('B645 f03b: база контактов — короткое название и одна строка «Где»', () => {
+  it('без заголовка страницы и разметки', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([
+        finding({
+          id: 'broker',
+          url: 'https://aeroleads.com/in/alexeydenisov',
+          title: 'Alexey Denisov Email & Phone Number @ Россети Цифра | AeroLeads',
+          detail: '# Alexey Denisov Email & Phone Number\n\n**Россети Цифра**',
+        }),
+      ]),
+      [],
+    );
+    const [broker] = summary.items;
+    expect(broker.title).toBe('Почта и телефон в базе контактов');
+    expect(broker.detail).toBe('aeroleads.com/in/alexeydenisov');
+  });
+});
+
+describe('описание находки без разметки', () => {
+  it('снимает # и ** из текста страницы', () => {
+    const summary = buildFootprintRiskSummary(
+      audit([finding({ id: 'md', detail: '# Заголовок\n\n**Жирный** текст' })]),
+      [],
+    );
+    expect(summary.items[0].detail).not.toMatch(/[#*]/u);
+  });
+});

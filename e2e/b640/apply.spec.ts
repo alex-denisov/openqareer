@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
+import { expectLastActionReachable } from './lastActionReachable';
 import { installDesktopApiTestBridge } from '../../scripts/desktop-api-test-bridge.mjs';
 import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
 
@@ -21,8 +22,12 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly withPath?: boolean;
   /** У вакансии есть анкета работодателя. */
   readonly questionnaire?: boolean;
+  /** Длинный список стран, как у настоящих анкет Greenhouse (B641). */
+  readonly longChoice?: boolean;
   /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
   readonly approvedBody?: string;
+  /** Вместе с письмом одобрено общее резюме. */
+  readonly approvedResume?: boolean;
   /** Длинный текст вакансии, как у настоящих на hh.ru (B645). */
   readonly longVacancy?: boolean;
 }
@@ -215,7 +220,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
         text: 'Country of residence',
         required: true,
         kind: 'choice',
-        options: ['Germany', 'Россия', 'Other'],
+        options: options.longChoice
+          ? Array.from({ length: 255 }, (_, index) => `Country ${index}`)
+          : ['Germany', 'Россия', 'Other'],
       },
     ];
     // Ответы из профиля сервер отдаёт уже подставленными, пока кандидат не сохранил свои.
@@ -274,6 +281,7 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
   });
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', async (route) => {
     calls.push('approval read');
+    const iso = '2026-11-19T10:00:00.000Z';
     const approved = options.approvedBody
       ? {
           applicationId: 'a-draft',
@@ -281,7 +289,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
           approvedAt: '2026-11-19T10:00:00.000Z',
           status: 'approved',
           sent: false,
-          resume: null,
+          resume: options.approvedResume
+            ? { kind: 'general', versionId: null, documentId: 'doc-2', snapshotAt: iso }
+            : null,
           subject: null,
           body: options.approvedBody,
           variantId: null,
@@ -388,6 +398,8 @@ test.describe('B657: единый экран отклика', () => {
       'https://hh.ru/vacancy/1',
     );
     await expect(page.locator('.cb-t')).toContainText('вырастила группу разработки');
+    const copy = (await page.locator('.cb-copy').first().boundingBox())!;
+    expect([copy.width, copy.height]).toEqual([44, 44]);
     await expectGates(page);
     await page.getByRole('button', { name: 'Я откликнулся' }).click();
     await expect(page.getByText('Отклик отмечен как отправленный')).toBeVisible();
@@ -408,6 +420,23 @@ test.describe('B657: единый экран отклика', () => {
     await expect(page.getByText('Собираем письмо…')).toHaveCount(0);
     expect(mock.calls).toContain('approval read');
     expect(mock.calls.filter((call) => call.startsWith('pitch'))).toEqual([]);
+  });
+
+  test('письмо одобрено — шаг «Резюме» одобрен и на вкладке, и внутри (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=send', {
+      approvedBody: 'Готовый текст.',
+      approvedResume: true,
+    });
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(1);
+    await step(page, 'Резюме').click();
+    await expect(page.getByRole('button', { name: 'К письму' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Одобрить резюме' })).toHaveCount(0);
+  });
+
+  test('письмо одобрено без резюме — шаг «Резюме» без галочки (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter', { approvedBody: 'Готовый текст.' });
+    await expect(page.getByRole('heading', { name: 'Письмо одобрено' })).toBeVisible();
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(0);
   });
 
   test('«Изменить письмо», а черновик не собрался — одобренный текст остаётся в поле (B724)', async ({
@@ -482,6 +511,8 @@ test.describe('B657: единый экран отклика', () => {
   test('резюме: шаг открывается по адресу, без опыта ведёт в профиль', async ({ page }) => {
     await open(page, '/app/responses/a-draft/letter?step=resume');
     await expect(step(page, 'Резюме')).toHaveAttribute('aria-current', 'page');
+    // Макет o03 без `data-mtight`: отступ страницы обычный и на 390.
+    await expect(page.locator('[data-b640-node="o02"]')).toHaveCSS('padding-top', '16px');
     await expect(
       page.getByRole('heading', { name: 'Резюме пока не из чего собрать' }),
     ).toBeVisible();
@@ -528,6 +559,7 @@ test.describe('B657: единый экран отклика', () => {
     const pop = page.getByRole('dialog', { name: 'Что поменять' });
     await expect(pop).toBeVisible();
     await expectGates(page, { only: ['modal_fit', 'field_height'] });
+    await expect(pop.getByLabel('Своё пожелание')).toHaveCSS('padding-left', '12px');
     await pop.getByRole('button', { name: 'Короче' }).click();
     await pop.getByLabel('Своё пожелание').fill('начать с результата');
     await pop.getByRole('button', { name: 'Сделать вариант' }).click();
@@ -623,13 +655,42 @@ test.describe('B657: единый экран отклика', () => {
     expect(mock.calls).toContain('form submitted');
   });
 
+  test('B641: длинный список стран — поиск, «Показать ещё», цели 44 px', async ({ page }) => {
+    const mock = await open(page, '/app/responses/a-draft/letter?step=form', {
+      questionnaire: true,
+      longChoice: true,
+    });
+    const country = page.getByRole('radiogroup', { name: 'Ваш ответ: Country of residence' });
+    // 20 вариантов страницы и сохранённый ответ вне списка.
+    await expect(country.getByRole('radio')).toHaveCount(21);
+    const search = page.getByRole('searchbox', { name: /Найти вариант/u });
+    const more = page.getByRole('button', { name: 'Показать ещё' });
+    // Рамка и фон поиска — у обёртки `.search`, как в фильтрах макета.
+    const box = page.locator('.qa .search');
+    await expect(box).toHaveCSS('border-top-width', '1px');
+    await expect(search).toHaveCSS('border-top-width', '0px');
+    await expect(search).toHaveCSS('font-size', '14px');
+    for (const target of [box, more, country.locator('label').first()]) {
+      expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    await expectGates(page);
+    await more.click();
+    await expect(country.getByRole('radio')).toHaveCount(41);
+    await search.fill('country 254');
+    await country.getByRole('radio', { name: 'Country 254' }).check();
+    await expect(country.getByRole('radio')).toHaveCount(1);
+    await expect.poll(() => mock.calls.some((call) => call.includes('q5'))).toBe(true);
+    await search.fill('zzz');
+    await expect(page.getByText('Ничего не нашлось')).toBeVisible();
+  });
+
   test('без анкеты вкладки «Анкета» нет, адрес шага ведёт к письму', async ({ page }) => {
     await open(page, '/app/responses/a-draft/letter?step=form');
     await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
     await expect(step(page, 'Анкета')).toHaveCount(0);
   });
 
-  test('B704 в приложении: окна hh.ru нет — выбор резюме ведёт ко входу, не к ошибке', async ({
+  test('B708 в приложении: окна hh.ru нет — открывается само; вход просит только страница входа', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'приложение только на компьютере');
@@ -642,9 +703,19 @@ test.describe('B657: единый экран отклика', () => {
         {
           invoke: (command: string, args?: { url?: string }) => {
             calls.push(args?.url ? `${command} ${args.url}` : command);
-            // Ровно так отвечает Rust (`inspect_session_page_for`), когда окна сессии hh.ru нет.
-            if (command === 'inspect_connector_session_page')
-              return Promise.reject('session_window_missing');
+            // Окна сессии hh.ru нет, пока его не открыли; в нём — страница входа.
+            if (command === 'inspect_connector_session_page') {
+              if (!calls.includes('open_connector_session'))
+                return Promise.reject('session_window_missing');
+              return Promise.resolve({
+                ready: true,
+                url: 'https://hh.ru/account/login',
+                signedInApplicant: false,
+                login: true,
+                otp: false,
+                captcha: false,
+              });
+            }
             if (command === 'open_connector_session') {
               return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
             }
@@ -665,7 +736,7 @@ test.describe('B657: единый экран отклика', () => {
 
     await page.getByRole('button', { name: 'Выбрать резюме' }).click();
     const sheet = page.getByRole('dialog', { name: 'Каким резюме откликаться' });
-    await expect(sheet.getByText('Нужен вход в hh.ru')).toBeVisible();
+    await expect(sheet.getByText('Нужен вход в hh.ru')).toBeVisible({ timeout: 15_000 });
     await expect(sheet.getByText('не прочитался')).toHaveCount(0);
     const retry = sheet.getByRole('button', { name: 'Прочитать снова' });
     const box = await retry.boundingBox();
@@ -675,8 +746,164 @@ test.describe('B657: единый экран отклика', () => {
 
     await sheet.getByRole('button', { name: 'Войти в hh.ru' }).click();
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { __hhCalls: string[] }).__hhCalls))
-      .toContain('open_connector_session');
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __hhCalls: string[] }).__hhCalls.filter(
+              (call) => call === 'open_connector_session',
+            ).length,
+        ),
+      )
+      .toBe(2);
+  });
+
+  test('B678 в приложении: строки отправки и разбор резюме hh.ru — по макету', async ({ page }) => {
+    await page.addInitScript(installDesktopApiTestBridge);
+    await page.addInitScript(() => {
+      localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
+      const list =
+        '<a href="/resume/abc1">Руководитель разработки</a><a href="/resume/abc2">Ведущий разработчик Go</a>';
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {
+          invoke: (command: string, args?: { request?: { url?: string } }) => {
+            if (command === 'is_connector_session_open') return Promise.resolve(true);
+            if (command === 'inspect_connector_session_page')
+              return Promise.resolve({
+                ready: true,
+                url: 'https://hh.ru/applicant/resumes',
+                signedInApplicant: true,
+                login: false,
+                otp: false,
+                captcha: false,
+              });
+            if (command === 'read_connector_session_page')
+              return Promise.resolve({
+                ok: true,
+                url: args?.request?.url,
+                body: args?.request?.url?.includes('/resume/')
+                  ? '<div data-qa="resume-block-title-position">Руководитель</div>'
+                  : list,
+              });
+            return Promise.resolve(null);
+          },
+        };
+    });
+    // Общая заглушка API ставится в open: маршруты hh.ru — после неё.
+    await open(page, '/app/responses/a-draft/letter');
+    const selected = {
+      id: 'abc1',
+      title: 'Руководитель разработки',
+      text: 'Опыт',
+      sections: { title: 'Руководитель', about: '', skills: [], places: [] },
+    };
+    const snapshot = { resumes: [{ id: 'abc1', title: selected.title }], selected, readAt: 'x' };
+    await page.route('**/api/v1/candidate/hh/resumes', (route) =>
+      route.fulfill({ json: { data: snapshot } }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/edits**', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            resumeId: 'abc1',
+            vacancyId: 'v',
+            edits: [
+              { id: 'title', section: 'title', was: 'Руководитель', now: 'Head of Engineering' },
+              {
+                id: 'about',
+                section: 'about',
+                was: 'Руковожу 5 лет.',
+                now: 'Пять лет руковожу.',
+                variantOf: { vacancyId: 'v', subjectId: 'b'.repeat(64) },
+              },
+            ],
+          },
+        },
+      }),
+    );
+    const variant = {
+      id: 'x1',
+      position: 1,
+      text: 'Веду разработку пять лет.',
+      payload: null,
+      wish: { chips: [], text: '' },
+      createdAt: '2026-11-24T00:00:00.000Z',
+    };
+    await page.route('**/api/v1/candidate/text-variants?kind=resume**', (route) =>
+      route.fulfill({ json: { data: { variants: [], remaining: 3 } } }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/edits/variants', (route) =>
+      route.fulfill({
+        status: 201,
+        json: { data: { variant, variants: [variant], remaining: 2 } },
+      }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/review**', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            vacancyId: 'v',
+            requirements: [],
+            recommendedId: null,
+            resumes: ['abc1', 'abc2'].map((resumeId, index) => ({
+              resumeId,
+              title: '',
+              status: 'fits',
+              matched: [],
+              missing: [],
+              editCount: index ? 0 : 2,
+            })),
+          },
+        },
+      }),
+    );
+    await page.getByRole('button', { name: 'Одобрить' }).click();
+    await page.getByRole('button', { name: 'К отправке' }).click();
+
+    const rows = page.locator('.ap-parts > li.row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.last().locator('.tag')).toBeVisible();
+    for (const row of await rows.all()) {
+      const box = (await row.boundingBox())!;
+      const tag = (await row.locator('> .tag').boundingBox())!;
+      expect(Math.abs(box.x + box.width - tag.x - tag.width)).toBeLessThan(1.5);
+    }
+    await expect(rows.first()).toHaveCSS('border-bottom-width', '1px');
+    await expectLastActionReachable(page);
+    await page.getByRole('button', { name: /^Письмо · одобрено/u }).click();
+    await expect(page.getByLabel('Текст письма')).toBeVisible();
+    await page.getByRole('button', { name: 'К отправке' }).click();
+
+    await page.getByRole('button', { name: 'Резюме hh.ru «Руководитель разработки»' }).click();
+    const next = page.getByRole('dialog').getByRole('button', { name: 'Продолжить' });
+    await expect(next.locator('svg')).toHaveCount(1, { timeout: 15_000 });
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: '2 правки' }).click();
+    const applyAll = page.getByRole('button', { name: 'Применить все на hh.ru' });
+    await expect(page.getByRole('radio', { name: 'Руководитель разработки' })).toBeChecked();
+    await expect(applyAll).toBeInViewport();
+    const section = (await page.locator('.hh2-sec').first().boundingBox())!;
+    const main = (await page.locator('.page.two').boundingBox())!;
+    expect(section.width).toBeGreaterThan(main.width * 0.85);
+    // a01c: значок без окна у «О себе», у должности его нет; вариант встаёт на место.
+    const other = page.getByRole('button', { name: 'Другой вариант', exact: true });
+    await expect(other).toHaveCount(1);
+    const size = (await other.boundingBox())!;
+    const copy = (await other
+      .locator('xpath=preceding-sibling::button[@aria-label="Скопировать"]')
+      .boundingBox())!;
+    expect(size).toMatchObject({ width: copy.width, height: copy.height, y: copy.y });
+    await other.click();
+    await expect(page.getByText('Веду разработку пять лет.')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Варианты правки' })).toContainText('2 из 2');
+    const acts = (await page.locator('.hh2-acts').last().boundingBox())!;
+    const sugg = (await page.locator('.hh2-sugg').last().boundingBox())!;
+    expect(acts.x + acts.width).toBeLessThanOrEqual(sugg.x + sugg.width + 0.5);
+    await page.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(page.getByText('Пять лет руковожу.')).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expectLastActionReachable(page);
+    await expectGates(page);
   });
 
   test('отправка без одобренного письма возвращает к письму', async ({ page }) => {

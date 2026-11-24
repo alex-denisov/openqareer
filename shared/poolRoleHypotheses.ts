@@ -203,11 +203,25 @@ function canonicalTitle(group: RoleGroup): string {
 
 const REQUIREMENT_SHARE = 0.25;
 
+/**
+ * B747 (прод 23.11): источники кладут в навыки название отдела — «Operations», «Engineering».
+ * Это не навык: в «Чего не хватает» он стоял рядом с «Операционной эффективностью».
+ */
+const DEPARTMENT_LABELS: ReadonlySet<string> = new Set([
+  'operations',
+  'engineering',
+  'management',
+  'business',
+  'technology',
+  'it',
+]);
+
 function repeatedRequirements(items: readonly RoleObservation[]): string[] {
   const counts = new Map<string, number>();
   for (const item of items) {
     for (const skill of new Set(item.skills.map((value) => value.trim()))) {
-      if (skill) counts.set(skill, (counts.get(skill) ?? 0) + 1);
+      if (skill && !DEPARTMENT_LABELS.has(skill.toLowerCase()))
+        counts.set(skill, (counts.get(skill) ?? 0) + 1);
     }
   }
   // Доля считается среди вакансий с навыками и от четверти (28.10): у большой

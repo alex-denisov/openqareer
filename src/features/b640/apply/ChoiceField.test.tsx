@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { QuestionnaireQuestion } from '../../../../shared/applicationQuestionnaire';
 import { click, mount, type Mounted } from '../kit/testDom';
@@ -17,6 +18,13 @@ afterEach(() => {
   view?.unmount();
   view = null;
 });
+
+function typeInto(field: HTMLInputElement, text: string): void {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, text);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
 
 function input(label: string): HTMLInputElement {
   const found = [...view!.container.querySelectorAll('label')].find((node) => node.textContent === label);
@@ -52,6 +60,41 @@ describe('B703: вопрос с выбором показан выбором, а
   it('сохранённый ответ вне вариантов виден отдельной отмеченной строкой', () => {
     view = mount(<ChoiceField fieldId="qa-q1" question={base} value="Иногда" onPick={vi.fn()} />);
     expect(input('Иногда').checked).toBe(true);
+  });
+
+  describe('B641: длинный список', () => {
+    const options = Array.from({ length: 255 }, (_, index) => `Country ${index}`);
+    const long = { ...base, options };
+    const radios = () => view!.container.querySelectorAll('input[type="radio"]').length;
+    const search = () => view!.container.querySelector<HTMLInputElement>('input[type="search"]')!;
+
+    it('показывает 20 вариантов и остальные по «Показать ещё»', () => {
+      view = mount(<ChoiceField fieldId="qa-q1" question={long} value="" onPick={vi.fn()} />);
+      expect(radios()).toBe(20);
+      click(view.container.querySelector('button'));
+      expect(radios()).toBe(40);
+      expect(search().id).toBe('qa-q1');
+      // Поле поиска — как в фильтрах макета: рамка и значок у обёртки `.search`.
+      expect(search().closest('.search')?.querySelector('svg')).toBeTruthy();
+    });
+
+    it('поиск находит вариант в конце списка, выбранный виден всегда', () => {
+      const onPick = vi.fn();
+      view = mount(<ChoiceField fieldId="qa-q1" question={long} value="Country 200" onPick={onPick} />);
+      expect(input('Country 200').checked).toBe(true);
+      typeInto(search(), ' country 254 ');
+      expect(radios()).toBe(2);
+      click(input('Country 254'));
+      expect(onPick).toHaveBeenCalledWith('Country 254');
+      typeInto(search(), 'zzz');
+      expect(view.container.textContent).toContain('Ничего не нашлось');
+      expect(input('Country 200').checked).toBe(true);
+    });
+
+    it('короткий список — без поиска', () => {
+      view = mount(<ChoiceField fieldId="qa-q1" question={base} value="" onPick={vi.fn()} />);
+      expect(search()).toBeNull();
+    });
   });
 
   it('первый вариант получает id поля: к нему ведёт «Ответьте на обязательные»', () => {

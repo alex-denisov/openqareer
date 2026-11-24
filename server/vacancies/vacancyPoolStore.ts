@@ -1,3 +1,4 @@
+import type { UnclusteredPoolPage } from './unclusteredPoolPage';
 import type { CatalogChip, ChipCounts } from './catalogChips';
 import type { PruneControl } from './poolPruneBatches';
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
@@ -60,6 +61,11 @@ export interface StoredSourceState {
 }
 
 /** Что снял `mergeSourceSlice`: по этим ссылкам записи покидают кластеры (B230). */
+/** B763: что делать с каждой записанной порцией среза, пока срез ещё пишется. */
+export interface SliceWriteOptions {
+  readonly onChunkWritten?: (chunk: readonly UnifiedVacancy[]) => Promise<void> | void;
+}
+
 export interface MergeSliceResult {
   readonly dropped: readonly VacancyLink[];
 }
@@ -133,7 +139,8 @@ export interface VacancyPoolStore {
    */
   backfillStep?(chunk?: number): number;
   /** Шаг дочитывания по окну строк: каждый шаг ограничен и по чтению (B649-2). */
-  backfillWindowStep?(windowRows?: number): { done: boolean };
+  /** B759: `from` — `rowid`, с которого продолжить; `cursor` — откуда следующее окно. */
+  backfillWindowStep?(windowRows?: number, from?: number): { done: boolean; cursor?: number };
   /** Чистка, отпускающая цикл событий между транзакциями (B649-2). */
   pruneAsync?(
     knownSourceIds: readonly string[],
@@ -156,7 +163,10 @@ export interface VacancyPoolStore {
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     dropObservedBefore?: string,
+    options?: SliceWriteOptions,
   ): Promise<MergeSliceResult>;
+  /** B763: окно пула с записями без кластера; курсор живёт в хранилище. */
+  readUnclusteredPoolPage?(chunk?: number, maxUnclustered?: number): UnclusteredPoolPage;
   /** Without ids — every stored state (start-up); with ids — only those (B736 admin page). */
   loadSourceStates(sourceIds?: readonly string[]): StoredSourceState[];
   /** Only sources with a pending manual request: the 5 s worker poll (B641). */
@@ -174,7 +184,11 @@ export interface VacancyPoolStore {
   /** Swaps everything this source contributed for what it just returned. */
   replaceSourceSlice(sourceId: string, vacancies: readonly UnifiedVacancy[]): void;
   /** Async bounded-write variant that yields between SQLite transactions. */
-  replaceSourceSliceAsync?(sourceId: string, vacancies: readonly UnifiedVacancy[]): Promise<void>;
+  replaceSourceSliceAsync?(
+    sourceId: string,
+    vacancies: readonly UnifiedVacancy[],
+    options?: SliceWriteOptions,
+  ): Promise<void>;
   saveSourceState(state: StoredSourceState): void;
   /**
    * Помечает снятые объявления датой смерти, оставляя их в базе. Возвращает,
@@ -209,6 +223,8 @@ export interface VacancyPoolStore {
   recomputeCatalogTotalsInSlices?(observedAt: string): Promise<CatalogTotalsRow>;
   /** B485: одна строка итогов по ключу; HTTP-путь, без vacancy_clusters. */
   readCatalogTotals?(): CatalogTotalsRow | undefined;
+  /** B776: entries of the public catalog, one row by key; undefined until maintenance wrote it. */
+  readCatalogEntriesTotal?(): number | undefined;
   /**
    * Сведение по ключам (B230): соседи партии из `vacancy_cluster_keys`,
    * резюмируемое заполнение ключей по старым кластерам и его готовность.

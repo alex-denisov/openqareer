@@ -115,9 +115,31 @@ describe('cluster split dry run (B752)', () => {
       piecesCreated: 1,
       catalogMoved: 1,
       skippedCandidateRef: 1,
+      redirects: 1,
     });
+    expect(counts.journalBytesEstimate).toBeGreaterThan(0);
     expect(counts.keysRewritten).toBeGreaterThan(0);
     expect(database.prepare('SELECT count(*) AS n FROM vacancy_clusters').get()).toEqual(before);
+    store.close();
+  });
+
+  it('counts split clusters with requirements by the vacancy id the cache is keyed on', () => {
+    const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
+    const database = (store as unknown as { database: DatabaseSync }).database;
+    const kept = collided();
+    store.replaceSourceSlice(VK, [vk]);
+    store.replaceSourceSlice(ORACLE, [oracle]);
+    store.saveClusters([kept]);
+    database.exec(`CREATE TABLE vacancy_requirements_cache (
+      cache_key TEXT PRIMARY KEY, vacancy_id TEXT NOT NULL, cluster_id TEXT,
+      description_hash TEXT NOT NULL, extractor_version TEXT NOT NULL,
+      result_json TEXT NOT NULL, updated_at INTEGER NOT NULL)`);
+    // На проде cluster_id пуст у всех строк: кэш пишется по vacancy_id = id кластера.
+    database
+      .prepare(`INSERT INTO vacancy_requirements_cache VALUES ('k', ?, NULL, 'h', 'v', '{}', 0)`)
+      .run(kept.id);
+
+    expect(runClusterSplitDryRun(database)).toMatchObject({ splitWithRequirements: 1, piecesWithRequirements: 1 });
     store.close();
   });
 });

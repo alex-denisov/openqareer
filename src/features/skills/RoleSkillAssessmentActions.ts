@@ -1,5 +1,6 @@
 import { apiErrorMessage, CoachApiError } from '../coach/apiClient';
 import type { RoleSkillAssessmentMutationResult } from './roleSkillAssessmentApi';
+import { readUntilCounted } from './roleSkillAssessmentCounting';
 import {
   answerRoleAssessmentCase,
   answerRoleAssessmentDialogue,
@@ -57,10 +58,11 @@ export class RoleSkillAssessmentActions {
   loadCurrent = async (): Promise<void> => {
     this.patch({ loading: true, error: undefined });
     try {
-      this.dispatch({
-        type: 'current',
-        current: await getCurrentRoleSkillAssessment(this.roleTitle),
-      });
+      const current = await readUntilCounted(
+        () => getCurrentRoleSkillAssessment(this.roleTitle),
+        (counting) => this.dispatch({ type: 'current', current: counting }),
+      );
+      this.dispatch({ type: 'current', current });
     } catch (reason) {
       this.patch({ error: apiErrorMessage(reason, 'Не удалось загрузить проверку навыков.') });
     } finally {
@@ -286,7 +288,11 @@ export class RoleSkillAssessmentActions {
 export async function loadInitialAssessment(dispatch: Dispatch, roleTitle?: string): Promise<void> {
   dispatch({ type: 'patch', values: { loading: true, error: undefined } });
   try {
-    dispatch({ type: 'current', current: await getCurrentRoleSkillAssessment(roleTitle) });
+    const current = await readUntilCounted(
+      () => getCurrentRoleSkillAssessment(roleTitle),
+      (counting) => dispatch({ type: 'current', current: counting }),
+    );
+    dispatch({ type: 'current', current });
   } catch (reason) {
     dispatch({
       type: 'patch',

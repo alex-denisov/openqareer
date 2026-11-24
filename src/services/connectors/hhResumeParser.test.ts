@@ -65,7 +65,6 @@ describe('hhResumeParser', () => {
         id: 'live-token-542',
         title: 'Head of Product',
         url: 'https://hh.ru/resume/live-token-542',
-        updatedLabel: 'Готово к импорту',
       },
     ]);
   });
@@ -83,7 +82,6 @@ describe('hhResumeParser', () => {
         id: 'live-token-903',
         title: 'Менеджер по продукту',
         url: 'https://hh.ru/resume/live-token-903',
-        updatedLabel: 'Готово к импорту',
       },
     ]);
   });
@@ -127,7 +125,6 @@ describe('hhResumeParser', () => {
         id: 'live-token-731',
         title: 'Product Director',
         url: 'https://hh.ru/resume/live-token-731',
-        updatedLabel: 'Готово к импорту',
       },
     ]);
   });
@@ -243,18 +240,39 @@ describe('the hh.ru profile surface as it is served today', () => {
   });
 });
 
+describe('B678: когда резюме обновлено — словами hh.ru, а не выдумкой', () => {
+  const now = new Date('2026-11-24T10:00:00+03:00');
+  const card = (stamp: string) =>
+    `<a href="/resume/ab12cd34"><h3>COO</h3><div data-qa="title-description">Обновлено <span>${stamp}</span></div></a>`;
+  const label = (html: string) => parseHhResumesList(html, now)[0]?.updatedLabel;
+
+  it('этот год — день и месяц, прошлый — год, сегодня — как у hh.ru', () => {
+    expect(label(card('3&nbsp;ноября&nbsp;2026&nbsp;в&nbsp;16:09'))).toBe('обновлено 3 ноября');
+    expect(label(card('3 ноября в 16:09'))).toBe('обновлено 3 ноября');
+    expect(label(card('12 мая 2023 в 09:30'))).toBe('обновлено в 2023');
+    expect(label(card('сегодня в 10:15'))).toBe('обновлено сегодня');
+  });
+
+  it('дата рядом со ссылкой берётся у своей карточки; без даты подписи нет', () => {
+    const html =
+      '<div><a href="/resume/ab12cd34">COO</a></div>' +
+      '<div><a href="/resume/ef56">CTO</a><p>Обновлено 3 ноября 2026 в 16:09</p></div>';
+    expect(parseHhResumesList(html, now).map((item) => item.updatedLabel)).toEqual([undefined, 'обновлено 3 ноября']);
+  });
+});
+
 describe('the resume card label the candidate picks from', () => {
   it('drops the update stamp hh.ru glues into the same link and decodes its entities', () => {
     const html =
       '<a data-qa="resume-card-link-260801" href="/resume/260801e7ff10">' +
       'Менеджер по продукту Обновлено 9&nbsp;августа&nbsp;2026&nbsp;в&nbsp;16:09</a>';
 
-    expect(parseHhResumesList(html)).toEqual([
+    expect(parseHhResumesList(html, new Date('2026-11-24T10:00:00+03:00'))).toEqual([
       {
         id: '260801e7ff10',
         title: 'Менеджер по продукту',
         url: 'https://hh.ru/resume/260801e7ff10',
-        updatedLabel: 'Готово к импорту',
+        updatedLabel: 'обновлено 9 августа',
       },
     ]);
   });

@@ -24,6 +24,12 @@ const api = vi.hoisted(() => ({
   getOverview: vi.fn(),
 }));
 vi.mock('./diaryApi', () => api);
+// B744: подсказки формы цели — в GoalHints.test.tsx; здесь модели нет.
+vi.mock('./goalHintsApi', () => ({
+  getGoalExamples: vi.fn(async () => null),
+  getGoalBaseline: vi.fn(async () => null),
+  getRoleTitleRu: vi.fn(async () => null),
+}));
 const resume = vi.hoisted(() => ({ getResumeStudio: vi.fn() }));
 vi.mock('../../resume/resumeApi', () => resume);
 const people = vi.hoisted(() => ({ getPeople: vi.fn() }));
@@ -148,6 +154,23 @@ afterEach(() => {
 });
 
 describe('d02 «Цели и показатели»', () => {
+  it('B686: цель из KPI — одна строка цели, показатель не повторяет её название', async () => {
+    const kpi = {
+      ...summary('k1', { title: 'Срок релиза' }),
+      details: { setBy: 'manager', agreedOn: null, weight: 50, archive: null },
+      indicators: [summary('k1i', { title: 'Срок релиза', parentGoalId: 'k1' })],
+    };
+    api.listGoalCards.mockResolvedValue({ items: [kpi], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    expect(page.querySelectorAll('.dn-goal')).toHaveLength(1);
+    expect(page.querySelector('.dn-goal-t')?.textContent).toBe('Срок релиза');
+    // Название не повторяется и колонку не занимает: значение с начала строки.
+    const solo = page.querySelector('.dn-ind');
+    expect(solo?.className).toBe('dn-ind is-solo');
+    expect(solo?.firstElementChild?.className).toBe('num');
+    expect(page.querySelector('.dn-ind strong')?.textContent).toBe('не внесено');
+  });
+
   it('заголовок по отстающей цели, показатели, архив с причиной', async () => {
     const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
     expect(page.querySelector('.lead-title')?.textContent).toBe(
@@ -200,9 +223,52 @@ describe('d02 «Цели и показатели»', () => {
     const flags = [...page.querySelectorAll('.dn-goal')].map(
       (goal) => goal.querySelector('.dn-flag.is-done')?.textContent ?? null,
     );
-    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профиль · Перенести']);
+    expect(flags).toEqual([null, 'Достигнута → в Итоги и в профильПеренести']);
     const move = page.querySelector('.dn-flag.is-done a');
     expect(move?.getAttribute('href')).toBe('/app/diary/results');
+    expect(move?.className).toBe('btn is-quiet is-sm');
+  });
+
+  it('B645: на «Квартале» годовая цель идёт после квартальных — с целью этого квартала', async () => {
+    const yearly = {
+      ...summary('g5', {
+        title: 'Релизы без отката: 95 % за год',
+        horizon: 'year',
+        unit: '%',
+        dueDate: '2099-12-31',
+        targetValue: 95,
+        latestMeasurement: {
+          id: 'm5',
+          goalId: 'g5',
+          value: 82,
+          measuredAt: '2099-01-03',
+          note: null,
+          source: 'candidate_entered',
+          createdAt: '',
+        },
+      }),
+      details: {
+        setBy: 'manager',
+        agreedOn: null,
+        weight: null,
+        archive: null,
+        quarterTargets: [
+          { quarter: 1, value: 85 },
+          { quarter: 2, value: 88 },
+        ],
+      },
+      indicators: [],
+    };
+    api.listGoalCards.mockResolvedValue({ items: [yearly, hiring], archived: [] });
+    const page = await open(<GoalsScreen node={nodeByCode('d02')!} />);
+    const titles = () => [...page.querySelectorAll('.dn-goal-t')].map((item) => item.textContent);
+    expect(titles()).toEqual(['Закрыть 2 вакансии в команду', 'Релизы без отката: 95 % за год']);
+    const year = page.querySelectorAll('.dn-goal')[1]!;
+    expect(year.querySelector('.dn-ind .num')?.textContent).toBe('82 % из 85 % в I кв.');
+    expect(year.textContent).toContain('Вклад кварталов: I — 85 %, II — 88 %');
+    click(button(page, 'Год'));
+    expect(titles()).toEqual(['Релизы без отката: 95 % за год']);
+    expect(page.querySelector('.dn-ind .num')?.textContent).toBe('82 % из 95 %');
   });
 
   it('горизонт «Год» без целей — строка пустого состояния', async () => {

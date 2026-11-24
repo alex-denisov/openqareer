@@ -45,7 +45,15 @@ function preview(body: { status: string; targetProfession?: string }) {
     stays: [],
     options:
       body.status === 'working'
-        ? [{ key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true }]
+        ? [
+            { key: 'pauseAutoApply', label: 'Поставить автоотклики на паузу', checked: true },
+            // B779: как на сервере — подборка раз в неделю, отметка по тому, включена ли она.
+            {
+              key: 'weeklySelection',
+              label: 'Подборку в своей роли — раз в неделю',
+              checked: false,
+            },
+          ]
         : [],
   };
 }
@@ -205,9 +213,12 @@ test.describe('B651: «Статус» (s02)', () => {
     await expectGates(page);
 
     await screen.getByRole('checkbox', { name: 'Поставить автоотклики на паузу' }).uncheck();
+    await screen.getByRole('checkbox', { name: 'Подборку в своей роли — раз в неделю' }).check();
     await page.getByRole('button', { name: 'Сменить статус' }).click();
     await expect(page).toHaveURL(/\/app\/today$/u);
-    expect(calls.statusPuts).toEqual([{ status: 'working', options: { pauseAutoApply: false } }]);
+    expect(calls.statusPuts).toEqual([
+      { status: 'working', options: { pauseAutoApply: false, weeklySelection: true } },
+    ]);
   });
 
   test('предложение из адреса: статус и профессия подставлены, чужое значение отброшено', async ({
@@ -226,6 +237,29 @@ test.describe('B651: «Статус» (s02)', () => {
       waitUntil: 'domcontentloaded',
     });
     await expect(node(page, 's02').getByRole('radio', { name: /Ищу работу/u })).toBeChecked();
+  });
+
+  test('раскладка как в макете: список справа, «Что изменится» и история слева, «Можно сразу»', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'две колонки — на 1440');
+    await openCabinet(page, '/app/profile/status');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-main-right', '1');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-mtight', '1');
+    const screen = node(page, 's02');
+    await screen.getByRole('radio', { name: 'Работаю' }).check();
+    await expect(screen.locator('.optin h3')).toHaveText('Можно сразу');
+    const box = async (selector: string) => (await screen.locator(selector).boundingBox())!;
+    const [page2, pick, lead, history] = await Promise.all([
+      screen.boundingBox(),
+      box('.pick'),
+      box('section.lead'),
+      box('#hist-title'),
+    ]);
+    expect(page2!.width).toBeGreaterThan(1000);
+    expect(pick.x).toBeGreaterThan(lead.x + lead.width / 2);
+    expect(Math.abs(history.x - lead.x)).toBeLessThan(40);
+    expect(history.y).toBeLessThan(lead.y);
   });
 
   test('сбой сохранения: строка на месте, выбор сохранён, повтор проходит', async ({ page }) => {

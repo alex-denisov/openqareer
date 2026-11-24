@@ -4,12 +4,12 @@ import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
 import {
   compareFitDirected,
-  compareMoney,
   DEFAULT_VACANCY_SORT,
   type VacancySort,
 } from '../../shared/vacancySort';
-import { createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
+import { compareMoneyRank, createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
+import type { ListPhasesMs } from './matchedListPhases';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import { vacancyFitStage } from '../../shared/vacancyFitPercent';
@@ -106,13 +106,22 @@ export function withVacancyFitOrder(
     fitViewsCache.write(key, patched);
     return orderByFit(items, patched, sort, money, relevance);
   };
+  let phases: ListPhasesMs = {};
   const prepare = async (items: readonly MatchedVacancyItem[]): Promise<number> => {
+    const startedAt = performance.now();
     const { rows, views } = reader ? await prepareFitViews(key, reader, items) : NOTHING_PREPARED;
-    if (relevance) await readRolesYielding(items, relevance);
+    const rolesAt = performance.now();
+    const roles = relevance ? await readRolesYielding(items, relevance) : NO_ROLE_TURNS;
+    phases = {
+      prepareFitViewsWall: roundMs(rolesAt - startedAt),
+      prepareRolesWall: roundMs(performance.now() - rolesAt),
+      prepareRoles: roundMs(roles.busyMs),
+      prepareRoleTurns: roles.turns,
+    };
     prepared = views;
     return rows;
   };
-  return Object.assign(order, { prepare, fitStamp: stamp });
+  return Object.assign(order, { prepare, preparePhases: () => phases, fitStamp: stamp });
 }
 
 /** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
@@ -125,6 +134,8 @@ export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVac
   readonly fitStamp: string;
   /** Reads the percents the order needs without holding the event loop; call before the order. Resolves to the rows read. */
   readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<number>;
+  /** B770: what the last `prepare` spent, by phase. */
+  readonly preparePhases?: () => ListPhasesMs;
 };
 
 /**
@@ -180,7 +191,13 @@ export function withWantedCompanyOrder(
           ? compareFitRelevance(rankedRow(left), rankedRow(right), isExact)
           : compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
       ),
-    { cacheKey, dataKey, prepare: byFit.prepare, fitStamp: byFit.fitStamp },
+    {
+      cacheKey,
+      dataKey,
+      prepare: byFit.prepare,
+      preparePhases: byFit.preparePhases,
+      fitStamp: byFit.fitStamp,
+    },
   );
 }
 
@@ -366,17 +383,31 @@ function rankedRow(item: MatchedVacancyItem) {
 
 const ROLE_ROWS_PER_TURN = 50;
 
+interface RoleTurns {
+  readonly busyMs: number;
+  readonly turns: number;
+}
+
+const NO_ROLE_TURNS: RoleTurns = { busyMs: 0, turns: 0 };
+const roundMs = (ms: number): number => Number(ms.toFixed(2));
+
 /** A first read of a title parses it; the event loop gets its turn between portions (PRB-041). */
 async function readRolesYielding(
   items: readonly MatchedVacancyItem[],
   isExact: ExactRoleTest,
-): Promise<void> {
+): Promise<RoleTurns> {
+  let busyMs = 0;
+  let turns = 0;
   for (let start = 0; start < items.length; start += ROLE_ROWS_PER_TURN) {
+    const startedAt = performance.now();
     items
       .slice(start, start + ROLE_ROWS_PER_TURN)
       .forEach((item) => isExact(item.cluster.canonicalTitle));
+    busyMs += performance.now() - startedAt;
+    turns += 1;
     await new Promise((resolve) => setImmediate(resolve));
   }
+  return { busyMs, turns };
 }
 
 function orderByFit(
@@ -405,7 +436,7 @@ function orderByFit(
   const amounts = new Map(decorated.map((item) => [item.cluster.id, money(item)]));
   return decorated.sort(
     (left, right) =>
-      compareMoney(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
+      compareMoneyRank(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
       compareFitOrder(left, right),
   );
 }

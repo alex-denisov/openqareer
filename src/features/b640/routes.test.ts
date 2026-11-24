@@ -73,6 +73,8 @@ describe('адреса узлов нового кабинета (B649)', () => {
     expect(crumbTrail('p07').map((node) => node.code)).toEqual(['s01', 'p06', 'p07']);
     expect(crumbTrail('s03').map((node) => node.code)).toEqual(['s03']);
     expect(crumbTrail('d02l').map((node) => node.code)).toEqual(['d00', 'd02', 'd02k', 'd02l']);
+    // B645 f03/f03b: «Профиль › Цифровой след › Сводка › находка», как в макете.
+    expect(crumbTrail('f03b').map((node) => node.code)).toEqual(['s01', 'p02', 'f03', 'f03b']);
   });
 
   it('вкладки разделов ведут на существующие узлы', () => {

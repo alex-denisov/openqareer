@@ -100,10 +100,14 @@ export interface RouteDeps {
   skillNameTranslator?: import('../providers/skillNameTranslator').SkillNameTranslator;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
+  /** B753: сообщение знакомому и рекрутёру — своя цепочка (GLM первым); нет — писатель письма. */
+  contactMessageWriter?: CoverLetterWriter;
   /** B642: расшифровка сегмента записи; нет подстановки — Whisper на OpenRouter. */
   recordingTranscriber?: import('../providers/whisperTranscriber').RecordingTranscriber;
   /** B751: разбор интервью моделью; нет подстановки — цепочка письма без Vertex. */
   interviewDebriefWriter?: import('../providers/interviewDebriefWriter').InterviewDebriefWriter;
+  /** B780: оценка критериев ответа тренировки; без подставного — цепочка письма из конфига. */
+  interviewAnswerJudge?: import('../providers/interviewAnswerJudge').InterviewAnswerJudge;
   /** d01: шаги плана адаптации из «Что от вас ждут»; нет — план из шаблона. */
   adaptationStepsWriter?: import('../providers/adaptationStepsWriter').AdaptationStepsWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */

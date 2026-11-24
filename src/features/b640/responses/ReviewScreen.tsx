@@ -16,11 +16,12 @@ import {
   useIsMobile,
 } from '../kit';
 import { buildNodePath } from '../routes';
+import { useShell } from '../shell/ShellContext';
 import { getRejectionReview, saveReviewFeedback } from './data/rejectionReviewApi';
 import { useAsync } from './data/useAsync';
 import { longDate, pluralRu } from './model/responseRow';
 import { checksBasis } from './model/reviewChecks';
-import { guessLine, recommendationText, reviewTitle } from './model/reviewText';
+import { guessLine, recommendationText, rejectionsTitle, reviewTitle } from './model/reviewText';
 import { ReviewChecks, ReviewThreshold } from './ReviewChecks';
 
 /** Ширина полосы шагами по 5 %: атрибут `style` в кабинете запрещён. */
@@ -47,12 +48,18 @@ function DataMeter({ review }: { readonly review: RejectionReview }) {
   );
 }
 
-function RejectedList({ items }: { readonly items: readonly RejectionReviewItem[] }) {
+interface RejectedListProps {
+  readonly items: readonly RejectionReviewItem[];
+  /** Всего отказов: список показывает не больше 20. */
+  readonly total: number;
+}
+
+function RejectedList({ items, total }: RejectedListProps) {
   if (items.length === 0) return null;
   return (
     <section className="mod" aria-labelledby="rj-title">
       <h3 className="mod-title" id="rj-title">
-        Отказы
+        {rejectionsTitle(items, total)}
       </h3>
       <ul className="rows">
         {items.map((item) => (
@@ -83,15 +90,27 @@ interface StepActionProps {
   readonly primary: boolean;
 }
 
-function StepAction({ step, primary }: StepActionProps) {
+/** «Поправить резюме» открывает у консультанта готовую правку; остальное — переход. */
+function StepButton({ step, primary }: StepActionProps) {
+  const { openConsultant } = useShell();
   const text = recommendationText(step);
-  return (
-    <div className="actions">
-      <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath(text.node)}>
-        <Icon name={text.icon} />
+  const { resumeFactId } = step;
+  if (resumeFactId) {
+    return (
+      <Button
+        variant={primary ? 'primary' : undefined}
+        icon={text.icon}
+        onClick={() => openConsultant({ kind: 'dialog', resumeFactId, resumeReason: text.why })}
+      >
         {text.action}
-      </Link>
-    </div>
+      </Button>
+    );
+  }
+  return (
+    <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath(text.node)}>
+      <Icon name={text.icon} />
+      {text.action}
+    </Link>
   );
 }
 
@@ -113,7 +132,9 @@ function OtherSteps({ steps }: { readonly steps: readonly RejectionRecommendatio
               <div className="rec-body">
                 <h4 className="rec-t">{text.title}</h4>
                 <p className="rec-why">{text.why}</p>
-                <StepAction step={step} primary={false} />
+                <div className="actions">
+                  <StepButton step={step} primary={false} />
+                </div>
               </div>
             </li>
           );
@@ -182,11 +203,12 @@ function Helped({ initial }: { readonly initial: boolean | null }) {
  */
 function LeadAction({ step }: { readonly step: RejectionRecommendation | null }) {
   const mobile = useIsMobile();
-  const text = step ? recommendationText(step) : null;
-  const link = (
-    <Link className="btn is-primary" to={buildNodePath(text?.node ?? 's07')}>
-      <Icon name={text?.icon ?? 'vacancies'} />
-      {text?.action ?? 'Посмотреть вакансии'}
+  const link = step ? (
+    <StepButton step={step} primary />
+  ) : (
+    <Link className="btn is-primary" to={buildNodePath('s07')}>
+      <Icon name="vacancies" />
+      Посмотреть вакансии
     </Link>
   );
   return mobile ? <ActionDock kind="auto" primary={link} /> : <div className="actions">{link}</div>;
@@ -224,7 +246,7 @@ function Review({ review }: { readonly review: RejectionReview }) {
     <div className="page two" data-b640-node="o07" data-b640-section="responses">
       <div className="col">
         <ReviewLead review={review} />
-        <RejectedList items={review.rejections} />
+        <RejectedList items={review.rejections} total={review.rejectedCount} />
       </div>
       <div className="col">
         {!ready && review.checks ? <ReviewThreshold threshold={review.threshold} /> : null}

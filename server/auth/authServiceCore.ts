@@ -1,3 +1,4 @@
+import { dropUserPasskeys } from './passkeySchema';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { withEffectiveProTrial } from '../billing/proTrial';
@@ -124,12 +125,14 @@ export class AuthServiceCore implements SessionAuth {
   >;
   protected readonly database: DatabaseSync;
   private readonly onPasswordReset?: AuthServiceOptions['onPasswordReset'];
+  private readonly onPasskeyAdded?: AuthServiceOptions['onPasskeyAdded'];
   protected readonly checkEmailDomain: ReturnType<typeof createEmailDomainChecker>;
   protected candidateStore?: CandidateStore;
   private sessionLog?: SessionDeletionLog;
 
   constructor(options: AuthServiceOptions) {
     this.onPasswordReset = options.onPasswordReset;
+    this.onPasskeyAdded = options.onPasskeyAdded;
     this.candidateStore = options.candidateStore;
     this.checkEmailDomain = createEmailDomainChecker({
       resolver: options.emailDomainResolver,
@@ -614,6 +617,8 @@ export class AuthServiceCore implements SessionAuth {
         )
         .run(salt.toString('base64'), passwordHash.toString('base64'), now, user.id);
       this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      // Пароль меняют и при подозрении на захват: ключ, добавленный чужим, не должен пережить смену.
+      dropUserPasskeys(this.database, user.id);
       this.database.exec('COMMIT');
     } catch (error) {
       this.database.exec('ROLLBACK');
@@ -622,6 +627,21 @@ export class AuthServiceCore implements SessionAuth {
     const authenticated = await this.login(user.username, newPassword);
     if (!authenticated) throw new Error('changed password cannot authenticate');
     return authenticated;
+  }
+
+  async notifyPasskeyAdded(
+    userId: string,
+    passkeyId: string,
+    deviceLabel: string | null,
+  ): Promise<void> {
+    const user = this.findUserById(userId);
+    if (!user?.email || !this.onPasskeyAdded) return;
+    await this.onPasskeyAdded({
+      email: user.email,
+      displayName: user.display_name,
+      passkeyId,
+      deviceLabel,
+    });
   }
 
   async requestPasswordReset(identifierInput: string): Promise<void> {
@@ -712,6 +732,7 @@ export class AuthServiceCore implements SessionAuth {
         )
         .run(salt.toString('base64'), passwordHash.toString('base64'), now, userId);
       this.database.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+      dropUserPasskeys(this.database, userId);
       this.database
         .prepare(
           `DELETE FROM password_reset_tokens

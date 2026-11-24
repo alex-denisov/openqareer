@@ -8,9 +8,10 @@ import { getAccount, revokeAccountSession, revokeOtherSessions } from '../../coa
 import { ResultLine } from '../kit/ResultLine';
 import type { B640Node } from '../routes';
 import { useShell } from '../shell/ShellContext';
-import { deviceLine, deviceName, devicesTitle, type AccountSession } from './model';
+import { deviceLine, deviceName, devicesTitle, emailConfirmed, type AccountSession } from './model';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 import { EmailCodeForm, EmailForm, NameForm, PasswordForm } from './securityForms';
+import { PasskeyForm, PasskeyRow, usePasskeys, type PasskeyState } from './PasskeySection';
 import { getTwoFactorStatus } from './twoFactorApi';
 import { TwoFactorPanel, TwoFactorRow, type TwoFactorState, type TwoFactorView } from './TwoFactorSection';
 
@@ -93,7 +94,7 @@ function Identity({ data, load }: SectionProps) {
     <Group title="Почта и имя">
       <Row
         title="Почта для входа"
-        value={emailLine(account.email, session.emailVerified === true, pendingEmail)}
+        value={emailLine(account.email, emailConfirmed(session), pendingEmail)}
         action={editing === 'email' ? undefined : 'Изменить'}
         onAction={() => setEditing('email')}
       />
@@ -130,10 +131,19 @@ function Identity({ data, load }: SectionProps) {
 }
 
 /** «Вход»: смена пароля на месте (макет N4b) и строка двухфакторной защиты (B401). */
-function SignIn({ onChanged, twoFactor }: { readonly onChanged: () => void; readonly twoFactor: TwoFactorState }) {
+interface SignInProps {
+  readonly onChanged: () => void;
+  readonly twoFactor: TwoFactorState;
+  readonly passkeys: PasskeyState;
+  /** Название этого устройства из списка сеансов: по нему видно, есть ли здесь ключ. */
+  readonly deviceLabel: string | null;
+}
+
+function SignIn({ onChanged, twoFactor, passkeys, deviceLabel }: SignInProps) {
   const needsCode = twoFactor.load.state === 'ready' && twoFactor.load.data.enabled;
   const [open, setOpen] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const hadPasskeys = passkeys.load.state === 'ready' && passkeys.load.data.length > 0;
   return (
     <Group title={open ? 'Сменить пароль' : 'Вход'}>
       {open ? (
@@ -142,20 +152,27 @@ function SignIn({ onChanged, twoFactor }: { readonly onChanged: () => void; read
           onCancel={() => setOpen(false)}
           onDone={() => {
             setOpen(false);
-            setSaved(true);
-            // Смена пароля завершает остальные сеансы: список устройств перечитывается.
+            setSaved(
+              hadPasskeys
+                ? 'Пароль изменён. Ключи входа удалены — добавьте Touch ID заново'
+                : 'Пароль изменён',
+            );
+            // Смена пароля завершает остальные сеансы и удаляет ключи входа: оба списка перечитываются.
             onChanged();
+            if (hadPasskeys) passkeys.load.retry();
           }}
         />
       ) : (
         <>
           <Row title="Пароль" action="Сменить пароль" onAction={() => setOpen(true)} />
           <TwoFactorRow state={twoFactor} />
+          <PasskeyRow state={passkeys} currentLabel={deviceLabel} />
+          <PasskeyForm state={passkeys} needsCode={needsCode} />
         </>
       )}
       {saved && !open ? (
         <li className="set-foot">
-          <ResultLine text="Пароль изменён" />
+          <ResultLine text={saved} />
         </li>
       ) : null}
     </Group>
@@ -260,13 +277,19 @@ function useTwoFactor(): TwoFactorState {
 export function SecurityScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadSecurity);
   const twoFactor = useTwoFactor();
+  const passkeys = usePasskeys();
   return (
     <SettingsPage node={node} heading="Вход и безопасность" busy={load.state === 'loading'}>
       {load.state === 'error' ? <ErrorLine text="Раздел не загрузился" onRetry={load.retry} /> : null}
       {load.state === 'ready' ? (
         <>
           <Identity data={load.data} load={load} />
-          <SignIn onChanged={load.retry} twoFactor={twoFactor} />
+          <SignIn
+            onChanged={load.retry}
+            twoFactor={twoFactor}
+            passkeys={passkeys}
+            deviceLabel={load.data.account.sessions.find((session) => session.current)?.deviceLabel ?? null}
+          />
           <TwoFactorPanel state={twoFactor} />
           <Devices data={load.data} load={load} />
           <SignOut />

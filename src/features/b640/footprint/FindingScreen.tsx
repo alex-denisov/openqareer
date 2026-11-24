@@ -9,10 +9,12 @@ import { FootprintLoad, StartPage, hasSummary } from './FootprintScreen';
 import {
   GOOGLE_REMOVAL_URL,
   YANDEX_REMOVAL_URL,
+  confirmsOwner,
   letterText,
   mailtoHref,
   openRisks,
   pageAttrs,
+  riskLine,
 } from './footprintModel';
 import type { FootprintData } from './useFootprint';
 import { reportFailure } from './reportFailure';
@@ -33,7 +35,7 @@ function Facts({ item }: { readonly item: FootprintRiskItem }) {
           <dd>{item.mismatch.field}: «{item.mismatch.foundValue}», в профиле — «{item.mismatch.profileValue}»</dd>
         </>
       ) : null}
-      {item.levelLabel ? (<><dt>Риск</dt><dd>{item.levelLabel}</dd></>) : null}
+      {item.levelLabel ? (<><dt>Риск</dt><dd>{riskLine(item)}</dd></>) : null}
     </dl>
   );
 }
@@ -110,6 +112,37 @@ function ExternalRow({ item }: { readonly item: FootprintRiskItem }) {
   );
 }
 
+/**
+ * B382: страница найдена по нику, чья она — неизвестно. Сама страница открывается отсюда (из списка
+ * внешних ссылок нет); «Это моё» подтверждает её, «Это не моё» убирает из сводки.
+ */
+function OwnerRow({ item, onDone }: { readonly item: FootprintRiskItem; readonly onDone: () => void }) {
+  const review = useReview(onDone);
+  const target = reviewTarget(item);
+  if (!item.url || !target) return null;
+  return (
+    <>
+      <div className="actions fp-owner-row">
+        <a className="btn is-primary" href={item.url} rel="noopener noreferrer" target="_blank"
+          aria-label={`Открыть страницу ${item.title}, откроется в новой вкладке`}>
+          Открыть страницу
+          <Icon name="out" />
+        </a>
+        <button className="btn" type="button" disabled={review.busy}
+          onClick={() => void review.confirm(target, 'Отмечено: это ваша страница')}>
+          <Icon name="check" />
+          Это моё
+        </button>
+        <button className="row-act" type="button" disabled={review.busy}
+          onClick={() => void review.mark(target, 'not_self', 'Отмечено: это не ваша страница')}>
+          Это не моё
+        </button>
+      </div>
+      {review.error ? <StatusLine state="err" text={review.error} /> : null}
+    </>
+  );
+}
+
 function Finding({ data, item, reload }: ViewProps) {
   const { navigate } = useShell();
   useScreenChrome({ crumb: item.title });
@@ -125,10 +158,16 @@ function Finding({ data, item, reload }: ViewProps) {
       <h2 className="lead-title is-long" id="pf-t">{item.title}</h2>
       <p className="lead-sub">{position}{FOOTPRINT_CATEGORY_TITLES[item.category].toLowerCase()}</p>
       <Facts item={item} />
-      <QuietRow item={item} onDone={toSummary} />
-      <Letter item={item} />
-      <ExternalRow item={item} />
-      <FindingDock data={data} item={item} reload={reload} />
+      {confirmsOwner(item) ? (
+        <OwnerRow item={item} onDone={toSummary} />
+      ) : (
+        <>
+          <QuietRow item={item} onDone={toSummary} />
+          <Letter item={item} />
+          <ExternalRow item={item} />
+          <FindingDock data={data} item={item} reload={reload} />
+        </>
+      )}
     </section>
   );
 }

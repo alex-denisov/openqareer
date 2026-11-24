@@ -1,4 +1,5 @@
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { syncSection } from '../observability/syncSections';
 
 /** A computation cut at its `yield`s: one piece for a sync caller, slices for an HTTP read. */
 export type Steps<R> = Generator<void, R, void>;
@@ -11,20 +12,28 @@ export function runSteps<R>(steps: Steps<R>): R {
   return step.value;
 }
 
+interface YieldingOptions {
+  readonly sliceMs?: number;
+  readonly now?: () => number;
+  /** Names a step that holds the loop by itself for the stall log (B770). */
+  readonly section?: string;
+}
+
 /** Same computation; after each `sliceMs` of work it lets queued requests run. */
 export async function runStepsYielding<R>(
   steps: Steps<R>,
-  options: { readonly sliceMs?: number; readonly now?: () => number } = {},
+  options: YieldingOptions = {},
 ): Promise<R> {
-  const { sliceMs = 20, now = () => performance.now() } = options;
+  const { sliceMs = 20, now = () => performance.now(), section } = options;
+  const next = section ? () => syncSection(section, () => steps.next()) : () => steps.next();
   let sliceStart = now();
-  let step = steps.next();
+  let step = next();
   while (!step.done) {
     if (now() - sliceStart >= sliceMs) {
       await yieldToEventLoop();
       sliceStart = now();
     }
-    step = steps.next();
+    step = next();
   }
   return step.value;
 }

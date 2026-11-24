@@ -211,7 +211,14 @@ async function handle(
   if (path === '' || path === '/') {
     return route.fulfill({
       json: {
-        data: { asOf: TODAY, platformStartedAt: isoDay(-30), primaryWorkplace: null, summary: {} },
+        // Понедельник за 4 недели до текущей: лента начинается с «Недели 5» в любой день недели
+        // (с «−30 дней» в понедельник и вторник выходила «Неделя 6»).
+        data: {
+          asOf: TODAY,
+          platformStartedAt: monday(isoDay(-28)),
+          primaryWorkplace: null,
+          summary: {},
+        },
       },
     });
   }

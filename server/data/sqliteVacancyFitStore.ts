@@ -3,6 +3,7 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
 import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
+import { syncSection } from '../observability/syncSections';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
 import { MECHANICS_REQUEUE_REVISION } from './sqliteVacancyRequirementsStore';
@@ -26,6 +27,7 @@ const ORPHANED_REQUIREMENTS_SINCE = '2026-11-01T21:00:00.000Z';
 const MAX_REKEYS_PER_CLAIM = 50;
 /** Rows one worker-start requeue write touches: each holds the write lock a few ms per row. */
 const REQUEUE_BATCH = 20;
+const SUPERSEDED = "status='failed' AND last_error='profile_changed'";
 const RETRY_BASE_MS = 30_000;
 const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
@@ -200,18 +202,24 @@ export class SqliteVacancyFitStore {
   ): Promise<void> {
     const candidateKey = this.candidateKey(candidateId);
     const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
-    for (;;) {
+    // B770a: the batch holds the loop between yields; named so a stall over list:fit-ids shows it.
+    const warmBatch = () => {
       const known = this.cachedIdsMemo.get(candidateKey);
       const rows = page.all(candidateKey, known?.last ?? 0, batch) as { id: number; cache_key: string; result_cipher: string }[];
-      if (rows.length === 0) return;
+      if (rows.length === 0) return 0;
       const ids = new Set(known?.ids ?? []);
       for (const row of rows) {
         const id = this.openedVacancyId(row, candidateId);
         if (id) ids.add(id);
       }
       this.cachedIdsMemo.set(candidateKey, { ids, count: (known?.count ?? 0) + rows.length, last: rows.at(-1)!.id });
+      return rows.length;
+    };
+    for (;;) {
+      const read = syncSection('fit-ids:batch', warmBatch);
+      if (read === 0) return;
       await yieldToLoop();
-      if (rows.length < batch) return;
+      if (read < batch) return;
     }
   }
 
@@ -411,6 +419,24 @@ export class SqliteVacancyFitStore {
     const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),last_error=?,updated_at=?
       WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(until, reason, now, job.key, job.leaseToken, now);
     return Number(update.changes) === 1;
+  }
+
+  /**
+   * A job for a profile that changed before its model call: its key (facts and profile stamp) is
+   * never asked again, so the row goes. Kept as `failed`, 18.5K of them held 2 GB of sealed input
+   * on prod (23.11) and a revision bump would requeue them into the day's recount ceiling.
+   */
+  discard(job: VacancyFitJob, now = new Date().toISOString()): boolean {
+    const removed = this.database.prepare("DELETE FROM vacancy_fit_queue WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?")
+      .run(job.key, job.leaseToken, now);
+    return Number(removed.changes) === 1;
+  }
+
+  /** One small batch of the `profile_changed` rows written before `discard`; the caller paces the batches. */
+  purgeSupersededBatch(size = REQUEUE_BATCH): number {
+    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${SUPERSEDED} LIMIT ?`).all(Math.max(0, Math.floor(size))) as { id: number }[]).map((row) => row.id);
+    if (ids.length === 0) return 0;
+    return Number(this.database.prepare(`DELETE FROM vacancy_fit_queue WHERE rowid IN (${ids.map(() => '?').join(',')}) AND ${SUPERSEDED}`).run(...ids).changes);
   }
 
   /** A retried job waits 30 s, 60 s, 120 s… before the next model call; the reason is an error class only. */

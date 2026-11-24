@@ -26,6 +26,7 @@ import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { registerCandidateAutomationRoutes } from './candidateAutomationRoutes';
 import {
   notificationRepositoryFor,
+  recordMergedNotification,
   recordNotificationFromSource,
 } from './notificationRepositoryAccess';
 import { readCampaign } from './campaignContext';
@@ -33,10 +34,18 @@ import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolC
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readTargetLevel } from './vacancyRoleContext';
 import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
+import {
+  digestDay,
+  mergeDigestMarks,
+  ROLE_DIGEST_SOURCE_TYPE,
+  roleDigestKey,
+} from '../domain/roleVacancyDigest';
+import { salaryAboveFloor, type DigestFloor, type DigestVacancy } from '../domain/roleDigestMarks';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
-import { registerHhSessionRoutes } from './hhSessionRoutes';
+import { registerHhRoutes } from './hhRoutes';
 import { registerQuestionnaireRoutes } from './questionnaireRoutes';
 import { registerTextVariantRoutes } from './textVariantRoutes';
 import { snapshotWithDescription } from './applicationVacancyText';
@@ -303,7 +312,7 @@ const todayQuerySchema = z
  * с (C55). Кандидат без роли/навыков подбирать физически нечем — матчинг не
  * запускается, `matched` — пустой список, а не «неизвестно».
  */
-async function readTodayMatchedVacancies(
+export async function readTodayMatchedVacancies(
   deps: Pick<RouteDeps, 'candidateStore' | 'multiSourceEngine'>,
   candidateId: string,
 ): Promise<{
@@ -360,27 +369,49 @@ function todayNewVacancies(
     : undefined;
 }
 
+/** B671: одна запись «Новые вакансии по вашей роли» на роли поиска в сутки; набор дня дописывается. */
+/** Порог — «Зарплата от» в решениях кандидата; без него подписи «выше …» нет. */
+function digestFloorOf(deps: RouteDeps, candidateId: string): DigestFloor | null {
+  const profile = deps.candidateStore.decisionProfileRepo?.get(candidateId) ?? null;
+  const amount = profile?.salaryFloor;
+  return amount && amount > 0 ? { amount, currency: profile?.salaryCurrency ?? 'RUB' } : null;
+}
+
+function digestVacanciesOf(
+  vacancies: readonly TodayNewVacancy[],
+  floor: DigestFloor | null,
+): DigestVacancy[] {
+  const rates = floor ? getCurrencyRates() : undefined;
+  return vacancies.map((vacancy) => ({
+    id: vacancy.clusterId,
+    aboveFloor: floor ? salaryAboveFloor(vacancy.salary, floor, rates) : false,
+  }));
+}
+
 function recordFreshVacancyNotification(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
   vacancies: readonly TodayNewVacancy[],
+  roles: readonly string[],
 ): void {
   if (!vacancies.length) return;
-  const sourceId = createHash('sha256')
-    .update(
-      vacancies
-        .map((vacancy) => vacancy.clusterId)
-        .sort()
-        .join('\0'),
-    )
-    .digest('hex');
-  recordNotificationFromSource(deps, request, candidateId, {
-    kind: 'new_vacancies_by_role',
-    sourceType: 'matched_vacancy_batch',
-    sourceId,
-    idempotencyKey: `new-vacancies:${sourceId}`,
-  });
+  const now = new Date();
+  const floor = digestFloorOf(deps, candidateId);
+  const marked = digestVacanciesOf(vacancies, floor);
+  recordMergedNotification(
+    deps,
+    request,
+    candidateId,
+    {
+      kind: 'new_vacancies_by_role',
+      sourceType: ROLE_DIGEST_SOURCE_TYPE,
+      sourceId: '',
+      idempotencyKey: roleDigestKey(digestDay(now), roles),
+      createdAt: now.toISOString(),
+    },
+    (stored) => mergeDigestMarks(stored, marked, floor),
+  );
 }
 
 const TODAY_QUEUE_INITIAL_COUNT = 5;
@@ -445,7 +476,7 @@ async function readTodaySnapshot(
     changesDismissedAt: candidateStore.getCandidateWorkspace(candidateId)?.todayChangesDismissedAt,
     now: now.toISOString(),
   });
-  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
+  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies, targetRoles);
   return {
     snapshot: {
       ...snapshot,
@@ -554,7 +585,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerRejectionReviewRoutes(app, deps);
   registerQuestionnaireRoutes(app, deps);
   registerTextVariantRoutes(app, deps);
-  registerHhSessionRoutes(app, deps);
+  registerHhRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },

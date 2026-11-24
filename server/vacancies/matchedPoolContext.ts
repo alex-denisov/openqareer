@@ -4,8 +4,10 @@ import type { deriveCandidateTargetLevel } from './candidateLevel';
 import {
   MatchedPoolSnapshots,
   type MatchedPoolReadOptions,
+  type MatchedSnapshotMiss,
   type MatchedSnapshotStore,
 } from './matchedPoolSnapshot';
+import { mapYielding } from './mapYielding';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { matchGeographyKey, type MatchGeography } from './matchGeography';
 import { candidateGradeRange, type GradeRange } from './titleParse/gradeRange';
@@ -148,7 +150,13 @@ function snapshotsOf(engine: RouteDeps['multiSourceEngine']): MatchedPoolSnapsho
 /** What the candidate store keeps between processes: text in, text out. */
 interface SealedSnapshotText {
   read(candidateId: string, profileKey: string): { builtAt: number; text: string } | null;
-  write(candidateId: string, profileKey: string, builtAt: number, text: string): void;
+  write(
+    candidateId: string,
+    profileKey: string,
+    builtAt: number,
+    text: string,
+    isWanted: () => boolean,
+  ): Promise<void>;
   delete(candidateId: string): void;
   keys(candidateId: string): string[];
 }
@@ -167,8 +175,11 @@ export function setMatchedSnapshotStore(
         ? { items: items as MatchedVacancyItem[], storedAt: row.builtAt }
         : null;
     },
-    write: (candidateId, profileKey, snapshot) =>
-      sealed.write(candidateId, profileKey, snapshot.storedAt, JSON.stringify(snapshot.items)),
+    async write(candidateId, profileKey, snapshot, isWanted) {
+      const items = await mapYielding(snapshot.items, (item) => JSON.stringify(item));
+      const text = `[${items.join(',')}]`;
+      await sealed.write(candidateId, profileKey, snapshot.storedAt, text, isWanted);
+    },
     delete: (candidateId) => sealed.delete(candidateId),
     keys: (candidateId) => sealed.keys(candidateId),
   };
@@ -181,6 +192,14 @@ export function preloadMatchedSnapshots(
   candidateIds: readonly string[],
 ): Promise<number> {
   return snapshotsOf(engine).preload(candidateIds);
+}
+
+/** B770: a reader with no snapshot for its profile, for the journal. */
+export function setMatchedSnapshotMissLog(
+  engine: RouteDeps['multiSourceEngine'],
+  log: (miss: MatchedSnapshotMiss) => void,
+): void {
+  snapshotsOf(engine).setMissLog(log);
 }
 
 /** A rebuild behind an expired snapshot has no request to fail: its failure goes here. */

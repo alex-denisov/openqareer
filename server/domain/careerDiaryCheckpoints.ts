@@ -1,4 +1,9 @@
-import { evaluateCareerGoalRisk, type CareerDiaryGoal, type CareerDiaryMeasurement } from '../../shared/careerDiary';
+import {
+  evaluateCareerGoalRisk,
+  type CareerDiaryGoal,
+  type CareerDiaryGoalRiskStatus,
+  type CareerDiaryMeasurement,
+} from '../../shared/careerDiary';
 import type {
   CareerDiaryDay30Check,
   CareerDiaryDay30Fact,
@@ -6,6 +11,9 @@ import type {
   CareerDiaryResults90,
 } from '../../shared/careerDiaryCheckpoints';
 import type { CareerDiaryPeopleMap } from '../../shared/careerDiaryPeople';
+import { withoutEmployerFigures } from '../../shared/employerFigures';
+
+export { withoutEmployerFigures };
 
 const DAY_MS = 86_400_000;
 
@@ -43,30 +51,15 @@ function ofPeople(count: number): string {
 }
 
 const lowerFirst = (text: string): string => text.charAt(0).toLocaleLowerCase('ru-RU') + text.slice(1);
-const numeric = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const latestOf = (track: GoalTrack) => track.measurements.at(-1) ?? null;
 const startOf = (track: GoalTrack) => track.goal.baselineValue ?? track.measurements[0]?.value ?? null;
 
-/** Достигнута ли цель: числа — с учётом направления, остальное — по правилу дневника. */
-function achieved(track: GoalTrack, asOf: string): boolean {
-  const latest = latestOf(track);
-  if (!latest) return false;
-  const { targetValue, baselineValue } = track.goal;
-  if (numeric(latest.value) && numeric(targetValue) && numeric(baselineValue)) {
-    return targetValue < baselineValue ? latest.value <= targetValue : latest.value >= targetValue;
-  }
-  return evaluateCareerGoalRisk(track.goal, latest, asOf).status === 'achieved';
-}
-
-/** Отстаёт ли числовая цель от ровного пути от базы к цели на сегодня. */
-function behindPace(track: GoalTrack, asOf: string): boolean {
-  const latest = latestOf(track);
-  const { targetValue, baselineValue, startDate, dueDate } = track.goal;
-  if (!latest || achieved(track, asOf) || !numeric(latest.value) || !numeric(targetValue) || !numeric(baselineValue)) return false;
-  const span = Math.max(1, Date.parse(dueDate) - Date.parse(startDate));
-  const share = Math.min(1, Math.max(0, (Date.parse(asOf) - Date.parse(startDate)) / span));
-  const expected = baselineValue + (targetValue - baselineValue) * share;
-  return targetValue < baselineValue ? latest.value > expected : latest.value < expected;
+/**
+ * Статус цели — тот же, что у карточки в d02 и d02a (B662): одна функция риска на все экраны.
+ * «Итоги» и свод первого месяца раньше считали своё и расходились с карточкой.
+ */
+function riskOf(track: GoalTrack, asOf: string): CareerDiaryGoalRiskStatus {
+  return evaluateCareerGoalRisk(track.goal, latestOf(track), asOf).status;
 }
 
 /** Цели, которые считаются: у цели с показателями — её показатели, сама она только заголовок. */
@@ -110,7 +103,7 @@ function facts(input: Day30Input, main: GoalTrack | null): CareerDiaryDay30Fact[
 }
 
 function signalOf(input: Day30Input, main: GoalTrack | null, dueOn: string): CareerDiaryDay30Check['signal'] {
-  if (main && behindPace(main, input.asOf)) return { area: 'result', text: `${main.goal.title} отстаёт от плана` };
+  if (main && riskOf(main, input.asOf) === 'at_risk') return { area: 'result', text: `${main.goal.title} отстаёт от плана` };
   if (input.people && input.people.withoutMeeting > 0) {
     return { area: 'team', text: `Без встречи — ${peopleCount(input.people.withoutMeeting)}` };
   }
@@ -136,29 +129,16 @@ export function buildDay30Check(input: Day30Input): CareerDiaryDay30Check {
   };
 }
 
-/**
- * Убирает из текста цифры работодателя: деньги, проценты, крупные суммы и предлог перед ними.
- * Счёт людей и штук остаётся — это не внутренние показатели.
- */
-export function withoutEmployerFigures(text: string): string {
-  const unit = String.raw`(?:%|процент\p{L}*|percent|млн\.?|млрд\.?|миллион\p{L}*|миллиард\p{L}*|тыс\p{L}*\.?|k|m|bn|₽|руб\p{L}*\.?|usd|eur|евро|долл\p{L}*\.?|\$|€)(?![\p{L}\d])`;
-  const money = String.raw`(?:₽|руб\p{L}*\.?|usd|eur|евро|долл\p{L}*\.?|\$|€)`;
-  const figure = new RegExp(
-    String.raw`(?:(?<=^|\s)(?:до|на|с|в|по|от)\s+)?[-+$€]?\d[\d\s.,]*\s*${unit}(?:\s*${money}(?![\p{L}\d]))?`,
-    'giu',
-  );
-  return text.replace(figure, '').replace(/\s+,/gu, ',').replace(/\s{2,}/gu, ' ').replace(/[\s,]+$/u, '').trim();
-}
-
 function itemOf(track: GoalTrack, asOf: string): CareerDiaryResultItem {
   const latest = latestOf(track);
   const { goal } = track;
   if (!latest) return { goalId: goal.id, title: goal.title, line: 'замеров нет', status: 'open' };
   const unit = goal.unit ? ` ${goal.unit}` : '';
   const line = `с ${String(startOf(track))} до ${String(latest.value)}${unit}`;
-  return achieved(track, asOf)
-    ? { goalId: goal.id, title: goal.title, line, status: 'done' }
-    : { goalId: goal.id, title: goal.title, line: `${line}, цель — ${String(goal.targetValue)}`, status: 'behind' };
+  const risk = riskOf(track, asOf);
+  if (risk === 'achieved') return { goalId: goal.id, title: goal.title, line, status: 'done' };
+  const status = risk === 'at_risk' ? 'behind' : 'open';
+  return { goalId: goal.id, title: goal.title, line: `${line}, цель — ${String(goal.targetValue)}`, status };
 }
 
 /** Итоги 90 дней из целей и замеров и два текста без цифр работодателя. */
@@ -168,7 +148,8 @@ export function buildResults90(input: PlaceInput): CareerDiaryResults90 {
     .filter((track) => track.goal.startDate <= periodTo)
     .map((track) => itemOf(track, input.asOf));
   const done = items.filter((item) => item.status === 'done');
-  const behind = items.filter((item) => item.status === 'behind').length;
+  // «в работе» — все недостигнутые, и отстающие, и идущие по плану.
+  const behind = items.length - done.length;
   const titles = done.map((item) => lowerFirst(withoutEmployerFigures(item.title))).filter(Boolean);
   const progress = `${done.length} из ${items.length} целей достигнуто${behind > 0 ? `, ${behind} в работе` : ''}`;
   return {

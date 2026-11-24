@@ -150,7 +150,21 @@ export interface CandidateExport extends CandidateSnapshot {
   /** B738 · 1: отклики с событиями, собеседованиями и оффером, анкеты, отказы, действия. */
   tracker: import('./trackerExport').TrackerExport;
   notifications: import('./notificationExport').NotificationExport;
+  /** B755: ключи доступа — название устройства и даты, без ключей. */
+  passkeys: import('./passkeyExport').ExportedPasskey[];
   profileHistory: import('./profileHistoryExport').ProfileHistoryExport;
+  /** B738 · 4: черновики, посты ленты, варианты текстов и LinkedIn. */
+  content: import('./contentExport').ContentExport;
+  /** B738 · 5: контакты рекрутёров, сообщения и статусы «писали / ответили». */
+  contacts: import('./contactsCareerExport').ContactsExport;
+  /** B738 · 6: компании, цели роста, доход, путь профессии, места переезда, вакансии подписки. */
+  careerSections: import('./contactsCareerExport').CareerSectionsExport;
+  /** B738 · 7: логин, оплаты и подписка, настройки, согласия, статусы — без паролей, кодов и ключей провайдера. */
+  account: import('./accountExport').AccountExport;
+  /** B738 · 8: автоотклики и hh.ru — настройки, очередь с письмами, журнал, попытки, подъём, снимок резюме. */
+  automation: import('./automationExport').AutomationExport;
+  /** B738 · 9: записи интервью с расшифровкой и разбором, имя собеседника. */
+  interviewRecordings: import('./interviewRecordingExport').InterviewRecordingExport;
   relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];

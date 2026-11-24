@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { HhApplyOutcome, HhResumeSnapshot } from '../../shared/hhCandidateSession';
+import {
+  HH_LATE_SENT_MS,
+  HH_WINDOW_LEFT_OPEN_FAILURES,
+  type HhApplyOutcome,
+  type HhResumeSnapshot,
+} from '../../shared/hhCandidateSession';
 import { SealedText } from '../data/sealedText';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
@@ -65,6 +70,11 @@ function toAttempt(row: AttemptRow): HhAttemptRow {
   };
 }
 
+/** Связанные данные снимка резюме hh.ru; выгрузка открывает снимок тем же ключом (B738 · 8). */
+export function hhResumeSnapshotScope(candidateId: string): string {
+  return `hh-resumes:${candidateId}`;
+}
+
 export class SqliteHhSessionRepository {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
@@ -82,7 +92,7 @@ export class SqliteHhSessionRepository {
   }
 
   private scope(candidateId: string): string {
-    return `hh-resumes:${candidateId}`;
+    return hhResumeSnapshotScope(candidateId);
   }
 
   getSnapshot(candidateId: string): HhResumeSnapshot | null {
@@ -165,6 +175,30 @@ export class SqliteHhSessionRepository {
          WHERE candidate_id = ? AND id = ? AND outcome IS NULL`,
       )
       .run(input.outcome, input.failureCode, input.now.toISOString(), candidateId, attemptId);
+    return Number(result.changes) === 1;
+  }
+
+  /**
+   * B708: кандидат завершил отклик в том же окне hh.ru после неуспешной попытки. Код сбоя
+   * остаётся: на нём держится пауза площадки после проверки.
+   */
+  markSentLater(candidateId: string, attemptId: string, input: { vacancyId: string; now: Date }): boolean {
+    const since = new Date(input.now.getTime() - HH_LATE_SENT_MS).toISOString();
+    const codes = HH_WINDOW_LEFT_OPEN_FAILURES.map(() => '?').join(', ');
+    const result = this.database
+      .prepare(
+        `UPDATE hh_apply_attempts SET outcome = 'sent', finished_at = ?
+         WHERE candidate_id = ? AND id = ? AND vacancy_id = ? AND outcome = 'failed'
+           AND finished_at >= ? AND failure_code IN (${codes})`,
+      )
+      .run(
+        input.now.toISOString(),
+        candidateId,
+        attemptId,
+        input.vacancyId,
+        since,
+        ...HH_WINDOW_LEFT_OPEN_FAILURES,
+      );
     return Number(result.changes) === 1;
   }
 }

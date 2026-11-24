@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { B640Notification } from './b640NotificationsApi';
-import { FEED_FILTERS, feedAction, feedSubtitle } from './feedModel';
+import { FEED_FILTERS, feedAction, feedSubtitle, pinnedAction, pinnedTitle } from './feedModel';
 
 function item(overrides: Partial<B640Notification>): B640Notification {
   return {
@@ -50,6 +50,17 @@ describe('B671 лента уведомлений', () => {
     );
   });
 
+  it('подборка с порогом зарплаты: «выше 450 тыс. ₽» после времени (n01b)', () => {
+    const digest = item({
+      kind: 'new_vacancies_by_role',
+      role: null,
+      eventAt: null,
+      createdAt: '2026-11-09T07:05:00.000Z',
+      note: 'выше 450 тыс. ₽',
+    });
+    expect(feedSubtitle(digest, NOW, TZ)).toBe('9 ноября · выше 450 тыс. ₽');
+  });
+
   it('действие ведёт к отклику, подключениям или подборке', () => {
     expect(feedAction(item({}))).toEqual({ label: 'Ответить', path: '/app/responses/app-7' });
     expect(feedAction(item({ kind: 'offer' }))).toEqual({
@@ -69,5 +80,42 @@ describe('B671 лента уведомлений', () => {
       item({ kind: 'new_vacancies_by_role', sourceType: 'matched_vacancy_batch' }),
     );
     expect(vacancies.label).toBe('Смотреть вакансии');
+  });
+});
+
+describe('n01b: блок «Важно»', () => {
+  it('сбой доставки — «Отклик не дошёл · компания · роль» и «Повторить» к письму отклика', () => {
+    const failed = item({
+      kind: 'delivery_error',
+      title: 'Отклик не доставлен · Ладога Банк',
+      company: 'Ладога Банк',
+      role: 'Руководитель разработки',
+    });
+    expect(pinnedTitle(failed)).toBe('Отклик не дошёл · Ладога Банк · Руководитель разработки');
+    expect(pinnedAction(failed)).toEqual({
+      label: 'Повторить',
+      path: '/app/responses/app-7/letter',
+      icon: 'repeat',
+    });
+  });
+
+  it('вход на площадку — «Подключить» с иконкой, прочие — без изменений', () => {
+    const login = item({ kind: 'platform_login_required', title: 'Отклик не доставлен · Карта' });
+    expect(pinnedAction(login)).toMatchObject({ label: 'Подключить', icon: 'refresh' });
+    expect(pinnedTitle(login)).toBe('Отклик не доставлен · Карта · Руководитель платформы');
+    expect(pinnedAction(item({}))).not.toHaveProperty('icon');
+  });
+
+  it('подборка дня: без даты события — сегодня время, раньше день', () => {
+    const digest = item({
+      kind: 'new_vacancies_by_role',
+      role: null,
+      eventAt: null,
+      createdAt: '2026-11-16T07:05:00.000Z',
+    });
+    expect(feedSubtitle(digest, NOW, TZ)).toBe('10:05');
+    expect(feedSubtitle({ ...digest, createdAt: '2026-11-14T07:05:00.000Z' }, NOW, TZ)).toBe(
+      '14 ноября',
+    );
   });
 });

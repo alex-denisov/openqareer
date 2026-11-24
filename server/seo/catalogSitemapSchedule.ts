@@ -12,10 +12,10 @@ import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
 import { snapshotDue, snapshotSitemapCards } from './catalogArchive';
 import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
-import {
-  readCatalogSitemaps,
-  writeCatalogSitemaps,
-} from './catalogSitemapJob';
+import { writeCatalogSitemaps } from './catalogSitemapJob';
+import { CatalogSitemapReader } from './catalogSitemapChanged';
+import { labelledTimer } from '../observability/backgroundSteps';
+import { nextTurn } from '../data/chunkedRows';
 import type { ListingIndexHistory } from './catalogIndexing';
 import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
 import { createGoogleIndexingNotifier } from './googleIndexing';
@@ -65,11 +65,14 @@ function errorName(error: unknown): string {
 }
 
 /** A failed step leaves the set as it is and never stops the sitemap files. */
-function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): void {
+async function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): Promise<void> {
   try {
     const cap = cardRolloutDailyCap(process.env.OPENQAREER_CARD_ROLLOUT_DAILY_CAP);
     const started = Date.now();
-    const report = admitCardRollout(database, now, cap);
+    const report = await admitCardRollout(database, now, cap, {
+      choose: (quota) =>
+        heavyRead(database, 'cardRolloutCandidates', { nowMs: now.getTime(), quota }, log),
+    });
     log.info({ ...report, cap, ms: Date.now() - started }, 'catalog-card-rollout');
   } catch (error: unknown) {
     log.error({ errorName: errorName(error) }, 'catalog-card-rollout-failed');
@@ -123,7 +126,7 @@ export function scheduleCatalogSitemapJob(
     const started = Date.now();
     try {
       const now = new Date();
-      runCardRollout(database, log, now);
+      await runCardRollout(database, log, now);
       runMarketReport(database, log, now);
       // B649-3: grouping the catalog held the loop ~40 s; read in its own thread.
       const files = await heavyRead(database, 'sitemaps', { nowMs: now.getTime() }, log);
@@ -159,22 +162,37 @@ export function scheduleCatalogSitemapJob(
   };
 }
 
-/** Web server: a read of a handful of rows, then the in-memory set is replaced. */
+/**
+ * Web server: the in-memory set is replaced from a read-only connection. B776: every read is its
+ * own turn of the loop (the history is 11 thousand rows, read in portions), and a slow run is
+ * never overlapped by the next timer.
+ */
 export function scheduleCatalogSitemapRefresh(databasePath: string, log: SitemapLog): () => void {
-  const refresh = () => {
+  const sitemaps = new CatalogSitemapReader();
+  let running = false;
+  const read = async () => {
+    if (running) return;
+    running = true;
     let database: DatabaseSync | undefined;
     try {
+      await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
-      setCatalogSitemaps(readCatalogSitemaps(database));
-      setListingHistory(readListingHistory(database));
+      setCatalogSitemaps(sitemaps.readIfChanged(database));
+      await nextTurn();
+      setListingHistory(await readListingHistory(database));
+      await nextTurn();
       setMarketReports(readMarketReports(database));
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed');
     } finally {
       database?.close();
+      running = false;
     }
   };
+  const refresh = labelledTimer('web:sitemap-refresh', read, (error) =>
+    log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed'),
+  );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);
   every.unref();

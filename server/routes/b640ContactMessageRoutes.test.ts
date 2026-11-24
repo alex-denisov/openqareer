@@ -90,6 +90,13 @@ describe('B698: POST contact-messages', () => {
     expect(b.text).not.toContain('300');
   });
 
+  it('B753: знакомому «Откликаюсь на вакансию…» не принимается — шаблон', async () => {
+    const formula = await setup('Анна, добрый день! Откликаюсь на вакансию директора по данным в Альфа.');
+    const text = (await formula.draft()).json().data.text as string;
+    expect(text).not.toContain('Откликаюсь');
+    expect(text).toContain('Анна');
+  });
+
   it('проверяет тело: нужен ровно один получатель, вид из списка, чужой контакт — 404', async () => {
     const { send, draft, seed } = await setup();
     await draft();
@@ -118,6 +125,169 @@ describe('B698: POST contact-messages', () => {
     expect(JSON.stringify(res.json())).not.toMatch(/maria@|\+7000|email|phone/iu);
     expect(writer.calls[0]?.vacancy.title).toBe('Директор по данным');
     expect((await send('POST', BASE, 'flagged.test', { recruiterId: 'rec1', kind: 'recruiter' })).statusCode).toBe(404);
+  });
+});
+
+describe('B682: POST contact-messages/:id/variants', () => {
+  const list = (id: string) => `/api/v1/candidate/text-variants?kind=message&subjectId=${id}`;
+
+  it('пишет вариант с пожеланием, хранит у черновика; четвёртый — 409 без модели', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    writer.body = 'Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?';
+    const make = (body: object = {}) => send('POST', `${BASE}/${id}/variants`, 'flagged.test', body);
+    const first = await make({ wish: { chips: ['shorter'], text: 'на «вы»' } });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().data).toMatchObject({ remaining: 2, variant: { position: 1, text: writer.body } });
+    expect(writer.calls.at(-1)?.wish).toContain('заметно короче');
+    expect(writer.calls.at(-1)?.wish).toContain('Прежний текст');
+    expect((await send('GET', list(id), 'flagged.test')).json().data.variants).toHaveLength(1);
+    await make();
+    expect((await make()).json().data.remaining).toBe(0);
+    const calls = writer.calls.length;
+    const fourth = await make();
+    expect(fourth.statusCode).toBe(409);
+    expect(fourth.json().error.code).toBe('variant_limit_reached');
+    expect(writer.calls).toHaveLength(calls);
+  });
+
+  it('повторное открытие продолжает черновик: предел в три не обойти, после отправки — новый', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    writer.body = 'Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?';
+    const make = (messageId: string) => send('POST', `${BASE}/${messageId}/variants`, 'flagged.test', {});
+    for (let step = 0; step < 3; step += 1) expect((await make(id)).statusCode).toBe(201);
+    const calls = writer.calls.length;
+    const again = await draft();
+    expect([again.statusCode, again.json().data.id]).toEqual([200, id]);
+    expect((await make(again.json().data.id)).statusCode).toBe(409);
+    expect(writer.calls).toHaveLength(calls);
+    expect((await send('GET', list(id), 'flagged.test')).json().data.variants).toHaveLength(3);
+    const other = await draft({ contactId: 'anna', vacancyId: 'c1', kind: 'known_contact' });
+    expect(other.json().data.id).not.toBe(id);
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    expect((await draft()).json().data.id).toBe(id);
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${id}/sent`, 'flagged.test');
+    expect((await draft()).json().data.id).not.toBe(id);
+  });
+
+  it('два запроса сразу дают один черновик; сменился адрес получателя — новый черновик', async () => {
+    const { seed, send } = await setup();
+    await seed('anna', { fullName: 'Анна Ким', companyName: 'Альфа', linkedinUrl: 'https://www.linkedin.com/in/anna-kim' });
+    const body = { contactId: 'anna', kind: 'known_contact' };
+    const [a, b] = await Promise.all([0, 1].map(() => send('POST', BASE, 'flagged.test', body)));
+    expect(a!.json().data.id).toBe(b!.json().data.id);
+    await seed('anna', { fullName: 'Анна Ким', companyName: 'Альфа', linkedinUrl: 'https://www.linkedin.com/in/anna-new' });
+    const moved = await send('POST', BASE, 'flagged.test', body);
+    expect(moved.json().data.id).not.toBe(a!.json().data.id);
+  });
+
+  it('без флага, чужой, отправленный, плохое тело и сбой модели — отказ', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    const url = `${BASE}/${id}/variants`;
+    const calls = writer.calls.length;
+    for (const user of ['plain.test', 'other.test'] as const) {
+      expect((await send('POST', url, user, {})).statusCode).toBe(404);
+    }
+    expect((await send('POST', url, undefined, {})).statusCode).toBe(404);
+    expect((await send('POST', url, 'flagged.test', { wish: { chips: ['louder'] } })).statusCode).toBe(400);
+    expect(writer.calls).toHaveLength(calls);
+    writer.body = undefined;
+    expect((await send('POST', url, 'flagged.test', {})).statusCode).toBe(503);
+    expect((await send('GET', list(id), 'flagged.test')).json().data.variants).toEqual([]);
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${id}/sent`, 'flagged.test');
+    expect((await send('POST', url, 'flagged.test', {})).statusCode).toBe(409);
+  });
+});
+
+describe('B753: своя цепочка сообщения', () => {
+  it('черновик пишет писатель сообщений, писатель письма не вызывается', async () => {
+    const letter = stubWriter('Письмо работодателю');
+    const contact = stubWriter('Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?');
+    const h = await createB640Harness({ pool: () => [], coverLetterWriter: letter, contactMessageWriter: contact });
+    closers.push(h.close);
+    const own = h.candidateIds['flagged.test'];
+    h.candidates.saveResumeDraft(own, { ...EMPTY_RESUME_DRAFT, targetRole: 'Директор по данным',
+      candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline: 'Руководитель аналитики' } }, []);
+    const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
+    await h.app.inject({ method: 'PUT', url: `${OLD}/anna`, headers,
+      payload: { fullName: 'Анна Ким', companyName: 'Альфа', roleTitle: 'Рекрутер', relationship: 'Коллега', strength: 'strong' } });
+    const res = await h.app.inject({ method: 'POST', url: BASE, headers, payload: { contactId: 'anna', kind: 'known_contact' } });
+    expect(res.json().data.text).toContain('Давно не общались');
+    expect(contact.calls).toHaveLength(1);
+    expect(letter.calls).toHaveLength(0);
+    const review = contact.calls[0]?.review;
+    // Длинный текст первая проверка пропускает: его сокращает та же модель (решение CPO 23.11).
+    expect(review?.('Анна, привет! ' + 'а'.repeat(700))).toEqual([]);
+    expect(review?.('Анна, привет! Откликаюсь на вакансию в Альфа.')).toEqual(['contact_response_formula']);
+    expect(review?.('Анна, привет! Давно не общались.')).toEqual([]);
+  });
+});
+
+describe('B753: сокращение и роли по-русски', () => {
+  type Cluster = { canonicalTitle: string; canonicalCompany: string; descriptionSummary?: string; canonicalLocation?: string };
+  async function harness(bodies: string[], targetRole = 'Директор по данным', headline = 'Руководитель аналитики', cluster?: Cluster) {
+    const calls: CoverLetterWriteInput[] = [];
+    const contact: CoverLetterWriter = {
+      async writeCoverLetter(input) {
+        calls.push(input);
+        const body = bodies.shift();
+        return body ? { body, stage: 'stub' } : { stage: 'stub', failure: { stage: 'stub', kind: 'timeout' } };
+      },
+    };
+    const h = await createB640Harness({
+      pool: () => [], contactMessageWriter: contact, ...(cluster ? { engine: { getActiveCluster: () => cluster } } : {}),
+    });
+    closers.push(h.close);
+    h.candidates.saveResumeDraft(h.candidateIds['flagged.test'], { ...EMPTY_RESUME_DRAFT, targetRole,
+      candidate: { ...EMPTY_RESUME_DRAFT.candidate, fullName: 'Пётр Сидоров', headline } }, []);
+    const headers = { authorization: `Bearer ${h.tokens['flagged.test']}`, origin: 'http://localhost:3000' };
+    await h.app.inject({ method: 'PUT', url: `${OLD}/anna`, headers,
+      payload: { fullName: 'Анна Ким', companyName: 'Альфа', roleTitle: 'Рекрутер', relationship: 'Коллега', strength: 'strong' } });
+    const payload = { contactId: 'anna', kind: 'known_contact', ...(cluster ? { vacancyId: 'cluster-src-x:1' } : {}) };
+    const post = async () => (await h.app.inject({ method: 'POST', url: BASE, headers, payload })).json().data.text as string;
+    return { calls, post };
+  }
+
+  it('без вакансии текст «по поводу открытой вакансии» не принимается — шаблон без вакансии', async () => {
+    const { post } = await harness(['Анна, здравствуйте! Пишу по поводу открытой вакансии в Альфа.', 'Анна, здравствуйте! Пишу по поводу вакансии.']);
+    expect(await post()).not.toMatch(/ваканси/iu);
+  });
+
+  it('язык: английская вакансия — английский черновик, русская — русский', async () => {
+    const en = await harness(['Hello Anna! Happy to discuss.'], 'CTO', 'CTO', {
+      canonicalTitle: 'Senior Lead AI Engineer', canonicalCompany: 'Capital One',
+      descriptionSummary: 'We are looking for a lead engineer to build agentic AI platform services.', canonicalLocation: 'McLean, VA, United States',
+    });
+    await en.post();
+    expect(en.calls[0]?.chosenLanguage).toBe('en');
+    const ru = await harness(['Анна, здравствуйте!'], 'CTO', 'CTO', {
+      canonicalTitle: 'Директор по кредитным продуктам (CPO)', canonicalCompany: 'СБЕР',
+      descriptionSummary: 'Ищем руководителя кредитных продуктов.', canonicalLocation: 'Москва',
+    });
+    await ru.post();
+    expect(ru.calls[0]?.chosenLanguage).toBe('ru');
+  });
+
+  it('длинный текст — та же модель сокращает свой текст, шаблон не нужен', async () => {
+    const long = `Анна, привет! Давно не общались. ${'Очень длинное пояснение. '.repeat(30)}`;
+    const { calls, post } = await harness([long, 'Анна, привет! Давно не общались. Расскажешь о команде данных?']);
+    expect(await post()).toBe('Анна, привет! Давно не общались. Расскажешь о команде данных?');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.correction).toContain('Сократи');
+    expect(calls[1]?.correction).toContain(long.trim().slice(0, 40));
+  });
+
+  it('профиль идёт к модели как есть; целевые роли — отдельной строкой по-русски; английская целевая роль — повтор', async () => {
+    const { calls, post } = await harness(['Анна, привет! Давно не общались.'], 'Chief Operating Officer', 'Chief Operating Officer в Альфа');
+    await post();
+    expect(calls[0]?.profile).toContain('Chief Operating Officer в Альфа');
+    expect(calls[0]?.wish).toContain('«Операционный директор»');
+    expect(calls[0]?.review?.('Анна, привет! Ищу роль Chief Operating Officer.')).toEqual(['contact_english_role']);
+    expect(calls[0]?.review?.('Анна, привет! Был Chief Operating Officer в Альфа.')).toEqual([]);
   });
 });
 

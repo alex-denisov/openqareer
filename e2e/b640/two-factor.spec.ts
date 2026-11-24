@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
-import { candidate } from '../fixtures/readabilityWorkspace';
+import { account, candidate } from '../fixtures/readabilityWorkspace';
 import { expectGates } from './gates';
 
 // B401: включение 2FA в n04 → резервные коды один раз → выход → вход с кодом
@@ -184,4 +184,102 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
     { challenge: 'oq2_e2e', code: CODES[2] },
   ]);
   expect(server.usedCodes).toEqual([CODES[2]]);
+});
+
+// B755: «Вход по Touch ID / Face ID» в n04. Сервер подменён, а системное окно — настоящее:
+// виртуальный аутентификатор Chromium отвечает на navigator.credentials.create.
+// RP ID не бывает IP-адресом, поэтому страница открывается по localhost.
+const PORT = Number(process.env.E2E_PORT ?? 4173);
+const THIS_MAC = 'MacBook · Safari';
+
+interface PasskeyServer {
+  keys: { id: string; deviceLabel: string | null; createdAt: string; lastUsedAt: string | null }[];
+  optionBodies: { password?: string; code?: string }[];
+  registrations: { token: string; response: { id: string } }[];
+}
+
+const creationOptions = {
+  challenge: 'YWJjZGVmZ2hpamtsbW5vcA',
+  rp: { name: 'openqareer', id: 'localhost' },
+  user: { id: 'dXNlci0x', name: 'candidate', displayName: 'candidate' },
+  pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+  authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+  attestation: 'none',
+  timeout: 60_000,
+};
+
+async function mockPasskeys(page: Page): Promise<PasskeyServer> {
+  const server: PasskeyServer = { keys: [], optionBodies: [], registrations: [] };
+  await mockTwoFactor(page);
+  await page.route(
+    (url) => url.pathname === '/api/v1/account',
+    (route) =>
+      route.request().method() === 'GET'
+        ? json(route, { ...account, sessions: [{ ...account.sessions[0], deviceLabel: THIS_MAC }] })
+        : route.fallback(),
+  );
+  await page.route('**/api/v1/account/passkeys**', (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (request.method() === 'GET') return json(route, { passkeys: server.keys });
+    if (path.endsWith('/options')) {
+      server.optionBodies.push(request.postDataJSON() as { password?: string });
+      return json(route, { options: creationOptions, token: 'oqp_e2e_token' });
+    }
+    server.registrations.push(
+      request.postDataJSON() as { token: string; response: { id: string } },
+    );
+    server.keys = [
+      { id: 'k1', deviceLabel: THIS_MAC, createdAt: '2026-11-22T10:00:00.000Z', lastUsedAt: null },
+    ];
+    return json(route, { id: 'k1' });
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+  return server;
+}
+
+test('B755: Touch ID / Face ID — строка в «Вход», добавление устройства, гейты', async ({
+  page,
+}) => {
+  const server = await mockPasskeys(page);
+  await page.goto(`http://localhost:${PORT}/app/account/security`, {
+    waitUntil: 'domcontentloaded',
+  });
+  const screen = page.locator('[data-b640-node="n04"]');
+  const row = screen.locator('.set-row', { hasText: 'Вход по Touch ID / Face ID' });
+  await expect(row.locator('.set-t')).toBeVisible();
+  await expect(row.locator('.set-v')).toHaveText('выключено');
+  await expect(row.getByRole('button', { name: 'Добавить устройство' })).toBeVisible();
+  await expectGates(page);
+
+  await row.getByRole('button', { name: 'Добавить устройство' }).click();
+  const form = screen.locator('form.c5-form');
+  await expect(form.getByLabel('Текущий пароль')).toBeVisible();
+  await expect(form.getByLabel('Код из приложения-аутентификатора')).toHaveCount(0);
+  await expectGates(page);
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  await form.getByLabel('Текущий пароль').fill('secret-password');
+  await form.getByRole('button', { name: 'Добавить' }).click();
+  await expect(row.locator('.set-v')).toHaveText('включено на этом Mac');
+  await expect(form).toHaveCount(0);
+  expect(server.optionBodies).toEqual([{ password: 'secret-password' }]);
+  expect(server.registrations).toHaveLength(1);
+  expect(server.registrations[0]?.token).toBe('oqp_e2e_token');
+  expect(server.registrations[0]?.response.id).toEqual(expect.any(String));
+  await expectGates(page);
 });

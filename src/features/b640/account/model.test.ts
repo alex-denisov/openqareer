@@ -3,6 +3,7 @@ import type { CandidateConnection } from '../../coach/coachApi';
 import {
   connectedCount,
   connectionLine,
+  emailConfirmed,
   connectionsSummary,
   deviceLine,
   deviceName,
@@ -45,6 +46,10 @@ describe('модель «Аккаунта»', () => {
 
   it('строка площадки: состояние без лишних слов', () => {
     expect(connectionLine(hh)).toBe('подключено');
+    // B774: как в макете n03 — чей аккаунт подключён.
+    expect(connectionLine({ ...hh, account: 'Марина Соколова' } as typeof hh)).toBe(
+      'Марина Соколова · подключено',
+    );
     expect(connectionLine(linkedin)).toBe('не подключено');
     expect(connectionLine({ ...base, platform: 'hh', status: 'imported', importedAt: '2026-11-01' })).toBe(
       'данные загружены, вход не выполнен',
@@ -135,5 +140,11 @@ describe('модель «Аккаунта»', () => {
       'Вакансии нужных компаний',
       'Итоги недели',
     ]);
+  });
+
+  it('B774: почта без поля «подтверждена» — проверка ей не нужна, как решает сервер', () => {
+    expect(emailConfirmed({ emailVerified: true })).toBe(true);
+    expect(emailConfirmed({})).toBe(true);
+    expect(emailConfirmed({ emailVerified: false })).toBe(false);
   });
 });

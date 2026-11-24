@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ProfileHistoryItem } from '../../resume/profileHistoryApi';
-import { canReapply, canRevert, historyDays, historyHeading, sourceLabel } from './historyModel';
+import {
+  canReapply,
+  canRevert,
+  historyDays,
+  historyHeading,
+  sourceChips,
+  sourceLabel,
+} from './historyModel';
 
 function entry(overrides: Partial<ProfileHistoryItem>): ProfileHistoryItem {
   return {
@@ -23,6 +30,12 @@ describe('b640 profile: история изменений', () => {
     expect(historyHeading(8)).toBe('8 правок профиля');
     expect(historyHeading(1)).toBe('1 правка профиля');
     expect(historyHeading(0)).toBe('Правок пока нет');
+  });
+
+  it('чипы источника: счёт сервера, пустых нет', () => {
+    expect(sourceChips(undefined)).toEqual([]);
+    const chips = sourceChips({ all: 8, candidate: 3, consultant: 0 });
+    expect(chips.map((chip) => chip.label)).toEqual(['Все · 8', 'С ваших слов · 3']);
   });
 
   it('источник правки называет простым словом', () => {

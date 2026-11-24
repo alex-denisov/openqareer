@@ -33,6 +33,10 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * Порядок ступеней — по замеру 28.10 на реальных входах хода консультанта:
  * gpt-5.6-luna 4/4, deepseek-v4.1-flash 3/4, glm-5.3-flash 4/4.
  *
+ * 23.11: Vertex выключен решением владельца 20.11 («не используем и не пополняем»): каждый вызов
+ * терял время на отказе `credit_spent`. Vertex убран из всех цепочек, кроме последней ступени письма;
+ * порядок остальных ступеней прежний. Ниже — история.
+ *
  * Решение владельца 04.11: Vertex Gemini — ПЕРВАЯ ступень, пока идёт стартовый кредит Vertex (сгорает
  * около 09.11); ступени после него прежние (DeepSeek и GLM с повторами). Все вызовы Vertex идут через
  * одни ворота (`vertexCredit.ts`): общий потолок по журналу, дневной предел, срок кредита, отключение
@@ -70,16 +74,20 @@ export const MODEL_CHAINS = {
    * luna — 14 чистых пунктов за 36–43 с; glm — 12 пунктов за 63 с, слабее; deepseek
    * v4.1-flash тратит все 16 000 токенов на рассуждение и не отвечает.
    */
-  experienceBullets: [VERTEX, LUNA, GLM_FLASH],
+  experienceBullets: [LUNA, GLM_FLASH],
   /**
-   * B686: разбор KPI из текста, таблицы или фото слайда. Кандидат ждёт ответа; фото читает
-   * только Vertex, остальные ступени — запас для текста и таблицы.
+   * B686: разбор KPI из текста, таблицы или фото слайда. Кандидат ждёт ответа. Фото читают обе
+   * ступени (вход изображения у luna и glm-5.3-flash по каталогу OpenRouter 23.11).
    */
-  kpiImport: [VERTEX, LUNA, GLM_FLASH],
+  kpiImport: [LUNA, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
-  bulk: [VERTEX, DEEPSEEK_V4_FLASH, GLM_FLASH],
-  /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
-  roleNames: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
+  bulk: [DEEPSEEK_V4_FLASH, GLM_FLASH],
+  /**
+   * Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. Без Vertex
+   * (выключен решением владельца 20.11): прод 23.11 каждое называние начиналось с отказа
+   * «vertex skipped: credit_spent», и «Карьера» ждала его в каждой роли.
+   */
+  roleNames: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Сопроводительное письмо (решение владельца, B601, 06.11): порядок по его чтению писем на настоящем
    * мастер-профиле. Отменяет для письма правило «Gemini первым» от 04.11.
@@ -91,7 +99,13 @@ export const MODEL_CHAINS = {
    * (`vertexCredit.ts`, кончился 09.11).
    */
   coverLetters: [DEEPSEEK_FLASH, GLM_FLASH, VERTEX],
-  linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
+  /**
+   * B753 (решение CPO 23.11): сообщение знакомому и рекрутёру — короткий текст, DeepSeek на нём
+   * упирался в 8 с потолка в каждом черновике (прод 22–23.11), отвечал GLM. GLM первым, DeepSeek
+   * запасом, без Vertex; после отказа обоих — шаблон. Цепочка письма (B601) не меняется.
+   */
+  contactMessages: [GLM_FLASH, DEEPSEEK_FLASH],
+  linkedinDrafts: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
    * цепочка консультанта, а не фон. Без Vertex (решение владельца 05.11): кандидат ждёт,
@@ -104,8 +118,10 @@ export const MODEL_CHAINS = {
    * OpenRouter с запретом сбора данных (`personal`), без Vertex (выключен решением владельца 20.11).
    */
   goalTaskSuggestions: [DEEPSEEK_FLASH, GLM_FLASH],
+  /** B750: задача System Design под вакансию; вход — только публичный текст вакансии. */
+  systemDesignTasks: [DEEPSEEK_FLASH, GLM_FLASH],
   /** Структурный JSON без текста для человека: как фон. */
-  campaignRoles: [VERTEX, DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
+  campaignRoles: [DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;
 
 export type ModelMechanic = keyof typeof MODEL_CHAINS;

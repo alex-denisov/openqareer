@@ -52,7 +52,9 @@ async function postOwnVacancy(deps: RouteDeps, request: FastifyRequest, reply: F
   const body = bodySchema.safeParse(request.body);
   if (!body.success) return sendError(reply, request, 400, 'invalid_own_vacancy', 'Вставьте ссылку или текст вакансии.', false);
   try {
-    const data = await createOwnVacancy(deps, context.store, context.candidateId, body.data);
+    // B676: домен, код и байты чтения страницы — чтобы отказ сайта был виден в журнале.
+    const data = await createOwnVacancy(deps, context.store, context.candidateId, body.data, (trace) =>
+      request.log.info(trace, 'own-vacancy-page-read'));
     return { data, meta: meta(request) };
   } catch (error) {
     if (!(error instanceof OwnVacancyReadBusy)) throw error;

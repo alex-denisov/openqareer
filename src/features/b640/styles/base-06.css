@@ -390,7 +390,7 @@
   .b640 .lk-menu-l[hidden] { display: none; }
   .b640 .lk-dr-top { display: flex; align-items: center; justify-content: space-between; gap: var(--career-space-2); }
   .b640 .lk-dr-top .lk-lbl { margin: 0; }
-  .b640 .alt-wish { inline-size: 100%; box-sizing: border-box; min-block-size: var(--career-target-min); padding-inline: var(--career-space-3); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); background: var(--career-surface); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
+  .b640 .alt-wish { inline-size: 100%; box-sizing: border-box; block-size: var(--career-target-min); min-block-size: var(--career-target-min); padding-inline: var(--career-space-3); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); background: var(--career-surface); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
   .b640 .alt-wish:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
   .b640 .lk-next { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--career-space-2); }
   .b640 .lk-next-t { margin: 0; font-size: var(--career-text-md); font-weight: 600; }
@@ -434,8 +434,11 @@
     .b640 .list-head.ot-head { min-inline-size: 0; max-inline-size: 100%; }
     .b640 .list-head.ot-head > .chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   }
-  .b640 .lk-inline { display: grid; gap: var(--career-space-3); margin-block-start: var(--career-space-3); padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); background: var(--career-surface); min-inline-size: 0; }
+  /* B698: колонка не шире строки — textarea с field-sizing: content иначе раздвигает страницу на 390. */
+  .b640 .lk-inline { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--career-space-3); margin-block-start: var(--career-space-3); padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); background: var(--career-surface); min-inline-size: 0; }
   .b640 .lk-inline .actions { margin: 0; }
+  /* B698: у черновика под строкой полные кнопки — на 390 они переносятся, а не уходят за край. */
+  .b640 .lk-inline .lk-draft + .actions { flex-wrap: wrap; }
   .b640 .lk-inline .lk-dr-top { display: flex; align-items: center; justify-content: space-between; gap: var(--career-space-2); }
   .b640 .ot-th.ot-c-st,
   .b640 .ot-c-st { inline-size: calc(var(--career-space-8) * 6); }

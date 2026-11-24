@@ -5,7 +5,11 @@ import type {
   FeedPostCreated,
   FeedPostPage,
 } from '../../../../../shared/b640FeedComments';
-import type { LinkedinQueuePage, LinkedinRhythm } from '../../../../../shared/b640LinkedinQueue';
+import type {
+  LinkedinQueueItem,
+  LinkedinQueuePage,
+  LinkedinRhythm,
+} from '../../../../../shared/b640LinkedinQueue';
 
 const BASE = '/api/v1/candidate/b640/linkedin';
 
@@ -57,3 +61,25 @@ export const createFeedPost = (input: { readonly url?: string; readonly text: st
 
 export const approveFeedPosts = (draftIds: readonly string[]) =>
   request<FeedApproveResponse>(`${BASE}/feed-posts/approve`, post({ draftIds }));
+
+/** a05 «Пропустить»: пост снимается с ленты, черновик отклоняется. */
+export const skipFeedPost = (draftId: string) =>
+  request<{ readonly draftId: string; readonly skipped: true }>(
+    `${BASE}/feed-posts/${encodeURIComponent(draftId)}/skip`,
+    post({}),
+  );
+
+/** a05e: ритм сохраняется на сервере, комментарии очереди встают на его слоты. */
+export const saveRhythm = (rhythm: LinkedinRhythm) =>
+  request<LinkedinRhythm>(`${BASE}/rhythm`, { ...post(rhythm), method: 'PUT' });
+
+/** a05b «Перенести»: новое время строки очереди. */
+export const rescheduleQueueItem = (id: string, at: string) =>
+  request<LinkedinQueueItem>(`${BASE}/queue/${encodeURIComponent(id)}`, {
+    ...post({ at }),
+    method: 'PATCH',
+  });
+
+/** a05b «Снять с очереди». */
+export const removeQueueItem = (id: string) =>
+  request<LinkedinQueueItem>(`${BASE}/queue/${encodeURIComponent(id)}`, { method: 'DELETE' });

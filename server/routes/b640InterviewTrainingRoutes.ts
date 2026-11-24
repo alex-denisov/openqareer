@@ -5,13 +5,15 @@ import {
   scoreInterviewAnswerWithQuotes,
 } from '../domain/interviewAnswerReview';
 import type { InterviewQuestion, InterviewSession } from '../domain/interviewSimulator';
-import { buildSystemDesignTask, type SystemDesignTask } from '../domain/systemDesignTask';
 import { extractSystemDesignSchema, type SystemDesignSchema } from '../domain/systemDesignSchema';
 import { linkReviewToSchema } from '../domain/systemDesignSchemaReview';
 import { correctedSchema, schemaPutBodySchema } from './b640InterviewSchemaBody';
 import type { CandidateIdentity } from '../data/candidateStore';
 import { sessionCandidate } from './b640VacancyContext';
+import { storedOrRuleTask, taskQuestion } from './b640SystemDesignTaskSource';
+import { registerB640SystemDesignTaskRoutes } from './b640SystemDesignTaskRoutes';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { judgedEvaluation } from './interviewAnswerJudging';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
@@ -77,26 +79,15 @@ function loadSession(
   return { candidate, session };
 }
 
-function taskFor(
-  deps: RouteDeps,
-  candidateId: string,
-  session: InterviewSession,
-): SystemDesignTask {
-  const application = session.applicationId
-    ? deps.candidateStore.getApplication(candidateId, session.applicationId)
-    : null;
-  return buildSystemDesignTask({
-    vacancyTitle: application?.vacancy?.title ?? session.vacancyTitle ?? session.roleTitle,
-    company: application?.vacancy?.companyHidden ? undefined : application?.vacancy?.company,
-    description: application?.vacancy?.description,
-  });
-}
-
 /** Условие задачи без образца ответа: образец показывается в разборе, после ответа. */
 const handleTask: Handler = async (deps, request, reply) => {
   const context = loadSession(deps, request, reply, (request.params as { id?: unknown }).id);
   if (!context) return reply;
-  const { exampleAnswer: _example, ...task } = taskFor(deps, context.candidate.id, context.session);
+  const { exampleAnswer: _example, ...task } = storedOrRuleTask(
+    deps,
+    context.candidate.id,
+    context.session,
+  );
   return { data: task, meta: { requestId: request.id } };
 };
 
@@ -144,7 +135,21 @@ const handleReview: Handler = async (deps, request, reply) => {
   }
   const { candidate, session, question } = context;
   const schema = question.type === 'system_design' ? schemaView(deps, context) : null;
-  const evaluation = scoreInterviewAnswerWithQuotes(question.answer.text, question.type);
+  // B780: модель оценивает критерии; у System Design «Требования» — по пунктам «Что важно в задаче».
+  const task =
+    question.type === 'system_design' ? storedOrRuleTask(deps, candidate.id, session) : null;
+  const evaluation = await judgedEvaluation(
+    deps,
+    request.log,
+    {
+      type: question.type,
+      // B647: на экране i03 задача отклика, а не вопрос сессии — судим по ней.
+      question: task ? taskQuestion(task) : question.prompt,
+      answer: question.answer.text,
+      ...(task ? { taskPoints: task.points } : {}),
+    },
+    scoreInterviewAnswerWithQuotes(question.answer.text, question.type),
+  );
   const facts = deps.candidateStore.getSnapshot(candidate.id).memory;
   const helpful = deps.candidateStore.interviewSimulatorRepo.reviewHelpful.get({
     candidateId: candidate.id,
@@ -157,10 +162,7 @@ const handleReview: Handler = async (deps, request, reply) => {
       type: question.type,
       evaluation: schema ? linkReviewToSchema(evaluation, schema.schema) : evaluation,
       numbers: checkAnswerNumbers(question.answer.text, facts),
-      exampleAnswer:
-        question.type === 'system_design'
-          ? taskFor(deps, candidate.id, session).exampleAnswer
-          : null,
+      exampleAnswer: task?.exampleAnswer ?? null,
       helpful,
       schema,
     },
@@ -271,6 +273,8 @@ const handleSchemaPut: Handler = async (deps, request, reply) => {
 /** B681: маршруты тренировки кабинета B640; без флага отвечают 404. */
 export function registerB640InterviewTrainingRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get(`${URL}/:id/system-design-task`, withDeps(deps, handleTask));
+  // B750: задача по отклику до начала тренировки — та же при повторном открытии.
+  registerB640SystemDesignTaskRoutes(app, deps);
   // Без лимита частоты: маршруты только для вошедшего кандидата (правило владельца 23.10).
   app.post(`${URL}/:id/questions/:questionId/review`, withDeps(deps, handleReview));
   app.put(`${URL}/:id/questions/:questionId/helpful`, withDeps(deps, handleHelpful));

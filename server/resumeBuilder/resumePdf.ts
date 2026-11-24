@@ -3,10 +3,13 @@ import {
   compactBuilderResume,
   contactLine,
   jobPeriod,
+  resumeHeadings,
+  tailSections,
   type BuilderResume,
   type ResumeTemplate,
 } from '../../shared/resumeBuilder/model';
 import { loadResumeFonts } from './resumeFonts';
+import { RESUME_PHOTO_GAP_PT, RESUME_PHOTO_PT, type ResumePhoto } from './resumePhoto';
 import { TEMPLATE_STYLES, type TemplateStyle } from './templateStyle';
 
 type Doc = InstanceType<typeof PDFDocument>;
@@ -18,17 +21,38 @@ function contentWidth(doc: Doc, style: TemplateStyle): number {
   return doc.page.width - style.margin * 2;
 }
 
-function head(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
+/** Фото справа вверху; текст шапки уже на его ширину. Возвращает нижний край фото. */
+function headPhoto(doc: Doc, style: TemplateStyle, photo: ResumePhoto | null): number {
+  if (!photo) return 0;
+  const x = style.margin + contentWidth(doc, style) - RESUME_PHOTO_PT;
+  doc.image(photo.bytes, x, style.margin, {
+    fit: [RESUME_PHOTO_PT, RESUME_PHOTO_PT],
+    align: 'center',
+    valign: 'center',
+  });
+  return style.margin + RESUME_PHOTO_PT;
+}
+
+function head(
+  doc: Doc,
+  resume: BuilderResume,
+  style: TemplateStyle,
+  photo: ResumePhoto | null,
+): void {
   const align = style.centeredHead ? 'center' : 'left';
   const name = style.nameUpper ? resume.fullName.toUpperCase() : resume.fullName;
+  const photoBottom = headPhoto(doc, style, photo);
+  const width = contentWidth(doc, style) - (photo ? RESUME_PHOTO_PT + RESUME_PHOTO_GAP_PT : 0);
+  doc.x = style.margin;
+  doc.y = style.margin;
   doc.font('bold').fontSize(style.nameSize).fillColor(INK);
-  doc.text(name || ' ', { align, characterSpacing: style.nameUpper ? 1 : 0 });
+  doc.text(name || ' ', { align, width, characterSpacing: style.nameUpper ? 1 : 0 });
   if (style.showTitle && resume.title) {
     doc
       .font('bold')
       .fontSize(style.bodySize + 2)
       .fillColor(hex(style.accent));
-    doc.text(resume.title, { align });
+    doc.text(resume.title, { align, width });
   }
   const contacts = contactLine(resume);
   if (contacts) {
@@ -36,8 +60,9 @@ function head(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
       .font('regular')
       .fontSize(style.bodySize - 0.5)
       .fillColor(hex(style.muted));
-    doc.moveDown(0.2).text(contacts, { align });
+    doc.moveDown(0.2).text(contacts, { align, width });
   }
+  doc.y = Math.max(doc.y, photoBottom);
 }
 
 function section(doc: Doc, title: string, style: TemplateStyle): void {
@@ -91,36 +116,44 @@ function bullets(doc: Doc, items: readonly string[], style: TemplateStyle): void
   doc.x = style.margin;
 }
 
+function paragraph(doc: Doc, title: string, lines: readonly string[], style: TemplateStyle): void {
+  section(doc, title, style);
+  doc.font('regular').fontSize(style.bodySize).fillColor(INK);
+  for (const text of lines) doc.text(text, { lineGap: style.lineGap });
+}
+
 function body(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
+  const titles = resumeHeadings(resume);
+  if (resume.about?.trim()) paragraph(doc, titles.about, [resume.about.trim()], style);
   if (style.showResults && resume.results.length) {
-    section(doc, 'Главные результаты', style);
+    section(doc, titles.results, style);
     bullets(doc, resume.results, style);
   }
   if (resume.jobs.length) {
-    section(doc, 'Опыт работы', style);
+    section(doc, titles.jobs, style);
     resume.jobs.forEach((job, index) => {
       if (index > 0) doc.moveDown(0.4);
       split(doc, job.company || job.role, job.city, 'bold', style);
-      split(doc, job.company ? job.role : '', jobPeriod(job), 'italic', style);
+      split(doc, job.company ? job.role : '', jobPeriod(job, resume.lang), 'italic', style);
       bullets(doc, job.bullets, style);
     });
   }
   if (resume.education.length) {
-    section(doc, 'Образование', style);
+    section(doc, titles.education, style);
     for (const item of resume.education) {
       split(doc, item.school, item.year, 'bold', style);
       if (item.degree) split(doc, item.degree, '', 'italic', style);
     }
   }
-  if (resume.skills.trim()) {
-    section(doc, 'Навыки', style);
-    doc.font('regular').fontSize(style.bodySize).fillColor(INK);
-    doc.text(resume.skills.trim(), { lineGap: style.lineGap });
-  }
+  for (const item of tailSections(resume)) paragraph(doc, item.title, item.lines, style);
 }
 
 /** A real PDF with embedded Cyrillic fonts, A4, text selectable for ATS. */
-export function renderResumePdf(input: BuilderResume, template: ResumeTemplate): Promise<Buffer> {
+export function renderResumePdf(
+  input: BuilderResume,
+  template: ResumeTemplate,
+  photo: ResumePhoto | null = null,
+): Promise<Buffer> {
   const resume = compactBuilderResume(input);
   const style = TEMPLATE_STYLES[template];
   const fonts = loadResumeFonts(style.family);
@@ -130,9 +163,11 @@ export function renderResumePdf(input: BuilderResume, template: ResumeTemplate):
     // pdfkit takes a font buffer here (its typings say only a path); the default
     // Helvetica would read an AFM file that the bundled server does not carry.
     font: fonts.regular as unknown as string,
-    lang: 'ru-RU',
+    lang: resume.lang === 'en' ? 'en-US' : 'ru-RU',
     info: {
-      Title: resume.fullName ? `Резюме — ${resume.fullName}` : 'Резюме',
+      Title: resume.fullName
+        ? `${resumeHeadings(resume).file} — ${resume.fullName}`
+        : resumeHeadings(resume).file,
       Creator: 'openqareer',
     },
   });
@@ -145,7 +180,7 @@ export function renderResumePdf(input: BuilderResume, template: ResumeTemplate):
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
     try {
-      head(doc, resume, style);
+      head(doc, resume, style, photo);
       body(doc, resume, style);
       doc.end();
     } catch (error) {

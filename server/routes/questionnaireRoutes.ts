@@ -12,7 +12,7 @@ import {
 } from '../candidate/sqliteQuestionnaireRepository';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
 import { answersToStore, buildQuestionnaire } from '../domain/applicationQuestionnaire';
-import type { QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
+import { linkedinProfileLink, type QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -45,11 +45,37 @@ const VACANCY_ID_MAX_LENGTH = 200;
 /** Через сутки вопросы читаются заново; анкета с ответами кандидата не перечитывается. */
 const QUESTIONS_TTL_MS = 24 * 60 * 60 * 1000;
 
-function fresh(stored: StoredQuestionnaire, now: number): boolean {
+/** До возврата B641 варианты обрезались на этом числе: такой список мог сохраниться неполным. */
+const LEGACY_OPTIONS_CUT = 30;
+/** Прочитанное с этого момента уже не обрезано: список ровно из 30 вариантов — полный. */
+const FULL_OPTIONS_SINCE = Date.parse('2026-11-25T00:00:00.000Z');
+
+export function isQuestionnaireFresh(stored: StoredQuestionnaire, now: number): boolean {
+  if (stored.submittedAt) return true;
+  const readAt = new Date(stored.readAt).getTime();
+  // Обрезанный список перечитывается сразу, а не через сутки.
+  const cut =
+    readAt < FULL_OPTIONS_SINCE &&
+    stored.questions.some((question) => question.options?.length === LEGACY_OPTIONS_CUT);
+  if (cut) return false;
   // Пустой ответ — только отметка «стёрто»: вопросы из-за него не закрепляются.
-  if (stored.answers.some((answer) => answer.text) || stored.submittedAt) return true;
-  return now - new Date(stored.readAt).getTime() < QUESTIONS_TTL_MS;
+  if (stored.answers.some((answer) => answer.text)) return true;
+  return now - readAt < QUESTIONS_TTL_MS;
 }
+
+/** Повторное чтение берёт свежие вопросы и не теряет те, на которые кандидат уже ответил. */
+export function mergeReadQuestions(
+  known: Pick<StoredQuestionnaire, 'questions' | 'answers'> | null,
+  fresh: readonly QuestionnaireQuestion[],
+): readonly QuestionnaireQuestion[] {
+  const freshIds = new Set(fresh.map((question) => question.id));
+  const answered = new Set(
+    known?.answers.filter((answer) => answer.text).map((answer) => answer.questionId),
+  );
+  const kept = known?.questions.filter(({ id }) => answered.has(id) && !freshIds.has(id)) ?? [];
+  return [...fresh.slice(0, QUESTIONNAIRE_MAX_QUESTIONS - kept.length), ...kept];
+}
+
 const answersSchema = z
   .object({
     answers: z
@@ -127,6 +153,13 @@ function vacancyLabel(
   return { ...(title ? { vacancyTitle: title } : {}), ...(company ? { vacancyCompany: company } : {}) };
 }
 
+/** Ссылка из контактов: с http(s) как есть, LinkedIn без схемы — полной, прочее не берём. */
+function safeProfileLink(link: string): readonly string[] {
+  const profile = linkedinProfileLink(link);
+  if (profile) return [profile];
+  return /^https?:\/\//u.test(link) ? [link] : [];
+}
+
 /** То, что в профиле записано дословно: контакты резюме и гражданство из условий поиска. */
 function profileFacts(
   deps: RouteDeps,
@@ -141,7 +174,7 @@ function profileFacts(
     ...(email ? { email } : {}),
     ...(contact?.phone ? { phone: contact.phone } : {}),
     ...(contact?.linkedinUrl ? { linkedinUrl: contact.linkedinUrl } : {}),
-    ...(contact?.links ? { links: contact.links.filter((link) => /^https?:\/\//u.test(link)) } : {}),
+    ...(contact?.links ? { links: contact.links.flatMap(safeProfileLink) } : {}),
     ...(contact?.location ? { location: contact.location } : {}),
     ...(decision?.citizenship ? { citizenship: decision.citizenship } : {}),
     ...(decision?.workFormats.includes('relocation') ? { openToRelocation: true } : {}),
@@ -173,14 +206,14 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const known = deps.forms.get(who.candidateId, who.vacancyId);
-  if (known && fresh(known, Date.now())) {
+  if (known && isQuestionnaireFresh(known, Date.now())) {
     return { data: view(deps, who, known, { state: 'ready', formUrl: null }), meta: { requestId: request.id } };
   }
   const source = await deps.reader(who.vacancyId);
   // Пустой список тоже запоминаем: вакансию без анкеты не читаем у площадки при каждом заходе.
   if (source?.questions) {
     deps.forms.saveQuestions(who.candidateId, who.vacancyId, {
-      questions: source.questions,
+      questions: mergeReadQuestions(known, source.questions),
       formUrl: source.formUrl,
       readAt: new Date().toISOString(),
     });

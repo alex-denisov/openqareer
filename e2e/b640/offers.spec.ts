@@ -110,11 +110,20 @@ test.describe('B658: «Офферы» нового кабинета', () => {
     page,
   }) => {
     const mock = await open(page, '/app/responses/offers/o-green', 'o06a', { failSave: 1 });
+    // B733: как общее поле даты — ошибка формата при уходе с поля, без сохранения.
+    const due = page.getByLabel('Срок ответа');
+    await due.fill('31022026');
+    await due.blur();
+    await expect(page.locator('#of-respondBy-err')).toHaveText('Дата в виде дд.мм.гггг');
+    await expect(due).toHaveAttribute('aria-invalid', 'true');
+    await expect(due).toHaveAttribute('aria-describedby', /of-respondBy-err/u);
+    expect(mock.calls).toEqual([]);
     await page.getByLabel('Срок ответа').fill('31.02.2026');
     await page.getByRole('button', { name: 'Сохранить условия' }).click();
     await expect(page.getByText('Дата в виде дд.мм.гггг')).toBeVisible();
     expect(mock.calls).toEqual([]);
-    await page.getByLabel('Срок ответа').fill('20.11.2026');
+    // B733: цифры без точек — точки ставит общее поле даты.
+    await page.getByLabel('Срок ответа').fill('20112026');
     await page.getByRole('button', { name: 'Сохранить условия' }).click();
     await expect(page.getByRole('alert')).toContainText('Условия не сохранились');
     await expect(page.getByLabel('Срок ответа')).toHaveValue('20.11.2026');

@@ -39,3 +39,28 @@ describe('B757: a fit too large for one call is not asked again', () => {
     expect(store.getJobStatus(input)?.state).toBe('pending');
   });
 });
+
+describe('a job superseded by a profile change goes instead of staying failed', () => {
+  it('discard deletes the leased row only for its own lease', () => {
+    const store = new SqliteVacancyFitStore(new DatabaseSync(':memory:'), new SealedText(Buffer.alloc(32, 7)));
+    store.enqueue(input, now);
+    const job = store.claim({ now })!;
+    expect(store.discard({ ...job, leaseToken: 'other' }, now)).toBe(false);
+    expect(store.discard(job, now)).toBe(true);
+    expect(store.getJobStatus(input)).toBeUndefined();
+    expect(store.enqueue(input, later).status).toBe('pending');
+  });
+
+  it('a purge batch removes old profile_changed rows only, a batch at a time', () => {
+    const database = new DatabaseSync(':memory:');
+    const store = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
+    const insert = database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,created_at,updated_at,last_error)
+      VALUES(?,'c','cipher',?,?,?,?)`);
+    for (let index = 0; index < 45; index += 1) insert.run(`s${index}`, 'failed', now, now, 'profile_changed');
+    insert.run('other-failed', 'failed', now, now, 'assessment_model_unavailable');
+    insert.run('waiting', 'pending', now, now, 'profile_changed');
+    expect([store.purgeSupersededBatch(), store.purgeSupersededBatch(), store.purgeSupersededBatch(), store.purgeSupersededBatch()]).toEqual([20, 20, 5, 0]);
+    const left = database.prepare('SELECT cache_key FROM vacancy_fit_queue ORDER BY cache_key').all().map((row) => row.cache_key);
+    expect(left).toEqual(['other-failed', 'waiting']);
+  });
+});

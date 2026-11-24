@@ -10,7 +10,8 @@ export interface CompanyBlockProps {
   readonly item: MatchedVacancyItem;
   readonly recruiter: RecruiterContact | undefined;
   readonly vacancyId: string;
-  readonly companyPath: string;
+  /** `null` — у вакансии нет компании: ссылки на её карточку нет. */
+  readonly companyPath: string | null;
   /** Отрасль и город из карточки компании (B677); пусто — берутся признаки вакансии. */
   readonly industry?: string | null | undefined;
   readonly location?: string | null | undefined;
@@ -92,6 +93,8 @@ function MoreLink({
 /** «О компании»: отрасль, город, рекрутёр вакансии, «Откликнуться напрямую», ссылка на компанию. */
 export function CompanyBlock(props: CompanyBlockProps) {
   const { recruiter, vacancyId, companyPath } = props;
+  // B726: без компании и рекрутёра блоку нечего сказать — пустой «О компании» не показываем.
+  if (!companyPath && !recruiter) return null;
   const facts = companyFacts(props);
   return (
     <Fold title="О компании" className="v4-about-co" openOnDesktop>
@@ -119,7 +122,13 @@ export function CompanyBlock(props: CompanyBlockProps) {
           </Link>
         </div>
       ) : null}
-      <MoreLink path={companyPath} vacancies={facts.moreVacancies} acquaint={props.acquaintCount} />
+      {companyPath ? (
+        <MoreLink
+          path={companyPath}
+          vacancies={facts.moreVacancies}
+          acquaint={props.acquaintCount}
+        />
+      ) : null}
     </Fold>
   );
 }

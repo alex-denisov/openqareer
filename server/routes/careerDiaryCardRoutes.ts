@@ -20,6 +20,7 @@ import {
   type CareerDiaryGoalDetails,
 } from '../../shared/careerDiaryCards';
 import { CareerDiaryIdempotencyConflictError } from '../data/sqliteCareerDiaryRepository';
+import { SqliteDiaryCheckpointRepository } from '../data/sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
 import { SqliteGoalTaskSuggestionRepository } from '../data/sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from '../data/sqliteKpiImportRepository';
@@ -27,7 +28,9 @@ import { careerDiaryPlanningSchema } from '../domain/careerDiaryAdaptation';
 import { buildAdaptationView } from '../domain/careerDiaryAdaptationView';
 import { cardRisk } from '../domain/careerDiaryCardRisk';
 import { requireCabinetB640 } from './cabinetB640Flag';
+import { registerCareerDiaryGoalTransferRoutes } from './careerDiaryGoalTransferRoutes';
 import { registerCareerDiaryKpiRoutes } from './careerDiaryKpiRoutes';
+import { registerCareerDiaryGoalHintRoutes } from './careerDiaryGoalHintRoutes';
 import { registerCareerDiaryTaskSuggestionRoutes } from './careerDiaryTaskSuggestionRoutes';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -42,7 +45,11 @@ export type CareerDiaryCardRouteDeps = RouteDeps & {
   readonly kpiImportRepository?: SqliteKpiImportRepository;
   readonly taskSuggestionRepository?: SqliteGoalTaskSuggestionRepository;
 };
-type BoundDeps = RouteDeps & { readonly details: () => SqliteDiaryDetailsRepository };
+type BoundDeps = RouteDeps & {
+  readonly details: () => SqliteDiaryDetailsRepository;
+  /** B687: отметка проверки на 30-й день — шаг d01 «пройдено» только с ней. */
+  readonly marks: () => SqliteDiaryCheckpointRepository;
+};
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const BASE = '/api/v1/candidate/career-diary';
@@ -273,6 +280,7 @@ function createCard(
       weight: input.weight ?? null,
       archive: null,
       quarterTargets: input.quarterTargets ?? null,
+      transfer: null,
     };
     deps.details().saveGoalDetail(candidate, goal.id, details);
   }
@@ -378,6 +386,7 @@ function adaptationView(deps: BoundDeps, candidate: string, workplaceId: string)
     tasks: planTasks(workplace),
     details: deps.details().adaptationDetails(candidate, workplaceId),
     asOf: today(),
+    day30Sent: deps.marks().get(candidate, workplaceId, 'day30').sentOn !== null,
   });
 }
 
@@ -469,7 +478,14 @@ export function registerCareerDiaryCardRoutes(
     return repository;
   };
   if (!deps.diaryDetailsRepository) app.addHook('onClose', async () => repository?.close());
-  const bound: BoundDeps = { ...deps, details };
+  let checkpoints: SqliteDiaryCheckpointRepository | null = null;
+  const marks = () =>
+    (checkpoints ??= new SqliteDiaryCheckpointRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: deps.config.dataEncryptionKey,
+    }));
+  app.addHook('onClose', async () => checkpoints?.close());
+  const bound: BoundDeps = { ...deps, details, marks };
   const read = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const write = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   app.get(`${BASE}/goal-cards`, read, withDeps(bound, listCards));
@@ -485,6 +501,16 @@ export function registerCareerDiaryCardRoutes(
     goalCard: (candidate, goalId) => cardOf(bound, candidate, goalId),
     goalTasks: (candidate, goalId) => goalPlanTasks(bound, candidate, goalId),
   });
+  registerCareerDiaryGoalTransferRoutes(app, {
+    candidateStore: deps.candidateStore,
+    candidateId: (request, reply) => candidateId(bound, request, reply),
+    goalId: (request, reply) => routeId(request, reply, 'goalId'),
+    cardOf: (candidate, goalId) => cardOf(bound, candidate, goalId),
+    saveTransfer: (candidate, goalId, transfer) =>
+      changeDetails(bound, candidate, goalId, (details) => ({ ...details, transfer })),
+    rateLimit: write,
+  });
+  registerCareerDiaryGoalHintRoutes(app, deps);
 }
 
 /** Задачи цели в плане основного места работы; `null` — основного места нет, задаче негде жить. */

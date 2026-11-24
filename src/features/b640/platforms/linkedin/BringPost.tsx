@@ -47,7 +47,14 @@ function Fields({
  * Пост приносит кандидат: текст обязателен (по ссылке одной мы пост не читаем), ссылка нужна
  * только для «Открыть в LinkedIn». Автора и причину выбора платформа не придумывает.
  */
-export function BringPost({ onCreated }: { readonly onCreated: () => void }) {
+export function BringPost({
+  onCreated,
+  primary = true,
+}: {
+  readonly onCreated: () => void;
+  /** На a05h главная кнопка — «Изменить темы»: здесь обычная, вторую главную макет не допускает. */
+  readonly primary?: boolean;
+}) {
   const [text, setText] = useState('');
   const [url, setUrl] = useState('');
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
@@ -80,7 +87,7 @@ export function BringPost({ onCreated }: { readonly onCreated: () => void }) {
         {phase.kind === 'busy' ? <StatusLine state="wait" text="Готовим комментарий…" /> : null}
         <div className="actions">
           <Button
-            variant="primary"
+            variant={primary ? 'primary' : 'default'}
             icon="plus"
             type="submit"
             disabled={!text.trim()}

@@ -52,9 +52,27 @@ describe('format: строка вакансии B640', () => {
     expect(rowGeo(item({ workFormat: 'office' }))).toBe('Не указана');
   });
 
+  it('B764: место — только слово об удалёнке, формат «в офисе» — без английского «Remote»', () => {
+    const remote = (canonicalLocation: string) =>
+      rowGeo(item({ canonicalLocation, isRemote: true, workFormat: 'office' }));
+    expect(remote('Remote')).toBe('Удалённо');
+    expect(remote('Remote job')).toBe('Удалённо');
+    expect(remote('Berlin, Remote')).toBe('Удалённо · Berlin');
+    expect(rowGeo(item({ canonicalLocation: 'Remote', workFormat: 'office' }))).toBe('Удалённо');
+  });
+
   it('формат словами, неизвестный — пусто', () => {
     expect(rowFormat(item({ workFormat: 'hybrid' }))).toBe('гибрид');
     expect(rowFormat(item({ workFormat: 'remote', isRemote: true }))).toBe('удалённо');
+  });
+
+  it('B765: сумма без периода 100–999 — как в вакансии, без ₽ и без периода (per diem 450–600 USD)', () => {
+    const view = moneyView(item({ salary: { from: 450, to: 600, currency: 'USD' } }), {
+      currency: 'RUB',
+      rates: RATES,
+    });
+    expect(view.text).toBe('$450–600');
+    expect(view.title).toBeUndefined();
   });
 
   it('деньги в рублях — без «≈» и без подсказки', () => {
@@ -84,6 +102,22 @@ describe('format: строка вакансии B640', () => {
     expect(view.text).toBe('≈ 22–26 тыс. AED');
     expect(view.title).toContain('В вакансии $6–7 тыс.');
     expect(view.title).toContain('1 AED = 24,8 ₽');
+  });
+
+  it('B765: годовая зарплата (Egen, прод 23.11) — в месяц, как вся колонка; в подсказке — «в год»', () => {
+    const egen = item({ salary: { from: 218000, to: 265000, currency: 'USD', period: 'year' } });
+    const view = moneyView(egen, { currency: 'RUB', rates: RATES });
+    expect(view.text).toMatch(/^≈ 1\s650–2\s005 тыс\. ₽$/u);
+    expect(view.title).toContain('В вакансии $218–265 тыс. в год');
+    expect(moneyView(egen, { currency: 'ORIG', rates: RATES }).text).toBe('$218–265 тыс. в год');
+  });
+
+  it('B765: почасовая ставка (Arootah, прод 23.11) — ставка в рублях «в час», без месячной суммы', () => {
+    const hourly = item({ salary: { from: 250, to: 400, currency: 'USD', period: 'hour' } });
+    const view = moneyView(hourly, { currency: 'RUB', rates: RATES });
+    expect(view.text).toBe('≈ 23–36 тыс. ₽ в час');
+    expect(view.title).toContain('В вакансии $250–400 в час');
+    expect(moneyView(hourly, { currency: 'ORIG', rates: RATES }).text).toBe('$250–400 в час');
   });
 
   it('нет курса или «Как в вакансии» — исходная сумма без «≈»', () => {

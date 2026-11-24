@@ -11,6 +11,8 @@ export type RoleOrigin = 'search' | 'experience' | 'own';
 export interface RoleCheck {
   readonly confirmed: number;
   readonly total: number;
+  /** B764: проверка пройдена под другим названием роли — какой и куда ведёт ссылка. */
+  readonly source?: { readonly title: string; readonly label: string };
 }
 
 /** Строка роли на вкладке «Роли» и столбец сравнения (s09, s10). */
@@ -62,6 +64,13 @@ function listOf(items: readonly { readonly text: string }[]): string | null {
         .join(', ');
 }
 
+/** B645-2 (s09, макет «hh.ru, 96 вакансий»): главный источник и «и ещё N», а не все площадки. */
+export function sourcesLine(sources: readonly string[]): string {
+  const [first, ...rest] = sources;
+  if (!first) return '';
+  return rest.length > 0 ? `${first} и ещё ${rest.length}` : first;
+}
+
 function originOf(role: ProposedRole, search: ReadonlySet<string>): RoleOrigin {
   if (namesOf(role).some((name) => search.has(name))) return 'search';
   return role.origin === 'candidate' ? 'own' : 'experience';
@@ -82,15 +91,16 @@ function rowOf(
     ),
   });
   const sample = wageSample(role);
+  const label = role.titleRu || roleLabel(role.title, titlesRu);
   const wageNote = model.isWageCalculated
-    ? [model.sources.join(', '), formatVacancyCount(sample), model.observedDate]
+    ? [sourcesLine(model.sources), formatVacancyCount(sample), model.observedDate]
         .filter(Boolean)
         .join(', ')
     : NO_WAGE;
   return {
     id: role.id,
     title: role.title,
-    label: role.titleRu || roleLabel(role.title, titlesRu),
+    label,
     wage: model.isWageCalculated ? model.wageDisplay : null,
     wageNote,
     vacancies: model.vacancyCount > 0 ? model.vacancyCount : null,
@@ -102,11 +112,34 @@ function rowOf(
     check:
       model.status === 'hypothesis'
         ? null
-        : {
+        : (runCheck(role, label, checked) ?? {
             confirmed: model.confirmedItems.length,
             total: model.confirmedItems.length + model.missingItems.length,
-          },
+          }),
   };
+}
+
+/**
+ * B764: проверка «Chief Operating Officer» засчитана и строке «VP of Operations» — у обеих
+ * это название среди псевдонимов. Такая строка честно называет роль проверки и её счёт.
+ * B645 (прод c6dac4fe): строка, чьё название совпадает с ролью проверки, считала по модели роли
+ * («6 из 6» рядом с «3 из 5» той же проверки). Если прогон знает число навыков — счёт прогона.
+ */
+function runCheck(
+  role: ProposedRole,
+  label: string,
+  checked: readonly CheckedRole[],
+): RoleCheck | null {
+  const names = namesOf(role);
+  const entry =
+    checked.find((item) => key(item.roleTitle) === key(role.title)) ??
+    checked.find((item) => names.includes(key(item.roleTitle)));
+  if (!entry || entry.skillCount === undefined) return null;
+  const confirmed = entry.confirmedSkills?.length ?? 0;
+  const counts = { confirmed, total: entry.skillCount };
+  const sourceLabel = entry.roleTitleRu ?? entry.roleTitle;
+  const ownRun = key(entry.roleTitle) === key(role.title) || key(sourceLabel) === key(label);
+  return ownRun ? counts : { ...counts, source: { title: entry.roleTitle, label: sourceLabel } };
 }
 
 function searchOnlyRow(title: string, titlesRu: RoleTitlesRu): RoleRow {
@@ -171,7 +204,9 @@ export function skillStripText(count: number): string {
 }
 
 export function compareCheckTag(row: RoleRow): { readonly text: string; readonly ok: boolean } {
-  if (!row.check) return { text: 'не начата', ok: false };
+  // B645-2 (решение оркестратора 23.11): столбец роли показывает проверку только этой роли;
+  // пройденная под другим названием (B764) здесь «не начата».
+  if (!row.check || row.check.source) return { text: 'не начата', ok: false };
   const share = row.check.total > 0 ? ` · ${row.check.confirmed} из ${row.check.total}` : '';
   return { text: `пройдена${share}`, ok: true };
 }

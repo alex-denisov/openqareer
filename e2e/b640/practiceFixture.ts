@@ -8,6 +8,8 @@ export interface PracticeOptions {
   readonly paywall?: boolean;
   /** Тренировка уже отвечена: экран открывает разбор. */
   readonly answered?: string;
+  /** Тренировку заменили в другой вкладке: первый ответ получает 404, текущей тренировки нет. */
+  readonly replaced?: boolean;
 }
 
 export interface PracticeState {
@@ -18,6 +20,25 @@ export interface PracticeState {
 export const PRACTICE_ANSWER =
   'Требования: 2 000 платежей в секунду, пики нагрузки. Приложение шлёт запрос в шлюз API, ' +
   'шлюз кладёт платёж в очередь, сервис платежей пишет в базу PostgreSQL.';
+
+/** B750: задача, которую сервер написал по вакансии; четыре пункта — как в макете i03a. */
+export const PRACTICE_TASK = {
+  title: 'Приём платежей на 2 000 в секунду',
+  prompt:
+    'Спроектируйте сервис приёма платежей для «Go-разработчик» в «Арка Пэй»: приём оплаты без двойного списания. Начните с требований и ограничений.',
+  points: [
+    'Платформа на нескольких командах: 3 команды, общие сервисы',
+    'Переход на Kubernetes без остановки приёма',
+    'Отказоустойчивость и понятная эксплуатация',
+    'Работа с платёжными данными и повторами запросов',
+  ],
+  hint: 'Начните с вопросов о нагрузке.',
+  timeLimitMinutes: 45,
+  basis: 'vacancy',
+  domain: 'payments',
+  stack: ['Go', 'Kafka'],
+  origin: 'model',
+};
 
 const EVALUATION = {
   rubric: 'system_design',
@@ -111,6 +132,20 @@ async function sessions(
     return fulfillSession(route, ref.session, 201);
   }
   const session = ref.session!;
+  if (path.endsWith('/answers') && options.replaced && !calls.includes('answer 404')) {
+    calls.push('answer 404');
+    ref.session = null;
+    return route.fulfill({
+      status: 404,
+      json: {
+        error: {
+          code: 'interview_session_not_found',
+          message: 'Тренировка не найдена.',
+          retryable: false,
+        },
+      },
+    });
+  }
   if (path.endsWith('/answers')) {
     calls.push(`answer ${String(body.questionId)}${body.feedback === false ? '' : ' +feedback'}`);
     ref.session = { ...session, version: session.version + 1, answer: String(body.answer) };
@@ -185,6 +220,10 @@ export async function mockPractice(
   );
   await page.route('**/api/v1/candidate/b640/interview-sessions/**', (route) =>
     training(route, ref, state),
+  );
+  // B750: задача по отклику — с сервера, четыре пункта, как в макете i03a.
+  await page.route('**/api/v1/candidate/b640/interview-tasks', (route) =>
+    route.fulfill({ json: { data: PRACTICE_TASK, meta: { requestId: 'e2e-task' } } }),
   );
   return state;
 }

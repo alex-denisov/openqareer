@@ -55,6 +55,7 @@ describe('B679: догадка об отказе', () => {
       requirement: 'Команда от 20 человек',
       quote: 'цитата: Команда от 20 человек',
       profileFact: 'руководил командой из 9 человек',
+      profileFactIds: ['f0'],
     });
   });
 
@@ -92,6 +93,27 @@ describe('B679: догадка об отказе', () => {
 function sent(id: string, stage: RejectionReviewApplication['stage'], changedAt = '2026-11-09T10:00:00.000Z'): RejectionReviewApplication {
   return { id, stage, title: `Роль ${id}`, company: 'Компания', stageChangedAt: changedAt };
 }
+
+describe('B679: «Поправить резюме»', () => {
+  const review = (resumeFactIds: ReadonlySet<string>) =>
+    buildRejectionReview({
+      applications: Array.from({ length: 20 }, (_, index) => sent(`a${index}`, index ? 'applied' : 'rejected')),
+      guesses: new Map([['a0', { ...TEAM, profileFactIds: ['profile:experience:e1', 'm1'] }]]),
+      reasons: new Map(),
+      helped: null,
+      resumeFactIds,
+    });
+
+  it('факт из беседы ещё не в резюме — рекомендация несёт его; отказу он не отдаётся', () => {
+    const result = review(new Set(['m1']));
+    expect(result.firstStep).toMatchObject({ kind: 'show_in_resume', resumeFactId: 'm1' });
+    expect(result.rejections[0]?.guess).toEqual(TEAM);
+  });
+
+  it('факта для правки нет — только «Открыть профиль»', () => {
+    expect(review(new Set()).firstStep).not.toHaveProperty('resumeFactId');
+  });
+});
 
 const TEAM: RejectionGuess = { requirement: 'Команда от 20 человек', quote: 'команда от 20', profileFact: 'команда 9' };
 const BROKER: RejectionGuess = { requirement: 'Опыт в брокерских системах', quote: 'брокерские системы', profileFact: null };

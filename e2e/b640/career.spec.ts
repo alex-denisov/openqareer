@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
-import { openCareer, type CareerOptions } from './careerFixture';
+import { openCareer, tipAloneLengths, type CareerOptions } from './careerFixture';
 import { expectGates } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -58,7 +58,7 @@ test.describe('B653: «Карьера» — роли и условия поис�
         '/app/vacancies?role=%D0%A0%D1%83%D0%BA%D0%BE%D0%B2%D0%BE%D0%B4%D0%B8%D1%82%D0%B5%D0%BB%D1%8C+%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B8&date=30',
       );
       await expect(list.last()).toContainText('нет данных о зарплатах');
-      await expect(list.nth(2)).toContainText('Открытый API, Страница вакансий, hh.ru');
+      await expect(list.nth(2)).toContainText('Открытый API и ещё 2');
       await expectWageNotesInsideCells(page);
     }
   });
@@ -126,6 +126,26 @@ test.describe('B653: «Карьера» — роли и условия поис�
       await expect(screen.locator('table.cmp thead .r2-pick')).toHaveCount(3);
       await expect(screen.locator('table.cmp')).toContainText('пройдена · 3 из 3');
       await expect(screen.locator('table.cmp')).toContainText('не начата');
+      // B645-2: столбцы ролей равной ширины (WebKit делил их неровно).
+      const widths = await screen
+        .locator('table.cmp thead th[scope="col"]')
+        .evaluateAll((cells) => cells.slice(1).map((cell) => cell.getBoundingClientRect().width));
+      expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
+    }
+    // B645-2: «Как посчитано» на строке последнего слова заголовка, не отдельной строкой
+    // (на 1440 заголовок фикстуры в одну строку; на 390 значок переносится, только если не влезает).
+    const head = await screen
+      .locator('.lead-head')
+      .first()
+      .evaluate((el) => {
+        const title = el.querySelector('.lead-title')!.getClientRects();
+        const tip = el.querySelector('.tip')!.getBoundingClientRect();
+        const last = title[title.length - 1];
+        return { tipMid: tip.top + tip.height / 2, top: last.top, bottom: last.bottom };
+      });
+    if (desk(page)) {
+      expect(head.tipMid).toBeGreaterThanOrEqual(head.top);
+      expect(head.tipMid).toBeLessThanOrEqual(head.bottom);
     }
     await expectGates(page);
     // Гейты меняют размер окна: курсор мог остаться над ⓘ, и подсказка закрывает строки.
@@ -135,6 +155,50 @@ test.describe('B653: «Карьера» — роли и условия поис�
     await screen.getByRole('button', { name: 'Добавить роль' }).click();
     await expect(screen.getByText('Роль добавлена в поиск')).toBeVisible();
     expect(calls.ownRoles).toEqual([{ action: 'add', title: 'Архитектор решений' }]);
+  });
+
+  test('B645-2: длинный заголовок S10 — «Как посчитано» на строке последнего слова, 1440 и 390', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career', { status: 'choosing_role', searchRoles: [] });
+    const head = node(page, 's10').locator('.lead-head').first();
+    await expect(head.locator('.lead-title')).toBeVisible();
+    const alone = await tipAloneLengths(head);
+    expect(alone).toEqual([]);
+  });
+
+  test('B764: «Проверить вторую роль» не называет роль — C04 сам берёт роль, проверку которой можно начать', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career/roles', {
+      searchRoles: ['Технический продакт-менеджер', 'Директор по разработке'],
+    });
+    const link = node(page, 's10').getByRole('link', { name: 'Проверить вторую роль' });
+    await expect(link).toHaveAttribute('href', '/app/career/skills');
+  });
+
+  test('B645-2: проверка под другим названием не попадает в столбец этой роли', async ({
+    page,
+  }) => {
+    await openCareer(page, '/app/career/roles', {
+      searchRoles: ['Директор по разработке', 'Руководитель разработки'],
+      roleAliases: { 'Директор по разработке': ['Head of Engineering'] },
+      checkedRoles: [
+        {
+          roleTitle: 'Head of Engineering',
+          roleTitleRu: 'Руководитель направления разработки',
+          completedAt: '2026-11-22',
+          confirmedSkills: ['Найм', 'Бюджет', 'Управление командой'],
+          skillCount: 5,
+        },
+      ],
+    });
+    const screen = node(page, 's10');
+    await expect(screen.getByText(/пройдена для/u)).toHaveCount(0);
+    if (desk(page)) {
+      const cell = screen.locator('table.cmp td[data-col="Директор по разработке"] .tag').last();
+      await expect(cell).toHaveText('не начата');
+    }
   });
 
   test('S10: «Искать в роли» сохраняет отмеченную роль', async ({ page }) => {
@@ -178,6 +242,19 @@ test.describe('B653: «Карьера» — роли и условия поис�
       salaryFloor: 0,
     });
     expect(calls.profiles[0]).toMatchObject({ citizenship: ['РФ'] });
+  });
+
+  test('C10 по макету: страница настроек 640 по центру, а не шаблон «Ролей» (B645-2)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'замер макета снят на 1440');
+    await openCareer(page, '/app/career?view=conditions');
+    await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-template', 'settings');
+    // Макет c10-usloviya-poiska на 1440: страница 720 с x398, колонка условий 640 с x438.
+    const pageBox = await node(page, 'c10').boundingBox();
+    const column = await node(page, 'c10').locator('.lead.cc').boundingBox();
+    expect([pageBox?.x, pageBox?.width].map((value) => Math.round(value ?? 0))).toEqual([398, 720]);
+    expect([column?.x, column?.width].map((value) => Math.round(value ?? 0))).toEqual([438, 640]);
   });
 
   test('C10: сбой сохранения — ошибка на месте, введённое осталось', async ({ page }) => {

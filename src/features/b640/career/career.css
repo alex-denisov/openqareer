@@ -1,5 +1,26 @@
 /* «Карьера»: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* s10: столбцы ролей равной ширины в любом движке (макет 166/166/172; WebKit делил 159/193). */
+  .b640 .cmp.cmp-roles { table-layout: fixed; }
+  .b640 .cmp.cmp-roles thead th:first-child { inline-size: var(--career-label-col); }
+  /* s10: «Как посчитано» стоит сразу за последним словом длинного заголовка, а не строкой ниже.
+     Место под значок — внутренний отступ заголовка: он не отрывается от последнего слова.
+     Значок занимает его отрицательным полем и сам ширины строке не прибавляет, поэтому
+     ни Chromium, ни WebKit .app не переносят его отдельно (склейка U+2060 и nowrap WebKit
+     не держит). */
+  .b640 .lead-head:has(> #cmp-title) {
+    --cmp-tip-size: max(var(--career-control-sm), var(--career-target-min));
+    display: block;
+  }
+  .b640 .lead-head:has(> #cmp-title) > .lead-title {
+    display: inline;
+    padding-inline-end: calc(var(--cmp-tip-size) + var(--career-space-1));
+  }
+  .b640 .lead-head:has(> #cmp-title) > .tip {
+    display: inline-flex;
+    vertical-align: middle;
+    margin-inline-start: calc(var(--cmp-tip-size) * -1);
+  }
   /* c06: «Изменить места» в сетке .lead — строчная ссылка по ширине текста, как row-act макета. */
   .b640 .lead > .row-act {
     justify-self: start;

@@ -7,6 +7,7 @@ import { FilterSheet } from './FilterSheet';
 import { HiddenRows } from './HiddenRows';
 import { FiltersBar } from './FiltersBar';
 import { withoutKind, type FilterKind } from './filterModel';
+import { withRoleLabels } from './filterOptions';
 import {
   CountTitle,
   EmptyByFilters,
@@ -48,7 +49,8 @@ function filterProps(list: VacancyList, section: HiddenSection) {
     showHidden: section.show,
     onShowHidden: section.setShow,
     filters: list.filters,
-    options: list.options,
+    options: withRoleLabels(list.options, list.pool.campaign?.titlesRu),
+    roleTitlesRu: list.pool.campaign?.titlesRu,
     currency: list.currency,
     onChange: list.setFilters,
     onCurrency: list.setCurrency,
@@ -115,7 +117,7 @@ function ListTable({ list, rows, section, env, links, triage, own }: ListTablePr
         rows={rows}
         rates={list.rates}
         hidden={hidden}
-        own={<OwnRows items={own.items} onRemove={own.removeWithToast} />}
+        own={<OwnRows items={own.items} money={env} onRemove={own.removeWithToast} />}
         pickFor={(item) => pickOf(triage, item)}
       />
       {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
@@ -174,7 +176,7 @@ export function ListScreen() {
   return (
     <div className="page" data-b640-node="s07" data-b640-section="vacancies">
       {strip ? <GapStrip kind={strip} /> : null}
-      <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
+      <section className={`col vl vt-wrap${strip || triage.active ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
         <CountBar list={list} hideCount={unread} triage={triage} own={own} />
         <FiltersBar
           {...filterProps(list, section)}
@@ -184,7 +186,7 @@ export function ListScreen() {
           onOpenSheet={() => list.setSheetOpen(true)}
           onReset={list.resetFilters}
         />
-        <SkillLine roles={pool.campaign?.roles.value ?? []} />
+        <SkillLine roles={pool.campaign?.roles.value ?? []} ready={!pool.loading} />
         <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {empty && (pool.loading || retrying) ? <LoadingLine /> : null}

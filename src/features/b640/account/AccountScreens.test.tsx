@@ -57,7 +57,14 @@ vi.mock('../../account/notificationPreferencesApi', () => ({
   startTelegramLink: api.startTelegramLink,
   disconnectTelegram: api.disconnectTelegram,
 }));
-vi.mock('./telegramStateApi', () => ({ getTelegramLinkState: api.getTelegramLinkState }));
+const early = vi.hoisted(() => ({
+  delivery: { start: vi.fn(), drop: vi.fn() },
+  telegram: { start: vi.fn(), drop: vi.fn() },
+}));
+vi.mock('./telegramStateApi', () => ({
+  getTelegramLinkState: api.getTelegramLinkState,
+  telegramStateRead: early.telegram,
+}));
 vi.mock('./invitationPreferenceApi', () => ({
   INVITATION_KEY: 'ev-invitation',
   getInvitationPreference: api.getInvitationPreference,
@@ -66,6 +73,7 @@ vi.mock('./invitationPreferenceApi', () => ({
 vi.mock('./deliverySettingsApi', () => ({
   getDeliverySettings: api.getDeliverySettings,
   putDeliverySettings: api.putDeliverySettings,
+  deliverySettingsRead: early.delivery,
 }));
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
@@ -253,6 +261,17 @@ describe('n03 «Подключения»', () => {
     expect(root.querySelector('.cn-menu-t')?.textContent).toBe('Обновлено 3 ноября');
   });
 
+  it('B774: у подключённой площадки — чей аккаунт, как в макете', async () => {
+    api.getConnections.mockResolvedValue([
+      { ...hh, account: 'Марина Соколова' },
+      { ...hh, platform: 'linkedin', account: 'linkedin.com/in/msokolova' },
+    ]);
+    const root = await open(<ConnectionsScreen node={node('n03')} />);
+    const lines = [...root.querySelectorAll('.set-row.cn-row .set-v')].map((item) => item.textContent);
+    expect(lines).toContain('Марина Соколова · подключено');
+    expect(lines).toContain('linkedin.com/in/msokolova · подключено');
+  });
+
   it('отключение подтверждается на месте; сбой показан там же, успех перечитывает список', async () => {
     const root = await open(<ConnectionsScreen node={node('n03')} />);
     click(root.querySelector('.cn-off'));
@@ -312,6 +331,17 @@ describe('n03 «Подключения»', () => {
 });
 
 describe('n02 «Уведомления»', () => {
+  it('n02: чтения «Как присылать» и Telegram начинаются при открытии, не после таблицы', async () => {
+    let release: (value: unknown) => void = () => undefined;
+    api.getNotificationPreferences.mockImplementationOnce(() => new Promise((done) => (release = done)));
+    const view = mount(<NotificationSettingsScreen node={node('n02')} />);
+    expect(early.delivery.start).toHaveBeenCalledTimes(1);
+    expect(early.telegram.start).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(early.delivery.drop).toHaveBeenCalled();
+    release(null);
+  });
+
   it('таблица: все события сервера по каналам', async () => {
     const root = await open(<NotificationSettingsScreen node={node('n02')} />);
     expect([...root.querySelectorAll('.set-mx.is-head .set-ch')].map((cell) => cell.textContent)).toEqual([

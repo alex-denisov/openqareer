@@ -23,6 +23,7 @@ import { VacancyMatchUnavailable } from '../vacancies/vacancyMatchReader';
 import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
 import { readTargetLevel } from './vacancyRoleContext';
 import { companyCoachContextText } from './companyCoachContext';
+import { findCompanyRow } from './b640CompanyModel';
 import {
   listCandidateConnectionViews,
   deriveImportedFactSources,
@@ -789,19 +790,22 @@ async function handleSearchRecruiter(
   });
 }
 
-/** Тема консультанта «Компании и люди»: выбранная компания по ключу; `null` — нет такой. */
+/**
+ * Тема консультанта «Компании и люди»: компания кандидата по хеш-ключу списка или по ключу
+ * адреса карточки (B783); `null` — у кандидата такой нет.
+ */
 export async function candidateCompanyCoachContext(
   deps: RouteDeps,
   candidateId: string,
-  companyKey: string,
+  companyId: string,
 ): Promise<string | null> {
   const context = await companyContext(deps, candidateId);
-  const row = context.rows.find((item) => item.key === companyKey);
+  const row = findCompanyRow(context.rows, companyId);
   if (!row) return null;
   return companyCoachContextText(
     row,
     context.vacancies
-      .filter((vacancy) => candidateCompanyKey(vacancy.companyName) === companyKey)
+      .filter((vacancy) => candidateCompanyKey(vacancy.companyName) === row.key)
       .map((vacancy) => ({ title: vacancy.title })),
   );
 }

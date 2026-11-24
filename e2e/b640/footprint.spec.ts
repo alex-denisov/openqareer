@@ -47,7 +47,13 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(screen.locator('.fp-find')).toHaveCount(6);
     await expect(screen.getByText('Согласие дано 10.11 ·')).toBeVisible();
     await expect(screen.getByRole('link', { name: 'В профиль' })).toHaveCount(0);
-    await expect(screen.getByRole('button', { name: 'В профиль' })).toHaveCount(2);
+    // B382: доклад — «В профиль», профиль GitHub — только «Это не моё».
+    await expect(screen.getByRole('button', { name: 'В профиль' })).toHaveCount(1);
+    await expect(
+      screen
+        .locator('.fp-find', { hasText: 'Профиль на GitHub' })
+        .getByRole('button', { name: 'Это не моё' }),
+    ).toBeVisible();
     expect(await screen.innerText()).not.toMatch(HIDDEN);
     await expectGates(page);
   });
@@ -65,7 +71,7 @@ test.describe('B652: «Цифровой след»', () => {
       ]);
   });
 
-  test('B727: страница по нику — «Нужно проверить», «Проверить» открывает её, «Это не моё» убирает', async ({
+  test('B727: страница по нику — «Нужно проверить», «Проверить» ведёт на f03b, «Это не моё» убирает', async ({
     page,
   }) => {
     const calls = await openFootprint(page, '/app/profile/footprint', 'nick');
@@ -74,9 +80,10 @@ test.describe('B652: «Цифровой след»', () => {
     await expect(row).toContainText('важно');
     await expect(row).not.toContainText('владение нужно подтвердить');
     await expect(row.getByRole('button', { name: 'В профиль' })).toHaveCount(0);
-    const check = row.getByRole('link', { name: /^Проверить: Duolingo/ });
-    await expect(check).toHaveAttribute('href', NICK_URL);
-    await expect(check).toHaveAttribute('target', '_blank');
+    // B382 (макет p02): из списка внешних ссылок нет — «Проверить» ведёт на f03b.
+    const check = row.getByRole('link', { name: 'Проверить' });
+    await expect(check).toHaveAttribute('href', `/app/profile/footprint/findings/${fid(7)}`);
+    await expect(check).not.toHaveAttribute('target', '_blank');
     await expect(screen.locator('.fp-cat', { hasText: 'Полезные доказательства' })).toContainText(
       '2 находки',
     );
@@ -86,6 +93,30 @@ test.describe('B652: «Цифровой след»', () => {
     await row.getByRole('button', { name: 'Это не моё' }).click();
     await expect.poll(() => calls.reviews).toEqual([{ id: fid(7), review: 'not_self' }]);
     await expect(screen.locator('.fp-find', { hasText: 'Duolingo' })).toHaveCount(0);
+  });
+
+  test('B382: f03b страницы по нику — сама страница открывается здесь, «Это моё» подтверждает', async ({
+    page,
+  }) => {
+    const calls = await openFootprint(page, '/app/profile/footprint', 'nick');
+    await node(page, 'p02')
+      .locator('.fp-find', { hasText: 'Duolingo' })
+      .getByRole('link', { name: 'Проверить' })
+      .click();
+    const finding = node(page, 'f03b');
+    const open = finding.getByRole('link', { name: /Открыть страницу Duolingo/u });
+    await expect(open).toHaveAttribute('href', NICK_URL);
+    await expect(open).toHaveAttribute('target', '_blank');
+    // Пока неизвестно, чья страница, письма о удалении нет.
+    await expect(finding.locator('.fp-letter')).toHaveCount(0);
+    // B645 (и): три действия не выходят за колонку ни на 1440, ни на 390.
+    const edge = await finding.locator('.lead').evaluate((el) => el.getBoundingClientRect().right);
+    for (const name of ['Это моё', 'Это не моё']) {
+      const box = await finding.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box!.x + box!.width).toBeLessThanOrEqual(edge + 0.5);
+    }
+    await finding.getByRole('button', { name: 'Это моё' }).click();
+    await expect.poll(() => calls.reviews).toEqual([{ id: fid(7), review: 'confirmed_self' }]);
   });
 
   test('разбор F3 → находка F3б: письмо, формы поисковиков, путь назад; гейты', async ({
@@ -217,7 +248,7 @@ test.describe('B652: «Цифровой след»', () => {
   test('сбой поиска: строка ошибки с «Повторить» на месте', async ({ page }) => {
     const calls = await openFootprint(page, '/app/profile/footprint', 'failed');
     const screen = node(page, 'f01');
-    await expect(screen.getByRole('alert')).toContainText('Проверили не всё');
+    await expect(screen.getByRole('alert')).toContainText(/категори[яий] не проверен/u);
     await screen.getByRole('button', { name: 'Повторить' }).click();
     await expect(screen.locator('progress.pf-prog')).toBeVisible();
     expect(calls.started).toHaveLength(1);

@@ -36,6 +36,10 @@ describe('«Своя вакансия»: кнопка и панель', () => {
     const failed = panel({ kind: 'unreadable', reason: 'failed' });
     expect(failed.container.querySelector('.va-add-st.is-err span')!.textContent).toBe('Страница не открылась');
     expect(buttons(failed.container)).toEqual(['Повторить', 'Вставить текст']);
+    // Макет v06q: «Вставить текст» — действие строки с иконкой правки, не вторая кнопка.
+    const actions = [...failed.container.querySelectorAll('#va-add-st button')];
+    expect(actions.map((item) => item.className)).toEqual(['btn is-sm', 'row-act']);
+    expect(actions.every((item) => item.querySelector('svg'))).toBe(true);
     expect(failed.container.querySelector('textarea')!.getAttribute('aria-invalid')).toBe('true');
     failed.unmount();
     for (const reason of ['site_closed', 'thin'] as const) {

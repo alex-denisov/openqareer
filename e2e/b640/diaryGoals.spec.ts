@@ -15,9 +15,64 @@ async function openGoals(page: Page, path: string, node: string): Promise<DiaryC
 }
 
 test.describe('B662: «Дневник» — цели и показатели', () => {
+  test('B768 · d02c: пока примеры под роль готовятся — «Загружаем примеры», затем они без перезагрузки', async ({
+    page,
+  }) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    await mockDiary(page);
+    const ROOT = '**/api/v1/candidate/career-diary';
+    await page.route(ROOT, (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            asOf: '2026-11-23',
+            platformStartedAt: '2026-10-26',
+            primaryWorkplace: { id: 'w1', company: 'Вектор', title: 'Коммерческий директор' },
+            summary: {},
+          },
+        },
+      }),
+    );
+    await page.route(`${ROOT}/goal-cards`, (route) =>
+      route.fulfill({ json: { data: { items: [], archived: [] } } }),
+    );
+    await page.route(`${ROOT}/role-title-ru**`, (route) =>
+      route.fulfill({ json: { data: { titleRu: 'Коммерческий директор' } } }),
+    );
+    let answer: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    await page.route(`${ROOT}/goal-examples`, async (route) => {
+      // Модель отвечает долго: держим ответ, пока тест не проверит ожидание.
+      await answered;
+      await route.fulfill({
+        json: {
+          data: {
+            items: [{ title: 'Выполнить план выручки отдела', measure: 'от плана квартала' }],
+          },
+        },
+      });
+    });
+    await page.goto('/app/diary/goals', { waitUntil: 'domcontentloaded' });
+    const ghost = page.locator('[data-b640-node="d02"] .ghost');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(ghost.getByRole('status')).toHaveText('Загружаем примеры', { timeout: 15_000 });
+    await expect(ghost.locator('.gc-ex')).toHaveCount(0);
+    await expect(page.locator('[data-b640-node="d02"]')).toHaveCSS(
+      'padding-top',
+      phone ? '12px' : '16px',
+    );
+    await expect(ghost.locator('.ghost-cap')).toHaveText('Пример для роли «Коммерческий директор»');
+    await expectGates(page);
+    answer();
+    await expect(ghost.locator('.gc-ex strong')).toHaveText(['Выполнить план выручки отдела']);
+    await expect(ghost.getByRole('status')).toHaveCount(0);
+  });
+
   test('d02 → d02a: отстающая цель в заголовке, замер, в архив', async ({ page }) => {
     const calls = await openGoals(page, '/app/diary/goals', 'd02');
     const list = page.locator('[data-b640-node="d02"]');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(list).toHaveCSS('padding-top', phone ? '12px' : '16px');
     await expect(list.locator('.lead-title')).toHaveText('Отстаёт «Закрыть 2 вакансии в команду»');
     await expect(list.locator('.dn-goal')).toHaveCount(2);
     await expect(list.getByText('Перевести сборку на общий конвейер')).toBeVisible();
@@ -26,6 +81,7 @@ test.describe('B662: «Дневник» — цели и показатели', (
     await list.locator('.lead').getByRole('link').first().click();
     const card = page.locator('[data-b640-node="d02a"]');
     await expect(card.locator('.gt-h')).toHaveText('Закрыть 2 вакансии в команду');
+    await expect(card).toHaveCSS('padding-top', phone ? '12px' : '8px');
     await expectGates(page);
     await card.getByRole('button', { name: 'Внести замер' }).click();
     const dialog = page.getByRole('dialog');
@@ -49,6 +105,8 @@ test.describe('B662: «Дневник» — цели и показатели', (
   test('d02b: ошибки на месте, затем новая цель открывается карточкой', async ({ page }) => {
     const calls = await openGoals(page, '/app/diary/goals/new', 'd02b');
     const form = page.locator('[data-b640-node="d02b"]');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(form).toHaveCSS('padding-top', phone ? '12px' : '8px');
     await expectGates(page);
     await form.getByRole('button', { name: 'Сохранить цель' }).click();
     await expect(form.locator('.va-err').first()).toHaveText('Назовите цель');
@@ -60,6 +118,36 @@ test.describe('B662: «Дневник» — цели и показатели', (
     await form.getByRole('button', { name: 'Сохранить цель' }).click();
     await expect(page).toHaveURL(/\/app\/diary\/goals\/goal-new$/u);
     expect(calls.goals).toEqual([expect.objectContaining({ title: 'Сократить время ревью' })]);
+  });
+
+  test('B744: d02b — «Сейчас» из записей черновиком, цитата в ⓘ, «Верно»', async ({ page }) => {
+    await mockSignedInCabinet(page, { cabinetB640: true });
+    await mockDiary(page);
+    const asked: unknown[] = [];
+    await page.route('**/api/v1/candidate/career-diary/goal-baseline', async (route) => {
+      asked.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: {
+          data: { value: 18, quote: 'ревью ждут по полтора-два дня', entryDate: '2026-12-30' },
+          meta: { requestId: 'r' },
+        },
+      });
+    });
+    await page.goto('/app/diary/goals/new', { waitUntil: 'domcontentloaded' });
+    const form = page.locator('[data-b640-node="d02b"]');
+    await expect(form).toBeVisible({ timeout: 15_000 });
+    await form.getByLabel('Показатель').first().fill('Время до первого ревью, часов');
+    await form.getByLabel('Цель', { exact: true }).first().focus();
+    const now = form.getByLabel('Сейчас').first();
+    await expect(now).toHaveValue('18');
+    await expect(now).toHaveClass(/is-draft/u);
+    await expect(form.locator('.gb-sugg-t')).toHaveText('18 — из ваших записей');
+    expect(asked).toEqual([{ indicator: 'Время до первого ревью, часов' }]);
+    await expectGates(page);
+    await form.getByRole('button', { name: 'Верно' }).click();
+    await expect(form.locator('.gb-sugg')).toHaveCount(0);
+    await expect(now).toHaveValue('18');
+    await expect(now).not.toHaveClass(/is-draft/u);
   });
 
   test('B743: d02a «Задачи» — задачи цели из плана, отметка и «+ Задача»', async ({ page }) => {

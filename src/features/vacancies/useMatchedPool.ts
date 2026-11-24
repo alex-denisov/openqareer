@@ -51,18 +51,24 @@ export interface MatchedPoolOptions {
    * сервера, остальное — по запросу порциями сервера; без него читается вся подборка.
    */
   readonly pageLimit?: number;
+  /**
+   * B768: фильтры первого чтения. «Вакансии по роли» читали сначала всю подборку,
+   * а потом с ролью — два запроса строк по ~5 с на проде; теперь первый уже с ролью.
+   * Кэш — подборка без фильтров, с начальными фильтрами он не показывается.
+   */
+  readonly initialFilters?: VacanciesScreenState;
 }
 
 /** One cabin-wide read; the owner screen can retry the bounded page sequence. */
 export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptions = {}): MatchedPool {
   // B589: the last unfiltered selection renders at once on a repeat visit.
-  const [cached] = useState(() => (provided ? undefined : readCachedMatchedPool()));
+  const [cached] = useState(() => (provided || options.initialFilters ? undefined : readCachedMatchedPool()));
   const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
   const [initialFilters, setInitialFilters] = useState<VacanciesScreenState | undefined>(
     cached?.initialFilters,
   );
   const [sort, setSort] = useState<VacancySort | undefined>(cached?.sort);
-  const [filters, setFilterState] = useState<VacanciesScreenState>();
+  const [filters, setFilterState] = useState(options.initialFilters);
   const setFilters = useCallback((value: VacanciesScreenState) => {
     const hasServerFilters = hasMatchedPoolFilters(value);
     setFilterState((previous) =>
@@ -227,13 +233,15 @@ async function loadMatchedPool(
   // A silent refresh replaces the cached list in one step when the read is
   // done, so the table never shrinks to the first page and grows back (B589).
   let lastPoolSize = 0;
-  readMatchedFacets(setters, isActive, filters);
   try {
     const pool = await collectMatchedPool<MatchedVacancyItem>(
       (offset) =>
         withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters, 'rows')).then((page) => {
           if (offset === 0 && isActive()) {
+            // B760: фасеты — после первой страницы, иначе на холодном сервере они делят
+            // с ней цикл событий, и строки приходят на 1,5–3 с позже.
             if (page.facets) setters.setFacets(page.facets);
+            else readMatchedFacets(setters, isActive, filters);
             if (page.initialFilters) setters.setInitialFilters(page.initialFilters);
             if (page.sort) setters.setSort(page.sort);
             if (page.campaign) setters.setCampaign(page.campaign);
@@ -272,7 +280,7 @@ async function loadMatchedPool(
 }
 
 /**
- * B725: фасеты идут своим запросом рядом со страницей 0. Их неудача не роняет список:
+ * B725: фасеты идут своим запросом, с B760 — после страницы 0. Их неудача не роняет список:
  * фильтры остаются с прежними числами, а строки и счёт выдачи приходят своим чтением.
  */
 function readMatchedFacets(

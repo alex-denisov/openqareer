@@ -10,7 +10,7 @@ import {
   levelTag,
   openRisks,
   pageAttrs,
-  opensRemovalPath,
+  firstToRemove,
   usefulItems,
 } from './footprintModel';
 import type { FootprintData } from './useFootprint';
@@ -114,7 +114,7 @@ export function FindingsScreen({ node }: { readonly node: B640Node }) {
       {(data, reload) => {
         if (!hasSummary(data)) return <StartPage node={node} data={data} reload={reload} />;
         const risks = openRisks(data.summary);
-        const first = risks.find(opensRemovalPath);
+        const first = firstToRemove(risks);
         return (
           <div className="page pf" {...pageAttrs(node, risks.length > 0 ? undefined : 'f04')}>
             <div className="col">

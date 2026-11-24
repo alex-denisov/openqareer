@@ -10,7 +10,8 @@ import { profileAnswers, type QuestionnaireProfileFacts } from './questionnaireP
 
 const QUESTION_TEXT_MAX_LENGTH = 500;
 const OPTION_MAX_LENGTH = 200;
-const MAX_OPTIONS = 30;
+/** Защита от чужого ответа, а не страница списка: настоящие списки (страны) — около 250. */
+const MAX_OPTIONS = 2000;
 /** Поля, которые Greenhouse добавляет сам: это не вопросы работодателя. */
 const STANDARD_FIELD = /^(first_name|last_name|preferred_name|email|phone|resume|resume_text|cover_letter|cover_letter_text|location|linkedin|website)$/u;
 const TEXT_TYPES = new Set(['input_text', 'textarea']);

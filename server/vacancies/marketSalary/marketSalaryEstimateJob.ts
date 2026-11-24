@@ -57,19 +57,31 @@ export interface MarketSalarySliceOptions {
   readonly pause?: () => Promise<void>;
 }
 
-const DEFAULT_SLICE_ROWS = 2000;
+// B761: холодная порция в 2 000 строк держала очередь до 1,2 с; 500 — около 0,3 с.
+const DEFAULT_SLICE_ROWS = 500;
 const SLICE_PAUSE_MS = 50;
 
+/**
+ * B761 23.11: `json_extract` по `payload` разбирал полный текст каждой живой вакансии —
+ * 46 % профиля обслуживания ночью. Зарплату и место проекция сведения хранит как есть
+ * (`clusterProjectionOf`), а она в разы короче; `payload` читается только у строки
+ * без проекции, так что цифры оценки не меняются.
+ */
+const fieldOf = (path: string) =>
+  `CASE WHEN c.id IS NOT NULL THEN json_extract(c.cluster_json, '${path}')
+        ELSE json_extract(p.payload, '${path}') END`;
+
 const SLICE_SQL = `SELECT s.id, s.function_code, s.level_rank,
-    json_extract(p.payload, '$.salary.from') AS salary_from,
-    json_extract(p.payload, '$.salary.to') AS salary_to,
-    json_extract(p.payload, '$.salary.currency') AS currency,
-    json_extract(p.payload, '$.location') AS location
+    ${fieldOf('$.salary.from')} AS salary_from,
+    ${fieldOf('$.salary.to')} AS salary_to,
+    ${fieldOf('$.salary.currency')} AS currency,
+    ${fieldOf('$.location')} AS location
   FROM (SELECT id, function_code, level_rank FROM vacancy_semantic
         WHERE (id, function_code) > (?, ?)
         ORDER BY id, function_code LIMIT ?) s
   LEFT JOIN vacancy_pool_index i ON i.id = s.id AND i.is_active = 1 AND i.expired = 0
-  LEFT JOIN vacancy_pool p ON p.id = i.id
+  LEFT JOIN vacancy_cluster_input c ON c.id = i.id
+  LEFT JOIN vacancy_pool p ON p.id = i.id AND c.id IS NULL
   ORDER BY s.id, s.function_code`;
 
 function addRow(groups: Groups, row: SalariedRow): void {

@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   searchRoleLabel,
   buildB640NotificationFeed,
+  footprintTitle,
   type B640ApplicationContext,
   type B640NotificationSource,
 } from './b640Notifications';
+import { mergeDigestMarks, ROLE_DIGEST_SOURCE_TYPE } from './roleVacancyDigest';
+
+const plain = (id: string) => ({ id, aboveFloor: false });
 
 let counter = 0;
 function source(overrides: Partial<B640NotificationSource> = {}): B640NotificationSource {
@@ -38,7 +42,7 @@ function feed(
     category?: 'all' | 'invitations' | 'responses' | 'vacancies';
     offset?: number;
     limit?: number;
-    searchRole?: string | null;
+    searchRoles?: readonly string[];
   } = {},
 ) {
   return buildB640NotificationFeed({
@@ -48,7 +52,7 @@ function feed(
     category: options.category ?? 'all',
     offset: options.offset ?? 0,
     limit: options.limit ?? 20,
-    searchRole: options.searchRole,
+    searchRoles: options.searchRoles,
   });
 }
 
@@ -167,27 +171,72 @@ describe('классификация уведомлений кабинета B64
 });
 
 describe('B671: «Новые вакансии по вашей роли» — роль поиска и время подборки', () => {
-  it('роль — роль поиска кандидата, время — когда пришла подборка', () => {
+  it('прежняя запись без числа: заголовок общий, роль — роль поиска, даты события нет', () => {
     const row = source({
       kind: 'new_vacancies_by_role',
       sourceType: 'matched_vacancy_batch',
       sourceId: 'batch-1',
       createdAt: '2026-11-18T17:54:53.869Z',
     });
-    const [item] = feed([row], {}, { searchRole: 'Chief Operating Officer и ещё 10' }).items;
+    const roles = ['Chief Operating Officer', ...Array.from({ length: 10 }, (_, i) => `R${i}`)];
+    const [item] = feed([row], {}, { searchRoles: roles }).items;
     expect(item).toMatchObject({
       kind: 'new_vacancies_by_role',
       title: 'Новые вакансии по вашей роли',
       role: 'Chief Operating Officer и ещё 10',
-      eventAt: '2026-11-18T17:54:53.869Z',
+      eventAt: null,
     });
   });
 
-  it('роль поиска не задана — роли нет, время есть', () => {
+  it('n01b: подборка дня — число и роль в заголовке, роль в подписи не повторяется', () => {
+    const row = source({
+      kind: 'new_vacancies_by_role',
+      sourceType: ROLE_DIGEST_SOURCE_TYPE,
+      sourceId: mergeDigestMarks('', ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].map(plain)),
+    });
+    const [item] = feed([row], {}, { searchRoles: ['Руководитель разработки'] }).items;
+    expect(item).toMatchObject({
+      title: '6 новых вакансий руководителя разработки',
+      role: null,
+      eventAt: null,
+    });
+  });
+
+  it('n01b: несколько ролей — «по вашим ролям», роли в подписи', () => {
+    const row = source({
+      kind: 'new_vacancies_by_role',
+      sourceType: ROLE_DIGEST_SOURCE_TYPE,
+      sourceId: mergeDigestMarks('', [plain('c1')]),
+    });
+    const [item] = feed([row], {}, { searchRoles: ['CTO', 'CIO'] }).items;
+    expect(item).toMatchObject({ title: '1 новая вакансия по вашим ролям', role: 'CTO и ещё 1' });
+  });
+
+  it('роль поиска не задана — роли нет', () => {
     const row = source({ kind: 'new_vacancies_by_role', sourceType: 'matched_vacancy_batch' });
     const [item] = feed([row]).items;
     expect(item.role).toBeNull();
-    expect(item.eventAt).toBe(row.createdAt);
+    expect(item.eventAt).toBeNull();
+  });
+
+  it('n01b: находки следа — «Цифровой след: 1 новая находка»', () => {
+    const row = source({
+      kind: 'footprint_findings',
+      sourceType: 'footprint_audit',
+      sourceId: 'a1',
+    });
+    const one = buildB640NotificationFeed({
+      rows: [row],
+      applications: new Map(),
+      unreadCount: 1,
+      category: 'all',
+      offset: 0,
+      limit: 20,
+      findingCounts: new Map([['a1', 1]]),
+    });
+    expect(one.items[0]?.title).toBe('Цифровой след: 1 новая находка');
+    expect(footprintTitle(5)).toBe('Цифровой след: 5 новых находок');
+    expect(footprintTitle(undefined)).toBe('Цифровой след: новые находки');
   });
 
   it('подпись роли поиска', () => {
@@ -198,7 +247,7 @@ describe('B671: «Новые вакансии по вашей роли» — р�
 
   it('у прочих событий без отклика роль поиска не подставляется', () => {
     const row = source({ kind: 'consultant_edits', sourceType: 'coach_turn' });
-    const [item] = feed([row], {}, { searchRole: 'COO' }).items;
+    const [item] = feed([row], {}, { searchRoles: ['COO'] }).items;
     expect(item.role).toBeNull();
     expect(item.eventAt).toBeNull();
   });

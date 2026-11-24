@@ -173,6 +173,17 @@ describe('b640 profile: шапка и списки', () => {
     expect(languageRow({ id: 'l3', evidenceMemoryId: 'x' })).toBeNull();
   });
 
+  it('B645 23.11: язык из LinkedIn по-английски — по словарю языков по-русски', () => {
+    expect(
+      languageRow({ id: 'l4', evidenceMemoryId: 'x', name: 'english', cefr: 'C1' })?.name,
+    ).toBe('Английский');
+    expect(languageRow({ id: 'l5', evidenceMemoryId: 'x', name: 'Russian' })?.name).toBe('Русский');
+    // Языка нет в словаре — как записан.
+    expect(languageRow({ id: 'l6', evidenceMemoryId: 'x', name: 'Esperanto' })?.name).toBe(
+      'Esperanto',
+    );
+  });
+
   it('длинный список: первые записи и остаток под «Ещё N»', () => {
     expect(splitVisible([1, 2, 3, 4, 5], 2)).toEqual({ shown: [1, 2], rest: [3, 4, 5] });
     expect(splitVisible([1, 2], 2)).toEqual({ shown: [1, 2], rest: [] });

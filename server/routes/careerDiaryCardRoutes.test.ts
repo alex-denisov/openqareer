@@ -10,6 +10,7 @@ import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
+import { SqliteDiaryDetailsRepository } from '../data/sqliteDiaryDetailsRepository';
 import { cardRisk } from '../domain/careerDiaryCardRisk';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -380,6 +381,32 @@ describe('B684: цель с показателями под флагом', () =>
     });
   });
 
+  it('детали, сохранённые до кварталов и переноса, читают их как null', async () => {
+    const { app, sessions, databasePath } = await setup();
+    const goal = await legacyGoal(app, flagged, 'Встречи один на один');
+    const stored = new SqliteDiaryDetailsRepository({
+      databasePath,
+      encryptionKey: baseConfig.dataEncryptionKey,
+    });
+    // Запись прежнего вида: полей quarterTargets и transfer в ней нет.
+    stored.saveGoalDetail(sessions.get(flagged)!.candidate!.id, goal.id, {
+      setBy: 'manager',
+      agreedOn: null,
+      weight: 30,
+      archive: null,
+    } as never);
+    stored.close();
+    const [item] = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data.items;
+    expect(item.details).toEqual({
+      setBy: 'manager',
+      agreedOn: null,
+      weight: 30,
+      archive: null,
+      quarterTargets: null,
+      transfer: null,
+    });
+  });
+
   it('детали правятся, цель уходит в архив с причиной и возвращается', async () => {
     const { app } = await setup();
     const goal = await legacyGoal(app, flagged, 'Перевести сборку на общий конвейер');
@@ -405,6 +432,28 @@ describe('B684: цель с показателями под флагом', () =>
     expect((await call(app, 'GET', `${DIARY}/goals`, flagged)).json().data.items).toHaveLength(1);
     const restored = await call(app, 'DELETE', `${DIARY}/goal-cards/${goal.id}/archive`, flagged);
     expect(restored.json().data.details.archive).toBeNull();
+  });
+
+  it('B686: архив и удаление цели не оставляют показателей-сирот', async () => {
+    const { app, databasePath } = await setup();
+    const card = (await call(app, 'POST', `${DIARY}/goal-cards`, flagged, CARD)).json().data;
+    const archived = await call(app, 'PUT', `${DIARY}/goal-cards/${card.id}/archive`, flagged, {
+      reason: 'Отменена',
+    });
+    expect(archived.statusCode, archived.body).toBe(200);
+    let list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
+    expect(list.items).toEqual([]);
+    expect(list.archived.map((item: { id: string }) => item.id)).toEqual([card.id]);
+    expect(list.archived[0].indicators).toHaveLength(CARD.indicators.length);
+
+    const removed = await call(app, 'DELETE', `${DIARY}/goals/${card.id}`, flagged);
+    expect(removed.statusCode, removed.body).toBe(200);
+    list = (await call(app, 'GET', `${DIARY}/goal-cards`, flagged)).json().data;
+    expect(list).toEqual({ items: [], archived: [] });
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    const left = database.prepare('SELECT COUNT(*) AS total FROM career_diary_goals').get();
+    database.close();
+    expect(left).toEqual({ total: 0 });
   });
 
   it('детали удалённой цели не остаются в базе', async () => {

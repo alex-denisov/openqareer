@@ -11,7 +11,10 @@ vi.mock('../../../services/desktop/desktopBridge', async (original) => ({
   ...(await original<typeof import('../../../services/desktop/desktopBridge')>()),
   isTauriEnvironment: () => true,
 }));
-const updater = vi.hoisted(() => ({ check: vi.fn(async () => undefined), getStatus: () => ({ state: 'idle' }), setAutoInstall: vi.fn() }));
+const updater = vi.hoisted(() => {
+  const idle = { state: 'idle', info: { version: '' } };
+  return { check: vi.fn(async () => 'latest'), getStatus: () => idle, subscribe: () => () => undefined, setAutoInstall: vi.fn(), actions: {} };
+});
 vi.mock('../../appUpdate/useDesktopUpdater', () => ({ desktopUpdater: updater }));
 const device = vi.hoisted(() => ({
   get: vi.fn(async () => ({ trayIcon: true, autoUpdate: true, launchAtLogin: false })),
@@ -57,13 +60,21 @@ describe('n06 «Приложение» в .app', () => {
     expect(container.textContent).toContain('Работа приложения');
   });
 
-  it('B722: «Интерфейс» in mockup order, «Язык» offers only «Русский»', async () => {
+  it('B722/B774: «Интерфейс» in mockup order; the only language is text, not a one-option list', async () => {
     const { container } = await render();
     const titles = [...container.querySelectorAll('.set-group')][0]?.querySelectorAll('.set-t') ?? [];
     expect([...titles].map((item) => item.textContent)).toEqual(['Тема', 'Язык', 'Часовой пояс', 'Валюта зарплат']);
-    const language = [...titles].find((item) => item.textContent === 'Язык');
-    const select = container.querySelector<HTMLSelectElement>(`select[aria-labelledby="${language?.id}"]`);
-    expect([...(select?.options ?? [])].map((item) => item.textContent)).toEqual(['Русский']);
+    const language = [...titles].find((item) => item.textContent === 'Язык')?.closest('.set-row');
+    expect(language?.querySelector('select')).toBeNull();
+    expect(language?.querySelector('.set-r')?.textContent).toBe('Русский');
+  });
+
+  it('B593: time zones read as in the mockup — «Москва, UTC+3»', async () => {
+    const { container } = await render();
+    const zone = [...container.querySelectorAll('.set-t')].find((item) => item.textContent === 'Часовой пояс')?.closest('.set-row');
+    const options = [...(zone?.querySelectorAll('option') ?? [])].map((item) => item.textContent);
+    expect(options).toContain('Москва, UTC+3');
+    expect(options.every((text) => !text?.includes('('))).toBe(true);
   });
 
   it('B722: automatic updates switch saves on this computer and tells the updater at once', async () => {

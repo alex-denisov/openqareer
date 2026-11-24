@@ -76,6 +76,7 @@ function EditorRow({ id, draft, goals, change }: FieldsProps) {
         <label htmlFor={`${id}-k`}>Тип</label>
         <select
           id={`${id}-k`}
+          aria-label="Тип записи"
           value={draft.kind}
           onChange={(event) => change({ kind: event.target.value as CareerDiaryEntryKind })}
         >
@@ -90,6 +91,7 @@ function EditorRow({ id, draft, goals, change }: FieldsProps) {
         <label htmlFor={`${id}-g`}>Цель</label>
         <select
           id={`${id}-g`}
+          aria-label="Цель"
           value={draft.goalId}
           onChange={(event) => change({ goalId: event.target.value })}
         >

@@ -4,6 +4,7 @@ import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome } from '../shell/ShellContext';
 import type { B640Notification } from './b640NotificationsApi';
 import { FEED_FILTERS, feedAction, feedSubtitle } from './feedModel';
+import { pinnedLines } from './pinnedLines';
 import { groupNotifications, unreadHeading } from './notificationsModel';
 import { BlockError, BlockSkeleton } from './parts';
 import { LOAD_ERROR, useFeed, type Feed } from './useFeed';
@@ -42,23 +43,26 @@ function NotificationRow({ item, now, next, onOpen }: RowProps) {
   );
 }
 
-/** Важные непрочитанные события сверху: одно действие у каждого. */
+/** Важные непрочитанные события сверху: одно действие у каждой строки. */
 function Pinned({ feed }: { readonly feed: Feed }) {
   if (feed.status !== 'ready' || feed.pinned.length === 0) return null;
   return (
     <ul className="np-crit" aria-label="Важно: нужно ваше действие">
-      {feed.pinned.map((item, index) => {
-        const action = feedAction(item);
-        return (
-          <li className="np-crit-i is-one" key={item.id}>
-            {index === 0 ? <span className="np-crit-l">Важно</span> : null}
-            <span className="np-crit-t">{[item.title, item.role].filter(Boolean).join(' · ')}</span>
-            <Link className="btn is-sm" to={action.path} onClick={() => void feed.markRead(item)}>
-              {action.label}
-            </Link>
-          </li>
-        );
-      })}
+      {pinnedLines(feed.pinned).map((line, index) => (
+        <li className={line.detail ? 'np-crit-i' : 'np-crit-i is-one'} key={line.key}>
+          {index === 0 ? <span className="np-crit-l">Важно</span> : null}
+          <span className="np-crit-t">{line.title}</span>
+          {line.detail ? <span className="np-crit-s">{line.detail}</span> : null}
+          <Link
+            className="btn is-sm"
+            to={line.action.path}
+            onClick={() => line.items.forEach((item) => void feed.markRead(item))}
+          >
+            {line.action.icon ? <Icon name={line.action.icon} /> : null}
+            {line.action.label}
+          </Link>
+        </li>
+      ))}
     </ul>
   );
 }
@@ -143,7 +147,10 @@ function NotificationsFeed({ feed, now }: { readonly feed: Feed; readonly now: D
 /** n01b «Все уведомления»: важное сверху, фильтр по категории, события по дням. */
 export function NotificationsScreen({ node }: { readonly node: B640Node }) {
   const feed = useFeed();
-  useScreenChrome({ bellCount: feed.unreadCount });
+  useScreenChrome({
+    bellCount: feed.unreadCount,
+    bellCritical: feed.status === 'ready' && feed.pinned.length > 0,
+  });
   const now = useMemo(() => new Date(), []);
   return (
     <div className="page" data-b640-node={node.code} data-b640-section={node.section}>

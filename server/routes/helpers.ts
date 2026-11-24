@@ -257,14 +257,14 @@ export function hasPreviewAccess(request: FastifyRequest, expectedToken: string)
   return secureEqual(suppliedToken, expectedToken);
 }
 
+/**
+ * Охранный хук. Отказ возвращает reply: без этого onSend с настоящим await откладывает
+ * отправку, и Fastify зовёт обработчик после 401 (B781).
+ */
 export function previewAuth(expectedToken: string) {
-  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const authorization = request.headers.authorization;
-    const suppliedToken = authorization?.startsWith('Bearer ')
-      ? authorization.slice('Bearer '.length)
-      : '';
-    if (!secureEqual(suppliedToken, expectedToken)) {
-      sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | void> => {
+    if (!hasPreviewAccess(request, expectedToken)) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
     }
   };
 }

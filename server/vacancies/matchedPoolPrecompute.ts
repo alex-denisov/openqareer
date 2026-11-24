@@ -9,10 +9,12 @@ import {
   readMatchProfile,
   setMatchedRecentTitlesReader,
   setMatchedSnapshotFailureLog,
+  setMatchedSnapshotMissLog,
   setMatchedSnapshotStore,
   preloadMatchedSnapshots,
 } from './matchedPoolContext';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
+import { backgroundStep } from '../observability/backgroundSteps';
 
 const RECENT_VISIT_MS = 14 * 24 * 60 * 60 * 1_000;
 const DEFAULT_PAUSE_MS = 50;
@@ -58,6 +60,9 @@ export class MatchedPoolPrecompute {
   private warmList: MatchedListWarmer | undefined;
   /** Each candidate is checked once per process: new facts rebuild roles on their own routes. */
   private readonly rolesChecked = new Set<string>();
+  /** B770: who the running pass is on and who is still ahead of it, for the miss log. */
+  private current: string | undefined;
+  private readonly ahead = new Set<string>();
   /** The first pass loads the stored snapshots before it builds anything (prod 19.11). */
   private preloaded = false;
   private readonly pauseMs: number;
@@ -81,6 +86,9 @@ export class MatchedPoolPrecompute {
         'matched-snapshot-rebuild-failed',
       ),
     );
+    setMatchedSnapshotMissLog(options.engine, (miss) =>
+      this.log?.info({ ...miss, precompute: this.stateOf(miss.candidateId) }, 'matched-snapshot-miss'),
+    );
     const sealedSnapshots = options.candidateStore.sealedMatchedLists?.snapshots;
     if (sealedSnapshots) setMatchedSnapshotStore(options.engine, sealedSnapshots);
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
@@ -92,6 +100,12 @@ export class MatchedPoolPrecompute {
     const index = this.priority.indexOf(candidateId);
     if (index >= 0) this.priority.splice(index, 1);
     this.priority.unshift(candidateId);
+  }
+
+  /** `on` — the pass is building this candidate now; `ahead` — it will; `idle` — it is not. */
+  stateOf(candidateId: string): 'on' | 'ahead' | 'idle' {
+    if (this.current === candidateId) return 'on';
+    return this.ahead.has(candidateId) ? 'ahead' : 'idle';
   }
 
   setLogger(log: Logger): void {
@@ -121,6 +135,7 @@ export class MatchedPoolPrecompute {
   private async runOnce(): Promise<void> {
     const startedAt = this.now();
     const candidates = this.nextCandidates();
+    candidates.forEach((candidateId) => this.ahead.add(candidateId));
     if (!this.preloaded) {
       this.preloaded = true;
       const loaded = await preloadMatchedSnapshots(this.options.engine, candidates);
@@ -130,6 +145,8 @@ export class MatchedPoolPrecompute {
     let errors = 0;
     for (const candidateId of candidates) {
       const candidateStartedAt = this.now();
+      this.ahead.delete(candidateId);
+      this.current = candidateId;
       try {
         await this.precompute(candidateId);
       } catch (error) {
@@ -139,6 +156,7 @@ export class MatchedPoolPrecompute {
           'matched-precompute-candidate-failed',
         );
       }
+      this.current = undefined;
       durationsMs.push(this.now() - candidateStartedAt);
       if (this.pauseMs > 0) await pause(this.pauseMs);
     }
@@ -162,19 +180,26 @@ export class MatchedPoolPrecompute {
       this.rolesChecked.add(candidateId);
       const log = (fields: Record<string, unknown>, message: string) =>
         this.log?.info({ candidateId, ...fields }, message);
-      await this.refreshRoles(candidateId, log).catch((error: unknown) => {
+      await backgroundStep('precompute:roles-refresh', () => this.refreshRoles!(candidateId, log)).catch((error: unknown) => {
         this.log?.error(
           { errorName: error instanceof Error ? error.name : 'UnknownError' },
           'campaign-roles-refresh-failed',
         );
       });
     }
-    const { confirmedSkills } = readMatchProfile(this.options.candidateStore, candidateId);
-    const campaign = readCampaign(this.options.candidateStore, candidateId);
-    const targetRoles = [...campaign.roles.value];
+    const { confirmedSkills, campaign, targetRoles, targetLevel } = await backgroundStep('precompute:profile', async () => {
+      const store = this.options.candidateStore;
+      const read = readCampaign(store, candidateId);
+      const roles = [...read.roles.value];
+      return {
+        confirmedSkills: readMatchProfile(store, candidateId).confirmedSkills,
+        campaign: read,
+        targetRoles: roles,
+        targetLevel: readTargetLevel(store, candidateId, roles),
+      };
+    });
     if (confirmedSkills.length === 0 && targetRoles.length === 0) return;
-    const targetLevel = readTargetLevel(this.options.candidateStore, candidateId, targetRoles);
-    const snapshot = await readMatchedSnapshot(
+    const snapshot = await backgroundStep('precompute:snapshot', () => readMatchedSnapshot(
       this.options.engine,
       candidateId,
       confirmedSkills,
@@ -182,7 +207,7 @@ export class MatchedPoolPrecompute {
       targetLevel,
       matchGeographyOf(campaign.careerGeography),
       { awaitRebuild: true },
-    );
+    ));
     // The sweep runs in chunks on its own: the next candidate's snapshot does not wait for it.
     void this.requestFit?.(candidateId, snapshot).catch((error: unknown) => {
       this.log?.error(

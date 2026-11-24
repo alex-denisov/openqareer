@@ -1,7 +1,12 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
-import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
+import {
+  mockResponses,
+  RESUME_BULLET,
+  responseFixtures,
+  type ResponsesMockOptions,
+} from './responsesFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 
@@ -34,6 +39,34 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page);
   });
 
+  test('«не отправлен» не рвётся по буквам при окне 1176 (B678)', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'ширина окна приложения');
+    const applications = responseFixtures().map((item) =>
+      item.id === 'a-draft' ? { ...item, materials: { coverLetter: true, resume: true } } : item,
+    );
+    await open(page, '/app/responses', 'o01', { applications });
+    const cell = row(page, 'a-draft').locator('.ot-c-sent');
+    await expect(cell).toHaveText('не отправлен');
+    for (const width of [1176, 1024, 768, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const fit = await cell.evaluate((node) => {
+        const text = node.firstChild!;
+        const at = node.textContent!.indexOf('отправлен');
+        const range = document.createRange();
+        range.setStart(text, at);
+        range.setEnd(text, at + 'отправлен'.length);
+        return {
+          lines: range.getClientRects().length,
+          over: node.scrollWidth - node.clientWidth,
+          page: document.documentElement.scrollWidth - window.innerWidth,
+        };
+      });
+      expect(fit.lines, `${width}`).toBe(1);
+      expect(fit.over, `${width}`).toBeLessThanOrEqual(0);
+      expect(fit.page, `${width}`).toBeLessThanOrEqual(0);
+    }
+  });
+
   test('раскрытый отклик: что дальше, что было, отметка ответа на месте', async ({ page }) => {
     const mock = await open(page, '/app/responses', 'o01');
     await row(page, 'a-interview')
@@ -42,8 +75,12 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expect(page).toHaveURL(/\/app\/responses\/a-interview$/u);
     const detail = page.locator('#otklik-a-interview');
     await expect(detail.getByRole('heading', { name: 'Что дальше' })).toBeVisible();
-    // B645: раздел «Интервью» ещё заглушка — ссылок в него нет.
-    await expect(detail.locator('a[href*="/interview"], a[href*="/debrief"]')).toHaveCount(0);
+    // B645-2: до интервью отклик ведёт в подготовку (I1); путей в разбор ещё нет.
+    await expect(detail.locator('a[href*="/interview"], a[href*="/debrief"]')).toHaveCount(1);
+    await expect(detail.getByRole('link', { name: 'Подготовиться к интервью' })).toHaveAttribute(
+      'href',
+      '/app/responses/a-interview/interview',
+    );
     await expect(detail.getByText('Интервью назначено')).toBeVisible();
     await expect(detail.getByLabel('Ваша заметка')).toHaveValue(
       'Спросить про размер команды платформы.',
@@ -276,6 +313,32 @@ test.describe('B656: «Отклики» нового кабинета', () => {
       'true',
     );
     expect(mock.calls).toContain('PUT feedback true');
+  });
+
+  test('«Поправить резюме»: готовая правка у консультанта, пишет её кандидат (o07 → k06)', async ({
+    page,
+  }, info) => {
+    const options = { reviewReady: true, resumeFact: true };
+    const mock = await open(page, '/app/responses/review', 'o07', options);
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Поправить резюме' }).click();
+    const panel = page.getByRole('dialog', { name: 'Консультант · Резюме' });
+    const card = panel.locator('.ec');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await expect(panel.locator('.msg.bot')).toContainText('из беседы 11.11');
+    await expect(panel.getByRole('alert')).toHaveCount(0);
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-${info.project.name}.png` });
+    }
+    expect(mock.calls).toEqual([]);
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    expect(mock.calls).toEqual(['apply e1#0']);
+    await panel.getByRole('button', { name: 'Отменить' }).click();
+    await expect(card).toBeVisible();
+    expect(mock.calls).toEqual(['apply e1#0', 'revert']);
   });
 
   test('отказ в раскрытом отклике: догадка и отметка «чего не хватило»', async ({ page }) => {

@@ -138,6 +138,7 @@ describe('the matched list past its window (PRB-041)', () => {
     expect(logged('matched-list-rebuilt')[0]).toMatchObject({
       listMs: expect.any(Number),
       prepareMs: expect.any(Number),
+      phasesMs: expect.objectContaining({ finish: expect.any(Number) }),
     });
     await get();
     expect(logged('matched-vacancies-timing').at(-1)).toMatchObject({ listServed: 'fresh' });
@@ -167,6 +168,8 @@ describe('the matched list past its window (PRB-041)', () => {
     expect(logged('matched-vacancies-timing').at(-1)).toMatchObject({
       listCached: false,
       listServed: 'built',
+      'phase:finish': expect.any(Number),
+      'phase:filters': expect.any(Number),
     });
   });
 });

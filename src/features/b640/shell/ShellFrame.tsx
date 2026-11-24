@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import {
   B640_HOME_PATH,
   B640_KIT_PATH,
@@ -11,6 +11,7 @@ import {
 } from '../routes';
 import { SECTION_ENTRIES } from '../sections';
 import { BottomNav } from './BottomNav';
+import { ChunkBoundary, ChunkView } from './ChunkBoundary';
 import { Crumbs, type Crumb } from './Crumbs';
 import { Link } from './Link';
 import { backLabel } from './navigation';
@@ -84,6 +85,8 @@ function NotFound() {
   );
 }
 
+const pageFrame = (failure: ReactNode) => <div className="page">{failure}</div>;
+
 /** Оболочка вокруг экрана: рейл, верхняя полоса, путь, вкладки, нижняя навигация. */
 export function ShellFrame() {
   const { match, path, session, chrome, setCtxSlot, panel } = useShell();
@@ -94,17 +97,18 @@ export function ShellFrame() {
   const tabs = match ? tabsOf(match) : null;
   const back = match ? mobileBackOf(match, trail) : null;
   const title = chrome.title ?? (isKit ? 'Общие компоненты' : (node?.title ?? 'Кабинет'));
-  const bellCount = chrome.bellCount ?? counted;
-  const Section = node ? SECTION_ENTRIES[node.section] : null;
+  const bellCount = chrome.bellCount ?? counted.count;
+  const section = node ? SECTION_ENTRIES[node.section] : null;
 
   return (
     <div className={panel?.kind === 'consultant' ? 'app has-panel' : 'app'} id="screen">
       <Rail active={node?.nav ?? null} />
       <Topbar
         title={title}
+        titleTip={chrome.title ? undefined : chrome.titleTip}
         active={node?.nav ?? null}
         bellCount={bellCount}
-        bellCritical={chrome.bellCritical ?? false}
+        bellCritical={chrome.bellCritical ?? counted.critical}
         coachDot={chrome.coachDot ?? false}
         back={back}
       />
@@ -115,11 +119,15 @@ export function ShellFrame() {
         {tabs ? <SecTabs label={tabs.label} tabs={tabs.tabs} className={tabs.className} /> : null}
         <Suspense fallback={<div className="page b640-loading" aria-busy="true" />}>
           {isKit ? <Showcase /> : null}
-          {!isKit && match && Section ? (
-            <Section key={path} node={match.node} params={match.params} />
-          ) : null}
           {!isKit && !match ? <NotFound /> : null}
         </Suspense>
+        {!isKit && match && section ? (
+          <ChunkBoundary chunk={section} resetKey={path} frame={pageFrame}>
+            <Suspense fallback={<div className="page b640-loading" aria-busy="true" />}>
+              <ChunkView key={path} chunk={section} props={{ node: match.node, params: match.params }} />
+            </Suspense>
+          </ChunkBoundary>
+        ) : null}
       </main>
       <ShellPanels nav={node?.nav ?? null} />
       <BottomNav

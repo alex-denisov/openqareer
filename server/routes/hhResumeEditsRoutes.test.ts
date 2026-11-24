@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import { cluster } from '../testHelpers/letterApprovalHarness';
 import { createApp, login } from '../testHelpers/vacancyPitchHarness';
@@ -19,8 +19,11 @@ const SNAPSHOT = {
   selected: { id: 'dev', title: 'Разработчик', text: 'Разработчик. Node.js. Писал сервисы.', sections: SECTIONS },
 };
 
-async function harness(cabinetB640 = true) {
-  const { app, candidates } = await createApp([cluster], { cabinetB640 });
+async function harness(cabinetB640 = true, hhResumeVariant?: (input: { facts: readonly { text: string }[] }) => Promise<unknown>) {
+  const { app, candidates } = await createApp([cluster], {
+    cabinetB640,
+    ...(hhResumeVariant ? { experienceFactRewriter: { rewrite: async () => null, hhResumeVariant } as never } : {}),
+  });
   const { cookie, candidateId } = await login(app);
   const ids = ['import:b678:role', 'import:b678:b1', 'import:b678:b2'];
   candidates.importResumeEvidence(candidateId, {
@@ -41,7 +44,7 @@ async function harness(cabinetB640 = true) {
     }],
   };
   candidates.saveResumeDraft(candidateId, draft, []);
-  const call = (method: 'GET' | 'PUT', url: string, payload?: object) =>
+  const call = (method: 'GET' | 'PUT' | 'POST', url: string, payload?: object) =>
     app.inject({ method, url, headers: { cookie, origin: ORIGIN }, ...(payload ? { payload } : {}) });
   return { call };
 }
@@ -73,6 +76,33 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     expect(response.json().error.code).toBe('hh_resume_sections_missing');
   });
 
+  it('разделы выбранного прочитаны при сверке списка — правки есть без нового выбора', async () => {
+    const { call } = await harness();
+    const { sections, ...plain } = SNAPSHOT.selected;
+    const saved = await call('PUT', RESUMES, { ...SNAPSHOT, selected: plain, contents: [{ ...plain, sections }] });
+    expect(saved.statusCode).toBe(200);
+    expect((await call('GET', EDITS)).statusCode).toBe(200);
+  });
+
+  it('сверка отдаёт у прочитанного резюме то же число правок, что откроет разбор', async () => {
+    const { call } = await harness();
+    const other = { id: 'other', title: 'Другое', text: 'Текст' };
+    await call('PUT', RESUMES, {
+      resumes: [...SNAPSHOT.resumes, { id: 'other', title: 'Другое' }],
+      selected: other,
+      contents: [SNAPSHOT.selected],
+    });
+    const review = (await call('GET', `${RESUMES}/review?vacancyId=cluster-99&edits=1`)).json().data;
+    const plain = (await call('GET', `${RESUMES}/review?vacancyId=cluster-99`)).json().data;
+    expect(plain.resumes[0]).not.toHaveProperty('editCount');
+    await call('PUT', RESUMES, SNAPSHOT);
+    const edits = (await call('GET', EDITS)).json().data.edits;
+    const fits = review.resumes as Array<{ resumeId: string; editCount?: number }>;
+    expect(edits.length).toBeGreaterThan(0);
+    expect(fits.find((fit) => fit.resumeId === 'dev')?.editCount).toBe(edits.length);
+    expect(fits.find((fit) => fit.resumeId === 'other')).not.toHaveProperty('editCount');
+  });
+
   it('разделы проверяются по размеру', async () => {
     const { call } = await harness();
     const huge = { ...SECTIONS, about: 'я'.repeat(4_001) };
@@ -96,5 +126,53 @@ describe('B678: правки резюме hh.ru «было → станет»', 
       contents: resumes.map((resume) => ({ ...resume, text })),
     });
     expect(response.statusCode).toBe(200);
+  });
+});
+
+describe('B682: «Другой вариант» правки резюме', () => {
+  const VARIANTS = `${RESUMES}/edits/variants`;
+  type Edit = { section: string; now: string; variantOf?: { vacancyId: string; subjectId: string } };
+  async function opened(answers: readonly string[]) {
+    const queue = [...answers];
+    const write = vi.fn(async () => ({ text: queue.shift() ?? '', factIds: [] }));
+    const { call } = await harness(true, write);
+    await call('PUT', RESUMES, SNAPSHOT);
+    const edits = (await call('GET', EDITS)).json().data.edits as Edit[];
+    return { call, write, edits, skills: edits.find((edit) => edit.section === 'skills')! };
+  }
+
+  it('три варианта навыков, четвёртый — 409 без модели; список переживает перезагрузку; у должности ключа нет', async () => {
+    const { call, write, edits, skills } = await opened(['Kubernetes\nNode.js', 'PostgreSQL\nNode.js', 'PostgreSQL\nKubernetes\nNode.js']);
+    expect(edits.find((edit) => edit.section === 'title')?.variantOf).toBeUndefined();
+    const first = await call('POST', VARIANTS, skills.variantOf);
+    expect(first.statusCode).toBe(201);
+    expect(first.json().data).toMatchObject({ remaining: 2, variant: { text: 'Kubernetes, Node.js', payload: { added: ['Kubernetes'] } } });
+    for (let i = 0; i < 2; i += 1) expect((await call('POST', VARIANTS, skills.variantOf)).statusCode).toBe(201);
+    const over = await call('POST', VARIANTS, skills.variantOf);
+    expect([over.statusCode, over.json().error.code]).toEqual([409, 'variant_limit_reached']);
+    expect(write).toHaveBeenCalledTimes(3);
+    const list = await call('GET', `/api/v1/candidate/text-variants?kind=resume&subjectId=${skills.variantOf!.subjectId}`);
+    expect(list.json().data).toMatchObject({ remaining: 0 });
+  });
+
+  it('новый навык — 503 и не сохраняется; чужой ключ — 404, мусор — 400, модель не зовётся', async () => {
+    const { call, write, skills } = await opened(['Rust\nNode.js']);
+    expect((await call('POST', VARIANTS, skills.variantOf)).statusCode).toBe(503);
+    expect((await call('POST', VARIANTS, { vacancyId: 'cluster-99', subjectId: 'a'.repeat(64) })).statusCode).toBe(404);
+    expect((await call('POST', VARIANTS, { vacancyId: 'cluster-99', subjectId: 'x' })).statusCode).toBe(400);
+    expect((await call('POST', VARIANTS, { ...skills.variantOf, vacancyId: 'cluster-0' })).statusCode).toBe(404);
+    expect(write).toHaveBeenCalledTimes(1);
+  });
+
+  it('пять неудач за час — 429 без вызова модели', async () => {
+    const { call, write, skills } = await opened([]);
+    for (let i = 0; i < 5; i += 1) expect((await call('POST', VARIANTS, skills.variantOf)).statusCode).toBe(503);
+    expect((await call('POST', VARIANTS, skills.variantOf)).statusCode).toBe(429);
+    expect(write).toHaveBeenCalledTimes(5);
+  });
+
+  it('без флага B640 — 404', async () => {
+    const { call } = await harness(false);
+    expect((await call('POST', VARIANTS, { vacancyId: 'cluster-99', subjectId: 'a'.repeat(64) })).statusCode).toBe(404);
   });
 });

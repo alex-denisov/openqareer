@@ -12,7 +12,7 @@ vi.mock('../../apply/hh/hhDesktop', () => desktop);
 const { HhRaiseStatus } = await import('./HhRaiseStatus');
 
 const base: B640HhRaiseState = {
-  connected: true, resumeId: 'abc', enabled: true, everyHours: 4,
+  connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер', updatedLabel: 'обновлено 3 ноября' }], enabled: true, everyHours: 4,
   lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null,
 };
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -67,6 +67,28 @@ describe('B699: состояние автоподнятия', () => {
     await flush();
     expect(api.setHhRaiseEnabled).toHaveBeenCalledWith(false, 'abc');
     expect((view!.container.querySelector('[role="switch"]') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('a11: поле «Резюме» показывает список и сохраняет выбор', async () => {
+    const resumes = [...base.resumes, { id: 'def', title: 'Архитектор' }];
+    api.setHhRaiseEnabled.mockResolvedValue({ ...base, resumes, resumeId: 'def' });
+    await show({ resumes });
+    const select = view!.container.querySelector<HTMLSelectElement>('.pf-f.hh-cv select#hh-cv')!;
+    expect(view!.container.querySelector('label[for="hh-cv"]')?.textContent).toBe('Резюме');
+    expect([...select.options].map((o) => o.text)).toEqual(['Инженер · обновлено 3 ноября', 'Архитектор']);
+    expect(select.value).toBe('abc');
+    act(() => {
+      select.value = 'def';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flush();
+    expect(api.setHhRaiseEnabled).toHaveBeenCalledWith(true, 'def');
+    expect(select.value).toBe('def');
+  });
+
+  it('a11: одно резюме — поле с одним вариантом', async () => {
+    await show({});
+    expect(view!.container.querySelectorAll('#hh-cv option')).toHaveLength(1);
   });
 
   it('hh не подключён — ничего не показывает; сбой загрузки — строка ошибки', async () => {

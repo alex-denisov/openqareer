@@ -9,7 +9,7 @@ use crate::connector_session::{
     eval_json, is_allowed_session_url, is_transient_eval_error, read_session_page,
     session_window_label, SessionWindowRequest, HH_SIGNED_IN_SELECTOR,
 };
-use crate::hh_apply::RunningGuard;
+use crate::hh_apply::{is_early_signed_out, RunningGuard};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -83,9 +83,11 @@ async fn step(window: &tauri::Webview, script: &str) -> Result<String, String> {
 
 /// Polls the page script until it answers something other than `waiting`.
 async fn wait_for_answer(window: &tauri::Webview, script: &str) -> String {
-    let deadline = tokio::time::Instant::now() + RAISE_WAIT;
+    let started = tokio::time::Instant::now();
+    let deadline = started + RAISE_WAIT;
     loop {
         match step(window, script).await {
+            Ok(code) if is_early_signed_out(&code, started.elapsed()) => {}
             Ok(code) if code != "waiting" => return code,
             Err(error) if !is_transient_eval_error(&error) => return "script_error".into(),
             _ => {}
@@ -145,7 +147,9 @@ mod tests {
         assert!(validate_request(&request("0a1b2c3d4e5f")).is_ok());
         assert!(validate_request(&request("1234567")).is_ok());
         assert!(validate_request(&request(&"a".repeat(RESUME_ID_MAX))).is_ok());
-        for bad in ["", "xyz", "ab/cd", "ab cd", "a\"b", "../1", "ab?x=1", "résumé"] {
+        for bad in [
+            "", "xyz", "ab/cd", "ab cd", "a\"b", "../1", "ab?x=1", "résumé",
+        ] {
             assert!(validate_request(&request(bad)).is_err(), "{bad}");
         }
         assert!(validate_request(&request(&"a".repeat(RESUME_ID_MAX + 1))).is_err());
@@ -155,7 +159,10 @@ mod tests {
     fn opens_the_resume_page_on_hh_only() {
         assert_eq!(resume_url("abc123"), "https://hh.ru/resume/abc123");
         assert!(is_allowed_session_url("hh", &resume_url("abc123")));
-        assert!(!is_allowed_session_url("hh", "https://hh.ru.evil.example/resume/abc123"));
+        assert!(!is_allowed_session_url(
+            "hh",
+            "https://hh.ru.evil.example/resume/abc123"
+        ));
     }
 
     #[test]

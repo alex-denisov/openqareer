@@ -1,5 +1,9 @@
-import type { VacancyFitRequirementAssessment, VacancyFitView } from '../../../../../shared/vacancyFit';
+import type {
+  VacancyFitRequirementAssessment,
+  VacancyFitView,
+} from '../../../../../shared/vacancyFit';
 import { vacancyFitPercent } from '../../../../../shared/vacancyFitPercent';
+import { countedSkillRequirements, requirementVerdict } from '../../../vacancies/vacancyRequirementChips';
 import { pluralRu } from '../format';
 
 export type FitStatus = VacancyFitRequirementAssessment['status'];
@@ -19,7 +23,10 @@ export type FitBlockState = 'busy' | 'err' | 'none' | 'few' | 'ready';
 
 const BUSY_STATES: readonly VacancyFitView['state'][] = ['processing', 'retrying', 'refreshing'];
 
-export function fitBlockState(view: VacancyFitView | undefined, readFailed: boolean): FitBlockState {
+export function fitBlockState(
+  view: VacancyFitView | undefined,
+  readFailed: boolean,
+): FitBlockState {
   if (vacancyFitPercent(view) !== null) return 'ready';
   if (!view) return readFailed ? 'err' : 'busy';
   if (BUSY_STATES.includes(view.state)) return 'busy';
@@ -28,29 +35,33 @@ export function fitBlockState(view: VacancyFitView | undefined, readFailed: bool
   return 'few';
 }
 
-function evidenceText(status: FitStatus, quote: string | undefined): string {
-  if (status === 'matched') return quote ?? '';
+function evidenceText(
+  status: FitStatus,
+  quote: string | undefined,
+  impliedRole: string | undefined,
+): string {
+  if (status === 'matched') {
+    return quote ?? (impliedRole ? `следует из опыта: ${impliedRole}` : '');
+  }
   if (status === 'partial') return quote ? `частично · ${quote}` : 'частично';
   return status === 'unknown' ? 'неизвестно' : 'нет в профиле';
 }
 
-/** Список требований-навыков с вердиктом по каждому; условия (язык, формат) в нём не идут. */
+/**
+ * Требования, по которым посчитан процент, с тем же вердиктом, что у предложения над списком
+ * (навык, следующий из опыта, — «есть»); условия и обязанности в список не идут.
+ */
 export function fitRows(view: VacancyFitView | undefined): readonly FitRow[] {
-  if (!view) return [];
-  const byId = new Map(view.result?.assessments.map((item) => [item.requirementId, item]) ?? []);
-  return view.requirements
-    .filter((requirement) => requirement.skill !== false)
-    .map((requirement) => {
-      const assessment = byId.get(requirement.id);
-      const status = assessment?.status ?? 'unknown';
-      return {
-        id: requirement.id,
-        text: requirement.label?.trim() || requirement.text,
-        status,
-        evidence: evidenceText(status, assessment?.evidence[0]?.quote),
-        canCheck: status === 'partial' || status === 'unknown',
-      };
-    });
+  return countedSkillRequirements(view).map((requirement) => {
+    const { status, evidence, impliedRole } = requirementVerdict(view, requirement.id);
+    return {
+      id: requirement.id,
+      text: requirement.label?.trim() || requirement.text,
+      status,
+      evidence: evidenceText(status, evidence[0]?.quote, impliedRole),
+      canCheck: status === 'partial' || status === 'unknown',
+    };
+  });
 }
 
 export function requirementsLabel(view: VacancyFitView | undefined): string {
@@ -62,7 +73,11 @@ export function requirementsLabel(view: VacancyFitView | undefined): string {
 function shortDate(iso: string | undefined): string {
   const date = iso ? new Date(iso) : undefined;
   if (!date || Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Moscow' }).format(date);
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Europe/Moscow',
+  }).format(date);
 }
 
 /** «Требования — из текста вакансии, hh.ru, 11.11 · 7 требований». */

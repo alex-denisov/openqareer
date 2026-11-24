@@ -109,6 +109,11 @@ export interface VacancyCluster {
   id: string;
   canonicalTitle: string;
   canonicalCompany: string;
+  /**
+   * B756 23.11: площадка не назвала работодателя. `canonicalCompany` тогда пустая строка —
+   * поле обязательно в договоре с кабинетом; признак говорит «компания не указана» явно.
+   */
+  companyUnspecified?: true;
   /** `canonicalCompany` — имя частного лица по признаку площадки (INC-023). */
   employerIsPerson?: boolean;
   canonicalLocation?: string;

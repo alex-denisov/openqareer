@@ -1,7 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
 import { PREP_NOW } from './interviewFixture';
-import { mockPractice, PRACTICE_ANSWER, type PracticeOptions } from './practiceFixture';
+import {
+  mockPractice,
+  PRACTICE_ANSWER,
+  PRACTICE_TASK,
+  type PracticeOptions,
+} from './practiceFixture';
 
 const PATH = '/app/responses/r-arka/interview/practice';
 
@@ -44,6 +49,30 @@ async function open(page: Page, options: PracticeOptions = {}, query = '') {
 const steps = (page: Page) => page.getByRole('list', { name: 'Шаги тренировки' });
 
 test.describe('B750: «Тренировка System Design» (I3)', () => {
+  test('B768 · I3a: задача готовится долго — «Готовим задачу…» на месте, без пустого экрана', async ({
+    page,
+  }) => {
+    await speechStub(page);
+    await page.clock.setFixedTime(new Date(PREP_NOW));
+    await mockPractice(page);
+    let release: () => void = () => undefined;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    // Первый запрос задачи на проде идёт около 10 с: держим ответ, пока тест не проверит ожидание.
+    await page.route('**/api/v1/candidate/b640/interview-tasks', async (route) => {
+      await released;
+      await route.fulfill({ json: { data: PRACTICE_TASK, meta: { requestId: 'e2e-task' } } });
+    });
+    await page.goto(PATH, { waitUntil: 'domcontentloaded' });
+    const screen = page.locator('[data-b640-node="i03"]');
+    const waiting = screen.getByRole('status');
+    await expect(waiting).toHaveText('Готовим задачу…', { timeout: 15_000 });
+    await expect(waiting).toBeInViewport();
+    await expect(steps(page)).toBeVisible();
+    release();
+    await expect(page.getByRole('heading', { name: 'Что важно в задаче' })).toBeVisible();
+    await expect(screen.getByText('Готовим задачу…')).toHaveCount(0);
+  });
+
   test('задача → ответ со схемой и критериями → разбор, схема в подготовку, «Разбор помог?»', async ({
     page,
   }) => {
@@ -53,7 +82,9 @@ test.describe('B750: «Тренировка System Design» (I3)', () => {
       'step',
     );
     await expect(page.getByRole('heading', { name: 'Что важно в задаче' })).toBeVisible();
-    await expect(page.locator('.sd-reqs li').first()).toBeVisible();
+    // B750: пункты — те, что сервер написал по вакансии, ровно четыре.
+    await expect(page.locator('.sd-reqs li')).toHaveText(PRACTICE_TASK.points);
+    await expect(page.getByRole('heading', { name: PRACTICE_TASK.title })).toBeVisible();
     await expect(page.locator('.sd-time')).toHaveText('45 минут на ответ');
     await expect(page.getByText('Пробные интервью: осталось 27 из 30')).toBeVisible();
     await expectGates(page);
@@ -131,6 +162,32 @@ test.describe('B750: «Тренировка System Design» (I3)', () => {
       'helpful PUT',
     ]);
     expect(state.schemas[0]).toMatchObject({ nodes: expect.any(Array), links: expect.any(Array) });
+  });
+
+  test('B780: тренировку заменили в другой вкладке — «Закончить и разобрать» не теряет ответ', async ({
+    page,
+  }) => {
+    const state = await open(page, { replaced: true });
+    await page.getByRole('radiogroup', { name: 'Как отвечать' }).getByLabel('Текстом').check();
+    await page.getByRole('button', { name: 'Начать' }).click();
+    await page.getByLabel('Ваш ответ').fill(PRACTICE_ANSWER);
+    await page.getByRole('button', { name: 'Закончить и разобрать' }).click();
+    await expect(page.getByText('Тренировка не найдена.')).toHaveCount(0);
+    await page.getByRole('radiogroup', { name: 'Как отвечать' }).getByLabel('Текстом').check();
+    await page.getByRole('button', { name: 'Начать' }).click();
+    await expect(page.getByLabel('Ваш ответ')).toHaveValue(PRACTICE_ANSWER);
+    await page.getByRole('button', { name: 'Закончить и разобрать' }).click();
+    await expect(
+      page.getByRole('heading', { name: 'Четыре критерия: два закрыты, два — не полностью' }),
+    ).toBeVisible();
+    expect(
+      state.calls.filter((call) => call.startsWith('start') || call.startsWith('answer')),
+    ).toEqual([
+      'start text system_design',
+      'answer 404',
+      'start text system_design',
+      'answer q-sd-1',
+    ]);
   });
 
   test('возврат к отвеченной тренировке открывает разбор; «Задача» — снова условие', async ({

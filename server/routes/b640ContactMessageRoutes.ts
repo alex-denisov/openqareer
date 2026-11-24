@@ -10,7 +10,7 @@ import {
   type B640ContactMessageSent,
   type B640SentContactMessage,
 } from '../../shared/b640ContactMessage';
-import { SqliteContactMessageRepository, type StoredContactMessage } from '../data/sqliteContactMessageRepository';
+import { SqliteContactMessageRepository, type OpenDraftKey, type StoredContactMessage } from '../data/sqliteContactMessageRepository';
 import { SqliteContactStatusRepository } from '../data/sqliteContactStatusRepository';
 import { linkedinOpenUrl } from '../domain/b640ContactMessage';
 import { sessionCandidate } from './b640VacancyContext';
@@ -21,10 +21,11 @@ import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 import { requireTariffQuota } from './tariffQuotaGuard';
 
-const BASE = '/api/v1/candidate/b640/contact-messages';
-const idSchema = z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/u);
+export const CONTACT_MESSAGE_BASE = '/api/v1/candidate/b640/contact-messages';
+const BASE = CONTACT_MESSAGE_BASE;
+export const idSchema = z.string().trim().min(1).max(120).regex(/^[a-zA-Z0-9_-]+$/u);
 /** Id кластера вакансии: у источников с префиксом есть двоеточие (`cluster-src-hh-search:137412812`). */
-const vacancyIdSchema = z.string().trim().min(1).max(200).regex(/^[a-zA-Z0-9_:.-]+$/u);
+export const vacancyIdSchema = z.string().trim().min(1).max(200).regex(/^[a-zA-Z0-9_:.-]+$/u);
 const createSchema = z
   .object({
     contactId: idSchema.optional(),
@@ -37,6 +38,14 @@ const createSchema = z
   .strict()
   .refine((body) => (body.contactId === undefined) !== (body.recruiterId === undefined))
   .refine((body) => body.alsoVacancyId === undefined || body.vacancyId !== undefined);
+/** Единица квоты сообщения: вариант стоит на ней же. */
+export function messageUnit(message: {
+  readonly vacancyId?: string | null;
+  readonly contactId: string | null;
+  readonly recruiterId: string | null;
+}): string {
+  return message.vacancyId ?? `contact-message:${message.contactId ?? message.recruiterId}`;
+}
 const editSchema = z.object({ text: z.string().trim().min(1).max(B640_CONTACT_MESSAGE_EDIT_MAX) }).strict();
 const listSchema = z.object({ contactId: idSchema });
 const sentSchema = z.object({ vacancyId: vacancyIdSchema });
@@ -54,21 +63,21 @@ const shown = (message: StoredContactMessage): B640ContactMessage => ({
   createdAt: message.createdAt,
 });
 
-function session(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+export function session(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
   return principal ? sessionCandidate(request, reply, principal.candidate) : null;
 }
 
-function notFound(request: FastifyRequest, reply: FastifyReply) {
+export function notFound(request: FastifyRequest, reply: FastifyReply) {
   return sendError(reply, request, 404, 'message_not_found', 'Сообщение не найдено.', false);
 }
 
-function findRecipient(
+export function findRecipient(
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
   candidateId: string,
-  body: z.infer<typeof createSchema>,
+  body: Pick<z.infer<typeof createSchema>, 'contactId' | 'recruiterId' | 'vacancyId'>,
 ): MessageRecipient | null {
   const repository = connectionRepository(deps, request, reply);
   if (!repository) return null;
@@ -103,7 +112,19 @@ async function createMessage(deps: RouteDeps, stores: Stores, request: FastifyRe
   if (!body.success) return sendError(reply, request, 400, 'invalid_body', 'Неверные параметры сообщения.', false);
   const recipient = findRecipient(deps, request, reply, candidate.id, body.data);
   if (!recipient) return reply;
-  const unit = body.data.vacancyId ?? `contact-message:${recipient.contactId ?? recipient.recruiterId}`;
+  const key: OpenDraftKey = {
+    candidateId: candidate.id,
+    contactId: recipient.contactId,
+    recruiterId: recipient.recruiterId,
+    vacancyId: body.data.vacancyId ?? null,
+    kind: body.data.kind,
+    recipientName: recipient.name,
+    recipientUrl: recipient.linkedinUrl,
+  };
+  // B682: закрытая панель продолжает свой черновик — с ним остаются его варианты и их предел.
+  const open = stores.messages.findOpen(key);
+  if (open) return { data: shown(open), meta: { requestId: request.id } };
+  const unit = messageUnit({ ...recipient, vacancyId: body.data.vacancyId });
   if (!requireTariffQuota(deps, request, reply, candidate.id, 'applications', unit)) return reply;
   const text = await writeContactMessageText(deps, request, {
     candidateId: candidate.id,
@@ -112,18 +133,10 @@ async function createMessage(deps: RouteDeps, stores: Stores, request: FastifyRe
     vacancyId: body.data.vacancyId ?? null,
     alsoVacancyId: body.data.alsoVacancyId ?? null,
   });
-  const stored = stores.messages.create({
-    id: randomUUID(),
-    candidateId: candidate.id,
-    contactId: recipient.contactId,
-    recruiterId: recipient.recruiterId,
-    vacancyId: body.data.vacancyId ?? null,
-    kind: body.data.kind,
-    text,
-    recipientName: recipient.name,
-    recipientUrl: recipient.linkedinUrl,
-    createdAt: new Date().toISOString(),
-  });
+  // Пока модель писала, такой же черновик мог появиться вторым запросом.
+  const stored =
+    stores.messages.findOpen(key) ??
+    stores.messages.create({ ...key, id: randomUUID(), text, createdAt: new Date().toISOString() });
   return reply.code(201).send({ data: shown(stored), meta: { requestId: request.id } });
 }
 

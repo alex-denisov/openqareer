@@ -6,7 +6,7 @@ import { useLoad } from '../today/useLoad';
 import { pageAttrs } from './careerPaths';
 import { ProfessionMoney } from './ProfessionMoney';
 import { loadProfession, type ProfessionData, type ProfessionPath } from './professionPathApi';
-import { bridgeRole, requirementsMeta } from './professionPathModel';
+import { bridgeRole, professionTexts, requirementsMeta } from './professionPathModel';
 import { skillCheckPath } from './skillCheckModel';
 
 type Ready = Extract<ProfessionPath, { state: 'ready' }>;
@@ -56,11 +56,12 @@ function Steps({ path, data }: { readonly path: Ready; readonly data: Profession
   const { openConsultant } = useShell();
   const owned = path.requirements.filter((item) => item.inProfile).map((item) => item.name);
   const bridge = data.roles ? bridgeRole(data.roles.rows, path.target, path.requirements) : null;
+  const texts = professionTexts(path.target, path.forms);
   return (
     <ol className="steps">
       <Step
         cls="done"
-        title="Что уже есть для новой профессии"
+        title={texts.owned}
         tip={
           owned.length
             ? `${owned.join(', ')}. Покажет работодателю, чем вы уже подходите`
@@ -69,7 +70,7 @@ function Steps({ path, data }: { readonly path: Ready; readonly data: Profession
       >
         <span className="step-meta num">{requirementsMeta(path.requirements)}</span>
       </Step>
-      <Step cls="now is-next" title="Проверка навыков профессии" tip="Подтвердит навыки в профиле">
+      <Step cls="now is-next" title={texts.check} tip="Подтвердит навыки в профиле">
         {data.checkReady ? (
           <Link className="btn is-primary" to={skillCheckPath(path.target)}>
             <Icon name="checkc" />
@@ -94,11 +95,12 @@ function Steps({ path, data }: { readonly path: Ready; readonly data: Profession
 
 function PathLead({ path, data }: { readonly path: Ready; readonly data: ProfessionData }) {
   const bridge = data.roles ? bridgeRole(data.roles.rows, path.target, path.requirements) : null;
+  const texts = professionTexts(path.target, path.forms);
   return (
     <section className="lead" aria-labelledby="path-title">
       <div className="lead-head">
         <h2 className="lead-title is-long" id="path-title">
-          Путь в профессию «{path.target}»
+          {texts.path}
         </h2>
         <InfoTip
           label="Как посчитано"
@@ -108,7 +110,7 @@ function PathLead({ path, data }: { readonly path: Ready; readonly data: Profess
       {bridge ? <p className="lead-text">Через промежуточную роль: {bridge.label}</p> : null}
       <Steps path={path} data={data} />
       <Link className="s11-resp" to={buildNodePath('o01')}>
-        <span className="s11-resp-t">Отклики в новой профессии</span>
+        <span className="s11-resp-t">{texts.responses}</span>
         <span className="s11-resp-n">
           Отправлено <span className="num">{path.responses.sent}</span>, приглашений{' '}
           <span className="num">{path.responses.invited}</span>
@@ -143,7 +145,7 @@ function PathBody({ data, retry }: { readonly data: ProfessionData; readonly ret
   if (path.state === 'too_few')
     return (
       <EmptyLead
-        title={`Путь в профессию «${path.target}»`}
+        title={professionTexts(path.target, path.forms).path}
         line={`По профессии мало вакансий для разбора: ${path.sampleSize} из ${path.threshold}.`}
       />
     );

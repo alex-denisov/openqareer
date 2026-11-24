@@ -19,6 +19,8 @@ import {
   versionTag,
   type TermsRow,
 } from './profileAsideModel';
+import { ResumePhotoSwitch } from './PhotoInResume';
+import { RoleResumeActions } from './RoleResumeActions';
 import { headLine, languageRow } from './profileModel';
 
 function TermsList({ rows }: { readonly rows: readonly TermsRow[] }) {
@@ -160,6 +162,7 @@ function BaseResume({ draft, role }: BaseProps) {
         <div className="cv-main">
           <b>{title}</b>
           {languages ? <small>{languages}</small> : null}
+          <ResumePhotoSwitch />
         </div>
         <div className="cv-acts">
           <Link
@@ -175,6 +178,7 @@ function BaseResume({ draft, role }: BaseProps) {
               Консультант
             </span>
           </Link>
+          <RoleResumeActions title={title} />
         </div>
       </li>
     </ul>

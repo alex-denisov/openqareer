@@ -48,8 +48,9 @@ function AddStatus({ status, onRetry, onPasteText }: StatusProps) {
   return (
     <div className="va-add-st is-err" id="va-add-st" role="alert">
       <span><Icon name="warn" />{text}</span>
-      {retry ? <button className="btn is-sm" type="button" onClick={onRetry}><Icon name="refresh" />Повторить</button> : null}
-      {paste ? <button className="btn is-sm" type="button" onClick={onPasteText}><Icon name="file" />Вставить текст</button> : null}
+      {/* Макет v06q: «Повторить» — кнопка с иконкой repeat, «Вставить текст» — действие строки с edit. */}
+      {retry ? <button className="btn is-sm" type="button" onClick={onRetry}><Icon name="repeat" />Повторить</button> : null}
+      {paste ? <button className="row-act" type="button" onClick={onPasteText}><Icon name="edit" />Вставить текст</button> : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { readTargetLevel } from './vacancyRoleContext';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import { readMatchedSnapshot, readMatchProfile } from '../vacancies/matchedPoolContext';
 import { cachedMatchedSourceRegistry } from '../vacancies/matchedSourceRegistryCache';
+import { backgroundStep } from '../observability/backgroundSteps';
 
 interface WarmLog {
   info(fields: Record<string, unknown>, message: string): void;
@@ -29,22 +30,22 @@ export async function warmMatchedList(
 ): Promise<void> {
   const { candidateStore, multiSourceEngine: engine, titleParseStore } = deps;
   const warmStartedAt = performance.now();
-  await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidateId);
+  await backgroundStep('list:fit-ids', async () => deps.vacancyMechanics?.warmCachedVacancyIds?.(candidateId));
   const warmFitIdsMs = Math.round(performance.now() - warmStartedAt);
-  const { filters, sort } = readSortedFilters(deps, candidateId, query);
-  const { confirmedSkills } = readMatchProfile(candidateStore, candidateId);
-  const campaign = readCampaign(candidateStore, candidateId);
-  const targetRoles = [...campaign.roles.value];
-  const targetLevel = readTargetLevel(candidateStore, candidateId, targetRoles);
-  const geography = matchGeographyOf(campaign.careerGeography);
-  const snapshot = await readMatchedSnapshot(
-    engine,
-    candidateId,
-    confirmedSkills,
-    targetRoles,
-    targetLevel,
-    geography,
-  );
+  const { filters, sort, confirmedSkills, campaign, targetRoles, targetLevel, geography } = await backgroundStep('list:profile', async () => {
+    const read = readCampaign(candidateStore, candidateId);
+    const roles = [...read.roles.value];
+    return {
+      ...readSortedFilters(deps, candidateId, query),
+      confirmedSkills: readMatchProfile(candidateStore, candidateId).confirmedSkills,
+      campaign: read,
+      targetRoles: roles,
+      targetLevel: readTargetLevel(candidateStore, candidateId, roles),
+      geography: matchGeographyOf(read.careerGeography),
+    };
+  });
+  const snapshot = await backgroundStep('list:snapshot', () =>
+    readMatchedSnapshot(engine, candidateId, confirmedSkills, targetRoles, targetLevel, geography));
   const orderLog = warnThrough(log);
   const input = {
     snapshot,
@@ -63,11 +64,11 @@ export async function warmMatchedList(
       ? { catalogTotals: () => engine.getCatalogTotals!() }
       : {}),
   };
-  const list = await warmMatchedListCache(input, log);
+  const list = await backgroundStep('list:build', () => warmMatchedListCache(input, log));
   if (!list) return;
-  const { prepareMs, prepareRows, listMs, filtered } = list;
+  const { prepareMs, prepareRows, listMs, phasesMs, filtered } = list;
   log?.info(
-    { warmFitIdsMs, prepareMs, prepareRows, listMs, rows: filtered.length },
+    { warmFitIdsMs, prepareMs, prepareRows, listMs, phasesMs, rows: filtered.length },
     'matched-list-warmed',
   );
 }

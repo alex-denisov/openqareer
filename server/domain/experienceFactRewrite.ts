@@ -507,6 +507,28 @@ export function withBulletEdits(
   };
 }
 
+/** Keeps only the named bullets; the facts of the others stay on offer (o07). */
+export function withOnlyBullets(
+  proposal: FactRewriteProposal,
+  keys: readonly string[],
+): FactRewriteProposal {
+  const wanted = new Set(keys);
+  const places = proposal.places
+    .map((place) => ({
+      ...place,
+      bullets: place.bullets.filter((_, i) => wanted.has(bulletKey(place.experienceId, i))),
+    }))
+    .filter((place) => place.bullets.length > 0);
+  const kept = places.flatMap((place) => place.bullets);
+  if (kept.length !== wanted.size) throw new InvalidBulletEditError('unknown_bullet');
+  return {
+    ...proposal,
+    places,
+    leftOutFactIds: [],
+    sourceFactIds: [...new Set(kept.flatMap((bullet) => bullet.sourceFactIds))],
+  };
+}
+
 /** Takes the rewrite's bullets out and offers the facts it declined again. */
 export function revertFactRewrite(
   draft: ResumeDraft,

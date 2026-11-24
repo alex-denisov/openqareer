@@ -29,7 +29,11 @@ import type { NamedRole } from '../../shared/roleProposals';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
-import { assertOpenRouterModelForPersonalData, isOpenRouterBaseUrl, openRouterRouting } from './openRouterPrivacy';
+import {
+  assertOpenRouterModelForPersonalData,
+  isOpenRouterBaseUrl,
+  openRouterRouting,
+} from './openRouterPrivacy';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
 const MAX_FACTS = 120;
@@ -39,7 +43,10 @@ const MAX_STATEMENT = 400;
 export interface ChatCompletionClient {
   readonly chat: {
     readonly completions: {
-      create(request: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{
+      create(
+        request: Record<string, unknown>,
+        options?: { signal?: AbortSignal },
+      ): Promise<{
         choices: Array<{ message: { content?: string | null } }>;
       }>;
     };
@@ -456,6 +463,18 @@ const DURABLE_TTL_MS = 7 * 24 * 60 * 60_000;
  * незачем. Память — быстрый слой, переживает рестарт база: без неё каждый
  * деплой снова звал модель и упирался в исчерпанную квоту (INC-035, B191).
  */
+/**
+ * B748 (переводы v8): сохранённое прежней проверкой название проходит нынешнюю без модели.
+ * Не прошедшее отбрасывается — экран берёт перевод, который фоновый проход записал роли.
+ */
+function recheckedTitleRu(role: NamedRole): NamedRole {
+  if (!role.titleRu) return role;
+  const titleRu = checkedTitleRu(role.title, role.titleRu);
+  if (titleRu === role.titleRu) return role;
+  const { titleRu: _dropped, ...rest } = role;
+  return titleRu ? { ...rest, titleRu } : rest;
+}
+
 export class CachedRoleNamer implements RoleNamer {
   private readonly entries = new Map<string, { at: number; outcome: RoleNamingOutcome }>();
 
@@ -497,7 +516,7 @@ export class CachedRoleNamer implements RoleNamer {
     const stored = this.store?.read(key);
     if (stored && this.now() - stored.at < this.durableTtlMs) {
       const outcome: RoleNamingOutcome = {
-        roles: stored.roles,
+        roles: stored.roles.map(recheckedTitleRu),
         ...(stored.stage ? { stage: stored.stage } : {}),
       };
       this.entries.set(key, { at: this.now(), outcome });
@@ -560,7 +579,9 @@ export class QueuedRoleNamer implements RoleNamer {
 }
 
 /** B748: проверенный перевод названий из собранной цепочки называния; нет — перевода нет. */
-export function roleTitleTranslatorOf(namer: RoleNamer | undefined): RoleTitleTranslator | undefined {
+export function roleTitleTranslatorOf(
+  namer: RoleNamer | undefined,
+): RoleTitleTranslator | undefined {
   const cached = namer instanceof CachedRoleNamer ? namer.inner : namer;
   const clean = cached instanceof HygienicRoleNamer ? cached.inner : cached;
   return clean instanceof TitleRuRetryRoleNamer ? clean.translator : undefined;
@@ -580,7 +601,7 @@ export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
 
 export interface RoleNamerConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Gemini на Vertex — последняя ступень цепочки называния, когда настроен (B580, 29.10). */
+  /** Vertex: в называние ролей не ставится с 20.11; конфиг остаётся для цепочек, где он есть. */
   readonly vertex?: VertexConfig;
   /** Metered `fetch` of the Vertex stage (04.11): books the call and enforces the daily cap. */
   readonly vertexFetch?: typeof fetch;
@@ -589,7 +610,7 @@ export interface RoleNamerConfig {
 }
 
 /**
- * Цепочка называния (B580, 29.10): deepseek-v4.1-flash → gpt-5.6-luna → Vertex.
+ * Цепочка называния (23.11): deepseek-v4.1-flash дважды → gpt-5.6-luna, без Vertex (выключен 20.11).
  * Gemini AI Studio с кредитом в 402 и бесплатные маршруты из неё ушли.
  */
 export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
@@ -605,7 +626,9 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
     new HygienicRoleNamer({
       inner: withTitleRuRetry(
         stages.map((stage) =>
-          stage.kind === 'vertex' ? vertexRoleNamer(stage.vertex, config.vertexFetch) : routeRoleNamer(stage.route),
+          stage.kind === 'vertex'
+            ? vertexRoleNamer(stage.vertex, config.vertexFetch)
+            : routeRoleNamer(stage.route),
         ),
         stages.map((stage) => stage.label),
       ),
@@ -648,15 +671,15 @@ function vertexRoleNamer(vertex: VertexConfig, fetchImpl?: typeof fetch): RoleNa
 /** Ступень называния по маршруту цепочки: все они говорят на chat-completions. */
 function routeRoleNamer(route: ProviderRoute): RoleNamer {
   return new LlmRoleNamer({
-        apiKey: route.apiKey,
-        model: route.model,
-        stage: `${route.provider}:${route.model}`,
-        baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-        structuredOutput:
-          modelRegistry[route.provider].models.find((item) => item.id === route.model)
-            ?.structuredOutput ?? false,
-        // Условие имеет смысл только у пула: у названной модели OpenRouter
-        // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
-        requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
-      });
+    apiKey: route.apiKey,
+    model: route.model,
+    stage: `${route.provider}:${route.model}`,
+    baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+    structuredOutput:
+      modelRegistry[route.provider].models.find((item) => item.id === route.model)
+        ?.structuredOutput ?? false,
+    // Условие имеет смысл только у пула: у названной модели OpenRouter
+    // отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+    requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
+  });
 }

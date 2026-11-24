@@ -1,4 +1,6 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import type { ResumeTemplate } from '../../../../shared/resumeBuilder/model';
+import type { ResumeDocument } from '../../resume/resumeTypes';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import {
   loadLetterResumePreview,
@@ -7,7 +9,9 @@ import {
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
-import { resumeLines } from './model/applyModel';
+import { sheetFromDocument } from './model/resumeSheet';
+import { ResumeBar } from './ResumeBar';
+import { ResumePage } from './ResumePage';
 
 const TITLES: Readonly<Record<LetterResumePreview['kind'], string>> = {
   targeted: 'Резюме под эту вакансию',
@@ -23,25 +27,14 @@ const SOURCES: Readonly<Record<LetterResumePreview['kind'], string>> = {
 };
 const SKELETON = ['w1', 'w2', 'w3', 'w4', 'w5', 'w2', 'w3', 'w4'] as const;
 
-function Sheet({ preview }: { readonly preview: LetterResumePreview }) {
-  const lines = resumeLines(preview.text);
-  if (lines.length === 0) return null;
+function ResumeFile({ document }: { readonly document: ResumeDocument }) {
+  const [template, setTemplate] = useState<ResumeTemplate>('strict');
+  const resume = useMemo(() => sheetFromDocument(document), [document]);
   return (
-    <div className="cv-stage">
-      <article className="cv-sheet cv-doc cv-strict" aria-label="Резюме">
-        <section className="cv-page" aria-label={preview.title}>
-          {lines.map((line, index) =>
-            line.kind === 'heading' ? (
-              <h4 className="cv-h" key={`${index}-${line.text.slice(0, 24)}`}>
-                {line.text}
-              </h4>
-            ) : (
-              <p key={`${index}-${line.text.slice(0, 24)}`}>{line.text}</p>
-            ),
-          )}
-        </section>
-      </article>
-    </div>
+    <>
+      <ResumeBar resume={resume} template={template} onTemplate={setTemplate} />
+      <ResumePage resume={resume} template={template} />
+    </>
   );
 }
 
@@ -67,13 +60,20 @@ function ResumePending({ error, onRetry }: PendingProps) {
           }
         />
       ) : (
-        <div className="cv-stage">
-          <div className="cv-skel" role="region" aria-busy="true" aria-label="Резюме собирается">
-            {SKELETON.map((width, index) => (
-              <div className={`ls-bar ${width}`} key={`${width}-${index}`} />
-            ))}
+        <>
+          <div className="cv-stage">
+            <div className="cv-skel" role="region" aria-busy="true" aria-label="Резюме собирается">
+              {SKELETON.map((width, index) => (
+                <div className={`ls-bar ${width}`} key={`${width}-${index}`} />
+              ))}
+            </div>
           </div>
-        </div>
+          <div className="actions">
+            <Button variant="primary" icon="check" disabled>
+              Одобрить резюме
+            </Button>
+          </div>
+        </>
       )}
     </section>
   );
@@ -106,7 +106,7 @@ export function ResumeStep({ vacancyId, approved, confirmed, onConfirm }: Resume
         </h2>
         <InfoTip label="Источник" text={SOURCES[preview.kind]} />
       </div>
-      <Sheet preview={preview} />
+      {preview.document ? <ResumeFile document={preview.document} /> : null}
       <div className="actions">
         {preview.kind === 'none' ? (
           <Link className="btn is-primary" to={buildNodePath('s01')}>

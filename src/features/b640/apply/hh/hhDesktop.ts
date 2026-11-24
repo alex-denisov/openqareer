@@ -22,14 +22,13 @@ import {
   type HhResumeItem,
 } from '../../../connections/hhSessionPoll';
 import { invokeDesktopCommand } from '../../../../services/desktop/desktopBridge';
+import { ensureHhWindow, ensureSettledHhWindow, HH_LOGIN_URL } from './hhWindow';
 import type { ParsedResume } from '../../../workspace/resumeParserTypes';
 
 /**
  * B704: сессия кандидата hh.ru в настольном приложении. Кандидат входит сам, в окне hh.ru;
  * список резюме и содержимое выбранного читаются в этом окне, отклик уходит там же.
  */
-const HH_LOGIN_URL = 'https://hh.ru/account/login';
-
 export type HhSessionRead =
   | { readonly kind: 'signed_out' }
   | { readonly kind: 'empty' }
@@ -50,25 +49,12 @@ const poller = createHhSessionPoller({
   readSessionPage: (url) => readSessionPage('hh', url),
 });
 
-/**
- * Окна сессии hh.ru нет: кандидат ещё не входил в приложении или закрыл окно. Rust отвечает
- * отказом `session_window_missing` — это «нужен вход», а не сбой чтения.
- */
-function isMissingSessionWindow(reason: unknown): boolean {
-  const raw = reason instanceof Error ? reason.message : String(reason ?? '');
-  return raw.split(':')[0]?.trim() === 'session_window_missing';
-}
-
-/** Список резюме кандидата в его сессии hh.ru. */
+/** Список резюме кандидата в его сессии hh.ru; «нужен вход» — только когда его показывает сама страница. */
 export async function readHhResumes(): Promise<HhSessionRead> {
-  let result: Awaited<ReturnType<typeof poller.poll>>;
-  try {
-    result = await poller.poll();
-  } catch (reason: unknown) {
-    if (isMissingSessionWindow(reason)) return { kind: 'signed_out' };
-    throw reason;
-  }
-  if (result.status === 'waiting_for_sign_in') return { kind: 'signed_out' };
+  if ((await ensureSettledHhWindow()) === 'signed_out') return { kind: 'signed_out' };
+  const result = await poller.poll();
+  // Вход только что виден, а страница ушла или просит проверку: это сбой чтения, а не вход.
+  if (result.status === 'waiting_for_sign_in') throw new Error('hh_resumes_not_read');
   if (result.status === 'authenticated_empty') return { kind: 'empty' };
   const usable = result.resumes.filter((item) => HH_RESUME_ID.test(item.id) && item.title.trim());
   return usable.length > 0 ? { kind: 'ready', resumes: usable.slice(0, HH_RESUMES_MAX) } : { kind: 'empty' };
@@ -93,6 +79,7 @@ export function sectionsOf(parsed: ParsedResume, fallbackTitle: string): HhResum
 
 /** Содержимое выбранного резюме — страница резюме в сессии кандидата, как её показывает hh.ru. */
 export async function readHhResumeContent(item: HhResumeItem): Promise<HhResumeContent> {
+  if ((await ensureHhWindow()) === 'signed_out') throw new Error('hh_resume_not_read');
   const parsed = await readHhResumeFromSession(item.url, (url) => readSessionPage('hh', url));
   const text = parsed?.rawText.trim();
   if (!parsed || !text) throw new Error('hh_resume_not_read');
@@ -119,10 +106,20 @@ export async function runHhApplyInSession(input: {
   readonly vacancyId: string;
   readonly resumeId: string;
   readonly letter: string;
+  /** Заголовок резюме, если он у кандидата один: запасной признак, когда hh.ru не отдал идентификатор. */
+  readonly uniqueResumeTitle?: string;
 }): Promise<HhDesktopReport> {
+  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
   const report = await invokeDesktopCommand<HhDesktopReport>('run_hh_apply', { request: input });
   if (!report) throw new Error('desktop_unavailable');
   return report;
+}
+
+/** B708: виден ли в окне hh.ru отклик на эту вакансию. Только чтение открытой страницы. */
+export async function readHhApplyWindow(vacancyId: string): Promise<'sent' | 'waiting'> {
+  const code = await invokeDesktopCommand<string>('read_hh_apply_window', { vacancyId });
+  if (code !== 'sent' && code !== 'waiting') throw new Error('desktop_unavailable');
+  return code;
 }
 
 export interface HhSectionEditInput {
@@ -151,6 +148,7 @@ export interface HhResumeEditReport {
 
 /** B678: раздел резюме hh.ru в окне кандидата. Вызывается только после его «Применить». */
 export async function applyHhResumeEditInSession(input: HhResumeEditInput): Promise<HhResumeEditReport> {
+  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
   const report =
     input.section === 'experience'
       ? await invokeDesktopCommand<HhResumeEditReport>('run_hh_experience_edit', {

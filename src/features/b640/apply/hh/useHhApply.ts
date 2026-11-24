@@ -3,6 +3,7 @@ import { CoachApiError } from '../../../coach/apiClient';
 import { runHhApplyInSession } from './hhDesktop';
 import { desktopFailureCode, refusalText, resultOf, type HhSendResult } from './hhSendModel';
 import { finishHhApply, startHhApply } from './hhSessionApi';
+import { stopHhWindowWatch, watchHhWindow } from './hhWindowWatch';
 
 export type HhApplyState =
   | { readonly kind: 'idle' }
@@ -14,6 +15,8 @@ export interface HhApplyInput {
   readonly vacancyId: string;
   readonly resumeId: string | null;
   readonly letter: string;
+  /** Заголовок выбранного резюме, если он у кандидата один. */
+  readonly uniqueResumeTitle?: string;
   /** Отклик ушёл (в том числе с анкетой): отклик отмечается отправленным. */
   readonly onSent: () => Promise<void>;
 }
@@ -37,19 +40,34 @@ function useSendingClock(sending: boolean, tick: (seconds: number) => void): voi
   }, [sending, tick]);
 }
 
-async function sendOnce(input: HhApplyInput, resumeId: string): Promise<HhSendResult> {
+async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () => void): Promise<HhSendResult> {
   let attemptId: string;
   try {
     ({ attemptId } = await startHhApply(input.vacancyId, resumeId));
   } catch (reason: unknown) {
     return { kind: 'error', text: refusalText(reason instanceof CoachApiError ? reason.code : undefined) };
   }
-  const report = await runHhApplyInSession({ vacancyId: input.vacancyId, resumeId, letter: input.letter }).catch(
+  // Отказ сервера прежнее чтение окна не обрывает; новая попытка уводит окно на свою вакансию.
+  stopHhWindowWatch();
+  const report = await runHhApplyInSession({
+    vacancyId: input.vacancyId,
+    resumeId,
+    letter: input.letter,
+    uniqueResumeTitle: input.uniqueResumeTitle,
+  }).catch(
     (reason: unknown) => ({ outcome: 'failed' as const, failureCode: desktopFailureCode(reason) }),
   );
   await finishHhApply(attemptId, report.outcome, report.failureCode ?? undefined).catch(() => undefined);
   const result = resultOf(report.outcome, report.failureCode);
   if (result.kind === 'sent' || result.kind === 'questionnaire') await input.onSent().catch(() => undefined);
+  else {
+    void watchHhWindow({
+      attemptId,
+      vacancyId: input.vacancyId,
+      failureCode: report.failureCode,
+      onSent: input.onSent,
+    }).then((late) => late && onLateSent());
+  }
   return result;
 }
 
@@ -61,15 +79,30 @@ export function useHhApply(input: HhApplyInput): HhApplyControls {
     setState((current) => (current.kind === 'sending' ? { kind: 'sending', seconds } : current)),
   );
   useSendingClock(sending, tickRef.current);
+  // Двойное нажатие до перерисовки видит прежнее состояние: попытка всё равно одна.
+  const inFlight = useRef(false);
+  const shownVacancy = useRef(input.vacancyId);
+  useEffect(() => {
+    shownVacancy.current = input.vacancyId;
+  }, [input.vacancyId]);
 
   return {
     state,
     ask: () => setState({ kind: 'confirm' }),
     cancel: () => setState({ kind: 'idle' }),
     confirm: () => {
-      if (state.kind !== 'confirm' || !input.resumeId) return;
+      if (state.kind !== 'confirm' || !input.resumeId || inFlight.current) return;
+      inFlight.current = true;
       setState({ kind: 'sending', seconds: 0 });
-      void sendOnce(input, input.resumeId).then(setState);
+      const onLateSent = () => {
+        if (shownVacancy.current === input.vacancyId) setState({ kind: 'sent' });
+      };
+      // Отклик из окна мог отметиться раньше, чем сервер отказал в повторе: «отправлен» не затираем.
+      void sendOnce(input, input.resumeId, onLateSent)
+        .then((result) => setState((shown) => (shown.kind === 'sent' ? shown : result)))
+        .finally(() => {
+          inFlight.current = false;
+        });
     },
   };
 }

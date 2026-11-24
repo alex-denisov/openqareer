@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { careerRoleKey, sameCareerRole } from './careerRoleKey';
+import {
+  careerRoleKey,
+  careerRoleListKey,
+  careerRoleRowKey,
+  sameCareerRole,
+} from './careerRoleKey';
 
 describe('careerRoleKey', () => {
   it('одна функция и уровень под разными названиями — один ключ', () => {
@@ -90,5 +95,62 @@ describe('careerRoleKey: название вне словаря (27.10)', () => 
 
   it('разные названия вне словаря остаются разными', () => {
     expect(careerRoleKey('Исполнительный директор')).not.toBe(careerRoleKey('Chief of Staff'));
+  });
+});
+
+describe('careerRoleListKey: строка списка ролей по роли словаря (B767)', () => {
+  it('варианты одной роли словаря разных ступеней — одна строка', () => {
+    expect(careerRoleListKey('Customer Support Director')).toBe(
+      careerRoleListKey('Head of Technical Support'),
+    );
+  });
+
+  it('разные роли словаря и первые лица остаются разными строками', () => {
+    expect(careerRoleListKey('VP of Customer Support')).not.toBe(
+      careerRoleListKey('Customer Support Director'),
+    );
+    expect(careerRoleListKey('CTO')).not.toBe(careerRoleListKey('VP of Engineering'));
+    expect(careerRoleListKey('CIO')).toBe(careerRoleListKey('IT Director'));
+    expect(careerRoleListKey('COO')).not.toBe(careerRoleListKey('VP of Operations'));
+  });
+
+  it('название вне словаря — как ключ строки', () => {
+    expect(careerRoleListKey('Transformation Director')).toBe(
+      careerRoleRowKey('Transformation Director'),
+    );
+  });
+});
+
+describe('sameCareerRole: аббревиатура в скобках роль не решает (B766)', () => {
+  it('Chief Transformation Officer (CTO) — не CTO: решает полное название', () => {
+    expect(
+      sameCareerRole('Chief Transformation Officer (CTO) – Insurance & Investments', 'CTO'),
+    ).toBe(false);
+  });
+
+  it('настоящие технические директора остаются в роли', () => {
+    for (const title of [
+      'Технический директор (CTO)',
+      'Технический директор (СТО)',
+      'CTO/Технический директор',
+      'Chief Technology Officer / Технический директор',
+      'Chief Technology Officer (CTO)',
+      'CTO',
+    ])
+      expect(sameCareerRole(title, 'CTO')).toBe(true);
+  });
+
+  it('скобка с другим смыслом, чем слова перед ней, роль решает, как раньше', () => {
+    expect(
+      sameCareerRole(
+        'Chief AI & Technology Officer (CTO) - Global Business Services - Dubai',
+        'CTO',
+      ),
+    ).toBe(true);
+    expect(sameCareerRole('Руководитель направления робототехники (CTO)', 'CTO')).toBe(true);
+  });
+
+  it('название из одной аббревиатуры в скобках сравнивается как есть', () => {
+    expect(sameCareerRole('(CTO)', 'CTO')).toBe(true);
   });
 });

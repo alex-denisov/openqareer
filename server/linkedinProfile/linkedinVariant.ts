@@ -6,7 +6,10 @@
 import { z } from 'zod';
 import { LINKEDIN_HEADLINE_MAX, LINKEDIN_SKILLS_MAX } from '../../shared/b640LinkedinProfile';
 import { textLanguage, type ProfileLanguage } from '../domain/profileLanguage';
-import { ABOUT_RULE, answerText, checkedText, linkedinRewriteRequest, PLACE_RULE, type CheckRule } from './linkedinRewrite';
+import {
+  ABOUT_RULE, answerText, checkedText, linkedinRewriteRequest, PLACE_RULE,
+  type CheckRule, type RewriteRejectReason,
+} from './linkedinRewrite';
 import { usableSkills, type LinkedinSectionFact, type SuggestionInput } from './sectionSuggestions';
 
 export const LINKEDIN_VARIANT_PROMPT_REVISION = 'linkedin-profile-variant-2026-11-20';
@@ -79,17 +82,29 @@ function checkedSkills(request: LinkedinVariantRequest, output: LinkedinVariantO
 }
 
 const RULES: Readonly<Record<Exclude<LinkedinVariantTarget, 'skills'>, Omit<CheckRule, 'allowed'>>> = {
-  headline: { max: LINKEDIN_HEADLINE_MAX },
+  headline: { max: LINKEDIN_HEADLINE_MAX, namesAllowed: true },
   about: ABOUT_RULE,
   place: PLACE_RULE,
 };
 
+/** Почему вариант не принят: код без текста кандидата. */
+export type VariantRejectReason = RewriteRejectReason | 'skills' | 'repeat';
+
 /** Принятый текст варианта или `null`. */
-export function checkLinkedinVariant(request: LinkedinVariantRequest, output: LinkedinVariantOutput): string | null {
+export function checkLinkedinVariant(
+  request: LinkedinVariantRequest,
+  output: LinkedinVariantOutput,
+  onReject?: (reason: VariantRejectReason) => void,
+): string | null {
   const text = request.target === 'skills'
     ? checkedSkills(request, output)
-    : checkedText(output, { ...RULES[request.target], allowed: request.facts }, request.language)?.text ?? null;
-  if (!text) return null;
+    : checkedText(output, { ...RULES[request.target], allowed: request.facts }, request.language, onReject)?.text ?? null;
+  if (!text) {
+    if (request.target === 'skills') onReject?.('skills');
+    return null;
+  }
   const own = flat(text);
-  return request.avoid.some((previous) => flat(previous) === own) ? null : text;
+  if (!request.avoid.some((previous) => flat(previous) === own)) return text;
+  onReject?.('repeat');
+  return null;
 }

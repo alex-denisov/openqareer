@@ -10,6 +10,8 @@ import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAss
 export type RoleSkillAssessmentCurrent =
   | { state: 'role_not_selected' }
   | { state: 'source_unavailable' }
+  /** B770: вакансии роли ещё подбираются; повтор через минуту получит проверку. */
+  | { state: 'counting' }
   | { state: 'too_few_vacancies'; roleTitle: string; sampleSize: number; threshold: number }
   | {
       state: 'insufficient_requirements';
@@ -81,6 +83,9 @@ export interface CheckedRole {
   readonly completedAt: string;
   /** B565: навыки, которые проверка подтвердила. */
   readonly confirmedSkills?: readonly string[];
+  /** B764: русское название роли проверки и число её навыков. */
+  readonly roleTitleRu?: string;
+  readonly skillCount?: number;
 }
 
 /** Роли с завершённой проверкой навыков (B445). */

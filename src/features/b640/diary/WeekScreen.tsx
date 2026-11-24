@@ -6,7 +6,7 @@ import { Button } from '../kit/Button';
 import { StatusLine } from '../kit/ResultLine';
 import { useToast } from '../kit/Toast';
 import { buildNodePath, type B640Node } from '../routes';
-import { useShell } from '../shell/ShellContext';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { getWeek, listGoalCards, recordMeasurement, saveWeek } from './diaryApi';
 import { shortDate, today, weekEnd, weekNumber, weekRangeLong } from './model';
 import {
@@ -60,6 +60,8 @@ function useWeekData(weekStart: string): readonly [Loaded, () => void] {
 /** Экран d00d «Итог недели»: замеры, что получилось, что мешает, план на неделю. */
 export function WeekScreen({ node }: { readonly node: B640Node }) {
   const { search } = useShell();
+  // Как у макета d00d (`data-mtight`): на 390 поле «Что мешает» 68 px, отступы плотнее.
+  useScreenChrome({ rootData: { mtight: '1' } });
   const day = today();
   const weekStart = weekFromSearch(search, diaryWeekStart(day) ?? day);
   const [loaded, retry] = useWeekData(weekStart);

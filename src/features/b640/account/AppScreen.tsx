@@ -1,5 +1,9 @@
 import { useId, useState } from 'react';
-import { COMMON_TIMEZONES, DEFAULT_ACCOUNT_TIMEZONE, formatTimezoneDisplay } from '../../../../shared/timezoneUtils';
+import {
+  COMMON_TIMEZONES,
+  DEFAULT_ACCOUNT_TIMEZONE,
+  formatTimezoneOffset,
+} from '../../../../shared/timezoneUtils';
 import { getAccount, updateAccountProfile } from '../../coach/coachApi';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { SegControl } from '../kit/SegControl';
@@ -10,6 +14,12 @@ import type { AppMoneyCurrency } from '../../../../shared/b640AppPreferences';
 import { DeviceSettingsSection, WebAppSection } from './DeviceSettingsSection';
 import { getAppPreferences, saveAppPreferences } from './appPreferencesApi';
 import { ErrorLine, SettingsPage, useLoad } from './parts';
+
+/** Пояс в списке n06 так, как в макете: «Москва, UTC+3». */
+function zoneLabel(timezone: string): string {
+  const city = COMMON_TIMEZONES.find((item) => item.timezone === timezone)?.city ?? timezone;
+  return `${city}, ${formatTimezoneOffset(timezone)}`;
+}
 
 const THEMES: ReadonlyArray<{ value: B640Theme; label: string }> = [
   { value: 'system', label: 'Как в системе' },
@@ -48,20 +58,15 @@ function ThemeRow() {
   );
 }
 
-/** Язык интерфейса: пока один — русский, как в макете n06. */
+/** Язык интерфейса один — русский: текстом, а не списком, где нечего выбрать (B774). */
 function LanguageRow() {
-  const labelId = useId();
   return (
     <li className="set-row">
       <div className="set-l">
-        <span className="set-t" id={labelId}>
-          Язык
-        </span>
+        <span className="set-t">Язык</span>
       </div>
       <div className="set-r">
-        <select className="sec-sel" aria-labelledby={labelId} defaultValue="ru">
-          <option value="ru">Русский</option>
-        </select>
+        <span className="set-v">Русский</span>
       </div>
     </li>
   );
@@ -105,7 +110,7 @@ function TimezoneRow() {
         >
           {zones.map((zone) => (
             <option key={zone.timezone} value={zone.timezone}>
-              {formatTimezoneDisplay(zone.timezone)}
+              {zoneLabel(zone.timezone)}
             </option>
           ))}
         </select>

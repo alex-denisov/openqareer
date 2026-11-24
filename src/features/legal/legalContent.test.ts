@@ -56,6 +56,27 @@ describe('published legal pack', () => {
     }
   });
 
+  it('describes the interview recordings the way the code handles them (edition 1.4)', () => {
+    const terms = plainText('terms');
+    const privacy = plainText('privacy');
+
+    expect(terms).not.toContain('доступны только пользователю');
+    expect(terms).toContain('разбор строится автоматически');
+    expect(terms).toContain('передаёт технологическим провайдерам обработки текста');
+    expect(privacy).not.toContain('провайдер не хранит переданный звук');
+    expect(privacy).not.toContain('провайдер не хранит эти данные');
+    expect(privacy).not.toContain('без хранения данных у провайдера');
+    expect(privacy).toContain('в объёме текста расшифровки разговора');
+    expect(privacy).toContain('оператор не обещает, что провайдер не хранит этот текст');
+  });
+
+  it('keeps speaker labelling out of the text until the product does it', () => {
+    for (const slug of LEGAL_DOC_SLUGS) {
+      expect(plainText(slug)).not.toContain('разметк');
+      expect(plainText(slug)).not.toContain('размечает');
+    }
+  });
+
   it('names the operator and the contact address in the personal-data policy', () => {
     const text = plainText('privacy');
 

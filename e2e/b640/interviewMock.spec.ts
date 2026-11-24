@@ -117,6 +117,47 @@ test.describe('B659: «Пробное интервью» (I2)', () => {
     ]);
   });
 
+  test('B780: на 390 панель действий не закрывает последний критерий при полной прокрутке', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!testInfo.project.name.includes('390'), 'панель закреплена только на 390');
+    // Длинные причины модели на проде прокручивают экран: короткий экран даёт ту же прокрутку.
+    await page.setViewportSize({ width: 390, height: 600 });
+    await open(page);
+    await page.getByLabel('Ваш ответ').fill('В 2024 году мы переводили платформу на Kubernetes.');
+    await page.getByRole('button', { name: 'Ответить', exact: true }).click();
+    const last = page.locator('ul.mi-crit > li.row').last();
+    await expect(last).toBeVisible();
+    const probe = await last.evaluate((row) => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      const box = row.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height - 4);
+      return { inside: Boolean(hit && row.contains(hit)), hit: hit?.className ?? '' };
+    });
+    expect(probe.inside, `низ последнего критерия под ${probe.hit}`).toBe(true);
+  });
+
+  for (const [replaced, calls] of [
+    ['same', ['start', 'answer 404', 'answer q-release replace=false']],
+    ['gone', ['start', 'answer 404', 'start', 'answer q-release replace=false']],
+  ] as const) {
+    test(`тренировку заменили в другой вкладке (${replaced}): ответ не теряется, экран продолжает`, async ({
+      page,
+    }) => {
+      const mock = await open(page, { replaced });
+      const answer = 'В 2024 году мы переводили платформу на Kubernetes.';
+      await page.getByLabel('Ваш ответ').fill(answer);
+      await page.getByRole('button', { name: 'Ответить', exact: true }).click();
+      await expect(page.getByText('Тренировка не найдена.')).toHaveCount(0);
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue(answer);
+      await page.getByRole('button', { name: 'Ответить', exact: true }).click();
+      await expect(page.locator('ul.mi-crit > li.row')).toHaveCount(4);
+      expect(mock.calls).toEqual(calls);
+      await page.getByRole('button', { name: 'Следующий вопрос' }).click();
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue('');
+    });
+  }
+
   test('тариф без пробных интервью: одна строка и путь к тарифам', async ({ page }) => {
     await open(page, { paywall: true });
     await expect(page.getByText('Пробное интервью — на платном тарифе.')).toBeVisible();

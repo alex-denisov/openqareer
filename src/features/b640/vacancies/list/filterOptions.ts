@@ -1,3 +1,4 @@
+import { roleLabel, type RoleTitlesRu } from '../../career/roleLabel';
 import type { MatchedVacancyFacets } from '../../../../../shared/matchedVacancyFacets';
 import type { MatchedFilteredFacets } from '../../../../../shared/listFilterFacets';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -106,6 +107,14 @@ export function buildOptions(
   };
 }
 
+/** B726: роли фильтра и их чипы — русскими названиями ролей поиска (`titlesRu` кампании). */
+export function withRoleLabels(options: FilterOptions, titlesRu: RoleTitlesRu = {}): FilterOptions {
+  return {
+    ...options,
+    roles: options.roles.map((option) => ({ ...option, label: roleLabel(option.id, titlesRu) })),
+  };
+}
+
 /** Число в шапке и в «Показать»: строки после фильтров или ответ сервера. */
 export interface ListCountInput {
   /** Выбран фильтр, который считает клиент (локации, формат, деньги, дата, релокация). */
@@ -129,6 +138,22 @@ export function listCount(input: ListCountInput): { count: number; countKnown: b
     count: narrowed || complete ? filtered : Math.max(known, filtered),
     countKnown: !narrowed || complete || serverMode,
   };
+}
+
+/**
+ * B726: в серверном порядке «Дату» режет и считает сервер. Его итог — число подборки, даже ноль;
+ * пока первая порция с «Датой» не пришла, числа нет (иначе мелькнуло бы число всего пула).
+ */
+export function serverCountState(input: {
+  readonly serverMode: boolean;
+  /** Сервер режет подборку «Датой» или «Зарплатой от» (B765). */
+  readonly dated: boolean;
+  readonly total: number;
+  readonly loadingFirst: boolean;
+}): { readonly serverKnows: boolean; readonly serverPending: boolean } {
+  const { serverMode, dated, total, loadingFirst } = input;
+  const serverPending = serverMode && dated && loadingFirst;
+  return { serverKnows: serverMode && (total > 0 || (dated && !serverPending)), serverPending };
 }
 
 export function splitOptions(options: readonly FilterOption[], query: string): {

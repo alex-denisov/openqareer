@@ -9,6 +9,7 @@ import { skillKey } from '../../career-map/roleHypothesisAdapter';
 import {
   getCheckedRoles,
   getCurrentRoleSkillAssessment,
+  type RoleSkillAssessmentCurrent,
 } from '../../skills/roleSkillAssessmentApi';
 import { getRoleSkillDemand, type RoleSkillDemand } from '../../skills/roleSkillDemandApi';
 import {
@@ -24,8 +25,6 @@ export interface RolesData {
   readonly rows: readonly RoleRow[];
   readonly searchTitles: readonly string[];
   readonly campaign: CampaignMetaView;
-  /** Число вакансий выбора: единый расчёт со списком «Вакансии»; `null` — не прочитано. */
-  readonly selectionTotal: number | null;
 }
 
 /** Полоса «Проверьте N навыков»: роль поиска, проверку которой можно начать. */
@@ -50,17 +49,20 @@ async function readDemand(): Promise<readonly RoleSkillDemand[]> {
  * Первая роль поиска, у которой проверка навыков готова. Роль, требования которой
  * ещё не собраны или которых мало, в полосу не попадает: иначе «Проверить» ведёт в тупик.
  */
-async function readyRole(
-  searchTitles: readonly string[],
-  orChecked = false,
-): Promise<{
-  readonly title: string;
-  readonly skills: number;
-} | null> {
-  // Роли спрашиваем разом (B645 s09): по очереди это 5+ запросов подряд до полосы.
-  const answers = await Promise.all(
+type Answer = RoleSkillAssessmentCurrent | null;
+
+// Роли спрашиваем разом (B645 s09): по очереди это 5+ запросов подряд до полосы.
+function readAnswers(searchTitles: readonly string[]): Promise<readonly Answer[]> {
+  return Promise.all(
     searchTitles.map((title) => getCurrentRoleSkillAssessment(title).catch(() => null)),
   );
+}
+
+function pickReady(
+  searchTitles: readonly string[],
+  answers: readonly Answer[],
+  orChecked: boolean,
+): { readonly title: string; readonly skills: number } | null {
   const index = answers.findIndex((current) => current?.state === 'ready');
   const current = answers[index];
   if (current?.state === 'ready') return { title: searchTitles[index]!, skills: current.skills.length };
@@ -70,6 +72,27 @@ async function readyRole(
   const checked = answers.findIndex((answer) => answer?.state === 'result');
   return checked >= 0 ? { title: searchTitles[checked]!, skills: 0 } : null;
 }
+
+async function readyRole(
+  searchTitles: readonly string[],
+  orChecked = false,
+): Promise<{
+  readonly title: string;
+  readonly skills: number;
+} | null> {
+  return pickReady(searchTitles, await readAnswers(searchTitles), orChecked);
+}
+
+const BLOCKED: ReadonlySet<RoleSkillAssessmentCurrent['state']> = new Set([
+  'role_not_selected',
+  'source_unavailable',
+  'too_few_vacancies',
+  'insufficient_requirements',
+  'focus_insufficient',
+]);
+
+/** B726: роль, проверка которой откроется; непрочитанную не прячем — ошибка сети не повод. */
+const opensCheck = (answer: Answer) => answer === null || !BLOCKED.has(answer.state);
 
 const demandOf = (demand: readonly RoleSkillDemand[], title: string) =>
   demand.find((entry) => key(entry.roleTitle) === key(title));
@@ -118,8 +141,18 @@ export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
     rows: withLacks(buildRoleRows(roles, searchTitles, checked, campaign.titlesRu), demand),
     searchTitles,
     campaign,
-    selectionTotal: searchTitles.length > 0 ? await readSelectionTotal(searchTitles, signal) : null,
   };
+}
+
+/**
+ * Число вакансий выбора: единый расчёт со списком «Вакансии»; `null` — не прочитано.
+ * B768: читается отдельно — таблица ролей его не ждёт (на проде запрос шёл 3,6 с).
+ */
+export function loadSelectionTotal(
+  titles: readonly string[],
+  signal: AbortSignal,
+): Promise<number | null> {
+  return titles.length > 0 ? readSelectionTotal(titles, signal) : Promise.resolve(null);
 }
 
 /** Полоса навыков догружается после таблицы ролей и её не держит. */
@@ -133,16 +166,43 @@ export async function loadSkillStrip(signal: AbortSignal): Promise<SkillStripDat
 /** C04 без роли в адресе: роли поиска и первая из них, проверку которой можно начать. */
 export async function loadSkillRoles(signal: AbortSignal): Promise<{
   readonly searchTitles: readonly string[];
+  /** Роли поиска, проверку которых можно открыть: выбор на месте не ведёт в тупик. */
+  readonly checkable: readonly string[];
   readonly ready: string | null;
   readonly titlesRu: Readonly<Record<string, string>>;
 }> {
   const campaign = await getCandidateCampaign(signal);
-  const searchTitles = campaign.roles.value;
+  const titlesRu = campaign.titlesRu ?? {};
+  const all = campaign.roles.value;
+  const allAnswers = await readAnswers(all);
+  const picked = onePerLabel(all, allAnswers, titlesRu);
+  const searchTitles = picked.map((index) => all[index]!);
+  const answers = picked.map((index) => allAnswers[index] ?? null);
   return {
     searchTitles,
-    ready: (await readyRole(searchTitles))?.title ?? null,
-    titlesRu: campaign.titlesRu ?? {},
+    checkable: searchTitles.filter((_, index) => opensCheck(answers[index] ?? null)),
+    ready: pickReady(searchTitles, answers, false)?.title ?? null,
+    titlesRu,
   };
+}
+
+/**
+ * B767: варианты одной роли с одним русским названием — одна роль на выбор. Остаётся
+ * вариант с пройденной проверкой, иначе первый; место — первого варианта.
+ */
+function onePerLabel(
+  titles: readonly string[],
+  answers: readonly Answer[],
+  titlesRu: Readonly<Record<string, string>>,
+): readonly number[] {
+  const byLabel = new Map<string, number[]>();
+  titles.forEach((title, index) => {
+    const label = key(titlesRu[title] ?? title);
+    byLabel.set(label, [...(byLabel.get(label) ?? []), index]);
+  });
+  return [...byLabel.values()].map(
+    (group) => group.find((index) => answers[index]?.state === 'result') ?? group[0]!,
+  );
 }
 
 /** Роли поиска целиком: подборка пересчитывается по ним. */

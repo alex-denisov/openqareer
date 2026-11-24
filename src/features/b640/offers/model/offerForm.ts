@@ -1,5 +1,6 @@
 import { B640_TAX_PERCENT_MAX } from '../../../../../shared/b640Offers';
 import type { ApplicationOfferTerms } from '../../../../../server/data/sqliteApplicationOfferRepository';
+import { formatDateTyping, readRuDate } from '../../kit/dateText';
 import { formatOption, type OfferCard } from './offerModel';
 
 /** Поля формы O6a как их видит кандидат: строки, без преобразований. */
@@ -106,15 +107,19 @@ function parseNumber(
 }
 
 function parseDay(text: string): Parsed<string> {
-  const clean = text.trim();
-  if (clean === '') return { value: undefined };
-  const match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(clean);
-  const error = { error: 'Дата в виде дд.мм.гггг' };
-  if (!match) return error;
-  const [day, month, year] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return error;
-  return { value: date.toISOString().slice(0, 10) };
+  const { iso, error } = readRuDate(text);
+  if (error) return { error };
+  return { value: iso || undefined };
+}
+
+/** B733: ошибка формата при уходе с поля — как в общем поле даты; остальные поля — при сохранении. */
+export function leftFieldError(key: keyof OfferForm, value: string): string | undefined {
+  return key === 'respondBy' ? readRuDate(value).error : undefined;
+}
+
+/** B733: «Срок ответа» набирается как общее поле даты — точки ставятся сами. */
+export function typedOfferValue(key: keyof OfferForm, raw: string): string {
+  return key === 'respondBy' ? formatDateTyping(raw) : raw;
 }
 
 function list(text: string): readonly string[] | undefined {

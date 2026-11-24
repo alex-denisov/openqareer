@@ -3,6 +3,7 @@ import type { ApplicationView } from '../../../../server/domain/applicationDeriv
 import type { InterviewDebriefView } from '../../../../server/domain/interviewDebriefView';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { InfoTip, Link, StatusLine } from '../kit';
+import { useScreenChrome } from '../shell/ShellContext';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { CtxHead } from '../shell/CtxHead';
@@ -11,7 +12,7 @@ import { DebriefNotes } from './DebriefNotes';
 import { DebriefQuestions, ShareLine } from './DebriefQuestions';
 import { DebriefSteps } from './DebriefSteps';
 import { analyzeDebrief, loadDebrief, type DebriefData } from './data/debriefApi';
-import { durationText, measuresTip } from './model/debriefModel';
+import { debriefLeadSub, durationText, measuresTip } from './model/debriefModel';
 import { formatInterviewWhen } from './model/prepModel';
 import { PrepSteps } from './PrepSteps';
 
@@ -34,6 +35,21 @@ function DebriefHead({ data }: { readonly data: DebriefData }) {
         label: 'Открыть: интервью',
       }}
     />
+  );
+}
+
+/** «Арка Холдинг · интервью 12 ноября · с техническим директором» — видна сразу, как в макете. */
+function LeadSub(props: { readonly data: DebriefData; readonly debrief: InterviewDebriefView }) {
+  const { vacancy } = props.data.response;
+  return (
+    <p className="lead-sub">
+      {debriefLeadSub({
+        company: vacancy?.companyHidden ? undefined : vacancy?.company,
+        scheduledAt: props.debrief.scheduledAt,
+        format: props.debrief.format,
+        interviewerName: props.debrief.interviewerName,
+      })}
+    </p>
   );
 }
 
@@ -135,6 +151,7 @@ function DebriefLead(props: {
           />
         ) : null}
       </div>
+      <LeadSub data={props.data} debrief={debrief} />
       <DebriefSteps responseId={response.id} current="debrief" inApp={isTauriEnvironment()} />
       <RecordingState debrief={debrief} response={response} />
       {ready && debrief.metrics ? <ShareLine metrics={debrief.metrics} /> : null}
@@ -212,6 +229,8 @@ export function DebriefScreen({ responseId }: { readonly responseId: string }) {
   const { state, reload, replaceData } = useAsync(load, 'Разбор не загрузился.');
   const data = state.data;
   usePolling(data, reload);
+  // Макет: плотные мобильные отступы (`data-mtight`), как у I1, I2 и I3.
+  useScreenChrome({ rootData: { mtight: '1' } });
   return (
     <>
       <PrepSteps responseId={data?.response.id ?? responseId} current="debrief" />

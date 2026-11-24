@@ -23,6 +23,44 @@ const STAGE_FIRST_DAY: Readonly<Record<CareerDiaryAdaptationStageId, number>> = 
   days_61_90: 61,
 };
 
+/**
+ * Дни шага на новом месте (день выхода — 1), как в плане d01: «До выхода» и «Первые две недели»
+ * совпадают с `STEP_SPAN` экрана; карта людей ведётся весь срок адаптации.
+ */
+const STEP_DAYS: Readonly<Record<CareerDiaryAdaptationStepId, readonly [number, number]>> = {
+  before_start: [Number.NEGATIVE_INFINITY, 0],
+  first_two_weeks: [1, 13],
+  first_meeting: [1, 7],
+  people_map: [1, 90],
+  day_30_check: [28, 30],
+  settling: [1, 30],
+};
+
+/**
+ * B685: состояние шага по его дням и задачам (решения оркестратора 23.11): все задачи шага
+ * закрыты — «пройдено», даже раньше его дней; иначе до дней шага — «впереди», в его дни —
+ * «идёт»; после них — «идёт» с открытой задачей и «пройдено» без задач.
+ */
+function stepProgress(
+  id: CareerDiaryAdaptationStepId,
+  day: number,
+  tasks: readonly CareerDiaryAdaptationTask[],
+  day30Sent: boolean,
+): CareerDiaryProgress {
+  // Проверка на 30-й день — действие кандидата (B687), а не задачи: «пройдено» только с её
+  // сохранённым итогом; без него после 28-го дня шаг «идёт» и ведёт на проверку d01e.
+  if (id === 'day_30_check') {
+    if (day30Sent) return 'done';
+    return day < STEP_DAYS[id][0] ? 'ahead' : 'active';
+  }
+  const open = tasks.some((task) => !task.completed);
+  if (tasks.length > 0 && !open) return 'done';
+  const [from, to] = STEP_DAYS[id];
+  if (day < from) return 'ahead';
+  if (day <= to) return 'active';
+  return open ? 'active' : 'done';
+}
+
 /** Шаг задачи прежнего плана, у которой шаг не назван: по этапу и виду задачи. */
 function defaultStep(task: PlanTask): CareerDiaryAdaptationStepId | null {
   if (task.stage === 'prep') return 'before_start';
@@ -60,6 +98,8 @@ export interface AdaptationViewInput {
   readonly details: CareerDiaryAdaptationDetails;
   /** Сегодняшний день, `ГГГГ-ММ-ДД`. */
   readonly asOf: string;
+  /** Итог проверки на 30-й день сохранён (отметка B687 `day30.sentOn`). */
+  readonly day30Sent?: boolean;
 }
 
 /**
@@ -92,7 +132,8 @@ export function buildAdaptationView(input: AdaptationViewInput): CareerDiaryAdap
     }),
     steps: ADAPTATION_STEPS.map((id) => {
       const own = tasks.filter((task) => task.step === id);
-      return { id, groups: groupsOf(own), ...counted(own, own.some((task) => task.completed)) };
+      const summary = counted(own, own.some((task) => task.completed));
+      return { id, groups: groupsOf(own), ...summary, status: stepProgress(id, day, own, input.day30Sent === true) };
     }),
     probation: details.probation,
     firstMeeting: details.firstMeeting,

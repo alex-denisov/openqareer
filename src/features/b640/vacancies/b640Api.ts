@@ -58,11 +58,37 @@ export function poolFilterQuery(roles: readonly string[]): string {
 }
 
 /** Запрос порции подборки: прежние фильтры (роли), `sort`, `direction`, `offset`, `limit`. */
-export function matchedPageQuery(sort: SortState, roles: readonly string[], offset: number): string {
+/** Пояс кандидата для границы дня фильтра «Дата» — та же, что у числа роли «Карьеры». */
+function candidateTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+/** `days` — фильтр «Дата» (B726): сервер режет и считает подборку сам; `null` — без даты. */
+/** «Зарплата от» для сервера (B765): сумма в месяц в валюте фильтра. */
+export interface ServerMoney {
+  readonly from: number;
+  readonly currency: 'RUB' | 'USD' | 'EUR' | 'AED';
+}
+
+export function matchedPageQuery(
+  sort: SortState,
+  roles: readonly string[],
+  offset: number,
+  days: number | null = null,
+  money: ServerMoney | null = null,
+): string {
   const query = new URLSearchParams(matchedVacancyQuery(offset, { roles, regions: [], remoteOnly: false }));
   query.set('sort', SERVER_KEY[sort.key]);
   query.set('direction', sort.dir);
   query.set('limit', String(B640_PAGE_SIZE));
+  if (days !== null) {
+    query.set('days', String(days));
+    query.set('tz', candidateTimeZone());
+  }
+  if (money !== null) {
+    query.set('money', String(money.from));
+    query.set('moneyCurrency', money.currency);
+  }
   return query.toString();
 }
 
@@ -71,8 +97,12 @@ export async function getSortedMatchedPage(
   roles: readonly string[],
   offset: number,
   signal?: AbortSignal,
+  days: number | null = null,
+  money: ServerMoney | null = null,
 ): Promise<PageResult<MatchedVacancyItem>> {
-  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset)}`, { signal });
+  const response = await apiFetch(`${BASE}/matched-vacancies?${matchedPageQuery(sort, roles, offset, days, money)}`, {
+    signal,
+  });
   return readPage<MatchedVacancyItem>(response);
 }
 

@@ -4,7 +4,6 @@ import {
   REJECTION_NOTE_MAX_LENGTH,
   REJECTION_REASONS,
   REJECTION_REVIEW_MIN_SAMPLE,
-  type RejectionGuess,
 } from '../../shared/rejectionReview';
 import { SqliteRejectionReviewRepository } from '../candidate/sqliteRejectionReviewRepository';
 import {
@@ -12,7 +11,9 @@ import {
   guessFromFit,
   rejectedForReview,
   type RejectionReviewApplication,
+  type SourcedRejectionGuess,
 } from '../domain/rejectionReview';
+import { rewriteSourceFacts } from '../domain/experienceFactRewrite';
 import {
   buildReviewChecks,
   type ReviewCheckApplication,
@@ -60,7 +61,7 @@ function guessFor(
   request: FastifyRequest,
   candidate: string,
   clusterId: string | null,
-): RejectionGuess | null {
+): SourcedRejectionGuess | null {
   const runtime = deps.vacancyMechanics;
   if (!runtime || !clusterId) return null;
   try {
@@ -105,6 +106,14 @@ function lowDataChecks(deps: BoundDeps, candidate: string, stored: readonly Stor
   );
 }
 
+/** Факты, из которых консультант готовит пункты резюме (29.10); мест работы нет — и правки нет. */
+function resumeFactIds(deps: BoundDeps, candidate: string): ReadonlySet<string> {
+  const snapshot = deps.candidateStore.getSnapshot(candidate);
+  const draft = snapshot.resume?.draft;
+  if (!draft?.experience.length) return new Set();
+  return new Set(rewriteSourceFacts(draft, snapshot.memory).map((fact) => fact.id));
+}
+
 const getReview: Handler = async (deps, request, reply) => {
   const candidate = candidateId(deps, request, reply);
   if (!candidate) return reply;
@@ -128,6 +137,7 @@ const getReview: Handler = async (deps, request, reply) => {
     guesses,
     reasons: deps.review.reasons(candidate),
     helped: deps.review.helped(candidate),
+    resumeFactIds: resumeFactIds(deps, candidate),
   });
   const checks = lowDataChecks(deps, candidate, stored);
   return { data: checks ? { ...review, checks } : review, meta: { requestId: request.id } };

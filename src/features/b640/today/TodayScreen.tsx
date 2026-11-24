@@ -3,7 +3,9 @@ import type { CandidateStatusToday, TodayStatusModule } from '../../../../shared
 import { pluralRu } from '../../../../shared/pluralRu';
 import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
-import { BlockError, BlockSkeleton } from './parts';
+import { useIsMobile } from '../kit/useMediaQuery';
+import { BlockError, BlockSkeleton, LeadQuietContext } from './parts';
+import { ResponseEventsBlock } from './ResponseEventsBlock';
 import {
   OnboardingPlanModule,
   ProfessionFitModule,
@@ -16,6 +18,8 @@ import {
   NextActionModule,
   ProfileQuestionModule,
 } from './searchModules';
+import { listApplicationsPool, type ApplicationView } from '../../applications/applicationsApi';
+import { funnelLine } from './funnelLineModel';
 import { getStatusToday } from './statusApi';
 import { StatusSignalBlock } from './StatusSignalBlock';
 import { StatusStrip } from './StatusStrip';
@@ -64,6 +68,10 @@ function TodayModule({ module, status, today, lead }: ModuleProps) {
   }
 }
 
+async function loadApplications(signal: AbortSignal): Promise<readonly ApplicationView[]> {
+  return (await listApplicationsPool({}, signal)).items;
+}
+
 interface TodayBodyProps {
   readonly status: CandidateStatusToday;
   readonly today: TodayDay;
@@ -73,9 +81,17 @@ interface TodayBodyProps {
 
 function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps) {
   const layout = moduleLayout(status.status, status.modules);
+  // Сбой чтения откликов строку пути прячет: она второстепенна, а «Отклики» покажут ошибку сами.
+  const applications = useLoad(loadApplications);
+  const items = applications.state === 'ready' ? applications.data : null;
+  const funnel = items ? funnelLine(items, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
-  const signal = <StatusSignalBlock statusTitle={status.title} wide={wideSignal} />;
+  const [signalShown, setSignalShown] = useState(false);
+  const mobile = useIsMobile();
+  const signal = (
+    <StatusSignalBlock statusTitle={status.title} wide={wideSignal} onShown={setSignalShown} />
+  );
   const modules = (list: readonly TodayStatusModule[], withLead: boolean) =>
     list.map((module, index) => (
       <TodayModule
@@ -87,21 +103,26 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
       />
     ));
   return (
-    <>
+    <LeadQuietContext.Provider value={mobile && wideSignal && signalShown}>
       <StatusStrip
         status={status}
         revertedTitle={revertedTitle}
         onReverted={onReverted}
+        funnel={funnel}
       />
       {wideSignal ? signal : null}
-      <div className="col">{modules(layout.main, true)}</div>
+      <div className="col">
+        {/* Макет s05b: события откликов первыми в левой колонке; нет событий — блока нет. */}
+        <ResponseEventsBlock applications={items} />
+        {modules(layout.main, true)}
+      </div>
       {layout.side.length > 0 ? (
         <div className="col">
           {wideSignal ? null : signal}
           {modules(layout.side, false)}
         </div>
       ) : null}
-    </>
+    </LeadQuietContext.Provider>
   );
 }
 

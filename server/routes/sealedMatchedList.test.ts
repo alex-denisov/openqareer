@@ -148,6 +148,16 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect((await read('offset=0&sort=money')).timing.listServed).toBe('built');
   });
 
+  it('two choices both survive a restart: the list by role does not overwrite the general one (B770)', async () => {
+    const { read, logged } = await sealedApp();
+    await read();
+    await read('offset=0&sort=money');
+    await settle(logged, 'matched-list-sealed', 2);
+    forgetMatchedListsForTests();
+
+    expect((await read()).timing.listServed).toBe('sealed');
+  });
+
   it('a row of another version is not served, and a later page beyond the stored ones goes the usual way', async () => {
     const { read, candidateStore, candidate } = await sealedApp(pool(400));
     await read();
@@ -157,7 +167,7 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     forgetMatchedListsForTests();
     const stored = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
     const older = { ...JSON.parse(stored.text), version: SEALED_MATCHED_LIST_VERSION - 1 };
-    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify(older));
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify(older), stored.choice);
     expect((await read()).timing.listServed).toBe('built');
   });
 
@@ -194,24 +204,24 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const { read, candidateStore, candidate } = await sealedApp();
     await read();
     const database = (candidateStore as never as { database: import('node:sqlite').DatabaseSync }).database;
-    const cipher = database.prepare('SELECT cipher FROM sealed_matched_lists').get() as { cipher: string };
+    const cipher = database.prepare('SELECT cipher FROM sealed_matched_list_choices').get() as { cipher: string };
     expect(cipher.cipher).not.toContain('Инженер');
 
     candidateStore.deleteCandidate(candidate.id);
 
-    expect(database.prepare('SELECT COUNT(*) AS n FROM sealed_matched_lists').get()).toEqual({ n: 0 });
+    expect(database.prepare('SELECT COUNT(*) AS n FROM sealed_matched_list_choices').get()).toEqual({ n: 0 });
   });
 
   it('a write is one short transaction per build, and the journal has its length', async () => {
     const holds: string[] = [];
     const stop = watchWriteHolds((hold) => {
-      if (hold.statement.includes('sealed_matched_lists')) holds.push(hold.statement);
+      if (hold.statement.includes('sealed_matched_list')) holds.push(hold.statement);
     }, 0);
     try {
       const { read, logged } = await sealedApp();
       await read();
       await read();
-      expect(holds).toEqual(['INSERT INTO sealed_matched_lists']);
+      expect(holds).toEqual(['INSERT INTO sealed_matched_list_choices']);
       expect(logged('matched-list-sealed')[0]).toMatchObject({
         heldMs: expect.any(Number),
         lockWaitMs: expect.any(Number),
@@ -231,8 +241,8 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     await read();
     forgetMatchedListsForTests();
     const database = (candidateStore as never as { database: import('node:sqlite').DatabaseSync }).database;
-    const { cipher } = database.prepare('SELECT cipher FROM sealed_matched_lists').get() as { cipher: string };
-    database.prepare('UPDATE sealed_matched_lists SET cipher = ?').run(spoil(cipher));
+    const { cipher } = database.prepare('SELECT cipher FROM sealed_matched_list_choices').get() as { cipher: string };
+    database.prepare('UPDATE sealed_matched_list_choices SET cipher = ?').run(spoil(cipher));
 
     expect((await read()).timing.listServed).toBe('built');
 
@@ -250,7 +260,8 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const { read, candidateStore, candidate } = await sealedApp();
     await read();
     forgetMatchedListsForTests();
-    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), typeof text === 'string' ? text : text());
+    const { choice } = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), typeof text === 'string' ? text : text(), choice);
 
     expect((await read()).timing.listServed).toBe('built');
   });
@@ -259,8 +270,9 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const { read, candidateStore, candidate } = await sealedApp();
     await read();
     forgetMatchedListsForTests();
-    const stored = JSON.parse(candidateStore.sealedMatchedLists.read(candidate.id, 0)!.text);
-    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify({ ...stored, pages: undefined }));
+    const row = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
+    const stored = JSON.parse(row.text);
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify({ ...stored, pages: undefined }), row.choice);
 
     expect((await read()).timing.listServed).toBe('built');
   });
@@ -332,7 +344,7 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     const stored = candidateStore.sealedMatchedLists.read(candidate.id, 0)!;
     const { filteredObserved: _observed, ...old } = JSON.parse(stored.text);
     const { filtered: _filtered, ...oldFacets } = old.facets;
-    candidateStore.sealedMatchedLists.write(candidate.id, stored.builtAt + 1, JSON.stringify({ ...old, facets: oldFacets }));
+    candidateStore.sealedMatchedLists.write(candidate.id, stored.builtAt + 1, JSON.stringify({ ...old, facets: oldFacets }), stored.choice);
     forgetMatchedListsForTests();
     const sealed = await read('offset=0&tz=Europe/Moscow');
     expect(sealed.timing).toMatchObject({ listServed: 'sealed' });
@@ -342,9 +354,9 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
 
   it('an older build does not replace a newer one', async () => {
     const { candidateStore, candidate } = await sealedApp();
-    candidateStore.sealedMatchedLists.write(candidate.id, 2_000, 'newer');
-    candidateStore.sealedMatchedLists.write(candidate.id, 1_000, 'older');
-    expect(candidateStore.sealedMatchedLists.read(candidate.id, 0)).toEqual({ builtAt: 2_000, text: 'newer' });
+    candidateStore.sealedMatchedLists.write(candidate.id, 2_000, 'newer', 'all');
+    candidateStore.sealedMatchedLists.write(candidate.id, 1_000, 'older', 'all');
+    expect(candidateStore.sealedMatchedLists.read(candidate.id, 0, 'all')).toEqual({ builtAt: 2_000, text: 'newer', choice: 'all' });
   });
 
   it('keeps the first pages of a long list, and nothing when even they would not be short', () => {
@@ -405,7 +417,7 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
       const id = harness.candidateIds['flagged.test'];
       const stored = harness.candidates.sealedMatchedLists.read(id, 0)!;
       const { leanPages: _lean, ...older } = JSON.parse(stored.text);
-      harness.candidates.sealedMatchedLists.write(id, Date.now(), JSON.stringify(older));
+      harness.candidates.sealedMatchedLists.write(id, Date.now(), JSON.stringify(older), stored.choice);
       forgetMatchedListsForTests();
       const fromUsual = (await harness.get('/api/v1/candidate/matched-vacancies?offset=0', 'flagged.test')).json();
       const lastTiming = lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing').at(-1);
@@ -429,6 +441,30 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect(writing).not.toHaveBeenCalled();
     sealMatchedList(input, 'c', list, 1, undefined, true);
     expect(writing).toHaveBeenCalledOnce();
+  });
+
+  it('B776: a busy database skips the seal without an exception, a slow seal is logged with its size', () => {
+    const list = { filtered: pool(1), pageOffsets: [0], facets: {}, campaignWithHypotheses: {} } as never;
+    const store = (written: object) => ({ sealedMatchedLists: { write: () => written } });
+    const log = { info: vi.fn(), error: vi.fn() };
+    const busy = { candidateId: 'c1', candidateStore: store({ skipped: 'busy', lockWaitMs: 51 }) } as never;
+    expect(() => sealMatchedList(busy, 'all', list, 1, log, true)).not.toThrow();
+    expect(log.info).toHaveBeenCalledWith(expect.objectContaining({ lockWaitMs: 51, bytes: expect.any(Number) }), 'matched-list-seal-skipped');
+    expect(log.error).not.toHaveBeenCalled();
+
+    log.info.mockClear();
+    const slow = { candidateId: 'c1', candidateStore: store({ heldMs: 700, lockWaitMs: 3 }) } as never;
+    sealMatchedList(slow, 'all', list, 1, log, true);
+    expect(log.info).toHaveBeenCalledWith(
+      expect.objectContaining({ heldMs: 700, sealMs: expect.any(Number), bytes: expect.any(Number) }),
+      'matched-list-seal-slow',
+    );
+
+    log.info.mockClear();
+    const quick = { candidateId: 'c1', candidateStore: store({ heldMs: 20, lockWaitMs: 0 }) } as never;
+    sealMatchedList(quick, 'all', list, 1, log, true);
+    expect(log.info).toHaveBeenCalledTimes(1);
+    expect(log.info).toHaveBeenCalledWith(expect.anything(), 'matched-list-sealed');
   });
 
   it('the switch off stops the read', async () => {

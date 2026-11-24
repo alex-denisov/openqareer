@@ -10,7 +10,7 @@ import {
   labelOf,
   withoutChip,
 } from './filterModel';
-import { buildOptions, listCount, splitOptions } from './filterOptions';
+import { buildOptions, listCount, splitOptions, withRoleLabels } from './filterOptions';
 
 const NOW = new Date('2026-11-11T10:00:00Z');
 const context = { currency: 'RUB' as const, now: NOW };
@@ -52,6 +52,20 @@ describe('счётчик и чипы', () => {
     ]);
     expect(hasChosen(EMPTY_FILTERS)).toBe(false);
     expect(hasChosen(filters)).toBe(true);
+  });
+
+  it('B726: роль в чипе и в списке фильтра — русским названием роли поиска, без него — исходным', () => {
+    const filters = { ...EMPTY_FILTERS, roles: ['CTO', 'Head of X'] };
+    const titlesRu = { CTO: 'Технический директор (CTO)' };
+    const roles = withRoleLabels(
+      { roles: [{ id: 'CTO', label: 'CTO', count: 3 }], locations: [], formats: [], money: [], dates: [] },
+      titlesRu,
+    ).roles;
+    expect(roles).toEqual([{ id: 'CTO', label: 'Технический директор (CTO)', count: 3 }]);
+    expect(chipsOf(filters, 'RUB', titlesRu).map((chip) => [chip.id, chip.label])).toEqual([
+      ['CTO', 'Технический директор (CTO)'],
+      ['Head of X', 'Head of X'],
+    ]);
   });
 
   it('«Убрать» снимает одно значение', () => {

@@ -101,7 +101,7 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(byText(root, 'button', 'Сохранить')).toBeNull();
     expect(byText(root, 'button', 'Применить')).toBeNull();
     expect(byText(root, '#ls-courses ~ .li-rec .li-cur', 'В импорте LinkedIn этого раздела нет')).not.toBeNull();
-    expect(root.querySelector('[aria-label="Другой вариант: Заголовок · осталось 2"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Другой вариант: Заголовок · осталось 3"]')).not.toBeNull();
     expect(root.querySelector('[aria-label="Скопировать: Навыки"]')).not.toBeNull();
   });
 
@@ -140,30 +140,41 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('.li-all')).toBeNull();
   });
 
-  it('«Предложить заново»: новый вариант на экране, «Вариант 2 из 3» и листание назад', async () => {
+  it('«Предложить заново»: новый вариант на экране, «Вариант 2 из 4» и листание назад', async () => {
     vi.mocked(api.requestOfferVariant).mockResolvedValueOnce(
       offer('skills', '', { variants: ['Go · Kubernetes', 'Kubernetes · Go'] }) as never,
     );
     const root = (await open()).container;
     expect(root.querySelector('[aria-label="Варианты: Навыки"]')).toBeNull();
-    click(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 2"]'));
+    click(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 3"]'));
     await flush();
     expect(api.requestOfferVariant).toHaveBeenCalledWith('skills');
     expect(root.querySelector('#li-new-skills')!.textContent).toBe('Kubernetes · Go');
     const sw = root.querySelector('[aria-label="Варианты: Навыки"]')!;
-    expect(sw.querySelector('.num')!.textContent).toBe('Вариант 2 из 3');
+    expect(sw.querySelector('.num')!.textContent).toBe('Вариант 2 из 4');
     click(sw.querySelector('[aria-label="Предыдущий вариант"]'));
     expect(root.querySelector('#li-new-skills')!.textContent).toBe('Go · Kubernetes');
-    expect(sw.querySelector('.num')!.textContent).toBe('Вариант 1 из 3');
-    expect(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 1"]')).not.toBeNull();
+    expect(sw.querySelector('.num')!.textContent).toBe('Вариант 1 из 4');
+    expect(root.querySelector('[aria-label="Другой вариант: Навыки · осталось 2"]')).not.toBeNull();
   });
 
   it('модель не ответила — ошибка на месте с «Повторить»', async () => {
     vi.mocked(api.requestOfferVariant).mockRejectedValueOnce(new CoachApiError('x', 'variant_unavailable', true));
     const root = (await open()).container;
-    click(root.querySelector('[aria-label="Другой вариант: О себе · осталось 2"]'));
+    click(root.querySelector('[aria-label="Другой вариант: О себе · осталось 3"]'));
     await flush();
     expect(root.querySelector('.li-err')!.textContent).toContain('Не получилось предложить другой вариант');
+  });
+
+  it('варианты кончились в другой вкладке (409) — слова сервера без «Повторить»', async () => {
+    vi.mocked(api.requestOfferVariant).mockRejectedValueOnce(
+      new CoachApiError('Других вариантов больше не будет.', 'variant_limit_reached', false),
+    );
+    const root = (await open()).container;
+    click(root.querySelector('[aria-label="Другой вариант: О себе · осталось 3"]'));
+    await flush();
+    expect(root.querySelector('.li-err')!.textContent).toBe('Других вариантов больше не будет.');
+    expect(root.querySelector('.li-err button')).toBeNull();
   });
 
   it('предложений нет вовсе — не «всё выполнено» и без «Отметить все»', async () => {
@@ -174,7 +185,7 @@ describe('a03: профиль LinkedIn по макету', () => {
   });
 
   it('три варианта — «Предложить заново» недоступна, без подписи', async () => {
-    const third = offer('skills', '', { variants: ['Go', 'Go · SQL', 'SQL'] });
+    const third = offer('skills', '', { variants: ['Go', 'Go · SQL', 'SQL', 'SQL · Go'] });
     const root = (await open({ kind: 'ready', sections: sections({ skills: { offer: third } }) })).container;
     expect(root.querySelector<HTMLButtonElement>('[aria-label="Другой вариант: Навыки · осталось 0"]')!.disabled).toBe(true);
     expect(root.querySelector('#ls-skills ~ .li-rec .li-err')).toBeNull();

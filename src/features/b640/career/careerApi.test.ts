@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   getRoleSkillDemand: vi.fn(),
   getCurrentRoleSkillAssessment: vi.fn(),
   changeCareerRole: vi.fn(),
+  readSelectionTotal: vi.fn(),
 }));
 
 vi.mock('../../coach/coachApi', () => ({ getRoleHypotheses: api.getRoleHypotheses }));
@@ -21,8 +22,16 @@ vi.mock('../../skills/roleSkillAssessmentApi', () => ({
 }));
 vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getRoleSkillDemand }));
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
+vi.mock('../vacancies/list/selectionCount', () => ({ readSelectionTotal: api.readSelectionTotal }));
 
-import { addOwnRole, loadRoles, loadSkillStrip, readSkillGap, saveSearchRoles } from './careerApi';
+import {
+  addOwnRole,
+  loadRoles,
+  loadSkillRoles,
+  loadSkillStrip,
+  readSkillGap,
+  saveSearchRoles,
+} from './careerApi';
 
 const campaign = (roles: string[]) => ({
   roles: { value: roles, origin: 'explicit' },
@@ -42,6 +51,14 @@ beforeEach(() => {
 });
 
 describe('loadRoles', () => {
+  it('B768: таблица ролей не ждёт числа вакансий выбора (на проде 3,6 с)', async () => {
+    api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+    api.readSelectionTotal.mockReturnValue(new Promise(() => {}));
+    const data = await loadRoles(new AbortController().signal);
+    expect(data.searchTitles).toEqual(['Аналитик']);
+    expect(api.readSelectionTotal).not.toHaveBeenCalled();
+  });
+
   it('пробелы считает по роли поиска', async () => {
     api.getRoleSkillDemand.mockResolvedValue({
       state: 'ready',
@@ -230,5 +247,48 @@ describe('readSkillGap (строка навыков в «Вакансиях», s
     api.getCurrentRoleSkillAssessment.mockResolvedValue({ state: 'insufficient_requirements', roleTitle: 'VP' });
     api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
     expect(await readSkillGap(['VP'])).toEqual({ gap: 0, role: null });
+  });
+});
+
+describe('loadSkillRoles (выбор роли на C04)', () => {
+  it('B726: на выбор только роли, проверку которых можно открыть; непрочитанная роль остаётся', async () => {
+    api.getCandidateCampaign.mockResolvedValue(campaign(['CTO', 'COO', 'Head of IT', 'CIO', 'VP', 'Lead']));
+    const answers: Record<string, unknown> = {
+      CTO: { state: 'insufficient_requirements', roleTitle: 'CTO', collecting: false },
+      COO: { state: 'result', run: {} },
+      'Head of IT': { state: 'too_few_vacancies', roleTitle: 'Head of IT' },
+      CIO: { state: 'ready', roleTitle: 'CIO', skills: [] },
+      VP: { state: 'insufficient_requirements', roleTitle: 'VP', collecting: true },
+    };
+    api.getCurrentRoleSkillAssessment.mockImplementation((title: string) =>
+      title in answers ? Promise.resolve(answers[title]) : Promise.reject(new Error('net')),
+    );
+    const roles = await loadSkillRoles(new AbortController().signal);
+    expect(roles.checkable).toEqual(['COO', 'CIO', 'Lead']);
+    expect(roles.ready).toBe('CIO');
+    expect(api.getCurrentRoleSkillAssessment).toHaveBeenCalledTimes(6);
+  });
+
+  it('B767: два варианта одной роли с одним русским названием — на выбор одна роль, пройденная проверка первой', async () => {
+    api.getCandidateCampaign.mockResolvedValue({
+      ...campaign(['Head of Technical Support', 'CTO', 'Customer Support Director']),
+      titlesRu: {
+        'Head of Technical Support': 'Руководитель службы поддержки',
+        'Customer Support Director': 'Руководитель службы поддержки',
+        CTO: 'Технический директор (CTO)',
+      },
+    });
+    const answers: Record<string, unknown> = {
+      'Head of Technical Support': { state: 'ready', roleTitle: 'Head of Technical Support', skills: [] },
+      CTO: { state: 'ready', roleTitle: 'CTO', skills: [] },
+      'Customer Support Director': { state: 'result', run: {} },
+    };
+    api.getCurrentRoleSkillAssessment.mockImplementation((title: string) =>
+      Promise.resolve(answers[title]),
+    );
+    const roles = await loadSkillRoles(new AbortController().signal);
+    expect(roles.searchTitles).toEqual(['Customer Support Director', 'CTO']);
+    expect(roles.checkable).toEqual(['Customer Support Director', 'CTO']);
+    expect(roles.ready).toBe('CTO');
   });
 });

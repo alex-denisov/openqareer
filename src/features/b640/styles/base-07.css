@@ -95,7 +95,11 @@
   }
   .b640 .topbar h1:has(.top-tip) { display: flex; align-items: center; gap: var(--career-space-1); overflow: visible; }
   .b640 .top-tip .tip-bubble { font-size: var(--career-text-xs); font-weight: 400; letter-spacing: normal; white-space: normal; }
-  @media (max-width: 767px) { .b640 .topbar h1:has(.top-tip) { justify-content: center; } }
+  @media (max-width: 767px) {
+    .b640 .topbar h1:has(.top-tip) { justify-content: center; }
+    /* ⓘ у заголовка по центру экрана: подсказка под кнопкой по центру, иначе уходит за правый край 390. */
+    .b640 .top-tip .tip-bubble { inset-inline-start: 50%; translate: -50% 0; max-inline-size: min(var(--career-tip-width), calc(100vw - var(--career-space-4) * 2)); }
+  }
   .b640 .dn-q-row { display: flex; align-items: center; gap: var(--career-space-2); }
   .b640 .dn-quick input { min-block-size: var(--career-target-min); padding-inline-start: var(--career-space-3); border-radius: var(--career-radius-ctl); border: var(--career-border-width) solid color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated)); background: var(--career-bg); color: var(--career-text); font: inherit; font-size: var(--career-text-sm); }
   .b640 .dn-quick input:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
@@ -210,6 +214,7 @@
   .b640 .kp-t { font-size: var(--career-text-sm); font-weight: 600; }
   .b640 .kp-v { font-size: var(--career-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
   .b640 .kp-s { grid-column: 1 / -1; color: var(--career-text-soft); font-size: var(--career-text-xs); }
+  .b640 .kp-s.va-err { color: var(--career-danger); }
   .b640 .kp-ok { display: grid; place-items: center; min-inline-size: var(--career-target-min); min-block-size: var(--career-target-min); }
   .b640 .act-dock { display: none; }
   @media (max-width: 767px) {
@@ -492,11 +497,19 @@
   }
   .b640 .hh-ok-l { display: grid; gap: var(--career-space-2); margin: 0; padding-inline-start: var(--career-space-5); color: var(--career-text-soft); font-size: var(--career-text-sm); }
   @media (max-width: 767px) {
-    div.b640[data-vsheet]::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
-    div.b640[data-vsheet] .va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
-    div.b640[data-vsheet] .va-pop .chip { min-block-size: var(--career-target-min); }
-    div.b640[data-vsheet] .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    div.b640[data-vsheet] .va-pop-chips .chip { white-space: normal; }
+    div.b640:is([data-vsheet], :has(> .va-pop))::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop .chip { min-block-size: var(--career-target-min); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    div.b640:is([data-vsheet], :has(> .va-pop)) .va-pop-chips .chip { white-space: normal; }
+  }
+  /* a05e на 390: «Настроить ритм» открывается листом снизу, как «Что поменять». */
+  @media (max-width: 767px) {
+    div.b640:has(#va-pop-rh)::after { content: ""; position: fixed; inset: 0; z-index: 29; background: var(--career-backdrop); }
+    .b640 main .va-popwrap:has(> #va-pop-rh) { z-index: 30; }
+    .b640 #va-pop-rh.va-pop { position: fixed; z-index: 30; inset-block: auto 0; inset-inline: 0; inline-size: auto; max-block-size: 86vh; overflow-y: auto; padding-block-end: calc(var(--career-space-4) + env(safe-area-inset-bottom, 0px)); border-end-start-radius: 0; border-end-end-radius: 0; }
+    .b640 #va-pop-rh .chip { min-block-size: var(--career-target-min); }
+    .b640 #va-pop-rh .va-pop-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   .b640 .po-name { display: flex; align-items: center; gap: var(--career-space-1); margin: 0; font-size: var(--career-text-md); font-weight: 600; }
   .b640 .li-was { display: block; }

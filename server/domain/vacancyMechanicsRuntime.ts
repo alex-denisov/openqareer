@@ -6,10 +6,10 @@ import type { VacancyFitFailure, VacancyFitResult, VacancyFitView } from '../../
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { FIT_INPUT_TOO_LARGE, SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
-import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
+import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, type VacancyRequirement } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
-import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
+import { assessVacancyFit, isSkillRequirement, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
 import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, BulkInputTooLarge, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
@@ -46,6 +46,12 @@ const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
   profile_changed: 'profile_changed',
   [FIT_INPUT_TOO_LARGE]: 'too_large',
 };
+/** B654: the label names the row; only the percent's own rule says whether the row counts. */
+function shownRequirement(requirement: VacancyRequirement): VacancyRequirement {
+  const labelled = labelVacancyRequirement(requirement);
+  // Experience always counts; its label only says whether a quiz can check it.
+  return requirement.kind === 'experience' ? labelled : { ...labelled, skill: isSkillRequirement(requirement) };
+}
 interface AssessmentOutcome {
   staleProfile: boolean;
   /** The spend budget refused the call: the job waits for the next UTC day, no attempt is spent. */
@@ -161,7 +167,7 @@ export class VacancyMechanicsRuntime {
                   : 'not_requested';
     return {
       state,
-      requirements: shown.requirements.map(labelVacancyRequirement),
+      requirements: shown.requirements.map(shownRequirement),
       ...(result ? { result } : {}),
       ...(state === 'failed' ? { failure: fitFailure(job?.lastError) } : {}),
     };
@@ -177,6 +183,10 @@ export class VacancyMechanicsRuntime {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
     if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
     return this.fit.hasCache({ ...input, requirements: extracted.requirements });
+  }
+  /** B766: разобранные требования вакансий для роли «Технический директор», одним запросом. */
+  latestRequirementTextsMany(vacancyIds: readonly string[]): ReadonlyMap<string, readonly VacancyRequirement[]> {
+    return new Map([...this.requirements.latestManyOrLegacy(vacancyIds)].map(([id, result]) => [id, result.requirements]));
   }
   /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key and its result stands. */
   fitJobHoldsKey(input: VacancyFitInput): boolean {
@@ -236,6 +246,10 @@ export class VacancyMechanicsRuntime {
     logMassRecount(log, 'requirements', failures + labels, requirementsRemaining, limits.requirements, total('requirements'));
     logMassRecount(log, 'fit', fit, this.fit.countFailedOnce() + this.fit.countOrphanedRequirementsTimeouts(), limits.fit, total('fit'));
     return { requirements: failures, fit, labels };
+  }
+  /** One batch of superseded fit jobs left as `failed` before 23.11 (`runSupersededPurge` paces them). */
+  purgeSupersededFitBatch(): number {
+    return this.fit.purgeSupersededBatch();
   }
   /** The background refresh of counted rows (a new algorithm version): true while the day's ceiling has room. */
   takeFitRefreshSlot(limit = massRecountLimit('OPENQAREER_MASS_FIT_REFRESH_DAY_LIMIT', MASS_FIT_REFRESH_DAY_LIMIT)): boolean {
@@ -304,6 +318,9 @@ export class VacancyMechanicsRuntime {
     } else if (outcome.channelDown) {
       this.pauseForChannel();
       this.waitForChannel(job);
+    } else if (outcome.staleProfile && this.validateCurrentProfile) {
+      // Superseded: the current profile has its own key and job; without a validator it fails closed below.
+      this.recordFailure(this.fit.discard(job), 'profile_changed');
     } else if (hasClient && result.reason === 'assessment_unavailable' && !outcome.returned) {
       this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && !outcome.tooLarge && job.attempts < 3);
     } else if (this.fit.complete(job, result, undefined, resolved, outcome.answeredBy)) this.stats.completed += 1;

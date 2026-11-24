@@ -14,6 +14,7 @@ async function openCabinet(
     readonly total?: number;
     readonly own?: readonly unknown[];
     readonly campaignRoles?: readonly string[];
+    readonly titlesRu?: Readonly<Record<string, string>>;
     readonly skillGap?: number;
   } = {},
 ): Promise<void> {
@@ -21,6 +22,7 @@ async function openCabinet(
     cabinetB640: true,
     vacancyTotal: options.total ?? 45,
     ...(options.campaignRoles ? { vacancyCampaignRoles: options.campaignRoles } : {}),
+    ...(options.titlesRu ? { vacancyCampaignTitlesRu: options.titlesRu } : {}),
     ...(options.skillGap !== undefined ? { roleSkillGap: options.skillGap } : {}),
     vacancyFacets: {
       total: options.total ?? 45,
@@ -186,6 +188,39 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expectGates(page);
   });
 
+  test('B760: строки подборки не ждут чтения рабочего пространства', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies');
+    // Рабочее пространство нужно только прежней оболочке: новый кабинет его не ждёт.
+    let workspaceAnswered = false;
+    await page.route('**/api/v1/candidate/workspace', async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+      workspaceAnswered = true;
+      return route.fallback();
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible({ timeout: 3_000 });
+    expect(workspaceAnswered).toBe(false);
+  });
+  test('B760: код кабинета грузится рядом с /auth/me на устройстве, где кабинет уже открывался', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/vacancies');
+    let authAnswered = false;
+    let chunkBeforeAuth = false;
+    await page.route('**/api/v1/auth/me', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      authAnswered = true;
+      return route.fallback();
+    });
+    page.on('request', (request) => {
+      if (/\/assets\/CabinetB640-[^/]+\.js$/u.test(request.url()) && !authAnswered)
+        chunkBeforeAuth = true;
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS).first()).toBeVisible();
+    expect(chunkBeforeAuth).toBe(true);
+  });
   test('фильтр локаций меняет число вакансий, «Сбросить всё» возвращает', async ({
     page,
   }, testInfo) => {
@@ -243,6 +278,43 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await page.locator('.vt-chips').getByRole('button', { name: 'Сбросить всё' }).click();
     await expect(chips).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Все роли/ })).toBeVisible();
+  });
+
+  test('B726: чип роли из «Вакансий по роли» — русское название роли поиска', async ({ page }) => {
+    await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
+      campaignRoles: ['CTO', 'Руководитель продукта'],
+      titlesRu: { CTO: 'Технический директор (CTO)' },
+    });
+    const chips = page.locator('.vt-chips .vt-chip');
+    await expect(chips.first()).toHaveText('Технический директор (CTO)');
+    await expect(
+      page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }),
+    ).toBeVisible();
+  });
+
+  test('B768: «Вакансии по роли» читают подборку сразу с ролью, снятая роль — вся подборка', async ({
+    page,
+  }) => {
+    const rows: string[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (
+        url.pathname.endsWith('/candidate/matched-vacancies') &&
+        url.searchParams.get('part') === 'rows'
+      )
+        rows.push(url.searchParams.getAll('role').join('|'));
+    });
+    await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
+      campaignRoles: ['CTO', 'Руководитель продукта'],
+      titlesRu: { CTO: 'Технический директор (CTO)' },
+    });
+    await expect(page.locator('.vt-chips .vt-chip').first()).toHaveText(
+      'Технический директор (CTO)',
+    );
+    await expect.poll(() => rows.length).toBeGreaterThan(0);
+    expect(rows.every((roles) => roles !== '')).toBe(true);
+    await page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }).click();
+    await expect.poll(() => rows.includes('')).toBe(true);
   });
 
   test('B645: строка «Проверить N навыка» ведёт в проверку навыков', async ({ page }) => {
@@ -439,6 +511,13 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator(PRIMARY)).toBeEnabled();
     expect(calls[0]?.query).toBe('');
     expect(calls[0]?.clusterIds).toBeUndefined();
+    if (isMobile(test.info().project.name)) {
+      // v09 на 390: блоки режима стоят встык, на 1440 между ними 16 px.
+      const gap = await page
+        .locator('section.is-triage')
+        .evaluate((section) => getComputedStyle(section).rowGap);
+      expect(gap).toBe('0px');
+    }
     await expectGates(page);
 
     await page.locator('.vz-q1-a').getByRole('button', { name: 'Да' }).click();
@@ -655,6 +734,42 @@ test.describe('B676: своя вакансия', () => {
     await page.locator('#va-add-in').fill('https://hh.ru/vacancy/12345678');
     await page.locator('#va-add .va-add-foot .btn').click();
     await expect(page).toHaveURL(/\/app\/vacancies\/cluster-hh-1$/u);
+  });
+
+  test('удалить свою вакансию: 1440 — корзина, 390 — «…» → «Удалить»', async ({
+    page,
+  }, testInfo) => {
+    const mobile = isMobile(testInfo.project.name);
+    await openCabinet(page, '/app/vacancies', { own: [OWN] });
+    const deleted: string[] = [];
+    await page.route('**/api/v1/candidate/b640/own-vacancies/*', (route) => {
+      if (route.request().method() !== 'DELETE') return route.fallback();
+      deleted.push(route.request().url().split('/').pop() ?? '');
+      return route.fulfill({ status: 204 });
+    });
+    const row = page.locator(ROWS).first();
+    await expect(row.locator('.va-mine')).toBeVisible();
+    const trash = row.getByRole('button', { name: `Удалить: ${OWN.title}` });
+    const more = row.getByRole('button', { name: 'Ещё действия' });
+    await expect(mobile ? more : trash).toBeVisible();
+    await expect(mobile ? trash : more).toBeHidden();
+    const target = mobile ? more : trash;
+    const hit = await target.evaluate((node) => {
+      const box = node.getBoundingClientRect();
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return Boolean(top && node.contains(top));
+    });
+    expect(hit).toBe(true);
+    if (mobile) {
+      await more.click();
+      await page
+        .getByRole('dialog', { name: `Действия: ${OWN.title}` })
+        .getByRole('button', { name: 'Удалить' })
+        .click();
+    } else {
+      await trash.click();
+    }
+    await expect.poll(() => deleted).toEqual([OWN.id]);
   });
 
   test('снимки панели и строки «ваша» для сверки с макетом', async ({ page }, testInfo) => {

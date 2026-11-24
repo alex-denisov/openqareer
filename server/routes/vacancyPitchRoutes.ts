@@ -1,4 +1,5 @@
 import { candidateGenderFromName } from '../../shared/candidateGender';
+import { preferredApplySource } from '../../shared/hhVacancySource';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -12,7 +13,7 @@ import { writeCoverLetterBody, type WrittenLetterBody } from './vacancyLetterBod
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
-import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
+import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import {
   attachApprovedResume,
@@ -104,9 +105,13 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
 export function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
-  cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
+  storedCluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
   poolVacancy: ReturnType<NonNullable<RouteDeps['multiSourceEngine']['getVacancy']>> | undefined,
 ) {
+  // B778 (прод 23.11): строка подборки `cluster-<запись>` по ключу `member` находит сохранённый кластер,
+  // склеенный вокруг другого основателя (Arootah → Himalayas «Fractional CAO»). Его название и требования
+  // не берём: кластер годится, только если он и есть выбранная вакансия.
+  const cluster = storedCluster?.id === vacancyId ? storedCluster : undefined;
   return {
     id: vacancyId,
     title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
@@ -495,7 +500,7 @@ const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
-  const cluster = resolvePoolVacancyCluster(multiSourceEngine, vacancyId);
+  const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
     const state = prepareLetterResume(deps, candidate.id, cluster);
@@ -514,7 +519,7 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   const vacancyId = (request.params as { id: string }).id;
   const parsed = approvedLetterSnapshotSchema.safeParse(request.body);
   if (!parsed.success) return invalidLetterSnapshot(reply, request);
-  const cluster = resolvePoolVacancyCluster(multiSourceEngine, vacancyId);
+  const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   const evidenceIds = new Set(
     filterUsablePitchFacts(candidateStore.getSnapshot(candidate.id).memory).map((fact) => fact.id),
@@ -556,6 +561,7 @@ function persistApprovedLetterSnapshot(
   approvedAt: string,
 ) {
   const { candidateStore } = deps;
+  const route = preferredApplySource(cluster);
   return candidateStore.transaction(() => {
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
@@ -563,8 +569,8 @@ function persistApprovedLetterSnapshot(
       manualVacancy: {
         title: cluster.canonicalTitle,
         company: cluster.canonicalCompany,
-        url: cluster.primaryUrl,
-        source: cluster.sources[0]?.sourceName ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
+        url: route.url,
+        source: route.source ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
       },
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).

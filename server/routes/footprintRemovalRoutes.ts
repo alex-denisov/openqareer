@@ -2,16 +2,19 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { CandidateFootprintFinding } from '../../shared/candidateFootprint';
 import type { FootprintRemoval } from '../../shared/footprintRemoval';
-import { recheckFindingUrl } from '../osint/findingRecheck';
+import { recheckFinding } from '../osint/findingSourceRecheck';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 
 /**
  * B382, f03b «Находка: путь удаления». «Письмо отправлено» запоминает дату
- * запроса владельцу сайта; «Проверить находку» один раз открывает адрес
- * находки и сохраняет итог. Оба адреса за флагом B640.
+ * запроса владельцу сайта; «Проверить находку» спрашивает источник находки
+ * (findingSourceRecheck), а без него открывает адрес, и сохраняет итог. Оба адреса за флагом B640.
  */
+/** Источник находки и адрес вместе: дольше кандидат ждать не должен. */
+const RECHECK_SOURCE_TIMEOUT_MS = 25_000;
+
 const findingIdSchema = z.string().regex(/^[a-f0-9]{24}$/u);
 
 interface FindingContext {
@@ -85,8 +88,12 @@ async function handleRecheck(
 ): Promise<unknown> {
   const context = loadFinding(deps, request, reply);
   if (!context) return reply;
-  const url = context.finding.url;
-  if (!url) {
+  const outcome = await recheckFinding(
+    context.finding,
+    { ...(deps.config.exaApiKey ? { exaApiKey: deps.config.exaApiKey } : {}) },
+    AbortSignal.timeout(RECHECK_SOURCE_TIMEOUT_MS),
+  );
+  if (!outcome) {
     return sendError(
       reply,
       request,
@@ -96,11 +103,10 @@ async function handleRecheck(
       false,
     );
   }
-  const result = await recheckFindingUrl(url);
   return saveRemoval(deps, request, context, {
     ...context.finding.removal,
     checkedAt: new Date().toISOString(),
-    result,
+    result: outcome.result,
   });
 }
 

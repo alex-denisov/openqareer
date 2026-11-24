@@ -44,7 +44,7 @@ describe('B694: ритм', () => {
     expect(first.json().data).toMatchObject({ postsPerWeek: 1, days: ['mon', 'tue', 'wed', 'thu', 'fri'], time: '10:00' });
     const saved = await call('PUT', `${BASE}/rhythm`, { postsPerWeek: 3, days: ['tue', 'thu'], time: '09:30', timezone: 'Europe/Berlin' });
     expect(saved.statusCode).toBe(200);
-    expect((await h.get(`${BASE}/rhythm`, 'flagged.test')).json().data).toEqual({ postsPerWeek: 3, days: ['tue', 'thu'], time: '09:30', timezone: 'Europe/Berlin' });
+    expect((await h.get(`${BASE}/rhythm`, 'flagged.test')).json().data).toMatchObject({ postsPerWeek: 3, days: ['tue', 'thu'], time: '09:30', timezone: 'Europe/Berlin' });
     expect((await h.get(`${BASE}/rhythm`, 'other.test')).json().data.postsPerWeek).toBe(1);
     for (const bad of [
       { postsPerWeek: 0, days: ['mon'], time: '10:00', timezone: 'UTC' },

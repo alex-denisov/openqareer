@@ -4,14 +4,24 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { CANDIDATE_TABLE_COVERAGE } from './candidateExportCoverage';
+import { forbiddenExportKeys } from './exportForbiddenKeys';
+import { openSeeded, seedAutoApply, seedHh, seedRecording } from './exportTestSeeds';
 import { SqliteDiaryCheckpointRepository } from './sqliteDiaryCheckpointRepository';
 import { SqliteDiaryDetailsRepository } from './sqliteDiaryDetailsRepository';
 import { SqliteDiaryPeopleRepository } from './sqliteDiaryPeopleRepository';
 import { SqliteGoalTaskSuggestionRepository } from './sqliteGoalTaskSuggestionRepository';
 import { SqliteKpiImportRepository } from './sqliteKpiImportRepository';
-import { createCandidate, createStore, directories } from './sqliteTestHarness';
+import { createCandidate, createStore, directories, output, turnRequest } from './sqliteTestHarness';
 
 const KEY = Buffer.alloc(32, 4);
+const TURN_KEY = '51df5f57-df61-4ac2-98af-202611230101';
+/** Служебное, что последний шаг выгрузки убирает; новое поле в этом списке — решение, а не случайность. */
+const STRIPPED_PATHS = [
+  'careerDiary.taskSuggestions[].inputHash',
+  'tracker.careerCommands[].authorization',
+  'tracker.careerCommands[].idempotency',
+  'turns[].idempotencyKey',
+];
 
 function fileStore() {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-export-coverage-'));
@@ -134,7 +144,7 @@ function seedDiary(store: ReturnType<typeof createStore>, databasePath: string, 
   });
   const options = { databasePath, encryptionKey: KEY };
   const details = new SqliteDiaryDetailsRepository(options);
-  details.saveGoalDetail(candidateId, goal.id, { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null });
+  details.saveGoalDetail(candidateId, goal.id, { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null, transfer: null });
   details.saveAdaptationDetails(candidateId, workplace.id, {
     tasks: {},
     stages: {},
@@ -167,11 +177,47 @@ describe('B689: выгрузка данных покрывает все табл
     expect(Object.keys(CANDIDATE_TABLE_COVERAGE).filter((table) => !tables.includes(table))).toEqual([]);
   });
 
-  it('таблицы дневника с содержимым кандидата все в выгрузке', () => {
-    const diaryGaps = Object.entries(CANDIDATE_TABLE_COVERAGE).filter(
-      ([table, coverage]) => table.startsWith('career_diary_') && 'gap' in coverage,
+  it('B738: пробелов нет — каждая таблица либо в выгрузке, либо служебная с причиной', () => {
+    const unresolved = Object.entries(CANDIDATE_TABLE_COVERAGE).filter(([, coverage]) => {
+      if ('internal' in coverage) return coverage.internal.trim().length === 0;
+      return !('export' in coverage) && !('routeExport' in coverage);
+    });
+    expect(unresolved).toEqual([]);
+  });
+
+  it('B738: в выгрузке нет полей с хешами, токенами, секретами, cookie и паролями; убранное известно', async () => {
+    const { databasePath, store } = fileStore();
+    const candidate = createCandidate(store);
+    store.startTurn(candidate.id, TURN_KEY, turnRequest);
+    store.completeTurn(candidate.id, TURN_KEY, output);
+    const { CareerCommandPlanner } = await import('../orchestration/careerCommandPlanner');
+    const commandId = '7a0c6f0e-8a43-4d0b-9a3e-2f5b0d6c1e11';
+    store.saveCareerCommand(
+      new CareerCommandPlanner({ createId: () => commandId }).materialize({
+        principal: { candidateId: candidate.id },
+        proposal: {
+          kind: 'application.submit', objective: 'Отправить отклик.', evidenceRefs: ['message-1'],
+          acceptanceCriteria: ['Отклик принят'], expectedSignal: 'Ответ', measureAfter: '2026-12-01', risk: 'external_side_effect',
+        },
+        availableEvidenceRefs: new Set(['message-1']), strategyDecisionId: '1f7b3c2a-5d6e-4f80-9a1b-2c3d4e5f6a7b',
+        modelInvocationIds: [], idempotencyKey: commandId, approval: null,
+      }),
     );
-    expect(diaryGaps).toEqual([]);
+    seedDiary(store, databasePath, candidate.id, 'своя');
+    const database = openSeeded(databasePath);
+    seedAutoApply(database, candidate.id, 'token password');
+    seedHh(databasePath, database, candidate.id, 'own');
+    seedRecording(database, candidate.id, 'own');
+    database.close();
+
+    const exported = store.exportCandidate(candidate.id);
+    expect(exported.automation.queue).toHaveLength(1);
+    expect(exported.interviewRecordings.recordings).toHaveLength(1);
+    expect(exported.tracker.careerCommands).toHaveLength(1);
+    expect(forbiddenExportKeys(exported)).toEqual([]);
+    // Запрет смотрит только на имя поля: текст кандидата со словами «token» и «password» на месте.
+    expect(exported.automation.stopCompanies).toEqual([expect.objectContaining({ company: 'Стоп token password' })]);
+    expect(store.exportCandidateStripReport(candidate.id)).toEqual(STRIPPED_PATHS);
   });
 
   it('n02: «Как часто» и «Не показывать название компании» входят в выгрузку', () => {
@@ -222,7 +268,7 @@ describe('B689: выгрузка данных покрывает все табл
     expect(diary.goals.map((goal) => goal.title)).toEqual(['Цель своя']);
     expect(diary.measurements.map((measurement) => [measurement.goalId, measurement.note])).toEqual([[goalId, 'Замер своя']]);
     expect(diary.goalDetails).toEqual([
-      { goalId, details: { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null } },
+      { goalId, details: { setBy: 'manager', agreedOn: '2026-12-01', weight: 40, archive: null, quarterTargets: null, transfer: null } },
     ]);
     expect(diary.weeklyReviews.map((review) => review.movedForward)).toEqual(['Неделя своя']);
     expect(diary.achievements.map((achievement) => achievement.situation)).toEqual(['Ситуация своя']);
@@ -255,6 +301,31 @@ describe('B689: выгрузка данных покрывает все табл
           return Number(row.total) > 0;
         });
       expect(left).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('запечатанные подборки по выбору (B770): кэш — не в выгрузке, и уходят с аккаунтом', () => {
+    const { databasePath, store } = fileStore();
+    const own = createCandidate(store);
+    const other = createCandidate(store);
+    store.sealedMatchedLists.write(own.id, 100, '"Подборка своя"', 'all');
+    store.sealedMatchedLists.write(own.id, 101, '"Подборка по роли"', 'role=CTO');
+    store.sealedMatchedLists.write(other.id, 102, '"Подборка чужая"', 'all');
+
+    expect(CANDIDATE_TABLE_COVERAGE.sealed_matched_list_choices).toEqual({
+      internal: 'кэш подборки вакансий, пересчитывается',
+    });
+    expect(JSON.stringify(store.exportCandidate(own.id))).not.toContain('Подборка');
+
+    expect(store.deleteCandidate(own.id)).toBe(true);
+    const database = new DatabaseSync(databasePath);
+    try {
+      const rows = database
+        .prepare('SELECT candidate_id AS id FROM sealed_matched_list_choices')
+        .all() as { id: string }[];
+      expect(rows.map((row) => row.id)).toEqual([other.id]);
     } finally {
       database.close();
     }

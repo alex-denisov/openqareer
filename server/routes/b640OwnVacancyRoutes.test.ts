@@ -181,6 +181,14 @@ describe('GET и DELETE own-vacancies', () => {
       'SQL', 'Python', 'умение договариваться с заказчиками внутри компании.',
     ]);
   });
+  it('B676: деньги из строки зарплаты — в строке списка и в детали', async () => {
+    const h = await setup();
+    const text = 'Руководитель разработки\nМосква, гибрид\nЗарплата от 450 000 ₽\nТребования:\n- SQL\n- Python';
+    const { vacancy } = (await createText(h, text)).json().data;
+    expect(vacancy).toMatchObject({ location: 'Москва', salary: { from: 450_000, currency: 'RUB' } });
+    const list = (await h.send('GET', BASE, 'flagged.test')).json().data;
+    expect(list[0].salary).toEqual({ from: 450_000, currency: 'RUB' });
+  });
   it('деталь: текст с абзацами и вид сравнения с профилем без процента', async () => {
     const h = await setup();
     const { id } = (await createText(h)).json().data.vacancy;

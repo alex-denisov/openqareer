@@ -74,9 +74,9 @@ function TableHead({ sort, onSort }: HeadProps) {
 
 /** Адрес действия строки: письмо или условия оффера. */
 export function actionPath(row: ResponseRow): string {
-  return row.action?.kind === 'offer'
-    ? buildNodePath('o06a', { offerId: row.id })
-    : buildNodePath('o02', { responseId: row.id });
+  if (row.action?.kind === 'offer') return buildNodePath('o06a', { offerId: row.id });
+  if (row.action?.kind === 'debrief') return buildNodePath('o01c', { responseId: row.id });
+  return buildNodePath('o02', { responseId: row.id });
 }
 
 function RowActionCell({ row, primary }: { readonly row: ResponseRow; readonly primary: boolean }) {
@@ -189,7 +189,11 @@ export function ResponsesTable(props: ResponsesTableProps) {
                 {open ? (
                   <tr className="vt-detail-row is-next">
                     <td colSpan={6}>
-                      <section className="od od-one" id={detailId} aria-labelledby={`${detailId}-t`}>
+                      <section
+                        className="od od-one"
+                        id={detailId}
+                        aria-labelledby={`${detailId}-t`}
+                      >
                         {detail}
                       </section>
                     </td>

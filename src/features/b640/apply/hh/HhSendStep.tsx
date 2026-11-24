@@ -5,7 +5,7 @@ import type { ApplyHead } from '../model/applyModel';
 import { editsWord, HhResumeEdits } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
-import { elapsedLabel } from './hhSendModel';
+import { elapsedLabel, uniqueResumeTitle } from './hhSendModel';
 import { useHhApply, type HhApplyControls } from './useHhApply';
 import { useMarkSent, type MarkSentState } from './useMarkSent';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
@@ -20,6 +20,8 @@ export interface HhSendStepProps {
   readonly approvedLabel: string;
   readonly letterText: string;
   readonly onSent: () => Promise<void>;
+  /** a01: название письма открывает шаг «Письмо». */
+  readonly onLetter: () => void;
 }
 
 interface PartsProps {
@@ -33,25 +35,26 @@ function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
   const selected = resumes.snapshot?.selected ?? null;
   return (
     <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
-      <li>
-        <p>
-          <b>Письмо</b> · {props.approvedLabel}
-        </p>
-        <p className="ap-lines">{props.letterText}</p>
+      <li className="row">
+        <div>
+          <button className="row-title ap-pick" type="button" onClick={props.onLetter}>
+            Письмо · {props.approvedLabel}
+          </button>
+          <p className="ap-lines">{props.letterText}</p>
+        </div>
         <span className="tag ok">готово</span>
       </li>
-      <li>
-        <p>
-          <b>Резюме hh.ru</b> {selected ? `«${selected.title}»` : null}
-        </p>
-        <button className="res-act" type="button" onClick={resumes.openPicker}>
-          {selected ? 'Другое резюме' : 'Выбрать резюме'}
-        </button>
-        {selected && editCount > 0 ? (
-          <button className="res-act" type="button" onClick={onEdits}>
-            {editsWord(editCount)}
+      <li className="row">
+        <div>
+          <button className="row-title ap-pick" type="button" onClick={resumes.openPicker}>
+            {selected ? `Резюме hh.ru «${selected.title}»` : 'Выбрать резюме hh.ru'}
           </button>
-        ) : null}
+          {selected && editCount > 0 ? (
+            <button className="res-act" type="button" onClick={onEdits}>
+              {editsWord(editCount)}
+            </button>
+          ) : null}
+        </div>
         {selected ? <span className="tag ok">готово</span> : null}
       </li>
     </ul>
@@ -112,26 +115,36 @@ function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string
     </>
   );
   return (
-    <Dialog open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
+    <Dialog className="hh-ask" open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
       <p>Отклик на «{title}» уйдёт от вашего имени из вашего входа в hh.ru.</p>
     </Dialog>
   );
 }
 
+function useStepApply(props: HhSendStepProps, { snapshot }: HhResumesState): HhApplyControls {
+  return useHhApply({
+    vacancyId: props.hhVacancyId,
+    resumeId: snapshot?.selected?.id ?? null,
+    letter: props.letterText,
+    uniqueResumeTitle: uniqueResumeTitle(snapshot),
+    onSent: props.onSent,
+  });
+}
+
 /** Шаг «Отправка» в приложении (a01): отклик через hh.ru от имени кандидата после подтверждения. */
 export function HhSendStep(props: HhSendStepProps) {
   const resumes = useHhResumes(props.vacancyId);
-  const edits = useHhResumeEdits(props.vacancyId, resumes.snapshot);
+  const { edits, loading: editsLoading } = useHhResumeEdits(props.vacancyId, resumes.snapshot);
   const [reviewing, setReviewing] = useState(false);
-  const resumeId = resumes.snapshot?.selected?.id ?? null;
-  const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
+  const selected = resumes.snapshot?.selected;
+  const resumeId = selected?.id ?? null;
+  const apply = useStepApply(props, resumes);
   const marked = useMarkSent(props.onSent);
-  const sentHere = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
-  const done = sentHere || marked.state.kind === 'done';
-  const busy = apply.state.kind === 'sending';
+  const sent = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
+  const done = sent || marked.state.kind === 'done';
   const responsePath = buildNodePath('o01c', { responseId: props.applicationId });
-  if (reviewing && resumes.snapshot?.selected && edits.length > 0) {
-    const { selected } = resumes.snapshot;
+  if (reviewing && editsLoading) return <StatusLine state="wait" text="Готовим правки" />;
+  if (reviewing && selected && edits.length > 0) {
     return <HhResumeEdits resumeId={selected.id} resumeTitle={selected.title} edits={edits} onBack={() => setReviewing(false)} />;
   }
   return (
@@ -142,20 +155,20 @@ export function HhSendStep(props: HhSendStepProps) {
       <Parts props={props} resumes={resumes} editCount={edits.length} onEdits={() => setReviewing(true)} />
       {done ? null : (
         <div className="actions">
-          <Button variant="primary" icon="send" busy={busy} disabled={!resumeId || resumes.loading} onClick={apply.ask}>
+          <Button variant="primary" icon="send" busy={apply.state.kind === 'sending'} disabled={!resumeId || resumes.loading} onClick={apply.ask}>
             Отправить отклик
           </Button>
           <a className="btn m-ico" href={props.head.url ?? undefined} target="_blank" rel="noopener noreferrer">
             <Icon name="out" />
             Вакансия на hh.ru
           </a>
-          <Button variant="quiet" icon="checkc" busy={marked.state.kind === 'busy'} disabled={busy} onClick={marked.mark}>
+          <Button variant="quiet" icon="checkc" busy={marked.state.kind === 'busy'} disabled={apply.state.kind === 'sending'} onClick={marked.mark}>
             Я уже откликнулся
           </Button>
         </div>
       )}
       <Outcome apply={apply} resumes={resumes} responsePath={responsePath} />
-      <MarkedOutcome marked={marked.state} responsePath={responsePath} />
+      {sent ? null : <MarkedOutcome marked={marked.state} responsePath={responsePath} />}
       <ConfirmDialog apply={apply} title={props.head.title} />
       <HhResumeSheet
         picker={resumes.picker}
@@ -164,7 +177,7 @@ export function HhSendStep(props: HhSendStepProps) {
         onClose={resumes.closePicker}
         onSignIn={resumes.signIn}
         onRetry={resumes.openPicker}
-        onChoose={resumes.choose}
+        onChoose={(item, optimize) => resumes.choose(item, () => setReviewing(optimize))}
       />
     </section>
   );

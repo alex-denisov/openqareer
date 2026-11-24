@@ -21,7 +21,7 @@ export interface LetterGateSources {
   readonly resumeAttached?: boolean;
 }
 
-export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic' | 'distorted';
+export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic' | 'distorted' | 'recipient';
 
 export interface LetterGateViolation {
   readonly rule: LetterGateRule;
@@ -275,6 +275,42 @@ function hasForeignName(sentence: string, known: ReadonlySet<string>, language: 
   return foreignFirst || capitals.some((word) => !isKnownName(word, known));
 }
 
+const GREETED_NAME =
+  /^\s*(?:здравствуйте|приветствую|привет|добр(?:ый|ого|ое)\s+(?:день|дня|вечер|утро|времени суток)|уважаем(?:ый|ая|ые)|dear|hello|hi|good\s+(?:morning|afternoon|evening|day))[,\s]+(\p{L}[\p{L}'’-]*(?:\s+\p{L}[\p{L}'’-]*){0,3})\s*(?:[,!.:;—–]|\n|$)/iu;
+/** Обращения без имени: их пишут, когда получатель неизвестен. */
+const IMPERSONAL_GREETING = new Set([
+  'hiring', 'manager', 'team', 'recruiter', 'recruitment', 'recruiting', 'talent', 'acquisition', 'hr', 'sir', 'madam', 'colleagues', 'all', 'everyone', 'there',
+  'mr', 'ms', 'mrs', 'dr', 'господа',
+  'коллеги', 'команда', 'рекрутёр', 'рекрутер', 'работодатель',
+]);
+
+/** Имя целиком: другое окончание на одну букву или другой алфавит, но не похожее имя («Марина» — не «Мария»). */
+function samePersonName(word: string, known: string): boolean {
+  if (word === known) return true;
+  if (CYRILLIC_WORD.test(word) && CYRILLIC_WORD.test(known)) {
+    // Беглая гласная: «Павел» — «Павлу», «Пётр» — «Петра».
+    const [one, other] = [word.replace(/[её]/gu, ''), known.replace(/[её]/gu, '')];
+    const shared = sharedPrefix(one, other);
+    return shared >= 3 && one.length - shared <= 1 && other.length - shared <= 1;
+  }
+  const bothLatin = /^\p{Script=Latin}+$/u.test(word) && /^\p{Script=Latin}+$/u.test(known);
+  return !bothLatin && soundOf(word) === soundOf(known);
+}
+
+/**
+ * B682: имя и отчество в приветствии подтверждают только вакансия, её компания и получатель, а не профиль.
+ * На hh.ru компания ИП — это фамилия, имя и отчество владельца: такое обращение законно.
+ */
+function greetsStranger(body: string, vacancy: readonly string[]): boolean {
+  const greeted = GREETED_NAME.exec(body)?.[1]?.match(WORD) ?? [];
+  // «Здравствуйте, меня зовут …» — не обращение по имени.
+  if (!greeted.every((word) => /^\p{Lu}/u.test(word))) return false;
+  const known = vacancy.flatMap(wordsOf);
+  return greeted
+    .map((word) => word.replace(/’/gu, "'").toLocaleLowerCase())
+    .some((word) => !IMPERSONAL_GREETING.has(word) && !known.some((name) => samePersonName(word, name)));
+}
+
 /** Отрицание ничего не подтверждает: «не увеличил выручку на 20%» — не повод писать про 20%. «Не только» не отрицание. */
 const NEGATED = /(?:^|[\s,:])(?:не|нет|not|never)\s+(?!только|менее|более|just|only|less|more)\p{L}|cannot|can't|unable to confirm|did not/iu;
 
@@ -333,6 +369,9 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });
+  const greeted: LetterGateViolation[] = greetsStranger(body, sources.vacancy)
+    ? [{ rule: 'recipient', sentence: sentences[0] ?? '' }]
+    : [];
   const sourceTexts = [...sources.candidate, ...sources.vacancy];
   const distorted = sentences
     .filter((sentence) => distortedWords(sentence, sourceTexts).length > 0)
@@ -343,9 +382,9 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     : [];
   if (sources.resumeAttached === false) {
     const promised = sentences.filter((sentence) => RESUME_NOTE.test(sentence));
-    return [...checked, ...distorted, ...cyrillic, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
+    return [...checked, ...greeted, ...distorted, ...cyrillic, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
   }
   return RESUME_NOTE.test(body)
-    ? [...checked, ...distorted, ...cyrillic]
-    : [...checked, ...distorted, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
+    ? [...checked, ...greeted, ...distorted, ...cyrillic]
+    : [...checked, ...greeted, ...distorted, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }

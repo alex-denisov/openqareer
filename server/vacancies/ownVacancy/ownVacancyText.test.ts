@@ -50,6 +50,28 @@ describe('своя вакансия из вставленного текста (
     });
   });
 
+  it('B676: строка зарплаты — деньги вакансии; город из строки с форматом работы', () => {
+    const text = [
+      'Руководитель разработки',
+      'Компания: Ритм Ритейл',
+      'Москва, гибрид',
+      'Зарплата от 450 000 ₽',
+      'Требования:',
+      '- опыт руководства командой от 5 лет',
+    ].join('\n');
+    expect(ownVacancyFromText(text)).toMatchObject({
+      location: 'Москва',
+      workFormat: 'hybrid',
+      salary: { from: 450_000, currency: 'RUB' },
+    });
+    expect(ownVacancyFromText('Инженер\nУдалённо · Казань\nТребования: SQL').location).toBe(
+      'Казань',
+    );
+    expect(
+      ownVacancyFromText('Инженер\nОфис в центре, 2 дня удалённо\nТребования: SQL').location,
+    ).toBeNull();
+  });
+
   it('без полей в тексте — пусто, а не выдумка', () => {
     const text = 'Ищем инженера. Требования: опыт с Kubernetes от 2 лет; Terraform.';
     expect(ownVacancyFromText(text)).toMatchObject({

@@ -29,11 +29,17 @@ describe('B645: три проверки «Мало данных»', () => {
     ]);
   });
 
-  it('без ожиданий по деньгам проверки вилок нет', () => {
-    expect(checkCards({ ...CHECKS, salaryBelow: null }).map((card) => card.action)).toEqual([
-      'Обновить статусы',
-      'Показать свежие',
-    ]);
+  // Оркестратор 23.11: третья карточка остаётся и без ожиданий — просит указать «Зарплату от».
+  it('без ожиданий по деньгам карточка вилок просит указать сумму в условиях поиска', () => {
+    const salary = checkCards({ ...CHECKS, salaryBelow: null })[1];
+    expect(salary).toMatchObject({
+      key: 'salary',
+      title: 'Сверить ожидания по деньгам с вилкой',
+      why: 'Сколько хотите получать? Зарплата от — не указана.',
+      action: 'Указать',
+      to: '/app/career?view=conditions',
+    });
+    expect(checkCards(CHECKS)[1]?.to).toBe('/app/vacancies');
   });
 
   it('основание: с какого дня отклики и порог', () => {

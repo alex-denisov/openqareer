@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ApplicationView } from '../../applications/applicationsApi';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
-import { buildNodePath } from '../routes';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
 import { onPlatform, platformOf } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
@@ -9,6 +8,8 @@ import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
 import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
+import { InterviewActions } from './InterviewActions';
+import { useRecordingLine } from './useRecordingLine';
 import {
   marksFor,
   useResponseActions,
@@ -36,12 +37,6 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
     </ul>
   );
 }
-
-/**
- * Экраны раздела «Интервью» (i01, i04) пока заглушки: кнопки «Подготовиться» и «Рассказать,
- * как прошло» вели в тупик (B645). Включить, когда раздел подключён в `interview/index.tsx`.
- */
-const INTERVIEW_SCREENS_READY = false;
 
 function History({ application }: { readonly application: ApplicationView }) {
   const messages = useSentMessages(application.clusterId);
@@ -169,10 +164,16 @@ function NextActions({ item, actions, draft }: ActionsProps) {
   const { application, row } = item;
   const copy = useCopy(draft);
   const busy = actions.outcome.kind === 'busy';
-  const interviewAhead = application.stage === 'interview' && row.tag.tone !== 'ok';
+  const interview = application.stage === 'interview';
+  const interviewAhead = interview && row.tag.tone !== 'ok';
+  const past = interview && !interviewAhead;
+  const marks = marksFor(application.stage);
+  // Макет o01c: после интервью «В архив» — в «Другом способе», остальные отметки — в меню.
+  const archive = past ? marks.find((mark) => mark.stage === 'archived') : undefined;
+  const menuMarks = archive ? marks.filter((mark) => mark !== archive) : marks;
   return (
     <div className="actions">
-      {row.action ? (
+      {row.action && row.action.kind !== 'debrief' ? (
         <Link className="btn is-primary" to={actionPath(row)}>
           <Icon name={row.action.icon} />
           {row.action.label}
@@ -188,22 +189,45 @@ function NextActions({ item, actions, draft }: ActionsProps) {
           </Button>
         </>
       ) : null}
-      {INTERVIEW_SCREENS_READY && application.stage === 'interview' ? (
-        <Link
-          className="btn is-primary"
-          to={buildNodePath(interviewAhead ? 'i01' : 'i04', { responseId: application.id })}
-        >
-          <Icon name={interviewAhead ? 'checkc' : 'mic'} />
-          {interviewAhead ? 'Подготовиться к интервью' : 'Рассказать, как прошло'}
-        </Link>
+      {interview ? (
+        <InterviewActions
+          responseId={application.id}
+          ahead={interviewAhead}
+          archive={archive}
+          disabled={busy}
+          onArchive={actions.mark}
+        />
       ) : null}
       {application.stage === 'archived' ? (
         <Button icon="undo" busy={busy} onClick={actions.restore}>
           Вернуть из архива
         </Button>
       ) : null}
-      <MarkMenu marks={marksFor(application.stage)} disabled={busy} onMark={actions.mark} />
+      <MarkMenu marks={menuMarks} disabled={busy} onMark={actions.mark} />
     </div>
+  );
+}
+
+function pastInterview(item: ListedResponse): boolean {
+  return item.application.stage === 'interview' && item.row.tag.tone === 'ok';
+}
+
+/** Что дальше: после интервью — вопрос, как оно прошло, и есть ли запись (макет o01c). */
+function NextLine({ item }: { readonly item: ListedResponse }) {
+  const past = pastInterview(item);
+  const recording = useRecordingLine(item.application.id, past);
+  if (!past) {
+    return (
+      <p>
+        <b>{item.row.next}</b>
+      </p>
+    );
+  }
+  return (
+    <p>
+      <b>{`Как прошло интервью с ${item.row.company}?`}</b>
+      {recording ? ` ${recording}` : null}
+    </p>
   );
 }
 
@@ -260,9 +284,7 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
         Что дальше
       </h3>
       {row.failure ? <StatusLine state="err" text={`Не доставлен · ${row.failure}`} /> : null}
-      <p>
-        <b>{row.next}</b>
-      </p>
+      <NextLine item={item} />
       {row.remind ? (
         <ReminderDraft fieldId={`${titleId}-drt`} draft={draft} onChange={setDraft} />
       ) : null}

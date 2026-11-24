@@ -1,5 +1,6 @@
 import { useCallback, useId, useState, type ChangeEvent } from 'react';
 import { Button, Icon, Link, StatusLine } from '../kit';
+import { useScreenChrome } from '../shell/ShellContext';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { loadDebrief, saveInterviewerName, splitVoices, type DebriefData } from './data/debriefApi';
@@ -175,7 +176,10 @@ function VoicesFailed(props: { readonly data: DebriefData; readonly onView: Repl
 
 type Replace = (next: DebriefData) => void;
 
-function leadTitle(picking: boolean, hasFile: boolean): string {
+/** Заголовок по фазе загрузки: при сбое — снова «Загрузите запись интервью». */
+function leadTitle(phase: UploadPhase, picking: boolean, hasFile: boolean): string {
+  if (phase.kind === 'sending') return 'Загружаем запись…';
+  if (phase.kind === 'failed') return 'Загрузите запись интервью';
   if (picking) return 'Запись загружена — отметьте, кто говорит';
   return hasFile ? 'Запись загружена' : 'Загрузите запись интервью';
 }
@@ -190,7 +194,11 @@ function UploadLead(props: {
   return (
     <section className="lead" aria-labelledby="ic-t">
       <h2 className="lead-title is-long" id="ic-t">
-        {leadTitle(props.picking, Boolean(upload.file ?? props.data.debrief?.recording))}
+        {leadTitle(
+          upload.phase,
+          props.picking,
+          Boolean(upload.file ?? props.data.debrief?.recording),
+        )}
       </h2>
       {upload.file ? (
         <FileRow
@@ -222,11 +230,11 @@ function UploadLead(props: {
 
 function UploadBody(props: {
   readonly data: DebriefData;
-  readonly reload: () => void;
+  readonly onSent: () => void;
   readonly onView: Replace;
 }) {
   const { data } = props;
-  const upload = useUpload(data, props.reload);
+  const upload = useUpload(data, props.onSent);
   if (!data.debrief) {
     return <StatusLine state="wait" text="Интервью по этому отклику ещё не записано." />;
   }
@@ -250,12 +258,21 @@ export function UploadScreen({ responseId }: { readonly responseId: string }) {
   const { state, reload, replaceData } = useAsync(load, 'Загрузка не открылась.');
   const data = state.data;
   useVoicesStep(data, reload, replaceData);
+  // Макет: плотные мобильные отступы (`data-mtight`), как у I1, I2 и I3.
+  useScreenChrome({ rootData: { mtight: '1' } });
+  // «Запись или файл» — текущий шаг, пока файла нет; после загрузки он с галочкой.
+  const [sent, setSent] = useState(false);
+  const onSent = useCallback(() => {
+    setSent(true);
+    reload();
+  }, [reload]);
+  const step = sent || data?.debrief?.recording ? 'voices' : 'source';
   return (
     <>
-      <RecordSteps responseId={data?.response.id ?? responseId} current="voices" />
+      <RecordSteps responseId={data?.response.id ?? responseId} current={step} />
       <div className="page two" data-b640-node="i04c" data-b640-section="interview">
         {data ? <SourceHead data={data} /> : null}
-        {data ? <UploadBody data={data} reload={reload} onView={replaceData} /> : null}
+        {data ? <UploadBody data={data} onSent={onSent} onView={replaceData} /> : null}
         {state.status === 'error' && !data ? <StatusLine state="err" text={state.error} /> : null}
       </div>
     </>

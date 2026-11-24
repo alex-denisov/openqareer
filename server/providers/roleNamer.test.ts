@@ -89,6 +89,30 @@ describe('CachedRoleNamer', () => {
    * INC-035: кэш жил только в памяти процесса, поэтому каждый деплой снова звал
    * модель — и упирался в исчерпанную бесплатную квоту (429).
    */
+  // B748 v8: правило уровня применяется к сохранённому без модели — первый вход «Карьеры» не ждёт.
+  it('сохранённое название с уровнем латиницей отдаётся без titleRu, модель не спрашивается', async () => {
+    const vp = [
+      {
+        title: 'VP of IT Operations',
+        titleRu: 'VP по ИТ-эксплуатации',
+        reason: 'вёл эксплуатацию',
+        evidenceRefs: ['memory:1'],
+      },
+    ];
+    const store: RoleNamingCacheStore = {
+      read: () => ({ at: 0, roles: vp }),
+      write: () => undefined,
+    };
+    const inner = { nameRoles: vi.fn() };
+    const outcome = await new CachedRoleNamer(inner, { store, now: () => 1 }).nameRoles(
+      facts,
+      'en',
+    );
+    expect(outcome.roles[0]?.title).toBe('VP of IT Operations');
+    expect(outcome.roles[0]?.titleRu).toBeUndefined();
+    expect(inner.nameRoles).not.toHaveBeenCalled();
+  });
+
   it('переживает рестарт: второй процесс читает названное из хранилища', async () => {
     const rows = new Map<string, RoleNamingCacheEntry>();
     const store: RoleNamingCacheStore = {
@@ -270,7 +294,7 @@ function namedRoleHygieneIsWired(namer: unknown): boolean {
 }
 
 describe('buildRoleNamer', () => {
-  it('цепочка называния: deepseek-v4.1-flash → luna → Vertex, без бесплатных и Gemini AI Studio (B580)', () => {
+  it('цепочка называния: deepseek-v4.1-flash дважды → luna, без Vertex, бесплатных и Gemini AI Studio', () => {
     const built = buildRoleNamer({
       providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k', nvidia: 'k' },
       vertex: {
@@ -283,7 +307,6 @@ describe('buildRoleNamer', () => {
     });
 
     expect(describeRoleNamerQueue(built)).toEqual([
-      'vertex:gemini-3.8-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
@@ -291,7 +314,7 @@ describe('buildRoleNamer', () => {
     expect(namedRoleHygieneIsWired(built)).toBe(true);
   });
 
-  it('ставит Vertex первым, когда он настроен (решение владельца 04.11)', () => {
+  it('Vertex в называние не ставится и когда настроен (выключен решением владельца 20.11)', () => {
     const built = buildRoleNamer({
       providerCredentials: { openrouter: 'k' },
       vertex: {
@@ -303,7 +326,7 @@ describe('buildRoleNamer', () => {
       },
     });
 
-    expect(describeRoleNamerQueue(built)[0]).toBe('vertex:gemini-3.8-flash');
+    expect(describeRoleNamerQueue(built)).not.toContain('vertex:gemini-3.8-flash');
   });
 
   it('ступень Gemini передаёт thinkingLevel и заголовок доступа Vertex', async () => {

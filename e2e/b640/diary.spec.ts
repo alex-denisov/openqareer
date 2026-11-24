@@ -51,11 +51,37 @@ test.describe('B662: «Дневник» нового кабинета — зап
       /^План на неделю/u,
     ]);
     await expectGates(page);
+    // B645: «Что мешает» с текстом макета d00d — 96 px на 1440 и 68 px на 390 (корень `data-mtight`).
+    const mobile = (page.viewportSize()?.width ?? 1440) < 768;
+    const blockers = screen.locator('#wk-bad');
+    await blockers.fill('Тестовая среда общая с соседней командой: ждали 4 дня.');
+    expect(Math.round((await blockers.boundingBox())?.height ?? 0)).toBe(mobile ? 68 : 96);
     await screen.getByLabel('Срок релиза, дней').fill('5');
     await screen.getByRole('button', { name: 'Сохранить итог' }).click();
     await expect(page.locator('[data-b640-node="d00"]')).toBeVisible();
     expect(calls.measurements).toEqual([expect.objectContaining({ value: 5 })]);
     expect(calls.weeks).toHaveLength(1);
+  });
+
+  test('B645-2 п. 97: ⓘ «Кто видит» у заголовка — с клавиатуры, в пределах экрана, Esc снимает', async ({
+    page,
+  }) => {
+    await openDiary(page, '/app/diary', 'd00');
+    const tip = page.locator('.topbar h1 .top-tip');
+    const button = tip.getByRole('button', { name: 'Кто видит' });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    const bubble = tip.getByRole('tooltip');
+    await expect(bubble).toHaveText('Дневник виден только вам: работодатель его не видит.');
+    await expect(bubble).toBeVisible();
+    const box = await bubble.boundingBox();
+    const width = page.viewportSize()?.width ?? 1440;
+    expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(width);
+    expect(box?.y ?? -1).toBeGreaterThanOrEqual(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    await page.keyboard.press('Escape');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('снимки «Дневника»: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {

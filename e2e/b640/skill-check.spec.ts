@@ -124,10 +124,12 @@ test.describe('B653: «Карьера» — проверка навыков C04'
   test('C4: мало требований — короткая строка и выбор роли на месте (B645)', async ({ page }) => {
     await openSkillCheck(page, `${PATH}?role=${encodeURIComponent('VP of Engineering')}`, {
       ready: true,
-      searchRoles: ['VP of Engineering', 'Руководитель разработки'],
-      insufficient: ['VP of Engineering'],
+      searchRoles: ['VP of Engineering', 'CTO', 'Руководитель разработки'],
+      insufficient: ['VP of Engineering', 'CTO'],
     });
     const screen = node(page, 'c04');
+    // B726 (прод 23.11): роль, которую тоже нельзя проверить, в выбор не попадает — второй тупик.
+    await expect(screen.getByRole('link', { name: /^Проверить «/u })).toHaveCount(1);
     await expect(screen.locator('.re-line')).toHaveText(
       'По роли «VP of Engineering» в вакансиях мало требований для проверки.',
     );
@@ -135,6 +137,25 @@ test.describe('B653: «Карьера» — проверка навыков C04'
     await expect(screen.getByText(/ещё собираются/u)).toHaveCount(0);
     await screen.getByRole('link', { name: 'Проверить «Руководитель разработки»' }).click();
     await expect(screen.getByText('Управление сроками · вопрос 5 из 6')).toBeVisible();
+  });
+
+  test('B767: два варианта одной роли с одним русским названием — на выбор одна роль', async ({
+    page,
+  }) => {
+    await openSkillCheck(page, `${PATH}?role=${encodeURIComponent('VP of Engineering')}`, {
+      ready: true,
+      searchRoles: ['VP of Engineering', 'Head of Technical Support', 'Customer Support Director'],
+      insufficient: ['VP of Engineering'],
+      titlesRu: {
+        'Head of Technical Support': 'Руководитель службы поддержки',
+        'Customer Support Director': 'Руководитель службы поддержки',
+      },
+    });
+    const screen = node(page, 'c04');
+    await expect(screen.getByRole('link', { name: /^Проверить «/u })).toHaveCount(1);
+    await expect(
+      screen.getByRole('link', { name: 'Проверить «Руководитель службы поддержки»' }),
+    ).toBeVisible();
   });
 
   test('C4: «Пропустить · продолжу позже» ведёт к ролям', async ({ page }) => {

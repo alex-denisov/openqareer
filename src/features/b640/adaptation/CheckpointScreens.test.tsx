@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../../coach/coachApi';
 import { click, mount, type Mounted } from '../kit/testDom';
 import { nodeByCode } from '../routes';
-import { ShellProvider } from '../shell/ShellContext';
+import { ShellProvider, useShell } from '../shell/ShellContext';
 import { Day30Screen } from './Day30Screen';
 import { ResultsScreen } from './ResultsScreen';
 
@@ -24,6 +24,8 @@ const api = vi.hoisted(() => ({
 vi.mock('./adaptationApi', () => api);
 const checks = vi.hoisted(() => ({ getDay30: vi.fn(), markDay30Sent: vi.fn(), unmarkDay30Sent: vi.fn(), getResults90: vi.fn() }));
 vi.mock('./checkpointsApi', () => checks);
+const diary = vi.hoisted(() => ({ listGoalCards: vi.fn() }));
+vi.mock('../diary/diaryApi', () => diary);
 const writeText = vi.fn();
 
 const session = { username: 'f.test', role: 'candidate', isTest: true, candidateId: 'c', features: { cabinetB640: true }, emailVerified: true } as AuthUser;
@@ -48,6 +50,12 @@ const PEOPLE = { workplaceId: 'w1', total: 2, withoutMeeting: 1, nextMeeting: nu
   ] },
 ] };
 
+/** Какая панель открыта поверх раздела: каркас в этих тестах не рисуется. */
+function PanelProbe() {
+  const { panel } = useShell();
+  return panel ? <i data-panel={panel.kind} /> : null;
+}
+
 let view: Mounted | null = null;
 async function settle() {
   await act(async () => {
@@ -56,7 +64,7 @@ async function settle() {
 }
 async function open(element: ReactElement) {
   const value = { session, path: '/app/diary/adaptation', search: '', match: null, consultantRoute: null, navigate: vi.fn(), signOut: async () => undefined, theme: 'light' as const, setTheme: () => undefined };
-  view = mount(<ShellProvider value={value}>{element}</ShellProvider>);
+  view = mount(<ShellProvider value={value}>{element}<PanelProbe /></ShellProvider>);
   await settle();
   await settle();
   return view.container;
@@ -69,6 +77,7 @@ beforeEach(() => {
   api.getWorkplace.mockResolvedValue({ ...WORKPLACE, planning: { adaptationPlan: PLAN } });
   api.getAdaptation.mockResolvedValue(VIEW);
   api.getPeople.mockResolvedValue(PEOPLE);
+  diary.listGoalCards.mockResolvedValue({ items: [], archived: [] });
   writeText.mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
 });
@@ -124,7 +133,7 @@ describe('d01e проверка на 30-й день', () => {
 });
 
 describe('d04 итоги 90 дней', () => {
-  it('цели со статусами, тексты для резюме и разговора копируются; кнопки «в профиль» нет', async () => {
+  it('цели со статусами; текст для резюме копируется, разговор готовится с консультантом', async () => {
     checks.getResults90.mockResolvedValue({
       workplaceId: 'w1', periodFrom: '2026-12-01', periodTo: '2027-02-28',
       items: [
@@ -137,9 +146,14 @@ describe('d04 итоги 90 дней', () => {
     const page = await open(<ResultsScreen node={nodeByCode('d04')!} />);
     expect(page.querySelector('#rs-title')?.textContent).toBe('Итоги 90 дней');
     expect(page.textContent).toContain('отстаёт');
-    expect(page.textContent).not.toContain('Добавить в профиль');
     const copies = [...page.querySelectorAll('button')].filter((item) => item.textContent?.includes('Скопировать'));
-    expect(copies).toHaveLength(2);
+    expect(copies).toHaveLength(1);
+    const talk = button(page, 'Подготовить разговор');
+    expect(talk?.className).toBe('btn');
+    expect(talk?.querySelector('svg')).not.toBeNull();
+    click(talk!);
+    await settle();
+    expect(page.querySelector('[data-panel]')?.getAttribute('data-panel')).toBe('consultant');
     click(copies[0]!);
     await settle();
     expect(writeText).toHaveBeenCalledWith('Руководитель разработки: за первые 90 дней — срок релиза.');

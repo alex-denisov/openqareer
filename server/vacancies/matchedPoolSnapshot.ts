@@ -1,5 +1,6 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
+import { syncSection } from '../observability/syncSections';
 
 /**
  * Один снимок подбора на одно чтение пула.
@@ -27,8 +28,12 @@ const DEFAULT_TTL_MS = 10 * 60_000;
  * PRB-041 (prod 03.11): the first read past the window waited 5–6 s for the rebuild, on whichever
  * offset came first. Until this age it gets the old snapshot and the rebuild runs behind it; the
  * key still carries the profile, so a candidate's own edit never reads the old list.
+ *
+ * Prod 23.11: at 20 minutes «Карьера» after an idle spell waited 89 s and got 503 while twelve
+ * roles rebuilt one by one. An old list of the same profile beats a refusal, so the limit is the
+ * one a stored snapshot already had: a day.
  */
-const DEFAULT_MAX_AGE_MS = 20 * 60_000;
+const DEFAULT_MAX_AGE_MS = 24 * 60 * 60_000;
 
 /**
  * PRB-041: a rebuild costs one large selection 7–8 s of the match reader (prod 04.11); once per
@@ -57,24 +62,36 @@ export interface PersistedMatchedSnapshot {
 /** The last snapshot of a candidate, kept past the process: a deploy no longer starts cold. */
 export interface MatchedSnapshotStore {
   read(candidateId: string, profileKey: string): PersistedMatchedSnapshot | null;
-  write(candidateId: string, profileKey: string, snapshot: PersistedMatchedSnapshot): void;
+  /** `isWanted` turns false when the snapshot is dropped or replaced before it is written. */
+  write(
+    candidateId: string,
+    profileKey: string,
+    snapshot: PersistedMatchedSnapshot,
+    isWanted: () => boolean,
+  ): void | Promise<void>;
   delete(candidateId: string): void;
   /** Profiles stored for a candidate, for loading them all when a process starts. */
   keys(candidateId: string): string[];
 }
 
-/** A snapshot of the previous process stays an answer this long; a rebuild runs behind it. */
-const STORED_MAX_AGE_MS = 24 * 60 * 60_000;
-
 const WAIT_EXPIRED = Symbol('wait-expired');
+
+/**
+ * B770: a reader found no snapshot for its profile, neither in the process nor in the store.
+ * `keyInStore` with no snapshot means the stored row did not open; `seals` near the cap of 24
+ * means the row was pushed out; neither means the warm pass had not reached the candidate yet.
+ */
+export interface MatchedSnapshotMiss {
+  readonly candidateId: string;
+  readonly keyInStore: boolean;
+  readonly seals: number;
+}
 
 interface Snapshot {
   readonly items: MatchedVacancyItem[];
   readonly storedAt: number;
   /** The shared-write count this list was read after; an older count marks it stale. */
   readonly poolWrites: number;
-  /** Read from the store: after a deploy it is the only answer that does not wait. */
-  readonly stored?: boolean;
 }
 
 export interface MatchedPoolSnapshotsOptions {
@@ -91,16 +108,24 @@ export interface MatchedPoolSnapshotsOptions {
 export interface MatchedPoolReadOptions {
   /** For a background pass: its next candidate waits for the rebuild instead of running beside it. */
   readonly awaitRebuild?: boolean;
+  /**
+   * B770 (prod 23.11 04:47Z): «Карьера» right after a restart waited the full 12 s for each of
+   * seven roles with no stored snapshot. A screen that can say «считаем» names a shorter wait.
+   */
+  readonly waitMs?: number;
 }
 
 export class MatchedPoolSnapshots {
   private readonly entries = new Map<string, Snapshot>();
   private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
   private poolWrites = 0;
+  /** One write at a time: several built together would each take a slice of the same loop turn. */
+  private lastPersist: Promise<void> = Promise.resolve();
   private readonly ttlMs: number;
   private readonly maxAgeMs: number;
   private readonly minStaleRebuildMs: number;
   private onRebuildFailed: ((error: unknown) => void) | undefined;
+  private onMiss: ((miss: MatchedSnapshotMiss) => void) | undefined;
   private readonly maxEntries: number;
   private readonly waitMs: number;
   private readonly staleWaitMs: number;
@@ -120,6 +145,10 @@ export class MatchedPoolSnapshots {
 
   setRebuildFailureLog(log: (error: unknown) => void): void {
     this.onRebuildFailed = log;
+  }
+
+  setMissLog(log: (miss: MatchedSnapshotMiss) => void): void {
+    this.onMiss = log;
   }
 
   setStore(store: MatchedSnapshotStore): void {
@@ -209,24 +238,36 @@ export class MatchedPoolSnapshots {
     const stored = this.entries.get(key) ?? this.loadStored(candidateId, profileKey, key);
     const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
     if (stored && this.isCurrent(stored, age)) return stored.items;
-    const servable = age < (stored?.stored ? STORED_MAX_AGE_MS : this.maxAgeMs);
+    const servable = age < this.maxAgeMs;
     if (stored && servable && !options.awaitRebuild) {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
-    const waitMs = options.awaitRebuild ? undefined : stored ? this.staleWaitMs : this.waitMs;
+    if (!stored && !options.awaitRebuild) this.reportMiss(candidateId, profileKey);
+    const waitMs = options.awaitRebuild
+      ? undefined
+      : stored
+        ? this.staleWaitMs
+        : (options.waitMs ?? this.waitMs);
     return this.awaitCompute(key, compute, stored, waitMs);
+  }
+
+  private reportMiss(candidateId: string, profileKey: string): void {
+    if (!this.onMiss) return;
+    const keys = this.guard(() => this.store?.keys(candidateId)) ?? [];
+    this.onMiss({ candidateId, keyInStore: keys.includes(profileKey), seals: keys.length });
   }
 
   /** A snapshot of the previous process: it counts as read after the current pool writes. */
   private loadStored(candidateId: string, profileKey: string, key: string): Snapshot | undefined {
-    const persisted = this.guard(() => this.store?.read(candidateId, profileKey));
+    const persisted = syncSection('snapshot:load', () =>
+      this.guard(() => this.store?.read(candidateId, profileKey)),
+    );
     if (!persisted) return undefined;
     const snapshot = {
       items: persisted.items,
       storedAt: persisted.storedAt,
       poolWrites: this.poolWrites,
-      stored: true,
     };
     this.entries.set(key, snapshot);
     return snapshot;
@@ -333,7 +374,13 @@ export class MatchedPoolSnapshots {
     const split = key.indexOf(' ');
     const candidateId = key.slice(0, split);
     const profileKey = key.slice(split + 1);
-    setImmediate(() => this.guard(() => store.write(candidateId, profileKey, snapshot)));
+    const isWanted = () => this.entries.get(key)?.items === snapshot.items;
+    this.lastPersist = this.lastPersist
+      .then(() => new Promise((resolve) => setImmediate(resolve)))
+      .then(() =>
+        isWanted() ? store.write(candidateId, profileKey, snapshot, isWanted) : undefined,
+      )
+      .catch((error: unknown) => this.onRebuildFailed?.(error));
   }
 
   private evict(now: number): void {

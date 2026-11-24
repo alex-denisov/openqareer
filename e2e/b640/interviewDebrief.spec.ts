@@ -97,6 +97,9 @@ test.describe('B751: «Разбор интервью» (I4)', () => {
   }) => {
     const calls = await open(page, '/app/responses/r-arka/debrief', 'i04', 'ready');
     await expect(page.getByRole('heading', { name: 'Что спросили и как прошло' })).toBeVisible();
+    await expect(page.locator('.lead-sub').first()).toHaveText(
+      'Арка Холдинг · интервью 9 ноября · собеседник: Ирина Петрова',
+    );
     await expect(page.getByText('Как снижали затраты на инфраструктуру').first()).toBeVisible();
     await expect(page.getByText('Ответ до пятницы').first()).toBeVisible();
     await expect(page.getByText('Ваши заметки').first()).toBeVisible();
@@ -140,6 +143,28 @@ test.describe('B751: «Загрузка записи» (I4c)', () => {
     await expect(page.getByLabel('Имя собеседника')).toHaveValue('Ирина Петрова');
     await expect(page.getByRole('link', { name: 'Записать интервью' })).toHaveCount(0);
     await expectGates(page);
+  });
+
+  test('до файла текущий шаг — «Запись или файл»; файл не прочитался — снова «Загрузите запись»', async ({
+    page,
+  }) => {
+    await open(page, '/app/responses/r-arka/debrief/upload', 'i04c', 'none', 'none', false);
+    const steps = page.getByRole('navigation', { name: 'Шаги' });
+    await expect(steps.getByRole('link', { name: 'Запись или файл' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'interview.m4a',
+      mimeType: 'audio/mp4',
+      buffer: Buffer.from('not audio at all'),
+    });
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText('Загрузите запись интервью');
+    await expect(page.locator('.ls-err, [role="alert"]').first()).toBeVisible();
+    await expect(steps.getByRole('link', { name: 'Запись или файл' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   });
 });
 

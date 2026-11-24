@@ -22,6 +22,8 @@ export interface ResumeCandidateInput {
    * writes it yet.
    */
   readonly photoMediaId?: string;
+  /** B666 · p08: фото из последнего импорта LinkedIn — «Взять из LinkedIn» ставит его снова. */
+  readonly linkedinPhotoMediaId?: string;
   readonly about?: string;
   /** B541: the imported fact the about text came from (platform and date live on it). */
   readonly aboutMemoryId?: string;
@@ -403,6 +405,7 @@ export const resumeDraftSchema = z
         photoUrl: urlSchema.optional(),
         headline: labelSchema.optional(),
         photoMediaId: mediaIdSchema.optional(),
+        linkedinPhotoMediaId: mediaIdSchema.optional(),
         about: longTextSchema.optional(),
         aboutMemoryId: z.string().trim().min(1).max(200).optional(),
         aboutOrigin: z
