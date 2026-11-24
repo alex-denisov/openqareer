@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
   requestFactRewrite: vi.fn(),
   applyFactRewrite: vi.fn(),
   revertFactRewrite: vi.fn(),
+  listFactRewriteVariants: vi.fn(),
+  createFactRewriteVariant: vi.fn(),
   getResumeStudio: vi.fn(),
   saveResumeStudioDraft: vi.fn(),
 }));
@@ -81,9 +83,15 @@ async function press(root: HTMLElement, name: string): Promise<void> {
 }
 
 beforeEach(() => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
   api.requestFactRewrite.mockResolvedValue(proposal);
   api.applyFactRewrite.mockResolvedValue({ id: 'r1' });
   api.revertFactRewrite.mockResolvedValue(undefined);
+  api.listFactRewriteVariants.mockResolvedValue({ variants: [], remaining: 3 });
   api.getResumeStudio.mockResolvedValue({ draft });
   api.saveResumeStudioDraft.mockResolvedValue(undefined);
 });
@@ -91,6 +99,7 @@ afterEach(() => {
   view?.unmount();
   view = null;
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('o07 → k06: правка резюме у консультанта', () => {
@@ -132,7 +141,7 @@ describe('o07 → k06: правка резюме у консультанта', (
   it('«Применить» пишет только этот пункт, «Отменить» возвращает', async () => {
     const root = await open();
     await press(root, 'Применить');
-    expect(api.applyFactRewrite).toHaveBeenCalledWith('p1', {}, ['e1#1']);
+    expect(api.applyFactRewrite).toHaveBeenCalledWith('p1', {}, ['e1#1'], undefined);
     expect(root.textContent).toContain('Применено');
     await press(root, 'Отменить');
     expect(api.revertFactRewrite).toHaveBeenCalledWith('r1');
@@ -179,5 +188,53 @@ describe('o07 → k06: правка резюме у консультанта', (
     expect(root.querySelector('[role=alert]')?.textContent).toContain('Ответ не пришёл');
     await press(root, 'Повторить');
     expect(root.textContent).toContain(NOW);
+  });
+
+  const variant = (position: number) => ({
+    id: `v${position}`,
+    position,
+    text: `Вариант ${position} из 18 человек.`,
+  });
+  const shown = (root: HTMLElement) => root.querySelector('.ec-diff .now dd')?.textContent;
+
+  it('«Другой вариант» ничего не пишет, прежние листаются, применяется показанный', async () => {
+    api.createFactRewriteVariant.mockResolvedValue({ variants: [variant(1)], remaining: 2 });
+    const root = await open();
+    await press(root, 'Другой вариант');
+    expect(root.querySelector('[role=dialog]')?.textContent).toContain('Что поменять');
+    await press(root, 'Короче');
+    await press(root, 'Сделать вариант');
+    expect(api.createFactRewriteVariant).toHaveBeenCalledWith('p1', 'e1#1', {
+      chips: ['shorter'],
+      text: '',
+    });
+    expect(shown(root)).toBe('Вариант 1 из 18 человек.');
+    expect(root.querySelector('.var-sw')?.textContent).toBe('2 из 2');
+    expect(api.applyFactRewrite).not.toHaveBeenCalled();
+    await press(root, 'Предыдущий вариант');
+    expect(shown(root)).toBe(NOW);
+    await press(root, 'Следующий вариант');
+    await press(root, 'Применить');
+    expect(api.applyFactRewrite).toHaveBeenCalledWith('p1', {}, ['e1#1'], 'v1');
+  });
+
+  it('варианты кончились: кнопки нет, листание и остальные действия остаются', async () => {
+    const variants = [1, 2, 3].map(variant);
+    api.listFactRewriteVariants.mockResolvedValue({ variants, remaining: 0 });
+    const root = await open();
+    expect(root.querySelector('[aria-label="Другой вариант"]')).toBeNull();
+    expect(root.querySelector('.var-sw')?.textContent).toBe('1 из 4');
+    expect(button(root, 'Применить')).toBeTruthy();
+    expect(button(root, 'Отклонить')).toBeTruthy();
+  });
+
+  it('вариант не собрался — прежний текст на месте, можно повторить', async () => {
+    api.createFactRewriteVariant.mockRejectedValue(new Error('503'));
+    const root = await open();
+    await press(root, 'Другой вариант');
+    await press(root, 'Сделать вариант');
+    expect(root.textContent).toContain('Другой вариант не собрался');
+    expect(shown(root)).toBe(NOW);
+    expect((button(root, 'Сделать вариант') as HTMLButtonElement).disabled).toBe(false);
   });
 });

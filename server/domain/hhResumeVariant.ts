@@ -119,7 +119,7 @@ function checkedSkills(request: HhResumeVariantRequest, output: HhResumeVariantO
 }
 
 /** Названия, которых нет в фактах: у русского текста — любое слово латиницей, у английского — с заглавной внутри фразы. */
-function addsNames(text: string, source: string, language: HhEditLanguage): boolean {
+export function addsNames(text: string, source: string, language: HhEditLanguage): boolean {
   const known = new Set(source.toLocaleLowerCase().match(/[\p{L}\p{N}+#]+/gu) ?? []);
   const names = language === 'ru'
     ? text.match(/[A-Za-z][A-Za-z0-9+#]*/gu) ?? []

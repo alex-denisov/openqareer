@@ -212,6 +212,7 @@ function reviewPayload(
 
 /** Факт из беседы и готовый пункт резюме из него (k06). */
 const RESUME_FACT_ID = 'fact-team';
+export const RESUME_VARIANT = 'Вёл бэкенд: в группе 18 человек.';
 export const RESUME_BULLET = 'Руководил группой бэкенда из 18 человек.';
 
 /** Разговор раздела, запись из него и место работы, куда встанет пункт. */
@@ -282,10 +283,20 @@ async function mockFactRewrite(page: Page, calls: string[]): Promise<void> {
   await page.route('**/api/v1/candidate/experience-fact-rewrite**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/apply')) {
-      const { only } = route.request().postDataJSON() as { only: string[] };
-      calls.push(`apply ${only.join(',')}`);
+      const { only, variantId } = route.request().postDataJSON() as {
+        only: string[];
+        variantId?: string;
+      };
+      calls.push(['apply', only.join(','), variantId].filter(Boolean).join(' '));
       const rewrite = { id: 'p1', appliedAt: iso(0), bullets: [], declinedFactIds: [] };
       return route.fulfill({ json: { data: { rewrite } } });
+    }
+    if (path.endsWith('/variants')) {
+      const made = route.request().method() === 'POST';
+      if (made) calls.push('variant');
+      const variant = { id: 'v1', position: 1, text: RESUME_VARIANT, payload: null };
+      const list = { variants: made ? [variant] : [], remaining: made ? 2 : 3 };
+      return route.fulfill({ status: made ? 201 : 200, json: { data: list } });
     }
     if (path.endsWith('/revert')) {
       calls.push('revert');

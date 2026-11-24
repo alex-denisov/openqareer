@@ -4,6 +4,7 @@ import { expectGates } from './gates';
 import {
   mockResponses,
   RESUME_BULLET,
+  RESUME_VARIANT,
   responseFixtures,
   type ResponsesMockOptions,
 } from './responsesFixture';
@@ -333,12 +334,28 @@ test.describe('B656: «Отклики» нового кабинета', () => {
       await page.screenshot({ path: `${SHOTS}/k06-${info.project.name}.png` });
     }
     expect(mock.calls).toEqual([]);
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    const wish = page.getByRole('dialog', { name: 'Что поменять' });
+    await expect(wish).toBeVisible();
+    await wish.getByRole('button', { name: 'Сделать вариант' }).scrollIntoViewIfNeeded();
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/k06-wish-${info.project.name}.png` });
+    await page.keyboard.press('Escape');
+    await expect(wish).toHaveCount(0);
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    await wish.getByRole('button', { name: 'Сделать вариант' }).click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_VARIANT);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/k06-variant-${info.project.name}.png` });
+    await card.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await card.getByRole('button', { name: 'Следующий вариант' }).click();
+    expect(mock.calls).toEqual(['variant']);
     await card.getByRole('button', { name: 'Применить' }).click();
     await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
-    expect(mock.calls).toEqual(['apply e1#0']);
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1']);
     await panel.getByRole('button', { name: 'Отменить' }).click();
     await expect(card).toBeVisible();
-    expect(mock.calls).toEqual(['apply e1#0', 'revert']);
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1', 'revert']);
   });
 
   test('отказ в раскрытом отклике: догадка и отметка «чего не хватило»', async ({ page }) => {
