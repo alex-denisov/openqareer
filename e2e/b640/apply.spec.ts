@@ -78,6 +78,12 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
   const vacancyOf = (url: string) =>
     decodeURIComponent(new URL(url).pathname.split('/').at(-2) ?? '');
 
+  await page.route('**/api/v1/candidate/b640/vacancies/*', (route) =>
+    route.fulfill({
+      status: 404,
+      json: { error: { code: 'vacancy_not_found', message: 'Вакансия не найдена.' } },
+    }),
+  );
   await page.route('**/api/v1/candidate/vacancies/*/connection-circles', (route) =>
     route.fulfill({
       json: { data: circles(vacancyOf(route.request().url()), options.withPath === true) },
@@ -477,6 +483,63 @@ test.describe('B657: единый экран отклика', () => {
     await expect(page.getByLabel('Текст письма')).toHaveValue(/Здравствуйте/u);
     await expect(page.getByLabel('Текст вакансии')).toContainText('переход на Kubernetes');
     await expect(page.locator('.ctx-title').first()).toContainText('Head of Engineering · Гринкод');
+  });
+
+  test('площадка не определена — ни Getmatch, ни действий; затем сразу hh.ru (B678)', async ({
+    page,
+  }) => {
+    await mockApply(page, { approvedBody: 'Готовый текст.' });
+    const observedAt = '2026-11-24T10:00:00.000Z';
+    const source = (sourceName: string, sourceUrl: string) => ({
+      sourceType: 'json_api',
+      sourceId: sourceName,
+      sourceName,
+      sourceUrl,
+      observedAt,
+    });
+    const getmatch = source('Getmatch', 'https://getmatch.ru/vacancies/37138');
+    const hh = source('hh.ru (страница поиска)', 'https://hh.ru/vacancy/139105692');
+    const matchedReads: string[] = [];
+    page.on('request', (request) => {
+      if (/matched-vacancies/u.test(request.url())) matchedReads.push(request.url());
+    });
+    let release = () => undefined as void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route('**/api/v1/candidate/b640/vacancies/cluster-from-list', async (route) => {
+      await held;
+      await route.fulfill({
+        json: {
+          data: {
+            cluster: {
+              id: 'cluster-from-list',
+              canonicalTitle: 'Head of DevOps',
+              canonicalCompany: 'ЭР-Телеком Холдинг',
+              primaryUrl: getmatch.sourceUrl,
+              sources: [getmatch, hh],
+            },
+            explanation: {},
+          },
+        },
+      });
+    });
+    await page.goto('/app/responses/cluster-from-list/letter?step=send', {
+      waitUntil: 'domcontentloaded',
+    });
+    const main = page.locator('[data-b640-node="o02"]');
+    await expect(main.getByText('Загружаем отклик…')).toBeVisible({ timeout: 15_000 });
+    await expect(main.getByText(/getmatch/iu)).toHaveCount(0);
+    await expect(main.locator('a, button')).toHaveCount(0);
+    await expectGates(page);
+
+    release();
+    await expect(page.getByRole('heading', { name: 'Отправьте отклик с hh.ru' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Открыть вакансию на сайте' })).toHaveAttribute(
+      'href',
+      hh.sourceUrl,
+    );
+    expect(matchedReads).toEqual([]);
   });
 
   test('письмо через знакомого: адресат меняет письмо', async ({ page }) => {
