@@ -176,7 +176,7 @@ export function ListScreen() {
   return (
     <div className="page" data-b640-node="s07" data-b640-section="vacancies">
       {strip ? <GapStrip kind={strip} /> : null}
-      <section className={`col vl vt-wrap${strip ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
+      <section className={`col vl vt-wrap${strip || triage.active ? ' is-v6' : ''}${triage.active ? ' is-triage' : ''}`} aria-labelledby="list-title">
         <CountBar list={list} hideCount={unread} triage={triage} own={own} />
         <FiltersBar
           {...filterProps(list, section)}
