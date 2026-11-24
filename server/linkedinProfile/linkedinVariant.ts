@@ -5,17 +5,18 @@
  */
 import { z } from 'zod';
 import { LINKEDIN_HEADLINE_MAX, LINKEDIN_SKILLS_MAX } from '../../shared/b640LinkedinProfile';
+import type { OnVariantReject, RetryableVariantRequest } from '../domain/checkedVariant';
 import { textLanguage, type ProfileLanguage } from '../domain/profileLanguage';
 import {
   ABOUT_RULE, answerText, checkedText, linkedinRewriteRequest, PLACE_RULE,
-  type CheckRule, type RewriteRejectReason,
+  type CheckRule,
 } from './linkedinRewrite';
 import { usableSkills, type LinkedinSectionFact, type SuggestionInput } from './sectionSuggestions';
 
-export const LINKEDIN_VARIANT_PROMPT_REVISION = 'linkedin-profile-variant-2026-11-20';
+export const LINKEDIN_VARIANT_PROMPT_REVISION = 'linkedin-profile-variant-2026-11-24';
 
 export type LinkedinVariantTarget = 'headline' | 'about' | 'place' | 'skills';
-export interface LinkedinVariantRequest {
+export interface LinkedinVariantRequest extends RetryableVariantRequest {
   readonly target: LinkedinVariantTarget;
   readonly language: ProfileLanguage;
   readonly targetRole: string;
@@ -87,14 +88,11 @@ const RULES: Readonly<Record<Exclude<LinkedinVariantTarget, 'skills'>, Omit<Chec
   place: PLACE_RULE,
 };
 
-/** Почему вариант не принят: код без текста кандидата. */
-export type VariantRejectReason = RewriteRejectReason | 'skills' | 'repeat';
-
 /** Принятый текст варианта или `null`. */
 export function checkLinkedinVariant(
   request: LinkedinVariantRequest,
   output: LinkedinVariantOutput,
-  onReject?: (reason: VariantRejectReason) => void,
+  onReject?: OnVariantReject,
 ): string | null {
   const text = request.target === 'skills'
     ? checkedSkills(request, output)

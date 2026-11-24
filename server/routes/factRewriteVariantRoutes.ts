@@ -10,6 +10,7 @@ import {
   factRewriteVariantSubject,
   type LocatedBullet,
 } from '../domain/factRewriteVariant';
+import { writeCheckedVariant } from '../domain/checkedVariant';
 import { normalizeWish } from '../domain/textVariants';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError, withDeps } from './helpers';
@@ -70,10 +71,18 @@ async function writeVariant(
   const stored = variants.list(subject).variants.map((variant) => variant.text);
   const input = factRewriteVariantRequest(located.request, located.bullet, stored, wish);
   if (!input) return stale(request, reply);
-  const output = await deps.experienceFactRewriter?.rewriteVariant?.(input);
-  const text = output ? checkFactRewriteVariant(input, output) : null;
+  let rejected = false;
+  const text = await writeCheckedVariant({
+    request: input,
+    write: async (asked) => deps.experienceFactRewriter?.rewriteVariant?.(asked),
+    check: (output, onReject) => checkFactRewriteVariant(input, output, onReject),
+    onReject: (reason, attempt) => {
+      rejected = true;
+      request.log.info({ reason, attempt }, 'experience_fact_rewrite_variant_rejected');
+    },
+  });
   if (!text) {
-    request.log.warn({ reason: output ? 'rejected' : 'no_answer' }, 'experience_fact_rewrite_variant_failed');
+    request.log.warn({ reason: rejected ? 'rejected' : 'no_answer' }, 'experience_fact_rewrite_variant_failed');
     return generationFailed(reply, request);
   }
   const variant = variants.add({ ...subject, text, wish, createdAt: new Date().toISOString() });
