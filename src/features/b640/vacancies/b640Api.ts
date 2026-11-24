@@ -1,4 +1,5 @@
 import type { B640ApplicationQuota, B640HiddenInfo, B640SortKey } from '../../../../shared/b640Vacancies';
+import type { ApplyTarget } from '../../../../shared/applyTarget';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { apiFetch, malformedResponseError, readDataObject, throwApiError } from '../../coach/apiClient';
 import { matchedVacancyQuery } from '../../coach/matchedVacancyApi';
@@ -117,4 +118,18 @@ export async function getVacancyCard(vacancyId: string, signal?: AbortSignal): P
   );
   if (typeof data.cluster?.id !== 'string' || !data.explanation) throw malformedResponseError();
   return data;
+}
+
+/** B787: раскрыть адрес трекера, когда кандидат открыл отклик. */
+export async function postApplyTarget(
+  vacancyId: string,
+  signal?: AbortSignal,
+): Promise<ApplyTarget | null> {
+  const data = await readDataObject<{ applyTarget?: ApplyTarget | null }>(
+    await apiFetch(`${BASE}/vacancies/${encodeURIComponent(vacancyId)}/apply-target`, {
+      method: 'POST',
+      signal,
+    }),
+  );
+  return data.applyTarget ?? null;
 }
