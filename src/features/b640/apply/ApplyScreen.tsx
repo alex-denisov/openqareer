@@ -17,7 +17,9 @@ import { LetterStep } from './LetterStep';
 import { copyText } from './model/formModel';
 import {
   stepsFor,
+  applyRoute,
   buildHead,
+  needsPoolRoute,
   paragraphs,
   parseStep,
   resolveTarget,
@@ -257,6 +259,8 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const known = letter.circles.data ?? questionnaire.known;
   const head = buildHead({ application: target.application, known, cluster });
   const saved = Boolean(letter.approval.saved);
+  // Одобренное письмо уходит со своим резюме: вкладка и сам шаг показывают одно состояние.
+  const resumeDone = resumeOk || saved;
   return {
     shown,
     setStep,
@@ -265,7 +269,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
     questionnaire,
     wide: shown !== 'send' && shown !== 'form' && !quota,
     done: {
-      resume: resumeOk || saved,
+      resume: resumeDone,
       letter: saved,
       form: questionnaire.submitted.kind === 'done',
       send: false,
@@ -273,14 +277,13 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
     body: {
       vacancyId: target.vacancyId,
       head,
-      sourceType:
-        target.application?.vacancy?.source ?? cluster?.sources[0]?.sourceName ?? 'manual',
+      sourceType: applyRoute({ application: target.application, cluster }).source ?? 'manual',
       step: shown,
       setStep,
       letter,
       variants,
       answers: form ? copyText(form.questions, questionnaire.draft) : '',
-      resumeOk,
+      resumeOk: resumeDone,
       resumeSeen,
       onResumeOk: () => {
         setResumeOk(true);
@@ -323,7 +326,7 @@ function ApplyFlow(props: FlowProps) {
   );
 }
 
-/** Отклика ещё нет: название, компания и ссылка берутся из подбора. */
+/** Отклик не отправлен: название, компания и площадка сверяются с подбором. */
 function FromPool({ target }: { readonly target: ApplyTarget }) {
   const pool = useMatchedPool();
   const cluster =
@@ -384,9 +387,9 @@ export function ApplyScreen({ responseId }: { readonly responseId: string }) {
       </Pending>
     );
   }
-  return target.application ? (
-    <ApplyFlow key={target.vacancyId} target={target} cluster={null} />
-  ) : (
+  return needsPoolRoute(target.application) ? (
     <FromPool key={target.vacancyId} target={target} />
+  ) : (
+    <ApplyFlow key={target.vacancyId} target={target} cluster={null} />
   );
 }

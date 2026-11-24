@@ -411,6 +411,14 @@ test.describe('B657: единый экран отклика', () => {
     expect(mock.calls.filter((call) => call.startsWith('pitch'))).toEqual([]);
   });
 
+  test('письмо одобрено — шаг «Резюме» одобрен и на вкладке, и внутри (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=send', { approvedBody: 'Готовый текст.' });
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(1);
+    await step(page, 'Резюме').click();
+    await expect(page.getByRole('button', { name: 'К письму' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Одобрить резюме' })).toHaveCount(0);
+  });
+
   test('«Изменить письмо», а черновик не собрался — одобренный текст остаётся в поле (B724)', async ({
     page,
   }) => {
