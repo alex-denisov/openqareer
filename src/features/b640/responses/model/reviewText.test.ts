@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RejectionReview } from '../../../../../shared/rejectionReview';
-import { guessLine, recommendationText, reviewTitle } from './reviewText';
+import { guessLine, rejectionsTitle, recommendationText, reviewTitle } from './reviewText';
 
 const BASE: RejectionReview = {
   state: 'ready',
@@ -33,6 +33,18 @@ describe('B679: тексты разбора отказов', () => {
       why: 'Без ответа — 3 из 6.',
       node: 'o01',
     });
+  });
+
+  it('заголовок списка отказов: число и «за месяц», только если все — за месяц', () => {
+    const now = new Date('2026-11-24T12:00:00Z');
+    const at = (...dates: string[]) => dates.map((rejectedAt) => ({ rejectedAt }));
+    expect(rejectionsTitle(at('2026-11-09', '2026-10-29', '2026-10-25'), 3, now)).toBe('Три отказа за месяц');
+    expect(rejectionsTitle(at('2026-11-09', '2026-08-01'), 2, now)).toBe('Два отказа');
+    expect(rejectionsTitle(at('2026-11-09'), 1, now)).toBe('Один отказ за месяц');
+    expect(rejectionsTitle(at(...Array<string>(11).fill('2026-11-09')), 11, now)).toBe('11 отказов за месяц');
+    // Показаны не все: число списка не равно числу отказов, поэтому числа нет.
+    expect(rejectionsTitle(at('2026-11-09'), 21, now)).toBe('Отказы');
+    expect(rejectionsTitle(at('не дата'), 1, now)).toBe('Один отказ');
   });
 
   it('заголовок экрана по состоянию', () => {

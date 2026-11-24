@@ -9,6 +9,31 @@ import { pluralRu } from './responseRow';
 const REJECTIONS = ['отказ', 'отказа', 'отказов'] as const;
 const RESPONSES = ['отклик', 'отклика', 'откликов'] as const;
 
+const COUNT_WORDS = [
+  'Ноль', 'Один', 'Два', 'Три', 'Четыре', 'Пять', 'Шесть', 'Семь', 'Восемь', 'Девять', 'Десять',
+] as const;
+
+/** Начало «за месяц»: то же число прошлого месяца; у короткого месяца — его последний день. */
+function monthBefore(now: Date): number {
+  const start = new Date(now);
+  start.setMonth(start.getMonth() - 1);
+  if (start.getDate() !== now.getDate()) start.setDate(0);
+  return start.getTime();
+}
+
+/** «Три отказа за месяц» (o07). Период пишем, когда все показанные отказы в нём. */
+export function rejectionsTitle(
+  items: readonly Pick<RejectionReview['rejections'][number], 'rejectedAt'>[],
+  total: number,
+  now: Date = new Date(),
+): string {
+  if (items.length !== total) return 'Отказы';
+  const title = `${COUNT_WORDS[total] ?? total} ${pluralRu(total, REJECTIONS)}`;
+  const start = monthBefore(now);
+  const recent = items.every((item) => Date.parse(item.rejectedAt) >= start);
+  return recent ? `${title} за месяц` : title;
+}
+
 /** «из 3 отказов», «из 21 отказа»: родительный падеж после «из». */
 function ofRejections(total: number): string {
   return total % 10 === 1 && total % 100 !== 11 ? 'отказа' : 'отказов';
