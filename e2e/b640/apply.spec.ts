@@ -26,6 +26,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly longChoice?: boolean;
   /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
   readonly approvedBody?: string;
+  /** Вместе с письмом одобрено общее резюме. */
+  readonly approvedResume?: boolean;
   /** Длинный текст вакансии, как у настоящих на hh.ru (B645). */
   readonly longVacancy?: boolean;
 }
@@ -279,6 +281,7 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
   });
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', async (route) => {
     calls.push('approval read');
+    const iso = '2026-11-19T10:00:00.000Z';
     const approved = options.approvedBody
       ? {
           applicationId: 'a-draft',
@@ -286,7 +289,9 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
           approvedAt: '2026-11-19T10:00:00.000Z',
           status: 'approved',
           sent: false,
-          resume: null,
+          resume: options.approvedResume
+            ? { kind: 'general', versionId: null, documentId: 'doc-2', snapshotAt: iso }
+            : null,
           subject: null,
           body: options.approvedBody,
           variantId: null,
@@ -415,6 +420,23 @@ test.describe('B657: единый экран отклика', () => {
     await expect(page.getByText('Собираем письмо…')).toHaveCount(0);
     expect(mock.calls).toContain('approval read');
     expect(mock.calls.filter((call) => call.startsWith('pitch'))).toEqual([]);
+  });
+
+  test('письмо одобрено — шаг «Резюме» одобрен и на вкладке, и внутри (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter?step=send', {
+      approvedBody: 'Готовый текст.',
+      approvedResume: true,
+    });
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(1);
+    await step(page, 'Резюме').click();
+    await expect(page.getByRole('button', { name: 'К письму' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Одобрить резюме' })).toHaveCount(0);
+  });
+
+  test('письмо одобрено без резюме — шаг «Резюме» без галочки (B678)', async ({ page }) => {
+    await open(page, '/app/responses/a-draft/letter', { approvedBody: 'Готовый текст.' });
+    await expect(page.getByRole('heading', { name: 'Письмо одобрено' })).toBeVisible();
+    await expect(step(page, 'Резюме').locator('svg')).toHaveCount(0);
   });
 
   test('«Изменить письмо», а черновик не собрался — одобренный текст остаётся в поле (B724)', async ({

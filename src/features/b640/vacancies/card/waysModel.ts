@@ -1,4 +1,5 @@
 import type { B640PersonMessage } from '../../../../../shared/b640Companies';
+import { isHhHost, isHhSource } from '../../../../../shared/hhVacancySource';
 import { pluralRu } from '../../../../../shared/pluralRu';
 import type { IconName } from '../../kit';
 import { sourceLinkLabel, sourceLinkTarget } from '../sourceLinkLabel';
@@ -58,17 +59,6 @@ function safeUrl(value: string | undefined): URL | undefined {
   }
 }
 
-function isHhHost(url: URL): boolean {
-  return url.hostname === 'hh.ru' || url.hostname.endsWith('.hh.ru');
-}
-
-/** hh.ru на проде приходит как `json_api` с `sourceId: hh`: тип один из признаков, не единственный. */
-function isHhSource(source: WaysInput['sources'][number]): boolean {
-  if (source.sourceType === 'hh' || source.sourceId === 'hh') return true;
-  const url = safeUrl(source.sourceUrl);
-  return Boolean(url && isHhHost(url)) || /^hh\.ru\b/iu.test(source.sourceName ?? '');
-}
-
 function siteUrl(input: WaysInput): string | undefined {
   const candidates = [
     ...input.sources.filter((source) => !isHhSource(source)).map((source) => source.sourceUrl),
@@ -76,7 +66,7 @@ function siteUrl(input: WaysInput): string | undefined {
   ];
   for (const candidate of candidates) {
     const url = safeUrl(candidate);
-    if (url && !isHhHost(url)) return url.toString();
+    if (url && !isHhHost(url.hostname)) return url.toString();
   }
   return undefined;
 }

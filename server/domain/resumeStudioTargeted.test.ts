@@ -173,6 +173,25 @@ describe('buildTargetedResumeSlice', () => {
     });
   });
 
+  it('matches a Russian language requirement with an English profile entry and a higher level (B713)', () => {
+    const english: ResumeDocument = {
+      ...master,
+      languages: [
+        { id: 'en', name: fact('English', 'lang'), cefr: fact('C1', 'lang'), native: null },
+      ] as unknown as ResumeDocument['languages'],
+    };
+    const matched = ['Английский B2', 'Английский язык не ниже B2', 'English C1', 'Знание английского языка'];
+    const missing = ['Английский C2', 'Немецкий B1', 'Английский B2 и SQL'];
+
+    const result = buildTargetedResumeSlice(english, {
+      title: 'COO',
+      requirements: [...matched, ...missing],
+    });
+
+    expect(result.matchedRequirements).toEqual(matched);
+    expect(result.missingRequirements).toEqual(missing);
+  });
+
   it('prioritizes supported facts, keeps every role described, and keeps unsupported requirements visible', () => {
     const result = buildTargetedResumeSlice(master, {
       title: 'Инженер платформы',

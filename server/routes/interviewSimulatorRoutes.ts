@@ -1,5 +1,6 @@
 import { registerInterviewDiaryRoutes } from './interviewDiaryRoutes';
 import { registerB640InterviewTrainingRoutes } from './b640InterviewTrainingRoutes';
+import { storedOrRuleTask, taskQuestion } from './b640SystemDesignTaskSource';
 import { judgedEvaluation } from './interviewAnswerJudging';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -8,6 +9,7 @@ import { isResumeEvidenceEligible } from '../domain/resumeEvidenceEligibility';
 import {
   createInterviewSession,
   INTERVIEW_QUESTION_COUNT,
+  MAX_ANSWER_SECONDS,
   recordInterviewAnswer,
   scoreInterviewAnswer,
   summarizeInterviewTopics,
@@ -53,7 +55,8 @@ const answerSchema = z.object({
   expectedVersion: z.number().int().positive(),
   questionId: z.string().trim().min(1).max(80),
   answer: z.string().trim().min(1).max(4_000),
-  elapsedSeconds: z.number().int().min(0).max(3_600),
+  // B647: часы тренировки не останавливаются — долгий ответ принимаем, время обрезаем.
+  elapsedSeconds: z.number().int().min(0).transform((value) => Math.min(value, MAX_ANSWER_SECONDS)),
   replaceAnswer: z.boolean().default(false),
   // «Тренировка» (i03) отзыв модели не показывает: не просить его — не платить (B750 3b).
   feedback: z.boolean().default(true),
@@ -145,6 +148,18 @@ function createAndPersistStartedSession(
   verifiedSkills: string[],
 ): InterviewSession | null {
   const now = new Date().toISOString();
+  // B647: тренировка i03 показывает задачу отклика — вопрос сессии тот же, по нему судят ответ.
+  const isPractice = input.questionTypes.every((type) => type === 'system_design');
+  const systemDesignPrompt =
+    application && isPractice
+      ? taskQuestion(
+          storedOrRuleTask(deps, candidateId, {
+            applicationId: application.id,
+            roleTitle,
+            vacancyTitle: application.vacancy?.title ?? null,
+          }),
+        )
+      : null;
   const session = createInterviewSession({
     id: randomUUID(),
     mode: input.mode,
@@ -155,6 +170,7 @@ function createAndPersistStartedSession(
     stressMode: input.stressMode,
     stories,
     verifiedSkills,
+    ...(systemDesignPrompt ? { systemDesignPrompt } : {}),
     questionIds: Array.from({ length: INTERVIEW_QUESTION_COUNT }, () => randomUUID()),
     now,
   });
