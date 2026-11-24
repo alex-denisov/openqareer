@@ -68,7 +68,7 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     const skills = data.edits.find((edit: { section: string }) => edit.section === 'skills');
     expect(skills.now).toBe('Node.js, Kubernetes, PostgreSQL');
     expect(skills.added).toEqual(['Kubernetes', 'PostgreSQL']);
-    expect(data.edits.find((edit: { section: string }) => edit.section === 'title').now).toBe('Senior Platform Engineer');
+    expect(data.edits.some((edit: { section: string }) => edit.section === 'title')).toBe(false);
   });
 
   it('отклик сохранён под другим названием — должность и навыки чужой вакансии не предлагаются', async () => {

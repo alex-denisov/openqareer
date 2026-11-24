@@ -42,6 +42,14 @@ export interface HhResumeSections {
   readonly places: readonly HhResumePlace[];
 }
 
+/**
+ * Разделы прочитаны, только когда виден опыт: с новой разметкой страница отдаёт одни условия
+ * поиска и навыки, и такое чтение — не содержимое резюме.
+ */
+export function hhSectionsRead(sections: HhResumeSections | undefined): sections is HhResumeSections {
+  return Boolean(sections && sections.places.length > 0);
+}
+
 /** Разделы резюме для сверки целиком: длиннее — не шлём, снимок с пятью резюме должен уместиться в предел тела запроса. */
 export const HH_REVIEW_SECTIONS_MAX_LENGTH = 30_000;
 export const HH_SECTION_PLACES_MAX = 30;
@@ -82,6 +90,8 @@ export interface HhResumeSnapshot {
   readonly selected: HhResumeContent | null;
   /** B678: прочитанное содержимое остальных резюме списка — для сверки с вакансией. */
   readonly contents?: readonly HhResumeContent[];
+  /** Какое резюме кандидат выбрал для вакансии; нет — предлагается подходящее. */
+  readonly choices?: Readonly<Record<string, string>>;
   readonly readAt: string;
 }
 

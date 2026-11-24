@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import { expectGates } from './gates';
-import { mockResponses } from './responsesFixture';
+import { mockResponses, siteDraft } from './responsesFixture';
 
 const claim = (value: string | boolean) => ({
   value,
@@ -94,9 +94,8 @@ async function open(
   page: Page,
   document: object,
   edits = (route: Route) => route.fulfill({ json: { data: { edits: [], lang: 'ru' } } }),
-  hhResumes = (route: Route) => route.fulfill({ json: { data: null } }),
 ) {
-  await mockResponses(page);
+  await mockResponses(page, { applications: siteDraft() });
   await page.route('**/api/v1/candidate/vacancies/*/resume-edits', edits);
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', (route) =>
     route.fulfill({ json: { data: { approval: null } } }),
@@ -114,7 +113,6 @@ async function open(
       },
     }),
   );
-  await page.route('**/api/v1/candidate/hh/resumes', hhResumes);
   await page.goto('/app/responses/a-draft/letter?step=resume', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('article', { name: 'Резюме' })).toBeVisible({ timeout: 15_000 });
 }
@@ -199,37 +197,6 @@ test.describe('B785: шаг «Резюме» по макету o03', () => {
     expect(sent).toHaveLength(3);
   });
 
-  test('«Резюме hh.ru»: прочитанное выбирается, непрочитанное в вебе недоступно', async ({
-    page,
-  }) => {
-    const content = (id: string, title: string) => ({
-      id,
-      title,
-      text: 'x',
-      sections: { title, about: '', skills: [], places: [] },
-    });
-    const lead = content('a', 'Руководитель разработки');
-    const go = content('b', 'Ведущий разработчик Go');
-    const snapshot = {
-      resumes: [...[lead, go].map(({ id, title }) => ({ id, title })), { id: 'c', title: 'CTO' }],
-      selected: lead,
-      contents: [go],
-      readAt: '2026-11-24T00:00:00.000Z',
-    };
-    await open(page, FULL, undefined, (route) => {
-      const put = route.request().method() === 'PUT';
-      return route.fulfill({
-        json: { data: put ? { ...snapshot, ...route.request().postDataJSON() } : snapshot },
-      });
-    });
-    const select = page.getByLabel('Резюме hh.ru');
-    await expect(select).toHaveValue('a');
-    await expect(select.locator('option', { hasText: 'CTO' })).toBeDisabled();
-    await select.selectOption('b');
-    await expect(select).toHaveValue('b');
-    await expectGates(page);
-  });
-
   test('RU/EN: сбой оставляет язык, успех показывает английский лист', async ({ page }) => {
     let fails = true;
     let lang = 'ru';
@@ -285,5 +252,96 @@ test.describe('B785: шаг «Резюме» по макету o03', () => {
     await button.click();
     await expect(page).toHaveURL(/letter/u);
     await expect(page.locator('.act-dock.is-auto')).toHaveCount(0);
+  });
+});
+
+test.describe('отклик на hh.ru: шаг «Резюме»', () => {
+  const SECTIONS = {
+    title: 'Руководитель разработки',
+    about: 'Руковожу платформой 8 лет.',
+    skills: ['Go', 'PostgreSQL'],
+    places: [
+      {
+        employer: 'Финтех Лаб',
+        title: 'Руководитель',
+        period: '2021 — н.в.',
+        text: 'Вёл платформу.',
+      },
+    ],
+  };
+  const resumes = [
+    { id: 'a', title: 'Руководитель разработки' },
+    { id: 'c', title: 'CTO' },
+  ];
+
+  async function openHh(page: Page, data: object | null) {
+    const prepared: string[] = [];
+    await mockResponses(page);
+    await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', (route) =>
+      route.fulfill({ json: { data: { approval: null } } }),
+    );
+    await page.route('**/api/v1/candidate/vacancies/*/letter-resume', (route) => {
+      prepared.push(route.request().url());
+      return route.fulfill({ json: { data: { ready: false, versionId: null } } });
+    });
+    await page.route('**/api/v1/candidate/hh/resumes*', (route) =>
+      route.fulfill({ json: { data } }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/edits*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            edits: [
+              {
+                id: 'skills',
+                section: 'skills',
+                was: 'Go, PostgreSQL',
+                now: 'Go, PostgreSQL, Kotlin',
+                added: ['Kotlin'],
+              },
+            ],
+          },
+        },
+      }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/choice', (route) =>
+      route.fulfill({
+        json: {
+          data: { resumes, selected: { id: 'c', title: 'CTO', text: '' }, readAt: 'x' },
+        },
+      }),
+    );
+    await page.goto('/app/responses/a-draft/letter?step=resume', { waitUntil: 'domcontentloaded' });
+    return prepared;
+  }
+
+  test('выбор и содержимое резюме hh.ru вместо листа PDF', async ({ page }) => {
+    const selected = { id: 'a', title: resumes[0]!.title, text: 'x', sections: SECTIONS };
+    const prepared = await openHh(page, { resumes, selected, readAt: 'x' });
+    const select = page.getByLabel('Резюме hh.ru');
+    await expect(select).toHaveValue('a', { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: '1 правка под эту вакансию' })).toBeVisible();
+    await expect(page.getByText('Вёл платформу.')).toBeVisible();
+    await expect(page.getByRole('article', { name: 'Резюме' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Скачать' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Применить' })).toHaveCount(0);
+    expect(prepared).toEqual([]);
+    await expectGates(page);
+    const chosen = page.waitForRequest('**/hh/resumes/choice');
+    await select.selectOption('c');
+    expect((await chosen).postDataJSON()).toEqual({ vacancyId: 'cluster-a-draft', resumeId: 'c' });
+    await expect(page.getByText('Резюме hh.ru не прочиталось')).toBeVisible();
+    await expect(page.getByText('Вёл платформу.')).toHaveCount(0);
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Одобрить резюме' }).click();
+    await expect(page.getByRole('heading', { name: 'Проверьте письмо' })).toBeVisible();
+  });
+
+  test('резюме hh.ru не читали — выбора нет, путь дальше к письму', async ({ page }) => {
+    const prepared = await openHh(page, null);
+    await expect(page.getByRole('button', { name: 'К письму' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel('Резюме hh.ru')).toHaveCount(0);
+    expect(prepared).toEqual([]);
+    await expectGates(page);
   });
 });

@@ -6,7 +6,7 @@ import type { HhResumeSnapshot } from '../../../../../shared/hhCandidateSession'
 import { forgetReadResumes } from './hhResumeReading';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
 
-const api = vi.hoisted(() => ({ getHhResumes: vi.fn(), saveHhResumes: vi.fn(), getHhResumeReview: vi.fn() }));
+const api = vi.hoisted(() => ({ getHhResumes: vi.fn(), saveHhResumes: vi.fn(), chooseHhResumeFor: vi.fn(), getHhResumeReview: vi.fn() }));
 const desktop = vi.hoisted(() => ({
   readHhResumes: vi.fn(),
   readHhResumeContent: vi.fn(),
@@ -21,7 +21,7 @@ vi.mock('./hhDesktop', async (original) => ({
 const ITEM = { id: 'r1', title: 'COO', url: 'https://hh.ru/resume/r1' };
 const SAVED = {
   resumes: [{ id: 'r1', title: 'COO' }],
-  selected: { id: 'r1', title: 'COO', text: 'Опыт', sections: { title: 'COO', about: '', skills: [], places: [] } },
+  selected: { id: 'r1', title: 'COO', text: 'Опыт', sections: { title: 'COO', about: '', skills: [], places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }] } },
   readAt: '2026-11-19T00:00:00.000Z',
 } as unknown as HhResumeSnapshot;
 
@@ -51,6 +51,7 @@ describe('useHhResumes (B710)', () => {
     desktop.readHhResumes.mockResolvedValue({ kind: 'ready', resumes: [ITEM] });
     desktop.readHhResumeContent.mockResolvedValue(SAVED.selected);
     api.saveHhResumes.mockResolvedValue(SAVED);
+    api.chooseHhResumeFor.mockResolvedValue(SAVED);
     api.getHhResumeReview.mockResolvedValue(null);
     const state = await mount();
     expect(state().snapshot).toBeNull();
@@ -59,6 +60,7 @@ describe('useHhResumes (B710)', () => {
     expect(state().picker.kind).toBe('choose');
     await act(async () => state().choose(ITEM));
 
+    expect(api.chooseHhResumeFor).toHaveBeenCalledWith('cluster-1', 'r1');
     expect(state().snapshot).toEqual(SAVED);
     expect(state().picker.kind).toBe('closed');
     expect(state().loading).toBe(false);
@@ -92,6 +94,7 @@ describe('useHhResumes (B710)', () => {
       [{ id: 'r1', title: 'COO' }, { id: 'r2', title: 'CTO' }],
       SAVED.selected,
       [SAVED.selected],
+      'cluster-1',
     );
     expect(api.getHhResumeReview).toHaveBeenCalledWith('cluster-1', true);
     const picker = state().picker;

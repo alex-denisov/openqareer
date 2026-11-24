@@ -1,15 +1,11 @@
 import { createHash } from 'node:crypto';
-import type { HhResumeContent, HhResumeEdit, HhResumeSections, HhResumeSnapshot } from '../../shared/hhCandidateSession';
+import { hhSectionsRead, type HhResumeContent, type HhResumeEdit, type HhResumeSections, type HhResumeSnapshot } from '../../shared/hhCandidateSession';
 import type { HhEditsInput, HhPlatformPlace } from '../domain/hhResumeEdits';
 import { buildTargetedResumeSlice } from '../domain/resumeStudio';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
-import { evaluateTitleRole } from '../vacancies/vacancyMatcher';
 import { sameVacancyTitle } from '../vacancies/vacancyIdentity';
-import { candidateRoleFunctionCodes } from '../vacancies/titleParse/candidateRoleFunctions';
-import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import { currentMaster } from './resumeMaster';
-import { readTargetLevel } from './vacancyRoleContext';
 
 /**
  * B678: из чего платформа предлагает правки резюме hh.ru: мастер-резюме кандидата с его
@@ -20,7 +16,7 @@ export type SelectedWithSections = HhResumeContent & { readonly sections: HhResu
 /** Прочитанные резюме списка с разделами; у выбранного разделы могли прийти вместе со сверкой. */
 export function readWithSections(snapshot: HhResumeSnapshot): SelectedWithSections[] {
   const all = [...(snapshot.selected ? [snapshot.selected] : []), ...(snapshot.contents ?? [])];
-  const withSections = all.flatMap((content) => (content.sections ? [{ ...content, sections: content.sections }] : []));
+  const withSections = all.flatMap((content) => (hhSectionsRead(content.sections) ? [{ ...content, sections: content.sections }] : []));
   return withSections.filter((content, index) => withSections.findIndex((item) => item.id === content.id) === index);
 }
 
@@ -51,18 +47,8 @@ function platformPlaces(deps: RouteDeps, candidateId: string, cluster: VacancyCl
   const facts = [
     master.document.about ?? '',
     ...places.flatMap((place) => place.bullets),
-    ...(master.document.skills ?? []).map((skill) => skill.name),
   ].filter(Boolean);
   return { about: master.document.about?.trim() || null, places, facts };
-}
-
-/** Название вакансии — роль, родственная целевым ролям кандидата; без ролей сравнивать не с чем. */
-function titleFitsTargetRoles(deps: RouteDeps, candidateId: string, title: string): boolean {
-  const targetRoles = [...readCampaign(deps.candidateStore, candidateId).roles.value];
-  if (targetRoles.length === 0) return false;
-  const functions = candidateRoleFunctionCodes(targetRoles);
-  const level = readTargetLevel(deps.candidateStore, candidateId, targetRoles);
-  return evaluateTitleRole(title, targetRoles, functions, level) !== 'none';
 }
 
 /** Отклик на этот id сохранён под другим названием: вакансия из пула — не его. */
@@ -76,7 +62,6 @@ function matchesApplication(deps: RouteDeps, candidateId: string, cluster: Vacan
 export function hhEditsInput(
   deps: RouteDeps,
   candidateId: string,
-  snapshot: HhResumeSnapshot,
   selected: SelectedWithSections,
   cluster: VacancyCluster,
   vacancyId: string,
@@ -84,10 +69,8 @@ export function hhEditsInput(
   const sameVacancy = matchesApplication(deps, candidateId, cluster, vacancyId);
   return {
     resume: { id: selected.id, title: selected.title, sections: selected.sections },
-    otherTitles: snapshot.resumes.filter((item) => item.id !== selected.id).map((item) => item.title),
     vacancy: {
       title: cluster.canonicalTitle,
-      titleFits: sameVacancy && titleFitsTargetRoles(deps, candidateId, cluster.canonicalTitle),
       requirements: sameVacancy ? cluster.skills : [],
     },
     platform: platformPlaces(deps, candidateId, cluster),
@@ -102,9 +85,9 @@ const EDITS_CACHE_TTL_MS = 10 * 60_000;
 const EDITS_CACHE_LIMIT = 200;
 const editsCache = new Map<string, { readonly at: number; readonly edits: readonly HhResumeEdit[] }>();
 
-export function editsCacheKey(candidateId: string, snapshot: HhResumeSnapshot, resume: SelectedWithSections, vacancyId: string): string {
+export function editsCacheKey(candidateId: string, resume: SelectedWithSections, vacancyId: string): string {
   const content = createHash('sha256')
-    .update(JSON.stringify([resume.title, resume.sections, snapshot.resumes.map((item) => item.title)]))
+    .update(JSON.stringify([resume.title, resume.sections]))
     .digest('hex');
   return [candidateId, resume.id, content, vacancyId].join('\u0000');
 }

@@ -179,3 +179,42 @@ describe('B785: правки резюме под вакансию', () => {
     expect(await count()).toBe(russian);
   });
 });
+
+describe('отклик на hh.ru: уходит резюме hh.ru', () => {
+  const vacancy = { primaryUrl: 'https://hh.ru/vacancy/135330911' };
+
+  it('своё резюме не собирается, правок нет, к письму ничего не приложено', async () => {
+    const { approve, call, prepareResume, resumeDocuments, versions } = await setup('Head of Platform', { vacancy });
+    expect((await prepareResume()).json().data).toMatchObject({ ready: false, versionId: null });
+    expect((await call('GET', '/api/v1/candidate/vacancies/cluster-99/resume-edits')).json().data).toEqual({ edits: [], lang: null });
+    const response = await approve();
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.resume).toBeNull();
+    expect(resumeDocuments()).toHaveLength(0);
+    expect(versions()).toHaveLength(0);
+  });
+});
+
+describe('язык резюме по умолчанию — язык вакансии', () => {
+  const PATH = '/api/v1/candidate/vacancies/cluster-99/resume-edits';
+  const vacancy = { descriptionSummary: 'Platform engineering with Node.js and Kubernetes' };
+  const translate = async ({ bullets }: { bullets: ReadonlyArray<{ key: string; text: string }> }) => ({
+    bullets: bullets.map(({ key }) => ({ key, text: 'The platform was moved to Kubernetes' })),
+  });
+
+  it('русский профиль, английская вакансия — английский текст; переключатель возвращает русский', async () => {
+    const { call, candidates, candidateId, prepareResume } = await setup(undefined, {
+      vacancy,
+      experienceFactRewriter: { translate, rewrite: async () => null } as never,
+    });
+    seedResume(candidates, candidateId, 'Head of Platform', ['Перевела платформу на Kubernetes']);
+    const text = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      return JSON.stringify(candidates.getResumeVersion(candidateId, id)?.snapshot.document.experience);
+    };
+    expect(await text()).toContain('moved to Kubernetes');
+    expect((await call('GET', PATH)).json().data.lang).toBe('en');
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'ru' })).json().data.lang).toBe('ru');
+    expect(await text()).toContain('Перевела платформу');
+  });
+});

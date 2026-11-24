@@ -143,7 +143,7 @@ export function useCardData(vacancyId: string): CardData {
   );
   const questionnaire = useOptional(() => getQuestionnaire(vacancyId), vacancyId);
   const profile = useOptional(() => getDecisionProfile(), 'profile');
-  const hhResumes = useOptional(() => getHhResumes(), 'hh');
+  const hhResumes = useOptional(() => getHhResumes(undefined, vacancyId), vacancyId);
   const hhReview = useOptional(() => getHhResumeReview(vacancyId), vacancyId);
   const reloadPool = pool.refresh;
   const reload = useCallback(() => {
