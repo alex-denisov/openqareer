@@ -214,7 +214,12 @@ mod tests {
             (
                 "<h1>Thank you for applying.</h1>",
                 "/acme/jobs/1",
-                "confirmed",
+                "pending",
+            ),
+            (
+                "<h1>Thank you for applying.</h1>",
+                "/x/acme/jobs/1/confirmation",
+                "pending",
             ),
             ("<h1>Something</h1>", "/acme/jobs/1", "pending"),
             (BOARD, "/acme/jobs/1", "pending"),

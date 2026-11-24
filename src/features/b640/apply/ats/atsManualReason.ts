@@ -59,7 +59,9 @@ const RECEIPT_CODES: Partial<Record<AtsReceipt['outcome'], AtsManualCode>> = {
 
 /** После нажатия: всё, кроме подтверждения доски, уходит в очередь; «отправлено» не пишется. */
 export function manualCaseAfterSubmit(receipt: AtsReceipt, plan: AtsPlan): AtsManualCase | null {
-  const code = RECEIPT_CODES[receipt.outcome];
+  // Кнопка уже нажималась, и доска этого не подтвердила: повторять отправку нельзя.
+  const code =
+    receipt.reason === 'already_submitted' ? 'unconfirmed' : RECEIPT_CODES[receipt.outcome];
   if (!code) return null;
   return {
     code,

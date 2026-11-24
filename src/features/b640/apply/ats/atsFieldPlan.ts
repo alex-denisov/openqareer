@@ -120,11 +120,32 @@ function fileStep(field: AtsField, facts: CandidateFacts): Step {
 function checkboxStep(field: AtsField, category: Category, context: PlanContext): Step {
   if (category === 'marketing') return field.required ? { ask: 'optional_consent_required' } : null;
   if (category === 'processing') {
+    if (!field.required) return null;
     if (!context.mandateAccepted) return { ask: 'consent_needs_mandate' };
     return { entry: { key: field.key, value: 'true' }, consent: true };
   }
   if (category === 'fact') return { ask: 'fact_needed' };
   return field.required ? { ask: 'unknown_checkbox' } : null;
+}
+
+const AFFIRMATIVE =
+  /^(true|yes\b|i (agree|accept|consent|acknowledge)|agree|accept|да(?!\S)|соглас|принима)/i;
+
+/**
+ * Ответ кандидата. Согласие на обработку и по ответу ставится только обязательной галочкой или
+ * «да» в списке, только при поручении и всегда с записью в журнал.
+ */
+function answerStep(field: AtsField, answer: string, context: PlanContext): Step {
+  const entry = { key: field.key, value: answer };
+  if (!PROCESSING.test(field.label)) return { entry };
+  const chosen = field.options.find((option) => option.value === answer)?.label ?? answer;
+  const agrees = AFFIRMATIVE.test(chosen.trim());
+  if (field.kind === 'checkbox') {
+    if (!field.required) return null;
+    if (!agrees) return { ask: 'no_answer' };
+  }
+  if (!agrees) return { entry };
+  return context.mandateAccepted ? { entry, consent: true } : { ask: 'consent_needs_mandate' };
 }
 
 function demographicStep(field: AtsField): Step {
@@ -140,7 +161,7 @@ function stepFor(field: AtsField, facts: CandidateFacts, context: PlanContext): 
   if (field.kind === 'password') return null;
   // Ответ самого кандидата сильнее любого шаблона, кроме рассылок и хранения.
   if (answer !== undefined && answer !== '' && category !== 'marketing') {
-    return { entry: { key: field.key, value: answer } };
+    return answerStep(field, answer, context);
   }
   if (field.kind === 'checkbox') return checkboxStep(field, category, context);
   if (category === 'marketing') return field.required ? { ask: 'optional_consent_required' } : null;

@@ -19,6 +19,7 @@ pub struct AtsTarget {
     pub adapter: &'static str,
     /// The board's own page with the form, never an employer page that frames it.
     pub entry_url: String,
+    /// The host of `entry_url`; a vacancy has no other.
     pub hosts: Vec<String>,
     /// The path the board shows after it accepted the application.
     pub confirmation_path: String,
@@ -38,7 +39,26 @@ fn is_job_id(value: &str) -> bool {
         && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
+/// A path spelled so that its segments are not what they look like. Checked on
+/// the raw text: parsing already folds `..` away.
+fn has_disguised_path(url: &str) -> bool {
+    let Some((_, rest)) = url.split_once("://") else {
+        return true;
+    };
+    let rest = rest.split(['?', '#']).next().unwrap_or_default();
+    let lower = rest.to_ascii_lowercase();
+    lower
+        .split('/')
+        .any(|segment| matches!(segment, "." | ".."))
+        || ["%2e", "%2f", "%5c", "\\"]
+            .iter()
+            .any(|part| lower.contains(part))
+}
+
 fn https(url: &str) -> Option<Url> {
+    if has_disguised_path(url) {
+        return None;
+    }
     let parsed = Url::parse(url).ok()?;
     let plain = parsed.scheme() == "https"
         && parsed.username().is_empty()
@@ -61,7 +81,7 @@ fn greenhouse(hosts: &[&str], token: &str, job_id: &str) -> Result<AtsTarget, St
     Ok(AtsTarget {
         adapter: "greenhouse",
         entry_url: format!("https://{}{path}", hosts[0]),
-        hosts: hosts.iter().map(|host| (*host).to_string()).collect(),
+        hosts: vec![hosts[0].to_string()],
         confirmation_path: format!("{path}/confirmation"),
     })
 }
@@ -98,24 +118,59 @@ pub fn resolve(url: &str, board: Option<&str>) -> Result<AtsTarget, String> {
 }
 
 /// The form window's navigation rule, frames included.
-pub fn navigation_allowed(hosts: &[String], url: &str) -> bool {
-    if url == "about:blank" {
+pub fn navigation_allowed(target: &AtsTarget, url: &str) -> bool {
+    if url == "about:blank" || on_target(target, url) {
         return true;
     }
-    let Some(parsed) = https(url) else {
-        return false;
-    };
-    let host = parsed.host_str().unwrap_or_default();
-    hosts.iter().any(|allowed| allowed == host) || CHECK_FRAME_HOSTS.contains(&host)
+    https(url)
+        .is_some_and(|parsed| CHECK_FRAME_HOSTS.contains(&parsed.host_str().unwrap_or_default()))
 }
 
-/// The page the window ended on is still the vacancy's own board.
-pub fn on_target(hosts: &[String], url: &str) -> bool {
-    https(url).is_some_and(|parsed| {
-        hosts
+fn on_target_host(target: &AtsTarget, url: &str) -> Option<Url> {
+    https(url).filter(|parsed| {
+        target
+            .hosts
             .iter()
-            .any(|allowed| Some(allowed.as_str()) == parsed.host_str())
+            .any(|host| Some(host.as_str()) == parsed.host_str())
     })
+}
+
+/// `path` is `base` itself or lies below it: `/jobs/123` never covers `/jobs/1234`.
+fn within(path: &str, base: &str) -> bool {
+    let base = base.trim_end_matches('/');
+    !base.is_empty()
+        && path
+            .strip_prefix(base)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
+/// Parameters of the entry address name the vacancy: each must keep its one value.
+fn same_identity(entry: &Url, next: &Url) -> bool {
+    entry.query_pairs().all(|(key, value)| {
+        let mut found = next.query_pairs().filter(|(name, _)| *name == key);
+        found.next().is_some_and(|(_, held)| held == value) && found.next().is_none()
+    })
+}
+
+/// The page the window ended on is the form of this very vacancy or the page
+/// its board shows after accepting the application.
+pub fn on_target(target: &AtsTarget, url: &str) -> bool {
+    let Some(next) = on_target_host(target, url) else {
+        return false;
+    };
+    let Some(entry) = https(&target.entry_url) else {
+        return false;
+    };
+    is_confirmation(target, url)
+        || (within(next.path(), entry.path()) && same_identity(&entry, &next))
+}
+
+/// The board's own confirmation page for this vacancy.
+pub fn is_confirmation(target: &AtsTarget, url: &str) -> bool {
+    !target.confirmation_path.is_empty()
+        && on_target_host(target, url).is_some_and(|next| {
+            next.path().trim_end_matches('/') == target.confirmation_path.trim_end_matches('/')
+        })
 }
 
 #[cfg(test)]
@@ -123,7 +178,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_board_page_opens_as_itself_with_only_its_two_hosts() {
+    fn a_board_page_opens_as_itself_with_only_its_host() {
         let target = resolve(
             "https://job-boards.greenhouse.io/acme/jobs/4343866009?gh_src=x",
             None,
@@ -134,10 +189,7 @@ mod tests {
             target.entry_url,
             "https://job-boards.greenhouse.io/acme/jobs/4343866009"
         );
-        assert_eq!(
-            target.hosts,
-            ["job-boards.greenhouse.io", "boards.greenhouse.io"]
-        );
+        assert_eq!(target.hosts, ["job-boards.greenhouse.io"]);
         assert_eq!(
             target.confirmation_path,
             "/acme/jobs/4343866009/confirmation"
@@ -170,10 +222,7 @@ mod tests {
             target.entry_url,
             "https://job-boards.eu.greenhouse.io/acme/jobs/7"
         );
-        assert_eq!(
-            target.hosts,
-            ["job-boards.eu.greenhouse.io", "boards.eu.greenhouse.io"]
-        );
+        assert_eq!(target.hosts, ["job-boards.eu.greenhouse.io"]);
     }
 
     #[test]
@@ -225,36 +274,92 @@ mod tests {
         }
     }
 
+    const ENTRY: &str = "https://job-boards.greenhouse.io/acme/jobs/123";
+
+    fn acme() -> AtsTarget {
+        resolve(ENTRY, None).unwrap()
+    }
+
     #[test]
-    fn the_window_visits_only_the_listed_hosts_and_check_frames() {
-        let hosts = resolve("https://boards.greenhouse.io/acme/jobs/1", None)
-            .unwrap()
-            .hosts;
+    fn the_window_stays_on_its_vacancy_its_confirmation_and_check_frames() {
         for url in [
             "about:blank",
-            "https://boards.greenhouse.io/acme/jobs/1/confirmation",
-            "https://job-boards.greenhouse.io/acme/jobs/1",
+            ENTRY,
+            "https://job-boards.greenhouse.io/acme/jobs/123/",
+            "https://job-boards.greenhouse.io/acme/jobs/123?gh_src=x#app",
+            "https://job-boards.greenhouse.io/acme/jobs/123/confirmation",
             "https://www.recaptcha.net/recaptcha/enterprise/anchor",
         ] {
-            assert!(navigation_allowed(&hosts, url), "{url}");
+            assert!(navigation_allowed(&acme(), url), "{url}");
         }
+        assert!(!on_target(&acme(), "about:blank"));
+        assert!(!on_target(
+            &acme(),
+            "https://www.recaptcha.net/recaptcha/enterprise/anchor"
+        ));
+    }
+
+    #[test]
+    fn another_vacancy_board_host_or_a_disguised_address_is_off_target() {
         for url in [
+            "https://job-boards.greenhouse.io/acme/jobs/1234",
+            "https://job-boards.greenhouse.io/acme/jobs/12",
+            "https://job-boards.greenhouse.io/acme/jobs/124",
+            "https://job-boards.greenhouse.io/acme",
+            "https://job-boards.greenhouse.io/other/jobs/123",
+            "https://job-boards.greenhouse.io/other/jobs/123/confirmation",
+            "https://job-boards.greenhouse.io/x/acme/jobs/123",
+            "https://job-boards.greenhouse.io//acme/jobs/123",
+            "https://job-boards.greenhouse.io/acme/jobs/123/../124",
+            "https://job-boards.greenhouse.io/acme/jobs/124/../123",
+            "https://job-boards.greenhouse.io/acme/jobs/123/%2e%2e/124",
+            "https://job-boards.greenhouse.io/acme/jobs/123%2F..%2F124",
+            "https://job-boards.greenhouse.io/acme/jobs/123\\..\\124",
+            "https://job-boards.greenhouse.io:8443/acme/jobs/123",
+            "https://user@job-boards.greenhouse.io/acme/jobs/123",
+            "https://boards.greenhouse.io/acme/jobs/123",
+            "https://job-boards.greenhouse.io.example/acme/jobs/123",
+            "http://job-boards.greenhouse.io/acme/jobs/123",
             "https://my.greenhouse.io/users/sign_in",
-            "https://app.greenhouse.io/",
-            "https://boards.greenhouse.io.example/acme",
-            "http://boards.greenhouse.io/acme/jobs/1",
             "https://acme.example/",
             "javascript:alert(1)",
         ] {
-            assert!(!navigation_allowed(&hosts, url), "{url}");
+            assert!(!on_target(&acme(), url), "{url}");
+            assert!(!navigation_allowed(&acme(), url), "{url}");
         }
-        assert!(on_target(
-            &hosts,
-            "https://boards.greenhouse.io/acme/jobs/1/confirmation"
-        ));
-        assert!(!on_target(
-            &hosts,
-            "https://www.recaptcha.net/recaptcha/enterprise/anchor"
-        ));
+    }
+
+    #[test]
+    fn a_vacancy_named_by_parameters_keeps_every_one_of_them() {
+        let target = AtsTarget {
+            adapter: "greenhouse",
+            entry_url: "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123".into(),
+            hosts: vec!["job-boards.greenhouse.io".into()],
+            confirmation_path: "/embed/job_app/confirmation".into(),
+        };
+        let at = |query: &str| {
+            on_target(
+                &target,
+                &format!("https://job-boards.greenhouse.io/embed/job_app{query}"),
+            )
+        };
+        assert!(at("?token=123&for=acme&x=1"));
+        assert!(!at("?for=acme&token=124"));
+        assert!(!at("?for=other&token=123"));
+        assert!(!at("?for=acme&token=123&token=124"));
+        assert!(!at("?for=acme"));
+    }
+
+    #[test]
+    fn only_the_exact_confirmation_path_confirms() {
+        let at = |path: &str| {
+            is_confirmation(&acme(), &format!("https://job-boards.greenhouse.io{path}"))
+        };
+        assert!(at("/acme/jobs/123/confirmation"));
+        assert!(at("/acme/jobs/123/confirmation/?x=1"));
+        assert!(!at("/acme/jobs/123"));
+        assert!(!at("/acme/jobs/1234/confirmation"));
+        assert!(!at("/acme/jobs/123/confirmation2"));
+        assert!(!at("/x/acme/jobs/123/confirmation"));
     }
 }

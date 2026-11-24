@@ -60,10 +60,35 @@ export interface AtsFillReport {
 
 export type AtsOutcome = 'confirmed' | 'unconfirmed' | 'rejected' | 'captcha' | 'not_submitted';
 
+/** Почему кнопка не нажата: закрытый список приложения, текста страницы в нём нет. */
+export type AtsReason =
+  | 'off_target'
+  | 'not_confirmed'
+  | 'already_submitted'
+  | 'form_not_filled'
+  | 'confirmed_values_differ'
+  | 'form_changed'
+  | 'attempt_unrecorded'
+  | 'captcha'
+  | 'submit_ambiguous'
+  | 'submit_disabled'
+  | 'form_missing'
+  | 'press_unknown';
+
+/** Попытка отправки на диске приложения: переживает перезапуск; `null` в итоге — он не узнан. */
+export interface AtsAttempt {
+  readonly id: string;
+  readonly vacancyId: string;
+  readonly entryUrl: string;
+  readonly startedAtMs: number;
+  readonly consentIds: readonly string[];
+  readonly result: 'sent' | 'failed' | 'unconfirmed' | null;
+}
+
 /** Квитанция: что нажато, когда и что ответила доска. Значений полей в ней нет. */
 export interface AtsReceipt {
   readonly outcome: AtsOutcome;
-  readonly reason: string | null;
+  readonly reason: AtsReason | null;
   readonly host: string;
   readonly path: string;
   readonly pressedAtMs: number | null;
