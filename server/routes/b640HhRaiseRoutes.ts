@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
+  HH_RAISE_CLOCK,
   HH_RAISE_EVERY_HOURS,
   type B640HhRaiseClaim,
   type B640HhRaiseState,
@@ -19,7 +20,7 @@ const resumeId = z.string().regex(HH_RESUME_ID);
 const querySchema = z.object({ resumeId: resumeId.optional() }).strict();
 const toggleSchema = z.object({ enabled: z.boolean(), resumeId: resumeId.optional() }).strict();
 const resultSchema = z
-  .object({ outcome: z.enum(['ok', 'captcha', 'logged_out', 'foreign_page', 'too_early', 'error']) })
+  .object({ outcome: z.enum(['ok', 'captcha', 'logged_out', 'foreign_page', 'too_early', 'error']), availableAt: z.string().regex(HH_RAISE_CLOCK).optional() })
   .strict();
 const emptyBody = z.object({ resumeId: resumeId.optional() }).strict().nullish();
 const taskParams = z.object({ taskId: z.string().uuid() });
@@ -33,7 +34,7 @@ type Handler = (stores: Stores, candidateId: string, request: FastifyRequest, re
 
 const answer = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
 
-function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhRaiseScheduleRow | null): B640HhRaiseState {
+function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhRaiseScheduleRow | null, pending: boolean): B640HhRaiseState {
   const connected = resumes.length > 0;
   return {
     connected, resumeId: id, resumes,
@@ -46,6 +47,7 @@ function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhR
       ? { status: row.lastResult, reason: row.lastReason, at: row.lastResultAt } : null,
     pausedUntil: row?.pausedUntil ?? null,
     pauseReason: row?.pauseReason ?? null,
+    pending,
   };
 }
 
@@ -77,18 +79,18 @@ const getState: Handler = (stores, candidateId, request, reply) => {
   if (!query.success) return sendError(reply, request, 400, 'invalid_hh_raise_query', 'Запрос заполнен неверно.', false);
   const picked = pickResume(stores, candidateId, query.data.resumeId);
   if (picked.unknown) return sendError(reply, request, 404, 'hh_resume_not_found', 'Такого резюме нет.', false);
-  if (!picked.id) return answer(request, viewOf([], null, null));
+  if (!picked.id) return answer(request, viewOf([], null, null, false));
   const now = new Date();
   if (picked.former && picked.id === picked.current && picked.former !== picked.current) {
     const former = stores.raise.getSchedule(candidateId, picked.former);
     const moved = stores.raise.chooseResume(candidateId, picked.id,
       choicePatch(former, stores.raise.getSchedule(candidateId, picked.id), former?.enabled ?? true, now), now.toISOString());
-    return answer(request, viewOf(picked.listed, picked.id, moved));
+    return answer(request, viewOf(picked.listed, picked.id, moved, stores.raise.hasOpenTask(candidateId, picked.id)));
   }
   // Расписание заводится при первом чтении подключённого резюме: первое поднятие со сдвигом.
   const row = stores.raise.getSchedule(candidateId, picked.id) ?? stores.raise.patchSchedule(
     candidateId, picked.id, { nextRaiseAt: firstRaiseAt(now) }, now.toISOString());
-  return answer(request, viewOf(picked.listed, picked.id, row));
+  return answer(request, viewOf(picked.listed, picked.id, row, stores.raise.hasOpenTask(candidateId, picked.id)));
 };
 
 const putToggle = withResume((stores, candidateId, id, request, reply) => {
@@ -100,7 +102,7 @@ const putToggle = withResume((stores, candidateId, id, request, reply) => {
   if (former && former !== id) {
     const chosen = stores.raise.chooseResume(candidateId, id,
       choicePatch(stores.raise.getSchedule(candidateId, former), current, body.data.enabled, now), now.toISOString());
-    return answer(request, viewOf(listed, id, chosen));
+    return answer(request, viewOf(listed, id, chosen, stores.raise.hasOpenTask(candidateId, id)));
   }
   const reconnect = body.data.enabled && current?.pauseReason === 'logged_out';
   const row = stores.raise.chooseResume(candidateId, id, {
@@ -108,7 +110,7 @@ const putToggle = withResume((stores, candidateId, id, request, reply) => {
     ...(reconnect ? { pauseReason: null, pausedUntil: null } : {}),
     ...(body.data.enabled && !current?.nextRaiseAt ? { nextRaiseAt: firstRaiseAt(now) } : {}),
   }, now.toISOString());
-  return answer(request, viewOf(listed, id, row));
+  return answer(request, viewOf(listed, id, row, stores.raise.hasOpenTask(candidateId, id)));
 }, (request) => (request.body as { resumeId?: string } | null)?.resumeId);
 
 const postRetry = withResume((stores, candidateId, id, request, reply) => {
@@ -129,7 +131,7 @@ const postRetry = withResume((stores, candidateId, id, request, reply) => {
   }
   if (!stores.raise.hasOpenTask(candidateId, id)) stores.raise.enqueue(candidateId, id, now.toISOString());
   const queued = stores.raise.patchSchedule(candidateId, id, { enabled: true, pauseReason: null, pausedUntil: null, nextRaiseAt: now.toISOString() }, now.toISOString());
-  return answer(request, viewOf(listed, id, queued));
+  return answer(request, viewOf(listed, id, queued, stores.raise.hasOpenTask(candidateId, id)));
 }, (request) => (request.body as { resumeId?: string } | null)?.resumeId);
 
 /** Клиент берёт задание и исполняет его в окне сессии кандидата; сервер в hh не ходит. */
@@ -148,9 +150,9 @@ const postResult: Handler = (stores, candidateId, request, reply) => {
   const now = new Date();
   const task = stores.raise.finish(candidateId, params.data.taskId, now.toISOString());
   if (!task) return sendError(reply, request, 409, 'hh_raise_task_closed', 'Это задание закрыто или чужое.', false);
-  const row = stores.raise.patchSchedule(candidateId, task.resumeId, applyOutcome(body.data.outcome, now), now.toISOString());
+  const row = stores.raise.patchSchedule(candidateId, task.resumeId, applyOutcome(body.data.outcome, now, Math.random, body.data.availableAt), now.toISOString());
   noteLoginChange(stores, request, candidateId, body.data.outcome);
-  return answer(request, viewOf(pickResume(stores, candidateId).listed, task.resumeId, row));
+  return answer(request, viewOf(pickResume(stores, candidateId).listed, task.resumeId, row, stores.raise.hasOpenTask(candidateId, task.resumeId)));
 };
 
 /** B690: первый упор в страницу входа — уведомление; удачное поднятие — вход жив, уведомление снято. */

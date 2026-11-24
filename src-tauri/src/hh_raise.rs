@@ -34,16 +34,21 @@ pub struct HhRaiseRequest {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HhRaiseReport {
     /// `ok`, `captcha`, `logged_out`, `foreign_page`, `too_early`, `error`,
     /// or `busy` (the window is taken by a response; nothing was done).
     pub outcome: String,
+    /// With `too_early`: the HH:MM (Moscow) printed on the button.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub available_at: Option<String>,
 }
 
 impl HhRaiseReport {
     fn of(outcome: &str) -> Self {
         Self {
             outcome: outcome.to_string(),
+            available_at: None,
         }
     }
 }
@@ -57,6 +62,9 @@ struct StepResult {
     /// Absent unless the list shows no card of this resume.
     #[serde(default = "card_found")]
     card: bool,
+    /// The time on the button, only with `too_early`.
+    #[serde(default)]
+    available: Option<String>,
 }
 
 fn card_found() -> bool {
@@ -72,6 +80,7 @@ enum Page {
 struct Answer {
     code: String,
     pressed: bool,
+    available: Option<String>,
 }
 
 /// hh.ru resume ids are hex hashes (or plain numbers): nothing else gets near a script or an address.
@@ -121,6 +130,16 @@ pub fn report_for(code: &str) -> HhRaiseReport {
     }
 }
 
+/// Strictly HH:MM: nothing else from the page reaches the server.
+fn is_clock(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 5
+        && bytes[2] == b':'
+        && [0, 1, 3, 4].iter().all(|&i| bytes[i].is_ascii_digit())
+        && &value[..2] < "24"
+        && &value[3..] < "60"
+}
+
 async fn step(window: &tauri::Webview, script: &str) -> Result<StepResult, String> {
     let raw = eval_json(window, script).await?;
     serde_json::from_str::<StepResult>(&raw).map_err(|_| "step_shape".to_string())
@@ -145,12 +164,16 @@ async fn wait_for_answer(
     let answer = |code: &str, pressed| Answer {
         code: code.to_string(),
         pressed,
+        available: None,
     };
     loop {
         match step(window, &script).await {
             Ok(result) if is_early_signed_out(&result.code, started.elapsed()) => {}
             Ok(result) if result.code != "waiting" => {
-                return answer(&result.code, pressed || result.pressed)
+                return Answer {
+                    available: result.available,
+                    ..answer(&result.code, pressed || result.pressed)
+                }
             }
             Ok(result) => {
                 pressed |= result.pressed;
@@ -169,21 +192,19 @@ async fn wait_for_answer(
 }
 
 /// The resume page first; when it settles nothing in time, the resume list once.
-async fn raise(window: &tauri::Webview, resume_id: &str) -> String {
+async fn raise(window: &tauri::Webview, resume_id: &str) -> Answer {
     let first = wait_for_answer(window, resume_id, Page::Resume, true).await;
     if !is_timeout(&first.code) {
-        return first.code;
+        return first;
     }
     let Ok(list) = LIST_URL.parse() else {
-        return first.code;
+        return first;
     };
     if window.navigate(list).is_err() {
-        return first.code;
+        return first;
     }
     tokio::time::sleep(STEP_POLL).await;
-    wait_for_answer(window, resume_id, Page::List, !first.pressed)
-        .await
-        .code
+    wait_for_answer(window, resume_id, Page::List, !first.pressed).await
 }
 
 fn on_hh(window: &tauri::Webview) -> bool {
@@ -215,11 +236,16 @@ pub async fn run_hh_raise(
     if !on_hh(&window) {
         return Ok(HhRaiseReport::of("foreign_page"));
     }
-    let code = raise(&window, &request.resume_id).await;
+    let Answer {
+        code, available, ..
+    } = raise(&window, &request.resume_id).await;
     if !matches!(code.as_str(), "ok" | "too_early") {
         let _ = append_connector_diagnostic(app, "hh-raise", "failed", Some(&code));
     }
-    Ok(report_for(&code))
+    Ok(HhRaiseReport {
+        available_at: available.filter(|clock| code == "too_early" && is_clock(clock)),
+        ..report_for(&code)
+    })
 }
 
 #[cfg(test)]
@@ -269,6 +295,16 @@ mod tests {
             "waiting",
         ] {
             assert_eq!(report_for(other), HhRaiseReport::of("error"), "{other}");
+        }
+    }
+
+    #[test]
+    fn accepts_only_a_strict_clock() {
+        for good in ["00:00", "20:55", "23:59"] {
+            assert!(is_clock(good), "{good}");
+        }
+        for bad in ["", "9:05", "24:00", "20:60", "20:5x", "20:555", "é0:55"] {
+            assert!(!is_clock(bad), "{bad}");
         }
     }
 

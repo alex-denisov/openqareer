@@ -6,14 +6,16 @@ import { click, mount, type Mounted } from '../../kit/testDom';
 
 const api = vi.hoisted(() => ({ getHhRaise: vi.fn(), setHhRaiseEnabled: vi.fn(), retryHhRaise: vi.fn() }));
 const desktop = vi.hoisted(() => ({ openHhSignIn: vi.fn() }));
+const poller = vi.hoisted(() => ({ requestHhRaiseStep: vi.fn() }));
 vi.mock('./hhRaiseApi', () => api);
+vi.mock('../../apply/hh/hhRaisePoller', () => poller);
 vi.mock('../../apply/hh/hhDesktop', () => desktop);
 
-const { HhRaiseStatus } = await import('./HhRaiseStatus');
+const { HH_RAISE_REFRESH_MS, HhRaiseStatus } = await import('./HhRaiseStatus');
 
 const base: B640HhRaiseState = {
   connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер', updatedLabel: 'обновлено 3 ноября' }], enabled: true, everyHours: 4,
-  lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null,
+  lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null, pending: false,
 };
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 let view: Mounted | null = null;
@@ -28,8 +30,8 @@ const show = async (patch: Partial<B640HhRaiseState>) => {
 const button = (label: string) =>
   [...(view?.container.querySelectorAll('button') ?? [])].find((b) => b.textContent === label) ?? null;
 
-beforeEach(() => vi.clearAllMocks());
-afterEach(() => { view?.unmount(); view = null; });
+beforeEach(() => vi.resetAllMocks());
+afterEach(() => { view?.unmount(); view = null; vi.useRealTimers(); });
 
 describe('B699: состояние автоподнятия', () => {
   it('тихая строка: когда поднято и когда следующее', async () => {
@@ -67,6 +69,56 @@ describe('B699: состояние автоподнятия', () => {
     await flush();
     expect(api.setHhRaiseEnabled).toHaveBeenCalledWith(false, 'abc');
     expect((view!.container.querySelector('[role="switch"]') as HTMLInputElement).checked).toBe(false);
+  });
+
+  it('«Повторить» и включение сразу запускают шаг опроса, выключение и отказ — нет', async () => {
+    api.retryHhRaise.mockRejectedValueOnce(new Error('x'));
+    await show({ lastResult: { status: 'error', reason: 'x', at: '' } });
+    click(button('Повторить'));
+    await flush();
+    expect(poller.requestHhRaiseStep).not.toHaveBeenCalled();
+    api.retryHhRaise.mockResolvedValueOnce({ ...base, pending: true });
+    click(button('Повторить'));
+    await flush();
+    expect(poller.requestHhRaiseStep).toHaveBeenCalledTimes(1);
+    expect(text()).toContain('Резюме будет поднято');
+    expect(button('Повторить')).toBeNull();
+
+    const toggle = () => click(view!.container.querySelector('[role="switch"]'));
+    api.setHhRaiseEnabled.mockResolvedValueOnce({ ...base, enabled: false });
+    toggle();
+    await flush();
+    expect(poller.requestHhRaiseStep).toHaveBeenCalledTimes(1);
+    api.setHhRaiseEnabled.mockResolvedValueOnce(base);
+    toggle();
+    await flush();
+    expect(poller.requestHhRaiseStep).toHaveBeenCalledTimes(2);
+  });
+
+  it('пока задание открыто, состояние перечитывается и останавливается при исходе', async () => {
+    vi.useFakeTimers();
+    const tick = () => act(() => vi.advanceTimersByTimeAsync(HH_RAISE_REFRESH_MS));
+    await show({ pending: true });
+    api.getHhRaise.mockRejectedValueOnce(new Error('offline'));
+    await tick();
+    expect(api.getHhRaise).toHaveBeenCalledTimes(2);
+    api.getHhRaise.mockResolvedValue({ ...base, lastRaisedAt: new Date().toISOString() });
+    await tick();
+    expect(text()).toContain('Резюме поднято');
+    await tick();
+    expect(api.getHhRaise).toHaveBeenCalledTimes(3);
+  });
+
+  it('после размонтирования и без задания состояние не перечитывается', async () => {
+    vi.useFakeTimers();
+    await show({ pending: true });
+    view?.unmount();
+    view = null;
+    await vi.advanceTimersByTimeAsync(HH_RAISE_REFRESH_MS * 2);
+    expect(api.getHhRaise).toHaveBeenCalledTimes(1);
+    await show({});
+    await act(() => vi.advanceTimersByTimeAsync(HH_RAISE_REFRESH_MS * 2));
+    expect(api.getHhRaise).toHaveBeenCalledTimes(2);
   });
 
   it('a11: поле «Резюме» показывает список и сохраняет выбор', async () => {

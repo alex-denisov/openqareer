@@ -20,10 +20,14 @@ export function lineOf(view: B640HhRaiseState, now: number = Date.now()): HhRais
   if (!view.connected || !view.enabled) return { state: 'off' };
   if (view.pauseReason === 'logged_out')
     return { state: 'err', text: 'Войдите в hh.ru заново', action: 'sign_in' };
+  // Задание уже стоит в очереди или исполняется: прошлый исход больше не показываем.
+  if (view.pending) return { state: 'wait', text: 'Резюме будет поднято' };
   if (view.pauseReason === 'captcha' && view.pausedUntil) {
     return { state: 'wait', text: `Пауза до ${clock(view.pausedUntil)}: hh.ru попросил капчу` };
   }
-  if (view.lastResult?.status === 'error')
+  // «Ещё рано» — не сбой: hh.ru поднимет резюме в следующий срок.
+  const tooEarly = view.lastResult?.reason === 'too_early';
+  if (view.lastResult?.status === 'error' && !tooEarly)
     return { state: 'err', text: 'Не поднято', action: 'retry' };
   if (view.lastRaisedAt) {
     const nextAt = ahead(view.nextRaiseAt, now);
@@ -31,6 +35,6 @@ export function lineOf(view: B640HhRaiseState, now: number = Date.now()): HhRais
     return { state: 'ok', text: `Резюме поднято · ${clock(view.lastRaisedAt)}${next}` };
   }
   const firstAt = ahead(view.nextRaiseAt, now);
-  const first = firstAt ? ` · первое ≈ ${firstAt}` : '';
+  const first = firstAt ? ` · ${tooEarly ? 'следующее' : 'первое'} ≈ ${firstAt}` : '';
   return { state: 'wait', text: `Резюме будет поднято${first}` };
 }

@@ -90,6 +90,19 @@ describe('b640 hh raise routes', () => {
     expect((await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'other.test')).statusCode).toBe(409);
   });
 
+  it('reports an open task until its result and treats too_early as no error', async () => {
+    const ctx = await setup();
+    const taskId = await claimTask(ctx);
+    expect((await ctx.get(BASE, 'flagged.test')).json().data.pending).toBe(true);
+    const url = `${BASE}/${taskId}/result`;
+    for (const availableAt of ['24:00', '9:05', '20:55 ', 2055]) {
+      expect((await ctx.send('POST', url, { outcome: 'too_early', availableAt }, 'flagged.test')).statusCode).toBe(400);
+    }
+    const data = (await ctx.send('POST', url, { outcome: 'too_early', availableAt: '20:55' }, 'flagged.test')).json().data;
+    expect(data).toMatchObject({ pending: false, lastResult: { status: 'ok', reason: 'too_early' } });
+    expect(data.nextRaiseAt).toContain(':57:00.000Z');
+  });
+
   it('captcha pauses 24 hours and the scheduler skips it', async () => {
     const ctx = await setup();
     const taskId = await claimTask(ctx);
@@ -118,6 +131,7 @@ describe('b640 hh raise routes', () => {
     await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'foreign_page' }, 'flagged.test');
     const retried = await ctx.send('POST', `${BASE}/retry`, {}, 'flagged.test');
     expect(retried.statusCode).toBe(200);
+    expect(retried.json().data.pending).toBe(true);
     expect((await ctx.send('POST', `${BASE}/claim`, {}, 'flagged.test')).json().data.task).not.toBeNull();
   });
 

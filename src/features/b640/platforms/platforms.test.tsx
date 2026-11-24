@@ -45,7 +45,7 @@ describe('a11: hh.ru', () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('connected')] as never);
     vi.mocked(raise.getHhRaise).mockResolvedValue({
       connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер' }], enabled: false, everyHours: 4,
-      lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null,
+      lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null, pending: false,
     } as never);
     vi.mocked(apps.getCandidateActionUsage).mockResolvedValue({ usage: { hhBoostsCount: 1, lastHhBoostAt: '2026-11-16T09:40:00Z' } } as never);
     const view = mount(<Section node={node('a11')} params={{}} />);
