@@ -314,6 +314,16 @@ describe('QueuedCoverLetterWriter: пустых писем нет (B640, реш�
     expect(letterPrompt(seen[0]!)).not.toContain('Прошлый вариант письма отклонён.');
   });
 
+  it('повтор нарушил другое правило: третий вызов называет обе причины (B682)', async () => {
+    const seen: CoverLetterWriteInput[] = [];
+    const outcomes = ['Resource-Logistics', 'Рост 900', 'Хорошее письмо'].map((body) => ({ body, stage: 'g' }));
+    const queue = new QueuedCoverLetterWriter([recorded('g', outcomes, seen)], ['g'], () => undefined);
+    const review = (body: string) => [...named(body), ...(body.includes('900') ? ['number'] : [])];
+    await expect(queue.writeCoverLetter({ ...input, review })).resolves.toMatchObject({ body: 'Хорошее письмо' });
+    expect(seen[2]?.correction).toContain('Не переводи и не меняй названия');
+    expect(seen[2]?.correction).toContain('Не пиши цифр');
+  });
+
   it('второй отказ — отказ всей цепочки (маршрут отвечает 503)', async () => {
     const bad = { body: 'At GK Resource-Logistics I led.', stage: 'g' };
     const queue = new QueuedCoverLetterWriter([recorded('g', [bad, bad], [])], ['g'], () => undefined);
