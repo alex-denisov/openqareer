@@ -10,27 +10,73 @@ vi.mock('../../../connections/connectorSession', () => session);
 const bridge = vi.hoisted(() => ({ invokeDesktopCommand: vi.fn() }));
 vi.mock('../../../../services/desktop/desktopBridge', () => bridge);
 
-const { HH_WINDOW_READY_MS, readHhResumes, runHhApplyInSession } = await import('./hhDesktop');
+const { applyHhResumeEditInSession, readHhResumeContent, readHhResumes, runHhApplyInSession } = await import('./hhDesktop');
+const { HH_WINDOW_READY_MS } = await import('./hhWindow');
 
 beforeEach(() => vi.resetAllMocks());
 
-describe('B704: список резюме hh.ru в приложении', () => {
-  it('окна сессии hh.ru нет — это «нужен вход», а не сбой', async () => {
-    // Так отклоняет вызов Rust (`inspect_session_page_for`), когда окна `connector-hh` нет.
-    session.inspectSessionPage.mockRejectedValue('session_window_missing');
-    await expect(readHhResumes()).resolves.toEqual({ kind: 'signed_out' });
+describe('B704/B708: список резюме hh.ru в приложении', () => {
+  const login = {
+    ready: true, url: 'https://hh.ru/account/login', signedInApplicant: false, login: true, otp: false, captcha: false,
+  };
+  const home = { ...login, url: 'https://hh.ru/', signedInApplicant: true, login: false };
+  const list = { ok: true, url: 'https://hh.ru/applicant/resumes', body: '<a href="/resume/abc1">COO</a>' };
+  beforeEach(() => {
+    vi.useFakeTimers();
+    session.isConnectorSessionOpen.mockResolvedValue(false);
+    session.openConnectorSession.mockResolvedValue({ opened: true });
+    session.inspectSessionPage.mockResolvedValue(home);
+    session.readSessionPage.mockResolvedValue(list);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('окна нет, вход жив — окно открывается в фоне и список читается', async () => {
+    await expect(readHhResumes()).resolves.toMatchObject({ kind: 'ready', resumes: [{ id: 'abc1' }] });
+    expect(session.openConnectorSession).toHaveBeenCalledOnce();
   });
 
-  it('страница входа в окне — тоже «нужен вход»', async () => {
-    session.inspectSessionPage.mockResolvedValue({
-      ready: true, url: 'https://hh.ru/account/login', signedInApplicant: false, login: true, otp: false, captcha: false,
-    });
-    await expect(readHhResumes()).resolves.toEqual({ kind: 'signed_out' });
+  it('страница, которая ещё дорисовывается, входа не просит — и в открытом окне', async () => {
+    session.isConnectorSessionOpen.mockResolvedValue(true);
+    session.inspectSessionPage
+      .mockResolvedValueOnce({ ...home, ready: false })
+      .mockResolvedValueOnce({ ...home, signedInApplicant: false });
+    const reading = readHhResumes();
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(reading).resolves.toMatchObject({ kind: 'ready' });
+    expect(session.openConnectorSession).not.toHaveBeenCalled();
   });
 
-  it('другой сбой окна остаётся сбоем', async () => {
-    session.inspectSessionPage.mockRejectedValue('inspection_shape: bad');
-    await expect(readHhResumes()).rejects.toBe('inspection_shape: bad');
+  it('страница входа осталась — «нужен вход»', async () => {
+    session.inspectSessionPage.mockResolvedValue(login);
+    const reading = readHhResumes();
+    await vi.advanceTimersByTimeAsync(HH_WINDOW_READY_MS);
+    await expect(reading).resolves.toEqual({ kind: 'signed_out' });
+  });
+
+  it('капча и неоткрытое окно — сбой, а не «нужен вход»', async () => {
+    session.inspectSessionPage.mockResolvedValue({ ...home, captcha: true });
+    await expect(readHhResumes()).rejects.toThrow('hh_resumes_not_read');
+    session.openConnectorSession.mockResolvedValue({ opened: false });
+    await expect(readHhResumes()).rejects.toThrow('hh_window_not_opened');
+  });
+
+  it('одновременные действия открывают окно один раз', async () => {
+    const item = { id: 'abc1', title: 'COO', url: 'https://hh.ru/resume/abc1' };
+    await Promise.allSettled([readHhResumes(), readHhResumeContent(item)]);
+    expect(session.openConnectorSession).toHaveBeenCalledOnce();
+  });
+
+  it('правка резюме: окно открывается сначала; страница входа — not_signed_in без команды', async () => {
+    const edit = { resumeId: 'abc1', section: 'title' as const, text: 'COO', skills: [] };
+    bridge.invokeDesktopCommand.mockResolvedValue({ outcome: 'applied' });
+    await expect(applyHhResumeEditInSession(edit)).resolves.toEqual({ outcome: 'applied' });
+    expect(session.openConnectorSession).toHaveBeenCalledOnce();
+    expect(bridge.invokeDesktopCommand).toHaveBeenCalledOnce();
+    session.inspectSessionPage.mockResolvedValue(login);
+    const refused = applyHhResumeEditInSession(edit);
+    await vi.advanceTimersByTimeAsync(HH_WINDOW_READY_MS);
+    await expect(refused).resolves.toEqual({ outcome: 'failed', failureCode: 'not_signed_in' });
+    expect(bridge.invokeDesktopCommand).toHaveBeenCalledOnce();
   });
 });
 
