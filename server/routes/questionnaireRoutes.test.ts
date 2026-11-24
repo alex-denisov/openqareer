@@ -7,7 +7,11 @@ import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
-import { SqliteQuestionnaireRepository, type StoredQuestionnaire } from '../candidate/sqliteQuestionnaireRepository';
+import {
+  QUESTIONNAIRE_MAX_PER_CANDIDATE,
+  SqliteQuestionnaireRepository,
+  type StoredQuestionnaire,
+} from '../candidate/sqliteQuestionnaireRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { isQuestionnaireFresh, mergeReadQuestions } from './questionnaireRoutes';
@@ -26,9 +30,15 @@ const ORIGIN = 'http://localhost:3000';
 const flagged = 'token-flagged';
 const plain = 'token-plain';
 const other = 'token-other';
-const url = (vacancy: string, tail = '') => `/api/v1/candidate/vacancies/${vacancy}/questionnaire${tail}`;
+const url = (vacancy: string, tail = '') =>
+  `/api/v1/candidate/vacancies/${vacancy}/questionnaire${tail}`;
 const QUESTIONS = [
-  { id: 'q1', text: 'Сколько человек было в вашей команде?', required: true, kind: 'text' as const },
+  {
+    id: 'q1',
+    text: 'Сколько человек было в вашей команде?',
+    required: true,
+    kind: 'text' as const,
+  },
   { id: 'q2', text: 'Ожидаемый уровень дохода?', required: true, kind: 'text' as const },
   { id: 'q3', text: 'Готовы ли к командировкам?', required: false, kind: 'text' as const },
 ];
@@ -66,7 +76,13 @@ async function setup() {
     ...noSessions,
     authenticate: (token: string) => sessions.get(token) ?? null,
   };
-  const app = await buildApp({ config, candidateStore, authService, coachProvider: {} as never, serveStatic: false });
+  const app = await buildApp({
+    config,
+    candidateStore,
+    authService,
+    coachProvider: {} as never,
+    serveStatic: false,
+  });
   const forms = new SqliteQuestionnaireRepository({
     databasePath: config.databasePath,
     encryptionKey: config.dataEncryptionKey,
@@ -87,7 +103,13 @@ async function setup() {
   return { app, seed, forms, sessions, candidateStore, databasePath: config.databasePath };
 }
 
-function call(app: App, method: 'GET' | 'PUT' | 'POST', path: string, token?: string, payload?: unknown) {
+function call(
+  app: App,
+  method: 'GET' | 'PUT' | 'POST',
+  path: string,
+  token?: string,
+  payload?: unknown,
+) {
   return app.inject({
     method,
     url: path,
@@ -96,7 +118,9 @@ function call(app: App, method: 'GET' | 'PUT' | 'POST', path: string, token?: st
   });
 }
 
-function rows(databasePath: string): Array<{ answers_cipher: string | null; submitted_at: string | null }> {
+function rows(
+  databasePath: string,
+): Array<{ answers_cipher: string | null; submitted_at: string | null }> {
   const database = new DatabaseSync(databasePath);
   try {
     return database
@@ -142,7 +166,12 @@ describe('questionnaire routes with the B640 flag', () => {
     const { app, databasePath } = await setup();
     const response = await call(app, 'GET', url('v-unknown'), flagged);
     expect(response.statusCode).toBe(200);
-    expect(response.json().data).toMatchObject({ state: 'none', questions: [], total: 0, formUrl: null });
+    expect(response.json().data).toMatchObject({
+      state: 'none',
+      questions: [],
+      total: 0,
+      formUrl: null,
+    });
     expect(rows(databasePath)).toEqual([]);
   });
 
@@ -150,9 +179,14 @@ describe('questionnaire routes with the B640 flag', () => {
     const { app, seed, databasePath } = await setup();
     seed(flagged, 'v1');
     const database = new DatabaseSync(databasePath);
-    database.prepare("UPDATE application_questionnaires SET read_at = '2026-01-01T00:00:00.000Z'").run();
+    database
+      .prepare("UPDATE application_questionnaires SET read_at = '2026-01-01T00:00:00.000Z'")
+      .run();
     database.close();
-    expect((await call(app, 'GET', url('v1'), flagged)).json().data).toMatchObject({ state: 'ready', total: 3 });
+    expect((await call(app, 'GET', url('v1'), flagged)).json().data).toMatchObject({
+      state: 'ready',
+      total: 3,
+    });
   });
 
   it('returns questions with readiness and saves answers sealed', async () => {
@@ -200,7 +234,13 @@ describe('questionnaire routes with the B640 flag', () => {
     forms.saveQuestions(candidateId, 'v2', {
       questions: [
         { id: 'q1', text: 'LinkedIn Profile', required: true, kind: 'text' },
-        { id: 'q2', text: 'Country of residence', required: true, kind: 'choice', options: ['Germany', 'Россия'] },
+        {
+          id: 'q2',
+          text: 'Country of residence',
+          required: true,
+          kind: 'choice',
+          options: ['Germany', 'Россия'],
+        },
         { id: 'q3', text: 'Website', required: false, kind: 'text' },
         { id: 'q4', text: 'Are you authorized to work in the EU?', required: true, kind: 'text' },
       ],
@@ -223,8 +263,13 @@ describe('questionnaire routes with the B640 flag', () => {
     const saved = await call(app, 'PUT', url('v2', '/answers'), flagged, {
       answers: [{ questionId: 'q1', text: 'linkedin.com/in/other' }],
     });
-    expect(saved.json().data.answers[0]).toEqual({ questionId: 'q1', text: 'linkedin.com/in/other' });
-    expect(saved.json().data.suggestions.map((item: { questionId: string }) => item.questionId)).toEqual(['q2', 'q3']);
+    expect(saved.json().data.answers[0]).toEqual({
+      questionId: 'q1',
+      text: 'linkedin.com/in/other',
+    });
+    expect(
+      saved.json().data.suggestions.map((item: { questionId: string }) => item.questionId),
+    ).toEqual(['q2', 'q3']);
     // Другой кандидат чужих контактов не получает.
     forms.saveQuestions(sessions.get(other)!.candidate!.id, 'v2', {
       questions: [{ id: 'q1', text: 'LinkedIn Profile', required: true, kind: 'text' }],
@@ -265,7 +310,10 @@ describe('questionnaire routes with the B640 flag', () => {
       formUrl: null,
       questions: [
         {
-          id: 'q1', text: 'Country', required: true, kind: 'choice',
+          id: 'q1',
+          text: 'Country',
+          required: true,
+          kind: 'choice',
           options: Array.from({ length: count }, (_, index) => `C${index}`),
         },
       ],
@@ -283,7 +331,10 @@ describe('questionnaire routes with the B640 flag', () => {
 
   it('B641: a repeated read takes the full list and keeps answered questions the board dropped', () => {
     const question = (id: string, count: number) => ({
-      id, text: id, required: true, kind: 'choice' as const,
+      id,
+      text: id,
+      required: true,
+      kind: 'choice' as const,
       options: Array.from({ length: count }, (_, index) => `C${index}`),
     });
     const merged = mergeReadQuestions(
@@ -297,18 +348,26 @@ describe('questionnaire routes with the B640 flag', () => {
       },
       [question('q1', 255)],
     );
-    expect(merged.map((item) => [item.id, item.options?.length])).toEqual([['q1', 255], ['gone', 2]]);
+    expect(merged.map((item) => [item.id, item.options?.length])).toEqual([
+      ['q1', 255],
+      ['gone', 2],
+    ]);
     expect(mergeReadQuestions(null, [question('q1', 255)])).toHaveLength(1);
   });
 
   it('keeps one candidate away from another candidate questionnaire', async () => {
     const { app, seed, databasePath } = await setup();
     seed(flagged, 'v1');
-    await call(app, 'PUT', url('v1', '/answers'), flagged, { answers: [{ questionId: 'q1', text: 'моё' }] });
+    await call(app, 'PUT', url('v1', '/answers'), flagged, {
+      answers: [{ questionId: 'q1', text: 'моё' }],
+    });
     expect((await call(app, 'GET', url('v1'), other)).json().data.state).toBe('none');
     expect(
-      (await call(app, 'PUT', url('v1', '/answers'), other, { answers: [{ questionId: 'q1', text: 'чужое' }] }))
-        .statusCode,
+      (
+        await call(app, 'PUT', url('v1', '/answers'), other, {
+          answers: [{ questionId: 'q1', text: 'чужое' }],
+        })
+      ).statusCode,
     ).toBe(404);
     expect((await call(app, 'POST', url('v1', '/submitted'), other)).statusCode).toBe(404);
     expect(rows(databasePath)).toHaveLength(1);
@@ -326,7 +385,9 @@ describe('questionnaire routes with the B640 flag', () => {
       { answers: Array.from({ length: 41 }, () => ({ questionId: 'q1', text: 'x' })) },
     ];
     for (const payload of bad) {
-      expect((await call(app, 'PUT', url('v1', '/answers'), flagged, payload)).statusCode).toBe(400);
+      expect((await call(app, 'PUT', url('v1', '/answers'), flagged, payload)).statusCode).toBe(
+        400,
+      );
     }
     expect((await call(app, 'GET', url('x'.repeat(201)), flagged)).statusCode).toBe(400);
   });
@@ -337,7 +398,9 @@ describe('questionnaire routes with the B640 flag', () => {
     seed(flagged, 'v1');
     const done = await call(app, 'POST', url('v1', '/submitted'), flagged);
     expect(done.statusCode).toBe(200);
-    expect((await call(app, 'GET', url('v1'), flagged)).json().data.submittedAt).toBe(done.json().data.submittedAt);
+    expect((await call(app, 'GET', url('v1'), flagged)).json().data.submittedAt).toBe(
+      done.json().data.submittedAt,
+    );
   });
 
   it('refuses a write from a foreign origin', async () => {
@@ -357,11 +420,15 @@ describe('questionnaire routes with the B640 flag', () => {
 describe('B641: анкета hh.ru из окна кандидата', () => {
   it('сохраняет вопросы своему кандидату; адрес — только страница с номером вакансии', async () => {
     const { app, candidateStore, sessions } = await setup();
-    candidateStore.decisionProfileRepo.put(sessions.get(flagged)!.candidate!.id, {
-      salaryFloor: 500000,
-      salaryCurrency: 'RUB',
-      workFormats: [],
-    } as never, '2026-11-24T00:00:00.000Z');
+    candidateStore.decisionProfileRepo.put(
+      sessions.get(flagged)!.candidate!.id,
+      {
+        salaryFloor: 500000,
+        salaryCurrency: 'RUB',
+        workFormats: [],
+      } as never,
+      '2026-11-24T00:00:00.000Z',
+    );
     const saved = await call(app, 'PUT', url('v1', '/hh-form'), flagged, HH_FORM);
     expect(saved.statusCode).toBe(200);
     const data = saved.json().data;
@@ -378,10 +445,15 @@ describe('B641: анкета hh.ru из окна кандидата', () => {
     const [first] = data.questions;
     const answers = [{ questionId: first.id, text: 'от 600 000 ₽' }];
     await call(app, 'PUT', url('v1', '/answers'), flagged, { answers });
-    const changed = { ...HH_FORM, questions: [{ text: 'Срок выхода?', required: true, kind: 'text' }] };
+    const changed = {
+      ...HH_FORM,
+      questions: [{ text: 'Срок выхода?', required: true, kind: 'text' }],
+    };
     const next = (await call(app, 'PUT', url('v1', '/hh-form'), flagged, changed)).json().data;
     const fresh = next.questions.find((item: { text: string }) => item.text === 'Срок выхода?');
-    expect(next.answers.map((item: { questionId: string }) => item.questionId)).not.toContain(fresh.id);
+    expect(next.answers.map((item: { questionId: string }) => item.questionId)).not.toContain(
+      fresh.id,
+    );
   });
 
   it.each([
@@ -390,11 +462,51 @@ describe('B641: анкета hh.ru из окна кандидата', () => {
     ['другая страница', { ...HH_FORM, url: 'https://hh.ru/resume/77' }],
     ['без вопросов', { ...HH_FORM, questions: [] }],
     ['лишнее поле', { ...HH_FORM, html: '<form>' }],
-    ['выбор без вариантов', { ...HH_FORM, questions: [{ text: 'А?', required: true, kind: 'choice' }] }],
+    [
+      'вариантов слишком много',
+      {
+        ...HH_FORM,
+        questions: Array.from({ length: 4 }, (_, i) => ({
+          text: `Вопрос ${i}`,
+          required: true,
+          kind: 'choice',
+          options: Array.from({ length: 200 }, (_o, j) => `Вариант ${j}`),
+        })),
+      },
+    ],
+    [
+      'выбор без вариантов',
+      { ...HH_FORM, questions: [{ text: 'А?', required: true, kind: 'choice' }] },
+    ],
   ])('отклоняет: %s', async (_name, body) => {
     const { app, databasePath } = await setup();
     expect((await call(app, 'PUT', url('v1', '/hh-form'), flagged, body)).statusCode).toBe(400);
-    expect((await call(app, 'PUT', url('v1', '/hh-form'), undefined, HH_FORM)).statusCode).not.toBe(200);
+    expect((await call(app, 'PUT', url('v1', '/hh-form'), undefined, HH_FORM)).statusCode).not.toBe(
+      200,
+    );
     expect(rows(databasePath)).toEqual([]);
+  });
+
+  it('число анкет на кандидата ограничено: старые без ответов вытесняются первыми', async () => {
+    const { app, databasePath, sessions } = await setup();
+    const candidateId = sessions.get(flagged)!.candidate!.id;
+    const repo = new SqliteQuestionnaireRepository({
+      databasePath,
+      encryptionKey: baseConfig.dataEncryptionKey,
+    });
+    const questions = [{ id: 'q', text: 'А?', kind: 'text' as const, required: true }];
+    const at = (n: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, n)).toISOString();
+    for (let n = 0; n < QUESTIONNAIRE_MAX_PER_CANDIDATE; n += 1) {
+      repo.saveQuestions(candidateId, `old-${n}`, { questions, formUrl: null, readAt: at(n) });
+    }
+    repo.saveAnswers(candidateId, 'old-0', [{ questionId: 'q', text: 'мой ответ' }]);
+    const saved = await call(app, 'PUT', url('v1', '/hh-form'), flagged, HH_FORM);
+    expect(saved.statusCode).toBe(200);
+    const kept = repo.exportAll(candidateId).map((item) => item.vacancyId);
+    expect(kept).toHaveLength(QUESTIONNAIRE_MAX_PER_CANDIDATE);
+    expect(kept).toContain('old-0');
+    expect(kept).not.toContain('old-1');
+    expect(kept).toContain('v1');
+    repo.close();
   });
 });

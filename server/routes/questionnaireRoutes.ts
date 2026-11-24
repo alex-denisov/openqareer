@@ -12,8 +12,15 @@ import {
 } from '../candidate/sqliteQuestionnaireRepository';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
 import { hhFormUrl } from '../../shared/hhCandidateSession';
-import { answersToStore, buildQuestionnaire, hhQuestions } from '../domain/applicationQuestionnaire';
-import { linkedinProfileLink, type QuestionnaireProfileFacts } from '../domain/questionnaireProfileAnswers';
+import {
+  answersToStore,
+  buildQuestionnaire,
+  hhQuestions,
+} from '../domain/applicationQuestionnaire';
+import {
+  linkedinProfileLink,
+  type QuestionnaireProfileFacts,
+} from '../domain/questionnaireProfileAnswers';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -94,6 +101,9 @@ const answersSchema = z
 
 const FORM_URL_MAX_LENGTH = 2048;
 
+/** Вариантов во всей анкете: строка остаётся в пределах десятков килобайт. */
+const HH_FORM_MAX_OPTIONS = 600;
+
 /** Вопросы, прочитанные приложением в окне hh.ru кандидата. */
 const hhFormSchema = z
   .object({
@@ -113,14 +123,20 @@ const hhFormSchema = z
       .min(1)
       .max(QUESTIONNAIRE_MAX_QUESTIONS),
   })
-  .strict();
+  .strict()
+  .refine(
+    ({ questions }) =>
+      questions.reduce((sum, item) => sum + (item.options?.length ?? 0), 0) <= HH_FORM_MAX_OPTIONS,
+  );
 
 /** Ссылка на страницу анкеты: только https, без логина в адресе и разумной длины. */
 function safeUrl(url: string | undefined): string | null {
   if (!url || url.length > FORM_URL_MAX_LENGTH) return null;
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' && !parsed.username && !parsed.password ? parsed.href : null;
+    return parsed.protocol === 'https:' && !parsed.username && !parsed.password
+      ? parsed.href
+      : null;
   } catch {
     return null;
   }
@@ -133,7 +149,9 @@ function poolReader(deps: RouteDeps): QuestionnaireReader {
     if (!vacancy) return null;
     const ref = greenhouseJobRef(vacancy);
     const formUrl = safeUrl(vacancy.url);
-    return ref ? { questions: await readGreenhouseQuestions(ref), formUrl } : { questions: null, formUrl };
+    return ref
+      ? { questions: await readGreenhouseQuestions(ref), formUrl }
+      : { questions: null, formUrl };
   };
 }
 
@@ -172,7 +190,10 @@ function vacancyLabel(
   const vacancy = deps.multiSourceEngine.getVacancy?.(vacancyId.replace(/^cluster-/u, ''));
   const title = (cluster?.canonicalTitle ?? vacancy?.title ?? '').trim();
   const company = (cluster?.canonicalCompany ?? vacancy?.company ?? '').trim();
-  return { ...(title ? { vacancyTitle: title } : {}), ...(company ? { vacancyCompany: company } : {}) };
+  return {
+    ...(title ? { vacancyTitle: title } : {}),
+    ...(company ? { vacancyCompany: company } : {}),
+  };
 }
 
 /** Ссылка из контактов: с http(s) как есть, LinkedIn без схемы — полной, прочее не берём. */
@@ -229,7 +250,10 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   if (!who) return reply;
   const known = deps.forms.get(who.candidateId, who.vacancyId);
   if (known && isQuestionnaireFresh(known, Date.now())) {
-    return { data: view(deps, who, known, { state: 'ready', formUrl: null }), meta: { requestId: request.id } };
+    return {
+      data: view(deps, who, known, { state: 'ready', formUrl: null }),
+      meta: { requestId: request.id },
+    };
   }
   const source = await deps.reader(who.vacancyId);
   // Пустой список тоже запоминаем: вакансию без анкеты не читаем у площадки при каждом заходе.
@@ -255,7 +279,14 @@ const putAnswers: Handler = async (deps, request, reply) => {
   if (!who) return reply;
   const parsed = answersSchema.safeParse(request.body ?? {});
   if (!parsed.success) {
-    return sendError(reply, request, 400, 'invalid_questionnaire_answers', 'Проверьте ответы.', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_questionnaire_answers',
+      'Проверьте ответы.',
+      false,
+    );
   }
   const stored = deps.forms.get(who.candidateId, who.vacancyId);
   if (!stored) {
@@ -277,7 +308,14 @@ const putHhForm: Handler = async (deps, request, reply) => {
   const formUrl = parsed.success ? hhFormUrl(parsed.data.url) : null;
   const questions = parsed.success ? hhQuestions(parsed.data.questions) : [];
   if (!formUrl || questions.length === 0) {
-    return sendError(reply, request, 400, 'invalid_hh_form', 'Вопросы анкеты не прочитались.', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_hh_form',
+      'Вопросы анкеты не прочитались.',
+      false,
+    );
   }
   const known = deps.forms.get(who.candidateId, who.vacancyId);
   deps.forms.saveQuestions(who.candidateId, who.vacancyId, {
@@ -286,7 +324,10 @@ const putHhForm: Handler = async (deps, request, reply) => {
     readAt: new Date().toISOString(),
   });
   const stored = deps.forms.get(who.candidateId, who.vacancyId);
-  return { data: view(deps, who, stored, { state: 'none', formUrl: null }), meta: { requestId: request.id } };
+  return {
+    data: view(deps, who, stored, { state: 'none', formUrl: null }),
+    meta: { requestId: request.id },
+  };
 };
 
 const postSubmitted: Handler = async (deps, request, reply) => {
@@ -299,7 +340,10 @@ const postSubmitted: Handler = async (deps, request, reply) => {
   return { data: { submittedAt: at }, meta: { requestId: request.id } };
 };
 
-export function registerQuestionnaireRoutes(app: FastifyInstance, deps: QuestionnaireRouteDeps): void {
+export function registerQuestionnaireRoutes(
+  app: FastifyInstance,
+  deps: QuestionnaireRouteDeps,
+): void {
   const repository =
     deps.questionnaireRepository ??
     new SqliteQuestionnaireRepository({
