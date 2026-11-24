@@ -154,3 +154,50 @@ describe('sameCareerRole: аббревиатура в скобках роль н
     expect(sameCareerRole('(CTO)', 'CTO')).toBe(true);
   });
 });
+
+describe('sameCareerRole: функции директорского уровня различаются (B766)', () => {
+  it('COO, CCO, CISO — не CTO', () => {
+    for (const title of [
+      'Chief Operating Officer',
+      'Chief Operating Officer (COO)',
+      'Chief Customer Officer',
+      'Chief Client Officer',
+      'Chief Information Security Officer',
+      'CISO',
+    ])
+      expect(sameCareerRole(title, 'Chief Technology Officer')).toBe(false);
+  });
+
+  it('CISO и CIO — разные роли словаря, хотя «information» у них общее', () => {
+    expect(sameCareerRole('Chief Information Security Officer', 'Chief Information Officer')).toBe(
+      false,
+    );
+    expect(sameCareerRole('Chief Information Officer', 'Chief Information Security Officer')).toBe(
+      false,
+    );
+  });
+
+  it('название сразу двух первых лиц относится к обеим ролям', () => {
+    expect(
+      sameCareerRole(
+        'Chief Information Officer / Chief Information Security Officer',
+        'Chief Information Officer',
+      ),
+    ).toBe(true);
+  });
+
+  it('синонимы CTO остаются', () => {
+    for (const title of [
+      'CTO',
+      'Технический директор',
+      'VP Engineering',
+      'VP of Engineering',
+      'Chief Product & Technology Officer',
+      'Chief Technical Officer',
+      'Field CTO',
+      'CTO / chief technical officer / ИТ-Директор (IT Infrastructure & Ops)',
+    ])
+      expect(sameCareerRole(title, 'Chief Technology Officer')).toBe(true);
+    expect(sameCareerRole('Director of Information Technology', 'IT Director')).toBe(true);
+  });
+});

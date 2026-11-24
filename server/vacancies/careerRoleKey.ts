@@ -1,5 +1,5 @@
 import { ontology } from '../../shared/roleOntology';
-import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
+import { titleContainsRole, titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
 import { titleKey } from '../../shared/poolRoleHypotheses';
 import { rulesParse } from './titleParse/rulesParse';
 
@@ -83,7 +83,9 @@ function rowKeyOf(title: string): string | null {
   const chief =
     parsed.levelRank === CHIEF_RANK ||
     (parsed.roleId ? ontology.rolesById.get(parsed.roleId)?.levels.includes('c-level') : false);
-  return primary && chief && !UNMERGED_FUNCTIONS.has(primary) ? `${primary}:chief` : careerRoleKey(title);
+  return primary && chief && !UNMERGED_FUNCTIONS.has(primary)
+    ? `${primary}:chief`
+    : careerRoleKey(title);
 }
 
 /**
@@ -130,9 +132,25 @@ export function careerRoleListKey(title: string): string | null {
  */
 export function sameCareerRole(vacancyTitle: string, role: string): boolean {
   const title = withoutBracketed(vacancyTitle);
-  if (titleMatchesRole(title, role)) return true;
+  if (titleMatchesRole(title, role) && !differentChiefs(title, role)) return true;
   const roleKey = careerRoleKey(role);
   return roleKey !== null && careerRoleKey(title) === roleKey;
+}
+
+/**
+ * B766: два разных первых лица словаря — разные роли, даже если часть слов общая: Chief Information
+ * Security Officer и Chief Information Officer. Название, где роль стоит целиком, остаётся.
+ */
+function differentChiefs(title: string, role: string): boolean {
+  const roleChief = chiefRoleId(role);
+  if (roleChief === null || titleContainsRole(title, role)) return false;
+  const titleChief = chiefRoleId(title);
+  return titleChief !== null && titleChief !== roleChief;
+}
+
+function chiefRoleId(title: string): string | null {
+  const { roleId } = rulesParse(title);
+  return roleId && ontology.rolesById.get(roleId)?.levels.includes('c-level') ? roleId : null;
 }
 
 /**
