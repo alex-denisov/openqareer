@@ -1,5 +1,13 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
-import { readClusterSplitConfig, runClusterSplitDriver } from './clusterSplitDriver';
+import {
+  checkpointPassive,
+  readClusterSplitConfig,
+  runClusterSplitDriver,
+} from './clusterSplitDriver';
 import type { ClusterSplitStepResult } from '../vacancies/clusterSplitStep';
 
 const GIB = 1024 ** 3;
@@ -67,10 +75,27 @@ describe('cluster split driver (B752)', () => {
     expect(step).not.toHaveBeenCalled();
   });
 
+  it('the checkpoint does not wait for the write lock another connection holds', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'b752-')), 'wal.db');
+    const writer = new DatabaseSync(path);
+    writer.exec(
+      'PRAGMA journal_mode = WAL; CREATE TABLE t (v); BEGIN IMMEDIATE; INSERT INTO t VALUES (1)',
+    );
+    const db = new DatabaseSync(path);
+    db.exec('PRAGMA busy_timeout = 3000');
+    const at = performance.now();
+    checkpointPassive(db);
+    expect(performance.now() - at).toBeLessThan(1_000);
+    writer.exec('COMMIT');
+    writer.close();
+    db.close();
+  });
+
   it('runs steps with a checkpoint and a pause each, until completed', async () => {
-    const { options, checkpoint, sleep } = probes();
+    const { options, checkpoint, sleep, step } = probes();
     expect(await runClusterSplitDriver(options)).toEqual({ steps: 3, reason: 'completed' });
-    expect(checkpoint).toHaveBeenCalledTimes(3);
+    expect(checkpoint).toHaveBeenCalledTimes(4);
+    expect(checkpoint.mock.invocationCallOrder[0]).toBeLessThan(step.mock.invocationCallOrder[0]!);
     expect(sleep).toHaveBeenCalledWith(2_000);
   });
 
