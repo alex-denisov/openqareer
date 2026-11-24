@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Icon, InfoTip, Link } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
-import { useShell } from '../shell/ShellContext';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import { pageAttrs } from './careerPaths';
@@ -202,6 +202,9 @@ const stateOf = (data: GrowthData): string => (data.state === 'ready' ? 's12' : 
 /** S12 «Карьера» при «Работаю»: цель роста в нынешней компании (s12a — цель не задана). */
 export function GrowthScreen({ node }: { readonly node: B640Node }) {
   const load = useLoad(loadGrowth);
+  // Плотные отступы 390 — только у s12; в макете s12a их нет.
+  const ready = load.state === 'ready' && load.data.state === 'ready';
+  useScreenChrome(ready ? { rootData: { mtight: '1' } } : {});
   if (load.state === 'loading')
     return (
       <div className="page" {...pageAttrs(node)}>

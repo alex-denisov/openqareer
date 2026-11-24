@@ -164,9 +164,14 @@ test.describe('B654: карточка вакансии нового кабине
   test('на 390 «Откликнуться» закреплена внизу', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390', 'телефон');
     await openCard(page);
-    const apply = page.locator('.m-commit .is-primary');
+    const dock = page.locator('.v4-act-main');
+    const apply = dock.locator('.is-primary');
     await expect(apply).toBeVisible();
     const box = await apply.boundingBox();
+    // Макет v04: кнопка в правой половине (195, 179), полоса 61 px.
+    expect(Math.round(box?.x ?? 0)).toBe(195);
+    expect(Math.round(box?.width ?? 0)).toBe(179);
+    expect(Math.round((await dock.boundingBox())?.height ?? 0)).toBe(61);
     const height = page.viewportSize()?.height ?? 0;
     expect(box && box.y + box.height).toBeLessThanOrEqual(height);
     const hasScroll = await page.evaluate(
