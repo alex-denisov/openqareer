@@ -388,3 +388,45 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     ? [...checked, ...greeted, ...distorted, ...cyrillic]
     : [...checked, ...greeted, ...distorted, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }
+
+function quantityKey(item: Quantity): string {
+  return [item.kind, item.value, item.currency ?? ''].join(':');
+}
+
+/** Переход «с 23% до 68%» держится на фразе профиля, где стоят оба числа: порознь они могут быть о другом. */
+function backedTransition([from, to]: [number, number], source: readonly Quantity[]): boolean {
+  return [from, to].every((number) =>
+    source.some((item) => item.written === number || item.value === number));
+}
+
+/** Переходы «с А до Б», которых нет ни в одной фразе профиля: письмо может собрать их из двух фраз. */
+export function unbackedLetterTransitions(
+  body: string,
+  candidate: readonly string[],
+  vacancy: readonly string[],
+): string[] {
+  const perSentence = candidate
+    .flatMap(sentencesOf)
+    .filter((sentence) => !NEGATED.test(sentence))
+    .map(quantities);
+  const found = sentencesOf(body)
+    .flatMap((sentence) => transitions(withoutVacancyText(sentence, vacancy)))
+    .filter((pair) => !perSentence.some((source) => backedTransition(pair, source)));
+  return [...new Set(found.map(([from, to]) => `transition:${from}:${to}`))];
+}
+
+/** Числа письма, которых нет в профиле: те же правила, что у проверки готового письма. */
+export function unbackedLetterNumbers(
+  body: string,
+  candidate: readonly string[],
+  vacancy: readonly string[],
+): string[] {
+  const known = candidate
+    .flatMap(sentencesOf)
+    .filter((sentence) => !NEGATED.test(sentence))
+    .flatMap(quantities);
+  const found = sentencesOf(body)
+    .flatMap((sentence) => quantities(withoutVacancyText(sentence, vacancy)))
+    .filter((wanted) => !known.some((item) => backedBy(wanted, item)));
+  return [...new Set(found.map(quantityKey))];
+}
