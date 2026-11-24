@@ -9,7 +9,7 @@ import { sendFrom } from '../responses/model/platform';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import type { ApplyHead } from './model/applyModel';
-import { HhSendStep } from './hh/HhSendStep';
+import { HhSendStep, type HhSendStepProps } from './hh/HhSendStep';
 
 type Sent =
   { readonly kind: 'idle' | 'busy' | 'done' } | { readonly kind: 'error'; readonly text: string };
@@ -145,6 +145,9 @@ export interface SendStepProps {
   readonly letterText: string;
   /** Ответы анкеты работодателя для вставки; пусто — анкеты нет. */
   readonly answersText?: string;
+  /** Анкета hh.ru в приложении (B641). */
+  readonly form: HhSendStepProps['form'];
+  readonly onForm: HhSendStepProps['onForm'];
   readonly onLetter: () => void;
 }
 
@@ -165,6 +168,8 @@ export function SendStep(props: SendStepProps) {
       letterText={letterText}
       onSent={() => markApplied({ vacancyId, head, sourceType, applicationId })}
       onLetter={props.onLetter}
+      form={props.form}
+      onForm={props.onForm}
     />
   );
 }

@@ -5,7 +5,7 @@ import type {
   B640NotificationKind,
   NotificationFilter,
 } from './b640NotificationsApi';
-import { notificationWhen, type NotificationAction } from './notificationsModel';
+import { COMMENT_ACTION, notificationWhen, type NotificationAction } from './notificationsModel';
 
 /** Фильтры ленты N01b по категории события. */
 export const FEED_FILTERS: readonly {
@@ -42,6 +42,7 @@ const KIND_ACTION: Record<
 
 /** Одно действие события: отклик по его id, иначе раздел кабинета. */
 export function feedAction(item: B640Notification): NotificationAction {
+  if (item.sourceType === 'linkedin_queue_comment') return COMMENT_ACTION;
   const action = KIND_ACTION[item.kind];
   if (!('response' in action)) return action;
   return item.sourceType === 'application'

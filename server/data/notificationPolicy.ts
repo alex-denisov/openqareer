@@ -53,7 +53,7 @@ export interface NotificationItem {
   readonly readAt: string | null;
   readonly action: { readonly label: string; readonly href: string };
   /** B690: только у уведомлений о входе в площадку; у остальных поля нет. */
-  readonly source?: typeof HH_SESSION_SOURCE;
+  readonly source?: typeof HH_SESSION_SOURCE | typeof LINKEDIN_COMMENT_SOURCE;
 }
 
 export interface NotificationPage {
@@ -109,6 +109,10 @@ export const HH_SESSION_SOURCE = 'hh_session';
 /** B695: напоминание о посте ведёт в очередь постов нового кабинета (a03b). */
 export const LINKEDIN_POSTS_PATH = '/app/profile/linkedin/posts';
 
+/** B695: источник напоминания о комментарии; вид — `post_reminder`, ведёт в ленту (a05). */
+export const LINKEDIN_COMMENT_SOURCE = 'linkedin_queue_comment';
+export const LINKEDIN_FEED_PATH = '/app/profile/linkedin/feed';
+
 export function presentNotification(
   input: {
     readonly id: string;
@@ -126,6 +130,14 @@ export function presentNotification(
       title: 'Вход в hh.ru истёк',
       action: { label: 'Войти снова', href: '/app/account/connections' },
       source: HH_SESSION_SOURCE,
+    };
+  }
+  if (input.sourceType === LINKEDIN_COMMENT_SOURCE) {
+    return {
+      ...base,
+      title: 'Пора оставить комментарий',
+      action: { label: 'Открыть комментарий', href: LINKEDIN_FEED_PATH },
+      source: LINKEDIN_COMMENT_SOURCE,
     };
   }
   const presentation = EVENT_PRESENTATION[input.kind];

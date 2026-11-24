@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { HhFormQuestion } from '../../shared/hhCandidateSession';
 import {
   QUESTIONNAIRE_ANSWER_MAX_LENGTH,
   QUESTIONNAIRE_MAX_QUESTIONS,
@@ -71,6 +73,31 @@ export function parseGreenhouseQuestions(payload: unknown): readonly Questionnai
       return [question];
     })
     .slice(0, QUESTIONNAIRE_MAX_QUESTIONS);
+}
+
+/**
+ * Вопросы hh.ru из окна кандидата — чужой текст. Идентификатор считается из самого вопроса: если
+ * работодатель поменяет вопрос, прежний ответ не окажется под новым.
+ */
+export function hhQuestions(raw: readonly HhFormQuestion[]): readonly QuestionnaireQuestion[] {
+  const byId = new Map<string, QuestionnaireQuestion>();
+  for (const item of raw) {
+    const text = clip(item.text, QUESTION_TEXT_MAX_LENGTH);
+    const options = (item.options ?? []).map((option) => clip(option, OPTION_MAX_LENGTH)).filter(Boolean);
+    if (!text || (item.kind === 'choice' && options.length === 0)) continue;
+    const id = `hh-${createHash('sha256')
+      .update(JSON.stringify([text, item.kind, options]))
+      .digest('hex')
+      .slice(0, 24)}`;
+    const base = { id, text, required: item.required };
+    byId.set(
+      id,
+      item.kind === 'text'
+        ? { ...base, kind: 'text' }
+        : { ...base, kind: 'choice', options, ...(item.multiple ? { multiple: true } : {}) },
+    );
+  }
+  return [...byId.values()];
 }
 
 export interface SalaryProfile {

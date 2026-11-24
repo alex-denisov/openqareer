@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import { listApplications, type ApplicationView } from '../../applications/applicationsApi';
 import { fetchTariffQuotas, type TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
@@ -15,7 +15,8 @@ import { CtxHead } from '../shell/CtxHead';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { FormStep, useQuestionnaire, type QuestionnaireState } from './FormStep';
 import { LetterStep } from './LetterStep';
-import { copyText } from './model/formModel';
+import type { HhSendStepProps } from './hh/HhSendStep';
+import { copyText, readiness } from './model/formModel';
 import {
   stepsFor,
   applyRoute,
@@ -138,13 +139,15 @@ interface BodyProps {
   readonly variants: LetterVariantsState;
   /** Ответы анкеты одним текстом для вставки на площадке; пусто — анкеты нет. */
   readonly answers: string;
+  readonly hhForm: HhSendStepProps['form'];
+  readonly onHhForm: HhSendStepProps['onForm'];
   readonly resumeOk: boolean;
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: BodyProps) {
+function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm }: BodyProps) {
   return (
     <>
       <div className="col">
@@ -155,6 +158,8 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: Bod
           approved={letter.approval.saved}
           letterText={letter.draft.text}
           answersText={answers}
+          form={hhForm}
+          onForm={onHhForm}
           onLetter={() => setStep('letter')}
         />
       </div>
@@ -258,6 +263,33 @@ function useApplyLetter(vacancyId: string) {
   return { letter, variants };
 }
 
+/** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
+function applyForm(
+  questionnaire: QuestionnaireState,
+  setStep: Dispatch<SetStateAction<ApplyStep>>,
+): Pick<BodyProps, 'answers' | 'hhForm' | 'onHhForm'> {
+  const { form, draft } = questionnaire;
+  const answers = form ? copyText(form.questions, draft) : '';
+  const ready = form ? readiness(form.questions, draft) : null;
+  return {
+    answers,
+    hhForm: ready
+      ? {
+          answered: ready.answered,
+          complete: ready.missingRequired === 0,
+          answersText: answers,
+          open: () => setStep('form'),
+        }
+      : null,
+    // Отклик без анкеты не ушёл: прочитанные вопросы открываются сразу.
+    onHhForm: async (hhForm, open) => {
+      if ((await questionnaire.takeHhForm(hhForm)) && open) {
+        setStep((now) => (now === 'send' ? 'form' : now));
+      }
+    },
+  };
+}
+
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
 function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const { search } = useShell();
@@ -298,7 +330,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
       setStep,
       letter,
       variants,
-      answers: form ? copyText(form.questions, questionnaire.draft) : '',
+      ...applyForm(questionnaire, setStep),
       resumeOk: resumeDone,
       resumeSeen,
       onResumeOk: () => {
