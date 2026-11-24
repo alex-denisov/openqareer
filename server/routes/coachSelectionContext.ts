@@ -1,5 +1,7 @@
 import type { FastifyRequest } from 'fastify';
+import { parseRemoteScope, remoteScopeLabel } from '../../shared/remoteScope';
 import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
+import { detectVacancyWorkFormat, workFormatLabel } from '../../shared/vacancyWorkFormat';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readB640PoolRows } from './b640MatchedVacancyRoutes';
 import { readB640ListContext } from './b640VacancyContext';
@@ -12,6 +14,10 @@ export const SELECTION_CONTEXT_ROWS = 20;
 export interface SelectionContextRow {
   readonly title: string;
   readonly company: string | null;
+  /** Место из вакансии; null — площадка его не назвала. */
+  readonly location: string | null;
+  /** «офис», «гибрид», удалёнка с областью; null — в вакансии не сказано. */
+  readonly format: string | null;
   readonly salary: string | null;
   readonly fitPercent: number | null;
 }
@@ -25,7 +31,19 @@ type PercentOf = (item: MatchedVacancyItem) => number | null;
 
 const defaultPercentOf: PercentOf = (item) => vacancyFitPercent(item.explanation.fitView);
 
-/** Подборка в порядке списка кандидата: название, компания, зарплата и процент совпадения. */
+function formatOf(cluster: MatchedVacancyItem['cluster']): string | null {
+  const format =
+    cluster.workFormat ??
+    detectVacancyWorkFormat({
+      location: cluster.canonicalLocation,
+      summary: cluster.descriptionSummary,
+      isRemote: cluster.isRemote,
+    });
+  if (format !== 'remote') return workFormatLabel(format) ?? null;
+  return remoteScopeLabel(parseRemoteScope(cluster.remoteScope)).slice(0, 120);
+}
+
+/** Подборка в порядке списка кандидата: название, компания, место, формат, зарплата и процент совпадения. */
 export function selectionContextOf(
   items: readonly MatchedVacancyItem[],
   percentOf: PercentOf = defaultPercentOf,
@@ -36,6 +54,8 @@ export function selectionContextOf(
       title: item.cluster.canonicalTitle.slice(0, 200),
       // Имя частного лица — не компания, в ход оно не идёт (INC-023).
       company: item.cluster.employerIsPerson ? null : item.cluster.canonicalCompany.slice(0, 200) || null,
+      location: item.cluster.canonicalLocation?.trim().slice(0, 200) || null,
+      format: formatOf(item.cluster),
       salary: salaryLine(item.cluster.salary)?.slice(0, 120) ?? null,
       fitPercent: percentOf(item),
     })),

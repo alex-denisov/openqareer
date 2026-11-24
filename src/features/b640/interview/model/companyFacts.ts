@@ -1,4 +1,5 @@
 import type { B640CompanyItem } from '../../../../../shared/b640Companies';
+import type { VacancyApplicationSnapshot } from '../../../../../shared/vacancyApplication';
 
 /** Только то, что платформа хранит о компании; новости до B391 не показываются. */
 export interface CompanyFactsInput {
@@ -13,6 +14,11 @@ export interface CompanyFactsInput {
     | null;
   /** Вакансия отклика: рекрутер другой вакансии компании не «ведёт» эту. */
   readonly clusterId: string | null;
+  /** Вакансия, сохранённая в отклике: для компании вне подборки. */
+  readonly snapshot?: {
+    readonly vacancy: VacancyApplicationSnapshot;
+    readonly savedAt: string;
+  } | null;
 }
 
 export interface CompanyFactRow {
@@ -39,8 +45,28 @@ function sourceLine(sources: NonNullable<CompanyFactsInput['company']>['sources'
   return `Из карточки компании на платформе: ${names}, ${dayMonth(latest.observedAt)}.`;
 }
 
-export function companyFacts({ company, clusterId }: CompanyFactsInput): CompanyFacts {
-  if (!company) return { rows: [], source: null };
+/** Первое предложение описания, где компания названа по имени. */
+function aboutSentence(company: string, description: string): string | null {
+  const name = company.toLocaleLowerCase('ru-RU');
+  const sentences = description.split(/(?<=[.!?…])\s+|\n+/u).map((item) => item.trim());
+  return sentences.find((item) => item.toLocaleLowerCase('ru-RU').includes(name)) ?? null;
+}
+
+/** Компании нет в подборке: то, что сохранено в самом отклике. */
+function snapshotFacts(snapshot: CompanyFactsInput['snapshot']): CompanyFacts {
+  const company = snapshot?.vacancy.companyHidden ? '' : (snapshot?.vacancy.company ?? '').trim();
+  if (!snapshot || !company) return { rows: [], source: null };
+  const { vacancy } = snapshot;
+  const about = aboutSentence(company, vacancy.description ?? '');
+  const rows: CompanyFactRow[] = [
+    { label: 'Компания', value: company },
+    ...(about ? [{ label: 'В вакансии', value: about }] : []),
+  ];
+  return { rows, source: `Из вакансии, сохранённой в отклике ${dayMonth(snapshot.savedAt)}.` };
+}
+
+export function companyFacts({ company, clusterId, snapshot }: CompanyFactsInput): CompanyFacts {
+  if (!company) return snapshotFacts(snapshot);
   const rows: CompanyFactRow[] = [];
   const about = [company.industry, company.location].filter(Boolean).join(', ');
   if (about) rows.push({ label: 'Чем занята', value: about });
@@ -51,5 +77,6 @@ export function companyFacts({ company, clusterId }: CompanyFactsInput): Company
     const value = [hiring.fullName, hiring.roleTitle].filter(Boolean).join(', ');
     rows.push({ label: 'Кто ведёт', value });
   }
-  return { rows, source: rows.length > 0 ? sourceLine(company.sources) : null };
+  if (rows.length === 0) return snapshotFacts(snapshot);
+  return { rows, source: sourceLine(company.sources) };
 }

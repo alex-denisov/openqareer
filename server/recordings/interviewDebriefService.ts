@@ -8,7 +8,7 @@ import type {
 import { debriefMetrics, type DebriefFindings, type DebriefLine } from '../domain/interviewDebrief';
 import type { DebriefAnalysis, InterviewDebriefView } from '../domain/interviewDebriefView';
 import type { InterviewDebriefWriter } from '../providers/interviewDebriefWriter';
-import type { DebriefVoicesView } from '../domain/interviewDebriefView';
+import { voicesAwaitConfirmation, type DebriefVoicesView } from '../domain/interviewDebriefView';
 import type { VoiceId } from '../domain/interviewVoices';
 import { buildRecordingView } from './recordingView';
 import { voicedTranscript, voicesHash } from './recordingVoices';
@@ -183,9 +183,14 @@ export async function analyzeDebrief(
   context: DebriefContext,
   subject: DebriefSubject,
 ): Promise<InterviewDebriefView> {
+  if (recordingState(context, subject)?.voices?.status === 'none') {
+    await labelDebriefVoices(context, subject);
+  }
   const state = recordingState(context, subject);
   const lines = state?.view.transcript ?? [];
-  if (!state || lines.length === 0) return buildDebriefView(context, subject);
+  if (!state || lines.length === 0 || voicesAwaitConfirmation(state.voices)) {
+    return buildDebriefView(context, subject);
+  }
   const hash = transcriptHash(lines);
   if (context.repository.getAnalysis(state.recording.id, hash)?.status === 'ready') {
     return buildDebriefView(context, subject);
@@ -221,6 +226,9 @@ export function saveInterviewerName(
   );
 }
 
+/** Деления в работе: второй запрос ждёт первый, иначе он сбросил бы подтверждённый голос. */
+const voicesInFlight = new Map<string, Promise<void>>();
+
 /** I4c: один вызов модели на расшифровку файла — голос каждой строки; сбой — «Повторить». */
 export async function labelDebriefVoices(
   context: DebriefContext,
@@ -232,11 +240,24 @@ export async function labelDebriefVoices(
     return buildDebriefView(context, subject);
   }
   if (state.voices?.status === 'ready') return buildDebriefView(context, subject);
+  const key = `${state.recording.id}:${voicesHash(raw)}`;
+  const running =
+    voicesInFlight.get(key) ??
+    splitVoices(context, state.recording.id, raw).finally(() => voicesInFlight.delete(key));
+  voicesInFlight.set(key, running);
+  await running;
+  return buildDebriefView(context, subject);
+}
+
+async function splitVoices(
+  context: DebriefContext,
+  recordingId: string,
+  raw: readonly DebriefLine[],
+): Promise<void> {
   const outcome = context.writer.labelVoices
     ? await context.writer.labelVoices(raw).catch(() => null)
     : null;
-  context.repository.saveVoices(state.recording.id, voicesHash(raw), outcome?.labels ?? null);
-  return buildDebriefView(context, subject);
+  context.repository.saveVoices(recordingId, voicesHash(raw), outcome?.labels ?? null);
 }
 
 /** «Подтвердить голоса»: `false` — делить ещё нечего. */

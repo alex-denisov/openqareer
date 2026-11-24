@@ -151,6 +151,17 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     expect((await post(`${BASE}/offers/experience:nope/variant`, {}, 'flagged.test')).statusCode).toBe(404);
   });
 
+  it('B682: чужой id факта — сервер просит модель ещё раз с причиной, кандидат получает вариант', async () => {
+    const linkedinVariant = vi.fn(async (request: { rejected?: unknown }) => ({
+      text: 'Инженер данных | Python и SQL', factIds: [request.rejected ? 'resume:targetRole' : 'targetRole'],
+    }));
+    const { post } = await setup({ rewrite: async () => null, linkedinVariant });
+    const response = await post(`${BASE}/offers/headline/variant`, {}, 'flagged.test');
+    expect([response.statusCode, response.json().data.variants.at(-1)]).toEqual([200, 'Инженер данных | Python и SQL']);
+    expect(linkedinVariant).toHaveBeenCalledTimes(2);
+    expect(linkedinVariant.mock.calls[1]![0].rejected).toMatchObject({ reason: expect.stringContaining('factIds') });
+  });
+
   it('B692: неизвестное место работы — 404 без вызова модели; после 5 сбоев за час — 429 без вызова модели', async () => {
     const linkedinVariant = vi.fn(async () => ({ text: 'Rust · SQL', factIds: [] }));
     const { post } = await setup({ rewrite: async () => null, linkedinVariant });
@@ -161,7 +172,7 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     }
     const blocked = await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test');
     expect([blocked.statusCode, blocked.json().error.code]).toEqual([429, 'variant_attempts_exhausted']);
-    expect(linkedinVariant).toHaveBeenCalledTimes(5);
+    expect(linkedinVariant).toHaveBeenCalledTimes(15); // B682: по три попытки на запрос
   });
 
   it('два запроса варианта сразу — второй 409, вариант один', async () => {

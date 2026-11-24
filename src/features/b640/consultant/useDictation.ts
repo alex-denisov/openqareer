@@ -35,6 +35,13 @@ function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
   }, [shown, setShown]);
 }
 
+/** Прошлая диктовка закончена или сорвалась: машина возвращается в начало, текст не трогает. */
+function begin(voice: VoiceInputController, currentText: string): void {
+  voice.sent();
+  voice.request();
+  voice.approve(currentText);
+}
+
 /** Диктовка в поле ввода: распознанный текст приходит в `onText` по мере речи. */
 export function useDictation(onText: (text: string) => void): FieldDictation {
   const [supported] = useState(speechSupported);
@@ -42,6 +49,8 @@ export function useDictation(onText: (text: string) => void): FieldDictation {
   const [denied, setDenied] = useState(false);
   const handler = useRef(onText);
   const controller = useRef<VoiceInputController | null>(null);
+  // Эффект дочернего компонента идёт раньше нашего: запрос до готовности ждёт контроллер (B681).
+  const queued = useRef<string | null>(null);
 
   useEffect(() => {
     handler.current = onText;
@@ -60,6 +69,9 @@ export function useDictation(onText: (text: string) => void): FieldDictation {
     });
     created.activate();
     controller.current = created;
+    const waiting = queued.current;
+    queued.current = null;
+    if (waiting !== null) begin(created, waiting);
     return () => {
       created.dispose();
       controller.current = null;
@@ -70,11 +82,8 @@ export function useDictation(onText: (text: string) => void): FieldDictation {
 
   const start = useCallback((currentText: string) => {
     const voice = controller.current;
-    if (!voice) return;
-    // Прошлая диктовка закончена или сорвалась: машина возвращается в начало, текст не трогает.
-    voice.sent();
-    voice.request();
-    voice.approve(currentText);
+    if (voice) begin(voice, currentText);
+    else queued.current = currentText;
   }, []);
   const stop = useCallback(() => controller.current?.finish(), []);
 

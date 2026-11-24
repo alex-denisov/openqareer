@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { HH_SECTION_TEXT_MAX_LENGTH, type HhResumeEdit } from '../../shared/hhCandidateSession';
 import { checkedText } from '../linkedinProfile/linkedinRewrite';
+import type { OnVariantReject, RetryableVariantRequest } from './checkedVariant';
 import { addsPersonalAction } from './letterFactTranslation';
 import type { HhEditDraft, HhEditLanguage } from './hhResumeEdits';
 
@@ -9,14 +10,14 @@ import type { HhEditDraft, HhEditLanguage } from './hhResumeEdits';
  * B682 (a01c): «Другой вариант» правки резюме hh.ru — у опыта, навыков и «О себе». Факты только из
  * правки и подтверждённого профиля; у навыков меняются набор и порядок, новых навыков не появляется.
  */
-export const HH_RESUME_VARIANT_PROMPT_REVISION = 'hh-resume-variant-2026-11-24';
+export const HH_RESUME_VARIANT_PROMPT_REVISION = 'hh-resume-variant-2026-11-24-2';
 
 export interface HhResumeVariantFact {
   readonly id: string;
   readonly text: string;
 }
 
-export interface HhResumeVariantRequest {
+export interface HhResumeVariantRequest extends RetryableVariantRequest {
   readonly target: 'experience' | 'about' | 'skills';
   readonly language: HhEditLanguage;
   readonly vacancyTitle: string;
@@ -127,22 +128,35 @@ export function addsNames(text: string, source: string, language: HhEditLanguage
   return names.some((name) => !known.has(name.toLocaleLowerCase()));
 }
 
-function checkedLines(request: HhResumeVariantRequest, output: HhResumeVariantOutput): HhResumeVariantText | null {
+function checkedLines(
+  request: HhResumeVariantRequest, output: HhResumeVariantOutput, onReject?: OnVariantReject,
+): HhResumeVariantText | null {
   const rule = { max: TEXT_MAX, allowed: request.facts, noFirstPerson: request.target === 'experience' };
-  if (!checkedText(output, rule, request.language)) return null;
+  if (!checkedText(output, rule, request.language, onReject)) return null;
   const lines = output.text.split('\n').map((line) => line.replace(/\s+/gu, ' ').trim()).filter(Boolean);
   const source = request.facts.map((fact) => fact.text).join('\n');
   const text = lines.join('\n');
-  return addsPersonalAction(source, text) || addsNames(text, source, request.language) ? null : { text };
+  const action = addsPersonalAction(source, text);
+  const name = addsNames(text, source, request.language);
+  if (action) onReject?.('action');
+  if (name) onReject?.('name');
+  return action || name ? null : { text };
 }
 
 /** Принятый вариант или `null`. */
 export function checkHhResumeVariant(
   request: HhResumeVariantRequest,
   output: HhResumeVariantOutput,
+  onReject?: OnVariantReject,
 ): HhResumeVariantText | null {
-  const checked = request.target === 'skills' ? checkedSkills(request, output) : checkedLines(request, output);
-  if (!checked) return null;
+  const skills = request.target === 'skills';
+  const checked = skills ? checkedSkills(request, output) : checkedLines(request, output, onReject);
+  if (!checked) {
+    if (skills) onReject?.('skills');
+    return null;
+  }
   const own = flat(checked.text);
-  return request.avoid.some((previous) => flat(previous) === own) ? null : checked;
+  if (!request.avoid.some((previous) => flat(previous) === own)) return checked;
+  onReject?.('repeat');
+  return null;
 }

@@ -35,23 +35,25 @@ export function TextInput(props: InputProps) {
 
 /**
  * Голосом: в браузере расшифровка по мере речи, в .app текст приходит после «Стоп».
- * Без микрофона — поле ответа; не распознали — поле с тем, что есть.
+ * Без микрофона или после конца записи — поле ответа с тем, что есть.
  */
 export function VoiceAnswer(props: InputProps & { readonly voice: VoiceInput }) {
   const { voice } = props;
   const listening = voice.supported && voice.failure === null;
   const { start } = voice;
-  const started = useRef(false);
+  const [started, setStarted] = useState(false);
   const first = useRef(props.text);
   useEffect(() => {
-    if (!listening || started.current) return;
-    started.current = true;
+    if (!listening || started) return;
+    setStarted(true);
     start(first.current);
-  }, [listening, start]);
-  if (!listening) {
+  }, [listening, started, start]);
+  const live = !started || voice.starting || voice.recording || voice.settling;
+  if (!listening || !live) {
     return (
       <>
         <TextInput {...props} />
+        {voice.failure === 'mic' ? <StatusLine state="err" text="Нет доступа к микрофону" /> : null}
         {voice.failure === 'speech' ? (
           <StatusLine state="err" text="Не удалось распознать запись" />
         ) : null}
