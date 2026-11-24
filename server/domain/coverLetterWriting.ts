@@ -110,6 +110,19 @@ function withCompanyLink(template: string): string {
   );
 }
 
+/**
+ * 25.11: письмо обещало «готов рассмотреть роль в …» по городам вакансии. Решение владельца: место — только
+ * из профиля. Утверждённый запрос не меняется: фраза добавляется после правила о фактах.
+ */
+const FACTS_RULE_END = 'не называй одновременным.';
+
+function withOwnPlaces(template: string): string {
+  return template.replace(
+    FACTS_RULE_END,
+    `${FACTS_RULE_END} Города и регионы из вакансии не упоминай и готовность к переезду или работе в них не обещай: назвать можно только место, которое есть в профиле кандидата.`,
+  );
+}
+
 function withoutResume(template: string): string {
   return NO_RESUME_EDITS.reduce((text, [from, to]) => text.replace(from, to), template);
 }
@@ -139,7 +152,8 @@ export function coverLetterPrompt(input: CoverLetterPromptInput): string {
     LINK: input.companyLink?.trim() ?? '',
   };
   const approved = input.resumeAttached === false ? withoutResume(COVER_LETTER_PROMPT) : COVER_LETTER_PROMPT;
-  const signed = name ? withSignatureName(approved) : approved;
+  const placed = withOwnPlaces(approved);
+  const signed = name ? withSignatureName(placed) : placed;
   const linked = input.companyLink?.trim() ? withCompanyLink(signed) : signed;
   const template = input.chosenLanguage
     ? linked.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
