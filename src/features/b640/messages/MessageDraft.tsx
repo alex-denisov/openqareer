@@ -11,7 +11,7 @@ export interface MessageDraftProps {
   readonly recipientName: string;
   /** Отмечено «Отправил»: время отправки с сервера; строка контакта берёт его для метки «писали». */
   readonly onSent: (sentAt: string) => void;
-  /** «Не отправлять»: родитель убирает панель. */
+  /** «Не отправлять»: черновик убран, родитель убирает панель. */
   readonly onClose: () => void;
 }
 
@@ -42,7 +42,7 @@ function Notes({ state }: { readonly state: DraftState }) {
   );
 }
 
-function Actions({ state, onClose }: { readonly state: DraftState; readonly onClose: () => void }) {
+function Actions({ state }: { readonly state: DraftState }) {
   const { message, pending } = state;
   const approved = state.step === 'approved';
   return (
@@ -63,7 +63,7 @@ function Actions({ state, onClose }: { readonly state: DraftState; readonly onCl
         </Button>
       )}
       {message && !approved ? <VariantButton variants={state.variants} /> : null}
-      <Button variant="quiet" onClick={onClose}>
+      <Button variant="quiet" onClick={state.discard}>
         Не отправлять
       </Button>
     </div>
@@ -85,7 +85,7 @@ export function MessageDraft(props: MessageDraftProps) {
 
 function Draft({ target, kind, recipientName, onSent, onClose }: MessageDraftProps) {
   const fieldId = useId();
-  const state = useContactMessage({ target, kind, recipientName, onSent });
+  const state = useContactMessage({ target, kind, recipientName, onSent, onClose });
   return (
     <div className="lk-inline" role="group" aria-labelledby={`${fieldId}-l`}>
       <div className="lk-dr-top">
@@ -107,7 +107,7 @@ function Draft({ target, kind, recipientName, onSent, onClose }: MessageDraftPro
         />
       ) : null}
       <Notes state={state} />
-      <Actions state={state} onClose={onClose} />
+      <Actions state={state} />
     </div>
   );
 }
