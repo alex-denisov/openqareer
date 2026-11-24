@@ -97,6 +97,18 @@ export class MatchedPoolPrecompute {
 
   prioritizeCampaign(candidateId: string): void {
     invalidateMatchedVacancies(this.options.engine, candidateId);
+    this.queueFirst(candidateId);
+  }
+
+  /**
+   * B702 (prod 24.11 16:23Z): the roles rebuilt on start dropped all the stored snapshots, often for
+   * the same roles, and the first reads got 503. A key holds roles and facts, so nothing is dropped.
+   */
+  refreshCampaign(candidateId: string): void {
+    this.queueFirst(candidateId);
+  }
+
+  private queueFirst(candidateId: string): void {
     const index = this.priority.indexOf(candidateId);
     if (index >= 0) this.priority.splice(index, 1);
     this.priority.unshift(candidateId);

@@ -539,14 +539,17 @@ function createDeliveryProcessor(
   });
 }
 
-/** n02: компания отклика для строки письма и Telegram; сбой чтения не мешает доставке. */
+/** n02: компания отклика (или отклика интервью) для строки письма и Telegram; сбой чтения не мешает доставке. */
 function applicationCompany(
   deps: RouteDeps,
   candidateId: string,
   source: { readonly type: string; readonly id: string },
 ): string | null {
-  if (source.type !== 'application') return null;
   try {
+    if (source.type === 'interview') {
+      return deps.candidateStore.getInterviewSubject(candidateId, source.id)?.vacancyCompany ?? null;
+    }
+    if (source.type !== 'application') return null;
     return deps.candidateStore.getApplication(candidateId, source.id)?.vacancy?.company ?? null;
   } catch {
     return null;

@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+const desktop = vi.hoisted(() => ({
+  isTauriEnvironment: vi.fn(() => false),
+  invokeDesktopCommand: vi.fn(async () => undefined),
+}));
+vi.mock('../../services/desktop/desktopBridge', () => desktop);
+
 import {
   B640_THEME_KEY,
   B640_THEMES,
@@ -84,6 +90,31 @@ describe('B593: тема кандидата с сервера при запус�
     await settle();
     expect(failed.state.current?.theme).toBe('dark');
     failed.unmount();
+  });
+});
+
+describe('B593: фон окна приложения до загрузки страницы', () => {
+  afterEach(() => {
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    desktop.isTauriEnvironment.mockReturnValue(false);
+  });
+
+  it('приложение запоминает действующую тему и каждую смену', async () => {
+    desktop.isTauriEnvironment.mockReturnValue(true);
+    const view = probe(async () => null);
+    expect(desktop.invokeDesktopCommand).toHaveBeenLastCalledWith('save_window_theme', { theme: 'light' });
+    act(() => view.state.current?.setTheme('dark'));
+    expect(desktop.invokeDesktopCommand).toHaveBeenLastCalledWith('save_window_theme', { theme: 'dark' });
+    await settle();
+    view.unmount();
+  });
+
+  it('в браузере команд приложению нет', async () => {
+    const view = probe(async () => null);
+    await settle();
+    expect(desktop.invokeDesktopCommand).not.toHaveBeenCalled();
+    view.unmount();
   });
 });
 

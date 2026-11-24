@@ -7,7 +7,9 @@ import {
 } from '../domain/roleSkillAssessment';
 import type { CandidateIdentity } from '../data/candidateStore';
 import type { RouteDeps } from './deps';
-import { sendError, withDeps } from './helpers';
+import { cabinetB640Enabled } from './cabinetB640Flag';
+import { authenticateSession, sendError, withDeps } from './helpers';
+import { registerRoleSkillCaseDecisionRoute } from './roleSkillCaseDecisionRoute';
 import {
   CASE_CRITERIA,
   actionSchema,
@@ -66,6 +68,13 @@ export function registerRoleSkillAssessmentCaseRoutes(app: FastifyInstance, deps
     { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     withDeps(deps, handleRetry),
   );
+  registerRoleSkillCaseDecisionRoute(app, deps);
+}
+
+/** B734: в новом кабинете оценка ждёт «Верно»; прежний кабинет записывает её сразу. */
+function awaitsDecision(deps: RouteDeps, request: FastifyRequest): boolean {
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  return Boolean(principal && cabinetB640Enabled(deps.config, principal.username));
 }
 
 async function handleDraft(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -508,7 +517,14 @@ async function evaluateAndSaveCase(
       requestId,
       appealReason,
     );
-    const updated = applyCaseEvaluation(originalRun, pendingRun, caseIndex, answer, evaluation);
+    const updated = applyCaseEvaluation(
+      originalRun,
+      pendingRun,
+      caseIndex,
+      answer,
+      evaluation,
+      evaluation.grade !== 'not_confirmed' && awaitsDecision(deps, request),
+    );
     return saveRun(deps, candidate.id, updated, pendingRun.revision, reply, request);
   } catch (error) {
     return saveModelFailure(
@@ -598,21 +614,19 @@ function applyCaseEvaluation(
   caseIndex: number,
   answer: string,
   evaluation: ReturnType<typeof validateRoleSkillEvaluation>,
+  held: boolean,
 ): RoleSkillAssessmentRun {
   const record = originalRun.cases[caseIndex];
-  const cases = saveEvaluationOnCase(pendingRun, caseIndex, answer, evaluation, record);
+  const cases = saveEvaluationOnCase(pendingRun, caseIndex, answer, evaluation, record, held);
   const currentCaseIndex = Math.max(
     originalRun.currentCaseIndex,
     Math.min(caseIndex + 1, cases.length),
   );
   const completedAt = getCompletionTime(cases, currentCaseIndex, originalRun.completedAt);
   const explanation = evaluation.criteria.map((criterion) => criterion.explanation).join(' ');
-  const skillState = updateSkillResult(
-    pendingRun,
-    record.assessmentCase.skillId,
-    evaluation.grade,
-    explanation,
-  );
+  const skillState = held
+    ? pendingRun
+    : updateSkillResult(pendingRun, record.assessmentCase.skillId, evaluation.grade, explanation);
   return {
     ...skillState,
     revision: pendingRun.revision + 1,
@@ -631,6 +645,7 @@ function saveEvaluationOnCase(
   answer: string,
   evaluation: ReturnType<typeof validateRoleSkillEvaluation>,
   previousRecord: RoleSkillAssessmentRun['cases'][number],
+  held: boolean,
 ) {
   const history = previousRecord.evaluation
     ? [...previousRecord.evaluationHistory, previousRecord.evaluation].slice(-5)
@@ -649,6 +664,7 @@ function saveEvaluationOnCase(
             })),
           },
           evaluationHistory: history,
+          decision: held ? ('pending' as const) : undefined,
           appealReason: null,
         }
       : record,

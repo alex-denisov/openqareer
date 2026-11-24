@@ -158,6 +158,11 @@ export interface MatchedListInput {
  */
 const MATCHED_LIST_WINDOW_MS = 60_000;
 export const MATCHED_LIST_MAX_AGE_MS = 10 * 60_000;
+/**
+ * B702: the list of the previous process answers a new one as long as its stored snapshot does
+ * (a day): an older list with a rebuild behind it beats a 10-20 s wait.
+ */
+export const SEALED_MATCHED_LIST_MAX_AGE_MS = 24 * 60 * 60_000;
 const matchedListCache = createStaleListCache<MatchedList>({
   windowMs: MATCHED_LIST_WINDOW_MS,
   maxAgeMs: MATCHED_LIST_MAX_AGE_MS,
@@ -444,7 +449,7 @@ export function warmMatchedListCache(
 /**
  * PRB-055 (prod 05.11): the first read of a new process cost 6-16 s of its own and 19-22 s beside
  * the warm pass. This answers it from the last list of the previous process, under the conditions
- * of a held one: same `choice`, same age limit. Only a process with no list of this candidate asks:
+ * of a held one: same `choice`, its own age limit (B702). Only a process with no list of this candidate asks:
  * once one is built, the usual read takes over.
  */
 export function readSealedMatchedList(
@@ -458,7 +463,7 @@ export function readSealedMatchedList(
   return syncSection('list:sealed-read', () => {
     const row = input.candidateStore.sealedMatchedLists?.read(
       input.candidateId,
-      now - MATCHED_LIST_MAX_AGE_MS,
+      now - SEALED_MATCHED_LIST_MAX_AGE_MS,
       choice,
     );
     return row ? sealedListAnswering(row.text, choice) : undefined;

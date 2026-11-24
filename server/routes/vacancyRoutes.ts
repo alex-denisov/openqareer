@@ -38,6 +38,7 @@ import { registerSavedVacancyStateRoutes } from './savedVacancyStateRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
 import { registerExecutiveRequestRoutes } from './executiveRequestRoutes';
 import type { RouteDeps } from './deps';
+import { snapshotWithDescription } from './applicationVacancyText';
 import {
   authenticateCandidate,
   csrfError,
@@ -216,8 +217,10 @@ const handleRecordVacancyApplication: Handler = async (deps, request, reply) => 
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const body = vacancyApplicationSchema.parse(request.body);
+  const vacancy =
+    snapshotWithDescription(deps.multiSourceEngine, body.clusterId, body.vacancy) ?? body.vacancy;
   return {
-    data: candidateStore.recordVacancyApplication(candidate.id, body),
+    data: candidateStore.recordVacancyApplication(candidate.id, { ...body, vacancy }),
     meta: { requestId: request.id },
   };
 };

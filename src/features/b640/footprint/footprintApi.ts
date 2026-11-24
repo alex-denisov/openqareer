@@ -1,6 +1,6 @@
 import type { FootprintRemoval } from '../../../../shared/footprintRemoval';
 import type { FootprintRiskSummary } from '../../../../shared/footprintRisk';
-import { apiFetch, readData } from '../../coach/apiClient';
+import { apiFetch, readData, throwApiError } from '../../coach/apiClient';
 
 export {
   getCandidateFootprintPlan,
@@ -28,6 +28,16 @@ export async function reviewFootprintMismatch(
     },
   );
   await readData<object>(response);
+}
+
+/** B668: ссылка, добавленная в «Данные для поиска», входит в «Проверить снова». */
+export async function rememberAddedLink(link: string): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/footprint/added-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ link }),
+  });
+  if (!response.ok) await throwApiError(response);
 }
 
 /** B667: сводка следа по пяти категориям риска (маршрут закрыт флагом B640). */

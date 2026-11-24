@@ -7,7 +7,7 @@ import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { watchWriteHolds } from '../observability/sqliteWriteHolds';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
-import { forgetMatchedListsForTests, MATCHED_LIST_MAX_AGE_MS, readSealedMatchedList, sealMatchedList } from './matchedVacancyList';
+import { forgetMatchedListsForTests, MATCHED_LIST_MAX_AGE_MS, SEALED_MATCHED_LIST_MAX_AGE_MS, readSealedMatchedList, sealMatchedList } from './matchedVacancyList';
 import { SEALED_MATCHED_LIST_MAX_BYTES, SEALED_MATCHED_LIST_VERSION, sealedListText } from './sealedMatchedList';
 
 const row = (id: string, summary = 'Описание вакансии.') =>
@@ -171,13 +171,13 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     expect((await read()).timing.listServed).toBe('built');
   });
 
-  it('a closed vacancy stays in the stored list no longer than in a held one: same limit, downtime counts', async () => {
+  it('a stored list answers a new process for a day, as the stored snapshot does (B702); downtime counts', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const before = await sealedApp();
     await before.read();
     before.engine.rows = pool(40).slice(1);
     forgetMatchedListsForTests();
-    vi.advanceTimersByTime(MATCHED_LIST_MAX_AGE_MS - 1);
+    vi.advanceTimersByTime(SEALED_MATCHED_LIST_MAX_AGE_MS - 1);
     expect((await before.read()).ids).toContain('v-0');
     await settle(before.logged, 'matched-list-warmed');
     forgetMatchedListsForTests();
@@ -186,13 +186,13 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     await after.read();
     after.engine.rows = pool(40).slice(1);
     forgetMatchedListsForTests();
-    vi.advanceTimersByTime(MATCHED_LIST_MAX_AGE_MS);
+    vi.advanceTimersByTime(SEALED_MATCHED_LIST_MAX_AGE_MS);
     const cold = await after.read();
     // Past the limit the stored list does not answer; the read goes to the pool as any other.
     expect(cold.timing.listServed).toBe('built');
   });
 
-  it('a held list at the same age is rebuilt too: the limit is the same number', async () => {
+  it('a held list past its own limit is rebuilt', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     const { read } = await sealedApp();
     await read();

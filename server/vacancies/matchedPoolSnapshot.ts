@@ -113,11 +113,18 @@ export interface MatchedPoolReadOptions {
    * seven roles with no stored snapshot. A screen that can say «считаем» names a shorter wait.
    */
   readonly waitMs?: number;
+  /**
+   * B702: what the candidate looks for (roles, level, places) without their facts. When the facts
+   * changed and the build takes longer than the stale wait, the last list of this scope answers.
+   */
+  readonly scope?: string;
 }
 
 export class MatchedPoolSnapshots {
   private readonly entries = new Map<string, Snapshot>();
   private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
+  /** The key last answered for a candidate and scope (B702). */
+  private readonly lastOfScope = new Map<string, string>();
   private poolWrites = 0;
   /** One write at a time: several built together would each take a slice of the same loop turn. */
   private lastPersist: Promise<void> = Promise.resolve();
@@ -165,6 +172,9 @@ export class MatchedPoolSnapshots {
    */
   deleteCandidate(candidateId: string): void {
     const prefix = `${candidateId} `;
+    for (const key of this.lastOfScope.keys()) {
+      if (key.startsWith(prefix)) this.lastOfScope.delete(key);
+    }
     for (const key of this.entries.keys()) {
       if (key.startsWith(prefix)) this.entries.delete(key);
     }
@@ -237,6 +247,8 @@ export class MatchedPoolSnapshots {
     const key = this.key(candidateId, profileKey);
     const stored = this.entries.get(key) ?? this.loadStored(candidateId, profileKey, key);
     const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
+    const scopeKey = options.scope === undefined ? undefined : this.key(candidateId, options.scope);
+    if (stored && scopeKey !== undefined) this.lastOfScope.set(scopeKey, key);
     if (stored && this.isCurrent(stored, age)) return stored.items;
     const servable = age < this.maxAgeMs;
     if (stored && servable && !options.awaitRebuild) {
@@ -244,12 +256,23 @@ export class MatchedPoolSnapshots {
       return stored.items;
     }
     if (!stored && !options.awaitRebuild) this.reportMiss(candidateId, profileKey);
+    const held = stored ?? (options.awaitRebuild ? undefined : this.standIn(scopeKey));
     const waitMs = options.awaitRebuild
       ? undefined
-      : stored
+      : held
         ? this.staleWaitMs
         : (options.waitMs ?? this.waitMs);
-    return this.awaitCompute(key, compute, stored, waitMs);
+    return this.awaitCompute(key, compute, held, waitMs);
+  }
+
+  /**
+   * B702 (prod 24.11 16:15Z): one edited fact changed the key of 14 snapshots at once, and for a
+   * minute every list read waited 12 s and got 503. The rows of the same roles are the same.
+   */
+  private standIn(scopeKey: string | undefined): Snapshot | undefined {
+    const key = scopeKey === undefined ? undefined : this.lastOfScope.get(scopeKey);
+    const held = key === undefined ? undefined : this.entries.get(key);
+    return held && this.clock() - held.storedAt < this.maxAgeMs ? held : undefined;
   }
 
   private reportMiss(candidateId: string, profileKey: string): void {

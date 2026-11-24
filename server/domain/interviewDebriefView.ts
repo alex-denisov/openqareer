@@ -33,6 +33,11 @@ export interface DebriefVoicesView {
   readonly items: readonly VoiceSummaryItem[];
 }
 
+/** Голоса разделены, но кандидат ещё не отметил свой: разбор ждёт подтверждения. */
+export function voicesAwaitConfirmation(voices: DebriefVoicesView | null | undefined): boolean {
+  return voices?.status === 'ready' && voices.candidate === null;
+}
+
 export interface InterviewDebriefView {
   readonly interviewId: string;
   readonly scheduledAt: string | null;

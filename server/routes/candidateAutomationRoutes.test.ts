@@ -66,6 +66,7 @@ function cluster(id: string, company: string, title: string) {
     skills: ['TypeScript', 'Node.js', 'AWS', 'Distributed systems'],
     status: 'active',
     isRemote: false,
+    descriptionSummary: `Описание ${company}`,
   };
 }
 
@@ -217,6 +218,19 @@ describe('candidate automation API (B452)', () => {
       ]),
     );
     expect(enabled.json().data.linkedinPublishing).toMatchObject({ enabled: false });
+  });
+
+  it('B635: отклик из автоматизации хранит описание вакансии', async () => {
+    const { inject, candidateStore } = await setup();
+    await enable(inject);
+    await inject('POST', '/api/v1/candidate/automation/queue/refresh', {
+      opportunities: [
+        { clusterId: 'cluster-a', letterText: 'Письмо', materialDocumentIds: ['resume-a'] },
+      ],
+    });
+    expect(candidateStore.createApplication.mock.calls[0]?.[1].manualVacancy).toMatchObject({
+      description: 'Описание Acme',
+    });
   });
 
   it('builds only server-verified queue items, honors stop companies and previews owned materials', async () => {

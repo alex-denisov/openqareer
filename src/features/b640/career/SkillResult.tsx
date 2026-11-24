@@ -13,6 +13,8 @@ export interface SkillResultProps {
   readonly busy: boolean;
   readonly failed: boolean;
   readonly onNext: () => void;
+  /** «Пропустить»: навык остаётся как был. */
+  readonly onSkip: () => void;
   readonly onAgain: () => void;
   readonly onAppeal: (reason: string) => Promise<boolean>;
 }
@@ -64,11 +66,45 @@ function AppealField(props: {
   );
 }
 
+/** «В профиль попадёт… Верно?»: до ответа навык не меняется (B734). */
+function ProfileAsk(props: {
+  readonly line: string;
+  readonly busy: boolean;
+  readonly onYes: () => void;
+  readonly onAppeal: () => void;
+  readonly onSkip?: () => void;
+}) {
+  return (
+    <div className="lt-ask" role="group" aria-labelledby="c4-ask">
+      <p id="c4-ask">{props.line}</p>
+      <div className="lt-ask-a">
+        <Button icon="check" busy={props.busy} onClick={props.onYes}>
+          Верно
+        </Button>
+        <button className="row-act" type="button" onClick={props.onAppeal}>
+          <Icon name="edit" />
+          Исправить
+        </button>
+        {props.onSkip ? (
+          <button className="row-act" type="button" disabled={props.busy} onClick={props.onSkip}>
+            Пропустить
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /** C4b «Итог кейса»: пункты оценки, что попадёт в профиль, дальше или ещё раз. */
-export function SkillResult({ record, busy, failed, onNext, onAgain, onAppeal }: SkillResultProps) {
+export function SkillResult(props: SkillResultProps) {
+  const { record, busy, failed, onNext, onSkip, onAgain, onAppeal } = props;
   const [appealing, setAppealing] = useState(false);
   const { evaluation } = record;
-  const line = profileLine(record.assessmentCase.skillName, evaluation.grade);
+  const { decision } = record;
+  // Принятый итог уже в профиле: спрашивать второй раз нечего.
+  const line =
+    decision === 'accepted' ? null : profileLine(record.assessmentCase.skillName, evaluation.grade);
+  const skippable = decision === 'pending' || decision === 'declined';
   const appeal = async (reason: string) => {
     const sent = await onAppeal(reason);
     if (sent) setAppealing(false);
@@ -81,25 +117,20 @@ export function SkillResult({ record, busy, failed, onNext, onAgain, onAppeal }:
       </h2>
       <Criteria evaluation={evaluation} />
       {line && !appealing ? (
-        <div className="lt-ask" role="group" aria-labelledby="c4-ask">
-          <p id="c4-ask">{line}</p>
-          <div className="lt-ask-a">
-            <Button icon="check" onClick={onNext}>
-              Верно
-            </Button>
-            <button className="row-act" type="button" onClick={() => setAppealing(true)}>
-              <Icon name="edit" />
-              Исправить
-            </button>
-          </div>
-        </div>
+        <ProfileAsk
+          line={line}
+          busy={busy}
+          onYes={onNext}
+          onAppeal={() => setAppealing(true)}
+          onSkip={skippable ? onSkip : undefined}
+        />
       ) : null}
       {appealing ? (
         <AppealField busy={busy} onSend={appeal} onCancel={() => setAppealing(false)} />
       ) : null}
       {failed ? <StatusLine state="err" text="Не отправилось. Попробуйте ещё раз." /> : null}
       <div className="actions">
-        <Button variant="primary" icon="checkc" onClick={onNext}>
+        <Button variant="primary" icon="checkc" busy={busy} onClick={onNext}>
           {line ? 'Подтвердить навык' : 'Дальше'}
         </Button>
         <Button icon="repeat" onClick={onAgain}>

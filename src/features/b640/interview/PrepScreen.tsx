@@ -12,9 +12,11 @@ import { loadPrep, putStarPrep, type PrepData, type SalaryFloor } from './data/p
 import {
   buildPrepRows,
   paragraphsFromStory,
+  paragraphsFromText,
   prepHeadline,
   replaceQuestionParagraphs,
   salaryAnswer,
+  type PrepParagraph,
   type PrepRow,
 } from './model/prepModel';
 import { buildMemo, type Memo } from './model/memoModel';
@@ -115,13 +117,12 @@ function prepMemo(data: PrepData): Memo {
   });
 }
 
-/** Ответ из истории: абзацы этого вопроса заменяются, остальные остаются. */
+/** Ответ из истории или своими словами: абзацы этого вопроса заменяются, остальные остаются. */
 function useAnswer(data: PrepData, onSaved: (next: PrepData) => void) {
   const [question, setQuestion] = useState<PrepRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function pick(story: StarStoryView) {
-    const own = question ? paragraphsFromStory(question.id, story) : null;
+  async function save(own: readonly PrepParagraph[] | null) {
     if (!question || !own) return;
     setSaving(true);
     setError(null);
@@ -142,7 +143,10 @@ function useAnswer(data: PrepData, onSaved: (next: PrepData) => void) {
     setError(null);
     setQuestion(row);
   };
-  return { question, saving, error, pick, open };
+  const pick = (story: StarStoryView) =>
+    save(question ? paragraphsFromStory(question.id, story) : null);
+  const write = (text: string) => save(question ? paragraphsFromText(question.id, text) : null);
+  return { question, saving, error, pick, write, open };
 }
 
 function PrepActions(props: {
@@ -208,6 +212,7 @@ function PrepLead({
           saving={answer.saving}
           error={answer.error}
           onPick={(story) => void answer.pick(story)}
+          onWrite={(text) => void answer.write(text)}
           onClose={() => answer.open(null)}
         />
       ) : null}

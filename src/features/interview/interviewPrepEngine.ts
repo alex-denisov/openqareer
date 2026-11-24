@@ -62,9 +62,16 @@ export function generateInterviewPrepBrief(input: InterviewPrepInput): Interview
   };
 }
 
+const SOFTWARE_ROLE =
+  /software|backend|back-end|бэкенд|бекенд|frontend|front-end|фронтенд|full-?stack|devops|developer|программист|разработчик|разработк\S*\s+(?:сервис|приложени|программ|платформ|финтех)|микросервис|microservice|kubernetes|ci\/cd|data engineer|typescript|node\.js|(?<![a-z])sre(?![a-z])/i;
+
+/**
+ * B635: тип роли — только по тексту или навыкам вакансии. Название одно ничего не решает, а
+ * «инженер» и «разработка» бывают не про программы: инженер-энергетик получал «CI/CD».
+ */
 function isEngineeringRole(vacancy: InterviewVacancyTarget): boolean {
-  const text = [vacancy.title, ...(vacancy.skills ?? []), vacancy.descriptionSummary ?? ''].join(' ');
-  return /engineer|developer|разработ|инженер|architect|devops|backend|frontend|data engineer/i.test(text);
+  const evidence = [...(vacancy.skills ?? []), vacancy.descriptionSummary ?? ''].join(' ').trim();
+  return Boolean(evidence) && SOFTWARE_ROLE.test(`${vacancy.title} ${evidence}`);
 }
 
 function buildCompanyOverview(vacancy: InterviewVacancyTarget): CompanyOverview {

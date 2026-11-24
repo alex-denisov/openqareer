@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApplicationView } from '../../../../server/domain/applicationDerivedFields';
-import type { InterviewDebriefView } from '../../../../server/domain/interviewDebriefView';
+import {
+  voicesAwaitConfirmation,
+  type InterviewDebriefView,
+} from '../../../../server/domain/interviewDebriefView';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { InfoTip, Link, StatusLine } from '../kit';
 import { useScreenChrome } from '../shell/ShellContext';
@@ -70,7 +73,9 @@ function useAnalysis(data: DebriefData | null, replace: (next: DebriefData) => v
     }
   }, [data, replace]);
   const needed =
-    data?.debrief?.recording?.status === 'ready' && data.debrief.analysis.status === 'none';
+    data?.debrief?.recording?.status === 'ready' &&
+    data.debrief.analysis.status === 'none' &&
+    !voicesAwaitConfirmation(data.debrief.voices);
   useEffect(() => {
     if (!needed || asked.current) return;
     asked.current = true;
@@ -152,7 +157,7 @@ function DebriefLead(props: {
         ) : null}
       </div>
       <LeadSub data={props.data} debrief={debrief} />
-      <DebriefSteps responseId={response.id} current="debrief" inApp={isTauriEnvironment()} />
+      <DebriefSteps responseId={response.id} current="debrief" debrief={debrief} />
       <RecordingState debrief={debrief} response={response} />
       {ready && debrief.metrics ? <ShareLine metrics={debrief.metrics} /> : null}
       {debrief.analysis.status === 'failed' ? (
@@ -223,14 +228,30 @@ function usePolling(data: DebriefData | null, reload: () => void) {
   }, [status, reload]);
 }
 
+/** Голоса файла разделены, но не подтверждены: вместо разбора — I4c; «Назад» сюда не возвращает. */
+function useVoicesFirst(data: DebriefData | null): boolean {
+  const debrief = data?.debrief;
+  const waiting =
+    voicesAwaitConfirmation(debrief?.voices) && debrief?.analysis.status !== 'ready';
+  const responseId = data?.response.id;
+  useEffect(() => {
+    if (!waiting || !responseId) return;
+    window.history.replaceState(null, '', buildNodePath('i04c', { responseId }));
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, [waiting, responseId]);
+  return waiting;
+}
+
 /** «Разбор после интервью» (I4). */
 export function DebriefScreen({ responseId }: { readonly responseId: string }) {
   const load = useCallback((signal: AbortSignal) => loadDebrief(responseId, signal), [responseId]);
   const { state, reload, replaceData } = useAsync(load, 'Разбор не загрузился.');
   const data = state.data;
   usePolling(data, reload);
+  const voicesFirst = useVoicesFirst(data);
   // Макет: плотные мобильные отступы (`data-mtight`), как у I1, I2 и I3.
   useScreenChrome({ rootData: { mtight: '1' } });
+  if (voicesFirst) return null;
   return (
     <>
       <PrepSteps responseId={data?.response.id ?? responseId} current="debrief" />

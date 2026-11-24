@@ -130,6 +130,17 @@ describe('B704: resumes read in the candidate hh.ru session', () => {
     expect(stored).not.toContain('Руководитель');
   });
 
+  it('B704: keep the read date when nothing was read from hh.ru', async () => {
+    const { app } = await setup();
+    const first = (await call(app, 'PUT', RESUMES, flagged, SNAPSHOT)).json().data.readAt;
+    await new Promise((done) => setTimeout(done, 5));
+    for (const extra of [{ contentRead: false }, { contents: [] }]) {
+      const saved = await call(app, 'PUT', RESUMES, flagged, { ...SNAPSHOT, ...extra });
+      expect(saved.json().data.readAt).toBe(first);
+    }
+    expect((await call(app, 'PUT', RESUMES, flagged, SNAPSHOT)).json().data.readAt).not.toBe(first);
+  });
+
   it('reject a selected resume that is not in the list and malformed input', async () => {
     const { app } = await setup();
     const bad = [
