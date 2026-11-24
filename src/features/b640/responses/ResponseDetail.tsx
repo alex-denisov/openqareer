@@ -1,11 +1,14 @@
 import { useRef, useState } from 'react';
 import type { ApplicationView } from '../../applications/applicationsApi';
+import type { ApplyConsentEntry } from '../../../../shared/applyConsent';
+import { ConsentItems, ConsentTextLink } from '../account/consentParts';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
 import { onPlatform, platformOf } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
 import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
+import { useApplyConsents } from './useApplyConsents';
 import { useSentMessages } from './useSentMessages';
 import { actionPath } from './ResponsesTable';
 import { InterviewActions } from './InterviewActions';
@@ -21,6 +24,37 @@ import {
   type ResponseWriter,
 } from './useResponseActions';
 
+/** B787: сохранённый текст согласия, поручение, по которому оно дано, и данные записи. */
+function ConsentRecord({ entry }: { readonly entry: ApplyConsentEntry }) {
+  const facts = [
+    entry.employer,
+    entry.host,
+    `${entry.occurredAt.slice(0, 19).replace('T', ' ')} UTC`,
+    `Команда: ${entry.command}`,
+    ...(entry.checkboxLabel ? [`Подпись у галочки: ${entry.checkboxLabel}`] : []),
+    ...(entry.policySha256 ? [`SHA-256 политики: ${entry.policySha256}`] : []),
+    `Поручение: ${entry.mandateVersion}`,
+  ];
+  return (
+    <ConsentTextLink title="Согласие на обработку данных">
+      <p className="c5-lead">{entry.checkboxText}</p>
+      <ul className="c5-list">
+        {facts.map((fact) => (
+          <li key={fact}>{fact}</li>
+        ))}
+        {entry.policyUrl ? (
+          <li>
+            <a href={entry.policyUrl} target="_blank" rel="noopener noreferrer">
+              Политика работодателя
+            </a>
+          </li>
+        ) : null}
+      </ul>
+      <ConsentItems capability="actions_on_behalf" versionId={entry.mandateVersion} />
+    </ConsentTextLink>
+  );
+}
+
 function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
   return (
     <ul className="tl">
@@ -30,6 +64,7 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
           <span className="od-ev">
             <b>{item.title}</b>
             {item.note ? <small>{item.note}</small> : null}
+            {item.consent ? <ConsentRecord entry={item.consent} /> : null}
           </span>
           <span className="when num">{item.when}</span>
         </li>
@@ -40,7 +75,8 @@ function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
 
 function History({ application }: { readonly application: ApplicationView }) {
   const messages = useSentMessages(application.clusterId);
-  const events = timeline(application, new Date(), messages);
+  const consents = useApplyConsents(application.id);
+  const events = timeline(application, new Date(), messages, consents);
   if (events.length === 0) return null;
   const rest = events.slice(1);
   return (

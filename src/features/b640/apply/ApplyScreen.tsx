@@ -15,6 +15,7 @@ import { CtxHead } from '../shell/CtxHead';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { FormStep, useQuestionnaire, type QuestionnaireState } from './FormStep';
 import { LetterStep } from './LetterStep';
+import { useVisibilityQuestion, type VisibilityState } from './visibilityQuestion';
 import type { HhSendStepProps } from './hh/HhSendStep';
 import { copyText, hhAnswers, readiness } from './model/formModel';
 import {
@@ -25,6 +26,7 @@ import {
   paragraphs,
   parseStep,
   resolveTarget,
+  stepOpening,
   type ApplyHead,
   type ApplyStep,
   type ApplyTarget,
@@ -129,6 +131,14 @@ interface FlowProps {
   readonly cluster: Parameters<typeof buildHead>[0]['cluster'];
 }
 
+interface SendAsk {
+  /** o04: отправка открыта кнопкой «Отправить отклик с анкетой». */
+  readonly askNow: boolean;
+  readonly onAsked: () => void;
+  readonly sendWithForm: () => void;
+  readonly visibility: VisibilityState;
+}
+
 interface BodyProps {
   readonly vacancyId: string;
   readonly head: ApplyHead;
@@ -141,16 +151,14 @@ interface BodyProps {
   readonly answers: string;
   readonly hhForm: HhSendStepProps['form'];
   readonly onHhForm: HhSendStepProps['onForm'];
-  /** o04: отправка открыта кнопкой «Отправить отклик с анкетой». */
-  readonly askNow: boolean;
-  readonly onAsked: () => void;
+  readonly ask: SendAsk;
   readonly resumeOk: boolean;
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, askNow, onAsked }: BodyProps) {
+function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, ask }: BodyProps) {
   return (
     <>
       <div className="col">
@@ -163,8 +171,8 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhFor
           answersText={answers}
           form={hhForm}
           onForm={onHhForm}
-          askNow={askNow}
-          onAsked={onAsked}
+          askNow={ask.askNow}
+          onAsked={ask.onAsked}
           onLetter={() => setStep('letter')}
         />
       </div>
@@ -247,12 +255,13 @@ function FlowHead({ head, applicationId }: FlowHeadProps) {
 interface FlowState {
   readonly shown: ApplyStep;
   readonly setStep: (step: ApplyStep) => void;
-  readonly sendWithForm: () => void;
   readonly head: ApplyHead;
   readonly body: BodyProps;
   readonly quota: TariffQuotaStatus | null;
   readonly questionnaire: QuestionnaireState;
   readonly done: Readonly<Record<ApplyStep, boolean>>;
+  /** Ещё не известно, что показать на шаге: читается одобрение письма или анкета из адреса. */
+  readonly opening: boolean;
   /** Два окна: вакансия и редактор. */
   readonly wide: boolean;
 }
@@ -266,12 +275,14 @@ function useApplyLetter(vacancyId: string) {
   });
   const variants = useLetterVariants(vacancyId, draft);
   const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
-  return { letter, variants };
+  // B678: до чтения одобрения шаг не показывает ни «Сначала одобрите», ни «Собираем письмо».
+  return { letter, variants, approvalPending: approvalHold.hold && !letter.approval.saved };
 }
 
 /** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
 function applyForm(
   questionnaire: QuestionnaireState,
+  visibility: VisibilityState,
   setStep: Dispatch<SetStateAction<ApplyStep>>,
 ): Pick<BodyProps, 'answers' | 'hhForm' | 'onHhForm'> {
   const { form, draft } = questionnaire;
@@ -286,6 +297,11 @@ function applyForm(
           answersText: answers,
           answers: form ? hhAnswers(form.questions, draft) : [],
           onSubmitted: questionnaire.markSubmitted,
+          visibilityAgreed: visibility.agreed,
+          askVisibility: () => {
+            visibility.ask();
+            setStep((now) => (now === 'send' ? 'form' : now));
+          },
           open: () => setStep('form'),
         }
       : null,
@@ -302,12 +318,14 @@ function applyForm(
 function useSendAsk(
   questionnaire: QuestionnaireState,
   setStep: Dispatch<SetStateAction<ApplyStep>>,
-): Pick<BodyProps, 'askNow' | 'onAsked'> & { readonly sendWithForm: () => void } {
+): SendAsk {
   const [askNow, setAskNow] = useState(false);
+  const visibility = useVisibilityQuestion();
   const onAsked = useCallback(() => setAskNow(false), []);
   return {
     askNow,
     onAsked,
+    visibility,
     sendWithForm: () => {
       questionnaire.save();
       setAskNow(true);
@@ -323,7 +341,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const [resumeOk, setResumeOk] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
-  const { letter, variants } = useApplyLetter(target.vacancyId);
+  const { letter, variants, approvalPending } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
   const ask = useSendAsk(questionnaire, setStep);
@@ -339,10 +357,10 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   return {
     shown,
     setStep,
-    sendWithForm: ask.sendWithForm,
     head,
     quota,
     questionnaire,
+    opening: stepOpening({ step, approvalPending, formLoading: questionnaire.loading }),
     wide: shown !== 'send' && shown !== 'form' && !quota,
     done: {
       resume: resumeDone,
@@ -358,9 +376,8 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
       setStep,
       letter,
       variants,
-      askNow: ask.askNow,
-      onAsked: ask.onAsked,
-      ...applyForm(questionnaire, setStep),
+      ask,
+      ...applyForm(questionnaire, ask.visibility, setStep),
       resumeOk: resumeDone,
       resumeSeen,
       onResumeOk: () => {
@@ -373,7 +390,9 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
 
 function ApplyFlow(props: FlowProps) {
   const flow = useApplyFlow(props);
-  const { shown, head, quota, questionnaire, wide, body } = flow;
+  const { shown, head, quota, questionnaire, opening, body } = flow;
+  const wide = flow.wide && !opening;
+  const ready = !quota && !opening;
   const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
@@ -398,9 +417,10 @@ function ApplyFlow(props: FlowProps) {
       >
         <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
-        {!quota && shown === 'send' ? <SendBody {...body} /> : null}
-        {!quota && shown === 'form' && form ? <FormStep state={questionnaire} form={form} onSend={flow.sendWithForm} /> : null}
-        {!quota && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
+        {opening && !quota ? <LoadingApply /> : null}
+        {ready && shown === 'send' ? <SendBody {...body} /> : null}
+        {ready && shown === 'form' && form ? <FormStep state={questionnaire} form={form} visibility={body.ask.visibility} onSend={body.ask.sendWithForm} /> : null}
+        {ready && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>
   );

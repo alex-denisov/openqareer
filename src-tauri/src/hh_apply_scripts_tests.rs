@@ -640,28 +640,20 @@ fn hh_questions_stop_until_the_candidate_agrees() {
 }
 
 #[test]
-fn a_submit_hh_held_back_is_pressed_once_more_and_only_then() {
+fn submit_is_never_pressed_again_after_the_visibility_question() {
     let agreed = Agreed {
         relocation: false,
         visibility: true,
     };
-    let script = result_script(agreed);
-    let form = r#"<button data-qa="vacancy-response-submit-popup">Откликнуться</button>"#;
-    let asked = r#"<button data-qa="countries-profile-visibility-popup-confirm">Да</button>"#;
+    let html = r#"<button data-qa="vacancy-response-submit-popup">Откликнуться</button><button data-qa="countries-profile-visibility-popup-confirm">Да</button>"#;
     let setup = "window.__oqSubmitted=1;document.addEventListener('click',function(e){if(/visibility/.test(e.target.getAttribute('data-qa')))e.target.remove();});";
-    let many = vec![script; 12];
-    let Some(held) = run(&format!("{form}{asked}"), setup, &many) else {
-        return;
-    };
-    assert_eq!(
-        held["clicks"],
-        json!([
-            "countries-profile-visibility-popup-confirm",
-            "vacancy-response-submit-popup"
-        ])
-    );
-    let Some(plain) = run(form, setup, &many) else {
-        return;
-    };
-    assert_eq!(plain["clicks"], json!([]));
+    for script in [result_script(agreed), page_result_script(agreed)] {
+        let Some(result) = run(html, setup, &vec![script; 12]) else {
+            return;
+        };
+        assert_eq!(
+            result["clicks"],
+            json!(["countries-profile-visibility-popup-confirm"])
+        );
+    }
 }

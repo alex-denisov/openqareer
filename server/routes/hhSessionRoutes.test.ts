@@ -9,6 +9,7 @@ import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
 import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+import { APPLY_MANDATE_VERSION } from '../candidate/applyMandate';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -64,7 +65,14 @@ async function setup() {
     () => candidateStore.close(),
     () => app.close(),
   );
-  return { app, databasePath: config.databasePath };
+  const consents = new SqliteCapabilityConsentStore({ databasePath: config.databasePath });
+  const grant = (userId: string) =>
+    consents.recordConsent({ userId, capability: 'actions_on_behalf', versionId: APPLY_MANDATE_VERSION });
+  const flaggedId = sessions.get(flagged)!.candidate!.id;
+  for (const token of [flagged, other]) grant(sessions.get(token)!.candidate!.id);
+  const revokeMandate = () => consents.revokeConsent(flaggedId, 'actions_on_behalf');
+  cleanups.push(() => consents.close());
+  return { app, databasePath: config.databasePath, revokeMandate };
 }
 
 function call(app: App, method: 'GET' | 'PUT' | 'POST', path: string, token?: string, payload?: unknown) {
@@ -111,6 +119,18 @@ describe('B704: hh.ru session routes without the B640 flag', () => {
       }
     }
     expect(tableRows(databasePath, 'hh_resume_snapshots')).toEqual([]);
+    expect(tableRows(databasePath, 'hh_apply_attempts')).toEqual([]);
+  });
+});
+
+describe('B787: поручение перед откликом hh.ru', () => {
+  it('без поручения отклик не начинается и попытка не тратится', async () => {
+    const { app, databasePath, revokeMandate } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    revokeMandate();
+    const refused = await call(app, 'POST', APPLY, flagged, attempt());
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.code).toBe('apply_mandate_required');
     expect(tableRows(databasePath, 'hh_apply_attempts')).toEqual([]);
   });
 });
@@ -273,39 +293,56 @@ describe('B704: hh.ru vacancy number from its address', () => {
 
 describe('B787: согласие по поручению', () => {
   const CONSENT = { text: 'Согласен на обработку персональных данных', url: 'https://hh.ru/policy' };
+  const JOURNAL = '/api/v1/candidate/apply-consents';
 
-  async function apply(versionId: string | null, result: Record<string, unknown>) {
+  async function start() {
     const { app, databasePath } = await setup();
-    if (versionId) {
-      const store = new SqliteCapabilityConsentStore({ databasePath });
-      store.recordConsent({ userId: 'user-flagged.test', capability: 'actions_on_behalf', versionId });
-      store.close();
-    }
     await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
-    const started = await call(app, 'POST', APPLY, flagged, attempt());
-    const { attemptId, consent } = started.json().data;
-    const done = await call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, result);
-    expect(done.statusCode).toBe(200);
-    return { app, consent, rows: tableRows(databasePath, 'hh_apply_consents') };
+    const { attemptId, consent } = (await call(app, 'POST', APPLY, flagged, attempt())).json().data;
+    expect(consent).toBe(true);
+    const finish = (result: Record<string, unknown>) =>
+      call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, result);
+    const entries = async () => (await call(app, 'GET', JOURNAL, flagged)).json().data.entries;
+    return { app, databasePath, finish, entries };
   }
 
-  it.each([
-    ['actions_on_behalf-v1.1', true, 'actions_on_behalf-v1.1'],
-    ['actions_on_behalf-v1.0', false, 'candidate_answer'],
-    [null, false, 'candidate_answer'],
-  ])('поручение %s', async (versionId, allowed, basis) => {
-    const { consent, rows } = await apply(versionId, { outcome: 'sent', consents: [CONSENT] });
-    expect(consent).toBe(allowed);
-    expect(rows).toMatchObject([{ consent_text: CONSENT.text, policy_url: CONSENT.url, host: 'hh.ru', basis }]);
+  it('галочка пишется в запечатанный журнал с действующим поручением', async () => {
+    const { finish, entries, databasePath } = await start();
+    const sent = { outcome: 'sent', consents: [CONSENT], employer: 'Ромашка', applicationId: 'foreign' };
+    expect((await finish(sent)).statusCode).toBe(200);
+    expect((await finish(sent)).statusCode).toBe(409);
+    expect(await entries()).toMatchObject([
+      {
+        host: 'hh.ru',
+        employer: 'Ромашка',
+        applicationId: null,
+        checkboxText: CONSENT.text,
+        policyUrl: CONSENT.url,
+        mandateVersion: APPLY_MANDATE_VERSION,
+        results: [{ result: 'sent' }],
+      },
+    ]);
+    expect(JSON.stringify(tableRows(databasePath, 'apply_consent_journal'))).not.toContain(CONSENT.text);
+  });
+
+  it('неподтверждённая отправка записана, поздний отклик дописывает результат', async () => {
+    const { finish, entries } = await start();
+    await finish({ outcome: 'failed', failureCode: 'no_confirmation', consents: [CONSENT] });
+    expect((await entries())[0].results).toMatchObject([{ result: 'unconfirmed' }]);
+    expect((await finish({ outcome: 'sent', vacancyId: '123456' })).statusCode).toBe(200);
+    expect((await entries())[0].results).toMatchObject([{ result: 'unconfirmed' }, { result: 'sent' }]);
+  });
+
+  it.each(['http://hh.ru/policy', 'javascript:alert(1)'])('ссылка на политику только https: %s', async (url) => {
+    const { finish, entries } = await start();
+    expect((await finish({ outcome: 'sent', consents: [{ ...CONSENT, url }] })).statusCode).toBe(400);
+    expect(await entries()).toEqual([]);
   });
 
   it('отклик не ушёл — согласие не записано; already_applied закрывает повтор', async () => {
-    const { app, rows } = await apply('actions_on_behalf-v1.1', {
-      outcome: 'failed',
-      failureCode: 'already_applied',
-      consents: [CONSENT],
-    });
-    expect(rows).toEqual([]);
+    const { app, finish, entries } = await start();
+    await finish({ outcome: 'failed', failureCode: 'already_applied', consents: [CONSENT] });
+    expect(await entries()).toEqual([]);
     const again = await call(app, 'POST', APPLY, flagged, attempt());
     expect(again.json().error.code).toBe('hh_already_applied');
   });

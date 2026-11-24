@@ -1,7 +1,7 @@
 import type {
   HhApplyAttempt,
   HhApplyOutcome,
-  HhConsent,
+  HhConsentReport,
   HhResumeContent,
   HhResumeEdit,
   HhResumeReview,
@@ -67,12 +67,12 @@ export async function finishHhApply(
   outcome: HhApplyOutcome,
   failureCode?: string,
   vacancyId?: string,
-  consents: readonly HhConsent[] = [],
+  consent?: HhConsentReport,
 ): Promise<void> {
   const response = await apiFetch(`${BASE}/applications/${encodeURIComponent(attemptId)}/result`, {
     method: 'POST',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}), ...(vacancyId ? { vacancyId } : {}), ...(consents.length ? { consents } : {}) }),
+    body: JSON.stringify({ outcome, ...(failureCode ? { failureCode } : {}), ...(vacancyId ? { vacancyId } : {}), ...consent }),
   });
   await readDataObject<object>(response);
 }

@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   HH_APPLY_OUTCOMES,
-  HH_CONSENT_MANDATE_VERSION,
   HH_CONSENTS_MAX,
   HH_RESUME_ID,
   HH_RESUME_TEXT_MAX_LENGTH,
@@ -17,6 +16,8 @@ import {
   type HhResumeEdit,
   type HhResumeSnapshot,
 } from '../../shared/hhCandidateSession';
+import { APPLY_MANDATE_REQUIRED, APPLY_MANDATE_VERSION, hasApplyMandate } from '../candidate/applyMandate';
+import type { SqliteApplyConsentJournal } from '../candidate/sqliteApplyConsentJournal';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { hhApplyGate, type HhApplyRefusal } from '../domain/hhApplyGate';
 import { draftHhResumeEdits, hhResumeLanguage } from '../domain/hhResumeEdits';
@@ -30,14 +31,14 @@ import { sameVacancyTitle } from '../vacancies/vacancyIdentity';
 import { resolveHhLoginNotice } from './b640HhSessionState';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
-import { authenticateSession, sendError, withDeps } from './helpers';
+import { sendError, withDeps } from './helpers';
 
 /**
  * B704: сессия кандидата hh.ru в приложении. Резюме читаются в окне hh.ru на машине
  * кандидата и сохраняются здесь запечатанными; отклик от его имени начинается только с его
  * подтверждения и в пределах суточного лимита, исход записывается один раз.
  */
-type BoundDeps = RouteDeps & { readonly hh: SqliteHhSessionRepository };
+type BoundDeps = RouteDeps & { readonly journal: SqliteApplyConsentJournal; readonly hh: SqliteHhSessionRepository };
 type Handler = (deps: BoundDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const resumeId = z.string().regex(HH_RESUME_ID);
@@ -113,18 +114,13 @@ const resultSchema = z
     vacancyId: z.string().regex(HH_VACANCY_ID).optional(),
     /** B787: галочки согласия, поставленные в форме работодателя. */
     consents: z
-      .array(z.object({ text: z.string().trim().min(1).max(500), url: z.url().max(2048).nullish() }).strict())
+      .array(z.object({ text: z.string().trim().min(1).max(500), url: z.url({ protocol: /^https$/u }).max(2048).nullish() }).strict())
       .max(HH_CONSENTS_MAX)
       .optional(),
+    employer: z.string().trim().max(300).optional(),
+    applicationId: z.string().min(1).max(100).optional(),
   })
   .strict();
-
-/** Принято поручение нужной версии: согласие ставится без вопроса. Нет хранилища — спрашиваем. */
-function hasConsentMandate(deps: RouteDeps, request: FastifyRequest): boolean {
-  const userId = authenticateSession(request, deps.authService, deps.config)?.userId;
-  const active = userId ? deps.capabilityConsentStore?.getActiveConsent(userId, 'actions_on_behalf') : null;
-  return active?.versionId === HH_CONSENT_MANDATE_VERSION;
-}
 
 const REFUSAL_REPLY: Readonly<Record<HhApplyRefusal, readonly [number, string]>> = {
   hh_resumes_not_read: [409, 'Сначала выберите резюме hh.ru.'],
@@ -319,12 +315,49 @@ const postAttempt: Handler = async (deps, request, reply) => {
     const [status, message] = REFUSAL_REPLY[gate.refusal];
     return sendError(reply, request, status, gate.refusal, message, false);
   }
+  if (!hasApplyMandate(deps.capabilityConsentStore, candidateId)) {
+    return sendError(reply, request, 403, APPLY_MANDATE_REQUIRED, 'Для отклика от вашего имени нужно ваше согласие.', false);
+  }
   const attemptId = deps.hh.startAttempt(candidateId, { vacancyId, resumeId: chosen, now });
   return reply.status(201).send({
-    data: { attemptId, remainingToday: gate.remainingToday, consent: hasConsentMandate(deps, request) },
+    data: { attemptId, remainingToday: gate.remainingToday, consent: true },
     meta: { requestId: request.id },
   });
 };
+
+const consentIds = (attemptId: string): readonly string[] =>
+  Array.from({ length: HH_CONSENTS_MAX }, (_, position) => `${attemptId}:${position}`);
+
+/** B787: галочки попадают в журнал, только если форма ушла или могла уйти; отклик начат по поручению. */
+function journalConsents(
+  journal: SqliteApplyConsentJournal,
+  candidateId: string,
+  attemptId: string,
+  { consents = [], outcome, failureCode, employer, applicationId }: z.infer<typeof resultSchema>,
+  now: Date,
+): void {
+  if (outcome === 'failed' && failureCode !== 'no_confirmation') return;
+  const ids = consentIds(attemptId);
+  consents.forEach(({ text, url }, position) => {
+    const id = ids[position]!;
+    journal.append(
+      candidateId,
+      {
+        id,
+        applicationId: applicationId && journal.ownsApplication(candidateId, applicationId) ? applicationId : null,
+        host: 'hh.ru',
+        employer: employer || 'hh.ru',
+        checkboxText: text,
+        policyUrl: url ?? null,
+        policySha256: null,
+        checkboxLabel: text,
+        command: 'Отправить отклик',
+      },
+      { mandateVersion: APPLY_MANDATE_VERSION, now },
+    );
+    journal.appendResult(candidateId, id, outcome === 'failed' ? 'unconfirmed' : 'sent', now);
+  });
+}
 
 const postResult: Handler = async (deps, request, reply) => {
   const candidateId = hhCandidateOf(deps, request, reply);
@@ -338,9 +371,11 @@ const postResult: Handler = async (deps, request, reply) => {
   if (!stored) {
     return sendError(reply, request, 404, 'hh_apply_not_found', 'Такого отклика нет.', false);
   }
-  const { outcome, failureCode, vacancyId, consents } = parsed.data;
+  const { outcome, failureCode, vacancyId } = parsed.data;
   const now = new Date();
   const otherVacancy = vacancyId !== undefined && vacancyId !== stored.vacancyId;
+  // Журнал до исхода: прерванная запись повторится вместе с ним, номера записей те же.
+  if (!otherVacancy && stored.outcome === null) journalConsents(deps.journal, candidateId, attemptId, parsed.data, now);
   const written =
     !otherVacancy &&
     (deps.hh.finishAttempt(candidateId, attemptId, { outcome, failureCode: failureCode ?? null, now }) ||
@@ -350,15 +385,16 @@ const postResult: Handler = async (deps, request, reply) => {
   if (!written) {
     return sendError(reply, request, 409, 'hh_apply_finished', 'Исход этого отклика уже записан.', false);
   }
-  // Согласие дано, только если форма ушла или могла уйти.
-  if (consents?.length && (outcome !== 'failed' || failureCode === 'no_confirmation')) {
-    const basis = hasConsentMandate(deps, request) ? HH_CONSENT_MANDATE_VERSION : 'candidate_answer';
-    deps.hh.recordConsents(candidateId, attemptId, { consents, basis, now });
+  if (outcome === 'sent' && stored.outcome !== null) {
+    for (const id of consentIds(attemptId)) deps.journal.appendResult(candidateId, id, 'sent', now);
   }
   return { data: { attemptId, outcome: parsed.data.outcome }, meta: { requestId: request.id } };
 };
 
-export function registerHhSessionRoutes(app: FastifyInstance, deps: RouteDeps): void {
+export function registerHhSessionRoutes(
+  app: FastifyInstance,
+  deps: RouteDeps & { readonly journal: SqliteApplyConsentJournal },
+): void {
   const repository = new SqliteHhSessionRepository({
     databasePath: deps.config.databasePath,
     encryptionKey: deps.config.dataEncryptionKey,

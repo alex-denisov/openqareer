@@ -22,6 +22,13 @@ export interface HhApplyInput {
   readonly uniqueResumeTitle?: string;
   /** Ответы анкеты, если её вопросы прочитаны. */
   readonly answers?: readonly HhFormAnswer[];
+  /** Чей отклик записать в журнал согласий. */
+  readonly employer: string;
+  readonly applicationId: string;
+  /** Ответ кандидата в анкете на вопрос hh.ru о показе резюме. */
+  readonly visibilityAgreed?: boolean;
+  /** hh.ru спросил о показе резюме: вопрос встаёт в анкету. */
+  readonly onVisibility?: () => void;
   /** Отклик ушёл вместе с анкетой. */
   readonly onFormSent?: () => void;
   /** Отклик ушёл (в том числе с анкетой): отклик отмечается отправленным. */
@@ -34,7 +41,7 @@ export interface HhApplyControls {
   readonly state: HhApplyState;
   readonly ask: () => void;
   readonly cancel: () => void;
-  /** Только из окна подтверждения: отклик уходит после «Отправить». */
+  /** Только из окна подтверждения или сразу после принятого поручения. */
   readonly confirm: () => void;
   /** «Да» на вопрос hh.ru: отклик отправляется снова с этим ответом. */
   readonly agree: () => void;
@@ -52,6 +59,14 @@ function useSendingClock(sending: boolean, tick: (seconds: number) => void): voi
 }
 
 type Agreed = ReadonlySet<HhSendQuestion>;
+
+/** Исход отклика и поставленные при нём галочки согласия. */
+function recordOutcome(input: HhApplyInput, attemptId: string, report: HhDesktopReport): Promise<void> {
+  const failure = report.failureCode ?? undefined;
+  if (!report.consents?.length) return finishHhApply(attemptId, report.outcome, failure);
+  const { employer, applicationId } = input;
+  return finishHhApply(attemptId, report.outcome, failure, undefined, { consents: report.consents, employer, applicationId });
+}
 
 async function sendOnce(
   input: HhApplyInput,
@@ -78,16 +93,13 @@ async function sendOnce(
     ...(input.answers?.length ? { answers: input.answers } : {}),
     ...(mandate || agreed.has('consent') ? { consent: true } : {}),
     ...(agreed.has('relocation') ? { agreedRelocation: true } : {}),
-    ...(agreed.has('visibility') ? { agreedVisibility: true } : {}),
+    ...(agreed.has('visibility') || input.visibilityAgreed ? { agreedVisibility: true } : {}),
   }).catch(
     (reason: unknown) => ({ outcome: 'failed' as const, failureCode: desktopFailureCode(reason) }),
   );
-  const failure = report.failureCode ?? undefined;
-  const recorded = report.consents?.length
-    ? finishHhApply(attemptId, report.outcome, failure, undefined, report.consents)
-    : finishHhApply(attemptId, report.outcome, failure);
-  await recorded.catch(() => undefined);
+  await recordOutcome(input, attemptId, report).catch(() => undefined);
   const result = resultOf(report.outcome, report.failureCode);
+  if (result.kind === 'question' && result.about === 'visibility') input.onVisibility?.();
   if (result.kind === 'sent' && input.answers?.length) input.onFormSent?.();
   if (result.kind === 'sent' || result.kind === 'questionnaire' || result.kind === 'already') await input.onSent().catch(() => undefined);
   else {
@@ -141,7 +153,7 @@ export function useHhApply(input: HhApplyInput): HhApplyControls {
     ask: () => setState({ kind: 'confirm' }),
     cancel: () => setState({ kind: 'idle' }),
     confirm: () => {
-      if (state.kind === 'confirm') send();
+      if (state.kind === 'confirm' || state.kind === 'mandate') send();
     },
     agree: () => {
       if (state.kind !== 'question' || inFlight.current) return;

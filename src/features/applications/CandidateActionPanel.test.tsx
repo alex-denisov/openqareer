@@ -69,7 +69,7 @@ beforeEach(() => {
   vi.spyOn(applicationsApi, 'listCandidateActionReceipts').mockResolvedValue([]);
   vi.spyOn(applicationsApi, 'getActionsOnBehalfConsent').mockResolvedValue({
     granted: true,
-    consent: { versionId: 'actions_on_behalf-v1.0' },
+    consent: { versionId: 'actions_on_behalf-v1.1' },
   });
   vi.spyOn(applicationsApi, 'grantActionsOnBehalfConsent').mockResolvedValue(undefined);
   vi.spyOn(applicationsApi, 'setCandidateActionKillSwitch').mockResolvedValue(undefined);
@@ -309,7 +309,7 @@ describe('CandidateActionPanel', () => {
     it('Критерий 3: состояние согласия читается по флажку, отдельной подписи нет', async () => {
       vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
         granted: false,
-        consent: { versionId: 'actions_on_behalf-v1.0' },
+        consent: { versionId: 'actions_on_behalf-v1.1' },
       });
       await mount();
 

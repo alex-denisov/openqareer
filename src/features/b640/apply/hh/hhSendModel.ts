@@ -6,6 +6,8 @@ export type HhSendResult =
   | { readonly kind: 'sent' }
   | { readonly kind: 'questionnaire' }
   | { readonly kind: 'signin' }
+  /** B787: сервер ждёт поручение кандидата — отклик не начат. */
+  | { readonly kind: 'mandate' }
   /** hh.ru просит анкету до отклика: отклик не ушёл. */
   | { readonly kind: 'form' }
   /** hh.ru уже держит отклик на эту вакансию. */
@@ -84,11 +86,16 @@ export function uniqueResumeTitle(snapshot: HhResumeSnapshot | null): string | u
   return title && same.length === 1 && !/\p{Cc}/u.test(title) ? title : undefined;
 }
 
+/** B787: код отказа сервера, пока кандидат не принял действующее поручение. */
+const MANDATE_REFUSAL = 'apply_mandate_required';
+
 /** Отказ сервера до отклика; уже ушедший отклик — не сбой, а его состояние. */
 export function refusalOf(code: string | undefined): HhSendResult {
+  if (code === MANDATE_REFUSAL) return { kind: 'mandate' };
   return code === 'hh_already_applied' ? { kind: 'already' } : { kind: 'error', text: refusalText(code) };
 }
 
+/** Отказ сервера до отклика: код ошибки — в те же слова. */
 export function refusalText(code: string | undefined): string {
   return (code && FAILURE_TEXT[code]) || DEFAULT_FAILURE;
 }

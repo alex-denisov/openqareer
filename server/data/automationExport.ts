@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { ApplyConsentEntry } from '../../shared/applyConsent';
 import type { HhResumeSnapshot } from '../../shared/hhCandidateSession';
 import {
   type CandidateAutomationConsent,
@@ -8,6 +9,7 @@ import {
   type CandidateAutomationStopCompany,
   SqliteCandidateAutomationRepository,
 } from '../candidate/sqliteCandidateAutomationRepository';
+import { SqliteApplyConsentJournal } from '../candidate/sqliteApplyConsentJournal';
 import type { CandidateAutomationSchedule } from '../candidate/candidateAutomationScheduler';
 import { SqliteCandidateAutomationScheduleRepository } from '../candidate/sqliteCandidateAutomationScheduleRepository';
 import { hhResumeSnapshotScope } from '../candidate/sqliteHhSessionRepository';
@@ -36,9 +38,10 @@ export interface AutomationExport {
   readonly queue: readonly CandidateAutomationQueueItem[];
   readonly schedule: CandidateAutomationSchedule | null;
   readonly journal: readonly ExportedJournalEntry[];
+  /** B787: согласия, подтверждённые за кандидата по поручению. */
+  readonly applyConsents: readonly ApplyConsentEntry[];
   readonly hh: {
     readonly applyAttempts: readonly Row[];
-    readonly applyConsents: readonly Row[];
     readonly raiseSchedules: readonly Row[];
     readonly raiseChoice: readonly Row[];
     readonly resumeSnapshot: HhResumeSnapshot | null;
@@ -95,24 +98,23 @@ function readResumeSnapshot(sources: AutomationExportSources, candidateId: strin
   );
 }
 
+function readApplyConsents(sources: AutomationExportSources, candidateId: string): readonly ApplyConsentEntry[] {
+  if (!tableExists(sources.database, 'apply_consent_journal')) return [];
+  return new SqliteApplyConsentJournal(sources.database, sources.encryptionKey).exportAll(candidateId);
+}
+
 export function exportAutomation(sources: AutomationExportSources, candidateId: string): AutomationExport {
   const { database } = sources;
   return {
     ...readAutoApply(sources, candidateId),
     ...readSchedule(sources, candidateId),
+    applyConsents: readApplyConsents(sources, candidateId),
     hh: {
       applyAttempts: rows(
         database,
         'hh_apply_attempts',
         `SELECT vacancy_id AS vacancyId, resume_id AS resumeId, outcome, started_at AS startedAt, finished_at AS finishedAt
          FROM hh_apply_attempts WHERE candidate_id = ? ORDER BY started_at, id`,
-        candidateId,
-      ),
-      applyConsents: rows(
-        database,
-        'hh_apply_consents',
-        `SELECT host, consent_text AS consentText, policy_url AS policyUrl, basis, given_at AS givenAt
-         FROM hh_apply_consents WHERE candidate_id = ? ORDER BY given_at, position`,
         candidateId,
       ),
       raiseSchedules: rows(

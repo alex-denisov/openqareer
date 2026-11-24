@@ -154,14 +154,19 @@ export function hhApplyStep(failureCode: string | null | undefined): HhApplyStep
   return STEP_BY_FAILURE.get(failureCode ?? '') ?? null;
 }
 
-/** B787: поручение, по которому приложение ставит галочку согласия в форме работодателя. */
-export const HH_CONSENT_MANDATE_VERSION = 'actions_on_behalf-v1.1';
 export const HH_CONSENTS_MAX = 5;
 
 /** Галочка согласия, поставленная при отклике: слова формы и ссылка на политику. */
 export interface HhConsent {
   readonly text: string;
   readonly url?: string | null;
+}
+
+/** B787: поставленные галочки и отклик, к которому они относятся, — для журнала согласий. */
+export interface HhConsentReport {
+  readonly consents: readonly HhConsent[];
+  readonly employer: string;
+  readonly applicationId: string;
 }
 
 /** B787: ответ кандидата на вопрос анкеты, как он уходит в окно hh.ru. */

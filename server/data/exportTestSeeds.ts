@@ -40,8 +40,6 @@ export function seedHh(databasePath: string, database: DatabaseSync, candidateId
   hh.close();
   database.prepare(`INSERT INTO hh_apply_attempts(id,candidate_id,vacancy_id,resume_id,outcome,failure_code,started_at,finished_at)
     VALUES (?,?,?,?,?,?,?,?)`).run(`attempt-${tag}`, candidateId, `vacancy-${tag}`, `resume-${tag}`, 'applied', 'internal_code', AT, AT);
-  database.prepare(`INSERT INTO hh_apply_consents(attempt_id,position,candidate_id,host,consent_text,basis,given_at) VALUES (?,?,?,?,?,?,?)`)
-    .run(`attempt-${tag}`, 0, candidateId, 'hh.ru', `Согласие ${tag}`, 'actions_on_behalf-v1.1', AT);
   database.exec(HH_RAISE_SCHEMA);
   database.prepare(`INSERT INTO hh_raise_schedules(candidate_id,resume_id,enabled,updated_at) VALUES (?,?,?,?)`).run(candidateId, `resume-${tag}`, 1, AT);
   database.prepare(`INSERT INTO hh_raise_choices(candidate_id,resume_id,updated_at) VALUES (?,?,?)`).run(candidateId, `resume-${tag}`, AT);

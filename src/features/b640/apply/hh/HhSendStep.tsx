@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { HhFormAnswer } from '../../../../../shared/hhCandidateSession';
 import { pluralRu } from '../../../../../shared/pluralRu';
+import { grantAccountCapabilityConsent } from '../../../account/accountCapabilityConsentApi';
+import { CAPABILITY_CONSENT_CURRENT_VERSION } from '../../../legal/capabilityConsents';
+import { ConsentDialog, useAction } from '../../account/consentParts';
 import { Button, Dialog, Icon, Link, ResultLine, StatusLine, useToast } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { UNKNOWN_VACANCY_TITLE, type ApplyHead } from '../model/applyModel';
@@ -40,6 +43,9 @@ export interface HhSendForm {
   readonly answersText: string;
   readonly answers: readonly HhFormAnswer[];
   readonly onSubmitted: () => void;
+  /** Ответ на вопрос hh.ru о показе резюме. */
+  readonly visibilityAgreed: boolean;
+  readonly askVisibility: () => void;
   readonly open: () => void;
 }
 
@@ -214,9 +220,29 @@ function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string
     </>
   );
   return (
-    <Dialog className="hh-ask" open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
-      <p>Отклик на «{title}» уйдёт от вашего имени из вашего входа в hh.ru.</p>
-    </Dialog>
+    <>
+      <Dialog className="hh-ask" open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
+        <p>Отклик на «{title}» уйдёт от вашего имени из вашего входа в hh.ru.</p>
+      </Dialog>
+      <MandateDialog apply={apply} />
+    </>
+  );
+}
+
+/** B787: поручение спрашивают один раз — с первым откликом; после согласия отклик уходит дальше. */
+function MandateDialog({ apply }: { readonly apply: HhApplyControls }) {
+  const { busy, failed, run } = useAction(apply.confirm);
+  return (
+    <ConsentDialog
+      capability="actions_on_behalf"
+      open={apply.state.kind === 'mandate'}
+      busy={busy}
+      failed={failed}
+      onGrant={() =>
+        run(() => grantAccountCapabilityConsent('actions_on_behalf', CAPABILITY_CONSENT_CURRENT_VERSION.actions_on_behalf))
+      }
+      onClose={apply.cancel}
+    />
   );
 }
 
@@ -226,10 +252,12 @@ function useStepApply(props: HhSendStepProps, { snapshot }: HhResumesState): HhA
     resumeId: snapshot?.selected?.id ?? null,
     vacancyTitle: props.head.title === UNKNOWN_VACANCY_TITLE ? undefined : props.head.title,
     letter: props.letterText,
+    employer: props.head.company,
+    applicationId: props.applicationId,
     uniqueResumeTitle: uniqueResumeTitle(snapshot),
     onSent: props.onSent,
     onForm: props.onForm,
-    ...(props.form ? { answers: props.form.answers, onFormSent: props.form.onSubmitted } : {}),
+    ...(props.form ? { answers: props.form.answers, onFormSent: props.form.onSubmitted, visibilityAgreed: props.form.visibilityAgreed, onVisibility: props.form.askVisibility } : {}),
   });
   useAskNow(props, Boolean(snapshot?.selected), apply);
   return apply;

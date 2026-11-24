@@ -1,3 +1,4 @@
+import type { ApplyConsentEntry, ApplyConsentResult } from '../../../../../shared/applyConsent';
 import { deliveryState } from '../../../../../shared/applicationStage';
 import type {
   B640ContactMessageKind,
@@ -216,6 +217,8 @@ export interface TimelineEvent {
   readonly note: string | null;
   readonly when: string;
   readonly at: number;
+  /** B787: согласие, подтверждённое за кандидата; его текст открывается из события. */
+  readonly consent?: ApplyConsentEntry;
 }
 
 const STAGE_EVENTS: Partial<Record<ApplicationView['stage'], { icon: IconName; title: string }>> = {
@@ -250,6 +253,23 @@ const messageEvents = (messages: readonly B640SentContactMessage[]): TimelineEve
     return event(shown.icon, shown.title, message.sentAt, message.recipientName);
   });
 
+const CONSENT_RESULT: Record<ApplyConsentResult, string> = {
+  sent: 'отклик отправлен',
+  failed: 'отклик не отправлен',
+  unconfirmed: 'отправка не подтверждена',
+};
+
+/** B787: согласия, подтверждённые по поручению кандидата. */
+const consentEvents = (consents: readonly ApplyConsentEntry[]): TimelineEvent[] =>
+  consents.flatMap((consent) => {
+    const last = consent.results.at(-1);
+    const note = [consent.host, ...(last ? [CONSENT_RESULT[last.result]] : [])].join(' · ');
+    return event('checkc', 'Подтверждено согласие на обработку данных', consent.occurredAt, note).map((item) => ({
+      ...item,
+      consent,
+    }));
+  });
+
 /**
  * «Что было» по отклику: только события, у которых известна дата. Свежие сверху.
  */
@@ -257,8 +277,9 @@ export function timeline(
   application: ApplicationView,
   now: Date = new Date(),
   messages: readonly B640SentContactMessage[] = [],
+  consents: readonly ApplyConsentEntry[] = [],
 ): readonly TimelineEvent[] {
-  if (application.stage === 'saved') return [];
+  if (application.stage === 'saved') return consentEvents(consents);
   const via = viaPlatform(platformOf(application.vacancy?.source));
   const receipt = application.deliveryReceipt ?? null;
   const delivery = receipt ? deliveryState('applied', receipt) : null;
@@ -278,6 +299,7 @@ export function timeline(
         : event('calendar', 'Интервью назначено', iso),
     ),
     ...messageEvents(messages),
+    ...consentEvents(consents),
   ];
   return [...events].sort((a, b) => b.at - a.at);
 }

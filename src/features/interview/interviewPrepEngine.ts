@@ -1,4 +1,9 @@
 import type { CandidateMemory } from '../coach/coachApi';
+import {
+  askCounterQuestion,
+  askQuestion,
+  type InterviewAsk,
+} from '../../../shared/interviewAsks';
 import { isResumeEvidenceEligible } from '../../../server/domain/resumeEvidenceEligibility';
 
 export interface InterviewVacancyTarget {
@@ -50,16 +55,38 @@ export interface InterviewPrepInput {
   readonly vacancy: InterviewVacancyTarget;
   readonly candidateName?: string;
   readonly facts: readonly CandidateMemory[];
+  /** B635: задачи и требования из описания вакансии; нет — вопросы общие. */
+  readonly asks?: readonly InterviewAsk[];
 }
 
+const QUESTION_COUNT = 10;
+const COUNTER_ASK_COUNT = 4;
+
 export function generateInterviewPrepBrief(input: InterviewPrepInput): InterviewPrepBrief {
-  const { vacancy, facts } = input;
+  const { vacancy, facts, asks = [] } = input;
   return {
     companyOverview: buildCompanyOverview(vacancy),
     interviewerFocus: buildInterviewerFocus(vacancy),
-    starQuestions: buildStarQuestions(vacancy, facts),
-    counterQuestions: buildCounterQuestions(vacancy),
+    starQuestions: withAskQuestions(asks, buildStarQuestions(vacancy, facts)),
+    counterQuestions: [
+      ...asks.slice(0, COUNTER_ASK_COUNT).map(askCounterQuestion),
+      ...buildCounterQuestions(vacancy),
+    ].slice(0, QUESTION_COUNT),
   };
+}
+
+/** Вопросы по описанию вакансии — первыми, общие добирают список до десяти. */
+function withAskQuestions(
+  asks: readonly InterviewAsk[],
+  common: readonly StarQuestion[],
+): readonly StarQuestion[] {
+  const own = asks.map((ask): StarQuestion => ({
+    ...askQuestion(ask),
+    category: 'technical',
+    starAnswer: unknownStarAnswer(),
+    usedEvidenceIds: [],
+  }));
+  return [...own, ...common].slice(0, Math.max(QUESTION_COUNT, own.length));
 }
 
 const SOFTWARE_ROLE =

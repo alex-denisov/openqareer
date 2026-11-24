@@ -37,9 +37,6 @@ describe('B738 · 8: автоотклики и hh.ru в выгрузке', () =>
     expect(automation.schedule).toEqual(DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE);
     expect(automation.journal).toEqual([expect.objectContaining({ result: 'error', company: 'Компания own' })]);
     expect(automation.hh.applyAttempts).toEqual([{ vacancyId: 'vacancy-own', resumeId: 'resume-own', outcome: 'applied', startedAt: AT, finishedAt: AT }]);
-    expect(automation.hh.applyConsents).toEqual([
-      { host: 'hh.ru', consentText: 'Согласие own', policyUrl: null, basis: 'actions_on_behalf-v1.1', givenAt: AT },
-    ]);
     expect(automation.hh.raiseChoice).toEqual([expect.objectContaining({ resumeId: 'resume-own' })]);
     expect(automation.hh.raiseSchedules).toEqual([expect.objectContaining({ resumeId: 'resume-own', enabled: 1 })]);
     expect(automation.hh.resumeSnapshot).toEqual({ resumes: [{ id: 'resume-own', title: 'Резюме own' }], selected: null, readAt: AT });
@@ -70,7 +67,7 @@ describe('B738 · 8: автоотклики и hh.ru в выгрузке', () =>
     const own = createCandidate(store);
     const tables = () => new DatabaseSync(databasePath).prepare("SELECT group_concat(name) AS names FROM (SELECT name FROM sqlite_master WHERE type='table' ORDER BY name)").get();
     const before = tables();
-    expect(store.exportCandidate(own.id).automation).toMatchObject({ settings: null, queue: [], journal: [], hh: { applyAttempts: [], applyConsents: [], resumeSnapshot: null } });
+    expect(store.exportCandidate(own.id).automation).toMatchObject({ settings: null, queue: [], journal: [], applyConsents: [], hh: { applyAttempts: [], resumeSnapshot: null } });
     expect(tables()).toEqual(before);
   });
 });

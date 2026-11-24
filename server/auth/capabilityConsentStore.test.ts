@@ -33,7 +33,8 @@ describe('capabilityConsents draft text and flags', () => {
 
     for (const cap of CANDIDATE_CAPABILITIES) {
       const doc = CAPABILITY_CONSENT_DOCUMENTS[cap];
-      expect(doc.items.length).toBeGreaterThanOrEqual(3);
+      // B787: поручение на отклик — одна фраза, одобренная владельцем дословно.
+      expect(doc.items.length).toBeGreaterThanOrEqual(cap === 'actions_on_behalf' ? 1 : 3);
       expect(doc.items.length).toBeLessThanOrEqual(5);
 
       const allText = `${doc.title} ${doc.items.join(' ')}`;

@@ -10,6 +10,7 @@ import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
+import { VISIBILITY_QUESTION, type VisibilityState } from './visibilityQuestion';
 import { ChoiceField } from './ChoiceField';
 import {
   getQuestionnaire,
@@ -35,6 +36,8 @@ type Mark =
 export interface QuestionnaireState {
   /** Анкета с вопросами; `null` — её нет или вопросы заранее не читаются. */
   readonly form: ApplicationQuestionnaire | null;
+  /** Первое чтение анкеты ещё идёт. */
+  readonly loading: boolean;
   /** Название и компания вакансии, как их знает сервер. */
   readonly known: { readonly vacancyTitle: string; readonly companyName: string } | null;
   readonly draft: AnswerDraft;
@@ -67,6 +70,7 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const title = data?.vacancyTitle;
   return {
     form,
+    loading: state.status === 'loading' && !data,
     known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
     draft,
     saveError,
@@ -173,6 +177,26 @@ interface ActionsProps {
   readonly state: QuestionnaireState;
   /** Анкета hh.ru в приложении: отклик с ответами уходит отсюда (o04). */
   readonly onSend: (() => void) | null;
+  readonly declined: boolean;
+}
+
+/** B787: вопрос hh.ru о показе резюме — строкой анкеты; без «Да» отклик не уходит. */
+function VisibilityRow({ visibility }: { readonly visibility: VisibilityState }) {
+  return (
+    <li className="qa">
+      <div className="qa-q">
+        <span>{VISIBILITY_QUESTION.text}</span>
+      </div>
+      <div className="field">
+        <ChoiceField
+          fieldId={`qa-${VISIBILITY_QUESTION.id}`}
+          question={VISIBILITY_QUESTION}
+          value={visibility.value ?? ''}
+          onPick={visibility.set}
+        />
+      </div>
+    </li>
+  );
 }
 
 /** Переводит к полю вопроса: прокрутка и фокус, без смены адреса. */
@@ -183,7 +207,7 @@ function focusField(fieldId: string): void {
 }
 
 /** Главное действие анкеты: дойти до пропущенного обязательного вопроса или скопировать ответы. */
-function FormActions({ form, ready, state, onSend }: ActionsProps) {
+function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   const toast = useToast();
   const copy = () => {
     state.save();
@@ -212,7 +236,7 @@ function FormActions({ form, ready, state, onSend }: ActionsProps) {
         <Button
           variant={ready.nextRequired ? undefined : 'primary'}
           icon="send"
-          disabled={Boolean(ready.nextRequired) || state.submitted.kind === 'done'}
+          disabled={Boolean(ready.nextRequired) || declined || state.submitted.kind === 'done'}
           onClick={onSend}
         >
           Отправить отклик с анкетой
@@ -251,15 +275,20 @@ function SubmittedBlock({ state, onHh }: { readonly state: QuestionnaireState; r
 export interface FormStepProps {
   readonly state: QuestionnaireState;
   readonly form: ApplicationQuestionnaire;
+  readonly visibility: VisibilityState;
   readonly onSend: () => void;
 }
 
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form, onSend }: FormStepProps) {
+export function FormStep({ state, form, visibility, onSend }: FormStepProps) {
   const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
   const inApp = onHh && isTauriEnvironment();
   const send = inApp ? onSend : null;
-  const ready = readiness(form.questions, state.draft);
+  const asked = inApp && visibility.value !== null;
+  const ready = asked
+    ? readiness([...form.questions, VISIBILITY_QUESTION], { ...state.draft, [VISIBILITY_QUESTION.id]: visibility.value ?? '' })
+    : readiness(form.questions, state.draft);
+  const declined = asked && !visibility.agreed;
   const suggestions = new Map(form.suggestions.map((item) => [item.questionId, item]));
   return (
     <>
@@ -277,10 +306,11 @@ export function FormStep({ state, form, onSend }: FormStepProps) {
                 state={state}
               />
             ))}
+            {asked ? <VisibilityRow visibility={visibility} /> : null}
           </ul>
           {state.saveError ? <StatusLine state="err" text={state.saveError} /> : null}
           <div className="actions m-commit qa-mob">
-            <FormActions form={form} ready={ready} state={state} onSend={send} />
+            <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
           </div>
         </section>
       </div>
@@ -290,7 +320,7 @@ export function FormStep({ state, form, onSend }: FormStepProps) {
             <b className="num">{`${ready.answered} из ${ready.total}`}</b> готовы
           </p>
           <div className="actions">
-            <FormActions form={form} ready={ready} state={state} onSend={send} />
+            <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
           </div>
         </aside>
         {inApp ? null : <SubmittedBlock state={state} onHh={onHh} />}

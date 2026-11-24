@@ -136,7 +136,7 @@ pub struct Agreed {
 fn surface_script(open_code: &str, success_code: &str, agreed: Agreed, tail: &str) -> String {
     wrap(&format!(
         "var ask=function(s,yes,code){{if(!seen(s))return null;if(!yes)return {{code:code}};\
-var k='__oqAgreed_'+code;if(!window[k]){{window[k]=1;if(window.__oqSubmitted&&code==='visibility_warning')window.__oqHeld=1;q(s).click();}}return {{code:'waiting'}};}};\
+var k='__oqAgreed_'+code;if(!window[k]){{window[k]=1;q(s).click();}}return {{code:'waiting'}};}};\
 var asked=ask({relocation},{yes_relocation},'relocation_warning')||ask({visibility},{yes_visibility},'visibility_warning');\
 if(asked)return asked;{tail}\
 if(location.pathname.indexOf({response_page})===0||seen({questionnaire}))return {{code:'questionnaire'}};\
@@ -163,34 +163,21 @@ pub fn popup_script(agreed: Agreed) -> String {
     surface_script("popup", "already_applied", agreed, "")
 }
 
+/// Submit is pressed once per response: after it hh.ru may already have taken the response.
 /// After the submit: an open pop-up still means "waiting", a success means `sent`.
 pub fn result_script(agreed: Agreed) -> String {
-    surface_script("waiting", "sent", agreed, &repress())
+    surface_script("waiting", "sent", agreed, "")
 }
 
 /// After the submit on hh.ru's own response page, where the form itself is the questionnaire.
 pub fn page_result_script(agreed: Agreed) -> String {
     let tail = format!(
-        "{repress}if(seen({error}))return {{code:'hh_error'}};\
+        "if(seen({error}))return {{code:'hh_error'}};\
 if(location.pathname.indexOf({page})===0)return {{code:'waiting'}};",
-        repress = repress(),
         error = literal(HH_PAGE_ERROR),
         page = literal(HH_RESPONSE_PAGE),
     );
     surface_script("waiting", "sent", agreed, &tail)
-}
-
-/// hh.ru held our submit back to ask about visibility (it cancels the press itself). Once the
-/// candidate's «yes» closed that question and the form still waits, submit is pressed one more time.
-fn repress() -> String {
-    format!(
-        "if(window.__oqHeld&&!window.__oqResubmitted){{var s=q({submit});\
-if(s&&!s.disabled&&s.getAttribute('aria-disabled')!=='true'){{\
-window.__oqIdle=(window.__oqIdle||0)+1;if(window.__oqIdle>={polls}){{window.__oqResubmitted=1;s.click();}}}}\
-else window.__oqIdle=0;}}",
-        submit = literal(HH_SUBMIT),
-        polls = RESUME_LIST_POLLS,
-    )
 }
 
 /// B708: read-only look at the open page after an unsuccessful response: did the
