@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
 import type { CandidateSnapshot } from '../data/candidateStore';
 import { CandidateStoreConflictError } from '../data/store/errors';
 import { applyBulletTranslation, pendingTranslation } from '../domain/experienceBulletLanguage';
@@ -15,9 +16,11 @@ import {
   type FactRewriteProposal,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
+import { withBulletVariant } from '../domain/factRewriteVariant';
 import { EMPTY_RESUME_DRAFT, MAX_REWRITE_BULLETS, type ResumePendingFactRewrite } from '../domain/resumeDraft';
 import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
+import { factRewriteSubject, registerFactRewriteVariantRoutes } from './factRewriteVariantRoutes';
 import {
   authenticateCandidate,
   csrfError,
@@ -193,8 +196,11 @@ const applyBody = z
     edits: z.record(z.string().max(160), z.string().max(400).nullable()).optional(),
     /** Only these bullets are applied; with `only`, edits are not taken. */
     only: z.array(z.string().max(160)).min(1).max(MAX_REWRITE_BULLETS).optional(),
+    /** B786: вариант единственного пункта из `only`; его текст берётся из хранилища. */
+    variantId: z.string().max(80).optional(),
   })
   .strict()
+  .refine((body) => !body.variantId || body.only?.length === 1)
   .optional();
 
 function staleError(request: FastifyRequest, reply: FastifyReply) {
@@ -224,8 +230,11 @@ function editedProposal(
   proposal: FactRewriteProposal,
   edits: Readonly<Record<string, string | null>>,
   only: readonly string[] | undefined,
+  variantText?: string,
 ): FactRewriteProposal | null {
   try {
+    const [key] = only ?? [];
+    if (key && variantText) return withBulletVariant(proposal, key, variantText);
     const edited = only ? withOnlyBullets(proposal, only) : withBulletEdits(proposal, edits);
     return edited.places.length ? edited : null;
   } catch (error) {
@@ -234,7 +243,20 @@ function editedProposal(
   }
 }
 
-const handleApply: Handler = async (deps, request, reply) => {
+/** Текст сохранённого варианта; `null` — такого варианта у пункта нет. */
+function variantTextOf(
+  variants: SqliteTextVariantRepository,
+  candidateId: string,
+  proposalId: string,
+  body: z.infer<typeof applyBody>,
+): string | null | undefined {
+  const [key] = body?.only ?? [];
+  if (!body?.variantId || !key) return undefined;
+  const { variants: stored } = variants.list(factRewriteSubject(candidateId, proposalId, key));
+  return stored.find((variant) => variant.id === body.variantId)?.text ?? null;
+}
+
+const handleApply = (variants: SqliteTextVariantRepository): Handler => async (deps, request, reply) => {
   const candidate = signedInCandidate(deps, request, reply);
   if (!candidate) return undefined;
   const { id } = idParams.parse(request.params);
@@ -242,7 +264,9 @@ const handleApply: Handler = async (deps, request, reply) => {
   if (!body.success) return editError(request, reply);
   const pending = deps.candidateStore.getSnapshot(candidate.id).resume?.draft.factRewriteProposal;
   if (pending?.proposal.id !== id) return staleError(request, reply);
-  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {}, body.data?.only);
+  const variantText = variantTextOf(variants, candidate.id, id, body.data);
+  if (variantText === null) return editError(request, reply);
+  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {}, body.data?.only, variantText);
   if (!proposal) return editError(request, reply);
   try {
     const rewrite = deps.candidateStore.applyExperienceFactRewrite(
@@ -272,7 +296,21 @@ export async function registerExperienceFactRewriteRoutes(
   deps: RouteDeps,
 ): Promise<void> {
   const running = new RunningRewrites();
+  const variants = new SqliteTextVariantRepository({
+    databasePath: deps.config.databasePath,
+    encryptionKey: deps.config.dataEncryptionKey,
+  });
+  app.addHook('onClose', async () => variants.close());
   app.post('/api/v1/candidate/experience-fact-rewrite', withDeps(deps, proposeHandler(running)));
-  app.post('/api/v1/candidate/experience-fact-rewrite/:id/apply', withDeps(deps, handleApply));
+  app.post('/api/v1/candidate/experience-fact-rewrite/:id/apply', withDeps(deps, handleApply(variants)));
   app.post('/api/v1/candidate/experience-fact-rewrite/:id/revert', withDeps(deps, handleRevert));
+  registerFactRewriteVariantRoutes(app, deps, {
+    variants,
+    current: (bound, candidateId) => {
+      const snapshot = bound.candidateStore.getSnapshot(candidateId);
+      const pending = snapshot.resume?.draft.factRewriteProposal;
+      const request = rewriteRequestOf(snapshot);
+      return pending?.digest === requestDigest(request) ? { proposal: pending.proposal, request } : null;
+    },
+  });
 }
