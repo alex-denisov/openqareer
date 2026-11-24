@@ -239,6 +239,25 @@ describe('«История изменений» профиля', () => {
     expect((await revertChange(ctx, latest.id)).statusCode).toBe(409);
   });
 
+  it('отбирает по источнику и считает правки по источникам', async () => {
+    const ctx = await setup();
+    await putDraft(ctx, 'Engineering Lead');
+    const read = (query: string) =>
+      ctx.app.inject({
+        method: 'GET',
+        url: `/api/v1/candidate/profile/history?${query}`,
+        headers: { authorization: ctx.authorization },
+      });
+    const all = (await read('page=0')).json().data;
+    const own = (await read('source=candidate')).json().data;
+    const consultant = (await read('source=consultant')).json().data;
+    expect(all.sources).toEqual({ all: all.total, candidate: own.total, consultant: 0 });
+    expect(own.total).toBeGreaterThan(0);
+    expect(own.sources).toEqual(all.sources);
+    expect(consultant).toMatchObject({ entries: [], total: 0 });
+    expect((await read('source=linkedin')).statusCode).toBe(422);
+  });
+
   it('pages the log by 20', async () => {
     const ctx = await setup();
     for (let index = 0; index < 21; index += 1) await putDraft(ctx, `Lead ${index}`);

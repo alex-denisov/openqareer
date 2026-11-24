@@ -2,6 +2,9 @@ import { INTERVIEW_QUESTION_COUNT } from '../../shared/interviewPlan';
 
 export { INTERVIEW_QUESTION_COUNT };
 
+/** Время ответа справочное: дольше часа (вернулись на следующий день) — пишем час. */
+export const MAX_ANSWER_SECONDS = 3_600;
+
 export type InterviewQuestionType = 'behavioral' | 'system_design';
 export type InterviewAnswerMode = 'text' | 'voice';
 export type InterviewSessionStatus = 'active' | 'paused' | 'interrupted' | 'completed';
@@ -60,6 +63,8 @@ export interface BuildInterviewQuestionPlanInput {
   readonly stressMode: boolean;
   readonly stories: readonly InterviewStorySource[];
   readonly verifiedSkills?: readonly string[];
+  /** Условие задачи, которую кандидат видит на тренировке i03; без неё — общий вопрос. */
+  readonly systemDesignPrompt?: string;
   readonly questionIds: readonly string[];
 }
 
@@ -130,7 +135,7 @@ export function buildInterviewQuestionPlan(
       : null;
     const designScope = skill ? ` с использованием ${skill}` : '';
     const prompt = type === 'system_design'
-      ? `Для ${target}${designScope} спроектируйте сервис уведомлений с повторной доставкой и защитой от дублей. Начните с требований и ограничений.`
+      ? input.systemDesignPrompt ?? `Для ${target}${designScope} спроектируйте сервис уведомлений с повторной доставкой и защитой от дублей. Начните с требований и ограничений.`
       : story
         ? `В истории «${story.title}» опишите ситуацию, задачу, личные действия и проверяемый результат.`
         : 'Расскажите о профессиональной ситуации, где вы решили сложную задачу. Опишите ситуацию, цель, свои действия и результат из собственного опыта.';
@@ -202,7 +207,7 @@ export function recordInterviewAnswer(
   if (!question) throw new Error('interview_question_not_found');
   const text = answer.trim();
   if (!text) throw new Error('interview_answer_required');
-  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > 3_600) {
+  if (!Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > MAX_ANSWER_SECONDS) {
     throw new Error('interview_elapsed_seconds_invalid');
   }
   if (evaluation.rubric !== (question.type === 'behavioral' ? 'star' : 'system_design')) {
