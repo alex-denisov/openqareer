@@ -84,6 +84,7 @@ const AFFECTED = [
   'SELECT rowid, * FROM catalog_entries ORDER BY rowid',
   'SELECT rowid, * FROM catalog_entries_seen ORDER BY rowid',
   'SELECT * FROM vacancy_catalog_redirects ORDER BY old_key',
+  'SELECT * FROM cluster_split_pages ORDER BY old_key',
 ];
 const snapshot = (db: DatabaseSync) => AFFECTED.map((sql) => db.prepare(sql).all());
 
@@ -147,9 +148,12 @@ describe('cluster split step (B752)', () => {
     expect(
       db.prepare('SELECT cluster_id FROM catalog_entries_seen ORDER BY cluster_id').all(),
     ).toEqual(expect.arrayContaining([{ cluster_id: keptId }, { cluster_id: pieceId }]));
-    expect(db.prepare('SELECT count(*) AS n FROM vacancy_catalog_redirects').get()).toEqual({
-      n: 0,
-    });
+    // На прежней странице стояла ссылка Oracle: её адрес уходит куску Oracle.
+    expect(
+      db.prepare('SELECT old_key, new_cluster_id, new_key FROM vacancy_catalog_redirects').all(),
+    ).toEqual([
+      { old_key: vacancyKey(keptId), new_cluster_id: pieceId, new_key: vacancyKey(pieceId) },
+    ]);
     expect(db.prepare('SELECT count(*) AS n FROM cluster_split_journal').get()).toEqual({ n: 1 });
 
     expect(splitClustersStep(db, { chunk: 200, now: 2_000 })).toMatchObject({

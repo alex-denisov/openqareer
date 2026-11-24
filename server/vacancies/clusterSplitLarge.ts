@@ -57,7 +57,14 @@ export function finishSplit(
   plan: PlannedSplit,
   redirectStepId: string,
 ): void {
-  if (writeFounder(context.writers, plan.pieces, redirectStepId)) context.result.catalogMoved += 1;
+  const outcome = writeFounder(context.writers, plan, redirectStepId);
+  if (outcome) {
+    context.result.catalogMoved += 1;
+    context.result.pages[outcome] += 1;
+    if (outcome === 'unresolved') {
+      context.log('cluster_split_page_unresolved', { clusterId: plan.cluster.id });
+    }
+  }
   context.units += 1;
   context.result.split += 1;
 }

@@ -6,6 +6,7 @@ import {
   parseCluster,
   planClusterSplit,
 } from './clusterSplit';
+import { linkOwnersOf, type LinkOwners } from './clusterSplitPages';
 
 /**
  * B752: план шага строится до транзакции записи — чтение пула и сведение
@@ -20,6 +21,7 @@ export interface PlannedSplit {
   readonly cluster: VacancyCluster;
   /** Основатель первым, затем новые куски. */
   readonly pieces: readonly VacancyCluster[];
+  readonly links: LinkOwners;
 }
 
 export type PlannedItem =
@@ -46,9 +48,10 @@ export function planOf(db: DatabaseSync, rowid: number, json: string): PlannedSp
   if (cachedPlan?.rowid === rowid && cachedPlan.json === json) return cachedPlan;
   const cluster = parseCluster(json);
   if (!cluster || !hasCrossSourceIdCollision(cluster)) return undefined;
-  const pieces = planClusterSplit(cluster, loadMemberVacancies(db, cluster));
+  const vacancies = loadMemberVacancies(db, cluster);
+  const pieces = planClusterSplit(cluster, vacancies);
   if (pieces.length <= 1) return undefined;
-  return { kind: 'split', rowid, json, cluster, pieces };
+  return { kind: 'split', rowid, json, cluster, pieces, links: linkOwnersOf(pieces, vacancies) };
 }
 
 /** Большой план запоминается: следующий шаг продолжит его части. */

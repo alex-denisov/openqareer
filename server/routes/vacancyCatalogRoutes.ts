@@ -7,6 +7,7 @@
  */
 import { isCardInRollout } from '../seo/catalogCardRolloutReader';
 import { readCatalogRuSummary } from '../seo/catalogRuSummaryReader';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { searchIndexFor } from '../vacancies/vacancyCatalogSearch';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
@@ -419,32 +420,56 @@ function ruSummaryReader(deps: RouteDeps): RuSummaryReader {
   return (card) => readCatalogRuSummary(deps.config.databasePath, card);
 }
 
-/** B752: ключ страницы, переехавшей к куску разбитого кластера, — 301 на её новый адрес. */
-function redirectMovedVacancy(deps: RouteDeps, reply: FastifyReply, key: string): boolean {
-  const moved = readCatalogRedirect(deps.config.databasePath, key);
-  if (moved) void reply.redirect(moved, 301);
-  return moved !== undefined;
+/**
+ * B752: адрес, опубликованный до разбиения кластера, ведёт на ту же вакансию —
+ * 301 на страницу куска, а без страницы отвечает как снятая карточка. Ключ мог
+ * остаться у основателя с другой вакансией, поэтому у живой страницы
+ * сравнивается весь адрес, а не только ключ.
+ */
+function sendMovedVacancy(
+  deps: RouteDeps,
+  reply: FastifyReply,
+  request: { readonly key: string; readonly url: string; readonly held: boolean },
+): FastifyReply | undefined {
+  const moved = readCatalogRedirect(deps.config.databasePath, request.key);
+  const path = request.url.split('?')[0]!.replace(/\/$/u, '');
+  if (!moved || moved.path === path) return undefined;
+  if (request.held && moved.oldPath !== path) return undefined;
+  if (moved.path) return reply.redirect(moved.path, 301);
+  const gone = () => renderGoneDocument(buildCatalogPageFromEntries([], 1, 0));
+  // Копия в архиве под этим ключом может быть уже другой вакансией основателя.
+  return sendClosedVacancy(deps, reply, request.key, gone, moved.oldPath);
+}
+
+/**
+ * Кластер несёт только первые 300 знаков описания. Полный текст лежит у
+ * исходной вакансии — её идентификатор и есть хвост идентификатора кластера
+ * (`cluster-<vacancyId>`), поэтому разметка и страница показывают то же
+ * самое, что отдала площадка, а не обрывок на полуслове.
+ */
+function detailOf(deps: RouteDeps, found: VacancyCluster) {
+  const sourceId = found.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
+  const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
+  return buildVacancyDetail(
+    found,
+    full?.fullDescription ?? full?.description,
+    full,
+    new Date(),
+    ruSummaryReader(deps),
+    (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
+  );
 }
 
 async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const key = parseVacancyPath(request.url);
   const projected = key ? deps.multiSourceEngine.getPublicCatalogEntry(key) : undefined;
+  const moved = key
+    ? sendMovedVacancy(deps, reply, { key, url: request.url, held: projected !== undefined })
+    : undefined;
+  if (moved) return moved;
   if (projected) {
     const found = deps.multiSourceEngine.getPublicCatalogCluster(projected.clusterId);
-    const sourceId = found?.id.startsWith('cluster-')
-      ? found.id.slice('cluster-'.length)
-      : undefined;
-    const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
-    const detail = found
-      ? buildVacancyDetail(
-          found,
-          full?.fullDescription ?? full?.description,
-          full,
-          new Date(),
-          ruSummaryReader(deps),
-          (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
-        )
-      : null;
+    const detail = found ? detailOf(deps, found) : null;
     // 11.11: the stored path is the one the sitemap and the lists link to; a slug
     // rebuilt from a since-cleaned title must not point the canonical elsewhere.
     if (detail) {
@@ -455,25 +480,9 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
       renderGoneDocument(buildCatalogPageFromEntries([projected], 1, 1)),
     );
   }
-  if (key && redirectMovedVacancy(deps, reply, key)) return reply;
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
   const found = key ? clusters.find((cluster) => vacancyKey(cluster.id) === key) : undefined;
-  // Кластер несёт только первые 300 знаков описания. Полный текст лежит у
-  // исходной вакансии — её идентификатор и есть хвост идентификатора кластера
-  // (`cluster-<vacancyId>`), поэтому разметка и страница показывают то же
-  // самое, что отдала площадка, а не обрывок на полуслове.
-  const sourceId = found?.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
-  const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
-  const detail = found
-    ? buildVacancyDetail(
-        found,
-        full?.fullDescription ?? full?.description,
-        full,
-        new Date(),
-        ruSummaryReader(deps),
-        (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
-      )
-    : null;
+  const detail = found ? detailOf(deps, found) : null;
 
   if (!detail) {
     if (!key) return sendDocument(reply, renderGoneDocument(buildCatalogPage(clusters, 1)), 410);
@@ -541,9 +550,11 @@ function sendClosedVacancy(
   reply: FastifyReply,
   key: string,
   gone: () => string,
+  onlyPath?: string,
 ): FastifyReply {
   const card = readCatalogArchiveCard(deps.config.databasePath, key);
-  if (!card || archivePageDecision(card, new Date()) === 'gone') {
+  const other = onlyPath !== undefined && card?.path !== onlyPath;
+  if (!card || other || archivePageDecision(card, new Date()) === 'gone') {
     return sendDocument(reply, gone(), 410);
   }
   const listingPath = publishedListingPath(deps, card);
