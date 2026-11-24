@@ -172,7 +172,7 @@ export function MockQuestion(props: QuestionProps) {
       <MockAnswerField
         text={text}
         readOnly={answered}
-        empty={empty}
+        empty={empty && !text.trim()}
         dictation={dictation}
         onChange={setText}
       />

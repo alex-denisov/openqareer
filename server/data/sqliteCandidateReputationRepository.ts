@@ -349,6 +349,14 @@ export class SqliteCandidateReputationRepository {
     return updated;
   }
 
+  /** B668: ссылки, добавленные кандидатом после запуска, — в последней проверке следа. */
+  addFootprintQueryIds(candidateId: string, ids: readonly string[]): void {
+    const audit = this.getLatestFootprintAudit(candidateId);
+    if (!audit || ids.length === 0) return;
+    const addedQueryIds = [...new Set([...(audit.addedQueryIds ?? []), ...ids])];
+    this.saveFootprintAudit({ ...audit, addedQueryIds });
+  }
+
   /** B544/B382: stores the candidate's checklist mark, profile fact or removal path on one finding. */
   updateFootprintFindingChecklist(
     candidateId: string,

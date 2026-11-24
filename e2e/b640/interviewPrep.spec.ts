@@ -74,11 +74,13 @@ test.describe('B659: «Подготовка к интервью» (I1)', () => {
     await expectGates(page);
   });
 
-  test('B749: компании нет в данных — одна строка, без выдуманных фактов', async ({ page }) => {
+  test('B749: компании нет в подборке — данные вакансии из отклика, без выдуманных фактов', async ({
+    page,
+  }) => {
     await open(page, '/app/responses/r-arka/interview', 'i01', { noCompany: true });
     const about = page.locator('section.mod', { hasText: 'Что известно о компании' });
-    await expect(about).toContainText('О компании на платформе пока нет данных.');
-    await expect(about.locator('dl')).toHaveCount(0);
+    await expect(about.locator('dt')).toHaveText(['Компания']);
+    await expect(about.locator('dd')).toHaveText(['Арка Холдинг']);
   });
 
   test('B749: «Памятка к интервью» собрана из подготовки и копируется текстом', async ({

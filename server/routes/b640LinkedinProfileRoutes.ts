@@ -6,6 +6,7 @@ import {
   type LinkedinProfileView,
 } from '../../shared/b640LinkedinProfile';
 import { MAX_TEXT_VARIANTS } from '../../shared/textVariants';
+import { writeCheckedVariant } from '../domain/checkedVariant';
 import { LinkedinSectionRepository } from '../linkedinProfile/linkedinSectionRepository';
 import { LINKEDIN_REWRITE_BUDGET_MS, LINKEDIN_VIEW_WAIT_MS, rewrittenSuggestions } from '../linkedinProfile/linkedinRewrite';
 import { checkLinkedinVariant, linkedinVariantRequest } from '../linkedinProfile/linkedinVariant';
@@ -112,13 +113,12 @@ async function newVariant(
   const variantRequest = linkedinVariantRequest(key, profile.input, avoid, profile.currentAbout);
   if (!variantRequest) return { error: 'missing' };
   const writer = deps.experienceFactRewriter;
-  const output = writer?.linkedinVariant ? await writer.linkedinVariant(variantRequest).catch(() => null) : null;
-  const text = output
-    ? checkLinkedinVariant(
-        variantRequest, output,
-        (reason) => log.info({ section: variantRequest.target, reason }, 'linkedin_variant_rejected'),
-      )
-    : null;
+  const text = await writeCheckedVariant({
+    request: variantRequest,
+    write: async (input) => (await writer?.linkedinVariant?.(input).catch(() => null)) ?? null,
+    check: (output, onReject) => checkLinkedinVariant(variantRequest, output, onReject),
+    onReject: (reason, attempt) => log.info({ section: variantRequest.target, reason, attempt }, 'linkedin_variant_rejected'),
+  });
   if (!text) return { error: 'unavailable' };
   if (!repo.addVariant(candidateId, key, text, STORED_VARIANTS_MAX)) return { error: 'limit' };
   const base = avoid.length > (marks.variants.get(key)?.length ?? 0) ? avoid[0] : null;

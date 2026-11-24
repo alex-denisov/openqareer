@@ -39,6 +39,11 @@ describe('LinkedIn 1st-degree connections extract (B448)', () => {
       companyName: 'Вектор Банк',
     });
     expect(companyFromHeadline('Recruiter @ Лента Групп')?.companyName).toBe('Лента Групп');
+    expect(companyFromHeadline('CPO @ Positive Technologies | ex Product Lead at Wildberries')).toEqual({
+      roleTitle: 'CPO',
+      companyName: 'Positive Technologies',
+    });
+    expect(companyFromHeadline('Консультант, экс-директор в Wildberries')).toBeNull();
     expect(companyFromHeadline('Product enthusiast')).toBeNull();
   });
 

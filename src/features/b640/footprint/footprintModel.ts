@@ -5,6 +5,7 @@ import type {
   FootprintRiskLevel,
   FootprintRiskSummary,
 } from '../../../../shared/footprintRisk';
+import { pluralRu } from '../../../../shared/pluralRu';
 import type { IconName } from '../kit';
 import type { B640Node } from '../routes';
 
@@ -51,12 +52,12 @@ export function selectedIds(
   return groups.filter((group) => selected.has(group.key)).flatMap((group) => group.ids);
 }
 
-const KIND_WORD: Readonly<Record<PlanItem['kind'], readonly [string, string]>> = {
-  name: ['имя', 'имени'],
-  email: ['почта', 'почты'],
-  username: ['ник', 'ника'],
-  profile_url: ['ссылка', 'ссылки'],
-  work_context: ['место работы', 'места работы'],
+const KIND_WORD: Readonly<Record<PlanItem['kind'], [string, string, string]>> = {
+  name: ['имя', 'имени', 'имён'],
+  email: ['почта', 'почты', 'почт'],
+  username: ['ник', 'ника', 'ников'],
+  profile_url: ['ссылка', 'ссылки', 'ссылок'],
+  work_context: ['место работы', 'места работы', 'мест работы'],
 };
 const KIND_ORDER: readonly PlanItem['kind'][] = ['name', 'email', 'username', 'profile_url', 'work_context'];
 
@@ -66,8 +67,8 @@ export function searchByLine(groups: readonly PlanGroup[], selected: ReadonlySet
   for (const kind of KIND_ORDER) {
     const count = groups.filter((group) => group.kind === kind && selected.has(group.key)).length;
     if (count === 0) continue;
-    const [one, many] = KIND_WORD[kind];
-    parts.push(count === 1 ? one : `${count} ${many}`);
+    const forms = KIND_WORD[kind];
+    parts.push(count === 1 ? forms[0] : pluralRu(count, forms));
   }
   return parts.join(', ');
 }

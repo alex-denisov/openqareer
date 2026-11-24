@@ -86,7 +86,13 @@ async function vacancyPay(response: ApplicationView, signal: AbortSignal): Promi
 async function loadCompanyFacts(response: ApplicationView): Promise<CompanyFacts> {
   const name = response.vacancy?.companyHidden ? '' : (response.vacancy?.company ?? '').trim();
   const card = name ? await optional(() => getB640Company(name)) : null;
-  return companyFacts({ company: card?.company ?? null, clusterId: response.clusterId });
+  return companyFacts({
+    company: card?.company ?? null,
+    clusterId: response.clusterId,
+    snapshot: response.vacancy
+      ? { vacancy: response.vacancy, savedAt: response.createdAt }
+      : null,
+  });
 }
 
 /** Отклик по адресу; `next` — ближайшее интервью. `null` — такого отклика нет. */

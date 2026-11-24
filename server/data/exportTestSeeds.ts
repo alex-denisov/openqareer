@@ -68,6 +68,12 @@ export function seedRecording(database: DatabaseSync, candidateId: string, tag: 
     )
     .run(recordingId, sealed.seal(JSON.stringify({ summary: `Разбор ${tag}` }), findingsData(recordingId, 'th1')), AT);
   database
+    .prepare(
+      `INSERT INTO interview_recording_voices (recording_id, transcript_hash, status, labels, candidate_voice, updated_at)
+       VALUES (?, 'vh1', 'ready', '[1]', 1, ?)`,
+    )
+    .run(recordingId, AT);
+  database
     .prepare('INSERT INTO interview_interviewers (interview_id, candidate_id, name_cipher, updated_at) VALUES (?, ?, ?, ?)')
     .run(`int-${tag}`, candidateId, sealed.seal(`Ирина ${tag}`, interviewerData(`int-${tag}`)), AT);
 }

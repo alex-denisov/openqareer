@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { VariantWish } from '../../shared/textVariants';
+import { REJECTED_VARIANT_RULE, type OnVariantReject, type RetryableVariantRequest, type VariantRejectCode } from './checkedVariant';
 import {
   bulletKey,
   checkedBullet,
@@ -21,9 +22,9 @@ import { addsPersonalAction } from './letterFactTranslation';
 import { textLanguage } from './profileLanguage';
 import { wishInstruction } from './textVariants';
 
-export const FACT_REWRITE_VARIANT_PROMPT_REVISION = 'experience-fact-rewrite-variant-2026-11-24';
+export const FACT_REWRITE_VARIANT_PROMPT_REVISION = 'experience-fact-rewrite-variant-2026-11-24-2';
 
-export interface FactRewriteVariantRequest {
+export interface FactRewriteVariantRequest extends RetryableVariantRequest {
   readonly place: Pick<RewritePlace, 'employer' | 'title' | 'period' | 'language'>;
   readonly facts: readonly RewriteFact[];
   /** Исходный пункт: вариант не приписывает кандидату действий сверх него и фактов. */
@@ -84,6 +85,7 @@ export const FACT_REWRITE_VARIANT_INSTRUCTIONS = `Ты карьерный кон
 - Те же факты. Числа, проценты, суммы, названия компаний, продуктов и технологий — только из facts; числа пиши цифрами. Не придумывай и не округляй.
 - Не приписывай кандидату больше, чем в facts и current. Факт дословно не переписывай.
 - Язык — place.language ("ru" — русский, "en" — английский).
+${REJECTED_VARIANT_RULE}
 
 Ответь только JSON: {"text":"..."}`;
 
@@ -115,19 +117,24 @@ function addsCyrillicNames(text: string, source: string): boolean {
 export function checkFactRewriteVariant(
   request: FactRewriteVariantRequest,
   output: FactRewriteVariantOutput,
+  onReject?: OnVariantReject,
 ): string | null {
+  const refuse = (reason: VariantRejectCode) => {
+    onReject?.(reason);
+    return null;
+  };
   const { place, facts, current } = request;
   const statements = new Map(facts.map((fact) => [fact.id, fact.statement]));
   const checked = checkedBullet({ text: output.text, sourceFactIds: facts.map((fact) => fact.id) }, statements, place.language);
-  if (!checked) return null;
+  if (!checked) return refuse('bullet');
   const said = facts.map((fact) => fact.statement).join('\n');
   const spoken = textLanguage(said);
   // Факты на другом языке: латинское написание названия есть только в уже показанном пункте.
   const named = [said, place.employer, spoken && spoken !== place.language ? current : ''].join('\n');
-  if (addsNames(checked.text, named, place.language) || addsCyrillicNames(checked.text, named)) return null;
-  if ([...statements.values(), current].every((source) => addsPersonalAction(source, checked.text))) return null;
+  if (addsNames(checked.text, named, place.language) || addsCyrillicNames(checked.text, named)) return refuse('name');
+  if ([...statements.values(), current].every((source) => addsPersonalAction(source, checked.text))) return refuse('action');
   const own = flat(checked.text);
-  return request.avoid.some((previous) => flat(previous) === own) ? null : checked.text;
+  return request.avoid.some((previous) => flat(previous) === own) ? refuse('repeat') : checked.text;
 }
 
 /** Один пункт предложения с текстом выбранного варианта. */

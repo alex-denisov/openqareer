@@ -28,6 +28,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   resume_drafts: { export: 'resume' },
   candidate_documents: { export: 'documentContents' },
   vacancy_subscriptions: { export: 'vacancySubscriptions' },
+  vacancy_subscription_items_v14: { internal: MIGRATION_COPY },
+  vacancy_subscription_items_v15: { internal: MIGRATION_COPY },
   // Остальные разделы.
   consultant_conversations: { export: 'consultantConversations' },
   executive_requests: { export: 'executiveRequests' },
@@ -177,6 +179,9 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   b640_offer_choices: { export: 'account' },
   // B642: только тексты расшифровок (аудио не хранится); сегменты висят на записи.
   interview_recordings: { export: 'interviewRecordings' },
+  interview_recording_segments: { export: 'interviewRecordings' },
+  interview_recording_voices: { export: 'interviewRecordings' },
+  interview_debrief_analyses: { export: 'interviewRecordings' },
   interview_interviewers: { export: 'interviewRecordings' },
   candidate_auto_apply_consents: { export: 'automation' },
   candidate_auto_apply_journal: { export: 'automation' },
