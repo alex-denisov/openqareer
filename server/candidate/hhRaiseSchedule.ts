@@ -15,11 +15,27 @@ export function nextAllowedAt(from: Date, random: () => number = Math.random): s
   return new Date(from.getTime() + HH_RAISE_EVERY_HOURS * HOUR_MS + jitter).toISOString();
 }
 
+const DAY_MS = 24 * HOUR_MS;
+/** Москва без перехода на летнее время. */
+const MOSCOW_OFFSET_MS = 3 * HOUR_MS;
+/** Запас после времени с кнопки hh.ru. */
+const CLOCK_MARGIN_MS = 2 * MINUTE_MS;
+
+/** Ближайшее будущее «ЧЧ:ММ» по Москве с запасом, не дальше суток. */
+export function nextAtMoscowClock(clock: string, now: Date): string {
+  const [hours, minutes] = clock.split(':').map(Number);
+  const midnight = Math.floor((now.getTime() + MOSCOW_OFFSET_MS) / DAY_MS) * DAY_MS - MOSCOW_OFFSET_MS;
+  const at = midnight + hours * HOUR_MS + minutes * MINUTE_MS + CLOCK_MARGIN_MS;
+  const fromNow = (at - now.getTime() + DAY_MS) % DAY_MS;
+  return new Date(now.getTime() + (fromNow || DAY_MS)).toISOString();
+}
+
 /** Что менять в расписании после исхода поднятия; сам hh здесь не вызывается. */
 export function applyOutcome(
   outcome: HhRaiseOutcome,
   now: Date,
   random: () => number = Math.random,
+  availableAt?: string,
 ): HhRaiseSchedulePatch {
   const at = now.toISOString();
   const result = (status: 'ok' | 'error', reason: string | null) => ({ lastResult: status, lastReason: reason, lastResultAt: at });
@@ -27,8 +43,11 @@ export function applyOutcome(
     case 'ok':
       return { ...result('ok', null), lastRaisedAt: at, nextRaiseAt: nextAllowedAt(now, random), pausedUntil: null, pauseReason: null };
     case 'too_early':
-      // hh сказал «ещё рано»: следующий допустимый час, от этого момента.
-      return { ...result('error', 'too_early'), nextRaiseAt: nextAllowedAt(now, random) };
+      // hh сказал «ещё рано»: не сбой. Следующее — по времени с кнопки, без него от этого момента.
+      return {
+        ...result('ok', 'too_early'),
+        nextRaiseAt: availableAt ? nextAtMoscowClock(availableAt, now) : nextAllowedAt(now, random),
+      };
     case 'captcha': {
       const until = new Date(now.getTime() + HH_RAISE_CAPTCHA_PAUSE_HOURS * HOUR_MS).toISOString();
       return { ...result('error', 'captcha'), pausedUntil: until, pauseReason: 'captcha', nextRaiseAt: until };

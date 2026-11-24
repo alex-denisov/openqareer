@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { B640HhRaiseState } from '../../../../../shared/b640HhRaise';
 import { openHhSignIn } from '../../apply/hh/hhDesktop';
+import { requestHhRaiseStep } from '../../apply/hh/hhRaisePoller';
 import { Button, StatusLine } from '../../kit';
 import { getHhRaise, retryHhRaise, setHhRaiseEnabled } from './hhRaiseApi';
 import { lineOf } from './hhRaiseText';
 
+/** Как часто экран перечитывает состояние, пока по резюме есть незавершённое задание. */
+export const HH_RAISE_REFRESH_MS = 5_000;
 const SWITCH_ID = 'hh-up';
 const RESUME_ID = 'hh-cv';
 
@@ -73,11 +76,34 @@ function useHhRaise() {
     return () => controller.abort();
   }, []);
 
-  const change = useCallback(async (run: () => Promise<B640HhRaiseState>) => {
+  // Во время записи чтение снимается, чтобы старый ответ не затёр новый.
+  const waiting = Boolean(view?.pending && view.enabled) && !busy;
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const refresh = async () => {
+      try {
+        const next = await getHhRaise(controller.signal);
+        if (!controller.signal.aborted) setView(next);
+      } catch {
+        // Сбой чтения не меняет строку: следующая попытка через тот же интервал.
+      }
+      if (!controller.signal.aborted) timer = setTimeout(refresh, HH_RAISE_REFRESH_MS);
+    };
+    timer = setTimeout(refresh, HH_RAISE_REFRESH_MS);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [waiting]);
+
+  const change = useCallback(async (run: () => Promise<B640HhRaiseState>, startStep = false) => {
     setBusy(true);
     try {
       setView(await run());
       setFailed(false);
+      if (startStep) requestHhRaiseStep();
     } catch {
       setFailed(true);
     } finally {
@@ -97,14 +123,14 @@ export function HhRaiseStatus() {
   if (!view) return <StatusLine state="wait" text="Загружаем состояние поднятия" />;
   if (!view.connected) return null;
   const line = lineOf(view);
-  const retry = <Button size="sm" busy={busy} onClick={() => change(() => retryHhRaise(view.resumeId ?? undefined))}>Повторить</Button>;
+  const retry = <Button size="sm" busy={busy} onClick={() => change(() => retryHhRaise(view.resumeId ?? undefined), true)}>Повторить</Button>;
   const signIn = <Button size="sm" onClick={() => void openHhSignIn()}>Войти</Button>;
   return (
     <>
       <RaiseSwitch
         checked={view.enabled}
         disabled={busy}
-        onChange={(enabled) => void change(() => setHhRaiseEnabled(enabled, view.resumeId ?? undefined))}
+        onChange={(enabled) => void change(() => setHhRaiseEnabled(enabled, view.resumeId ?? undefined), enabled)}
       />
       <RaiseResume
         resumes={view.resumes}

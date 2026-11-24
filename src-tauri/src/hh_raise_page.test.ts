@@ -114,7 +114,8 @@ describe('B699: страница поднятия резюме hh.ru', () => {
       const page = open(
         `${menu}<p>${'опыт '.repeat(2000)}</p><button><span>${label}</span></button>${raiseButton}`,
       );
-      expect(page.run()).toBe('too_early');
+      const available = label.includes('9:05') ? '09:05' : '20:55';
+      expect(page.step()).toEqual({ code: 'too_early', available });
       expect(page.clicks).toHaveLength(0);
     },
   );
@@ -181,7 +182,7 @@ describe('B699: список резюме hh.ru', () => {
     const own = list(
       card('def456', raiseLink('def456')) + card(ID, '<span>Поднять в 20:55</span>'),
     );
-    expect(own.run()).toBe('too_early');
+    expect(own.step()).toEqual({ code: 'too_early', available: '20:55' });
     expect(own.clicks).toHaveLength(0);
     const other = list(
       card('def456', '<span>Поднять в 20:55</span>') + card(ID, raiseLink(ID)),

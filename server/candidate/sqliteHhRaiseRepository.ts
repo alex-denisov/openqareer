@@ -119,7 +119,7 @@ export class SqliteHhRaiseRepository {
     return row?.resume_id ?? null;
   }
 
-  /** Выбирает резюме: его расписание меняется, остальные выключаются, их задания уходят из очереди. */
+  /** Выбирает резюме: его расписание меняется, остальные выключаются. Задания выключенных из очереди снимаются. */
   chooseResume(candidateId: string, resumeId: string, patch: HhRaiseSchedulePatch, now: string): HhRaiseScheduleRow {
     this.database.exec('BEGIN IMMEDIATE');
     try {
@@ -131,8 +131,8 @@ export class SqliteHhRaiseRepository {
         .run(now, candidateId, resumeId);
       this.database
         .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?
-                  WHERE candidate_id = ? AND resume_id != ? AND status = 'queued'`)
-        .run(now, candidateId, resumeId);
+                  WHERE candidate_id = ? AND status = 'queued' AND (resume_id != ? OR ? = 0)`)
+        .run(now, candidateId, resumeId, patch.enabled === false ? 0 : 1);
       const row = this.patchSchedule(candidateId, resumeId, patch, now);
       this.database.exec('COMMIT');
       return row;
@@ -190,10 +190,13 @@ export class SqliteHhRaiseRepository {
     return id;
   }
 
-  /** Отдаёт клиенту самое раннее задание кандидата и помечает его выполняемым. */
+  /** Отдаёт клиенту самое раннее задание кандидата (кроме выключенных резюме) и помечает его выполняемым. */
   claim(candidateId: string, now: string): HhRaiseTask | null {
     const row = this.database
-      .prepare(`SELECT id, resume_id FROM hh_raise_tasks WHERE candidate_id = ? AND status = 'queued' ORDER BY queued_at LIMIT 1`)
+      .prepare(`SELECT id, resume_id FROM hh_raise_tasks t WHERE candidate_id = ? AND status = 'queued'
+                  AND NOT EXISTS (SELECT 1 FROM hh_raise_schedules s
+                    WHERE s.candidate_id = t.candidate_id AND s.resume_id = t.resume_id AND s.enabled = 0)
+                ORDER BY queued_at LIMIT 1`)
       .get(candidateId) as { id: string; resume_id: string } | undefined;
     if (!row) return null;
     const changed = this.database
