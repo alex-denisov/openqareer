@@ -55,6 +55,7 @@ function writeCopy(path: string): void {
   const db = new DatabaseSync(path);
   db.exec(CLUSTER_SPLIT_TABLES);
   const totals = { steps: 0, scanned: 0, split: 0, pieces: 0, catalogMoved: 0, skipped: 0 };
+  const pages = { kept: 0, redirect: 0, gone: 0, unresolved: 0 };
   const started = performance.now();
   let maxStepMs = 0;
   let maxWriteMs = 0;
@@ -71,6 +72,10 @@ function writeCopy(path: string): void {
     totals.split += step.split;
     totals.pieces += step.pieces;
     totals.catalogMoved += step.catalogMoved;
+    pages.kept += step.pages.kept;
+    pages.redirect += step.pages.redirect;
+    pages.gone += step.pages.gone;
+    pages.unresolved += step.pages.unresolved;
     totals.skipped += step.skippedCandidateRef + step.skippedIdTaken;
     process.stdout.write(
       `${JSON.stringify({ stepId: step.stepId, ms, writeMs: step.writeMs, split: step.split, pieces: step.pieces })}\n`,
@@ -79,7 +84,7 @@ function writeCopy(path: string): void {
   db.close();
   const elapsedMs = Math.round(performance.now() - started);
   process.stdout.write(
-    `${JSON.stringify({ ...totals, maxStepMs, maxWriteMs, elapsedMs }, null, 2)}\n`,
+    `${JSON.stringify({ ...totals, pages, maxStepMs, maxWriteMs, elapsedMs }, null, 2)}\n`,
   );
 }
 

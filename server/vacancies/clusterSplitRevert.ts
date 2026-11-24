@@ -121,7 +121,11 @@ function restoreFounder(db: DatabaseSync, entry: JournalRow, pieceIds: readonly 
   const redirect = db.prepare(
     'DELETE FROM vacancy_catalog_redirects WHERE step_id = ? AND old_key = ?',
   );
-  for (const row of catalog.catalog_entries ?? []) redirect.run(entry.step_id, row.entry_key!);
+  const outcome = db.prepare('DELETE FROM cluster_split_pages WHERE step_id = ? AND old_key = ?');
+  for (const row of catalog.catalog_entries ?? []) {
+    redirect.run(entry.step_id, row.entry_key!);
+    outcome.run(entry.step_id, row.entry_key!);
+  }
   db.prepare('INSERT INTO cluster_split_revert_marks (journal_id) VALUES (?)').run(entry.id);
 }
 
@@ -179,6 +183,7 @@ function revertInTransaction(db: DatabaseSync, stepId: string, budget: Budget): 
     if (!revertEntry(db, entry, budget, result)) return result;
   }
   db.prepare('DELETE FROM vacancy_catalog_redirects WHERE step_id = ?').run(stepId);
+  db.prepare('DELETE FROM cluster_split_pages WHERE step_id = ?').run(stepId);
   return { ...result, done: true };
 }
 

@@ -10,6 +10,15 @@ export interface CatalogProjectionStatements {
   readonly upsert: { run(...values: SQLInputValue[]): unknown };
   readonly markSeen: { run(...values: SQLInputValue[]): unknown };
   readonly remove: { run(...values: SQLInputValue[]): unknown };
+  /** B752: адрес остался за вакансией, уехавшей к другому кластеру. */
+  readonly addressGivenAway: { get(...values: SQLInputValue[]): unknown };
+}
+
+function prepareAddressGivenAway(db: DatabaseSync) {
+  return db.prepare(
+    `SELECT 1 FROM vacancy_catalog_redirects
+      WHERE old_key = ? AND old_path = ? AND new_cluster_id <> ?`,
+  );
 }
 
 /**
@@ -63,6 +72,7 @@ export function prepareCatalogProjectionStatements(db: DatabaseSync): CatalogPro
        ON CONFLICT(cluster_id) DO UPDATE SET processed_at = excluded.processed_at`,
     ),
     remove: db.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?'),
+    addressGivenAway: prepareAddressGivenAway(db),
   };
 }
 
@@ -71,7 +81,7 @@ export function writeCatalogEntry(
   statements: CatalogProjectionStatements,
 ): void {
   const entry = catalogEntryRowOfCluster(cluster);
-  if (!entry) {
+  if (!entry || statements.addressGivenAway.get(entry.key, entry.path, cluster.id)) {
     // An unaddressable role is intentionally absent from the public catalog,
     // but still marked as inspected so it cannot hold the backfill open.
     statements.remove.run(cluster.id);

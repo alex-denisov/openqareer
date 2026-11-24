@@ -77,7 +77,7 @@ export function extractAtsLink(text?: string): string | null {
     .toLowerCase();
 }
 
-function normalizeUrl(url: string): string {
+export function normalizeUrl(url: string): string {
   return url
     .trim()
     .replace(/[?#].*$/, '')
