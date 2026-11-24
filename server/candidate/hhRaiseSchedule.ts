@@ -3,7 +3,7 @@ import {
   HH_RAISE_EVERY_HOURS,
   type HhRaiseOutcome,
 } from '../../shared/b640HhRaise';
-import type { HhRaiseSchedulePatch } from './sqliteHhRaiseRepository';
+import type { HhRaiseSchedulePatch, HhRaiseScheduleRow } from './sqliteHhRaiseRepository';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -55,4 +55,26 @@ export function firstRaiseAt(now: Date, random: () => number = Math.random): str
 /** Ровно через интервал hh после последнего поднятия — раньше площадка не примет. */
 export function raiseAvailableAt(lastRaisedAt: string): string {
   return new Date(Date.parse(lastRaisedAt) + HH_RAISE_EVERY_HOURS * HOUR_MS).toISOString();
+}
+
+/**
+ * Что менять в расписании выбранного резюме. Капча относится к входу кандидата, поэтому её пауза
+ * переходит от прежнего резюме; выход из hh.ru следующая попытка увидит сама. Поднятое раньше ждёт своих 4 часов.
+ */
+export function choicePatch(
+  former: HhRaiseScheduleRow | null,
+  chosen: HhRaiseScheduleRow | null,
+  enabled: boolean,
+  now: Date,
+  random: () => number = Math.random,
+): HhRaiseSchedulePatch {
+  const planned = chosen?.nextRaiseAt ?? firstRaiseAt(now, random);
+  const allowed = chosen?.lastRaisedAt ? raiseAvailableAt(chosen.lastRaisedAt) : planned;
+  const captcha = former?.pauseReason === 'captcha';
+  return {
+    enabled,
+    nextRaiseAt: planned > allowed ? planned : allowed,
+    pauseReason: captcha ? 'captcha' : null,
+    pausedUntil: captcha ? former.pausedUntil : null,
+  };
 }

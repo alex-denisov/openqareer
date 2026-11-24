@@ -1,3 +1,8 @@
+import {
+  isHhSource,
+  preferredApplySource,
+  type VacancySourceRef,
+} from '../../../../../shared/hhVacancySource';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import { platformOf, type Platform } from '../../responses/model/platform';
 import type {
@@ -65,7 +70,7 @@ interface HeadSources {
     readonly canonicalTitle: string;
     readonly canonicalCompany: string;
     readonly primaryUrl: string;
-    readonly sources: readonly { readonly sourceName?: string }[];
+    readonly sources: readonly VacancySourceRef[];
   } | null;
 }
 
@@ -73,12 +78,41 @@ function safeUrl(url: string | null | undefined): string | null {
   return url && /^https?:\/\//u.test(url) ? url : null;
 }
 
+function isHhSnapshot(snapshot: ApplicationView['vacancy']): boolean {
+  return Boolean(
+    snapshot && isHhSource({ sourceType: snapshot.source, sourceName: snapshot.source, sourceUrl: snapshot.url }),
+  );
+}
+
+/** Отклик не отправлен, а в его снимке не hh.ru: площадку сверяем с подборкой (B678). */
+export function needsPoolRoute(application: ApplicationView | null): boolean {
+  return !application || (application.stage === 'saved' && !isHhSnapshot(application.vacancy));
+}
+
+/**
+ * Площадка отклика и её адрес (B678): hh.ru первым, как на карточке вакансии. Снимок отклика
+ * главнее подборки; на hh.ru переходит только неотправленный со снимком другой площадки.
+ */
+export function applyRoute({ application, cluster }: Pick<HeadSources, 'application' | 'cluster'>): {
+  readonly source: string | undefined;
+  readonly url: string | null;
+} {
+  const snapshot = application?.vacancy ?? null;
+  const pool = cluster ? preferredApplySource(cluster) : null;
+  if (pool?.hh && safeUrl(pool.url) && needsPoolRoute(application)) {
+    return { source: pool.source, url: pool.url };
+  }
+  return {
+    source: snapshot?.source || pool?.source,
+    url: safeUrl(snapshot?.url) ?? safeUrl(pool?.url),
+  };
+}
+
 /** Шапка отклика: что известно о вакансии из карточки отклика, сервера и подбора. */
 export function buildHead({ application, known, cluster }: HeadSources): ApplyHead {
   const snapshot = application?.vacancy ?? null;
-  const sourceType = snapshot?.source;
-  const sourceName = cluster?.sources[0]?.sourceName;
-  const platform = sourceType || sourceName ? platformOf(sourceType || sourceName) : null;
+  const route = applyRoute({ application, cluster });
+  const platform = route.source ? platformOf(route.source) : null;
   return {
     title: snapshot?.title || known?.vacancyTitle || cluster?.canonicalTitle || 'Вакансия',
     company:
@@ -86,7 +120,7 @@ export function buildHead({ application, known, cluster }: HeadSources): ApplyHe
       known?.companyName ||
       cluster?.canonicalCompany ||
       '',
-    url: safeUrl(snapshot?.url) ?? safeUrl(cluster?.primaryUrl),
+    url: route.url,
     source: platform?.label ?? null,
     platform,
   };

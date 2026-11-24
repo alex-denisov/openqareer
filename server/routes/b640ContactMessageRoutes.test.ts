@@ -151,6 +151,38 @@ describe('B682: POST contact-messages/:id/variants', () => {
     expect(writer.calls).toHaveLength(calls);
   });
 
+  it('повторное открытие продолжает черновик: предел в три не обойти, после отправки — новый', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    writer.body = 'Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?';
+    const make = (messageId: string) => send('POST', `${BASE}/${messageId}/variants`, 'flagged.test', {});
+    for (let step = 0; step < 3; step += 1) expect((await make(id)).statusCode).toBe(201);
+    const calls = writer.calls.length;
+    const again = await draft();
+    expect([again.statusCode, again.json().data.id]).toEqual([200, id]);
+    expect((await make(again.json().data.id)).statusCode).toBe(409);
+    expect(writer.calls).toHaveLength(calls);
+    expect((await send('GET', list(id), 'flagged.test')).json().data.variants).toHaveLength(3);
+    const other = await draft({ contactId: 'anna', vacancyId: 'c1', kind: 'known_contact' });
+    expect(other.json().data.id).not.toBe(id);
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    expect((await draft()).json().data.id).toBe(id);
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${id}/sent`, 'flagged.test');
+    expect((await draft()).json().data.id).not.toBe(id);
+  });
+
+  it('два запроса сразу дают один черновик; сменился адрес получателя — новый черновик', async () => {
+    const { seed, send } = await setup();
+    await seed('anna', { fullName: 'Анна Ким', companyName: 'Альфа', linkedinUrl: 'https://www.linkedin.com/in/anna-kim' });
+    const body = { contactId: 'anna', kind: 'known_contact' };
+    const [a, b] = await Promise.all([0, 1].map(() => send('POST', BASE, 'flagged.test', body)));
+    expect(a!.json().data.id).toBe(b!.json().data.id);
+    await seed('anna', { fullName: 'Анна Ким', companyName: 'Альфа', linkedinUrl: 'https://www.linkedin.com/in/anna-new' });
+    const moved = await send('POST', BASE, 'flagged.test', body);
+    expect(moved.json().data.id).not.toBe(a!.json().data.id);
+  });
+
   it('без флага, чужой, отправленный, плохое тело и сбой модели — отказ', async () => {
     const { draft, send, writer } = await setup();
     const id = (await draft()).json().data.id as string;

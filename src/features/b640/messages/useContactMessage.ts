@@ -11,17 +11,15 @@ import {
   createB640ContactMessage,
   createB640ContactMessageVariant,
   editB640ContactMessage,
+  listB640ContactMessageVariants,
   markB640ContactMessageSent,
   type B640ContactMessage,
   type B640ContactMessageKind,
   type B640MessageTarget,
 } from './contactMessageApi';
 
-/** Панель открывает новый черновик: сохранённых вариантов у него ещё нет. */
-const noVariants = async (): Promise<TextVariantList> => ({
-  variants: [],
-  remaining: MAX_TEXT_VARIANTS,
-});
+/** Черновика ещё нет — вариантов тоже. */
+const NO_VARIANTS: TextVariantList = { variants: [], remaining: MAX_TEXT_VARIANTS };
 
 export type MessageStep = 'draft' | 'approved';
 export interface MessageFailure {
@@ -160,12 +158,18 @@ export function useContactMessage({ target, kind, recipientName, onSent }: UseCo
     });
   }, [target, kind, run, alive]);
 
+  const messageId = message?.id ?? null;
+  const load = useCallback(
+    (signal: AbortSignal): Promise<TextVariantList> =>
+      messageId ? listB640ContactMessageVariants(messageId, signal) : Promise.resolve(NO_VARIANTS),
+    [messageId],
+  );
   const create = (wish: VariantWish): Promise<TextVariantList> => {
     if (!message) return Promise.reject(new Error('message_not_ready'));
     const also = 'alsoVacancyId' in target ? target.alsoVacancyId : undefined;
     return createB640ContactMessageVariant(message.id, wish, also);
   };
-  const variants = useTextVariants({ load: noVariants, create }, { draftText, text, setText });
+  const variants = useTextVariants({ load, create }, { draftText, text, setText });
   const actions = useMessageActions({ message, text, runner, replace: setMessage, onSent });
   const locked = variants.locked || runner.pending;
   return {

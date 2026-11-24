@@ -25,7 +25,7 @@ export type B640MessageTarget =
   | { readonly contactId: string; readonly vacancyId?: string; readonly alsoVacancyId?: string }
   | { readonly recruiterId: string; readonly vacancyId: string };
 
-/** Черновик сообщения; платформа ничего не отправляет. Каждый вызов — новый черновик. */
+/** Черновик сообщения: неотправленный продолжается, иначе новый. Платформа ничего не отправляет. */
 export async function createB640ContactMessage(
   target: B640MessageTarget,
   kind: B640ContactMessageKind,
@@ -36,6 +36,16 @@ export async function createB640ContactMessage(
     body: JSON.stringify({ ...target, kind }),
   });
   return readData<B640ContactMessage>(response);
+}
+
+/** Сохранённые варианты черновика: он продолжается после закрытия панели. */
+export async function listB640ContactMessageVariants(
+  id: string,
+  signal?: AbortSignal,
+): Promise<TextVariantList<null>> {
+  const query = new URLSearchParams({ kind: 'message', subjectId: id });
+  const response = await apiFetch(`/api/v1/candidate/text-variants?${query.toString()}`, { signal });
+  return readData<TextVariantList<null>>(response);
 }
 
 /** «Другой вариант» черновика с пожеланием; у черновика до трёх, квоту не расходует. */
