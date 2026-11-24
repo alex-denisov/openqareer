@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { QuestionnaireQuestion } from '../../../../../shared/applicationQuestionnaire';
-import { answerOf, answersOf, copyText, readiness, readinessTitle } from './formModel';
+import { answerOf, answersOf, copyText, readiness, readinessTitle, hhAnswers } from './formModel';
 
 const QUESTIONS: readonly QuestionnaireQuestion[] = [
   { id: 'q1', text: 'Сколько человек было в вашей команде?', required: true, kind: 'text' },
@@ -30,5 +30,19 @@ describe('B641: готовность анкеты на экране', () => {
     expect(copyText(QUESTIONS, { q1: '9 человек', q2: '', q3: 'Да' })).toBe(
       'Сколько человек было в вашей команде?\n9 человек\n\nГотовы ли к командировкам?\nДа',
     );
+  });
+});
+
+describe('B787: ответы для окна hh.ru', () => {
+  it('выбор — по вариантам, текст — целиком, пустых нет', () => {
+    const questions = [
+      { id: 'a', text: 'А?', required: true, kind: 'text' },
+      { id: 'b', text: 'Б?', required: true, kind: 'choice', options: ['x', 'y'], multiple: true },
+      { id: 'c', text: 'В?', required: false, kind: 'text' },
+    ] as const;
+    expect(hhAnswers(questions, { a: ' раз\nдва ', b: 'x\ny', c: ' ' })).toEqual([
+      { text: 'А?', values: ['раз\nдва'] },
+      { text: 'Б?', values: ['x', 'y'] },
+    ]);
   });
 });
