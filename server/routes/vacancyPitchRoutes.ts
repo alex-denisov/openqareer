@@ -33,6 +33,9 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
+import { registerResumeEditRoutes, type ResumeEditDeps } from './resumeEditRoutes';
+import { DatabaseSync } from 'node:sqlite';
 import { pitchRankingContext } from './pitchRankingContext';
 import { letterEmployerNames, letterNotesToTranslate, letterProfileText } from '../domain/letterProfile';
 import { latinEmployerNames, withLatinEmployerNames } from '../domain/letterLatinEmployers';
@@ -494,7 +497,7 @@ function changedLetterResume(reply: FastifyReply, request: FastifyRequest) {
 }
 
 /** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
-const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
+const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
@@ -503,7 +506,7 @@ const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
   const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
-    const state = prepareLetterResume(deps, candidate.id, cluster);
+    const state = prepareLetterResume(deps, candidate.id, cluster, deps.resumeEdits.read(candidate.id, cluster.id));
     return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId }, meta: { requestId: request.id } };
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
@@ -511,7 +514,7 @@ const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
   }
 };
 
-const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
+const handleApproveVacancyLetter = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
@@ -553,7 +556,7 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
 };
 
 function persistApprovedLetterSnapshot(
-  deps: RouteDeps,
+  deps: ResumeEditDeps,
   candidateId: string,
   vacancyId: string,
   cluster: NonNullable<ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>>,
@@ -575,7 +578,7 @@ function persistApprovedLetterSnapshot(
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).
     const resume = attachApprovedResume(deps, candidateId, {
-      applicationId: application.id, cluster, approvedAt,
+      applicationId: application.id, cluster, approvedAt, choices: deps.resumeEdits.read(candidateId, cluster.id),
       ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
     });
     const approvalId = randomUUID();
@@ -605,6 +608,14 @@ function persistApprovedLetterSnapshot(
 }
 
 export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  const database = new DatabaseSync(deps.config.databasePath);
+  database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  app.addHook('onClose', async () => database.close());
+  const editDeps: ResumeEditDeps = {
+    ...deps,
+    resumeEdits: new SqliteResumeEditChoicesRepository(database, deps.config.dataEncryptionKey),
+  };
+  registerResumeEditRoutes(app, editDeps);
   app.post(
     '/api/v1/candidate/vacancies/:id/pitch',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
@@ -613,12 +624,12 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-approvals',
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
-    withDeps(deps, handleApproveVacancyLetter),
+    withDeps(editDeps, handleApproveVacancyLetter),
   );
   app.get('/api/v1/candidate/vacancies/:id/letter-approvals/latest', withDeps(deps, handleReadLetterApproval));
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-resume',
     { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
-    withDeps(deps, handlePrepareLetterResume),
+    withDeps(editDeps, handlePrepareLetterResume),
   );
 }

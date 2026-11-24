@@ -250,6 +250,7 @@
   .b640 .btn.is-line { border-color: var(--career-line-strong); background: transparent; color: var(--career-text); }
   .b640 .btn.is-line:hover { border-color: var(--career-text-dim); background: var(--career-surface-raised); }
   .b640 .panel-col .ec-ib > .ico { display: none; }
+  .b640 .panel-col .ec > .va-pop { position: static; inline-size: auto; }
   .b640 .ec-tip { display: none; }
   @media (max-width: 767px) {
     .b640 .panel-col .chat .msg-acts.ec-acts > .btn.btn { block-size: var(--career-target-min); }
