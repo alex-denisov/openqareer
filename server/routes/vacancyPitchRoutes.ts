@@ -48,8 +48,6 @@ import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { vacancyDescriptionHash } from '../domain/vacancyRequirements';
 import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 
-type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
-
 const vacancyPitchInputSchema = z
   .object({
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
@@ -288,7 +286,7 @@ function latinProfile(
 
 export async function writeVacancyPitch(
   deps: RouteDeps,
-  request: FastifyRequest,
+  request: Pick<FastifyRequest, 'log'>,
   candidateId: string,
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },

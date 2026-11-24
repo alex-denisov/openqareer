@@ -148,12 +148,46 @@ export class SqliteManualApplyRepository {
     return this.get(candidateId, vacancyId)!;
   }
 
-  startAttempt(candidateId: string, vacancyId: string): void {
+  /** Занять попытку: из двух процессов её получает один. */
+  claimAttempt(candidateId: string, item: StoredManualApply, at: string): boolean {
+    const result = this.database
+      .prepare(
+        `UPDATE manual_apply_queue SET attempts = attempts + 1, updated_at = ?
+         WHERE candidate_id = ? AND vacancy_id = ? AND status = 'open' AND prepared = 0
+           AND attempts = ?`,
+      )
+      .run(at, candidateId, item.vacancyId, item.attempts);
+    return Number(result.changes) > 0;
+  }
+
+  /** Новые попытки после исчерпанных: отклик поставили ещё раз. */
+  resetAttempts(candidateId: string, vacancyId: string): void {
     this.database
       .prepare(
-        'UPDATE manual_apply_queue SET attempts = attempts + 1 WHERE candidate_id = ? AND vacancy_id = ?',
+        'UPDATE manual_apply_queue SET attempts = 0 WHERE candidate_id = ? AND vacancy_id = ? AND prepared = 0',
       )
       .run(candidateId, vacancyId);
+  }
+
+  /** Несобранные отклики, которых никто не касался с `before`: сбор прервался. */
+  listStale(
+    before: string,
+    maxAttempts: number,
+    limit: number,
+  ): Array<{ readonly candidateId: string; readonly item: StoredManualApply }> {
+    const rows = this.database
+      .prepare(
+        `SELECT * FROM manual_apply_queue
+         WHERE status = 'open' AND prepared = 0 AND attempts <= ? AND updated_at < ?
+         ORDER BY updated_at LIMIT ?`,
+      )
+      .all(maxAttempts, before, limit) as unknown as Array<Row & { candidate_id: string }>;
+    return rows.flatMap((row) =>
+      this.toStored(row.candidate_id, row).map((item) => ({
+        candidateId: row.candidate_id,
+        item,
+      })),
+    );
   }
 
   saveLetter(candidateId: string, vacancyId: string, letter: string, pitch: unknown): void {

@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
+import { SqliteManualApplyRepository } from '../candidate/sqliteManualApplyRepository';
 import { createApp, login } from '../testHelpers/vacancyPitchHarness';
 
 const ORIGIN = 'http://localhost:3000';
@@ -41,13 +42,18 @@ function countingWriter(fail = false) {
   return { writer, inputs };
 }
 
-async function setup(options: { cabinetB640?: boolean; fail?: boolean; billing?: boolean } = {}) {
+async function setup(
+  options: { cabinetB640?: boolean; fail?: boolean; billing?: boolean; primaryUrl?: string } = {},
+) {
   const { writer, inputs } = countingWriter(options.fail);
-  const created = await createApp([cluster], {
-    coverLetterWriter: writer,
-    cabinetB640: options.cabinetB640 ?? true,
-    ...(options.billing ? { billingEnforcement: true } : {}),
-  });
+  const created = await createApp(
+    [{ ...cluster, primaryUrl: options.primaryUrl ?? cluster.primaryUrl }],
+    {
+      coverLetterWriter: writer,
+      cabinetB640: options.cabinetB640 ?? true,
+      ...(options.billing ? { billingEnforcement: true } : {}),
+    },
+  );
   const { cookie, candidateId } = await login(created.app);
   created.candidates.importResumeEvidence(candidateId, {
     sourceLabel: 'test-import',
@@ -192,17 +198,107 @@ describe('очередь «отправить вручную»', () => {
     expect((await call('POST', QUEUE, { ...put, host: '<b>x</b>' })).statusCode).toBe(400);
   });
 
-  it('три отказа модели — больше её не зовём, остальное готово', async () => {
-    const { call, inputs } = await setup({ fail: true });
+  it('чтение очереди модель не зовёт и ничего не пишет', async () => {
+    const { call, inputs, databasePath } = await setup({ fail: true });
     await call('POST', QUEUE, put);
-    await vi.waitFor(async () => {
-      await call('GET', QUEUE);
-      expect(inputs).toHaveLength(3);
-    });
+    const row = () => {
+      const database = new DatabaseSync(databasePath);
+      const value = database.prepare('SELECT * FROM manual_apply_queue').get();
+      database.close();
+      return JSON.stringify(value);
+    };
+    await vi.waitFor(() => expect(inputs).toHaveLength(1));
+    const before = row();
+    for (const path of [QUEUE, `${QUEUE}/cluster-99`, QUEUE]) await call('GET', path);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inputs).toHaveLength(1);
+    expect(row()).toBe(before);
+  });
+
+  it('после трёх отказов квота возвращена, новая постановка даёт новые попытки', async () => {
+    const { call, inputs, databasePath } = await setup({ fail: true, billing: true });
+    const read = (sql: string) => {
+      const database = new DatabaseSync(databasePath);
+      const { n } = database.prepare(sql).get() as { n: number };
+      database.close();
+      return n;
+    };
+    const attempts = () => read('SELECT attempts AS n FROM manual_apply_queue');
+    const charged = () => read('SELECT COUNT(*) AS n FROM billing_quota_events');
+    for (const count of [1, 2, 3]) {
+      await vi.waitFor(async () => {
+        await call('POST', QUEUE, put);
+        expect(inputs).toHaveLength(count);
+      });
+      if (count < 3) expect(charged()).toBe(1);
+    }
+    await vi.waitFor(() => expect(attempts()).toBe(4));
+    expect(charged()).toBe(0);
     const [item] = (await call('GET', QUEUE)).json().data;
-    expect(item).toMatchObject({ letter: null, state: 'needs_answer' });
-    await call('GET', QUEUE);
-    expect(inputs).toHaveLength(3);
+    expect(item).toMatchObject({ letter: null, preparing: false, state: 'needs_answer' });
+    expect((await call('POST', QUEUE, put)).json().data.preparing).toBe(true);
+    await vi.waitFor(() => expect(inputs).toHaveLength(4));
+    expect(charged()).toBe(1);
+  });
+
+  it('прерванный сбор продолжает фоновый такт, но не раньше простоя', async () => {
+    const timers = vi.spyOn(globalThis, 'setInterval');
+    const { call, inputs, databasePath } = await setup({ fail: true, billing: true });
+    const tick = timers.mock.calls.find(([, delay]) => delay === 60_000)![0] as () => void;
+    timers.mockRestore();
+    const run = (sql: string) => {
+      const database = new DatabaseSync(databasePath);
+      const result = database.prepare(sql).all() as Array<Record<string, number>>;
+      database.close();
+      return result;
+    };
+    const age = () => run("UPDATE manual_apply_queue SET updated_at = '2026-01-01T00:00:00.000Z'");
+    await call('POST', QUEUE, put);
+    await vi.waitFor(() => expect(inputs).toHaveLength(1));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    tick();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inputs).toHaveLength(1);
+    age();
+    tick();
+    tick();
+    await vi.waitFor(() => expect(inputs).toHaveLength(2));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Процесс умер на последней попытке: такт модель не зовёт, единицу квоты возвращает.
+    run('UPDATE manual_apply_queue SET attempts = 3');
+    age();
+    tick();
+    expect(inputs).toHaveLength(2);
+    expect(run('SELECT COUNT(*) AS n FROM billing_quota_events')[0]!.n).toBe(0);
+  });
+
+  it('попытку сбора получает один процесс', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec(
+      "CREATE TABLE candidates (id TEXT PRIMARY KEY); INSERT INTO candidates VALUES ('c1')",
+    );
+    const queue = new SqliteManualApplyRepository(database, Buffer.alloc(32, 7));
+    const at = '2026-11-25T00:00:00.000Z';
+    const item = queue.enqueue('c1', 'v1', {
+      applicationId: 'a1',
+      at,
+      title: 'Роль',
+      company: '',
+      url: '',
+      source: '',
+      reason: 'linkedin',
+      host: 'linkedin.com',
+    });
+    expect(queue.claimAttempt('c1', item, at)).toBe(true);
+    expect(queue.claimAttempt('c1', item, at)).toBe(false);
+    database.close();
+  });
+
+  it('адрес вакансии не https в ссылку не попадает', async () => {
+    for (const primaryUrl of ['http://example.com/1', 'javascript:alert(1)']) {
+      const { call } = await setup({ primaryUrl });
+      expect((await call('POST', QUEUE, put)).json().data.url).toBeNull();
+    }
   });
 
   it('выгрузка данных содержит очередь, удаление кандидата её стирает', async () => {

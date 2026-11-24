@@ -19,7 +19,8 @@ export interface ManualApplyItem {
   readonly applicationId: string;
   readonly title: string;
   readonly company: string;
-  readonly url: string;
+  /** Только https; у площадки другого адреса — `null`. */
+  readonly url: string | null;
   readonly reason: ManualApplyReason;
   readonly host: string;
   readonly state: ManualApplyState;
@@ -45,6 +46,17 @@ export function manualApplyReasonText(reason: ManualApplyReason, host: string): 
       return 'Проверка на сайте';
     default:
       return 'Отправить на сайте';
+  }
+}
+
+/** Адрес для ссылки «Открыть вакансию»: только https и без логина в адресе. */
+export function manualApplyUrl(url: string | null): string | null {
+  try {
+    const parsed = new URL(url ?? '');
+    const safe = parsed.protocol === 'https:' && !parsed.username && !parsed.password;
+    return safe ? parsed.href : null;
+  } catch {
+    return null;
   }
 }
 

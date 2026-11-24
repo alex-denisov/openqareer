@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   MANUAL_APPLY_REASONS,
   manualApplyHost,
+  manualApplyUrl,
   type ManualApplyItem,
   type ManualApplyReason,
 } from '../../shared/manualApply';
@@ -37,7 +38,7 @@ export interface ManualApplyService {
 
 export type QueuedLetterWriter = (
   deps: RouteDeps,
-  request: FastifyRequest,
+  request: Pick<FastifyRequest, 'log'>,
   candidateId: string,
   vacancyId: string,
 ) => Promise<{ readonly text: string; readonly pitch: unknown } | null>;
@@ -48,6 +49,8 @@ type Bound = ResumeEditDeps & {
   readonly writeLetter: QueuedLetterWriter;
   readonly inFlight: Map<string, Promise<void>>;
 };
+/** Фону нужен только журнал запроса. */
+type LogContext = Pick<FastifyRequest, 'log'>;
 type Handler = (deps: Bound, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const BASE = '/api/v1/candidate/manual-applications';
@@ -55,6 +58,10 @@ const VACANCY_ID_MAX_LENGTH = 200;
 /** Сбой письма повторяется сам, но не бесконечно: модель не зовётся на каждое открытие. */
 const MAX_ATTEMPTS = 3;
 const MAX_OPEN = 200;
+/** Прерванный сбор (перезапуск сервера) продолжает фоновый такт. */
+const TICK_MS = 60_000;
+const STALE_MS = 5 * 60_000;
+const TICK_LIMIT = 10;
 
 const enqueueSchema = z
   .object({
@@ -106,7 +113,7 @@ async function prepareQuestions(
   if (deps.forms.get(candidateId, vacancyId)) return;
   deps.forms.saveQuestions(candidateId, vacancyId, {
     questions,
-    formUrl: item.url,
+    formUrl: manualApplyUrl(item.url),
     readAt: new Date().toISOString(),
   });
   const places = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
@@ -118,7 +125,7 @@ async function prepareQuestions(
 /** Резюме под вакансию заранее; не собралось — письмо и ответы всё равно готовятся. */
 function prepareResume(
   deps: Bound,
-  request: FastifyRequest,
+  request: LogContext,
   candidateId: string,
   vacancyId: string,
 ): void {
@@ -133,13 +140,11 @@ function prepareResume(
 
 async function prepare(
   deps: Bound,
-  request: FastifyRequest,
+  request: LogContext,
   candidateId: string,
-  vacancyId: string,
-) {
-  const item = deps.queue.get(candidateId, vacancyId);
-  if (!item) return;
-  deps.queue.startAttempt(candidateId, vacancyId);
+  item: StoredManualApply,
+): Promise<void> {
+  const { vacancyId } = item;
   await prepareQuestions(deps, candidateId, item);
   prepareResume(deps, request, candidateId, vacancyId);
   if (!item.letter && !latestLetterApproval(deps, candidateId, vacancyId)) {
@@ -150,32 +155,59 @@ async function prepare(
   deps.queue.markPrepared(candidateId, vacancyId);
 }
 
+/** Попытки кончились: единица квоты возвращается ровно один раз. */
+function giveUp(deps: Bound, candidateId: string, vacancyId: string): void {
+  const left = deps.queue.get(candidateId, vacancyId);
+  if (!left || left.attempts !== MAX_ATTEMPTS) return;
+  if (!deps.queue.claimAttempt(candidateId, left, new Date().toISOString())) return;
+  if (!left.letter) releaseTariffQuota(deps, candidateId, 'applications', vacancyId);
+}
+
 /** Один сбор на отклик: параллельные запросы присоединяются к идущему. */
 function startPreparing(
   deps: Bound,
-  request: FastifyRequest,
+  request: LogContext,
   candidateId: string,
   item: StoredManualApply,
 ): void {
   const { vacancyId } = item;
   const key = flightKey(candidateId, vacancyId);
   if (item.prepared || item.attempts >= MAX_ATTEMPTS || deps.inFlight.has(key)) return;
-  const job = prepare(deps, request, candidateId, vacancyId)
+  if (!deps.queue.claimAttempt(candidateId, item, new Date().toISOString())) return;
+  const job = prepare(deps, request, candidateId, item)
     .catch((error: unknown) => {
       request.log.warn({ err: error, vacancyId }, 'manual-apply-prepare-failed');
-      const left = deps.queue.get(candidateId, vacancyId);
-      // Письма не будет: единица квоты возвращается, как при отказе на экране письма.
-      if (left && !left.letter && left.attempts >= MAX_ATTEMPTS) {
-        releaseTariffQuota(deps, candidateId, 'applications', vacancyId);
-      }
+      giveUp(deps, candidateId, vacancyId);
     })
     .finally(() => deps.inFlight.delete(key));
   deps.inFlight.set(key, job);
 }
 
+/** Фоновый такт: сбор, прерванный перезапуском, продолжается без участия кандидата. */
+export function resumeStalled(deps: Bound, request: LogContext, now: number): void {
+  const before = new Date(now - STALE_MS).toISOString();
+  for (const { candidateId, item } of deps.queue.listStale(before, MAX_ATTEMPTS, TICK_LIMIT)) {
+    if (deps.inFlight.has(flightKey(candidateId, item.vacancyId))) continue;
+    if (item.attempts >= MAX_ATTEMPTS) giveUp(deps, candidateId, item.vacancyId);
+    else startPreparing(deps, request, candidateId, item);
+  }
+}
+
+function startTick(app: FastifyInstance, deps: Bound): void {
+  const timer = setInterval(() => {
+    try {
+      resumeStalled(deps, app, Date.now());
+    } catch (error) {
+      app.log.warn({ err: error }, 'manual-apply-tick-failed');
+    }
+  }, TICK_MS);
+  timer.unref();
+  app.addHook('onClose', async () => clearInterval(timer));
+}
+
 function toItem(deps: Bound, who: Who, item: StoredManualApply): ManualApplyItem {
   const { vacancyId, applicationId, title, company, url, reason, host, createdAt } = item;
-  const preparing = !item.prepared && item.attempts < MAX_ATTEMPTS;
+  const preparing = !item.prepared && item.attempts <= MAX_ATTEMPTS;
   const stored = deps.forms.get(who.candidateId, vacancyId);
   const missingAnswers = stored
     ? questionnaireView(deps, { ...who, vacancyId }, stored, { state: 'ready', formUrl: null })
@@ -190,7 +222,7 @@ function toItem(deps: Bound, who: Who, item: StoredManualApply): ManualApplyItem
     applicationId,
     title,
     company,
-    url,
+    url: manualApplyUrl(url),
     reason,
     host,
     state,
@@ -205,8 +237,6 @@ const listQueue: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const open = deps.queue.listOpen(who.candidateId);
-  // После перезапуска сервера незаконченный сбор продолжается сам.
-  for (const item of open) startPreparing(deps, request, who.candidateId, item);
   return { data: open.map((item) => toItem(deps, who, item)), meta: { requestId: request.id } };
 };
 
@@ -227,7 +257,6 @@ const readItem: Handler = async (deps, request, reply) => {
   if (!who) return reply;
   const item = openItem(deps, request, who.candidateId);
   if (!item) return notFound(request, reply);
-  startPreparing(deps, request, who.candidateId, item);
   return { data: toItem(deps, who, item), meta: { requestId: request.id } };
 };
 
@@ -240,7 +269,7 @@ function vacancyFacts(
   return {
     title: cluster.canonicalTitle,
     company: cluster.canonicalCompany,
-    url: route.url,
+    url: manualApplyUrl(route.url) ?? '',
     source: route.source ?? cluster.sources[0]?.sourceType ?? '',
     reason,
     host: host?.toLowerCase() || manualApplyHost(route.url),
@@ -321,6 +350,8 @@ async function enqueueVacancy(
   ) {
     return reply;
   }
+  // Прежние попытки кончились и единица квоты возвращена: эта постановка даёт новые.
+  if (known && known.attempts > MAX_ATTEMPTS) deps.queue.resetAttempts(candidateId, vacancyId);
   const item = deps.queue.enqueue(candidateId, vacancyId, {
     ...facts,
     applicationId: application.id,
@@ -383,6 +414,7 @@ export function registerManualApplyRoutes(
     inFlight: new Map(),
   };
   const write = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
+  startTick(app, bound);
   app.get(BASE, withDeps(bound, listQueue));
   app.post(BASE, write, withDeps(bound, enqueue));
   app.get(`${BASE}/:id`, withDeps(bound, readItem));

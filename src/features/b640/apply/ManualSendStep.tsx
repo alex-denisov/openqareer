@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { manualApplyReasonText } from '../../../../shared/manualApply';
+import { manualApplyReasonText, manualApplyUrl } from '../../../../shared/manualApply';
 import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import { loadLetterResumePreview } from '../../vacancies/vacancyLetterResumePreview';
@@ -164,13 +164,15 @@ function SentResult({ applicationId }: { readonly applicationId: string }) {
   );
 }
 
-function OpenVacancy({ url }: { readonly url: string }) {
+export function OpenVacancy({ url }: { readonly url: string | null }) {
+  const href = manualApplyUrl(url);
+  if (!href) return null;
   return (
     <div className="actions cb-top">
       <a
         className="btn m-ico"
         aria-label="Открыть вакансию"
-        href={url}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
       >
