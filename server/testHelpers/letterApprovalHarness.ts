@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { CoverLetterWriter } from '../providers/coverLetterWriter';
-import { createApp, login } from './vacancyPitchHarness';
+import { createApp, login, type PitchAppOptions } from './vacancyPitchHarness';
 
 /** Стенд одобрения письма с резюме (B601): вакансия, засев резюме и чтение привязки из таблицы. */
 export const cluster: VacancyCluster = {
@@ -64,11 +64,13 @@ export function seedResume(candidates: Candidates, candidateId: string, title: s
 export interface SetupOptions {
   readonly billingEnforcement?: boolean;
   readonly coverLetterWriter?: CoverLetterWriter;
+  readonly experienceFactRewriter?: PitchAppOptions['experienceFactRewriter'];
 }
 
 export async function setup(role?: string, options: SetupOptions = {}) {
   const { app, candidates, databasePath } = await createApp([cluster], {
     ...(options.billingEnforcement ? { billingEnforcement: true } : {}),
+    ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter } : {}),
     ...(options.coverLetterWriter ? { coverLetterWriter: options.coverLetterWriter } : {}),
   });
   const { cookie, candidateId } = await login(app);

@@ -1,12 +1,8 @@
 import type {
   ResumeEditDecision,
-  ResumeVacancyEdit,
+  ResumeEditsState,
 } from '../../../../../shared/resumeVacancyEdits';
 import { apiFetch, readDataObject } from '../../../coach/apiClient';
-
-interface EditsData {
-  readonly edits: readonly ResumeVacancyEdit[];
-}
 
 const pathOf = (vacancyId: string) =>
   `/api/v1/candidate/vacancies/${encodeURIComponent(vacancyId)}/resume-edits`;
@@ -15,18 +11,18 @@ const pathOf = (vacancyId: string) =>
 export async function getResumeEdits(
   vacancyId: string,
   signal?: AbortSignal,
-): Promise<readonly ResumeVacancyEdit[]> {
-  return (await readDataObject<EditsData>(await apiFetch(pathOf(vacancyId), { signal }))).edits;
+): Promise<ResumeEditsState> {
+  return readDataObject<ResumeEditsState>(await apiFetch(pathOf(vacancyId), { signal }));
 }
 
 export async function decideResumeEdit(
   vacancyId: string,
   decision: ResumeEditDecision,
-): Promise<readonly ResumeVacancyEdit[]> {
+): Promise<ResumeEditsState> {
   const response = await apiFetch(pathOf(vacancyId), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(decision),
   });
-  return (await readDataObject<EditsData>(response)).edits;
+  return readDataObject<ResumeEditsState>(response);
 }

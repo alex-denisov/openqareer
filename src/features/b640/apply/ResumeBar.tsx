@@ -5,6 +5,7 @@ import {
   type BuilderResume,
   type ResumeTemplate,
 } from '../../../../shared/resumeBuilder/model';
+import type { ResumeLang } from '../../../../shared/resumeVacancyEdits';
 import { downloadResumeFile } from '../../site/resumeBuilder/resumeBuilderApi';
 import type { ExportFormat } from '../../site/resumeBuilder/resumeBuilderStorage';
 import { Icon, useToast } from '../kit';
@@ -40,13 +41,55 @@ function useMenu() {
   return { open, setOpen, root, button };
 }
 
+const LANGS: ReadonlyArray<{
+  readonly id: ResumeLang;
+  readonly full: string;
+  readonly short: string;
+}> = [
+  { id: 'ru', full: 'Русский', short: 'RU' },
+  { id: 'en', full: 'English', short: 'EN' },
+];
+
+export interface ResumeLangControl {
+  readonly value: ResumeLang;
+  readonly busy: boolean;
+  readonly onChange: (lang: ResumeLang) => void;
+}
+
+function LangSwitch({ value, busy, onChange }: ResumeLangControl) {
+  return (
+    <div className="seg cv-lang-seg" role="group" aria-label="Язык резюме" aria-busy={busy}>
+      {LANGS.map((item) => (
+        <button
+          key={item.id}
+          className="seg-i"
+          type="button"
+          aria-pressed={item.id === value}
+          aria-label={item.full}
+          disabled={busy}
+          onClick={() => {
+            if (item.id !== value) onChange(item.id);
+          }}
+        >
+          <span className="cv-l-full">{item.full}</span>
+          <span className="cv-l-short" aria-hidden="true">
+            {item.short}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface Props {
   readonly resume: BuilderResume;
   readonly template: ResumeTemplate;
   readonly onTemplate: (template: ResumeTemplate) => void;
+  /** Язык меняется у резюме под вакансию до одобрения. */
+  readonly lang: ResumeLangControl | null;
 }
 
-function DownloadMenu({ resume, template }: Omit<Props, 'onTemplate'>) {
+function DownloadMenu({ resume, template }: Omit<Props, 'onTemplate' | 'lang'>) {
   const id = useId();
   const toast = useToast();
   const { open, setOpen, root, button } = useMenu();
@@ -95,7 +138,7 @@ function DownloadMenu({ resume, template }: Omit<Props, 'onTemplate'>) {
 }
 
 /** Параметры файла (макет o03): шаблон и скачивание. */
-export function ResumeBar({ resume, template, onTemplate }: Props) {
+export function ResumeBar({ resume, template, onTemplate, lang }: Props) {
   const id = useId();
   return (
     <div className="cv-bar" role="group" aria-label="Параметры файла">
@@ -113,6 +156,7 @@ export function ResumeBar({ resume, template, onTemplate }: Props) {
           ))}
         </select>
       </div>
+      {lang ? <LangSwitch {...lang} /> : null}
       <DownloadMenu resume={resume} template={template} />
     </div>
   );
