@@ -36,6 +36,11 @@ export function taskInputFor(
   return { ...base, description, ...(requirements.length ? { requirements } : {}) };
 }
 
+/** Вопрос, на который отвечает кандидат: название задачи с экрана и её условие. */
+export function taskQuestion(task: SystemDesignTask): string {
+  return `${task.title}. ${task.prompt}`;
+}
+
 /**
  * Задача тренировки: показанная по отклику (B750), иначе шаблон по снимку отклика. Только
  * чтение: модель зовёт и задачу записывает один POST interview-tasks.
@@ -43,7 +48,7 @@ export function taskInputFor(
 export function storedOrRuleTask(
   deps: RouteDeps,
   candidateId: string,
-  session: InterviewSession,
+  session: Pick<InterviewSession, 'applicationId' | 'roleTitle' | 'vacancyTitle'>,
 ): SystemDesignTask {
   const application = session.applicationId
     ? deps.candidateStore.getApplication(candidateId, session.applicationId)
