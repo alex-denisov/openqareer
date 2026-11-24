@@ -180,7 +180,6 @@ describe('hh.ru session polling', () => {
           id: 'resume-selected',
           title: 'Product Director',
           url: 'https://hh.ru/resume/resume-selected',
-          updatedLabel: 'Готово к импорту',
         },
       ],
       defaultParsed: undefined,

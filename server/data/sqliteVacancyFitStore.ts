@@ -3,6 +3,7 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
 import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
+import { syncSection } from '../observability/syncSections';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
 import { MECHANICS_REQUEUE_REVISION } from './sqliteVacancyRequirementsStore';
@@ -201,18 +202,24 @@ export class SqliteVacancyFitStore {
   ): Promise<void> {
     const candidateKey = this.candidateKey(candidateId);
     const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
-    for (;;) {
+    // B770a: the batch holds the loop between yields; named so a stall over list:fit-ids shows it.
+    const warmBatch = () => {
       const known = this.cachedIdsMemo.get(candidateKey);
       const rows = page.all(candidateKey, known?.last ?? 0, batch) as { id: number; cache_key: string; result_cipher: string }[];
-      if (rows.length === 0) return;
+      if (rows.length === 0) return 0;
       const ids = new Set(known?.ids ?? []);
       for (const row of rows) {
         const id = this.openedVacancyId(row, candidateId);
         if (id) ids.add(id);
       }
       this.cachedIdsMemo.set(candidateKey, { ids, count: (known?.count ?? 0) + rows.length, last: rows.at(-1)!.id });
+      return rows.length;
+    };
+    for (;;) {
+      const read = syncSection('fit-ids:batch', warmBatch);
+      if (read === 0) return;
       await yieldToLoop();
-      if (rows.length < batch) return;
+      if (read < batch) return;
     }
   }
 
