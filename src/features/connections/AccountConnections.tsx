@@ -31,6 +31,7 @@ import {
   scheduleLinkedInContactsRefresh,
   startLinkedInContactsRefresh,
 } from './linkedinContactsRefresh';
+import { LinkedInImportStatus } from './LinkedInImportStatus';
 import { startLinkedInCompanySearch } from './linkedinCompanySearch';
 import {
   canImportLinkedInInBackground,
@@ -342,6 +343,7 @@ export function AccountConnectionsManager({
   return (
     <>
       {connectionContent}
+      <LinkedInImportStatus />
       {replaceOffer ? (
         <ProfileReplaceOffer
           platform={replaceOffer.platform}

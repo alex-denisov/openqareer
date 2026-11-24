@@ -268,7 +268,7 @@ export function startLinkedInCompanySearch(
           y: 0,
           width: OUT_OF_SIGHT_WIDTH_PX,
           height: OUT_OF_SIGHT_HEIGHT_PX,
-        })
+        }, { background: true })
       ).opened,
     close: () => closeConnectorSession('linkedin'),
     loadPlan: loadLinkedInCompanySearchPlan,

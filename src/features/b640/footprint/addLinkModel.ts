@@ -32,6 +32,15 @@ export function withLink(draft: ResumeDraft, link: string): ResumeDraft {
   };
 }
 
+/** Профиль без ссылки; такой ссылки нет — тот же профиль. */
+export function withoutLink(draft: ResumeDraft, link: string): ResumeDraft {
+  const contact = draft.candidate.contact;
+  const links = contact?.links ?? [];
+  const kept = links.filter((item) => fold(item) !== fold(link));
+  if (kept.length === links.length) return draft;
+  return { ...draft, candidate: { ...draft.candidate, contact: { ...contact, links: kept } } };
+}
+
 /** Места под ссылку не осталось, и такой ссылки ещё нет. */
 export function linksFull(draft: ResumeDraft, link: string): boolean {
   const links = draft.candidate.contact?.links ?? [];

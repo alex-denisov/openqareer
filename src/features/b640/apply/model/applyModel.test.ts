@@ -8,7 +8,9 @@ import {
   parseStep,
   recipientOptions,
   resolveTarget,
+  stepOpening,
   stepsFor,
+  type ApplyStep,
 } from './applyModel';
 
 describe('B657: шаг отклика из адреса', () => {
@@ -255,5 +257,17 @@ describe('B787: цель отклика называет канал и адре�
       url: cluster.primaryUrl,
     });
     expect(head({ ...target, url: 'javascript:1' })).toMatchObject({ url: cluster.primaryUrl });
+  });
+});
+
+describe('stepOpening (B678)', () => {
+  it('шаг ждёт одобрение и анкету, а не показывает чужой кадр', () => {
+    const opening = (step: ApplyStep, approvalPending: boolean, formLoading: boolean) =>
+      stepOpening({ step, approvalPending, formLoading });
+    expect(opening('letter', true, false)).toBe(true);
+    expect(opening('send', true, false)).toBe(true);
+    expect(opening('form', false, true)).toBe(true);
+    expect(opening('letter', false, true)).toBe(false);
+    expect(opening('resume', true, true)).toBe(false);
   });
 });

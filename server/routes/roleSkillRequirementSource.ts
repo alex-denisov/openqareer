@@ -1,4 +1,6 @@
 import type { RouteDeps } from './deps';
+import { writeBriefly } from '../data/sqliteBriefLock';
+import { isSqliteBusy } from '../data/sqliteBusyRetry';
 import { readVacancyFitTarget } from './vacancyFitContext';
 import { SHOWN_PAGE_PRIORITY } from '../domain/vacancyMechanicsRuntime';
 import {
@@ -19,6 +21,21 @@ export interface RoleRequirementReader {
   skillsFor(vacancyId: string): readonly string[];
   /** Vacancies of this read that have no extracted requirements yet and were queued. */
   readonly pendingCount: () => number;
+}
+
+/** B702 part 2: a read does not wait for the write lock; when it is taken, the next read queues the text. */
+function queueBriefly(
+  runtime: NonNullable<RouteDeps['vacancyMechanics']>,
+  input: { readonly vacancyId: string; readonly description: string },
+): void {
+  const queue = () =>
+    runtime.requirements.enqueue(input, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
+  try {
+    if (runtime.database) writeBriefly(runtime.database, queue);
+    else queue();
+  } catch (error) {
+    if (!isSqliteBusy(error)) throw error;
+  }
 }
 
 /**
@@ -47,7 +64,7 @@ export function createRoleRequirementReader(deps: RouteDeps): RoleRequirementRea
       ) {
         queued += 1;
         if (!extracted) pending += 1;
-        runtime.requirements.enqueue(input, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
+        queueBriefly(runtime, input);
       }
       const requirements = (extracted ?? extractVacancyRequirements(input)).requirements;
       const labels = requirements

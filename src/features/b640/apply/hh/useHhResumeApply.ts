@@ -14,7 +14,7 @@ export type HhApplyState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'applying' }
   | { readonly kind: 'applied' }
-  | { readonly kind: 'failed'; readonly message: string; readonly retry: boolean };
+  | { readonly kind: 'failed'; readonly message: string; readonly retry: boolean; readonly captcha?: boolean };
 
 const FAILURE_TEXT: Readonly<Record<string, string>> = {
   not_signed_in: 'Войдите в hh.ru в окне приложения и нажмите ещё раз.',
@@ -78,7 +78,7 @@ export function useHhResumeApply(resumeId: string): HhResumeApply {
         const report = await applyHhResumeEditInSession(input);
         if (report.outcome !== 'applied') {
           const code = report.failureCode ?? '';
-          set(edit.id, { kind: 'failed', message: failureText(code), retry: !NO_RETRY.has(code) });
+          set(edit.id, { kind: 'failed', message: failureText(code), retry: !NO_RETRY.has(code), captcha: code === 'captcha' });
           return false;
         }
         forgetReadResumes();

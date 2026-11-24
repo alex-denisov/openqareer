@@ -207,3 +207,16 @@ export function paragraphs(text: string): readonly string[] {
     .map((line) => line.trim())
     .filter(Boolean);
 }
+
+/**
+ * B678: что показать на шаге, ещё неизвестно — читается одобрение письма или анкета из адреса.
+ * Резюме от них не зависит и открывается сразу.
+ */
+export function stepOpening(input: {
+  readonly step: ApplyStep;
+  readonly approvalPending: boolean;
+  readonly formLoading: boolean;
+}): boolean {
+  if (input.step === 'resume') return false;
+  return input.approvalPending || (input.step === 'form' && input.formLoading);
+}

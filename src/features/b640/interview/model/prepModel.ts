@@ -1,4 +1,5 @@
 import { pluralRu } from '../../../../../shared/pluralRu';
+import { askQuestionOfId } from '../../../../../shared/interviewAsks';
 import { STAR_FIELDS, type StarStoryView } from '../../../../../shared/starStories';
 import type { VacancyApplicationSnapshot } from '../../../../../shared/vacancyApplication';
 
@@ -70,6 +71,25 @@ export function replaceQuestionParagraphs(
   next: readonly PrepParagraph[],
 ): readonly PrepParagraph[] {
   return [...current.filter((item) => item.questionId !== questionId), ...next];
+}
+
+/**
+ * B635: вопросы списка и те, на которые кандидат уже ответил, хотя в новый список они не вошли
+ * (описание вакансии прочитали позже): сохранённый ответ не пропадает с экрана.
+ */
+export function answeredQuestions(
+  questions: readonly PrepQuestion[],
+  common: readonly PrepQuestion[],
+  paragraphs: readonly PrepParagraph[],
+): readonly PrepQuestion[] {
+  const shown = new Set(questions.map((question) => question.id));
+  const missing = [...new Set(paragraphs.map((item) => item.questionId))].filter(
+    (id) => !shown.has(id),
+  );
+  const kept = missing.flatMap(
+    (id) => common.find((question) => question.id === id) ?? askQuestionOfId(id) ?? [],
+  );
+  return [...questions, ...kept].map(({ id, question }) => ({ id, question }));
 }
 
 function exampleTitle(

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AddLink } from './AddLink';
+import { RemoveLink } from './RemoveLink';
 import { Button, Icon, InfoTip, StatusLine } from '../kit';
 import {
   auditProgress,
@@ -67,6 +68,7 @@ function SearchFields({ groups, selected, onToggle }: FieldsProps) {
             onChange={() => onToggle(group.key)}
           />
           <label htmlFor={`fp-q-${index}`}>{group.label}</label>
+          {group.profileLink ? <RemoveLink link={group.profileLink} /> : null}
         </div>
       ))}
       <AddLink />

@@ -37,8 +37,8 @@ import type { SessionWaitingStage } from './sessionWaitingStage';
 export type LinkedInReadyCapture = Extract<LinkedInSessionPollResult, { status: 'ready' }>;
 
 /**
- * Where the out-of-sight import stands. `needs_person` is the only phase with
- * a window on screen: LinkedIn asked for a sign-in, a code or a captcha.
+ * Where the out-of-sight import stands. `needs_person`: LinkedIn asked for a
+ * sign-in, a code or a captcha; the window is shown when the candidate asks.
  */
 export type LinkedInBackgroundState =
   | { readonly phase: 'idle' }
@@ -54,11 +54,9 @@ type Outcome = Extract<LinkedInBackgroundState, { phase: 'done' | 'failed' }>;
 export interface LinkedInBackgroundImportDependencies {
   readonly prepareRoute: () => Promise<{ readonly release: () => Promise<void> }>;
   readonly isWindowOpen: () => Promise<boolean>;
-  /** Opens the session window past the main window's edge, without focus. */
+  /** Opens the session window hidden, without focus. */
   readonly openOutOfSight: () => Promise<boolean>;
-  /** Puts the window over the work area and focuses it: a person is needed. */
-  readonly reveal: () => Promise<void>;
-  /** Moves the window back out of sight and returns focus to the cabinet. */
+  /** Hides the window again once the candidate is done in it. */
   readonly park: () => Promise<void>;
   readonly close: () => Promise<void>;
   readonly inspectCurrentPage: () => Promise<SessionInspectionResult>;
@@ -104,8 +102,9 @@ function defaultSleep(ms: number): Promise<void> {
 
 /**
  * Runs the LinkedIn profile import out of sight (owner, 30.10): the window
- * opens past the main window's edge without focus, and is put on screen only
- * while LinkedIn asks a person to sign in, enter a code or pass a captcha.
+ * is built hidden and is never put on screen by the import itself. When
+ * LinkedIn asks a person to sign in, enter a code or pass a captcha, the
+ * cabinet says so and the candidate opens the window.
  * The anti-ban rules of the walk itself — pauses, page cap, 12 h interval,
  * stop on the first unanswered section — stay in the session flow.
  */
@@ -148,7 +147,7 @@ async function waitForFreeWindow(dependencies: LinkedInBackgroundImportDependenc
 
 /** Where one run stands between polls. */
 interface RunProgress {
-  revealed: boolean;
+  needsPerson: boolean;
   signedIn: boolean;
 }
 
@@ -165,8 +164,8 @@ function createBackgroundFlow(
     waitBeforeRetry: dependencies.waitBeforeRetry,
     onAuthenticated: async () => {
       progress.signedIn = true;
-      if (progress.revealed) {
-        progress.revealed = false;
+      if (progress.needsPerson) {
+        progress.needsPerson = false;
         await dependencies.park().catch(() => undefined);
       }
       dependencies.onState({ phase: 'reading' });
@@ -182,7 +181,7 @@ async function pollUntilImported(
   const sleep = dependencies.sleep ?? defaultSleep;
   const now = dependencies.now ?? Date.now;
   const started = now();
-  const progress: RunProgress = { revealed: false, signedIn: false };
+  const progress: RunProgress = { needsPerson: false, signedIn: false };
   const flow = createBackgroundFlow(dependencies, progress);
   let unrecognised = 0;
   for (;;) {
@@ -202,11 +201,8 @@ async function pollUntilImported(
     if (result.status === 'ready') return save(dependencies, result);
     unrecognised = result.stage === 'unrecognised' ? unrecognised + 1 : 0;
     const waited = now() - started;
-    if (!progress.revealed && needsPerson(result.stage, unrecognised, waited)) {
-      progress.revealed = true;
-      await dependencies.reveal().catch(() => undefined);
-    }
-    if (progress.revealed) {
+    progress.needsPerson ||= needsPerson(result.stage, unrecognised, waited);
+    if (progress.needsPerson) {
       const notice = linkedinWaitingNotice(result.stage, unrecognised);
       dependencies.onState({ phase: 'needs_person', message: notice.text });
     }
@@ -250,6 +246,12 @@ function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+export function subscribeLinkedInBackgroundImport(
+  onState: (state: LinkedInBackgroundState) => void,
+): () => void {
+  return subscribe(() => onState(state));
+}
+
 export function useLinkedInBackgroundImport(): LinkedInBackgroundState {
   return useSyncExternalStore(
     subscribe,
@@ -268,7 +270,10 @@ export function canImportLinkedInInBackground(): boolean {
   return isTauriEnvironment();
 }
 
-export function showLinkedInImportWindow(): Promise<boolean> {
+/** The candidate asked for the window: it is put over the work area. */
+export async function showLinkedInImportWindow(): Promise<boolean> {
+  const layout = workAreaLayout(document.getElementById('career-main')) ?? FALLBACK_LAYOUT;
+  await resizeConnectorSession('linkedin', layout);
   return showConnectorSession('linkedin');
 }
 
@@ -311,13 +316,8 @@ export function startLinkedInBackgroundImport(
           background: true,
         })
       ).opened,
-    reveal: async () => {
-      const layout = workAreaLayout(document.getElementById('career-main')) ?? FALLBACK_LAYOUT;
-      await resizeConnectorSession('linkedin', layout);
-      await showConnectorSession('linkedin');
-    },
     park: async () => {
-      await parkConnectorSession('linkedin', outOfSightLayout());
+      await parkConnectorSession('linkedin');
     },
     close: () => closeConnectorSession('linkedin'),
     inspectCurrentPage: () => inspectSessionPage('linkedin'),

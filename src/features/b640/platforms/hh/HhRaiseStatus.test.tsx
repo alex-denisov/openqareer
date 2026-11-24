@@ -5,11 +5,15 @@ import type { B640HhRaiseState } from '../../../../../shared/b640HhRaise';
 import { click, mount, type Mounted } from '../../kit/testDom';
 
 const api = vi.hoisted(() => ({ getHhRaise: vi.fn(), setHhRaiseEnabled: vi.fn(), retryHhRaise: vi.fn() }));
-const desktop = vi.hoisted(() => ({ openHhSignIn: vi.fn() }));
+const desktop = vi.hoisted(() => ({ openHhSignIn: vi.fn(), showHhCaptcha: vi.fn() }));
 const poller = vi.hoisted(() => ({ requestHhRaiseStep: vi.fn() }));
 vi.mock('./hhRaiseApi', () => api);
 vi.mock('../../apply/hh/hhRaisePoller', () => poller);
 vi.mock('../../apply/hh/hhDesktop', () => desktop);
+vi.mock('../../../../services/desktop/desktopBridge', async (original) => ({
+  ...(await original<typeof import('../../../../services/desktop/desktopBridge')>()),
+  isTauriEnvironment: () => true,
+}));
 
 const { HH_RAISE_REFRESH_MS, HhRaiseStatus } = await import('./HhRaiseStatus');
 
@@ -56,6 +60,8 @@ describe('B699: состояние автоподнятия', () => {
   it('капча: пауза до времени; выход: «Войдите в hh.ru заново»', async () => {
     await show({ pauseReason: 'captcha', pausedUntil: '2026-11-20T09:40:00Z' });
     expect(text()).toContain(`Пауза до ${time('2026-11-20T09:40:00Z')}: hh.ru попросил капчу`);
+    click(button('Открыть окно hh.ru'));
+    expect(desktop.showHhCaptcha).toHaveBeenCalledOnce();
     await show({ pauseReason: 'logged_out' });
     expect(text()).toContain('Войдите в hh.ru заново');
     click(button('Войти'));

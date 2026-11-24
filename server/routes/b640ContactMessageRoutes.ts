@@ -14,7 +14,7 @@ import { SqliteContactMessageRepository, type OpenDraftKey, type StoredContactMe
 import { SqliteContactStatusRepository } from '../data/sqliteContactStatusRepository';
 import { linkedinOpenUrl } from '../domain/b640ContactMessage';
 import { sessionCandidate } from './b640VacancyContext';
-import { writeContactMessageText, type MessageRecipient } from './b640ContactMessageText';
+import { draftNamesOtherCompany, writeContactMessageText, type MessageRecipient } from './b640ContactMessageText';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import { connectionRecords, connectionRepository, readConnectionMetadata } from './candidateConnectionRoutes';
 import type { RouteDeps } from './deps';
@@ -122,20 +122,24 @@ async function createMessage(deps: RouteDeps, stores: Stores, request: FastifyRe
     recipientUrl: recipient.linkedinUrl,
   };
   // B682: закрытая панель продолжает свой черновик — с ним остаются его варианты и их предел.
-  const open = stores.messages.findOpen(key);
+  // B753: неодобренный черновик о другой компании не продолжаем — пишется новый.
+  const about = { kind: body.data.kind, recipient, vacancyId: body.data.vacancyId ?? null };
+  const findUsable = () => {
+    const draft = stores.messages.findOpen(key);
+    return draft?.state === 'draft' && draftNamesOtherCompany(deps, about, draft.text) ? null : draft;
+  };
+  const open = findUsable();
   if (open) return { data: shown(open), meta: { requestId: request.id } };
   const unit = messageUnit({ ...recipient, vacancyId: body.data.vacancyId });
   if (!requireTariffQuota(deps, request, reply, candidate.id, 'applications', unit)) return reply;
   const text = await writeContactMessageText(deps, request, {
     candidateId: candidate.id,
-    kind: body.data.kind,
-    recipient,
-    vacancyId: body.data.vacancyId ?? null,
+    ...about,
     alsoVacancyId: body.data.alsoVacancyId ?? null,
   });
   // Пока модель писала, такой же черновик мог появиться вторым запросом.
   const stored =
-    stores.messages.findOpen(key) ??
+    findUsable() ??
     stores.messages.create({ ...key, id: randomUUID(), text, createdAt: new Date().toISOString() });
   return reply.code(201).send({ data: shown(stored), meta: { requestId: request.id } });
 }

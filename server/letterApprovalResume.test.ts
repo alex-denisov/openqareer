@@ -156,4 +156,26 @@ describe('B785: правки резюме под вакансию', () => {
     expect((await call('PUT', PATH, { action: 'lang', lang: 'ru' })).json().data.lang).toBe('ru');
     expect(await snapshot()).toBe(russian);
   });
+
+  it('RU/EN: более длинный перевод не теряет пунктов при подгонке под две страницы', async () => {
+    const translate = async ({ bullets }: { bullets: ReadonlyArray<{ key: string; text: string }> }) => ({
+      bullets: bullets.map(({ key, text }) => ({
+        key,
+        text: `The support service moved to the new platform with ${/\d+/u.exec(text)?.[0]} regional teams across the whole country on schedule`,
+      })),
+    });
+    const { call, candidates, candidateId, prepareResume } = await setup(undefined, {
+      experienceFactRewriter: { translate, rewrite: async () => null } as never,
+    });
+    const bullets = Array.from({ length: 50 }, (_, index) => `Сервис поддержки перешёл на платформу, регион номер ${index + 100}`);
+    seedResume(candidates, candidateId, 'Head of Platform', bullets);
+    const count = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      return candidates.getResumeVersion(candidateId, id)?.snapshot.document.experience[0]?.bullets.length;
+    };
+    const russian = await count();
+    expect(russian).toBeGreaterThan(20);
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'en' })).statusCode).toBe(200);
+    expect(await count()).toBe(russian);
+  });
 });

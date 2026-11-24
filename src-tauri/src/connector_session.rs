@@ -8,10 +8,12 @@
 
 use crate::linkedin_read_guard::{is_detail_page, is_people_search_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs::{create_dir_all, remove_dir_all, symlink_metadata};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
+use tauri::utils::config::BackgroundThrottlingPolicy;
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
     WebviewWindowBuilder,
@@ -56,8 +58,8 @@ pub struct SessionWindowRequest {
     pub url: String,
     pub layout: Option<SessionLayout>,
     pub session_key: Option<String>,
-    /// A background read: the window opens where it was placed without taking
-    /// focus, so an out-of-sight import never pulls the candidate away.
+    /// A background read: the window is built hidden and never put on screen;
+    /// one a person was already shown is left alone.
     #[serde(default)]
     pub background: bool,
 }
@@ -108,6 +110,46 @@ pub struct PoolSessionCookie {
     pub http_only: bool,
     pub secure: bool,
     pub same_site: Option<String>,
+}
+
+/// Labels of the session windows a person was shown: theirs until the window
+/// is hidden again. `is_visible` would not do, a minimised window or a hidden
+/// application answers `false` while the person is still signing in.
+#[derive(Default)]
+pub struct SessionWindowsOnScreen(Mutex<HashSet<String>>);
+
+impl SessionWindowsOnScreen {
+    fn set(&self, label: &str, shown: bool) {
+        let mut labels = self.0.lock().unwrap_or_else(|poison| poison.into_inner());
+        if shown {
+            labels.insert(label.to_string());
+        } else {
+            labels.remove(label);
+        }
+    }
+
+    fn contains(&self, label: &str) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .contains(label)
+    }
+}
+
+/// Whether a person was shown this window and it was not hidden since.
+fn is_label_on_screen(app: &AppHandle, label: &str) -> bool {
+    app.get_webview(label).is_some() && app.state::<SessionWindowsOnScreen>().contains(label)
+}
+
+/// The same for the candidate's window: an automatic action must not navigate
+/// the page a person is signing in to.
+pub fn is_session_window_on_screen(app: &AppHandle, platform: &str) -> bool {
+    session_window_label(platform).is_some_and(|label| is_label_on_screen(app, label))
+}
+
+/// A background session is built off screen, and without focus.
+fn opens_on_screen(request: &SessionWindowRequest) -> bool {
+    !request.background
 }
 
 /// One long-lived window per platform, so a second click focuses the window the
@@ -688,6 +730,14 @@ pub async fn open_session_window(
         };
     }
 
+    if request.background && is_label_on_screen(app, &label) {
+        return SessionWindowReport {
+            opened: false,
+            label: label.to_string(),
+            reason: Some("session_window_in_use".to_string()),
+        };
+    }
+
     if let Some(existing) = app.get_webview(&label) {
         if !existing.url().is_ok_and(|current| current == url) {
             if request.platform == "linkedin" && request.session_key.is_none() {
@@ -701,7 +751,8 @@ pub async fn open_session_window(
             request.session_key.as_deref(),
             layout.clone(),
         );
-        if !request.background {
+        if opens_on_screen(request) {
+            app.state::<SessionWindowsOnScreen>().set(&label, true);
             if let Some(window) = app.get_webview_window(&label) {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -746,7 +797,11 @@ pub async fn open_session_window(
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
         .position(screen_layout.x, screen_layout.y)
         .inner_size(screen_layout.width, screen_layout.height)
-        .focused(!request.background)
+        .visible(opens_on_screen(request))
+        .focused(opens_on_screen(request))
+        // A hidden WKWebView keeps running the read script and its timers only
+        // with the inactive scheduling policy `none` (macOS 14+, B157).
+        .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
     let (decorations, resizable, skip_taskbar) =
         session_window_chrome(request.session_key.is_some());
@@ -816,6 +871,8 @@ pub async fn open_session_window(
         builder = builder.proxy_url(proxy);
     }
 
+    app.state::<SessionWindowsOnScreen>()
+        .set(&label, opens_on_screen(request));
     match builder.build() {
         Ok(_) => {
             // Reporting "opened" before the window is inspectable is what threw
@@ -883,6 +940,7 @@ pub fn show_session_window(app: &AppHandle, platform: &str) -> bool {
     let Some(window) = app.get_webview_window(label) else {
         return false;
     };
+    app.state::<SessionWindowsOnScreen>().set(label, true);
     window.show().and_then(|()| window.set_focus()).is_ok()
 }
 
@@ -1050,15 +1108,27 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
     built.is_ok() && await_registered_window(app, label).await
 }
 
-/// Moves the candidate window back out of sight once a person is no longer
-/// needed in it, and hands focus back to the main window: the window stays
-/// shown, since a hidden WKWebView stops running the read script (B157).
-pub fn park_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
-    let moved = resize_session_window(app, platform, layout);
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.set_focus();
+/// Hides the candidate window once a person is no longer needed in it; the
+/// main window gets the focus back only if this window held it. The hidden
+/// page keeps running its scripts (see `background_throttling`).
+pub fn park_session_window(app: &AppHandle, platform: &str) -> bool {
+    let Some(label) = session_window_label(platform) else {
+        return false;
+    };
+    let Some(window) = app.get_webview_window(label) else {
+        return false;
+    };
+    let was_focused = window.is_focused().unwrap_or(false);
+    let hidden = window.hide().is_ok();
+    if hidden {
+        app.state::<SessionWindowsOnScreen>().set(label, false);
     }
-    moved
+    if was_focused {
+        if let Some(main) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            let _ = main.set_focus();
+        }
+    }
+    hidden
 }
 
 pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
@@ -2326,6 +2396,30 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_background_session_is_never_built_on_screen() {
+        let request = |background| SessionWindowRequest {
+            platform: "hh".into(),
+            url: "https://hh.ru/account/login".into(),
+            layout: None,
+            session_key: None,
+            background,
+        };
+        assert!(!opens_on_screen(&request(true)));
+        assert!(opens_on_screen(&request(false)));
+    }
+
+    #[test]
+    fn a_window_belongs_to_the_person_from_show_until_hide() {
+        let shown = SessionWindowsOnScreen::default();
+        assert!(!shown.contains("connector-hh"));
+        shown.set("connector-hh", true);
+        assert!(shown.contains("connector-hh"));
+        assert!(!shown.contains("connector-linkedin"));
+        shown.set("connector-hh", false);
+        assert!(!shown.contains("connector-hh"));
+    }
+
     #[test]
     fn a_session_window_never_opens_on_a_people_search_page() {
         assert!(search_page_entry_refused(

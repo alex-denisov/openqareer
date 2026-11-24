@@ -316,6 +316,9 @@ const FIRST_PERSON =
 /** Case-sensitive: «US» and «IT» are not pronouns. */
 const FIRST_PERSON_EN = /(?:^|[^\p{L}])(?:I|[Ww]e|[Mm]y|[Oo]ur|[Mm]e)(?=$|[^\p{L}])/u;
 
+export const speaksInFirstPerson = (text: string) =>
+  FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text);
+
 function cleanBulletText(text: string): string {
   const flat = text
     .replace(/\s+/gu, ' ')
@@ -342,7 +345,7 @@ export function checkedBullet(
   // The model's text is the only thing that reaches the profile: a bullet
   // that copies a fragment word for word is the raw speech the owner refused.
   if (sources.some((source) => cleanBulletText(source) === text)) return null;
-  if (FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text) || arithmeticFails(text)) return null;
+  if (speaksInFirstPerson(text) || arithmeticFails(text)) return null;
   if (!numbersAreSourced(text, sources)) return null;
   const written = textLanguage(text);
   if (written && written !== language) return null;
