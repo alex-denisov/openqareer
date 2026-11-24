@@ -1,23 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { saveResumeStudioDraft } from '../../resume/resumeApi';
 import { Icon } from '../kit';
-import { freshDraft, PROFILE_CHANGED } from '../profile/ExperienceEditScreen';
-import { LINK_MAX, linksFull, normalizeLink, withLink } from './addLinkModel';
-import { rememberAddedLink } from './footprintApi';
+import { LINK_MAX, normalizeLink } from './addLinkModel';
+import { saveLink } from './profileLinks';
 import { reportFailure } from './reportFailure';
-import { announceFootprintChanged } from './useFootprint';
-
-/** Ссылка ложится в контакты профиля: план поиска строится по ним. */
-async function saveLink(link: string): Promise<'saved' | 'full'> {
-  const draft = await freshDraft();
-  if (linksFull(draft, link)) return 'full';
-  const next = withLink(draft, link);
-  if (next !== draft) await saveResumeStudioDraft(next);
-  await rememberAddedLink(link);
-  window.dispatchEvent(new Event(PROFILE_CHANGED));
-  announceFootprintChanged();
-  return 'saved';
-}
 
 interface LinkFieldProps {
   readonly value: string;

@@ -22,6 +22,7 @@ import {
 import {
   buildCandidateFootprintQueryPlan,
   extractUnidentifiedEmployers,
+  profileLinksOf,
   toPublicFootprintQueryPlan,
 } from '../osint/candidateFootprintQueryPlan';
 import { registerCandidateFootprintChecklistRoutes } from './candidateFootprintChecklistRoutes';
@@ -80,6 +81,7 @@ function getPlan(
     plan: toPublicFootprintQueryPlan(
       buildCandidateFootprintQueryPlan(draft, { manualEmployers, youtube }),
       availability,
+      profileLinksOf(draft),
     ),
     unidentifiedEmployers: extractUnidentifiedEmployers(draft),
     sourceAvailability: availability,

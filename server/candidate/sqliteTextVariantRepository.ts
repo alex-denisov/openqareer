@@ -123,6 +123,13 @@ export class SqliteTextVariantRepository {
     };
   }
 
+  /** Черновик убран — вместе с его вариантами. */
+  removeAll(subject: TextSubject): void {
+    this.database
+      .prepare('DELETE FROM text_variants WHERE candidate_id = ? AND kind = ? AND subject_id = ?')
+      .run(subject.candidateId, subject.kind, subject.subjectId);
+  }
+
   /** Новый вариант; `null` — предел исчерпан, строка не создана. */
   add(input: NewTextVariant): TextVariant | null {
     const id = randomUUID();

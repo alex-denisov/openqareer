@@ -24,6 +24,7 @@ vi.mock('../../shell/ShellContext', () => ({
 vi.mock('../../messages/contactMessageApi', () => ({
   listB640ContactMessageVariants: async () => ({ variants: [], remaining: 3 }),
   createB640ContactMessage: vi.fn(() => new Promise(() => undefined)),
+  discardB640ContactMessage: vi.fn(async () => undefined),
   editB640ContactMessage: vi.fn(),
   approveB640ContactMessage: vi.fn(),
   markB640ContactMessageSent: vi.fn(),
