@@ -44,7 +44,8 @@
     cursor: pointer;
   }
   .b640 .ap-parts .ap-pick:hover { color: var(--career-accent); }
-  .b640 .ap-parts .ap-pick:only-child::after {
+  .b640 .ap-parts .ap-pick:only-child::after,
+  .b640 .ap-parts .ap-pick:has(+ .ap-lines)::after {
     content: "";
     position: absolute;
     inset-inline: 0;
