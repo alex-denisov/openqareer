@@ -16,7 +16,7 @@ import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { FormStep, useQuestionnaire, type QuestionnaireState } from './FormStep';
 import { LetterStep } from './LetterStep';
 import type { HhSendStepProps } from './hh/HhSendStep';
-import { copyText, readiness } from './model/formModel';
+import { copyText, hhAnswers, readiness } from './model/formModel';
 import {
   stepsFor,
   applyRoute,
@@ -141,13 +141,16 @@ interface BodyProps {
   readonly answers: string;
   readonly hhForm: HhSendStepProps['form'];
   readonly onHhForm: HhSendStepProps['onForm'];
+  /** o04: отправка открыта кнопкой «Отправить отклик с анкетой». */
+  readonly askNow: boolean;
+  readonly onAsked: () => void;
   readonly resumeOk: boolean;
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm }: BodyProps) {
+function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, askNow, onAsked }: BodyProps) {
   return (
     <>
       <div className="col">
@@ -160,6 +163,8 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhFor
           answersText={answers}
           form={hhForm}
           onForm={onHhForm}
+          askNow={askNow}
+          onAsked={onAsked}
           onLetter={() => setStep('letter')}
         />
       </div>
@@ -242,6 +247,7 @@ function FlowHead({ head, applicationId }: FlowHeadProps) {
 interface FlowState {
   readonly shown: ApplyStep;
   readonly setStep: (step: ApplyStep) => void;
+  readonly sendWithForm: () => void;
   readonly head: ApplyHead;
   readonly body: BodyProps;
   readonly quota: TariffQuotaStatus | null;
@@ -278,6 +284,8 @@ function applyForm(
           answered: ready.answered,
           complete: ready.missingRequired === 0,
           answersText: answers,
+          answers: form ? hhAnswers(form.questions, draft) : [],
+          onSubmitted: questionnaire.markSubmitted,
           open: () => setStep('form'),
         }
       : null,
@@ -286,6 +294,24 @@ function applyForm(
       if ((await questionnaire.takeHhForm(hhForm)) && open) {
         setStep((now) => (now === 'send' ? 'form' : now));
       }
+    },
+  };
+}
+
+/** o04: «Отправить отклик с анкетой» сохраняет ответы и открывает подтверждение отправки. */
+function useSendAsk(
+  questionnaire: QuestionnaireState,
+  setStep: Dispatch<SetStateAction<ApplyStep>>,
+): Pick<BodyProps, 'askNow' | 'onAsked'> & { readonly sendWithForm: () => void } {
+  const [askNow, setAskNow] = useState(false);
+  const onAsked = useCallback(() => setAskNow(false), []);
+  return {
+    askNow,
+    onAsked,
+    sendWithForm: () => {
+      questionnaire.save();
+      setAskNow(true);
+      setStep('send');
     },
   };
 }
@@ -300,6 +326,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const { letter, variants } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
+  const ask = useSendAsk(questionnaire, setStep);
   const form = questionnaire.form;
   // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
   const shown: ApplyStep = step === 'form' && !form ? 'letter' : step;
@@ -312,6 +339,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   return {
     shown,
     setStep,
+    sendWithForm: ask.sendWithForm,
     head,
     quota,
     questionnaire,
@@ -330,6 +358,8 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
       setStep,
       letter,
       variants,
+      askNow: ask.askNow,
+      onAsked: ask.onAsked,
       ...applyForm(questionnaire, setStep),
       resumeOk: resumeDone,
       resumeSeen,
@@ -369,7 +399,7 @@ function ApplyFlow(props: FlowProps) {
         <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
         {!quota && shown === 'send' ? <SendBody {...body} /> : null}
-        {!quota && shown === 'form' && form ? <FormStep state={questionnaire} form={form} /> : null}
+        {!quota && shown === 'form' && form ? <FormStep state={questionnaire} form={form} onSend={flow.sendWithForm} /> : null}
         {!quota && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>

@@ -125,6 +125,8 @@ export const HH_WINDOW_LEFT_OPEN_FAILURES = [
   'letter_not_kept',
   'submit_unavailable',
   'relocation_warning',
+  'visibility_warning',
+  'consent_required',
   'hh_error',
   'script_error',
   'already_applied',
@@ -134,6 +136,39 @@ export const HH_WINDOW_LEFT_OPEN_FAILURES = [
   'eval_timeout',
   'eval_cancelled',
 ] as const;
+
+/** B787: что нужно от кандидата, чтобы отклик ушёл; очередь «нужен ваш шаг» берёт причину отсюда. */
+export type HhApplyStep =
+  'login' | 'captcha' | 'questionnaire' | 'consent' | 'relocation' | 'visibility';
+
+const STEP_BY_FAILURE: ReadonlyMap<string, HhApplyStep> = new Map([
+  ['not_signed_in', 'login'],
+  ['captcha', 'captcha'],
+  ['questionnaire_required', 'questionnaire'],
+  ['consent_required', 'consent'],
+  ['relocation_warning', 'relocation'],
+  ['visibility_warning', 'visibility'],
+]);
+
+export function hhApplyStep(failureCode: string | null | undefined): HhApplyStep | null {
+  return STEP_BY_FAILURE.get(failureCode ?? '') ?? null;
+}
+
+/** B787: поручение, по которому приложение ставит галочку согласия в форме работодателя. */
+export const HH_CONSENT_MANDATE_VERSION = 'actions_on_behalf-v1.1';
+export const HH_CONSENTS_MAX = 5;
+
+/** Галочка согласия, поставленная при отклике: слова формы и ссылка на политику. */
+export interface HhConsent {
+  readonly text: string;
+  readonly url?: string | null;
+}
+
+/** B787: ответ кандидата на вопрос анкеты, как он уходит в окно hh.ru. */
+export interface HhFormAnswer {
+  readonly text: string;
+  readonly values: readonly string[];
+}
 
 /** B641: вопрос анкеты, как его прочитало приложение в окне hh.ru кандидата. */
 export interface HhFormQuestion {
@@ -171,6 +206,8 @@ export interface HhApplyAttempt {
   readonly attemptId: string;
   /** Сколько откликов через hh.ru ещё можно отправить сегодня, считая этот. */
   readonly remainingToday: number;
+  /** Принято поручение: согласие на обработку данных ставится без вопроса. */
+  readonly consent?: boolean;
 }
 
 /** Номер вакансии из её адреса на hh.ru; не hh.ru — `null`. */

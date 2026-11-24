@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   HH_APPLY_OUTCOMES,
+  HH_CONSENT_MANDATE_VERSION,
+  HH_CONSENTS_MAX,
   HH_RESUME_ID,
   HH_RESUME_TEXT_MAX_LENGTH,
   HH_RESUME_TITLE_MAX_LENGTH,
@@ -28,7 +30,7 @@ import { sameVacancyTitle } from '../vacancies/vacancyIdentity';
 import { resolveHhLoginNotice } from './b640HhSessionState';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
-import { sendError, withDeps } from './helpers';
+import { authenticateSession, sendError, withDeps } from './helpers';
 
 /**
  * B704: сессия кандидата hh.ru в приложении. Резюме читаются в окне hh.ru на машине
@@ -109,8 +111,20 @@ const resultSchema = z
     failureCode: z.string().regex(/^[a-z0-9_]{1,64}$/u).optional(),
     /** B708: вакансия, на странице которой виден отклик, завершённый кандидатом в окне hh.ru. */
     vacancyId: z.string().regex(HH_VACANCY_ID).optional(),
+    /** B787: галочки согласия, поставленные в форме работодателя. */
+    consents: z
+      .array(z.object({ text: z.string().trim().min(1).max(500), url: z.url().max(2048).nullish() }).strict())
+      .max(HH_CONSENTS_MAX)
+      .optional(),
   })
   .strict();
+
+/** Принято поручение нужной версии: согласие ставится без вопроса. Нет хранилища — спрашиваем. */
+function hasConsentMandate(deps: RouteDeps, request: FastifyRequest): boolean {
+  const userId = authenticateSession(request, deps.authService, deps.config)?.userId;
+  const active = userId ? deps.capabilityConsentStore?.getActiveConsent(userId, 'actions_on_behalf') : null;
+  return active?.versionId === HH_CONSENT_MANDATE_VERSION;
+}
 
 const REFUSAL_REPLY: Readonly<Record<HhApplyRefusal, readonly [number, string]>> = {
   hh_resumes_not_read: [409, 'Сначала выберите резюме hh.ru.'],
@@ -307,7 +321,7 @@ const postAttempt: Handler = async (deps, request, reply) => {
   }
   const attemptId = deps.hh.startAttempt(candidateId, { vacancyId, resumeId: chosen, now });
   return reply.status(201).send({
-    data: { attemptId, remainingToday: gate.remainingToday },
+    data: { attemptId, remainingToday: gate.remainingToday, consent: hasConsentMandate(deps, request) },
     meta: { requestId: request.id },
   });
 };
@@ -324,7 +338,7 @@ const postResult: Handler = async (deps, request, reply) => {
   if (!stored) {
     return sendError(reply, request, 404, 'hh_apply_not_found', 'Такого отклика нет.', false);
   }
-  const { outcome, failureCode, vacancyId } = parsed.data;
+  const { outcome, failureCode, vacancyId, consents } = parsed.data;
   const now = new Date();
   const otherVacancy = vacancyId !== undefined && vacancyId !== stored.vacancyId;
   const written =
@@ -335,6 +349,11 @@ const postResult: Handler = async (deps, request, reply) => {
         deps.hh.markSentLater(candidateId, attemptId, { vacancyId, now })));
   if (!written) {
     return sendError(reply, request, 409, 'hh_apply_finished', 'Исход этого отклика уже записан.', false);
+  }
+  // Согласие дано, только если форма ушла или могла уйти.
+  if (consents?.length && (outcome !== 'failed' || failureCode === 'no_confirmation')) {
+    const basis = hasConsentMandate(deps, request) ? HH_CONSENT_MANDATE_VERSION : 'candidate_answer';
+    deps.hh.recordConsents(candidateId, attemptId, { consents, basis, now });
   }
   return { data: { attemptId, outcome: parsed.data.outcome }, meta: { requestId: request.id } };
 };

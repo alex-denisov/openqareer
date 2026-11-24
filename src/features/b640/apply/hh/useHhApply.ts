@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { CoachApiError } from '../../../coach/apiClient';
-import type { HhForm } from '../../../../../shared/hhCandidateSession';
+import type { HhForm, HhFormAnswer } from '../../../../../shared/hhCandidateSession';
 import { runHhApplyInSession, type HhDesktopReport } from './hhDesktop';
-import { desktopFailureCode, refusalText, resultOf, type HhSendResult } from './hhSendModel';
+import { desktopFailureCode, refusalOf, resultOf, type HhSendQuestion, type HhSendResult } from './hhSendModel';
 import { finishHhApply, startHhApply } from './hhSessionApi';
 import { stopHhWindowWatch, watchHhWindow } from './hhWindowWatch';
 
@@ -20,6 +20,10 @@ export interface HhApplyInput {
   readonly letter: string;
   /** Заголовок выбранного резюме, если он у кандидата один. */
   readonly uniqueResumeTitle?: string;
+  /** Ответы анкеты, если её вопросы прочитаны. */
+  readonly answers?: readonly HhFormAnswer[];
+  /** Отклик ушёл вместе с анкетой. */
+  readonly onFormSent?: () => void;
   /** Отклик ушёл (в том числе с анкетой): отклик отмечается отправленным. */
   readonly onSent: () => Promise<void>;
   /** B641: анкета из окна hh.ru; `open` — отклик без неё не ушёл, нужен шаг «Анкета». */
@@ -32,6 +36,8 @@ export interface HhApplyControls {
   readonly cancel: () => void;
   /** Только из окна подтверждения: отклик уходит после «Отправить». */
   readonly confirm: () => void;
+  /** «Да» на вопрос hh.ru: отклик отправляется снова с этим ответом. */
+  readonly agree: () => void;
 }
 
 /** Секунды ожидания ответа hh.ru: макет a01d показывает их рядом со строкой. */
@@ -45,12 +51,22 @@ function useSendingClock(sending: boolean, tick: (seconds: number) => void): voi
   }, [sending, tick]);
 }
 
-async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () => void): Promise<HhSendResult> {
+type Agreed = ReadonlySet<HhSendQuestion>;
+
+async function sendOnce(
+  input: HhApplyInput,
+  resumeId: string,
+  agreed: Agreed,
+  onLateSent: () => void,
+): Promise<HhSendResult> {
   let attemptId: string;
+  let mandate: boolean | undefined;
   try {
-    ({ attemptId } = await startHhApply(input.vacancyId, resumeId, input.vacancyTitle));
+    ({ attemptId, consent: mandate } = await startHhApply(input.vacancyId, resumeId, input.vacancyTitle));
   } catch (reason: unknown) {
-    return { kind: 'error', text: refusalText(reason instanceof CoachApiError ? reason.code : undefined) };
+    const refused = refusalOf(reason instanceof CoachApiError ? reason.code : undefined);
+    if (refused.kind === 'already') await input.onSent().catch(() => undefined);
+    return refused;
   }
   // Отказ сервера прежнее чтение окна не обрывает; новая попытка уводит окно на свою вакансию.
   stopHhWindowWatch();
@@ -59,12 +75,21 @@ async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () =>
     resumeId,
     letter: input.letter,
     uniqueResumeTitle: input.uniqueResumeTitle,
+    ...(input.answers?.length ? { answers: input.answers } : {}),
+    ...(mandate || agreed.has('consent') ? { consent: true } : {}),
+    ...(agreed.has('relocation') ? { agreedRelocation: true } : {}),
+    ...(agreed.has('visibility') ? { agreedVisibility: true } : {}),
   }).catch(
     (reason: unknown) => ({ outcome: 'failed' as const, failureCode: desktopFailureCode(reason) }),
   );
-  await finishHhApply(attemptId, report.outcome, report.failureCode ?? undefined).catch(() => undefined);
-  const result = resultOf(report.outcome, report.failureCode, report.questionnaire);
-  if (result.kind === 'sent' || result.kind === 'questionnaire') await input.onSent().catch(() => undefined);
+  const failure = report.failureCode ?? undefined;
+  const recorded = report.consents?.length
+    ? finishHhApply(attemptId, report.outcome, failure, undefined, report.consents)
+    : finishHhApply(attemptId, report.outcome, failure);
+  await recorded.catch(() => undefined);
+  const result = resultOf(report.outcome, report.failureCode);
+  if (result.kind === 'sent' && input.answers?.length) input.onFormSent?.();
+  if (result.kind === 'sent' || result.kind === 'questionnaire' || result.kind === 'already') await input.onSent().catch(() => undefined);
   else {
     void watchHhWindow({
       attemptId,
@@ -92,23 +117,36 @@ export function useHhApply(input: HhApplyInput): HhApplyControls {
     shownVacancy.current = input.vacancyId;
   }, [input.vacancyId]);
 
+  // Ответы на вопросы hh.ru действуют только для этой вакансии.
+  const agreed = useRef<{ readonly vacancyId: string; readonly set: Agreed }>({ vacancyId: '', set: new Set() });
+  const agreedNow = (): Agreed => (agreed.current.vacancyId === input.vacancyId ? agreed.current.set : new Set());
+
+  const send = () => {
+    if (!input.resumeId || inFlight.current) return;
+    inFlight.current = true;
+    setState({ kind: 'sending', seconds: 0 });
+    const onLateSent = () => {
+      if (shownVacancy.current === input.vacancyId) setState({ kind: 'sent' });
+    };
+    // Отклик из окна мог отметиться раньше, чем сервер отказал в повторе: «отправлен» не затираем.
+    void sendOnce(input, input.resumeId, agreedNow(), onLateSent)
+      .then((result) => setState((shown) => (shown.kind === 'sent' ? shown : result)))
+      .finally(() => {
+        inFlight.current = false;
+      });
+  };
+
   return {
     state,
     ask: () => setState({ kind: 'confirm' }),
     cancel: () => setState({ kind: 'idle' }),
     confirm: () => {
-      if (state.kind !== 'confirm' || !input.resumeId || inFlight.current) return;
-      inFlight.current = true;
-      setState({ kind: 'sending', seconds: 0 });
-      const onLateSent = () => {
-        if (shownVacancy.current === input.vacancyId) setState({ kind: 'sent' });
-      };
-      // Отклик из окна мог отметиться раньше, чем сервер отказал в повторе: «отправлен» не затираем.
-      void sendOnce(input, input.resumeId, onLateSent)
-        .then((result) => setState((shown) => (shown.kind === 'sent' ? shown : result)))
-        .finally(() => {
-          inFlight.current = false;
-        });
+      if (state.kind === 'confirm') send();
+    },
+    agree: () => {
+      if (state.kind !== 'question' || inFlight.current) return;
+      agreed.current = { vacancyId: input.vacancyId, set: new Set([...agreedNow(), state.about]) };
+      send();
     },
   };
 }

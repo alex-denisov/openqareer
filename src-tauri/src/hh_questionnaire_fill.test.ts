@@ -20,17 +20,22 @@ function page(html: string) {
   };
   const submits: string[] = [];
   window.document.addEventListener('submit', () => submits.push('submit'), true);
-  const read = () => JSON.parse(JSON.stringify(window.eval(PAGE))) as { code: string; questions: unknown[] };
+  const read = () =>
+    JSON.parse(JSON.stringify(window.eval(PAGE))) as { code: string; questions: unknown[] };
   const fill = (answers: readonly Answer[], consent = false) => {
-    const act = FILL.replace('"__OQ_ANSWERS__"', () => JSON.stringify({ answers, consent }));
+    const act = FILL.replace('__OQ_ANSWERS__', () => JSON.stringify({ answers, consent }));
     const script = PAGE.replace('/* OQ_ACT */', () => act);
-    const once = () => JSON.parse(JSON.stringify(window.eval(script))) as { code: string; consents?: unknown[] };
+    const once = () =>
+      JSON.parse(JSON.stringify(window.eval(script))) as { code: string; consents?: unknown[] };
     const first = once();
     return first.code === 'waiting' ? once() : first;
   };
-  const value = (name: string) => window.document.querySelector<HTMLTextAreaElement>(`[name="${name}"]`)!.value;
+  const value = (name: string) =>
+    window.document.querySelector<HTMLTextAreaElement>(`[name="${name}"]`)!.value;
   const ticked = () =>
-    [...window.document.querySelectorAll<HTMLInputElement>('input:checked')].map((box) => `${box.name}=${box.value}`);
+    [...window.document.querySelectorAll<HTMLInputElement>('input:checked')].map(
+      (box) => `${box.name}=${box.value}`,
+    );
   return { read, fill, value, ticked, submits };
 }
 
@@ -39,13 +44,17 @@ const option = (name: string, type: string, value: string, text: string) =>
   `<div><div><input type="${type}" name="${name}" value="${value}"></div><div><div>${text}</div></div></div>`;
 const taskBody = (question: string, body: string) =>
   `<div data-qa="task-body"><div><div data-qa="task-question"><p>${question}</p></div></div><div>${body}</div></div>`;
-const LETTER = '<div data-qa="vacancy-response-popup-form-letter-input"><textarea name="text"></textarea></div>';
+const LETTER =
+  '<div data-qa="vacancy-response-popup-form-letter-input"><textarea name="text"></textarea></div>';
 const form = (inner: string, outside = '') =>
   `<form><input type="hidden" name="uidPk" value="x"><div data-qa="resume-title">Директор</div>${inner}${LETTER}${outside}<button type="submit" data-qa="vacancy-response-submit-popup">Откликнуться</button></form>`;
 
 const TEST = form(
   taskBody('Почему мы?', '<textarea name="task_1_text"></textarea>') +
-    taskBody('Командировки?', option('task_2', 'radio', '21', 'Да') + option('task_2', 'radio', '22', 'Нет')) +
+    taskBody(
+      'Командировки?',
+      option('task_2', 'radio', '21', 'Да') + option('task_2', 'radio', '22', 'Нет'),
+    ) +
     taskBody(
       'Языки',
       option('task_3', 'checkbox', '31', 'Английский') +
@@ -67,7 +76,13 @@ describe('B787: анкета hh.ru заполняется в окне канди
       questions: [
         { text: 'Почему мы?', required: true, kind: 'text' },
         { text: 'Командировки?', required: true, kind: 'choice', options: ['Да', 'Нет'] },
-        { text: 'Языки', required: true, kind: 'choice', options: ['Английский', 'Свой вариант'], multiple: true },
+        {
+          text: 'Языки',
+          required: true,
+          kind: 'choice',
+          options: ['Английский', 'Свой вариант'],
+          multiple: true,
+        },
         { text: 'Языки — свой вариант', required: false, kind: 'text' },
       ],
     });
@@ -87,8 +102,16 @@ describe('B787: анкета hh.ru заполняется в окне канди
   it.each([
     ['нет обязательного ответа', ANSWERS.slice(1), 'answers_missing'],
     ['«свой вариант» без текста', ANSWERS.slice(0, 3), 'answers_missing'],
-    ['варианта больше нет', [ANSWERS[0]!, { text: 'Командировки?', values: ['Иногда'] }, ...ANSWERS.slice(2)], 'answers_changed'],
-    ['два ответа на один выбор', [ANSWERS[0]!, { text: 'Командировки?', values: ['Да', 'Нет'] }, ...ANSWERS.slice(2)], 'answers_changed'],
+    [
+      'варианта больше нет',
+      [ANSWERS[0]!, { text: 'Командировки?', values: ['Иногда'] }, ...ANSWERS.slice(2)],
+      'answers_changed',
+    ],
+    [
+      'два ответа на один выбор',
+      [ANSWERS[0]!, { text: 'Командировки?', values: ['Да', 'Нет'] }, ...ANSWERS.slice(2)],
+      'answers_changed',
+    ],
   ])('%s — форма не тронута', (_name, answers, code) => {
     const view = page(TEST);
     expect(view.fill(answers)).toEqual({ code });
@@ -98,7 +121,10 @@ describe('B787: анкета hh.ru заполняется в окне канди
 
   const CONSENT =
     '<label><input type="checkbox" name="pd">Согласен на обработку <a href="https://hh.ru/policy">персональных данных</a></label><label><input type="checkbox" name="news" checked>Хочу получать рассылку</label>';
-  const WITH_CONSENT = form(taskBody('Почему мы?', '<textarea name="task_1_text"></textarea>'), CONSENT);
+  const WITH_CONSENT = form(
+    taskBody('Почему мы?', '<textarea name="task_1_text"></textarea>'),
+    CONSENT,
+  );
 
   it('согласие — только по поручению; рассылка не ставится и снимается', () => {
     expect(page(WITH_CONSENT).read().questions).toHaveLength(1);
@@ -108,7 +134,9 @@ describe('B787: анкета hh.ru заполняется в окне канди
     const given = page(WITH_CONSENT);
     expect(given.fill(ANSWERS, true)).toEqual({
       code: 'filled',
-      consents: [{ text: 'Согласен на обработку персональных данных', url: 'https://hh.ru/policy' }],
+      consents: [
+        { text: 'Согласен на обработку персональных данных', url: 'https://hh.ru/policy' },
+      ],
     });
     expect(given.ticked()).toEqual(['pd=on']);
   });
@@ -118,7 +146,18 @@ describe('B787: анкета hh.ru заполняется в окне канди
     'Согласен на обработку персональных данных и рассылку вакансий',
     'Согласен на хранение персональных данных для будущих вакансий',
   ])('другая галочка — вопрос кандидату: %s', (text) => {
-    const view = page(form(taskBody('А?', '<textarea name="task_1_text"></textarea>'), `<label><input type="checkbox" name="x" required>${text}</label>`));
-    expect(view.read().questions).toContainEqual({ text, required: true, kind: 'choice', options: [text], multiple: true });
+    const view = page(
+      form(
+        taskBody('А?', '<textarea name="task_1_text"></textarea>'),
+        `<label><input type="checkbox" name="x" required>${text}</label>`,
+      ),
+    );
+    expect(view.read().questions).toContainEqual({
+      text,
+      required: true,
+      kind: 'choice',
+      options: [text],
+      multiple: true,
+    });
   });
 });

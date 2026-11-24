@@ -10,7 +10,7 @@ use std::time::Duration;
 const PAGE_SCRIPT: &str = include_str!("hh_questionnaire_page.js");
 const FILL_SCRIPT: &str = include_str!("hh_questionnaire_fill.js");
 const ACT_MARK: &str = "/* OQ_ACT */";
-const ANSWERS_MARK: &str = "\"__OQ_ANSWERS__\"";
+const ANSWERS_MARK: &str = "__OQ_ANSWERS__";
 const READ_WAIT: Duration = Duration::from_secs(10);
 const READ_POLL: Duration = Duration::from_millis(500);
 /// 40 questions of up to 200 options would still fit far below this.

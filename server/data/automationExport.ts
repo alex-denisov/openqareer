@@ -38,6 +38,7 @@ export interface AutomationExport {
   readonly journal: readonly ExportedJournalEntry[];
   readonly hh: {
     readonly applyAttempts: readonly Row[];
+    readonly applyConsents: readonly Row[];
     readonly raiseSchedules: readonly Row[];
     readonly raiseChoice: readonly Row[];
     readonly resumeSnapshot: HhResumeSnapshot | null;
@@ -105,6 +106,13 @@ export function exportAutomation(sources: AutomationExportSources, candidateId: 
         'hh_apply_attempts',
         `SELECT vacancy_id AS vacancyId, resume_id AS resumeId, outcome, started_at AS startedAt, finished_at AS finishedAt
          FROM hh_apply_attempts WHERE candidate_id = ? ORDER BY started_at, id`,
+        candidateId,
+      ),
+      applyConsents: rows(
+        database,
+        'hh_apply_consents',
+        `SELECT host, consent_text AS consentText, policy_url AS policyUrl, basis, given_at AS givenAt
+         FROM hh_apply_consents WHERE candidate_id = ? ORDER BY given_at, position`,
         candidateId,
       ),
       raiseSchedules: rows(

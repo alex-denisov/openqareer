@@ -6,6 +6,7 @@ import type {
 } from '../../../../shared/applicationQuestionnaire';
 import { hhFormUrl, type HhForm } from '../../../../shared/hhCandidateSession';
 import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQuestionnaire';
+import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
@@ -170,6 +171,8 @@ interface ActionsProps {
   readonly form: ApplicationQuestionnaire;
   readonly ready: FormReadiness;
   readonly state: QuestionnaireState;
+  /** Анкета hh.ru в приложении: отклик с ответами уходит отсюда (o04). */
+  readonly onSend: (() => void) | null;
 }
 
 /** Переводит к полю вопроса: прокрутка и фокус, без смены адреса. */
@@ -180,7 +183,7 @@ function focusField(fieldId: string): void {
 }
 
 /** Главное действие анкеты: дойти до пропущенного обязательного вопроса или скопировать ответы. */
-function FormActions({ form, ready, state }: ActionsProps) {
+function FormActions({ form, ready, state, onSend }: ActionsProps) {
   const toast = useToast();
   const copy = () => {
     state.save();
@@ -200,12 +203,22 @@ function FormActions({ form, ready, state }: ActionsProps) {
         <Button variant="primary" icon="edit" onClick={() => focusField(`qa-${ready.nextRequired?.id}`)}>
           {`Ответьте на обязательные · ${ready.missingRequired}`}
         </Button>
-      ) : (
+      ) : onSend ? null : (
         <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
           Скопировать ответы
         </Button>
       )}
-      {form.formUrl ? (
+      {onSend ? (
+        <Button
+          variant={ready.nextRequired ? undefined : 'primary'}
+          icon="send"
+          disabled={Boolean(ready.nextRequired) || state.submitted.kind === 'done'}
+          onClick={onSend}
+        >
+          Отправить отклик с анкетой
+        </Button>
+      ) : null}
+      {form.formUrl && !onSend ? (
         <a className="row-act" href={form.formUrl} target="_blank" rel="noopener noreferrer">
           Анкета на сайте ↗
         </a>
@@ -238,10 +251,14 @@ function SubmittedBlock({ state, onHh }: { readonly state: QuestionnaireState; r
 export interface FormStepProps {
   readonly state: QuestionnaireState;
   readonly form: ApplicationQuestionnaire;
+  readonly onSend: () => void;
 }
 
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form }: FormStepProps) {
+export function FormStep({ state, form, onSend }: FormStepProps) {
+  const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
+  const inApp = onHh && isTauriEnvironment();
+  const send = inApp ? onSend : null;
   const ready = readiness(form.questions, state.draft);
   const suggestions = new Map(form.suggestions.map((item) => [item.questionId, item]));
   return (
@@ -263,7 +280,7 @@ export function FormStep({ state, form }: FormStepProps) {
           </ul>
           {state.saveError ? <StatusLine state="err" text={state.saveError} /> : null}
           <div className="actions m-commit qa-mob">
-            <FormActions form={form} ready={ready} state={state} />
+            <FormActions form={form} ready={ready} state={state} onSend={send} />
           </div>
         </section>
       </div>
@@ -273,10 +290,10 @@ export function FormStep({ state, form }: FormStepProps) {
             <b className="num">{`${ready.answered} из ${ready.total}`}</b> готовы
           </p>
           <div className="actions">
-            <FormActions form={form} ready={ready} state={state} />
+            <FormActions form={form} ready={ready} state={state} onSend={send} />
           </div>
         </aside>
-        <SubmittedBlock state={state} onHh={Boolean(form.formUrl && hhFormUrl(form.formUrl))} />
+        {inApp ? null : <SubmittedBlock state={state} onHh={onHh} />}
       </div>
     </>
   );

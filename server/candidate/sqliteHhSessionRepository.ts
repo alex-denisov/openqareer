@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   HH_LATE_SENT_MS,
+  type HhConsent,
   HH_WINDOW_LEFT_OPEN_FAILURES,
   type HhApplyOutcome,
   type HhResumeSnapshot,
@@ -32,6 +33,19 @@ CREATE TABLE IF NOT EXISTS hh_apply_attempts (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS hh_apply_attempts_candidate
   ON hh_apply_attempts (candidate_id, started_at);
+CREATE TABLE IF NOT EXISTS hh_apply_consents (
+  attempt_id TEXT NOT NULL REFERENCES hh_apply_attempts(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+  host TEXT NOT NULL,
+  consent_text TEXT NOT NULL,
+  policy_url TEXT,
+  basis TEXT NOT NULL,
+  given_at TEXT NOT NULL,
+  PRIMARY KEY (attempt_id, position)
+) STRICT;
+CREATE INDEX IF NOT EXISTS hh_apply_consents_candidate
+  ON hh_apply_consents (candidate_id, given_at);
 `;
 
 /** Отклик без исхода дольше этого считается брошенным: приложение закрыли посреди отклика. */
@@ -176,6 +190,22 @@ export class SqliteHhSessionRepository {
       )
       .run(input.outcome, input.failureCode, input.now.toISOString(), candidateId, attemptId);
     return Number(result.changes) === 1;
+  }
+
+  /** B787: какие галочки согласия поставлены при отклике; `basis` — версия поручения или ответ кандидата. */
+  recordConsents(
+    candidateId: string,
+    attemptId: string,
+    input: { readonly consents: readonly HhConsent[]; readonly basis: string; readonly now: Date },
+  ): void {
+    const insert = this.database.prepare(
+      `INSERT OR IGNORE INTO hh_apply_consents
+         (attempt_id, position, candidate_id, host, consent_text, policy_url, basis, given_at)
+       VALUES (?, ?, ?, 'hh.ru', ?, ?, ?, ?)`,
+    );
+    input.consents.forEach((consent, position) =>
+      insert.run(attemptId, position, candidateId, consent.text, consent.url ?? null, input.basis, input.now.toISOString()),
+    );
   }
 
   /**

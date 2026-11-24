@@ -7,7 +7,9 @@ import {
   HH_SECTION_SKILLS_MAX,
   HH_SECTION_TEXT_MAX_LENGTH,
   type HhApplyOutcome,
+  type HhConsent,
   type HhForm,
+  type HhFormAnswer,
   type HhResumeContent,
   type HhResumeSections,
   type HhResumeSummary,
@@ -41,6 +43,8 @@ export interface HhDesktopReport {
   readonly failureCode?: string | null;
   /** B641: анкета работодателя, если hh.ru её показал. */
   readonly questionnaire?: HhForm | null;
+  /** Галочки согласия, поставленные по поручению. */
+  readonly consents?: readonly HhConsent[];
 }
 
 /** hh.ru просит проверку: её проходит кандидат в окне hh.ru. */
@@ -114,6 +118,11 @@ export async function runHhApplyInSession(input: {
   readonly letter: string;
   /** Заголовок резюме, если он у кандидата один: запасной признак, когда hh.ru не отдал идентификатор. */
   readonly uniqueResumeTitle?: string;
+  /** Подтверждённые ответы анкеты. */
+  readonly answers?: readonly HhFormAnswer[];
+  readonly consent?: boolean;
+  readonly agreedRelocation?: boolean;
+  readonly agreedVisibility?: boolean;
 }): Promise<HhDesktopReport> {
   if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
   await hideHhWindow();

@@ -8,6 +8,7 @@ import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
+import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -267,5 +268,45 @@ describe('B704: hh.ru vacancy number from its address', () => {
     expect(hhVacancyIdFromUrl('https://hh.ru/employer/1')).toBeNull();
     expect(hhVacancyIdFromUrl('not a url')).toBeNull();
     expect(hhVacancyIdFromUrl(null)).toBeNull();
+  });
+});
+
+describe('B787: согласие по поручению', () => {
+  const CONSENT = { text: 'Согласен на обработку персональных данных', url: 'https://hh.ru/policy' };
+
+  async function apply(versionId: string | null, result: Record<string, unknown>) {
+    const { app, databasePath } = await setup();
+    if (versionId) {
+      const store = new SqliteCapabilityConsentStore({ databasePath });
+      store.recordConsent({ userId: 'user-flagged.test', capability: 'actions_on_behalf', versionId });
+      store.close();
+    }
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const started = await call(app, 'POST', APPLY, flagged, attempt());
+    const { attemptId, consent } = started.json().data;
+    const done = await call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, result);
+    expect(done.statusCode).toBe(200);
+    return { app, consent, rows: tableRows(databasePath, 'hh_apply_consents') };
+  }
+
+  it.each([
+    ['actions_on_behalf-v1.1', true, 'actions_on_behalf-v1.1'],
+    ['actions_on_behalf-v1.0', false, 'candidate_answer'],
+    [null, false, 'candidate_answer'],
+  ])('поручение %s', async (versionId, allowed, basis) => {
+    const { consent, rows } = await apply(versionId, { outcome: 'sent', consents: [CONSENT] });
+    expect(consent).toBe(allowed);
+    expect(rows).toMatchObject([{ consent_text: CONSENT.text, policy_url: CONSENT.url, host: 'hh.ru', basis }]);
+  });
+
+  it('отклик не ушёл — согласие не записано; already_applied закрывает повтор', async () => {
+    const { app, rows } = await apply('actions_on_behalf-v1.1', {
+      outcome: 'failed',
+      failureCode: 'already_applied',
+      consents: [CONSENT],
+    });
+    expect(rows).toEqual([]);
+    const again = await call(app, 'POST', APPLY, flagged, attempt());
+    expect(again.json().error.code).toBe('hh_already_applied');
   });
 });

@@ -15,6 +15,8 @@ const api = vi.hoisted(() => ({
 }));
 const desktop = vi.hoisted(() => ({
   openHhSignIn: vi.fn(),
+  showHhResponse: vi.fn(),
+  showHhCaptcha: vi.fn(),
   readHhResumes: vi.fn(),
   readHhResumeContent: vi.fn(),
   summaryOf: vi.fn((item: { id: string; title: string }) => ({ id: item.id, title: item.title })),
@@ -73,6 +75,20 @@ async function settle(): Promise<void> {
 
 const onForm = vi.fn();
 let form: HhSendForm | null = null;
+const ANSWERS = [{ text: 'Почему мы?', values: ['Потому'] }];
+const FORM = (): HhSendForm => ({
+  answered: 1,
+  complete: true,
+  answersText: 'Почему мы?\nПотому',
+  answers: ANSWERS,
+  onSubmitted: vi.fn(),
+  open: vi.fn(),
+});
+const confirmSend = async () => {
+  click(button('Отправить отклик'));
+  click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+  await settle();
+};
 
 async function render(onSent = vi.fn().mockResolvedValue(undefined), onLetter = vi.fn()) {
   view = mount(
@@ -149,7 +165,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
       failureCode: 'questionnaire_required',
       questionnaire,
     });
-    form = { answered: 1, complete: true, answersText: 'Почему мы?\nПотому', open: vi.fn() };
+    form = FORM();
     const onSent = await render();
     click(button('1 ответ анкеты'));
     expect(form.open).toHaveBeenCalledOnce();
@@ -162,11 +178,11 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(onSent).not.toHaveBeenCalled();
     expect(view!.container.textContent).toContain('Не отправлен · работодатель просит анкету');
     expect(button('Скопировать ответы')).toBeTruthy();
-    const link = [...view!.container.querySelectorAll('a')].find((item) => item.textContent?.includes('Открыть анкету'));
-    expect(link?.getAttribute('href')).toBe('https://hh.ru/applicant/vacancy_response?vacancyId=123');
+    click(button('Открыть окно hh.ru'));
+    expect(desktop.showHhResponse).toHaveBeenCalledOnce();
   });
 
-  it('B641: анкета не читается и ответов нет — только «Открыть анкету»', async () => {
+  it('B641: анкета не читается и ответов нет — только «Открыть окно hh.ru»', async () => {
     desktop.runHhApplyInSession.mockResolvedValue({
       outcome: 'failed',
       failureCode: 'questionnaire_required',
@@ -177,8 +193,61 @@ describe('B704: отклик через hh.ru в приложении', () => {
     click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
     await settle();
     expect(() => button('Скопировать ответы')).toThrow();
-    const link = [...view!.container.querySelectorAll('a')].find((item) => item.textContent?.includes('Открыть анкету'));
-    expect(link?.getAttribute('href')).toBe('https://hh.ru/vacancy/123');
+    expect(button('Открыть окно hh.ru')).toBeTruthy();
+  });
+
+  it('B787: ответы анкеты уходят вместе с откликом; анкета отмечена отправленной', async () => {
+    form = FORM();
+    desktop.runHhApplyInSession.mockResolvedValue({
+      outcome: 'sent',
+      consents: [{ text: 'Согласен на обработку персональных данных', url: null }],
+    });
+    api.startHhApply.mockResolvedValue({ attemptId: 'att-1', remainingToday: 14, consent: true });
+    const onSent = await render();
+    await confirmSend();
+    expect(desktop.runHhApplyInSession).toHaveBeenCalledWith(expect.objectContaining({ answers: ANSWERS, consent: true }));
+    expect(api.finishHhApply).toHaveBeenCalledWith('att-1', 'sent', undefined, undefined, [
+      { text: 'Согласен на обработку персональных данных', url: null },
+    ]);
+    expect(form.onSubmitted).toHaveBeenCalledOnce();
+    expect(onSent).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['relocation_warning', 'Откликнуться', 'agreedRelocation'],
+    ['visibility_warning', 'Разрешить', 'agreedVisibility'],
+    ['consent_required', 'Согласиться', 'consent'],
+  ])('B787: %s — вопрос на экране, «да» отправляет снова с ответом', async (failureCode, yes, flag) => {
+    desktop.runHhApplyInSession.mockResolvedValueOnce({ outcome: 'failed', failureCode });
+    const onSent = await render();
+    await confirmSend();
+    expect(onSent).not.toHaveBeenCalled();
+    expect(desktop.runHhApplyInSession.mock.calls[0]![0]).not.toHaveProperty(flag);
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === yes)!);
+    await settle();
+    expect(desktop.runHhApplyInSession).toHaveBeenLastCalledWith(expect.objectContaining({ [flag]: true }));
+    expect(onSent).toHaveBeenCalledOnce();
+  });
+
+  it('B787: отклик на hh.ru уже есть — отмечается, а не ошибка', async () => {
+    desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'already_applied' });
+    const onSent = await render();
+    await confirmSend();
+    expect(onSent).toHaveBeenCalledOnce();
+    expect(view!.container.textContent).toContain('Вы уже откликнулись на hh.ru');
+    expect(() => button('Отправить отклик')).toThrow();
+  });
+
+  it('B787: снятая вакансия — своя строка без окна; капча — окно проверки', async () => {
+    desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'vacancy_closed' });
+    await render();
+    await confirmSend();
+    expect(view!.container.textContent).toContain('Вакансия снята с hh.ru');
+    expect(() => button('Открыть окно hh.ru')).toThrow();
+    desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'captcha' });
+    await confirmSend();
+    click(button('Открыть окно hh.ru'));
+    expect(desktop.showHhCaptcha).toHaveBeenCalledOnce();
   });
 
   it('без резюме отправить нельзя', async () => {
