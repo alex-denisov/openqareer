@@ -21,7 +21,7 @@ function stepPath(step: DebriefStep, responseId: string, inApp: boolean): string
 
 /** Какие шаги пройдены: без записи — ни один, голоса — когда расшифровка разделена. */
 function passed({ recording, voices }: StepsDebrief): ReadonlySet<DebriefStep> {
-  const voiced = voices === null || voices.candidate !== null;
+  const voiced = !voices || voices.candidate !== null;
   if (!recording || recording.status === 'failed') return new Set();
   if (recording.status !== 'ready' || !voiced) return new Set(['source']);
   return new Set(['source', 'voices']);
