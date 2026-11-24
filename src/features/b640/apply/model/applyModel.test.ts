@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ConnectionCircleResult } from '../../../vacancies/vacancyLetterApi';
 import { application } from '../../responses/model/testApplication';
 import {
+  applyRoute,
   buildHead,
   paragraphs,
   parseStep,
@@ -63,7 +64,7 @@ describe('B657: шапка отклика', () => {
           canonicalTitle: 'x',
           canonicalCompany: 'y',
           primaryUrl: 'javascript:alert(1)',
-          sources: [{ sourceName: 'hh.ru (страница поиска)' }],
+          sources: [{ sourceName: 'hh.ru (страница поиска)', sourceUrl: '' }],
         },
       }),
     ).toEqual({
@@ -73,6 +74,46 @@ describe('B657: шапка отклика', () => {
       source: 'hh.ru',
       platform: { label: 'hh.ru', site: false },
     });
+  });
+
+  const twoSources = {
+    canonicalTitle: 'Руководитель IT-инфраструктуры',
+    canonicalCompany: 'ЭР-Телеком Холдинг',
+    primaryUrl: 'https://getmatch.ru/vacancies/7',
+    sources: [
+      { sourceType: 'json_api', sourceName: 'Getmatch', sourceUrl: 'https://getmatch.ru/vacancies/7' },
+      { sourceType: 'json_api', sourceId: 'hh', sourceName: 'hh.ru', sourceUrl: 'https://hh.ru/vacancy/139180469' },
+    ],
+  };
+  const getmatchCard = {
+    title: 'Руководитель IT-инфраструктуры',
+    company: 'ЭР-Телеком Холдинг',
+    url: 'https://getmatch.ru/vacancies/7',
+    source: 'Getmatch',
+  };
+
+  it('B678: из двух источников отклик идёт на hh.ru, адрес — вакансии hh.ru', () => {
+    const head = buildHead({ application: null, cluster: twoSources });
+    expect(head).toMatchObject({ source: 'hh.ru', url: 'https://hh.ru/vacancy/139180469' });
+    expect(applyRoute({ application: null, cluster: twoSources }).source).toBe('hh.ru');
+  });
+
+  it('B678: неотправленный отклик со снимком Getmatch переходит на hh.ru, отправленный — нет', () => {
+    const saved = application({ stage: 'saved', appliedAt: null, vacancy: getmatchCard });
+    expect(buildHead({ application: saved, cluster: twoSources })).toMatchObject({
+      source: 'hh.ru',
+      url: 'https://hh.ru/vacancy/139180469',
+    });
+    const sent = application({ stage: 'applied', vacancy: getmatchCard });
+    expect(buildHead({ application: sent, cluster: twoSources })).toMatchObject({
+      source: 'Getmatch',
+      url: 'https://getmatch.ru/vacancies/7',
+    });
+  });
+
+  it('B678: снимок hh.ru не меняется на другой источник hh.ru', () => {
+    const saved = application({ stage: 'saved', appliedAt: null });
+    expect(buildHead({ application: saved, cluster: twoSources }).url).toBe('https://hh.ru/vacancy/1');
   });
 
   it('скрытая компания не подставляется', () => {
@@ -167,5 +208,15 @@ describe('резюме без служебной разметки', () => {
       { kind: 'heading', text: 'Навыки' },
     ]);
     expect(resumeLines(`== a${' '.repeat(5000)}b`)).toHaveLength(1);
+  });
+});
+
+describe('B713: заголовки резюме на языке его текста', () => {
+  it('английский текст — английские заголовки', () => {
+    expect(resumeLines('=== WORK EXPERIENCE ===\nLed a team of 12 engineers.')[0]).toEqual({ kind: 'heading', text: 'Work experience' });
+  });
+
+  it('русский текст — русские, вместе с курсами', () => {
+    expect(resumeLines('=== COURSES AND CERTIFICATIONS ===\nУправление продуктом')[0]).toEqual({ kind: 'heading', text: 'Курсы и сертификаты' });
   });
 });
