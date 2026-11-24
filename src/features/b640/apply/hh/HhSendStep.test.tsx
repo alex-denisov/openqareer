@@ -112,7 +112,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
     click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
     await settle();
     expect(api.startHhApply).toHaveBeenCalledWith('123', 'abc1');
-    expect(desktop.runHhApplyInSession).toHaveBeenCalledWith({ vacancyId: '123', resumeId: 'abc1', letter: 'Здравствуйте' });
+    expect(desktop.runHhApplyInSession).toHaveBeenCalledWith({ vacancyId: '123', resumeId: 'abc1', letter: 'Здравствуйте', uniqueResumeTitle: 'CDO' });
     expect(api.finishHhApply).toHaveBeenCalledWith('att-1', 'sent', undefined);
     expect(onSent).toHaveBeenCalledOnce();
     expect(view!.container.textContent).toContain('Отклик отправлен на hh.ru');

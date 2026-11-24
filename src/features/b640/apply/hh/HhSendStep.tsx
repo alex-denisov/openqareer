@@ -5,7 +5,7 @@ import type { ApplyHead } from '../model/applyModel';
 import { editsWord, HhResumeEdits } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
-import { elapsedLabel } from './hhSendModel';
+import { elapsedLabel, uniqueResumeTitle } from './hhSendModel';
 import { useHhApply, type HhApplyControls } from './useHhApply';
 import { useMarkSent, type MarkSentState } from './useMarkSent';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
@@ -121,6 +121,16 @@ function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string
   );
 }
 
+function useStepApply(props: HhSendStepProps, { snapshot }: HhResumesState): HhApplyControls {
+  return useHhApply({
+    vacancyId: props.hhVacancyId,
+    resumeId: snapshot?.selected?.id ?? null,
+    letter: props.letterText,
+    uniqueResumeTitle: uniqueResumeTitle(snapshot),
+    onSent: props.onSent,
+  });
+}
+
 /** Шаг «Отправка» в приложении (a01): отклик через hh.ru от имени кандидата после подтверждения. */
 export function HhSendStep(props: HhSendStepProps) {
   const resumes = useHhResumes(props.vacancyId);
@@ -128,7 +138,7 @@ export function HhSendStep(props: HhSendStepProps) {
   const [reviewing, setReviewing] = useState(false);
   const selected = resumes.snapshot?.selected;
   const resumeId = selected?.id ?? null;
-  const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
+  const apply = useStepApply(props, resumes);
   const marked = useMarkSent(props.onSent);
   const sent = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
   const done = sent || marked.state.kind === 'done';
