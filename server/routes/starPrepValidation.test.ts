@@ -9,6 +9,11 @@ describe('putStarPrepSchema', () => {
     expect(putStarPrepSchema.safeParse({ paragraphs: [] }).success).toBe(true);
   });
 
+  it('B659: свой ответ кандидата — источник null', () => {
+    const own = { ...ok, sourceFactId: null };
+    expect(putStarPrepSchema.safeParse({ paragraphs: [own] }).success).toBe(true);
+  });
+
   it('отклоняет абзац без источника или с пустым источником', () => {
     const { sourceFactId: _drop, ...noSource } = ok;
     expect(putStarPrepSchema.safeParse({ paragraphs: [noSource] }).success).toBe(false);

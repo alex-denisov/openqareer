@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { speechSupported, useDictation } from '../consultant/useDictation';
+import { speechSupported, useDictation, type FieldDictation } from '../consultant/useDictation';
 import {
   canRecordInApp,
   recordingPermissions,
@@ -11,13 +11,15 @@ import { beginAppDictation, finishAppDictation } from './appDictation';
 import { interviewRecordingEnabled } from './recordingFeature';
 
 /** `mic` — нет доступа к микрофону; `speech` — запись не распознана. */
-export type VoiceFailure = 'mic' | 'speech' | null;
+export type VoiceFailure = FieldDictation['failure'];
 
 export interface VoiceInput extends ComposerDictation {
   readonly failure: VoiceFailure;
+  /** Ждём доступ к микрофону: запись ещё не идёт, но уже начата. */
+  readonly starting?: boolean;
 }
 
-type AppPhase = 'idle' | 'listening' | 'transcribing';
+type AppPhase = 'idle' | 'starting' | 'listening' | 'transcribing';
 
 /**
  * Диктовка в .app пишет только микрофон (запись `mic` B758 #930, разрешения `mic` #942):
@@ -56,6 +58,7 @@ function useAppDictation(onText: (text: string) => void): VoiceInput {
 
   const start = useCallback(async (currentText: string) => {
     setFailure(null);
+    setPhase('starting');
     try {
       if (!(await requestRecordingPermissions('mic')).microphone) throw new Error('microphone');
       current.current = { created: await beginAppDictation(), base: currentText };
@@ -87,6 +90,7 @@ function useAppDictation(onText: (text: string) => void): VoiceInput {
     settling: phase === 'transcribing',
     denied: failure === 'mic',
     failure,
+    starting: phase === 'starting',
     start: (text) => void start(text),
     stop: () => void stop(),
   };
@@ -100,6 +104,5 @@ export function useVoiceInput(onText: (text: string) => void): VoiceInput {
   const [browser] = useState(speechSupported);
   const dictation = useDictation(onText);
   const app = useAppDictation(onText);
-  if (browser) return { ...dictation, failure: dictation.denied ? 'mic' : null };
-  return app;
+  return browser ? dictation : app;
 }

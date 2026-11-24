@@ -7,7 +7,8 @@ export interface PrepParagraph {
   readonly questionId: string;
   readonly field: (typeof STAR_FIELDS)[number];
   readonly text: string;
-  readonly sourceFactId: string;
+  /** `null` — ответ кандидат написал сам. */
+  readonly sourceFactId: string | null;
 }
 
 export interface PrepQuestion {
@@ -56,6 +57,11 @@ export function paragraphsFromStory(
     text: story.fields[field].trim(),
     sourceFactId,
   }));
+}
+
+/** Ответ словами кандидата: один абзац без факта-источника. */
+export function paragraphsFromText(questionId: string, text: string): readonly PrepParagraph[] {
+  return [{ questionId, field: 'action', text: text.trim(), sourceFactId: null }];
 }
 
 export function replaceQuestionParagraphs(
