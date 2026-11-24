@@ -57,7 +57,13 @@ describe('i03 «Голосом»: ответ через общий голосо�
   });
 
   it('доступа к микрофону нет — поле ответа текстом', () => {
-    const root = render(voice({ failure: 'mic', denied: true }));
+    const root = render(voice({ failure: 'mic' }));
+    expect(root.querySelector('textarea[aria-label="Ваш ответ"]')).not.toBeNull();
+    expect(root.textContent).toContain('Нет доступа к микрофону');
+  });
+
+  it('B681: запись не идёт — поле ответа, а не пустая область', () => {
+    const root = render(voice());
     expect(root.querySelector('textarea[aria-label="Ваш ответ"]')).not.toBeNull();
   });
 
