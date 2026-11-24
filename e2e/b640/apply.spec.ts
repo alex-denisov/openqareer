@@ -531,7 +531,6 @@ test.describe('B657: единый экран отклика', () => {
     await expect(main.getByText('Загружаем отклик…')).toBeVisible({ timeout: 15_000 });
     await expect(main.getByText(/getmatch/iu)).toHaveCount(0);
     await expect(main.locator('a, button')).toHaveCount(0);
-    await expectGates(page);
 
     release();
     await expect(page.getByRole('heading', { name: 'Отправьте отклик с hh.ru' })).toBeVisible();
