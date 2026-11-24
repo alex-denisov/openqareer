@@ -154,6 +154,7 @@ function reviewPayload(
   ready: boolean,
   reason: Record<string, unknown> | null,
   helped: boolean | null,
+  resumeFact: boolean,
 ) {
   const rejection = {
     applicationId: 'a-rejected',
@@ -189,7 +190,14 @@ function reviewPayload(
     ...base,
     state: 'ready',
     sentCount: 22,
-    firstStep: { kind: 'show_in_resume', ...TEAM_GUESS, quote: undefined, count: 2, total: 3 },
+    firstStep: {
+      kind: 'show_in_resume',
+      ...TEAM_GUESS,
+      quote: undefined,
+      count: 2,
+      total: 3,
+      ...(resumeFact ? { resumeFactId: RESUME_FACT_ID } : {}),
+    },
     recommendations: [
       {
         kind: 'match_vacancies',
@@ -202,6 +210,31 @@ function reviewPayload(
   };
 }
 
+/** Факт из беседы и готовый пункт резюме из него (k06). */
+const RESUME_FACT_ID = 'fact-team';
+export const RESUME_BULLET = 'Руководил группой бэкенда из 18 человек.';
+
+/** Предложение консультанта: запись и отмена попадают в `calls`. */
+async function mockFactRewrite(page: Page, calls: string[]): Promise<void> {
+  await page.route('**/api/v1/candidate/experience-fact-rewrite**', async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/apply')) {
+      const { only } = route.request().postDataJSON() as { only: string[] };
+      calls.push(`apply ${only.join(',')}`);
+      const rewrite = { id: 'p1', appliedAt: iso(0), bullets: [], declinedFactIds: [] };
+      return route.fulfill({ json: { data: { rewrite } } });
+    }
+    if (path.endsWith('/revert')) {
+      calls.push('revert');
+      return route.fulfill({ json: { data: { reverted: true } } });
+    }
+    const bullets = [{ text: RESUME_BULLET, sourceFactIds: [RESUME_FACT_ID] }];
+    const places = [{ experienceId: 'e1', bullets }];
+    const proposal = { id: 'p1', places, leftOutFactIds: [], sourceFactIds: [RESUME_FACT_ID] };
+    return route.fulfill({ json: { data: { proposal } } });
+  });
+}
+
 const reviewState: { reason: Record<string, unknown> | null; helped: boolean | null } = {
   reason: null,
   helped: null,
@@ -212,13 +245,20 @@ async function mockReview(
   route: Route,
   path: string,
   method: string,
-  ready: boolean,
+  options: ResponsesMockOptions,
   calls: string[],
 ) {
   const base = '/api/v1/candidate/applications/rejection-review';
   if (path === base && method === 'GET') {
     await route.fulfill({
-      json: { data: reviewPayload(ready, reviewState.reason, reviewState.helped) },
+      json: {
+        data: reviewPayload(
+          options.reviewReady === true,
+          reviewState.reason,
+          reviewState.helped,
+          options.resumeFact === true,
+        ),
+      },
     });
     return true;
   }
@@ -248,6 +288,8 @@ export interface ResponsesMockOptions {
   readonly failList?: number;
   /** Разбор отказов готов (откликов хватает); иначе — «мало данных». */
   readonly reviewReady?: boolean;
+  /** Факт рекомендации есть в беседе, но не в резюме: «Поправить резюме». */
+  readonly resumeFact?: boolean;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
   /** Сводка B680: какие отклики — автоотклики. Без опции сводка не отвечает. */
@@ -297,7 +339,7 @@ export async function mockResponses(
         });
         return true;
       }
-      if (await mockReview(route, path, method, options.reviewReady === true, calls)) return true;
+      if (await mockReview(route, path, method, options, calls)) return true;
       const match = path.match(/^\/api\/v1\/candidate\/applications\/([^/]+)(\/events)?$/u);
       const record = match
         ? applications.find((item) => item.id === decodeURIComponent(match[1]!))
@@ -320,6 +362,7 @@ export async function mockResponses(
     },
   });
 
+  await mockFactRewrite(page, calls);
   await page.route('**/api/v1/candidate/automation**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();

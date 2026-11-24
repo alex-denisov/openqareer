@@ -16,6 +16,7 @@ import {
   useIsMobile,
 } from '../kit';
 import { buildNodePath } from '../routes';
+import { useShell } from '../shell/ShellContext';
 import { getRejectionReview, saveReviewFeedback } from './data/rejectionReviewApi';
 import { useAsync } from './data/useAsync';
 import { longDate, pluralRu } from './model/responseRow';
@@ -89,15 +90,27 @@ interface StepActionProps {
   readonly primary: boolean;
 }
 
-function StepAction({ step, primary }: StepActionProps) {
+/** «Поправить резюме» открывает у консультанта готовую правку; остальное — переход. */
+function StepButton({ step, primary }: StepActionProps) {
+  const { openConsultant } = useShell();
   const text = recommendationText(step);
-  return (
-    <div className="actions">
-      <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath(text.node)}>
-        <Icon name={text.icon} />
+  const { resumeFactId } = step;
+  if (resumeFactId) {
+    return (
+      <Button
+        variant={primary ? 'primary' : undefined}
+        icon={text.icon}
+        onClick={() => openConsultant({ kind: 'dialog', resumeFactId })}
+      >
         {text.action}
-      </Link>
-    </div>
+      </Button>
+    );
+  }
+  return (
+    <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath(text.node)}>
+      <Icon name={text.icon} />
+      {text.action}
+    </Link>
   );
 }
 
@@ -119,7 +132,9 @@ function OtherSteps({ steps }: { readonly steps: readonly RejectionRecommendatio
               <div className="rec-body">
                 <h4 className="rec-t">{text.title}</h4>
                 <p className="rec-why">{text.why}</p>
-                <StepAction step={step} primary={false} />
+                <div className="actions">
+                  <StepButton step={step} primary={false} />
+                </div>
               </div>
             </li>
           );
@@ -188,11 +203,12 @@ function Helped({ initial }: { readonly initial: boolean | null }) {
  */
 function LeadAction({ step }: { readonly step: RejectionRecommendation | null }) {
   const mobile = useIsMobile();
-  const text = step ? recommendationText(step) : null;
-  const link = (
-    <Link className="btn is-primary" to={buildNodePath(text?.node ?? 's07')}>
-      <Icon name={text?.icon ?? 'vacancies'} />
-      {text?.action ?? 'Посмотреть вакансии'}
+  const link = step ? (
+    <StepButton step={step} primary />
+  ) : (
+    <Link className="btn is-primary" to={buildNodePath('s07')}>
+      <Icon name="vacancies" />
+      Посмотреть вакансии
     </Link>
   );
   return mobile ? <ActionDock kind="auto" primary={link} /> : <div className="actions">{link}</div>;

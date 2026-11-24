@@ -146,6 +146,20 @@ describe('consultant rewrite of conversation facts (29.10)', () => {
     expect(twice.statusCode).toBe(404);
   });
 
+  it('applies only the named bullet and declines nothing else (o07)', async () => {
+    const { app, headers, candidateId, store } = await candidateWithFacts(rewriterAnswering());
+    const url = '/api/v1/candidate/experience-fact-rewrite';
+    const proposal = (await app.inject({ method: 'POST', url, headers })).json().data.proposal;
+    const apply = (only: string[]) =>
+      app.inject({ method: 'POST', url: `${url}/${proposal.id}/apply`, headers, payload: { only } });
+    expect((await apply([`${CLOUD}#7`])).statusCode).toBe(400);
+    expect((await apply([])).statusCode).toBe(400);
+    expect((await apply([`${CLOUD}#0`])).statusCode).toBe(200);
+    const draft = store.getSnapshot(candidateId).resume!.draft;
+    expect(draft.experience[0]!.bulletMemoryIds).toHaveLength(1);
+    expect(draft.declinedFactIds).toEqual([]);
+  });
+
   it('refuses to apply a proposal whose facts changed meanwhile', async () => {
     const { app, headers, candidateId, store } = await candidateWithFacts(rewriterAnswering());
     const url = '/api/v1/candidate/experience-fact-rewrite';
