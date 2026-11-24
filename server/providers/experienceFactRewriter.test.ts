@@ -178,4 +178,16 @@ describe('B645: тексты профиля LinkedIn', () => {
     await expect(queue.linkedinVariant(variant)).resolves.toEqual(answer);
     expect(failures).toEqual(['a']);
   });
+
+  it('B682: вариант резюме — своя схема; очередь пропускает пустой ответ', async () => {
+    const request = { target: 'about', language: 'ru', vacancyTitle: 'CTO', facts: [{ id: 'f1', text: 'Вёл команду' }], keep: [], avoid: ['Старый'] } as const;
+    const answer = { text: 'Новый', factIds: ['f1'] };
+    const { create, client } = clientAnswering(JSON.stringify(answer));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    await expect(rewriter.hhResumeVariant(request)).resolves.toEqual(answer);
+    expect(create.mock.calls[0]![0].response_format.json_schema).toMatchObject({ name: 'hh_resume_variant', strict: true });
+    const stage = (result: unknown) => ({ rewrite: async () => null, hhResumeVariant: async () => result as never });
+    const queue = new QueuedExperienceFactRewriter([stage({ text: ' ', factIds: [] }), stage(answer)], () => undefined);
+    await expect(queue.hhResumeVariant(request)).resolves.toEqual(answer);
+  });
 });

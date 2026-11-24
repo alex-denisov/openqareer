@@ -70,6 +70,8 @@ export interface HhResumeEdit {
   readonly now: string;
   /** Навыки, которые правка добавляет (у правки навыков): применяются на hh.ru по одному. */
   readonly added?: readonly string[];
+  /** B682: чьи варианты у правки («Другой вариант» a01c); у должности вариантов нет. */
+  readonly variantOf?: { readonly vacancyId: string; readonly subjectId: string };
 }
 
 export interface HhResumeSnapshot {
