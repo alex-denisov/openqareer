@@ -156,7 +156,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
       ],
     });
     await render();
-    click(button('Другое резюме'));
+    click(button('Резюме hh.ru «CDO»'));
     await settle();
 
     const sheet = document.body.textContent ?? '';
@@ -192,7 +192,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
     await render();
     const optimise = () => document.querySelector<HTMLInputElement>('.hh2-opt input');
     const open = async () => {
-      click(button('Другое резюме'));
+      click(button('Резюме hh.ru «'));
       await settle();
     };
     await open();
