@@ -783,10 +783,33 @@ test.describe('B657: единый экран отклика', () => {
             vacancyId: 'v',
             edits: [
               { id: 'title', section: 'title', was: 'Руководитель', now: 'Head of Engineering' },
-              { id: 'about', section: 'about', was: 'Руковожу 5 лет.', now: 'Пять лет руковожу.' },
+              {
+                id: 'about',
+                section: 'about',
+                was: 'Руковожу 5 лет.',
+                now: 'Пять лет руковожу.',
+                variantOf: { vacancyId: 'v', subjectId: 'b'.repeat(64) },
+              },
             ],
           },
         },
+      }),
+    );
+    const variant = {
+      id: 'x1',
+      position: 1,
+      text: 'Веду разработку пять лет.',
+      payload: null,
+      wish: { chips: [], text: '' },
+      createdAt: '2026-11-24T00:00:00.000Z',
+    };
+    await page.route('**/api/v1/candidate/text-variants?kind=resume**', (route) =>
+      route.fulfill({ json: { data: { variants: [], remaining: 3 } } }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/edits/variants', (route) =>
+      route.fulfill({
+        status: 201,
+        json: { data: { variant, variants: [variant], remaining: 2 } },
       }),
     );
     await page.route('**/api/v1/candidate/hh/resumes/review**', (route) =>
@@ -837,6 +860,23 @@ test.describe('B657: единый экран отклика', () => {
     const section = (await page.locator('.hh2-sec').first().boundingBox())!;
     const main = (await page.locator('.page.two').boundingBox())!;
     expect(section.width).toBeGreaterThan(main.width * 0.85);
+    // a01c: значок без окна у «О себе», у должности его нет; вариант встаёт на место.
+    const other = page.getByRole('button', { name: 'Другой вариант', exact: true });
+    await expect(other).toHaveCount(1);
+    const size = (await other.boundingBox())!;
+    const copy = (await other
+      .locator('xpath=preceding-sibling::button[@aria-label="Скопировать"]')
+      .boundingBox())!;
+    expect(size).toMatchObject({ width: copy.width, height: copy.height, y: copy.y });
+    await other.click();
+    await expect(page.getByText('Веду разработку пять лет.')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Варианты правки' })).toContainText('2 из 2');
+    const acts = (await page.locator('.hh2-acts').last().boundingBox())!;
+    const sugg = (await page.locator('.hh2-sugg').last().boundingBox())!;
+    expect(acts.x + acts.width).toBeLessThanOrEqual(sugg.x + sugg.width + 0.5);
+    await page.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(page.getByText('Пять лет руковожу.')).toBeVisible();
+    await page.mouse.move(0, 0);
     await expectLastActionReachable(page);
     await expectGates(page);
   });
