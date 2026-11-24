@@ -192,6 +192,48 @@ describe('B704: an hh.ru application on the candidate behalf', () => {
     expect(paused.json().error.code).toBe('hh_cooldown');
   });
 
+  it('B708: a response finished in the hh.ru window turns the failed attempt into a sent one', async () => {
+    const { app, databasePath } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const { attemptId } = (await call(app, 'POST', APPLY, flagged, attempt())).json().data;
+    const result = `${APPLY}/${attemptId}/result`;
+    await call(app, 'POST', result, flagged, { outcome: 'failed', failureCode: 'captcha' });
+    const late = { outcome: 'sent', vacancyId: '123456' };
+
+    expect((await call(app, 'POST', result, other, late)).statusCode).toBe(404);
+    expect((await call(app, 'POST', result, flagged, { ...late, vacancyId: '777' })).statusCode).toBe(409);
+    expect((await call(app, 'POST', result, flagged, { outcome: 'sent' })).statusCode).toBe(409);
+    expect((await call(app, 'POST', result, flagged, { ...late, outcome: 'questionnaire' })).statusCode).toBe(409);
+    expect((await call(app, 'POST', result, flagged, late)).statusCode).toBe(200);
+    expect((await call(app, 'POST', result, flagged, late)).statusCode).toBe(409);
+
+    expect((await call(app, 'POST', APPLY, flagged, attempt())).json().error.code).toBe('hh_already_applied');
+    // Пауза после проверки hh.ru остаётся: код сбоя не стирается.
+    expect((await call(app, 'POST', APPLY, flagged, attempt({ vacancyId: '777' }))).json().error.code).toBe(
+      'hh_cooldown',
+    );
+    expect(tableRows(databasePath, 'hh_apply_attempts')).toMatchObject([{ outcome: 'sent', failure_code: 'captcha' }]);
+  });
+
+  it('B708: a late response is refused after the deadline and for failures that leave no vacancy window', async () => {
+    const { app, databasePath } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    const failedWith = async (vacancyId: string, failureCode: string) => {
+      const { attemptId } = (await call(app, 'POST', APPLY, flagged, attempt({ vacancyId }))).json().data;
+      await call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, { outcome: 'failed', failureCode });
+      return () => call(app, 'POST', `${APPLY}/${attemptId}/result`, flagged, { outcome: 'sent', vacancyId });
+    };
+    const noWindow = await failedWith('111', 'no_response_button');
+    expect((await noWindow()).statusCode).toBe(409);
+    const stale = await failedWith('222', 'popup_missing');
+    const database = new DatabaseSync(databasePath);
+    database
+      .prepare('UPDATE hh_apply_attempts SET finished_at = ?')
+      .run(new Date(Date.now() - 16 * 60_000).toISOString());
+    database.close();
+    expect((await stale()).statusCode).toBe(409);
+  });
+
   it('keeps to the daily limit of hh.ru applications', async () => {
     const { app } = await setup();
     await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);

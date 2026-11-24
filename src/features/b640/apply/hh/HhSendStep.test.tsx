@@ -18,6 +18,7 @@ const desktop = vi.hoisted(() => ({
   readHhResumeContent: vi.fn(),
   summaryOf: vi.fn((item: { id: string; title: string }) => ({ id: item.id, title: item.title })),
   runHhApplyInSession: vi.fn(),
+  readHhApplyWindow: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => api);
 vi.mock('./hhDesktop', () => desktop);
@@ -58,6 +59,7 @@ beforeEach(() => {
   api.startHhApply.mockResolvedValue({ attemptId: 'att-1', remainingToday: 14 });
   api.finishHhApply.mockResolvedValue(undefined);
   desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'sent', failureCode: null });
+  desktop.readHhApplyWindow.mockRejectedValue(new Error('session_window_missing'));
 });
 
 async function settle(): Promise<void> {
@@ -285,5 +287,54 @@ describe('B704: отклик через hh.ru в приложении', () => {
     const text = view!.container.textContent ?? '';
     expect(text).toContain('Отметка не сохранилась');
     expect(text).toContain('Отправить отклик');
+  });
+
+  const send = async () => {
+    click(button('Отправить отклик'));
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+  };
+
+  it('B708: отклик завершён в окне hh.ru — отмечается сам, тот же результат, что после отправки', async () => {
+    desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'popup_missing' });
+    desktop.readHhApplyWindow.mockResolvedValue('sent');
+    const onSent = await render();
+    await send();
+    await settle();
+    expect(desktop.readHhApplyWindow).toHaveBeenCalledWith('123');
+    expect(api.finishHhApply.mock.calls).toEqual([
+      ['att-1', 'failed', 'popup_missing'],
+      ['att-1', 'sent', undefined, '123'],
+    ]);
+    expect(onSent).toHaveBeenCalledOnce();
+    expect(view!.container.textContent).toContain('Отклик отправлен на hh.ru');
+    expect(view!.container.textContent).not.toContain('Отправить отклик');
+  });
+
+  it('B708: сервер отклонил поздний исход — отметки нет', async () => {
+    desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'popup_missing' });
+    desktop.readHhApplyWindow.mockResolvedValue('sent');
+    const { CoachApiError } = await import('../../../coach/apiClient');
+    api.finishHhApply.mockImplementation(async (_id: string, outcome: string) => {
+      if (outcome === 'sent') throw Object.assign(Object.create(CoachApiError.prototype), { status: 404 });
+    });
+    const onSent = await render();
+    await send();
+    await settle();
+    expect(onSent).not.toHaveBeenCalled();
+    expect(view!.container.textContent).toContain('hh.ru не открыл окно отклика');
+  });
+
+  it('B708: экран закрыт, пока окно читается, — отметка всё равно ставится', async () => {
+    desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'popup_missing' });
+    let answer: (code: string) => void = () => undefined;
+    desktop.readHhApplyWindow.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const onSent = await render();
+    await send();
+    view!.unmount();
+    view = null;
+    answer('sent');
+    await settle();
+    expect(onSent).toHaveBeenCalledOnce();
   });
 });

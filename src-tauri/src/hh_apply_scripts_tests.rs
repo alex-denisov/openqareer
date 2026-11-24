@@ -352,3 +352,39 @@ fn stops_on_a_captcha_in_every_step() {
     };
     assert_eq!(codes(&result), ["captcha", "captcha", "captcha"]);
 }
+
+#[test]
+fn window_read_sees_only_a_response_to_this_vacancy() {
+    let button = r#"<a data-qa="vacancy-response-link-top">Откликнуться</a>"#;
+    let topic = r#"<button data-qa="vacancy-response-link-view-topic">Вы откликнулись</button>"#;
+    let toast =
+        r#"<div data-qa="vacancy-response-success-standard-notification">Отклик отправлен</div>"#;
+    let cases = [
+        (topic.to_string(), "77", "sent"),
+        (toast.to_string(), "77", "sent"),
+        // A title about a check is not a reason to miss the response.
+        (
+            format!("<title>Проверка качества</title>{topic}"),
+            "77",
+            "sent",
+        ),
+        // The page is another vacancy.
+        (topic.to_string(), "7", "waiting"),
+        (topic.to_string(), "777", "waiting"),
+        // A response to a similar vacancy listed on this page.
+        (format!("{button}{toast}"), "77", "waiting"),
+        (format!("{button}{topic}"), "77", "waiting"),
+        (
+            "<p>Отклик отправлен. Вы откликнулись.</p>".into(),
+            "77",
+            "waiting",
+        ),
+    ];
+    for (html, vacancy, code) in cases {
+        let Some(result) = run(&html, "", &[window_script(vacancy)]) else {
+            return;
+        };
+        assert_eq!(codes(&result), [code], "{vacancy} {html}");
+        assert_eq!(result["clicks"], json!([]));
+    }
+}

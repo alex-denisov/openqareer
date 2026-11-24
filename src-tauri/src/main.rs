@@ -134,6 +134,19 @@ async fn run_hh_apply(
     hh_apply::run_hh_apply(&app, request).await
 }
 
+/// B708: reads whether the candidate finished the response in the open hh.ru window.
+#[tauri::command]
+async fn read_hh_apply_window(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<String, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    hh_apply::read_hh_apply_window(&app, &vacancy_id).await
+}
+
 /// B678: one section of the candidate's hh.ru resume changed in their own hh.ru window, after
 /// the candidate pressed «Применить» and confirmed it.
 #[tauri::command]
@@ -607,6 +620,7 @@ fn main() {
             stop_tunnel,
             execute_local_action,
             run_hh_apply,
+            read_hh_apply_window,
             run_hh_resume_edit,
             run_hh_experience_edit,
             run_hh_raise,

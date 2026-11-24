@@ -5,7 +5,8 @@ import { buildRoleSkillDemand } from '../domain/roleSkillDemand';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, withDeps } from './helpers';
-import { readRoleSnapshot, toAssessmentVacancies } from './roleSkillAssessmentRoutes';
+import { toAssessmentVacancies } from './roleAssessmentVacancies';
+import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
 import { RoleSkillDemandCache } from './roleSkillDemandCache';
 import { createRoleRequirementReader } from './roleSkillRequirementSource';
 
