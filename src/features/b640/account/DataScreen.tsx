@@ -13,7 +13,7 @@ import { exportCandidateData } from '../../coach/coachApi';
 import { getSearchConsent } from '../../vacancies/recruiterContactsApi';
 import {
   CAPABILITY_CONSENT_CURRENT_VERSION,
-  CAPABILITY_CONSENT_DOCUMENTS,
+  capabilityConsentDocument,
   type CandidateCapability,
 } from '../../legal/capabilityConsents';
 import { triggerFileDownload } from '../../resume/resumeExport';
@@ -26,14 +26,17 @@ import { Link } from '../shell/Link';
 import { AccountDeletionGroup } from './AccountDeletion';
 import { getAccountDeletion, type AccountDeletion } from './accountDeletionApi';
 import { countScheduledPosts } from '../platforms/linkedin/linkedinQueueApi';
-import { ConsentSwitch, ConsentTextLink, useAction } from './consentParts';
+import { ConsentDialog, ConsentItems, ConsentSwitch, ConsentTextLink, useAction } from './consentParts';
 import { automationLine, CONSENT_ROWS, type AutomationState, type ConsentRow } from './dataModel';
 import { SearchConsentRow } from './SearchConsentRow';
 import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 
+/** Действующие согласия и принятая версия каждого. */
+type GrantedVersions = Partial<Readonly<Record<CandidateCapability, string>>>;
+
 interface AccountData {
   /** Согласия, которые сейчас действуют. */
-  readonly granted: readonly CandidateCapability[];
+  readonly granted: GrantedVersions;
   /** «Вы в поиске» (B263); `null` — не прочиталось: строка с ошибкой и «Повторить». */
   readonly searchConsent: boolean | null;
   /** Автоотклики; `null` — состояние не прочиталось. */
@@ -57,7 +60,9 @@ async function loadData(): Promise<AccountData> {
     countScheduledPosts().catch(() => 0),
   ]);
   return {
-    granted: consents.filter((item) => item.revokedAt === null).map((item) => item.capability),
+    granted: Object.fromEntries(
+      consents.filter((item) => item.revokedAt === null).map((item) => [item.capability, item.versionId]),
+    ),
     searchConsent,
     automation: automation
       ? {
@@ -77,44 +82,6 @@ function Group({ title, children }: { readonly title: string; readonly children:
       <h3 className="set-h">{title}</h3>
       <ul className="set-list">{children}</ul>
     </section>
-  );
-}
-
-interface ConsentDialogProps {
-  readonly capability: CandidateCapability;
-  readonly open: boolean;
-  readonly busy: boolean;
-  readonly failed: boolean;
-  readonly onGrant: () => void;
-  readonly onClose: () => void;
-}
-
-function ConsentItems({ capability }: { readonly capability: CandidateCapability }) {
-  return (
-    <ul className="c5-list">
-      {CAPABILITY_CONSENT_DOCUMENTS[capability].items.map((item) => (
-        <li key={item}>{item}</li>
-      ))}
-    </ul>
-  );
-}
-
-/** Текст согласия перед выдачей: согласие даётся только после него. */
-function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: ConsentDialogProps) {
-  return (
-    <Dialog open={open} title={CAPABILITY_CONSENT_DOCUMENTS[capability].title} onClose={onClose}>
-      <ConsentItems capability={capability} />
-      {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}
-      <div className="actions">
-        <button className="btn is-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onGrant}>
-          <Icon name="check" />
-          Дать согласие
-        </button>
-        <button className="btn" type="button" onClick={onClose}>
-          Отмена
-        </button>
-      </div>
-    </Dialog>
   );
 }
 
@@ -148,12 +115,14 @@ function RevokeDialog({ row, open, busy, failed, onRevoke, onClose }: RevokeDial
 
 interface ConsentProps {
   readonly row: ConsentRow;
-  readonly granted: boolean;
+  /** Принятая версия; нет — согласие не дано. */
+  readonly grantedVersion: string | undefined;
   readonly onChanged: () => void;
 }
 
 /** Согласие: отзыв — переключателем, выдача — после текста согласия в окне. */
-function Consent({ row, granted, onChanged }: ConsentProps) {
+function Consent({ row, grantedVersion, onChanged }: ConsentProps) {
+  const granted = grantedVersion !== undefined;
   const [asking, setAsking] = useState(false);
   const { busy, failed, run } = useAction(() => {
     setAsking(false);
@@ -175,8 +144,8 @@ function Consent({ row, granted, onChanged }: ConsentProps) {
         <span className="set-t">{row.title}</span>
         <span className="set-v">{row.line}</span>
         {granted ? (
-          <ConsentTextLink title={CAPABILITY_CONSENT_DOCUMENTS[row.capability].title}>
-            <ConsentItems capability={row.capability} />
+          <ConsentTextLink title={capabilityConsentDocument(row.capability, grantedVersion).title}>
+            <ConsentItems capability={row.capability} versionId={grantedVersion} />
           </ConsentTextLink>
         ) : null}
         {failed && !asking && !revoking ? <ErrorLine text="Не сохранилось" /> : null}
@@ -334,7 +303,7 @@ function Sections({ data, load }: { readonly data: AccountData; readonly load: L
           <Consent
             key={row.capability}
             row={row}
-            granted={data.granted.includes(row.capability)}
+            grantedVersion={data.granted[row.capability]}
             onChanged={load.retry}
           />
         ))}

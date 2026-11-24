@@ -151,6 +151,21 @@ describe('B656: что было', () => {
   it('у черновика событий отправки нет', () => {
     expect(timeline(application({ stage: 'saved', appliedAt: null }), NOW)).toEqual([]);
   });
+
+  it('B787: согласие, подтверждённое за кандидата, видно и до отметки отклика', () => {
+    const consent = {
+      id: 'c1', applicationId: 'app-1', host: 'boards.greenhouse.io', employer: 'Ромашка', checkboxText: 'Согласен',
+      policyUrl: null, policySha256: null, checkboxLabel: null, command: 'Отправить отклик',
+      mandateVersion: 'actions_on_behalf-v1.1', occurredAt: '2026-11-10T10:00:00.000Z',
+      results: [{ result: 'sent' as const, at: '2026-11-10T10:00:05.000Z' }],
+    };
+    const [shown] = timeline(application({ stage: 'saved', appliedAt: null }), NOW, [], [consent]);
+    expect(shown).toMatchObject({
+      title: 'Подтверждено согласие на обработку данных',
+      note: 'boards.greenhouse.io · отклик отправлен',
+      consent,
+    });
+  });
 });
 
 describe('B680: автоотклики отдельно', () => {

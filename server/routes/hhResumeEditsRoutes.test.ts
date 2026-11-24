@@ -94,6 +94,9 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     const refused = await send('Head of DevOps');
     expect(refused.statusCode).toBe(409);
     expect(refused.json().error.code).toBe('hh_vacancy_mismatch');
+    // B787: поручение принимает сам кандидат — запись лежит под id пользователя, не кандидата.
+    expect((await send('Receptionist')).statusCode).toBe(403);
+    await call('POST', '/api/v1/me/consents/actions_on_behalf', { versionId: 'actions_on_behalf-v1.1' });
     expect((await send('Receptionist')).statusCode).toBe(201);
     read.mockRestore();
   });

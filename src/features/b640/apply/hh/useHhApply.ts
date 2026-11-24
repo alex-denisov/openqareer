@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CoachApiError } from '../../../coach/apiClient';
 import type { HhForm } from '../../../../../shared/hhCandidateSession';
 import { runHhApplyInSession, type HhDesktopReport } from './hhDesktop';
-import { desktopFailureCode, refusalText, resultOf, type HhSendResult } from './hhSendModel';
+import { desktopFailureCode, MANDATE_REFUSAL, refusalText, resultOf, type HhSendResult } from './hhSendModel';
 import { finishHhApply, startHhApply } from './hhSessionApi';
 import { stopHhWindowWatch, watchHhWindow } from './hhWindowWatch';
 
@@ -30,7 +30,7 @@ export interface HhApplyControls {
   readonly state: HhApplyState;
   readonly ask: () => void;
   readonly cancel: () => void;
-  /** Только из окна подтверждения: отклик уходит после «Отправить». */
+  /** Только из окна подтверждения или сразу после принятого поручения. */
   readonly confirm: () => void;
 }
 
@@ -50,7 +50,8 @@ async function sendOnce(input: HhApplyInput, resumeId: string, onLateSent: () =>
   try {
     ({ attemptId } = await startHhApply(input.vacancyId, resumeId, input.vacancyTitle));
   } catch (reason: unknown) {
-    return { kind: 'error', text: refusalText(reason instanceof CoachApiError ? reason.code : undefined) };
+    const code = reason instanceof CoachApiError ? reason.code : undefined;
+    return code === MANDATE_REFUSAL ? { kind: 'mandate' } : { kind: 'error', text: refusalText(code) };
   }
   // Отказ сервера прежнее чтение окна не обрывает; новая попытка уводит окно на свою вакансию.
   stopHhWindowWatch();
@@ -97,7 +98,7 @@ export function useHhApply(input: HhApplyInput): HhApplyControls {
     ask: () => setState({ kind: 'confirm' }),
     cancel: () => setState({ kind: 'idle' }),
     confirm: () => {
-      if (state.kind !== 'confirm' || !input.resumeId || inFlight.current) return;
+      if ((state.kind !== 'confirm' && state.kind !== 'mandate') || !input.resumeId || inFlight.current) return;
       inFlight.current = true;
       setState({ kind: 'sending', seconds: 0 });
       const onLateSent = () => {

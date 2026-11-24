@@ -72,7 +72,7 @@ test.describe('B661: «Аккаунт» и «Тарифы» нового каб�
       '«Вы в поиске»',
       'Цифровой след',
       'Подключённый профиль',
-      'Отклики и подъём резюме',
+      'Отклики',
     ]);
     await expect(screen.getByRole('button', { name: 'Удалить аккаунт' })).toHaveText('Удалить');
     await expect(screen).not.toContainText(/пока недоступно/iu);

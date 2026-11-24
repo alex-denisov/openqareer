@@ -173,7 +173,7 @@ describe('Candidate Action Routes (B261)', () => {
     capabilityConsentStore.recordConsent({
       userId: candidateId,
       capability: 'actions_on_behalf',
-      versionId: 'actions_on_behalf-v1.0',
+      versionId: 'actions_on_behalf-v1.1',
     });
 
     const res = await app.inject({
@@ -206,7 +206,7 @@ describe('Candidate Action Routes (B261)', () => {
     capabilityConsentStore.recordConsent({
       userId: candidateId,
       capability: 'actions_on_behalf',
-      versionId: 'actions_on_behalf-v1.0',
+      versionId: 'actions_on_behalf-v1.1',
     });
 
     const res = await app.inject({
@@ -276,7 +276,7 @@ describe('Candidate Action Routes (B261)', () => {
     capabilityConsentStore.recordConsent({
       userId: candidateId,
       capability: 'actions_on_behalf',
-      versionId: 'actions_on_behalf-v1.0',
+      versionId: 'actions_on_behalf-v1.1',
     });
 
     // Toggle kill-switch ON

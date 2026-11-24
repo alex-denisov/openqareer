@@ -6,6 +6,8 @@ export type HhSendResult =
   | { readonly kind: 'sent' }
   | { readonly kind: 'questionnaire' }
   | { readonly kind: 'signin' }
+  /** B787: сервер ждёт поручение кандидата — отклик не начат. */
+  | { readonly kind: 'mandate' }
   /** hh.ru просит анкету до отклика: отклик не ушёл. `url` — страница анкеты, если известна. */
   | { readonly kind: 'form'; readonly url: string | null }
   | { readonly kind: 'error'; readonly text: string; /** hh.ru ждёт кандидата в своём окне. */ readonly inWindow?: boolean };
@@ -56,6 +58,9 @@ export function uniqueResumeTitle(snapshot: HhResumeSnapshot | null): string | u
   const same = snapshot.resumes.filter((item) => plainTitle(item.title) === title);
   return title && same.length === 1 && !/\p{Cc}/u.test(title) ? title : undefined;
 }
+
+/** B787: код отказа сервера, пока кандидат не принял действующее поручение. */
+export const MANDATE_REFUSAL = 'apply_mandate_required';
 
 /** Отказ сервера до отклика: код ошибки — в те же слова. */
 export function refusalText(code: string | undefined): string {

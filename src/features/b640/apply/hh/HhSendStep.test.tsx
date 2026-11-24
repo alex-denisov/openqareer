@@ -37,7 +37,11 @@ vi.mock('../../shell/Link', () => ({
   ),
 }));
 
+const consentApi = vi.hoisted(() => ({ grantAccountCapabilityConsent: vi.fn() }));
+vi.mock('../../../account/accountCapabilityConsentApi', () => consentApi);
+
 const { HhSendStep } = await import('./HhSendStep');
+const { CoachApiError } = await import('../../../coach/apiClient');
 
 const head = { title: 'Директор по данным', company: 'Ромашка', url: 'https://hh.ru/vacancy/123' } as ApplyHead;
 const snapshot = {
@@ -126,6 +130,34 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(view!.container.textContent).toContain('Отклик отправлен на hh.ru');
   });
 
+  it('B787: без поручения показывает его текст один раз; после согласия отклик уходит', async () => {
+    api.startHhApply.mockRejectedValueOnce(new CoachApiError('нужно согласие', 'apply_mandate_required', false));
+    consentApi.grantAccountCapabilityConsent.mockResolvedValue({});
+    const onSent = await render();
+    click(button('Отправить отклик'));
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+    expect(document.body.textContent).toContain('Поручаю OpenQareer по моей команде направлять отклик выбранному работодателю');
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
+    click(button('Дать согласие'));
+    await settle();
+    expect(consentApi.grantAccountCapabilityConsent).toHaveBeenCalledExactlyOnceWith('actions_on_behalf', 'actions_on_behalf-v1.1');
+    expect(desktop.runHhApplyInSession).toHaveBeenCalledOnce();
+    expect(onSent).toHaveBeenCalledOnce();
+  });
+
+  it('B787: «Отмена» в поручении ничего не отправляет и не принимает', async () => {
+    api.startHhApply.mockRejectedValueOnce(new CoachApiError('нужно согласие', 'apply_mandate_required', false));
+    await render();
+    click(button('Отправить отклик'));
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+    click(button('Отмена'));
+    await settle();
+    expect(consentApi.grantAccountCapabilityConsent).not.toHaveBeenCalled();
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
+  });
+
   it('двойное «Отправить» до перерисовки — одна попытка', async () => {
     await render();
     click(button('Отправить отклик'));
@@ -201,7 +233,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
   });
 
   it('отказ сервера (лимит) — окно hh.ru не трогаем', async () => {
-    const { CoachApiError } = await import('../../../coach/apiClient');
+
     api.startHhApply.mockRejectedValue(Object.assign(Object.create(CoachApiError.prototype), { code: 'hh_daily_limit_reached', message: 'x' }));
     await render();
     click(button('Отправить отклик'));
@@ -209,6 +241,17 @@ describe('B704: отклик через hh.ru в приложении', () => {
     await settle();
     expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
     expect(view!.container.textContent).toContain('На сегодня отклики через hh.ru закончились');
+  });
+
+  it('B787: отказ, которого сборка не знает (старая .app), — ошибка на месте, а не ожидание', async () => {
+    api.startHhApply.mockRejectedValue(new CoachApiError('x', 'unknown_refusal', false));
+    await render();
+    click(button('Отправить отклик'));
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+    expect(view!.container.textContent).toContain('Отклик не отправлен. Повторите.');
+    expect(view!.container.textContent).not.toContain('Ждём ответа');
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
   });
 
   it('B678: лист выбора сверяет резюме с вакансией и выбирает рекомендованное', async () => {
@@ -377,7 +420,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
   it('B708: сервер отклонил поздний исход — отметки нет', async () => {
     desktop.runHhApplyInSession.mockResolvedValue({ outcome: 'failed', failureCode: 'popup_missing' });
     desktop.readHhApplyWindow.mockResolvedValue('sent');
-    const { CoachApiError } = await import('../../../coach/apiClient');
+
     api.finishHhApply.mockImplementation(async (_id: string, outcome: string) => {
       if (outcome === 'sent') throw Object.assign(Object.create(CoachApiError.prototype), { status: 404 });
     });
