@@ -5,6 +5,7 @@
  * цифру, которой нет в профиле, и компанию, которой нет ни в профиле, ни в вакансии. Стиль, самооценка
  * и термины направления не отклоняются. Цифры прописью и слово в начале фразы не проверяются.
  */
+import { letterPlaceCheck } from './letterPlaces';
 import { distortedWords } from './letterWordDistortion';
 
 export interface LetterGateSources {
@@ -14,6 +15,11 @@ export interface LetterGateSources {
   readonly candidate: readonly string[];
   /** Вакансия и получатель подтверждают имена, но не то, что сделал кандидат. */
   readonly vacancy: readonly string[];
+  /** Условия поиска кандидата: места и готовность к переезду (25.11). */
+  readonly conditions?: readonly string[];
+  readonly vacancyLocation?: string;
+  /** Название вакансии, компания и получатель: город в них — часть названия. */
+  readonly vacancyNames?: readonly string[];
   /**
    * `false` — опыта работы нет, резюме к отклику не приложится: письмо не должно упоминать резюме.
    * По умолчанию резюме приложено, и письмо обязано сказать об этом (B601, 08.11).
@@ -21,7 +27,7 @@ export interface LetterGateSources {
   readonly resumeAttached?: boolean;
 }
 
-export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic' | 'distorted' | 'recipient';
+export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic' | 'distorted' | 'recipient' | 'place';
 
 export interface LetterGateViolation {
   readonly rule: LetterGateRule;
@@ -358,14 +364,20 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
   const profileSentences = sources.candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence));
   const profile = profileSentences.join('\n');
   const known = quantities(profile);
-  const names = new Set([...sources.candidate, ...sources.vacancy].flatMap(wordsOf));
+  const names = new Set([...sources.candidate, ...(sources.conditions ?? []), ...sources.vacancy].flatMap(wordsOf));
   // Модель сама выбирает язык письма и может разойтись с определением по вакансии.
   const language = /\p{Script=Cyrillic}/u.test(body) ? sources.language : 'en';
   const sentences = sentencesOf(body);
+  const hasForeignPlace = letterPlaceCheck({
+    candidate: [...profileSentences, ...(sources.conditions ?? []).filter((text) => !NEGATED.test(text))],
+    ...(sources.vacancyLocation ? { vacancyLocation: sources.vacancyLocation } : {}),
+    vacancyNames: sources.vacancyNames ?? [],
+  });
   const checked = sentences.flatMap((sentence) => {
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
       ['number', hasForeignNumber(withoutVacancyText(sentence, sources.vacancy), known, profile) || gluesGrowthToAmount(sentence, profileSentences)],
       ['name', hasForeignName(sentence, names, language)],
+      ['place', hasForeignPlace(sentence)],
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });

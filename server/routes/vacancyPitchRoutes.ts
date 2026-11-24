@@ -176,6 +176,20 @@ function letterWorkplaces(
   }));
 }
 
+/** Места и переезд из условий поиска и резюме: только их письмо может назвать. */
+function letterConditions(
+  deps: RouteDeps,
+  candidateId: string,
+  relocation: string | undefined,
+): string[] {
+  const profile = deps.candidateStore.decisionProfileRepo?.get(candidateId);
+  return [
+    ...(profile?.searchLocations ?? []),
+    ...(profile?.workFormats?.includes('relocation') ? ['Релокация'] : []),
+    ...(relocation ? [relocation] : []),
+  ];
+}
+
 /** Всё, что письму нужно из базы; занятая база здесь не доходит до вызова модели. */
 function readLetterContext(
   deps: RouteDeps,
@@ -201,6 +215,7 @@ function readLetterContext(
     profileHash: letterFactSource(snapshot).profileHash,
     resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
     facts: allFacts,
+    conditions: letterConditions(deps, candidateId, draft.additional?.relocation),
     candidateWorkplaces,
     workplaces,
     draft,
@@ -314,6 +329,7 @@ export async function writeVacancyPitch(
     vacancy: { ...vacancy, description: vacancy.fullDescription },
     profile,
     facts: translatedFacts,
+    conditions: context.conditions,
     language,
     ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
