@@ -34,24 +34,50 @@ const patchInterviewSchema = z.object({
   followUpDueAt: isoDateField.nullable().optional(),
 });
 
-/** B731: напоминание уходит за сутки до интервью; если сутки уже прошли — по каналам не уходит. */
+/** B731: напоминание появляется в ленте и уходит за сутки до интервью. */
 const REMINDER_LEAD_MS = 24 * 60 * 60 * 1_000;
+
+/** Сбой уведомлений не ломает правку интервью: оно уже сохранено, ошибка — в журнал. */
+function withdrawInterviewReminder(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  interviewId: string,
+): void {
+  try {
+    notificationRepositoryFor(deps).withdrawUnsentFromSource(candidateId, 'interview', interviewId);
+  } catch (error) {
+    request.log.error(
+      {
+        code: 'interview_reminder_withdraw_failed',
+        candidateId,
+        failureType: error instanceof Error ? error.name : 'UnknownError',
+      },
+      'interview-reminder-withdraw-failed',
+    );
+  }
+}
 
 function recordInterviewReminder(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
   interview: { readonly id: string; readonly scheduledAt: string | null },
-  createdAt: string,
 ): void {
+  // Новая, перенесённая или снятая дата: прежнее неушедшее напоминание больше не верно.
+  withdrawInterviewReminder(deps, request, candidateId, interview.id);
   if (!interview.scheduledAt) return;
+  const now = new Date().toISOString();
+  // Прошедшее интервью записывают для истории: напоминать не о чем.
+  if (Date.parse(interview.scheduledAt) <= Date.parse(now)) return;
   const deliverAt = new Date(Date.parse(interview.scheduledAt) - REMINDER_LEAD_MS).toISOString();
   recordNotificationFromSource(deps, request, candidateId, {
     kind: 'interview_reminder',
     sourceType: 'interview',
     sourceId: interview.id,
     idempotencyKey: `interview-reminder:${interview.id}:${interview.scheduledAt}`,
-    createdAt,
+    // Меньше суток до интервью — в ленте сразу, по каналам не уходит.
+    createdAt: deliverAt > now ? deliverAt : now,
     deliverAt,
   });
 }
@@ -64,7 +90,7 @@ const handleCreateInterview: Handler = async (deps, request, reply) => {
   const applicationId = (request.params as { id: string }).id;
   const body = createInterviewSchema.parse(request.body);
   const created = candidateStore.createApplicationInterview(candidate.id, applicationId, body);
-  recordInterviewReminder(deps, request, candidate.id, created, created.createdAt);
+  recordInterviewReminder(deps, request, candidate.id, created);
   return { data: created, meta: { requestId: request.id } };
 };
 
@@ -82,9 +108,7 @@ const handlePatchInterview: Handler = async (deps, request, reply) => {
     body,
   );
   if (patched && body.scheduledAt !== undefined) {
-    // Новая или снятая дата: прежнее неушедшее напоминание больше не верно.
-    notificationRepositoryFor(deps).withdrawUnsentFromSource(candidate.id, 'interview', patched.id);
-    recordInterviewReminder(deps, request, candidate.id, patched, new Date().toISOString());
+    recordInterviewReminder(deps, request, candidate.id, patched);
   }
   if (body.followUpDueAt !== undefined) {
     const app = candidateStore.getApplication(candidate.id, params.id);

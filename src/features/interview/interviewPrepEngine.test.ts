@@ -81,6 +81,21 @@ describe('interviewPrepEngine', () => {
     }
   });
 
+  it('B635: без текста вакансии тип роли по названию не угадывается', () => {
+    for (const descriptionSummary of [undefined, 'Эксплуатация СЭС, разработка графиков ремонта.']) {
+      const brief = generateInterviewPrepBrief({
+        vacancy: { id: 'v', title: 'Инженер-энергетик СЭС', company: 'Intouch', descriptionSummary },
+        facts: [],
+      });
+      expect(JSON.stringify(brief)).not.toMatch(/CI\/CD|архитектур|инженером/u);
+    }
+    const software = generateInterviewPrepBrief({
+      vacancy: { id: 'v', title: 'Инженер', descriptionSummary: 'Платформа на Kubernetes и Go.' },
+      facts: [],
+    });
+    expect(software.counterQuestions.join(' ')).toContain('CI/CD');
+  });
+
   it('строго опирается на подтверждённые факты кандидата и привязывает usedEvidenceIds', () => {
     const brief = generateInterviewPrepBrief({
       vacancy: sampleVacancy,

@@ -162,6 +162,28 @@ describe('классификация уведомлений кабинета B64
     });
   });
 
+  it('B671: напоминание важно до интервью; прошедшее и снятое — нет', () => {
+    const row = source({ kind: 'interview_reminder', sourceType: 'interview', sourceId: 'iv-1' });
+    const interviewAt = '2026-11-25T09:00:00.000Z';
+    const at = (now: string, when: string | null = interviewAt) =>
+      buildB640NotificationFeed({
+        rows: [row],
+        applications: new Map([['iv-1', application({ interviewAt: when })]]),
+        unreadCount: 1,
+        category: 'all',
+        offset: 0,
+        limit: 20,
+        now,
+      });
+    expect(at('2026-11-24T10:00:00.000Z').pinned[0]).toMatchObject({
+      title: 'Скоро интервью · Acme',
+      role: 'Backend',
+      eventAt: interviewAt,
+    });
+    expect(at('2026-11-25T10:00:00.000Z').pinned).toEqual([]);
+    expect(at('2026-11-24T10:00:00.000Z', null).pinned).toEqual([]);
+  });
+
   it('важное только пока не прочитано', () => {
     const read = source({ id: 'r', kind: 'delivery_error', readAt: '2026-11-19T00:00:00.000Z' });
     const result = feed([read], { 'app-1': application() });

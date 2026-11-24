@@ -21,7 +21,11 @@ interface DeliveryRow {
 async function setup() {
   const h = await createB640Harness({ pool: () => [] });
   closers.push(h.close);
-  const send = (method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload?: unknown) =>
+  const send = (
+    method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    url: string,
+    payload?: unknown,
+  ) =>
     h.app.inject({
       method,
       url,
@@ -70,7 +74,18 @@ async function setup() {
       repository.close();
     }
   };
-  return { send, application, deliveries, createInterview, claimedAt };
+  /** Что видно в ленте в момент `now`: только напоминания. */
+  const feedAt = (now: string) => {
+    const repository = new SqliteNotificationRepository({ databasePath: h.databasePath });
+    try {
+      return repository
+        .listForFeed(h.candidateIds[USER], { max: 100, now })
+        .rows.filter((row) => row.kind === 'interview_reminder');
+    } finally {
+      repository.close();
+    }
+  };
+  return { send, application, deliveries, createInterview, claimedAt, feedAt };
 }
 
 const at = (ms: number) => new Date(Date.now() + ms).toISOString();
@@ -142,5 +157,59 @@ describe('B731: напоминание об интервью уходит за �
 
     expect(deleted.statusCode).toBe(200);
     expect(deliveries(id)).toEqual([]);
+  });
+});
+
+describe('B731: напоминание видно в ленте за сутки, а не при назначении', () => {
+  it('появляется за 24 часа до интервью', async () => {
+    const { createInterview, feedAt } = await setup();
+    const scheduledAt = at(7 * DAY_MS);
+    const due = Date.parse(scheduledAt) - DAY_MS;
+
+    const id = await createInterview(scheduledAt);
+
+    expect(feedAt(new Date(due - 60_000).toISOString())).toEqual([]);
+    expect(feedAt(new Date(due).toISOString())).toMatchObject([
+      { sourceId: id, createdAt: new Date(due).toISOString() },
+    ]);
+  });
+
+  it('до интервью меньше суток — видно сразу; прошедшее интервью не напоминает', async () => {
+    const { createInterview, feedAt } = await setup();
+    const id = await createInterview(at(5 * 3_600_000));
+    await createInterview(at(-2 * DAY_MS));
+
+    expect(feedAt(at(1_000)).map((row) => row.sourceId)).toEqual([id]);
+  });
+
+  it('перенос двигает напоминание, удаление снимает', async () => {
+    const { send, application, createInterview, feedAt } = await setup();
+    const id = await createInterview(at(7 * DAY_MS));
+    const path = `${APPS}/${application.id}/interviews/${id}`;
+    await send('PATCH', path, { scheduledAt: at(10 * DAY_MS) });
+
+    expect(feedAt(at(8 * DAY_MS))).toEqual([]);
+    expect(feedAt(at(9 * DAY_MS + 60_000))).toHaveLength(1);
+
+    await send('DELETE', path);
+    expect(feedAt(at(9 * DAY_MS + 60_000))).toEqual([]);
+  });
+
+  it('B671: в ленте кабинета — компания, роль, время и «Важно»', async () => {
+    const { send, createInterview, application } = await setup();
+    const scheduledAt = at(5 * 3_600_000);
+    await createInterview(scheduledAt);
+
+    const feed = (await send('GET', '/api/v1/candidate/b640/notifications')).json().data;
+
+    expect(feed.pinned).toMatchObject([
+      {
+        kind: 'interview_reminder',
+        title: `Скоро интервью · ${application.vacancy?.company}`,
+        role: 'CTO',
+        eventAt: scheduledAt,
+        important: true,
+      },
+    ]);
   });
 });

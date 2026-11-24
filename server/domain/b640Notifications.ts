@@ -61,6 +61,7 @@ const IMPORTANT_KINDS: ReadonlySet<B640NotificationKind> = new Set([
   'platform_login_required',
   'interview_invitation',
   'offer',
+  'interview_reminder',
 ]);
 const CATEGORY_BY_KIND: Partial<Record<B640NotificationKind, B640NotificationCategory>> = {
   interview_invitation: 'invitations',
@@ -77,6 +78,7 @@ const CATEGORY_BY_KIND: Partial<Record<B640NotificationKind, B640NotificationCat
 const TITLE_WITH_COMPANY: Partial<Record<B640NotificationKind, (company: string) => string>> = {
   interview_invitation: (company) => `${company} приглашает на интервью`,
   offer: (company) => `${company} прислал оффер`,
+  interview_reminder: (company) => `Скоро интервью · ${company}`,
   questionnaire: (company) => `${company} просит заполнить анкету`,
   platform_login_required: (company) => `Отклик не доставлен · ${company}`,
   delivery_error: (company) => `Отклик не доставлен · ${company}`,
@@ -150,12 +152,14 @@ export function searchRoleLabel(roles: readonly string[]): string | null {
   return named.length === 1 ? named[0] : `${named[0]} и ещё ${named.length - 1}`;
 }
 
-/** Время события есть только у приглашения; у остальных подпись несёт время записи. */
+/** Время события есть у приглашения и напоминания об интервью; у остальных подпись несёт время записи. */
 function eventAtOf(
   kind: B640NotificationKind,
   application: B640ApplicationContext | undefined,
 ): string | null {
-  return kind === 'interview_invitation' ? (application?.interviewAt ?? null) : null;
+  return kind === 'interview_invitation' || kind === 'interview_reminder'
+    ? (application?.interviewAt ?? null)
+    : null;
 }
 
 /**
@@ -179,6 +183,19 @@ export interface ClassifyContext {
   readonly searchRoles?: readonly string[];
   /** B671 (n01b): сколько находок в проверке следа этого уведомления. */
   readonly findingCount?: number;
+  /** B671: прошедшее интервью больше не важное. */
+  readonly now?: string;
+}
+
+function isImportant(
+  row: B640NotificationSource,
+  kind: B640NotificationKind,
+  eventAt: string | null,
+  now: string | undefined,
+): boolean {
+  if (row.readAt !== null || !IMPORTANT_KINDS.has(kind)) return false;
+  if (kind !== 'interview_reminder') return true;
+  return eventAt !== null && (!now || Date.parse(eventAt) > Date.parse(now));
 }
 
 /** n01b: «Цифровой след: 1 новая находка». */
@@ -196,6 +213,7 @@ export function classifyB640Notification(
 ): B640Notification {
   const kind = classifyKind(row, application, newestReplies);
   const company = cleaned(application?.company);
+  const eventAt = eventAtOf(kind, application);
   const searchRoles = context.searchRoles ?? [];
   const digest = kind === 'new_vacancies_by_role' ? roleDigestView(row, searchRoles) : null;
   const role =
@@ -208,7 +226,7 @@ export function classifyB640Notification(
     id: row.id,
     kind,
     category: CATEGORY_BY_KIND[kind] ?? 'other',
-    important: row.readAt === null && IMPORTANT_KINDS.has(kind),
+    important: isImportant(row, kind, eventAt, context.now),
     title:
       digest?.title ??
       (kind === 'footprint_findings'
@@ -216,7 +234,7 @@ export function classifyB640Notification(
         : titleFor(kind, company, row)),
     company,
     role,
-    eventAt: eventAtOf(kind, application),
+    eventAt,
     note: digest ? digestSalaryNote(row.sourceType, row.sourceId) : null,
     createdAt: row.createdAt,
     readAt: row.readAt,
@@ -242,6 +260,7 @@ export interface BuildB640FeedInput {
   readonly searchRoles?: readonly string[];
   /** B671 (n01b): число находок по id проверки следа. */
   readonly findingCounts?: ReadonlyMap<string, number>;
+  readonly now?: string;
 }
 
 const INVITATION_KINDS: ReadonlySet<B640NotificationKind> = new Set([
@@ -260,10 +279,13 @@ export function buildB640NotificationFeed(input: BuildB640FeedInput): B640Notifi
   const all = input.rows.map((row) =>
     classifyB640Notification(
       row,
-      row.sourceType === 'application' ? input.applications.get(row.sourceId) : undefined,
+      row.sourceType === 'application' || row.sourceType === 'interview'
+        ? input.applications.get(row.sourceId)
+        : undefined,
       newestReplies,
       {
         searchRoles: input.searchRoles ?? [],
+        now: input.now,
         findingCount:
           row.kind === 'footprint_findings' ? input.findingCounts?.get(row.sourceId) : undefined,
       },
