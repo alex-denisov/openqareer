@@ -18,6 +18,7 @@ import type {
   SqliteCandidateActionRepository,
   StoredActionReceipt,
 } from './sqliteCandidateActionRepository';
+import { hasApplyMandate } from './applyMandate';
 import type { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
 
 /** Process-local guard matches the single service process; use a shared lock before scaling. */
@@ -281,8 +282,7 @@ export class CandidateActionExecutor {
   }
 
   private assertConsent(candidateId: string): void {
-    const consent = this.consentStore?.getActiveConsent(candidateId, 'actions_on_behalf');
-    if (!consent) throw new CandidateConsentRequiredError();
+    if (!hasApplyMandate(this.consentStore, candidateId)) throw new CandidateConsentRequiredError();
   }
 
   private assertBatchCapacity(input: ExecuteBatchInput, timezone: string, now: Date): void {

@@ -393,6 +393,18 @@ describe('n05 «Согласия и данные»', () => {
     expect(document.querySelector('.pf-dialog')).toBeNull();
   });
 
+  it('B787: под согласием — текст принятой версии, а не действующей', async () => {
+    api.getConsents.mockResolvedValue([
+      { id: 'c2', capability: 'actions_on_behalf', versionId: 'actions_on_behalf-v1.0', grantedAt: '2026-11-01', revokedAt: null },
+    ]);
+    const root = await open(<DataScreen node={node('n05')} />);
+    const row = root.querySelector('input[aria-label="Отклики и подъём резюме"]')!.closest('li')!;
+    click(button(row, 'Текст согласия'));
+    await settle();
+    expect(document.body.textContent).toContain('Платформа помогает направлять согласованные отклики');
+    expect(document.body.textContent).not.toContain('Поручаю OpenQareer');
+  });
+
   it('«Остановить всё» спрашивает подтверждение; после — «Возобновить»', async () => {
     api.pauseAutomation.mockResolvedValue(undefined);
     const root = await open(<DataScreen node={node('n05')} />);

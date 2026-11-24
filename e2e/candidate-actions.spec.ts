@@ -93,7 +93,7 @@ async function mockCandidateActionApi(page: Page): Promise<() => unknown> {
         data: {
           capability: 'actions_on_behalf',
           granted: true,
-          consent: { versionId: 'actions_on_behalf-v1.0' },
+          consent: { versionId: 'actions_on_behalf-v1.1' },
         },
       },
     }),

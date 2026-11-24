@@ -166,6 +166,29 @@ export function deleteCapabilityConsentsForUser(database: DatabaseSync, userId: 
   return Number(result.changes);
 }
 
+function tableExists(database: DatabaseSync, name: string): boolean {
+  return database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
+}
+
+function hasCandidateConsentVersion(
+  database: DatabaseSync,
+  candidateId: string,
+  capability: CandidateCapability,
+  versionId: string,
+): boolean {
+  const owner = tableExists(database, 'users')
+    ? '(user_id = ?1 OR user_id IN (SELECT id FROM users WHERE candidate_id = ?1))'
+    : 'user_id = ?1';
+  return (
+    database
+      .prepare(
+        `SELECT 1 FROM candidate_capability_consents
+          WHERE ${owner} AND capability = ?2 AND version_id = ?3 AND revoked_at IS NULL LIMIT 1`,
+      )
+      .get(candidateId, capability, versionId) !== undefined
+  );
+}
+
 /** Самоудаление: у кандидата есть строка в users; запись под id кандидата тоже уходит. */
 export function deleteCapabilityConsentsForCandidate(
   database: DatabaseSync,
@@ -245,6 +268,11 @@ export class SqliteCapabilityConsentStore {
 
   getActiveConsent(userId: string, capability: CandidateCapability): CapabilityConsentRecord | null {
     return getActiveCapabilityConsent(this.database, userId, capability);
+  }
+
+  /** Действующее согласие кандидата в этой версии; запись лежит под id его пользователя. */
+  hasConsentVersion(candidateId: string, capability: CandidateCapability, versionId: string): boolean {
+    return hasCandidateConsentVersion(this.database, candidateId, capability, versionId);
   }
 
   listConsents(userId: string, capability?: CandidateCapability): readonly CapabilityConsentRecord[] {

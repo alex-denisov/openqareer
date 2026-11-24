@@ -15,6 +15,7 @@ import {
   type HhResumeEdit,
   type HhResumeSnapshot,
 } from '../../shared/hhCandidateSession';
+import { APPLY_MANDATE_REQUIRED, hasApplyMandate } from '../candidate/applyMandate';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { hhApplyGate, type HhApplyRefusal } from '../domain/hhApplyGate';
 import { draftHhResumeEdits, hhResumeLanguage } from '../domain/hhResumeEdits';
@@ -304,6 +305,9 @@ const postAttempt: Handler = async (deps, request, reply) => {
   if (!gate.ok) {
     const [status, message] = REFUSAL_REPLY[gate.refusal];
     return sendError(reply, request, status, gate.refusal, message, false);
+  }
+  if (!hasApplyMandate(deps.capabilityConsentStore, candidateId)) {
+    return sendError(reply, request, 403, APPLY_MANDATE_REQUIRED, 'Для отклика от вашего имени нужно ваше согласие.', false);
   }
   const attemptId = deps.hh.startAttempt(candidateId, { vacancyId, resumeId: chosen, now });
   return reply.status(201).send({

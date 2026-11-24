@@ -1,5 +1,12 @@
 import { useState, type ReactNode } from 'react';
+import {
+  CAPABILITY_CONSENT_DOCUMENTS,
+  capabilityConsentDocument,
+  type CandidateCapability,
+} from '../../legal/capabilityConsents';
 import { Dialog } from '../kit/Dialog';
+import { Icon } from '../kit/Icon';
+import { ErrorLine } from './parts';
 
 /** Общие части строк согласий n05: действие с ожиданием и переключатель. */
 
@@ -64,5 +71,44 @@ export function ConsentTextLink({ title, children }: ConsentTextLinkProps) {
         {children}
       </Dialog>
     </span>
+  );
+}
+
+interface ConsentDialogProps {
+  readonly capability: CandidateCapability;
+  readonly open: boolean;
+  readonly busy: boolean;
+  readonly failed: boolean;
+  readonly onGrant: () => void;
+  readonly onClose: () => void;
+}
+
+/** Текст согласия; у данного согласия — той версии, которую кандидат принял. */
+export function ConsentItems({ capability, versionId }: { readonly capability: CandidateCapability; readonly versionId?: string }) {
+  return (
+    <ul className="c5-list">
+      {capabilityConsentDocument(capability, versionId).items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** Текст согласия перед выдачей: согласие даётся только после него. */
+export function ConsentDialog({ capability, open, busy, failed, onGrant, onClose }: ConsentDialogProps) {
+  return (
+    <Dialog open={open} title={CAPABILITY_CONSENT_DOCUMENTS[capability].title} onClose={onClose}>
+      <ConsentItems capability={capability} />
+      {failed ? <ErrorLine text="Согласие не сохранилось" /> : null}
+      <div className="actions">
+        <button className="btn is-primary" type="button" disabled={busy} aria-busy={busy || undefined} onClick={onGrant}>
+          <Icon name="check" />
+          Дать согласие
+        </button>
+        <button className="btn" type="button" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
+    </Dialog>
   );
 }

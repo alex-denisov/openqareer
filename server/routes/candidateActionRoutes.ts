@@ -16,6 +16,7 @@ import {
   CandidateActionTargetError,
   CandidateRunnerNotConnectedError,
 } from '../candidate/candidateActionExecutor';
+import { hasApplyMandate } from '../candidate/applyMandate';
 import { SqliteCandidateActionRepository } from '../candidate/sqliteCandidateActionRepository';
 import type { RouteDeps } from './deps';
 import {
@@ -120,7 +121,7 @@ function validateBatchRequest(
     );
     return null;
   }
-  if (!deps.capabilityConsentStore?.getActiveConsent(candidateId, 'actions_on_behalf')) {
+  if (!hasApplyMandate(deps.capabilityConsentStore, candidateId)) {
     sendError(
       reply,
       request,
