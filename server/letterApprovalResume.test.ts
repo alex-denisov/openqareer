@@ -129,4 +129,31 @@ describe('B785: правки резюме под вакансию', () => {
     expect((await call('PUT', PATH, { action: 'cancel', id: 'нет' })).statusCode).toBe(409);
     expect((await call('PUT', PATH, { action: 'other', id: 'x' })).statusCode).toBe(400);
   });
+
+  it('RU/EN: перевод входит в версию, сбой перевода язык не меняет, назад — без модели', async () => {
+    let works = false;
+    const translate = async ({ bullets }: { bullets: ReadonlyArray<{ key: string; text: string }> }) =>
+      works ? { bullets: bullets.map(({ key, text }) => ({ key, text: 'The platform was moved to Kubernetes' + (text.includes('2024') ? ', 2024' : '') })) } : null;
+    const { call, candidates, candidateId, approve, prepareResume } = await setup(undefined, {
+      experienceFactRewriter: { translate, rewrite: async () => null } as never,
+    });
+    seedResume(candidates, candidateId, 'Head of Platform', BULLETS);
+    const snapshot = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      return JSON.stringify(candidates.getResumeVersion(candidateId, id)?.snapshot.document.experience);
+    };
+    const russian = await snapshot();
+    expect((await call('GET', PATH)).json().data.lang).toBe('ru');
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'en' })).statusCode).toBe(503);
+    expect((await call('GET', PATH)).json().data.lang).toBe('ru');
+    expect(await snapshot()).toBe(russian);
+    works = true;
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'en' })).json().data.lang).toBe('en');
+    expect(await snapshot()).not.toMatch(/Перевела|Вела|Финтех/u);
+    const { versionId } = (await approve()).json().data.resume;
+    expect(JSON.stringify(candidates.getResumeVersion(candidateId, versionId)?.snapshot)).toContain('moved to Kubernetes, 2024');
+    works = false;
+    expect((await call('PUT', PATH, { action: 'lang', lang: 'ru' })).json().data.lang).toBe('ru');
+    expect(await snapshot()).toBe(russian);
+  });
 });

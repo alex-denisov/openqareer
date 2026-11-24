@@ -120,7 +120,7 @@ export function editSource(slice: TargetedResumeSlice, id: string): string | nul
 
 export function withDecision(
   choices: ResumeEditChoices,
-  decision: ResumeEditDecision,
+  decision: Exclude<ResumeEditDecision, { action: 'lang' }>,
   source: string,
 ): ResumeEditChoices {
   const others = choices.cancelled.filter((id) => id !== decision.id);
@@ -131,6 +131,7 @@ export function withDecision(
     Object.entries(choices.texts).filter(([id]) => id !== decision.id),
   );
   return {
+    ...choices,
     cancelled: others,
     texts: decision.text === source ? rest : { ...rest, [decision.id]: decision.text },
   };
