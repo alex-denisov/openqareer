@@ -23,6 +23,11 @@ export interface StoredContactMessage {
 
 export type NewContactMessage = Omit<StoredContactMessage, 'state' | 'approvedAt' | 'sentAt'>;
 
+export type OpenDraftKey = Pick<
+  StoredContactMessage,
+  'candidateId' | 'contactId' | 'recruiterId' | 'vacancyId' | 'kind' | 'recipientName' | 'recipientUrl'
+>;
+
 interface Row {
   id: string;
   candidate_id: string;
@@ -79,6 +84,20 @@ export class SqliteContactMessageRepository {
       .run(message.id, message.candidateId, message.contactId, message.recruiterId, message.vacancyId,
         message.kind, message.text, message.recipientName, message.recipientUrl, message.createdAt);
     return { ...message, state: 'draft', approvedAt: null, sentAt: null };
+  }
+
+  /** B682: неотправленный черновик тому же получателю по той же вакансии; свежий первым. */
+  findOpen(key: OpenDraftKey): StoredContactMessage | null {
+    const row = this.database
+      .prepare(
+        `SELECT * FROM candidate_contact_messages
+         WHERE candidate_id = ? AND contact_id IS ? AND recruiter_id IS ? AND vacancy_id IS ? AND kind = ?
+           AND recipient_name = ? AND recipient_url IS ? AND state != 'sent'
+         ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(key.candidateId, key.contactId, key.recruiterId, key.vacancyId, key.kind,
+        key.recipientName, key.recipientUrl) as Row | undefined;
+    return row ? toMessage(row) : null;
   }
 
   get(candidateId: string, id: string): StoredContactMessage | null {

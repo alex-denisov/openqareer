@@ -303,6 +303,14 @@ test.describe('B645: карточка вакансии — способы отк
     await page.screenshot({ path: testInfo.outputPath('message-variant.png') });
     await sw.getByRole('button', { name: 'Предыдущий вариант' }).click();
     await expect(field).toHaveValue(/Мы работали вместе/u);
+    // Закрыли и открыли снова: тот же черновик, вариант и остаток на месте.
+    await page.route('**/api/v1/candidate/text-variants?kind=message&subjectId=m1', (route) =>
+      route.fulfill({ json: { data: { variants: [variant], remaining: 2 } } }),
+    );
+    await page.getByRole('button', { name: 'Не отправлять' }).click();
+    await page.getByRole('button', { name: 'Написать Роману' }).click();
+    await expect(sw).toContainText('1 из 2');
+    await expect(page.getByRole('button', { name: 'Другой вариант · 2' })).toBeVisible();
     await expectGates(page);
   });
 

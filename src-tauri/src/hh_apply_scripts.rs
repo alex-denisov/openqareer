@@ -121,6 +121,24 @@ pub fn result_script() -> String {
     surface_script("waiting", "sent")
 }
 
+/// B708: read-only look at the open page after an unsuccessful response: did the
+/// candidate finish it by hand? Only on this vacancy's own page, only by hh.ru's
+/// elements, and only once «Откликнуться» is gone: a toast next to a live button
+/// belongs to a similar vacancy listed below. The captcha prelude reads page
+/// text, so it is not used here.
+pub fn window_script(vacancy_id: &str) -> String {
+    format!(
+        "(function(){{try{{var host=location.hostname,q=function(s){{return document.querySelector(s);}};\
+var here=(host==='hh.ru'||host.slice(-6)==='.hh.ru')&&location.pathname.replace(/\\/$/,'')==={path};\
+return {{code:here&&q({success})&&!q({top})&&!q({bottom})?'sent':'waiting'}};\
+}}catch(e){{return {{code:'waiting'}};}}}})()",
+        path = literal(&format!("/vacancy/{vacancy_id}")),
+        success = literal(HH_SUCCESS),
+        top = literal(HH_RESPONSE_BUTTON_TOP),
+        bottom = literal(HH_RESPONSE_BUTTON_BOTTOM),
+    )
+}
+
 /// Polled: answers `resume_ok` once the requested resume is the chosen one.
 /// The drop-down is opened and the matching option clicked at most once each.
 pub fn resume_script(resume_id: &str) -> String {

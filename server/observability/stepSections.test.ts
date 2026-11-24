@@ -5,8 +5,9 @@ import { SealedText } from '../data/sealedText';
 import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
 import { evaluateVacancyFit, type VacancyFitInput } from '../domain/vacancyFit';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
+import { runStepsYielding } from '../vacancies/yieldingSteps';
 import type { VacancyPoolStore } from '../vacancies/vacancyPoolStore';
-import { summarizeAssessmentContext } from '../routes/roleSkillAssessmentRoutes';
+import { summarizeContextSteps } from '../routes/roleSkillAssessmentRoutes';
 
 vi.mock('./syncSections', async (original) => {
   const actual = await original<typeof import('./syncSections')>();
@@ -62,8 +63,10 @@ describe('B770a: синхронные куски шагов фона назва�
     expect(named()).toEqual(expect.arrayContaining(['engine:cluster', 'engine:sort']));
   });
 
-  it('role-assessment-context — сводка роли', () => {
-    summarizeAssessmentContext('Engineering Manager', 1, []);
+  it('role-assessment-context — сводка роли', async () => {
+    await runStepsYielding(summarizeContextSteps('Engineering Manager', 1, []), {
+      section: 'assessment:summary',
+    });
     expect(named()).toContain('assessment:summary');
   });
 });

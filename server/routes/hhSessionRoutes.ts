@@ -96,6 +96,8 @@ const resultSchema = z
   .object({
     outcome: z.enum(HH_APPLY_OUTCOMES),
     failureCode: z.string().regex(/^[a-z0-9_]{1,64}$/u).optional(),
+    /** B708: вакансия, на странице которой виден отклик, завершённый кандидатом в окне hh.ru. */
+    vacancyId: z.string().regex(HH_VACANCY_ID).optional(),
   })
   .strict();
 
@@ -279,14 +281,19 @@ const postResult: Handler = async (deps, request, reply) => {
   if (!parsed.success) {
     return sendError(reply, request, 400, 'invalid_hh_apply_result', 'Исход отклика не записался.', false);
   }
-  if (!deps.hh.getAttempt(candidateId, attemptId)) {
+  const stored = deps.hh.getAttempt(candidateId, attemptId);
+  if (!stored) {
     return sendError(reply, request, 404, 'hh_apply_not_found', 'Такого отклика нет.', false);
   }
-  const written = deps.hh.finishAttempt(candidateId, attemptId, {
-    outcome: parsed.data.outcome,
-    failureCode: parsed.data.failureCode ?? null,
-    now: new Date(),
-  });
+  const { outcome, failureCode, vacancyId } = parsed.data;
+  const now = new Date();
+  const otherVacancy = vacancyId !== undefined && vacancyId !== stored.vacancyId;
+  const written =
+    !otherVacancy &&
+    (deps.hh.finishAttempt(candidateId, attemptId, { outcome, failureCode: failureCode ?? null, now }) ||
+      (outcome === 'sent' &&
+        vacancyId !== undefined &&
+        deps.hh.markSentLater(candidateId, attemptId, { vacancyId, now })));
   if (!written) {
     return sendError(reply, request, 409, 'hh_apply_finished', 'Исход этого отклика уже записан.', false);
   }

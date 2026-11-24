@@ -20,6 +20,8 @@ export interface HhSendStepProps {
   readonly approvedLabel: string;
   readonly letterText: string;
   readonly onSent: () => Promise<void>;
+  /** a01: название письма открывает шаг «Письмо». */
+  readonly onLetter: () => void;
 }
 
 interface PartsProps {
@@ -35,7 +37,9 @@ function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
     <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
       <li className="row">
         <div>
-          <span className="row-title">Письмо · {props.approvedLabel}</span>
+          <button className="row-title ap-pick" type="button" onClick={props.onLetter}>
+            Письмо · {props.approvedLabel}
+          </button>
           <p className="ap-lines">{props.letterText}</p>
         </div>
         <span className="tag ok">готово</span>
@@ -126,8 +130,8 @@ export function HhSendStep(props: HhSendStepProps) {
   const resumeId = selected?.id ?? null;
   const apply = useHhApply({ vacancyId: props.hhVacancyId, resumeId, letter: props.letterText, onSent: props.onSent });
   const marked = useMarkSent(props.onSent);
-  const done = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire' || marked.state.kind === 'done';
-  const busy = apply.state.kind === 'sending';
+  const sent = apply.state.kind === 'sent' || apply.state.kind === 'questionnaire';
+  const done = sent || marked.state.kind === 'done';
   const responsePath = buildNodePath('o01c', { responseId: props.applicationId });
   if (reviewing && editsLoading) return <StatusLine state="wait" text="Готовим правки" />;
   if (reviewing && selected && edits.length > 0) {
@@ -141,20 +145,20 @@ export function HhSendStep(props: HhSendStepProps) {
       <Parts props={props} resumes={resumes} editCount={edits.length} onEdits={() => setReviewing(true)} />
       {done ? null : (
         <div className="actions">
-          <Button variant="primary" icon="send" busy={busy} disabled={!resumeId || resumes.loading} onClick={apply.ask}>
+          <Button variant="primary" icon="send" busy={apply.state.kind === 'sending'} disabled={!resumeId || resumes.loading} onClick={apply.ask}>
             Отправить отклик
           </Button>
           <a className="btn m-ico" href={props.head.url ?? undefined} target="_blank" rel="noopener noreferrer">
             <Icon name="out" />
             Вакансия на hh.ru
           </a>
-          <Button variant="quiet" icon="checkc" busy={marked.state.kind === 'busy'} disabled={busy} onClick={marked.mark}>
+          <Button variant="quiet" icon="checkc" busy={marked.state.kind === 'busy'} disabled={apply.state.kind === 'sending'} onClick={marked.mark}>
             Я уже откликнулся
           </Button>
         </div>
       )}
       <Outcome apply={apply} resumes={resumes} responsePath={responsePath} />
-      <MarkedOutcome marked={marked.state} responsePath={responsePath} />
+      {sent ? null : <MarkedOutcome marked={marked.state} responsePath={responsePath} />}
       <ConfirmDialog apply={apply} title={props.head.title} />
       <HhResumeSheet
         picker={resumes.picker}

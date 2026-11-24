@@ -1,3 +1,5 @@
+import type { HhResumeSummary } from './hhCandidateSession';
+
 /**
  * B699: платформа сама поднимает резюме на hh.ru не чаще раза в 4 часа на резюме,
  * исполняет поднятие клиент в окне сессии кандидата. Просмотры и приглашения не читаются.
@@ -16,10 +18,12 @@ export interface B640HhRaiseLastResult {
   readonly at: string;
 }
 
-/** GET /api/v1/candidate/b640/hh/raise?resumeId= (без resumeId — первое резюме снимка). */
+/** GET /api/v1/candidate/b640/hh/raise?resumeId= (без resumeId — выбранное резюме, до выбора первое в снимке). */
 export interface B640HhRaiseState {
   readonly connected: boolean;
   readonly resumeId: string | null;
+  /** Резюме снимка, из которых кандидат выбирает поднимаемое. */
+  readonly resumes: readonly HhResumeSummary[];
   readonly enabled: boolean;
   readonly everyHours: typeof HH_RAISE_EVERY_HOURS;
   readonly lastRaisedAt: string | null;
@@ -29,7 +33,7 @@ export interface B640HhRaiseState {
   readonly pauseReason: HhRaisePauseReason | null;
 }
 
-/** PUT /hh/raise */
+/** PUT /hh/raise: `resumeId` становится выбранным, поднимается только оно. */
 export interface B640HhRaiseToggle {
   readonly enabled: boolean;
   readonly resumeId?: string;

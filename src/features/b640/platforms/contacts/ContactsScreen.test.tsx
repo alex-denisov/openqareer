@@ -18,6 +18,7 @@ const navigate = vi.fn();
 vi.mock('../../shell/ShellContext', () => ({ useShell: () => ({ navigate }) }));
 
 vi.mock('../../messages/contactMessageApi', () => ({
+  listB640ContactMessageVariants: async () => ({ variants: [], remaining: 3 }),
   createB640ContactMessage: vi.fn(),
   createB640ContactMessageVariant: vi.fn(),
   editB640ContactMessage: vi.fn(),

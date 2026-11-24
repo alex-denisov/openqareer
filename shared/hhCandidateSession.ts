@@ -105,6 +105,30 @@ export interface HhResumeReview {
 export const HH_APPLY_OUTCOMES = ['sent', 'questionnaire', 'failed'] as const;
 export type HhApplyOutcome = (typeof HH_APPLY_OUTCOMES)[number];
 
+/** B708: сколько после неуспешной попытки приложение читает окно hh.ru; сервер даёт запас на запись. */
+export const HH_WINDOW_WATCH_MS = 10 * 60 * 1000;
+export const HH_LATE_SENT_MS = 15 * 60 * 1000;
+
+/** B708: исходы, после которых окно hh.ru осталось на вакансии и кандидат мог завершить отклик сам. */
+export const HH_WINDOW_LEFT_OPEN_FAILURES = [
+  'popup_missing',
+  'no_confirmation',
+  'captcha',
+  'resume_not_found',
+  'resume_unknown',
+  'letter_field_missing',
+  'letter_not_kept',
+  'submit_unavailable',
+  'relocation_warning',
+  'hh_error',
+  'script_error',
+  'already_applied',
+  'not_signed_in',
+  'page_load_timeout',
+  'eval_timeout',
+  'eval_cancelled',
+] as const;
+
 export interface HhApplyAttempt {
   readonly attemptId: string;
   /** Сколько откликов через hh.ru ещё можно отправить сегодня, считая этот. */
