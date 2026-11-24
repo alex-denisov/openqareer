@@ -2,10 +2,10 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest }
 import { z } from 'zod';
 import {
   LINKEDIN_OFFER_KEY,
-  LINKEDIN_VARIANTS_MAX,
   type LinkedinOffer,
   type LinkedinProfileView,
 } from '../../shared/b640LinkedinProfile';
+import { MAX_TEXT_VARIANTS } from '../../shared/textVariants';
 import { LinkedinSectionRepository } from '../linkedinProfile/linkedinSectionRepository';
 import { LINKEDIN_REWRITE_BUDGET_MS, LINKEDIN_VIEW_WAIT_MS, rewrittenSuggestions } from '../linkedinProfile/linkedinRewrite';
 import { checkLinkedinVariant, linkedinVariantRequest } from '../linkedinProfile/linkedinVariant';
@@ -24,8 +24,8 @@ const VARIANT_LIMIT = { config: { rateLimit: { max: 6, timeWindow: '1 minute' } 
 /** B692: неудачных вызовов модели на кандидата за час — успешные и так ограничены тремя вариантами. */
 const VARIANT_FAILURES_MAX = 5;
 const HOUR_MS = 60 * 60 * 1000;
-/** Сохранённых вариантов «Предложить заново» — всего три с первым (без квоты тарифа, решение 12.11/19.11). */
-const STORED_VARIANTS_MAX = LINKEDIN_VARIANTS_MAX - 1;
+/** Сохранённых вариантов «Предложить заново» — три, первый не в счёт; без квоты тарифа. */
+const STORED_VARIANTS_MAX = MAX_TEXT_VARIANTS;
 
 const offerKey = z.string().regex(LINKEDIN_OFFER_KEY);
 const keySchema = z.object({ key: offerKey });
