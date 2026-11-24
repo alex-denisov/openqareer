@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon, Link } from '../kit';
 import { pluralRu } from '../../../../shared/pluralRu';
+import { SkillAdd } from './SkillAdd';
 import {
   LANGUAGE_SCALE_STEPS,
   splitVisible,
@@ -182,6 +183,9 @@ export function SkillChips({ names }: { readonly names: readonly string[] }) {
           <span className="skill-chip">{name}</span>
         </li>
       ))}
+      <li>
+        <SkillAdd />
+      </li>
     </ul>
   );
 }
