@@ -157,6 +157,13 @@ export class SqliteContactMessageRepository {
       .run(now, candidateId, id).changes === 1;
   }
 
+  /** «Не отправлять»: неотправленный черновик удаляется. */
+  discard(candidateId: string, id: string): boolean {
+    return this.database
+      .prepare(`DELETE FROM candidate_contact_messages WHERE candidate_id = ? AND id = ? AND state != 'sent'`)
+      .run(candidateId, id).changes === 1;
+  }
+
   close(): void {
     this.database.close();
   }
