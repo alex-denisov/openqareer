@@ -135,7 +135,7 @@
     }
     if (questions.length > MAX_QUESTIONS) return unreadable;
     return questions.length ? { code: 'read', questions: questions } : waiting;
-  } catch (e) {
+  } catch {
     return { code: 'unreadable', questions: [] };
   }
 })()
