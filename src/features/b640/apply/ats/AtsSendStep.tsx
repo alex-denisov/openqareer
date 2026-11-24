@@ -53,13 +53,13 @@ function Part({
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
-/** «Отклик отправлен на jobs.lever.co · 25.11, 14:32». */
+/** «Отправлено 25.11, 14:32 · jobs.lever.co». */
 export function sentText({ host, pressedAtMs }: AtsConfirmation): string {
   const at = pressedAtMs === null ? null : new Date(pressedAtMs);
   const when = at
-    ? ` · ${pad(at.getDate())}.${pad(at.getMonth() + 1)}, ${pad(at.getHours())}:${pad(at.getMinutes())}`
+    ? ` ${pad(at.getDate())}.${pad(at.getMonth() + 1)}, ${pad(at.getHours())}:${pad(at.getMinutes())}`
     : '';
-  return `Отклик отправлен на ${host}${when}`;
+  return `Отправлено${when} · ${host}`;
 }
 
 function Done({ text, path }: { readonly text: string; readonly path: string }) {
@@ -168,13 +168,13 @@ function OpenOnSite({ url }: { readonly url: string }) {
   return (
     <a
       className="btn m-ico"
-      aria-label="Открыть вакансию на сайте"
+      aria-label="Вакансия на сайте"
       href={url}
       target="_blank"
       rel="noopener noreferrer"
     >
       <Icon name="out" />
-      Открыть вакансию на сайте
+      Вакансия на сайте
     </a>
   );
 }
@@ -197,12 +197,12 @@ function SendActions({
           {`Ответить · ${noun}`}
         </Button>
       ) : null}
-      {state.kind === 'unconfirmed' ? null : (
+      {state.kind === 'unconfirmed' || answerFirst ? null : (
         <Button
-          {...(answerFirst ? {} : { variant: 'primary' as const })}
+          variant="primary"
           icon="send"
           busy={state.kind === 'sending'}
-          disabled={!canSendAts(state.kind) || answerFirst}
+          disabled={!canSendAts(state.kind)}
           onClick={apply.send}
         >
           Отправить отклик
@@ -222,6 +222,13 @@ function SendActions({
   );
 }
 
+const UNREAD: ReadonlySet<AtsApplyState['kind']> = new Set(['reading', 'read_failed']);
+
+function titleOf({ state, missing }: AtsApplyControls): string {
+  if (state.kind === 'unconfirmed') return 'Отклик не подтверждён';
+  return missing > 0 ? 'Отправьте отклик' : 'Всё одобрено — можно отправлять';
+}
+
 /** Шаг «Отправка» в приложении: форма сайта работодателя уходит одним нажатием (B787). */
 export function AtsSendStep(props: AtsSendStepProps) {
   const { apply, onStep, answered } = props;
@@ -234,7 +241,7 @@ export function AtsSendStep(props: AtsSendStepProps) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        {apply.missing > 0 ? 'Отправьте отклик' : 'Всё одобрено — можно отправлять'}
+        {titleOf(apply)}
       </h2>
       <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
         <Part
@@ -247,7 +254,7 @@ export function AtsSendStep(props: AtsSendStepProps) {
         {answered > 0 ? (
           <Part
             title={`${noun} анкеты`}
-            ready={canSendAts(state.kind) && apply.missing === 0}
+            ready={!UNREAD.has(state.kind) && apply.missing === 0}
             onOpen={() => onStep('form')}
           />
         ) : null}
