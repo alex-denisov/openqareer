@@ -39,6 +39,8 @@ interface TextInput {
   readonly vacancyId: string | null;
   /** B698: вторая вакансия той же компании из карточки компании — только для текста. */
   readonly alsoVacancyId?: string | null;
+  /** B682: «Другой вариант» — пожелание и прежний текст к запросу модели. */
+  readonly variantWish?: string;
 }
 
 interface MessageVacancy {
@@ -173,6 +175,12 @@ function messageContext(deps: RouteDeps, input: TextInput, targetRole: string): 
   return { vacancy, also, language, roles: candidateRoles(deps, input.candidateId, targetRole, language) };
 }
 
+/** Текст модели (`null` — не ответила или не принята) и шаблон на данных профиля. */
+interface WrittenMessage {
+  readonly model: string | null;
+  readonly fallback: string;
+}
+
 /**
  * Текст сообщения: модель через тот же писатель, что и письмо получателю; при отказе, пустом ответе
  * или новых цифрах — шаблон на данных профиля. Реальный запрос B613 заменит `contactMessageWish`.
@@ -182,6 +190,24 @@ export async function writeContactMessageText(
   request: FastifyRequest,
   input: TextInput,
 ): Promise<string> {
+  const { model, fallback } = await writeMessage(deps, request, input);
+  return model ?? fallback;
+}
+
+/** B682: другой вариант пишет только модель — шаблон дал бы тот же текст. */
+export async function writeContactMessageVariant(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  input: TextInput & { readonly variantWish: string },
+): Promise<string | null> {
+  return (await writeMessage(deps, request, input)).model;
+}
+
+async function writeMessage(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  input: TextInput,
+): Promise<WrittenMessage> {
   const snapshot = deps.candidateStore.getSnapshot(input.candidateId);
   const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
   const facts = snapshot.memory ?? [];
@@ -192,7 +218,7 @@ export async function writeContactMessageText(
   const message = messageFacts(input, context);
   const fallback = language === 'en' ? englishFallbackMessage(message) : fallbackContactMessage(message);
   const writer = deps.contactMessageWriter ?? deps.coverLetterWriter; // B753: своя цепочка, GLM первым
-  if (!writer || !profile.trim()) return fallback;
+  if (!writer || !profile.trim()) return { model: null, fallback };
   const known = [
     profile, roles.targetRole, input.recipient.name, input.recipient.company, input.recipient.role ?? '',
     vacancy?.title ?? '', vacancy?.company ?? '', also?.title ?? '', draft.targetRole ?? '',
@@ -205,15 +231,15 @@ export async function writeContactMessageText(
       ...(gender ? { gender } : {}),
       resumeAttached: false,
       chosenLanguage: language,
-      wish: contactMessageWish(message),
+      wish: [contactMessageWish(message), input.variantWish].filter(Boolean).join('\n'),
     };
     const options: ContactCheckOptions = {
       withoutVacancy: !vacancy, language, recipientName: input.recipient.name, relationship: input.recipient.relationship,
     };
     const check: ContactCheck = { known, kind: input.kind, englishRoles: roles.english, options };
-    return (await askContactModel(writer, request, ask, check)) ?? fallback;
+    return { model: await askContactModel(writer, request, ask, check), fallback };
   } catch (error) {
     request.log.warn({ err: error }, 'contact-message-writer-failed');
-    return fallback;
+    return { model: null, fallback };
   }
 }

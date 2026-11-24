@@ -19,11 +19,19 @@ vi.mock('../../shell/ShellContext', () => ({ useShell: () => ({ navigate }) }));
 
 vi.mock('../../messages/contactMessageApi', () => ({
   createB640ContactMessage: vi.fn(),
+  createB640ContactMessageVariant: vi.fn(),
   editB640ContactMessage: vi.fn(),
   approveB640ContactMessage: vi.fn(),
   markB640ContactMessageSent: vi.fn(),
 }));
 
+// jsdom без matchMedia: широкий экран (useIsMobile читает медиа-запрос).
+window.matchMedia = ((query: string) => ({
+  matches: false,
+  media: query,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+})) as unknown as typeof window.matchMedia;
 const api = await import('./contactsApi');
 const messages = await import('../../messages/contactMessageApi');
 const draft = (text: string) => ({

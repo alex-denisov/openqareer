@@ -86,7 +86,7 @@ describe('B694 a03b: «Другой вариант» поста', () => {
     expect(button('Скопировать')).toBeUndefined();
     expect(button('Другой вариант')?.textContent).toBe('Другой вариант · 3');
     expect(view!.container.querySelector('.var-sw')).toBeNull();
-    expect(variantsApi.listPostVariants).toHaveBeenCalledWith('d1', expect.anything());
+    expect(variantsApi.listPostVariants).toHaveBeenCalledWith('post', 'd1', expect.anything());
   });
 
   it('вариант с пожеланием встаёт в поле, листание возвращает черновик с правкой', async () => {

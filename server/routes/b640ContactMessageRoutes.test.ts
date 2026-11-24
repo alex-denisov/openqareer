@@ -128,6 +128,49 @@ describe('B698: POST contact-messages', () => {
   });
 });
 
+describe('B682: POST contact-messages/:id/variants', () => {
+  const list = (id: string) => `/api/v1/candidate/text-variants?kind=message&subjectId=${id}`;
+
+  it('пишет вариант с пожеланием, хранит у черновика; четвёртый — 409 без модели', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    writer.body = 'Анна, привет! Давно не общались. Расскажешь, как устроена команда данных?';
+    const make = (body: object = {}) => send('POST', `${BASE}/${id}/variants`, 'flagged.test', body);
+    const first = await make({ wish: { chips: ['shorter'], text: 'на «вы»' } });
+    expect(first.statusCode).toBe(201);
+    expect(first.json().data).toMatchObject({ remaining: 2, variant: { position: 1, text: writer.body } });
+    expect(writer.calls.at(-1)?.wish).toContain('заметно короче');
+    expect(writer.calls.at(-1)?.wish).toContain('Прежний текст');
+    expect((await send('GET', list(id), 'flagged.test')).json().data.variants).toHaveLength(1);
+    await make();
+    expect((await make()).json().data.remaining).toBe(0);
+    const calls = writer.calls.length;
+    const fourth = await make();
+    expect(fourth.statusCode).toBe(409);
+    expect(fourth.json().error.code).toBe('variant_limit_reached');
+    expect(writer.calls).toHaveLength(calls);
+  });
+
+  it('без флага, чужой, отправленный, плохое тело и сбой модели — отказ', async () => {
+    const { draft, send, writer } = await setup();
+    const id = (await draft()).json().data.id as string;
+    const url = `${BASE}/${id}/variants`;
+    const calls = writer.calls.length;
+    for (const user of ['plain.test', 'other.test'] as const) {
+      expect((await send('POST', url, user, {})).statusCode).toBe(404);
+    }
+    expect((await send('POST', url, undefined, {})).statusCode).toBe(404);
+    expect((await send('POST', url, 'flagged.test', { wish: { chips: ['louder'] } })).statusCode).toBe(400);
+    expect(writer.calls).toHaveLength(calls);
+    writer.body = undefined;
+    expect((await send('POST', url, 'flagged.test', {})).statusCode).toBe(503);
+    expect((await send('GET', list(id), 'flagged.test')).json().data.variants).toEqual([]);
+    await send('POST', `${BASE}/${id}/approve`, 'flagged.test');
+    await send('POST', `${BASE}/${id}/sent`, 'flagged.test');
+    expect((await send('POST', url, 'flagged.test', {})).statusCode).toBe(409);
+  });
+});
+
 describe('B753: своя цепочка сообщения', () => {
   it('черновик пишет писатель сообщений, писатель письма не вызывается', async () => {
     const letter = stubWriter('Письмо работодателю');

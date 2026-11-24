@@ -259,6 +259,53 @@ test.describe('B645: карточка вакансии — способы отк
     await expect(page.locator('.ha-item')).toHaveCount(3);
   });
 
+  test('B682: «Другой вариант» сообщения — «Что поменять», листание, поле 44 (a02d)', async ({
+    page,
+  }, testInfo) => {
+    await openLadoga(page);
+    const variant = {
+      id: 'v1',
+      position: 1,
+      text: 'Роман, привет!',
+      wish: { chips: ['shorter'], text: '' },
+      createdAt: '2026-11-24T10:00:00.000Z',
+      payload: null,
+    };
+    let body: unknown = null;
+    await page.route('**/api/v1/candidate/b640/contact-messages/m1/variants', (route) => {
+      body = route.request().postDataJSON();
+      return route.fulfill({
+        status: 201,
+        json: { data: { variant, variants: [variant], remaining: 2 } },
+      });
+    });
+    await page.getByRole('button', { name: 'Написать Роману' }).click();
+    const button = page.getByRole('button', { name: 'Другой вариант · 3' });
+    await button.click();
+    const pop = page.getByRole('dialog', { name: 'Что поменять' });
+    const wish = await pop.locator('.alt-wish').boundingBox();
+    expect(wish!.height).toBe(44);
+    const box = await pop.boundingBox();
+    if (testInfo.project.name.includes('390')) {
+      expect(box!.x).toBe(0);
+      expect(box!.width).toBe(page.viewportSize()!.width);
+    }
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await page.screenshot({ path: testInfo.outputPath('message-wish.png') });
+    await pop.getByRole('button', { name: 'Короче' }).click();
+    await pop.getByRole('button', { name: 'Сделать вариант' }).click();
+    const field = page.locator('.lk-inline textarea.lk-draft');
+    await expect(field).toHaveValue('Роман, привет!');
+    expect(body).toMatchObject({ wish: { chips: ['shorter'], text: '' } });
+    const sw = page.getByRole('group', { name: 'Варианты сообщения' });
+    await expect(sw).toContainText('2 из 2');
+    await page.screenshot({ path: testInfo.outputPath('message-variant.png') });
+    await sw.getByRole('button', { name: 'Предыдущий вариант' }).click();
+    await expect(field).toHaveValue(/Мы работали вместе/u);
+    await expectGates(page);
+  });
+
   test('знакомых нет: «Как откликнуться» остаётся с hh.ru и сайтом', async ({ page }) => {
     await openLadoga(page, { noPeople: true });
     const ways = page.locator('.ha-item');
