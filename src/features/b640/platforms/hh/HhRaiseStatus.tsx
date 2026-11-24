@@ -6,6 +6,7 @@ import { getHhRaise, retryHhRaise, setHhRaiseEnabled } from './hhRaiseApi';
 import { lineOf } from './hhRaiseText';
 
 const SWITCH_ID = 'hh-up';
+const RESUME_ID = 'hh-cv';
 
 interface RaiseSwitchProps {
   readonly checked: boolean;
@@ -31,11 +32,35 @@ function RaiseSwitch({ checked, disabled, onChange }: RaiseSwitchProps) {
   );
 }
 
-/**
- * B699: переключатель «Автоподнятие резюме» по макету a11 (`.hh-sw`) и тихая строка состояния
- * под ним. Монтируется в шапке экрана hh.ru (a11), когда hh.ru подключён.
- */
-export function HhRaiseStatus() {
+interface RaiseResumeProps {
+  readonly resumes: B640HhRaiseState['resumes'];
+  readonly value: string | null;
+  readonly disabled: boolean;
+  readonly onChange: (resumeId: string) => void;
+}
+
+/** Поле макета a11 `.hh-cv`: резюме, которое поднимается. */
+function RaiseResume({ resumes, value, disabled, onChange }: RaiseResumeProps) {
+  return (
+    <div className="pf-f hh-cv">
+      <label htmlFor={RESUME_ID}>Резюме</label>
+      <select
+        id={RESUME_ID}
+        value={value ?? undefined}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
+        {resumes.map((resume) => (
+          <option key={resume.id} value={resume.id}>
+            {resume.updatedLabel ? `${resume.title} · ${resume.updatedLabel}` : resume.title}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function useHhRaise() {
   const [view, setView] = useState<B640HhRaiseState | null>(null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -59,7 +84,15 @@ export function HhRaiseStatus() {
       setBusy(false);
     }
   }, []);
+  return { view, failed, busy, change };
+}
 
+/**
+ * B699: переключатель «Автоподнятие резюме» по макету a11 (`.hh-sw`) и тихая строка состояния
+ * под ним. Монтируется в шапке экрана hh.ru (a11), когда hh.ru подключён.
+ */
+export function HhRaiseStatus() {
+  const { view, failed, busy, change } = useHhRaise();
   if (failed && !view) return <StatusLine state="err" text="Состояние поднятия не загрузилось" />;
   if (!view) return <StatusLine state="wait" text="Загружаем состояние поднятия" />;
   if (!view.connected) return null;
@@ -72,6 +105,12 @@ export function HhRaiseStatus() {
         checked={view.enabled}
         disabled={busy}
         onChange={(enabled) => void change(() => setHhRaiseEnabled(enabled, view.resumeId ?? undefined))}
+      />
+      <RaiseResume
+        resumes={view.resumes}
+        value={view.resumeId}
+        disabled={busy}
+        onChange={(resumeId) => void change(() => setHhRaiseEnabled(view.enabled, resumeId))}
       />
       {line.state === 'off' ? null : (
         <StatusLine

@@ -5,8 +5,8 @@ import {
   type B640HhRaiseClaim,
   type B640HhRaiseState,
 } from '../../shared/b640HhRaise';
-import { HH_RESUME_ID } from '../../shared/hhCandidateSession';
-import { applyOutcome, canRaiseAt, firstRaiseAt, raiseAvailableAt } from '../candidate/hhRaiseSchedule';
+import { HH_RESUME_ID, type HhResumeSummary } from '../../shared/hhCandidateSession';
+import { applyOutcome, canRaiseAt, choicePatch, firstRaiseAt, raiseAvailableAt } from '../candidate/hhRaiseSchedule';
 import { SqliteHhRaiseRepository, type HhRaiseScheduleRow } from '../candidate/sqliteHhRaiseRepository';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { sessionCandidate } from './b640VacancyContext';
@@ -33,9 +33,10 @@ type Handler = (stores: Stores, candidateId: string, request: FastifyRequest, re
 
 const answer = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
 
-function viewOf(connected: boolean, id: string | null, row: HhRaiseScheduleRow | null): B640HhRaiseState {
+function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhRaiseScheduleRow | null): B640HhRaiseState {
+  const connected = resumes.length > 0;
   return {
-    connected, resumeId: id,
+    connected, resumeId: id, resumes,
     // Для подключённого hh расписание включено по умолчанию.
     enabled: row ? row.enabled : connected,
     everyHours: HH_RAISE_EVERY_HOURS,
@@ -48,11 +49,15 @@ function viewOf(connected: boolean, id: string | null, row: HhRaiseScheduleRow |
   };
 }
 
-/** Резюме, о котором речь: из запроса, если оно есть в снимке, иначе первое. */
+/** Резюме, о котором речь: из запроса, если оно есть в снимке, иначе выбранное кандидатом или первое. */
 function pickResume(stores: Stores, candidateId: string, wanted?: string) {
   const listed = stores.hh.getSnapshot(candidateId)?.resumes ?? [];
-  const id = wanted ? (listed.some((item) => item.id === wanted) ? wanted : null) : (listed[0]?.id ?? null);
-  return { connected: listed.length > 0, id, unknown: Boolean(wanted) && id === null };
+  const choice = stores.raise.getChoice(candidateId);
+  const isListed = (id: string) => listed.some((item) => item.id === id);
+  const current = choice && isListed(choice) ? choice : (listed[0]?.id ?? null);
+  const id = wanted ? (isListed(wanted) ? wanted : null) : current;
+  // `former` отличается от `current`, когда выбранного резюме больше нет на hh.ru.
+  return { listed, current, former: choice ?? current, id, unknown: Boolean(wanted) && id === null };
 }
 
 function withResume(handler: (s: Stores, c: string, id: string, req: FastifyRequest, rep: FastifyReply) => unknown, wanted: (r: FastifyRequest) => string | undefined): Handler {
@@ -72,12 +77,18 @@ const getState: Handler = (stores, candidateId, request, reply) => {
   if (!query.success) return sendError(reply, request, 400, 'invalid_hh_raise_query', 'Запрос заполнен неверно.', false);
   const picked = pickResume(stores, candidateId, query.data.resumeId);
   if (picked.unknown) return sendError(reply, request, 404, 'hh_resume_not_found', 'Такого резюме нет.', false);
-  if (!picked.id) return answer(request, viewOf(false, null, null));
+  if (!picked.id) return answer(request, viewOf([], null, null));
   const now = new Date();
+  if (picked.former && picked.id === picked.current && picked.former !== picked.current) {
+    const former = stores.raise.getSchedule(candidateId, picked.former);
+    const moved = stores.raise.chooseResume(candidateId, picked.id,
+      choicePatch(former, stores.raise.getSchedule(candidateId, picked.id), former?.enabled ?? true, now), now.toISOString());
+    return answer(request, viewOf(picked.listed, picked.id, moved));
+  }
   // Расписание заводится при первом чтении подключённого резюме: первое поднятие со сдвигом.
   const row = stores.raise.getSchedule(candidateId, picked.id) ?? stores.raise.patchSchedule(
     candidateId, picked.id, { nextRaiseAt: firstRaiseAt(now) }, now.toISOString());
-  return answer(request, viewOf(true, picked.id, row));
+  return answer(request, viewOf(picked.listed, picked.id, row));
 };
 
 const putToggle = withResume((stores, candidateId, id, request, reply) => {
@@ -85,13 +96,19 @@ const putToggle = withResume((stores, candidateId, id, request, reply) => {
   if (!body.success) return sendError(reply, request, 400, 'invalid_hh_raise', 'Запрос заполнен неверно.', false);
   const now = new Date();
   const current = stores.raise.getSchedule(candidateId, id);
+  const { listed, former } = pickResume(stores, candidateId);
+  if (former && former !== id) {
+    const chosen = stores.raise.chooseResume(candidateId, id,
+      choicePatch(stores.raise.getSchedule(candidateId, former), current, body.data.enabled, now), now.toISOString());
+    return answer(request, viewOf(listed, id, chosen));
+  }
   const reconnect = body.data.enabled && current?.pauseReason === 'logged_out';
-  const row = stores.raise.patchSchedule(candidateId, id, {
+  const row = stores.raise.chooseResume(candidateId, id, {
     enabled: body.data.enabled,
     ...(reconnect ? { pauseReason: null, pausedUntil: null } : {}),
     ...(body.data.enabled && !current?.nextRaiseAt ? { nextRaiseAt: firstRaiseAt(now) } : {}),
   }, now.toISOString());
-  return answer(request, viewOf(true, id, row));
+  return answer(request, viewOf(listed, id, row));
 }, (request) => (request.body as { resumeId?: string } | null)?.resumeId);
 
 const postRetry = withResume((stores, candidateId, id, request, reply) => {
@@ -100,7 +117,8 @@ const postRetry = withResume((stores, candidateId, id, request, reply) => {
   if (!emptyBody.safeParse(request.body).success) return refuse(400, 'invalid_hh_raise', 'Запрос заполнен неверно.');
   const now = new Date();
   const row = stores.raise.getSchedule(candidateId, id);
-  if (row?.lastResult !== 'error') return refuse(409, 'hh_raise_nothing_to_retry', 'Повторять нечего.');
+  const { listed, current } = pickResume(stores, candidateId);
+  if (id !== current || row?.lastResult !== 'error') return refuse(409, 'hh_raise_nothing_to_retry', 'Повторять нечего.');
   if (row.pauseReason === 'logged_out') return refuse(409, 'hh_reconnect_required', 'Войдите в hh.ru заново.');
   if (row.pauseReason === 'captcha' && row.pausedUntil && Date.parse(row.pausedUntil) > now.getTime()) {
     return refuse(409, 'hh_raise_paused', 'Поднятие приостановлено.', { pausedUntil: row.pausedUntil });
@@ -111,7 +129,7 @@ const postRetry = withResume((stores, candidateId, id, request, reply) => {
   }
   if (!stores.raise.hasOpenTask(candidateId, id)) stores.raise.enqueue(candidateId, id, now.toISOString());
   const queued = stores.raise.patchSchedule(candidateId, id, { enabled: true, pauseReason: null, pausedUntil: null, nextRaiseAt: now.toISOString() }, now.toISOString());
-  return answer(request, viewOf(true, id, queued));
+  return answer(request, viewOf(listed, id, queued));
 }, (request) => (request.body as { resumeId?: string } | null)?.resumeId);
 
 /** Клиент берёт задание и исполняет его в окне сессии кандидата; сервер в hh не ходит. */
@@ -132,7 +150,7 @@ const postResult: Handler = (stores, candidateId, request, reply) => {
   if (!task) return sendError(reply, request, 409, 'hh_raise_task_closed', 'Это задание закрыто или чужое.', false);
   const row = stores.raise.patchSchedule(candidateId, task.resumeId, applyOutcome(body.data.outcome, now), now.toISOString());
   noteLoginChange(stores, request, candidateId, body.data.outcome);
-  return answer(request, viewOf(true, task.resumeId, row));
+  return answer(request, viewOf(pickResume(stores, candidateId).listed, task.resumeId, row));
 };
 
 /** B690: первый упор в страницу входа — уведомление; удачное поднятие — вход жив, уведомление снято. */

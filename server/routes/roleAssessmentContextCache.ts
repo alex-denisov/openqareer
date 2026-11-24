@@ -14,19 +14,42 @@ interface Cached<T> {
 
 export class RoleContextCache<T> {
   private readonly bySnapshot = new WeakMap<object, Map<string, Cached<T>>>();
+  /** B770: a build runs in slices, so a second reader waits for the one under way. */
+  private readonly underWay = new WeakMap<object, Map<string, Promise<T>>>();
 
   constructor(
     private readonly ttlMs = CONTEXT_TTL_MS,
     private readonly clock: () => number = Date.now,
   ) {}
 
-  read(snapshot: object, key: string, build: () => T, settled: (value: T) => boolean = () => false): T {
+  async read(
+    snapshot: object,
+    key: string,
+    build: () => T | Promise<T>,
+    settled: (value: T) => boolean = () => false,
+  ): Promise<T> {
     const now = this.clock();
     const known = this.bySnapshot.get(snapshot) ?? new Map<string, Cached<T>>();
     const cached = known.get(key);
     if (cached && (cached.settled || now - cached.at < this.ttlMs)) return cached.value;
-    const value = build();
-    known.set(key, { at: now, value, settled: settled(value) });
+    const builds = this.underWay.get(snapshot) ?? new Map<string, Promise<T>>();
+    this.underWay.set(snapshot, builds);
+    const started = builds.get(key);
+    if (started) return started;
+    const building = this.build(snapshot, key, build, settled).finally(() => builds.delete(key));
+    builds.set(key, building);
+    return building;
+  }
+
+  private async build(
+    snapshot: object,
+    key: string,
+    build: () => T | Promise<T>,
+    settled: (value: T) => boolean,
+  ): Promise<T> {
+    const value = await build();
+    const known = this.bySnapshot.get(snapshot) ?? new Map<string, Cached<T>>();
+    known.set(key, { at: this.clock(), value, settled: settled(value) });
     this.bySnapshot.set(snapshot, known);
     return value;
   }

@@ -12,6 +12,7 @@ use crate::connector_session::{
 };
 use crate::hh_apply_scripts::{
     letter_script, open_script, popup_script, result_script, resume_script, submit_script,
+    window_script,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -68,8 +69,7 @@ struct StepResult {
     code: String,
 }
 
-pub fn validate_request(request: &HhApplyRequest) -> Result<(), String> {
-    let vacancy = &request.vacancy_id;
+fn validate_vacancy(vacancy: &str) -> Result<(), String> {
     if vacancy.is_empty()
         || vacancy.len() > 15
         || vacancy.starts_with('0')
@@ -77,6 +77,11 @@ pub fn validate_request(request: &HhApplyRequest) -> Result<(), String> {
     {
         return Err("vacancy_id_invalid".into());
     }
+    Ok(())
+}
+
+pub fn validate_request(request: &HhApplyRequest) -> Result<(), String> {
+    validate_vacancy(&request.vacancy_id)?;
     let resume = &request.resume_id;
     if resume.is_empty() || resume.len() > 64 || !resume.chars().all(|c| c.is_ascii_alphanumeric())
     {
@@ -216,6 +221,21 @@ pub async fn run_hh_apply(
     // After the click the pop-up may stay open while hh.ru answers.
     let result = wait_for(&window, &result_script(), RESULT_WAIT).await;
     Ok(report_for(&result))
+}
+
+/// B708: `sent` when the open hh.ru window shows the response to this vacancy,
+/// `waiting` otherwise. Never navigates, reloads or clicks.
+pub async fn read_hh_apply_window(app: &AppHandle, vacancy_id: &str) -> Result<String, String> {
+    validate_vacancy(vacancy_id)?;
+    let label = session_window_label("hh").ok_or("unsupported_platform")?;
+    let window = app.get_webview(label).ok_or("session_window_missing")?;
+    match step(&window, &window_script(vacancy_id)).await {
+        Ok(code) => Ok(code),
+        Err(error) if is_transient_eval_error(&error) || error == "step_shape" => {
+            Ok("waiting".into())
+        }
+        Err(error) => Err(error),
+    }
 }
 
 #[cfg(test)]

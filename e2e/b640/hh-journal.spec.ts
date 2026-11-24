@@ -59,14 +59,28 @@ async function mockHh(page: Page, connected: boolean): Promise<void> {
     route.fulfill({ json: { data: [hh(connected)] } }),
   );
   let enabled = true;
+  let resumeId = 'cv-1';
   await page.route('**/api/v1/candidate/b640/hh/raise', (route) => {
-    if (route.request().method() === 'PUT')
-      enabled = Boolean(route.request().postDataJSON()?.enabled);
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON();
+      enabled = Boolean(body?.enabled);
+      resumeId = body?.resumeId ?? resumeId;
+    }
     return route.fulfill({
       json: {
         data: {
           connected,
-          resumeId: connected ? 'cv-1' : null,
+          resumeId: connected ? resumeId : null,
+          resumes: connected
+            ? [
+                {
+                  id: 'cv-1',
+                  title: 'Руководитель разработки',
+                  updatedLabel: 'обновлено 3 ноября',
+                },
+                { id: 'cv-2', title: 'Ведущий разработчик Go', updatedLabel: 'обновлено в 2023' },
+              ]
+            : [],
           enabled,
           everyHours: 4,
           lastRaisedAt: '2026-11-19T06:40:00.000Z',
@@ -124,7 +138,9 @@ async function mockJournal(
 }
 
 test.describe('B664/B696: hh.ru и журнал LinkedIn нового кабинета', () => {
-  test('hh.ru подключён: «Автоподнятие резюме», данные, без аналитики', async ({ page }) => {
+  test('hh.ru подключён: «Автоподнятие резюме» и выбор резюме, данные, без аналитики', async ({
+    page,
+  }) => {
     await mockHh(page, true);
     await page.goto(HH_PATH, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('[data-b640-node="a11"]')).toBeVisible({ timeout: 15_000 });
@@ -136,6 +152,11 @@ test.describe('B664/B696: hh.ru и журнал LinkedIn нового кабин
     const raise = page.getByRole('switch', { name: 'Автоподнятие резюме' });
     await expect(raise).toBeChecked();
     await expect(page.getByText(/^Резюме поднято · /u)).toBeVisible();
+    const resume = page.getByLabel('Резюме', { exact: true });
+    await expect(resume).toHaveValue('cv-1');
+    await resume.selectOption('Ведущий разработчик Go · обновлено в 2023');
+    await expect(resume).toBeEnabled();
+    await expect(resume).toHaveValue('cv-2');
     await raise.click();
     await expect(raise).not.toBeChecked();
     await expectGates(page);
