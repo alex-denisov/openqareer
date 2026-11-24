@@ -5,6 +5,6 @@
 export const ACTIONS_ON_BEHALF_VERSION = 'actions_on_behalf-v1.1';
 
 /** Принята ли действующая редакция поручения; `accepted` — версии документов, принятые кандидатом. */
-export function hasActionsMandate(accepted: readonly string[]): boolean {
+export function hasApplyMandate(accepted: readonly string[]): boolean {
   return accepted.includes(ACTIONS_ON_BEHALF_VERSION);
 }

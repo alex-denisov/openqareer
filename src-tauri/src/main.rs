@@ -3,8 +3,11 @@
 
 mod app_sign_in;
 mod ats_apply;
+mod ats_attempts;
 mod ats_boards;
+mod ats_files;
 mod ats_form_scripts;
+mod ats_model;
 mod ats_steps;
 mod ats_target;
 mod automation_worker;
@@ -154,8 +157,8 @@ fn cabinet_only(webview: &tauri::Webview) -> Result<(), String> {
 async fn ats_form_open(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::OpenRequest,
-) -> Result<ats_apply::FormReport, String> {
+    request: ats_model::OpenRequest,
+) -> Result<ats_model::FormReport, String> {
     cabinet_only(&webview)?;
     ats_apply::open_form(&app, request).await
 }
@@ -176,7 +179,7 @@ async fn ats_form_options(
 async fn ats_form_next(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::SubmitRequest,
+    request: ats_steps::NextRequest,
 ) -> Result<ats_steps::StepReport, String> {
     cabinet_only(&webview)?;
     ats_steps::next_step(&app, request).await
@@ -186,8 +189,8 @@ async fn ats_form_next(
 async fn ats_form_fill(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::FillRequest,
-) -> Result<ats_apply::FillReport, String> {
+    request: ats_model::FillRequest,
+) -> Result<ats_model::FillReport, String> {
     cabinet_only(&webview)?;
     ats_apply::fill_form(&app, request).await
 }
@@ -197,8 +200,8 @@ async fn ats_form_fill(
 async fn ats_form_submit(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::SubmitRequest,
-) -> Result<ats_apply::Receipt, String> {
+    request: ats_model::SubmitRequest,
+) -> Result<ats_model::Receipt, String> {
     cabinet_only(&webview)?;
     ats_apply::submit_form(&app, request).await
 }
@@ -208,9 +211,26 @@ async fn ats_form_outcome(
     app: AppHandle,
     webview: tauri::Webview,
     vacancy_id: String,
-) -> Result<ats_apply::Receipt, String> {
+) -> Result<ats_model::Receipt, String> {
     cabinet_only(&webview)?;
     ats_apply::read_form_outcome(&app, &vacancy_id).await
+}
+
+#[tauri::command]
+async fn ats_form_attempt(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<Option<ats_attempts::Attempt>, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_attempt(&app, &vacancy_id)
+}
+
+/// Removes the cookies and files of employer forms when the candidate leaves.
+#[tauri::command]
+async fn ats_form_erase(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::erase_bound_form_store(&app).await
 }
 
 /// Shows the form window; the cabinet calls it only for the candidate's press.
@@ -727,6 +747,8 @@ fn main() {
             ats_form_next,
             ats_form_submit,
             ats_form_outcome,
+            ats_form_attempt,
+            ats_form_erase,
             ats_form_show,
             ats_form_close,
             run_hh_resume_edit,

@@ -1,4 +1,3 @@
-/* eslint-disable no-undef -- the app substitutes the operation and its argument before the script runs */
 (function () {
   var OP = __OQ_ATS_OP__;
   var ARG = __OQ_ATS_ARG__;
@@ -57,8 +56,6 @@
   var MAX_OPTIONS = 300;
   var CAPTCHA_FRAMES =
     'iframe[src*="recaptcha"][src*="bframe"], iframe[src*="hcaptcha.com"][src*="challenge"], iframe[src*="challenges.cloudflare.com"], iframe[src*="/captcha/v1/"][src*="frame=challenge"]';
-  var DONE_TEXT =
-    /thank you for applying|application (has been |was )?(submitted|received)|we('ve| have) received your application/i;
   var MENU_WAIT_MS = 120;
   var MENU_TRIES = 15;
 
@@ -675,8 +672,19 @@
       })
       .filter(Boolean);
   }
+  // The page may have changed its own address since the app last looked.
+  function inPlace() {
+    var path = ARG && ARG.path ? ARG.path.replace(/\/+$/, '') : '';
+    return Boolean(
+      path &&
+      ARG.hosts.indexOf(location.hostname) >= 0 &&
+      location.protocol === 'https:' &&
+      (location.pathname === path || location.pathname.indexOf(path + '/') === 0),
+    );
+  }
   // Moves to the next page of the form; never the button that sends it.
   function next() {
+    if (!inPlace()) return { state: 'off_target' };
     var form = findForm();
     if (!form) return { state: 'form_missing' };
     if (captcha()) return { state: 'captcha' };
@@ -700,6 +708,7 @@
   }
 
   function submit() {
+    if (!inPlace()) return { state: 'off_target' };
     if (window.__oqAtsSubmitted) return { state: 'already_submitted' };
     var form = findForm();
     if (!form) return { state: 'form_missing' };
@@ -717,11 +726,9 @@
   }
   function outcome() {
     var confirmPath = ARG && ARG.confirmationPath;
-    var onConfirm = Boolean(confirmPath && location.pathname.indexOf(confirmPath) >= 0);
+    var here = location.pathname.replace(/\/+$/, '');
+    if (confirmPath && here === confirmPath) return { state: 'confirmed', path: location.pathname };
     var form = findForm();
-    var body = text(document.body).slice(0, 4000);
-    if (onConfirm || (!form && DONE_TEXT.test(body)))
-      return { state: 'confirmed', path: location.pathname };
     if (captcha()) return { state: 'captcha' };
     if (form) {
       var invalid = Array.prototype.slice

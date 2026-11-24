@@ -34,6 +34,7 @@ fn target(
         entry_url: format!("https://{host}{entry_path}"),
         hosts: vec![host.to_string()],
         confirmation_path,
+        post_path: None,
     }
 }
 
@@ -46,8 +47,7 @@ fn ashby(host: &str, parts: &[&str]) -> Option<AtsTarget> {
         return None;
     }
     let path = format!("/{board}/{job}/application");
-    // The board confirms in place: the form gives way to its own message.
-    Some(target("ashby", host, &path, format!("{path}/submitted")))
+    Some(target("ashby", host, &path, String::new()))
 }
 
 fn lever(host: &str, parts: &[&str]) -> Option<AtsTarget> {
@@ -74,12 +74,7 @@ fn recruitee(host: &str, parts: &[&str]) -> Option<AtsTarget> {
         return None;
     }
     let path = format!("/o/{job}/c/new");
-    Some(target(
-        "recruitee",
-        host,
-        &path,
-        format!("{path}/submitted"),
-    ))
+    Some(target("recruitee", host, &path, String::new()))
 }
 
 fn teamtailor(host: &str, parts: &[&str]) -> Option<AtsTarget> {
@@ -91,29 +86,24 @@ fn teamtailor(host: &str, parts: &[&str]) -> Option<AtsTarget> {
         return None;
     }
     let path = format!("/jobs/{job}/applications");
-    Some(target(
-        "teamtailor",
-        host,
-        &format!("{path}/new"),
-        format!("{path}/submitted"),
-    ))
+    Some(AtsTarget {
+        post_path: Some("/applications".to_string()),
+        ..target("teamtailor", host, &format!("{path}/new"), String::new())
+    })
 }
 
-fn workable(host: &str, parts: &[&str]) -> Option<AtsTarget> {
+/// The short address names no company; the board's own page always does.
+fn workable(host: &str, parts: &[&str], board: Option<&str>) -> Option<AtsTarget> {
     let (company, job, rest) = match parts {
-        ["j", job, rest @ ..] => (None, job, rest),
-        [company, "j", job, rest @ ..] => (Some(company), job, rest),
+        ["j", job, rest @ ..] => (board?, job, rest),
+        [company, "j", job, rest @ ..] => (*company, job, rest),
         _ => return None,
     };
-    let sound = company.is_none_or(|name| is_token(name)) && is_token(job);
-    if !sound || !matches!(rest, [] | ["apply"]) {
+    if !is_token(company) || !is_token(job) || !matches!(rest, [] | ["apply"]) {
         return None;
     }
-    let path = match company {
-        Some(company) => format!("/{company}/j/{job}/apply"),
-        None => format!("/j/{job}/apply"),
-    };
-    Some(target("workable", host, &path, format!("{path}/submitted")))
+    let path = format!("/{company}/j/{job}/apply");
+    Some(target("workable", host, &path, String::new()))
 }
 
 fn pinpoint(host: &str, parts: &[&str]) -> Option<AtsTarget> {
@@ -128,16 +118,14 @@ fn pinpoint(host: &str, parts: &[&str]) -> Option<AtsTarget> {
         return None;
     }
     let path = format!("{prefix}/postings/{job}/applications");
-    Some(target(
-        "pinpoint",
-        host,
-        &format!("{path}/new"),
-        format!("{path}/submitted"),
-    ))
+    Some(AtsTarget {
+        post_path: Some(path.clone()),
+        ..target("pinpoint", host, &format!("{path}/new"), String::new())
+    })
 }
 
 /// `None` when the host is not one of these boards.
-pub fn resolve(url: &Url) -> Option<Result<AtsTarget, String>> {
+pub fn resolve(url: &Url, board: Option<&str>) -> Option<Result<AtsTarget, String>> {
     let host = url.host_str()?;
     let parts: Vec<&str> = url
         .path()
@@ -151,7 +139,7 @@ pub fn resolve(url: &Url) -> Option<Result<AtsTarget, String>> {
     let found = match host {
         "jobs.ashbyhq.com" => ashby(host, &parts),
         "jobs.lever.co" | "jobs.eu.lever.co" => lever(host, &parts),
-        "apply.workable.com" => workable(host, &parts),
+        "apply.workable.com" => workable(host, &parts, board),
         _ if company(".pinpointhq.com") => pinpoint(host, &parts),
         _ if company(".recruitee.com") => recruitee(host, &parts),
         _ if company(".teamtailor.com") => teamtailor(host, &parts),
@@ -208,10 +196,6 @@ mod tests {
             assert_eq!(target.adapter, adapter);
             assert_eq!(target.entry_url, entry);
             assert_eq!(target.hosts.len(), 1, "{url}");
-            assert!(
-                !target.entry_url.ends_with(&target.confirmation_path),
-                "{url}"
-            );
         }
         let target = resolve(&lever, None).unwrap();
         assert_eq!(target.confirmation_path, format!("/acme/{JOB}/thanks"));

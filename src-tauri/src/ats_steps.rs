@@ -2,10 +2,8 @@
 //! «Next» is pressed only for values the candidate confirmed and the page still
 //! holds; the sending button is never pressed here (see `ats_apply::submit_form`).
 
-use crate::ats_apply::{
-    current_target, form_report, is_id, note, page, poll, still_on_target, values_of, AtsFormState,
-    FormReport, SubmitRequest, Values,
-};
+use crate::ats_apply::{current_target, note, page, place_of, poll, still_on_target, AtsFormState};
+use crate::ats_model::{file_fields_of, form_report, is_id, listed, values_of, FormReport, Values};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -15,6 +13,13 @@ const MENU_WAIT: Duration = Duration::from_secs(40);
 const STEP_WAIT: Duration = Duration::from_secs(25);
 /// Lists opened while the form is read; a longer form asks per field.
 const MAX_MENUS: usize = 12;
+const NEXT_REFUSALS: &[&str] = &[
+    "captcha",
+    "form_missing",
+    "next_ambiguous",
+    "next_disabled",
+    "off_target",
+];
 const MAX_QUERY_CHARS: usize = 120;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -24,6 +29,15 @@ pub struct OptionsRequest {
     pub key: String,
     #[serde(default)]
     pub query: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NextRequest {
+    pub vacancy_id: String,
+    /// The candidate confirmed exactly these values of this page.
+    pub confirmed: bool,
+    pub values: Values,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -112,14 +126,23 @@ pub async fn read_options(app: &AppHandle, request: OptionsRequest) -> Result<Va
 
 /// Why «Next» must not be pressed: the same double check as the last page.
 fn next_refusal(
-    request: &SubmitRequest,
+    request: &NextRequest,
     filled: Option<&Values>,
     now: &Values,
 ) -> Option<&'static str> {
-    crate::ats_apply::submit_refusal(request, filled, now, false)
+    if !request.confirmed {
+        return Some("not_confirmed");
+    }
+    let Some(first) = filled else {
+        return Some("form_not_filled");
+    };
+    if first != &request.values {
+        return Some("confirmed_values_differ");
+    }
+    (now != first).then_some("form_changed")
 }
 
-pub async fn next_step(app: &AppHandle, request: SubmitRequest) -> Result<StepReport, String> {
+pub async fn next_step(app: &AppHandle, request: NextRequest) -> Result<StepReport, String> {
     let target = current_target(app, &request.vacancy_id)?;
     if !still_on_target(app, &target) {
         return Ok(stopped("not_moved", Some("off_target"), Vec::new()));
@@ -137,9 +160,9 @@ pub async fn next_step(app: &AppHandle, request: SubmitRequest) -> Result<StepRe
             run.filled = None;
         }
     }
-    let press = page(app, "next", &Value::Null).await?;
+    let press = page(app, "next", &place_of(&target)).await?;
     if press["state"] != "clicked" {
-        let reason = press["state"].as_str().unwrap_or("press_unknown");
+        let reason = listed(press["state"].as_str(), NEXT_REFUSALS, "press_unknown");
         let state = if reason == "captcha" {
             "captcha"
         } else {
@@ -155,10 +178,23 @@ pub async fn next_step(app: &AppHandle, request: SubmitRequest) -> Result<StepRe
         )
     })
     .await?;
-    note(app, "next", last["state"].as_str().unwrap_or("unknown"));
+    note(
+        app,
+        "next",
+        listed(
+            last["state"].as_str(),
+            &["moved", "invalid", "captcha"],
+            "no_answer",
+        ),
+    );
     match last["state"].as_str() {
         Some("moved") => {
             let form = with_menus(app, last["form"].clone()).await;
+            if let Ok(mut run) = state.run.lock() {
+                if let Some(run) = run.as_mut() {
+                    run.file_fields = file_fields_of(&form);
+                }
+            }
             let on_board = still_on_target(app, &target);
             Ok(StepReport {
                 form: Some(form_report(&target, form, on_board)),
@@ -199,7 +235,7 @@ mod tests {
     #[test]
     fn a_page_is_left_only_with_confirmed_unchanged_values() {
         let values = |value: &str| Values::from([("id:a".to_string(), value.to_string())]);
-        let request = |confirmed| SubmitRequest {
+        let request = |confirmed| NextRequest {
             vacancy_id: "v1".into(),
             confirmed,
             values: values("1"),

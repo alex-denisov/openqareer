@@ -70,6 +70,10 @@ mod tests {
         script(name, &argument).unwrap()
     }
 
+    fn press(name: &str) -> String {
+        op(name, json!({ "hosts": ["hh.ru"], "path": "/acme" }))
+    }
+
     fn parsed(value: &Value, index: usize) -> Value {
         serde_json::from_str(value["results"][index].as_str().unwrap()).unwrap()
     }
@@ -177,7 +181,7 @@ mod tests {
 
     #[test]
     fn presses_the_only_submit_button_once() {
-        let scripts = [op("submit", json!(null)), op("submit", json!(null))];
+        let scripts = [press("submit"), press("submit")];
         let setup = "document.getElementById('application-form').addEventListener('submit', e => e.preventDefault());";
         let Some(out) = run(BOARD, "/acme/jobs/1", setup, &scripts) else {
             return;
@@ -196,7 +200,7 @@ mod tests {
         );
         let off = BOARD.replace(r#"aria-disabled="false""#, r#"aria-disabled="true""#);
         for (html, state) in [(two, "submit_ambiguous"), (off, "submit_disabled")] {
-            let Some(out) = run(&html, "/acme/jobs/1", "", &[op("submit", json!(null))]) else {
+            let Some(out) = run(&html, "/acme/jobs/1", "", &[press("submit")]) else {
                 return;
             };
             assert_eq!(parsed(&out, 0)["state"], state);
@@ -216,7 +220,12 @@ mod tests {
             (
                 "<h1>Thank you for applying.</h1>",
                 "/acme/jobs/1",
-                "confirmed",
+                "pending",
+            ),
+            (
+                "<h1>Thank you for applying.</h1>",
+                "/x/acme/jobs/1/confirmation",
+                "pending",
             ),
             ("<h1>Something</h1>", "/acme/jobs/1", "pending"),
             (BOARD, "/acme/jobs/1", "pending"),
@@ -419,25 +428,25 @@ mod tests {
     #[test]
     fn steps_are_walked_one_page_at_a_time_and_only_the_last_one_sends() {
         let name = json!({ "entries": [{ "key": "id:name", "value": "Test" }] });
-        let moved = || op("moved", json!({ "signature": "/a|id:name" }));
+        let moved = || op("moved", json!({ "signature": "/acme|id:name" }));
         let scripts = [
             op("read", json!(null)),
-            op("submit", json!(null)),
-            op("next", json!(null)),
+            press("submit"),
+            press("next"),
             moved(),
             op("fill", name),
-            op("next", json!(null)),
+            press("next"),
             moved(),
-            op("next", json!(null)),
-            op("submit", json!(null)),
-            op("submit", json!(null)),
+            press("next"),
+            press("submit"),
+            press("submit"),
         ];
-        let Some(out) = run(STEPS, "/a", &format!("{NO_WAIT}{STEPS_SETUP}"), &scripts) else {
+        let Some(out) = run(STEPS, "/acme", &format!("{NO_WAIT}{STEPS_SETUP}"), &scripts) else {
             return;
         };
         let state = |index: usize| parsed(&out, index)["state"].clone();
         assert_eq!(parsed(&out, 0)["step"], "next");
-        assert_eq!(parsed(&out, 0)["signature"], "/a|id:name");
+        assert_eq!(parsed(&out, 0)["signature"], "/acme|id:name");
         assert_eq!(state(1), "submit_ambiguous");
         assert_eq!(state(2), "clicked");
         assert_eq!(
@@ -451,5 +460,31 @@ mod tests {
         assert_eq!(state(7), "next_ambiguous");
         assert_eq!(state(8), "clicked");
         assert_eq!(state(9), "already_submitted");
+    }
+
+    #[test]
+    fn nothing_is_pressed_once_the_page_has_left_its_address() {
+        let at = |path: &str, host: &str| json!({ "hosts": [host], "path": path });
+        for (argument, state) in [
+            (json!(null), "off_target"),
+            (at("/acme/jobs/1", "other.example"), "off_target"),
+            (at("/acme/jobs/2", "hh.ru"), "off_target"),
+            (at("/acme/jobs", "hh.ru"), "clicked"),
+            (at("/acme/jobs/1", "hh.ru"), "clicked"),
+        ] {
+            let Some(out) = run(BOARD, "/acme/jobs/1", "", &[op("submit", argument)]) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], state);
+            assert_eq!(
+                out["clicks"].as_array().unwrap().len(),
+                usize::from(state == "clicked")
+            );
+        }
+        // The application path moved between the last look and the press.
+        let moved = "history.pushState(null, '', '/acme/jobs/12');";
+        let script = [op("submit", at("/acme/jobs/1", "hh.ru"))];
+        let out = run(BOARD, "/acme/jobs/1", moved, &script).unwrap();
+        assert_eq!(parsed(&out, 0)["state"], "off_target");
     }
 }

@@ -613,25 +613,50 @@ pub fn bind_candidate_account(app: &AppHandle, key: Option<String>) -> Result<bo
         close_session_window(app, "linkedin");
         close_session_window(app, "hh");
         crate::ats_apply::close_form_window(app);
-        *current = key;
+        // Employer forms keep no session worth returning to: the signed-out or
+        // deleted candidate leaves none of their cookies on the device (B787).
+        if let Some(previous) = std::mem::replace(&mut *current, key) {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if crate::ats_apply::erase_form_store(&app, &previous)
+                    .await
+                    .is_err()
+                {
+                    let _ =
+                        append_connector_diagnostic(&app, "ats-form", "erase", Some("failed"));
+                }
+            });
+        }
     }
     Ok(current.is_some())
 }
 
-pub(crate) fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
-    let key = app
-        .state::<CandidateSessionAccount>()
+pub(crate) fn bound_account_key(app: &AppHandle) -> Result<String, String> {
+    app.state::<CandidateSessionAccount>()
         .0
         .lock()
         .map_err(|_| "account_state_unavailable".to_string())?
         .clone()
-        .ok_or_else(|| "account_not_bound".to_string())?;
-    let identifier = account_store_identifier(&key)?;
+        .ok_or_else(|| "account_not_bound".to_string())
+}
+
+pub(crate) fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
+    candidate_store_of(app, &bound_account_key(app)?)
+}
+
+pub(crate) fn candidate_store_of(
+    app: &AppHandle,
+    key: &str,
+) -> Result<(PathBuf, [u8; 16]), String> {
+    if !is_valid_account_key(key) {
+        return Err("account_key_invalid".to_string());
+    }
+    let identifier = account_store_identifier(key)?;
     let app_data_dir = app
         .path()
         .app_data_dir()
         .map_err(|_| "candidate_session_data_dir_unavailable".to_string())?;
-    let directory = candidate_data_directory(&app_data_dir, &key)?;
+    let directory = candidate_data_directory(&app_data_dir, key)?;
     Ok((directory, identifier))
 }
 

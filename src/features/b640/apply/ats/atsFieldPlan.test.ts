@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { planForm, type CandidateFacts, type PlanContext } from './atsFieldPlan';
 import type { AtsField, AtsFormReport, AtsReceipt } from './atsFormTypes';
 import { manualCaseAfterSubmit, manualCaseBeforeSubmit } from './atsManualReason';
-import { ACTIONS_ON_BEHALF_VERSION, hasActionsMandate } from './atsMandate';
+import { ACTIONS_ON_BEHALF_VERSION, hasApplyMandate } from './atsMandate';
 
 const field = (key: string, label: string, extra: Partial<AtsField> = {}): AtsField => ({
   key,
@@ -84,6 +84,79 @@ describe('план заполнения формы работодателя', ()
     expect(without.entries).toEqual([]);
     expect(without.consents).toEqual([]);
     expect(without.questions[0]?.reason).toBe('consent_needs_mandate');
+  });
+
+  it('необязательную галочку обработки не ставит даже по ответу кандидата', () => {
+    const consent = box('id:gdpr', 'I agree to the Privacy Policy', false);
+    const cases: Record<string, string>[] = [{}, { 'id:gdpr': 'true' }];
+    for (const answers of cases) {
+      expect(plan([consent], true, answers)).toEqual({ entries: [], questions: [], consents: [] });
+    }
+  });
+
+  it('ответ кандидата на обязательную галочку обработки тоже требует поручения и пишется в журнал', () => {
+    const consent = box('id:gdpr', 'I agree to the Privacy Policy');
+    const accepted = plan([consent], true, { 'id:gdpr': 'true' });
+    expect(accepted.entries).toEqual([{ key: 'id:gdpr', value: 'true' }]);
+    expect(accepted.consents.map((item) => item.key)).toEqual(['id:gdpr']);
+    const without = plan([consent], false, { 'id:gdpr': 'true' });
+    expect(without.entries).toEqual([]);
+    expect(without.questions.map((item) => item.reason)).toEqual(['consent_needs_mandate']);
+    const refused = plan([consent], true, { 'id:gdpr': 'false' });
+    expect(refused.entries).toEqual([]);
+    expect(refused.consents).toEqual([]);
+    expect(refused.questions.map((item) => item.reason)).toEqual(['no_answer']);
+  });
+
+  it('галочка с фактом и обработкой сразу ждёт ответа кандидата и пишется как согласие', () => {
+    const mixed = box('id:m', 'I certify this is true and consent to processing of my data');
+    expect(plan([mixed]).questions.map((item) => item.reason)).toEqual(['fact_needed']);
+    const answered = plan([mixed], true, { 'id:m': 'true' });
+    expect(answered.entries).toEqual([{ key: 'id:m', value: 'true' }]);
+    expect(answered.consents.map((item) => item.key)).toEqual(['id:m']);
+    expect(plan([mixed], false, { 'id:m': 'true' }).entries).toEqual([]);
+  });
+
+  it('согласие списком: «да» кандидата требует поручения и журнала, «нет» — это не согласие', () => {
+    const list = field('id:l', 'Do you agree to the Privacy Policy?', {
+      kind: 'select',
+      options: [
+        { value: '1', label: 'Yes' },
+        { value: '0', label: 'No' },
+      ],
+    });
+    expect(plan([list], true, { 'id:l': '1' }).consents.map((item) => item.key)).toEqual(['id:l']);
+    expect(plan([list], false, { 'id:l': '1' }).entries).toEqual([]);
+    const no = plan([list], true, { 'id:l': 'No' });
+    expect(no.entries).toEqual([{ key: 'id:l', value: 'No' }]);
+    expect(no.consents).toEqual([]);
+  });
+
+  it.each(['Я даю согласие', 'Даю согласие', 'Я согласна', 'I give my consent'])(
+    '«%s» в списке — согласие: поручение и журнал',
+    (label) => {
+      const options = [
+        { value: '1', label },
+        { value: '0', label: 'Я не даю согласие' },
+      ];
+      const list = field('id:l', 'Обработка персональных данных', { kind: 'select', options });
+      const given = plan([list], true, { 'id:l': '1' });
+      expect(given.consents.map((item) => item.key)).toEqual(['id:l']);
+      expect(plan([list], false, { 'id:l': '1' }).entries).toEqual([]);
+      expect(plan([list], true, { 'id:l': '0' }).consents).toEqual([]);
+    },
+  );
+
+  it('согласие среди нескольких галочек одного вопроса тоже требует поручения и журнала', () => {
+    const options = ['Москва', 'Даю согласие на обработку персональных данных'].map((label) => ({
+      value: label,
+      label,
+    }));
+    const group = field('name:g', 'Отметьте нужное', { kind: 'checkbox_group', options });
+    const both = { 'name:g': options.map((option) => option.value).join('\n') };
+    expect(plan([group], true, both).consents.map((item) => item.key)).toEqual(['name:g']);
+    expect(plan([group], false, both).entries).toEqual([]);
+    expect(plan([group], true, { 'name:g': 'Москва' }).consents).toEqual([]);
   });
 
   it('рассылки и хранение на будущее не ставит никогда, даже по ответу; обязательные — вопрос', () => {
@@ -169,9 +242,9 @@ describe('план заполнения формы работодателя', ()
 describe('поручение и коды причин для очереди', () => {
   it('поручение принято только при действующей редакции', () => {
     expect(ACTIONS_ON_BEHALF_VERSION).toBe('actions_on_behalf-v1.1');
-    expect(hasActionsMandate(['terms-v3', 'actions_on_behalf-v1.1'])).toBe(true);
-    expect(hasActionsMandate(['actions_on_behalf-v1.0'])).toBe(false);
-    expect(hasActionsMandate([])).toBe(false);
+    expect(hasApplyMandate(['terms-v3', 'actions_on_behalf-v1.1'])).toBe(true);
+    expect(hasApplyMandate(['actions_on_behalf-v1.0'])).toBe(false);
+    expect(hasApplyMandate([])).toBe(false);
   });
 
   const report = (state: AtsFormReport['state']): AtsFormReport => ({
@@ -217,6 +290,8 @@ describe('поручение и коды причин для очереди', ()
     const ready = plan([field('id:first_name', 'First Name')]);
     expect(manualCaseAfterSubmit(receipt('confirmed'), ready)).toBeNull();
     expect(manualCaseAfterSubmit(receipt('unconfirmed'), ready)?.code).toBe('unconfirmed');
+    const again = { ...receipt('not_submitted'), reason: 'already_submitted' as const };
+    expect(manualCaseAfterSubmit(again, ready)?.code).toBe('unconfirmed');
     expect(manualCaseAfterSubmit(receipt('captcha'), ready)?.code).toBe('captcha');
     expect(manualCaseAfterSubmit(receipt('rejected', ['id:email']), ready)).toMatchObject({
       code: 'rejected_form',
