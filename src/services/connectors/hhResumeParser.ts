@@ -314,7 +314,32 @@ function resumeCardTitle(linkHtml: string): string {
   return name || text;
 }
 
-export function parseHhResumesList(html: string): Array<{
+const RESUME_CARD_MAX = 20_000;
+
+/** Карточка резюме — от его ссылки до ссылки на другое резюме. */
+function resumeCardHtml(html: string, start: number, resumeId: string): string {
+  const rest = html.slice(start, start + RESUME_CARD_MAX);
+  for (const link of rest.matchAll(/<a\b[^>]*?\shref=["']([^"']+)["']/giu)) {
+    const id = resumeIdFromHref(link[1]);
+    if (id && id !== resumeId) return rest.slice(0, link.index);
+  }
+  return rest;
+}
+
+const RESUME_UPDATED =
+  /Обновлено\s+(?:(сегодня|вчера)|(\d{1,2})\s+([а-яё]{3,8})(?:\s+(\d{4}))?)/iu;
+
+/** Как в a01b: в этом году — день и месяц, в прошлых — год. Нет даты на карточке — нет и подписи. */
+function resumeUpdatedLabel(cardHtml: string, now: Date): string | undefined {
+  const match = RESUME_UPDATED.exec(plainText(cardHtml));
+  if (!match) return undefined;
+  const [, relative, day, month, year] = match;
+  if (relative) return `обновлено ${relative.toLowerCase()}`;
+  if (year && Number(year) !== now.getFullYear()) return `обновлено в ${year}`;
+  return `обновлено ${day} ${month}`;
+}
+
+export function parseHhResumesList(html: string, now = new Date()): Array<{
   id: string;
   title: string;
   url: string;
@@ -344,16 +369,19 @@ export function parseHhResumesList(html: string): Array<{
     const resumeId = href ? resumeIdFromHref(href) : undefined;
     if (!resumeId) continue;
     const title = resumeCardTitle(match[2]);
+    const cardHtml = resumeCardHtml(html, match.index, resumeId);
+    const updatedLabel = resumeUpdatedLabel(cardHtml, now);
     const existing = resumes.find((resume) => resume.id === resumeId);
     if (!existing) {
       resumes.push({
         id: resumeId,
         title: title || 'Резюме hh.ru',
         url: `https://hh.ru/resume/${resumeId}`,
-        updatedLabel: 'Готово к импорту',
+        ...(updatedLabel ? { updatedLabel } : {}),
       });
       continue;
     }
+    if (!existing.updatedLabel && updatedLabel) existing.updatedLabel = updatedLabel;
     // One card links the same resume more than once — from its title and from
     // an icon with no text. Keep the label a human can recognise.
     if (title.length > existing.title.length || existing.title === 'Резюме hh.ru') {
