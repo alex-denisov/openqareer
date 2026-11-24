@@ -44,7 +44,7 @@ const entrySchema = z
       .string()
       .regex(/^[0-9a-f]{64}$/u)
       .nullable(),
-    signature: z.string().min(1).max(300).nullable(),
+    checkboxLabel: z.string().min(1).max(2_000).nullable(),
     command: z.string().trim().min(1).max(300),
   })
   .strict()

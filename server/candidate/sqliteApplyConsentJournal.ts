@@ -9,7 +9,7 @@ import { SealedText } from '../data/sealedText';
 
 /**
  * B787: журнал только на добавление — записи и их результаты не меняются, стираются лишь вместе
- * с кандидатом. Тексты, работодатель и подпись — персональные данные и лежат запечатанными.
+ * с кандидатом. Содержимое записи относится к отклику кандидата и лежит запечатанными.
  */
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS apply_consent_journal (
@@ -48,10 +48,10 @@ function payloadOf({
   checkboxText,
   policyUrl,
   policySha256,
-  signature,
+  checkboxLabel,
   command,
 }: ApplyConsentInput): Payload {
-  return { host, employer, checkboxText, policyUrl, policySha256, signature, command };
+  return { host, employer, checkboxText, policyUrl, policySha256, checkboxLabel, command };
 }
 
 export class SqliteApplyConsentJournal {

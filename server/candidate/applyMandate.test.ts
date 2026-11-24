@@ -6,7 +6,7 @@ import {
   capabilityConsentDocument,
 } from '../../src/features/legal/capabilityConsents';
 import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
-import { hasApplyMandate } from './applyMandate';
+import { hasActionsConsent, hasApplyMandate } from './applyMandate';
 
 const V1 = 'actions_on_behalf-v1.0';
 const V11 = 'actions_on_behalf-v1.1';
@@ -46,5 +46,15 @@ describe('B787: поручение на отклик', () => {
     store.revokeConsent('usr-1', 'actions_on_behalf');
     expect(hasApplyMandate(store, 'cand-1')).toBe(false);
     expect(hasApplyMandate(undefined, 'cand-1')).toBe(false);
+  });
+
+  it('подъём резюме остаётся у принявших v1.0; отклик в том же пакете требует v1.1', () => {
+    const store = setup();
+    const boost = { actionKind: 'hh_resume_boost' };
+    expect(hasActionsConsent(store, 'cand-1', [boost])).toBe(false);
+    store.recordConsent({ userId: 'usr-1', capability: 'actions_on_behalf', versionId: V1 });
+    expect(hasActionsConsent(store, 'cand-1', [boost])).toBe(true);
+    expect(hasActionsConsent(store, 'cand-1', [boost, { actionKind: 'hh_apply' }])).toBe(false);
+    expect(hasActionsConsent(store, 'cand-1', [])).toBe(false);
   });
 });

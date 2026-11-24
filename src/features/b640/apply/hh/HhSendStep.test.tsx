@@ -243,6 +243,17 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(view!.container.textContent).toContain('На сегодня отклики через hh.ru закончились');
   });
 
+  it('B787: отказ, которого сборка не знает (старая .app), — ошибка на месте, а не ожидание', async () => {
+    api.startHhApply.mockRejectedValue(new CoachApiError('x', 'unknown_refusal', false));
+    await render();
+    click(button('Отправить отклик'));
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+    expect(view!.container.textContent).toContain('Отклик не отправлен. Повторите.');
+    expect(view!.container.textContent).not.toContain('Ждём ответа');
+    expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
+  });
+
   it('B678: лист выбора сверяет резюме с вакансией и выбирает рекомендованное', async () => {
     const items = [
       { id: 'abc1', title: 'CDO', url: 'https://hh.ru/resume/abc1' },

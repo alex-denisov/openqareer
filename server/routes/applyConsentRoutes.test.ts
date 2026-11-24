@@ -88,7 +88,7 @@ const entry = (overrides: Record<string, unknown> = {}) => ({
   checkboxText: 'Согласен на обработку персональных данных',
   policyUrl: 'https://romashka.example/privacy',
   policySha256: 'a'.repeat(64),
-  signature: 'Марина Соколова',
+  checkboxLabel: 'Даю согласие',
   command: 'Отправить отклик',
   ...overrides,
 });
@@ -128,7 +128,7 @@ describe('B787: журнал согласий по отклику', () => {
     const stored = raw((database) =>
       JSON.stringify(database.prepare('SELECT * FROM apply_consent_journal').all()),
     );
-    expect(stored).not.toContain('Марина');
+    expect(stored).not.toContain('Даю согласие');
     expect(stored).not.toContain('Ромашка');
   });
 
@@ -187,7 +187,7 @@ describe('B787: журнал согласий по отклику', () => {
     expect(candidateStore.exportCandidate(id('a')).automation.applyConsents).toMatchObject([
       {
         checkboxText: entry().checkboxText,
-        signature: 'Марина Соколова',
+        checkboxLabel: 'Даю согласие',
         results: [{ result: 'sent' }],
       },
     ]);

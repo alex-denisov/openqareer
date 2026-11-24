@@ -13,8 +13,8 @@ export interface ApplyConsentInput {
   readonly policyUrl: string | null;
   /** SHA-256 текста политики; `null` — политика не прочиталась. */
   readonly policySha256: string | null;
-  /** Что вписано в поле подписи формы. */
-  readonly signature: string | null;
+  /** Видимая подпись у галочки на форме (label); `null` — её нет. */
+  readonly checkboxLabel: string | null;
   /** Команда кандидата, по которой ушёл отклик. */
   readonly command: string;
 }

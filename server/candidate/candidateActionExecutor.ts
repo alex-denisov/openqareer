@@ -18,7 +18,7 @@ import type {
   SqliteCandidateActionRepository,
   StoredActionReceipt,
 } from './sqliteCandidateActionRepository';
-import { hasApplyMandate } from './applyMandate';
+import { hasActionsConsent } from './applyMandate';
 import type { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
 
 /** Process-local guard matches the single service process; use a shared lock before scaling. */
@@ -230,7 +230,7 @@ export class CandidateActionExecutor {
 
   async executeBatch(input: ExecuteBatchInput): Promise<ExecuteBatchResult> {
     const prepared = await this.prepareBatch(input);
-    this.assertConsent(input.candidateId);
+    this.assertConsent(input);
     if (input.beforeExecute && !input.beforeExecute()) {
       throw new CandidateConsentRequiredError();
     }
@@ -258,7 +258,7 @@ export class CandidateActionExecutor {
 
   private async prepareBatch(input: ExecuteBatchInput): Promise<PreparedBatch> {
     assertConfirmation(input.confirmedByCandidate);
-    this.assertConsent(input.candidateId);
+    this.assertConsent(input);
     const actions: PreparedCandidateAction[] = input.actions.map((action) => ({
       ...action,
       id: isUuid(action.id) ? action.id : randomUUID(),
@@ -281,8 +281,8 @@ export class CandidateActionExecutor {
     };
   }
 
-  private assertConsent(candidateId: string): void {
-    if (!hasApplyMandate(this.consentStore, candidateId)) throw new CandidateConsentRequiredError();
+  private assertConsent(input: ExecuteBatchInput): void {
+    if (!hasActionsConsent(this.consentStore, input.candidateId, input.actions)) throw new CandidateConsentRequiredError();
   }
 
   private assertBatchCapacity(input: ExecuteBatchInput, timezone: string, now: Date): void {

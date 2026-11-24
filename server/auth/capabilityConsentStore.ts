@@ -174,7 +174,7 @@ function hasCandidateConsentVersion(
   database: DatabaseSync,
   candidateId: string,
   capability: CandidateCapability,
-  versionId: string,
+  versionId: string | null,
 ): boolean {
   const owner = tableExists(database, 'users')
     ? '(user_id = ?1 OR user_id IN (SELECT id FROM users WHERE candidate_id = ?1))'
@@ -183,7 +183,7 @@ function hasCandidateConsentVersion(
     database
       .prepare(
         `SELECT 1 FROM candidate_capability_consents
-          WHERE ${owner} AND capability = ?2 AND version_id = ?3 AND revoked_at IS NULL LIMIT 1`,
+          WHERE ${owner} AND capability = ?2 AND (?3 IS NULL OR version_id = ?3) AND revoked_at IS NULL LIMIT 1`,
       )
       .get(candidateId, capability, versionId) !== undefined
   );
@@ -270,8 +270,8 @@ export class SqliteCapabilityConsentStore {
     return getActiveCapabilityConsent(this.database, userId, capability);
   }
 
-  /** Действующее согласие кандидата в этой версии; запись лежит под id его пользователя. */
-  hasConsentVersion(candidateId: string, capability: CandidateCapability, versionId: string): boolean {
+  /** Действующее согласие кандидата в этой версии (`null` — в любой); запись лежит под id его пользователя. */
+  hasConsentVersion(candidateId: string, capability: CandidateCapability, versionId: string | null): boolean {
     return hasCandidateConsentVersion(this.database, candidateId, capability, versionId);
   }
 

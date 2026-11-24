@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
 import { queueDueRaises } from '../candidate/hhRaiseQueue';
 import { SqliteHhRaiseRepository } from '../candidate/sqliteHhRaiseRepository';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
@@ -119,6 +120,18 @@ describe('b640 hh raise routes', () => {
     expect(await claim()).toBeNull();
     ctx.raise.patchSchedule(candidateId, 'abc123', { enabled: true }, new Date().toISOString());
     expect(await claim()).not.toBeNull();
+  });
+
+  it.each([null, 'actions_on_behalf-v1.0'])('B787: does not need the apply mandate (consent: %s)', async (versionId) => {
+    const { get, send, raise, candidateIds, databasePath } = await setup();
+    if (versionId) {
+      const consents = new SqliteCapabilityConsentStore({ databasePath });
+      consents.recordConsent({ userId: candidateIds['flagged.test'], capability: 'actions_on_behalf', versionId });
+      consents.close();
+    }
+    await get(BASE, 'flagged.test');
+    expect(queueDueRaises(raise, new Date(Date.now() + 3_600_000), () => true)).toBe(1);
+    expect((await send('POST', `${BASE}/claim`, {}, 'flagged.test')).json().data.task.resumeId).toBe('abc123');
   });
 
   it('captcha pauses 24 hours and the scheduler skips it', async () => {

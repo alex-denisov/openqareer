@@ -196,7 +196,7 @@ describe('n05 «Согласия и данные»', () => {
       ['«Вы в поиске»', true],
       ['Цифровой след', true],
       ['Подключённый профиль', false],
-      ['Отклики и подъём резюме', false],
+      ['Отклики', false],
     ]);
     const titles = [...root.querySelectorAll('.set-t, .set-h')].map((item) => item.textContent);
     expect(titles.filter((title) => title === 'Действия от вашего имени')).toHaveLength(1);
@@ -272,7 +272,7 @@ describe('n05 «Согласия и данные»', () => {
       ['«Вы в поиске»', true],
       ['Цифровой след', true],
       ['Подключённый профиль', false],
-      ['Отклики и подъём резюме', false],
+      ['Отклики', false],
     ]);
     const remove = root.querySelector('button[aria-label="Удалить аккаунт"]') as HTMLButtonElement;
     expect(remove.textContent).toBe('Удалить');
@@ -387,7 +387,7 @@ describe('n05 «Согласия и данные»', () => {
     ]);
     api.revokeConsent.mockResolvedValue(null);
     const root = await open(<DataScreen node={node('n05')} />);
-    click(root.querySelector('input[aria-label="Отклики и подъём резюме"]'));
+    click(root.querySelector('input[aria-label="Отклики"]'));
     await settle();
     expect(api.revokeConsent).toHaveBeenCalledWith('actions_on_behalf');
     expect(document.querySelector('.pf-dialog')).toBeNull();
@@ -398,7 +398,7 @@ describe('n05 «Согласия и данные»', () => {
       { id: 'c2', capability: 'actions_on_behalf', versionId: 'actions_on_behalf-v1.0', grantedAt: '2026-11-01', revokedAt: null },
     ]);
     const root = await open(<DataScreen node={node('n05')} />);
-    const row = root.querySelector('input[aria-label="Отклики и подъём резюме"]')!.closest('li')!;
+    const row = root.querySelector('input[aria-label="Отклики"]')!.closest('li')!;
     click(button(row, 'Текст согласия'));
     await settle();
     expect(document.body.textContent).toContain('Платформа помогает направлять согласованные отклики');

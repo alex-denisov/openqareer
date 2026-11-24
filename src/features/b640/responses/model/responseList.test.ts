@@ -155,7 +155,7 @@ describe('B656: что было', () => {
   it('B787: согласие, подтверждённое за кандидата, видно и до отметки отклика', () => {
     const consent = {
       id: 'c1', applicationId: 'app-1', host: 'boards.greenhouse.io', employer: 'Ромашка', checkboxText: 'Согласен',
-      policyUrl: null, policySha256: null, signature: null, command: 'Отправить отклик',
+      policyUrl: null, policySha256: null, checkboxLabel: null, command: 'Отправить отклик',
       mandateVersion: 'actions_on_behalf-v1.1', occurredAt: '2026-11-10T10:00:00.000Z',
       results: [{ result: 'sent' as const, at: '2026-11-10T10:00:05.000Z' }],
     };

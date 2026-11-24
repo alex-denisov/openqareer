@@ -16,3 +16,17 @@ export function hasApplyMandate(
 ): boolean {
   return store?.hasConsentVersion(candidateId, 'actions_on_behalf', APPLY_MANDATE_VERSION) ?? false;
 }
+
+/**
+ * Согласие на пакет действий. Подъём резюме в поручение v1.1 не входит: для него хватает любого
+ * действующего согласия, в том числе v1.0; отклику нужно поручение.
+ */
+export function hasActionsConsent(
+  store: Pick<SqliteCapabilityConsentStore, 'hasConsentVersion'> | undefined,
+  candidateId: string,
+  actions: readonly { readonly actionKind: string }[],
+): boolean {
+  return actions.length > 0 && actions.every((action) => action.actionKind === 'hh_resume_boost')
+    ? (store?.hasConsentVersion(candidateId, 'actions_on_behalf', null) ?? false)
+    : hasApplyMandate(store, candidateId);
+}

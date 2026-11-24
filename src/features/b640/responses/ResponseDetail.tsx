@@ -31,7 +31,7 @@ function ConsentRecord({ entry }: { readonly entry: ApplyConsentEntry }) {
     entry.host,
     `${entry.occurredAt.slice(0, 19).replace('T', ' ')} UTC`,
     `Команда: ${entry.command}`,
-    ...(entry.signature ? [`Подпись: ${entry.signature}`] : []),
+    ...(entry.checkboxLabel ? [`Подпись у галочки: ${entry.checkboxLabel}`] : []),
     ...(entry.policySha256 ? [`SHA-256 политики: ${entry.policySha256}`] : []),
     `Поручение: ${entry.mandateVersion}`,
   ];
