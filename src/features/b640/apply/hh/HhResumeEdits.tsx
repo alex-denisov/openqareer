@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { HhResumeEdit, HhResumeEditSection } from '../../../../../shared/hhCandidateSession';
-import { Button, Dialog, Icon, useToast } from '../../kit';
+import { Button, Dialog, Icon, SegControl, useToast } from '../../kit';
 import { canApply, useHhResumeApply, type HhApplyState, type HhResumeApply } from './useHhResumeApply';
 
 /** B678, A1c: разбор резюме hh.ru — разделы hh.ru, сейчас и предложение платформы. */
@@ -11,6 +11,8 @@ const SECTIONS: ReadonlyArray<readonly [HhResumeEditSection, string]> = [
   ['about', 'О себе'],
 ];
 const COPIED_MS = 2_000;
+/** Отклик уходит одним резюме: сверху одно выбранное, переключать не на что. */
+const NO_CHANGE = () => undefined;
 
 export function editsWord(count: number): string {
   if (count === 0) return 'Без правок';
@@ -67,7 +69,7 @@ function ApplyAction({ edit, state, onApply }: { readonly edit: HhResumeEdit; re
     );
   }
   return (
-    <Button size="sm" busy={state.kind === 'applying'} disabled={state.kind === 'applying'} onClick={onApply}>
+    <Button size="sm" icon="check" busy={state.kind === 'applying'} disabled={state.kind === 'applying'} onClick={onApply}>
       Применить
     </Button>
   );
@@ -130,31 +132,42 @@ function ApplyAllDialog({
   );
 }
 
-export interface HhResumeEditsProps {
+interface EditsTopProps {
   readonly resumeId: string;
   readonly resumeTitle: string;
-  readonly edits: readonly HhResumeEdit[];
-  readonly onBack: () => void;
+  readonly busy: boolean;
+  /** `null` — переносить на hh.ru нечего. */
+  readonly onApplyAll: (() => void) | null;
 }
 
-export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResumeEditsProps) {
-  const apply = useHhResumeApply(resumeId);
-  const [confirming, setConfirming] = useState(false);
+/** a01c: сверху выбранное резюме и «Применить все на hh.ru». */
+function EditsTop({ resumeId, resumeTitle, busy, onApplyAll }: EditsTopProps) {
+  const switchName = useId();
+  return (
+    <div className="hh2-top">
+      <SegControl
+        label="Резюме hh.ru"
+        name={switchName}
+        value={resumeId}
+        options={[{ value: resumeId, label: resumeTitle }]}
+        onChange={NO_CHANGE}
+      />
+      {onApplyAll ? (
+        <div className="actions">
+          <Button variant="primary" icon="check" disabled={busy} busy={busy} onClick={onApplyAll}>
+            Применить все на hh.ru
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EditSections({ edits, apply }: { readonly edits: readonly HhResumeEdit[]; readonly apply: HhResumeApply }) {
   const groups = SECTIONS.map(([section, label]) => [label, edits.filter((edit) => edit.section === section)] as const)
     .filter(([, items]) => items.length > 0);
-  const pending = edits.filter((edit) => {
-    const state = apply.stateOf(edit.id);
-    return canApply(edit) && state.kind !== 'applied' && !(state.kind === 'failed' && !state.retry);
-  });
-  const confirm = () => {
-    setConfirming(false);
-    void apply.applyAll(pending);
-  };
   return (
-    <section className="lead" aria-labelledby="hh2-title">
-      <h2 className="lead-title is-long" id="hh2-title">
-        Резюме «{resumeTitle}» · {editsWord(edits.length)}
-      </h2>
+    <>
       {groups.map(([label, items], index) => (
         <section className="hh2-sec" aria-labelledby={`hh2-s${index}`} key={label}>
           <h3 className="mod-title" id={`hh2-s${index}`}>
@@ -167,12 +180,41 @@ export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResume
           </ul>
         </section>
       ))}
+    </>
+  );
+}
+
+export interface HhResumeEditsProps {
+  readonly resumeId: string;
+  readonly resumeTitle: string;
+  readonly edits: readonly HhResumeEdit[];
+  readonly onBack: () => void;
+}
+
+export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResumeEditsProps) {
+  const apply = useHhResumeApply(resumeId);
+  const [confirming, setConfirming] = useState(false);
+  const pending = edits.filter((edit) => {
+    const state = apply.stateOf(edit.id);
+    return canApply(edit) && state.kind !== 'applied' && !(state.kind === 'failed' && !state.retry);
+  });
+  const confirm = () => {
+    setConfirming(false);
+    void apply.applyAll(pending);
+  };
+  return (
+    <section className="lead" aria-labelledby="hh2-title">
+      <h2 className="lead-title" id="hh2-title">
+        Резюме «{resumeTitle}» · {editsWord(edits.length)}
+      </h2>
+      <EditsTop
+        resumeId={resumeId}
+        resumeTitle={resumeTitle}
+        busy={apply.busy}
+        onApplyAll={pending.length > 0 ? () => setConfirming(true) : null}
+      />
+      <EditSections edits={edits} apply={apply} />
       <div className="actions">
-        {pending.length > 0 ? (
-          <Button variant="primary" disabled={apply.busy} busy={apply.busy} onClick={() => setConfirming(true)}>
-            Применить все на hh.ru
-          </Button>
-        ) : null}
         <Button icon="back" onClick={onBack}>
           К отправке
         </Button>

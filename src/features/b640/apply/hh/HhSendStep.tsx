@@ -33,25 +33,24 @@ function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
   const selected = resumes.snapshot?.selected ?? null;
   return (
     <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
-      <li>
-        <p>
-          <b>Письмо</b> · {props.approvedLabel}
-        </p>
-        <p className="ap-lines">{props.letterText}</p>
+      <li className="row">
+        <div>
+          <span className="row-title">Письмо · {props.approvedLabel}</span>
+          <p className="ap-lines">{props.letterText}</p>
+        </div>
         <span className="tag ok">готово</span>
       </li>
-      <li>
-        <p>
-          <b>Резюме hh.ru</b> {selected ? `«${selected.title}»` : null}
-        </p>
-        <button className="res-act" type="button" onClick={resumes.openPicker}>
-          {selected ? 'Другое резюме' : 'Выбрать резюме'}
-        </button>
-        {selected && editCount > 0 ? (
-          <button className="res-act" type="button" onClick={onEdits}>
-            {editsWord(editCount)}
+      <li className="row">
+        <div>
+          <button className="row-title ap-pick" type="button" onClick={resumes.openPicker}>
+            {selected ? `Резюме hh.ru «${selected.title}»` : 'Выбрать резюме hh.ru'}
           </button>
-        ) : null}
+          {selected && editCount > 0 ? (
+            <button className="res-act" type="button" onClick={onEdits}>
+              {editsWord(editCount)}
+            </button>
+          ) : null}
+        </div>
         {selected ? <span className="tag ok">готово</span> : null}
       </li>
     </ul>

@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
+import { expectLastActionReachable } from './lastActionReachable';
 import { installDesktopApiTestBridge } from '../../scripts/desktop-api-test-bridge.mjs';
 import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
 
@@ -678,6 +679,111 @@ test.describe('B657: единый экран отклика', () => {
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { __hhCalls: string[] }).__hhCalls))
       .toContain('open_connector_session');
+  });
+
+  test('B678 в приложении: строки отправки и разбор резюме hh.ru — по макету', async ({ page }) => {
+    await page.addInitScript(installDesktopApiTestBridge);
+    await page.addInitScript(() => {
+      localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
+      const list =
+        '<a href="/resume/abc1">Руководитель разработки</a><a href="/resume/abc2">Ведущий разработчик Go</a>';
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {
+          invoke: (command: string, args?: { request?: { url?: string } }) => {
+            if (command === 'inspect_connector_session_page')
+              return Promise.resolve({
+                ready: true,
+                url: 'https://hh.ru/applicant/resumes',
+                signedInApplicant: true,
+                login: false,
+                otp: false,
+                captcha: false,
+              });
+            if (command === 'read_connector_session_page')
+              return Promise.resolve({
+                ok: true,
+                url: args?.request?.url,
+                body: args?.request?.url?.includes('/resume/')
+                  ? '<div data-qa="resume-block-title-position">Руководитель</div>'
+                  : list,
+              });
+            return Promise.resolve(null);
+          },
+        };
+    });
+    // Общая заглушка API ставится в open: маршруты hh.ru — после неё.
+    await open(page, '/app/responses/a-draft/letter');
+    const selected = {
+      id: 'abc1',
+      title: 'Руководитель разработки',
+      text: 'Опыт',
+      sections: { title: 'Руководитель', about: '', skills: [], places: [] },
+    };
+    const snapshot = { resumes: [{ id: 'abc1', title: selected.title }], selected, readAt: 'x' };
+    await page.route('**/api/v1/candidate/hh/resumes', (route) =>
+      route.fulfill({ json: { data: snapshot } }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/edits**', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            resumeId: 'abc1',
+            vacancyId: 'v',
+            edits: [
+              { id: 'title', section: 'title', was: 'Руководитель', now: 'Head of Engineering' },
+              { id: 'about', section: 'about', was: 'Руковожу 5 лет.', now: 'Пять лет руковожу.' },
+            ],
+          },
+        },
+      }),
+    );
+    await page.route('**/api/v1/candidate/hh/resumes/review**', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            vacancyId: 'v',
+            requirements: [],
+            recommendedId: null,
+            resumes: ['abc1', 'abc2'].map((resumeId, index) => ({
+              resumeId,
+              title: '',
+              status: 'fits',
+              matched: [],
+              missing: [],
+              editCount: index ? 0 : 2,
+            })),
+          },
+        },
+      }),
+    );
+    await page.getByRole('button', { name: 'Одобрить' }).click();
+    await page.getByRole('button', { name: 'К отправке' }).click();
+
+    const rows = page.locator('.ap-parts > li.row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.last().locator('.tag')).toBeVisible();
+    for (const row of await rows.all()) {
+      const box = (await row.boundingBox())!;
+      const tag = (await row.locator('> .tag').boundingBox())!;
+      expect(Math.abs(box.x + box.width - tag.x - tag.width)).toBeLessThan(1.5);
+    }
+    await expect(rows.first()).toHaveCSS('border-bottom-width', '1px');
+    await expectLastActionReachable(page);
+
+    await page.getByRole('button', { name: 'Резюме hh.ru «Руководитель разработки»' }).click();
+    const next = page.getByRole('dialog').getByRole('button', { name: 'Продолжить' });
+    await expect(next.locator('svg')).toHaveCount(1, { timeout: 15_000 });
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: '2 правки' }).click();
+    const applyAll = page.getByRole('button', { name: 'Применить все на hh.ru' });
+    await expect(page.getByRole('radio', { name: 'Руководитель разработки' })).toBeChecked();
+    await expect(applyAll).toBeInViewport();
+    const section = (await page.locator('.hh2-sec').first().boundingBox())!;
+    const main = (await page.locator('.page.two').boundingBox())!;
+    expect(section.width).toBeGreaterThan(main.width * 0.85);
+    await expectLastActionReachable(page);
+    await expectGates(page);
   });
 
   test('отправка без одобренного письма возвращает к письму', async ({ page }) => {

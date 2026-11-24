@@ -119,7 +119,7 @@ export function DraftEditor({
   const dirty = text !== draft.text;
   const actions = useDraftActions(draft, text, { onChanged, onPlaced });
   const { save, on } = actions;
-  const variants = usePostVariants(draft.id, { draftText: draft.text, text, setText });
+  const variants = usePostVariants(draft.kind, draft.id, { draftText: draft.text, text, setText });
   const edit = (event: ChangeEvent<HTMLTextAreaElement>) => {
     setText(event.target.value);
     actions.setSave('idle');

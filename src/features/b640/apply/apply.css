@@ -32,6 +32,30 @@
   }
   /* B678: строки текста раздела hh.ru одна под другой, как на hh.ru. */
   .b640 .hh2-line { display: block; }
+  /* B678, a01: название резюме открывает лист выбора и выглядит как название строки макета. */
+  .b640 .ap-parts .ap-pick {
+    position: relative;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    line-height: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  .b640 .ap-parts .ap-pick:hover { color: var(--career-accent); }
+  .b640 .ap-parts .ap-pick:only-child::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block: calc(-1 * var(--career-space-3));
+  }
+  /* B678, a01c: разбор занимает всю ширину страницы, пустой второй колонки нет. */
+  .b640 .page.two > .col:has(> .lead > .hh2-top) { grid-column: 1 / -1; }
+  .b640 .page.two > .col:has(> .lead > .hh2-top) + .col:empty { display: none; }
+  /* B678, a01c: сегмент по названию резюме: в макете на 390 оно обрезано третью ширины. */
+  .b640 .hh2-top .seg-ctl { inline-size: 100%; grid-template-columns: fit-content(100%); }
+  .b640 .hh2-top .seg-ctl span { padding-inline: var(--career-space-3); white-space: normal; overflow-wrap: anywhere; }
   /* B678: отказ hh.ru применить правку — под строкой правки, текст остаётся для копирования. */
   .b640 .hh2-err {
     margin: var(--career-space-2) 0 0;
