@@ -97,6 +97,8 @@ test.describe('B662: «Дневник» — цели и показатели', (
   test('d02b: ошибки на месте, затем новая цель открывается карточкой', async ({ page }) => {
     const calls = await openGoals(page, '/app/diary/goals/new', 'd02b');
     const form = page.locator('[data-b640-node="d02b"]');
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(form).toHaveCSS('padding-top', phone ? '12px' : '8px');
     await expectGates(page);
     await form.getByRole('button', { name: 'Сохранить цель' }).click();
     await expect(form.locator('.va-err').first()).toHaveText('Назовите цель');

@@ -6,6 +6,7 @@ import { Icon } from '../kit/Icon';
 import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
+import { useScreenChrome } from '../shell/ShellContext';
 import { dayLabel } from './adaptationModel';
 import { AdaptationGate, type AdaptationActions } from './AdaptationGate';
 import { Field } from './StartPlan';
@@ -93,6 +94,8 @@ function Facts({ meeting, onEdit }: { readonly meeting: CareerDiaryFirstMeeting;
 }
 
 function MeetingBody({ data, actions }: { readonly data: AdaptationData; readonly actions: AdaptationActions }) {
+  // Как у макета d01c (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   const meeting = data.view.firstMeeting;
   const [editing, setEditing] = useState(meeting === null);
   const step = data.view.steps.find((item) => item.id === 'first_meeting');
