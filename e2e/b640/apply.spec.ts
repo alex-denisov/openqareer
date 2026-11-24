@@ -389,6 +389,8 @@ test.describe('B657: единый экран отклика', () => {
       'https://hh.ru/vacancy/1',
     );
     await expect(page.locator('.cb-t')).toContainText('вырастила группу разработки');
+    const copy = (await page.locator('.cb-copy').first().boundingBox())!;
+    expect([copy.width, copy.height]).toEqual([44, 44]);
     await expectGates(page);
     await page.getByRole('button', { name: 'Я откликнулся' }).click();
     await expect(page.getByText('Отклик отмечен как отправленный')).toBeVisible();
@@ -769,6 +771,9 @@ test.describe('B657: единый экран отклика', () => {
     }
     await expect(rows.first()).toHaveCSS('border-bottom-width', '1px');
     await expectLastActionReachable(page);
+    await page.getByRole('button', { name: /^Письмо · одобрено/u }).click();
+    await expect(page.getByLabel('Текст письма')).toBeVisible();
+    await page.getByRole('button', { name: 'К отправке' }).click();
 
     await page.getByRole('button', { name: 'Резюме hh.ru «Руководитель разработки»' }).click();
     const next = page.getByRole('dialog').getByRole('button', { name: 'Продолжить' });
