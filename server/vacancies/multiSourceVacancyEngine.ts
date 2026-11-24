@@ -1003,7 +1003,7 @@ export class MultiSourceVacancyEngine {
 
   /**
    * A total without the table scan: listed groups (>= 3) come from the cached
-   * summaries, the whole catalog from a TTL copy. Unlisted groups have < 3
+   * summaries, the whole catalog from the stored row (a TTL copy before it exists). Unlisted groups have < 3
    * entries and are counted exactly through an index. Stale by LISTINGS_CACHE_MS.
    */
   private knownCatalogTotal(query: CatalogEntriesQuery): number | undefined {
@@ -1011,6 +1011,9 @@ export class MultiSourceVacancyEngine {
     const now = this.now();
     if (!query.place) {
       if (query.role) return undefined;
+      // B776: maintenance stores the total; the count in the request is the fallback before it.
+      const stored = this.pool.readCatalogEntriesTotal?.();
+      if (stored !== undefined) return stored;
       const root = this.rootTotalCache;
       return root && now - root.at < LISTINGS_CACHE_MS ? root.total : undefined;
     }
