@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HhResumeContent, HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
 import { apiErrorMessage } from '../../../coach/apiClient';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
@@ -35,7 +35,7 @@ export interface HhResumesState {
   readonly closePicker: () => void;
   readonly signIn: () => void;
   readonly saving: boolean;
-  readonly choose: (item: HhResumeItem) => void;
+  readonly choose: (item: HhResumeItem, onChosen?: () => void) => void;
 }
 
 export interface HhResumesOptions {
@@ -59,10 +59,39 @@ async function reviewList(
   const selected = kept ? (read.get(kept.id) ?? kept) : null;
   try {
     const saved = await saveHhResumes(items.map(summaryOf), selected, contents.map(forReview));
-    return { saved, review: await getHhResumeReview(vacancyId), read };
+    return { saved, review: await getHhResumeReview(vacancyId, true), read };
   } catch {
     return { saved: null, review: null, read };
   }
+}
+
+/** Прежний снимок без разделов: правок по нему нет (409), поэтому выбранное перечитываем сами, один раз. */
+function useSectionsRefresh(snapshot: HhResumeSnapshot | null, replaceData: (saved: HhResumeSnapshot) => void) {
+  const refreshed = useRef<{ readonly id: string; readonly done: Promise<void> } | null>(null);
+  // Снимок после перечитывания: замыкание открытия листа помнит прежний.
+  const latest = useRef(snapshot);
+  useEffect(() => {
+    latest.current = snapshot;
+  }, [snapshot]);
+  const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => {
+    const selected = snapshot?.selected;
+    if (!snapshot || !selected || selected.sections || refreshed.current?.id === selected.id) return;
+    setRefreshing(true);
+    const reread = async () => {
+      const item = { id: selected.id, title: selected.title, url: `https://hh.ru/resume/${selected.id}` };
+      const saved = await saveHhResumes(snapshot.resumes, await readHhResumeContent(item));
+      latest.current = saved;
+      replaceData(saved);
+    };
+    // Не прочиталось (вход, капча) — отклик уходит выбранным резюме как есть.
+    refreshed.current = { id: selected.id, done: reread().catch(() => undefined).finally(() => setRefreshing(false)) };
+  }, [snapshot, replaceData]);
+  const settled = async () => {
+    await refreshed.current?.done;
+    return latest.current;
+  };
+  return { refreshing, settled };
 }
 
 /** Резюме hh.ru кандидата: список и содержимое — из его сессии hh.ru; сверка с вакансией — на сервере. */
@@ -74,12 +103,16 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
   const read = useRef<ReadonlyMap<string, HhResumeContent>>(new Map());
   const snapshot = state.data ?? null;
 
+  const { refreshing, settled } = useSectionsRefresh(snapshot, replaceData);
+
   const openPicker = () => {
     setPicker({ kind: 'reading' });
-    readHhResumes()
-      .then(async (list) => {
+    // Окно hh.ru одно: список читается после перечитывания выбранного.
+    settled()
+      .then(async (previous) => {
+        const list = await readHhResumes();
         if (list.kind !== 'ready') return setPicker({ kind: list.kind === 'empty' ? 'empty' : 'signin' });
-        const outcome = await reviewList(list.resumes, snapshot, vacancyId, options.pace);
+        const outcome = await reviewList(list.resumes, previous, vacancyId, options.pace);
         read.current = outcome.read;
         if (outcome.saved) replaceData(outcome.saved);
         return setPicker({ kind: 'choose', resumes: list.resumes, review: outcome.review });
@@ -87,7 +120,7 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
       .catch(() => setPicker({ kind: 'error', text: 'Список резюме hh.ru не прочитался. Повторите.' }));
   };
 
-  const choose = (item: HhResumeItem) => {
+  const choose = (item: HhResumeItem, onChosen?: () => void) => {
     if (picker.kind !== 'choose') return;
     const listed = picker.resumes.map(summaryOf);
     const known = read.current.get(item.id);
@@ -99,6 +132,7 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
         // Снимка до выбора могло не быть (GET вернул null): ставим его целиком.
         replaceData(saved);
         setPicker({ kind: 'closed' });
+        onChosen?.();
       })
       .catch((reason: unknown) =>
         setPicker({ kind: 'error', text: apiErrorMessage(reason, 'Резюме не прочиталось. Выберите его ещё раз.') }),
@@ -108,13 +142,11 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
 
   return {
     snapshot,
-    loading: state.status === 'loading',
+    loading: state.status === 'loading' || refreshing,
     picker,
     openPicker,
     closePicker: () => setPicker({ kind: 'closed' }),
-    signIn: () => {
-      void openHhSignIn();
-    },
+    signIn: () => void openHhSignIn(),
     saving,
     choose,
   };

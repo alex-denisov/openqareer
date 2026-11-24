@@ -78,6 +78,7 @@ import {
 } from './hhCatalogText';
 import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { syncSection } from '../observability/syncSections';
 import { mapYielding } from './mapYielding';
 import type { CatalogTotals } from './matchedCatalogSummary';
 import {
@@ -2487,14 +2488,16 @@ export class MultiSourceVacancyEngine {
   ): Promise<MatchedVacancyItem[]> {
     if (!this.pool.queryMatchCandidatesAsync) return this.getMatchedVacancies(candidate);
     const effective = this.withResolvedSemanticFunctions(candidate);
-    const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(effective)).filter(
-      (cluster) => cluster.status === 'active',
+    const candidates = await this.pool.queryMatchCandidatesAsync(effective);
+    // B770a: the two unyielded stretches of role-snapshot and precompute:snapshot, named for the stall log.
+    const clusters = syncSection('engine:cluster', () =>
+      clusterVacancies(candidates).filter((cluster) => cluster.status === 'active'),
     );
     const matched = await mapYielding(clusters, (cluster) => ({
       cluster,
       explanation: matchCandidateWithVacancy(effective, cluster),
     }));
-    return matched.sort(compareMatchedVacancies);
+    return syncSection('engine:sort', () => matched.sort(compareMatchedVacancies));
   }
 
   public async testSource(

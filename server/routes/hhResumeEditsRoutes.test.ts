@@ -73,6 +73,33 @@ describe('B678: правки резюме hh.ru «было → станет»', 
     expect(response.json().error.code).toBe('hh_resume_sections_missing');
   });
 
+  it('разделы выбранного прочитаны при сверке списка — правки есть без нового выбора', async () => {
+    const { call } = await harness();
+    const { sections, ...plain } = SNAPSHOT.selected;
+    const saved = await call('PUT', RESUMES, { ...SNAPSHOT, selected: plain, contents: [{ ...plain, sections }] });
+    expect(saved.statusCode).toBe(200);
+    expect((await call('GET', EDITS)).statusCode).toBe(200);
+  });
+
+  it('сверка отдаёт у прочитанного резюме то же число правок, что откроет разбор', async () => {
+    const { call } = await harness();
+    const other = { id: 'other', title: 'Другое', text: 'Текст' };
+    await call('PUT', RESUMES, {
+      resumes: [...SNAPSHOT.resumes, { id: 'other', title: 'Другое' }],
+      selected: other,
+      contents: [SNAPSHOT.selected],
+    });
+    const review = (await call('GET', `${RESUMES}/review?vacancyId=cluster-99&edits=1`)).json().data;
+    const plain = (await call('GET', `${RESUMES}/review?vacancyId=cluster-99`)).json().data;
+    expect(plain.resumes[0]).not.toHaveProperty('editCount');
+    await call('PUT', RESUMES, SNAPSHOT);
+    const edits = (await call('GET', EDITS)).json().data.edits;
+    const fits = review.resumes as Array<{ resumeId: string; editCount?: number }>;
+    expect(edits.length).toBeGreaterThan(0);
+    expect(fits.find((fit) => fit.resumeId === 'dev')?.editCount).toBe(edits.length);
+    expect(fits.find((fit) => fit.resumeId === 'other')).not.toHaveProperty('editCount');
+  });
+
   it('разделы проверяются по размеру', async () => {
     const { call } = await harness();
     const huge = { ...SECTIONS, about: 'я'.repeat(4_001) };

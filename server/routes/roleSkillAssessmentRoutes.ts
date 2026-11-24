@@ -28,6 +28,7 @@ import { readCampaign } from './campaignContext';
 import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
+import { syncSection } from '../observability/syncSections';
 import { russianSkillNames, withRussianContextNames, withRussianSkillNames } from './roleSkillNamesStep';
 import { createRoleRequirementReader, type RoleRequirementReader } from './roleSkillRequirementSource';
 import { focusSchema, validateFocus, type ValidatedFocus } from './roleSkillAssessmentFocus';
@@ -435,7 +436,19 @@ export async function warmAssessmentContext(deps: RouteDeps, candidateId: string
   await readAssessmentContext(deps, candidateId, resolveAssessedRole(deps, candidateId, role), true);
 }
 
+/** B770a: the role-assessment-context step holds the loop here; named for the stall log. */
 export function summarizeAssessmentContext(
+  roleTitle: string,
+  roleVersion: number,
+  matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
+  requirementReader?: RoleRequirementReader,
+): AssessmentContext {
+  return syncSection('assessment:summary', () =>
+    summarizeContext(roleTitle, roleVersion, matched, requirementReader),
+  );
+}
+
+function summarizeContext(
   roleTitle: string,
   roleVersion: number,
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,

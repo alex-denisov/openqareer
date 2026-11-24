@@ -511,6 +511,13 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(page.locator(PRIMARY)).toBeEnabled();
     expect(calls[0]?.query).toBe('');
     expect(calls[0]?.clusterIds).toBeUndefined();
+    if (isMobile(test.info().project.name)) {
+      // v09 на 390: блоки режима стоят встык, на 1440 между ними 16 px.
+      const gap = await page
+        .locator('section.is-triage')
+        .evaluate((section) => getComputedStyle(section).rowGap);
+      expect(gap).toBe('0px');
+    }
     await expectGates(page);
 
     await page.locator('.vz-q1-a').getByRole('button', { name: 'Да' }).click();

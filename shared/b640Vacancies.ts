@@ -77,5 +77,5 @@ export interface VacancyTriage {
   readonly poolTotal?: number;
 }
 
-/** Предел длины строки фильтров в запросе разбора всей подборки. */
-export const VACANCY_TRIAGE_QUERY_MAX = 2_000;
+/** Предел длины строки фильтров: в адресе буква кириллицы — 6 знаков, десяток длинных ролей занимает больше 2 000. */
+export const VACANCY_TRIAGE_QUERY_MAX = 16_000;
