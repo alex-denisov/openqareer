@@ -123,8 +123,8 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     }
   });
 
-  it('«Предложить заново»: проверенный вариант, «Выполнено» снимается, всего три с первым, без квоты', async () => {
-    const texts = ['Python · SQL', 'SQL'];
+  it('«Предложить заново»: проверенный вариант, «Выполнено» снимается, три сверх первого, без квоты', async () => {
+    const texts = ['Python · SQL', 'SQL', 'Python'];
     const linkedinVariant = vi.fn(async () => ({ text: texts.shift() ?? 'SQL · Python', factIds: [] }));
     const { h, post } = await setup({ rewrite: async () => null, linkedinVariant });
     await post(`${BASE}/done`, { keys: ['skills'] }, 'flagged.test');
@@ -134,9 +134,11 @@ describe('B645 a03: профиль LinkedIn из импорта', () => {
     expect(linkedinVariant.mock.calls[0]).toMatchObject([{ target: 'skills', avoid: ['SQL · Python'] }]);
     expect(sectionOf((await h.get(BASE, 'flagged.test')).json(), 'skills').offer).toMatchObject({ doneAt: null });
     expect((await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test')).json().data.variants).toEqual(['SQL · Python', 'Python · SQL', 'SQL']);
+    expect((await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test')).json().data.variants)
+      .toEqual(['SQL · Python', 'Python · SQL', 'SQL', 'Python']);
     const over = await post(`${BASE}/offers/skills/variant`, {}, 'flagged.test');
     expect([over.statusCode, over.json().error.code]).toEqual([409, 'variant_limit_reached']);
-    expect(linkedinVariant).toHaveBeenCalledTimes(2);
+    expect(linkedinVariant).toHaveBeenCalledTimes(3);
   });
 
   it('ответ не прошёл проверки — 503 с повтором, вариант не сохраняется; неизвестный ключ — 400', async () => {
