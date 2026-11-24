@@ -11,7 +11,7 @@ import {
   type ApplyAddress,
 } from './applyAddress';
 import { isSameVacancy } from './sameVacancy';
-import { atsInText, emailInText, telegramInText } from './textTarget';
+import { atsInText, emailInText, mailtoOf, telegramInText } from './textTarget';
 
 const JOB_ID = /^\d{1,20}$/u;
 const BOARD = /^[\w-]{1,100}$/u;
@@ -25,11 +25,15 @@ export interface ApplyTargetInput {
   readonly redirected?: (url: string) => string | undefined;
 }
 
-const target = (found: ApplyAddress, origin: ApplyTargetOrigin): ApplyTarget => ({
-  channel: found.channel,
-  url: found.url,
-  formUrl: found.formUrl,
+const target = (
+  { channel, url, formUrl, email }: ApplyAddress,
+  origin: ApplyTargetOrigin,
+): ApplyTarget => ({
+  channel,
+  url,
+  formUrl,
   origin,
+  ...(email ? { email } : {}),
 });
 
 /** Доска ATS встроена в сайт работодателя: номер в адресе, доска — в источнике или параметре. */
@@ -87,7 +91,7 @@ function textAddress(vacancy: UnifiedVacancy, own: ApplyAddress): ApplyAddress |
   const ats = atsInText(text);
   if (ats) return ats;
   const email = emailInText(text);
-  if (email) return { channel: 'email', url: own.url, formUrl: `mailto:${email}` };
+  if (email) return { channel: 'email', url: own.url, formUrl: mailtoOf(email), email };
   const contact = own.channel === 'telegram' ? telegramInText(text) : null;
   return contact ? { channel: 'telegram', url: own.url, formUrl: contact } : null;
 }

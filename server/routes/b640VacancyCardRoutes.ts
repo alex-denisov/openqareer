@@ -76,7 +76,7 @@ async function postApplyTarget(deps: RouteDeps, request: FastifyRequest, reply: 
   const read = () =>
     resolveVacancyApplyTarget(deps.multiSourceEngine, cluster, applyRedirects.peek);
   const target = read();
-  if (target?.needsRedirect && (await applyRedirects.resolve(target.url))) {
+  if (target?.needsRedirect && (await applyRedirects.resolve(target.url, candidate.id))) {
     return { data: { applyTarget: read() }, meta: { requestId: request.id } };
   }
   return { data: { applyTarget: target }, meta: { requestId: request.id } };

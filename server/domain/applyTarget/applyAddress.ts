@@ -5,6 +5,7 @@ export interface ApplyAddress {
   readonly channel: ApplyChannel;
   readonly url: string;
   readonly formUrl: string;
+  readonly email?: string;
 }
 
 /** Адрес длиннее — мусор, а не ссылка на вакансию. */
@@ -61,6 +62,12 @@ const REDIRECT_PARAMS: readonly string[] = [
   'joburl',
   'rx_url',
 ];
+
+/** Трекер адреса без поддомена: лимит обращений общий на площадку. */
+export function trackerHost(value: string): string | undefined {
+  const host = parseHttpUrl(value)?.hostname ?? '';
+  return TRACKER_HOSTS.find((base) => isHost(host, base));
+}
 
 const isHost = (host: string, base: string) => host === base || host.endsWith(`.${base}`);
 const inHosts = (host: string, bases: readonly string[]) =>

@@ -34,6 +34,8 @@ export interface ApplyTarget {
   readonly url: string;
   /** Адрес формы: страница отклика ATS, `mailto:` или тот же `url`. */
   readonly formUrl: string;
+  /** Почта отклика как есть: её показывают кандидату рядом со ссылкой. */
+  readonly email?: string;
   readonly origin: ApplyTargetOrigin;
   /** Адрес — трекер: конечная площадка узнаётся переходом по действию кандидата. */
   readonly needsRedirect?: true;

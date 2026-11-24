@@ -55,6 +55,12 @@ describe('B715: GET b640/vacancies/:id — карточка вакансии в�
     expect((await h.get(path, 'flagged.test')).json().data.applyTarget).toEqual(target);
     const post = await h.post(`${path}/apply-target`, {}, 'flagged.test');
     expect(post.json().data.applyTarget).toEqual(target);
+    const foreign = await h.app.inject({
+      method: 'POST',
+      url: `${path}/apply-target`,
+      headers: { cookie: `openqareer_session=${h.tokens['flagged.test']}`, origin: 'https://evil.example' },
+    });
+    expect(foreign.statusCode).toBe(403);
     expect((await h.post(`${path}/apply-target`, {}, 'plain.test')).statusCode).toBe(404);
     expect(
       (await h.post(`${BASE}/cluster-src-hh-search:99999999/apply-target`, {}, 'flagged.test'))

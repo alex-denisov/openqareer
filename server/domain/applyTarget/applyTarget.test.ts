@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { UnifiedVacancy } from '../unifiedVacancy';
 import { applyAddress, atsAddress } from './applyAddress';
 import { resolveApplyTarget } from './applyTarget';
-import { emailInText, telegramInText } from './textTarget';
+import { isSameVacancy } from './sameVacancy';
+import { atsInText, emailInText, mailtoOf, telegramInText } from './textTarget';
 
 const UUID = '286059a4-70bc-4128-999a-3873abadde80';
 const TEXT = Array.from({ length: 60 }, (_, index) => `слово${index}`).join(' ');
@@ -223,6 +224,7 @@ describe('цель отклика', () => {
     expect(post('Send your resume to hr@acme.com')).toMatchObject({
       channel: 'email',
       formUrl: 'mailto:hr@acme.com',
+      email: 'hr@acme.com',
     });
   });
 });
@@ -246,5 +248,64 @@ describe('контакт в тексте', () => {
     expect(telegramInText('Контакт: @Diana_Hantix #serbia')).toBe('https://t.me/diana_hantix');
     expect(telegramInText('Подписывайтесь @channel_news')).toBeNull();
     expect(telegramInText('Пишите на hr@acme.ru')).toBeNull();
+  });
+});
+
+describe('враждебный текст (проверка безопасности #1186)', () => {
+  const SIZE = 200_000;
+  const fill = (piece: string) => piece.repeat(Math.ceil(SIZE / piece.length));
+  it.each([
+    'a',
+    'a.',
+    '@',
+    'a@',
+    'a@a.',
+    'a@b.co ',
+    'send cv to a@b.co ',
+    '<',
+    '<a ',
+    '<a href="',
+    '<a href="x">',
+    'https://',
+    'https://a.co ',
+    'https://jobs.lever.co/',
+    '.',
+    '!',
+    ' ',
+    '\n',
+    'https://a.co/!!!!',
+    'пиши @abcdef ',
+    'cv ',
+    'a-b.c-',
+  ])('200 КБ «%s» — меньше 50 мс', (piece) => {
+    const text = fill(piece);
+    const run = (hostile: string) => {
+      const started = performance.now();
+      atsInText(hostile);
+      emailInText(hostile);
+      telegramInText(hostile);
+      isSameVacancy(
+        vacancy('a:1', 'x', { description: hostile }),
+        vacancy('b:1', 'x', { description: hostile }),
+      );
+      return performance.now() - started;
+    };
+    [text, `https://a.co/${text}x`, `x@${text}x`].forEach((hostile) => {
+      // Лучший из трёх: занятая машина не выдаётся за медленный разбор.
+      expect(Math.min(run(hostile), run(hostile), run(hostile))).toBeLessThan(50);
+    });
+  });
+
+  it('контакт в конце длинного описания не теряется', () => {
+    expect(emailInText(`${fill('слово ')}${fill('word ')}. Send your resume to hr@acme.com`)).toBe(
+      'hr@acme.com',
+    );
+  });
+
+  it('почта с % и чужими знаками — не адрес; ссылка письма закодирована', () => {
+    expect(emailInText('Send CV to evil%40x.com%2C@acme.com')).toBeNull();
+    expect(emailInText('Send CV to a%hr@acme.com')).toBeNull();
+    expect(emailInText('Send CV to еhr@acme.com')).toBeNull();
+    expect(mailtoOf('a+b@acme.com')).toBe('mailto:a%2Bb@acme.com');
   });
 });

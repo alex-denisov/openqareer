@@ -13,6 +13,8 @@ type Posting = Pick<
 /** Доля общих слов текстов: у копии одного объявления она выше, у шаблона другой роли ниже. */
 const TEXT_SIMILARITY_MIN = 0.7;
 const TEXT_WORDS_MIN = 40;
+/** Для сверки объявления хватает начала; предел держит время разбора. */
+const TEXT_MAX_LENGTH = 10_000;
 
 const wordList = (text: string): readonly string[] =>
   normalizeTextForComparison(text)
@@ -39,8 +41,8 @@ const companyKey = (company: string) =>
     .join(' ');
 
 function sameText(left: string, right: string): boolean {
-  const a = new Set(wordList(left.replace(/<[^>]+>/gu, ' ')));
-  const b = new Set(wordList(right.replace(/<[^>]+>/gu, ' ')));
+  const a = new Set(wordList(left.slice(0, TEXT_MAX_LENGTH).replace(/<[^<>]+>/gu, ' ')));
+  const b = new Set(wordList(right.slice(0, TEXT_MAX_LENGTH).replace(/<[^<>]+>/gu, ' ')));
   if (a.size < TEXT_WORDS_MIN || b.size < TEXT_WORDS_MIN) return false;
   const shared = [...a].filter((word) => b.has(word)).length;
   // Общие слова к короткому тексту: площадка сокращает объявление, но не переписывает его.
