@@ -20,7 +20,7 @@ import { getRejectionReview, saveReviewFeedback } from './data/rejectionReviewAp
 import { useAsync } from './data/useAsync';
 import { longDate, pluralRu } from './model/responseRow';
 import { checksBasis } from './model/reviewChecks';
-import { guessLine, recommendationText, reviewTitle } from './model/reviewText';
+import { guessLine, recommendationText, rejectionsTitle, reviewTitle } from './model/reviewText';
 import { ReviewChecks, ReviewThreshold } from './ReviewChecks';
 
 /** Ширина полосы шагами по 5 %: атрибут `style` в кабинете запрещён. */
@@ -47,12 +47,18 @@ function DataMeter({ review }: { readonly review: RejectionReview }) {
   );
 }
 
-function RejectedList({ items }: { readonly items: readonly RejectionReviewItem[] }) {
+interface RejectedListProps {
+  readonly items: readonly RejectionReviewItem[];
+  /** Всего отказов: список показывает не больше 20. */
+  readonly total: number;
+}
+
+function RejectedList({ items, total }: RejectedListProps) {
   if (items.length === 0) return null;
   return (
     <section className="mod" aria-labelledby="rj-title">
       <h3 className="mod-title" id="rj-title">
-        Отказы
+        {rejectionsTitle(items, total)}
       </h3>
       <ul className="rows">
         {items.map((item) => (
@@ -224,7 +230,7 @@ function Review({ review }: { readonly review: RejectionReview }) {
     <div className="page two" data-b640-node="o07" data-b640-section="responses">
       <div className="col">
         <ReviewLead review={review} />
-        <RejectedList items={review.rejections} />
+        <RejectedList items={review.rejections} total={review.rejectedCount} />
       </div>
       <div className="col">
         {!ready && review.checks ? <ReviewThreshold threshold={review.threshold} /> : null}

@@ -1,3 +1,4 @@
+import type { ParsedUrlQuery } from 'node:querystring';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -348,7 +349,7 @@ export async function readB640PoolRows(
   request: FastifyRequest,
   candidateId: string,
   context: B640ListContext,
-  filters: Readonly<Record<string, string>>,
+  filters: Readonly<ParsedUrlQuery>,
 ): Promise<Rows | null> {
   const parsed = querySchema.safeParse(filters);
   if (!parsed.success) return null;

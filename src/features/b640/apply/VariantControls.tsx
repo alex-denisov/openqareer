@@ -128,6 +128,7 @@ function WishPop({ popId, variants }: WishProps) {
           Своё пожелание
         </label>
         <textarea
+          className="alt-wish"
           id={`${popId}-w`}
           rows={2}
           maxLength={VARIANT_WISH_MAX_LENGTH}
