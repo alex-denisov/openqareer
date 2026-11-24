@@ -45,6 +45,13 @@ pub const HH_SUCCESS: &str = r#"[data-qa="vacancy-response-success-standard-noti
 pub const HH_RESPONSE_ERROR: &str = r#"[data-qa="vacancy-response-error-notification"]"#;
 /// «Вы откликаетесь на вакансию в другой стране»: the candidate decides, not us.
 pub const HH_RELOCATION_WARNING: &str = r#"[data-qa="relocation-warning-confirm"]"#;
+/// «Видимость резюме»: hh.ru shows the resume in other countries only with consent.
+pub const HH_VISIBILITY_WARNING: &str =
+    r#"[data-qa="countries-profile-visibility-popup-confirm"]"#;
+/// The error line of hh.ru's own response page.
+pub const HH_PAGE_ERROR: &str = "[data-qa-popup-error-code]";
+pub const HH_ARCHIVED: &str =
+    r#"[data-qa="vacancy-title-archived-text"], [data-qa="vacancy-info-archived"]"#;
 pub const HH_CAPTCHA: &str = r#"[data-qa="captcha"], #captcha, .captcha-container"#;
 pub const HH_RESPONSE_PAGE: &str = "/applicant/vacancy_response";
 /// Polls a pressed resume card gets to show a list.
@@ -91,22 +98,34 @@ pub(crate) fn wrap(body: &str) -> String {
 /// own response page, which reads as a questionnaire.
 pub fn open_script(vacancy_id: &str) -> String {
     wrap(&format!(
-        "var path=location.pathname.replace(/\\/$/,'');\
+        "var closed=function(){{if(q({archived}))return true;var t=document.getElementById({state});if(!t)return false;\
+try{{var s=JSON.parse((t.content&&t.content.textContent)||t.textContent||'').vacancyView.vacancyFull.vacancy.status;\
+return s.archived===true||s.disabled===true;}}catch(e){{return false;}}}};\
+var path=location.pathname.replace(/\\/$/,'');\
 if(window.__oqOpened||path.indexOf({response_page})===0)return {{code:'opened'}};\
 if(path.indexOf('/account/login')===0)return {{code:'not_signed_in'}};\
 if(path!=={path})return {{code:'waiting'}};\
 if(!signedIn())return {{code:'not_signed_in'}};\
 if(q({already}))return {{code:'already_applied'}};\
-var b=q({top})||q({bottom});if(!b)return {{code:'no_response_button'}};\
+var b=q({top})||q({bottom});if(!b)return {{code:closed()?'vacancy_closed':'no_response_button'}};\
 var live=Object.keys(b).some(function(k){{return k.indexOf('__react')===0;}});\
 if(!live)return {{code:'page_not_ready'}};\
 window.__oqOpened=1;b.click();return {{code:'opened'}};",
         response_page = literal(HH_RESPONSE_PAGE),
         path = literal(&format!("/vacancy/{vacancy_id}")),
         already = literal(HH_ALREADY_APPLIED),
+        archived = literal(HH_ARCHIVED),
+        state = literal(HH_INITIAL_STATE_ID),
         top = literal(HH_RESPONSE_BUTTON_TOP),
         bottom = literal(HH_RESPONSE_BUTTON_BOTTOM),
     ))
+}
+
+/// hh.ru's own questions the candidate answered «yes» to on our screen.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Agreed {
+    pub relocation: bool,
+    pub visibility: bool,
 }
 
 /// What the page shows after a click. `open_code` is the answer for an open
@@ -114,18 +133,24 @@ window.__oqOpened=1;b.click();return {{code:'opened'}};",
 /// Only hh.ru's own elements count as a success, never page text (a vacancy
 /// description can say «Отклик отправлен»), and only after our submit: before
 /// it the same elements mean an earlier response.
-fn surface_script(open_code: &str, success_code: &str) -> String {
+fn surface_script(open_code: &str, success_code: &str, agreed: Agreed, tail: &str) -> String {
     wrap(&format!(
-        "if(location.pathname.indexOf({response_page})===0||seen({questionnaire}))return {{code:'questionnaire'}};\
+        "var ask=function(s,yes,code){{if(!seen(s))return null;if(!yes)return {{code:code}};\
+var k='__oqAgreed_'+code;if(!window[k]){{window[k]=1;if(window.__oqSubmitted&&code==='visibility_warning')window.__oqHeld=1;q(s).click();}}return {{code:'waiting'}};}};\
+var asked=ask({relocation},{yes_relocation},'relocation_warning')||ask({visibility},{yes_visibility},'visibility_warning');\
+if(asked)return asked;{tail}\
+if(location.pathname.indexOf({response_page})===0||seen({questionnaire}))return {{code:'questionnaire'}};\
 if(q({success}))return {{code:{done}}};\
 if(seen({error}))return {{code:'hh_error'}};\
-if(seen({relocation}))return {{code:'relocation_warning'}};\
 return {{code:seen({popup})?{open}:'waiting'}};",
         response_page = literal(HH_RESPONSE_PAGE),
         questionnaire = literal(HH_QUESTIONNAIRE),
         success = literal(HH_SUCCESS),
         error = literal(HH_RESPONSE_ERROR),
         relocation = literal(HH_RELOCATION_WARNING),
+        visibility = literal(HH_VISIBILITY_WARNING),
+        yes_relocation = agreed.relocation,
+        yes_visibility = agreed.visibility,
         popup = literal(HH_APPLY_POPUP),
         open = literal(open_code),
         done = literal(success_code),
@@ -134,13 +159,38 @@ return {{code:seen({popup})?{open}:'waiting'}};",
 
 /// hh.ru either opens the response pop-up or, for a vacancy with a
 /// questionnaire, takes the candidate to its own response page.
-pub fn popup_script() -> String {
-    surface_script("popup", "already_applied")
+pub fn popup_script(agreed: Agreed) -> String {
+    surface_script("popup", "already_applied", agreed, "")
 }
 
 /// After the submit: an open pop-up still means "waiting", a success means `sent`.
-pub fn result_script() -> String {
-    surface_script("waiting", "sent")
+pub fn result_script(agreed: Agreed) -> String {
+    surface_script("waiting", "sent", agreed, &repress())
+}
+
+/// After the submit on hh.ru's own response page, where the form itself is the questionnaire.
+pub fn page_result_script(agreed: Agreed) -> String {
+    let tail = format!(
+        "{repress}if(seen({error}))return {{code:'hh_error'}};\
+if(location.pathname.indexOf({page})===0)return {{code:'waiting'}};",
+        repress = repress(),
+        error = literal(HH_PAGE_ERROR),
+        page = literal(HH_RESPONSE_PAGE),
+    );
+    surface_script("waiting", "sent", agreed, &tail)
+}
+
+/// hh.ru held our submit back to ask about visibility (it cancels the press itself). Once the
+/// candidate's «yes» closed that question and the form still waits, submit is pressed one more time.
+fn repress() -> String {
+    format!(
+        "if(window.__oqHeld&&!window.__oqResubmitted){{var s=q({submit});\
+if(s&&!s.disabled&&s.getAttribute('aria-disabled')!=='true'){{\
+window.__oqIdle=(window.__oqIdle||0)+1;if(window.__oqIdle>={polls}){{window.__oqResubmitted=1;s.click();}}}}\
+else window.__oqIdle=0;}}",
+        submit = literal(HH_SUBMIT),
+        polls = RESUME_LIST_POLLS,
+    )
 }
 
 /// B708: read-only look at the open page after an unsuccessful response: did the
@@ -168,7 +218,7 @@ return {{code:here&&q({success})&&!q({top})&&!q({bottom})?'sent':'waiting'}};\
 /// when its title is the one shown, and two different ids are no answer.
 fn resume_prelude(resume_id: &str) -> String {
     format!(
-        "var id={resume};var form=q({form});\
+        "var id={resume};var form=q({form})||(q({submit})&&q({submit}).closest('form'));\
 var norm=function(s){{return String(s||'').replace(/\\s+/g,' ').trim();}};\
 var txt=function(e){{return norm(e.textContent);}};\
 var radios=[].slice.call(document.querySelectorAll({radio})).filter(function(e){{return e.type==='radio';}});\
@@ -185,6 +235,7 @@ var ids=near.filter(function(r){{var t=r.title&&r.title[0]&&r.title[0].string;re
 return ids.length&&ids.every(function(h){{return h===ids[0];}})?ids[0]:null;}}return null;}};",
         resume = literal(resume_id),
         form = literal(HH_APPLY_FORM),
+        submit = literal(HH_SUBMIT),
         radio = literal(HH_RESUME_RADIO),
         title = literal(HH_RESUME_TITLE),
     )
