@@ -1,5 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { promisify } from 'node:util';
+import { gunzipSync, gzip } from 'node:zlib';
+import { syncSection } from '../observability/syncSections';
+import { beginImmediateBriefly } from './sqliteBriefLock';
+import { retryOnSqliteBusy } from './sqliteBusyRetry';
 import type { SealedText } from './sealedText';
 
 /**
@@ -23,6 +27,17 @@ const FIRST_TABLE_MOVE = `
 INSERT OR IGNORE INTO matched_snapshot_seals (candidate_id, profile_key, built_at, cipher)
   SELECT candidate_id, profile_key, built_at, cipher FROM sealed_matched_snapshots;
 DROP TABLE sealed_matched_snapshots`;
+
+/**
+ * B770 (prod 24.11 09:31Z): the write waited 9.6 s on the event loop for the lock of the other slot
+ * while it started. One attempt waits this long; the retries wait off the loop.
+ */
+const SNAPSHOT_BUSY_TIMEOUT_MS = 50;
+
+/** Off-loop waits between attempts: longer together than the 12 s lock of a starting slot. */
+const SNAPSHOT_BUSY_RETRY_MS: readonly number[] = [250, 1_000, 3_000, 5_000, 10_000];
+
+const gzipInPool = promisify(gzip);
 
 export interface SealedMatchedSnapshotRow {
   readonly builtAt: number;
@@ -60,9 +75,38 @@ export class SealedMatchedSnapshotStore {
   }
 
   /** Sealed before the write; an older build that finished late does not replace a newer one. */
-  write(candidateId: string, profileKey: string, builtAt: number, text: string): void {
-    const packed = gzipSync(Buffer.from(text, 'utf8')).toString('base64');
-    const cipher = this.sealedText.seal(packed, associatedData(candidateId, profileKey));
+  async write(
+    candidateId: string,
+    profileKey: string,
+    builtAt: number,
+    text: string,
+    isWanted: () => boolean = () => true,
+  ): Promise<void> {
+    // Compression took 85 % of the section (B770): it runs in the thread pool.
+    const packed = (await gzipInPool(Buffer.from(text, 'utf8'))).toString('base64');
+    if (!isWanted()) return;
+    const cipher = syncSection('snapshot:store', () =>
+      this.sealedText.seal(packed, associatedData(candidateId, profileKey)),
+    );
+    await retryOnSqliteBusy(() => {
+      // Dropped while it was packed or waited: writing now would bring the deleted row back.
+      if (!isWanted()) return;
+      syncSection('snapshot:store', () => this.writeRow(candidateId, profileKey, builtAt, cipher));
+    }, { delaysMs: SNAPSHOT_BUSY_RETRY_MS });
+  }
+
+  private writeRow(candidateId: string, profileKey: string, builtAt: number, cipher: string): void {
+    beginImmediateBriefly(this.database, SNAPSHOT_BUSY_TIMEOUT_MS);
+    try {
+      this.upsertRow(candidateId, profileKey, builtAt, cipher);
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  private upsertRow(candidateId: string, profileKey: string, builtAt: number, cipher: string): void {
     this.database
       .prepare(
         `INSERT INTO matched_snapshot_seals (candidate_id, profile_key, built_at, cipher) VALUES (?, ?, ?, ?)

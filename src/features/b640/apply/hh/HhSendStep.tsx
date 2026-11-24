@@ -115,7 +115,7 @@ function ConfirmDialog({ apply, title }: { apply: HhApplyControls; title: string
     </>
   );
   return (
-    <Dialog open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
+    <Dialog className="hh-ask" open={apply.state.kind === 'confirm'} onClose={apply.cancel} title="Отправить отклик на hh.ru?" footer={footer}>
       <p>Отклик на «{title}» уйдёт от вашего имени из вашего входа в hh.ru.</p>
     </Dialog>
   );

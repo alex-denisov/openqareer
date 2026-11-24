@@ -20,6 +20,8 @@
   .b640 .cv-page > p { margin: 0 0 var(--career-space-2); }
   /* B704: лист выбора резюме без подвала — «Прочитать снова» под строкой, отступ до края окна. */
   .b640 .hh2-sheet .pf-db:last-child { padding-block-end: var(--career-dlg-pad, var(--career-space-6)); }
+  /* B708: подтверждение отклика — текст не прижат к линии подвала. */
+  .b640 .hh-ask .pf-db { padding-block-end: var(--career-dlg-pad, var(--career-space-4)); }
   /* B678: сверка резюме с вакансией справа от названия; длинный список недостающего переносится. */
   .b640 .hh2-st {
     display: inline-flex;
