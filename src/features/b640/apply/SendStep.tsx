@@ -164,6 +164,7 @@ export function SendStep(props: SendStepProps) {
       approvedLabel={approvedLabel(approved.approvedAt)}
       letterText={letterText}
       onSent={() => markApplied({ vacancyId, head, sourceType, applicationId })}
+      onLetter={props.onLetter}
     />
   );
 }
