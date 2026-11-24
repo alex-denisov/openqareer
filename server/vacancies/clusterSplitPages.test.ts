@@ -239,6 +239,7 @@ describe('B752: one link at two pieces', () => {
     ['Relationship Manager', 'Tata Capital', 1],
     ['Relationship Manager', 'Renamed Ltd', 1],
     ['Renamed role', 'VK', 0],
+    ['Renamed role', 'Tata Capital Limited', 1],
     ['Renamed role', 'Renamed Ltd', undefined],
   ])('%s / %s → %s', (title, company, expected) => {
     expect(owner(title, company)).toBe(expected);

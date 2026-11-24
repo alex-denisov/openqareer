@@ -57,7 +57,10 @@ function namedAlike(
     single(new Set([...owners].filter((index) => matches(pieces[index]!))));
   const title = (piece: VacancyCluster) => piece.canonicalTitle === page.title;
   const company = (piece: VacancyCluster) => piece.canonicalCompany === page.company;
-  return pick((piece) => title(piece) && company(piece)) ?? pick(title) ?? pick(company);
+  const alike = (piece: VacancyCluster) => sameVacancyTitle(piece.canonicalCompany, page.company);
+  return (
+    pick((piece) => title(piece) && company(piece)) ?? pick(title) ?? pick(company) ?? pick(alike)
+  );
 }
 
 /**
