@@ -16,4 +16,20 @@
       block-size: calc(var(--career-space-8) + var(--career-space-6));
     }
   }
+  /* p11: вид как в макете (кнопка 36, чип 32), область нажатия — 44. */
+  .b640 .ln-end .btn,
+  .b640 a.ln-open,
+  .b640 .ln-chip-pool {
+    position: relative;
+  }
+  .b640 .ln-end .btn::after,
+  .b640 a.ln-open::after,
+  .b640 .ln-chip-pool::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 50%;
+    block-size: max(100%, var(--career-target-min));
+    transform: translateY(-50%);
+  }
 }
