@@ -528,6 +528,7 @@ test.describe('B657: единый экран отклика', () => {
     const pop = page.getByRole('dialog', { name: 'Что поменять' });
     await expect(pop).toBeVisible();
     await expectGates(page, { only: ['modal_fit', 'field_height'] });
+    await expect(pop.getByLabel('Своё пожелание')).toHaveCSS('padding-left', '12px');
     await pop.getByRole('button', { name: 'Короче' }).click();
     await pop.getByLabel('Своё пожелание').fill('начать с результата');
     await pop.getByRole('button', { name: 'Сделать вариант' }).click();
