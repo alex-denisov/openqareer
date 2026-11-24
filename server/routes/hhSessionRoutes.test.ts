@@ -8,6 +8,8 @@ import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
+import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+import { APPLY_MANDATE_VERSION } from '../candidate/applyMandate';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -63,7 +65,14 @@ async function setup() {
     () => candidateStore.close(),
     () => app.close(),
   );
-  return { app, databasePath: config.databasePath };
+  const consents = new SqliteCapabilityConsentStore({ databasePath: config.databasePath });
+  const grant = (userId: string) =>
+    consents.recordConsent({ userId, capability: 'actions_on_behalf', versionId: APPLY_MANDATE_VERSION });
+  const flaggedId = sessions.get(flagged)!.candidate!.id;
+  for (const token of [flagged, other]) grant(sessions.get(token)!.candidate!.id);
+  const revokeMandate = () => consents.revokeConsent(flaggedId, 'actions_on_behalf');
+  cleanups.push(() => consents.close());
+  return { app, databasePath: config.databasePath, revokeMandate };
 }
 
 function call(app: App, method: 'GET' | 'PUT' | 'POST', path: string, token?: string, payload?: unknown) {
@@ -110,6 +119,18 @@ describe('B704: hh.ru session routes without the B640 flag', () => {
       }
     }
     expect(tableRows(databasePath, 'hh_resume_snapshots')).toEqual([]);
+    expect(tableRows(databasePath, 'hh_apply_attempts')).toEqual([]);
+  });
+});
+
+describe('B787: поручение перед откликом hh.ru', () => {
+  it('без поручения отклик не начинается и попытка не тратится', async () => {
+    const { app, databasePath, revokeMandate } = await setup();
+    await call(app, 'PUT', RESUMES, flagged, SNAPSHOT);
+    revokeMandate();
+    const refused = await call(app, 'POST', APPLY, flagged, attempt());
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().error.code).toBe('apply_mandate_required');
     expect(tableRows(databasePath, 'hh_apply_attempts')).toEqual([]);
   });
 });

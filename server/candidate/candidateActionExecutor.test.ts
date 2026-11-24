@@ -29,7 +29,7 @@ function grantActionConsent(
   store.recordConsent({
     userId: candidateId,
     capability: 'actions_on_behalf',
-    versionId: 'actions_on_behalf-v1.0',
+    versionId: 'actions_on_behalf-v1.1',
   });
   return store;
 }
