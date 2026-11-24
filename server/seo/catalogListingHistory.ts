@@ -10,6 +10,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { readRowsChunked } from '../data/chunkedRows';
+import { writeInPortions } from '../data/writePortions';
 import { MIN_LISTING_SIZE } from '../vacancies/vacancyCatalogFacets';
 import { listingQualifies, type ListingIndexHistory } from './catalogIndexing';
 
@@ -29,6 +30,8 @@ export const CATALOG_LISTING_SEARCH_EVIDENCE_TABLE_SQL = `CREATE TABLE IF NOT EX
   last_impression_at TEXT NOT NULL,
   PRIMARY KEY (place_slug, role_slug)
 ) STRICT, WITHOUT ROWID`;
+
+const HISTORY_WRITE_PORTION = 1_000;
 
 export interface ListingCount {
   readonly place: string;
@@ -50,6 +53,7 @@ export function recordListingHistory(
   database: DatabaseSync,
   counts: readonly ListingCount[],
   now: Date,
+  pause: () => void = () => undefined,
 ): void {
   database.exec(CATALOG_LISTING_HISTORY_TABLE_SQL);
   const at = now.toISOString();
@@ -61,18 +65,11 @@ export function recordListingHistory(
        first_qualified_at = coalesce(first_qualified_at, excluded.first_qualified_at),
        last_qualified_at = coalesce(excluded.last_qualified_at, last_qualified_at)`,
   );
-  database.exec('BEGIN IMMEDIATE');
-  try {
-    for (const listing of counts) {
-      if (listing.count < MIN_LISTING_SIZE) continue;
-      const qualified = listingQualifies(listing.count, listing.role !== undefined) ? at : null;
-      upsert.run(listing.place, listing.role ?? '', at, qualified, qualified);
-    }
-    database.exec('COMMIT');
-  } catch (error: unknown) {
-    database.exec('ROLLBACK');
-    throw error;
-  }
+  const published = counts.filter((listing) => listing.count >= MIN_LISTING_SIZE);
+  writeInPortions(database, published, HISTORY_WRITE_PORTION, pause, (listing) => {
+    const qualified = listingQualifies(listing.count, listing.role !== undefined) ? at : null;
+    upsert.run(listing.place, listing.role ?? '', at, qualified, qualified);
+  });
 }
 
 function tableExists(database: DatabaseSync, name: string): boolean {
@@ -98,7 +95,9 @@ interface HistoryRow {
 async function readImpressions(database: DatabaseSync): Promise<Map<string, string>> {
   if (!tableExists(database, 'catalog_listing_search_evidence')) return new Map();
   const rows = await readRowsChunked<ImpressionRow>(
-    database.prepare('SELECT place_slug, role_slug, last_impression_at FROM catalog_listing_search_evidence'),
+    database.prepare(
+      'SELECT place_slug, role_slug, last_impression_at FROM catalog_listing_search_evidence',
+    ),
   );
   return new Map(
     rows.map((row) => [
