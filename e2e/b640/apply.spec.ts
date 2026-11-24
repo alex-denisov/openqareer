@@ -511,6 +511,8 @@ test.describe('B657: единый экран отклика', () => {
   test('резюме: шаг открывается по адресу, без опыта ведёт в профиль', async ({ page }) => {
     await open(page, '/app/responses/a-draft/letter?step=resume');
     await expect(step(page, 'Резюме')).toHaveAttribute('aria-current', 'page');
+    // Макет o03 без `data-mtight`: отступ страницы обычный и на 390.
+    await expect(page.locator('[data-b640-node="o02"]')).toHaveCSS('padding-top', '16px');
     await expect(
       page.getByRole('heading', { name: 'Резюме пока не из чего собрать' }),
     ).toBeVisible();
@@ -663,7 +665,12 @@ test.describe('B657: единый экран отклика', () => {
     await expect(country.getByRole('radio')).toHaveCount(21);
     const search = page.getByRole('searchbox', { name: /Найти вариант/u });
     const more = page.getByRole('button', { name: 'Показать ещё' });
-    for (const target of [search, more, country.locator('label').first()]) {
+    // Рамка и фон поиска — у обёртки `.search`, как в фильтрах макета.
+    const box = page.locator('.qa .search');
+    await expect(box).toHaveCSS('border-top-width', '1px');
+    await expect(search).toHaveCSS('border-top-width', '0px');
+    await expect(search).toHaveCSS('font-size', '14px');
+    for (const target of [box, more, country.locator('label').first()]) {
       expect((await target.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     }
     await expectGates(page);
