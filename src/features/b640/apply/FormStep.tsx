@@ -69,9 +69,7 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   return {
     form,
     known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
-    draft,
-    reload,
-    saveError,
+    draft, reload, saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
     setAnswer: (questionId, text) => setDraft((current) => ({ ...current, [questionId]: text })),
     save: (next = draft) => {
