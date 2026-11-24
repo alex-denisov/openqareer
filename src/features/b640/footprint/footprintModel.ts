@@ -16,6 +16,8 @@ export interface PlanItem {
   readonly preview: string;
   readonly selectedByDefault: boolean;
   readonly available: boolean;
+  /** Ссылка из контактов профиля: её можно убрать (B668). */
+  readonly profileLink?: string;
 }
 
 /** Одна строка «Данных для поиска»: одинаковые запросы к разным источникам слиты в одну. */
@@ -24,6 +26,7 @@ export interface PlanGroup {
   readonly kind: PlanItem['kind'];
   readonly label: string;
   readonly ids: readonly string[];
+  readonly profileLink?: string;
 }
 
 export function planGroups(plan: readonly PlanItem[]): readonly PlanGroup[] {
@@ -34,7 +37,13 @@ export function planGroups(plan: readonly PlanItem[]): readonly PlanGroup[] {
     const prev = groups.get(key);
     groups.set(key, prev
       ? { ...prev, ids: [...prev.ids, item.id] }
-      : { key, kind: item.kind, label: item.preview, ids: [item.id] });
+      : {
+          key,
+          kind: item.kind,
+          label: item.preview,
+          ids: [item.id],
+          ...(item.profileLink ? { profileLink: item.profileLink } : {}),
+        });
   }
   return [...groups.values()];
 }
@@ -61,15 +70,21 @@ const KIND_WORD: Readonly<Record<PlanItem['kind'], [string, string, string]>> = 
 };
 const KIND_ORDER: readonly PlanItem['kind'][] = ['name', 'email', 'username', 'profile_url', 'work_context'];
 
+/** Город идёт в плане тем же видом, что места работы; формулировка — из плана поиска (B668). */
+const CITY_WORDING = /^Искать имя и город «/u;
+const isCity = (group: PlanGroup): boolean =>
+  group.kind === 'work_context' && CITY_WORDING.test(group.label);
+
 /** «имя, почта, 2 ссылки» — по чему ищем, без способа поиска. */
 export function searchByLine(groups: readonly PlanGroup[], selected: ReadonlySet<string>): string {
   const parts: string[] = [];
   for (const kind of KIND_ORDER) {
-    const count = groups.filter((group) => group.kind === kind && selected.has(group.key)).length;
+    const count = groups.filter((group) => group.kind === kind && !isCity(group) && selected.has(group.key)).length;
     if (count === 0) continue;
     const forms = KIND_WORD[kind];
     parts.push(count === 1 ? forms[0] : pluralRu(count, forms));
   }
+  if (groups.some((group) => isCity(group) && selected.has(group.key))) parts.push('город');
   return parts.join(', ');
 }
 

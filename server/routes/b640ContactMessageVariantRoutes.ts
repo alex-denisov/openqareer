@@ -112,9 +112,26 @@ async function writeVariant(
     .send({ data: { variant, ...variants.list(subject) }, meta: { requestId: request.id } });
 }
 
+/** B753: «Не отправлять» убирает черновик вместе с вариантами; отправленный остаётся. */
+function discardDraft(deps: RouteDeps, stores: Stores, request: FastifyRequest, reply: FastifyReply) {
+  const candidate = session(deps, request, reply);
+  if (!candidate) return reply;
+  const id = idSchema.safeParse((request.params as { id?: string }).id);
+  const message = id.success ? stores.messages.get(candidate.id, id.data) : null;
+  if (!message) return notFound(request, reply);
+  if (!stores.messages.discard(candidate.id, message.id)) {
+    return sendError(reply, request, 409, 'message_already_sent', 'Сообщение уже отмечено отправленным.', false);
+  }
+  stores.variants.removeAll({ candidateId: candidate.id, kind: 'message', subjectId: message.id });
+  return reply.code(204).send();
+}
+
 function register(app: FastifyInstance, deps: RouteDeps, stores: Stores): void {
   // Один вариант на черновик за раз: параллельные запросы не обходят предел лишними вызовами модели.
   const inFlight = new Set<string>();
+  app.delete(`${CONTACT_MESSAGE_BASE}/:id`, { config: { rateLimit: { max: 600, timeWindow: '1 hour' } } }, async (request, reply) =>
+    discardDraft(deps, stores, request, reply),
+  );
   app.post(`${CONTACT_MESSAGE_BASE}/:id/variants`, VARIANT_LIMIT, async (request, reply) => {
     const job = prepareJob(deps, stores, request, reply);
     if (!job) return reply;

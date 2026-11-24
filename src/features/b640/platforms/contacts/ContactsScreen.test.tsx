@@ -21,6 +21,7 @@ vi.mock('../../messages/contactMessageApi', () => ({
   listB640ContactMessageVariants: async () => ({ variants: [], remaining: 3 }),
   createB640ContactMessage: vi.fn(),
   createB640ContactMessageVariant: vi.fn(),
+  discardB640ContactMessage: vi.fn(async () => undefined),
   editB640ContactMessage: vi.fn(),
   approveB640ContactMessage: vi.fn(),
   markB640ContactMessageSent: vi.fn(),
@@ -384,6 +385,7 @@ describe('a02: контакты', () => {
     click(view.container.querySelector('a.ct-n'));
     await flush();
     click(byText(view.container, 'button', 'Не отправлять'));
+    await flush();
     expect(view.container.querySelectorAll('.lk-inline')).toHaveLength(0);
     view.unmount();
   });
