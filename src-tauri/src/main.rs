@@ -463,8 +463,8 @@ fn resize_connector_session(
 }
 
 #[tauri::command]
-fn park_connector_session(app: AppHandle, platform: String, layout: SessionLayout) -> bool {
-    park_session_window(&app, &platform, layout)
+fn park_connector_session(app: AppHandle, platform: String) -> bool {
+    park_session_window(&app, &platform)
 }
 
 /// Reads a page inside the candidate's own signed-in session window.
@@ -613,6 +613,7 @@ fn main() {
         })
         .manage(app_state)
         .manage(CandidateSessionAccount::default())
+        .manage(connector_session::SessionWindowsOnScreen::default())
         .manage(linkedin_read_guard::LinkedInReadGuardState::default())
         .manage(recording::RecordingState::default())
         .invoke_handler(tauri::generate_handler![

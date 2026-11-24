@@ -168,7 +168,7 @@ export function startLinkedInContactsRefresh(
           y: 0,
           width: OUT_OF_SIGHT_WIDTH_PX,
           height: OUT_OF_SIGHT_HEIGHT_PX,
-        })
+        }, { background: true })
       ).opened,
     importContacts: () =>
       importLinkedInConnectionsFromSession({

@@ -167,6 +167,7 @@ async function openCabinet(page: Page, path: string, mocks: Mocks = {}): Promise
       },
     });
   });
+  await page.route(`${API}/b640/contact-messages/m-1`, (route) => route.fulfill({ status: 204 }));
   await page.route(`${API}/b640/contact-messages`, (route) => {
     calls.drafts.push(route.request().postDataJSON());
     return route.fulfill({

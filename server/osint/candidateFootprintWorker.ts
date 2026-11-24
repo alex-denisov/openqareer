@@ -12,6 +12,7 @@ import type { UsernamePresenceInput } from './adapters/usernamePresenceAdapter';
 import type { WaybackAdapterInput } from './adapters/waybackAdapter';
 import type { YoutubeAdapterInput } from './adapters/youtubeAdapter';
 import type { FootprintQueryPlanItem } from './candidateFootprintQueryPlan';
+import { findingsStillSearched } from './footprintSearchedData';
 import { mergeFootprintFindings } from './mergeFootprintFindings';
 import type { FootprintAdapterSet } from './adapters/createFootprintAdapters';
 
@@ -320,7 +321,7 @@ async function executeAudit(
     ...audit,
     state: 'completed',
     adapterStatuses: finalizedStatuses(statuses, now),
-    findings: mergeFootprintFindings(findings, previous?.findings ?? []),
+    findings: mergeFootprintFindings(findings, findingsStillSearched(previous?.findings ?? [], input.plan)),
     completedAt: now().toISOString(),
   };
 }

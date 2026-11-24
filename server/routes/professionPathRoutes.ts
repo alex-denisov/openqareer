@@ -17,7 +17,8 @@ import { buildRoleSkillDemand } from '../domain/roleSkillDemand';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
-import { toAssessmentVacancies } from './roleAssessmentVacancies';
+import { runStepsYielding } from '../vacancies/yieldingSteps';
+import { assessmentVacancySteps } from './roleAssessmentVacancies';
 import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
 import { createRoleRequirementReader } from './roleSkillRequirementSource';
 import { signalApplicationOf } from './statusSignalRoutes';
@@ -66,11 +67,8 @@ async function readPath(deps: BoundDeps, candidateId: string, target: string) {
   if (snapshot.state !== 'matched') return { state: 'source_unavailable', target } as const;
   const roleId = titleKey(target);
   const now = new Date();
-  const vacancies = toAssessmentVacancies(
-    snapshot.vacancies,
-    roleId,
-    now,
-    createRoleRequirementReader(deps),
+  const vacancies = await runStepsYielding(
+    assessmentVacancySteps(snapshot.vacancies, roleId, now, createRoleRequirementReader(deps)),
   );
   const skills = deps.candidateStore.getSnapshot(candidateId)?.resume?.draft.skills ?? [];
   const demand = buildRoleSkillDemand(

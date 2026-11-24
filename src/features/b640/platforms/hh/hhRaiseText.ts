@@ -5,7 +5,7 @@ export type HhRaiseLine =
   | {
       readonly state: 'wait' | 'ok' | 'err';
       readonly text: string;
-      readonly action?: 'retry' | 'sign_in';
+      readonly action?: 'retry' | 'sign_in' | 'captcha';
     };
 
 const clock = (iso: string) =>
@@ -23,7 +23,7 @@ export function lineOf(view: B640HhRaiseState, now: number = Date.now()): HhRais
   // Задание уже стоит в очереди или исполняется: прошлый исход больше не показываем.
   if (view.pending) return { state: 'wait', text: 'Резюме будет поднято' };
   if (view.pauseReason === 'captcha' && view.pausedUntil) {
-    return { state: 'wait', text: `Пауза до ${clock(view.pausedUntil)}: hh.ru попросил капчу` };
+    return { state: 'wait', text: `Пауза до ${clock(view.pausedUntil)}: hh.ru попросил капчу`, action: 'captcha' };
   }
   // «Ещё рано» — не сбой: hh.ru поднимет резюме в следующий срок.
   const tooEarly = view.lastResult?.reason === 'too_early';

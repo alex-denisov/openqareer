@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ProposedRole } from '../../shared/roleProposals';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import {
   careerTimeZone,
   countRolesLikeTheList,
-  observedWithinDays,
   startOfDayIn,
+  withinLastDays,
 } from './careerRoleCounts';
 
 const NOW = new Date('2026-11-19T12:00:00.000Z');
@@ -35,9 +35,9 @@ const role = (title: string): ProposedRole =>
 
 describe('B726: число роли «Карьеры» = строкам «Подборки» по ссылке', () => {
   it('30 дней — от начала сегодняшнего дня, как фильтр «Дата»', () => {
-    expect(observedWithinDays(row('COO', '2026-10-20T00:00:00.000Z'), 30, NOW)).toBe(true);
-    expect(observedWithinDays(row('COO', '2026-10-19T23:59:00.000Z'), 30, NOW)).toBe(false);
-    expect(observedWithinDays(row('COO', 'не дата'), 30, NOW)).toBe(false);
+    expect(withinLastDays([row('COO', '2026-10-20T00:00:00.000Z')], 30, NOW)).toHaveLength(1);
+    expect(withinLastDays([row('COO', '2026-10-19T23:59:00.000Z')], 30, NOW)).toHaveLength(0);
+    expect(withinLastDays([row('COO', 'не дата')], 30, NOW)).toHaveLength(0);
   });
 
   it('считает по строкам списка тем же признаком роли и за 30 дней', () => {
@@ -67,11 +67,11 @@ describe('B726: число роли «Карьеры» = строкам «Под
       '2026-11-18T05:00:00.000Z',
     );
     expect(
-      observedWithinDays(row('COO', '2026-10-20T21:00:00.000Z'), 30, late, 'Europe/Moscow'),
-    ).toBe(true);
+      withinLastDays([row('COO', '2026-10-20T21:00:00.000Z')], 30, late, 'Europe/Moscow'),
+    ).toHaveLength(1);
     expect(
-      observedWithinDays(row('COO', '2026-10-20T20:59:00.000Z'), 30, late, 'Europe/Moscow'),
-    ).toBe(false);
+      withinLastDays([row('COO', '2026-10-20T20:59:00.000Z')], 30, late, 'Europe/Moscow'),
+    ).toHaveLength(0);
   });
 
   it('пояс из запроса — только IANA, иначе UTC', () => {
@@ -79,5 +79,18 @@ describe('B726: число роли «Карьеры» = строкам «Под
     expect(careerTimeZone({ tz: 'Mars/Olympus' })).toBe('UTC');
     expect(careerTimeZone({ tz: ['Europe/Moscow'] })).toBe('UTC');
     expect(careerTimeZone(undefined)).toBe('UTC');
+  });
+
+  it('B702-2: граница дня считается один раз на список, а не на строку', () => {
+    const Original = Intl.DateTimeFormat;
+    let built = 0;
+    vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function (...args) {
+      built += 1;
+      return new Original(...args);
+    } as typeof Intl.DateTimeFormat);
+    const rows = Array.from({ length: 200 }, () => row('COO', '2026-11-10T00:00:00.000Z'));
+    expect(withinLastDays(rows, 30, NOW, 'Europe/Moscow')).toHaveLength(200);
+    vi.restoreAllMocks();
+    expect(built).toBeLessThan(10);
   });
 });

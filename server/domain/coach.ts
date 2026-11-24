@@ -326,6 +326,28 @@ const knowledgeContextSchema = z.object({
     .optional(),
 });
 
+const selectionGroupsSchema = z
+  .array(
+    z
+      .object({
+        label: z.string().max(200),
+        count: z.number().int().min(1),
+        rows: z.array(z.number().int().min(1).max(20)).max(20),
+      })
+      .strict(),
+  )
+  .max(20);
+
+/** B735: счёт строк подборки по месту, стране и формату; без данных — «неизвестно». */
+const selectionSummarySchema = z
+  .object({
+    shown: z.number().int().min(0).max(20),
+    byPlace: selectionGroupsSchema,
+    byCountry: selectionGroupsSchema,
+    byFormat: selectionGroupsSchema,
+  })
+  .strict();
+
 export const coachTurnInputSchema = z.object({
   candidateReference: z.string().min(8).max(80),
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
@@ -348,13 +370,16 @@ export const coachTurnInputSchema = z.object({
       selection: z
         .object({
           total: z.number().int().min(0),
+          summary: selectionSummarySchema,
           rows: z
             .array(
               z
                 .object({
+                  n: z.number().int().min(1).max(20),
                   title: z.string().max(200),
                   company: z.string().max(200).nullable(),
                   location: z.string().max(200).nullable(),
+                  country: z.string().max(120).nullable(),
                   format: z.string().max(120).nullable(),
                   salary: z.string().max(120).nullable(),
                   fitPercent: z.number().min(0).max(100).nullable(),

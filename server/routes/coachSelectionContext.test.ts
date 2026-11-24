@@ -22,7 +22,7 @@ describe('подборка в ходе консультанта (B735)', () => {
     expect(SELECTION_CONTEXT_ROWS).toBe(20);
     expect(selection.total).toBe(34);
     expect(selection.rows).toHaveLength(20);
-    expect(selection.rows[0]).toEqual({ title: 'Head of IT Service 1', company: 'Компания 1', location: null, format: null, salary: null, fitPercent: null });
+    expect(selection.rows[0]).toEqual({ n: 1, title: 'Head of IT Service 1', company: 'Компания 1', location: null, country: null, format: null, salary: null, fitPercent: null });
     expect(selection.rows[19]?.title).toBe('Head of IT Service 20');
   });
 
@@ -50,10 +50,30 @@ describe('подборка в ходе консультанта (B735)', () => {
     ]);
   });
 
-  it('правила консультанта: место только из location, доля — пересчётом строк', () => {
+  it('правила консультанта: страна только из country, число — из сводки сервера', () => {
     const prompt = careerInstructionsForRole();
-    expect(prompt).toContain('только из location');
-    expect(prompt).toContain('только пересчитав строки');
+    expect(prompt).toContain('только из country');
+    expect(prompt).toContain('только из summary');
+  });
+
+  it('сводка: город, страна и формат с номерами строк; «Remote» — не место, спорный формат — неизвестно', () => {
+    const { rows, summary } = selectionContextOf(
+      [
+        item(1, { canonicalLocation: 'Москва', workFormat: 'hybrid' }),
+        item(2, { canonicalLocation: 'Moscow, Russia', workFormat: 'office' }),
+        item(3, { canonicalLocation: 'Remote', workFormat: 'office' }),
+        item(4, { canonicalLocation: 'Тверь', workFormat: 'remote', remoteScope: 'RU' }),
+        item(5, { canonicalLocation: 'Dubai, UAE', workFormat: 'office' }),
+      ],
+      () => null,
+    );
+    expect(rows[2]).toMatchObject({ n: 3, location: null, country: null, format: null });
+    expect(summary.shown).toBe(5);
+    expect(summary.byPlace[0]).toEqual({ label: 'Москва', count: 2, rows: [1, 2] });
+    expect(summary.byPlace.at(-1)).toEqual({ label: 'неизвестно', count: 1, rows: [3] });
+    expect(summary.byCountry[0]).toEqual({ label: 'Россия', count: 3, rows: [1, 2, 4] });
+    expect(summary.byCountry.at(-1)).toEqual({ label: 'неизвестно', count: 1, rows: [3] });
+    expect(summary.byFormat.find((group) => group.rows.includes(4))?.label).toContain('Удалённо');
   });
 
   it('частное лицо вместо компании не попадает в ход', () => {

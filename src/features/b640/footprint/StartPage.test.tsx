@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CandidateFootprintAudit } from '../../../../shared/candidateFootprint';
+import { ToastHost } from '../kit/Toast';
 import { click, mount, type Mounted } from '../kit/testDom';
 import { nodeByCode } from '../routes';
 import { StartPage } from './FootprintScreen';
@@ -131,6 +132,35 @@ describe('B668: ссылка в «Данных для поиска»', () => {
     expect(rememberAddedLink).toHaveBeenCalledWith('https://youtube.com/@name');
     expect(changed).toHaveBeenCalled();
     window.removeEventListener('b640:footprint-changed', changed);
+  });
+});
+
+describe('B668: добавленную ссылку можно убрать', () => {
+  const link = 'https://youtube.com/@name';
+  it('«Убрать» — ссылки в профиле нет, тост «Отменить» возвращает её', async () => {
+    resume.saveResumeStudioDraft.mockReset().mockResolvedValue({});
+    const draft = (links: string[]) => ({ draft: { candidate: { contact: { links } }, experience: [] } });
+    resume.getResumeStudio.mockResolvedValueOnce(draft(['https://a.ru/', link])).mockResolvedValueOnce(draft(['https://a.ru/']));
+    const item = (id: string, profileLink?: string) => ({
+      id, kind: 'profile_url' as const, preview: id, selectedByDefault: true, available: true,
+      ...(profileLink ? { profileLink } : {}),
+    });
+    const root = render({
+      ...data('ready', audit('completed', ['checked'])),
+      plan: [item('своя', link), item('выведенная')],
+    });
+    const toast = mount(<ToastHost />);
+    click([...root.querySelectorAll('button')].find((node) => node.textContent === 'Изменить')!);
+    const remove = [...root.querySelectorAll('button')].filter((node) => node.textContent === 'Убрать');
+    expect(remove).toHaveLength(1);
+    await act(async () => remove[0]!.click());
+    const links = (call: number) => resume.saveResumeStudioDraft.mock.calls[call]![0].candidate.contact.links;
+    expect(links(0)).toEqual(['https://a.ru/']);
+    expect(toast.container.textContent).toContain('Ссылка убрана');
+    const undo = [...document.querySelectorAll('button')].find((node) => node.textContent === 'Отменить')!;
+    await act(async () => undo.click());
+    expect(links(1)).toEqual(['https://a.ru/', link]);
+    toast.unmount();
   });
 });
 

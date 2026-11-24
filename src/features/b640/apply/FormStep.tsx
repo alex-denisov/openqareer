@@ -34,6 +34,8 @@ type Mark =
 export interface QuestionnaireState {
   /** Анкета с вопросами; `null` — её нет или вопросы заранее не читаются. */
   readonly form: ApplicationQuestionnaire | null;
+  /** Первое чтение анкеты ещё идёт. */
+  readonly loading: boolean;
   /** Название и компания вакансии, как их знает сервер. */
   readonly known: { readonly vacancyTitle: string; readonly companyName: string } | null;
   readonly draft: AnswerDraft;
@@ -66,6 +68,7 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const title = data?.vacancyTitle;
   return {
     form,
+    loading: state.status === 'loading' && !data,
     known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
     draft,
     saveError,

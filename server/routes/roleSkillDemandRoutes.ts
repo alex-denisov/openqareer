@@ -5,7 +5,8 @@ import { buildRoleSkillDemand } from '../domain/roleSkillDemand';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, withDeps } from './helpers';
-import { toAssessmentVacancies } from './roleAssessmentVacancies';
+import { runStepsYielding } from '../vacancies/yieldingSteps';
+import { assessmentVacancySteps } from './roleAssessmentVacancies';
 import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
 import { RoleSkillDemandCache } from './roleSkillDemandCache';
 import { createRoleRequirementReader } from './roleSkillRequirementSource';
@@ -36,7 +37,7 @@ function cacheOf(deps: RouteDeps): RoleSkillDemandCache<readonly RoleSample[]> {
 }
 
 /** Roles one at a time: a read holds the pool for seconds, never in parallel. */
-async function readSamples(
+export async function readSamples(
   deps: RouteDeps,
   candidateId: string,
   roles: readonly string[],
@@ -45,11 +46,15 @@ async function readSamples(
   for (const roleTitle of roles) {
     const snapshot = await readRoleSnapshot(deps, candidateId, roleTitle);
     if (snapshot.state !== 'matched') throw new Error('selection source unavailable');
-    const vacancies = toAssessmentVacancies(
-      snapshot.vacancies,
-      titleKey(roleTitle),
-      new Date(),
-      createRoleRequirementReader(deps),
+    // B702 part 2 (prod 24.11 18:57Z): five roles in one piece held the loop 2385 ms.
+    const vacancies = await runStepsYielding(
+      assessmentVacancySteps(
+        snapshot.vacancies,
+        titleKey(roleTitle),
+        new Date(),
+        createRoleRequirementReader(deps),
+      ),
+      { section: 'role-demand:row' },
     );
     samples.push({ roleTitle, vacancies });
   }
