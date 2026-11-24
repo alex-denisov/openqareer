@@ -148,7 +148,16 @@ interface BodyProps {
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm }: BodyProps) {
+function SendBody({
+  vacancyId,
+  head,
+  sourceType,
+  setStep,
+  letter,
+  answers,
+  hhForm,
+  onHhForm,
+}: BodyProps) {
   return (
     <>
       <div className="col">
@@ -264,7 +273,9 @@ function useApplyLetter(vacancyId: string) {
   const variants = useLetterVariants(vacancyId, draft);
   const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
   // B678: до чтения одобрения шаг не показывает ни «Сначала одобрите», ни «Собираем письмо».
-  return { letter, variants, approvalPending: approvalHold.hold && !letter.approval.saved };
+  // Письмо с опровергнутыми фактами уже прочитано, хотя одобрения у него больше нет.
+  const known = Boolean(letter.approval.saved) || letter.approval.stale === true;
+  return { letter, variants, approvalPending: approvalHold.hold && !known };
 }
 
 /** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
