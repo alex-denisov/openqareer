@@ -186,8 +186,7 @@ function stepFor(
   if (category === 'marketing') return field.required ? { ask: 'optional_consent_required' } : null;
   if (category === 'fact') return { ask: 'fact_needed' };
   if (category === 'demographic') return demographicStep(field);
-  if (category === 'processing')
-    return processingStep(field, context);
+  if (category === 'processing') return processingStep(field, context);
   const known = identityOf(field, fields, facts);
   if (known) return { entry: { key: field.key, value: known } };
   if (COVER_LETTER.test(field.label) && facts.coverLetter) {

@@ -63,6 +63,44 @@ export interface QuestionnaireState {
   ) => Promise<boolean>;
 }
 
+/** Анкеты, прочитанные приложением на площадке, встают вопросами экрана. */
+function formTakers(
+  vacancyId: string,
+  queue: { readonly current: Promise<unknown> },
+  replaceData: (next: ApplicationQuestionnaire) => void,
+): Pick<QuestionnaireState, 'takeAtsForm' | 'takeHhForm'> {
+  return {
+    takeAtsForm: async (atsForm, stale) => {
+      try {
+        await queue.current;
+        const read = await saveAtsForm(vacancyId, atsForm);
+        const answers = draftOf(read);
+        const gone = Object.fromEntries(stale(answers).map((id) => [id, '']));
+        const next =
+          Object.keys(gone).length > 0
+            ? await saveQuestionnaireAnswers(vacancyId, answersOf({ ...answers, ...gone }))
+            : read;
+        replaceData(next);
+        return next.state === 'ready';
+      } catch {
+        return false;
+      }
+    },
+    takeHhForm: async (hhForm) => {
+      if (hhForm.questions.length === 0) return false;
+      try {
+        // Ответы, которые ещё сохраняются, сначала доходят до сервера.
+        await queue.current;
+        const next = await saveHhForm(vacancyId, hhForm);
+        replaceData(next);
+        return next.state === 'ready';
+      } catch {
+        return false;
+      }
+    },
+  };
+}
+
 /** Анкета работодателя по вакансии: загрузка, черновик ответов и их сохранение. */
 export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const load = useCallback((signal: AbortSignal) => getQuestionnaire(vacancyId, signal), [vacancyId]);
@@ -103,34 +141,7 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
           setSubmitted({ kind: 'error', text: apiErrorMessage(reason, 'Отметка не сохранилась.') }),
         );
     },
-    takeAtsForm: async (atsForm, stale) => {
-      try {
-        await queue.current;
-        const read = await saveAtsForm(vacancyId, atsForm);
-        const answers = draftOf(read);
-        const gone = Object.fromEntries(stale(answers).map((id) => [id, '']));
-        const next =
-          Object.keys(gone).length > 0
-            ? await saveQuestionnaireAnswers(vacancyId, answersOf({ ...answers, ...gone }))
-            : read;
-        replaceData(next);
-        return next.state === 'ready';
-      } catch {
-        return false;
-      }
-    },
-    takeHhForm: async (hhForm) => {
-      if (hhForm.questions.length === 0) return false;
-      try {
-        // Ответы, которые ещё сохраняются, сначала доходят до сервера.
-        await queue.current;
-        const next = await saveHhForm(vacancyId, hhForm);
-        replaceData(next);
-        return next.state === 'ready';
-      } catch {
-        return false;
-      }
-    },
+    ...formTakers(vacancyId, queue, replaceData),
   };
 }
 
@@ -304,21 +315,21 @@ export interface FormStepProps {
   readonly form: ApplicationQuestionnaire;
   readonly visibility: VisibilityState;
   /** Форма сайта работодателя уходит из приложения (B787). */
-  readonly viaApp?: boolean;
+  readonly viaApp?: 'open' | 'locked';
   readonly onSend: () => void;
 }
 
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form, visibility, viaApp = false, onSend }: FormStepProps) {
+export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepProps) {
   const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
   const hhInApp = onHh && isTauriEnvironment();
-  const inApp = hhInApp || viaApp;
+  const inApp = hhInApp || viaApp !== undefined;
   const send = inApp ? onSend : null;
   const asked = hhInApp && visibility.value !== null;
   const ready = asked
     ? readiness([...form.questions, VISIBILITY_QUESTION], { ...state.draft, [VISIBILITY_QUESTION.id]: visibility.value ?? '' })
     : readiness(form.questions, state.draft);
-  const declined = asked && !visibility.agreed;
+  const declined = (asked && !visibility.agreed) || viaApp === 'locked';
   const suggestions = new Map(form.suggestions.map((item) => [item.questionId, item]));
   return (
     <>

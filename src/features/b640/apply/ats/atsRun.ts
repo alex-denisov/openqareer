@@ -3,13 +3,7 @@ import type { AnswerDraft } from '../model/formModel';
 import type { AtsConsentJournal } from './atsConsentJournal';
 import type * as desktop from './atsDesktop';
 import { planForm, type AtsConsentRecord, type CandidateFacts } from './atsFieldPlan';
-import type {
-  AtsEntry,
-  AtsField,
-  AtsFile,
-  AtsFormReport,
-  AtsReceipt,
-} from './atsFormTypes';
+import type { AtsEntry, AtsField, AtsFile, AtsFormReport, AtsReceipt } from './atsFormTypes';
 import type { IdentityFacts } from './atsIdentity';
 import { fieldAnswers, isBeyondForm, missingAnswers } from './atsQuestions';
 import { sendAtsForm } from './atsSend';
@@ -49,13 +43,14 @@ export type AtsRunResult =
   | { readonly kind: 'failed' }
   | AtsManual;
 
-const READ_REASONS: Readonly<Record<Exclude<AtsFormReport['state'], 'ready'>, ManualApplyReason>> = {
-  account_required: 'account_required',
-  captcha: 'captcha',
-  form_missing: 'other',
-  off_target: 'other',
-  unreadable: 'other',
-};
+const READ_REASONS: Readonly<Record<Exclude<AtsFormReport['state'], 'ready'>, ManualApplyReason>> =
+  {
+    account_required: 'account_required',
+    captcha: 'captcha',
+    form_missing: 'other',
+    off_target: 'other',
+    unreadable: 'other',
+  };
 
 const manual = (reason: ManualApplyReason, host: string): AtsManual => ({
   kind: 'manual',

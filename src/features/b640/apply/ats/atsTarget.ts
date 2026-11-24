@@ -1,4 +1,5 @@
-import type { ApplyTarget } from '../../../../../shared/applyTarget';
+import type { ManualApplyReason } from '../../../../../shared/manualApply';
+import type { ApplyChannel, ApplyTarget } from '../../../../../shared/applyTarget';
 
 /** B787: площадки, форму которых приложение заполняет само. Точный адрес проверяет приложение. */
 const HOSTS =
@@ -33,4 +34,21 @@ export function atsAddressOf(
 ): AtsAddress | null {
   const formUrl = target && !target.needsRedirect ? target.formUrl : null;
   return knownAddress(formUrl) ?? knownAddress(url);
+}
+
+/** Площадки со своим путём отклика: очередь «отправить на сайте» им не нужна. */
+const OWN_WAY: ReadonlySet<ApplyChannel> = new Set([
+  'hh',
+  'linkedin',
+  'indeed',
+  'telegram',
+  'email',
+  'board',
+]);
+const WITH_ACCOUNT: ReadonlySet<ApplyChannel> = new Set(['workday', 'icims']);
+
+/** Почему отклик на сайте работодателя отправляет кандидат; `null` — это не сайт работодателя. */
+export function ownSiteReason(target: ApplyTarget | null | undefined): ManualApplyReason | null {
+  if (!target || target.needsRedirect || OWN_WAY.has(target.channel)) return null;
+  return WITH_ACCOUNT.has(target.channel) ? 'account_required' : 'other';
 }

@@ -9,7 +9,7 @@ import type { ApplyStep } from '../model/applyModel';
 import { elapsedLabel } from '../hh/hhSendModel';
 import { useMarkSent } from '../hh/useMarkSent';
 import type { AtsConfirmation } from './atsFormTypes';
-import type { AtsApplyControls, AtsApplyState } from './useAtsApply';
+import { canSendAts, type AtsApplyControls, type AtsApplyState } from './useAtsApply';
 
 export interface AtsSendStepProps {
   readonly apply: AtsApplyControls;
@@ -62,6 +62,33 @@ export function sentText({ host, pressedAtMs }: AtsConfirmation): string {
   return `Отклик отправлен на ${host}${when}`;
 }
 
+function Done({ text, path }: { readonly text: string; readonly path: string }) {
+  return (
+    <>
+      <ResultLine text={text} />
+      <div className="actions">
+        <Link className="btn is-primary" to={path}>
+          <Icon name="right" />К отклику
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function ReadFailed({ onRetry }: { readonly onRetry: () => void }) {
+  return (
+    <StatusLine
+      state="err"
+      text="Анкета не загрузилась"
+      action={
+        <Button size="sm" onClick={onRetry}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
 function Outcome({
   state,
   host,
@@ -81,19 +108,11 @@ function Outcome({
         </p>
       );
     case 'read_failed':
-      return (
-        <StatusLine
-          state="err"
-          text="Анкета не загрузилась"
-          action={
-            <Button size="sm" onClick={onRetry}>
-              Повторить
-            </Button>
-          }
-        />
-      );
+      return <ReadFailed onRetry={onRetry} />;
     case 'sending':
-      return <StatusLine state="wait" text={`Ждём ответа ${host} · ${elapsedLabel(state.seconds)}`} />;
+      return (
+        <StatusLine state="wait" text={`Ждём ответа ${host} · ${elapsedLabel(state.seconds)}`} />
+      );
     case 'unconfirmed':
       return (
         <StatusLine
@@ -106,16 +125,7 @@ function Outcome({
     case 'failed':
       return <StatusLine state="err" text="Отклик не отправлен. Повторите." />;
     case 'sent':
-      return (
-        <>
-          <ResultLine text={sentText(state.receipt)} />
-          <div className="actions">
-            <Link className="btn is-primary" to={path}>
-              <Icon name="right" />К отклику
-            </Link>
-          </div>
-        </>
-      );
+      return <Done text={sentText(state.receipt)} path={path} />;
     default:
       return null;
   }
@@ -154,23 +164,37 @@ function useAskNow({ askNow, onAsked, apply }: AtsSendStepProps): void {
   }, [askNow, kind, apply.missing, onAsked]);
 }
 
-const CAN_SEND: ReadonlySet<AtsApplyState['kind']> = new Set([
-  'ready',
-  'mandate',
-  'refused',
-  'failed',
-]);
+function OpenOnSite({ url }: { readonly url: string }) {
+  return (
+    <a
+      className="btn m-ico"
+      aria-label="Открыть вакансию на сайте"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <Icon name="out" />
+      Открыть вакансию на сайте
+    </a>
+  );
+}
 
-function SendActions({ props, marking }: { props: AtsSendStepProps; marking: ReturnType<typeof useMarkSent> }) {
+function SendActions({
+  props,
+  marking,
+}: {
+  props: AtsSendStepProps;
+  marking: ReturnType<typeof useMarkSent>;
+}) {
   const { apply, url } = props;
   const { state, missing } = apply;
-  const answerFirst = CAN_SEND.has(state.kind) && missing > 0;
+  const answerFirst = canSendAts(state.kind) && missing > 0;
   const noun = pluralRu(missing, ['вопрос', 'вопроса', 'вопросов']);
   return (
     <div className="actions">
       {answerFirst ? (
         <Button variant="primary" icon="edit" onClick={() => props.onStep('form')}>
-          {`Ответить · ${missing} ${noun}`}
+          {`Ответить · ${noun}`}
         </Button>
       ) : null}
       {state.kind === 'unconfirmed' ? null : (
@@ -178,24 +202,13 @@ function SendActions({ props, marking }: { props: AtsSendStepProps; marking: Ret
           {...(answerFirst ? {} : { variant: 'primary' as const })}
           icon="send"
           busy={state.kind === 'sending'}
-          disabled={!CAN_SEND.has(state.kind) || answerFirst}
+          disabled={!canSendAts(state.kind) || answerFirst}
           onClick={apply.send}
         >
           Отправить отклик
         </Button>
       )}
-      {url ? (
-        <a
-          className="btn m-ico"
-          aria-label="Открыть вакансию на сайте"
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Icon name="out" />
-          Открыть вакансию на сайте
-        </a>
-      ) : null}
+      {url ? <OpenOnSite url={url} /> : null}
       <Button
         variant="quiet"
         icon="checkc"
@@ -233,8 +246,8 @@ export function AtsSendStep(props: AtsSendStepProps) {
         <Part title="Резюме" ready={props.hasResume} onOpen={() => onStep('resume')} />
         {answered > 0 ? (
           <Part
-            title={`${answered} ${noun} анкеты`}
-            ready={CAN_SEND.has(state.kind) && apply.missing === 0}
+            title={`${noun} анкеты`}
+            ready={canSendAts(state.kind) && apply.missing === 0}
             onOpen={() => onStep('form')}
           />
         ) : null}
@@ -242,14 +255,7 @@ export function AtsSendStep(props: AtsSendStepProps) {
       {done ? null : <SendActions props={props} marking={marking} />}
       <Outcome state={state} host={apply.host} path={path} onRetry={apply.retry} />
       {state.kind !== 'sent' && marking.state.kind === 'done' ? (
-        <>
-          <ResultLine text="Отклик отмечен как отправленный" />
-          <div className="actions">
-            <Link className="btn is-primary" to={path}>
-              <Icon name="right" />К отклику
-            </Link>
-          </div>
-        </>
+        <Done text="Отклик отмечен как отправленный" path={path} />
       ) : null}
       {marking.state.kind === 'error' ? <StatusLine state="err" text={marking.state.text} /> : null}
       <MandateDialog apply={apply} />

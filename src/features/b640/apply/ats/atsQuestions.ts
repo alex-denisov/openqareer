@@ -5,13 +5,7 @@ import {
 } from '../../../../../shared/applicationQuestionnaire';
 import { answerOf, type AnswerDraft } from '../model/formModel';
 import { choiceValues } from '../model/choiceModel';
-import {
-  categoryOf,
-  consentOption,
-  declines,
-  isCoverLetter,
-  isResumeFile,
-} from './atsFieldPlan';
+import { categoryOf, consentOption, declines, isCoverLetter, isResumeFile } from './atsFieldPlan';
 import type { AtsField, AtsOption } from './atsFormTypes';
 import { identityOf, type IdentityFacts } from './atsIdentity';
 

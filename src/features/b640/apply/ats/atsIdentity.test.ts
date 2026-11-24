@@ -15,7 +15,10 @@ const field = (label: string, extra: Partial<AtsField> = {}): AtsField => ({
   ...extra,
 });
 const factOf = (label: string, ...others: string[]) =>
-  identityFact(field(label), [label, ...others].map((item) => field(item)));
+  identityFact(
+    field(label),
+    [label, ...others].map((item) => field(item)),
+  );
 
 describe('поля о кандидате', () => {
   it.each([

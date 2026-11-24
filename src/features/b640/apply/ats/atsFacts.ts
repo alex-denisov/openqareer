@@ -23,13 +23,19 @@ export function base64Of(bytes: Uint8Array): string {
 
 /** Имя файла без знаков, которые приложение не примет. */
 export function resumeFileName(name: string, extension: string): string {
-  const stem = name.replace(/[\p{Cc}/\\]/gu, ' ').replace(/\s+/gu, ' ').trim();
+  const stem = name
+    .replace(/[\p{Cc}/\\]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
   return `${stem.slice(0, 120) || 'resume'}.${extension}`;
 }
 
 /** Город и страна — только когда место записано через запятую. */
 function place(location: string | undefined): Pick<IdentityFacts, 'city' | 'country'> {
-  const parts = (location ?? '').split(',').map((part) => part.trim()).filter(Boolean);
+  const parts = (location ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
   return parts.length > 1 ? { city: parts[0], country: parts.at(-1) } : { city: parts[0] };
 }
 
@@ -45,7 +51,9 @@ export function factsOf({ contact }: Pick<ResumeDocument, 'contact'>): IdentityF
     email: text(contact.email),
     phone: text(contact.phone),
     linkedin: linkedin?.replace(/^(?!https?:\/\/)/iu, 'https://'),
-    website: links.find((link) => /^https?:\/\//iu.test(link) && !/linkedin\.com|github\.com/iu.test(link)),
+    website: links.find(
+      (link) => /^https?:\/\//iu.test(link) && !/linkedin\.com|github\.com/iu.test(link),
+    ),
     location,
     ...place(location),
   };

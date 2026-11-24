@@ -1,42 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ManualApplyReason } from '../../../../../shared/manualApply';
-import { getAccountCapabilityConsents } from '../../../account/accountCapabilityConsentApi';
 import type { ApprovedVacancyLetterResult } from '../../../vacancies/vacancyLetterApi';
 import type { QuestionnaireState } from '../FormStep';
-import { serverConsentJournal } from './atsConsentJournal';
-import * as desktop from './atsDesktop';
-import { loadAtsFacts, loadAtsResume } from './atsFacts';
-import { isResumeFile } from './atsFieldPlan';
-import type { AtsConfirmation } from './atsFormTypes';
-import type { IdentityFacts } from './atsIdentity';
-import { hasApplyMandate } from './atsMandate';
-import { askedFields, atsFormInput, isOffList, missingAnswers, questionIdOf } from './atsQuestions';
-import {
-  allFields,
-  formOf,
-  isOffTarget,
-  isUnknownForm,
-  runAtsForm,
-  type AtsForm,
-  type AtsRunResult,
-} from './atsRun';
-import { settleAtsConsents } from './atsSend';
-import type { AtsAddress } from './atsTarget';
 import { answerOf, type AnswerDraft } from '../model/formModel';
+import { closeAtsForm } from './atsDesktop';
+import { askedFields, atsFormInput, isOffList, missingAnswers, questionIdOf } from './atsQuestions';
+import { allFields, isOffTarget, type AtsRunResult } from './atsRun';
+import {
+  holdWindow,
+  mandateAccepted,
+  openForm,
+  priorAttempt,
+  sendSession,
+  type AtsApplyState,
+  type AtsSession,
+} from './atsSession';
+import type { AtsAddress } from './atsTarget';
 
-export type AtsApplyState =
-  | { readonly kind: 'reading' }
-  | { readonly kind: 'read_failed' }
-  | { readonly kind: 'ready' }
-  /** Поручение ещё не дано: спрашивают один раз, отклик уходит сразу после согласия. */
-  | { readonly kind: 'mandate' }
-  | { readonly kind: 'sending'; readonly seconds: number }
-  | { readonly kind: 'sent'; readonly receipt: AtsConfirmation }
-  | { readonly kind: 'unconfirmed'; readonly host: string }
-  | { readonly kind: 'refused'; readonly host: string }
-  | { readonly kind: 'failed' }
-  /** Отклик уходит в очередь кандидата. */
-  | { readonly kind: 'manual' };
+export type { AtsApplyState } from './atsSession';
+
+const CAN_SEND: ReadonlySet<AtsApplyState['kind']> = new Set([
+  'ready',
+  'mandate',
+  'refused',
+  'failed',
+]);
+
+/** Нажатие ещё возможно. */
+export const canSendAts = (kind: AtsApplyState['kind']): boolean => CAN_SEND.has(kind);
 
 export interface AtsApplyInput {
   readonly vacancyId: string;
@@ -64,209 +55,167 @@ export interface AtsApplyControls {
   readonly cancel: () => void;
 }
 
-const DEPS = {
-  desktop,
-  journal: serverConsentJournal,
-  newId: () => crypto.randomUUID(),
+const closeWindow = (): void => {
+  void closeAtsForm().catch(() => undefined);
 };
 
-/** Окно формы одно на приложение: новая форма ждёт конца идущей отправки. */
-let running: Promise<unknown> = Promise.resolve();
-
-type Opened =
-  | { readonly kind: 'form'; readonly form: AtsForm; readonly facts: IdentityFacts }
-  | { readonly kind: 'manual'; readonly reason: ManualApplyReason; readonly host: string };
-
-async function openForm(vacancyId: string, address: AtsAddress): Promise<Opened> {
-  await running.catch(() => undefined);
-  const facts = await loadAtsFacts();
-  try {
-    const report = await desktop.openAtsForm(vacancyId, address.url, address.board);
-    if (!report) throw new Error('ats_no_answer');
-    const form = formOf(report, address.host);
-    return 'kind' in form ? form : { kind: 'form', form, facts };
-  } catch (reason) {
-    if (isUnknownForm(reason)) return { kind: 'manual', reason: 'other', host: address.host };
-    throw reason;
-  }
+interface Box<T> {
+  current: T;
 }
 
-/** Прежнее нажатие: его итог показывается, второго не будет. */
-async function priorAttempt(vacancyId: string): Promise<AtsApplyState | null> {
-  const attempt = await desktop.readAtsAttempt(vacancyId);
-  if (!attempt) return null;
-  await settleAtsConsents(attempt, serverConsentJournal);
-  if (attempt.result === 'failed') return null;
-  const host = URL.canParse(attempt.entryUrl) ? new URL(attempt.entryUrl).hostname : '';
-  if (attempt.result !== 'sent') return { kind: 'unconfirmed', host };
-  const pressedAtMs = attempt.startedAtMs;
-  return { kind: 'sent', receipt: attempt.confirmation ?? { host, path: '', pressedAtMs } };
+interface Core {
+  readonly latest: Box<AtsApplyInput>;
+  readonly alive: Box<boolean>;
+  readonly inFlight: Box<boolean>;
+  readonly session: AtsSession | null;
+  readonly show: (next: AtsApplyState) => void;
+  /** Вопросы формы встают в «Анкету»; ответ не из списка стирается. */
+  readonly takeForm: (next: AtsSession) => Promise<boolean>;
+  readonly dropSession: () => void;
+  readonly toManual: (reason: ManualApplyReason, host: string) => void;
 }
 
-async function mandateAccepted(): Promise<boolean> {
-  const consents = await getAccountCapabilityConsents();
-  return hasApplyMandate(
-    consents.filter((item) => item.revokedAt === null).map((item) => item.versionId),
-  );
-}
+const offList = (form: AtsSession['form']) => (draft: AnswerDraft) =>
+  askedFields(allFields(form))
+    .map((field) => ({ field, id: questionIdOf(field) }))
+    .filter(({ field, id }) => isOffList(field, answerOf(draft, id)))
+    .map(({ id }) => id);
 
-interface Session {
-  readonly form: AtsForm;
-  readonly facts: IdentityFacts;
-}
-
-/** Форма с сайта работодателя: чтение, вопросы «Анкеты», одно нажатие и его итог (B787). */
-export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
-  const { vacancyId, address, wanted, questionnaire } = input;
-  const [state, setState] = useState<AtsApplyState>({ kind: 'reading' });
-  const [session, setSession] = useState<Session | null>(null);
+function useCore(input: AtsApplyInput, setState: (next: AtsApplyState) => void): Core {
+  const [session, setSession] = useState<AtsSession | null>(null);
   const latest = useRef(input);
   latest.current = input;
   const inFlight = useRef(false);
   const alive = useRef(true);
-  const show = useCallback((next: AtsApplyState) => {
-    if (alive.current) setState(next);
-  }, []);
-
-  /** Вопросы формы встают в «Анкету»; ответ не из списка стирается. */
-  const takeForm = useCallback(
-    async (next: Session, url: string): Promise<boolean> => {
-      const { questionnaire: form } = latest.current;
-      const fields = allFields(next.form);
-      const offList = (draft: AnswerDraft) =>
-        askedFields(fields)
-          .map((field) => ({ field, id: questionIdOf(field) }))
-          .filter(({ field, id }) => isOffList(field, answerOf(draft, id)))
-          .map(({ id }) => id);
-      const saved = await form.takeAtsForm(atsFormInput(url, fields, next.facts), offList);
-      if (!saved || !alive.current) return false;
-      setSession(next);
-      return true;
+  const show = useCallback(
+    (next: AtsApplyState) => {
+      if (alive.current) setState(next);
     },
-    [],
+    [setState],
   );
-
+  const takeForm = useCallback(async (next: AtsSession): Promise<boolean> => {
+    const { questionnaire, address } = latest.current;
+    if (!address) return false;
+    const questions = atsFormInput(address.url, allFields(next.form), next.facts);
+    const saved = await questionnaire.takeAtsForm(questions, offList(next.form));
+    if (!saved || !alive.current) return false;
+    setSession(next);
+    return true;
+  }, []);
   const toManual = useCallback(
     (reason: ManualApplyReason, host: string) => {
       show({ kind: 'manual' });
       latest.current.onManual(reason, host);
-      void desktop.closeAtsForm().catch(() => undefined);
+      closeWindow();
     },
     [show],
   );
+  const dropSession = useCallback(() => setSession(null), []);
+  return { latest, alive, inFlight, session, show, takeForm, dropSession, toManual };
+}
 
-  const open = useCallback(async (): Promise<void> => {
+/** Открыть форму; прежнее нажатие показывает свой итог вместо неё. */
+function useOpen({ latest, alive, show, takeForm, toManual }: Core): () => Promise<void> {
+  return useCallback(async () => {
+    const { address, vacancyId } = latest.current;
     if (!address) return;
     show({ kind: 'reading' });
     try {
       const prior = await priorAttempt(vacancyId);
       if (prior) {
         if (prior.kind === 'sent') await latest.current.onSent().catch(() => undefined);
-        return show(prior);
+        show(prior);
+        return;
       }
       const opened = await openForm(vacancyId, address);
-      if (!alive.current) return undefined;
-      if (opened.kind === 'manual') return toManual(opened.reason, opened.host);
-      const taken = await takeForm(opened, address.url);
-      return show({ kind: taken ? 'ready' : 'read_failed' });
+      if (!alive.current) return;
+      if (opened.kind === 'manual') {
+        toManual(opened.reason, opened.host);
+        return;
+      }
+      show({ kind: (await takeForm(opened)) ? 'ready' : 'read_failed' });
     } catch {
-      return show({ kind: 'read_failed' });
+      show({ kind: 'read_failed' });
     }
-  }, [address, vacancyId, show, takeForm, toManual]);
+  }, [latest, alive, show, takeForm, toManual]);
+}
 
+/** Форма читается один раз, когда открыт её шаг; уход с экрана закрывает окно. */
+function useAutoOpen({ alive, inFlight }: Core, wanted: boolean, open: () => Promise<void>): void {
   const started = useRef(false);
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
       // Идущую отправку закрытие окна оборвало бы.
-      if (started.current && !inFlight.current) void desktop.closeAtsForm().catch(() => undefined);
+      if (started.current && !inFlight.current) closeWindow();
     };
-  }, []);
+  }, [alive, inFlight]);
   useEffect(() => {
-    if (!wanted || !address || started.current) return;
+    if (!wanted || started.current) return;
     started.current = true;
     void open();
-  }, [wanted, address, open]);
+  }, [wanted, open]);
+}
 
-  const finish = async (result: AtsRunResult, current: Session): Promise<void> => {
-    if (result.kind === 'manual') return toManual(result.reason, result.host);
-    if (result.kind === 'ask') {
-      const taken = await takeForm({ ...current, form: result.form }, address!.url);
-      show({ kind: taken ? 'ready' : 'read_failed' });
-      if (taken) latest.current.onAsk();
-      return undefined;
-    }
-    if (result.kind === 'sent') {
-      const { host, path, pressedAtMs } = result.receipt;
-      show({ kind: 'sent', receipt: { host, path, pressedAtMs } });
-      if (alive.current) await desktop.closeAtsForm().catch(() => undefined);
-      await latest.current.onSent().catch(() => undefined);
-      return undefined;
-    }
-    // Страница уже видела нажатие или потеряна: следующая попытка открывает её заново.
-    if (result.kind !== 'unconfirmed') setSession(null);
-    return show(result);
-  };
+async function finish(core: Core, result: AtsRunResult, current: AtsSession): Promise<void> {
+  const { show, latest, alive } = core;
+  if (result.kind === 'manual') return core.toManual(result.reason, result.host);
+  if (result.kind === 'ask') {
+    const taken = await core.takeForm({ ...current, form: result.form });
+    show({ kind: taken ? 'ready' : 'read_failed' });
+    if (taken) latest.current.onAsk();
+    return undefined;
+  }
+  if (result.kind === 'sent') {
+    const { host, path, pressedAtMs } = result.receipt;
+    show({ kind: 'sent', receipt: { host, path, pressedAtMs } });
+    if (alive.current) closeWindow();
+    return latest.current.onSent().catch(() => undefined);
+  }
+  // Страница уже видела нажатие или потеряна: следующая попытка открывает её заново.
+  if (result.kind !== 'unconfirmed') core.dropSession();
+  return show(result);
+}
 
-  const run = async (current: Session): Promise<AtsRunResult> => {
-    const { approved, letterText, employer, questionnaire: form } = latest.current;
-    const needsFile = allFields(current.form).some((field) => isResumeFile(field));
-    const fullName = current.facts.fullName ?? '';
-    const resume = needsFile ? await loadAtsResume(vacancyId, approved?.resume, fullName) : null;
-    return runAtsForm(
-      current.form,
-      {
-        vacancyId,
-        applicationId: approved!.applicationId,
-        employer,
-        letter: letterText,
-        facts: current.facts,
-        resume,
-        draft: form.draft,
-        now: () => new Date(),
-      },
-      DEPS,
+async function sendNow(core: Core, open: () => Promise<void>): Promise<void> {
+  const { session: current, latest, show } = core;
+  // Форма отказала или потеряна: она читается заново, дальше — снова по команде кандидата.
+  if (!current) return open();
+  show({ kind: 'sending', seconds: 0 });
+  const { vacancyId, employer, approved, letterText, questionnaire } = latest.current;
+  if (!approved) return show({ kind: 'failed' });
+  let result: AtsRunResult = { kind: 'failed' };
+  try {
+    if (!(await mandateAccepted())) return show({ kind: 'mandate' });
+    const { draft } = questionnaire;
+    result = await holdWindow(
+      sendSession(current, { vacancyId, employer, approved, letterText, draft }),
     );
-  };
+  } catch (reason) {
+    if (isOffTarget(reason)) result = { kind: 'manual', reason: 'other', host: current.form.host };
+  }
+  return finish(core, result, current);
+}
 
-  /** Форма отказала или потеряна: она читается заново, дальше — снова по команде кандидата. */
-  const ensureSession = async (): Promise<Session | null> => {
-    if (session) return session;
-    await open();
-    return null;
-  };
-
-  const sendNow = async (): Promise<void> => {
-    const current = await ensureSession();
-    if (!current) return undefined;
-    show({ kind: 'sending', seconds: 0 });
-    let result: AtsRunResult = { kind: 'failed' };
-    try {
-      if (!(await mandateAccepted())) return show({ kind: 'mandate' });
-      const job = run(current);
-      running = job;
-      result = await job;
-    } catch (reason) {
-      result = isOffTarget(reason)
-        ? { kind: 'manual', reason: 'other', host: current.form.host }
-        : { kind: 'failed' };
-    }
-    return finish(result, current);
-  };
+/** Форма с сайта работодателя: чтение, вопросы «Анкеты», одно нажатие и его итог (B787). */
+export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
+  const { address, wanted, questionnaire } = input;
+  const [state, setState] = useState<AtsApplyState>({ kind: 'reading' });
+  const core = useCore(input, setState);
+  const { session, inFlight, alive } = core;
+  const open = useOpen(core);
+  useAutoOpen(core, wanted && address !== null, open);
+  useSeconds(state.kind === 'sending', setState);
 
   const send = () => {
-    const { kind } = state;
-    const can = kind === 'ready' || kind === 'mandate' || kind === 'refused' || kind === 'failed';
-    if (!can || inFlight.current || !latest.current.approved) return;
+    if (!canSendAts(state.kind) || inFlight.current || !input.approved) return;
     inFlight.current = true;
-    void sendNow().finally(() => {
+    void sendNow(core, open).finally(() => {
       inFlight.current = false;
-      if (!alive.current) void desktop.closeAtsForm().catch(() => undefined);
+      if (!alive.current) closeWindow();
     });
   };
-
-  useSeconds(state.kind === 'sending', setState);
   const missing = useMemo(
     () => (session ? missingAnswers(allFields(session.form), questionnaire.draft) : 0),
     [session, questionnaire.draft],

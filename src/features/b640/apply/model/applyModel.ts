@@ -15,6 +15,8 @@ import type {
 } from '../../../vacancies/vacancyLetterApi';
 
 /** Шаги единого экрана отклика. «Анкета» есть только у вакансий с прочитанной анкетой. */
+export type { ApplyDestination };
+
 export type ApplyStep = 'resume' | 'letter' | 'form' | 'send';
 
 export const APPLY_STEPS: readonly { readonly id: ApplyStep; readonly label: string }[] = [

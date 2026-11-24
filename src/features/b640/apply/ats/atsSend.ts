@@ -27,7 +27,11 @@ export type AtsSendResult =
   /** Не в приложении или ответ команды потерян: итог нажатия неизвестен. */
   | { readonly kind: 'unknown' };
 
-function consentInput(input: AtsSendInput, consent: AtsConsentRecord, id: string): ApplyConsentInput {
+function consentInput(
+  input: AtsSendInput,
+  consent: AtsConsentRecord,
+  id: string,
+): ApplyConsentInput {
   return {
     id,
     applicationId: input.applicationId,

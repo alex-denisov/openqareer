@@ -52,7 +52,6 @@ import { vacancyDescriptionHash } from '../domain/vacancyRequirements';
 import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 
 type LetterDeps = ResumeEditDeps & LetterDraftDeps;
-type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const vacancyPitchInputSchema = z
   .object({

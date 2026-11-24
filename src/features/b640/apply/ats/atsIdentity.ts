@@ -46,13 +46,26 @@ const LABELS: readonly (readonly [RegExp, Fact])[] = [
     ),
     'phone',
   ],
-  [whole('country(?: of residence)?|страна(?: проживания)?|land|pays|país|paese|kraj|maa'), 'country'],
   [
-    whole('city|current city|город(?: проживания)?|stadt|wohnort|ville|ciudad|città|cidade|stad|woonplaats|miasto|ort'),
+    whole('country(?: of residence)?|страна(?: проживания)?|land|pays|país|paese|kraj|maa'),
+    'country',
+  ],
+  [
+    whole(
+      'city|current city|город(?: проживания)?|stadt|wohnort|ville|ciudad|città|cidade|stad|woonplaats|miasto|ort',
+    ),
     'city',
   ],
-  [whole('(?:current )?location(?: ?,? city)?|место ?жительства|локация|местоположение|ubicación|localização'), 'location'],
-  [whole('(?:personal )?web ?site(?: url)?|portfolio(?: (?:url|link|website))?|сайт|портфолио'), 'website'],
+  [
+    whole(
+      '(?:current )?location(?: ?,? city)?|место ?жительства|локация|местоположение|ubicación|localização',
+    ),
+    'location',
+  ],
+  [
+    whole('(?:personal )?web ?site(?: url)?|portfolio(?: (?:url|link|website))?|сайт|портфолио'),
+    'website',
+  ],
 ];
 
 const LINKEDIN =
@@ -93,7 +106,12 @@ export function identityFact(field: AtsField, fields: readonly AtsField[]): Fact
   if (field.kind === 'tel') return 'phone';
   if (LINKEDIN.test(label)) return 'linkedin';
   const known = LABELS.find(([pattern]) => pattern.test(label));
-  return known ? known[1] : nameFact(label, fields.map((other) => tidy(other.label)));
+  return known
+    ? known[1]
+    : nameFact(
+        label,
+        fields.map((other) => tidy(other.label)),
+      );
 }
 
 /** Значение из профиля; у списка — только его собственный вариант. */
