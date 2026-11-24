@@ -80,7 +80,12 @@ function safeUrl(url: string | null | undefined): string | null {
 
 function isHhSnapshot(snapshot: ApplicationView['vacancy']): boolean {
   return Boolean(
-    snapshot && isHhSource({ sourceType: snapshot.source, sourceName: snapshot.source, sourceUrl: snapshot.url }),
+    snapshot &&
+    isHhSource({
+      sourceType: snapshot.source,
+      sourceName: snapshot.source,
+      sourceUrl: snapshot.url,
+    }),
   );
 }
 
@@ -93,7 +98,10 @@ export function needsPoolRoute(application: ApplicationView | null): boolean {
  * Площадка отклика и её адрес (B678): hh.ru первым, как на карточке вакансии. Снимок отклика
  * главнее подборки; на hh.ru переходит только неотправленный со снимком другой площадки.
  */
-export function applyRoute({ application, cluster }: Pick<HeadSources, 'application' | 'cluster'>): {
+export function applyRoute({
+  application,
+  cluster,
+}: Pick<HeadSources, 'application' | 'cluster'>): {
   readonly source: string | undefined;
   readonly url: string | null;
 } {
@@ -172,80 +180,4 @@ export function paragraphs(text: string): readonly string[] {
     .split(/\n+/u)
     .map((line) => line.trim())
     .filter(Boolean);
-}
-
-export interface ResumeLine {
-  readonly kind: 'heading' | 'line';
-  readonly text: string;
-}
-
-/**
- * Служебная разметка раздела из исходного файла. Знаки должны стоять с обеих сторон
- * одинаковые (`=== SUMMARY ===`, `**Опыт**`) либо это заголовок `## Навыки`; строка с
- * тире в начале остаётся пунктом списка.
- */
-const FENCED = /^([=\-_*~]{2,})\s*(.*?)\s*\1$/u;
-const HASHED = /^#{2,6}\s+(.+)$/u;
-/** Длинные строки — это текст, а не разметка: сверять их с шаблоном незачем. */
-const MARKER_MAX_LENGTH = 120;
-
-function markerTitle(line: string): string | null {
-  if (line.length > MARKER_MAX_LENGTH) return null;
-  if (/^[=\-_*~#]{2,}$/u.test(line)) return '';
-  const fenced = FENCED.exec(line);
-  if (fenced) return fenced[2] ?? '';
-  const hashed = HASHED.exec(line);
-  if (hashed) return hashed[1] ?? '';
-  return null;
-}
-
-/** Названия технологий латиницей не делают русское резюме английским. */
-const ENGLISH_RATIO = 2;
-
-const SECTION_NAMES: Readonly<Record<string, string>> = {
-  summary: 'О себе',
-  about: 'О себе',
-  profile: 'О себе',
-  experience: 'Опыт работы',
-  'work experience': 'Опыт работы',
-  education: 'Образование',
-  skills: 'Навыки',
-  languages: 'Языки',
-  certifications: 'Сертификаты',
-  'courses and certifications': 'Курсы и сертификаты',
-  projects: 'Проекты',
-  contacts: 'Контакты',
-};
-
-/** Язык текста резюме — по буквам строк без заголовков: заголовки идут на нём же (B713). */
-function isEnglish(lines: readonly ResumeLine[]): boolean {
-  const body = lines
-    .filter((line) => line.kind === 'line')
-    .map((line) => line.text)
-    .join(' ');
-  const latin = body.match(/[a-z]/giu)?.length ?? 0;
-  return latin > (body.match(/[а-яё]/giu)?.length ?? 0) * ENGLISH_RATIO && latin > 0;
-}
-
-function headingName(title: string, english: boolean): string {
-  const key = title.toLowerCase();
-  if (!Object.hasOwn(SECTION_NAMES, key)) return title;
-  return english ? `${key.charAt(0).toUpperCase()}${key.slice(1)}` : SECTION_NAMES[key]!;
-}
-
-/**
- * Резюме строками для показа. Служебная разметка разделов на экран не выходит: строка
- * `=== SUMMARY ===` становится заголовком «О себе», линия из одних знаков пропадает.
- */
-export function resumeLines(text: string): readonly ResumeLine[] {
-  const lines = paragraphs(text).flatMap((line): ResumeLine[] => {
-    const title = markerTitle(line)?.trim();
-    if (title === undefined) return [{ kind: 'line', text: line }];
-    if (!title) return [];
-    return [{ kind: 'heading', text: title }];
-  });
-  const english = isEnglish(lines);
-  return lines.map((line) =>
-    line.kind === 'heading' ? { ...line, text: headingName(line.text, english) } : line,
-  );
 }

@@ -8,7 +8,6 @@ import {
   parseStep,
   recipientOptions,
   resolveTarget,
-  resumeLines,
   stepsFor,
 } from './applyModel';
 
@@ -32,11 +31,17 @@ describe('B657: что открыто — отклик или вакансия',
   });
 
   it('id вакансии находит уже существующий отклик', () => {
-    expect(resolveTarget('cluster-9', [card])).toEqual({ vacancyId: 'cluster-9', application: card });
+    expect(resolveTarget('cluster-9', [card])).toEqual({
+      vacancyId: 'cluster-9',
+      application: card,
+    });
   });
 
   it('id вакансии без карточки отклика тоже принимается', () => {
-    expect(resolveTarget('cluster-new', [card])).toEqual({ vacancyId: 'cluster-new', application: null });
+    expect(resolveTarget('cluster-new', [card])).toEqual({
+      vacancyId: 'cluster-new',
+      application: null,
+    });
   });
 
   it('отклик без вакансии из подбора письма не получает', () => {
@@ -81,8 +86,17 @@ describe('B657: шапка отклика', () => {
     canonicalCompany: 'ЭР-Телеком Холдинг',
     primaryUrl: 'https://getmatch.ru/vacancies/7',
     sources: [
-      { sourceType: 'json_api', sourceName: 'Getmatch', sourceUrl: 'https://getmatch.ru/vacancies/7' },
-      { sourceType: 'json_api', sourceId: 'hh', sourceName: 'hh.ru', sourceUrl: 'https://hh.ru/vacancy/139180469' },
+      {
+        sourceType: 'json_api',
+        sourceName: 'Getmatch',
+        sourceUrl: 'https://getmatch.ru/vacancies/7',
+      },
+      {
+        sourceType: 'json_api',
+        sourceId: 'hh',
+        sourceName: 'hh.ru',
+        sourceUrl: 'https://hh.ru/vacancy/139180469',
+      },
     ],
   };
   const getmatchCard = {
@@ -113,19 +127,32 @@ describe('B657: шапка отклика', () => {
 
   it('B678: снимок hh.ru не меняется на другой источник hh.ru', () => {
     const saved = application({ stage: 'saved', appliedAt: null });
-    expect(buildHead({ application: saved, cluster: twoSources }).url).toBe('https://hh.ru/vacancy/1');
+    expect(buildHead({ application: saved, cluster: twoSources }).url).toBe(
+      'https://hh.ru/vacancy/1',
+    );
   });
 
   it('скрытая компания не подставляется', () => {
     const hidden = application({
-      vacancy: { title: 'Аналитик', company: 'Тайна', url: '', source: 'manual', companyHidden: true },
+      vacancy: {
+        title: 'Аналитик',
+        company: 'Тайна',
+        url: '',
+        source: 'manual',
+        companyHidden: true,
+      },
     });
     expect(buildHead({ application: hidden }).company).toBe('');
   });
 });
 
 describe('B657: «Кому»', () => {
-  const person = (id: string, fullName: string) => ({ id, fullName, roleTitle: null, companyName: null });
+  const person = (id: string, fullName: string) => ({
+    id,
+    fullName,
+    roleTitle: null,
+    companyName: null,
+  });
   const circles: ConnectionCircleResult[] = [
     {
       circle: 1,
@@ -133,8 +160,14 @@ describe('B657: «Кому»', () => {
       message: '',
       paths: [
         {
-          id: 'p1', circle: 1, path: [person('me', 'Марина Соколова'), person('a', 'Анна Ветрова')], recipient: person('a', 'Анна Ветрова'),
-          evidence: [], strength: 'direct', source: 'manual', nextStep: 'write' as never,
+          id: 'p1',
+          circle: 1,
+          path: [person('me', 'Марина Соколова'), person('a', 'Анна Ветрова')],
+          recipient: person('a', 'Анна Ветрова'),
+          evidence: [],
+          strength: 'direct',
+          source: 'manual',
+          nextStep: 'write' as never,
         },
       ],
     },
@@ -144,8 +177,17 @@ describe('B657: «Кому»', () => {
       message: '',
       paths: [
         {
-          id: 'p2', circle: 2, path: [person('me', 'Марина Соколова'), person('i', 'Игорь Шаталов'), person('a', 'Анна Ветрова')],
-          recipient: person('a', 'Анна Ветрова'), evidence: [], strength: 'weak', source: 'linkedin_import',
+          id: 'p2',
+          circle: 2,
+          path: [
+            person('me', 'Марина Соколова'),
+            person('i', 'Игорь Шаталов'),
+            person('a', 'Анна Ветрова'),
+          ],
+          recipient: person('a', 'Анна Ветрова'),
+          evidence: [],
+          strength: 'weak',
+          source: 'linkedin_import',
           nextStep: 'ask' as never,
         },
       ],
@@ -157,7 +199,12 @@ describe('B657: «Кому»', () => {
     expect(recipientOptions(circles, 'hh.ru')).toEqual([
       { value: 'cold', label: 'Работодателю · через hh.ru', circle: 3, pathId: null },
       { value: 'p1', label: 'Анна Ветрова · знакомый', circle: 1, pathId: 'p1' },
-      { value: 'p2', label: 'Игорь Шаталов — попросить познакомить: Анна Ветрова', circle: 2, pathId: 'p2' },
+      {
+        value: 'p2',
+        label: 'Игорь Шаталов — попросить познакомить: Анна Ветрова',
+        circle: 2,
+        pathId: 'p2',
+      },
     ]);
   });
 
@@ -175,48 +222,5 @@ describe('B657: текст абзацами', () => {
       'Пять лет…',
       'Марина',
     ]);
-  });
-});
-
-describe('резюме без служебной разметки', () => {
-  it('маркеры разделов из исходного файла становятся заголовками', () => {
-    expect(
-      resumeLines('=== SUMMARY ===\nРуковожу разработкой.\n\n--- Опыт работы ---\nФинтех Лаб\n## Skills\nGo, Kotlin'),
-    ).toEqual([
-      { kind: 'heading', text: 'О себе' },
-      { kind: 'line', text: 'Руковожу разработкой.' },
-      { kind: 'heading', text: 'Опыт работы' },
-      { kind: 'line', text: 'Финтех Лаб' },
-      { kind: 'heading', text: 'Навыки' },
-      { kind: 'line', text: 'Go, Kotlin' },
-    ]);
-  });
-
-  it('линия из одних знаков пропадает, обычный текст не трогается', () => {
-    expect(resumeLines('=====\n----\nKubernetes — 3 года\nC# и .NET')).toEqual([
-      { kind: 'line', text: 'Kubernetes — 3 года' },
-      { kind: 'line', text: 'C# и .NET' },
-    ]);
-    expect(resumeLines('=== constructor ===')).toEqual([{ kind: 'heading', text: 'constructor' }]);
-  });
-
-  it('пункты списка и обычные строки со знаками не становятся заголовками', () => {
-    const lines = ['- Руководил командой -', '-- Вёл релизы', '# 1 в рейтинге', 'C# разработчик', '=== SUMMARY === и текст'];
-    expect(resumeLines(lines.join('\n'))).toEqual(lines.map((text) => ({ kind: 'line', text })));
-    expect(resumeLines('**Опыт**\n__Skills__')).toEqual([
-      { kind: 'heading', text: 'Опыт' },
-      { kind: 'heading', text: 'Навыки' },
-    ]);
-    expect(resumeLines(`== a${' '.repeat(5000)}b`)).toHaveLength(1);
-  });
-});
-
-describe('B713: заголовки резюме на языке его текста', () => {
-  it('английский текст — английские заголовки', () => {
-    expect(resumeLines('=== WORK EXPERIENCE ===\nLed a team of 12 engineers.')[0]).toEqual({ kind: 'heading', text: 'Work experience' });
-  });
-
-  it('русский текст — русские, вместе с курсами', () => {
-    expect(resumeLines('=== COURSES AND CERTIFICATIONS ===\nУправление продуктом')[0]).toEqual({ kind: 'heading', text: 'Курсы и сертификаты' });
   });
 });

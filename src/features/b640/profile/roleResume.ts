@@ -1,5 +1,6 @@
 import {
   EMPTY_BUILDER_RESUME,
+  RESUME_ABOUT_MAX,
   type BuilderEducation,
   type BuilderJob,
   type BuilderResume,
@@ -35,6 +36,12 @@ function educationOf(draft: ResumeDraft): BuilderEducation[] {
   }));
 }
 
+function languagesOf(draft: ResumeDraft): string {
+  return (draft.languages ?? [])
+    .flatMap(({ name, cefr }) => (name?.trim() ? `${name.trim()}${cefr ? ` (${cefr})` : ''}` : []))
+    .join(', ');
+}
+
 /**
  * s01 «Резюме под роль»: профиль в поля файла резюме (тот же сборщик PDF, что у конструктора).
  * Заголовок — роль из условий поиска, иначе заголовок профиля.
@@ -55,5 +62,7 @@ export function roleResumeFromProfile(view: ResumeStudioView, title: string): Bu
     jobs: jobsOf(draft, statementsOf(view)),
     education: educationOf(draft),
     skills: cut(skills.join(', '), 1_000),
+    about: cut(draft.candidate.about, RESUME_ABOUT_MAX),
+    languages: cut(languagesOf(draft), 500),
   };
 }

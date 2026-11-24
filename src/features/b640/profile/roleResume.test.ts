@@ -7,6 +7,7 @@ const view = {
   draft: {
     candidate: {
       fullName: 'Мария Соколова',
+      about: 'Руковожу командами',
       contact: { email: 'm@example.test', phone: '+7 900 000-00-00', location: 'Москва' },
     },
     experience: [
@@ -21,7 +22,7 @@ const view = {
       },
     ],
     education: [{ id: 'ed', evidenceMemoryId: 'm2', institution: 'МГТУ', endDate: '2012-06' }],
-    languages: [],
+    languages: [{ id: 'l', evidenceMemoryId: 'm3', name: 'Английский', cefr: 'C1' }],
     skills: [
       { id: 's1', name: 'Kubernetes' },
       { id: 's2', name: 'Go' },
@@ -41,6 +42,8 @@ describe('s01: резюме под роль из профиля', () => {
       city: 'Москва',
       email: 'm@example.test',
       skills: 'Kubernetes, Go',
+      about: 'Руковожу командами',
+      languages: 'Английский (C1)',
       jobs: [
         {
           company: 'Финтех Лаб',

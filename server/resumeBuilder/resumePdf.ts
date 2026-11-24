@@ -3,6 +3,8 @@ import {
   compactBuilderResume,
   contactLine,
   jobPeriod,
+  resumeHeadings,
+  tailSections,
   type BuilderResume,
   type ResumeTemplate,
 } from '../../shared/resumeBuilder/model';
@@ -114,32 +116,36 @@ function bullets(doc: Doc, items: readonly string[], style: TemplateStyle): void
   doc.x = style.margin;
 }
 
+function paragraph(doc: Doc, title: string, lines: readonly string[], style: TemplateStyle): void {
+  section(doc, title, style);
+  doc.font('regular').fontSize(style.bodySize).fillColor(INK);
+  for (const text of lines) doc.text(text, { lineGap: style.lineGap });
+}
+
 function body(doc: Doc, resume: BuilderResume, style: TemplateStyle): void {
+  const titles = resumeHeadings(resume);
+  if (resume.about?.trim()) paragraph(doc, titles.about, [resume.about.trim()], style);
   if (style.showResults && resume.results.length) {
-    section(doc, 'Главные результаты', style);
+    section(doc, titles.results, style);
     bullets(doc, resume.results, style);
   }
   if (resume.jobs.length) {
-    section(doc, 'Опыт работы', style);
+    section(doc, titles.jobs, style);
     resume.jobs.forEach((job, index) => {
       if (index > 0) doc.moveDown(0.4);
       split(doc, job.company || job.role, job.city, 'bold', style);
-      split(doc, job.company ? job.role : '', jobPeriod(job), 'italic', style);
+      split(doc, job.company ? job.role : '', jobPeriod(job, resume.lang), 'italic', style);
       bullets(doc, job.bullets, style);
     });
   }
   if (resume.education.length) {
-    section(doc, 'Образование', style);
+    section(doc, titles.education, style);
     for (const item of resume.education) {
       split(doc, item.school, item.year, 'bold', style);
       if (item.degree) split(doc, item.degree, '', 'italic', style);
     }
   }
-  if (resume.skills.trim()) {
-    section(doc, 'Навыки', style);
-    doc.font('regular').fontSize(style.bodySize).fillColor(INK);
-    doc.text(resume.skills.trim(), { lineGap: style.lineGap });
-  }
+  for (const item of tailSections(resume)) paragraph(doc, item.title, item.lines, style);
 }
 
 /** A real PDF with embedded Cyrillic fonts, A4, text selectable for ATS. */
@@ -157,9 +163,11 @@ export function renderResumePdf(
     // pdfkit takes a font buffer here (its typings say only a path); the default
     // Helvetica would read an AFM file that the bundled server does not carry.
     font: fonts.regular as unknown as string,
-    lang: 'ru-RU',
+    lang: resume.lang === 'en' ? 'en-US' : 'ru-RU',
     info: {
-      Title: resume.fullName ? `Резюме — ${resume.fullName}` : 'Резюме',
+      Title: resume.fullName
+        ? `${resumeHeadings(resume).file} — ${resume.fullName}`
+        : resumeHeadings(resume).file,
       Creator: 'openqareer',
     },
   });

@@ -17,6 +17,12 @@ export const RESUME_TEMPLATE_LABELS: Record<ResumeTemplate, string> = {
 /** Month and year, «03.2021». */
 export const MONTH_YEAR = /^(0[1-9]|1[0-2])\.(19|20)\d{2}$/u;
 
+/** Пределы пункта места работы: описание из профиля не обрезается на полуслове. */
+export const RESUME_BULLET_MAX = 2_000;
+export const RESUME_BULLETS_MAX = 30;
+export const RESUME_ABOUT_MAX = 4_000;
+export const RESUME_JOBS_MAX = 30;
+
 const line = (max: number) => z.string().trim().max(max);
 
 export const builderJobSchema = z
@@ -27,7 +33,7 @@ export const builderJobSchema = z
     start: line(7),
     end: line(7),
     current: z.boolean(),
-    bullets: z.array(line(400)).max(12),
+    bullets: z.array(line(RESUME_BULLET_MAX)).max(RESUME_BULLETS_MAX),
   })
   .strict();
 
@@ -47,9 +53,22 @@ export const builderResumeSchema = z
     phone: line(40),
     email: line(120),
     results: z.array(line(400)).max(8),
-    jobs: z.array(builderJobSchema).max(15),
+    jobs: z.array(builderJobSchema).max(RESUME_JOBS_MAX),
     education: z.array(builderEducationSchema).max(6),
     skills: line(1_000),
+    /** Язык заголовков файла; без него русский. */
+    lang: z.enum(['ru', 'en']).optional(),
+    /** Поля профиля; в форме конструктора их нет, поэтому они необязательны. */
+    link: line(300).optional(),
+    about: line(RESUME_ABOUT_MAX).optional(),
+    languages: line(500).optional(),
+    /** Другие разделы профиля: курсы, проекты. */
+    extra: z
+      .array(
+        z.object({ title: line(80), lines: z.array(line(RESUME_BULLET_MAX)).max(30) }).strict(),
+      )
+      .max(4)
+      .optional(),
   })
   .strict();
 
@@ -149,18 +168,75 @@ export function isBlankBuilderResume(resume: BuilderResume): boolean {
     compact.results.length === 0 &&
     compact.jobs.length === 0 &&
     compact.education.length === 0 &&
-    !filled(compact.skills)
+    !filled(compact.skills) &&
+    !filled(compact.about ?? '') &&
+    tailSections(compact).length === 0
   );
 }
 
-export function jobPeriod(job: Pick<BuilderJob, 'start' | 'end' | 'current'>): string {
-  const end = job.current ? 'сейчас' : job.end;
+export function jobPeriod(
+  job: Pick<BuilderJob, 'start' | 'end' | 'current'>,
+  lang: BuilderResume['lang'] = 'ru',
+): string {
+  const end = job.current ? (lang === 'en' ? 'Present' : 'сейчас') : job.end;
   if (!job.start && !end) return '';
   return `${job.start || '…'} — ${end || '…'}`;
 }
 
-export function contactLine(resume: Pick<BuilderResume, 'city' | 'phone' | 'email'>): string {
-  return [resume.city, resume.phone, resume.email].filter(filled).join(' · ');
+export function contactParts(
+  resume: Pick<BuilderResume, 'city' | 'phone' | 'email' | 'link'>,
+): string[] {
+  return [resume.city, resume.phone, resume.email, resume.link ?? ''].filter(filled);
+}
+
+export function contactLine(
+  resume: Pick<BuilderResume, 'city' | 'phone' | 'email' | 'link'>,
+): string {
+  return contactParts(resume).join(' · ');
+}
+
+const HEADINGS = {
+  ru: {
+    about: 'О себе',
+    results: 'Главные результаты',
+    jobs: 'Опыт работы',
+    education: 'Образование',
+    skills: 'Навыки',
+    languages: 'Языки',
+    file: 'Резюме',
+  },
+  en: {
+    about: 'Summary',
+    results: 'Key results',
+    jobs: 'Work experience',
+    education: 'Education',
+    skills: 'Skills',
+    languages: 'Languages',
+    file: 'Resume',
+  },
+} as const;
+
+/** Заголовки разделов на языке текста резюме (B713). */
+export function resumeHeadings(resume: Pick<BuilderResume, 'lang'>) {
+  return HEADINGS[resume.lang ?? 'ru'];
+}
+
+export interface ResumeTailSection {
+  readonly title: string;
+  readonly lines: readonly string[];
+}
+
+/** Разделы после образования; порядок один у листа, PDF и DOCX. */
+export function tailSections(resume: BuilderResume): ResumeTailSection[] {
+  const titles = resumeHeadings(resume);
+  const rows = [
+    { title: titles.skills, lines: [resume.skills.trim()] },
+    { title: titles.languages, lines: [resume.languages?.trim() ?? ''] },
+    ...(resume.extra ?? []),
+  ];
+  return rows
+    .map((row) => ({ title: row.title, lines: row.lines.filter(filled) }))
+    .filter((row) => row.lines.length > 0);
 }
 
 export function skillList(skills: string): string[] {
