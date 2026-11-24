@@ -17,29 +17,29 @@ function spied(database: DatabaseSync): string[] {
 }
 
 describe('B776: веб-процесс перечитывает карты сайта, только когда обслуживание записало новые', () => {
-  it('та же сборка — null без чтения файлов; новая — файлы; таблицы нет — null', () => {
+  it('та же сборка — null без чтения файлов; новая — файлы; таблицы нет — null', async () => {
     const database = new DatabaseSync(':memory:');
     const reader = new CatalogSitemapReader();
-    expect(reader.readIfChanged(database)).toBeNull();
+    expect(await reader.readIfChanged(database)).toBeNull();
     writeCatalogSitemaps(database, [file('jobs-1.xml', '<a/>')], new Date('2026-11-23T08:00:00Z'));
-    expect(reader.readIfChanged(database)?.map((f) => f.name)).toEqual(['jobs-1.xml']);
-    expect(reader.readIfChanged(database)).toBeNull();
+    expect((await reader.readIfChanged(database))?.map((f) => f.name)).toEqual(['jobs-1.xml']);
+    expect(await reader.readIfChanged(database)).toBeNull();
     writeCatalogSitemaps(database, [file('jobs-1.xml', '<b/>')], new Date('2026-11-23T08:30:00Z'));
-    expect(reader.readIfChanged(database)?.[0]?.xml).toBe('<b/>');
+    expect((await reader.readIfChanged(database))?.[0]?.xml).toBe('<b/>');
   });
 
   // Прод 23.11: подпись по строкам catalog_sitemaps шла 0,5 с — её столбцы лежат после 17 МБ xml.
-  it('неизменная сборка проверяется по строке сборки, без чтения таблицы файлов', () => {
+  it('неизменная сборка проверяется по строке сборки, без чтения таблицы файлов', async () => {
     const database = new DatabaseSync(':memory:');
     const reader = new CatalogSitemapReader();
     writeCatalogSitemaps(database, [file('jobs-1.xml', '<a/>')], new Date('2026-11-23T08:00:00Z'));
-    reader.readIfChanged(database);
+    await reader.readIfChanged(database);
     const seen = spied(database);
-    expect(reader.readIfChanged(database)).toBeNull();
+    expect(await reader.readIfChanged(database)).toBeNull();
     expect(seen.some((sql) => /FROM catalog_sitemaps\b/.test(sql))).toBe(false);
   });
 
-  it('база до этой правки (строки сборки нет): подпись по таблице файлов, как раньше', () => {
+  it('база до этой правки (строки сборки нет): подпись по таблице файлов, как раньше', async () => {
     const database = new DatabaseSync(':memory:');
     database.exec(CATALOG_SITEMAPS_TABLE_SQL);
     database
@@ -48,7 +48,7 @@ describe('B776: веб-процесс перечитывает карты сай
       )
       .run();
     const reader = new CatalogSitemapReader();
-    expect(reader.readIfChanged(database)?.[0]?.xml).toBe('<a/>');
-    expect(reader.readIfChanged(database)).toBeNull();
+    expect((await reader.readIfChanged(database))?.[0]?.xml).toBe('<a/>');
+    expect(await reader.readIfChanged(database)).toBeNull();
   });
 });

@@ -509,9 +509,10 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
     if (written > 0) log({ written }, 'role-titles-ru-backfill');
   });
   deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
-    // Roles first (prod 19.11): the list answers from its sealed copy, «Карьера» had nothing.
-    await warmRoleSnapshots(deps, candidateId, log);
+    // List first (B702, prod 24.11): the roles took 97 s of the 2 min before the switch, and the first
+    // list opened the stored results itself. «Карьера» has its own stored snapshots since 19.11.
     await warmMatchedList(deps, candidateId, log);
+    await warmRoleSnapshots(deps, candidateId, log);
   });
   return deps;
 }

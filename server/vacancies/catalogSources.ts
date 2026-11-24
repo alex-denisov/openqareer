@@ -5,7 +5,8 @@
  * фоне и держит её в памяти: HTTP пул не трогает (B308).
  */
 import type { DatabaseSync } from 'node:sqlite';
-import { readRowsChunked } from '../data/chunkedRows';
+import { syncSection } from '../observability/syncSections';
+import { nextTurn, readRowsChunked } from '../data/chunkedRows';
 import { readInWindows, type WindowedReadOptions } from '../data/windowedRead';
 
 export interface CatalogSourceCount {
@@ -62,9 +63,14 @@ export function readPoolCounts(
 
 export function catalogSourcesOf(counts: PoolCounts): CatalogSourceCount[] {
   return Array.from(counts.bySource, ([sourceId, count]) => ({ sourceId, count })).sort(
-    (left, right) =>
-      right.count - left.count ||
-      (left.sourceId < right.sourceId ? -1 : left.sourceId > right.sourceId ? 1 : 0),
+    compareCatalogSources,
+  );
+}
+
+function compareCatalogSources(left: CatalogSourceCount, right: CatalogSourceCount): number {
+  return (
+    right.count - left.count ||
+    (left.sourceId < right.sourceId ? -1 : left.sourceId > right.sourceId ? 1 : 0)
   );
 }
 
@@ -103,10 +109,13 @@ export async function readCatalogSources(database: DatabaseSync): Promise<Catalo
   if (!exists) return [];
   const rows = await readRowsChunked<{ source_id: string; vacancy_count: number }>(
     database.prepare(
-      'SELECT source_id, vacancy_count FROM catalog_sources ORDER BY vacancy_count DESC, source_id',
+      // Sorting in SQL read all 58 thousand rows, off a cold disk, in the first step (B702 part 2).
+      'SELECT source_id, vacancy_count FROM catalog_sources ORDER BY rowid',
     ),
   );
-  return rows.map((row) => ({ sourceId: row.source_id, count: Number(row.vacancy_count) }));
+  await nextTurn();
+  const sources = rows.map((row) => ({ sourceId: row.source_id, count: Number(row.vacancy_count) }));
+  return syncSection('catalog-sources:sort', () => sources.sort(compareCatalogSources));
 }
 
 let current: readonly CatalogSourceCount[] = [];

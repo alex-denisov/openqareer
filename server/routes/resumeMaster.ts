@@ -81,12 +81,17 @@ export function buildVersionContent(
   requirements: readonly string[],
   status: 'draft' | 'approved' = 'draft',
   tailor: (slice: TargetedResumeSlice) => TargetedResumeSlice = (slice) => slice,
+  /** Перевод ложится после подгонки объёма: более длинный язык не теряет пунктов (B785). */
+  translate: (fitted: ResumeDocument, tailored: ResumeDocument) => ResumeDocument = (fitted) =>
+    fitted,
 ): ResumeVersionContent {
   const slice = buildTargetedResumeSlice(master.document, { title, requirements });
+  const tailored = tailor(slice);
+  const fitted = estimateResumePages(tailored);
   return {
     title: title.trim(),
     requirements: slice.requirements.map((item) => item.requirement),
     status,
-    snapshot: estimateResumePages(tailor(slice)),
+    snapshot: { ...fitted, document: translate(fitted.document, tailored.document) },
   };
 }

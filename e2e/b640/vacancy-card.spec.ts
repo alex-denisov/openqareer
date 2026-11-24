@@ -255,6 +255,9 @@ test.describe('B645: карточка вакансии — способы отк
 
   test('«Написать Роману» открывает шаг «Отклик» с черновиком (a02d)', async ({ page }) => {
     await openLadoga(page);
+    await page.route('**/api/v1/candidate/b640/contact-messages/m1', (route) =>
+      route.fulfill({ status: 204 }),
+    );
     await page.getByRole('button', { name: 'Написать Роману' }).click();
     await expect(page.locator('section.lead .lead-title')).toContainText('Написать Роману Ефимову');
     await expect(page.locator('.lk-inline .lk-lbl')).toHaveText('Черновик');
@@ -308,11 +311,11 @@ test.describe('B645: карточка вакансии — способы отк
     await page.screenshot({ path: testInfo.outputPath('message-variant.png') });
     await sw.getByRole('button', { name: 'Предыдущий вариант' }).click();
     await expect(field).toHaveValue(/Мы работали вместе/u);
-    // Закрыли и открыли снова: тот же черновик, вариант и остаток на месте.
+    // Ушли и открыли снова: тот же черновик, вариант и остаток на месте.
     await page.route('**/api/v1/candidate/text-variants?kind=message&subjectId=m1', (route) =>
       route.fulfill({ json: { data: { variants: [variant], remaining: 2 } } }),
     );
-    await page.getByRole('button', { name: 'Не отправлять' }).click();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Написать Роману' }).click();
     await expect(sw).toContainText('1 из 2');
     await expect(page.getByRole('button', { name: 'Другой вариант · 2' })).toBeVisible();

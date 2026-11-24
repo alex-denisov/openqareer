@@ -420,3 +420,61 @@ describe('jobs queued by another release (B562-r)', () => {
     database.close();
   });
 });
+
+describe('B702 part 2: the stored ids of a candidate survive the process', () => {
+  const key = new SealedText(Buffer.alloc(32, 7));
+  const put = (store: SqliteVacancyFitStore, from: number, count: number) => {
+    for (let i = from; i < from + count; i += 1) {
+      const row = { ...input(), vacancyId: `vacancy-${i}` };
+      store.putCache(row, evaluateVacancyFit(row, now), now);
+    }
+  };
+  /** A new process: another store on the same database, counting what it opens. */
+  const reopened = (database: DatabaseSync) => {
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const open = vi.spyOn(sealed, 'open');
+    return { store: new SqliteVacancyFitStore(database, sealed), open };
+  };
+
+  it('opens one sealed row and the results written after it, not every stored result', async () => {
+    const database = new DatabaseSync(':memory:');
+    const first = new SqliteVacancyFitStore(database, key);
+    put(first, 0, 250);
+    await first.warmCachedVacancyIds('candidate-a');
+    await first.lastSeal;
+    put(first, 250, 3);
+
+    const { store, open } = reopened(database);
+    await store.warmCachedVacancyIds('candidate-a');
+
+    expect(open).toHaveBeenCalledTimes(1 + 3);
+    expect(store.cachedVacancyIds('candidate-a').size).toBe(253);
+    database.close();
+  });
+
+  it('a result deleted since the seal opens the rows again', async () => {
+    const database = new DatabaseSync(':memory:');
+    const first = new SqliteVacancyFitStore(database, key);
+    put(first, 0, 210);
+    await first.warmCachedVacancyIds('candidate-a');
+    await first.lastSeal;
+    database.exec('DELETE FROM vacancy_fit_cache WHERE rowid = 5');
+    const { store } = reopened(database);
+    await store.warmCachedVacancyIds('candidate-a');
+    expect(store.cachedVacancyIds('candidate-a').size).toBe(209);
+    database.close();
+  });
+
+  it('views answer only their stamp and go with the candidate, also when a write is still packing', async () => {
+    const { database, store } = setup();
+    await store.sealViews('candidate-a', 'p1', '[["v",{}]]');
+    expect(store.readSealedViews('candidate-a', 'p1')).toBe('[["v",{}]]');
+    expect(store.readSealedViews('candidate-a', 'p2')).toBeUndefined();
+    expect(store.readSealedViews('candidate-b', 'p1')).toBeUndefined();
+    const late = store.sealViews('candidate-a', 'p1', '[]');
+    store.deleteCandidate('candidate-a');
+    await late;
+    expect(database.prepare('SELECT COUNT(*) AS n FROM vacancy_fit_seals').get()).toEqual({ n: 0 });
+    database.close();
+  });
+});

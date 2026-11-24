@@ -7,6 +7,7 @@ import { MessageDraft } from './MessageDraft';
 vi.mock('./contactMessageApi', () => ({
   createB640ContactMessage: vi.fn(),
   createB640ContactMessageVariant: vi.fn(),
+  discardB640ContactMessage: vi.fn(async () => undefined),
   editB640ContactMessage: vi.fn(),
   listB640ContactMessageVariants: vi.fn(),
   approveB640ContactMessage: vi.fn(),
@@ -189,7 +190,29 @@ describe('MessageDraft', () => {
     await flush();
     expect(view.container.querySelector('textarea')!.value).toBe('Текст');
     expect(view.container.querySelector('[role="alert"]')).toBeNull();
+    vi.mocked(api.discardB640ContactMessage).mockRejectedValueOnce(new Error('boom'));
+    click(button(view.container, 'Не отправлять'));
+    await flush();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(view.container.querySelector('[role="alert"]')!.textContent).toContain('Черновик не убран.');
+    click(button(view.container, 'Повторить'));
+    await flush();
+    expect(api.discardB640ContactMessage).toHaveBeenLastCalledWith('m1');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('B753: «Не отправлять» до прихода черновика — пришедший черновик убирается', async () => {
+    let arrive = (_value: ReturnType<typeof message>) => undefined as void;
+    vi.mocked(api.createB640ContactMessage).mockReturnValue(
+      new Promise((resolve) => {
+        arrive = resolve;
+      }),
+    );
+    const view = panel();
     click(button(view.container, 'Не отправлять'));
     expect(onClose).toHaveBeenCalled();
+    arrive(message('m9', 'Текст'));
+    await flush();
+    expect(api.discardB640ContactMessage).toHaveBeenCalledWith('m9');
   });
 });
