@@ -163,9 +163,8 @@ export function buildB640Connections(
     items,
     total: found.length,
     connections: direct.length,
-    selectionCompanies: new Set(
-      rows.filter((row) => row.inSelection).map((row) => row.companyName),
-    ).size,
+    selectionCompanies: new Set(rows.filter((row) => row.inSelection).map((row) => row.companyName))
+      .size,
     selectionPending: input.selectionPending,
     offset: query.offset,
     nextOffset: shown < found.length ? shown : null,

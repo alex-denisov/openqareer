@@ -15,7 +15,13 @@ async function setup() {
     h.app.inject({
       method: 'PUT',
       url: `/api/v1/candidate/connection-contacts/${id}`,
-      payload: { fullName, companyName, roleTitle: 'инженер', relationship: 'Коллега', strength: 'strong' },
+      payload: {
+        fullName,
+        companyName,
+        roleTitle: 'инженер',
+        relationship: 'Коллега',
+        strength: 'strong',
+      },
       headers: { authorization: `Bearer ${h.tokens[user]}`, origin: 'http://localhost:3000' },
     });
   return { h, seed };
@@ -36,10 +42,22 @@ describe('B651: GET b640/connections', () => {
     await seed('boris', 'Борис Орлов', 'Ромашка', 'flagged.test');
     await seed('other', 'Чужой Знакомый', 'Ромашка', 'other.test');
     const all = (await h.get(BASE, 'flagged.test')).json();
-    expect(all.data).toMatchObject({ total: 2, connections: 2, selectionCompanies: 1, selectionPending: false });
-    expect(all.data.items[0]).toMatchObject({ fullName: 'Борис Орлов', inSelection: true, vacancyId: 'c1', circle: 1 });
+    expect(all.data).toMatchObject({
+      total: 2,
+      connections: 2,
+      selectionCompanies: 1,
+      selectionPending: false,
+    });
+    expect(all.data.items[0]).toMatchObject({
+      fullName: 'Борис Орлов',
+      inSelection: true,
+      vacancyId: 'c1',
+      circle: 1,
+    });
     expect(JSON.stringify(all)).not.toMatch(/email|phone|Чужой/iu);
     const pool = (await h.get(`${BASE}?pool=true`, 'flagged.test')).json();
-    expect(pool.data.items.map((item: { fullName: string }) => item.fullName)).toEqual(['Борис Орлов']);
+    expect(pool.data.items.map((item: { fullName: string }) => item.fullName)).toEqual([
+      'Борис Орлов',
+    ]);
   });
 });
