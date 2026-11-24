@@ -28,6 +28,8 @@ describe('B711: одобренное письмо читается после у
       variantId: 'variant-2',
       language: 'ru',
       tone: 'executive',
+      factsChanged: false,
+      profileChanged: false,
     });
     expect(read.resume).toMatchObject({ kind: 'targeted' });
   });

@@ -1,8 +1,16 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { StoredCandidateDocument } from '../data/candidateStore';
+import {
+  letterFactSource,
+  letterFreshness,
+  type LetterFactMark,
+  type LetterFactSource,
+  type LetterFreshness,
+} from '../domain/letterFreshness';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate } from './helpers';
+import { letterVacancyTexts, type LetterDraftDeps } from './letterDraftRoutes';
 
 /** Имя файла снимка одобренного письма: `approved-letter-<approvalId>.json`. */
 export const APPROVED_LETTER_PREFIX = 'approved-letter-';
@@ -28,9 +36,11 @@ const storedSnapshotSchema = z.object({
   tone: z.enum(['executive', 'confident', 'technical']).optional(),
   /** С B711 снимок помнит привязанное резюме; у прежних снимков поля нет. */
   resume: attachedResumeSchema.nullable().optional(),
+  /** С какими фактами письмо одобрено; у прежних снимков поля нет. */
+  factMark: z.object({ profileHash: z.string(), ownNumbers: z.array(z.string()) }).optional(),
 });
 
-export interface StoredLetterApproval {
+export interface StoredLetterApproval extends LetterFreshness {
   readonly applicationId: string;
   readonly documentId: string;
   readonly approvedAt: string;
@@ -67,6 +77,7 @@ export function latestLetterApproval(
   deps: RouteDeps,
   candidateId: string,
   vacancyId: string,
+  source: LetterFactSource,
 ): StoredLetterApproval | null {
   const { candidateStore } = deps;
   for (const document of recentApprovalDocuments(deps, candidateId)) {
@@ -85,9 +96,33 @@ export function latestLetterApproval(
       variantId: snapshot.variantId ?? null,
       language: snapshot.language ?? null,
       tone: snapshot.tone ?? null,
+      ...freshnessOf(deps, vacancyId, source, snapshot.body, snapshot.factMark ?? null),
     };
   }
   return null;
+}
+
+function freshnessOf(
+  deps: RouteDeps,
+  vacancyId: string,
+  source: LetterFactSource,
+  body: string,
+  mark: LetterFactMark | null,
+): LetterFreshness {
+  return letterFreshness(source, body, letterVacancyTexts(deps, vacancyId), mark);
+}
+
+/** Правка письма до одобрения; одобренное письмо она не заменяет. */
+function storedDraft(
+  deps: LetterDraftDeps,
+  candidateId: string,
+  vacancyId: string,
+  source: LetterFactSource,
+) {
+  const draft = deps.letterDrafts.read(candidateId, vacancyId);
+  if (!draft) return null;
+  const { body, variantId, savedAt, mark } = draft;
+  return { body, variantId, savedAt, ...freshnessOf(deps, vacancyId, source, body, mark) };
 }
 
 function recentApprovalDocuments(deps: RouteDeps, candidateId: string): StoredCandidateDocument[] {
@@ -118,7 +153,7 @@ export function approvedLetterApplicationIds(deps: RouteDeps, candidateId: strin
 
 /** `GET /api/v1/candidate/vacancies/:id/letter-approvals/latest`. */
 export async function handleReadLetterApproval(
-  deps: RouteDeps,
+  deps: LetterDraftDeps,
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<unknown> {
@@ -126,8 +161,12 @@ export async function handleReadLetterApproval(
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
+  const source = letterFactSource(candidateStore.getSnapshot(candidate.id));
   return {
-    data: { approval: latestLetterApproval(deps, candidate.id, vacancyId) },
+    data: {
+      approval: latestLetterApproval(deps, candidate.id, vacancyId, source),
+      draft: storedDraft(deps, candidate.id, vacancyId, source),
+    },
     meta: { requestId: request.id },
   };
 }
