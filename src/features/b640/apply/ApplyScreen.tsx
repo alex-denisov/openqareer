@@ -158,7 +158,17 @@ interface BodyProps {
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, ask }: BodyProps) {
+function SendBody({
+  vacancyId,
+  head,
+  sourceType,
+  setStep,
+  letter,
+  answers,
+  hhForm,
+  onHhForm,
+  ask,
+}: BodyProps) {
   return (
     <>
       <div className="col">
@@ -276,7 +286,9 @@ function useApplyLetter(vacancyId: string) {
   const variants = useLetterVariants(vacancyId, draft);
   const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
   // B678: до чтения одобрения шаг не показывает ни «Сначала одобрите», ни «Собираем письмо».
-  return { letter, variants, approvalPending: approvalHold.hold && !letter.approval.saved };
+  // Письмо с опровергнутыми фактами уже прочитано, хотя одобрения у него больше нет.
+  const known = Boolean(letter.approval.saved) || letter.approval.stale === true;
+  return { letter, variants, approvalPending: approvalHold.hold && !known };
 }
 
 /** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
@@ -419,7 +431,14 @@ function ApplyFlow(props: FlowProps) {
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
         {opening && !quota ? <LoadingApply /> : null}
         {ready && shown === 'send' ? <SendBody {...body} /> : null}
-        {ready && shown === 'form' && form ? <FormStep state={questionnaire} form={form} visibility={body.ask.visibility} onSend={body.ask.sendWithForm} /> : null}
+        {ready && shown === 'form' && form ? (
+          <FormStep
+            state={questionnaire}
+            form={form}
+            visibility={body.ask.visibility}
+            onSend={body.ask.sendWithForm}
+          />
+        ) : null}
         {ready && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>
