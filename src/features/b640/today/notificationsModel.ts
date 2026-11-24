@@ -28,9 +28,12 @@ const KIND_ACTION: Record<NotificationEventKind, NotificationAction> = {
 
 const HH_LOGIN_ACTION: NotificationAction = { label: 'Войти снова', path: buildNodePath('n03') };
 
+export const COMMENT_ACTION: NotificationAction = { label: 'Открыть комментарий', path: buildNodePath('a05') };
+
 /** Куда ведёт кнопка события. Ответ работодателя знает свой отклик, истёкший вход hh.ru — «Подключения». */
 export function notificationAction(item: CandidateNotification): NotificationAction {
   if (item.source === 'hh_session') return HH_LOGIN_ACTION;
+  if (item.source === 'linkedin_queue_comment') return COMMENT_ACTION;
   const base = KIND_ACTION[item.kind];
   const sourceId = item.kind === 'employer_reply' ? notificationSourceId(item) : null;
   return sourceId ? { ...base, path: buildNodePath('o01c', { responseId: sourceId }) } : base;
