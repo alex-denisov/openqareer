@@ -3,7 +3,9 @@
 
 mod app_sign_in;
 mod ats_apply;
+mod ats_boards;
 mod ats_form_scripts;
+mod ats_steps;
 mod ats_target;
 mod automation_worker;
 mod connector_session;
@@ -11,14 +13,14 @@ mod desktop_notify;
 mod device_settings;
 mod hh_apply;
 mod hh_apply_scripts;
-mod hh_resume_edit;
-mod hh_resume_edit_scripts;
 #[cfg(test)]
 mod hh_jsdom_harness;
-mod hh_resume_experience;
-mod hh_resume_experience_scripts;
 mod hh_questionnaire;
 mod hh_raise;
+mod hh_resume_edit;
+mod hh_resume_edit_scripts;
+mod hh_resume_experience;
+mod hh_resume_experience_scripts;
 mod linkedin_read_guard;
 mod network_probe;
 mod recording;
@@ -156,6 +158,28 @@ async fn ats_form_open(
 ) -> Result<ats_apply::FormReport, String> {
     cabinet_only(&webview)?;
     ats_apply::open_form(&app, request).await
+}
+
+/// Options of one list of the form. Nothing is picked or sent.
+#[tauri::command]
+async fn ats_form_options(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_steps::OptionsRequest,
+) -> Result<serde_json::Value, String> {
+    cabinet_only(&webview)?;
+    ats_steps::read_options(&app, request).await
+}
+
+/// Moves a multi-step form to its next page for confirmed values; never sends it.
+#[tauri::command]
+async fn ats_form_next(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_apply::SubmitRequest,
+) -> Result<ats_steps::StepReport, String> {
+    cabinet_only(&webview)?;
+    ats_steps::next_step(&app, request).await
 }
 
 #[tauri::command]
@@ -699,6 +723,8 @@ fn main() {
             read_hh_apply_window,
             ats_form_open,
             ats_form_fill,
+            ats_form_options,
+            ats_form_next,
             ats_form_submit,
             ats_form_outcome,
             ats_form_show,

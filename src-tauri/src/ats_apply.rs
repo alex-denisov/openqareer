@@ -31,18 +31,18 @@ const MAX_ID_CHARS: usize = 200;
 /// Keeps the form's cookies apart from the hh.ru and LinkedIn sessions.
 const STORE_MASK: [u8; 16] = *b"openqareer-ats-1";
 
-type Values = BTreeMap<String, String>;
+pub(crate) type Values = BTreeMap<String, String>;
 
-struct Run {
-    vacancy_id: String,
+pub(crate) struct Run {
+    pub(crate) vacancy_id: String,
     target: AtsTarget,
     /// What the form held right after filling; the candidate confirms these.
-    filled: Option<Values>,
+    pub(crate) filled: Option<Values>,
 }
 
 #[derive(Default)]
 pub struct AtsFormState {
-    run: Mutex<Option<Run>>,
+    pub(crate) run: Mutex<Option<Run>>,
     /// Vacancies whose submit button was pressed in this app run and not
     /// refused by the form: they are never pressed again.
     pressed: Mutex<HashSet<String>>,
@@ -124,7 +124,7 @@ pub struct Receipt {
     pub invalid_keys: Vec<String>,
 }
 
-fn is_id(value: &str) -> bool {
+pub(crate) fn is_id(value: &str) -> bool {
     !value.is_empty() && value.len() <= MAX_ID_CHARS && !value.chars().any(char::is_control)
 }
 
@@ -212,7 +212,7 @@ fn decode(raw: &str) -> Value {
     }
 }
 
-fn values_of(snapshot: &Value) -> Values {
+pub(crate) fn values_of(snapshot: &Value) -> Values {
     snapshot["values"]
         .as_object()
         .map(|map| {
@@ -230,11 +230,15 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-fn note(app: &AppHandle, event: &str, detail: &str) {
+pub(crate) fn note(app: &AppHandle, event: &str, detail: &str) {
     let _ = append_connector_diagnostic(app, "ats-form", event, Some(detail));
 }
 
-async fn page(app: &AppHandle, operation: &str, argument: &Value) -> Result<Value, String> {
+pub(crate) async fn page(
+    app: &AppHandle,
+    operation: &str,
+    argument: &Value,
+) -> Result<Value, String> {
     let window = app
         .get_webview(FORM_WINDOW_LABEL)
         .ok_or("form_window_missing")?;
@@ -244,7 +248,7 @@ async fn page(app: &AppHandle, operation: &str, argument: &Value) -> Result<Valu
 
 /// Repeats a read until `settled` accepts it or the wait runs out; the last
 /// answer is returned either way.
-async fn poll(
+pub(crate) async fn poll(
     app: &AppHandle,
     operation: &str,
     argument: &Value,
@@ -267,7 +271,7 @@ async fn poll(
     }
 }
 
-fn current_target(app: &AppHandle, vacancy_id: &str) -> Result<AtsTarget, String> {
+pub(crate) fn current_target(app: &AppHandle, vacancy_id: &str) -> Result<AtsTarget, String> {
     let state = app.state::<AtsFormState>();
     let run = state.run.lock().map_err(|_| "form_state_unavailable")?;
     run.as_ref()
@@ -280,7 +284,7 @@ fn window_location(app: &AppHandle) -> Option<Url> {
     app.get_webview(FORM_WINDOW_LABEL)?.url().ok()
 }
 
-fn still_on_target(app: &AppHandle, target: &AtsTarget) -> bool {
+pub(crate) fn still_on_target(app: &AppHandle, target: &AtsTarget) -> bool {
     window_location(app).is_some_and(|url| on_target(&target.hosts, url.as_str()))
 }
 
@@ -315,7 +319,7 @@ fn build_window(app: &AppHandle, target: &AtsTarget) -> Result<(), String> {
         .map_err(|_| "form_window_build_failed".to_string())
 }
 
-fn form_report(target: &AtsTarget, form: Value, on_board: bool) -> FormReport {
+pub(crate) fn form_report(target: &AtsTarget, form: Value, on_board: bool) -> FormReport {
     let state = match form["state"].as_str() {
         _ if !on_board => "off_target",
         Some("ready") if form["captcha"] == true => "captcha",
@@ -348,9 +352,10 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
         });
     }
     let form = poll(app, "read", &Value::Null, READ_WAIT, |value| {
-        value["state"] == "ready" && value["submitButtons"] == 1
+        value["state"] == "ready" && (value["submitButtons"] == 1 || value["step"] == "next")
     })
     .await?;
+    let form = crate::ats_steps::with_menus(app, form).await;
     let report = form_report(&target, form, still_on_target(app, &target));
     note(app, "read", &format!("{}_{}", target.adapter, report.state));
     Ok(report)

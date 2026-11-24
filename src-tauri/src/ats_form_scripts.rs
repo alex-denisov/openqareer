@@ -8,7 +8,9 @@ const PAGE_SCRIPT: &str = include_str!("ats_form.js");
 const OP_PLACEHOLDER: &str = "__OQ_ATS_OP__";
 const ARG_PLACEHOLDER: &str = "__OQ_ATS_ARG__";
 
-pub const OPERATIONS: &[&str] = &["read", "snapshot", "fill", "job", "submit", "outcome"];
+pub const OPERATIONS: &[&str] = &[
+    "read", "snapshot", "fill", "job", "options", "next", "moved", "submit", "outcome",
+];
 
 /// `</script>` and line separators cannot end the literal early.
 fn json_literal(value: &Value) -> String {
@@ -247,5 +249,207 @@ mod tests {
             };
             assert_eq!(parsed(&out, 0)["state"], state);
         }
+    }
+
+    const ASHBY: &str = include_str!("ats_fixtures/ashby.html");
+    const LEVER: &str = include_str!("ats_fixtures/lever.html");
+    const RECRUITEE: &str = include_str!("ats_fixtures/recruitee.html");
+    const WORKABLE: &str = include_str!("ats_fixtures/workable.html");
+    const PINPOINT: &str = include_str!("ats_fixtures/pinpoint.html");
+    const TEAMTAILOR: &str = include_str!("ats_fixtures/teamtailor.html");
+    /// Menus answer at once in jsdom; the page script waits between looks.
+    const NO_WAIT: &str = "window.setTimeout = (f) => { queueMicrotask(f); };";
+
+    #[test]
+    fn every_board_s_public_form_is_read_with_labels_kinds_and_one_send_button() {
+        // (form, fields, required, send button)
+        for (html, fields, required, send) in [
+            (ASHBY, 13, 10, "Submit Application"),
+            (LEVER, 21, 8, "Submit application"),
+            (RECRUITEE, 9, 7, "Send"),
+            (TEAMTAILOR, 9, 6, "Enviar solicitud"),
+            (WORKABLE, 13, 8, "Submit application"),
+            (PINPOINT, 11, 8, "Submit Application"),
+        ] {
+            let Some(out) = run(html, "/acme/jobs/1", "", &[op("read", json!(null))]) else {
+                return;
+            };
+            let form = parsed(&out, 0);
+            let list = form["fields"].as_array().unwrap();
+            assert_eq!(
+                (
+                    form["state"].as_str(),
+                    form["unkeyed"].as_u64(),
+                    form["submitButtons"].as_u64()
+                ),
+                (Some("ready"), Some(0), Some(1)),
+                "{send}"
+            );
+            assert_eq!(form["submitLabel"], send);
+            assert_eq!(form["step"], "submit");
+            assert_eq!(list.len(), fields, "{send}");
+            let marked = list
+                .iter()
+                .filter(|field| field["required"] == true)
+                .count();
+            assert_eq!(marked, required, "{send}");
+            for field in list {
+                assert_ne!(field["label"], "", "{send} {}", field["key"]);
+                let choice = ["radio", "checkbox_group", "select"]
+                    .contains(&field["kind"].as_str().unwrap());
+                assert_eq!(
+                    choice,
+                    !field["options"].as_array().unwrap().is_empty(),
+                    "{send}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_question_of_several_checkboxes_and_a_yes_no_question_take_named_options() {
+        let setup = "document.querySelectorAll('button[data-option]').forEach(b => b.addEventListener('click', e => { e.preventDefault(); b.setAttribute('aria-pressed', 'true'); }));";
+        let read = [op("read", json!(null))];
+        let Some(first) = run(ASHBY, "/a", "", &read) else {
+            return;
+        };
+        let form = parsed(&first, 0);
+        let key = |kind: &str| {
+            form["fields"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|field| field["kind"] == kind)
+                .unwrap()["key"]
+                .clone()
+        };
+        let (group, yes_no) = (key("checkbox_group"), key("radio"));
+        let entries = json!({ "entries": [
+            { "key": group, "value": "Series A or B startup\nSeries E+ startup" },
+            { "key": yes_no, "value": "No" },
+        ] });
+        let scripts = [
+            op("fill", entries),
+            op("job", json!(null)),
+            op("snapshot", json!(null)),
+        ];
+        let out = run(ASHBY, "/a", setup, &scripts).unwrap();
+        let values = parsed(&out, 2)["values"].clone();
+        assert_eq!(
+            values[group.as_str().unwrap()],
+            "Series A or B startup\nSeries E+ startup"
+        );
+        assert_eq!(values[yes_no.as_str().unwrap()], "No");
+        let wrong = json!({ "entries": [{ "key": group, "value": "Seed" }] });
+        let out = run(
+            ASHBY,
+            "/a",
+            "",
+            &[op("fill", wrong), op("job", json!(null))],
+        )
+        .unwrap();
+        assert_eq!(
+            parsed(&out, 1)["results"][group.as_str().unwrap()],
+            "option_missing"
+        );
+    }
+
+    const COMBO: &str = r#"
+<form><label for="city">City*</label>
+  <input id="city" role="combobox" aria-controls="menu" type="text">
+  <ul id="menu" role="listbox"></ul>
+  <input type="file" id="cv" aria-label="CV">
+  <button type="submit">Apply</button></form>"#;
+    const COMBO_SETUP: &str = "window.setTimeout = (f) => { queueMicrotask(f); };
+      const city = document.getElementById('city'), menu = document.getElementById('menu');
+      const show = (q) => { menu.innerHTML = ''; ['Warsaw, Poland','Warsaw, Indiana','Wien'].filter(x => x.toLowerCase().includes(q)).forEach(x => { const li = document.createElement('li'); li.setAttribute('role','option'); li.textContent = x; li.addEventListener('mousedown', () => { city.value = x; }); menu.append(li); }); };
+      city.addEventListener('input', () => show(city.value.toLowerCase()));
+      city.addEventListener('mousedown', () => show(''));
+      city.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.innerHTML = ''; });";
+
+    #[test]
+    fn a_closed_list_is_read_searched_and_set_only_to_an_exact_option() {
+        let request = |query: &str| {
+            op(
+                "options",
+                json!({ "requests": [{ "key": "id:city", "query": query }] }),
+            )
+        };
+        let fill = |value: &str| {
+            op(
+                "fill",
+                json!({ "entries": [{ "key": "id:city", "value": value }] }),
+            )
+        };
+        let job = || op("job", json!(null));
+        let scripts = [
+            request(""),
+            job(),
+            request("wars"),
+            job(),
+            fill("Warsaw"),
+            job(),
+            fill("warsaw, poland"),
+            job(),
+            op("snapshot", json!(null)),
+        ];
+        let Some(out) = run(COMBO, "/a", COMBO_SETUP, &scripts) else {
+            return;
+        };
+        let found = |index: usize| parsed(&out, index)["results"]["id:city"].clone();
+        assert_eq!(found(1).as_array().unwrap().len(), 3);
+        assert_eq!(found(3).as_array().unwrap().len(), 2);
+        assert_eq!(found(5), "option_missing");
+        assert_eq!(found(7), "set");
+        assert_eq!(parsed(&out, 8)["values"]["id:city"], "Warsaw, Poland");
+    }
+
+    const STEPS: &str = r#"
+<form><div id="one"><label for="name">Name*</label><input id="name" required></div>
+  <div id="two" hidden><label for="why">Why?</label><textarea id="why"></textarea>
+    <button type="submit" id="send">Submit application</button></div>
+  <button type="button" id="next">Next</button><button type="button">Back</button></form>"#;
+    const STEPS_SETUP: &str = "const el = (id) => document.getElementById(id);
+      document.forms[0].addEventListener('submit', (e) => e.preventDefault());
+      el('next').addEventListener('click', () => {
+        if (!el('name').value) { el('name').setAttribute('aria-invalid', 'true'); return; }
+        el('name').removeAttribute('aria-invalid');
+        el('one').hidden = true; el('next').hidden = true; el('two').hidden = false; });";
+
+    #[test]
+    fn steps_are_walked_one_page_at_a_time_and_only_the_last_one_sends() {
+        let name = json!({ "entries": [{ "key": "id:name", "value": "Test" }] });
+        let moved = || op("moved", json!({ "signature": "/a|id:name" }));
+        let scripts = [
+            op("read", json!(null)),
+            op("submit", json!(null)),
+            op("next", json!(null)),
+            moved(),
+            op("fill", name),
+            op("next", json!(null)),
+            moved(),
+            op("next", json!(null)),
+            op("submit", json!(null)),
+            op("submit", json!(null)),
+        ];
+        let Some(out) = run(STEPS, "/a", &format!("{NO_WAIT}{STEPS_SETUP}"), &scripts) else {
+            return;
+        };
+        let state = |index: usize| parsed(&out, index)["state"].clone();
+        assert_eq!(parsed(&out, 0)["step"], "next");
+        assert_eq!(parsed(&out, 0)["signature"], "/a|id:name");
+        assert_eq!(state(1), "submit_ambiguous");
+        assert_eq!(state(2), "clicked");
+        assert_eq!(
+            parsed(&out, 3),
+            json!({ "state": "invalid", "keys": ["id:name"] })
+        );
+        assert_eq!(state(5), "clicked");
+        assert_eq!(state(6), "moved");
+        assert_eq!(parsed(&out, 6)["form"]["step"], "submit");
+        assert_eq!(parsed(&out, 6)["form"]["fields"][0]["key"], "id:why");
+        assert_eq!(state(7), "next_ambiguous");
+        assert_eq!(state(8), "clicked");
+        assert_eq!(state(9), "already_submitted");
     }
 }

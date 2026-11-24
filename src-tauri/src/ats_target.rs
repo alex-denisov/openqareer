@@ -7,7 +7,13 @@ use tauri::Url;
 /// Frames a form page itself loads for its own check. They are allowed to
 /// load so the candidate can pass the check in the shown window; the app
 /// never answers one.
-const CHECK_FRAME_HOSTS: &[&str] = &["www.google.com", "www.recaptcha.net", "www.gstatic.com"];
+const CHECK_FRAME_HOSTS: &[&str] = &[
+    "www.google.com",
+    "www.recaptcha.net",
+    "www.gstatic.com",
+    "newassets.hcaptcha.com",
+    "captcha-assets.recruiteecdn.com",
+];
 
 const GREENHOUSE_HOSTS: &[&str] = &["job-boards.greenhouse.io", "boards.greenhouse.io"];
 const GREENHOUSE_EU_HOSTS: &[&str] = &["job-boards.eu.greenhouse.io", "boards.eu.greenhouse.io"];
@@ -89,6 +95,9 @@ pub fn resolve(url: &str, board: Option<&str>) -> Result<AtsTarget, String> {
             ),
             _ => Err("ats_address_invalid".to_string()),
         };
+    }
+    if let Some(target) = crate::ats_boards::resolve(&parsed) {
+        return target;
     }
     match (query(&parsed, "gh_jid"), board) {
         (Some(job_id), Some(token)) => greenhouse(GREENHOUSE_HOSTS, token, &job_id),
@@ -189,7 +198,7 @@ mod tests {
                 Some("acme"),
                 "ats_unsupported",
             ),
-            ("https://jobs.lever.co/acme/1", None, "ats_unsupported"),
+            ("https://jobs.lever.co/acme/1", None, "ats_address_invalid"),
             (
                 "http://boards.greenhouse.io/acme/jobs/1",
                 None,

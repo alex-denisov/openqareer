@@ -12,6 +12,8 @@ export type AtsFieldKind =
   | 'combobox'
   | 'radio'
   | 'checkbox'
+  /** Несколько галочек одного вопроса; значение — варианты через перевод строки. */
+  | 'checkbox_group'
   | 'file';
 
 export interface AtsOption {
@@ -25,6 +27,8 @@ export interface AtsField {
   readonly kind: AtsFieldKind;
   readonly role: string | null;
   readonly required: boolean;
+  /** Подсказка разметки (given-name, email, tel): не зависит от языка подписи. */
+  readonly autocomplete?: string | null;
   readonly options: readonly AtsOption[];
   readonly accept: string | null;
   /** Ссылка из подписи галочки: обычно политика работодателя. */
@@ -38,7 +42,12 @@ export interface AtsFormReport {
   readonly state: AtsFormState;
   readonly adapter: string;
   readonly host: string;
-  readonly form: { readonly fields?: readonly AtsField[]; readonly submitLabel?: string };
+  readonly form: {
+    readonly fields?: readonly AtsField[];
+    readonly submitLabel?: string;
+    /** 'next' — у формы есть следующий шаг: отправка на нём не нажимается. */
+    readonly step?: 'next' | 'submit';
+  };
 }
 
 export interface AtsFile {
