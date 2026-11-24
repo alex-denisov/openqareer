@@ -41,10 +41,10 @@ const journal = (list: unknown[], total = list.length) => ({
 afterEach(() => vi.clearAllMocks());
 
 describe('a11: hh.ru', () => {
-  it('подключён: «Автоподнятие резюме» по макету, цифры из учёта, без выбора резюме и аналитики', async () => {
+  it('подключён: «Автоподнятие резюме» по макету, цифры из учёта, поле «Резюме», без аналитики', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('connected')] as never);
     vi.mocked(raise.getHhRaise).mockResolvedValue({
-      connected: true, resumeId: 'abc', enabled: false, everyHours: 4,
+      connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер' }], enabled: false, everyHours: 4,
       lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null,
     } as never);
     vi.mocked(apps.getCandidateActionUsage).mockResolvedValue({ usage: { hhBoostsCount: 1, lastHhBoostAt: '2026-11-16T09:40:00Z' } } as never);
@@ -55,7 +55,7 @@ describe('a11: hh.ru', () => {
     const sw = view.container.querySelector<HTMLInputElement>('.hh-sw input#hh-up[role="switch"]');
     expect(sw?.checked).toBe(false);
     expect(view.container.querySelector('.hh-sw label[for="hh-up"]')!.textContent).toBe('Автоподнятие резюме');
-    expect(view.container.querySelector('select')).toBeNull();
+    expect(view.container.querySelectorAll('.hh-cv select option')).toHaveLength(1);
     expect(view.container.textContent).not.toMatch(/Просмотры|Приглашения/);
     expect(view.container.querySelectorAll('button')).toHaveLength(1);
     view.unmount();

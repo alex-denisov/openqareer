@@ -42,6 +42,22 @@ function isLinkedin(link: string): boolean {
   return /linkedin\.com/iu.test(link);
 }
 
+const LINKEDIN_PROFILE = /^(?:linkedin\s*:\s*)?(?:https?:\/\/)?((?:[a-z]{2,3}\.)?linkedin\.com\/in\/[^\s?#]+)/iu;
+
+/** Ссылка на профиль LinkedIn полной: в резюме её часто пишут без https. */
+export function linkedinProfileLink(link: string): string | undefined {
+  const address = LINKEDIN_PROFILE.exec(link.trim())?.[1];
+  return address ? `https://${address}` : undefined;
+}
+
+function linkedinFromLinks(links: readonly string[] | undefined): string | undefined {
+  for (const link of links ?? []) {
+    const profile = linkedinProfileLink(link);
+    if (profile) return profile;
+  }
+  return undefined;
+}
+
 function isGithub(link: string): boolean {
   return /github\.com/iu.test(link);
 }
@@ -73,7 +89,7 @@ const RULES: readonly Rule[] = [
   {
     matches: /linkedin/iu,
     source: SOURCE_CONTACTS,
-    value: (facts) => clean(facts.linkedinUrl) ?? facts.links?.find(isLinkedin),
+    value: (facts) => clean(facts.linkedinUrl) ?? linkedinFromLinks(facts.links),
   },
   { matches: /github/iu, source: SOURCE_CONTACTS, value: (facts) => facts.links?.find(isGithub) },
   {

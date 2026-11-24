@@ -1,5 +1,6 @@
-import { lazy, type ComponentType, type LazyExoticComponent } from 'react';
+import type { ComponentType } from 'react';
 import { matchNode, type B640Node, type B640Section } from './routes';
+import { retryableChunk, type RetryableChunk } from './shell/chunk';
 
 /** Что получает вход раздела: узел карты и параметры его адреса. */
 export interface SectionProps {
@@ -7,7 +8,7 @@ export interface SectionProps {
   readonly params: Readonly<Record<string, string>>;
 }
 
-type SectionEntry = LazyExoticComponent<ComponentType<SectionProps>>;
+type SectionEntry = RetryableChunk<SectionProps>;
 
 /** Модуль входа раздела: экран по умолчанию и, если есть, раннее чтение данных узла. */
 interface SectionModule {
@@ -35,7 +36,7 @@ const SECTION_LOADERS: Readonly<Record<B640Section, () => Promise<SectionModule>
 
 /** Каждый раздел — свой кусок сборки: код раздела грузится при первом заходе. */
 export const SECTION_ENTRIES = Object.fromEntries(
-  Object.entries(SECTION_LOADERS).map(([section, load]) => [section, lazy(load)]),
+  Object.entries(SECTION_LOADERS).map(([section, load]) => [section, retryableChunk<SectionProps>(load)]),
 ) as Readonly<Record<B640Section, SectionEntry>>;
 
 /**

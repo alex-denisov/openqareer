@@ -42,6 +42,7 @@ export function seedHh(databasePath: string, database: DatabaseSync, candidateId
     VALUES (?,?,?,?,?,?,?,?)`).run(`attempt-${tag}`, candidateId, `vacancy-${tag}`, `resume-${tag}`, 'applied', 'internal_code', AT, AT);
   database.exec(HH_RAISE_SCHEMA);
   database.prepare(`INSERT INTO hh_raise_schedules(candidate_id,resume_id,enabled,updated_at) VALUES (?,?,?,?)`).run(candidateId, `resume-${tag}`, 1, AT);
+  database.prepare(`INSERT INTO hh_raise_choices(candidate_id,resume_id,updated_at) VALUES (?,?,?)`).run(candidateId, `resume-${tag}`, AT);
 }
 
 export function seedRecording(database: DatabaseSync, candidateId: string, tag: string) {

@@ -39,6 +39,7 @@ export interface AutomationExport {
   readonly hh: {
     readonly applyAttempts: readonly Row[];
     readonly raiseSchedules: readonly Row[];
+    readonly raiseChoice: readonly Row[];
     readonly resumeSnapshot: HhResumeSnapshot | null;
   };
 }
@@ -113,6 +114,12 @@ export function exportAutomation(sources: AutomationExportSources, candidateId: 
            last_result AS lastResult, last_reason AS lastReason, last_result_at AS lastResultAt,
            paused_until AS pausedUntil, pause_reason AS pauseReason, updated_at AS updatedAt
          FROM hh_raise_schedules WHERE candidate_id = ? ORDER BY resume_id`,
+        candidateId,
+      ),
+      raiseChoice: rows(
+        database,
+        'hh_raise_choices',
+        `SELECT resume_id AS resumeId, updated_at AS updatedAt FROM hh_raise_choices WHERE candidate_id = ?`,
         candidateId,
       ),
       resumeSnapshot: readResumeSnapshot(sources, candidateId),

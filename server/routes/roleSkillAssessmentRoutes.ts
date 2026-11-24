@@ -4,18 +4,14 @@ import { registerRoleSkillAssessmentCaseRoutes } from './roleSkillAssessmentCase
 import { generateProfileSuggestions } from './roleSkillAssessmentSuggestions';
 import { z } from 'zod';
 import { MIN_ROLE_SAMPLE, titleKey } from '../../shared/poolRoleHypotheses';
-import { canonicalizeSkill } from '../connectors/managementSkillsDictionary';
 import {
   isRoleSkillAssessmentStale,
   buildRoleSkillCases,
   buildRoleSkillRequirementSummaries,
   countFreshActiveRoleVacancies,
-  type RoleAssessmentVacancy,
   type RoleSkillAssessmentRun,
 } from '../domain/roleSkillAssessment';
-import { isRoleTitleLabel } from '../domain/roleTitleLabel';
 import type { CandidateIdentity, ResumeEvidenceImport } from '../data/candidateStore';
-import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedPoolReadOptions } from '../vacancies/matchedPoolSnapshot';
 import {
@@ -29,6 +25,8 @@ import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
 import { syncSection } from '../observability/syncSections';
+import { assessmentVacancySteps } from './roleAssessmentVacancies';
+import { runSteps, runStepsYielding, type Steps } from '../vacancies/yieldingSteps';
 import { russianSkillNames, withRussianContextNames, withRussianSkillNames } from './roleSkillNamesStep';
 import { createRoleRequirementReader, type RoleRequirementReader } from './roleSkillRequirementSource';
 import { focusSchema, validateFocus, type ValidatedFocus } from './roleSkillAssessmentFocus';
@@ -424,7 +422,11 @@ async function readAssessmentContext(
   if (!snapshot) return { state: 'counting' };
   if (snapshot.state !== 'matched') return snapshot;
   const reader = createRoleRequirementReader(deps);
-  const build = () => summarizeAssessmentContext(role.title, role.version, snapshot.vacancies, reader);
+  // B770: thousands of requirement reads in one piece held the loop up to 2.9 s on prod.
+  const build = () =>
+    runStepsYielding(summarizeContextSteps(role.title, role.version, snapshot.vacancies, reader), {
+      section: 'assessment:summary',
+    });
   const key = `${titleKey(role.title)}\u0000${role.version}`;
   // B775: a context with no requirements still being read changes only with its snapshot.
   const settled = () => (reader?.pendingCount() ?? 0) === 0;
@@ -436,7 +438,7 @@ export async function warmAssessmentContext(deps: RouteDeps, candidateId: string
   await readAssessmentContext(deps, candidateId, resolveAssessedRole(deps, candidateId, role), true);
 }
 
-/** B770a: the role-assessment-context step holds the loop here; named for the stall log. */
+/** In one piece: for a caller without a requirement reader, whose summary is short. */
 export function summarizeAssessmentContext(
   roleTitle: string,
   roleVersion: number,
@@ -444,23 +446,25 @@ export function summarizeAssessmentContext(
   requirementReader?: RoleRequirementReader,
 ): AssessmentContext {
   return syncSection('assessment:summary', () =>
-    summarizeContext(roleTitle, roleVersion, matched, requirementReader),
+    runSteps(summarizeContextSteps(roleTitle, roleVersion, matched, requirementReader)),
   );
 }
 
-function summarizeContext(
+export function* summarizeContextSteps(
   roleTitle: string,
   roleVersion: number,
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
   requirementReader?: RoleRequirementReader,
-): AssessmentContext {
+): Steps<AssessmentContext> {
   const roleId = titleKey(roleTitle);
-  const vacancies = toAssessmentVacancies(matched, roleId, new Date(), requirementReader);
+  const vacancies = yield* assessmentVacancySteps(matched, roleId, new Date(), requirementReader);
+  yield;
   const sampleSize = countFreshActiveRoleVacancies(vacancies, roleId);
   if (sampleSize < MIN_ROLE_SAMPLE) {
     return { state: 'too_few_vacancies', roleTitle, sampleSize, threshold: MIN_ROLE_SAMPLE };
   }
   const skills = buildRoleSkillRequirementSummaries(vacancies, roleId);
+  yield;
   const cases = buildRoleSkillCases(vacancies, roleId);
   if (skills.length < 5 || cases.length < 3) {
     return {
@@ -484,68 +488,6 @@ function summarizeContext(
     skills,
     cases,
   };
-}
-
-export function toAssessmentVacancies(
-  matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
-  roleId: string,
-  now: Date,
-  requirementReader?: RoleRequirementReader,
-): RoleAssessmentVacancy[] {
-  const cutoff = now.getTime() - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1_000;
-  return matched.flatMap(({ cluster, explanation }) => {
-    if (cluster.status !== 'active' || explanation.roleMatch !== 'target') return [];
-    const sourceRefs = cluster.sources.flatMap((source) => {
-      const observedAtMs = Date.parse(source.observedAt);
-      if (!Number.isFinite(observedAtMs) || observedAtMs < cutoff || observedAtMs > now.getTime())
-        return [];
-      return [
-        {
-          sourceId: source.sourceId,
-          observedAt: source.observedAt,
-          sourceName: source.sourceName ?? 'Источник вакансии',
-        },
-      ];
-    });
-    const freshness = sourceRefs.length > 0 ? ('fresh' as const) : ('stale' as const);
-    const labels =
-      cluster.skills.length > 0 || freshness !== 'fresh' || !requirementReader
-        ? cluster.skills
-        : requirementReader.skillsFor(cluster.id);
-    const requirements = labels
-      .filter((label) => !isRoleTitleLabel(label))
-      .map((label) => {
-        const normalizedSkill = canonicalizeSkill(label).trim();
-        const skillId = normalizeSkillId(normalizedSkill);
-        return {
-          id: `requirement-${stableRefId(cluster.id, skillId)}`,
-          skillId,
-          statement: label.trim(),
-          sourceRefs: sourceRefs.map((source) => ({
-            id: stableRefId(cluster.id, `${source.sourceId}:${skillId}`),
-            vacancyId: cluster.id,
-            observedAt: source.observedAt,
-            sourceName: source.sourceName,
-          })),
-        };
-      });
-    return [{ id: cluster.id, roleId, status: 'active' as const, freshness, requirements }];
-  });
-}
-
-function normalizeSkillId(value: string): string {
-  return (
-    value
-      .toLocaleLowerCase('ru-RU')
-      .normalize('NFKC')
-      .replace(/[^\p{L}\p{N}]+/gu, '-')
-      .replace(/^-+|-+$/gu, '')
-      .slice(0, 70) || 'skill'
-  );
-}
-
-function stableRefId(left: string, right: string): string {
-  return createHash('sha256').update(`${left}\u0000${right}`).digest('hex').slice(0, 32);
 }
 
 async function handleDialogue(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

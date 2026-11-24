@@ -125,6 +125,13 @@ export async function runHhApplyInSession(input: {
   return report;
 }
 
+/** B708: виден ли в окне hh.ru отклик на эту вакансию. Только чтение открытой страницы. */
+export async function readHhApplyWindow(vacancyId: string): Promise<'sent' | 'waiting'> {
+  const code = await invokeDesktopCommand<string>('read_hh_apply_window', { vacancyId });
+  if (code !== 'sent' && code !== 'waiting') throw new Error('desktop_unavailable');
+  return code;
+}
+
 export interface HhSectionEditInput {
   readonly resumeId: string;
   readonly section: 'title' | 'skills' | 'about';

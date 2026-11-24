@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toAssessmentVacancies } from './roleSkillAssessmentRoutes';
+import { toAssessmentVacancies } from './roleAssessmentVacancies';
 
 type Matched = Parameters<typeof toAssessmentVacancies>[0];
 

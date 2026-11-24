@@ -17,7 +17,8 @@ import { buildRoleSkillDemand } from '../domain/roleSkillDemand';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
-import { readRoleSnapshot, toAssessmentVacancies } from './roleSkillAssessmentRoutes';
+import { toAssessmentVacancies } from './roleAssessmentVacancies';
+import { readRoleSnapshot } from './roleSkillAssessmentRoutes';
 import { createRoleRequirementReader } from './roleSkillRequirementSource';
 import { signalApplicationOf } from './statusSignalRoutes';
 

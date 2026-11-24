@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS hh_raise_tasks (
   finished_at TEXT
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_hh_raise_tasks_open ON hh_raise_tasks(candidate_id, status);
+CREATE TABLE IF NOT EXISTS hh_raise_choices (
+  candidate_id TEXT PRIMARY KEY,
+  resume_id TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+) STRICT;
 `;
 
 export interface HhRaiseScheduleRow {
@@ -104,6 +109,37 @@ export class SqliteHhRaiseRepository {
       .run(candidateId, resumeId, next.enabled ? 1 : 0, next.lastRaisedAt, next.nextRaiseAt, next.lastResult,
         next.lastReason, next.lastResultAt, next.pausedUntil, next.pauseReason, now);
     return next;
+  }
+
+  /** Резюме, которое кандидат выбрал для поднятия; `null` — ещё не выбирал. */
+  getChoice(candidateId: string): string | null {
+    const row = this.database
+      .prepare('SELECT resume_id FROM hh_raise_choices WHERE candidate_id = ?')
+      .get(candidateId) as { resume_id: string } | undefined;
+    return row?.resume_id ?? null;
+  }
+
+  /** Выбирает резюме: его расписание меняется, остальные выключаются, их задания уходят из очереди. */
+  chooseResume(candidateId: string, resumeId: string, patch: HhRaiseSchedulePatch, now: string): HhRaiseScheduleRow {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database
+        .prepare('INSERT OR REPLACE INTO hh_raise_choices (candidate_id, resume_id, updated_at) VALUES (?, ?, ?)')
+        .run(candidateId, resumeId, now);
+      this.database
+        .prepare('UPDATE hh_raise_schedules SET enabled = 0, updated_at = ? WHERE candidate_id = ? AND resume_id != ? AND enabled = 1')
+        .run(now, candidateId, resumeId);
+      this.database
+        .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?
+                  WHERE candidate_id = ? AND resume_id != ? AND status = 'queued'`)
+        .run(now, candidateId, resumeId);
+      const row = this.patchSchedule(candidateId, resumeId, patch, now);
+      this.database.exec('COMMIT');
+      return row;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   /** Включённые расписания, которым пора в очередь; паузы и открытые задания отсеиваются. */

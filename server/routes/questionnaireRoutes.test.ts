@@ -7,9 +7,10 @@ import { buildApp } from '../app';
 import { config as baseConfig, noSessions } from '../appTestHarness';
 import type { SessionAuth } from '../auth/authService';
 import type { AuthPrincipal } from '../auth/authTypes';
-import { SqliteQuestionnaireRepository } from '../candidate/sqliteQuestionnaireRepository';
+import { SqliteQuestionnaireRepository, type StoredQuestionnaire } from '../candidate/sqliteQuestionnaireRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import { isQuestionnaireFresh } from './questionnaireRoutes';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -222,6 +223,46 @@ describe('questionnaire routes with the B640 flag', () => {
       readAt: new Date().toISOString(),
     });
     expect((await call(app, 'GET', url('v2'), other)).json().data.answers).toEqual([]);
+  });
+
+  it('B641: fills LinkedIn from a profile link written without https', async () => {
+    const { app, forms, sessions, candidateStore } = await setup();
+    const candidateId = sessions.get(flagged)!.candidate!.id;
+    candidateStore.saveResumeDraft(
+      candidateId,
+      {
+        ...EMPTY_RESUME_DRAFT,
+        candidate: { contact: { links: ['linkedin.com/in/msokolova', 'javascript:alert(1)'] } },
+      },
+      [],
+    );
+    forms.saveQuestions(candidateId, 'v3', {
+      questions: [{ id: 'q1', text: 'LinkedIn Profile', required: true, kind: 'text' }],
+      formUrl: null,
+      readAt: new Date().toISOString(),
+    });
+    const data = (await call(app, 'GET', url('v3'), flagged)).json().data;
+    expect(data.answers).toEqual([{ questionId: 'q1', text: 'https://linkedin.com/in/msokolova' }]);
+  });
+
+  it('B641: reads a stored list cut at 30 options again, keeping a complete or submitted one', () => {
+    const now = Date.parse('2026-11-24T12:00:00.000Z');
+    const stored = (count: number, submittedAt: string | null = null): StoredQuestionnaire => ({
+      vacancyId: 'v1',
+      formUrl: null,
+      questions: [
+        {
+          id: 'q1', text: 'Country', required: true, kind: 'choice',
+          options: Array.from({ length: count }, (_, index) => `C${index}`),
+        },
+      ],
+      answers: [{ questionId: 'q1', text: 'C1' }],
+      readAt: '2026-11-20T00:00:00.000Z',
+      submittedAt,
+    });
+    expect(isQuestionnaireFresh(stored(30), now)).toBe(false);
+    expect(isQuestionnaireFresh(stored(255), now)).toBe(true);
+    expect(isQuestionnaireFresh(stored(30, '2026-11-21T00:00:00.000Z'), now)).toBe(true);
   });
 
   it('keeps one candidate away from another candidate questionnaire', async () => {
