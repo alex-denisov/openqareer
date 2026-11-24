@@ -118,6 +118,19 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(view!.container.textContent).toContain('Отклик отправлен на hh.ru');
   });
 
+  it('двойное «Отправить» до перерисовки — одна попытка', async () => {
+    await render();
+    click(button('Отправить отклик'));
+    const send = [...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!;
+    act(() => {
+      send.click();
+      send.click();
+    });
+    await settle();
+    expect(api.startHhApply).toHaveBeenCalledOnce();
+    expect(desktop.runHhApplyInSession).toHaveBeenCalledOnce();
+  });
+
   it('без резюме отправить нельзя', async () => {
     api.getHhResumes.mockResolvedValue(null);
     await render();

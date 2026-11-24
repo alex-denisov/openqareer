@@ -14,6 +14,7 @@ import {
   type ConsultantLimit,
 } from './model';
 import { ErrorRow, Message, Reply } from './parts';
+import { ResumeEditCard } from './ResumeEditCard';
 import { ReplyExtras } from './ReplyExtras';
 import { useDialog, type DialogState, type FactDecision } from './useDialog';
 import { useVoiceInput } from '../voice/useVoiceInput';
@@ -22,6 +23,9 @@ export interface DialogViewProps {
   readonly stage: CoachTurnStage;
   /** B746: объект открытого экрана (отклик, вакансия); вопросы уходят с ним. */
   readonly subject?: CoachTurnSubject;
+  /** Факт, из которого готовая правка резюме (K6). */
+  readonly resumeFactId?: string;
+  readonly resumeReason?: string;
   /** Записи на проверку открываются в этой же панели. */
   readonly reviewPath: string;
   readonly onReview: () => void;
@@ -60,9 +64,11 @@ interface FeedProps {
   readonly dialog: DialogState;
   readonly placed: ReadonlyMap<string, readonly CandidateMemory[]>;
   readonly onDecide: (id: string, decision: FactDecision) => Promise<void>;
+  readonly resumeFactId?: string;
+  readonly resumeReason?: string;
 }
 
-function Feed({ dialog, placed, onDecide }: FeedProps) {
+function Feed({ dialog, placed, onDecide, resumeFactId, resumeReason }: FeedProps) {
   const extras = useMemo(
     () => new Map(dialog.replies.map((item) => [item.messageId, item])),
     [dialog.replies],
@@ -94,6 +100,14 @@ function Feed({ dialog, placed, onDecide }: FeedProps) {
           </Fragment>
         );
       })}
+      {resumeFactId ? (
+        <ResumeEditCard
+          factId={resumeFactId}
+          reason={resumeReason}
+          memory={dialog.memory}
+          messages={dialog.messages}
+        />
+      ) : null}
       {dialog.reply !== null ? <Reply text={dialog.reply} /> : null}
       {dialog.sendFailed ? <ErrorRow text="Ответ не пришёл" onRetry={dialog.retry} /> : null}
     </div>
@@ -151,7 +165,15 @@ function Ask({ onSubmit, busy, limit, tariffsPath }: AskProps) {
 }
 
 /** Разговор по теме раздела (макеты K1, K1b, K3, K7 и состояния K2, K3b, K4). */
-export function DialogView({ stage, subject, reviewPath, onReview, tariffsPath }: DialogViewProps) {
+export function DialogView({
+  stage,
+  subject,
+  resumeFactId,
+  resumeReason,
+  reviewPath,
+  onReview,
+  tariffsPath,
+}: DialogViewProps) {
   const dialog = useDialog(stage, subject);
   const quotas = useTariffQuotas(dialog.turnCount);
   // Записи, по которым решение принято здесь: их итог остаётся в ленте.
@@ -174,7 +196,13 @@ export function DialogView({ stage, subject, reviewPath, onReview, tariffsPath }
       {pending.length > 0 ? (
         <PendingBanner count={pending.length} to={reviewPath} onOpen={onReview} />
       ) : null}
-      <Feed dialog={dialog} placed={placed} onDecide={decide} />
+      <Feed
+        dialog={dialog}
+        placed={placed}
+        onDecide={decide}
+        resumeFactId={resumeFactId}
+        resumeReason={resumeReason}
+      />
       <Ask
         onSubmit={dialog.send}
         busy={dialog.reply !== null || dialog.sendFailed}

@@ -9,6 +9,7 @@ import { InfoTip } from '../kit/InfoTip';
 import { StatusLine } from '../kit/ResultLine';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
+import { useScreenChrome } from '../shell/ShellContext';
 import { listGoalCards } from './diaryApi';
 import { getGoalExamples, getRoleTitleRu, type GoalExample } from './goalHintsApi';
 import { useRoleTitle } from './roleTitle';
@@ -261,6 +262,8 @@ function GoalsLead({ data }: { readonly data: CareerDiaryGoalCards }) {
 /** Экран d02 «Цели и показатели»: цели по горизонтам, показатели, архив; пусто — d02c. */
 export function GoalsScreen({ node }: { readonly node: B640Node }) {
   const [loaded, retry] = useGoalCards();
+  // Как у макетов d02 и d02c (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   const empty =
     loaded.state === 'ready' && loaded.data.items.length === 0 && loaded.data.archived.length === 0;
   return (

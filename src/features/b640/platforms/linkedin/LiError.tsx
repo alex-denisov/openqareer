@@ -6,16 +6,19 @@ export function LiError({
   onRetry,
 }: {
   readonly text: string;
-  readonly onRetry: () => void;
+  /** Нет — повтор ничего не даст: варианты кончились. */
+  readonly onRetry?: () => void;
 }) {
   return (
     <p className="li-err" role="alert">
       <Icon name="warn" />
       {text}
-      <button className="row-act" type="button" onClick={onRetry}>
-        <Icon name="repeat" />
-        Повторить
-      </button>
+      {onRetry ? (
+        <button className="row-act" type="button" onClick={onRetry}>
+          <Icon name="repeat" />
+          Повторить
+        </button>
+      ) : null}
     </p>
   );
 }

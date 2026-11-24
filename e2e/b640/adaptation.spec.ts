@@ -49,6 +49,10 @@ test.describe('B663: «Дневник» — адаптация', () => {
       'День 34 из 90: цель — первый заметный результат',
     );
     await expect(plan.getByText('13 человек · 2 без встречи')).toBeVisible();
+    // Отступы макетов d01, d01a, d01c (B645): плотные на 390 там, где `data-mtight`.
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(plan).toHaveCSS('padding-top', phone ? '12px' : '16px');
+    await expect(plan.locator('section.mod')).toHaveCSS('padding-top', phone ? '16px' : '20px');
     await expectGates(page);
     await plan.getByRole('button', { name: 'Готово: Своя тестовая среда для команды' }).click();
     await expect.poll(() => calls.plans.length).toBe(1);
@@ -56,6 +60,7 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await plan.getByRole('link', { name: 'До выхода' }).click();
     const step = page.locator('[data-b640-node="d01a"]');
     await expect(step.getByRole('heading', { name: 'Уточнить у HR' })).toBeVisible();
+    await expect(step).toHaveCSS('padding-top', phone ? '8px' : '8px');
     await expectGates(page);
     await step.getByLabel('Скрыть резюме на hh.ru').click();
     await expect.poll(() => calls.plans.length).toBe(2);
@@ -63,6 +68,20 @@ test.describe('B663: «Дневник» — адаптация', () => {
     await page.goto('/app/diary/adaptation/manager-meeting');
     const meeting = page.locator('[data-b640-node="d01c"]');
     await expect(meeting.locator('.fact')).toHaveCount(6);
+    await expect(meeting).toHaveCSS('padding-top', phone ? '12px' : '8px');
+    // Главная кнопка — под датой, как в макете d01c: на 390 прижата к правому полю
+    // полосы, на 1440 левый край — край заголовка. Ширина зависит от шрифта, числом не сверяем.
+    const kpi = await meeting.getByRole('link', { name: 'Сделать цели и KPI' }).boundingBox();
+    const title = await meeting.locator('#mt-title').boundingBox();
+    const prep = await meeting.locator('.dn-fs').first().boundingBox();
+    if (phone) {
+      expect(Math.round((kpi?.x ?? 0) + (kpi?.width ?? 0))).toBe(374);
+      expect(kpi?.width ?? 0).toBeLessThan(358);
+    } else {
+      expect(Math.round(kpi?.x ?? 0)).toBe(Math.round(title?.x ?? -1));
+      expect(kpi?.y ?? 0).toBeGreaterThan(title?.y ?? Infinity);
+      expect(kpi?.y ?? Infinity).toBeLessThan(prep?.y ?? 0);
+    }
     await expectGates(page);
 
     await page.goto('/app/diary/adaptation/people');

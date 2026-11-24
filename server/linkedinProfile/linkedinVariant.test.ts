@@ -47,6 +47,23 @@ describe('B645 a03: «Предложить заново» — проверка �
     expect(checkLinkedinVariant(place, { text: 'Отвечает за выпуск каждые 3 дня.', factIds: ['x1'] })).toBeNull();
   });
 
+  it('заголовок называет роль и длинные навыки как есть (прод 24.11: 503 четыре раза из четырёх)', () => {
+    const input = { memory: [], draft: {
+      targetRole: 'Операционный директор', experience: [],
+      skills: [{ id: 's1', name: 'Автоматизация бизнес-процессов' }, { id: 's2', name: 'Управление операционной деятельностью' }],
+    } } as never;
+    const request = linkedinVariantRequest('headline', input, ['Операционный директор'])!;
+    const text = 'Операционный директор | Управление операционной деятельностью · Автоматизация бизнес-процессов';
+    expect(checkLinkedinVariant(request, { text, factIds: ['resume:targetRole', 'resume:skill:s1', 'resume:skill:s2'] })).toBe(text);
+  });
+
+  it('отказ называет код причины', () => {
+    const reasons: string[] = [];
+    checkLinkedinVariant(place, { text: 'Вырастил выручку в 5 раз.', factIds: ['b1'] }, (reason) => reasons.push(reason));
+    checkLinkedinVariant(place, { text: 'Ведёт команду из 9 разработчиков.', factIds: ['d1'] }, (reason) => reasons.push(reason));
+    expect(reasons).toEqual(['ungrounded_number', 'repeat']);
+  });
+
   it('навыки — только из списка кандидата, через «·», без повторов', () => {
     const skills = linkedinVariantRequest('skills', INPUT, ['Go · Kubernetes · PostgreSQL'])!;
     expect(checkLinkedinVariant(skills, { text: 'kubernetes, Go', factIds: [] })).toBe('Kubernetes · Go');

@@ -690,7 +690,7 @@ test.describe('B657: единый экран отклика', () => {
     await expect(step(page, 'Анкета')).toHaveCount(0);
   });
 
-  test('B704 в приложении: окна hh.ru нет — выбор резюме ведёт ко входу, не к ошибке', async ({
+  test('B708 в приложении: окна hh.ru нет — открывается само; вход просит только страница входа', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'приложение только на компьютере');
@@ -703,9 +703,19 @@ test.describe('B657: единый экран отклика', () => {
         {
           invoke: (command: string, args?: { url?: string }) => {
             calls.push(args?.url ? `${command} ${args.url}` : command);
-            // Ровно так отвечает Rust (`inspect_session_page_for`), когда окна сессии hh.ru нет.
-            if (command === 'inspect_connector_session_page')
-              return Promise.reject('session_window_missing');
+            // Окна сессии hh.ru нет, пока его не открыли; в нём — страница входа.
+            if (command === 'inspect_connector_session_page') {
+              if (!calls.includes('open_connector_session'))
+                return Promise.reject('session_window_missing');
+              return Promise.resolve({
+                ready: true,
+                url: 'https://hh.ru/account/login',
+                signedInApplicant: false,
+                login: true,
+                otp: false,
+                captcha: false,
+              });
+            }
             if (command === 'open_connector_session') {
               return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
             }
@@ -726,7 +736,7 @@ test.describe('B657: единый экран отклика', () => {
 
     await page.getByRole('button', { name: 'Выбрать резюме' }).click();
     const sheet = page.getByRole('dialog', { name: 'Каким резюме откликаться' });
-    await expect(sheet.getByText('Нужен вход в hh.ru')).toBeVisible();
+    await expect(sheet.getByText('Нужен вход в hh.ru')).toBeVisible({ timeout: 15_000 });
     await expect(sheet.getByText('не прочитался')).toHaveCount(0);
     const retry = sheet.getByRole('button', { name: 'Прочитать снова' });
     const box = await retry.boundingBox();
@@ -736,8 +746,15 @@ test.describe('B657: единый экран отклика', () => {
 
     await sheet.getByRole('button', { name: 'Войти в hh.ru' }).click();
     await expect
-      .poll(() => page.evaluate(() => (window as unknown as { __hhCalls: string[] }).__hhCalls))
-      .toContain('open_connector_session');
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __hhCalls: string[] }).__hhCalls.filter(
+              (call) => call === 'open_connector_session',
+            ).length,
+        ),
+      )
+      .toBe(2);
   });
 
   test('B678 в приложении: строки отправки и разбор резюме hh.ru — по макету', async ({ page }) => {
@@ -749,6 +766,7 @@ test.describe('B657: единый экран отклика', () => {
       (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
         {
           invoke: (command: string, args?: { request?: { url?: string } }) => {
+            if (command === 'is_connector_session_open') return Promise.resolve(true);
             if (command === 'inspect_connector_session_page')
               return Promise.resolve({
                 ready: true,

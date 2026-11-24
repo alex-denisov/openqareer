@@ -62,7 +62,13 @@ export interface PersistedMatchedSnapshot {
 /** The last snapshot of a candidate, kept past the process: a deploy no longer starts cold. */
 export interface MatchedSnapshotStore {
   read(candidateId: string, profileKey: string): PersistedMatchedSnapshot | null;
-  write(candidateId: string, profileKey: string, snapshot: PersistedMatchedSnapshot): void;
+  /** `isWanted` turns false when the snapshot is dropped or replaced before it is written. */
+  write(
+    candidateId: string,
+    profileKey: string,
+    snapshot: PersistedMatchedSnapshot,
+    isWanted: () => boolean,
+  ): void | Promise<void>;
   delete(candidateId: string): void;
   /** Profiles stored for a candidate, for loading them all when a process starts. */
   keys(candidateId: string): string[];
@@ -113,6 +119,8 @@ export class MatchedPoolSnapshots {
   private readonly entries = new Map<string, Snapshot>();
   private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
   private poolWrites = 0;
+  /** One write at a time: several built together would each take a slice of the same loop turn. */
+  private lastPersist: Promise<void> = Promise.resolve();
   private readonly ttlMs: number;
   private readonly maxAgeMs: number;
   private readonly minStaleRebuildMs: number;
@@ -366,11 +374,13 @@ export class MatchedPoolSnapshots {
     const split = key.indexOf(' ');
     const candidateId = key.slice(0, split);
     const profileKey = key.slice(split + 1);
-    setImmediate(() =>
-      syncSection('snapshot:store', () =>
-        this.guard(() => store.write(candidateId, profileKey, snapshot)),
-      ),
-    );
+    const isWanted = () => this.entries.get(key)?.items === snapshot.items;
+    this.lastPersist = this.lastPersist
+      .then(() => new Promise((resolve) => setImmediate(resolve)))
+      .then(() =>
+        isWanted() ? store.write(candidateId, profileKey, snapshot, isWanted) : undefined,
+      )
+      .catch((error: unknown) => this.onRebuildFailed?.(error));
   }
 
   private evict(now: number): void {

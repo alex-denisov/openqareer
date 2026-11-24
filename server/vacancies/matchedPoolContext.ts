@@ -7,6 +7,7 @@ import {
   type MatchedSnapshotMiss,
   type MatchedSnapshotStore,
 } from './matchedPoolSnapshot';
+import { mapYielding } from './mapYielding';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { matchGeographyKey, type MatchGeography } from './matchGeography';
 import { candidateGradeRange, type GradeRange } from './titleParse/gradeRange';
@@ -149,7 +150,13 @@ function snapshotsOf(engine: RouteDeps['multiSourceEngine']): MatchedPoolSnapsho
 /** What the candidate store keeps between processes: text in, text out. */
 interface SealedSnapshotText {
   read(candidateId: string, profileKey: string): { builtAt: number; text: string } | null;
-  write(candidateId: string, profileKey: string, builtAt: number, text: string): void;
+  write(
+    candidateId: string,
+    profileKey: string,
+    builtAt: number,
+    text: string,
+    isWanted: () => boolean,
+  ): Promise<void>;
   delete(candidateId: string): void;
   keys(candidateId: string): string[];
 }
@@ -168,8 +175,11 @@ export function setMatchedSnapshotStore(
         ? { items: items as MatchedVacancyItem[], storedAt: row.builtAt }
         : null;
     },
-    write: (candidateId, profileKey, snapshot) =>
-      sealed.write(candidateId, profileKey, snapshot.storedAt, JSON.stringify(snapshot.items)),
+    async write(candidateId, profileKey, snapshot, isWanted) {
+      const items = await mapYielding(snapshot.items, (item) => JSON.stringify(item));
+      const text = `[${items.join(',')}]`;
+      await sealed.write(candidateId, profileKey, snapshot.storedAt, text, isWanted);
+    },
     delete: (candidateId) => sealed.delete(candidateId),
     keys: (candidateId) => sealed.keys(candidateId),
   };
