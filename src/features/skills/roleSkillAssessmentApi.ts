@@ -182,6 +182,18 @@ export async function appealRoleAssessmentCase(input: {
   return post(`${base(runId)}/cases/${encodeURIComponent(caseId)}/appeal`, body);
 }
 
+/** B734: «Верно» или «Пропустить» на итоге кейса. */
+export async function decideRoleAssessmentCase(input: {
+  runId: string;
+  caseId: string;
+  expectedRevision: number;
+  requestId: string;
+  accepted: boolean;
+}): Promise<RoleSkillAssessmentMutationResult> {
+  const { runId, caseId, ...body } = input;
+  return post(`${base(runId)}/cases/${encodeURIComponent(caseId)}/decision`, body);
+}
+
 export async function retryRoleSkillAssessment(input: {
   runId: string;
   expectedRevision: number;

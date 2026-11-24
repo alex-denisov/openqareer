@@ -154,3 +154,24 @@ describe('B645 f03: главная кнопка — первая находка,
     expect(firstToRemove([useful, { ...hide, action: null }])).toBeUndefined();
   });
 });
+
+describe('B668: формы слов в «Ищем по»', () => {
+  it('1, 2, 5, 7 и 21', () => {
+    const line = (count: number) => {
+      const groups = Array.from({ length: count }, (_, index) => ({
+        key: String(index),
+        kind: 'work_context' as const,
+        label: '',
+        ids: [],
+      }));
+      return searchByLine(groups, new Set(groups.map((group) => group.key)));
+    };
+    expect([1, 2, 5, 7, 21].map(line)).toEqual([
+      'место работы',
+      '2 места работы',
+      '5 мест работы',
+      '7 мест работы',
+      '21 место работы',
+    ]);
+  });
+});

@@ -1,13 +1,22 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CandidateFootprintAudit } from '../../../../shared/candidateFootprint';
-import { mount, type Mounted } from '../kit/testDom';
+import { click, mount, type Mounted } from '../kit/testDom';
 import { nodeByCode } from '../routes';
 import { StartPage } from './FootprintScreen';
 import { uncheckedLine } from './footprintModel';
 import type { FootprintData } from './useFootprint';
 
 vi.mock('./footprintApi', () => ({}));
+const resume = vi.hoisted(() => ({
+  getResumeStudio: vi.fn(),
+  saveResumeStudioDraft: vi.fn(),
+}));
+vi.mock('../../resume/resumeApi', async (original) => ({
+  ...(await original<object>()),
+  ...resume,
+}));
 
 const adapter = (state: string) => ({ adapterId: 'x', state });
 const audit = (state: string, adapters: readonly string[]) =>
@@ -83,5 +92,41 @@ describe('F1: состояние поиска вверху страницы, к�
       '21 категория не проверена',
       '12 категорий не проверены',
     ]);
+  });
+});
+
+describe('B668: ссылка в «Данных для поиска»', () => {
+  it('ссылка на канал добавляется в контакты профиля', async () => {
+    resume.getResumeStudio.mockResolvedValue({
+      draft: { candidate: { contact: { links: ['https://a.ru/'] } }, experience: [] },
+    });
+    resume.saveResumeStudioDraft.mockResolvedValue({});
+    const changed = vi.fn();
+    window.addEventListener('b640:footprint-changed', changed);
+    const root = render(data('ready', audit('completed', ['checked'])));
+    click([...root.querySelectorAll('button')].find((item) => item.textContent === 'Изменить')!);
+    const input = root.querySelector<HTMLInputElement>('#fp-link')!;
+    const type = (value: string) =>
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+          input,
+          value,
+        );
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    const submit = () =>
+      act(async () => {
+        input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+    type('не адрес');
+    await submit();
+    expect(root.querySelector('#fp-link-e')?.textContent).toBe('Это не адрес страницы');
+    type('youtube.com/@name');
+    await submit();
+    expect(resume.saveResumeStudioDraft).toHaveBeenCalledTimes(1);
+    const saved = resume.saveResumeStudioDraft.mock.calls[0]![0];
+    expect(saved.candidate.contact.links).toEqual(['https://a.ru/', 'https://youtube.com/@name']);
+    expect(changed).toHaveBeenCalled();
+    window.removeEventListener('b640:footprint-changed', changed);
   });
 });
