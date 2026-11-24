@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Button, Dialog, Icon, Link, ResultLine, StatusLine } from '../../kit';
+import { pluralRu } from '../../../../../shared/pluralRu';
+import { Button, Dialog, Icon, Link, ResultLine, StatusLine, useToast } from '../../kit';
 import { buildNodePath } from '../../routes';
 import type { ApplyHead } from '../model/applyModel';
 import { editsWord, HhResumeEdits } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
 import { useHhResumeEdits } from './useHhResumeEdits';
 import { elapsedLabel, uniqueResumeTitle } from './hhSendModel';
-import { useHhApply, type HhApplyControls } from './useHhApply';
+import { useHhApply, type HhApplyControls, type HhApplyInput } from './useHhApply';
 import { useMarkSent, type MarkSentState } from './useMarkSent';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
 
@@ -22,6 +23,17 @@ export interface HhSendStepProps {
   readonly onSent: () => Promise<void>;
   /** a01: название письма открывает шаг «Письмо». */
   readonly onLetter: () => void;
+  /** B641: анкета вакансии, если её вопросы прочитаны. */
+  readonly form: HhSendForm | null;
+  readonly onForm: HhApplyInput['onForm'];
+}
+
+export interface HhSendForm {
+  readonly answered: number;
+  readonly complete: boolean;
+  /** Ответы одним текстом для вставки. */
+  readonly answersText: string;
+  readonly open: () => void;
 }
 
 interface PartsProps {
@@ -57,11 +69,57 @@ function Parts({ props, resumes, editCount, onEdits }: PartsProps) {
         </div>
         {selected ? <span className="tag ok">готово</span> : null}
       </li>
+      {props.form ? (
+        <li className="row">
+          <div>
+            <button className="row-title ap-pick" type="button" onClick={props.form.open}>
+              {`${props.form.answered} ${pluralRu(props.form.answered, ['ответ', 'ответа', 'ответов'])} анкеты`}
+            </button>
+          </div>
+          {props.form.complete ? <span className="tag ok">готово</span> : null}
+        </li>
+      ) : null}
     </ul>
   );
 }
 
-function Outcome({ apply, resumes, responsePath }: { apply: HhApplyControls; resumes: HhResumesState; responsePath: string }) {
+/** B641: hh.ru не берёт отклик без анкеты — ответы копируются, анкету кандидат заполняет сам. */
+function FormNeeded({ url, answersText }: { readonly url: string | null; readonly answersText: string }) {
+  const toast = useToast();
+  const copy = () => {
+    void Promise.resolve()
+      .then(() => navigator.clipboard.writeText(answersText))
+      .then(() => toast.show({ text: 'Ответы скопированы' }))
+      .catch(() => toast.show({ text: 'Не получилось скопировать' }));
+  };
+  return (
+    <>
+      <StatusLine state="err" text="Не отправлен · работодатель просит анкету" />
+      <div className="actions">
+        {answersText ? (
+          <Button variant="primary" icon="copy" onClick={copy}>
+            Скопировать ответы
+          </Button>
+        ) : null}
+        {url ? (
+          <a className="btn" href={url} target="_blank" rel="noopener noreferrer">
+            <Icon name="out" />
+            Открыть анкету
+          </a>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+interface OutcomeProps {
+  readonly apply: HhApplyControls;
+  readonly resumes: HhResumesState;
+  readonly responsePath: string;
+  readonly props: HhSendStepProps;
+}
+
+function Outcome({ apply, resumes, responsePath, props }: OutcomeProps) {
   const { state } = apply;
   if (state.kind === 'sending') {
     return <StatusLine state="wait" text={`Ждём ответа hh.ru · ${elapsedLabel(state.seconds)}`} />;
@@ -73,6 +131,9 @@ function Outcome({ apply, resumes, responsePath }: { apply: HhApplyControls; res
       </button>
     );
     return <StatusLine state="err" text="Не отправлен · нужен вход в hh.ru" action={signIn} />;
+  }
+  if (state.kind === 'form') {
+    return <FormNeeded url={state.url ?? props.head.url} answersText={props.form?.answersText ?? ''} />;
   }
   if (state.kind === 'error') return <StatusLine state="err" text={state.text} />;
   if (state.kind !== 'sent' && state.kind !== 'questionnaire') return null;
@@ -128,6 +189,7 @@ function useStepApply(props: HhSendStepProps, { snapshot }: HhResumesState): HhA
     letter: props.letterText,
     uniqueResumeTitle: uniqueResumeTitle(snapshot),
     onSent: props.onSent,
+    onForm: props.onForm,
   });
 }
 
@@ -167,7 +229,7 @@ export function HhSendStep(props: HhSendStepProps) {
           </Button>
         </div>
       )}
-      <Outcome apply={apply} resumes={resumes} responsePath={responsePath} />
+      <Outcome apply={apply} resumes={resumes} responsePath={responsePath} props={props} />
       {sent ? null : <MarkedOutcome marked={marked.state} responsePath={responsePath} />}
       <ConfirmDialog apply={apply} title={props.head.title} />
       <HhResumeSheet

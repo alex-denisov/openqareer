@@ -12,6 +12,14 @@ import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { isQuestionnaireFresh, mergeReadQuestions } from './questionnaireRoutes';
 
+const HH_FORM = {
+  url: 'https://spb.hh.ru/applicant/vacancy_response?vacancyId=77&token=x',
+  questions: [
+    { text: 'Ожидаемый уровень дохода?', required: true, kind: 'text' },
+    { text: 'Готовы к командировкам?', required: true, kind: 'choice', options: ['Да', 'Нет'] },
+  ],
+};
+
 type App = Awaited<ReturnType<typeof buildApp>>;
 const cleanups: Array<() => Promise<void> | void> = [];
 const ORIGIN = 'http://localhost:3000';
@@ -107,6 +115,7 @@ describe('questionnaire routes without the B640 flag', () => {
     const routes: ReadonlyArray<['GET' | 'PUT' | 'POST', string, unknown?]> = [
       ['GET', url('v1')],
       ['PUT', url('v1', '/answers'), { answers: [{ questionId: 'q1', text: 'x' }] }],
+      ['PUT', url('v1', '/hh-form'), HH_FORM],
       ['POST', url('v1', '/submitted')],
     ];
     for (const [method, path, payload] of routes) {
@@ -342,5 +351,50 @@ describe('questionnaire routes with the B640 flag', () => {
     });
     expect(response.statusCode).toBe(403);
     expect(rows(databasePath)[0].answers_cipher).toBeNull();
+  });
+});
+
+describe('B641: анкета hh.ru из окна кандидата', () => {
+  it('сохраняет вопросы своему кандидату; адрес — только страница с номером вакансии', async () => {
+    const { app, candidateStore, sessions } = await setup();
+    candidateStore.decisionProfileRepo.put(sessions.get(flagged)!.candidate!.id, {
+      salaryFloor: 500000,
+      salaryCurrency: 'RUB',
+      workFormats: [],
+    } as never, '2026-11-24T00:00:00.000Z');
+    const saved = await call(app, 'PUT', url('v1', '/hh-form'), flagged, HH_FORM);
+    expect(saved.statusCode).toBe(200);
+    const data = saved.json().data;
+    expect(data).toMatchObject({
+      state: 'ready',
+      formUrl: 'https://spb.hh.ru/applicant/vacancy_response?vacancyId=77',
+      total: 2,
+      suggestions: [{ text: 'от 500 000 ₽', source: 'Ожидания из вашего профиля' }],
+    });
+    expect((await call(app, 'GET', url('v1'), flagged)).json().data.total).toBe(2);
+    expect((await call(app, 'GET', url('v1'), other)).json().data.total).toBe(0);
+
+    // Вопрос сменился — прежний ответ не оказывается под новым.
+    const [first] = data.questions;
+    const answers = [{ questionId: first.id, text: 'от 600 000 ₽' }];
+    await call(app, 'PUT', url('v1', '/answers'), flagged, { answers });
+    const changed = { ...HH_FORM, questions: [{ text: 'Срок выхода?', required: true, kind: 'text' }] };
+    const next = (await call(app, 'PUT', url('v1', '/hh-form'), flagged, changed)).json().data;
+    const fresh = next.questions.find((item: { text: string }) => item.text === 'Срок выхода?');
+    expect(next.answers.map((item: { questionId: string }) => item.questionId)).not.toContain(fresh.id);
+  });
+
+  it.each([
+    ['чужой сайт', { ...HH_FORM, url: 'https://evilhh.ru/vacancy/77' }],
+    ['http', { ...HH_FORM, url: 'http://hh.ru/vacancy/77' }],
+    ['другая страница', { ...HH_FORM, url: 'https://hh.ru/resume/77' }],
+    ['без вопросов', { ...HH_FORM, questions: [] }],
+    ['лишнее поле', { ...HH_FORM, html: '<form>' }],
+    ['выбор без вариантов', { ...HH_FORM, questions: [{ text: 'А?', required: true, kind: 'choice' }] }],
+  ])('отклоняет: %s', async (_name, body) => {
+    const { app, databasePath } = await setup();
+    expect((await call(app, 'PUT', url('v1', '/hh-form'), flagged, body)).statusCode).toBe(400);
+    expect((await call(app, 'PUT', url('v1', '/hh-form'), undefined, HH_FORM)).statusCode).not.toBe(200);
+    expect(rows(databasePath)).toEqual([]);
   });
 });

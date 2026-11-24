@@ -14,6 +14,7 @@ mod hh_resume_edit_scripts;
 mod hh_jsdom_harness;
 mod hh_resume_experience;
 mod hh_resume_experience_scripts;
+mod hh_questionnaire;
 mod hh_raise;
 mod linkedin_read_guard;
 mod network_probe;

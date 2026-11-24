@@ -7,6 +7,7 @@ import {
   HH_SECTION_SKILLS_MAX,
   HH_SECTION_TEXT_MAX_LENGTH,
   type HhApplyOutcome,
+  type HhForm,
   type HhResumeContent,
   type HhResumeSections,
   type HhResumeSummary,
@@ -37,6 +38,8 @@ export type HhSessionRead =
 export interface HhDesktopReport {
   readonly outcome: HhApplyOutcome;
   readonly failureCode?: string | null;
+  /** B641: анкета работодателя, если hh.ru её показал. */
+  readonly questionnaire?: HhForm | null;
 }
 
 /** Открывает окно входа hh.ru; вошедшего кандидата hh.ru сам ведёт дальше. */

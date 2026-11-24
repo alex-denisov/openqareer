@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount, type Mounted } from '../../kit/testDom';
 import type { ApplyHead } from '../model/applyModel';
+import type { HhSendForm } from './HhSendStep';
 
 const api = vi.hoisted(() => ({
   getHhResumes: vi.fn(),
@@ -52,6 +53,8 @@ afterEach(() => {
 });
 beforeEach(() => {
   vi.resetAllMocks();
+  form = null;
+  onForm.mockResolvedValue(undefined);
   desktop.summaryOf.mockImplementation((item) => ({ id: item.id, title: item.title }));
   api.getHhResumes.mockResolvedValue(snapshot);
   desktop.readHhResumeContent.mockRejectedValue(new Error('hh_resume_not_read'));
@@ -68,6 +71,9 @@ async function settle(): Promise<void> {
   });
 }
 
+const onForm = vi.fn();
+let form: HhSendForm | null = null;
+
 async function render(onSent = vi.fn().mockResolvedValue(undefined), onLetter = vi.fn()) {
   view = mount(
     <HhSendStep
@@ -78,6 +84,8 @@ async function render(onSent = vi.fn().mockResolvedValue(undefined), onLetter = 
       approvedLabel="одобрено 18.11"
       letterText="Здравствуйте"
       onSent={onSent}
+      form={form}
+      onForm={onForm}
       onLetter={onLetter}
     />,
   );
@@ -129,6 +137,48 @@ describe('B704: отклик через hh.ru в приложении', () => {
     await settle();
     expect(api.startHhApply).toHaveBeenCalledOnce();
     expect(desktop.runHhApplyInSession).toHaveBeenCalledOnce();
+  });
+
+  it('B641: анкета до отклика — не отправлен, отметки нет, вопросы уходят в шаг «Анкета»', async () => {
+    const questionnaire = {
+      url: 'https://hh.ru/applicant/vacancy_response?vacancyId=123&hhtmFrom=vacancy',
+      questions: [{ text: 'Почему мы?', required: true, kind: 'text' }],
+    };
+    desktop.runHhApplyInSession.mockResolvedValue({
+      outcome: 'failed',
+      failureCode: 'questionnaire_required',
+      questionnaire,
+    });
+    form = { answered: 1, complete: true, answersText: 'Почему мы?\nПотому', open: vi.fn() };
+    const onSent = await render();
+    click(button('1 ответ анкеты'));
+    expect(form.open).toHaveBeenCalledOnce();
+    click(button('Отправить отклик'));
+    expect(onForm).not.toHaveBeenCalled();
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+    expect(api.finishHhApply).toHaveBeenCalledWith('att-1', 'failed', 'questionnaire_required');
+    expect(onForm).toHaveBeenCalledExactlyOnceWith(questionnaire, true);
+    expect(onSent).not.toHaveBeenCalled();
+    expect(view!.container.textContent).toContain('Не отправлен · работодатель просит анкету');
+    expect(button('Скопировать ответы')).toBeTruthy();
+    const link = [...view!.container.querySelectorAll('a')].find((item) => item.textContent?.includes('Открыть анкету'));
+    expect(link?.getAttribute('href')).toBe('https://hh.ru/applicant/vacancy_response?vacancyId=123');
+  });
+
+  it('B641: анкета не читается и ответов нет — только «Открыть анкету»', async () => {
+    desktop.runHhApplyInSession.mockResolvedValue({
+      outcome: 'failed',
+      failureCode: 'questionnaire_required',
+      questionnaire: { url: '', questions: [] },
+    });
+    await render();
+    click(button('Отправить отклик'));
+    click([...document.querySelectorAll('button')].find((item) => item.textContent === 'Отправить')!);
+    await settle();
+    expect(() => button('Скопировать ответы')).toThrow();
+    const link = [...view!.container.querySelectorAll('a')].find((item) => item.textContent?.includes('Открыть анкету'));
+    expect(link?.getAttribute('href')).toBe('https://hh.ru/vacancy/123');
   });
 
   it('без резюме отправить нельзя', async () => {

@@ -4,6 +4,7 @@ import type {
   QuestionnaireQuestion,
   QuestionnaireSuggestion,
 } from '../../../../shared/applicationQuestionnaire';
+import { hhFormUrl, type HhForm } from '../../../../shared/hhCandidateSession';
 import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQuestionnaire';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
@@ -12,6 +13,7 @@ import { ChoiceField } from './ChoiceField';
 import {
   getQuestionnaire,
   markQuestionnaireSubmitted,
+  saveHhForm,
   saveQuestionnaireAnswers,
 } from './data/questionnaireApi';
 import {
@@ -41,13 +43,16 @@ export interface QuestionnaireState {
   readonly saveError: string | null;
   readonly submitted: Mark;
   readonly markSubmitted: () => void;
+  /** Анкета hh.ru прочитана в окне кандидата; `false` — вопросов нет или они не сохранились. */
+  readonly takeHhForm: (form: HhForm) => Promise<boolean>;
 }
 
 /** Анкета работодателя по вакансии: загрузка, черновик ответов и их сохранение. */
 export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const load = useCallback((signal: AbortSignal) => getQuestionnaire(vacancyId, signal), [vacancyId]);
-  const { state } = useAsync(load, '');
-  const form = state.data?.state === 'ready' ? state.data : null;
+  const { state, replaceData } = useAsync(load, '');
+  const data = state.data;
+  const form = data?.state === 'ready' ? data : null;
   const [draft, setDraft] = useState<AnswerDraft>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<Mark>({ kind: 'idle' });
@@ -58,10 +63,10 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
     if (form) setDraft(draftOf(form));
   }, [form]);
 
-  const title = state.data?.vacancyTitle;
+  const title = data?.vacancyTitle;
   return {
     form,
-    known: title ? { vacancyTitle: title, companyName: state.data?.vacancyCompany ?? '' } : null,
+    known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
     draft,
     saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
@@ -81,6 +86,18 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
         .catch((reason: unknown) =>
           setSubmitted({ kind: 'error', text: apiErrorMessage(reason, 'Отметка не сохранилась.') }),
         );
+    },
+    takeHhForm: async (hhForm) => {
+      if (hhForm.questions.length === 0) return false;
+      try {
+        // Ответы, которые ещё сохраняются, сначала доходят до сервера.
+        await queue.current;
+        const next = await saveHhForm(vacancyId, hhForm);
+        replaceData(next);
+        return next.state === 'ready';
+      } catch {
+        return false;
+      }
     },
   };
 }
@@ -197,12 +214,12 @@ function FormActions({ form, ready, state }: ActionsProps) {
   );
 }
 
-function SubmittedBlock({ state }: { readonly state: QuestionnaireState }) {
+function SubmittedBlock({ state, onHh }: { readonly state: QuestionnaireState; readonly onHh: boolean }) {
   const mark = state.submitted;
   return (
     <section className="mod" aria-labelledby="qb-back">
       <h3 className="mod-title" id="qb-back">
-        Вернулись с сайта компании?
+        {onHh ? 'Вернулись с hh.ru?' : 'Вернулись с сайта компании?'}
       </h3>
       {mark.kind === 'done' ? (
         <ResultLine text="Анкета отмечена как отправленная" />
@@ -259,7 +276,7 @@ export function FormStep({ state, form }: FormStepProps) {
             <FormActions form={form} ready={ready} state={state} />
           </div>
         </aside>
-        <SubmittedBlock state={state} />
+        <SubmittedBlock state={state} onHh={Boolean(form.formUrl && hhFormUrl(form.formUrl))} />
       </div>
     </>
   );
