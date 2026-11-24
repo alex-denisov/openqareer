@@ -89,7 +89,11 @@ export class SqliteLetterDraftRepository {
            wish_cipher = excluded.wish_cipher, created_at = excluded.created_at`,
       )
       .run(
-        id, candidateId, KIND, vacancyId, POSITION,
+        id,
+        candidateId,
+        KIND,
+        vacancyId,
+        POSITION,
         this.sealedText.seal(draft.body, scope),
         this.sealedText.seal(payload, scope),
         this.sealedText.seal(NO_WISH, scope),

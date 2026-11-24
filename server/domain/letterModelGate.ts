@@ -399,25 +399,34 @@ function backedTransition([from, to]: [number, number], source: readonly Quantit
     source.some((item) => item.written === number || item.value === number));
 }
 
+/** Переходы «с А до Б», которых нет ни в одной фразе профиля: письмо может собрать их из двух фраз. */
+export function unbackedLetterTransitions(
+  body: string,
+  candidate: readonly string[],
+  vacancy: readonly string[],
+): string[] {
+  const perSentence = candidate
+    .flatMap(sentencesOf)
+    .filter((sentence) => !NEGATED.test(sentence))
+    .map(quantities);
+  const found = sentencesOf(body)
+    .flatMap((sentence) => transitions(withoutVacancyText(sentence, vacancy)))
+    .filter((pair) => !perSentence.some((source) => backedTransition(pair, source)));
+  return [...new Set(found.map(([from, to]) => `transition:${from}:${to}`))];
+}
+
 /** Числа письма, которых нет в профиле: те же правила, что у проверки готового письма. */
 export function unbackedLetterNumbers(
   body: string,
   candidate: readonly string[],
   vacancy: readonly string[],
 ): string[] {
-  const profile = candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence));
-  const perSentence = profile.map(quantities);
-  const known = perSentence.flat();
-  const found = sentencesOf(body).flatMap((sentence) => {
-    const own = withoutVacancyText(sentence, vacancy);
-    return [
-      ...quantities(own)
-        .filter((wanted) => !known.some((item) => backedBy(wanted, item)))
-        .map(quantityKey),
-      ...transitions(own)
-        .filter((pair) => !perSentence.some((source) => backedTransition(pair, source)))
-        .map(([from, to]) => `transition:${from}:${to}`),
-    ];
-  });
-  return [...new Set(found)];
+  const known = candidate
+    .flatMap(sentencesOf)
+    .filter((sentence) => !NEGATED.test(sentence))
+    .flatMap(quantities);
+  const found = sentencesOf(body)
+    .flatMap((sentence) => quantities(withoutVacancyText(sentence, vacancy)))
+    .filter((wanted) => !known.some((item) => backedBy(wanted, item)));
+  return [...new Set(found.map(quantityKey))];
 }

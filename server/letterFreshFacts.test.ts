@@ -58,7 +58,9 @@ describe('правка письма до одобрения', () => {
     await approve({ body: LETTER });
     expect((await readApproval()).json().data.draft).toBeNull();
     expect((await call('PUT', DRAFT_URL, { body: 'Первая правка.' })).statusCode).toBe(200);
-    expect((await call('PUT', DRAFT_URL, { body: 'Моя правка.', variantId: 'v-1' })).statusCode).toBe(200);
+    expect(
+      (await call('PUT', DRAFT_URL, { body: 'Моя правка.', variantId: 'v-1' })).statusCode,
+    ).toBe(200);
     expect((await readApproval()).json().data).toMatchObject({
       approval: { body: LETTER },
       draft: { body: 'Моя правка.', variantId: 'v-1', factsChanged: false },

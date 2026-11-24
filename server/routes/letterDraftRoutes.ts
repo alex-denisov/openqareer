@@ -5,7 +5,13 @@ import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
 import { letterFactMark, letterFactSource } from '../domain/letterFreshness';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import type { RouteDeps } from './deps';
-import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError, withDeps } from './helpers';
+import {
+  authenticateCandidate,
+  csrfError,
+  hasSafeMutationOrigin,
+  sendError,
+  withDeps,
+} from './helpers';
 
 export type LetterDraftDeps = RouteDeps & { readonly letterDrafts: SqliteLetterDraftRepository };
 
@@ -22,14 +28,27 @@ const draftSchema = z
 export function letterVacancyTexts(deps: RouteDeps, vacancyId: string): string[] {
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
   if (!cluster) return [];
-  return [cluster.canonicalTitle, cluster.canonicalCompany, cluster.canonicalLocation, ...cluster.skills].filter(
-    (text): text is string => Boolean(text),
-  );
+  return [
+    cluster.canonicalTitle,
+    cluster.canonicalCompany,
+    cluster.canonicalLocation,
+    ...cluster.skills,
+  ].filter((text): text is string => Boolean(text));
 }
 
-async function handleSaveDraft(deps: LetterDraftDeps, request: FastifyRequest, reply: FastifyReply) {
+async function handleSaveDraft(
+  deps: LetterDraftDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
-  const candidate = authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
   const parsed = draftSchema.safeParse(request.body);
@@ -53,9 +72,19 @@ async function handleSaveDraft(deps: LetterDraftDeps, request: FastifyRequest, r
   return { data: { savedAt }, meta: { requestId: request.id } };
 }
 
-async function handleRemoveDraft(deps: LetterDraftDeps, request: FastifyRequest, reply: FastifyReply) {
+async function handleRemoveDraft(
+  deps: LetterDraftDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
-  const candidate = authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
   if (!candidate) return undefined;
   const vacancyId = (request.params as { id: string }).id;
   await retryOnSqliteBusy(() => deps.letterDrafts.remove(candidate.id, vacancyId));

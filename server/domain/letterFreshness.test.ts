@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { letterFactMark, letterFreshness, type LetterFactSource } from './letterFreshness';
 
-const source = (hash: string, ...lines: string[]): LetterFactSource => ({ profileHash: hash, lines });
+const source = (hash: string, ...lines: string[]): LetterFactSource => ({
+  profileHash: hash,
+  lines,
+});
 const before = source('a', 'CSAT вырос с 23% до 68%, SLA с 50% до 92%');
 const after = source('b', 'CSAT вырос с 25% до 85%, SLA с 50% до 92%');
 const LETTER = 'Повысил CSAT с 23% до 68%, SLA с 50% до 92%.';
@@ -21,7 +24,9 @@ describe('письмо и текущие факты профиля', () => {
 
   it('прежние числа есть в профиле порознь и о другом — переход всё равно опровергнут', () => {
     const apart = source('c', ...after.lines, 'Экономия 23%', 'Доля 68%');
-    expect(letterFreshness(apart, LETTER, [], null).factsChanged).toBe(true);
+    expect(
+      letterFreshness(apart, LETTER, [], letterFactMark(before, LETTER, [])).factsChanged,
+    ).toBe(true);
   });
 
   it('число, которое кандидат вписал и одобрил сам, не устаревает', () => {
