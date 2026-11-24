@@ -103,6 +103,7 @@ async function newVariant(
   repo: LinkedinSectionRepository,
   candidateId: string,
   key: string,
+  log: FastifyBaseLogger,
 ): Promise<{ readonly offer: LinkedinOffer } | { readonly error: 'missing' | 'unavailable' | 'limit' }> {
   const profile = await loadProfile(deps, repo, candidateId);
   if (profile.view.kind !== 'ready') return { error: 'missing' };
@@ -112,7 +113,12 @@ async function newVariant(
   if (!variantRequest) return { error: 'missing' };
   const writer = deps.experienceFactRewriter;
   const output = writer?.linkedinVariant ? await writer.linkedinVariant(variantRequest).catch(() => null) : null;
-  const text = output ? checkLinkedinVariant(variantRequest, output) : null;
+  const text = output
+    ? checkLinkedinVariant(
+        variantRequest, output,
+        (reason) => log.info({ section: variantRequest.target, reason }, 'linkedin_variant_rejected'),
+      )
+    : null;
   if (!text) return { error: 'unavailable' };
   if (!repo.addVariant(candidateId, key, text, STORED_VARIANTS_MAX)) return { error: 'limit' };
   const base = avoid.length > (marks.variants.get(key)?.length ?? 0) ? avoid[0] : null;
@@ -156,7 +162,7 @@ function registerVariant(app: FastifyInstance, deps: RouteDeps, repo: LinkedinSe
     if (used >= STORED_VARIANTS_MAX) return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);
     inFlight.add(lock);
     try {
-      const result = await newVariant(deps, repo, candidateId, key);
+      const result = await newVariant(deps, repo, candidateId, key, request.log);
       if ('offer' in result) return ok(request, result.offer);
       if (result.error === 'missing') return sendError(reply, request, 404, 'offer_not_found', 'Нет такого предложения.', false);
       if (result.error === 'limit') return sendError(reply, request, 409, 'variant_limit_reached', LIMIT_TEXT, false);

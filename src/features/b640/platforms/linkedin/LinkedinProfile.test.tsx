@@ -166,6 +166,17 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('.li-err')!.textContent).toContain('Не получилось предложить другой вариант');
   });
 
+  it('варианты кончились в другой вкладке (409) — слова сервера без «Повторить»', async () => {
+    vi.mocked(api.requestOfferVariant).mockRejectedValueOnce(
+      new CoachApiError('Других вариантов больше не будет.', 'variant_limit_reached', false),
+    );
+    const root = (await open()).container;
+    click(root.querySelector('[aria-label="Другой вариант: О себе · осталось 3"]'));
+    await flush();
+    expect(root.querySelector('.li-err')!.textContent).toBe('Других вариантов больше не будет.');
+    expect(root.querySelector('.li-err button')).toBeNull();
+  });
+
   it('предложений нет вовсе — не «всё выполнено» и без «Отметить все»', async () => {
     const bare = sections().map((section) => ({ ...section, offer: null, ...(section.places ? { places: [] } : {}) }));
     const root = (await open({ kind: 'ready', sections: bare })).container;

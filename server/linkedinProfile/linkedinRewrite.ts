@@ -104,6 +104,8 @@ export interface CheckRule {
   readonly max: number;
   readonly maxSentences?: number;
   readonly noFirstPerson?: boolean;
+  /** Заголовок складывается из названий роли и навыков: дословное название — не копия факта. */
+  readonly namesAllowed?: boolean;
 }
 
 /** Почему текст модели не принят; `null` — принят. Только код причины, без текста кандидата. */
@@ -123,7 +125,7 @@ function rejectReason(
   if (rule.noFirstPerson && FIRST_PERSON.test(text)) return 'first_person';
   if ((textLanguage(text) ?? language) !== language) return 'language';
   if (!numbersAreGrounded(text, facts)) return 'ungrounded_number';
-  return copiesSource(text, facts) ? 'copy' : null;
+  return !rule.namesAllowed && copiesSource(text, facts) ? 'copy' : null;
 }
 
 export function checkedText(
