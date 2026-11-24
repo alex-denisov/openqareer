@@ -13,7 +13,7 @@ export interface OfferMarks {
   readonly variants: ReadonlyMap<string, readonly string[]>;
 }
 
-/** Предложение по ключу: первый текст и варианты «Предложить заново», всего не больше трёх. */
+/** Предложение по ключу: первый текст и варианты «Предложить заново», до трёх других. */
 export function offerOf(key: string, base: string | null | undefined, marks: OfferMarks): LinkedinOffer | null {
   const variants = [...(base ? [base] : []), ...(marks.variants.get(key) ?? [])].slice(0, LINKEDIN_VARIANTS_MAX);
   if (variants.length === 0) return null;
