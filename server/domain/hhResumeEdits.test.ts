@@ -17,7 +17,7 @@ const input: HhEditsInput = {
     },
   },
   otherTitles: ['Руководитель ИТ'],
-  vacancy: { title: 'COO в ИТ-компанию', requirements: ['ITIL', 'Бюджетирование', 'Kubernetes'] },
+  vacancy: { title: 'COO в ИТ-компанию', titleFits: true, requirements: ['ITIL', 'Бюджетирование', 'Kubernetes'] },
   platform: {
     about: 'Строю операционные функции ИТ-компаний.',
     places: [
@@ -127,5 +127,17 @@ describe('B678: правки резюме hh.ru «было → станет»', 
       platform: { ...input.platform, facts: [long] },
     }).find((edit) => edit.section === 'skills');
     expect(skills).toBeUndefined();
+  });
+
+  it('название не из ролей кандидата — должность не меняется (24.11 «Receptionist»)', () => {
+    const edits = draftHhResumeEdits({ ...input, vacancy: { ...input.vacancy, title: 'Receptionist', titleFits: false } });
+    expect(edits.some((edit) => edit.section === 'title')).toBe(false);
+  });
+
+  it('условия поиска из старого снимка не показываются как «О себе»', () => {
+    const about = 'Уровень дохода не указан · Постоянная работа, Подработка · Гибрид, Удалённо · Могу приезжать в командировки';
+    const sections = { ...input.resume.sections, about };
+    const edits = draftHhResumeEdits({ ...input, resume: { ...input.resume, sections } });
+    expect(edits.some((edit) => edit.section === 'about')).toBe(false);
   });
 });

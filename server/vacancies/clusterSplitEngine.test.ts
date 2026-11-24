@@ -119,4 +119,32 @@ describe('cluster split against the maintenance engine (B752)', () => {
     expect(inner.clusters).toEqual([]);
     expect(inner.clusterBuilder?.getClusters() ?? []).toEqual([]);
   });
+
+  it('reading by id never returns a vacancy glued by a bare external id (24.11)', async () => {
+    const legacy = createClusterFromVacancy(oracle);
+    mergeVacancyIntoCluster(legacy, vk);
+    const twin = { ...vacancy('src-hh-search', '99', 'VK', 'Go Developer') };
+    const other = { ...vacancy('src-hh-search', '98', 'VK', 'Go Team Lead') };
+    for (const item of [other, twin]) legacy.sources.push(item.provenance);
+    const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
+    pool = store;
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source(VK), source(ORACLE)],
+      pool: store,
+      recluster: { mode: 'keyed', batchSize: 2 },
+    });
+    const records = new Map([vk, oracle, twin, other].map((item) => [item.id, item]));
+    store.getVacancy = (id) => records.get(id);
+    store.getVacancyIncludingExpired = (id) => records.get(id);
+    store.saveClusters([legacy]);
+
+    const found = engine.getActiveCluster(`cluster-${vk.id}`);
+    expect(found).toMatchObject({ canonicalTitle: 'Go Developer', canonicalCompany: 'VK' });
+    expect(found?.sources.map((item) => item.externalId)).toEqual(['55418', '99']);
+    expect(engine.getActiveCluster(legacy.id)?.canonicalTitle).toBe('Relationship Manager');
+    expect(engine.getActiveClusterByMemberKey(vk.url)?.canonicalTitle).toBe('Go Developer');
+
+    records.delete(vk.id);
+    expect(engine.getActiveCluster(`cluster-${vk.id}`)).toBeUndefined();
+  });
 });

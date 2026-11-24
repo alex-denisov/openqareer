@@ -214,7 +214,8 @@ describe('the hh.ru profile surface as it is served today', () => {
     expect(parsed.contact.email).toBe('candidate@example.test');
     expect(parsed.contact.phone).toBe('+7 900 000-00-00');
     expect(parsed.additional?.workSchedule).toContain('Постоянная работа');
-    expect(parsed.about).toContain('200 000 ₽');
+    expect(parsed.about).toBeUndefined();
+    expect(parsed.rawText).toContain('200 000 ₽');
   });
 
   it('reads the education level card', () => {

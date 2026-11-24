@@ -215,7 +215,7 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     fullName,
     targetRole,
     about,
-    salary && salary !== about ? salary : '',
+    salary,
     positionTerms.join('\n'),
     contact.location,
     contact.email,
@@ -241,7 +241,7 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
   return {
     fullName,
     targetRole,
-    about: about ?? salary,
+    about,
     contact,
     experience,
     skills,

@@ -52,6 +52,9 @@ export function resolveTarget(
   return { vacancyId: responseId, application: byVacancy ?? null };
 }
 
+/** Название не прочиталось: со страницей hh.ru сверять нечего. */
+export const UNKNOWN_VACANCY_TITLE = 'Вакансия';
+
 export interface ApplyHead {
   readonly title: string;
   readonly company: string;
@@ -122,7 +125,8 @@ export function buildHead({ application, known, cluster }: HeadSources): ApplyHe
   const route = applyRoute({ application, cluster });
   const platform = route.source ? platformOf(route.source) : null;
   return {
-    title: snapshot?.title || known?.vacancyTitle || cluster?.canonicalTitle || 'Вакансия',
+    title:
+      snapshot?.title || known?.vacancyTitle || cluster?.canonicalTitle || UNKNOWN_VACANCY_TITLE,
     company:
       (snapshot?.companyHidden ? '' : snapshot?.company) ||
       known?.companyName ||

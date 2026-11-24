@@ -24,6 +24,7 @@ import { reviewHhResumes } from '../domain/hhResumeReview';
 import { cachedEdits, editsCacheKey, hhEditsInput, rememberEdits, readWithSections, selectedWithSections, type SelectedWithSections } from './hhResumeEditsInput';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
+import { sameVacancyTitle } from '../vacancies/vacancyIdentity';
 import { resolveHhLoginNotice } from './b640HhSessionState';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -90,7 +91,13 @@ const reviewQuerySchema = z.object({ vacancyId: z.string().trim().min(1).max(512
 const reviewCountsSchema = reviewQuerySchema.extend({ edits: z.literal('1').optional() });
 
 const attemptSchema = z
-  .object({ vacancyId: z.string().regex(HH_VACANCY_ID), resumeId, confirmed: z.literal(true) })
+  .object({
+    vacancyId: z.string().regex(HH_VACANCY_ID),
+    resumeId,
+    confirmed: z.literal(true),
+    /** Название вакансии с экрана отклика: на вакансию hh.ru с другим названием отклик не уходит. */
+    vacancyTitle: z.string().trim().min(1).max(500).optional(),
+  })
   .strict();
 
 const resultSchema = z
@@ -193,8 +200,9 @@ async function freshEdits(
   snapshot: HhResumeSnapshot,
   selected: SelectedWithSections,
   cluster: VacancyCluster,
+  vacancyId: string,
 ): Promise<HhResumeEdit[]> {
-  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, selected, cluster));
+  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, selected, cluster, vacancyId));
   const language = hhResumeLanguage(selected.sections);
   return localizeHhResumeEdits(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
 }
@@ -208,7 +216,7 @@ export async function hhResumeEditsOf(
   vacancyId: string,
 ): Promise<readonly HhResumeEdit[]> {
   const key = editsCacheKey(candidateId, snapshot, resume, vacancyId);
-  const edits = cachedEdits(key) ?? (await freshEdits(deps, candidateId, snapshot, resume, cluster));
+  const edits = cachedEdits(key) ?? (await freshEdits(deps, candidateId, snapshot, resume, cluster, vacancyId));
   rememberEdits(key, edits);
   return edits;
 }
@@ -223,7 +231,7 @@ export function withVariantSubjects(
   vacancyId: string,
   edits: readonly HhResumeEdit[],
 ): HhResumeEdit[] {
-  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, resume, cluster));
+  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, resume, cluster, vacancyId));
   const subjects = new Map(drafts.filter(hasVariants).map((draft) => [draft.id, hhResumeVariantSubject(vacancyId, resume.id, draft)]));
   return edits.map((edit) => {
     const subjectId = subjects.get(edit.id);
@@ -275,7 +283,11 @@ const postAttempt: Handler = async (deps, request, reply) => {
     return sendError(reply, request, 400, 'invalid_hh_apply', 'Подтвердите отклик и выберите резюме.', false);
   }
   const now = new Date();
-  const { vacancyId, resumeId: chosen } = parsed.data;
+  const { vacancyId, resumeId: chosen, vacancyTitle } = parsed.data;
+  const record = deps.multiSourceEngine.getVacancy?.(`src-hh-search:${vacancyId}`);
+  if (vacancyTitle && record && !sameVacancyTitle(vacancyTitle, record.title)) {
+    return sendError(reply, request, 409, 'hh_vacancy_mismatch', 'На hh.ru по этому адресу другая вакансия. Отклик не отправлен.', false);
+  }
   const gate = hhApplyGate({
     snapshot: deps.hh.getSnapshot(candidateId),
     resumeId: chosen,

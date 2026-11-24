@@ -2,7 +2,7 @@ import { useCallback, useId, useState } from 'react';
 import type { HhResumeSnapshot, HhResumeSummary } from '../../../../shared/hhCandidateSession';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
-import { useToast } from '../kit';
+import { StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { readHhResumeContent } from './hh/hhDesktop';
 import { getHhResumes, saveHhResumes } from './hh/hhSessionApi';
@@ -23,11 +23,25 @@ async function select(snapshot: HhResumeSnapshot, item: HhResumeSummary) {
   return saveHhResumes(snapshot.resumes, content);
 }
 
+function ResumeOptions({ snapshot }: { readonly snapshot: HhResumeSnapshot }) {
+  return snapshot.resumes.map((item) => (
+    <option
+      key={item.id}
+      value={item.id}
+      disabled={!isTauriEnvironment() && !knownContent(snapshot, item.id)}
+    >
+      {item.title}
+    </option>
+  ));
+}
+
 /** «Резюме hh.ru» (макет o03): каким резюме уйдёт отклик на hh.ru. */
 export function HhResumeSelect() {
   const id = useId();
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
+  // Выбранное видно сразу, пока страница резюме читается; сбой возвращает прежнее.
+  const [picked, setPicked] = useState<string | null>(null);
+  const busy = picked !== null;
   const load = useCallback((signal: AbortSignal) => getHhResumes(signal), []);
   const { state, replaceData } = useAsync(load, '');
   const snapshot = state.data;
@@ -35,13 +49,13 @@ export function HhResumeSelect() {
   const change = async (resumeId: string) => {
     const item = snapshot.resumes.find((resume) => resume.id === resumeId);
     if (!item) return;
-    setBusy(true);
+    setPicked(resumeId);
     try {
       replaceData(await select(snapshot, item));
     } catch (reason) {
       toast.show({ text: apiErrorMessage(reason, 'Резюме hh.ru не прочиталось. Повторите.') });
     } finally {
-      setBusy(false);
+      setPicked(null);
     }
   };
   return (
@@ -51,25 +65,19 @@ export function HhResumeSelect() {
       </label>
       <select
         id={id}
-        value={snapshot.selected?.id ?? ''}
+        value={picked ?? snapshot.selected?.id ?? ''}
+        aria-busy={busy}
         disabled={busy}
         onChange={(event) => void change(event.currentTarget.value)}
       >
-        {snapshot.selected ? null : (
+        {snapshot.selected || busy ? null : (
           <option value="" disabled>
             Не выбрано
           </option>
         )}
-        {snapshot.resumes.map((item) => (
-          <option
-            key={item.id}
-            value={item.id}
-            disabled={!isTauriEnvironment() && !knownContent(snapshot, item.id)}
-          >
-            {item.title}
-          </option>
-        ))}
+        <ResumeOptions snapshot={snapshot} />
       </select>
+      {busy ? <StatusLine state="wait" text="Читаем резюме в hh.ru" /> : null}
     </div>
   );
 }
