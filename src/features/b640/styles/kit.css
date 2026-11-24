@@ -1,11 +1,11 @@
 /* B649: добавления общих компонентов к стилям макета. */
 @layer b640.kit {
-  /* B712: строки окна по местам. «Ручка» листа на 1440 скрыта и выпадает из сетки: без явных строк
-     подвал попадал в строку 1fr и при высоком окне растягивал кнопки в полосы. Лишнее место — телу. */
-  .b640 .pf-dialog > .grab { grid-row: 1; }
-  .b640 .pf-dialog > .pf-dh { grid-row: 2; }
-  .b640 .pf-dialog > .pf-db { grid-row: 3; }
-  .b640 .pf-dialog > .pf-df { grid-row: 4; align-items: center; }
+  /* B708: окно — столбец. Сетку с `position: fixed` WebKit приложения растягивал до предела высоты
+     при двух строках текста (828 px вместо 154). Лишнее место при заданной высоте — телу (B712). */
+  .b640 .pf-dialog { display: flex; flex-direction: column; }
+  .b640 .pf-dialog > * { flex: none; }
+  .b640 .pf-dialog > .pf-db { flex: 1 1 auto; min-block-size: 0; }
+  .b640 .pf-dialog > .pf-df { align-items: center; }
 
   /* ⓘ закреплён нажатием: на телефоне наведения нет */
   .b640 .tip.kit-pinned .tip-bubble { display: block; }
