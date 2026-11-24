@@ -95,7 +95,7 @@ function useFinish(input: {
       setBusy(false);
     }
   }
-  return { empty, busy, error, finish };
+  return { empty: empty && !input.text.trim(), busy, error, finish };
 }
 
 /** Голосом — общий ввод i02/i03; «Закончить» во время записи ждёт расшифровку. */

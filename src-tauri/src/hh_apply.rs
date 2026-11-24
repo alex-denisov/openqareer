@@ -7,12 +7,12 @@
 //! supplied from outside. Any unexpected page is a fail-closed stop.
 
 use crate::connector_session::{
-    eval_json, is_allowed_session_url, is_transient_eval_error, read_session_page,
-    session_window_label, SessionWindowRequest,
+    append_connector_diagnostic, eval_json, is_allowed_session_url, is_transient_eval_error,
+    read_fresh_session_page, session_window_label, SessionWindowRequest,
 };
 use crate::hh_apply_scripts::{
-    letter_script, open_script, popup_script, result_script, resume_script, submit_script,
-    window_script,
+    diagnostic_script, letter_script, open_script, popup_script, result_script, resume_script,
+    submit_script, window_script,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,6 +21,9 @@ use tauri::{AppHandle, Manager};
 
 const LETTER_MAX_CHARS: usize = 10_000;
 const STEP_POLL: Duration = Duration::from_millis(500);
+/// How long the vacancy page may take to show the sign-in and the button.
+const OPEN_WAIT: Duration = Duration::from_secs(10);
+const RESUME_TITLE_MAX_CHARS: usize = 300;
 const POPUP_WAIT: Duration = Duration::from_secs(10);
 /// The resume drop-down and the letter field open after a short animation.
 const FORM_STEP_WAIT: Duration = Duration::from_secs(6);
@@ -33,6 +36,9 @@ pub struct HhApplyRequest {
     pub vacancy_id: String,
     pub resume_id: String,
     pub letter: String,
+    /// The resume's title, only when no other resume of the candidate has it.
+    #[serde(default)]
+    pub unique_resume_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -87,6 +93,13 @@ pub fn validate_request(request: &HhApplyRequest) -> Result<(), String> {
     {
         return Err("resume_id_invalid".into());
     }
+    if request.unique_resume_title.as_deref().is_some_and(|title| {
+        title.trim().is_empty()
+            || title.chars().count() > RESUME_TITLE_MAX_CHARS
+            || title.chars().any(char::is_control)
+    }) {
+        return Err("resume_title_invalid".into());
+    }
     let letter = request.letter.trim();
     if letter.is_empty() || letter.chars().count() > LETTER_MAX_CHARS {
         return Err("letter_invalid".into());
@@ -119,6 +132,56 @@ pub(crate) async fn wait_for(window: &tauri::Webview, script: &str, limit: Durat
         }
         tokio::time::sleep(STEP_POLL).await;
     }
+}
+
+/// Answers that a vacancy page still filling in may give; they count only once
+/// the page had `OPEN_WAIT` to settle.
+fn is_unsettled(code: &str) -> bool {
+    matches!(
+        code,
+        "waiting" | "page_not_ready" | "not_signed_in" | "no_response_button"
+    )
+}
+
+/// The answer for a page that stayed unsettled.
+fn settled_code(code: &str) -> &str {
+    if code == "waiting" {
+        "target_redirect_rejected"
+    } else {
+        code
+    }
+}
+
+async fn open_response(window: &tauri::Webview, vacancy_id: &str) -> String {
+    let script = open_script(vacancy_id);
+    let deadline = tokio::time::Instant::now() + OPEN_WAIT;
+    let mut last = "waiting".to_string();
+    loop {
+        match step(window, &script).await {
+            Ok(code) if !is_unsettled(&code) => return code,
+            Ok(code) => last = code,
+            Err(error) if !is_transient_eval_error(&error) => return "script_error".into(),
+            Err(_) => {}
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return settled_code(&last).to_string();
+        }
+        tokio::time::sleep(STEP_POLL).await;
+    }
+}
+
+/// Codes only, on this machine only: which step stopped and what the page held.
+async fn explain_failure(
+    app: &AppHandle,
+    window: &tauri::Webview,
+    vacancy_id: &str,
+    at: &str,
+    code: &str,
+) {
+    let _ = append_connector_diagnostic(app, "hh-apply", at, Some(code));
+    let seen = step(window, &diagnostic_script(vacancy_id)).await;
+    let detail = seen.unwrap_or_else(|_| "unreadable".to_string());
+    let _ = append_connector_diagnostic(app, "hh-apply", "seen", Some(&detail));
 }
 
 /// Maps the last page answer to the report the response screen records.
@@ -174,53 +237,74 @@ pub async fn run_hh_apply(
         session_key: None,
         background: false,
     };
-    read_session_page(app, &page).await?;
+    read_fresh_session_page(app, &page).await?;
     let window = app.get_webview(label).ok_or("session_window_missing")?;
     if !on_hh(&window) {
         return Ok(HhApplyReport::failed("target_redirect_rejected"));
     }
-    let opened = step(&window, &open_script()).await?;
+    let outcome = respond(&window, &request).await;
+    let (at, code) = match &outcome {
+        Ok(code) => ("result", code.as_str()),
+        Err((at, code)) => (*at, code.as_str()),
+    };
+    let report = report_for(code);
+    if report.outcome == "failed" {
+        explain_failure(app, &window, &request.vacancy_id, at, code).await;
+    }
+    Ok(report)
+}
+
+/// The steps on the open vacancy page; `Err` names the step that stopped and why.
+async fn respond(
+    window: &tauri::Webview,
+    request: &HhApplyRequest,
+) -> Result<String, (&'static str, String)> {
+    let title = request.unique_resume_title.as_deref();
+    let opened = open_response(window, &request.vacancy_id).await;
     if opened != "opened" {
-        return Ok(report_for(&opened));
+        return Err(("open", opened));
     }
-    let surface = wait_for(&window, &popup_script(), POPUP_WAIT).await;
-    if surface != "popup" {
-        return Ok(report_for(if surface == "timeout" {
-            "popup_missing"
-        } else {
-            &surface
-        }));
-    }
-    let form_steps = [
+    let steps = [
         (
-            resume_script(&request.resume_id),
+            "popup",
+            popup_script(),
+            POPUP_WAIT,
+            "popup",
+            "popup_missing",
+        ),
+        (
+            "resume",
+            resume_script(&request.resume_id, title),
+            FORM_STEP_WAIT,
             "resume_ok",
             "resume_not_found",
         ),
         (
+            "letter",
             letter_script(&request.letter),
+            FORM_STEP_WAIT,
             "letter_set",
             "letter_field_missing",
         ),
         (
-            submit_script(&request.letter),
+            "submit",
+            submit_script(&request.resume_id, &request.letter),
+            FORM_STEP_WAIT,
             "submitted",
             "submit_unavailable",
         ),
     ];
-    for (script, done, on_timeout) in form_steps {
-        let code = wait_for(&window, &script, FORM_STEP_WAIT).await;
+    for (at, script, limit, done, on_timeout) in steps {
+        let code = wait_for(window, &script, limit).await;
+        if code == "timeout" {
+            return Err((at, on_timeout.to_string()));
+        }
         if code != done {
-            return Ok(report_for(if code == "timeout" {
-                on_timeout
-            } else {
-                &code
-            }));
+            return Err((at, code));
         }
     }
     // After the click the pop-up may stay open while hh.ru answers.
-    let result = wait_for(&window, &result_script(), RESULT_WAIT).await;
-    Ok(report_for(&result))
+    Ok(wait_for(window, &result_script(), RESULT_WAIT).await)
 }
 
 /// B708: `sent` when the open hh.ru window shows the response to this vacancy,
@@ -247,6 +331,7 @@ mod tests {
             vacancy_id: vacancy.into(),
             resume_id: resume.into(),
             letter: letter.into(),
+            unique_resume_title: None,
         }
     }
 
@@ -270,6 +355,39 @@ mod tests {
         }
         let long = "я".repeat(LETTER_MAX_CHARS + 1);
         assert!(validate_request(&request("1", "abc", &long)).is_err());
+    }
+
+    #[test]
+    fn accepts_only_a_bounded_plain_resume_title() {
+        let with = |title: &str| {
+            validate_request(&HhApplyRequest {
+                unique_resume_title: Some(title.into()),
+                ..request("1", "abc", "Письмо")
+            })
+        };
+        assert!(with("Операционный директор (COO)").is_ok());
+        for bad in ["", "  ", "a\nb", "a\u{0}b"] {
+            assert!(with(bad).is_err(), "{bad:?}");
+        }
+        assert!(with(&"я".repeat(RESUME_TITLE_MAX_CHARS)).is_ok());
+        assert!(with(&"я".repeat(RESUME_TITLE_MAX_CHARS + 1)).is_err());
+    }
+
+    #[test]
+    fn a_filling_page_is_asked_again() {
+        for code in [
+            "waiting",
+            "page_not_ready",
+            "not_signed_in",
+            "no_response_button",
+        ] {
+            assert!(is_unsettled(code), "{code}");
+        }
+        for code in ["opened", "already_applied", "captcha", "script_error"] {
+            assert!(!is_unsettled(code), "{code}");
+        }
+        assert_eq!(settled_code("waiting"), "target_redirect_rejected");
+        assert_eq!(settled_code("not_signed_in"), "not_signed_in");
     }
 
     #[test]

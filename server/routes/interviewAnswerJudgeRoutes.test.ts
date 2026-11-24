@@ -133,6 +133,21 @@ describe('B780: i02 — ответ оценивает модель, оценка
   });
 });
 
+describe('B647: вернулись к тренировке через семь часов', () => {
+  it('ответ принимается, время обрезается до часа', async () => {
+    const harness = await setup(stubJudge(() => null));
+    const session = seed(harness, 'flagged.test', ['system_design']);
+    const response = await harness.call(`${OLD}/${session.id}/answers`, {
+      expectedVersion: session.version,
+      questionId: session.questions[0]!.id,
+      answer: DESIGN,
+      elapsedSeconds: 25_096,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.session.questions[0].answer.elapsedSeconds).toBe(3_600);
+  });
+});
+
 describe('B780: i03 — «Требования» сверяются с «Что важно в задаче»', () => {
   it('передаёт модели пункты задачи и отдаёт её решение с цитатой', async () => {
     const judge = stubJudge(() => ({
@@ -159,5 +174,8 @@ describe('B780: i03 — «Требования» сверяются с «Что 
     expect(input.type).toBe('system_design');
     expect(input.answer).toBe(DESIGN);
     expect(input.taskPoints?.length).toBeGreaterThan(0);
+    // B647: вопрос судье — задача с экрана, а не «сервис уведомлений» из сессии.
+    expect(input.question).not.toContain('сервис уведомлений');
+    expect(input.question).not.toBe(session.questions[0]!.prompt);
   });
 });

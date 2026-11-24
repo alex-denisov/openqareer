@@ -45,7 +45,7 @@ import { getCurrencyRates } from '../currency/cbrRates';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 import { registerRejectionReviewRoutes } from './rejectionReviewRoutes';
-import { registerHhSessionRoutes } from './hhSessionRoutes';
+import { registerHhRoutes } from './hhRoutes';
 import { registerQuestionnaireRoutes } from './questionnaireRoutes';
 import { registerTextVariantRoutes } from './textVariantRoutes';
 import { snapshotWithDescription } from './applicationVacancyText';
@@ -585,7 +585,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerRejectionReviewRoutes(app, deps);
   registerQuestionnaireRoutes(app, deps);
   registerTextVariantRoutes(app, deps);
-  registerHhSessionRoutes(app, deps);
+  registerHhRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },

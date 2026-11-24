@@ -10,7 +10,7 @@ import { linkReviewToSchema } from '../domain/systemDesignSchemaReview';
 import { correctedSchema, schemaPutBodySchema } from './b640InterviewSchemaBody';
 import type { CandidateIdentity } from '../data/candidateStore';
 import { sessionCandidate } from './b640VacancyContext';
-import { storedOrRuleTask } from './b640SystemDesignTaskSource';
+import { storedOrRuleTask, taskQuestion } from './b640SystemDesignTaskSource';
 import { registerB640SystemDesignTaskRoutes } from './b640SystemDesignTaskRoutes';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import { judgedEvaluation } from './interviewAnswerJudging';
@@ -143,7 +143,8 @@ const handleReview: Handler = async (deps, request, reply) => {
     request.log,
     {
       type: question.type,
-      question: question.prompt,
+      // B647: на экране i03 задача отклика, а не вопрос сессии — судим по ней.
+      question: task ? taskQuestion(task) : question.prompt,
       answer: question.answer.text,
       ...(task ? { taskPoints: task.points } : {}),
     },

@@ -1,3 +1,4 @@
+import { languageRequirementMet } from './resumeLanguageRequirement';
 import { estimateLength } from './resumeStudioInternals';
 import type {
   ResumeAssertion,
@@ -35,7 +36,7 @@ export function buildTargetedResumeSlice(
 ): TargetedResumeSlice {
   const requirements = normalizeRequirements(vacancy.requirements);
   const coverage = coverRequirements(master, requirements);
-  const prepared = prepareTargetedDocument(master, vacancy, requirements, coverage.missingRequirements);
+  const prepared = prepareTargetedDocument(master, vacancy, requirements);
   assertTargetedResumeQuantities(master, prepared.document);
   return {
     ...coverage,
@@ -80,7 +81,9 @@ function coverRequirements(
   const facts = documentFactTexts(master);
   const matches = requirements.map((requirement) => ({
     requirement: requirement.label,
-    matched: requirementAppears(requirement.normalized, facts),
+    matched:
+      requirementAppears(requirement.normalized, facts) ||
+      languageRequirementMet(requirement.normalized, master.languages),
   }));
   return {
     requirements: matches,
@@ -93,7 +96,6 @@ function prepareTargetedDocument(
   master: ResumeDocument,
   vacancy: TargetedResumeInput,
   requirements: readonly { label: string; normalized: string }[],
-  missingRequirements: readonly string[],
 ): PreparedTargetedDocument {
   const experience = targetedExperience(master.experience, requirements);
   const projects = targetedProjects(master.projects ?? [], requirements);
@@ -111,7 +113,7 @@ function prepareTargetedDocument(
     projects,
     skills,
   };
-  const estimatedLength = targetedLength(initialDocument, missingRequirements);
+  const estimatedLength = targetedLength(initialDocument);
   const document = { ...initialDocument, length: estimatedLength };
   return {
     document,
@@ -263,10 +265,7 @@ function assertionTexts(
   return assertions.flatMap((item) => (item && typeof item.value === 'string' ? [item.value] : []));
 }
 
-function targetedLength(
-  document: ResumeDocument,
-  missingRequirements: readonly string[],
-) {
+function targetedLength(document: ResumeDocument) {
   const baseline = estimateLength(
     document.contact,
     document.experience,
@@ -282,15 +281,13 @@ function targetedLength(
     ...(document.tests ?? []).map((test) => test.name),
     ...(document.recommendations ?? []).map((item) => item.text ?? item.author ?? item.recommender),
     ...Object.values(document.additional ?? {}),
-    ...missingRequirements,
   ].filter((value): value is string => Boolean(value));
   const lines =
     baseline.lines +
     extraLines.reduce(
       (total, value) => total + Math.max(1, Math.ceil(value.length / TARGET_TEXT_CHARACTERS_PER_LINE)),
       0,
-    ) +
-    Number(missingRequirements.length > 0);
+    );
   return {
     lines,
     pages: Math.max(1, Math.ceil(lines / baseline.linesPerPage)),
