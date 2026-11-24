@@ -8,6 +8,7 @@ import {
 import { CATALOG_CLUSTER_TABLES } from './clusterSplitJournal';
 import { tableExists } from './clusterSplit';
 import {
+  outsideOwner,
   pageOwner,
   recordPageOutcome,
   type LinkOwners,
@@ -119,7 +120,9 @@ export function writeFounder(
     .get(founder.id) as PublishedPage | undefined;
   const owner = page ? pageOwner(page, plan.pieces, plan.links) : undefined;
   if (page && owner !== 0) {
-    redirectPage(writers, page, owner === undefined ? undefined : plan.pieces[owner], stepId);
+    const ownIds = new Set(plan.pieces.map((piece) => piece.id));
+    const holder = owner === undefined ? outsideOwner(db, page, ownIds) : plan.pieces[owner];
+    redirectPage(writers, page, holder, stepId);
   }
   db.prepare('DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?').run(founder.id);
   writeRow(writers, founder);

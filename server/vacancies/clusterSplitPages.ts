@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { normalizeUrl, sourceMemberKey } from './vacancyDeduplicator';
+import { hasCrossSourceIdCollision, sameVacancyTitle } from './vacancyIdentity';
 
 /**
  * B752: чья вакансия стояла на опубликованной странице кластера. Адрес после
@@ -46,6 +47,48 @@ function single(owners: ReadonlySet<number>): number | undefined {
   return owners.size === 1 ? [...owners][0] : undefined;
 }
 
+/** Одна ссылка у нескольких кусков: владелец тот, чьё имя стоит на странице. */
+function namedAlike(
+  page: PublishedPage,
+  pieces: readonly VacancyCluster[],
+  owners: ReadonlySet<number>,
+): number | undefined {
+  const pick = (matches: (piece: VacancyCluster) => boolean) =>
+    single(new Set([...owners].filter((index) => matches(pieces[index]!))));
+  const title = (piece: VacancyCluster) => piece.canonicalTitle === page.title;
+  const company = (piece: VacancyCluster) => piece.canonicalCompany === page.company;
+  return pick((piece) => title(piece) && company(piece)) ?? pick(title) ?? pick(company);
+}
+
+/**
+ * Вакансии страницы нет ни у одной части, но та же ссылка и то же имя — у другого
+ * кластера (25.11: Fulton Bank, Coface, astro). Ещё склеенный кластер владельцем не
+ * считается: его собственная страница переедет своим шагом.
+ */
+export function outsideOwner(
+  db: DatabaseSync,
+  page: PublishedPage,
+  ownIds: ReadonlySet<string>,
+): VacancyCluster | undefined {
+  const rows = db
+    .prepare(
+      `SELECT c.cluster_json AS json FROM vacancy_cluster_keys k
+         JOIN vacancy_clusters c ON c.id = k.cluster_id
+         JOIN catalog_entries e ON e.cluster_id = c.id
+        WHERE k.kind = 'url' AND k.key = ? AND e.source_url = ? AND e.status = 'active'
+        ORDER BY e.title = ? DESC, e.last_seen_ms DESC, c.id LIMIT 5`,
+    )
+    .all(normalizeUrl(page.source_url), page.source_url, page.title) as { json: string }[];
+  return rows
+    .map((row) => JSON.parse(row.json) as VacancyCluster)
+    .find(
+      (cluster) =>
+        !ownIds.has(cluster.id) &&
+        sameVacancyTitle(cluster.canonicalTitle, page.title) &&
+        !hasCrossSourceIdCollision(cluster),
+    );
+}
+
 function ownersAlike(link: string, links: LinkOwners): ReadonlySet<number> {
   const wanted = normalizeUrl(link);
   const found = new Set<number>();
@@ -70,6 +113,7 @@ export function pageOwner(
   );
   const byLink =
     single(primary) ??
+    namedAlike(page, pieces, primary) ??
     single(links.get(page.source_url) ?? primary) ??
     single(ownersAlike(page.source_url, links));
   if (byLink !== undefined) return byLink;
