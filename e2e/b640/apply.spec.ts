@@ -26,6 +26,8 @@ interface ApplyOptions extends ResponsesMockOptions {
   readonly longChoice?: boolean;
   /** Письмо уже одобрено: сервер отдаёт одобрение с этим текстом. */
   readonly approvedBody?: string;
+  /** Факты профиля изменились после одобрения. */
+  readonly factsChanged?: boolean;
   /** Вместе с письмом одобрено общее резюме. */
   readonly approvedResume?: boolean;
   /** Длинный текст вакансии, как у настоящих на hh.ru (B645). */
@@ -300,11 +302,15 @@ async function mockApply(page: Page, options: ApplyOptions = {}): Promise<ApplyM
             : null,
           subject: null,
           body: options.approvedBody,
+          ...(options.factsChanged ? { factsChanged: true, profileChanged: true } : {}),
           variantId: null,
         }
       : null;
     await route.fulfill({ json: { data: { approval: approved } } });
   });
+  await page.route('**/api/v1/candidate/vacancies/*/letter-draft', (route) =>
+    route.fulfill({ json: { data: { savedAt: '2026-11-24T10:00:00.000Z', removed: true } } }),
+  );
   await page.route('**/api/v1/candidate/vacancies/*/letter-resume', (route) =>
     route.fulfill({ json: { data: { ready: false } } }),
   );
@@ -461,6 +467,18 @@ test.describe('B657: единый экран отклика', () => {
     await page.getByRole('button', { name: 'Повторить' }).click();
     await expect(page.getByText('Письмо не собралось')).toHaveCount(0);
     await expect(page.getByLabel('Текст письма')).toHaveValue(body);
+  });
+
+  test('факты профиля изменились — письмо не отправить, пока не пересобрано и не одобрено', async ({
+    page,
+  }) => {
+    const body = 'CSAT с 23% до 68%.';
+    await open(page, '/app/responses/a-draft/letter', { approvedBody: body, factsChanged: true });
+    await expect(page.getByText('Факты профиля изменились')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'К отправке' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Пересобрать письмо' }).click();
+    await expect(page.getByRole('button', { name: 'Одобрить' })).toBeVisible();
+    await expect(page.getByLabel('Текст письма')).not.toHaveValue(body);
   });
 
   test('путь с шапкой контекста: на 390 скрыт, шаги под верхней полосой (B721)', async ({

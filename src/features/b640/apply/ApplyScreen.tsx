@@ -25,6 +25,7 @@ import {
   paragraphs,
   parseStep,
   resolveTarget,
+  stepOpening,
   type ApplyHead,
   type ApplyStep,
   type ApplyTarget,
@@ -147,7 +148,16 @@ interface BodyProps {
   readonly onResumeOk: () => void;
 }
 
-function SendBody({ vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm }: BodyProps) {
+function SendBody({
+  vacancyId,
+  head,
+  sourceType,
+  setStep,
+  letter,
+  answers,
+  hhForm,
+  onHhForm,
+}: BodyProps) {
   return (
     <>
       <div className="col">
@@ -247,6 +257,8 @@ interface FlowState {
   readonly quota: TariffQuotaStatus | null;
   readonly questionnaire: QuestionnaireState;
   readonly done: Readonly<Record<ApplyStep, boolean>>;
+  /** Ещё не известно, что показать на шаге: читается одобрение письма или анкета из адреса. */
+  readonly opening: boolean;
   /** Два окна: вакансия и редактор. */
   readonly wide: boolean;
 }
@@ -260,7 +272,10 @@ function useApplyLetter(vacancyId: string) {
   });
   const variants = useLetterVariants(vacancyId, draft);
   const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
-  return { letter, variants };
+  // B678: до чтения одобрения шаг не показывает ни «Сначала одобрите», ни «Собираем письмо».
+  // Письмо с опровергнутыми фактами уже прочитано, хотя одобрения у него больше нет.
+  const known = Boolean(letter.approval.saved) || letter.approval.stale === true;
+  return { letter, variants, approvalPending: approvalHold.hold && !known };
 }
 
 /** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
@@ -297,7 +312,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const [resumeOk, setResumeOk] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
-  const { letter, variants } = useApplyLetter(target.vacancyId);
+  const { letter, variants, approvalPending } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
   const form = questionnaire.form;
@@ -315,6 +330,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
     head,
     quota,
     questionnaire,
+    opening: stepOpening({ step, approvalPending, formLoading: questionnaire.loading }),
     wide: shown !== 'send' && shown !== 'form' && !quota,
     done: {
       resume: resumeDone,
@@ -343,7 +359,9 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
 
 function ApplyFlow(props: FlowProps) {
   const flow = useApplyFlow(props);
-  const { shown, head, quota, questionnaire, wide, body } = flow;
+  const { shown, head, quota, questionnaire, opening, body } = flow;
+  const wide = flow.wide && !opening;
+  const ready = !quota && !opening;
   const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
@@ -368,9 +386,10 @@ function ApplyFlow(props: FlowProps) {
       >
         <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
-        {!quota && shown === 'send' ? <SendBody {...body} /> : null}
-        {!quota && shown === 'form' && form ? <FormStep state={questionnaire} form={form} /> : null}
-        {!quota && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
+        {opening && !quota ? <LoadingApply /> : null}
+        {ready && shown === 'send' ? <SendBody {...body} /> : null}
+        {ready && shown === 'form' && form ? <FormStep state={questionnaire} form={form} /> : null}
+        {ready && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>
   );

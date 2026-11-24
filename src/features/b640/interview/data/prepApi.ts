@@ -1,5 +1,6 @@
 import type { ApplicationView } from '../../../../../server/domain/applicationDerivedFields';
 import type { StarStoryView } from '../../../../../shared/starStories';
+import type { InterviewAsk } from '../../../../../shared/interviewAsks';
 import { listApplicationsPool } from '../../../applications/applicationsApi';
 import { apiFetch, readDataObject } from '../../../coach/apiClient';
 import { getDecisionProfile } from '../../../coach/decisionProfileApi';
@@ -12,6 +13,7 @@ import { getVacancyCard } from '../../vacancies/b640Api';
 import { companyFacts, type CompanyFacts } from '../model/companyFacts';
 import { trainingQuota } from './trainingQuota';
 import {
+  answeredQuestions,
   pickNextResponse,
   prepVacancy,
   type PrepParagraph,
@@ -39,6 +41,8 @@ export interface PrepData {
 
 interface StarPrepView {
   readonly paragraphs: readonly PrepParagraph[];
+  /** B635: задачи и требования из описания вакансии. */
+  readonly asks?: readonly InterviewAsk[];
 }
 
 const starPrepPath = (applicationId: string) =>
@@ -110,7 +114,6 @@ export async function findResponse(
 export async function loadPrep(responseId: string, signal: AbortSignal): Promise<PrepData | null> {
   const response = await findResponse(responseId, signal);
   if (!response) return null;
-  const brief = generateInterviewPrepBrief({ vacancy: prepVacancy(response), facts: [] });
   const [prep, stories, floor, company, pay, quota] = await Promise.all([
     getStarPrep(response.id, signal),
     optional(() => getStarStories(signal)),
@@ -119,9 +122,12 @@ export async function loadPrep(responseId: string, signal: AbortSignal): Promise
     vacancyPay(response, signal),
     trainingQuota(),
   ]);
+  const vacancy = prepVacancy(response);
+  const brief = generateInterviewPrepBrief({ vacancy, facts: [], asks: prep.asks });
+  const common = generateInterviewPrepBrief({ vacancy, facts: [] }).starQuestions;
   return {
     response,
-    questions: brief.starQuestions.map(({ id, question }) => ({ id, question })),
+    questions: answeredQuestions(brief.starQuestions, common, prep.paragraphs),
     askThem: brief.counterQuestions,
     paragraphs: prep.paragraphs,
     stories: stories?.stories ?? [],

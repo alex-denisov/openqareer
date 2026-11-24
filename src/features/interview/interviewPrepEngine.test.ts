@@ -96,6 +96,23 @@ describe('interviewPrepEngine', () => {
     expect(software.counterQuestions.join(' ')).toContain('CI/CD');
   });
 
+  it('B635: описание двух вакансий даёт разные вопросы, без описания — общие', () => {
+    const brief = (text?: string) =>
+      generateInterviewPrepBrief({
+        vacancy: { id: 'v', title: 'Директор', company: 'Арка' },
+        facts: [],
+        ...(text ? { asks: [{ kind: 'duty' as const, text }] } : {}),
+      });
+    const energy = brief('Графики ремонта СЭС');
+    const data = brief('Конвейеры SQL');
+    expect(energy.starQuestions).toHaveLength(10);
+    expect(energy.counterQuestions).toHaveLength(10);
+    expect(energy.starQuestions[0]?.question).toContain('Графики ремонта СЭС');
+    expect(energy.counterQuestions[0]).toContain('Графики ремонта СЭС');
+    expect(JSON.stringify(data)).not.toContain('СЭС');
+    expect(brief().starQuestions[0]?.id).toBe('star-q1-tech');
+  });
+
   it('строго опирается на подтверждённые факты кандидата и привязывает usedEvidenceIds', () => {
     const brief = generateInterviewPrepBrief({
       vacancy: sampleVacancy,

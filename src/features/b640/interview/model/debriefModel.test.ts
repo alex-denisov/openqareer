@@ -4,9 +4,11 @@ import {
   clock,
   debriefLeadSub,
   durationText,
+  fileSize,
   measuresTip,
   shareParts,
   speakerLabel,
+  transcriptPending,
 } from './debriefModel';
 
 const VOICED: DebriefMetrics = {
@@ -84,5 +86,31 @@ describe('debriefModel', () => {
     expect(speakerLabel('interviewer', null)).toBe('Интервьюер');
     expect(speakerLabel('candidate', null)).toBe('Вы');
     expect(speakerLabel(null, 'Сергей Минин')).toBeNull();
+  });
+});
+
+describe('загрузка файла (B642)', () => {
+  it('меньше мегабайта — в килобайтах, а не «0 МБ»', () => {
+    expect(fileSize(85_000)).toBe('83\u00a0КБ');
+    expect(fileSize(1)).toBe('1\u00a0КБ');
+    expect(fileSize(1_048_575)).toBe('1\u00a0МБ');
+    expect(fileSize(5 * 1_048_576)).toBe('5\u00a0МБ');
+  });
+
+  it('«Расшифровываем» гаснет, когда голоса готовы или случился сбой', () => {
+    const pending = (
+      status: 'transcribing' | 'ready' | 'failed',
+      voices: 'none' | 'ready' | 'failed',
+    ) =>
+      transcriptPending({
+        recording: { id: 'r', status, source: 'upload', startedAt: '', gaps: 0 },
+        voices: { status: voices, candidate: null, items: [] },
+      });
+    expect(transcriptPending(null)).toBe(true);
+    expect(pending('transcribing', 'none')).toBe(true);
+    expect(pending('ready', 'none')).toBe(true);
+    expect(pending('ready', 'ready')).toBe(false);
+    expect(pending('ready', 'failed')).toBe(false);
+    expect(pending('failed', 'none')).toBe(false);
   });
 });
