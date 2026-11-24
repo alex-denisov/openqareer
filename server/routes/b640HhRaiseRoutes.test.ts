@@ -103,6 +103,24 @@ describe('b640 hh raise routes', () => {
     expect(data.nextRaiseAt).toContain(':57:00.000Z');
   });
 
+  it('turning off drops a queued task, and claim never hands out one of a disabled resume', async () => {
+    const ctx = await setup();
+    const candidateId = ctx.candidateIds['flagged.test'];
+    const claim = async () => (await ctx.send('POST', `${BASE}/claim`, {}, 'flagged.test')).json().data.task;
+    await ctx.get(BASE, 'flagged.test');
+    ctx.raise.enqueue(candidateId, 'abc123', new Date().toISOString());
+    const off = (await ctx.send('PUT', BASE, { enabled: false }, 'flagged.test')).json().data;
+    expect(off).toMatchObject({ enabled: false, pending: false });
+    await ctx.send('PUT', BASE, { enabled: true }, 'flagged.test');
+    expect(await claim()).toBeNull();
+
+    ctx.raise.enqueue(candidateId, 'abc123', new Date().toISOString());
+    ctx.raise.patchSchedule(candidateId, 'abc123', { enabled: false }, new Date().toISOString());
+    expect(await claim()).toBeNull();
+    ctx.raise.patchSchedule(candidateId, 'abc123', { enabled: true }, new Date().toISOString());
+    expect(await claim()).not.toBeNull();
+  });
+
   it('captcha pauses 24 hours and the scheduler skips it', async () => {
     const ctx = await setup();
     const taskId = await claimTask(ctx);
