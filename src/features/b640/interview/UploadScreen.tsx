@@ -5,7 +5,7 @@ import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { loadDebrief, saveInterviewerName, splitVoices, type DebriefData } from './data/debriefApi';
 import { uploadErrorText, uploadInterviewFile } from './data/fileUpload';
-import { durationText } from './model/debriefModel';
+import { durationText, fileSize, transcriptPending } from './model/debriefModel';
 import { RecordSteps, SourceHead } from './RecordSteps';
 import { MeterFill } from './MeterFill';
 import { useVoicesStep, VoicesBlock } from './UploadVoices';
@@ -15,9 +15,6 @@ type UploadPhase =
   | { readonly kind: 'sending'; readonly percent: number }
   | { readonly kind: 'sent'; readonly durationMs: number }
   | { readonly kind: 'failed'; readonly error: string };
-
-const megabytes = (bytes: number) =>
-  `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(bytes / 1_048_576)}\u00a0МБ`;
 
 function useUpload(data: DebriefData, onSent: () => void) {
   const [file, setFile] = useState<File | null>(null);
@@ -65,13 +62,15 @@ function FilePick(props: {
 function FileRow(props: {
   readonly file: File;
   readonly phase: UploadPhase;
+  /** Загруженный файл ещё расшифровывается. */
+  readonly transcribing: boolean;
   readonly onPick: (file: File) => void;
 }) {
   const { phase } = props;
   const percent = phase.kind === 'sending' ? phase.percent : 100;
   const size = [
     phase.kind === 'sent' ? durationText(phase.durationMs) : null,
-    megabytes(props.file.size),
+    fileSize(props.file.size),
   ]
     .filter(Boolean)
     .join(' · ');
@@ -84,7 +83,7 @@ function FileRow(props: {
           <FilePick label="Другой файл" quiet onPick={props.onPick} />
         )}
       </div>
-      {phase.kind === 'sending' || phase.kind === 'sent' ? (
+      {phase.kind === 'sending' || (phase.kind === 'sent' && props.transcribing) ? (
         <div className="ir-prog">
           <span
             className="meter"
@@ -188,6 +187,7 @@ function UploadLead(props: {
   readonly data: DebriefData;
   readonly upload: ReturnType<typeof useUpload>;
   readonly picking: boolean;
+  readonly transcribing: boolean;
 }) {
   const { upload } = props;
   const sent = upload.phase.kind === 'sent' && !props.picking;
@@ -204,6 +204,7 @@ function UploadLead(props: {
         <FileRow
           file={upload.file}
           phase={upload.phase}
+          transcribing={props.transcribing}
           onPick={(file) => void upload.send(file)}
         />
       ) : (
@@ -240,10 +241,11 @@ function UploadBody(props: {
   }
   const voices = data.debrief.recording?.source === 'upload' ? data.debrief.voices : null;
   const picking = voices?.status === 'ready';
+  const transcribing = transcriptPending(data.debrief);
   return (
     <>
       <div className="col">
-        <UploadLead data={data} upload={upload} picking={picking} />
+        <UploadLead data={data} upload={upload} picking={picking} transcribing={transcribing} />
         {picking ? <VoicesBlock data={data} /> : null}
         {voices?.status === 'failed' ? <VoicesFailed data={data} onView={props.onView} /> : null}
       </div>
