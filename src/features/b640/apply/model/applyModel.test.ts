@@ -169,3 +169,13 @@ describe('резюме без служебной разметки', () => {
     expect(resumeLines(`== a${' '.repeat(5000)}b`)).toHaveLength(1);
   });
 });
+
+describe('B713: заголовки резюме на языке его текста', () => {
+  it('английский текст — английские заголовки', () => {
+    expect(resumeLines('=== WORK EXPERIENCE ===\nLed a team of 12 engineers.')[0]).toEqual({ kind: 'heading', text: 'Work experience' });
+  });
+
+  it('русский текст — русские, вместе с курсами', () => {
+    expect(resumeLines('=== COURSES AND CERTIFICATIONS ===\nУправление продуктом')[0]).toEqual({ kind: 'heading', text: 'Курсы и сертификаты' });
+  });
+});
