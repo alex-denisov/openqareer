@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { invokeDesktopCommand, isTauriEnvironment } from '../../services/desktop/desktopBridge';
 
 /** B649: тема нового кабинета. Светлая по умолчанию; «system» следует за устройством. */
 export const B640_THEMES = ['light', 'dark', 'system'] as const;
@@ -64,6 +65,12 @@ export function useB640Theme(readServerTheme?: () => Promise<B640Theme | null>):
       active = false;
     };
   }, [readServerTheme]);
+  // B593: по этому выбору приложение красит окно до загрузки страницы.
+  useEffect(() => {
+    if (!isTauriEnvironment()) return;
+    // Не сохранилась — следующий запуск возьмёт прежний выбор или тему системы.
+    invokeDesktopCommand('save_window_theme', { theme }).catch(() => undefined);
+  }, [theme]);
   return { theme, setTheme };
 }
 

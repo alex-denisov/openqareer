@@ -11,6 +11,7 @@ vi.mock('../shell/ShellContext', () => ({
 }));
 vi.mock('../../coach/coachApi', () => ({ getConnections: vi.fn() }));
 vi.mock('../../applications/applicationsApi', () => ({ getCandidateActionUsage: vi.fn() }));
+vi.mock('../apply/hh/hhSessionApi', () => ({ getHhResumes: vi.fn(async () => null) }));
 vi.mock('./hh/hhRaiseApi', () => ({ getHhRaise: vi.fn(), setHhRaiseEnabled: vi.fn(), retryHhRaise: vi.fn() }));
 vi.mock('./journal/journalApi', () => ({ getLinkedinJournal: vi.fn() }));
 

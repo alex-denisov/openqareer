@@ -24,11 +24,18 @@ export async function saveHhResumes(
   resumes: readonly HhResumeSummary[],
   selected: HhResumeContent | null,
   contents?: readonly HhResumeContent[],
+  /** `false` — выбрано из прочитанного раньше, дата чтения прежняя. */
+  contentRead = true,
 ): Promise<HhResumeSnapshot> {
   const response = await apiFetch(`${BASE}/resumes`, {
     method: 'PUT',
     headers: JSON_HEADERS,
-    body: JSON.stringify({ resumes, selected, ...(contents ? { contents } : {}) }),
+    body: JSON.stringify({
+      resumes,
+      selected,
+      ...(contents ? { contents } : {}),
+      ...(contentRead ? {} : { contentRead }),
+    }),
   });
   return readDataObject<HhResumeSnapshot>(response);
 }
