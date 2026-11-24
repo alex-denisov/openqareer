@@ -229,10 +229,10 @@ describe('buildTargetedResumeSlice', () => {
     });
 
     expect(result.matchedRequirements).toEqual([]);
-    expect(result.document.experience.map((role) => role.id)).toEqual(['operations', 'platform', 'sales']);
-    for (const [index, role] of result.document.experience.entries()) {
-      expect(role.bullets).toEqual(master.experience[index]?.bullets);
+    expect(result.document.experience.map((role) => role.id)).toEqual(['platform', 'operations', 'sales']);
+    for (const role of result.document.experience) {
+      expect(role.bullets).toEqual(master.experience.find((item) => item.id === role.id)?.bullets);
     }
-    expect(result.detailedExperienceIds).toEqual(['operations', 'platform', 'sales']);
+    expect(result.detailedExperienceIds).toEqual(['platform', 'operations', 'sales']);
   });
 });

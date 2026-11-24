@@ -9,7 +9,7 @@ import {
   type LetterScreenState,
 } from '../../vacancies/vacancyLetterController';
 import type { ResumeDocument } from '../../resume/resumeTypes';
-import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
+import { Button, Icon, InfoTip, Link, StatusLine, useIsMobile } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
 import { CtxHead } from '../shell/CtxHead';
@@ -166,6 +166,8 @@ function SendBody({ vacancyId, head, sourceType, setStep, letter, answers }: Bod
 function EditorBody(props: BodyProps) {
   const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen } = props;
   const [document, setDocument] = useState<ResumeDocument | null>(null);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  const mobile = useIsMobile();
   return (
     <>
       <VacancyColumn vacancyId={vacancyId} head={head}>
@@ -181,6 +183,7 @@ function EditorBody(props: BodyProps) {
               confirmed={resumeOk}
               onConfirm={props.onResumeOk}
               onHh={Boolean(head.url && hhVacancyIdFromUrl(head.url))}
+              dock={dock}
               onDocument={setDocument}
             />
           </div>
@@ -194,6 +197,9 @@ function EditorBody(props: BodyProps) {
           />
         </div>
       </div>
+      {step === 'resume' && !mobile ? (
+        <div className="act-dock is-auto cv-dock" ref={setDock} />
+      ) : null}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NO_EDIT_CHOICES } from '../../shared/resumeVacancyEdits';
+import { buildTargetedResumeSlice } from './resumeStudioTargeted';
 import type { TargetedResumeSlice } from './resumeStudioTypes';
 import {
   editSource,
@@ -78,5 +79,46 @@ describe('правки резюме под вакансию (B785)', () => {
   it('новых чисел в тексте быть не может', () => {
     expect(keepsSourceNumbers('Kubernetes, 2024', 'На Kubernetes в 2024')).toBe(true);
     expect(keepsSourceNumbers('Сократила на 30%', 'На Kubernetes в 2024')).toBe(false);
+  });
+});
+
+describe('порядок мест и причина правки (B785)', () => {
+  const place = (id: string, start: string | null, end: string | null, value: string) => ({
+    id,
+    title: bullet('t' + id, 'Роль'),
+    employer: null,
+    location: null,
+    startDate: start ? bullet('s' + id, start) : null,
+    endDate: end ? bullet('e' + id, end) : null,
+    current: { ...bullet('c' + id, ''), value: !end && Boolean(start) },
+    bullets: [bullet('o' + id, 'Вела группу'), bullet('b' + id, value)],
+  });
+  const master = {
+    kind: 'master',
+    contact: { fullName: 'A', email: null, phone: null, location: null, links: [] },
+    experience: [
+      place('vk', '2020-01', '2023', 'Сервис на Go'),
+      place('none', null, null, 'Go'),
+      place('opti', '2025-02', null, 'Запуск go-to-market (GTM)'),
+      place('old', '2016', '2020-01', 'Отчёты'),
+    ],
+    education: [],
+    languages: [],
+    unknowns: [],
+  } as unknown as Parameters<typeof buildTargetedResumeSlice>[0];
+  const targeted = buildTargetedResumeSlice(master, { title: 'x', requirements: ['Go'] });
+
+  it('места от последнего к раннему, без дат — внизу', () => {
+    expect(targeted.document.experience.map((item) => item.id)).toEqual([
+      'opti',
+      'vk',
+      'old',
+      'none',
+    ]);
+  });
+
+  it('go-to-market под «Go» не поднимается', () => {
+    const edits = resumeVacancyEdits(targeted, NO_EDIT_CHOICES);
+    expect(edits.map((item) => item.id)).toEqual(['vk:bvk', 'none:bnone']);
   });
 });

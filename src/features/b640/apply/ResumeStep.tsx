@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
   ResumeEditDecision,
@@ -103,6 +104,8 @@ export interface ResumeStepProps {
   readonly onConfirm: () => void;
   /** Отклик на hh.ru: рядом выбор резюме hh.ru, которым он уйдёт. */
   readonly onHh: boolean;
+  /** Полоса действия страницы (макет o03, от 768); без неё кнопка стоит под листом. */
+  readonly dock: HTMLElement | null;
   readonly onDocument: (document: ResumeDocument | null) => void;
 }
 
@@ -111,23 +114,22 @@ interface StepActionsProps {
   readonly confirmed: boolean;
   readonly disabled: boolean;
   readonly onConfirm: () => void;
+  readonly dock: HTMLElement | null;
 }
 
-function StepActions({ kind, confirmed, disabled, onConfirm }: StepActionsProps) {
-  return (
-    <div className="actions">
-      {kind === 'none' ? (
-        <Link className="btn is-primary" to={buildNodePath('s01')}>
-          <Icon name="profile" />
-          Открыть профиль
-        </Link>
-      ) : (
-        <Button variant="primary" icon="check" disabled={disabled} onClick={onConfirm}>
-          {confirmed ? 'К письму' : 'Одобрить резюме'}
-        </Button>
-      )}
-    </div>
-  );
+function StepActions({ kind, confirmed, disabled, onConfirm, dock }: StepActionsProps) {
+  const action =
+    kind === 'none' ? (
+      <Link className="btn is-primary" to={buildNodePath('s01')}>
+        <Icon name="profile" />
+        Открыть профиль
+      </Link>
+    ) : (
+      <Button variant="primary" icon="check" disabled={disabled} onClick={onConfirm}>
+        {confirmed ? 'К письму' : 'Одобрить резюме'}
+      </Button>
+    );
+  return dock ? createPortal(action, dock) : <div className="actions">{action}</div>;
 }
 
 /** Переключение языка: пока строки переводятся, лист прежний. */
@@ -188,14 +190,8 @@ function titleOf(preview: LetterResumePreview, edits: ResumeEditsState['edits'])
 }
 
 /** Шаг «Резюме» (O3): то резюме, которое уйдёт с откликом. */
-export function ResumeStep({
-  vacancyId,
-  approved,
-  confirmed,
-  onConfirm,
-  onHh,
-  onDocument,
-}: ResumeStepProps) {
+export function ResumeStep(props: ResumeStepProps) {
+  const { vacancyId, approved, confirmed, onConfirm, onHh, dock, onDocument } = props;
   const { state, reload, decide, lang } = useResumeStep(vacancyId, approved);
   const preview = state.data?.preview;
   const edits = state.data?.choices.edits ?? [];
@@ -234,6 +230,7 @@ export function ResumeStep({
         confirmed={confirmed}
         disabled={state.status !== 'ready' || Boolean(lang?.busy)}
         onConfirm={onConfirm}
+        dock={dock}
       />
     </section>
   );

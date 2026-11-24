@@ -1,4 +1,5 @@
 import type { ResumeExperience, TargetedResumeSlice } from './resumeStudioTypes';
+import { termAppears } from './requirementTerm';
 import { formatTargetedResumeAsAtsText } from './resumeAtsText';
 
 const PRINT_PAGE_WIDTH_MM = 210;
@@ -136,17 +137,7 @@ function wrappedLineCount(line: string): number {
 }
 
 function bulletMatches(bullet: string, requirements: readonly string[]): boolean {
-  const normalizedBullet = normalizeText(bullet);
-  if (!normalizedBullet) return false;
-  return requirements.some((requirement) => {
-    const normalizedRequirement = normalizeText(requirement);
-    return normalizedRequirement.length > 0 &&
-      ` ${normalizedBullet} `.includes(` ${normalizedRequirement} `);
-  });
-}
-
-function normalizeText(value: string): string {
-  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/gu, ' ');
+  return requirements.some((requirement) => termAppears(requirement, bullet));
 }
 
 function oldestFirst<T extends ResumeExperience>(roles: readonly T[]): T[] {
