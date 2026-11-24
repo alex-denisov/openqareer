@@ -3,6 +3,7 @@ import { saveResumeStudioDraft } from '../../resume/resumeApi';
 import { Icon } from '../kit';
 import { freshDraft, PROFILE_CHANGED } from '../profile/ExperienceEditScreen';
 import { LINK_MAX, linksFull, normalizeLink, withLink } from './addLinkModel';
+import { rememberAddedLink } from './footprintApi';
 import { reportFailure } from './reportFailure';
 import { announceFootprintChanged } from './useFootprint';
 
@@ -12,6 +13,7 @@ async function saveLink(link: string): Promise<'saved' | 'full'> {
   if (linksFull(draft, link)) return 'full';
   const next = withLink(draft, link);
   if (next !== draft) await saveResumeStudioDraft(next);
+  await rememberAddedLink(link);
   window.dispatchEvent(new Event(PROFILE_CHANGED));
   announceFootprintChanged();
   return 'saved';

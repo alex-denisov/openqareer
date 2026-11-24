@@ -17,11 +17,12 @@ function startError(reason: unknown): string {
   return reason instanceof CoachApiError && reason.message ? reason.message : START_FAILED;
 }
 
-/** Повторная проверка берёт прежний выбор, если он ещё есть в плане. */
+/** Повторная проверка берёт прежний выбор, если он ещё есть в плане, и добавленные после него ссылки. */
 export function repeatIds(data: FootprintData): readonly string[] {
   const inPlan = new Set(data.plan.filter((item) => item.available).map((item) => item.id));
   const previous = (data.audit?.selectedQueryIds ?? []).filter((id) => inPlan.has(id));
-  if (previous.length > 0) return previous;
+  const added = (data.audit?.addedQueryIds ?? []).filter((id) => inPlan.has(id));
+  if (previous.length > 0) return [...new Set([...previous, ...added])];
   return data.plan.filter((item) => item.available && item.selectedByDefault).map((item) => item.id);
 }
 

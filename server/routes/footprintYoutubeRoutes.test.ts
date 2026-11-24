@@ -253,3 +253,36 @@ describe('B740: ответы цифрового следа без названи
     expect(forbiddenExportKeys(response.json().data)).toEqual([]);
   });
 });
+
+describe('B668: добавленная ссылка входит в повтор проверки', () => {
+  const add = (app: App, token: string, link: string) =>
+    app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/footprint/added-links',
+      headers: { authorization: `Bearer ${token}`, origin: baseConfig.allowedOrigins[0]! },
+      payload: { link },
+    });
+
+  it('запоминается только ссылка из профиля; повтор отметок не множит', async () => {
+    const { app, repo, people, saveAudit } = await setup('fixture-key');
+    saveAudit('flagged', []);
+    const link = 'https://www.youtube.com/@msokolova';
+    for (const item of [link, link, 'https://example.org/чужая'])
+      expect((await add(app, 'token-flagged', item)).statusCode).toBe(204);
+    const audit = repo.getLatestFootprintAudit(people.flagged.candidate!.id)!;
+    // Архив страницы и канал — две проверки одной ссылки.
+    expect(audit.addedQueryIds).toHaveLength(2);
+    const { plan: items } = await plan(app, 'token-flagged');
+    const row = items.find((item) => item.preview.includes('youtube.com')) as unknown as {
+      id: string;
+    };
+    expect(audit.addedQueryIds).toContain(row.id);
+    expect(audit.selectedQueryIds).toEqual([]);
+  });
+
+  it('без флага адреса нет, не адрес — 400', async () => {
+    const { app } = await setup();
+    expect((await add(app, 'token-plain', 'https://a.ru/')).statusCode).toBe(404);
+    expect((await add(app, 'token-flagged', 'не адрес')).statusCode).toBe(400);
+  });
+});

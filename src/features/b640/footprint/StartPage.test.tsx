@@ -6,9 +6,11 @@ import { click, mount, type Mounted } from '../kit/testDom';
 import { nodeByCode } from '../routes';
 import { StartPage } from './FootprintScreen';
 import { uncheckedLine } from './footprintModel';
+import { repeatIds } from './useStartSearch';
 import type { FootprintData } from './useFootprint';
 
-vi.mock('./footprintApi', () => ({}));
+const rememberAddedLink = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('./footprintApi', () => ({ rememberAddedLink }));
 const resume = vi.hoisted(() => ({
   getResumeStudio: vi.fn(),
   saveResumeStudioDraft: vi.fn(),
@@ -126,7 +128,28 @@ describe('B668: ссылка в «Данных для поиска»', () => {
     expect(resume.saveResumeStudioDraft).toHaveBeenCalledTimes(1);
     const saved = resume.saveResumeStudioDraft.mock.calls[0]![0];
     expect(saved.candidate.contact.links).toEqual(['https://a.ru/', 'https://youtube.com/@name']);
+    expect(rememberAddedLink).toHaveBeenCalledWith('https://youtube.com/@name');
     expect(changed).toHaveBeenCalled();
     window.removeEventListener('b640:footprint-changed', changed);
+  });
+});
+
+describe('B668: «Проверить снова»', () => {
+  it('прежний выбор и добавленная ссылка; снятое раньше не возвращается', () => {
+    const value = {
+      ...data('ready', {
+        ...audit('completed', ['checked']),
+        selectedQueryIds: ['a'],
+        addedQueryIds: ['new', 'gone'],
+      }),
+      plan: ['a', 'unticked', 'new'].map((id) => ({
+        id,
+        kind: 'profile_url' as const,
+        preview: id,
+        selectedByDefault: true,
+        available: true,
+      })),
+    };
+    expect(repeatIds(value)).toEqual(['a', 'new']);
   });
 });
