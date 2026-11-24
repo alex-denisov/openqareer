@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import { buildResumeStudioProjection, buildTargetedResumeSlice } from '../domain/resumeStudio';
 import { estimateResumePages } from '../domain/resumeTargetedVolume';
+import type { TargetedResumeSlice } from '../domain/resumeStudioTypes';
 import type { ResumeVersionContent } from '../domain/resumeVersions';
 import type { ResumeDocument, ResumeStudioProjection } from '../domain/resumeStudioTypes';
 import type { RouteDeps } from './deps';
@@ -79,12 +80,13 @@ export function buildVersionContent(
   title: string,
   requirements: readonly string[],
   status: 'draft' | 'approved' = 'draft',
+  tailor: (slice: TargetedResumeSlice) => TargetedResumeSlice = (slice) => slice,
 ): ResumeVersionContent {
   const slice = buildTargetedResumeSlice(master.document, { title, requirements });
   return {
     title: title.trim(),
     requirements: slice.requirements.map((item) => item.requirement),
     status,
-    snapshot: estimateResumePages(slice),
+    snapshot: estimateResumePages(tailor(slice)),
   };
 }
