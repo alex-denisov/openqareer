@@ -1,3 +1,4 @@
+import { termAppears } from './requirementTerm';
 import type {
   ResumeEditChoices,
   ResumeEditDecision,
@@ -11,19 +12,8 @@ interface Lift {
   readonly why: string;
 }
 
-function normalized(value: string): string {
-  return ` ${value
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()} `;
-}
-
 function requirementOf(text: string, requirements: readonly string[]): string | null {
-  const haystack = normalized(text);
-  return (
-    requirements.find((item) => normalized(item).trim() && haystack.includes(normalized(item))) ??
-    null
-  );
+  return requirements.find((item) => termAppears(item, text)) ?? null;
 }
 
 const editId = (place: ResumeExperience, bullet: ResumeAssertion) =>

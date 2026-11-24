@@ -260,4 +260,30 @@ test.describe('B785: шаг «Резюме» по макету o03', () => {
     await expect(page.getByText('Перевод не собрался')).toBeHidden({ timeout: 15_000 });
     await expectGates(page);
   });
+
+  test('«Одобрить резюме» видна без прокрутки и не закрывает лист', async ({ page }) => {
+    await open(page, FULL);
+    const button = page.getByRole('button', { name: 'Одобрить резюме' });
+    await expect(button).toHaveCount(1);
+    const size = page.viewportSize()!;
+    if (size.width >= 768) {
+      const dock = page.locator('.act-dock.is-auto');
+      await expect(dock).toHaveCSS('position', 'sticky');
+      const [box, bar, lead] = await Promise.all([
+        button.boundingBox(),
+        dock.boundingBox(),
+        page.locator('.cv-lead').boundingBox(),
+      ]);
+      expect(Math.abs(bar!.y + bar!.height - size.height)).toBeLessThanOrEqual(1);
+      expect(Math.abs(box!.x - lead!.x)).toBeLessThanOrEqual(1);
+      await page
+        .getByRole('article', { name: 'Резюме' })
+        .evaluate((node) => node.scrollIntoView(false));
+      await page.mouse.wheel(0, 5_000);
+      await expectGates(page);
+    } else await expect(page.locator('.act-dock')).toHaveCount(0);
+    await button.click();
+    await expect(page).toHaveURL(/letter/u);
+    await expect(page.locator('.act-dock.is-auto')).toHaveCount(0);
+  });
 });

@@ -34,4 +34,17 @@
     background-size: var(--career-space-1) var(--career-space-1);
     background-repeat: no-repeat;
   }
+  /* Полоса действия: кнопка на вертикали колонки резюме, как в макете. */
+  .b640 .act-dock.is-auto.cv-dock {
+    display: grid;
+    grid-template-columns: subgrid;
+    column-gap: var(--career-space-8);
+    justify-items: start;
+  }
+  .b640 .act-dock.cv-dock > .btn {
+    grid-column: -2 / -1;
+  }
+  .b640 .act-dock.is-auto.cv-dock:empty {
+    display: none;
+  }
 }

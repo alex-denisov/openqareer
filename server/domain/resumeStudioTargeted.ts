@@ -1,4 +1,5 @@
 import { languageRequirementMet } from './resumeLanguageRequirement';
+import { termAppears } from './requirementTerm';
 import { estimateLength } from './resumeStudioInternals';
 import type {
   ResumeAssertion,
@@ -82,7 +83,7 @@ function coverRequirements(
   const matches = requirements.map((requirement) => ({
     requirement: requirement.label,
     matched:
-      requirementAppears(requirement.normalized, facts) ||
+      requirementAppears(requirement.label, facts) ||
       languageRequirementMet(requirement.normalized, master.languages),
   }));
   return {
@@ -97,7 +98,7 @@ function prepareTargetedDocument(
   vacancy: TargetedResumeInput,
   requirements: readonly { label: string; normalized: string }[],
 ): PreparedTargetedDocument {
-  const experience = targetedExperience(master.experience, requirements);
+  const experience = latestFirst(master.experience);
   const projects = targetedProjects(master.projects ?? [], requirements);
   const skills = targetedSkills(master.skills ?? [], requirements);
   const about =
@@ -134,27 +135,43 @@ function normalizeRequirements(
   return requirements.flatMap((requirement) => {
     const label = clean(requirement);
     const normalized = normalizeText(label);
-    if (!label || !normalized || seen.has(normalized)) return [];
-    seen.add(normalized);
+    // «C++» и «C#» без знаков совпали бы: повтор ищем по самому названию.
+    const key = label.toLocaleLowerCase();
+    if (!label || !normalized || seen.has(key)) return [];
+    seen.add(key);
     return [{ label, normalized }];
   });
 }
 
 /**
- * Matching places go first; every place keeps its bullets (B713). Requirements are matched word for word,
- * so a Russian vacancy against an English profile matched nothing and the version listed bare titles.
- * Length is fitted later by trimming bullets that match nothing (`estimateResumePages`).
+ * Places go from the latest to the earliest whatever they match (B785): a resume out of time order
+ * reads as a mistake. Every place keeps its bullets (B713); length is fitted later by trimming
+ * bullets that match nothing (`estimateResumePages`).
  */
-function targetedExperience(
-  experience: readonly ResumeExperience[],
-  requirements: readonly { normalized: string }[],
-): ResumeExperience[] {
-  return rankEntries(experience, experienceFactTexts, requirements).map(({ entry }) => entry);
+function latestFirst(experience: readonly ResumeExperience[]): ResumeExperience[] {
+  const dated = experience.map((role) => ({ role, start: monthOf(role.startDate), end: endMonth(role) }));
+  return dated
+    .sort((left, right) => right.end - left.end || right.start - left.start)
+    .map(({ role }) => role);
+}
+
+/** Месяцы от нулевого года; без даты — 0, такое место внизу. */
+function monthOf(date: ResumeAssertion | null): number {
+  const value = date?.value.trim() ?? '';
+  const year = /(?:19|20)\d{2}/u.exec(value)?.[0];
+  if (!year) return 0;
+  const month = /^(?:19|20)\d{2}-(\d{2})/u.exec(value)?.[1] ?? /^(\d{1,2})[./](?:19|20)\d{2}$/u.exec(value)?.[1];
+  return Number(year) * 12 + Number(month ?? 0);
+}
+
+function endMonth(role: ResumeExperience): number {
+  if (role.current.value) return Number.MAX_SAFE_INTEGER;
+  return monthOf(role.endDate) || monthOf(role.startDate);
 }
 
 function targetedProjects(
   projects: readonly ResumeProject[],
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ): ResumeProject[] {
   return rankEntries(projects, projectFactTexts, requirements)
     .filter(
@@ -166,7 +183,7 @@ function targetedProjects(
 
 function targetedSkills(
   skills: NonNullable<ResumeDocument['skills']>,
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ) {
   if (requirements.length === 0) return skills;
   return skills.filter((skill) =>
@@ -177,7 +194,7 @@ function targetedSkills(
 function rankEntries<Entry>(
   entries: readonly Entry[],
   getFactTexts: (entry: Entry) => readonly string[],
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ): RankedEntry<Entry>[] {
   return entries
     .map((entry, originalIndex) => ({
@@ -197,16 +214,15 @@ function rankEntries<Entry>(
 
 function matchingIndexes(
   factTexts: readonly string[],
-  requirements: readonly { normalized: string }[],
+  requirements: readonly { label: string }[],
 ): number[] {
   return requirements.flatMap((requirement, index) =>
-    requirementAppears(requirement.normalized, factTexts) ? [index] : [],
+    requirementAppears(requirement.label, factTexts) ? [index] : [],
   );
 }
 
 function requirementAppears(requirement: string, factTexts: readonly string[]): boolean {
-  const paddedRequirement = ` ${requirement} `;
-  return factTexts.some((fact) => ` ${normalizeText(fact)} `.includes(paddedRequirement));
+  return factTexts.some((fact) => termAppears(requirement, fact));
 }
 
 function documentFactTexts(document: ResumeDocument): string[] {
