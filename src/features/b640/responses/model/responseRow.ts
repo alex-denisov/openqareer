@@ -1,5 +1,6 @@
 import { deliveryState } from '../../../../../shared/applicationStage';
 import type { ApplicationView } from '../../../applications/applicationsApi';
+import { manualApplyReasonText, type ManualApplyItem } from '../../../../../shared/manualApply';
 import type { IconName } from '../../kit';
 
 /** Цвет метки стадии: класс `.tag` макета. */
@@ -16,6 +17,8 @@ export interface ResponseRowAction {
   readonly label: string;
   readonly short: string;
   readonly icon: IconName;
+  /** Шаг отклика, к которому ведёт кнопка. */
+  readonly step?: 'form' | 'send';
 }
 
 export interface ResponseRow {
@@ -276,8 +279,38 @@ function approvedFace(application: ApplicationView): Face {
   };
 }
 
+/** Отклик, который кандидат отправляет сам (B787): готовим, нужен ответ или можно отправлять. */
+function manualFace(item: ManualApplyItem): Face {
+  const reason = manualApplyReasonText(item.reason, item.host);
+  const base = {
+    event: withDate('в очереди с', dotDate(item.createdAt)),
+    yours: true,
+    remind: false,
+    urgency: 0,
+  };
+  if (item.state === 'preparing') {
+    return { ...base, tag: { tone: '', label: 'готовим' }, next: reason, action: null, yours: false };
+  }
+  if (item.state === 'needs_answer') {
+    const noun = pluralRu(item.missingAnswers, ['вопрос', 'вопроса', 'вопросов']);
+    return {
+      ...base,
+      tag: { tone: 'part', label: 'нужен ответ' },
+      next: `${item.missingAnswers} ${noun} без ответа`,
+      action: { kind: 'letter', label: 'Заполнить', short: 'Заполнить', icon: 'edit', step: 'form' },
+    };
+  }
+  return {
+    ...base,
+    tag: { tone: 'part', label: 'готово' },
+    next: reason,
+    action: { ...SEND_ACTION, step: 'send' },
+  };
+}
+
 /** Неотправленный отклик: черновик или одобренное письмо (B723; отметка сводки B645). */
 function savedFace(application: ApplicationView, marks: RowMarks): Face {
+  if (marks.manual) return manualFace(marks.manual);
   if (application.materials.coverLetter || marks.letterApproved) return approvedFace(application);
   return {
     tag: { tone: 'part', label: 'Черновик' },
@@ -336,6 +369,8 @@ function face(
 export interface RowMarks {
   /** Письмо черновика одобрено: строка зовёт отправить, как экран письма. */
   readonly letterApproved?: boolean;
+  /** Отклик из очереди «отправить вручную» (B787). */
+  readonly manual?: ManualApplyItem;
 }
 
 /** Строка таблицы «Отклики» из отклика: стадия, «что дальше», событие и действие. */

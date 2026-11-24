@@ -4,6 +4,10 @@ import {
   SqliteQuestionnaireRepository,
   type StoredQuestionnaire,
 } from '../candidate/sqliteQuestionnaireRepository';
+import {
+  SqliteManualApplyRepository,
+  type StoredManualApply,
+} from '../candidate/sqliteManualApplyRepository';
 import { SqliteRejectionReviewRepository } from '../candidate/sqliteRejectionReviewRepository';
 import type { RejectionCandidateReason } from '../../shared/rejectionReview';
 import type { EmployerRead } from './applicationEmployerReads';
@@ -96,6 +100,8 @@ export interface TrackerExport {
   /** Таблица без записи в коде; поле контакта не выгружается, его формат нигде не задан. */
   readonly outreach: OutreachRecord[];
   readonly questionnaires: StoredQuestionnaire[];
+  /** B787: отклики, которые кандидат отправляет сам. */
+  readonly manualApplications: Array<Omit<StoredManualApply, 'pitch'>>;
   readonly rejectionReasons: Array<{ applicationId: string } & RejectionCandidateReason>;
   readonly rejectionReviewHelped: boolean | null;
   readonly actionBatches: ActionBatch[];
@@ -189,6 +195,14 @@ function createSeparateReaders({ database, encryptionKey }: TrackerExportSources
       (repository, candidateId) => repository.exportAll(candidateId),
       () => [],
     ),
+    manualApplications: whenTableExists(
+      database,
+      'manual_apply_queue',
+      () => new SqliteManualApplyRepository(database, encryptionKey),
+      (repository, candidateId) =>
+        repository.exportAll(candidateId).map(({ pitch: _pitch, ...item }) => item),
+      () => [],
+    ),
     rejections: whenTableExists(
       database,
       'application_rejection_reasons',
@@ -241,6 +255,7 @@ export function createTrackerExport(sources: TrackerExportSources): (candidateId
       commandApprovals: commandApprovals(database, candidateId),
       outreach: outreach(database, candidateId),
       questionnaires: separate.questionnaires(candidateId),
+      manualApplications: separate.manualApplications(candidateId),
       rejectionReasons: rejections.reasons,
       rejectionReviewHelped: rejections.helped,
       actionBatches: actionBatches(database, candidateId),

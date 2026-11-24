@@ -47,6 +47,8 @@ export interface QuestionnaireState {
   readonly saveError: string | null;
   readonly submitted: Mark;
   readonly markSubmitted: () => void;
+  /** Прочитать вопросы заново: их собрали в фоне (B787). */
+  readonly reload: () => void;
   /** Анкета hh.ru прочитана в окне кандидата; `false` — вопросов нет или они не сохранились. */
   readonly takeHhForm: (form: HhForm) => Promise<boolean>;
 }
@@ -54,7 +56,7 @@ export interface QuestionnaireState {
 /** Анкета работодателя по вакансии: загрузка, черновик ответов и их сохранение. */
 export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const load = useCallback((signal: AbortSignal) => getQuestionnaire(vacancyId, signal), [vacancyId]);
-  const { state, replaceData } = useAsync(load, '');
+  const { state, reload, replaceData } = useAsync(load, '');
   const data = state.data;
   const form = data?.state === 'ready' ? data : null;
   const [draft, setDraft] = useState<AnswerDraft>({});
@@ -73,6 +75,7 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
     loading: state.status === 'loading' && !data,
     known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
     draft,
+    reload,
     saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
     setAnswer: (questionId, text) => setDraft((current) => ({ ...current, [questionId]: text })),

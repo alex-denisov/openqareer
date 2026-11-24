@@ -43,11 +43,10 @@ import { latinEmployerNames, withLatinEmployerNames } from '../domain/letterLati
 import { letterCompanyLink } from '../domain/letterCompanyLink';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
+import { registerManualApplyRoutes, type ManualApplyService, type QueuedLetterWriter } from './manualApplyRoutes';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { vacancyDescriptionHash } from '../domain/vacancyRequirements';
 import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
-
-type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const vacancyPitchInputSchema = z
   .object({
@@ -287,7 +286,7 @@ function latinProfile(
 
 export async function writeVacancyPitch(
   deps: RouteDeps,
-  request: FastifyRequest,
+  request: Pick<FastifyRequest, 'log'>,
   candidateId: string,
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
@@ -421,9 +420,12 @@ export function pitchSourceId(vacancyId: string): string {
  * Занятая база на мгновение не доходит до кандидата (G3c, 03.11). Текст вакансии может идти по
  * сети, поэтому он читается один раз, вне повторов: повтор не запрашивает hh.ru второй раз.
  */
-async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  const access = await retryOnSqliteBusy(() => readPitchAccess(deps, request, reply));
-  if (!access) return undefined;
+async function prepareVacancyPitch(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  access: NonNullable<ReturnType<typeof readPitchAccess>>,
+) {
   const vacancyId = (request.params as { id: string }).id;
   const loaded = await deps.multiSourceEngine.loadVacancyDescription(pitchSourceId(vacancyId));
   const vacancy = await retryOnSqliteBusy(() => reservePitchVacancy(deps, request, reply, access, loaded));
@@ -442,9 +444,59 @@ export function letterNotices(
   return result.written.body ? [] : result.pitch.notices.slice(0, 1);
 }
 
-const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
+type PitchResult = Awaited<ReturnType<typeof writeVacancyPitch>>;
+
+/** Ответ экрану письма. */
+function pitchData(result: PitchResult) {
+  return {
+    ...result.pitch,
+    atsCoverLetter: result.atsCoverLetter,
+    candidateWorkplaces: result.candidateWorkplaces,
+    resumeAvailable: result.resume.available,
+    resumeKind: result.resume.kind,
+    outputFactChecks: result.outputFactChecks,
+    ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
+    notices: letterNotices(result),
+    bodySource: result.written.body ? ('model' as const) : ('template' as const),
+    ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
+  };
+}
+
+/** Письмо отклика из очереди «отправить вручную» (B787): первое письмо к вакансии, без экрана. */
+const writeQueuedLetter: QueuedLetterWriter = async (deps, request, candidateId, vacancyId) => {
+  const loaded = await deps.multiSourceEngine.loadVacancyDescription(pitchSourceId(vacancyId));
+  const cluster = deps.multiSourceEngine.getActiveCluster(vacancyId);
+  const poolVacancy = loaded.vacancy ?? deps.multiSourceEngine.getVacancy?.(pitchSourceId(vacancyId));
+  const vacancy = resolvePitchVacancy({}, vacancyId, cluster, poolVacancy);
+  if (!vacancy.title) return null;
+  const requiredSkills = vacancy.requiredSkills.length > 0 ? vacancy.requiredSkills
+    : readFreshPitchSkills(deps.vacancyMechanics?.requirements, cluster, vacancyId,
+      poolVacancy?.fullDescription ?? poolVacancy?.description);
+  const result = await writeVacancyPitch(deps, request, candidateId, {}, { ...vacancy, requiredSkills, title: vacancy.title });
+  if (result.written.refused) return null;
+  return { text: result.pitch.emailPitch.body, pitch: pitchData(result) };
+};
+
+/** Тон экрана письма по умолчанию: только такое письмо собирается в очереди заранее. */
+const DEFAULT_LETTER_TONE = 'executive';
+
+type PitchDeps = RouteDeps & { readonly manualApply: ManualApplyService };
+
+/** Письмо, уже собранное для очереди: второй раз модель не зовём. */
+async function queuedPitch(deps: PitchDeps, request: FastifyRequest, access: NonNullable<ReturnType<typeof readPitchAccess>>) {
+  const { body, candidateId } = access;
+  if (body?.language || body?.recipient || body?.applicationId || body?.vacancy) return null;
+  if ((body?.tone ?? DEFAULT_LETTER_TONE) !== DEFAULT_LETTER_TONE) return null;
+  return deps.manualApply.preparedPitch(candidateId, (request.params as { id: string }).id);
+}
+
+const handleGenerateVacancyPitch = async (deps: PitchDeps, request: FastifyRequest, reply: FastifyReply) => {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
-  const prepared = await prepareVacancyPitch(deps, request, reply);
+  const access = await retryOnSqliteBusy(() => readPitchAccess(deps, request, reply));
+  if (!access) return undefined;
+  const queued = await queuedPitch(deps, request, access);
+  if (queued) return { data: queued, meta: { requestId: request.id } };
+  const prepared = await prepareVacancyPitch(deps, request, reply, access);
   if (!prepared) return undefined;
   const { candidateId, body, vacancy } = prepared;
   const result = await writeVacancyPitch(deps, request, candidateId, body, vacancy);
@@ -458,21 +510,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     await retryOnSqliteBusy(() =>
       saveGeneratedCoverLetter(deps.candidateStore, candidateId, applicationId, result.atsCoverLetter));
   }
-  return {
-    data: {
-      ...result.pitch,
-      atsCoverLetter: result.atsCoverLetter,
-      candidateWorkplaces: result.candidateWorkplaces,
-      resumeAvailable: result.resume.available,
-      resumeKind: result.resume.kind,
-      outputFactChecks: result.outputFactChecks,
-      ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
-      notices: letterNotices(result),
-      bodySource: result.written.body ? ('model' as const) : ('template' as const),
-      ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
-    },
-    meta: { requestId: request.id },
-  };
+  return { data: pitchData(result), meta: { requestId: request.id } };
 };
 
 const LETTER_GENERATION_FAILED = 'Не удалось подготовить письмо. Попробуйте ещё раз.';
@@ -622,10 +660,11 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
     resumeEdits: new SqliteResumeEditChoicesRepository(database, deps.config.dataEncryptionKey),
   };
   registerResumeEditRoutes(app, editDeps);
+  const manualApply = registerManualApplyRoutes(app, editDeps, database, writeQueuedLetter);
   app.post(
     '/api/v1/candidate/vacancies/:id/pitch',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
-    withDeps(deps, handleGenerateVacancyPitch),
+    withDeps({ ...deps, manualApply }, handleGenerateVacancyPitch),
   );
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-approvals',

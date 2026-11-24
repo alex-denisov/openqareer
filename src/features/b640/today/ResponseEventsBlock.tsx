@@ -1,14 +1,19 @@
 import type { ApplicationView } from '../../applications/applicationsApi';
 import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
+import { useManualQueue } from '../responses/data/manualQueue';
 import { responseEvents, type ResponseEvent } from './responseEventsModel';
 
 function EventCard({ event, first }: { readonly event: ResponseEvent; readonly first: boolean }) {
   return (
-    <li className={first ? 're-card is-err is-next' : 're-card is-err'}>
+    <li
+      className={['re-card', event.failed ? 'is-err' : '', first ? 'is-next' : '']
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="re-main">
         <p className="re-t">
-          <span className="tag miss">{event.tag}</span>
+          <span className={event.failed ? 'tag miss' : 'tag part'}>{event.tag}</span>
           <Link className="re-open" to={event.openPath}>
             <b>{event.title}</b> · {event.company}
           </Link>
@@ -36,7 +41,8 @@ export function ResponseEventsBlock({
   /** Отклики кандидата — одно чтение на «Сегодня» с путём откликов; `null` — не прочитаны. */
   readonly applications: readonly ApplicationView[] | null;
 }) {
-  const events = applications ? responseEvents(applications) : [];
+  const manual = useManualQueue();
+  const events = applications ? responseEvents(applications, new Date(), manual) : [];
   if (events.length === 0) return null;
   return (
     <section className="re-today" aria-labelledby="re-today-t">
