@@ -1,0 +1,179 @@
+import { DatabaseSync } from 'node:sqlite';
+import { describe, expect, it, vi } from 'vitest';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
+import type { CoverLetterWriteInput, CoverLetterWriter } from '../providers/coverLetterWriter';
+import { createApp, login } from '../testHelpers/vacancyPitchHarness';
+
+const ORIGIN = 'http://localhost:3000';
+const QUEUE = '/api/v1/candidate/manual-applications';
+const PITCH = '/api/v1/candidate/vacancies/cluster-99/pitch';
+const FORM = '/api/v1/candidate/vacancies/cluster-99/questionnaire';
+
+const cluster: VacancyCluster = {
+  id: 'cluster-99',
+  canonicalTitle: 'Senior Platform Engineer',
+  canonicalCompany: 'CloudScale Inc',
+  canonicalLocation: 'Берлин, Германия',
+  isRemote: true,
+  descriptionSummary: 'Разработка высоконагруженной платформы на Node.js и Kubernetes',
+  skills: ['Node.js', 'TypeScript', 'Kubernetes', 'PostgreSQL'],
+  primaryUrl: 'https://www.linkedin.com/jobs/view/99',
+  sources: [],
+  firstObservedAt: '2026-09-17T00:00:00.000Z',
+  lastSeenAt: '2026-09-17T00:00:00.000Z',
+  status: 'active',
+  vacanciesCount: 1,
+};
+
+/** Модель-заглушка: помнит запросы и отвечает новым текстом на каждый вызов. */
+function countingWriter(fail = false) {
+  const inputs: CoverLetterWriteInput[] = [];
+  const writer: CoverLetterWriter = {
+    writeCoverLetter: async (input) => {
+      inputs.push(input);
+      // Без цифр: проверка письма не пропускает числа, которых нет в фактах профиля.
+      const style = ['коротко', 'тепло', 'официально', 'подробно'][inputs.length - 1] ?? 'иначе';
+      return fail ? {} : { body: `Здравствуйте! Пишу по вакансии ${style}.`, stage: 'openai:gpt-test' };
+    },
+  };
+  return { writer, inputs };
+}
+
+async function setup(options: { cabinetB640?: boolean; fail?: boolean; billing?: boolean } = {}) {
+  const { writer, inputs } = countingWriter(options.fail);
+  const created = await createApp([cluster], {
+    coverLetterWriter: writer,
+    cabinetB640: options.cabinetB640 ?? true,
+    ...(options.billing ? { billingEnforcement: true } : {}),
+  });
+  const { cookie, candidateId } = await login(created.app);
+  created.candidates.importResumeEvidence(candidateId, {
+    sourceLabel: 'test-import',
+    entries: [{ memoryId: 'mem-201', domain: 'skill', statement: 'Владею TypeScript, Node.js' }],
+  });
+  created.candidates.reviewMemories(candidateId, ['mem-201'], 'confirm');
+  const call = (method: 'GET' | 'POST' | 'PUT', url: string, payload?: unknown, origin = ORIGIN) =>
+    created.app.inject({
+      method,
+      url,
+      headers: { cookie, origin },
+      ...(payload === undefined ? {} : { payload: payload as object }),
+    });
+  return { ...created, call, inputs, candidateId };
+}
+
+const put = { vacancyId: 'cluster-99', reason: 'linkedin' };
+type Call = Awaited<ReturnType<typeof setup>>['call'];
+
+/** Список после того, как фоновый сбор закончился. */
+async function prepared(call: Call) {
+  return vi.waitFor(async () => {
+    const [item] = (await call('GET', QUEUE)).json().data;
+    expect(item.letter).toBeTruthy();
+    return item;
+  });
+}
+
+describe('очередь «отправить вручную»', () => {
+  it('без флага отвечает как несуществующий адрес', async () => {
+    const { call } = await setup({ cabinetB640: false });
+    const missing = await call('GET', '/api/v1/candidate/no-such-route');
+    for (const response of [await call('GET', QUEUE), await call('POST', QUEUE, put)]) {
+      expect(response.statusCode).toBe(404);
+      expect(response.json().error.code).toBe(missing.json().error.code);
+    }
+  });
+
+  it('собирает письмо и вопросы сама, повторная постановка и экран письма модель не зовут', async () => {
+    const { call, inputs, databasePath } = await setup({ billing: true });
+    expect((await call('POST', QUEUE, put)).statusCode).toBe(201);
+    const pitch = await call('POST', PITCH, { tone: 'executive' });
+    expect(pitch.json().data.emailPitch.body).toContain('коротко');
+    const item = await prepared(call);
+    expect(item).toMatchObject({
+      vacancyId: 'cluster-99',
+      reason: 'linkedin',
+      host: 'linkedin.com',
+      state: 'needs_answer',
+      letter: 'Здравствуйте! Пишу по вакансии коротко.',
+    });
+    expect((await call('POST', QUEUE, put)).statusCode).toBe(200);
+    await prepared(call);
+    expect(inputs).toHaveLength(1);
+    const database = new DatabaseSync(databasePath);
+    const quota = database.prepare('SELECT COUNT(*) AS n FROM billing_quota_events').get() as { n: number };
+    const row = database.prepare('SELECT payload_cipher AS c FROM manual_apply_queue').get() as { c: string };
+    database.close();
+    expect(quota.n).toBe(1);
+    expect(row.c).not.toContain('Пишу');
+  });
+
+  it('после ответов на вопросы отклик готов', async () => {
+    const { call } = await setup();
+    await call('POST', QUEUE, put);
+    const item = await prepared(call);
+    const form = (await call('GET', FORM)).json().data;
+    expect(form.missingRequired).toBe(item.missingAnswers);
+    const answers = form.questions.map((question: { id: string; options?: string[] }) => ({
+      questionId: question.id,
+      text: question.options?.[0] ?? 'ответ',
+    }));
+    await call('PUT', `${FORM}/answers`, { answers });
+    expect((await call('GET', `${QUEUE}/cluster-99`)).json().data.state).toBe('ready');
+  });
+
+  it('«Отправлено» записывает отклик и убирает его из очереди; второй раз в очередь он не встаёт', async () => {
+    const { call, candidates, candidateId } = await setup();
+    const { applicationId } = (await call('POST', QUEUE, put)).json().data;
+    await prepared(call);
+    expect((await call('POST', `${QUEUE}/cluster-99/sent`, {})).statusCode).toBe(200);
+    expect(candidates.getApplication(candidateId, applicationId)?.stage).toBe('applied');
+    expect((await call('GET', QUEUE)).json().data).toEqual([]);
+    expect((await call('POST', `${QUEUE}/cluster-99/sent`, {})).statusCode).toBe(404);
+    expect((await call('POST', QUEUE, put)).json().error.code).toBe('already_applied');
+  });
+
+  it('«Не откликаюсь» убирает из очереди и кладёт отклик в архив', async () => {
+    const { call, candidates, candidateId } = await setup();
+    const { applicationId } = (await call('POST', QUEUE, put)).json().data;
+    await prepared(call);
+    expect((await call('POST', `${QUEUE}/cluster-99/skip`, {})).statusCode).toBe(200);
+    expect(candidates.getApplication(candidateId, applicationId)?.stage).toBe('archived');
+    expect((await call('GET', QUEUE)).json().data).toEqual([]);
+  });
+
+  it('принимает причину площадки и её хост, чужой текст в хосте — нет', async () => {
+    const { call } = await setup();
+    const ok = await call('POST', QUEUE, { ...put, reason: 'account_required', host: 'acme.myworkdayjobs.com' });
+    expect(ok.json().data).toMatchObject({ reason: 'account_required', host: 'acme.myworkdayjobs.com' });
+    expect((await call('POST', QUEUE, { ...put, host: '<b>x</b>' })).statusCode).toBe(400);
+  });
+
+  it('три отказа модели — больше её не зовём, остальное готово', async () => {
+    const { call, inputs } = await setup({ fail: true });
+    await call('POST', QUEUE, put);
+    await vi.waitFor(async () => {
+      await call('GET', QUEUE);
+      expect(inputs).toHaveLength(3);
+    });
+    const [item] = (await call('GET', QUEUE)).json().data;
+    expect(item).toMatchObject({ letter: null, state: 'needs_answer' });
+    await call('GET', QUEUE);
+    expect(inputs).toHaveLength(3);
+  });
+
+  it('выгрузка данных содержит очередь, удаление кандидата её стирает', async () => {
+    const { call, candidates, candidateId, databasePath } = await setup();
+    await call('POST', QUEUE, put);
+    await prepared(call);
+    expect(candidates.exportCandidate(candidateId).tracker.manualApplications).toMatchObject([
+      { vacancyId: 'cluster-99', reason: 'linkedin', letter: expect.stringContaining('Пишу') },
+    ]);
+    const database = new DatabaseSync(databasePath);
+    database.exec('PRAGMA foreign_keys = ON');
+    database.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
+    const left = database.prepare('SELECT COUNT(*) AS n FROM manual_apply_queue').get() as { n: number };
+    database.close();
+    expect(left.n).toBe(0);
+  });
+});
