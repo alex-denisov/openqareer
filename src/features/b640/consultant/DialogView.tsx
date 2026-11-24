@@ -25,6 +25,7 @@ export interface DialogViewProps {
   readonly subject?: CoachTurnSubject;
   /** Факт, из которого готовая правка резюме (K6). */
   readonly resumeFactId?: string;
+  readonly resumeReason?: string;
   /** Записи на проверку открываются в этой же панели. */
   readonly reviewPath: string;
   readonly onReview: () => void;
@@ -64,9 +65,10 @@ interface FeedProps {
   readonly placed: ReadonlyMap<string, readonly CandidateMemory[]>;
   readonly onDecide: (id: string, decision: FactDecision) => Promise<void>;
   readonly resumeFactId?: string;
+  readonly resumeReason?: string;
 }
 
-function Feed({ dialog, placed, onDecide, resumeFactId }: FeedProps) {
+function Feed({ dialog, placed, onDecide, resumeFactId, resumeReason }: FeedProps) {
   const extras = useMemo(
     () => new Map(dialog.replies.map((item) => [item.messageId, item])),
     [dialog.replies],
@@ -98,7 +100,14 @@ function Feed({ dialog, placed, onDecide, resumeFactId }: FeedProps) {
           </Fragment>
         );
       })}
-      {resumeFactId ? <ResumeEditCard factId={resumeFactId} memory={dialog.memory} /> : null}
+      {resumeFactId ? (
+        <ResumeEditCard
+          factId={resumeFactId}
+          reason={resumeReason}
+          memory={dialog.memory}
+          messages={dialog.messages}
+        />
+      ) : null}
       {dialog.reply !== null ? <Reply text={dialog.reply} /> : null}
       {dialog.sendFailed ? <ErrorRow text="Ответ не пришёл" onRetry={dialog.retry} /> : null}
     </div>
@@ -160,6 +169,7 @@ export function DialogView({
   stage,
   subject,
   resumeFactId,
+  resumeReason,
   reviewPath,
   onReview,
   tariffsPath,
@@ -186,7 +196,13 @@ export function DialogView({
       {pending.length > 0 ? (
         <PendingBanner count={pending.length} to={reviewPath} onOpen={onReview} />
       ) : null}
-      <Feed dialog={dialog} placed={placed} onDecide={decide} resumeFactId={resumeFactId} />
+      <Feed
+        dialog={dialog}
+        placed={placed}
+        onDecide={decide}
+        resumeFactId={resumeFactId}
+        resumeReason={resumeReason}
+      />
       <Ask
         onSubmit={dialog.send}
         busy={dialog.reply !== null || dialog.sendFailed}

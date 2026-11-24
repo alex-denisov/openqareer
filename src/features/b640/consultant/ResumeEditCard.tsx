@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CoachApiError } from '../../coach/apiClient';
 import type { CandidateMemory } from '../../coach/coachApi';
 import { applyFactRewrite, revertFactRewrite } from '../../resume/experienceFactRewriteApi';
@@ -8,7 +8,9 @@ import { InfoTip } from '../kit/InfoTip';
 import { ResultLine } from '../kit/ResultLine';
 import { buildNodePath } from '../routes';
 import { Link } from '../shell/Link';
-import { ErrorRow, Reply } from './parts';
+import { useScreenChrome } from '../shell/ShellContext';
+import type { ChatMessage } from './model';
+import { ErrorRow, Message, Reply } from './parts';
 import { declineResumeEdit, loadResumeEdit, type ResumeEdit } from './resumeEdit';
 
 type Loaded =
@@ -104,20 +106,51 @@ function useResumeEdit(factId: string) {
   return { state, busy, failure, reload, apply, decline, revert };
 }
 
+/** Реплика K6: куда встанет строка и на какой записи кандидата она стоит. */
+export function editReply(
+  edit: ResumeEdit,
+  memory: readonly CandidateMemory[],
+  messages: readonly ChatMessage[],
+): string {
+  const facts = edit.sourceFactIds.flatMap((id) => {
+    const fact = memory.find((item) => item.id === id && !item.sensitive);
+    if (!fact) return [];
+    const said = messages.find((item) => fact.sourceMessageIds.includes(item.id));
+    const day = said?.at ? ` ${said.at.slice(8, 10)}.${said.at.slice(5, 7)}` : '';
+    const from = said ? ` — из беседы${day}` : '';
+    const confirmed = said && fact.status === 'confirmed' ? ', запись вы подтвердили: «Верно»' : '';
+    return [`«${fact.statement}»${from}${confirmed}.`];
+  });
+  return [edit.place ? `Новая строка: «${edit.place}».` : 'Новая строка.', ...facts].join(' ');
+}
+
+const HALF_SHEET = { rootData: { half: '1' } } as const;
+
+/** K6: ширина панели 400, на 390 — половина экрана без поля ввода; карточка в видимой части. */
+function HalfSheet() {
+  useScreenChrome(HALF_SHEET);
+  const end = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const chat = end.current?.closest('.chat');
+    if (chat) chat.scrollTop = chat.scrollHeight;
+  }, []);
+  return <span ref={end} hidden />;
+}
+
 interface EditBodyProps {
   readonly edit: ResumeEdit;
-  readonly source: string;
+  readonly reason?: string;
   readonly busy: boolean;
   readonly onApply: () => void;
   readonly onDecline: () => void;
 }
 
-function EditBody({ edit, source, busy, onApply, onDecline }: EditBodyProps) {
+function EditBody({ edit, reason, busy, onApply, onDecline }: EditBodyProps) {
   return (
     <>
       <p className="ec-title">
         {edit.place}
-        {source ? <InfoTip label="Причина правки" text={source} /> : null}
+        {reason ? <InfoTip label="Причина правки" text={reason} /> : null}
       </p>
       <dl className="ec-diff">
         <div className="now">
@@ -150,11 +183,13 @@ function EditBody({ edit, source, busy, onApply, onDecline }: EditBodyProps) {
 export interface ResumeEditCardProps {
   /** Факт из беседы, который надо показать в резюме. */
   readonly factId: string;
+  readonly reason?: string;
   readonly memory: readonly CandidateMemory[];
+  readonly messages: readonly ChatMessage[];
 }
 
 /** K6: готовая правка резюме; в резюме она попадает только после «Применить». */
-export function ResumeEditCard({ factId, memory }: ResumeEditCardProps) {
+export function ResumeEditCard({ factId, reason, memory, messages }: ResumeEditCardProps) {
   const { state, busy, failure, reload, apply, decline, revert } = useResumeEdit(factId);
   const error = failure ? <ErrorRow text={failure.text} onRetry={failure.retry} /> : null;
   if (state.kind === 'loading') return <Reply text="" />;
@@ -179,19 +214,22 @@ export function ResumeEditCard({ factId, memory }: ResumeEditCardProps) {
       </div>
     );
   }
-  const source = edit.sourceFactIds
-    .flatMap((id) => memory.find((item) => item.id === id && !item.sensitive)?.statement ?? [])
-    .join(' · ');
   return (
-    <section className="ec" aria-label={`Правка резюме: ${edit.place}`} aria-busy={busy}>
-      <EditBody
-        edit={edit}
-        source={source}
-        busy={busy}
-        onApply={() => apply(edit)}
-        onDecline={() => decline(edit)}
+    <>
+      <Message
+        message={{ id: edit.key, role: 'assistant', content: editReply(edit, memory, messages) }}
       />
-      {error}
-    </section>
+      <section className="ec" aria-label={`Правка резюме: ${edit.place}`} aria-busy={busy}>
+        <EditBody
+          edit={edit}
+          reason={reason}
+          busy={busy}
+          onApply={() => apply(edit)}
+          onDecline={() => decline(edit)}
+        />
+        {error}
+      </section>
+      <HalfSheet />
+    </>
   );
 }

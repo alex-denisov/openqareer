@@ -325,6 +325,8 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     const panel = page.getByRole('dialog', { name: 'Консультант · Резюме' });
     const card = panel.locator('.ec');
     await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await expect(panel.locator('.msg.bot')).toContainText('из беседы 11.11');
+    await expect(panel.getByRole('alert')).toHaveCount(0);
     await card.scrollIntoViewIfNeeded();
     if (SHOTS) {
       mkdirSync(SHOTS, { recursive: true });

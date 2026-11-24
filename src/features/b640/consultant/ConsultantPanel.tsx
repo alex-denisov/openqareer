@@ -205,6 +205,7 @@ function PanelBody({
       stage={stage}
       subject={subject}
       resumeFactId={view.resumeFactId}
+      resumeReason={view.resumeReason}
       reviewPath={pathOf({ kind: 'review' })}
       onReview={() => onView({ kind: 'review' })}
       tariffsPath={TARIFFS_PATH}

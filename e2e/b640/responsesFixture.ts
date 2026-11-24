@@ -214,6 +214,69 @@ function reviewPayload(
 const RESUME_FACT_ID = 'fact-team';
 export const RESUME_BULLET = 'Руководил группой бэкенда из 18 человек.';
 
+/** Разговор раздела, запись из него и место работы, куда встанет пункт. */
+async function mockResumeConversation(page: Page): Promise<void> {
+  const said = {
+    id: 'u1',
+    role: 'user',
+    content: 'Команда была 18 человек.',
+    createdAt: '2026-11-11T10:00:00.000Z',
+  };
+  const memory = [
+    {
+      id: RESUME_FACT_ID,
+      kind: 'fact',
+      domain: 'outcome',
+      statement: 'Сфера Платежи: команда 18 человек',
+      confidence: 'candidate-confirmed',
+      sourceMessageIds: ['u1'],
+      sensitive: false,
+      status: 'confirmed',
+    },
+  ];
+  const candidate = {
+    id: 'candidate-1',
+    dataClass: 'synthetic',
+    locale: 'ru-RU',
+    createdAt: iso(40),
+  };
+  await page.route('**/api/v1/candidate/me/messages**', (route) =>
+    route.fulfill({ json: { data: [said], meta: { nextOffset: null } } }),
+  );
+  await page.route('**/api/v1/candidate/me?memoryOffset=*', (route) =>
+    route.fulfill({
+      json: {
+        data: { candidate, messages: [], memory, turns: [] },
+        meta: { memory: { nextOffset: null }, turns: { nextOffset: null } },
+      },
+    }),
+  );
+  const current = {
+    id: 'current',
+    stage: 'responses',
+    startedAt: said.createdAt,
+    closedAt: null,
+    messages: [said],
+    replies: [],
+    analysisPending: false,
+  };
+  await page.route('**/api/v1/candidate/consultant/current**', (route) =>
+    route.fulfill({ json: { data: current } }),
+  );
+  const entry = {
+    id: 'e1',
+    chronologyMemoryId: 'm-e1',
+    title: 'Руководитель группы',
+    employer: 'Сфера Платежи',
+    startDate: '2018',
+    current: false,
+    bulletMemoryIds: [],
+  };
+  await page.route('**/api/v1/candidate/resume', (route) =>
+    route.fulfill({ json: { data: { draft: { candidate: {}, experience: [entry] } } } }),
+  );
+}
+
 /** Предложение консультанта: запись и отмена попадают в `calls`. */
 async function mockFactRewrite(page: Page, calls: string[]): Promise<void> {
   await page.route('**/api/v1/candidate/experience-fact-rewrite**', async (route) => {
@@ -363,6 +426,7 @@ export async function mockResponses(
   });
 
   await mockFactRewrite(page, calls);
+  if (options.resumeFact) await mockResumeConversation(page);
   await page.route('**/api/v1/candidate/automation**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();

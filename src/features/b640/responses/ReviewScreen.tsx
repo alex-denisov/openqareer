@@ -100,7 +100,7 @@ function StepButton({ step, primary }: StepActionProps) {
       <Button
         variant={primary ? 'primary' : undefined}
         icon={text.icon}
-        onClick={() => openConsultant({ kind: 'dialog', resumeFactId })}
+        onClick={() => openConsultant({ kind: 'dialog', resumeFactId, resumeReason: text.why })}
       >
         {text.action}
       </Button>

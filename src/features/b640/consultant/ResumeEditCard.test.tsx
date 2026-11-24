@@ -2,10 +2,10 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CoachApiError } from '../../coach/apiClient';
-import type { AuthUser } from '../../coach/coachApi';
+import type { AuthUser, CandidateMemory } from '../../coach/coachApi';
 import { click, mount, type Mounted } from '../kit/testDom';
 import { ShellProvider } from '../shell/ShellContext';
-import { ResumeEditCard } from './ResumeEditCard';
+import { editReply, ResumeEditCard } from './ResumeEditCard';
 
 const api = vi.hoisted(() => ({
   requestFactRewrite: vi.fn(),
@@ -60,7 +60,7 @@ async function open(factId = 'm1'): Promise<HTMLElement> {
   };
   view = mount(
     <ShellProvider value={value}>
-      <ResumeEditCard factId={factId} memory={[]} />
+      <ResumeEditCard factId={factId} reason="Причина" memory={[]} messages={[]} />
     </ShellProvider>,
   );
   await settle();
@@ -101,6 +101,32 @@ describe('o07 → k06: правка резюме у консультанта', (
     expect(root.textContent).not.toContain('Другой пункт');
     expect(api.applyFactRewrite).not.toHaveBeenCalled();
     expect(api.saveResumeStudioDraft).not.toHaveBeenCalled();
+  });
+
+  it('реплика называет место и запись; «из беседы» — только когда реплика кандидата найдена', () => {
+    const edit = {
+      proposalId: 'p1',
+      key: 'e1#1',
+      place: 'Сфера Платежи',
+      text: NOW,
+      sourceFactIds: ['m1'],
+    };
+    const fact = {
+      id: 'm1',
+      statement: 'Команда 18 человек',
+      sourceMessageIds: ['u1'],
+      status: 'confirmed',
+    } as CandidateMemory;
+    const said = { id: 'u1', role: 'user' as const, content: '', at: '2026-11-11T10:00:00.000Z' };
+    expect(editReply(edit, [fact], [said])).toBe(
+      'Новая строка: «Сфера Платежи». «Команда 18 человек» — из беседы 11.11, запись вы подтвердили: «Верно».',
+    );
+    expect(editReply(edit, [fact], [])).toBe(
+      'Новая строка: «Сфера Платежи». «Команда 18 человек».',
+    );
+    expect(editReply(edit, [{ ...fact, sensitive: true }], [])).toBe(
+      'Новая строка: «Сфера Платежи».',
+    );
   });
 
   it('«Применить» пишет только этот пункт, «Отменить» возвращает', async () => {

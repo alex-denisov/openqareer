@@ -3,7 +3,12 @@ import { buildNodePath } from '../routes';
 /** Что открыто в панели: текущий разговор, записи на проверку, список разговоров или прошлый разговор. */
 export type PanelView =
   /** `resumeFactId` — в разговоре готовая правка резюме из этого факта (K6). */
-  | { readonly kind: 'dialog'; readonly resumeFactId?: string }
+  | {
+      readonly kind: 'dialog';
+      readonly resumeFactId?: string;
+      /** Почему правка нужна; в адрес не попадает. */
+      readonly resumeReason?: string;
+    }
   | { readonly kind: 'review' }
   | { readonly kind: 'history' }
   | { readonly kind: 'conversation'; readonly id: string };
