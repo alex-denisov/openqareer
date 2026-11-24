@@ -8,6 +8,7 @@ vi.mock('./contactMessageApi', () => ({
   createB640ContactMessage: vi.fn(),
   createB640ContactMessageVariant: vi.fn(),
   editB640ContactMessage: vi.fn(),
+  listB640ContactMessageVariants: vi.fn(),
   approveB640ContactMessage: vi.fn(),
   markB640ContactMessageSent: vi.fn(),
 }));
@@ -60,6 +61,7 @@ const panel = () =>
 const opened: string[] = [];
 const copied: string[] = [];
 beforeEach(() => {
+  vi.mocked(api.listB640ContactMessageVariants).mockResolvedValue({ variants: [], remaining: 3 });
   opened.length = 0;
   copied.length = 0;
   vi.spyOn(window, 'open').mockImplementation((url) => {
@@ -156,6 +158,24 @@ describe('MessageDraft', () => {
     await flush();
     expect(api.editB640ContactMessage).toHaveBeenCalledWith('m1', 'Второй');
     expect(api.approveB640ContactMessage).toHaveBeenCalledWith('m1');
+  });
+
+  it('B682: открытый снова черновик приходит со своими вариантами и остатком', async () => {
+    vi.mocked(api.createB640ContactMessage).mockResolvedValue(message('m1', 'Первый'));
+    const variants = ['Второй', 'Третий'].map((text, index) => ({
+      id: `v${index}`,
+      position: index + 1,
+      text,
+      wish: { chips: [], text: '' },
+      createdAt: 'x',
+      payload: null,
+    }));
+    vi.mocked(api.listB640ContactMessageVariants).mockResolvedValue({ variants, remaining: 1 });
+    const view = panel();
+    await flush();
+    await flush();
+    expect(view.container.querySelector('.var-sw .num')!.textContent).toBe('1 из 3');
+    expect(button(view.container, 'Другой вариант')!.textContent).toContain('1');
   });
 
   it('ошибка на месте и «Повторить»; «Не отправлять» закрывает панель', async () => {

@@ -10,7 +10,7 @@ import {
   type B640ContactMessageSent,
   type B640SentContactMessage,
 } from '../../shared/b640ContactMessage';
-import { SqliteContactMessageRepository, type StoredContactMessage } from '../data/sqliteContactMessageRepository';
+import { SqliteContactMessageRepository, type OpenDraftKey, type StoredContactMessage } from '../data/sqliteContactMessageRepository';
 import { SqliteContactStatusRepository } from '../data/sqliteContactStatusRepository';
 import { linkedinOpenUrl } from '../domain/b640ContactMessage';
 import { sessionCandidate } from './b640VacancyContext';
@@ -112,6 +112,18 @@ async function createMessage(deps: RouteDeps, stores: Stores, request: FastifyRe
   if (!body.success) return sendError(reply, request, 400, 'invalid_body', 'Неверные параметры сообщения.', false);
   const recipient = findRecipient(deps, request, reply, candidate.id, body.data);
   if (!recipient) return reply;
+  const key: OpenDraftKey = {
+    candidateId: candidate.id,
+    contactId: recipient.contactId,
+    recruiterId: recipient.recruiterId,
+    vacancyId: body.data.vacancyId ?? null,
+    kind: body.data.kind,
+    recipientName: recipient.name,
+    recipientUrl: recipient.linkedinUrl,
+  };
+  // B682: закрытая панель продолжает свой черновик — с ним остаются его варианты и их предел.
+  const open = stores.messages.findOpen(key);
+  if (open) return { data: shown(open), meta: { requestId: request.id } };
   const unit = messageUnit({ ...recipient, vacancyId: body.data.vacancyId });
   if (!requireTariffQuota(deps, request, reply, candidate.id, 'applications', unit)) return reply;
   const text = await writeContactMessageText(deps, request, {
@@ -121,18 +133,10 @@ async function createMessage(deps: RouteDeps, stores: Stores, request: FastifyRe
     vacancyId: body.data.vacancyId ?? null,
     alsoVacancyId: body.data.alsoVacancyId ?? null,
   });
-  const stored = stores.messages.create({
-    id: randomUUID(),
-    candidateId: candidate.id,
-    contactId: recipient.contactId,
-    recruiterId: recipient.recruiterId,
-    vacancyId: body.data.vacancyId ?? null,
-    kind: body.data.kind,
-    text,
-    recipientName: recipient.name,
-    recipientUrl: recipient.linkedinUrl,
-    createdAt: new Date().toISOString(),
-  });
+  // Пока модель писала, такой же черновик мог появиться вторым запросом.
+  const stored =
+    stores.messages.findOpen(key) ??
+    stores.messages.create({ ...key, id: randomUUID(), text, createdAt: new Date().toISOString() });
   return reply.code(201).send({ data: shown(stored), meta: { requestId: request.id } });
 }
 
