@@ -7,6 +7,8 @@ import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { extractVacancyRequirements, vacancyDescriptionHash } from './vacancyRequirements';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS } from '../../shared/vacancyFit';
+import { countedSkillRequirements } from '../../src/features/vacancies/vacancyRequirementChips';
+import { fitRows } from '../../src/features/b640/vacancies/card/fitRows';
 import { vacancyFitStage } from '../../shared/vacancyFitPercent';
 /** 02.11: one quote backs at most two requirements, so the fake model cites a distinct one each. */
 const DISTINCT_QUOTES = ['services', 'ervices', 'rvices'];
@@ -138,6 +140,27 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.hasCurrentResult({ ...source, checkedFactIds: [] , facts: [] })).toBe(false);
     runtime.database.exec('DELETE FROM vacancy_fit_cache');
     expect(runtime.hasCurrentResult(source)).toBe(false);
+  });
+
+  it.each([true, undefined, false])('serves exactly the lines the percent counted, unlabelled ones included: skill=%s (B654)', async (skill) => {
+    const runtime = setup();
+    const long = 'Готовность разбираться в сложных процессах компании и доводить начатое до результата';
+    const source = { ...input(), description: `${input().description}\n- ${long}\n- Переезд` };
+    const base = { origin: 'explicit' as const, importance: 'medium' as const, kind: 'other' as const, hard: false, stopFactor: false };
+    const line = (id: string, text: string, isSkill: boolean | undefined, label?: string) => ({ ...base, id, text, sourceQuote: text, ...(isSkill === undefined ? {} : { skill: isSkill }), ...(label ? { label } : {}) });
+    const requirements = [line('a', 'TypeScript required', true, 'TypeScript'), line('b', 'Node services', true, 'Node'), line('c', 'SQL queries', true, 'SQL'), line('d', long, skill), line('e', 'Переезд', false)];
+    runtime.requirements.enqueue({ vacancyId: source.vacancyId, description: source.description });
+    await runtime.runNext(null);
+    const cached = runtime.requirements.getLatest(source.vacancyId, vacancyDescriptionHash(source.description))!;
+    vi.spyOn(runtime.requirements, 'getLatestOrLegacy').mockReturnValue({ ...cached, requirements });
+    const result = evaluateVacancyFit({ ...source, requirements, assessments: [{ requirementId: 'a', status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript' }] }] });
+    vi.spyOn(runtime.fit, 'getCache').mockReturnValue(result);
+    const view = runtime.view(source);
+    expect(result.coverage.total).toBe(skill === false ? 3 : 4);
+    expect(view.result!.coveragePercent).toBe(result.coveragePercent);
+    const counted = skill === false ? ['a', 'b', 'c'] : ['a', 'b', 'c', 'd'];
+    expect(countedSkillRequirements(view).map((item) => item.id)).toEqual(counted);
+    expect(fitRows(view).map((row) => row.id)).toEqual(counted);
   });
 
   it('a failed refresh keeps the previous percent on screen instead of «не посчитан» (prod 29.10)', async () => {

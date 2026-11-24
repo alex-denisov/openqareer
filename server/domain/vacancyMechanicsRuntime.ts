@@ -9,7 +9,7 @@ import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, type VacancyRequirement } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
-import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
+import { assessVacancyFit, isSkillRequirement, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
 import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, BulkInputTooLarge, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
@@ -46,6 +46,12 @@ const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
   profile_changed: 'profile_changed',
   [FIT_INPUT_TOO_LARGE]: 'too_large',
 };
+/** B654: the label names the row; only the percent's own rule says whether the row counts. */
+function shownRequirement(requirement: VacancyRequirement): VacancyRequirement {
+  const labelled = labelVacancyRequirement(requirement);
+  // Experience always counts; its label only says whether a quiz can check it.
+  return requirement.kind === 'experience' ? labelled : { ...labelled, skill: isSkillRequirement(requirement) };
+}
 interface AssessmentOutcome {
   staleProfile: boolean;
   /** The spend budget refused the call: the job waits for the next UTC day, no attempt is spent. */
@@ -161,7 +167,7 @@ export class VacancyMechanicsRuntime {
                   : 'not_requested';
     return {
       state,
-      requirements: shown.requirements.map(labelVacancyRequirement),
+      requirements: shown.requirements.map(shownRequirement),
       ...(result ? { result } : {}),
       ...(state === 'failed' ? { failure: fitFailure(job?.lastError) } : {}),
     };
