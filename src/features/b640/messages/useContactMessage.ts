@@ -10,6 +10,7 @@ import {
   approveB640ContactMessage,
   createB640ContactMessage,
   createB640ContactMessageVariant,
+  discardB640ContactMessage,
   editB640ContactMessage,
   listB640ContactMessageVariants,
   markB640ContactMessageSent,
@@ -33,6 +34,7 @@ export interface UseContactMessageInput {
   /** Имя получателя — для текста ошибки. */
   readonly recipientName: string;
   readonly onSent: (sentAt: string) => void;
+  readonly onClose: () => void;
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -61,14 +63,14 @@ function useRunner(failText: string) {
     };
   }, []);
   const run = useCallback(
-    async (action: () => Promise<void>) => {
+    async (action: () => Promise<void>, actionFailText = failText) => {
       setPending(true);
       setFailure(null);
       try {
         await action();
       } catch (reason) {
         if (alive.current) {
-          setFailure({ text: apiErrorMessage(reason, failText), retry: () => void run(action) });
+          setFailure({ text: apiErrorMessage(reason, actionFailText), retry: () => void run(action, actionFailText) });
         }
       } finally {
         if (alive.current) setPending(false);
@@ -133,17 +135,41 @@ function useMessageActions({ message, text, runner, replace, onSent }: ActionsIn
   return { step, notice, approve, markSent };
 }
 
+interface DiscardInput {
+  readonly message: B640ContactMessage | null;
+  readonly runner: Runner;
+  readonly unwanted: { current: boolean };
+  readonly onClose: () => void;
+}
+
+/** «Не отправлять»: черновик убран на сервере, затем панель закрыта; ещё не пришёл — уберём по приходу. */
+function useDiscard({ message, runner, unwanted, onClose }: DiscardInput) {
+  const { alive, run } = runner;
+  return () => {
+    if (!message) {
+      unwanted.current = true;
+      onClose();
+      return;
+    }
+    void run(async () => {
+      await discardB640ContactMessage(message.id);
+      if (alive.current) onClose();
+    }, 'Черновик не убран.');
+  };
+}
+
 /**
  * Сообщение: черновик → правка → «Одобрить и отправить» (копия текста и профиль получателя) → «Отправил».
  * Ошибка и ожидание остаются на месте; «Повторить» повторяет упавший шаг.
  */
-export function useContactMessage({ target, kind, recipientName, onSent }: UseContactMessageInput) {
+export function useContactMessage({ target, kind, recipientName, onSent, onClose }: UseContactMessageInput) {
   const [message, setMessage] = useState<B640ContactMessage | null>(null);
   const [draftText, setDraftText] = useState('');
   const [text, setText] = useState('');
   const runner = useRunner(`Не получилось подготовить сообщение: ${recipientName}.`);
   const { alive, run } = runner;
   const started = useRef(false);
+  const unwanted = useRef(false);
 
   useEffect(() => {
     // Перерисовка с новым объектом того же получателя не просит второй черновик.
@@ -151,7 +177,9 @@ export function useContactMessage({ target, kind, recipientName, onSent }: UseCo
     started.current = true;
     void run(async () => {
       const created = await createB640ContactMessage(target, kind);
-      if (!alive.current) return;
+      // «Не отправлять» нажали раньше, чем черновик пришёл.
+      if (unwanted.current) await discardB640ContactMessage(created.id);
+      if (!alive.current || unwanted.current) return;
       setMessage(created);
       setDraftText(created.text);
       setText(created.text);
@@ -171,9 +199,11 @@ export function useContactMessage({ target, kind, recipientName, onSent }: UseCo
   };
   const variants = useTextVariants({ load, create }, { draftText, text, setText });
   const actions = useMessageActions({ message, text, runner, replace: setMessage, onSent });
+  const discard = useDiscard({ message, runner, unwanted, onClose });
   const locked = variants.locked || runner.pending;
   return {
     ...actions,
+    discard,
     message,
     text,
     setText,

@@ -243,18 +243,18 @@ function readRowLimits(candidateStore: CandidateStore, candidateId: string): Mat
   };
 }
 
-function* levelGateSteps(
+export function* levelGateSteps(
   finished: readonly MatchedVacancyItem[],
-  input: MatchedListInput,
+  targetRoles: readonly string[],
+  targetLevel: SeniorityLevel | undefined,
+  titles: Pick<RouteDeps['titleParseStore'], 'getByKey'>,
 ): Steps<MatchedVacancyItem[]> {
-  const window = campaignLevelWindow(input.targetRoles, input.targetLevel);
+  const window = campaignLevelWindow(targetRoles, targetLevel);
   const kept: MatchedVacancyItem[] = [];
   for (let start = 0; start < finished.length; start += FINISH_ROWS_PER_STEP) {
     const rows = finished.slice(start, start + FINISH_ROWS_PER_STEP);
     kept.push(
-      ...dropOutsideLevelGate(rows, window, input.targetLevel, (key) =>
-        input.titleParseStore.getByKey(key),
-      ),
+      ...dropOutsideLevelGate(rows, window, targetLevel, (key) => titles.getByKey(key)),
     );
     yield;
   }
@@ -294,7 +294,7 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
     'finish',
     finishMatchedRowSteps(snapshot, targetRoles, campaign, limits),
   );
-  const gated = yield* phase.steps('levelGate', levelGateSteps(finished, input));
+  const gated = yield* phase.steps('levelGate', levelGateSteps(finished, targetRoles, input.targetLevel, input.titleParseStore));
   const matched = phase.run('order', () => input.order(gated));
   // B766: requirements of every plain «Технический директор» in one query, before the role checks.
   phase.run('roleRequirements', () => primeRoleRequirements(hypothesisRows(input)));

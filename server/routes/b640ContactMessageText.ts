@@ -3,6 +3,7 @@ import type { B640ContactMessageKind } from '../../shared/b640ContactMessage';
 import {
   acceptModelMessage,
   modelMessageRejection,
+  namesAnyCompany,
   shorteningCorrection,
   contactMessageWish,
   fallbackContactMessage,
@@ -169,10 +170,19 @@ function messageFacts(input: TextInput, context: MessageContext): ContactMessage
 }
 
 /** B753: компании из должности знакомого, кроме той, о которой сообщение. Рекрутёру не нужны. */
-function otherCompanies(input: TextInput, vacancy: MessageVacancy | null): string[] {
+function otherCompanies(input: Pick<TextInput, 'kind' | 'recipient'>, vacancy: MessageVacancy | null): string[] {
   if (input.kind === 'recruiter') return [];
   const own = candidateCompanyKey(vacancy?.company || input.recipient.company);
   return headlineEmployers(input.recipient.role ?? '').filter((name) => candidateCompanyKey(name) !== own);
+}
+
+/** B753: сохранённый до правки черновик знакомому спрашивает о другой компании — продолжать его нельзя. */
+export function draftNamesOtherCompany(
+  deps: RouteDeps,
+  input: Pick<TextInput, 'kind' | 'recipient' | 'vacancyId'>,
+  text: string,
+): boolean {
+  return namesAnyCompany(text, otherCompanies(input, vacancyOf(deps, input.vacancyId)));
 }
 
 /** B753: язык черновика по контакту и вакансии; английскому черновику — английский шаблон. */

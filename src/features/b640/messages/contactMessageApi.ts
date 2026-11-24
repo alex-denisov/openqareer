@@ -6,7 +6,7 @@ import type {
   B640SentContactMessage,
 } from '../../../../shared/b640ContactMessage';
 import type { TextVariant, TextVariantList, VariantWish } from '../../../../shared/textVariants';
-import { apiFetch, readData } from '../../coach/apiClient';
+import { apiFetch, readData, throwApiError } from '../../coach/apiClient';
 
 const BASE = '/api/v1/candidate/b640/contact-messages';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -72,6 +72,12 @@ export async function editB640ContactMessage(
     body: JSON.stringify({ text }),
   });
   return readData<B640ContactMessage>(response);
+}
+
+/** «Не отправлять»: черновик удаляется; его уже нет — тоже успех. */
+export async function discardB640ContactMessage(id: string): Promise<void> {
+  const response = await apiFetch(messageUrl(id), { method: 'DELETE' });
+  if (!response.ok && response.status !== 404) await throwApiError(response);
 }
 
 /** Одобрение: в ответе `openUrl` — профиль получателя, только https linkedin.com, иначе null. */

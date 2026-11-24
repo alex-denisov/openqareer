@@ -10,9 +10,9 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
 import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
-import { snapshotDue, snapshotSitemapCards } from './catalogArchive';
 import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
-import { writeCatalogSitemaps } from './catalogSitemapJob';
+import { decodeSitemapUrls, type SitemapBuildSummary } from './catalogSitemapWrite';
+import { safeMessage } from './safeMessage';
 import { CatalogSitemapReader } from './catalogSitemapChanged';
 import { labelledTimer } from '../observability/backgroundSteps';
 import { nextTurn } from '../data/chunkedRows';
@@ -60,8 +60,15 @@ export function resetCatalogSitemaps(): void {
   listingHistory = new Map();
 }
 
-function errorName(error: unknown): string {
-  return error instanceof Error ? error.name : 'UnknownError';
+/** Journal fields: the name alone («Error») hid a 12-day outage (24.11). */
+export function sitemapFailure(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) return { errorName: 'UnknownError' };
+  const code = (error as { code?: unknown }).code;
+  return {
+    errorName: error.name,
+    ...(typeof code === 'string' ? { errorCode: code } : {}),
+    reason: safeMessage(error.message),
+  };
 }
 
 /** A failed step leaves the set as it is and never stops the sitemap files. */
@@ -75,7 +82,7 @@ async function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date
     });
     log.info({ ...report, cap, ms: Date.now() - started }, 'catalog-card-rollout');
   } catch (error: unknown) {
-    log.error({ errorName: errorName(error) }, 'catalog-card-rollout-failed');
+    log.error(sitemapFailure(error), 'catalog-card-rollout-failed');
   }
 }
 
@@ -86,29 +93,14 @@ function runMarketReport(database: DatabaseSync, log: SitemapLog, now: Date): vo
     if (ensureMarketReport(database, now))
       log.info({ month: previousMonth(now), ms: Date.now() - started }, 'market-report-written');
   } catch (error: unknown) {
-    log.error({ errorName: errorName(error) }, 'market-report-failed');
+    log.error(sitemapFailure(error), 'market-report-failed');
   }
 }
 
-/** 11.11: today's sitemap cards are copied for their archive pages; never stops the files. */
-function runArchiveSnapshot(
-  database: DatabaseSync,
-  urls: ReadonlyArray<{ readonly path: string }>,
-  log: SitemapLog,
-  now: Date,
-): void {
-  try {
-    if (!snapshotDue(database, now)) return;
-    const started = Date.now();
-    const copied = snapshotSitemapCards(
-      database,
-      urls.map((url) => url.path),
-      now,
-    );
-    log.info({ copied, ms: Date.now() - started }, 'catalog-archive-snapshot');
-  } catch (error: unknown) {
-    log.error({ errorName: errorName(error) }, 'catalog-archive-snapshot-failed');
-  }
+function logArchive(archive: SitemapBuildSummary['archive'], log: SitemapLog): void {
+  if (!archive) return;
+  if ('reason' in archive) log.error({ ...archive }, 'catalog-archive-snapshot-failed');
+  else log.info({ ...archive }, 'catalog-archive-snapshot');
 }
 
 /** Maintenance process only: the listings query groups the whole catalog. */
@@ -128,12 +120,12 @@ export function scheduleCatalogSitemapJob(
       const now = new Date();
       await runCardRollout(database, log, now);
       runMarketReport(database, log, now);
-      // B649-3: grouping the catalog held the loop ~40 s; read in its own thread.
-      const files = await heavyRead(database, 'sitemaps', { nowMs: now.getTime() }, log);
-      writeCatalogSitemaps(database, files, now);
+      // B649-3: grouping the catalog held the loop ~40 s; read and written in its own thread.
+      const build = await heavyRead(database, 'sitemapsWrite', { nowMs: now.getTime() }, log);
+      const { files } = build;
       await checkIndexCoverage({ database, files, telegram, log, now });
-      const urls = files.flatMap((file) => file.urls ?? []);
-      runArchiveSnapshot(database, urls, log, now);
+      logArchive(build.archive, log);
+      const urls = await decodeSitemapUrls(build.urlsJson);
       await notifyIndexNow(database, urls);
       await notifyGoogle(database, urls);
       log.info(
@@ -144,10 +136,7 @@ export function scheduleCatalogSitemapJob(
         'catalog-sitemaps-written',
       );
     } catch (error: unknown) {
-      log.error(
-        { errorName: errorName(error), ms: Date.now() - started },
-        'catalog-sitemaps-failed',
-      );
+      log.error({ ...sitemapFailure(error), ms: Date.now() - started }, 'catalog-sitemaps-failed');
     } finally {
       running = false;
     }
@@ -178,20 +167,20 @@ export function scheduleCatalogSitemapRefresh(databasePath: string, log: Sitemap
       await nextTurn();
       database = new DatabaseSync(databasePath, { readOnly: true });
       applySqliteBusyTimeout(database);
-      setCatalogSitemaps(sitemaps.readIfChanged(database));
+      setCatalogSitemaps(await sitemaps.readIfChanged(database));
       await nextTurn();
       setListingHistory(await readListingHistory(database));
       await nextTurn();
       setMarketReports(readMarketReports(database));
     } catch (error: unknown) {
-      log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed');
+      log.error(sitemapFailure(error), 'catalog-sitemaps-refresh-failed');
     } finally {
       database?.close();
       running = false;
     }
   };
   const refresh = labelledTimer('web:sitemap-refresh', read, (error) =>
-    log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed'),
+    log.error(sitemapFailure(error), 'catalog-sitemaps-refresh-failed'),
   );
   refresh();
   const every = setInterval(refresh, REFRESH_INTERVAL_MS);

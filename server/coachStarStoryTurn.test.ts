@@ -7,7 +7,6 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { serializeCoachInput } from './domain/coachInputSerialization';
 import type { CoachTurnInput } from './domain/coach';
 import { coachTurnInputSchema } from './domain/coach';
-import { preferFinishedReply } from './providers/coachReplyShape';
 import type { CoachProvider, CoachTurnOptions } from './providers/coachProvider';
 
 const config: ServerConfig = {
@@ -179,7 +178,10 @@ describe('контекст хода консультанта', () => {
   it('ход просит у очереди моделей законченную реплику', async () => {
     const { seenOptions, turn } = await harness();
     await turn({ content: 'Что поправить в письме?', stage: 'vacancies' });
-    expect(seenOptions[0]?.prefer).toBe(preferFinishedReply);
+    type Result = Parameters<NonNullable<CoachTurnOptions['prefer']>>[0];
+    const prefers = (message: string) => seenOptions[0]?.prefer?.({ message } as Result);
+    expect(prefers('Это повышает риск кажущейся')).toBe(false);
+    expect(prefers('Добавьте в письмо один результат.')).toBe(true);
   });
 
   it('без историй поле пустое: модель не получает выдуманного', async () => {

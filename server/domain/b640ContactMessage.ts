@@ -189,6 +189,9 @@ export interface ContactCheckOptions {
 
 const MENTIONS_VACANCY = /(ваканси|vacanc)/iu;
 
+export const namesAnyCompany = (text: string, companies: readonly string[]): boolean =>
+  companies.some((company) => wordMention(company).test(text));
+
 /** B753: почему текст модели не принят — в журнал вместо молчаливого запасного текста. */
 export function modelMessageRejection(
   text: string | undefined,
@@ -202,7 +205,7 @@ export function modelMessageRejection(
   if (body.length > B640_CONTACT_MESSAGE_DRAFT_MAX) return 'too_long';
   if (kind !== 'recruiter' && RESPONSE_FORMULA.test(body)) return 'response_formula';
   if (options.withoutVacancy && MENTIONS_VACANCY.test(body)) return 'mentions_vacancy';
-  if ((options.otherCompanies ?? []).some((company) => wordMention(company).test(body))) return 'other_company';
+  if (namesAnyCompany(body, options.otherCompanies ?? [])) return 'other_company';
   if (options.language !== 'en' && namesEnglishTargetRole(body, englishRoles)) return 'english_role';
   const tone = options.recipientName
     ? toneRejection(body, { ...options, recipientName: options.recipientName, known: knownText, language: options.language ?? 'ru' })
