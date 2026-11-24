@@ -239,6 +239,31 @@ describe('MatchedPoolSnapshots: a snapshot outlives the process', () => {
   });
 });
 
+describe('MatchedPoolSnapshots: writes run one at a time (B770)', () => {
+  it('the next write waits for the one before, and a dropped snapshot is not written', async () => {
+    const store = memoryStore();
+    let finish!: () => void;
+    vi.mocked(store.write).mockImplementationOnce(
+      () => new Promise<void>((done) => (finish = done)),
+    );
+    const snapshots = new MatchedPoolSnapshots();
+    snapshots.setStore(store);
+    await snapshots.readAsync('one', 'a', async () => [item('a')]);
+    await snapshots.readAsync('two', 'b', async () => [item('b')]);
+    await snapshots.readAsync('three', 'c', async () => [item('c')]);
+    await turn();
+    await turn();
+    expect(store.write).toHaveBeenCalledTimes(1);
+
+    snapshots.deleteCandidate('two');
+    finish();
+    for (let i = 0; i < 4; i += 1) await turn();
+
+    expect(store.rows.has('two')).toBe(false);
+    expect(store.rows.get('three')?.items[0]?.cluster.id).toBe('c');
+  });
+});
+
 describe('MatchedPoolSnapshots: a new process loads the stored snapshots before the first read', () => {
   it('preloads every stored profile of a candidate, so the read does not open the store', async () => {
     const store = memoryStore({
