@@ -62,6 +62,8 @@ test.describe('B670: «Карьера» при «Работаю» (S12)', () => 
     await expect(
       screen.getByRole('heading', { name: 'Повышение в компании «Вектор Банк»' }),
     ).toBeVisible();
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    await expect(screen).toHaveCSS('padding-top', phone ? '12px' : '16px');
     const steps = screen.locator('.steps > li');
     await expect(steps).toHaveCount(3);
     await expect(steps.nth(0).locator('.tag')).toHaveText('есть');
@@ -88,6 +90,7 @@ test.describe('B670: «Карьера» при «Работаю» (S12)', () => 
       growthAfter: READY,
     });
     const pick = node(page, 's12a');
+    await expect(pick).toHaveCSS('padding-top', '16px');
     await expect(
       pick.getByRole('heading', { name: 'Что для вас дальше в компании «Вектор Банк»?' }),
     ).toBeVisible();

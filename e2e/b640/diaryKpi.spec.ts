@@ -47,6 +47,10 @@ test.describe('B686: «Дневник» — загрузка и проверка
     await upload.getByRole('button', { name: 'Разобрать' }).click();
 
     const review = page.locator('[data-b640-node="d02l"]');
+    await expect(review).toHaveCSS(
+      'padding-top',
+      testInfo.project.name === 'mobile-390' ? '12px' : '8px',
+    );
     if (testInfo.project.name === 'mobile-390') {
       await expect(review.locator('.kp-tbl')).toHaveCount(0);
       await expect(review.locator('.kp-row')).toHaveCount(4);

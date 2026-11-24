@@ -8,7 +8,7 @@ import { StatusLine } from '../kit/ResultLine';
 import { useToast } from '../kit/Toast';
 import { useIsMobile } from '../kit/useMediaQuery';
 import { buildNodePath, type B640Node } from '../routes';
-import { useShell } from '../shell/ShellContext';
+import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { Link } from '../shell/Link';
 import { acceptKpiImport, getKpiImport } from './diaryApi';
 import { KpiMobileList } from './KpiMobileList';
@@ -137,6 +137,8 @@ function Lead({ draft }: { readonly draft: CareerDiaryKpiImport }) {
 
 /** Экран d02l «Проверьте, как мы поняли»: черновик из d02k правится и принимается целями. */
 export function KpiReviewScreen({ node }: { readonly node: B640Node }) {
+  // Как у макета d02l (`data-mtight`).
+  useScreenChrome({ rootData: { mtight: '1' } });
   const { search, navigate } = useShell();
   const id = new URLSearchParams(search).get('import');
   const [loaded, retry] = useDraft(id);
