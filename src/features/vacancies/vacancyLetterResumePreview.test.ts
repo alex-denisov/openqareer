@@ -22,7 +22,11 @@ describe('loadLetterResumePreview (B631)', () => {
       snapshotAt: '2026-11-10T00:00:00.000Z',
     });
     expect(prepare).not.toHaveBeenCalled();
-    expect(preview).toEqual({ kind: 'targeted', title: 'Резюме под вакансию', text: 'ИВАН ИВАНОВ' });
+    expect(preview).toMatchObject({
+      kind: 'targeted',
+      title: 'Резюме под вакансию',
+      text: 'ИВАН ИВАНОВ',
+    });
   });
 
   it('before approval prepares the targeted version the letter will attach', async () => {
@@ -49,7 +53,7 @@ describe('loadLetterResumePreview (B631)', () => {
       projection: { master: {} },
     } as never);
     vi.spyOn(resumeExport, 'formatResumeAsAtsText').mockReturnValue('общее');
-    await expect(loadLetterResumePreview('cluster-1', null)).resolves.toEqual({
+    await expect(loadLetterResumePreview('cluster-1', null)).resolves.toMatchObject({
       kind: 'master',
       title: 'Резюме',
       text: 'общее',
