@@ -150,6 +150,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_draft_workflow: { export: 'content' },
   candidate_feed_posts: { export: 'content' },
   text_variants: { export: 'content' },
+  candidate_resume_edit_choices: { export: 'content' },
   candidate_linkedin_offer_variants: { export: 'content' },
   candidate_linkedin_queue: { export: 'content' },
   candidate_linkedin_rhythm: { export: 'content' },

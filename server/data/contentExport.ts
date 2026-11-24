@@ -1,6 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { TextVariant, TextVariantKind } from '../../shared/textVariants';
 import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
+import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
+import type { ResumeEditChoices } from '../../shared/resumeVacancyEdits';
 import { tableExists } from './exportTableReader';
 
 /**
@@ -27,6 +29,7 @@ export interface ContentExport {
   readonly draftTopicDecisions: readonly Row[];
   readonly feedPosts: readonly Row[];
   readonly textVariants: readonly ExportedTextVariants[];
+  readonly resumeEdits: ReadonlyArray<{ vacancyId: string; choices: ResumeEditChoices }>;
   readonly linkedin: {
     readonly sections: readonly Row[];
     readonly sectionEvents: readonly Row[];
@@ -141,6 +144,9 @@ export function exportContent(sources: ContentExportSources, candidateId: string
       candidateId,
     ),
     textVariants: readTextVariants(sources, candidateId),
+    resumeEdits: tableExists(database, 'candidate_resume_edit_choices')
+      ? new SqliteResumeEditChoicesRepository(database, sources.encryptionKey).list(candidateId)
+      : [],
     linkedin: readLinkedin(database, candidateId),
   };
 }

@@ -97,3 +97,36 @@ describe('B601: возврат к прежнему резюме', () => {
     expect(back.resume.documentId).not.toBe(middle.resume.documentId);
   });
 });
+
+describe('B785: правки резюме под вакансию', () => {
+  const PATH = '/api/v1/candidate/vacancies/cluster-99/resume-edits';
+
+  const BULLETS = ['Вела бэкенд и релизы команды', 'Перевела платформу на Kubernetes, 2024'];
+
+  it('правка видна, отменяется, меняется без новых чисел и уходит в одобренное резюме', async () => {
+    const { call, candidates, candidateId, approve, prepareResume } = await setup();
+    seedResume(candidates, candidateId, 'Head of Platform', BULLETS);
+    const [edit] = (await call('GET', PATH)).json().data.edits;
+    expect(edit).toMatchObject({ text: BULLETS[1], why: 'Kubernetes', cancelled: false });
+    const first = async () => {
+      const id = (await prepareResume()).json().data.versionId;
+      const version = candidates.getResumeVersion(candidateId, id);
+      return (version?.snapshot as unknown as { document: { experience: Array<{ bullets: Array<{ value: string }> }> } })
+        .document.experience[0]!.bullets[0]!.value;
+    };
+    expect(await first()).toBe(BULLETS[1]);
+    expect((await call('PUT', PATH, { action: 'cancel', id: edit.id })).json().data.edits[0].cancelled).toBe(true);
+    expect(await first()).toBe(BULLETS[0]);
+    expect((await call('PUT', PATH, { action: 'text', id: edit.id, text: 'Ускорила на 30%' })).statusCode).toBe(422);
+    const text = 'Kubernetes в 2024: перевела платформу';
+    expect((await call('PUT', PATH, { action: 'text', id: edit.id, text })).statusCode).toBe(200);
+    expect(await first()).toBe(text);
+    const approved = (await approve()).json().data.resume;
+    expect(JSON.stringify(candidates.getResumeVersion(candidateId, approved.versionId)?.snapshot)).toContain(text);
+    expect(candidates.exportCandidate(candidateId).content.resumeEdits).toEqual([
+      { vacancyId: 'cluster-99', choices: { cancelled: [], texts: { [edit.id]: text } } },
+    ]);
+    expect((await call('PUT', PATH, { action: 'cancel', id: 'нет' })).statusCode).toBe(409);
+    expect((await call('PUT', PATH, { action: 'other', id: 'x' })).statusCode).toBe(400);
+  });
+});

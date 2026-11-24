@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { expectGates } from './gates';
 import { mockResponses } from './responsesFixture';
 
@@ -90,8 +90,14 @@ const FULL = {
   languages: [{ id: 'l', name: claim('Английский'), cefr: claim('C1') }],
 };
 
-async function open(page: Page, document: object) {
+async function open(
+  page: Page,
+  document: object,
+  edits = (route: Route) => route.fulfill({ json: { data: { edits: [] } } }),
+  hhResumes = (route: Route) => route.fulfill({ json: { data: null } }),
+) {
   await mockResponses(page);
+  await page.route('**/api/v1/candidate/vacancies/*/resume-edits', edits);
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', (route) =>
     route.fulfill({ json: { data: { approval: null } } }),
   );
@@ -108,6 +114,7 @@ async function open(page: Page, document: object) {
       },
     }),
   );
+  await page.route('**/api/v1/candidate/hh/resumes', hhResumes);
   await page.goto('/app/responses/a-draft/letter?step=resume', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('article', { name: 'Резюме' })).toBeVisible({ timeout: 15_000 });
 }
@@ -154,5 +161,72 @@ test.describe('B785: шаг «Резюме» по макету o03', () => {
     await button.click();
     await page.getByRole('menuitem', { name: 'PDF' }).click();
     await expect(page.getByText('Сборщик файла занят.')).toBeVisible();
+  });
+
+  test('правка отменяется, меняется и остаётся в списке; даты без конца', async ({ page }) => {
+    const state = {
+      cancelled: false,
+      text: 'Перевела платформу на Kubernetes без остановки сервиса, 2024',
+    };
+    const edits = () => [{ id: '1:c', why: 'Kubernetes', ...state }];
+    const sent: object[] = [];
+    const handler = (route: Route) => {
+      if (route.request().method() === 'PUT') {
+        const body = route.request().postDataJSON();
+        sent.push(body);
+        if (body.action === 'text') state.text = body.text;
+        else state.cancelled = body.action === 'cancel';
+      }
+      return route.fulfill({ json: { data: { edits: edits() } } });
+    };
+    const gap = { ...FULL.experience[1]!, endDate: null };
+    await open(page, { ...FULL, experience: [FULL.experience[0], gap] }, handler);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Резюме');
+    await expect(page.getByRole('heading', { name: '1 правка под эту вакансию' })).toBeVisible();
+    await expect(page.getByText('Даты в «Сфера Платежи»')).toHaveCount(1);
+    await page.getByText('Что изменено · 1').click();
+    await expectGates(page);
+    const list = page.getByRole('list', { name: 'Правки под вакансию' });
+    await list.getByRole('button', { name: 'Отменить' }).click();
+    await expect(page.getByText('Что изменено · 0')).toBeVisible();
+    await list.getByRole('button', { name: 'Вернуть' }).click();
+    await list.getByRole('button', { name: 'Изменить' }).click();
+    await list.getByLabel('Текст правки').fill('Платформа на Kubernetes');
+    await expectGates(page);
+    await list.getByRole('button', { name: 'Сохранить' }).click();
+    await expect(list).toContainText('Платформа на Kubernetes');
+    await expect(page.getByRole('button', { name: 'Одобрить резюме' })).toBeEnabled();
+    expect(sent).toHaveLength(3);
+  });
+
+  test('«Резюме hh.ru»: прочитанное выбирается, непрочитанное в вебе недоступно', async ({
+    page,
+  }) => {
+    const content = (id: string, title: string) => ({
+      id,
+      title,
+      text: 'x',
+      sections: { title, about: '', skills: [], places: [] },
+    });
+    const lead = content('a', 'Руководитель разработки');
+    const go = content('b', 'Ведущий разработчик Go');
+    const snapshot = {
+      resumes: [...[lead, go].map(({ id, title }) => ({ id, title })), { id: 'c', title: 'CTO' }],
+      selected: lead,
+      contents: [go],
+      readAt: '2026-11-24T00:00:00.000Z',
+    };
+    await open(page, FULL, undefined, (route) => {
+      const put = route.request().method() === 'PUT';
+      return route.fulfill({
+        json: { data: put ? { ...snapshot, ...route.request().postDataJSON() } : snapshot },
+      });
+    });
+    const select = page.getByLabel('Резюме hh.ru');
+    await expect(select).toHaveValue('a');
+    await expect(select.locator('option', { hasText: 'CTO' })).toBeDisabled();
+    await select.selectOption('b');
+    await expect(select).toHaveValue('b');
+    await expectGates(page);
   });
 });

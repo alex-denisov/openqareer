@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto';
 import type { StoredCandidateDocument } from '../data/candidateStore';
 import type { ResumeDocument } from '../domain/resumeStudioTypes';
 import type { StoredResumeVersion } from '../domain/resumeVersions';
+import { buildTargetedResumeSlice } from '../domain/resumeStudio';
+import { tailorResumeSlice } from '../domain/resumeVacancyEdits';
+import { NO_EDIT_CHOICES, type ResumeEditChoices } from '../../shared/resumeVacancyEdits';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { RouteDeps } from './deps';
 import { candidatePlan } from './helpers';
-import { buildVersionContent, currentMaster, type CandidateResumeMaster } from './resumeMaster';
+import { buildVersionContent, canonicalJson, currentMaster, type CandidateResumeMaster } from './resumeMaster';
 
 /** Пределы схемы версии резюме (`resumeVersionContentSchema`). */
 const MAX_TITLE_LENGTH = 160;
@@ -72,11 +75,12 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
  * Правило сборки версии под вакансию. B713: версии до него перечисляли места работы без пунктов, и
  * одобренная такая версия возвращалась бы для той же вакансии и ревизии; новая сборка даёт новый id.
  */
-export const TARGETED_RESUME_BUILD = 'b713';
+export const TARGETED_RESUME_BUILD = 'b785';
 
-function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string): string {
+function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string, choices: ResumeEditChoices): string {
+  const decided = canonicalJson(choices);
   const hex = createHash('sha256')
-    .update(['letter-approval-resume', TARGETED_RESUME_BUILD, candidateId, vacancyId, masterRevision].join('\u0000'))
+    .update(['letter-approval-resume', TARGETED_RESUME_BUILD, candidateId, vacancyId, masterRevision, decided].join('\u0000'))
     .digest('hex');
   const variant = ((Number.parseInt(hex[16] ?? '0', 16) & 0x3) | 0x8).toString(16);
   return [hex.slice(0, 8), hex.slice(8, 12), '5' + hex.slice(13, 16), variant + hex.slice(17, 20), hex.slice(20, 32)].join('-');
@@ -91,21 +95,28 @@ function versionTarget(cluster: VacancyCluster): { title: string; requirements: 
   return { title, requirements };
 }
 
+/** Резюме под вакансию до правок: их перечень и решения кандидата считаются от него. */
+export function targetedSliceFor(master: CandidateResumeMaster, cluster: VacancyCluster) {
+  return buildTargetedResumeSlice(master.document, versionTarget(cluster));
+}
+
 /** Существующая механика версий: черновик из мастер-резюме, затем одобрение тем же содержимым. */
 function approvedVersion(
   deps: RouteDeps,
   candidateId: string,
   master: CandidateResumeMaster,
   cluster: VacancyCluster,
+  choices: ResumeEditChoices,
 ): StoredResumeVersion {
+  const tailor = (slice: ReturnType<typeof targetedSliceFor>) => tailorResumeSlice(slice, choices);
   const { candidateStore } = deps;
-  const versionId = stableVersionId(candidateId, cluster.id, master.revision);
+  const versionId = stableVersionId(candidateId, cluster.id, master.revision, choices);
   const { title, requirements } = versionTarget(cluster);
   const created = candidateStore.createResumeVersion(
     candidateId,
     versionId,
     master.revision,
-    buildVersionContent(master, title, requirements),
+    buildVersionContent(master, title, requirements, 'draft', tailor),
   );
   const version = created.status === 'id_conflict'
     ? candidateStore.getResumeVersion(candidateId, versionId)
@@ -117,7 +128,7 @@ function approvedVersion(
     versionId,
     version.revision,
     master.revision,
-    buildVersionContent(master, title, requirements, 'approved'),
+    buildVersionContent(master, title, requirements, 'approved', tailor),
   );
   return approved.status === 'updated' ? approved.version : version;
 }
@@ -166,8 +177,8 @@ interface SnapshotPlan {
   readonly content: Record<string, unknown>;
 }
 
-function targetedPlan(deps: RouteDeps, candidateId: string, applicationId: string, master: CandidateResumeMaster, cluster: VacancyCluster): SnapshotPlan {
-  const version = approvedVersion(deps, candidateId, master, cluster);
+function targetedPlan(deps: RouteDeps, candidateId: string, applicationId: string, master: CandidateResumeMaster, cluster: VacancyCluster, choices: ResumeEditChoices): SnapshotPlan {
+  const version = approvedVersion(deps, candidateId, master, cluster, choices);
   return {
     kind: 'targeted',
     versionId: version.id,
@@ -189,10 +200,10 @@ function masterPlan(applicationId: string, master: CandidateResumeMaster, approv
   };
 }
 
-function planSnapshot(deps: RouteDeps, candidateId: string, applicationId: string, cluster: VacancyCluster, approvedAt: string, master: CandidateResumeMaster): SnapshotPlan {
+function planSnapshot(deps: RouteDeps, candidateId: string, applicationId: string, cluster: VacancyCluster, approvedAt: string, master: CandidateResumeMaster, choices: ResumeEditChoices): SnapshotPlan {
   return letterResumeKind(deps, candidateId) === 'master'
     ? masterPlan(applicationId, master, approvedAt)
-    : targetedPlan(deps, candidateId, applicationId, master, cluster);
+    : targetedPlan(deps, candidateId, applicationId, master, cluster, choices);
 }
 
 /** Кнопка «Подготовить резюме»: повторяет создание снимка, не трогая письмо и заявку. */
@@ -201,12 +212,13 @@ export function prepareLetterResume(
   deps: RouteDeps,
   candidateId: string,
   cluster: VacancyCluster,
+  choices: ResumeEditChoices = NO_EDIT_CHOICES,
 ): LetterResumeState & { readonly versionId: string | null } {
   const master = currentMaster(deps, candidateId);
   const state = letterResumeState(deps, candidateId, master.document);
   if (!state.available || state.kind === 'master') return { ...state, versionId: null };
   try {
-    return { ...state, versionId: approvedVersion(deps, candidateId, master, cluster).id };
+    return { ...state, versionId: approvedVersion(deps, candidateId, master, cluster, choices).id };
   } catch (error) {
     throw new ResumeSnapshotError(error);
   }
@@ -227,6 +239,8 @@ export interface AttachResumeInput {
   readonly cluster: VacancyCluster;
   readonly approvedAt: string;
   readonly generalResumeId?: string;
+  /** Решения кандидата по правкам под вакансию (B785). */
+  readonly choices?: ResumeEditChoices;
 }
 
 /**
@@ -243,7 +257,7 @@ export function attachApprovedResume(deps: RouteDeps, candidateId: string, input
     if (general) return general;
   }
   try {
-    const plan = planSnapshot(deps, candidateId, applicationId, cluster, approvedAt, master);
+    const plan = planSnapshot(deps, candidateId, applicationId, cluster, approvedAt, master, input.choices ?? NO_EDIT_CHOICES);
     const linked = linkedSnapshot(deps, candidateId, applicationId);
     if (linked?.fileName === plan.fileName) {
       return { kind: plan.kind, versionId: plan.versionId, documentId: linked.id, snapshotAt: plan.kind === 'master' ? linked.createdAt : plan.snapshotAt };

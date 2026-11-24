@@ -90,7 +90,7 @@ describe('B738 · 4: черновики, посты, варианты текст
     const tables = () => new DatabaseSync(databasePath).prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get();
     const before = tables();
     expect(store.exportCandidate(own.id).content).toEqual({
-      drafts: [], draftWorkflow: [], draftTopicDecisions: [], feedPosts: [], textVariants: [],
+      drafts: [], draftWorkflow: [], draftTopicDecisions: [], feedPosts: [], textVariants: [], resumeEdits: [],
       linkedin: { sections: [], sectionEvents: [], offerVariants: [], rhythm: null, queue: [] },
     });
     expect(tables()).toEqual(before);

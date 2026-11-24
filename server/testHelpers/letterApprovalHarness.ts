@@ -33,13 +33,18 @@ export const LETTER = {
 export type Candidates = Awaited<ReturnType<typeof createApp>>['candidates'];
 
 /** Место работы попадает в снимок, только когда его подтверждает факт профиля. */
-export function seedResume(candidates: Candidates, candidateId: string, title: string): void {
+export function seedResume(candidates: Candidates, candidateId: string, title: string, bullets: readonly string[] = []): void {
   const memoryId = 'import:test:role-' + title.length;
+  const bulletId = (index: number) => 'import:test:bullet-' + index;
+  const bulletMemoryIds = bullets.map((_, index) => bulletId(index));
   candidates.importResumeEvidence(candidateId, {
     sourceLabel: 'synthetic',
-    entries: [{ memoryId, domain: 'outcome', statement: title + ', Финтех Лаб, с 2021 года.' }],
+    entries: [
+      { memoryId, domain: 'outcome', statement: title + ', Финтех Лаб, с 2021 года.' },
+      ...bullets.map((statement, index) => ({ memoryId: bulletId(index), domain: 'outcome', statement })),
+    ],
   } as never);
-  candidates.reviewMemories(candidateId, [memoryId], 'confirm');
+  candidates.reviewMemories(candidateId, [memoryId, ...bulletMemoryIds], 'confirm');
   const draft: ResumeDraft = {
     ...EMPTY_RESUME_DRAFT,
     candidate: { fullName: 'Мила Пример' },
@@ -50,7 +55,7 @@ export function seedResume(candidates: Candidates, candidateId: string, title: s
       employer: 'Финтех Лаб',
       startDate: '2021-01',
       current: true,
-      bulletMemoryIds: [],
+      bulletMemoryIds,
     }],
   };
   candidates.saveResumeDraft(candidateId, draft, []);
@@ -104,6 +109,9 @@ export async function setup(role?: string, options: SetupOptions = {}) {
       database.close();
     }
   };
-  return { candidates, candidateId, approve, readApproval, prepareResume, pitch, resumeDocuments, versions, linkedResume };
+  const call = (method: 'GET' | 'PUT', url: string, payload?: object) => app.inject({
+    method, url, headers: { cookie, origin: 'http://localhost:3000' }, ...(payload ? { payload } : {}),
+  });
+  return { call, candidates, candidateId, approve, readApproval, prepareResume, pitch, resumeDocuments, versions, linkedResume };
 }
 
