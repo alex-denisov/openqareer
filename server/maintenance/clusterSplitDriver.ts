@@ -79,18 +79,23 @@ export async function runClusterSplitDriver(
   if (!options.config.enabled) return { steps: 0, reason: 'disabled' };
   let steps = 0;
   let maxWriteMs = 0;
+  let pagesUnresolved = 0;
   const paused = (reason: string, stepId: string | null) => {
-    options.log.warn({ steps, reason, stepId, maxWriteMs }, 'cluster_split_paused');
+    options.log.warn(
+      { steps, reason, stepId, maxWriteMs, pagesUnresolved },
+      'cluster_split_paused',
+    );
     return { steps, reason };
   };
   while (!options.isStopped()) {
     const result = options.step();
     steps += 1;
     maxWriteMs = Math.max(maxWriteMs, result.writeMs);
+    pagesUnresolved += result.pages.unresolved;
     options.dropClusterSnapshot();
     options.checkpoint();
     if (result.completed) {
-      options.log.info({ steps, maxWriteMs }, 'cluster_split_completed');
+      options.log.info({ steps, maxWriteMs, pagesUnresolved }, 'cluster_split_completed');
       return { steps, reason: 'completed' };
     }
     // Задержка цикла за сам шаг (сведение кусков большого кластера — секунды процессора,

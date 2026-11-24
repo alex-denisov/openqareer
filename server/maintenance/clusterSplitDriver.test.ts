@@ -13,6 +13,7 @@ function stepResult(completed: boolean): ClusterSplitStepResult {
     skippedCandidateRef: 0,
     skippedIdTaken: 0,
     catalogMoved: 0,
+    pages: { kept: 0, redirect: 0, gone: 0, unresolved: 0 },
     newPieceIds: [],
     completed,
     writeMs: completed ? 0 : 120,
@@ -107,7 +108,10 @@ describe('cluster split driver (B752)', () => {
     let reads = 0;
     const { options, log } = probes({ lagP99Ms: () => (++reads % 2 === 1 ? 7_800 : 10) });
     expect(await runClusterSplitDriver(options)).toEqual({ steps: 3, reason: 'completed' });
-    expect(log.info).toHaveBeenCalledWith({ steps: 3, maxWriteMs: 120 }, 'cluster_split_completed');
+    expect(log.info).toHaveBeenCalledWith(
+      { steps: 3, maxWriteMs: 120, pagesUnresolved: 0 },
+      'cluster_split_completed',
+    );
   });
 
   it('pauses when the step asks to stop', async () => {

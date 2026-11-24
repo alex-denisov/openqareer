@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { PageOutcome } from './clusterSplitPages';
 import type { SplitWriters } from './clusterSplitWrite';
 
 /** B752: общее у шага разбиения — результат, бюджет записи, счётчики состояния. */
@@ -17,6 +18,8 @@ export interface ClusterSplitStepResult {
   skippedCandidateRef: number;
   skippedIdTaken: number;
   catalogMoved: number;
+  /** Прежние страницы шага по итогу; `unresolved` должно быть 0. */
+  pages: Record<PageOutcome, number>;
   /** Куски, записанные шагом (кроме основателя). */
   newPieceIds: string[];
   completed: boolean;
@@ -49,6 +52,7 @@ export function emptyResult(stepId: string | null, completed: boolean): ClusterS
     skippedCandidateRef: 0,
     skippedIdTaken: 0,
     catalogMoved: 0,
+    pages: { kept: 0, redirect: 0, gone: 0, unresolved: 0 },
     newPieceIds: [],
     completed,
     writeMs: 0,

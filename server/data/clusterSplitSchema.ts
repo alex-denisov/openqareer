@@ -9,8 +9,11 @@
  *   (куски шаг за шагом, основатель последним), и шаг, открывший его журнал;
  * - `cluster_split_revert_marks` — строки журнала, чей основатель уже
  *   возвращён откатом частями (B782): второй раз его не переписывать;
- * - `vacancy_catalog_redirects` — старый ключ карточки → новый кластер, когда
- *   страница каталога переехала к куску.
+ * - `vacancy_catalog_redirects` — опубликованный адрес карточки → кластер её
+ *   вакансии, когда основатель её больше не держит; пустой `new_key` — страницы
+ *   у вакансии нет, адрес отвечает как снятый (архив или 410);
+ * - `cluster_split_pages` — итог каждой прежней страницы (`kept`, `redirect`,
+ *   `gone`, `unresolved`); `unresolved` должно быть 0.
  */
 export const CLUSTER_SPLIT_TABLES = `
 CREATE TABLE IF NOT EXISTS cluster_split_state (
@@ -64,4 +67,11 @@ CREATE TABLE IF NOT EXISTS vacancy_catalog_redirects (
   step_id TEXT NOT NULL,
   created_at INTEGER NOT NULL
 ) STRICT;
+CREATE TABLE IF NOT EXISTS cluster_split_pages (
+  old_key TEXT PRIMARY KEY,
+  old_path TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('kept', 'redirect', 'gone', 'unresolved')),
+  step_id TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS cluster_split_pages_step ON cluster_split_pages(step_id);
 `;

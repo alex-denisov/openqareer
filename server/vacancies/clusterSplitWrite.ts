@@ -7,6 +7,13 @@ import {
 } from './catalogEntryWriter';
 import { CATALOG_CLUSTER_TABLES } from './clusterSplitJournal';
 import { tableExists } from './clusterSplit';
+import {
+  pageOwner,
+  recordPageOutcome,
+  type LinkOwners,
+  type PageOutcome,
+  type PublishedPage,
+} from './clusterSplitPages';
 import { clusterKeys, serializeRepresentative } from './vacancyDeduplicator';
 
 /**
@@ -73,46 +80,53 @@ export function removePiece(db: DatabaseSync, id: string): void {
   }
 }
 
-interface CatalogEntryRow {
-  entry_key: string;
-  path: string;
-  source_url: string;
+/** Опубликованный адрес ведёт на кусок его вакансии; пустой ключ — страницы у неё нет. */
+function redirectPage(
+  { db, now }: SplitWriters,
+  page: PublishedPage,
+  holder: VacancyCluster | undefined,
+  stepId: string,
+): void {
+  const target = holder
+    ? (db.prepare('SELECT entry_key FROM catalog_entries WHERE cluster_id = ?').get(holder.id) as
+        { entry_key: string } | undefined)
+    : undefined;
+  db.prepare(
+    `INSERT OR REPLACE INTO vacancy_catalog_redirects
+       (old_key, old_path, new_cluster_id, new_key, step_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(page.entry_key, page.path, holder?.id ?? '', target?.entry_key ?? '', stepId, now);
 }
 
 /**
  * Основатель последним: прежние ключи снимаются, строка и страница каталога
- * переписываются. Старый ключ уходит в переадресацию, только если у основателя
- * страницы больше нет, а ссылка прежней страницы досталась куску.
- * Возвращает, была ли у основателя страница каталога.
+ * переписываются. Прежний адрес остаётся за вакансией, чья ссылка на нём стояла
+ * (`pageOwner`): основатель держит его сам, иначе адрес уходит куску либо
+ * отвечает как снятый. Запись об адресе идёт до страницы основателя: тот же
+ * адрес она занять уже не может (`writeCatalogEntry`).
+ * Возвращает итог прежней страницы, `undefined` — страницы не было.
  */
 export function writeFounder(
   writers: SplitWriters,
-  pieces: readonly VacancyCluster[],
-  redirectStepId: string,
-): boolean {
+  plan: { readonly pieces: readonly VacancyCluster[]; readonly links: LinkOwners },
+  stepId: string,
+): PageOutcome | undefined {
   const { db } = writers;
-  const founder = pieces[0]!;
-  const before = db
-    .prepare('SELECT entry_key, path, source_url FROM catalog_entries WHERE cluster_id = ?')
-    .get(founder.id) as CatalogEntryRow | undefined;
+  const founder = plan.pieces[0]!;
+  const page = db
+    .prepare(
+      'SELECT entry_key, path, title, company, source_url FROM catalog_entries WHERE cluster_id = ?',
+    )
+    .get(founder.id) as PublishedPage | undefined;
+  const owner = page ? pageOwner(page, plan.pieces, plan.links) : undefined;
+  if (page && owner !== 0) {
+    redirectPage(writers, page, owner === undefined ? undefined : plan.pieces[owner], stepId);
+  }
   db.prepare('DELETE FROM vacancy_cluster_keys WHERE cluster_id = ?').run(founder.id);
   writeRow(writers, founder);
   writeCatalogEntry(founder, writers.catalog);
-  if (!before) return false;
-  if (db.prepare('SELECT 1 FROM catalog_entries WHERE cluster_id = ?').get(founder.id)) return true;
-  const holder = pieces.find(
-    (piece, index) =>
-      index > 0 && piece.sources.some((source) => source.sourceUrl === before.source_url),
-  );
-  const moved = holder
-    ? (db.prepare('SELECT entry_key FROM catalog_entries WHERE cluster_id = ?').get(holder.id) as
-        { entry_key: string } | undefined)
-    : undefined;
-  if (holder && moved) {
-    db.prepare(
-      `INSERT OR REPLACE INTO vacancy_catalog_redirects
-         (old_key, old_path, new_cluster_id, new_key, step_id, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(before.entry_key, before.path, holder.id, moved.entry_key, redirectStepId, writers.now);
-  }
-  return true;
+  if (!page) return undefined;
+  const held = db.prepare('SELECT 1 FROM catalog_entries WHERE cluster_id = ?').get(founder.id);
+  // Вакансия у основателя, но её новое имя адреса не даёт: адрес снят, а не забыт.
+  if (owner === 0 && !held) redirectPage(writers, page, founder, stepId);
+  return recordPageOutcome(db, page, founder.id, stepId);
 }
