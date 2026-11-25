@@ -50,6 +50,8 @@ pub(crate) const PRESS_REFUSALS: &[&str] = &[
     "submit_disabled",
     "form_missing",
     "off_target",
+    "code_missing",
+    "code_refused",
 ];
 pub(crate) const FILL_RESULTS: &[&str] = &[
     "set",
@@ -138,6 +140,42 @@ pub struct ReleaseRequest {
     pub vacancy_id: String,
     /// The candidate confirmed that the earlier application did not leave.
     pub confirmed: bool,
+}
+
+/// The code the candidate typed. No `Debug` and no `Serialize`: it is never
+/// written anywhere but the form.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodeRequest {
+    pub vacancy_id: String,
+    /// The candidate pressed «Отправить отклик» for this code.
+    pub confirmed: bool,
+    pub code: String,
+}
+
+const CODE_CHARS: usize = 8;
+
+pub(crate) fn validate_code(request: &CodeRequest) -> Result<(), String> {
+    let sound = request.code.len() == CODE_CHARS
+        && request
+            .code
+            .bytes()
+            .all(|sign| sign.is_ascii_alphanumeric());
+    if !request.confirmed || !is_id(&request.vacancy_id) || !sound {
+        return Err("code_invalid".to_string());
+    }
+    Ok(())
+}
+
+/// The answer to a sent code: outcome and reason. Only a wrong code may be typed
+/// again; a refusal of other fields may hide an application that did leave.
+pub(crate) fn code_outcome(read: &'static str) -> (&'static str, Option<&'static str>) {
+    match read {
+        "code_wrong" => ("code", Some("code_wrong")),
+        "code_expired" => ("unconfirmed", Some("code_expired")),
+        "confirmed" | "captcha" => (read, None),
+        _ => ("unconfirmed", None),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -339,6 +377,8 @@ pub(crate) fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, 
         Some("invalid") => ("rejected", keys()),
         Some("captcha") => ("captcha", Vec::new()),
         Some("code") => ("code", Vec::new()),
+        Some("code_wrong") => ("code_wrong", Vec::new()),
+        Some("code_expired") => ("code_expired", Vec::new()),
         _ => ("unconfirmed", Vec::new()),
     }
 }
@@ -405,6 +445,42 @@ mod tests {
     use crate::ats_apply::store_identifier;
     use crate::ats_target::resolve;
     use serde_json::json;
+
+    #[test]
+    fn a_code_is_eight_letters_or_digits_after_the_candidates_press() {
+        let check = |code: &str, confirmed| {
+            validate_code(&CodeRequest {
+                vacancy_id: "v1".to_string(),
+                confirmed,
+                code: code.to_string(),
+            })
+        };
+        assert_eq!(check("aB3dE9x0", true), Ok(()));
+        for code in [
+            "aB3dE9x",
+            "aB3dE9x01",
+            "aB3dE9x<",
+            "aB3 E9x0",
+            "кодкод12",
+            "",
+        ] {
+            assert_eq!(check(code, true), Err("code_invalid".to_string()));
+        }
+        assert_eq!(check("aB3dE9x0", false), Err("code_invalid".to_string()));
+    }
+
+    #[test]
+    fn only_a_wrong_code_may_be_typed_again() {
+        assert_eq!(code_outcome("code_wrong"), ("code", Some("code_wrong")));
+        assert_eq!(code_outcome("confirmed"), ("confirmed", None));
+        assert_eq!(
+            code_outcome("code_expired"),
+            ("unconfirmed", Some("code_expired"))
+        );
+        for read in ["unconfirmed", "rejected", "code"] {
+            assert_eq!(code_outcome(read), ("unconfirmed", None));
+        }
+    }
 
     #[test]
     fn a_path_becomes_a_journal_code_of_bounded_length() {

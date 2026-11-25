@@ -1,5 +1,8 @@
 /* Единый экран отклика: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* B787: код из письма на «Отправке». */
+  .b640 .ap-code-form { display: grid; gap: var(--career-space-4); }
+  .b640 .ap-code small.is-err { display: flex; gap: var(--career-space-1); align-items: center; color: var(--career-danger); font-weight: 600; }
   /* Д4: «Скачать» в строке ручной отправки — справа, как соседние кнопки. */
   .b640 .cb-item > .cv-dl { order: 0; flex: none; inline-size: auto; margin-inline-start: auto; }
   .b640 .cb-item > .cv-dl > .icon-btn { inline-size: var(--career-target-min); block-size: var(--career-target-min); }

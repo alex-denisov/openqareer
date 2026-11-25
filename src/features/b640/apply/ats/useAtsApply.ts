@@ -18,7 +18,7 @@ import {
 } from './atsSession';
 import { sentItems, type AtsSentItem } from './atsSentItems';
 import type { AtsAddress } from './atsTarget';
-import { isLive, useAtsWindow } from './useAtsWindow';
+import { isLive, useAtsWindow, type AtsWindow } from './useAtsWindow';
 
 export type { AtsApplyState } from './atsSession';
 
@@ -63,8 +63,10 @@ export interface AtsApplyControls {
   readonly send: () => void;
   readonly retry: () => void;
   readonly cancel: () => void;
-  /** Окно формы на экран: код и отправку в нём делает кандидат. */
+  /** Окно формы на экран: проверку и отправку в нём делает кандидат. */
   readonly showForm: () => void;
+  /** Код, введённый кандидатом, — в открытую форму. */
+  readonly sendCode: (code: string) => void;
   /** Кандидат подтвердил, что прежний отклик не ушёл: форма читается заново. */
   readonly again: () => Promise<void>;
 }
@@ -207,7 +209,9 @@ async function finish(core: Core, result: AtsRunResult, current: AtsSession): Pr
   }
   if (result.kind === 'code' || result.kind === 'captcha' || result.kind === 'unconfirmed') {
     core.held.current = (await windowOutcome(latest.current.vacancyId)) !== null;
-    return show({ ...result, live: core.held.current });
+    const live = core.held.current;
+    if (result.kind !== 'code') return show({ ...result, live });
+    return show(live ? { ...result, live } : { kind: 'unconfirmed', host: result.host, live });
   }
   // Страница уже видела нажатие или потеряна: следующая попытка открывает её заново.
   core.dropSession();
@@ -240,7 +244,7 @@ function useCandidateWindow(
   { latest }: Core,
   state: AtsApplyState,
   setState: (update: AtsApplyState | ((now: AtsApplyState) => AtsApplyState)) => void,
-): () => void {
+): AtsWindow {
   return useAtsWindow({
     vacancyId: latest.current.vacancyId,
     state,
@@ -265,7 +269,7 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
   const open = useOpen(core);
   core.held.current = isLive(state);
   useAutoOpen(core, wanted && address !== null, open);
-  const showForm = useCandidateWindow(core, state, setState);
+  const { showForm, sendCode } = useCandidateWindow(core, state, setState);
   useSeconds(state.kind === 'sending', setState);
 
   const send = () => {
@@ -294,6 +298,7 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
     send,
     retry: () => void open(),
     showForm,
+    sendCode,
     again: async () => {
       await releaseAtsAttempt(input.vacancyId);
       await open();

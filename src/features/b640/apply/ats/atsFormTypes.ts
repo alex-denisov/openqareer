@@ -97,7 +97,11 @@ export type AtsReason =
   | 'submit_ambiguous'
   | 'submit_disabled'
   | 'form_missing'
-  | 'press_unknown';
+  | 'press_unknown'
+  | 'code_wrong'
+  | 'code_expired'
+  | 'code_missing'
+  | 'code_refused';
 
 /** Попытка отправки на диске приложения: переживает перезапуск; `null` в итоге — он не узнан. */
 export interface AtsAttempt {
