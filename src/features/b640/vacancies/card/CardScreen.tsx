@@ -22,6 +22,7 @@ import { useCardData, type CardData } from './useCardData';
 import { useSave } from './useSave';
 import { useVacancyFit } from './useVacancyFit';
 import { VacancyText } from './VacancyText';
+import { appliedOn } from '../vacancyLinks';
 import { WaysBlock } from './WaysBlock';
 import { applyWays, sourceLinkOf, type ApplyWay, type ComposeAction } from './waysModel';
 
@@ -128,6 +129,8 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
   const save = useSave(item, data.links);
   const state = fitBlockState(fit.view, fit.failed);
   const ways = waysFor(item, data);
+  const existing = data.links.byCluster.get(item.cluster.id);
+  const responseId = appliedOn(existing) ? existing?.id : undefined;
   return (
     <>
       <QuotaLine />
@@ -140,7 +143,12 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
             sourceName={sourceName(item)}
             onRetry={fit.retry}
           />
-          <ActBar vacancyId={vacancyId} noProfile={state === 'none'} save={save.button} />
+          <ActBar
+            vacancyId={vacancyId}
+            responseId={responseId}
+            noProfile={state === 'none'}
+            save={save.button}
+          />
           {save.failed ? <SaveFailure onRetry={save.retry} /> : null}
         </div>
         <VacancyText
@@ -148,7 +156,7 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
           fit={fit.view}
           source={sourceLinkOf(item.cluster, ways)}
         />
-        <WaysBlock ways={ways} vacancyId={vacancyId} onCompose={onCompose} />
+        <WaysBlock ways={ways} vacancyId={vacancyId} responseId={responseId} onCompose={onCompose} />
       </div>
       <RightColumn
         vacancyId={vacancyId}

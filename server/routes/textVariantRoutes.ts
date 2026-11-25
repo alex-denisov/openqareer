@@ -19,6 +19,7 @@ import { letterVacancyTexts } from './letterDraftRoutes';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
+import { refuseWhenSent } from './sentApplicationGuard';
 import { requireTariffQuota } from './tariffQuotaGuard';
 import {
   pitchSourceId,
@@ -151,6 +152,7 @@ const createLetterVariant: Handler = async (deps, request, reply) => {
   if (deps.variants.count(subject) >= MAX_TEXT_VARIANTS) return limitReached(reply, request);
 
   const letter = parsed.data.letter ?? {};
+  if (!letter.recipient && refuseWhenSent(deps, request, reply, candidateId, vacancyId)) return reply;
   // Один вариант на текст за раз: параллельные запросы не обходят предел лишними вызовами модели.
   const flight = `${candidateId}:${vacancyId}`;
   if (inFlight.has(flight)) {

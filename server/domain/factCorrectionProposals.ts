@@ -89,6 +89,19 @@ export function placeOf(source: FactSource, target: FactCorrectionTarget): strin
   return entry ? entry.employer || entry.title || null : null;
 }
 
+/** Что о карточках под репликой знает консультант: где правка и какое число на какое. */
+export function correctionCards(
+  source: FactSource,
+  message: string,
+): { place: string; from: string; to: string }[] {
+  const stated = statedCorrection(message);
+  if (!stated) return [];
+  return factCorrectionProposals(source, message).map(({ place }) => ({
+    place: place.slice(0, 300),
+    ...stated,
+  }));
+}
+
 const MAX_PROPOSALS = 4;
 
 /**
