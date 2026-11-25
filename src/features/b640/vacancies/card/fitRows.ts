@@ -64,12 +64,6 @@ export function fitRows(view: VacancyFitView | undefined): readonly FitRow[] {
   });
 }
 
-export function requirementsLabel(view: VacancyFitView | undefined): string {
-  const count = fitRows(view).length;
-  if (vacancyFitPercent(view) === null) return `Требования из текста вакансии · ${count}`;
-  return `Требования: ${view!.result!.coverage.matched} из ${view!.result!.coverage.total} есть в профиле`;
-}
-
 function shortDate(iso: string | undefined): string {
   const date = iso ? new Date(iso) : undefined;
   if (!date || Number.isNaN(date.getTime())) return '';

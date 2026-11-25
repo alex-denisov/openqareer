@@ -38,6 +38,11 @@ describe('duties apart from requirements', () => {
   ])('B794: «%s» тоже открывает обязанности', (heading) => {
     expect(vacancyDutyIds(`${heading}\n- Провести глубокий анализ бизнеса`, [line('a', 'Провести глубокий анализ бизнеса')]).size).toBe(1);
   });
+  it.each(['Наши цели:', 'Цели компании:', 'Основные цели компании:'])('B794: «%s» — не обязанности, после списка тоже', (heading) => {
+    const text = `${heading}\n- Выйти на рынок ОАЭ`;
+    expect(vacancyDutyIds(text, [line('a', 'Выйти на рынок ОАЭ')]).size).toBe(0);
+    expect(vacancyDutyIds(`Обязанности:\n- Вести учёт\n${text}`, [line('a', 'Выйти на рынок ОАЭ')]).size).toBe(0);
+  });
   it('B794: подраздел обязанностей не закрывает их, раздел качеств закрывает', () => {
     const text = 'Responsibilities\n- Own the budget\nTeam Leadership\n- Lead the managers\nLeadership skills\n- Budget models in Excel';
     const ids = vacancyDutyIds(text, [line('a', 'Own the budget'), line('b', 'Lead the managers'), line('c', 'Budget models in Excel')]);

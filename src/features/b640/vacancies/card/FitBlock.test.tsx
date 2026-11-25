@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { FitBlock } from './FitBlock';
-import { ReqsBox } from './ReqsBox';
 import { RequirementList } from './RequirementList';
 import { fitRows } from './fitRows';
 
@@ -102,17 +101,5 @@ describe('RequirementList', () => {
     expect(html).not.toContain('Проверить: Kubernetes');
     expect(html).not.toContain('Проверить: Go"');
     expect(html).toContain('href="/app/career/skills"');
-  });
-});
-
-describe('ReqsBox', () => {
-  it('строка «Требования: N из M есть в профиле», закрыта', () => {
-    const html = renderToStaticMarkup(<ReqsBox view={view} />);
-    expect(html).toContain('Требования: 2 из 4 есть в профиле');
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain('v4-fd-l');
-  });
-  it('нет требований — строки нет', () => {
-    expect(renderToStaticMarkup(<ReqsBox view={undefined} />)).toBe('');
   });
 });

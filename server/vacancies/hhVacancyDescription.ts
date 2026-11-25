@@ -165,6 +165,12 @@ export class HhVacancyDescriptionLoader {
     return true;
   }
 
+  /** B797: сверка живости читает карточку заново, мимо памяти прочитанных. */
+  recheck(url: string): Promise<HhVacancyDetails | undefined> {
+    this.cached.delete(url);
+    return this.load(url);
+  }
+
   load(url: string): Promise<HhVacancyDetails | undefined> {
     if (!isHhVacancyUrl(url)) return Promise.resolve(undefined);
     if (this.isLoaded(url)) return Promise.resolve(this.cached.get(url)?.details);

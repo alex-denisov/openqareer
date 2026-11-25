@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { vacancyFitSentence } from '../../../vacancies/vacancyFitModel';
-import { fitBlockState, fitRows, requirementsLabel, sourceLine } from './fitRows';
+import { fitBlockState, fitRows, sourceLine } from './fitRows';
 
 function req(id: string, text: string, skill = true) {
   return {
@@ -119,16 +119,7 @@ describe('fitRows', () => {
   });
 });
 
-describe('requirementsLabel и sourceLine', () => {
-  it('«N из M есть в профиле» по покрытию', () => {
-    expect(requirementsLabel(view())).toBe('Требования: 2 из 4 есть в профиле');
-  });
-  it('без профиля — «Требования из текста вакансии · N»', () => {
-    const none = view({
-      result: { ...view().result!, reason: 'no_eligible_facts', status: 'unknown' },
-    });
-    expect(requirementsLabel(none)).toBe('Требования из текста вакансии · 4');
-  });
+describe('sourceLine', () => {
   it('строка источника с числом и датой', () => {
     expect(sourceLine(view(), 'hh.ru')).toBe(
       'Требования — из текста вакансии, hh.ru, 11.11 · 4 требования',
