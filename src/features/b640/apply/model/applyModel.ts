@@ -9,6 +9,7 @@ import {
 } from '../../../../../shared/hhVacancySource';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import { platformOf, type Platform } from '../../responses/model/platform';
+import { wasSent } from '../../responses/model/sentState';
 import type {
   ConnectionCircleNumber,
   ConnectionCircleResult,
@@ -68,6 +69,8 @@ export interface ApplyHead {
   /** Площадка словами: «hh.ru», «сайт компании». */
   readonly source: string | null;
   readonly platform: Platform | null;
+  /** Id отклика, который уже ушёл: отправлять его второй раз нечего. */
+  readonly sentId?: string;
 }
 
 interface HeadSources {
@@ -159,6 +162,7 @@ export function buildHead({ application, known, cluster }: HeadSources): ApplyHe
     url: route.url,
     source: platform?.label ?? null,
     platform,
+    ...(application && wasSent(application) ? { sentId: application.id } : {}),
   };
 }
 
