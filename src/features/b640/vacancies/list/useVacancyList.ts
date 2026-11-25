@@ -20,7 +20,7 @@ import {
   type ListFilters,
 } from './filterModel';
 import { defaultRoles } from './defaultRoles';
-import { buildOptions, listCount, serverCountState, type FilterOptions } from './filterOptions';
+import { buildOptions, countPending, listCount, serverCountState, type FilterOptions } from './filterOptions';
 import {
   useServerSortedList,
   type ServerListStatus,
@@ -72,10 +72,12 @@ export interface VacancyList {
     readonly retry: () => void;
   };
   readonly noRole: boolean;
+  /** Список выбрал роли — или выбирать их нечего (ролей нет, чтение сорвалось). */
+  readonly rolesReady: boolean;
 }
 
 /**
- * Роли читает сервер; пока выбор ролей не менялся, повторного чтения нет.
+ * Роли читает сервер; пока выбор ролей не менялся, повторного чтения нет. Отдаёт, выбраны ли роли.
  * Роль и «Дата» из адреса (B726, «Вакансии по роли» из «Карьеры») ставятся только на этот
  * заход, сохранённый выбор не заменяют.
  */
@@ -85,7 +87,8 @@ function useServerRoles(
   seed: (roles: readonly string[], date?: DateId) => void,
   /** Роли, с которыми пул уже читается с первого запроса (B768). */
   readingRoles: string,
-): void {
+): boolean {
+  const [settled, setSettled] = useState(false);
   const { search } = useShell();
   const linked = linkedRole(search);
   const linkedPeriod = linkedDate(search);
@@ -99,12 +102,14 @@ function useServerRoles(
     // «Вакансии по роли» из «Карьеры» (B726): подборка открывается с этой ролью в фильтре.
     if (linked) {
       seeded.current = true;
+      setSettled(true);
       seed([linked], linkedPeriod ?? undefined);
       return;
     }
     // Из кэша роли не ставим: их могли сменить после прошлого чтения (B792).
     if (pool.reading === true || (!initial && !campaign)) return;
     seeded.current = true;
+    setSettled(true);
     // Сервер уже отдал подборку с сохранёнными ролями; роли «Карьеры» подборку ещё не сузили.
     sent.current = (initial?.roles ?? []).join('\n');
     const start = defaultRoles(initial?.roles, campaign?.roles);
@@ -122,8 +127,11 @@ function useServerRoles(
     // B792: роли ставит сам экран — прочитанные строки остаются до сужения, список не пустеет.
     const own = seedKey.current === key;
     seedKey.current = null;
+    setSettled(true);
     pool.setFilters?.({ roles: [...roles], regions: [], remoteOnly: false }, own);
   }, [key]);
+  // Чтение закончилось без ролей (сбой): ждать выбора больше нечего.
+  return settled || (pool.reading !== true && !initial && !campaign);
 }
 
 interface RowsInput {
@@ -135,6 +143,7 @@ interface RowsInput {
   readonly now: Date;
   readonly sortState: SortState | null;
   readonly serverMode: boolean;
+  readonly rolesReady: boolean;
   readonly server: ServerSortedList;
   readonly shown: number;
 }
@@ -167,10 +176,55 @@ export function isNarrowed(filters: ListFilters): boolean {
   return locations.length > 0 || formats.length > 0 || reloc || moneyFrom !== null || date !== 'any';
 }
 
+/** Число в шапке и можно ли его уже показать. */
+function countOf({
+  input,
+  serverMode,
+  waitingFirst,
+  filtered,
+}: {
+  readonly input: RowsInput;
+  readonly serverMode: boolean;
+  readonly waitingFirst: boolean;
+  readonly filtered: number;
+}) {
+  const { pool, hidden, filters, server, rolesReady } = input;
+  // B726, B765: «Дату» и «Зарплату от» в серверном порядке режет и считает сервер — число известно сразу.
+  const narrowed = isNarrowed(serverMode ? { ...filters, date: 'any', moneyFrom: null } : filters);
+  // Серверный итог уже без скрытых в этой сессии (их вычел список порций), пул — нет.
+  const { serverKnows, serverPending } = serverCountState({
+    serverMode,
+    dated: serverDays(filters) !== null || filters.moneyFrom !== null,
+    total: server.total,
+    loadingFirst: server.rows.length === 0 && server.status === 'loading',
+  });
+  const pending = countPending({
+    rolesReady,
+    waitingFirst,
+    serverMode,
+    serverKnows,
+    reading: pool.reading === true,
+  });
+  const known = serverKnows ? server.total : pool.total - hidden.size;
+  const counted = listCount({ narrowed, complete: pool.complete, serverMode, known, filtered });
+  return {
+    count: counted.count,
+    countKnown: !pending && !serverPending && counted.countKnown,
+    narrowed,
+    pending,
+  };
+}
+
 /** Строки списка: источник (пул или порции сервера), фильтры, сортировка, число и подвал. */
 function useListRows(input: RowsInput): DerivedRows {
-  const { pool, hidden, filters, currency, rates, now, sortState, serverMode, server, shown } =
-    input;
+  const { pool, hidden, filters, currency, rates, now, sortState, server, shown } = input;
+  // Порядок по умолчанию на время первой порции сервера показываем из пула, чтобы таблица не мигала пустой.
+  const waitingFirst =
+    input.serverMode &&
+    server.status === 'loading' &&
+    server.rows.length === 0 &&
+    sortState === DEFAULT_LIST_SORT;
+  const serverMode = input.serverMode && !waitingFirst;
   const poolBase = useMemo(() => pool.matched.filter((item) => !hidden.has(item.cluster.id)), [pool.matched, hidden]);
   const base = useMemo(
     () => (serverMode ? server.rows.filter((item) => !hidden.has(item.cluster.id)) : poolBase),
@@ -189,18 +243,7 @@ function useListRows(input: RowsInput): DerivedRows {
     () => buildOptions(poolBase, pool.facets, now, pool.complete),
     [poolBase, pool.facets, now, pool.complete],
   );
-  // B726, B765: «Дату» и «Зарплату от» в серверном порядке режет и считает сервер — число известно сразу.
-  const narrowed = isNarrowed(serverMode ? { ...filters, date: 'any', moneyFrom: null } : filters);
-  // Серверный итог уже без скрытых в этой сессии (их вычел список порций), пул — нет.
-  const { serverKnows, serverPending } = serverCountState({
-    serverMode,
-    dated: serverDays(filters) !== null || filters.moneyFrom !== null,
-    total: server.total,
-    loadingFirst: server.rows.length === 0 && server.status === 'loading',
-  });
-  const known = serverKnows ? server.total : pool.total - hidden.size;
-  const counted = listCount({ narrowed, complete: pool.complete, serverMode, known, filtered: all.length });
-  const { count } = counted;
+  const { count, countKnown, narrowed, pending } = countOf({ input, serverMode, waitingFirst, filtered: all.length });
   const visible = serverMode ? all : visibleSlice(all, shown);
   const foot = serverFoot({
     narrowed,
@@ -208,7 +251,8 @@ function useListRows(input: RowsInput): DerivedRows {
     serverTotal: server.total,
     loaded: base.length,
   });
-  const more = serverMode ? { total: foot.total, shown: foot.shown } : { total: count, shown: visible.length };
+  const read = serverMode ? { total: foot.total, shown: foot.shown } : { total: count, shown: visible.length };
+  const more = pending && visible.length > 0 ? { ...read, total: null } : read;
   const blockers = useBlockers(all.length === 0 && !pool.loading, base, filters, { currency, rates, now });
   return {
     options,
@@ -217,7 +261,7 @@ function useListRows(input: RowsInput): DerivedRows {
     count,
     blockers,
     more,
-    countKnown: counted.countKnown && (!serverMode || foot.countKnown) && !serverPending,
+    countKnown: countKnown && (!serverMode || foot.countKnown),
   };
 }
 
@@ -275,13 +319,11 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   const [sheetOpen, setSheetOpen] = useState(false);
   const [shown, setShown] = useState(PAGE_SIZE);
   const now = useMemo(() => new Date(), [pool.matched]);
-  useServerRoles(pool, filters.roles, seedWith(setFilters), start.roles);
+  const rolesReady = useServerRoles(pool, filters.roles, seedWith(setFilters), start.roles);
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
   const serverMode = serverSortApplies(pool);
   const server = useServerSortedList(serverMode, sortState, filters.roles, hidden, serverDays(filters), serverMoney(filters, currency));
-  // Порядок по умолчанию на время первой порции сервера показываем из пула, чтобы таблица не мигала пустой.
-  const waitingFirst = server.status === 'loading' && server.rows.length === 0 && sortState === DEFAULT_LIST_SORT;
   const derived = useListRows({
     pool,
     hidden,
@@ -290,9 +332,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     rates,
     now,
     sortState,
-    serverMode: serverMode && !waitingFirst,
-    server,
-    shown,
+    ...{ serverMode, rolesReady, server, shown },
   });
   return {
     pool,
@@ -312,6 +352,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     ...derived,
     showMore: serverMode ? server.loadMore : () => setShown((value) => value + PAGE_SIZE),
     server: { active: serverMode, status: server.status, retry: server.retry },
-    noRole: pool.campaign !== undefined && pool.campaign.roles.value.length === 0,
+    rolesReady,
+    noRole: pool.campaign?.roles.value.length === 0,
   };
 }

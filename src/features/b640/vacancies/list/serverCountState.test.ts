@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { serverCountState } from './filterOptions';
+import { countPending, serverCountState } from './filterOptions';
 
 describe('B726: число подборки с «Датой» в серверном порядке', () => {
   it('итог сервера — число, и ноль тоже; до первой порции числа нет', () => {
@@ -28,5 +28,26 @@ describe('B726: число подборки с «Датой» в серверн�
       serverKnows: false,
       serverPending: false,
     });
+  });
+});
+
+describe('B791: промежуточного числа подборки нет', () => {
+  const ready = {
+    rolesReady: true,
+    waitingFirst: false,
+    serverMode: true,
+    serverKnows: true,
+    reading: false,
+  };
+
+  it('число — когда роли выбраны и сервер ответил, даже если пул ещё перечитывается', () => {
+    expect(countPending(ready)).toBe(false);
+    expect(countPending({ ...ready, reading: true })).toBe(false);
+  });
+
+  it('до выбора ролей, до первой порции и до перечитанного пула числа нет', () => {
+    expect(countPending({ ...ready, rolesReady: false })).toBe(true);
+    expect(countPending({ ...ready, serverMode: false, waitingFirst: true })).toBe(true);
+    expect(countPending({ ...ready, serverKnows: false, reading: true })).toBe(true);
   });
 });

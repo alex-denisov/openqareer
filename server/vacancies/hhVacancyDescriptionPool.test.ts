@@ -362,13 +362,19 @@ describe('B794: a cut hh text is read once more', () => {
     expect(pool.peekHhTextPriority(5)).toEqual([]);
   });
 
-  it('asks a card that really is short once per process', async () => {
+  it('asks a card that really is short once, after a restart and a new search slice too', async () => {
     const pool = new MemoryVacancyPoolStore();
     pool.mergeSourceSlice(source.id, [stub]);
     const load = vi.fn().mockResolvedValue({ description: 'Обязанности:', skills: [] });
     const engine = engineWith(pool, load);
     await engine.loadVacancyDescription(vacancy.id);
     await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({ status: 'cached' });
+    pool.mergeSourceSlice(source.id, [{ ...vacancy, description: '', fullDescription: '' }]);
+    pool.requestHhTextPriority([vacancy.id]);
+    expect(pool.peekHhTextPriority(5)).toEqual([]);
+    await expect(
+      engineWith(pool, load).loadVacancyDescription(vacancy.id),
+    ).resolves.toMatchObject({ status: 'cached' });
     expect(load).toHaveBeenCalledTimes(1);
   });
 

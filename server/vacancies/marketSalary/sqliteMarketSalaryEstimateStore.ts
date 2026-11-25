@@ -14,6 +14,7 @@ interface EstimateRow {
   readonly low: number | null;
   readonly high: number | null;
   readonly currency: string;
+  readonly period?: string | null;
   readonly sample_size: number;
   readonly computed_at: string;
 }
@@ -38,6 +39,7 @@ export class SqliteMarketSalaryEstimateStore {
     return {
       ...(row.low !== null && row.high !== null ? { low: row.low, high: row.high } : {}),
       currency: row.currency,
+      ...(row.period === 'month' || row.period === 'year' ? { period: row.period } : {}),
       sampleSize: row.sample_size,
       computedAt: row.computed_at,
     };
@@ -56,7 +58,8 @@ export class SqliteMarketSalaryEstimateStore {
       .get();
     if (!exists) return undefined;
     this.statement = this.database.prepare(
-      'SELECT low, high, currency, sample_size, computed_at FROM market_salary_estimates WHERE key = ?',
+      // `*`: столбец периода появляется с первым проходом обслуживания после B803.
+      'SELECT * FROM market_salary_estimates WHERE key = ?',
     );
     return this.statement;
   }

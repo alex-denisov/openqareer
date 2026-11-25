@@ -25,8 +25,11 @@ import {
   clusterVacanciesAsync,
   clusterVacancySteps,
   IncrementalClusterBuilder,
+  isDuplicatePrepared,
   memberKeysOf,
+  prepareVacancy,
   sourceMemberKey,
+  vacancyClusterLookup,
 } from './vacancyDeduplicator';
 import { clusterOfRecord } from './vacancyIdentity';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
@@ -102,7 +105,8 @@ import {
   type WorkdayDescriptionReport,
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
-import { isHhStubText } from './hhStubText';
+import { hhTextNeedsRead, isHhStubText } from './hhStubText';
+import { isHhSource } from '../../shared/hhVacancySource';
 import { hasDetailText } from './detailTextPriority';
 import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
@@ -1487,8 +1491,8 @@ export class MultiSourceVacancyEngine {
     if (
       this.persistedDescriptionIds.has(id) ||
       // 01.11: дочитанный текст без навыков — тоже готов; иначе он запрашивался каждый раз.
-      // B794: обрывок («Обязанности:») читается ещё раз, один раз за процесс.
-      !isHhStubText(existing.fullDescription)
+      // B794: обрывок («Обязанности:») читается ещё раз, один раз на вакансию.
+      !hhTextNeedsRead(existing)
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
@@ -1526,6 +1530,74 @@ export class MultiSourceVacancyEngine {
     this.pool.requestSelectionLiveness?.(ids);
   }
 
+  /** B797: записи верха подборок, которые сверка застала снятыми. */
+  public closedSelection(): ReadonlySet<string> {
+    return this.pool.closedSelection?.() ?? new Set();
+  }
+
+  /**
+   * B797: снята ли открытая карточка. Запись hh, которую сутки не сверяли, читается с площадки.
+   * Склейка закрыта, только когда сняты все её записи. Список снимает запись индексом; кластер
+   * сведёт воркер, как у `retireArchivedVacancy`.
+   */
+  public async openedVacancyGone(cluster: VacancyCluster): Promise<boolean> {
+    const id = cluster.id.replace(/^cluster-/u, '');
+    const vacancy = id.startsWith(HH_ID_PREFIX) ? this.pool.getVacancy(id) : undefined;
+    if (
+      vacancy &&
+      this.descriptionLoader?.recheck &&
+      this.pool.selectionRecentlyChecked?.(id) === false
+    ) {
+      await this.settleOpenedCheck(vacancy);
+    }
+    const sources = cluster.sources;
+    if (sources.length === 0) return this.recordGone(id);
+    return sources.every((source) => {
+      const key = sourceMemberKey(source);
+      const known = key !== undefined && this.memberRecordExists(`cluster-${key}`);
+      if (known) return this.recordGone(key);
+      // Источник hh без внешнего id — запись самой карточки.
+      return isHhSource(source) && this.recordGone(id);
+    });
+  }
+
+  /**
+   * B797: кластера у снятой записи нет — такт убрал её ключ из склейки с другой площадкой. Строка
+   * закрыта, если по правилам склейки у неё не осталось живой записи на другой площадке.
+   */
+  public detachedRowGone(rowId: string): boolean {
+    const id = rowId.replace(/^cluster-/u, '');
+    const record = this.pool.getVacancyIncludingExpired?.(id);
+    const load = this.pool.loadClusterRepresentatives?.bind(this.pool);
+    if (!record || !load) return true;
+    const prepared = prepareVacancy(record);
+    return !load([vacancyClusterLookup(record)]).some((candidate) => {
+      if (!isDuplicatePrepared(prepared, candidate.prepared)) return false;
+      const cluster = this.getPublicCatalogCluster(candidate.clusterId);
+      return cluster?.status === 'active' && this.hasOtherLiveSource(cluster, id);
+    });
+  }
+
+  private hasOtherLiveSource(cluster: VacancyCluster, ownId: string): boolean {
+    return cluster.sources.some((source) => {
+      const key = sourceMemberKey(source);
+      return key !== undefined && key !== ownId && this.pool.getVacancy(key)?.status === 'active';
+    });
+  }
+
+  /** Запись в пуле была, а живой её больше нет. */
+  private recordGone(id: string): boolean {
+    return this.pool.getVacancy(id) === undefined && this.memberRecordExists(`cluster-${id}`);
+  }
+
+  private async settleOpenedCheck(vacancy: UnifiedVacancy): Promise<void> {
+    const verdict = await this.checkHhLiveness(vacancy);
+    // Нет ответа о вакансии — карточка не сверена: следующее открытие спросит снова.
+    if (verdict === 'blocked' || verdict === 'unknown') return;
+    if (verdict === 'gone') this.pool.markExpired([vacancy.id], new Date().toISOString());
+    this.pool.markSelectionLivenessChecked?.(vacancy.id);
+  }
+
   /** B797: один такт сверки живости верха подборок. Зовёт только воркер обслуживания. */
   public runSelectionLivenessStep(stopped: () => boolean): Promise<SelectionLivenessReport> {
     const pool = this.pool;
@@ -1534,6 +1606,7 @@ export class MultiSourceVacancyEngine {
       check: (id) => this.checkLiveness(id),
       retire: (id) => this.retireGone(id),
       markChecked: (id) => pool.markSelectionLivenessChecked?.(id),
+      markTried: (id) => pool.markSelectionLivenessTried?.(id),
       stopped,
     });
   }
@@ -1673,6 +1746,7 @@ export class MultiSourceVacancyEngine {
       ...vacancy,
       ...(fullDescription ? { fullDescription } : {}),
       requiredSkills: skillsToSave,
+      ...(fullDescription && isHhStubText(fullDescription) ? { descriptionShort: true } : {}),
     };
     try {
       this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
@@ -2709,6 +2783,7 @@ const HIDDEN_TEXT_ANSWERS = 2;
 
 /** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
 const EXPIRED_CLUSTER_BATCH = 50;
+const HH_ID_PREFIX = 'src-hh-search:';
 const LIVENESS_COUNT_CHUNK = 50;
 
 function yieldTurn(): Promise<void> {

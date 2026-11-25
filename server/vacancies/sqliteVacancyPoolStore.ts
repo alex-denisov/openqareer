@@ -30,6 +30,9 @@ import {
 import {
   dueSelectionLiveness,
   markSelectionLivenessChecked,
+  markSelectionLivenessTried,
+  closedSelection,
+  recentlyChecked,
   requestSelectionLiveness,
   SELECTION_LIVENESS_TABLE,
 } from './selectionLiveness';
@@ -2062,8 +2065,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     requestSelectionLiveness(this.database, vacancyIds, nowMs);
   }
 
+  closedSelection(): ReadonlySet<string> {
+    return closedSelection(this.database);
+  }
+
+  selectionRecentlyChecked(id: string, nowMs: number = Date.now()): boolean {
+    return recentlyChecked(this.database, id, nowMs);
+  }
+
   dueSelectionLiveness(limit: number, nowMs: number = Date.now()): string[] {
     return dueSelectionLiveness(this.database, limit, nowMs);
+  }
+
+  markSelectionLivenessTried(vacancyId: string, nowMs: number = Date.now()): void {
+    markSelectionLivenessTried(this.database, vacancyId, nowMs);
   }
 
   markSelectionLivenessChecked(vacancyId: string, nowMs: number = Date.now()): void {
@@ -3467,6 +3482,7 @@ const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 /** B794: строка подборки с обрывком текста читается ещё раз; общий обход обрывков не трогает. */
 const HH_NEEDS_PRIORITY_TEXT = `p.expired_at IS NULL AND
+      coalesce(json_extract(p.payload, '$.descriptionShort'), 0) = 0 AND
       length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) < ${HH_STUB_TEXT_CHARS} AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 const HH_TEXT_PHASES = ['catalog', 'pool'] as const;

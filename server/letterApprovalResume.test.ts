@@ -72,6 +72,36 @@ describe('B601: одобрение письма прикладывает рез�
   });
 });
 
+describe('B785: резюме отправленного отклика', () => {
+  it('после отправки версия не меняется и отклик не открывается заново', async () => {
+    const { call, candidates, candidateId, approve, prepareResume, versions, linkedResume, resumeDocuments } =
+      await setup('Head of Platform');
+    const first = (await approve()).json().data;
+    const sent = candidates.getApplication(candidateId, first.applicationId)!;
+    const marked = await call('PATCH', '/api/v1/candidate/applications/' + sent.id, {
+      expectedVersion: sent.version,
+      stage: 'applied',
+    });
+    expect(marked.statusCode).toBe(200);
+    // Профиль, а с ним и разбор изменились: id версии был бы другим.
+    seedResume(candidates, candidateId, 'VP Platform Engineering');
+    expect((await prepareResume()).json().data.versionId).toBe(first.resume.versionId);
+    // Сам отклик заново не одобряется; письмо знакомому пишется и после отправки — с тем же резюме.
+    expect((await approve()).statusCode).toBe(409);
+    const toContact = await approve({ recipient: { name: 'Пётр Пример' } });
+    expect(toContact.statusCode).toBe(200);
+    expect(toContact.json().data.resume).toMatchObject({
+      versionId: first.resume.versionId,
+      documentId: first.resume.documentId,
+    });
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+    expect(versions()).toHaveLength(1);
+    expect(resumeDocuments()).toHaveLength(1);
+    const after = candidates.listApplications(candidateId);
+    expect(after.map(({ id, stage }) => [id, stage])).toEqual([[first.applicationId, 'applied']]);
+  });
+});
+
 describe('hasAttachableResume', () => {
   it('место работы без подтверждённого факта не делает резюме: в снимке его нет', async () => {
     const { candidates, candidateId, approve } = await setup();

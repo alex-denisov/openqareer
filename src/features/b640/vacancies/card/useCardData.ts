@@ -24,7 +24,7 @@ import {
   type CompanyCard,
 } from '../../companies/companiesApi';
 import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
-import { getVacancyCard } from '../b640Api';
+import { getVacancyCard, postVacancyLiveness } from '../b640Api';
 import type { Expectation } from './moneyScale';
 import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
 
@@ -66,6 +66,28 @@ function useOptional<T>(load: () => Promise<T>, key: string): T | undefined {
     // load закрыт над key: меняется только вместе с ним.
   }, [key]);
   return value?.key === key ? value.data : undefined;
+}
+
+const HH_ID_PREFIX = 'cluster-src-hh-search:';
+
+/** B797: вакансия hh.ru, которую площадка сняла; сбой сверки карточку не трогает. */
+function useClosedOnPlatform(vacancyId: string, shown: boolean): boolean {
+  const [closedId, setClosedId] = useState('');
+  const enabled = shown && vacancyId.startsWith(HH_ID_PREFIX);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let alive = true;
+    postVacancyLiveness(vacancyId).then(
+      ({ closed }) => {
+        if (alive && closed) setClosedId(vacancyId);
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [vacancyId, enabled]);
+  return closedId === vacancyId && closedId !== '';
 }
 
 type SingleRead =
@@ -163,7 +185,10 @@ export function useCardData(vacancyId: string): CardData {
   const pooled = pool.matched.find((entry) => entry.cluster.id === vacancyId);
   // B654: не ждём подборку (страницами — секунды): своя вакансия одним запросом по id.
   const single = useSingleVacancy(vacancyId, !pooled || hasGluedHh(pooled));
-  const item = withOwnSources(pooled, single.read);
+  const listed = withOwnSources(pooled, single.read);
+  // B797: карточка показана сразу, ответ площадки её закрывает.
+  const closed = useClosedOnPlatform(vacancyId, listed !== undefined);
+  const item = closed ? undefined : listed;
   const contacts = useOptional(() => getRecruiterContacts(vacancyId), vacancyId);
   const circles = useOptional(() => getVacancyConnectionCircles(vacancyId), vacancyId);
   const company = item?.cluster.canonicalCompany ?? '';
@@ -186,7 +211,7 @@ export function useCardData(vacancyId: string): CardData {
     single.retry();
   }, [reloadPool, single.retry]);
   return {
-    load: cardLoad(item, pool.loading, single.read),
+    load: closed ? 'closed' : cardLoad(item, pool.loading, single.read),
     item,
     campaign: pool.campaign,
     rates,

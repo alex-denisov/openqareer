@@ -10,11 +10,17 @@ export const factCorrectionTargetSchema = z.discriminatedUnion('kind', [
 export type FactCorrectionTarget = z.infer<typeof factCorrectionTargetSchema>;
 
 export const FACT_TEXT_MAX = 10_000;
+/** Запись профиля: столько же держит снимок фактов резюме. */
+export const MEMORY_TEXT_MAX = 1_000;
 const text = z.string().min(1).max(FACT_TEXT_MAX);
 
 export const factCorrectionSchema = z
   .object({ target: factCorrectionTargetSchema, before: text, after: text })
-  .strict();
+  .strict()
+  .refine(
+    ({ target, after }) => target.kind !== 'memory' || after.trim().length <= MEMORY_TEXT_MAX,
+    { path: ['after'], message: 'memory statement is too long' },
+  );
 export type FactCorrectionChange = z.infer<typeof factCorrectionSchema>;
 
 export const factCorrectionRevertSchema = z

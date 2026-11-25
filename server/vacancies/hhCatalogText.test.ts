@@ -366,6 +366,11 @@ describe('hh text priority queue (01.11)', () => {
     store.mergeSourceSlice(HH, [stub]);
     store.requestHhTextPriority([stub.id], 0);
     expect(store.peekHhTextPriority(10)).toEqual([stub.id, b.id]);
+    // Прочитан, текст и правда короткий: новый показ списка его не возвращает.
+    store.mergeSourceSlice(HH, [{ ...stub, descriptionShort: true }]);
+    store.mergeSourceSlice(HH, [hh(5, 1)]);
+    store.requestHhTextPriority([stub.id], 0);
+    expect(store.peekHhTextPriority(10)).toEqual([b.id]);
   });
 });
 
