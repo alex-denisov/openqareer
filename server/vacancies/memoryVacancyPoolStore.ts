@@ -1,3 +1,4 @@
+import { isHhStubText } from './hhStubText';
 import { confirmsLiveness, freshnessAnchorMs, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
 import { sourceMemberKey } from './vacancyDeduplicator';
 
@@ -580,7 +581,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     const ordered = [...this.hhTextPriority.entries()].sort((a, b) => a[1] - b[1]);
     const needs = (id: string) => {
       const row = this.rows.get(id);
-      return Boolean(row && row.expiredAt === undefined && !row.vacancy.fullDescription?.trim());
+      return Boolean(row && row.expiredAt === undefined && isHhStubText(row.vacancy.fullDescription));
     };
     this.dropHhTextPriority(ordered.filter(([id]) => !needs(id)).map(([id]) => id));
     return ordered
