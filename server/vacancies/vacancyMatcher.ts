@@ -2,6 +2,8 @@ import type { VacancyCluster, VacancyMatchExplanation } from '../domain/unifiedV
 import type { VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
 import { normalizeTextForComparison } from './vacancyFingerprint';
+import { careerRoleListKey, careerRoleRowKey } from './careerRoleKey';
+import { isForeignSectorTitle } from './foreignSectorTitle';
 import { evaluateLevelMatch, LEVEL_RANK, type SeniorityLevel } from './levelMatcher';
 import { rulesParse } from './titleParse/rulesParse';
 import type { MatchGeography } from './matchGeography';
@@ -156,25 +158,40 @@ function isNonTechNoise(functions: readonly FunctionCode[], title: string): bool
 
 /** Анкеты, опросы и кадровые резервы площадок — не вакансии (аудит 01.11). */
 const NOT_A_VACANCY_TITLE =
-  /\b(?:expression of interest|study participant|research participant|talent (?:pool|community|network))\b/iu;
+  /\b(?:expression of interest|study participant|research participant|(?:paid )?research opportunit(?:y|ies)|paid research|decision-makers for|open application|future (?:\w+ )?roles|talent (?:pool|community|network))\b|\(volunteer\)/iu;
+
+/**
+ * B794: уровень кандидата один, а ролей в кампании несколько. У VP с ролями CIO и COO «Директор по
+ * ИТ (CIO)» отличался на ступень и стоял «частично»: роль сверяется с ролями, а не с уровнем.
+ */
+function isOneOfTargetRoles(title: string, targetRoles: readonly string[]): boolean {
+  const key = careerRoleRowKey(title);
+  return (
+    key !== null &&
+    targetRoles.some((role) => careerRoleRowKey(role) === key || careerRoleListKey(role) === key)
+  );
+}
 
 function determineRoleMatchPoints(
   parsedLevelRank: number | null,
   targetRank: number | undefined,
+  isTargetRole: boolean,
 ): { roleMatch: VacancyRoleMatch; matchingPoints: string[] } {
   const distance =
     targetRank !== undefined && parsedLevelRank !== null
       ? Math.abs(parsedLevelRank - targetRank)
       : undefined;
-  const roleMatch: VacancyRoleMatch = distance === 0 ? 'target' : 'partial';
+  const roleMatch: VacancyRoleMatch = isTargetRole || distance === 0 ? 'target' : 'partial';
   return {
     roleMatch,
     matchingPoints: [
-      roleMatch === 'target'
-        ? 'Функция роли и уровень совпадают по разбору названия.'
-        : targetRank === undefined
-          ? 'Функция роли совпадает; уровень кандидата неизвестен.'
-          : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
+      isTargetRole
+        ? 'Название — целевая роль кандидата.'
+        : roleMatch === 'target'
+          ? 'Функция роли и уровень совпадают по разбору названия.'
+          : targetRank === undefined
+            ? 'Функция роли совпадает; уровень кандидата неизвестен.'
+            : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
     ],
   };
 }
@@ -213,7 +230,9 @@ function isCeoOutsideCampaign(
   return !(roleFunctions.includes('ops') && COO_TITLE.test(vacancyTitle));
 }
 
-const ASSISTANT_TITLE = /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*)(?!\p{L})/iu;
+/** B794: заместитель начальника отдела — тоже не уровень VP; заместитель технического директора остаётся. */
+const ASSISTANT_TITLE =
+  /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*|заместител\p{L}* (?:начальник|руководител|главного инженер)\p{L}*)(?!\p{L})/iu;
 
 /**
  * Аудит 01.11: «Call Center Assistant Operations Manager» в подборке
@@ -280,11 +299,12 @@ export function evaluateSemanticRole(
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
-  const targetRank = targetLevel ? LEVEL_RANK[targetLevel] : undefined;
-  const points = determineRoleMatchPoints(parsed.levelRank, targetRank);
   return {
-    roleMatch: points.roleMatch,
-    matchingPoints: points.matchingPoints,
+    ...determineRoleMatchPoints(
+      parsed.levelRank,
+      targetLevel ? LEVEL_RANK[targetLevel] : undefined,
+      isOneOfTargetRoles(vacancyTitle, targetRoles),
+    ),
     adjacentRole: false,
   };
 }
@@ -322,6 +342,17 @@ export function evaluateTitleRole(
     : evaluateRole([...targetRoles], title).roleMatch;
 }
 
+/** Подборка сверх родства названия отбрасывает чужую сферу; выбору резюме hh она не мешает. */
+function selectionRole(
+  candidate: CandidateMatchProfile,
+  functions: readonly FunctionCode[],
+  title: string,
+) {
+  return isForeignSectorTitle(title, candidate.targetRoles)
+    ? { roleMatch: 'none' as VacancyRoleMatch, matchingPoints: [], adjacentRole: false }
+    : evaluateSemanticRole(functions, candidate.targetLevel, title, candidate.targetRoles);
+}
+
 export function matchCandidateWithVacancy(
   candidate: CandidateMatchProfile,
   vacancy: VacancyCluster,
@@ -333,12 +364,7 @@ export function matchCandidateWithVacancy(
     candidate.confirmedSkillFacts,
   );
   const roleEval = candidate.semanticRoleFunctions?.length
-    ? evaluateSemanticRole(
-        candidate.semanticRoleFunctions,
-        candidate.targetLevel,
-        vacancy.canonicalTitle,
-        candidate.targetRoles,
-      )
+    ? selectionRole(candidate, candidate.semanticRoleFunctions, vacancy.canonicalTitle)
     : evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
   const levelMatch = evaluateLevelMatch(candidate.targetLevel, vacancy.canonicalTitle);
 
