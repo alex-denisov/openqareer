@@ -1,4 +1,4 @@
-import { holdFilteredRows, type UncheckedReader } from '../vacancies/selectionHold';
+import { type ClosedReader, withoutClosedRows } from '../vacancies/closedRows';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
@@ -122,8 +122,6 @@ export interface MatchedList {
   readonly campaignWithHypotheses: ReturnType<typeof readCampaign>;
   /** B729: моменты появления строк выдачи — для чисел «Даты» по поясу кандидата на ответе. */
   readonly filteredObserved: readonly number[];
-  /** B797: записи верха, скрытые до первой сверки живости. */
-  readonly heldIds: readonly string[];
   readonly prepareMs: number;
   readonly prepareRows: number;
   readonly listMs: number;
@@ -131,13 +129,13 @@ export interface MatchedList {
   readonly phasesMs: ListPhasesMs;
 }
 
-/** Чтения движка для сборки списка: итоги каталога и сверка живости (B797); заглушки тестов — без них. */
+/** Чтения движка для сборки списка: итоги каталога и снятые вакансии (B797); заглушки тестов — без них. */
 export function engineListReads(
   engine: RouteDeps['multiSourceEngine'],
-): Pick<MatchedListInput, 'unchecked' | 'catalogTotals'> {
+): Pick<MatchedListInput, 'closed' | 'catalogTotals'> {
   return {
-    ...(typeof engine.uncheckedSelection === 'function'
-      ? { unchecked: (ids: readonly string[]) => engine.uncheckedSelection(ids) }
+    ...(typeof engine.closedSelection === 'function'
+      ? { closed: () => engine.closedSelection() }
       : {}),
     ...(typeof engine.getCatalogTotals === 'function'
       ? { catalogTotals: () => engine.getCatalogTotals() }
@@ -158,8 +156,8 @@ export interface MatchedListInput {
   readonly filters: MatchedVacancyFilters;
   readonly sourceRegistry: readonly MatchedVacancySourceDefinition[];
   readonly order: MatchedOrder;
-  /** B797: какие записи ещё не сверены с площадкой. */
-  readonly unchecked?: UncheckedReader;
+  /** B797: какие записи сняты с площадки. */
+  readonly closed?: ClosedReader;
   readonly catalogTotals?: () => CatalogTotals | undefined;
   /** B674: `false` — список читают, но запечатанную строку кандидата не пишут. По умолчанию пишут. */
   readonly seal?: boolean;
@@ -288,7 +286,11 @@ function* facetAndFilterSteps(
   const { filters, targetRoles } = input;
   const readLevel = (item: MatchedVacancyItem) =>
     input.titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const selected = yield* phase.steps(
+  const facets = yield* phase.steps(
+    'facets',
+    matchedVacancyFacetSteps(matched, targetRoles, readLevel, input.sourceRegistry),
+  );
+  const filtered = yield* phase.steps(
     'filters',
     matchedVacancyFilterSteps(
       matched,
@@ -298,18 +300,15 @@ function* facetAndFilterSteps(
       input.sourceRegistry.map(({ id }) => id),
     ),
   );
-  // B797: строки до сверки не показываются и не входят ни в одно число.
-  const { rows: filtered, pool, hidden, heldIds } = phase.run('hold', () =>
-    holdFilteredRows(matched, selected, input.unchecked),
-  );
-  const facets = yield* phase.steps(
-    'facets',
-    matchedVacancyFacetSteps(pool, targetRoles, readLevel, input.sourceRegistry),
-  );
-  return { facets, filtered, hidden, heldIds };
+  return { facets, filtered };
 }
 
-function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
+export function* matchedListSteps(read: MatchedListInput, phase: PhaseTimer) {
+  // B797: снятые уходят до всех чисел, поэтому числа фильтров равны строкам при любом фильтре.
+  const open = phase.run('closed', () =>
+    withoutClosedRows(read.snapshot, read.closed?.() ?? new Set<string>()),
+  );
+  const input = open === read.snapshot ? read : { ...read, snapshot: open };
   const { campaign, candidateStore, candidateId, targetRoles, snapshot } = input;
   const limits = phase.run('limits', () => readRowLimits(candidateStore, candidateId));
   yield;
@@ -322,11 +321,9 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
   // B766: requirements of every plain «Технический директор» in one query, before the role checks.
   phase.run('roleRequirements', () => primeRoleRequirements(hypothesisRows(input)));
   yield;
-  const { facets, filtered, hidden, heldIds } = yield* facetAndFilterSteps(input, matched, phase);
-  const hypotheses = phase.run('hypotheses', () =>
-    hypothesisRows(input).filter((item) => !hidden.has(item.cluster.id)),
-  );
+  const hypotheses = phase.run('hypotheses', () => hypothesisRows(input));
   const counts = yield* phase.steps('roleCounts', matchedRoleCountSteps(hypotheses, targetRoles));
+  const { facets, filtered } = yield* facetAndFilterSteps(input, matched, phase);
   const totals = phase.run('catalogTotals', () => input.catalogTotals?.());
   const catalogSummary = phase.run('catalogSummary', () =>
     matchedCatalogSummary(totals, roleLevelCount(hypotheses, targetRoles), {
@@ -347,7 +344,6 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
   const withFiltered = { ...facets, filtered: filteredCounts };
   return {
     filtered,
-    heldIds,
     pageOffsets,
     facets: catalogSummary ? { ...withFiltered, catalogSummary } : withFiltered,
     campaignWithHypotheses,

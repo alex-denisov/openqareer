@@ -30,10 +30,10 @@ import {
 import {
   dueSelectionLiveness,
   markSelectionLivenessChecked,
+  closedSelection,
   recentlyChecked,
   requestSelectionLiveness,
   SELECTION_LIVENESS_TABLE,
-  uncheckedSelection,
 } from './selectionLiveness';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
@@ -2064,8 +2064,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     requestSelectionLiveness(this.database, vacancyIds, nowMs);
   }
 
-  uncheckedSelection(ids: readonly string[], nowMs: number = Date.now()): ReadonlySet<string> {
-    return uncheckedSelection(this.database, ids, nowMs);
+  closedSelection(): ReadonlySet<string> {
+    return closedSelection(this.database);
   }
 
   selectionRecentlyChecked(id: string, nowMs: number = Date.now()): boolean {

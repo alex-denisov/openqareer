@@ -25,12 +25,10 @@ export const LIVENESS_REQUEST_TTL_MS = 14 * 24 * HOUR_MS;
 /** Одна вакансия перечитывается не чаще. */
 export const LIVENESS_RECHECK_MS = 24 * HOUR_MS;
 /**
- * Карточек за такт (раз в минуту) через общий темп загрузчика hh: верх подборки — за 8 минут
+ * Карточек hh и столько же с других площадок за такт (раз в минуту) через общий темп загрузчика hh: верх подборки — за 8 минут
  * (по 5 за такт — 40 минут, прод 25.11). Суточный расход держит `LIVENESS_RECHECK_MS`.
  */
 export const LIVENESS_PER_TICK = 25;
-/** Строка ждёт первой сверки не дольше: при отказах площадки список не остаётся урезанным. */
-export const LIVENESS_HOLD_MS = 5 * 60_000;
 
 export function requestSelectionLiveness(
   database: DatabaseSync,
@@ -62,25 +60,15 @@ export function requestSelectionLiveness(
     .run(JSON.stringify(rows), nowMs);
 }
 
-/** Не сверенные ни разу: ещё не стоящие в очереди и стоящие в ней недолго. */
-export function uncheckedSelection(
-  database: DatabaseSync,
-  ids: readonly string[],
-  nowMs: number,
-): ReadonlySet<string> {
-  if (ids.length === 0) return new Set();
-  const settled = new Set(
-    (
-      database
-        .prepare(
-          `SELECT vacancy_id AS id FROM selection_liveness
-            WHERE (checked_ms > 0 OR requested_ms < ?)
-              AND vacancy_id IN (SELECT value FROM json_each(?))`,
-        )
-        .all(nowMs - LIVENESS_HOLD_MS, JSON.stringify(ids)) as Array<{ id: string }>
-    ).map((row) => row.id),
-  );
-  return new Set(ids.filter((id) => !settled.has(id)));
+/** Сверенные и снятые с площадки: индекс уже без них, а снимок подборки — ещё нет. */
+export function closedSelection(database: DatabaseSync): ReadonlySet<string> {
+  const rows = database
+    .prepare(
+      `SELECT q.vacancy_id AS id FROM selection_liveness q
+         JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 1`,
+    )
+    .all() as Array<{ id: string }>;
+  return new Set(rows.map((row) => row.id));
 }
 
 /** Сверена за последние сутки. */
@@ -91,23 +79,28 @@ export function recentlyChecked(database: DatabaseSync, id: string, nowMs: numbe
   return row !== undefined;
 }
 
-/** Сначала ни разу не сверенные по месту в подборке, потом самые давние сверки. */
+/**
+ * Сначала ни разу не сверенные по месту в подборке, потом самые давние сверки. У hh и остальных
+ * площадок свои `limit` строк: отказ hh не занимает весь такт его же строками.
+ */
 export function dueSelectionLiveness(
   database: DatabaseSync,
   limit: number,
   nowMs: number,
 ): string[] {
-  const rows = database
-    .prepare(
-      `SELECT q.vacancy_id AS id FROM selection_liveness q
-         JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 0
-        WHERE q.requested_ms >= ? AND q.checked_ms < ?
-        ORDER BY q.checked_ms, q.rank LIMIT ?`,
-    )
-    .all(nowMs - LIVENESS_REQUEST_TTL_MS, nowMs - LIVENESS_RECHECK_MS, limit) as Array<{
-    id: string;
-  }>;
-  return rows.map((row) => row.id);
+  const read = database.prepare(
+    `SELECT q.vacancy_id AS id FROM selection_liveness q
+       JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 0
+      WHERE q.requested_ms >= ? AND q.checked_ms < ? AND (q.vacancy_id LIKE 'src-hh-search:%') = ?
+      ORDER BY q.checked_ms, q.rank LIMIT ?`,
+  );
+  return [1, 0].flatMap((hh) =>
+    (
+      read.all(nowMs - LIVENESS_REQUEST_TTL_MS, nowMs - LIVENESS_RECHECK_MS, hh, limit) as Array<{
+        id: string;
+      }>
+    ).map((row) => row.id),
+  );
 }
 
 export function markSelectionLivenessChecked(

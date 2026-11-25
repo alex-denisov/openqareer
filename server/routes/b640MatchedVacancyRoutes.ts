@@ -325,7 +325,7 @@ const getMatchedVacancies = async (
   const live = await withShownPageFitViews(deps, candidate.id, levels);
   const data = withMarketSalary(deps, withOrderedPercents(live, rows.slice(query.offset)));
   // Подсчёт процентов идёт по порядку совпадения, а не по выбранному столбцу.
-  const work = fitWorkIds(byFit, query.offset, fitLimit, list.heldIds);
+  const work = fitWorkIds(byFit, query.offset, fitLimit);
   startFitWork(backgroundDeps, candidate.id, { ...work, data: live }, { offset: query.offset, fitLimit }, request);
   return {
     data,

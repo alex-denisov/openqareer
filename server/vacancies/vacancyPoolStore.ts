@@ -292,7 +292,7 @@ export interface VacancyPoolStore {
   ): string[];
   /** B797: верх подборки в сверку живости и чтение очереди воркером обслуживания. */
   requestSelectionLiveness?(vacancyIds: readonly string[], nowMs?: number): void;
-  uncheckedSelection?(ids: readonly string[], nowMs?: number): ReadonlySet<string>;
+  closedSelection?(): ReadonlySet<string>;
   selectionRecentlyChecked?(id: string, nowMs?: number): boolean;
   dueSelectionLiveness?(limit: number, nowMs?: number): string[];
   markSelectionLivenessChecked?(vacancyId: string, nowMs?: number): void;

@@ -63,7 +63,7 @@ import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { engineListReads } from './matchedVacancyList';
-import { SELECTION_LIVENESS_TOP } from '../vacancies/selectionLiveness';
+import { topSelectionIds } from './selectionTop';
 import type { ListPhasesMs } from './matchedListPhases';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -155,7 +155,7 @@ function buildMatchedResponse(
     page,
     facets: filters.offset === 0 ? list.facets : undefined,
     filteredObserved: list.filteredObserved,
-    ...fitWorkIds(list.filtered, filters.offset, fitLimit, list.heldIds),
+    ...fitWorkIds(list.filtered, filters.offset, fitLimit),
     campaignWithHypotheses: list.campaignWithHypotheses,
     listCached: served !== 'built',
     listServed: served,
@@ -197,25 +197,13 @@ function logMatchedTiming(
   );
 }
 
-/** B797: записи верха подборки для сверки живости. */
-function topSelectionIds(items: readonly MatchedVacancyItem[]): string[] {
-  return items
-    .slice(0, SELECTION_LIVENESS_TOP)
-    .map((item) => item.cluster.id.replace(/^cluster-/u, ''));
-}
-
 /** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
-export function fitWorkIds(
-  items: readonly MatchedVacancyItem[],
-  offset: number,
-  fitLimit: number,
-  heldIds: readonly string[] = [],
-) {
+export function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLimit: number) {
   return {
     warmIds: vacanciesToWarm(items),
     countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
     readIds: offset === 0 ? selectionToRead(items) : [],
-    livenessIds: offset === 0 ? [...heldIds, ...topSelectionIds(items)] : [],
+    livenessIds: offset === 0 ? topSelectionIds(items) : [],
     selectionKey: selectionStamp(items.map((item) => item.cluster.id)),
   };
 }

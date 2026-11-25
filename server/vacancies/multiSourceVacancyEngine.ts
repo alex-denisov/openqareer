@@ -1526,9 +1526,9 @@ export class MultiSourceVacancyEngine {
     this.pool.requestSelectionLiveness?.(ids);
   }
 
-  /** B797: записи подборки, ещё не сверенные ни разу. */
-  public uncheckedSelection(ids: readonly string[]): ReadonlySet<string> {
-    return this.pool.uncheckedSelection?.(ids) ?? new Set();
+  /** B797: записи верха подборок, которые сверка застала снятыми. */
+  public closedSelection(): ReadonlySet<string> {
+    return this.pool.closedSelection?.() ?? new Set();
   }
 
   /**
@@ -1553,7 +1553,8 @@ export class MultiSourceVacancyEngine {
 
   private async settleOpenedCheck(vacancy: UnifiedVacancy): Promise<boolean> {
     const verdict = await this.checkHhLiveness(vacancy);
-    if (verdict === 'blocked') return false;
+    // Нет ответа о вакансии — карточка не сверена: следующее открытие спросит снова.
+    if (verdict === 'blocked' || verdict === 'unknown') return false;
     if (verdict === 'gone') this.pool.markExpired([vacancy.id], new Date().toISOString());
     this.pool.markSelectionLivenessChecked?.(vacancy.id);
     return verdict === 'gone';

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
-import { LIVENESS_HOLD_MS, LIVENESS_PER_TICK, LIVENESS_RECHECK_MS, runSelectionLiveness } from './selectionLiveness';
+import { LIVENESS_PER_TICK, LIVENESS_RECHECK_MS, runSelectionLiveness } from './selectionLiveness';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
@@ -116,15 +116,24 @@ describe('B797: сверка живости верха подборок', () => 
     expect(await step(engine)).toEqual({ checked: 1, gone: 1, open: 0, unknown: 0, blocked: true });
   });
 
-  it('не сверенные: новые и недолго ждущие; сверенные и ждущие дольше пяти минут — нет', () => {
+  it('25 строк hh при отказе не вытесняют другие площадки из такта', async () => {
     const pool = openStore();
-    const now = Date.now();
-    pool.mergeSourceSlice(HH, [hh(1), hh(2), hh(3)]);
-    pool.requestSelectionLiveness([`${HH}:1`], now);
-    pool.requestSelectionLiveness([`${HH}:2`], now - LIVENESS_HOLD_MS - 1);
-    pool.markSelectionLivenessChecked(`${HH}:3`, now);
-    const ids = [1, 2, 3, 4].map((n) => `${HH}:${n}`);
-    expect([...pool.uncheckedSelection(ids, now)]).toEqual([`${HH}:1`, `${HH}:4`]);
+    const rows = Array.from({ length: LIVENESS_PER_TICK }, (_, n) => hh(n + 1));
+    pool.mergeSourceSlice(HH, rows);
+    pool.mergeSourceSlice('src-other', [vacancy('x:1', 'src-other', 'https://jobs.example.com/1')]);
+    const { engine, asked } = engineOf(pool, () => ({ status: 403, body: '' }));
+    engine.requestSelectionLiveness([...rows.map((row) => row.id), 'x:1']);
+    expect(await step(engine)).toMatchObject({ checked: 1, gone: 1, blocked: true });
+    expect(asked).toHaveLength(2);
+    expect([...engine.closedSelection()]).toEqual(['x:1']);
+  });
+
+  it('страница без карточки: открытая не отмечается сверенной', async () => {
+    const pool = openStore();
+    pool.mergeSourceSlice(HH, [hh(1)]);
+    const { engine } = engineOf(pool, () => ({ status: 200, body: '<html></html>' }));
+    expect(await engine.openedVacancyGone(`cluster-${HH}:1`)).toBe(false);
+    expect(pool.selectionRecentlyChecked(`${HH}:1`)).toBe(false);
   });
 
   it('открытая карточка сверяется сразу, раз в сутки; отказ площадки её не закрывает', async () => {
