@@ -1,6 +1,7 @@
 import { recordCandidateGoal } from './seoGoalRepository';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { isStarred, markAfterReturn, savedMark } from './applicationStar';
 import type { SealedText } from './sealedText';
 import {
   canLegacyClientAdvanceToApplied,
@@ -67,11 +68,15 @@ export interface CreateApplicationInput {
   readonly occurredAt?: string;
   /** Defaults to `standard` (server/vacancies/processProfileDefault.ts decides). */
   readonly processProfile?: ApplicationProcessProfile;
+  /** B798: черновик отклика, а не звезда кандидата. */
+  readonly draft?: boolean;
 }
 
 export interface PatchApplicationInput {
   readonly expectedVersion: number;
   readonly stage?: ApplicationStage;
+  /** B798: поставить или снять звезду у карточки `saved`, не трогая черновик отклика. */
+  readonly starred?: boolean;
   readonly occurredAt?: string;
   readonly notes?: string | null;
   readonly processProfile?: ApplicationProcessProfile;
@@ -170,7 +175,10 @@ export class SqliteApplicationRepository {
   ): StoredApplication {
     if (input.clusterId) {
       const existing = this.findByCluster(candidateId, input.clusterId);
-      if (existing) return existing;
+      if (existing) {
+        if (input.stage === 'saved' && !input.draft) this.star(candidateId, existing, true, now);
+        return existing;
+      }
     }
     const id = randomUUID();
     const occurredAt = input.occurredAt ?? now;
@@ -201,9 +209,26 @@ export class SqliteApplicationRepository {
       fromStage: null,
       toStage: input.stage,
       occurredAt,
-      provenance: 'candidate',
+      provenance: input.draft ? 'system' : 'candidate',
     }, now);
     return this.get(candidateId, id) as StoredApplication;
+  }
+
+  /** Отметка звезды; у карточки не в `saved` и без перемены ничего не пишет. */
+  private star(candidateId: string, card: StoredApplication, starred: boolean, now: string): void {
+    if (card.stage !== 'saved') return;
+    if (isStarred(card.stage, savedMark(this.database, candidateId, card.id)) === starred) return;
+    this.insertEvent(candidateId, card.id, {
+      kind: 'stage',
+      fromStage: 'saved',
+      toStage: 'saved',
+      occurredAt: now,
+      provenance: starred ? 'candidate' : 'system',
+    }, now);
+  }
+
+  private returnMark(candidateId: string, id: string, stage: ApplicationStage): ApplicationEventProvenance {
+    return stage === 'saved' ? markAfterReturn(savedMark(this.database, candidateId, id)) : 'candidate';
   }
 
   /** 409 — `expectedVersion` устарел, карточка открыта на двух устройствах. */
@@ -471,7 +496,7 @@ export class SqliteApplicationRepository {
       this.insertEvent(
         candidateId,
         applicationId,
-        { kind: 'stage', fromStage: 'archived', toStage: previousStage, occurredAt: now, provenance: 'candidate' },
+        { kind: 'stage', fromStage: 'archived', toStage: previousStage, occurredAt: now, provenance: this.returnMark(candidateId, applicationId, previousStage) },
         now,
       );
       return this.get(candidateId, applicationId) as StoredApplication;
@@ -551,7 +576,7 @@ export class SqliteApplicationRepository {
     this.insertEvent(
       candidateId,
       existing.id,
-      { kind: 'stage', fromStage: 'archived', toStage: 'saved', occurredAt: now, provenance: 'candidate' },
+      { kind: 'stage', fromStage: 'archived', toStage: 'saved', occurredAt: now, provenance: this.returnMark(candidateId, existing.id, 'saved') },
       now,
     );
   }
@@ -716,6 +741,7 @@ export class SqliteApplicationRepository {
     if (stageChanged || input.deliveryReceipt !== undefined) {
       this.recordCandidateStageEvent(candidateId, id, current.stage, nextStage, occurredAt, now, input.deliveryReceipt);
     }
+    if (input.starred !== undefined && !stageChanged) this.star(candidateId, current, input.starred, now);
     return this.get(candidateId, id) as StoredApplication;
   }
 
@@ -731,7 +757,7 @@ export class SqliteApplicationRepository {
     this.insertEvent(
       candidateId,
       applicationId,
-      { kind: 'stage', fromStage, toStage, occurredAt, provenance: 'candidate' },
+      { kind: 'stage', fromStage, toStage, occurredAt, provenance: this.returnMark(candidateId, applicationId, toStage) },
       recordedAt,
       deliveryReceipt
         ? this.sealedText.seal(JSON.stringify({ deliveryReceipt }), eventAssociatedData(candidateId, applicationId))

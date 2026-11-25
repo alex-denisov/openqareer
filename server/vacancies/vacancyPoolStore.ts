@@ -279,6 +279,17 @@ export interface VacancyPoolStore {
   /** Голова очереди подборок: hh-записи, которым ещё нужен текст. */
   peekHhTextPriority?(limit: number): string[];
   dropHhTextPriority?(vacancyIds: readonly string[]): void;
+  /** B791: подборки и открытые карточки первыми в дочитке площадок без текста в списке. */
+  requestDetailTextPriority?(
+    vacancyIds: readonly string[],
+    baseRank?: number,
+    nowMs?: number,
+  ): void;
+  peekDetailTextPriority?(
+    sourceId: string,
+    limit: number,
+    excludeIds?: readonly string[],
+  ): string[];
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
   loadHhTextCandidates?(
     cursor: string | undefined,

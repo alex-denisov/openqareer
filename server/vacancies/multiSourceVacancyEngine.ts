@@ -99,6 +99,7 @@ import {
   type WorkdayDescriptionReport,
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
+import { hasDetailText } from './detailTextPriority';
 import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
 /**
@@ -1380,8 +1381,19 @@ export class MultiSourceVacancyEngine {
       : undefined;
     return new WorkdayDescriptionBackfill({
       pool: {
-        loadVacanciesWithoutFullText: (sourceId, limit, excludeIds) =>
-          queue ? queue.take(sourceId, limit, excludeIds) : load(sourceId, limit, excludeIds),
+        loadVacanciesWithoutFullText: (sourceId, limit, excludeIds) => {
+          const ids = pool.peekDetailTextPriority?.(sourceId, limit, excludeIds) ?? [];
+          const head = ids.length
+            ? (pool.reloadVacanciesWithoutFullText?.(sourceId, ids) ?? [])
+            : [];
+          if (head.length >= limit) return head;
+          const exclude = [...excludeIds, ...head.map((vacancy) => vacancy.id)];
+          const rest = limit - head.length;
+          return [
+            ...head,
+            ...(queue ? queue.take(sourceId, rest, exclude) : load(sourceId, rest, exclude)),
+          ];
+        },
         mergeSourceSlice: (sourceId, vacancies) => pool.mergeSourceSlice(sourceId, vacancies),
         markExpired: (ids, atIso) => pool.markExpired(ids, atIso),
       },
@@ -1498,6 +1510,9 @@ export class MultiSourceVacancyEngine {
    */
   public requestHhTextPriority(ids: readonly string[], baseRank = 0): void {
     this.pool.requestHhTextPriority?.(ids, baseRank);
+    // B791: площадки без текста в списке (LinkedIn, Workday…) — своя очередь, тот же вызов.
+    const detail = ids.filter(hasDetailText);
+    if (detail.length > 0) this.pool.requestDetailTextPriority?.(detail, baseRank);
   }
 
   /** Первые карточки подбора греются последовательно, не создавая веер запросов. */

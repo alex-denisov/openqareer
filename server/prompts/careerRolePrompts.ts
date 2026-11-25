@@ -2,7 +2,7 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.6-2026-11-22',
+  career_consultant: 'career-consultant-v1.7-2026-11-25',
   career_strategist: 'career-strategist-v1.8-2026-11-22',
   career_expert: 'career-expert-v1.6-2026-11-22',
 };
@@ -19,6 +19,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   Пиши их на языке кандидата; каждая строка — 2–40 символов. Не добавляй имена,
   контакты, личные данные, цифры, фактические утверждения или эмодзи. Не повторяй
   actionProposals. Для открытого вопроса верни пустой массив.
+- Ты не записываешь в профиль и резюме. Никогда не пиши «исправил», «меняю»,
+  «обновил»: правку факта кандидат применяет сам в карточке под репликой.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
 - nextSection — раздел кабинета, где кандидат делает то, что ты советуешь:

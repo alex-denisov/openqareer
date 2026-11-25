@@ -133,6 +133,7 @@ const deliveryReceiptSchema = z
 const patchApplicationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   stage: stageSchema.optional(),
+  starred: z.boolean().optional(),
   occurredAt: isoDateField.optional(),
   notes: z.string().max(20_000).nullable().optional(),
   processProfile: z.enum(['standard', 'executive']).optional(),
