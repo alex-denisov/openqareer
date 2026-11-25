@@ -18,6 +18,8 @@ import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import {
   attachApprovedResume,
+  attachShownVersion,
+  canReplaceResume,
   generalResumeOf,
   letterResumeState,
   prepareLetterResume,
@@ -27,7 +29,7 @@ import type { ResumeEditChoices } from '../../shared/resumeVacancyEdits';
 import { appliesOnHh } from '../vacancies/applyOnHh';
 import { prepareVacancyLang } from './resumeDefaultLang';
 import { currentMaster, masterProjectionOf } from './resumeMaster';
-import { APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
+import { latestLetterApproval, APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
 import { letterVacancyTexts, registerLetterDraftRoutes, type LetterDraftDeps } from './letterDraftRoutes';
 import { SqliteLetterDraftRepository } from '../candidate/sqliteLetterDraftRepository';
 import { letterFactMark, letterFactSource, type LetterFactMark } from '../domain/letterFreshness';
@@ -570,9 +572,43 @@ function changedLetterResume(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 409, 'letter_resume_changed', 'Резюме в профиле изменилось. Письмо подготовлено заново: проверьте его и одобрите.', false);
 }
 
+function changedShownResume(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 409, 'letter_resume_changed', 'К отклику приложено другое резюме. Откройте шаг «Резюме» ещё раз.', false);
+}
+
 function changedLetterFacts(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 409, 'letter_facts_changed', 'Факты профиля изменились. Письмо подготовлено заново: проверьте его и одобрите.', false);
 }
+
+/** Отклик с одобренным письмом, у которого версию резюме ещё можно заменить. */
+function replaceableApplication(deps: RouteDeps, candidateId: string, vacancyId: string): string | null {
+  const source = letterFactSource(deps.candidateStore.getSnapshot(candidateId));
+  const approval = latestLetterApproval(deps, candidateId, vacancyId, source);
+  return approval?.resume?.kind === 'targeted' && canReplaceResume(deps, candidateId, approval.applicationId)
+    ? approval.applicationId
+    : null;
+}
+
+const shownResumeSchema = z.object({ versionId: z.uuid() });
+
+/** «Одобрить резюме» после одобрения письма: к отклику прикладывается показанная версия (B785). */
+const handleAttachLetterResume = async (deps: LetterDeps, request: FastifyRequest, reply: FastifyReply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const vacancyId = (request.params as { id: string }).id;
+  const parsed = shownResumeSchema.safeParse(request.body);
+  if (!parsed.success) return invalidLetterSnapshot(reply, request);
+  const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
+  if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
+  if (refuseWhenSent(deps, request, reply, candidate.id, vacancyId)) return undefined;
+  const resume = candidateStore.transaction(() => {
+    const applicationId = replaceableApplication(deps, candidate.id, vacancyId);
+    return applicationId ? attachShownVersion(deps, candidate.id, applicationId, cluster, parsed.data.versionId) : null;
+  });
+  return resume ? { data: { resume }, meta: { requestId: request.id } } : changedShownResume(reply, request);
+};
 
 /** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
 const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
@@ -589,7 +625,7 @@ const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyR
       return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: false, versionId: null }, meta: { requestId: request.id } };
     }
     const state = prepareLetterResume(deps, candidate.id, cluster, await prepareVacancyLang(deps, candidate.id, cluster));
-    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId }, meta: { requestId: request.id } };
+    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId, replaceable: replaceableApplication(deps, candidate.id, vacancyId) !== null }, meta: { requestId: request.id } };
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
     throw error;
@@ -733,7 +769,12 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
   app.get('/api/v1/candidate/vacancies/:id/letter-approvals/latest', withDeps(editDeps, handleReadLetterApproval));
   app.post(
     '/api/v1/candidate/vacancies/:id/letter-resume',
-    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(editDeps, handlePrepareLetterResume),
+  );
+  app.put(
+    '/api/v1/candidate/vacancies/:id/letter-resume',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(editDeps, handleAttachLetterResume),
   );
 }

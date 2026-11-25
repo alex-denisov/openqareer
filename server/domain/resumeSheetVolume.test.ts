@@ -132,4 +132,31 @@ describe('отбор пунктов резюме под вакансию', () =>
     expect(relevanceScore(relevance, 'Introduced ITIL processes')).toBeGreaterThan(0);
     expect(relevanceScore(relevance, 'Organised the office party')).toBe(0);
   });
+
+  it('измеримые результаты стоят первыми и не уступают место описаниям', () => {
+    const results = [
+      'Grew annual revenue from 230 to 920 million rubles (+300%).',
+      'Improved profitability from 16% to 40%.',
+      'Improved SLA compliance from 50% to 92%.',
+    ];
+    const experience = master.experience.map((item) => ({
+      ...item,
+      bullets: [
+        ...item.bullets,
+        ...results.map((text, index) => fact(`${text} ${item.id}`, `${item.id}-r${index}`)),
+      ],
+    }));
+    const { document, pages } = fitVacancyResume(
+      buildTargetedResumeSlice({ ...master, experience }, { title: 'CIO', requirements: [] }),
+      relevanceOf(view, []),
+    );
+    expect(pages).toBe(2);
+    for (const item of document.experience) {
+      expect(item.bullets.slice(0, 4).map(({ value }) => value)).toEqual(
+        expect.arrayContaining(results.map((text) => `${text} ${item.id}`)),
+      );
+    }
+    for (const item of document.experience.slice(0, 3))
+      expect(item.bullets.length).toBeLessThanOrEqual(4);
+  });
 });
