@@ -3,7 +3,7 @@ import {
   compareListed,
   compareListedDate,
   compareListedFit,
-  compareSunk,
+  compareListedGroup,
   listedDay,
 } from '../../../../../shared/vacancyListOrder';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -95,7 +95,7 @@ function compare(
   rates?: CurrencyRates,
 ): number {
   return (
-    compareSunk(left, right) ||
+    compareListedGroup(left, right) ||
     compareColumn(left, right, sort, rates) ||
     (sort.key === 'fit' ? compareListedDate(left, right) : compareListed(left, right))
   );

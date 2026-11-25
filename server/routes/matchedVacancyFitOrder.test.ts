@@ -12,7 +12,7 @@ vi.mock('./vacancyFitContext', () => ({
 }));
 vi.mock('../domain/vacancyFitProfileStamp', () => ({ vacancyFitProfileStamp: () => 'stamp' }));
 
-const { withVacancyFitOrder, withShownPageFitViews, withWantedCompanyOrder, STALE_REFIT_LIMIT } =
+const { withVacancyFitOrder, withShownPageFitViews, withWantedCompanyOrder, withOrderedPercents, STALE_REFIT_LIMIT } =
   await import('./matchedVacancyFit');
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { RouteDeps } from './deps';
@@ -48,6 +48,17 @@ function deps(scored: Record<string, number>): RouteDeps {
     },
   } as unknown as RouteDeps;
 }
+
+describe('процент и место из одного снимка (B789)', () => {
+  it('число, которого не было в снимке, не показано среди непосчитанных; остальное — из снимка', async () => {
+    const live = await withShownPageFitViews(deps({ a: 90, b: 70 }), 'one-snapshot', [item('a'), item('b')]);
+    const [b] = await withShownPageFitViews(deps({ b: 40 }), 'one-snapshot-old', [item('b')]);
+    const shown = withOrderedPercents(live, [item('a'), b!]);
+    expect(shown[0]!.explanation.fitView?.state).toBe('processing');
+    expect(shown[0]!.explanation.fitView?.result).toBeUndefined();
+    expect(shown[1]!.explanation.fitView?.result?.coveragePercent).toBe(40);
+  });
+});
 
 describe('pool fit order', () => {
   it('reads full fit evidence only for vacancies that have a stored result', () => {

@@ -1,7 +1,7 @@
 import { leanFitView } from '../vacancies/leanMatchedPage';
 import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
-import { compareListed, compareSunk } from '../../shared/vacancyListOrder';
+import { compareListed, compareListedGroup } from '../../shared/vacancyListOrder';
 import { exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
 import { compareMoneyRank, createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
@@ -151,7 +151,7 @@ export function matchedOrderChoiceKeys(
 }
 
 /** A stored list built by an older rule must not be served again: part of the list's `choice`. */
-export const FIT_ORDER_RULE = `percent-date-v1:${VACANCY_FIT_ALGORITHM_VERSION}`;
+export const FIT_ORDER_RULE = `percent-date-v2:${VACANCY_FIT_ALGORITHM_VERSION}`;
 
 /** B789 (владелец 25.11): процент, затем дата — отметка «Хочу» и роль порядок процентов не меняют. */
 export function withWantedCompanyOrder(
@@ -464,7 +464,7 @@ function orderByFit(
   const amounts = new Map(decorated.map((item) => [item.cluster.id, money(item)]));
   return decorated.sort(
     (left, right) =>
-      compareSunk(left, right) ||
+      compareListedGroup(left, right) ||
       compareMoneyRank(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
       compareFitOrder(left, right),
   );
@@ -510,6 +510,15 @@ export async function withShownPageFitViews(
   });
 }
 
+const COUNTING_VIEW: VacancyFitView = { state: 'processing', requirements: [] };
+
+const blocksOf = (view: VacancyFitView | undefined): number => view?.result?.conditionBlocks?.length ?? 0;
+
+const withFitView = (item: MatchedVacancyItem, view: VacancyFitView): MatchedVacancyItem => ({
+  ...item,
+  explanation: explanationWithFitView(item.explanation, compactFitView(view)),
+});
+
 /**
  * B789: показан тот процент, по которому строка встала на место. Живой разбор бывает новее снимка
  * порядка, и страница показывала 100 → 80 → 100 до следующего чтения.
@@ -520,10 +529,14 @@ export function withOrderedPercents(
 ): MatchedVacancyItem[] {
   return shown.map((item, index) => {
     const view = ordered[index]?.explanation.fitView;
-    const percent = vacancyFitPercent(view);
-    if (!view || percent === null || percent === vacancyFitPercent(item.explanation.fitView))
+    const live = item.explanation.fitView;
+    if (vacancyFitPercent(view) === null) {
+      // Досчитан после снимка: место среди непосчитанных, число придёт вместе с новым местом.
+      return vacancyFitPercent(live) === null ? item : withFitView(item, view ?? COUNTING_VIEW);
+    }
+    if (!view || (vacancyFitPercent(view) === vacancyFitPercent(live) && blocksOf(view) === blocksOf(live)))
       return item;
-    return { ...item, explanation: explanationWithFitView(item.explanation, compactFitView(view)) };
+    return withFitView(item, view);
   });
 }
 

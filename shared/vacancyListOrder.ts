@@ -1,6 +1,6 @@
 /**
  * Порядок подборки (владелец 25.11): показанный процент, затем дата; строки без процента — после
- * посчитанных, мёртвые и подозрительные — внизу. У другого столбца он главный, этот порядок — второй.
+ * посчитанных, не проходящие по условию, затем мёртвые и подозрительные — внизу. У другого столбца он главный, этот порядок — второй.
  */
 import type { VacancyFitView } from './vacancyFit';
 import { vacancyFitPercent, vacancyFitStage } from './vacancyFitPercent';
@@ -8,6 +8,7 @@ import { trustRank, type OrderableMatch } from './vacancyMatchOrder';
 
 export interface ListedMatch {
   readonly cluster: OrderableMatch['cluster'] & {
+    readonly id: string;
     readonly sources?: readonly { readonly observedAt?: string }[];
   };
   readonly explanation: OrderableMatch['explanation'] & { readonly fitView?: VacancyFitView };
@@ -38,11 +39,27 @@ export function listedDay(item: ListedMatch, timeZone?: string): string | undefi
   return time === undefined ? undefined : dayFormat(timeZone).format(time);
 }
 
-/** Мёртвая ссылка или подозрительная вакансия. */
-export const isSunk = (item: ListedMatch): boolean => trustRank(item) === 0;
+const MAIN_GROUP = 0;
+const BLOCKED_GROUP = 1;
+const SUNK_GROUP = 2;
 
-export const compareSunk = (left: ListedMatch, right: ListedMatch): number =>
-  Number(isSunk(left)) - Number(isSunk(right));
+/**
+ * Основная часть; ниже — вакансии, где профиль прямо не проходит условие (владелец 02.11); в самом
+ * низу — мёртвые ссылки и подозрительные.
+ */
+export function listedGroup(item: ListedMatch): number {
+  if (trustRank(item) === 0) return SUNK_GROUP;
+  const blocks = item.explanation.fitView?.result?.conditionBlocks?.length ?? 0;
+  return blocks > 0 ? BLOCKED_GROUP : MAIN_GROUP;
+}
+
+export const compareListedGroup = (left: ListedMatch, right: ListedMatch): number =>
+  listedGroup(left) - listedGroup(right);
+
+function compareId(left: ListedMatch, right: ListedMatch): number {
+  if (left.cluster.id === right.cluster.id) return 0;
+  return left.cluster.id < right.cluster.id ? -1 : 1;
+}
 
 /** Непосчитанные: сначала те, чей процент ещё будет. */
 const uncountedRank = ({ explanation }: ListedMatch): number =>
@@ -56,9 +73,9 @@ export function compareListedFit(left: ListedMatch, right: ListedMatch, dir: Dir
   return uncountedRank(left) - uncountedRank(right);
 }
 
-/** Свежие выше; равные остаются в порядке подбора (сортировка устойчива). */
+/** Свежие выше; равные — по id, чтобы после перезапуска порядок не сдвигался. */
 export function compareListedDate(left: ListedMatch, right: ListedMatch): number {
-  return (listedAt(right) ?? 0) - (listedAt(left) ?? 0);
+  return (listedAt(right) ?? 0) - (listedAt(left) ?? 0) || compareId(left, right);
 }
 
 export function compareListed(
@@ -68,7 +85,7 @@ export function compareListed(
   /** Порядок строк без процента: очередь подсчёта идёт по нему. */
   uncounted?: (left: ListedMatch, right: ListedMatch) => number,
 ): number {
-  const fit = compareSunk(left, right) || compareListedFit(left, right, dir);
+  const fit = compareListedGroup(left, right) || compareListedFit(left, right, dir);
   if (fit) return fit;
   const byRole =
     uncounted && vacancyFitPercent(left.explanation.fitView) === null ? uncounted(left, right) : 0;

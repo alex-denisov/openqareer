@@ -1,5 +1,5 @@
 import type { B640SortDirection, B640SortKey } from '../../shared/b640Vacancies';
-import { isSunk, listedDay } from '../../shared/vacancyListOrder';
+import { listedGroup, listedDay } from '../../shared/vacancyListOrder';
 import { detectVacancyWorkFormat, workFormatLabel } from '../../shared/vacancyWorkFormat';
 import { vacancyRemoteLabel } from '../../src/features/vacancies/vacancyRemoteLabel';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
@@ -72,10 +72,10 @@ export function sortMatchedByColumn(
   timeZone?: string,
 ): MatchedVacancyItem[] {
   return items
-    .map((item, index) => ({ item, index, sunk: Number(isSunk(item)), key: keyOf(item, by, timeZone) }))
+    .map((item, index) => ({ item, index, group: listedGroup(item), key: keyOf(item, by, timeZone) }))
     .sort(
       (a, b) =>
-        a.sunk - b.sunk || compareKeys(a.key, b.key, direction) || a.index - b.index,
+        a.group - b.group || compareKeys(a.key, b.key, direction) || a.index - b.index,
     )
     .map(({ item }) => item);
 }

@@ -260,7 +260,7 @@ async function sealedAnswer(
   const live = await withShownPageFitViews(deps, candidateId, levels);
   const data = withMarketSalary(deps, withOrderedPercents(live, slice.rows));
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidateId));
-  startShownPageFit(backgroundDeps, candidateId, data, query.offset, fitLimit, request);
+  startShownPageFit(backgroundDeps, candidateId, live, query.offset, fitLimit, request);
   request.log.info({ rows: slice.total, offset: query.offset }, 'b640-matched-served-sealed');
   return {
     data,
@@ -328,7 +328,7 @@ const getMatchedVacancies = async (
   const data = withMarketSalary(deps, withOrderedPercents(live, rows.slice(query.offset)));
   // Подсчёт процентов идёт по порядку совпадения, а не по выбранному столбцу.
   const work = fitWorkIds(byFit, query.offset, fitLimit);
-  startFitWork(backgroundDeps, candidate.id, { ...work, data }, { offset: query.offset, fitLimit }, request);
+  startFitWork(backgroundDeps, candidate.id, { ...work, data: live }, { offset: query.offset, fitLimit }, request);
   return {
     data,
     meta: {
