@@ -2,10 +2,11 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getMatchedVacancyPage } from '../coach/coachApi';
+import { getMatchedVacancyFacets, getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { MatchedVacancyPage } from '../coach/matchedVacancyApi';
-import { useMatchedPool, type MatchedPool } from './useMatchedPool';
+import { readCachedMatchedPool, writeCachedMatchedPool } from './matchedPoolCache';
+import { useMatchedPool, type MatchedPool, type MatchedPoolOptions } from './useMatchedPool';
 
 vi.mock('../coach/coachApi', () => ({
   getMatchedVacancyPage: vi.fn(),
@@ -13,7 +14,7 @@ vi.mock('../coach/coachApi', () => ({
   getVacancySources: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('./matchedPoolCache', () => ({
-  readCachedMatchedPool: () => undefined,
+  readCachedMatchedPool: vi.fn(),
   writeCachedMatchedPool: vi.fn(),
 }));
 
@@ -26,7 +27,7 @@ const pageAt = (offset: number): MatchedVacancyPage => ({
   pageOffsets: Array.from({ length: TOTAL / 20 }, (_, index) => index * 20),
 });
 
-async function readPool(options?: { readonly pageLimit: number }): Promise<MatchedPool> {
+async function readPool(options?: MatchedPoolOptions): Promise<MatchedPool> {
   vi.mocked(getMatchedVacancyPage).mockImplementation(async (offset) => pageAt(offset ?? 0));
   let pool!: MatchedPool;
   function Reader() {
@@ -50,6 +51,48 @@ describe('B645 s07: подборка не читает весь список д�
     expect(vi.mocked(getMatchedVacancyPage).mock.calls[0]?.[0]).toBe(0);
     expect(pool).toMatchObject({ total: TOTAL, complete: false, loading: false, failed: false });
     expect(pool.matched).toHaveLength(20);
+  });
+
+  it('своя первая страница — один запрос: роли, фасеты и кампания из неё, кэш только последний', async () => {
+    const firstPage = vi.fn(async () => ({
+      ...pageAt(0),
+      pageOffsets: undefined,
+      facets: {} as MatchedVacancyPage['facets'],
+      initialFilters: { roles: ['CTO'], regions: [], remoteOnly: false },
+    }));
+    const pool = await readPool({ pageLimit: 1, firstPage });
+    expect(firstPage).toHaveBeenCalledTimes(1);
+    expect(firstPage).toHaveBeenCalledWith(expect.anything());
+    expect(getMatchedVacancyPage).not.toHaveBeenCalled();
+    expect(getMatchedVacancyFacets).not.toHaveBeenCalled();
+    expect(pool).toMatchObject({ readRoles: ['CTO'], total: TOTAL, complete: false });
+    expect(vi.mocked(writeCachedMatchedPool).mock.lastCall?.[1]).toBe('latest');
+  });
+
+  it('снятые роли читаются явно, без подстановки сервера', async () => {
+    const firstPage = vi.fn(async () => ({ ...pageAt(0), facets: {} as MatchedVacancyPage['facets'] }));
+    let pool!: MatchedPool;
+    function Reader() {
+      pool = useMatchedPool(undefined, { pageLimit: 1, firstPage });
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Reader />));
+    const none = { roles: [], regions: [], remoteOnly: false };
+    await act(async () => pool.setFilters?.(none));
+    expect(firstPage).toHaveBeenLastCalledWith(expect.anything(), none);
+    expect(pool.readRoles).toEqual([]);
+    await act(async () => root.unmount());
+  });
+
+  it('тихое обновление кэша упало — чтение закончено, роли чтения неизвестны, строки на месте', async () => {
+    vi.mocked(readCachedMatchedPool).mockReturnValueOnce({
+      matched: [row(1)], total: TOTAL, poolTotal: TOTAL, complete: false,
+    });
+    const pool = await readPool({ pageLimit: 1, firstPage: () => Promise.reject(new Error('сбой')) });
+    expect(pool).toMatchObject({ reading: false, loading: false, failed: false, complete: false, total: TOTAL });
+    expect(pool.readRoles).toBeUndefined();
+    expect(pool.matched).toHaveLength(1);
   });
 
   it('без ограничения прежнее чтение — все страницы (старый кабинет)', async () => {
