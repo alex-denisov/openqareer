@@ -416,8 +416,24 @@ export interface CandidateDecisionLanguage {
   readonly context?: string;
 }
 
+/** B788: подтверждённое кандидатом право на работу; страна — ISO-код или `EU`. */
+export interface WorkRight {
+  readonly country: string;
+  readonly status: 'authorized' | 'needs_visa';
+}
+
+export const workRightsSchema = z
+  .array(
+    z.object({
+      country: z.string().regex(/^[A-Z]{2}$/u),
+      status: z.enum(['authorized', 'needs_visa']),
+    }),
+  )
+  .max(60);
+
 export interface CandidateDecisionProfile {
   readonly citizenship: readonly string[];
+  readonly workRights?: readonly WorkRight[];
   /** Где кандидат ищет работу (B445): города и «удалённо», не гражданство. */
   readonly searchLocations?: readonly string[];
   readonly taxStatus?: string;
@@ -451,6 +467,7 @@ const decisionProfileFormatIds = DECISION_WORK_FORMATS.map((format) => format.id
 const storedDecisionProfileSchema = z
   .object({
     citizenship: z.array(z.string().max(80)).max(10),
+    workRights: workRightsSchema.optional(),
     taxStatus: z.string().max(120).optional(),
     languages: z
       .array(
@@ -490,6 +507,7 @@ export const CONFIDENTIAL_DECISION_KEYS = [
   'salaryCurrency',
   'cushionMonths',
   'citizenship',
+  'workRights',
   'taxStatus',
   'hasFamily',
 ] as const;

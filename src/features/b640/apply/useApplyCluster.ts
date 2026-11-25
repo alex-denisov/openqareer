@@ -17,14 +17,18 @@ const GONE_CODES: ReadonlySet<string> = new Set(['vacancy_not_found', 'vacancy_g
 const LOADING: ApplyClusterState = { status: 'loading' };
 
 function cachedCluster(vacancyId: string): Cluster | null {
-  const pooled = readCachedMatchedPool()?.matched.find((item) => item.cluster.id === vacancyId);
+  const pooled = [readCachedMatchedPool('latest'), readCachedMatchedPool()]
+    .flatMap((pool) => pool?.matched ?? [])
+    .find((item) => item.cluster.id === vacancyId);
   return pooled?.cluster ?? null;
 }
 
-/** В показанной подборке у вакансии уже есть hh.ru — площадка известна, запрос не нужен. */
+/** Единственный источник — hh.ru: площадка известна. Склейку с hh.ru сверяет сервер (B787). */
 function settledByCache(vacancyId: string): ApplyClusterState | null {
   const cluster = cachedCluster(vacancyId);
-  return cluster && preferredApplySource(cluster).hh ? { status: 'ready', cluster } : null;
+  return cluster?.sources.length === 1 && preferredApplySource(cluster).hh
+    ? { status: 'ready', cluster }
+    : null;
 }
 
 /** Трекер раскрывается до показа экрана; не раскрылся — остаётся его адрес. */
