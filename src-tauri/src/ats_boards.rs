@@ -74,7 +74,8 @@ fn recruitee(host: &str, parts: &[&str]) -> Option<AtsTarget> {
         return None;
     }
     let path = format!("/o/{job}/c/new");
-    Some(target("recruitee", host, &path, String::new()))
+    let confirmation = format!("/o/{job}/applied");
+    Some(target("recruitee", host, &path, confirmation))
 }
 
 fn teamtailor(host: &str, parts: &[&str]) -> Option<AtsTarget> {
@@ -267,6 +268,25 @@ mod tests {
         ));
         assert!(!is_confirmation(&bamboo, &bamboo.entry_url));
         assert!(thanks_in_place(&bamboo, &bamboo.entry_url));
+        for url in [
+            format!("https://jobs.ashbyhq.com/acme/{JOB}"),
+            "https://apply.workable.com/acme/j/81B4".into(),
+            "https://acme.teamtailor.com/jobs/877-tech".into(),
+            format!("https://acme.pinpointhq.com/en/postings/{JOB}"),
+        ] {
+            let target = resolve(&url, None).unwrap();
+            assert!(thanks_in_place(&target, &target.entry_url), "{url}");
+            assert!(!thanks_in_place(&target, &url), "{url}");
+        }
+        let recruitee = resolve("https://acme.recruitee.com/o/engineer-3", None).unwrap();
+        assert!(is_confirmation(
+            &recruitee,
+            "https://acme.recruitee.com/o/engineer-3/applied"
+        ));
+        assert!(!is_confirmation(
+            &recruitee,
+            "https://acme.recruitee.com/o/engineer-4/applied"
+        ));
         assert!(!thanks_in_place(
             &bamboo,
             "https://other.bamboohr.com/careers/90"

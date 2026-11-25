@@ -67,22 +67,35 @@ function placeAgrees(left: string | undefined, right: string | undefined): boole
   return city(a, b) || city(b, a);
 }
 
+export function sameTitle(left: string, right: string): boolean {
+  const title = wordList(left).join(' ');
+  return title !== '' && title === wordList(right).join(' ');
+}
+
+export function sameCompany(left: string, right: string): boolean {
+  const company = companyKey(left);
+  return company !== '' && company === companyKey(right);
+}
+
+type Place = { readonly location?: string; readonly isRemote?: boolean };
+
+/** Место подтверждено: назван один город, обе удалённые или места не назвал никто. */
+export function isShownPlace(shown: Place, posting: Place): boolean {
+  if (shown.isRemote && posting.isRemote) return true;
+  const [a, b] = [shown.location?.trim(), posting.location?.trim()];
+  return Boolean(a) === Boolean(b) && placeAgrees(a, b);
+}
+
 /** Название и место одни и те же: запись — та вакансия, которую показывает карточка. */
 export function isShownPosting(
   shown: Pick<Posting, 'title' | 'location'>,
   posting: Pick<Posting, 'title' | 'location'>,
 ): boolean {
-  const title = wordList(shown.title).join(' ');
-  return (
-    title !== '' &&
-    title === wordList(posting.title).join(' ') &&
-    placeAgrees(shown.location, posting.location)
-  );
+  return sameTitle(shown.title, posting.title) && placeAgrees(shown.location, posting.location);
 }
 
 export function isSameVacancy(own: Posting, other: Posting): boolean {
   if (other.status !== 'active') return false;
-  const company = companyKey(own.company);
-  if (!company || company !== companyKey(other.company)) return false;
+  if (!sameCompany(own.company, other.company)) return false;
   return isShownPosting(own, other) && sameText(textOf(own), textOf(other));
 }

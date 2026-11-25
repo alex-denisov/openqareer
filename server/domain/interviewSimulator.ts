@@ -99,6 +99,14 @@ export const RUBRIC_CRITERIA = {
   ],
 } satisfies Record<InterviewQuestionType, readonly CriterionDefinition[]>;
 
+/** B635: те же четыре критерия для управленческого кейса и рабочей задачи. */
+export const CASE_CRITERIA: readonly CriterionDefinition[] = [
+  ['requirements', ['цел', 'срок', 'бюджет', 'ограничен', 'требован', 'выясн', 'уточн'], ['срок', 'бюджет', 'ограничен'], ['Не уточнены цели.', 'Уточните сроки и ограничения.', 'Цели и ограничения названы.']],
+  ['architecture', ['этап', 'план', 'роль', 'роли', 'команд', 'ответствен', 'приоритет', 'процесс'], ['этап', 'ответствен', 'приоритет'], ['Не описано решение.', 'Назовите этапы и ответственных.', 'Решение описано по шагам.']],
+  ['tradeoffs', ['компромисс', 'альтернатив', 'выбрал', 'почему', 'сначала', 'вместо'], ['компромисс', 'альтернатив', 'выбрал', 'почему', 'вместо'], ['Не объяснён выбор.', 'Сравните выбранный вариант с альтернативой.', 'Выбор и компромисс объяснены.']],
+  ['operations', ['показател', 'метрик', 'контрол', 'риск', 'провер', 'запасн'], ['показател', 'метрик', 'риск', 'запасн'], ['Не сказано, как проверить результат.', 'Добавьте показатели и риски.', 'Контроль результата учтён.']],
+];
+
 function scoreCriterion(
   answer: string,
   cues: readonly string[],
@@ -175,10 +183,11 @@ export function createInterviewSession(input: CreateInterviewSessionInput): Inte
 export function scoreInterviewAnswer(
   answer: string,
   type: InterviewQuestionType,
+  definitions: readonly CriterionDefinition[] = RUBRIC_CRITERIA[type],
 ): InterviewAnswerEvaluation {
   const text = answer.trim().toLocaleLowerCase('ru-RU');
   const criteria = Object.fromEntries(
-    RUBRIC_CRITERIA[type].map(([name, cues, details, reasons]) => [
+    definitions.map(([name, cues, details, reasons]) => [
       name,
       scoreCriterion(text, cues, details, reasons),
     ]),

@@ -108,6 +108,8 @@ const attemptSchema = z
     confirmed: z.literal(true),
     /** Название вакансии с экрана отклика: на вакансию hh.ru с другим названием отклик не уходит. */
     vacancyTitle: z.string().trim().min(1).max(500).optional(),
+    /** Карточка платформы: пока отклик уходит, её цель не меняется (B787). */
+    cardId: z.string().trim().min(1).max(200).optional(),
   })
   .strict();
 
@@ -330,7 +332,7 @@ const postAttempt: Handler = async (deps, request, reply) => {
     return sendError(reply, request, 400, 'invalid_hh_apply', 'Подтвердите отклик и выберите резюме.', false);
   }
   const now = new Date();
-  const { vacancyId, resumeId: chosen, vacancyTitle } = parsed.data;
+  const { vacancyId, resumeId: chosen, vacancyTitle, cardId } = parsed.data;
   const record = deps.multiSourceEngine.getVacancy?.(`src-hh-search:${vacancyId}`);
   if (vacancyTitle && record && !sameVacancyTitle(vacancyTitle, record.title)) {
     return sendError(reply, request, 409, 'hh_vacancy_mismatch', 'На hh.ru по этому адресу другая вакансия. Отклик не отправлен.', false);
@@ -349,7 +351,7 @@ const postAttempt: Handler = async (deps, request, reply) => {
   if (!hasApplyMandate(deps.capabilityConsentStore, candidateId)) {
     return sendError(reply, request, 403, APPLY_MANDATE_REQUIRED, 'Для отклика от вашего имени нужно ваше согласие.', false);
   }
-  const attemptId = deps.hh.startAttempt(candidateId, { vacancyId, resumeId: chosen, now });
+  const attemptId = deps.hh.startAttempt(candidateId, { vacancyId, resumeId: chosen, cardId, now });
   return reply.status(201).send({
     data: { attemptId, remainingToday: gate.remainingToday, consent: true },
     meta: { requestId: request.id },

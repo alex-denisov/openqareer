@@ -312,6 +312,20 @@ describe('очередь «отправить вручную»', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(inputs).toHaveLength(1);
     age();
+    // B649: флаг кабинета снят — такт кандидата не берёт.
+    run("UPDATE users SET username = 'without.flag' WHERE username = 'candidate.pitch'");
+    tick();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inputs).toHaveLength(1);
+    run("UPDATE users SET username = 'candidate.pitch' WHERE username = 'without.flag'");
+    // Старые строки без флага не закрывают очередь тем, у кого он есть.
+    const seed = new DatabaseSync(databasePath, { enableForeignKeyConstraints: false });
+    seed.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 250)
+      INSERT INTO manual_apply_queue
+      SELECT 'no-flag', 'v' || i, 'a' || i, 'open', 0, 0, payload_cipher, created_at,
+             '2025-01-01T00:00:00.000Z'
+      FROM manual_apply_queue, n`);
+    seed.close();
     tick();
     tick();
     await vi.waitFor(() => expect(inputs).toHaveLength(2));

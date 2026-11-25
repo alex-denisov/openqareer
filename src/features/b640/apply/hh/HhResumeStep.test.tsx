@@ -106,6 +106,17 @@ it('чтение без опыта — не прочиталось: правки
   expect(desktop.readHhResumeContent).toHaveBeenCalledTimes(2);
 });
 
+it('B704: условия поиска из старого снимка не показаны как «О себе»', async () => {
+  const about = 'Постоянная работа · Полная занятость · Удалённо';
+  api.getHhResumes.mockResolvedValue({
+    ...READ,
+    selected: { ...READ.selected, sections: { ...SECTIONS, about } },
+  });
+  const text = await render();
+  expect(text).not.toContain(about);
+  expect(text).not.toContain('О себе');
+});
+
 it('в браузере непрочитанное резюме сразу названо непрочитанным, hh.ru не читается', async () => {
   api.getHhResumes.mockResolvedValue({ ...READ, selected: { id: 'coo', title: 'COO', text: '' } });
   expect(await render()).toContain('не прочиталось');

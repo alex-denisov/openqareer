@@ -1,5 +1,5 @@
 import { hhVacancyIdFromUrl } from '../../shared/hhCandidateSession';
-import { isHhSource, preferredApplySource } from '../../shared/hhVacancySource';
+import { preferredApplySource } from '../../shared/hhVacancySource';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { RouteDeps } from '../routes/deps';
 import { applyRedirects } from './applyRedirect';
@@ -18,7 +18,7 @@ function openRouteUrl(deps: Deps, cluster: VacancyCluster): string {
 /**
  * Отклик уходит на hh.ru: там кандидата представляет его резюме hh.ru, своего резюме платформа
  * не готовит. Правило то же, что у экрана отклика (`applyRoute`): снимок отклика главнее подборки,
- * кроме неотправленного со снимком другой площадки.
+ * кроме неотправленного: его снимок мог сохранить чужую запись hh.ru.
  */
 export function appliesOnHh(
   deps: Deps,
@@ -30,9 +30,6 @@ export function appliesOnHh(
     .listApplications(candidateId)
     .find((item) => item.clusterId === vacancyId);
   const vacancy = application?.vacancy;
-  const hhSnapshot =
-    vacancy &&
-    isHhSource({ sourceType: vacancy.source, sourceName: vacancy.source, sourceUrl: vacancy.url });
-  const open = !application || (application.stage === 'saved' && !hhSnapshot);
+  const open = !application || application.stage === 'saved';
   return hhVacancyIdFromUrl(open ? openRouteUrl(deps, cluster) : vacancy?.url) !== null;
 }
