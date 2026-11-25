@@ -13,7 +13,8 @@ export async function putDecisionProfile(
   profile: CandidateDecisionProfile,
   signal?: AbortSignal,
 ): Promise<void> {
-  const { updatedAt: _updatedAt, ...body } = profile;
+  // Право на работу экраны условий не правят: их копия не должна вернуть стёртый факт (B788).
+  const { updatedAt: _updatedAt, workRights: _workRights, ...body } = profile;
   const response = await apiFetch('/api/v1/candidate/decision-profile', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

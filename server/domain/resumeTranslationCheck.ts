@@ -65,6 +65,14 @@ function mentions(text: string, name: string): boolean {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'u').test(text);
 }
 
+const TITLE_JOINT = /\s[&|/+]\s|[,;(&/]|(?<!\p{L})(?:и|and)(?!\p{L})/giu;
+const TITLE_PART = /\s[&|/+]\s|\(/gu;
+const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].length;
+
+/** «IT Lead (Acting Head of IT)» — две части: в переводе их не меньше. */
+const keepsTitleParts = (source: string, text: string): boolean =>
+  (!source.includes('(') || text.includes('(')) && count(text, TITLE_JOINT) >= count(source, TITLE_PART);
+
 /** Перевод на нужном языке с теми же числами, валютами и названиями компаний, что в исходной строке. */
 export function isFaithful(
   line: ResumeLine,
@@ -75,6 +83,7 @@ export function isFaithful(
   if (!text.trim()) return false;
   if (lang === 'en' ? CYRILLIC.test(text) : !CYRILLIC.test(text) || textLanguage(text) === 'en')
     return false;
+  if (line.kind === 'title' && !keepsTitleParts(line.text, text)) return false;
   if (!same(quantitiesOf(line.text), quantitiesOf(text))) return false;
   if (!same(currenciesOf(line.text), currenciesOf(text))) return false;
   if (lang === 'en') return true;
