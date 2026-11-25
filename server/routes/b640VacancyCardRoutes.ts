@@ -68,6 +68,21 @@ function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyR
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
 }
 
+async function openedClusterGone(
+  deps: CardDeps,
+  request: FastifyRequest,
+  cluster: VacancyCluster,
+): Promise<boolean> {
+  try {
+    return (await deps.multiSourceEngine.openedVacancyGone?.(cluster)) ?? false;
+  } catch (error: unknown) {
+    // Сбой сверки карточку не закрывает: следующее открытие спросит снова.
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    request.log.warn({ errorName }, 'opened-vacancy-check-failed');
+    return false;
+  }
+}
+
 /** B797: открытая карточка сверяется с площадкой своим запросом, пока кандидат её уже читает. */
 async function postVacancyLiveness(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
@@ -75,10 +90,11 @@ async function postVacancyLiveness(deps: CardDeps, request: FastifyRequest, repl
   const candidate = sessionCandidate(request, reply, principal.candidate);
   if (!candidate) return reply;
   const id = (request.params as { id?: string }).id ?? '';
-  if (!id || id.length > ID_MAX || !cardCluster(deps, candidate.id, id)) {
+  const cluster = id && id.length <= ID_MAX ? cardCluster(deps, candidate.id, id) : undefined;
+  if (!cluster && !(id && deps.multiSourceEngine.isKnownVacancyGone?.(id))) {
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   }
-  const closed = (await deps.multiSourceEngine.openedVacancyGone?.(id)) ?? false;
+  const closed = !cluster || (await openedClusterGone(deps, request, { ...cluster, id }));
   return { data: { closed }, meta: { requestId: request.id } };
 }
 

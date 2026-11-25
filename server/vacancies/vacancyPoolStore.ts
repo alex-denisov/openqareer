@@ -295,6 +295,7 @@ export interface VacancyPoolStore {
   closedSelection?(): ReadonlySet<string>;
   selectionRecentlyChecked?(id: string, nowMs?: number): boolean;
   dueSelectionLiveness?(limit: number, nowMs?: number): string[];
+  markSelectionLivenessTried?(vacancyId: string, nowMs?: number): void;
   markSelectionLivenessChecked?(vacancyId: string, nowMs?: number): void;
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
   loadHhTextCandidates?(

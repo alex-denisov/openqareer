@@ -50,6 +50,8 @@ describe('B715: GET b640/vacancies/:id — карточка вакансии в�
     const path = `${BASE}/${encodeURIComponent('cluster-src-hh-search:139180469')}`;
     expect((await h.post(`${path}/liveness`, {}, 'flagged.test')).json().data).toEqual({ closed: true });
     expect((await h.get(path, 'flagged.test')).statusCode).toBe(200);
+    const gone = `${BASE}/cluster-src-hh-search:44444444/liveness`;
+    expect((await h.post(gone, {}, 'flagged.test')).json().data).toEqual({ closed: true });
     const unknown = `${BASE}/cluster-src-hh-search:99999999/liveness`;
     expect((await h.post(unknown, {}, 'flagged.test')).statusCode).toBe(404);
   });

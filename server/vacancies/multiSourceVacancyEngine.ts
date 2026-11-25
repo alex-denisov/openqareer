@@ -103,6 +103,7 @@ import {
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
 import { hhTextNeedsRead, isHhStubText } from './hhStubText';
+import { isHhSource } from '../../shared/hhVacancySource';
 import { hasDetailText } from './detailTextPriority';
 import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
@@ -1532,32 +1533,42 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
-   * B797: открытая карточка hh, которую сутки не сверяли, читается сразу. `true` — снята. Список
-   * снимает запись индексом; кластер сведёт воркер, как у `retireArchivedVacancy`.
+   * B797: снята ли открытая карточка. Запись hh, которую сутки не сверяли, читается с площадки.
+   * Склейка закрыта, только когда сняты все её записи. Список снимает запись индексом; кластер
+   * сведёт воркер, как у `retireArchivedVacancy`.
    */
-  public async openedVacancyGone(clusterId: string, waitMs = OPENED_CHECK_WAIT_MS): Promise<boolean> {
-    const id = clusterId.replace(/^cluster-/u, '');
-    if (!id.startsWith('src-hh-search:')) return false;
-    const vacancy = this.pool.getVacancy(id);
-    if (!vacancy || !this.descriptionLoader?.recheck) return false;
-    if (this.pool.selectionRecentlyChecked?.(id) !== false) return false;
-    const check = this.settleOpenedCheck(vacancy).catch(() => false);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const late = new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), waitMs);
+  public async openedVacancyGone(cluster: VacancyCluster): Promise<boolean> {
+    const id = cluster.id.replace(/^cluster-/u, '');
+    const vacancy = id.startsWith(HH_ID_PREFIX) ? this.pool.getVacancy(id) : undefined;
+    if (
+      vacancy &&
+      this.descriptionLoader?.recheck &&
+      this.pool.selectionRecentlyChecked?.(id) === false
+    ) {
+      await this.settleOpenedCheck(vacancy);
+    }
+    const sources = cluster.sources;
+    if (sources.length === 0) return this.recordGone(id);
+    return sources.every((source) => {
+      const key = sourceMemberKey(source);
+      const known = key !== undefined && this.memberRecordExists(`cluster-${key}`);
+      if (known) return this.recordGone(key);
+      // Источник hh без внешнего id — запись самой карточки.
+      return isHhSource(source) && this.recordGone(id);
     });
-    const gone = await Promise.race([check, late]);
-    clearTimeout(timer);
-    return gone;
   }
 
-  private async settleOpenedCheck(vacancy: UnifiedVacancy): Promise<boolean> {
+  /** Запись в пуле была, а живой её больше нет. */
+  private recordGone(id: string): boolean {
+    return this.pool.getVacancy(id) === undefined && this.memberRecordExists(`cluster-${id}`);
+  }
+
+  private async settleOpenedCheck(vacancy: UnifiedVacancy): Promise<void> {
     const verdict = await this.checkHhLiveness(vacancy);
     // Нет ответа о вакансии — карточка не сверена: следующее открытие спросит снова.
-    if (verdict === 'blocked' || verdict === 'unknown') return false;
+    if (verdict === 'blocked' || verdict === 'unknown') return;
     if (verdict === 'gone') this.pool.markExpired([vacancy.id], new Date().toISOString());
     this.pool.markSelectionLivenessChecked?.(vacancy.id);
-    return verdict === 'gone';
   }
 
   /** B797: один такт сверки живости верха подборок. Зовёт только воркер обслуживания. */
@@ -1568,6 +1579,7 @@ export class MultiSourceVacancyEngine {
       check: (id) => this.checkLiveness(id),
       retire: (id) => this.retireGone(id),
       markChecked: (id) => pool.markSelectionLivenessChecked?.(id),
+      markTried: (id) => pool.markSelectionLivenessTried?.(id),
       stopped,
     });
   }
@@ -2744,8 +2756,7 @@ const HIDDEN_TEXT_ANSWERS = 2;
 
 /** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
 const EXPIRED_CLUSTER_BATCH = 50;
-/** B797: столько карточка ждёт ответа площадки о живости. */
-const OPENED_CHECK_WAIT_MS = 4_000;
+const HH_ID_PREFIX = 'src-hh-search:';
 const LIVENESS_COUNT_CHUNK = 50;
 
 function yieldTurn(): Promise<void> {

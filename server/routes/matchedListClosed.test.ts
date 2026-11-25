@@ -14,8 +14,9 @@ const rows = Array.from({ length: 300 }, (_, n) => ({
     canonicalLocation: PLACES[n % 3],
     isRemote: n % 4 === 0,
     skills: [],
-    sources: Array.from({ length: n === 0 ? 2 : 1 }, () => ({
-      sourceId: 'src-hh-search',
+    sources: Array.from({ length: n === 0 ? 2 : 1 }, (_source, part) => ({
+      sourceId: part === 0 ? 'src-hh-search' : 'src-other',
+      externalId: String(n),
       observedAt: '2026-11-01T00:00:00.000Z',
     })),
     lastSeenAt: '2026-11-01T00:00:00.000Z',
@@ -30,6 +31,7 @@ const rows = Array.from({ length: 300 }, (_, n) => ({
   },
 })) as unknown as MatchedVacancyItem[];
 
+const OTHER = -1;
 function build(closed: readonly number[], filters: Record<string, unknown> = {}) {
   const empty = { region: [], level: [], source: [], role: [], place: [], offset: 0 };
   const input = {
@@ -48,7 +50,7 @@ function build(closed: readonly number[], filters: Record<string, unknown> = {})
     filters: { ...empty, ...filters },
     sourceRegistry: [],
     order: (items: readonly MatchedVacancyItem[]) => [...items],
-    closed: () => new Set(closed.map(id)),
+    closed: () => new Set(closed.map((n) => (n === OTHER ? 'src-other:0' : id(n)))),
   } as unknown as MatchedListInput;
   return runSteps(matchedListSteps(input, createPhaseTimer()));
 }
@@ -65,6 +67,7 @@ describe('B797: снятые уходят из списка и из всех ч�
     expect(list.filtered.map((item) => item.cluster.id)).not.toContain(`cluster-${id(1)}`);
     expect(list.filtered).toHaveLength(298);
     expect(list.filtered[0]?.cluster.id).toBe(`cluster-${id(0)}`);
+    expect(build([0, OTHER]).filtered).toHaveLength(299);
   });
 
   it('число каждого фильтра равно строкам после нажатия, в верху и ниже него', () => {

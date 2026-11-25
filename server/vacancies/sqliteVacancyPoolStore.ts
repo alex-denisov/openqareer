@@ -30,6 +30,7 @@ import {
 import {
   dueSelectionLiveness,
   markSelectionLivenessChecked,
+  markSelectionLivenessTried,
   closedSelection,
   recentlyChecked,
   requestSelectionLiveness,
@@ -2074,6 +2075,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   dueSelectionLiveness(limit: number, nowMs: number = Date.now()): string[] {
     return dueSelectionLiveness(this.database, limit, nowMs);
+  }
+
+  markSelectionLivenessTried(vacancyId: string, nowMs: number = Date.now()): void {
+    markSelectionLivenessTried(this.database, vacancyId, nowMs);
   }
 
   markSelectionLivenessChecked(vacancyId: string, nowMs: number = Date.now()): void {

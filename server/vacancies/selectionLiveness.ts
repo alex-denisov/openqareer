@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS selection_liveness (
   requested_ms INTEGER NOT NULL,
   checked_ms INTEGER NOT NULL DEFAULT 0
 ) STRICT;
+CREATE TABLE IF NOT EXISTS selection_liveness_tried (
+  vacancy_id TEXT PRIMARY KEY,
+  tried_ms INTEGER NOT NULL
+) STRICT;
 `;
 
 const HH_ID_PREFIX = 'src-hh-search:';
@@ -24,6 +28,8 @@ export const LIVENESS_REQUEST_FRESH_MS = 3 * 24 * HOUR_MS;
 export const LIVENESS_REQUEST_TTL_MS = 14 * 24 * HOUR_MS;
 /** Одна вакансия перечитывается не чаще. */
 export const LIVENESS_RECHECK_MS = 24 * HOUR_MS;
+/** Площадка не ответила о вакансии: она не сверена, следующая попытка такта — через час. */
+export const LIVENESS_RETRY_MS = HOUR_MS;
 /**
  * Карточек hh и столько же с других площадок за такт (раз в минуту) через общий темп загрузчика hh: верх подборки — за 8 минут
  * (по 5 за такт — 40 минут, прод 25.11). Суточный расход держит `LIVENESS_RECHECK_MS`.
@@ -91,16 +97,38 @@ export function dueSelectionLiveness(
   const read = database.prepare(
     `SELECT q.vacancy_id AS id FROM selection_liveness q
        JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 0
-      WHERE q.requested_ms >= ? AND q.checked_ms < ? AND (q.vacancy_id LIKE 'src-hh-search:%') = ?
+      WHERE q.requested_ms >= ? AND q.checked_ms < ?
+        AND NOT EXISTS (SELECT 1 FROM selection_liveness_tried t
+                         WHERE t.vacancy_id = q.vacancy_id AND t.tried_ms >= ?)
+        AND (q.vacancy_id LIKE 'src-hh-search:%') = ?
       ORDER BY q.checked_ms, q.rank LIMIT ?`,
   );
   return [1, 0].flatMap((hh) =>
     (
-      read.all(nowMs - LIVENESS_REQUEST_TTL_MS, nowMs - LIVENESS_RECHECK_MS, hh, limit) as Array<{
+      read.all(
+        nowMs - LIVENESS_REQUEST_TTL_MS,
+        nowMs - LIVENESS_RECHECK_MS,
+        nowMs - LIVENESS_RETRY_MS,
+        hh,
+        limit,
+      ) as Array<{
         id: string;
       }>
     ).map((row) => row.id),
   );
+}
+
+export function markSelectionLivenessTried(
+  database: DatabaseSync,
+  id: string,
+  nowMs: number,
+): void {
+  database
+    .prepare(
+      `INSERT INTO selection_liveness_tried (vacancy_id, tried_ms) VALUES (?, ?)
+       ON CONFLICT(vacancy_id) DO UPDATE SET tried_ms = excluded.tried_ms`,
+    )
+    .run(id, nowMs);
 }
 
 export function markSelectionLivenessChecked(
@@ -131,6 +159,8 @@ export interface SelectionLivenessSteps {
   check(id: string): Promise<'open' | 'gone' | 'unknown' | 'blocked'>;
   retire(id: string): void;
   markChecked(id: string): void;
+  /** Ответа о вакансии нет: запомнить попытку, не отмечая сверенной. */
+  markTried(id: string): void;
   stopped(): boolean;
 }
 
@@ -150,7 +180,8 @@ export async function runSelectionLiveness(
     }
     if (verdict === 'gone') steps.retire(id);
     counts[verdict] += 1;
-    steps.markChecked(id);
+    if (verdict === 'unknown') steps.markTried(id);
+    else steps.markChecked(id);
   }
   return blocked ? { ...report(), blocked } : report();
 }
