@@ -495,7 +495,7 @@ function todayTeamSizeDecision(
   now: Date,
 ) {
   const experience = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
-  if (!experience.some((entry) => entry.current && !entry.teamSize)) return undefined;
+  if (!experience.some((entry) => entry.current && !entry.teamSize && !entry.teamSizeDeclined)) return undefined;
   const summaries = new Map(
     matched.map((item) => [item.cluster.id, item.cluster.descriptionSummary]),
   );

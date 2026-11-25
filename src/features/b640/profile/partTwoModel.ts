@@ -1,5 +1,8 @@
 import type { ResumeDraft } from '../../resume/resumeTypes';
 
+const unanswered = (entry: ResumeDraft['experience'][number]): boolean =>
+  !entry.teamSize && !entry.teamSizeDeclined;
+
 export interface ProfileQuestion {
   readonly entryId: string;
   readonly employer: string;
@@ -8,10 +11,10 @@ export interface ProfileQuestion {
 
 /**
  * Один вопрос о профиле: размер команды у первого места работы, где он не
- * указан. Отдельного списка вопросов на сервере нет — вопрос выводим из профиля.
+ * указан и кандидат не отказался его указывать. Отдельного списка вопросов на сервере нет — вопрос выводим из профиля.
  */
 export function nextQuestion(draft: ResumeDraft): ProfileQuestion | null {
-  const entry = draft.experience.find((item) => !item.teamSize);
+  const entry = draft.experience.find(unanswered);
   if (!entry) return null;
   const employer = entry.employer?.trim() ?? '';
   const place = employer
@@ -22,7 +25,7 @@ export function nextQuestion(draft: ResumeDraft): ProfileQuestion | null {
 
 /** Сколько вопросов о профиле осталось: по месту работы без размера команды. */
 export function questionCount(draft: ResumeDraft): number {
-  return draft.experience.filter((item) => !item.teamSize).length;
+  return draft.experience.filter(unanswered).length;
 }
 
 const MAX_TEAM_SIZE = 100_000;

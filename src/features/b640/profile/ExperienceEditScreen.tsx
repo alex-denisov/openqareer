@@ -97,7 +97,7 @@ function useSave({ entry }: EditorProps) {
 }
 
 /** Кнопки формы: на 390 — закреплённая полоса, на широком окне — под формой. */
-function FormActions({ busy }: { readonly busy: boolean }) {
+export function FormActions({ busy }: { readonly busy: boolean }) {
   return (
     <>
       <div className="actions m-commit pf-mob pf-mbar">

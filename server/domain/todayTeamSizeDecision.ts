@@ -26,7 +26,7 @@ export interface TodayTeamSizeDecisionInput {
 
 function currentPlaceWithoutTeamSize(experience: ResumeDraft['experience']) {
   return [...experience]
-    .filter((entry) => entry.current && !entry.teamSize && entry.employer?.trim())
+    .filter((entry) => entry.current && !entry.teamSize && !entry.teamSizeDeclined && entry.employer?.trim())
     .sort((left, right) => (right.startDate ?? '').localeCompare(left.startDate ?? ''))[0];
 }
 
