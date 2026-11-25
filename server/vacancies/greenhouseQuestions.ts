@@ -2,11 +2,11 @@ import type { QuestionnaireQuestion } from '../../shared/applicationQuestionnair
 import { parseGreenhouseQuestions } from '../domain/applicationQuestionnaire';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { parseAtsBoardSourceId } from './atsBoardAdapters';
+import { readLimited } from './limitedBody';
 import { withRequestTimeout } from './requestTimeout';
 
 const GREENHOUSE_API = 'https://boards-api.greenhouse.io/v1/boards';
 const READ_TIMEOUT_MS = 8_000;
-const MAX_BODY_BYTES = 512_000;
 const BOARD = /^[A-Za-z0-9_-]{1,100}$/u;
 const JOB_ID = /^[0-9]{1,20}$/u;
 
@@ -89,26 +89,6 @@ function rememberFailure(key: string): void {
 export function resetGreenhouseQuestionsCache(): void {
   failedUntil.clear();
   inFlight.clear();
-}
-
-/** Тело читается потоком и обрывается на пределе: чужой ответ не занимает память без меры. */
-async function readLimited(response: Response): Promise<string | null> {
-  if (Number(response.headers.get('content-length') ?? 0) > MAX_BODY_BYTES) return null;
-  const reader = response.body?.getReader();
-  if (!reader) return null;
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_BODY_BYTES) {
-      await reader.cancel();
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString('utf8');
 }
 
 async function fetchQuestions(

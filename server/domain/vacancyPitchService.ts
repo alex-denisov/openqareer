@@ -1,3 +1,4 @@
+import { textLanguage } from './profileLanguage';
 import { PERSON_FIRST_NAMES } from '../../shared/personFirstNames';
 import { stripHiddenMarkers } from '../../shared/textHygiene';
 import { isImportedMemoryId } from './resumeImport';
@@ -58,6 +59,8 @@ export interface VacancyPitchInputVacancy {
   readonly title: string;
   readonly company?: string;
   readonly description?: string;
+  /** Полный текст из пула: по нему определяется язык вакансии. */
+  readonly fullDescription?: string;
   readonly requiredSkills?: readonly string[];
   readonly responsibilities?: readonly string[];
   readonly location?: string;
@@ -154,8 +157,14 @@ function isNegativeStatement(statement: string): boolean {
  * иначе — английский. Явный параметр запроса всегда важнее (B266).
  */
 export function detectVacancyLanguage(vacancy: VacancyPitchInputVacancy): PitchLanguage {
-  const text = `${vacancy.title} ${vacancy.description ?? ''} ${(vacancy.responsibilities ?? []).join(' ')}`;
-  return /\p{Script=Cyrillic}/u.test(text) ? 'ru' : 'en';
+  const body = [
+    vacancy.fullDescription?.trim() || vacancy.description,
+    ...(vacancy.responsibilities ?? []),
+  ].join(' ');
+  // Язык — по тексту вакансии; заголовок решает, только когда текста нет.
+  const written = textLanguage(body);
+  if (written) return written;
+  return /\p{Script=Cyrillic}/u.test(body.trim() || vacancy.title) ? 'ru' : 'en';
 }
 
 function factBasis(fact: VacancyPitchInputFact): PitchFactBasis {
