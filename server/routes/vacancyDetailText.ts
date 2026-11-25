@@ -1,3 +1,4 @@
+import { hasDetailText, hasStandInDescription } from '../vacancies/detailTextPriority';
 import type { VacancyDescriptionLoadResult } from '../vacancies/multiSourceVacancyEngine';
 
 /** Сколько карточка ждёт текст в самом запросе; дальше его дочитает воркер обслуживания. */
@@ -10,7 +11,32 @@ interface DetailTextEngine {
   requestHhTextPriority?(ids: readonly string[], baseRank?: number): void;
 }
 
-export type DetailTextResult = VacancyDescriptionLoadResult & { readonly pending?: true };
+export type DetailTextResult = VacancyDescriptionLoadResult & {
+  readonly pending?: true;
+  /** Описание записи — склейка списка, не текст вакансии. */
+  readonly standIn?: true;
+};
+
+/**
+ * B791 25.11: площадка без текста в списке — карточка в голову очереди дочитки. У LinkedIn вместо
+ * описания склейка «название — компания — город»: до текста ответ `pending`, а не она.
+ */
+function requestListedText(
+  engine: DetailTextEngine,
+  vacancyId: string,
+  loaded: VacancyDescriptionLoadResult | undefined,
+): DetailTextResult {
+  const result = loaded ?? { unavailable: true, status: 'failed' as const };
+  if (!hasDetailText(vacancyId) || !result.vacancy || result.vacancy.fullDescription?.trim()) {
+    return result;
+  }
+  try {
+    engine.requestHhTextPriority?.([vacancyId], OPENED_CARD_RANK);
+  } catch {
+    // Занятая база не роняет карточку: запись дочитает общий обход, повтор — на следующем опросе.
+  }
+  return hasStandInDescription(vacancyId) ? { ...result, pending: true, standIn: true } : result;
+}
 
 /**
  * 02.11: an opened card without hh text waited behind the HTTP loader's page warm-ups (one
@@ -31,9 +57,8 @@ export async function loadDetailText(
   clearTimeout(timer);
   const waiting =
     vacancyId.startsWith('src-hh-search:') &&
-    (!loaded ||
-      (loaded.status === 'failed' && loaded.blocked !== 'refused' && !loaded.restricted));
-  if (!waiting) return loaded!;
+    (!loaded || (loaded.status === 'failed' && loaded.blocked !== 'refused' && !loaded.restricted));
+  if (!waiting) return requestListedText(engine, vacancyId, loaded);
   engine.requestHhTextPriority?.([vacancyId], OPENED_CARD_RANK);
   return { ...(loaded ?? {}), unavailable: true, status: 'failed', pending: true };
 }

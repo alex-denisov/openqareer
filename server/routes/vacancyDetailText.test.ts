@@ -4,7 +4,10 @@ import { loadDetailText } from './vacancyDetailText';
 describe('loadDetailText (02.11: card open reads text first, never waits behind warm-ups)', () => {
   it('returns the load when it answers in time', async () => {
     const engine = {
-      loadVacancyDescription: vi.fn(async () => ({ unavailable: false, status: 'loaded' as const })),
+      loadVacancyDescription: vi.fn(async () => ({
+        unavailable: false,
+        status: 'loaded' as const,
+      })),
       requestHhTextPriority: vi.fn(),
     };
     await expect(loadDetailText(engine, 'src-hh-search:1', 50)).resolves.toMatchObject({
@@ -64,5 +67,42 @@ describe('loadDetailText (02.11: card open reads text first, never waits behind 
     const result = await loadDetailText(engine, 'src-hh-search:4', 50);
     expect(result).not.toHaveProperty('pending');
     expect(result.restricted).toBe(true);
+  });
+
+  it('B791: LinkedIn without text goes to the head and answers pending, not the stand-in', async () => {
+    const vacancy = { id: 'src-linkedin-guest:1', description: 'CTO — Acme — Berlin' };
+    const engine = {
+      loadVacancyDescription: vi.fn(
+        async () => ({ vacancy, unavailable: false, status: 'skipped' }) as never,
+      ),
+      requestHhTextPriority: vi.fn(),
+    };
+    await expect(loadDetailText(engine, vacancy.id, 50)).resolves.toMatchObject({
+      pending: true,
+      standIn: true,
+    });
+    expect(engine.requestHhTextPriority).toHaveBeenCalledWith([vacancy.id], -1);
+  });
+
+  it('B791: LinkedIn with text is not requested; a late load of another source still answers', async () => {
+    const engine = {
+      loadVacancyDescription: vi.fn(
+        async () =>
+          ({
+            vacancy: { fullDescription: 'Текст' },
+            unavailable: false,
+            status: 'cached',
+          }) as never,
+      ),
+      requestHhTextPriority: vi.fn(),
+    };
+    await expect(loadDetailText(engine, 'src-linkedin-guest:2', 50)).resolves.not.toHaveProperty(
+      'pending',
+    );
+    expect(engine.requestHhTextPriority).not.toHaveBeenCalled();
+    const slow = { ...engine, loadVacancyDescription: vi.fn(() => new Promise<never>(() => {})) };
+    await expect(loadDetailText(slow, 'src-remotive:1', 5)).resolves.toMatchObject({
+      status: 'failed',
+    });
   });
 });
