@@ -23,8 +23,12 @@ const BOILERPLATE =
 const CONDITION =
   /^(?:обязательн\p{L}* )?(?:проживани[ея]|переезд|релокаци[яи])(?!\p{L})|^(?:must (?:reside|live|relocate)|residing in|willing(?:ness)? to relocate)\b/iu;
 /** «Возглавит направление», «определить приоритеты» — дело роли, а не требование к кандидату. */
-const ROLE_ACTION =
-  /^(?!(?:иметь|знать|уметь|владеть|понимать|обладать|быть|мочь|хотеть|любить)(?!\p{L}))\p{Ll}\p{L}{3,}(?:[аеиоуыя]ть(?:ся)?|ти(?:сь)?|[иея]т)\s/u;
+const NOT_ROLE_ACTION =
+  /^(?:иметь|знать|уметь|владеть|понимать|обладать|быть|мочь|хотеть|любить|имеет|знает|умеет|владеет|понимает|обладает|печать|память|занят|принят|(?:кибер)?аудит|\p{L}*(?:кредит|лимит|визит|магнит|аппетит)|транзит|депозит|реквизит|\p{L}*цит)(?!\p{L})/u;
+/** «-ет» после согласной — обычно имя («бюджет», «приоритет»), поэтому такие глаголы названы. */
+const ROLE_VERB =
+  /^(?:\p{Ll}\p{L}{3,}(?:[аеиоуыя]ть(?:ся)?|[аеуюя]ет(?:ся)?|[ия]т(?:ся)?)|\p{L}*(?:вести|нести|йти|расти)(?:сь)?|(?:станет|поможет|сможет|займет(?:ся)?|(?:по|про|в)?ведет))\s/u;
+const isRoleAction = (text: string): boolean => ROLE_VERB.test(text) && !NOT_ROLE_ACTION.test(text);
 /** Предложение о работе в роли, а не о компании. */
 const DUTY_SENTENCE =
   /\byou(?:(?:'|’)ll| will)\b|\bresponsible for\b|\byour (?:team|role|mission)\b|^(?:lead|build|own|drive|design|develop|manage|define|partner|deliver|hire|mentor|scale|operate)\b|вы будете|вам предстоит|предстоит|отвечать за|будете/iu;
@@ -140,7 +144,7 @@ export function interviewVacancyAsks(
       );
   const dutyIds = vacancyDutyIds(withDutyHeadings(fromModel ? description : text), requirements);
   const isDuty = (item: VacancyRequirement) =>
-    dutyIds.has(item.id) || ROLE_ACTION.test(item.text.trim().replace(BULLET, ''));
+    dutyIds.has(item.id) || isRoleAction(item.text.trim().replace(BULLET, ''));
   const ofKind = (kind: 'duty' | 'req') =>
     requirements
       .filter((item) => isDuty(item) === (kind === 'duty'))
