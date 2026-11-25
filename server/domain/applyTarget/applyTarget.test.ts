@@ -157,6 +157,10 @@ describe('цель отклика', () => {
     expect(
       resolveApplyTarget({ vacancy: vacancy('src-company-site-airbnb:7978040', url) }),
     ).toMatchObject({ channel: 'greenhouse', formUrl: url });
+    const named = `${url}&board=evil`;
+    expect(
+      resolveApplyTarget({ vacancy: vacancy('src-company-site-airbnb:7978040', named) }),
+    ).toMatchObject({ channel: 'greenhouse', formUrl: named });
   });
 
   it('та же вакансия у работодателя заменяет агрегатор', () => {

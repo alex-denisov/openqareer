@@ -165,6 +165,8 @@ export interface DesktopNativeHttpResponse {
   ok: boolean;
   headers: Record<string, string>;
   body: string;
+  /** Файл (PDF, DOCX, картинка): текстом его байты не доходят. */
+  body_base64?: string;
 }
 
 export async function desktopNativeFetch(

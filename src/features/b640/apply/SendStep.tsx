@@ -5,7 +5,7 @@ import { apiErrorMessage } from '../../coach/apiClient';
 import type { ApprovedVacancyLetterResult } from '../../vacancies/vacancyLetterApi';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
-import { sendFrom } from '../responses/model/platform';
+import { sendFrom, viaPlatform } from '../responses/model/platform';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import type { ApplyHead } from './model/applyModel';
@@ -86,14 +86,14 @@ export async function markApplied({
 }
 
 /** «одобрено 18.11» — дата одобрения письма. */
-function approvedLabel(approvedAt: string): string {
+export function approvedLabel(approvedAt: string): string {
   const date = new Date(approvedAt);
   if (Number.isNaN(date.getTime())) return 'одобрено';
   const pad = (value: number) => String(value).padStart(2, '0');
   return `одобрено ${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
 }
 
-function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
+export function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
@@ -136,6 +136,25 @@ function SentActions({ sent, responsePath, onConfirm }: SentActionsProps) {
   );
 }
 
+interface AlreadySentProps {
+  readonly platform: ApplyHead['platform'];
+  readonly responseId: string;
+}
+
+/** Отклик уже ушёл: площадка отправки и переход к нему. */
+function AlreadySent({ platform, responseId }: AlreadySentProps) {
+  return (
+    <section className="lead" aria-label="Отправка">
+      <ResultLine text={platform ? `Отправлен ${viaPlatform(platform)}` : 'Отклик отправлен'} />
+      <div className="actions">
+        <Link className="btn is-primary" to={buildNodePath('o01c', { responseId })}>
+          <Icon name="right" />К отклику
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export interface SendStepProps {
   readonly vacancyId: string;
   readonly head: ApplyHead;
@@ -156,6 +175,11 @@ export interface SendStepProps {
 /** Шаг «Отправка»: в приложении вакансия hh.ru уходит откликом из входа кандидата (B704), иначе — веб (O4d). */
 export function SendStep(props: SendStepProps) {
   const { vacancyId, head, sourceType, approved, letterText } = props;
+  // Отклик, ушедший с этого шага, показывает его итог; «Отправлен» — только ушедший до открытия.
+  const [opened] = useState({ vacancyId, sentId: head.sentId });
+  if (opened.sentId && opened.vacancyId === vacancyId) {
+    return <AlreadySent platform={head.platform} responseId={opened.sentId} />;
+  }
   const hhVacancyId =
     approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
   if (!approved || !hhVacancyId) return <WebSendStep {...props} />;

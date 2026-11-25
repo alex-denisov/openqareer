@@ -53,7 +53,7 @@ describe('B657: что открыто — отклик или вакансия',
 
 describe('B657: шапка отклика', () => {
   it('берёт данные карточки отклика', () => {
-    expect(buildHead({ application: application() })).toEqual({
+    expect(buildHead({ application: application({ stage: 'saved' }) })).toEqual({
       title: 'Руководитель платформы',
       company: 'Арка Холдинг',
       url: 'https://hh.ru/vacancy/1',
@@ -81,6 +81,12 @@ describe('B657: шапка отклика', () => {
       source: 'hh.ru',
       platform: { label: 'hh.ru', site: false },
     });
+  });
+
+  it('B678: отправленный отклик несёт свой id, черновик — нет', () => {
+    const sent = application({ id: 'sent-1', stage: 'applied' });
+    expect(buildHead({ application: sent }).sentId).toBe('sent-1');
+    expect(buildHead({ application: application({ stage: 'saved' }) }).sentId).toBeUndefined();
   });
 
   const twoSources = {

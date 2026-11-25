@@ -7,7 +7,14 @@ use tauri::Url;
 /// Frames a form page itself loads for its own check. They are allowed to
 /// load so the candidate can pass the check in the shown window; the app
 /// never answers one.
-const CHECK_FRAME_HOSTS: &[&str] = &["www.google.com", "www.recaptcha.net", "www.gstatic.com"];
+const CHECK_FRAMES: &[(&str, &str)] = &[
+    ("www.google.com", "/recaptcha"),
+    ("www.recaptcha.net", "/recaptcha"),
+    ("www.gstatic.com", "/recaptcha"),
+    ("newassets.hcaptcha.com", "/captcha"),
+    ("geo.captcha-delivery.com", "/captcha"),
+    ("captcha-assets.recruiteecdn.com", "/captcha"),
+];
 
 const GREENHOUSE_HOSTS: &[&str] = &["job-boards.greenhouse.io", "boards.greenhouse.io"];
 const GREENHOUSE_EU_HOSTS: &[&str] = &["job-boards.eu.greenhouse.io", "boards.eu.greenhouse.io"];
@@ -19,10 +26,13 @@ pub struct AtsTarget {
     pub adapter: &'static str,
     /// The board's own page with the form, never an employer page that frames it.
     pub entry_url: String,
-    /// The host of `entry_url`; a vacancy has no other.
+    /// The host of `entry_url` and, for Greenhouse, the one host it moves to.
     pub hosts: Vec<String>,
     /// The path the board shows after it accepted the application.
+    /// Empty when the board is not known to have one: nothing then confirms.
     pub confirmation_path: String,
+    /// The one address outside the form's own path that its button posts to.
+    pub post_path: Option<String>,
 }
 
 fn is_board_token(value: &str) -> bool {
@@ -81,8 +91,10 @@ fn greenhouse(hosts: &[&str], token: &str, job_id: &str) -> Result<AtsTarget, St
     Ok(AtsTarget {
         adapter: "greenhouse",
         entry_url: format!("https://{}{path}", hosts[0]),
-        hosts: vec![hosts[0].to_string()],
+        // Either host of the pair answers with the other; the path stays the same.
+        hosts: hosts.iter().map(|host| (*host).to_string()).collect(),
         confirmation_path: format!("{path}/confirmation"),
+        post_path: None,
     })
 }
 
@@ -110,6 +122,9 @@ pub fn resolve(url: &str, board: Option<&str>) -> Result<AtsTarget, String> {
             _ => Err("ats_address_invalid".to_string()),
         };
     }
+    if let Some(target) = crate::ats_boards::resolve(&parsed, board) {
+        return target;
+    }
     match (query(&parsed, "gh_jid"), board) {
         (Some(job_id), Some(token)) => greenhouse(GREENHOUSE_HOSTS, token, &job_id),
         (Some(_), None) => Err("ats_board_unknown".to_string()),
@@ -117,13 +132,31 @@ pub fn resolve(url: &str, board: Option<&str>) -> Result<AtsTarget, String> {
     }
 }
 
-/// The form window's navigation rule, frames included.
+/// What the window itself, not a frame in it, may show.
+pub fn top_level_allowed(target: &AtsTarget, url: &str) -> bool {
+    url == "about:blank" || on_target(target, url) || is_post(target, url)
+}
+
+fn is_check_frame(url: &str) -> bool {
+    https(url).is_some_and(|parsed| {
+        CHECK_FRAMES
+            .iter()
+            .any(|(host, base)| Some(*host) == parsed.host_str() && within(parsed.path(), base))
+    })
+}
+
+/// The navigation rule. macOS asks it for frames as well and does not say which
+/// one it is, so a check address that reaches the top level is stopped by the
+/// page-load rule (`top_level_allowed`). Elsewhere only the top level is asked.
 pub fn navigation_allowed(target: &AtsTarget, url: &str) -> bool {
-    if url == "about:blank" || on_target(target, url) {
-        return true;
-    }
-    https(url)
-        .is_some_and(|parsed| CHECK_FRAME_HOSTS.contains(&parsed.host_str().unwrap_or_default()))
+    top_level_allowed(target, url) || (cfg!(target_os = "macos") && is_check_frame(url))
+}
+
+fn is_post(target: &AtsTarget, url: &str) -> bool {
+    target
+        .post_path
+        .as_deref()
+        .is_some_and(|path| on_target_host(target, url).is_some_and(|next| next.path() == path))
 }
 
 fn on_target_host(target: &AtsTarget, url: &str) -> Option<Url> {
@@ -173,6 +206,20 @@ pub fn is_confirmation(target: &AtsTarget, url: &str) -> bool {
         })
 }
 
+/// Where a board that thanks on the vacancy's own address does so.
+pub fn thanks_path(target: &AtsTarget) -> Option<String> {
+    (target.adapter == "bamboohr")
+        .then(|| Url::parse(&target.entry_url).ok())
+        .flatten()
+        .map(|url| url.path().trim_end_matches('/').to_string())
+}
+
+pub fn thanks_in_place(target: &AtsTarget, url: &str) -> bool {
+    thanks_path(target).is_some_and(|path| {
+        on_target_host(target, url).is_some_and(|next| next.path().trim_end_matches('/') == path)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,7 +236,10 @@ mod tests {
             target.entry_url,
             "https://job-boards.greenhouse.io/acme/jobs/4343866009"
         );
-        assert_eq!(target.hosts, ["job-boards.greenhouse.io"]);
+        assert_eq!(
+            target.hosts,
+            ["job-boards.greenhouse.io", "boards.greenhouse.io"]
+        );
         assert_eq!(
             target.confirmation_path,
             "/acme/jobs/4343866009/confirmation"
@@ -222,7 +272,10 @@ mod tests {
             target.entry_url,
             "https://job-boards.eu.greenhouse.io/acme/jobs/7"
         );
-        assert_eq!(target.hosts, ["job-boards.eu.greenhouse.io"]);
+        assert_eq!(
+            target.hosts,
+            ["job-boards.eu.greenhouse.io", "boards.eu.greenhouse.io"]
+        );
     }
 
     #[test]
@@ -238,7 +291,7 @@ mod tests {
                 Some("acme"),
                 "ats_unsupported",
             ),
-            ("https://jobs.lever.co/acme/1", None, "ats_unsupported"),
+            ("https://jobs.lever.co/acme/1", None, "ats_address_invalid"),
             (
                 "http://boards.greenhouse.io/acme/jobs/1",
                 None,
@@ -288,10 +341,17 @@ mod tests {
             "https://job-boards.greenhouse.io/acme/jobs/123/",
             "https://job-boards.greenhouse.io/acme/jobs/123?gh_src=x#app",
             "https://job-boards.greenhouse.io/acme/jobs/123/confirmation",
-            "https://www.recaptcha.net/recaptcha/enterprise/anchor",
         ] {
             assert!(navigation_allowed(&acme(), url), "{url}");
         }
+        // Only macOS asks the rule for frames too.
+        assert_eq!(
+            navigation_allowed(
+                &acme(),
+                "https://www.recaptcha.net/recaptcha/enterprise/anchor"
+            ),
+            cfg!(target_os = "macos")
+        );
         assert!(!on_target(&acme(), "about:blank"));
         assert!(!on_target(
             &acme(),
@@ -317,7 +377,6 @@ mod tests {
             "https://job-boards.greenhouse.io/acme/jobs/123\\..\\124",
             "https://job-boards.greenhouse.io:8443/acme/jobs/123",
             "https://user@job-boards.greenhouse.io/acme/jobs/123",
-            "https://boards.greenhouse.io/acme/jobs/123",
             "https://job-boards.greenhouse.io.example/acme/jobs/123",
             "http://job-boards.greenhouse.io/acme/jobs/123",
             "https://my.greenhouse.io/users/sign_in",
@@ -336,6 +395,7 @@ mod tests {
             entry_url: "https://job-boards.greenhouse.io/embed/job_app?for=acme&token=123".into(),
             hosts: vec!["job-boards.greenhouse.io".into()],
             confirmation_path: "/embed/job_app/confirmation".into(),
+            post_path: None,
         };
         let at = |query: &str| {
             on_target(
@@ -361,5 +421,82 @@ mod tests {
         assert!(!at("/acme/jobs/1234/confirmation"));
         assert!(!at("/acme/jobs/123/confirmation2"));
         assert!(!at("/x/acme/jobs/123/confirmation"));
+    }
+
+    #[test]
+    fn a_greenhouse_vacancy_stays_itself_across_its_two_hosts_only() {
+        let pairs = [
+            (
+                "job-boards.greenhouse.io",
+                "boards.greenhouse.io",
+                "boards.eu.greenhouse.io",
+            ),
+            (
+                "job-boards.eu.greenhouse.io",
+                "boards.eu.greenhouse.io",
+                "boards.greenhouse.io",
+            ),
+        ];
+        for (new, old, foreign) in pairs {
+            let target = resolve(&format!("https://{old}/acme/jobs/12"), None).unwrap();
+            for host in [new, old] {
+                assert!(on_target(&target, &format!("https://{host}/acme/jobs/12")));
+                assert!(is_confirmation(
+                    &target,
+                    &format!("https://{host}/acme/jobs/12/confirmation")
+                ));
+                for path in ["acme/jobs/123", "other/jobs/12", "acme", "acme/jobs"] {
+                    let url = format!("https://{host}/{path}");
+                    assert!(!navigation_allowed(&target, &url), "{url}");
+                }
+            }
+            assert!(!navigation_allowed(
+                &target,
+                &format!("https://{foreign}/acme/jobs/12")
+            ));
+        }
+    }
+
+    #[test]
+    fn the_post_address_is_passed_through_but_is_not_the_vacancy() {
+        let target = resolve("https://acme.teamtailor.com/jobs/8-x", None).unwrap();
+        let post = "https://acme.teamtailor.com/applications";
+        assert!(navigation_allowed(&target, post) && !on_target(&target, post));
+        assert!(!is_confirmation(&target, post));
+        assert!(!navigation_allowed(
+            &target,
+            "https://acme.teamtailor.com/applications/5"
+        ));
+        assert!(!navigation_allowed(
+            &target,
+            "https://other.teamtailor.com/applications"
+        ));
+    }
+
+    #[test]
+    fn a_check_lives_only_in_a_frame_and_only_on_its_own_path() {
+        for url in [
+            "https://www.google.com/recaptcha/enterprise/anchor",
+            "https://www.gstatic.com/recaptcha/releases/x",
+            "https://www.recaptcha.net/recaptcha/enterprise/bframe",
+            "https://newassets.hcaptcha.com/captcha/v1/x/static/hcaptcha.html",
+        ] {
+            assert!(!top_level_allowed(&acme(), url), "{url}");
+            assert_eq!(
+                navigation_allowed(&acme(), url),
+                cfg!(target_os = "macos"),
+                "{url}"
+            );
+        }
+        for url in [
+            "https://www.google.com/",
+            "https://www.google.com/search?q=x",
+            "https://www.google.com/recaptchas",
+            "https://www.gstatic.com/x",
+        ] {
+            assert!(!navigation_allowed(&acme(), url), "{url}");
+        }
+        assert!(top_level_allowed(&acme(), "about:blank"));
+        assert!(top_level_allowed(&acme(), &acme().entry_url));
     }
 }

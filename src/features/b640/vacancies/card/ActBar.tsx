@@ -1,3 +1,4 @@
+import { pressApply } from '../../apply/applyIntent';
 import type { ReactNode } from 'react';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -13,7 +14,7 @@ export interface ActBarProps {
 
 function applyLink(vacancyId: string, primary: boolean): ReactNode {
   return (
-    <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath('o02', { responseId: vacancyId })}>
+    <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
       <Icon name="responses" />
       Откликнуться
     </Link>

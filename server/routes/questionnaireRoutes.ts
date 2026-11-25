@@ -14,13 +14,17 @@ import type { CandidateDecisionProfile } from '../../shared/workPreferences';
 import { hhFormUrl } from '../../shared/hhCandidateSession';
 import {
   answersToStore,
+  atsQuestions,
   buildQuestionnaire,
+  carryAnswers,
   hhQuestions,
+  withKnownAnswers,
 } from '../domain/applicationQuestionnaire';
 import {
   linkedinProfileLink,
   type QuestionnaireProfileFacts,
 } from '../domain/questionnaireProfileAnswers';
+import { boardFormRef, readBoardFormQuestions } from '../vacancies/boardFormReader';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -129,6 +133,34 @@ const hhFormSchema = z
       questions.reduce((sum, item) => sum + (item.options?.length ?? 0), 0) <= HH_FORM_MAX_OPTIONS,
   );
 
+/** Вопросы формы работодателя: список стран в ней — около 250 вариантов. */
+const ATS_FORM_MAX_OPTIONS = 1_500;
+const atsFormSchema = z
+  .object({
+    url: z.string().max(FORM_URL_MAX_LENGTH),
+    questions: z
+      .array(
+        z
+          .object({
+            id: z.string().regex(/^[A-Za-z0-9_\-[\]]{1,100}$/u),
+            text: z.string().min(1).max(500),
+            required: z.boolean(),
+            kind: z.enum(['text', 'choice']),
+            options: z.array(z.string().min(1).max(200)).max(300).optional(),
+            multiple: z.boolean().optional(),
+            known: z.string().max(QUESTIONNAIRE_ANSWER_MAX_LENGTH).optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(QUESTIONNAIRE_MAX_QUESTIONS),
+  })
+  .strict()
+  .refine(
+    ({ questions }) =>
+      questions.reduce((sum, item) => sum + (item.options?.length ?? 0), 0) <= ATS_FORM_MAX_OPTIONS,
+  );
+
 /** Ссылка на страницу анкеты: только https, без логина в адресе и разумной длины. */
 function safeUrl(url: string | undefined): string | null {
   if (!url || url.length > FORM_URL_MAX_LENGTH) return null;
@@ -142,16 +174,16 @@ function safeUrl(url: string | undefined): string | null {
   }
 }
 
-/** Вопросы по записи подбора: читаем заранее только у Greenhouse. */
+/** Вопросы по записи подбора: заранее читаем Greenhouse, Recruitee и Teamtailor. */
 export function poolReader(deps: RouteDeps): QuestionnaireReader {
   return async (vacancyId) => {
     const vacancy = deps.multiSourceEngine.getVacancy?.(vacancyId.replace(/^cluster-/u, ''));
     if (!vacancy) return null;
     const ref = greenhouseJobRef(vacancy);
     const formUrl = safeUrl(vacancy.url);
-    return ref
-      ? { questions: await readGreenhouseQuestions(ref), formUrl }
-      : { questions: null, formUrl };
+    if (ref) return { questions: await readGreenhouseQuestions(ref), formUrl };
+    const form = boardFormRef(vacancy.url);
+    return { questions: form ? await readBoardFormQuestions(form) : null, formUrl };
   };
 }
 
@@ -249,7 +281,9 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const known = deps.forms.get(who.candidateId, who.vacancyId);
-  if (known && isQuestionnaireFresh(known, Date.now())) {
+  // Список из окна приложения полнее открытого: его обновит само окно, иначе вопросы двоятся.
+  const fromWindow = known?.questions.some(({ id }) => id.startsWith('ats-'));
+  if (known && (fromWindow || isQuestionnaireFresh(known, Date.now()))) {
     return {
       data: questionnaireView(deps, who, known, { state: 'ready', formUrl: null }),
       meta: { requestId: request.id },
@@ -330,6 +364,40 @@ const putHhForm: Handler = async (deps, request, reply) => {
   };
 };
 
+/** B787: форма работодателя, прочитанная приложением, заменяет прежний список вопросов. */
+const putAtsForm: Handler = async (deps, request, reply) => {
+  const who = signed(deps, request, reply);
+  if (!who) return reply;
+  const parsed = atsFormSchema.safeParse(request.body ?? {});
+  const formUrl = parsed.success ? safeUrl(parsed.data.url) : null;
+  const questions = parsed.success ? atsQuestions(parsed.data.questions) : [];
+  if (!parsed.success || !formUrl || questions.length === 0) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_ats_form',
+      'Вопросы анкеты не прочитались.',
+      false,
+    );
+  }
+  const { candidateId, vacancyId } = who;
+  const known = deps.forms.get(candidateId, vacancyId);
+  deps.forms.saveQuestions(candidateId, vacancyId, {
+    questions,
+    formUrl,
+    readAt: new Date().toISOString(),
+  });
+  const carried = carryAnswers(known?.questions ?? [], questions, known?.answers ?? []);
+  const answers = withKnownAnswers(carried, parsed.data.questions);
+  deps.forms.saveAnswers(candidateId, vacancyId, answers);
+  const stored = deps.forms.get(candidateId, vacancyId);
+  return {
+    data: questionnaireView(deps, who, stored, { state: 'none', formUrl: null }),
+    meta: { requestId: request.id },
+  };
+};
+
 const postSubmitted: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
@@ -360,6 +428,7 @@ export function registerQuestionnaireRoutes(
   const base = '/api/v1/candidate/vacancies/:id/questionnaire';
   app.get(base, withDeps(bound, getQuestionnaire));
   app.put(`${base}/answers`, write, withDeps(bound, putAnswers));
+  app.put(`${base}/ats-form`, write, withDeps(bound, putAtsForm));
   app.put(`${base}/hh-form`, write, withDeps(bound, putHhForm));
   app.post(`${base}/submitted`, write, withDeps(bound, postSubmitted));
 }

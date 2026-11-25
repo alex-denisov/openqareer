@@ -1,7 +1,7 @@
 //! B787: which candidate files the form engine may attach. Anything the form
 //! field or this list does not name is refused before it reaches the page.
 
-use crate::ats_apply::FileValue;
+use crate::ats_model::FileValue;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 pub const MAX_FILE_BYTES: usize = 5 * 1024 * 1024;

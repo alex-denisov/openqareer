@@ -4,8 +4,12 @@
 mod app_sign_in;
 mod ats_apply;
 mod ats_attempts;
+mod ats_boards;
 mod ats_files;
 mod ats_form_scripts;
+mod ats_model;
+mod ats_smartrecruiters;
+mod ats_steps;
 mod ats_target;
 mod automation_worker;
 mod connector_session;
@@ -13,15 +17,16 @@ mod desktop_notify;
 mod device_settings;
 mod hh_apply;
 mod hh_apply_scripts;
-mod hh_resume_edit;
-mod hh_resume_edit_scripts;
 #[cfg(test)]
 mod hh_jsdom_harness;
-mod hh_resume_experience;
-mod hh_resume_experience_scripts;
 mod hh_questionnaire;
 mod hh_raise;
+mod hh_resume_edit;
+mod hh_resume_edit_scripts;
+mod hh_resume_experience;
+mod hh_resume_experience_scripts;
 mod linkedin_read_guard;
+mod native_answer;
 mod network_probe;
 mod recording;
 mod recording_clock;
@@ -154,18 +159,51 @@ fn cabinet_only(webview: &tauri::Webview) -> Result<(), String> {
 async fn ats_form_open(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::OpenRequest,
-) -> Result<ats_apply::FormReport, String> {
+    request: ats_model::OpenRequest,
+) -> Result<ats_model::FormReport, String> {
     cabinet_only(&webview)?;
     ats_apply::open_form(&app, request).await
+}
+
+/// The open form as it is now. Nothing is filled or sent.
+#[tauri::command]
+async fn ats_form_read(
+    app: AppHandle,
+    webview: tauri::Webview,
+    vacancy_id: String,
+) -> Result<ats_model::FormReport, String> {
+    cabinet_only(&webview)?;
+    ats_apply::read_form(&app, &vacancy_id).await
+}
+
+/// Options of one list of the form. Nothing is picked or sent.
+#[tauri::command]
+async fn ats_form_options(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_steps::OptionsRequest,
+) -> Result<serde_json::Value, String> {
+    cabinet_only(&webview)?;
+    ats_steps::read_options(&app, request).await
+}
+
+/// Moves a multi-step form to its next page for confirmed values; never sends it.
+#[tauri::command]
+async fn ats_form_next(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_steps::NextRequest,
+) -> Result<ats_steps::StepReport, String> {
+    cabinet_only(&webview)?;
+    ats_steps::next_step(&app, request).await
 }
 
 #[tauri::command]
 async fn ats_form_fill(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::FillRequest,
-) -> Result<ats_apply::FillReport, String> {
+    request: ats_model::FillRequest,
+) -> Result<ats_model::FillReport, String> {
     cabinet_only(&webview)?;
     ats_apply::fill_form(&app, request).await
 }
@@ -175,8 +213,8 @@ async fn ats_form_fill(
 async fn ats_form_submit(
     app: AppHandle,
     webview: tauri::Webview,
-    request: ats_apply::SubmitRequest,
-) -> Result<ats_apply::Receipt, String> {
+    request: ats_model::SubmitRequest,
+) -> Result<ats_model::Receipt, String> {
     cabinet_only(&webview)?;
     ats_apply::submit_form(&app, request).await
 }
@@ -186,7 +224,7 @@ async fn ats_form_outcome(
     app: AppHandle,
     webview: tauri::Webview,
     vacancy_id: String,
-) -> Result<ats_apply::Receipt, String> {
+) -> Result<ats_model::Receipt, String> {
     cabinet_only(&webview)?;
     ats_apply::read_form_outcome(&app, &vacancy_id).await
 }
@@ -294,6 +332,9 @@ pub struct NativeHttpResponse {
     pub ok: bool,
     pub headers: std::collections::HashMap<String, String>,
     pub body: String,
+    /// A file answer (PDF, DOCX, image): text would lose its bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_base64: Option<String>,
 }
 
 #[tauri::command]
@@ -362,13 +403,14 @@ async fn desktop_native_fetch(
         }
     }
 
-    let body = res.text().await.unwrap_or_default();
+    let (body, body_base64) = native_answer::read(res).await?;
 
     Ok(NativeHttpResponse {
         status,
         ok,
         headers: response_headers,
         body,
+        body_base64,
     })
 }
 
@@ -717,7 +759,10 @@ fn main() {
             run_hh_apply,
             read_hh_apply_window,
             ats_form_open,
+            ats_form_read,
             ats_form_fill,
+            ats_form_options,
+            ats_form_next,
             ats_form_submit,
             ats_form_outcome,
             ats_form_attempt,

@@ -1,0 +1,67 @@
+<form id="application-form" class="external-form"> <fieldset id="application-fieldset-details" class="external-form__fieldset"> <legend class="external-form__legend"> <div> <div> <span class="external-form__legend-index">1.</span>Personal Details </div> <div> <a href="https://acme.example/privacy"> <i aria-hidden="true">
+</i> <span>Apply with LinkedIn</span> </a> </div> </div> </legend> <div> <div> <div> <div class="col-md-1-1"> <label for="application_form_application_first_name" class="external-form__label external-form__label--required">First Name</label> <input required="required" autocomplete="given-name" type="text" name="application_form[application][first_name]" id="application_form_application_first_name"> </div> <div class="col-md-1-1"> <label for="application_form_application_last_name" class="external-form__label external-form__label--required">Last Name</label> <input required="required" autocomplete="family-name" type="text" name="application_form[application][last_name]" id="application_form_application_last_name"> </div> </div> </div> <div> <label for="application_form_application_email" class="external-form__label external-form__label--required">Email Address</label> <input required="required" autocomplete="email" type="email" name="application_form[application][email]" id="application_form_application_email"> </div> <div> <label for="application_form_application_phone" class="external-form__label">Phone</label> <div id="Shared::Form::Phonenumberinput-react-component-4da36ea2-eeb4-486f-83f5-e385c5f84c60">
+<div>
+<label for="phone-country-code-dropdown" hidden="">Phone country code</label>
+<div>
+<div>
+<ul hidden="">
+</ul>
+</div>
+<input type="tel" autocomplete="off" name="application_form[application][phone]" id="application_form_application_phone" value="">
+</div>
+</div>
+</div> </div> <div> <label for="application_form_application_linkedin_url"> <span class="external-form__label external-form__label--inline">LinkedIn URL</span> </label> <input type="text" name="application_form[application][linkedin_url]" id="application_form_application_linkedin_url"> </div> </div> </fieldset> <fieldset id="application-fieldset-profile" class="external-form__fieldset"> <legend class="external-form__legend"> <span class="external-form__legend-index">2.</span> Profile </legend> <div> <div class="col-md-1-1"> <div class="external-form__label"> <div class="external-form__label--required"> Résumé / CV </div> <span> Accepted file formats are .pdf and .docx </span> </div> <div id="Shared::Form::Filefield-react-component-5dae1dd7-a49b-43f2-8baa-121dfc131d9a">
+<div>
+<input accept="application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf" id="application_form[application][cv]" name="application_form[application][cv]" type="file">
+<label for="application_form[application][cv]">
+<div>Attach Résumé / CV</div>
+</label>
+</div>
+</div> </div> <div class="col-md-1-1"> <label for="personal-summary" class="external-form__label"> <div class="external-form__label--required"> Personal Summary </div> <span> Use it to tell us a little more about yourself. </span> </label> <textarea required="required" id="personal-summary" name="application_form[application][summary]">
+</textarea> </div> </div> </fieldset> <fieldset id="application-fieldset-questions" class="external-form__fieldset"> <legend class="external-form__legend"> <span class="external-form__legend-index">3.</span>Questions </legend> <div> <div class="col-md-1-1"> <div id="Shared::Form::Questions::Numberinput-react-component-c843c64b-7580-4100-937a-31b668386668">
+<div>
+<label for="application_form_application_answers_attributes_0_number_answer" class="external-form__label">
+<span class="external-form__label--title external-form__label--required"> What salary level are you expecting?</span>
+</label>
+<div>
+<div>
+<div>
+<input id="application_form_application_answers_attributes_0_number_answer" type="number" name="application_form[application][answers_attributes][0][number_answer]" required="" value="">
+</div>
+</div>
+</div>
+</div>
+</div> </div> <div class="col-md-1-1"> <div id="Shared::Form::Questions::Shorttext-react-component-f75844ab-b167-4315-a21b-bf92d550132a">
+<div>
+<label for="application_form_application_answers_attributes_1_text_answer" class="external-form__label">
+<span class="external-form__label--title external-form__label--required">What level of your Russian language? </span>
+</label>
+<div>
+<div>
+<div>
+<input id="application_form_application_answers_attributes_1_text_answer" type="text" name="application_form[application][answers_attributes][1][text_answer]" required="" value="">
+</div>
+</div>
+</div>
+</div>
+</div> </div> <div class="col-md-1-1"> <div id="Shared::Form::Questions::Longtext-react-component-d08e2099-20e7-457e-a6cc-1b59895e7d71">
+<div>
+<label for="application_form_application_answers_attributes_2_text_answer" class="external-form__label">
+<span class="external-form__label--title">What is your level of English?</span>
+</label>
+<div>
+<div>
+<div>
+<textarea name="application_form[application][answers_attributes][2][text_answer]" id="application_form_application_answers_attributes_2_text_answer">
+</textarea>
+</div>
+</div>
+</div>
+</div>
+</div> </div> </div> </fieldset> <fieldset id="application-fieldset-submit" class="external-form__fieldset"> <div> <div> <legend class="external-form__legend"> <span class="external-form__legend-index">4.</span> Submit Application </legend> <div> <input required="required" type="checkbox" value="1" name="application[process_information]" id="application_process_information"> <div> <i aria-hidden="true">
+</i> <label for="application_process_information" class="external-form__label"> (Required) Allow us to process your personal information. <span class="external-form__label--title">*</span> </label> </div> </div> </div> <div> <div id="External::Jobs::Applications::New-react-component-5c9e1895-ca8c-4e04-bab2-805b9068d4ce">
+<div>
+<span id="application-save-later">Not ready to submit the application yet? </span>
+<button type="button" id="application-save-later-link">Save application for later</button>
+</div>
+</div> <button name="button" type="submit">Submit Application</button> </div> </div> </fieldset> </form>

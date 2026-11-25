@@ -1,5 +1,6 @@
 import type {
   ApplicationQuestionnaire,
+  AtsFormInput,
   QuestionnaireAnswer,
 } from '../../../../../shared/applicationQuestionnaire';
 import type { HhForm } from '../../../../../shared/hhCandidateSession';
@@ -35,6 +36,19 @@ export async function saveHhForm(vacancyId: string, form: HhForm): Promise<Appli
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify({ url: form.url, questions: form.questions }),
+  });
+  return readDataObject<ApplicationQuestionnaire>(response);
+}
+
+/** B787: вопросы формы работодателя, прочитанные приложением. */
+export async function saveAtsForm(
+  vacancyId: string,
+  form: AtsFormInput,
+): Promise<ApplicationQuestionnaire> {
+  const response = await apiFetch(`${base(vacancyId)}/ats-form`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(form),
   });
   return readDataObject<ApplicationQuestionnaire>(response);
 }
