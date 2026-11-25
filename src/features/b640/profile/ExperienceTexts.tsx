@@ -1,20 +1,25 @@
 import { Icon } from '../kit';
-import { RESULT_MAX_LENGTH, type ExperienceForm, type ResultRow } from './experienceForm';
+import { FieldError } from './ExperienceFields';
+import {
+  RESULT_MAX_LENGTH,
+  type ExperienceForm,
+  type ExperienceFormErrors,
+  type ResultRow,
+} from './experienceForm';
 
 interface TextsProps {
   readonly form: ExperienceForm;
   readonly onChange: (patch: Partial<ExperienceForm>) => void;
 }
 
-const DESCRIPTION_MAX_LENGTH = 5_000;
 const DESCRIPTION_ROWS = 3;
 
-/** «Что делали»: описание места работы; у новой записи (`isNew`) предел — как у результата. */
+/** «Что делали»: описание места работы. */
 export function DescriptionField({
   form,
+  errors,
   onChange,
-  isNew = false,
-}: TextsProps & { readonly isNew?: boolean }) {
+}: TextsProps & { readonly errors: ExperienceFormErrors }) {
   if (form.description === null) return null;
   return (
     <div className="pf-f">
@@ -22,10 +27,12 @@ export function DescriptionField({
       <textarea
         id="wk"
         rows={DESCRIPTION_ROWS}
-        maxLength={isNew ? RESULT_MAX_LENGTH : DESCRIPTION_MAX_LENGTH}
+        aria-invalid={errors.description ? true : undefined}
+        aria-describedby={errors.description ? 'wk-e' : undefined}
         value={form.description}
         onChange={(event) => onChange({ description: event.target.value })}
       />
+      <FieldError id="wk-e" text={errors.description} />
     </div>
   );
 }

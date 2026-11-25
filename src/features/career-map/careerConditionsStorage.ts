@@ -34,7 +34,7 @@ export function decisionProfileToSearchConditions(
     },
     salaryFrom: {
       amountRubles: profile?.salaryFloor ?? null,
-      showWithoutSalary: true,
+      showWithoutSalary: profile?.showWithoutSalary ?? true,
     },
     format: {
       office: formats.includes('office'),
@@ -65,6 +65,7 @@ export function searchConditionsToDecisionProfile(
     ...(conditions.salaryFrom.amountRubles !== null
       ? { salaryFloor: conditions.salaryFrom.amountRubles }
       : {}),
+    showWithoutSalary: conditions.salaryFrom.showWithoutSalary,
     salaryCurrency: existing?.salaryCurrency ?? 'RUB',
     cushionMonths: existing?.cushionMonths,
     hasFamily: existing?.hasFamily ?? false,
