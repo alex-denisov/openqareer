@@ -6,7 +6,9 @@ import { isImportedMemoryId } from './resumeImport';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { impliedSoftRole, isCompensationLine, isSoftRequirementText } from './vacancyRequirementKind';
 import { leadershipMet, workShownRole } from './vacancyFitWorkEvidence';
+import { withDomainRule } from './vacancyFitDomainRule';
 import { vacancyDutyIds } from './vacancyRequirementDuty';
+import { vacancyWishIds } from './vacancyWish';
 import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
 export interface VacancyFitFact extends ResumeEvidenceCandidate {
@@ -168,6 +170,13 @@ function withEvidenceRules(items: readonly VacancyFitRequirementAssessment[], fa
   });
 }
 
+/** B794: an industry or a tool the profile never names is not counted as shown. */
+function withDomainRules(items: readonly VacancyFitRequirementAssessment[], requirements: readonly VacancyRequirement[], facts: readonly VacancyFitFact[]): VacancyFitRequirementAssessment[] {
+  const statements = facts.map((fact) => fact.statement);
+  const skills = new Map(requirements.filter(isSkillRequirement).map((item) => [item.id, item.text]));
+  return items.map((item) => withDomainRule(item, skills.get(item.requirementId) ?? '', statements));
+}
+
 /** Where the candidate lives: the resume draft section or the imported contact line. */
 const isLocationFact = (factId: string) => factId === 'profile:location' || (isImportedMemoryId(factId) && factId.endsWith('-location'));
 const NON_LOCATION_CONDITIONS: readonly string[] = ['education', 'language', 'license'];
@@ -242,6 +251,22 @@ function weighting(requirements: readonly VacancyRequirement[], skills: readonly
   return { implied, impliedIds, percent };
 }
 
+/**
+ * A wish («будет плюсом») never lowers the percent (owner 25.11): a met one counts, a missing one
+ * stays out of the count, a partial one counts only while it does not pull the percent down.
+ */
+function uncountedWishes(description: string, requirements: readonly VacancyRequirement[], skills: readonly VacancyFitRequirementAssessment[], facts: readonly VacancyFitFact[], now: string): ReadonlySet<string> {
+  const ids = new Set(skills.map((item) => item.requirementId));
+  const wishes = vacancyWishIds(description, requirements, (item) => ids.has(item.id));
+  if (!wishes.size) return wishes;
+  const { impliedIds } = weighting(requirements, skills, facts, true, now);
+  const met = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId);
+  const open = skills.filter((item) => wishes.has(item.requirementId) && !met(item));
+  const base = weighting(requirements, skills.filter((item) => !open.includes(item)), facts, true, now);
+  const raises = (base.percent(skills.filter((item) => !open.includes(item))) ?? 0) < PARTIAL_REQUIREMENT_CREDIT * 100;
+  return new Set(open.filter((item) => !(raises && item.status === 'partial')).map((item) => item.requirementId));
+}
+
 /** Validates model claims against exact candidate-owned source text. Missing facts are unknown. */
 export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toISOString()): VacancyFitResult {
   const facts = eligibleFacts(input);
@@ -262,7 +287,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !evidence.length) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
     return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status !== 'unmatched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
-  const assessments = withEvidenceRules(claimed, factMap);
+  const assessments = withDomainRules(withEvidenceRules(claimed, factMap), requirements, facts);
   // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
   // answer (no claims at all) the requirements are not assessed yet.
   const answered = (input.assessments?.length ?? 0) > 0;
@@ -271,9 +296,11 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   // не подтверждены), а остаются в результате как «неизвестно» и снижают потолок процента.
   const unknownGate = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status !== 'matched');
   const duties = countedDuties(input.description, requirements);
-  const skillIds = new Set(requirements.filter((item) => isSkillRequirement(item) && !duties.has(item.id)).map((item) => item.id));
+  const allSkillIds = new Set(requirements.filter((item) => isSkillRequirement(item) && !duties.has(item.id)).map((item) => item.id));
+  const uncounted = uncountedWishes(input.description, requirements, assessments.filter((item) => allSkillIds.has(item.requirementId)), facts, now);
+  const skillIds = new Set([...allSkillIds].filter((id) => !uncounted.has(id)));
   const skills = assessments.filter((item) => skillIds.has(item.requirementId));
-  const conditions = assessments.filter((item) => !skillIds.has(item.requirementId) && !duties.has(item.requirementId));
+  const conditions = assessments.filter((item) => !allSkillIds.has(item.requirementId) && !duties.has(item.requirementId));
   const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : skills.length < MIN_SKILL_REQUIREMENTS ? 'too_few_skills'
     : !facts.length ? 'no_eligible_facts' : !answered && !skills.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
   const required = new Set(requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor)).map((item) => item.id));
@@ -292,7 +319,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: percent(skills),
     requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
-    ...(implied.length ? { implied } : {}), ...(duties.size ? { duties: [...duties] } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
+    ...(implied.length ? { implied } : {}), ...(duties.size || uncounted.size ? { duties: [...duties, ...uncounted] } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
     coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments, placed),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,

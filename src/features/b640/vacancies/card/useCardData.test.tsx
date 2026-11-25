@@ -103,6 +103,14 @@ describe('B715: карточка v04 по id вакансии пула', () => {
     await render('cluster-src-hh-search:2');
     expect(seen?.load).toBe('failed');
   });
+  it('B797: вакансия снята с площадки — «закрыта»', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({}));
+    readCard.mockRejectedValueOnce(
+      new CoachApiError('Вакансия снята с площадки.', 'vacancy_gone', false),
+    );
+    await render(HH_ID);
+    expect(seen?.load).toBe('closed');
+  });
   it('B770: карточка читает одну страницу подборки, а не все 46', async () => {
     vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [item(HH_ID)] }));
     await render(HH_ID);

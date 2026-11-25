@@ -171,6 +171,7 @@ const resumeContextSchema = z
             endDate: z.string().nullable().optional(),
             current: z.boolean().optional(),
             teamSize: z.number().int().positive().nullable().optional(),
+            teamSizeDeclined: z.boolean().optional(),
             descriptionMemoryId: z.string().min(1).max(80).nullable().optional(),
             bulletMemoryIds: z.array(z.string().min(1).max(80)).max(MAX_BULLETS_PER_PLACE),
           })

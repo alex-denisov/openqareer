@@ -1,3 +1,4 @@
+import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
 import { isAtsBoardSourceId } from './atsSourceId';
 import { sourceKind } from './poolLiveness';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
@@ -324,9 +325,7 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
 
   updateClusterLocation(cluster, vacancy.location);
 
-  if (new Date(vacancy.publishedAt) < new Date(cluster.firstObservedAt)) {
-    cluster.firstObservedAt = vacancy.publishedAt;
-  }
+  cluster.firstObservedAt = earliestKnown(cluster.firstObservedAt, firstKnownDate(vacancy));
   if (new Date(vacancy.provenance.observedAt) > new Date(cluster.lastSeenAt)) {
     cluster.lastSeenAt = vacancy.provenance.observedAt;
   }
@@ -352,10 +351,22 @@ export function absorbCluster(target: VacancyCluster, twin: VacancyCluster): voi
   target.skills = Array.from(new Set([...target.skills, ...twin.skills]));
   if (twin.salary && prefersIncomingSalary(target.salary, twin.salary)) target.salary = twin.salary;
   if (!target.textKey && twin.textKey) target.textKey = twin.textKey;
-  if (new Date(twin.firstObservedAt) < new Date(target.firstObservedAt)) {
-    target.firstObservedAt = twin.firstObservedAt;
-  }
+  target.firstObservedAt = earliestKnown(target.firstObservedAt, twin.firstObservedAt);
   if (new Date(twin.lastSeenAt) > new Date(target.lastSeenAt)) target.lastSeenAt = twin.lastSeenAt;
+}
+
+/** B797: нулевая дата значит «площадка её не дала» (лента Pinpoint), а не 1970 год. */
+function firstKnownDate(vacancy: UnifiedVacancy): string {
+  return vacancy.publishedAt === UNKNOWN_PUBLISHED_AT
+    ? vacancy.provenance.observedAt
+    : vacancy.publishedAt;
+}
+
+/** Записанная раньше нулевая дата уступает любой известной. */
+function earliestKnown(current: string, next: string): string {
+  if (current === UNKNOWN_PUBLISHED_AT) return next;
+  if (next === UNKNOWN_PUBLISHED_AT) return current;
+  return new Date(next) < new Date(current) ? next : current;
 }
 
 export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
@@ -376,7 +387,7 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     skills: [...vacancy.requiredSkills],
     primaryUrl: vacancy.url,
     sources: [vacancy.provenance],
-    firstObservedAt: vacancy.publishedAt,
+    firstObservedAt: firstKnownDate(vacancy),
     lastSeenAt: vacancy.provenance.observedAt,
     status: vacancy.status,
     vacanciesCount: 1,

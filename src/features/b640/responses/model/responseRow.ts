@@ -1,3 +1,4 @@
+import { applicationReachedStage } from '../../../applications/pipelineAnalytics';
 import { wasSent } from './sentState';
 import { deliveryState } from '../../../../../shared/applicationStage';
 import type { ApplicationView } from '../../../applications/applicationsApi';
@@ -239,6 +240,20 @@ function interviewFace(application: ApplicationView, now: Date): Face {
   };
 }
 
+/** Чем кончился закрытый отклик: по истории, а не по одной отметке «в архиве» (B801). */
+function closedOutcome(application: ApplicationView): string {
+  if (!wasSent(application)) return 'Не отправлен';
+  if (applicationReachedStage(application, 'rejected')) return 'Отказ получен';
+  if (applicationReachedStage(application, 'offer')) return 'Был оффер';
+  if (
+    applicationReachedStage(application, 'interview') ||
+    (application.interviewScheduledAt ?? []).length > 0
+  ) {
+    return 'Было интервью';
+  }
+  return applicationReachedStage(application, 'responded') ? 'Компания ответила' : 'Без ответа';
+}
+
 function closedFace(application: ApplicationView): Face {
   const closed = application.archiveReason === 'vacancy_closed';
   const base = { action: null, yours: false, remind: false, urgency: 9 } as const;
@@ -253,7 +268,7 @@ function closedFace(application: ApplicationView): Face {
   return {
     ...base,
     tag: { tone: '', label: closed ? 'вакансия закрыта' : 'в архиве' },
-    next: wasSent(application) ? 'Без ответа' : 'Не отправлен',
+    next: closedOutcome(application),
     event: withDate(closed ? 'закрыта' : 'в архиве', dotDate(application.stageChangedAt)),
   };
 }

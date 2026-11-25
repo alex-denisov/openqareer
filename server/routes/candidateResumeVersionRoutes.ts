@@ -9,9 +9,11 @@ import { formatResumeAsAtsText, formatTargetedResumeAsAtsText } from '../domain/
 import type {
   ResumeVersionContent,
   ResumeVersionCursor,
+  ResumeVersionPage,
   ResumeVersionUpdateResult,
   StoredResumeVersion,
 } from '../domain/resumeVersions';
+import { latestPerVacancy } from '../domain/resumeVersionsPerVacancy';
 import type { RouteDeps } from './deps';
 import { buildVersionContent, canonicalJson, currentMaster } from './resumeMaster';
 import { currentMasterVersion, observedCareerRoles, roleKeywordBasis } from '../../shared/atsBasis';
@@ -49,6 +51,7 @@ const atsAssessmentSchema = z.object({
 const versionQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(20),
   cursor: z.string().max(512).optional(),
+  perVacancy: z.literal('1').optional(),
 });
 const cursorSchema = z.object({
   updatedAt: z.string().min(1).max(40),
@@ -100,6 +103,22 @@ function resumeVersionListItem(version: StoredResumeVersion) {
   };
 }
 
+/** Последняя версия каждой вакансии, без страниц: список «Под вакансии» короткий (B801). */
+function pagePerVacancy(deps: RouteDeps, candidateId: string, limit: number): ResumeVersionPage {
+  const all: StoredResumeVersion[] = [];
+  let cursor: ResumeVersionPage['nextCursor'] = null;
+  do {
+    const page: ResumeVersionPage = deps.candidateStore.listResumeVersions(candidateId, {
+      limit: MAX_PAGE_SIZE,
+      cursor,
+    });
+    all.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  const latest = latestPerVacancy(all);
+  return { items: latest.slice(0, limit), nextCursor: null, totalCount: latest.length };
+}
+
 async function handleListResumeVersions(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -131,10 +150,9 @@ async function handleListResumeVersions(
   }
 
   const master = currentMaster(deps, candidate.id);
-  const page = deps.candidateStore.listResumeVersions(candidate.id, {
-    limit: query.data.limit,
-    cursor,
-  });
+  const page = query.data.perVacancy
+    ? pagePerVacancy(deps, candidate.id, query.data.limit)
+    : deps.candidateStore.listResumeVersions(candidate.id, { limit: query.data.limit, cursor });
   reply.header('Cache-Control', 'private, no-store');
   return {
     data: {

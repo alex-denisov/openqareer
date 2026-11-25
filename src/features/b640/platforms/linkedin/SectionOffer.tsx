@@ -135,7 +135,7 @@ export function SectionOffer(props: SectionOfferProps) {
         </p>
         <div className="li-offer-a">
           <VariantSwitch label={label} index={shown.index} total={offer.variants.length} onSelect={shown.select} />
-          <CopyButton text={shown.text} label={label} />
+          <CopyButton text={shown.text} label={label} caption="Скопировать" className="btn is-sm" />
           <button
             className="icon-btn li-alt"
             type="button"

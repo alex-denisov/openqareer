@@ -5,7 +5,7 @@ import type {
 } from '../../shared/candidateFootprint';
 import type { ConsistencyDiscrepancy } from '../../shared/candidateReputation';
 import { FOOTPRINT_RISK_CATEGORIES } from '../../shared/footprintRisk';
-import { buildFootprintRiskSummary } from './footprintRisk';
+import { buildFootprintRiskSummary, footprintFindingCounts } from './footprintRisk';
 
 let counter = 0;
 function finding(overrides: Partial<CandidateFootprintFinding>): CandidateFootprintFinding {
@@ -155,7 +155,7 @@ describe('buildFootprintRiskSummary', () => {
       // B382: профиль площадки в профиль не переносится — только «Это не моё».
       { kind: 'not_mine', label: 'Это не моё' },
     ]);
-    expect([byId.who.category, byId.who.level]).toEqual(['needs_check', 'important']);
+    expect([byId.who.category, byId.who.level]).toEqual(['needs_check', 'low']);
     expect(byId.odd.category).toBe('needs_check');
     expect([byId['mismatch:d1'].category, byId['mismatch:d1'].action]).toEqual([
       'resume_mismatch',
@@ -202,6 +202,18 @@ describe('buildFootprintRiskSummary', () => {
       levelLabel: null,
       where: '',
     });
+  });
+
+  it('B801: уведомление считает находки так же, как экран', () => {
+    const page = { url: 'https://duolingo.com/profile/ad' };
+    const own = audit([
+      finding(page),
+      finding({ url: 'https://www.duolingo.com/profile/ad/' }),
+      finding({ review: 'hidden' }),
+      finding({ review: 'not_self' }),
+    ]);
+    expect(footprintFindingCounts([own], [mismatch]).get('a1')).toBe(2);
+    expect(buildFootprintRiskSummary(own, [mismatch]).total).toBe(2);
   });
 
   it('порядок: рисковые, затем нейтральные, затем полезные', () => {
@@ -445,12 +457,12 @@ describe('buildFootprintRiskSummary', () => {
         ...overrides,
       });
 
-    it('важно, «Проверить» открывает страницу, полезные её не считают', () => {
+    it('не «важно», «Проверить» открывает страницу, полезные её не считают', () => {
       const summary = buildFootprintRiskSummary(audit([nick(), finding({ title: 'GitHub' })]), []);
       const item = summary.items.find((entry) => entry.title === 'Duolingo');
       expect(item).toMatchObject({
         category: 'needs_check',
-        level: 'important',
+        level: 'low',
         action: { kind: 'confirm_owner', label: 'Проверить' },
         url: 'https://www.duolingo.com/profile/alexey_denisov',
       });
@@ -460,18 +472,26 @@ describe('buildFootprintRiskSummary', () => {
 
     it('строка без «владение нужно подтвердить» — действие уже в кнопке', () => {
       const [item] = buildFootprintRiskSummary(audit([nick()]), []).items;
-      expect(item!.detail).toBe('duolingo.com/profile/alexey_denisov · Открытая страница найдена по нику.');
+      expect(item!.detail).toBe(
+        'duolingo.com/profile/alexey_denisov · Открытая страница найдена по нику.',
+      );
     });
 
     it('подтверждённая или добавленная в профиль — остаётся полезной', () => {
       const summary = buildFootprintRiskSummary(
         audit([
           nick({ review: 'confirmed_self' }),
-          nick({ url: 'https://profiles.topcoder.com/alexey_denisov', checklistMark: 'added_to_profile' }),
+          nick({
+            url: 'https://profiles.topcoder.com/alexey_denisov',
+            checklistMark: 'added_to_profile',
+          }),
         ]),
         [],
       );
-      expect(summary.items.map((entry) => entry.category)).toEqual(['useful_evidence', 'useful_evidence']);
+      expect(summary.items.map((entry) => entry.category)).toEqual([
+        'useful_evidence',
+        'useful_evidence',
+      ]);
     });
 
     it('«стоит убрать» не считает страницы, владелец которых не подтверждён (B645 p02)', () => {
@@ -480,17 +500,28 @@ describe('buildFootprintRiskSummary', () => {
       );
       expect(buildFootprintRiskSummary(audit(pages), []).headline).toBe('7 находок');
       const mixed = buildFootprintRiskSummary(
-        audit([...pages.slice(0, 2), finding({ title: 'Телефон', category: 'personal_data' } as never)]),
+        audit([
+          ...pages.slice(0, 2),
+          finding({ title: 'Телефон', category: 'personal_data' } as never),
+        ]),
         [],
       );
-      expect(mixed.toRemove).toBe(mixed.items.filter((item) => item.action?.kind !== 'confirm_owner' && item.level !== 'useful').length);
+      expect(mixed.toRemove).toBe(
+        mixed.items.filter(
+          (item) => item.action?.kind !== 'confirm_owner' && item.level !== 'useful',
+        ).length,
+      );
     });
 
     it('«стоит убрать» не считает и непроверенные страницы с «Проверить» (B645 p02)', () => {
       const pages = Array.from({ length: 6 }, (_, index) =>
         nick({ url: `https://site${index}.test/alexey_denisov` }),
       );
-      const unsure = finding({ kind: 'mention', review: 'unreviewed', automatedMatch: 'unknown' } as never);
+      const unsure = finding({
+        kind: 'mention',
+        review: 'unreviewed',
+        automatedMatch: 'unknown',
+      } as never);
       const summary = buildFootprintRiskSummary(audit([...pages, unsure]), []);
       expect(summary.items.map((item) => item.action?.kind)).toContain('check_now');
       expect(summary.toRemove).toBe(0);
@@ -504,23 +535,34 @@ describe('buildFootprintRiskSummary', () => {
   });
 });
 
-
 describe('B645 f03b: строка «Риск» — уровень и почему', () => {
   const reasonOf = (overrides: Partial<CandidateFootprintFinding>): string | undefined =>
     buildFootprintRiskSummary(audit([finding(overrides)]), []).items[0]?.levelReason;
 
   it('у каждой находки есть причина уровня по её виду', () => {
-    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe('старые аккаунты на эту почту ещё открыты');
+    expect(reasonOf({ kind: 'breach', adapter: 'hibp' })).toBe(
+      'старые аккаунты на эту почту ещё открыты',
+    );
     expect(reasonOf({ review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
       'страницу находят по нику, чья она — неизвестно',
     );
-    expect(reasonOf({ kind: 'mention', adapter: 'exa', review: 'unreviewed', automatedMatch: 'unknown' })).toBe(
-      'совпадение по имени не подтверждено',
-    );
+    expect(
+      reasonOf({
+        kind: 'mention',
+        adapter: 'exa',
+        review: 'unreviewed',
+        automatedMatch: 'unknown',
+      }),
+    ).toBe('совпадение по имени не подтверждено');
     expect(reasonOf({ kind: 'profile', review: 'confirmed_self' })).toBe('подтверждает ваш опыт');
-    expect(reasonOf({ kind: 'archive', adapter: 'wayback' })).toBe('старая копия страницы ещё открыта');
+    expect(reasonOf({ kind: 'archive', adapter: 'wayback' })).toBe(
+      'старая копия страницы ещё открыта',
+    );
     const all = ['breach', 'metadata', 'secret', 'archive', 'profile', 'mention'].map((kind) =>
-      reasonOf({ kind: kind as CandidateFootprintFinding['kind'], staleAccount: kind === 'profile' }),
+      reasonOf({
+        kind: kind as CandidateFootprintFinding['kind'],
+        staleAccount: kind === 'profile',
+      }),
     );
     // Кандидату не называем инструменты и не пугаем словами «утечка», «пароль» (B667).
     expect(all.join(' · ')).not.toMatch(/sherlock|maigret|hibp|wayback|exa\b|утечк|парол/iu);

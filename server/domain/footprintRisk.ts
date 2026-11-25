@@ -44,9 +44,10 @@ const NOT_MINE: FootprintRiskAction = { kind: 'not_mine', label: 'Это не м
 /** «Проверить» ждёт кандидата и в «стоит убрать» не идёт (B645 p02). */
 const REVIEW_KINDS: ReadonlySet<string> = new Set([CHECK.kind, CONFIRM.kind]);
 
+/** B801: неподтверждённое совпадение — не «важно»: чья страница, ещё неизвестно. */
 const NEEDS_CHECK: Rule = {
   category: 'needs_check',
-  level: 'important',
+  level: 'low',
   action: CHECK,
   reason: 'совпадение по имени не подтверждено',
 };
@@ -65,11 +66,15 @@ const USEFUL: Rule = {
 };
 const OWNER_UNKNOWN: Rule = {
   category: 'needs_check',
-  level: 'important',
+  level: 'low',
   action: CONFIRM,
   reason: 'страницу находят по нику, чья она — неизвестно',
 };
-const SECRET: Rule = { ...NEEDS_CHECK, reason: 'в открытом коде виден ключ доступа' };
+const SECRET: Rule = {
+  ...NEEDS_CHECK,
+  level: 'important',
+  reason: 'в открытом коде виден ключ доступа',
+};
 /** B382: полезное, которое сервер в профиль не примет (профиль площадки), — только «Это не моё». */
 const USEFUL_ONLY: Rule = { ...USEFUL, action: NOT_MINE };
 /** B382: база контактов публикует чужие почту и телефон — всегда риск, путь удаления. */
@@ -417,4 +422,14 @@ export function buildFootprintRiskSummary(
     categories: FOOTPRINT_RISK_CATEGORIES.map((id) => categoryOf(id, items)),
     items,
   };
+}
+
+/** B801: число находок уведомления — то же, что на экране следа: одна страница — одна находка. */
+export function footprintFindingCounts(
+  audits: readonly CandidateFootprintAudit[],
+  discrepancies: readonly ConsistencyDiscrepancy[],
+): Map<string, number> {
+  return new Map(
+    audits.map((audit) => [audit.id, buildFootprintRiskSummary(audit, discrepancies).total]),
+  );
 }
