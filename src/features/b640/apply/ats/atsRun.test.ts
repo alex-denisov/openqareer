@@ -143,6 +143,19 @@ describe('отклик формой работодателя', () => {
     expect(desktop.submitAtsForm).not.toHaveBeenCalled();
   });
 
+  it.each(['upload_failed', 'file_not_attached', 'fill_failed'])(
+    'необязательное резюме, загрузка упала (%s): нажатия нет',
+    async (code) => {
+      desktop.fillAtsForm.mockResolvedValue({
+        results: { 'id:name': 'set', 'id:resume': code },
+        values: { 'id:name': 'Марина' },
+      });
+      const optional = { ...resume, required: false };
+      expect(await run(form(name, optional))).toEqual({ kind: 'failed', rejected: 'resume' });
+      expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+    },
+  );
+
   it('нет файла для обязательного резюме — отклик уходит в очередь', async () => {
     expect(await run(form(name, resume), { resume: null })).toEqual({
       kind: 'manual',

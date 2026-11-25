@@ -170,14 +170,16 @@ async function fill(
 ): Promise<Filled | 'page_ticked' | null> {
   const first = await deps.desktop.fillAtsForm(input.vacancyId, entries);
   if (!first) return null;
-  const failed = entries.filter((entry) => !wrote(entry, first.results, first.values));
-  const fields = page.filter((field) => failed.some((entry) => entry.key === field.key));
+  const missed = (values: Filled['values']): readonly AtsField[] => {
+    const failed = entries.filter((entry) => !wrote(entry, first.results, values));
+    return page.filter((field) => failed.some((entry) => entry.key === field.key));
+  };
   const ticked = tickedByPage(page, entries, first.values);
-  if (ticked.length === 0) return { values: first.values, failed: fields };
+  if (ticked.length === 0) return { values: first.values, failed: missed(first.values) };
   const second = await deps.desktop.fillAtsForm(input.vacancyId, ticked);
   if (!second) return null;
   const left = tickedByPage(page, entries, second.values);
-  return left.length > 0 ? 'page_ticked' : { values: second.values, failed: fields };
+  return left.length > 0 ? 'page_ticked' : { values: second.values, failed: missed(second.values) };
 }
 
 /** Список не взял значение: его варианты читаются и выбираются кандидатом. */
@@ -187,6 +189,9 @@ async function withOptions(
   form: AtsForm,
   failed: readonly AtsField[],
 ): Promise<AtsForm | AtsRunResult> {
+  // Подготовленное резюме или письмо форма не взяла: без него отклик не уходит.
+  if (failed.some(isResumeFile)) return { kind: 'failed', rejected: 'resume' };
+  if (failed.some(isCoverLetter)) return { kind: 'failed', rejected: 'letter' };
   const { answers } = candidateFacts(input, form.page);
   const read = new Map<string, AtsField>();
   for (const field of failed) {
@@ -198,8 +203,6 @@ async function withOptions(
     if (options && options.length > 0) read.set(field.key, { ...field, options });
   }
   const left = failed.filter((field) => field.required && !read.has(field.key));
-  if (left.some(isResumeFile)) return { kind: 'failed', rejected: 'resume' };
-  if (left.some(isCoverLetter)) return { kind: 'failed', rejected: 'letter' };
   if (left.length > 0) {
     const asked = new Set(askedFields(left).map((field) => field.key));
     if (asked.size < left.length) return manual('other', form.host);

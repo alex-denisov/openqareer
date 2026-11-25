@@ -1,5 +1,32 @@
 /* Единый экран отклика: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* Д4: «Скачать» в строке ручной отправки — справа, как соседние кнопки. */
+  .b640 .cb-item > .cv-dl { order: 0; flex: none; inline-size: auto; margin-inline-start: auto; }
+  .b640 .cb-item > .cv-dl > .icon-btn { inline-size: var(--career-target-min); block-size: var(--career-target-min); }
+  /* Д7: кнопка полосы анкеты стоит на вертикали карточки готовности. */
+  .b640 .act-dock.qa-dock { padding-inline-start: calc(var(--career-space-4) + var(--career-border-width)); }
+  @media (min-width: 768px) {
+    .b640 .page:has(> .act-dock.qa-dock) { padding-block-end: 0; }
+  }
+  /* Д6: действие и ссылка анкеты на 390 — в один ряд. */
+  @media (max-width: 767px) {
+    .b640 .lead > .actions.m-commit.m-commit.m-commit.qa-mob:has(> .row-act) {
+      flex-flow: row nowrap;
+      justify-content: flex-start;
+    }
+    .b640 .lead > .actions.m-commit.m-commit.m-commit.qa-mob:has(> .row-act) > .btn.btn.btn {
+      flex: 1 1 auto;
+      order: 0;
+      min-inline-size: 0;
+    }
+    .b640 .qa-mob:has(> .row-act) .qa-must {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+  }
   /* Письмо можно править на месте: поле выглядит как текст письма из макета. */
   .b640 textarea.ap-letter {
     inline-size: 100%;
