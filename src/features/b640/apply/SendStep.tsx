@@ -175,7 +175,11 @@ export interface SendStepProps {
 /** Шаг «Отправка»: в приложении вакансия hh.ru уходит откликом из входа кандидата (B704), иначе — веб (O4d). */
 export function SendStep(props: SendStepProps) {
   const { vacancyId, head, sourceType, approved, letterText } = props;
-  if (head.sentId) return <AlreadySent platform={head.platform} responseId={head.sentId} />;
+  // Отклик, ушедший с этого шага, показывает его итог; «Отправлен» — только ушедший до открытия.
+  const [opened] = useState({ vacancyId, sentId: head.sentId });
+  if (opened.sentId && opened.vacancyId === vacancyId) {
+    return <AlreadySent platform={head.platform} responseId={opened.sentId} />;
+  }
   const hhVacancyId =
     approved && isTauriEnvironment() && head.url ? hhVacancyIdFromUrl(head.url) : null;
   if (!approved || !hhVacancyId) return <WebSendStep {...props} />;
