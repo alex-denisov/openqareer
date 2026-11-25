@@ -281,6 +281,7 @@
       'tel',
       'url',
       'number',
+      'range',
       'date',
       'password',
     ].indexOf(type) >= 0
@@ -514,10 +515,11 @@
         label: label.replace(/\s*[*✱]\s*$/, ''),
         kind: kind,
         role: node.getAttribute('role'),
-        required: isRequired(node, label),
+        required: isRequired(node, label) || sendsDefault(node, kind),
         autocomplete: node.getAttribute('autocomplete'),
         options: optionsOf(node, kind, form),
         accept: kind === 'file' ? node.getAttribute('accept') : null,
+        limits: limitsOf(node, kind),
         link: kind === 'checkbox' ? linkOf(node) : null,
       });
     });
@@ -674,6 +676,40 @@
     fire(node, 'input');
     fire(node, 'change');
     fire(node, 'blur');
+  }
+  function numberOr(text, otherwise) {
+    return text !== null && text !== '' && isFinite(Number(text)) ? Number(text) : otherwise;
+  }
+  // The bounds a number field states; a slider has some even when it states none.
+  function limitsOf(node, kind) {
+    if (kind !== 'number' && kind !== 'range') return null;
+    var slider = kind === 'range';
+    var step = node.getAttribute('step');
+    var given = numberOr(step, 1);
+    return {
+      min: numberOr(node.getAttribute('min'), slider ? 0 : null),
+      max: numberOr(node.getAttribute('max'), slider ? 100 : null),
+      step: step === 'any' || given <= 0 ? null : given,
+      unit: (node.getAttribute('data-unit') || '').trim().slice(0, 20) || null,
+    };
+  }
+  // The page sends a number of its own unless the candidate gives one: a slider
+  // always stands somewhere, a number field may come filled in.
+  function sendsDefault(node, kind) {
+    return kind === 'range' || (kind === 'number' && Boolean(node.getAttribute('value')));
+  }
+  // A slider moves a value it cannot hold to one it can: the field is left as it
+  // was unless it holds exactly the answer.
+  function setNumber(node, value) {
+    if (!/^-?\d+(\.\d+)?$/.test(value)) return 'value_refused';
+    var limits = limitsOf(node, kindOf(node));
+    var number = Number(value);
+    if (limits.min !== null && number < limits.min) return 'value_refused';
+    if (limits.max !== null && number > limits.max) return 'value_refused';
+    var steps = limits.step ? (number - (limits.min || 0)) / limits.step : 0;
+    if (Math.abs(steps - Math.round(steps)) > 1e-6) return 'value_refused';
+    setText(node, value);
+    return node.value !== '' && Number(node.value) === number ? 'set' : 'value_refused';
   }
   function setSelect(node, value) {
     var option = Array.prototype.slice.call(node.options).filter(function (candidate) {
@@ -908,6 +944,7 @@
     }
     if (kind === 'select') return setSelect(node, entry.value);
     if (kind === 'combobox') return setCombobox(node, entry.value);
+    if (kind === 'number' || kind === 'range') return setNumber(node, entry.value);
     setText(node, entry.value);
     return 'set';
   }

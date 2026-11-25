@@ -1,4 +1,5 @@
 import { leanFitView } from '../vacancies/leanMatchedPage';
+import { isCountedLine } from '../../shared/vacancyWorkTerm';
 import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareListed, compareListedGroup } from '../../shared/vacancyListOrder';
@@ -292,14 +293,22 @@ function createFitViewReader(
 
 /** PRB-041: each row retries, seals and writes, so it runs after the read and in slices. */
 function requeueStaleRows<Input>(
-  runtime: { enqueue(input: Input): unknown },
+  runtime: {
+    enqueue(input: Input): unknown;
+    fitJobHoldsKey?(input: Input): boolean;
+    takeFitRefreshSlot?(): boolean;
+  },
   inputs: readonly Input[],
   log?: FitOrderLog,
 ): void {
   if (inputs.length === 0) return;
   const rows = inputs.slice(0, STALE_REFIT_LIMIT);
   void yieldToEventLoop()
-    .then(() => queueRowsYielding(rows, (input) => runtime.enqueue(input)))
+    .then(() => queueRowsYielding(rows, (input) => {
+        // B794: a reread selection spends the day's ceiling too; the shown page and the card do not.
+        if (runtime.fitJobHoldsKey?.(input)) return;
+        if (runtime.takeFitRefreshSlot?.() ?? true) runtime.enqueue(input);
+      }))
     .catch((error: unknown) =>
       log?.warn(
         { errorName: error instanceof Error ? error.name : 'UnknownError', rows: rows.length },
@@ -616,8 +625,14 @@ function explanationWithFitPoints(explanation: Explanation, fitView: VacancyFitV
  * только сводка; раскрытая карточка читает полный разбор сама.
  */
 export function compactFitView(view: VacancyFitView): VacancyFitView {
-  const text = new Map(view.requirements.map((item) => [item.id, item.text]));
-  const implied = new Set((view.result?.implied ?? []).map((item) => item.requirementId));
+  // B794: the points are the lines «N из M» counts; terms, conditions and duties are not among them.
+  const duties = new Set(view.result?.duties ?? []);
+  const asked = view.requirements.filter((item) => !duties.has(item.id) && isCountedLine(item));
+  const text = new Map(asked.map((item) => [item.id, item.text]));
+  const implied = new Set([
+    ...(view.result?.implied ?? []).map((item) => item.requirementId),
+    ...(view.result?.placeCovered ?? []),
+  ]);
   const points = (view.result?.assessments ?? [])
     .filter((item) => text.has(item.requirementId))
     .slice(0, MAX_FIT_POINTS)

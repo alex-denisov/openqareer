@@ -129,4 +129,24 @@ describe('B787: hh.ru в склейке подборки показан толь
     expect(seen?.load).toBe('ready');
     expect(seen?.item?.cluster.sources).toEqual(sources);
   });
+  it('сбой сверки — «не удалось загрузить», повтор читает карточку снова', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [glued(GETMATCH, HH)] }));
+    readCard.mockRejectedValueOnce(new CoachApiError('Нет сети', 'network_error', true));
+    await render('cluster-g');
+    expect(seen?.load).toBe('failed');
+    readCard.mockResolvedValue(glued(GETMATCH, HH));
+    await act(async () => {
+      seen?.reload();
+      await Promise.resolve();
+    });
+    expect(seen?.load).toBe('ready');
+    expect(seen?.item?.cluster.sources).toEqual([GETMATCH, HH]);
+  });
+  it('в склейке только записи hh.ru — до ответа «загружаем»', async () => {
+    const second = { ...HH, sourceUrl: 'https://hh.ru/vacancy/2' };
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [glued(HH, second)] }));
+    readCard.mockReturnValue(new Promise(() => undefined));
+    await render('cluster-g');
+    expect(seen?.load).toBe('loading');
+  });
 });
