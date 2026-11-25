@@ -426,6 +426,22 @@
       ''
     );
   }
+  // The button beside a file takes the file away; it never sends the form.
+  function besideFile(button) {
+    if (button.matches('[data-dz-remove]')) return true;
+    if (button.getAttribute('type') === 'submit') return false;
+    return Object.keys(heldFiles()).some(function (key) {
+      var held = heldFiles()[key];
+      var place = held.places.filter(function (candidate) {
+        return candidate.isConnected && shows(candidate, held.name);
+      })[0];
+      return Boolean(place && place.contains(button));
+    });
+  }
+  function ofAnotherForm(form, button) {
+    var own = form.tagName === 'FORM' ? form : form.closest('form');
+    return Boolean(own && button.form && button.form !== own);
+  }
   function submitButtons(form) {
     var known = profile().submit;
     if (profile().deep) return footerButtons(form, known);
@@ -436,6 +452,10 @@
       var label = caption(button);
       return (
         shown(button) &&
+        !ofAnotherForm(form, button) &&
+        !besideFile(button) &&
+        // Without a word on it an untyped button cannot be the sending one.
+        (button.getAttribute('type') || label) &&
         button.getAttribute('role') !== 'combobox' &&
         button.getAttribute('aria-haspopup') !== 'listbox' &&
         !NEXT_TEXT.test(label) &&

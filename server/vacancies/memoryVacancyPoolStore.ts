@@ -636,6 +636,13 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
       .map((row) => row.vacancy);
   }
 
+  reloadVacanciesWithoutFullText(sourceId: string, ids: readonly string[]): UnifiedVacancy[] {
+    const wanted = new Set(ids);
+    return this.loadVacanciesWithoutFullText(sourceId, Number.MAX_SAFE_INTEGER, []).filter(
+      (vacancy) => wanted.has(vacancy.id),
+    );
+  }
+
   backfillDescriptionSkillsStep(chunk = 100): {
     inspected: number;
     updated: number;
