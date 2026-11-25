@@ -256,7 +256,16 @@ export function startFitWork(
     // selection order; the HTTP path only writes the queue (the shown page warms above).
     (ids, rank) => engine.requestHhTextPriority!(ids, rank),
     // The sweep queues below the shown page: after an edit, paid plans see the visible rows first.
-    (ids, rank) => requestFitForVacancyIds(deps, candidateId, ids, rank),
+    // B794: the rows below it spend the same day's ceiling as the background pass.
+    (ids, rank) =>
+      requestFitForVacancyIds(
+        deps,
+        candidateId,
+        ids,
+        rank,
+        {},
+        () => deps.vacancyMechanics?.takeFitRefreshSlot() ?? true,
+      ),
     `${vacancyFitStampOf(deps, candidateId)}|${response.selectionKey}`,
     response.readIds,
   );

@@ -546,6 +546,7 @@ function ensureSavedApplication(
     const application = deps.candidateStore.createApplication(candidateId, {
       clusterId: cluster.id,
       stage: 'saved',
+      draft: true,
       manualVacancy: snapshotWithDescription(deps.multiSourceEngine, cluster.id, {
         title: cluster.canonicalTitle,
         company: cluster.canonicalCompany,

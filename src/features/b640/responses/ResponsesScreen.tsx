@@ -34,7 +34,7 @@ const SORT_MENU: readonly { readonly label: string; readonly sort: SortState }[]
   { label: 'По компании', sort: { key: 'company', direction: 'asc' } },
 ];
 
-async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationView[]> {
+export async function loadResponses(signal: AbortSignal): Promise<readonly ApplicationView[]> {
   return (await listApplicationsPool({}, signal)).items;
 }
 
@@ -126,8 +126,7 @@ interface ListState {
 }
 
 function useResponsesList(): ListState {
-  const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
-  const { state, reload, setData } = useAsync(load, 'Отклики не загрузились.');
+  const { state, reload, setData } = useAsync(loadResponses, 'Отклики не загрузились.');
   const marks = useResponseMarks();
   const manual = useManualQueue();
   const all = useMemo<readonly ListedResponse[]>(() => {

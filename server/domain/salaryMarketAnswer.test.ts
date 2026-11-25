@@ -100,6 +100,11 @@ describe('B788: рыночная зарплата', () => {
 
   it('период и валюта вопроса; числовое поле получает число', () => {
     expect(run(ask('Monthly salary expectation', { numeric: true }), own)?.text).toBe('10000');
+    const limits = { min: 0, max: 50_000, step: 3000, unit: '$' };
+    const slider = (more: object) =>
+      run(ask('Monthly salary', { numeric: true, limits: { ...limits, ...more } }), own)?.text;
+    expect(slider({})).toBe('9000');
+    expect(slider({ max: 5000 })).toBeUndefined();
     const euro = run(ask('Annual salary expectation in EUR'), own);
     expect(euro?.text).toBe('96 000 EUR per year');
     expect(euro?.source).toContain('курс ЦБ на 25.11.2026');

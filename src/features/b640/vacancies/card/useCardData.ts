@@ -110,15 +110,20 @@ function hasGluedHh(item: MatchedVacancyItem | undefined): boolean {
   return sources.length > 1 && sources.some(isHhSource);
 }
 
-/** Площадки строки — сверенные сервером; до ответа hh.ru в склейке не показывается (B787). */
+/**
+ * Площадки строки — сверенные сервером; до ответа hh.ru в склейке не показывается (B787). Чтение не
+ * удалось или без hh.ru площадок нет — строки нет: экран ждёт ответа или предлагает повтор.
+ */
 function withOwnSources(
   pooled: MatchedVacancyItem | undefined,
   single: SingleRead | undefined,
 ): MatchedVacancyItem | undefined {
   const own = single?.state === 'ready' ? single.item : undefined;
   if (!pooled || !hasGluedHh(pooled)) return pooled ?? own;
+  if (single?.state === 'failed') return undefined;
   const sources =
     own?.cluster.sources ?? pooled.cluster.sources.filter((source) => !isHhSource(source));
+  if (sources.length === 0) return undefined;
   const primaryUrl = own?.cluster.primaryUrl ?? pooled.cluster.primaryUrl;
   return { ...pooled, cluster: { ...pooled.cluster, sources, primaryUrl } };
 }
