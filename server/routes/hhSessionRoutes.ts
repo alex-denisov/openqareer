@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   HH_APPLY_OUTCOMES,
   HH_CONSENTS_MAX,
+  HH_COPY_KNOWN_MAX,
+  HH_COPY_STAGES,
   HH_RESUME_ID,
   HH_RESUME_TEXT_MAX_LENGTH,
   HH_RESUME_TITLE_MAX_LENGTH,
@@ -24,7 +26,7 @@ import { draftHhResumeEdits, hhResumeLanguage } from '../domain/hhResumeEdits';
 import { localizeHhResumeEdits } from '../domain/hhResumeEditTranslation';
 import { hasVariants, hhResumeVariantSubject } from '../domain/hhResumeVariant';
 import { reviewHhResumes } from '../domain/hhResumeReview';
-import { chooseHhResume, mergedContents, resumesForVacancy, titleRank } from './hhVacancyResume';
+import { chooseHhResume, mergedContents, resumesForVacancy, saveHhCopy, titleRank, withoutOtherCopies } from './hhVacancyResume';
 import { cachedEdits, editsCacheKey, hhEditsInput, rememberEdits, readWithSections, selectedWithSections, type SelectedWithSections } from './hhResumeEditsInput';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
@@ -101,6 +103,24 @@ const reviewCountsSchema = reviewQuerySchema.extend({ edits: z.literal('1').opti
 
 const choiceSchema = z.object({ vacancyId: z.string().trim().min(1).max(512), resumeId }).strict();
 
+const copySchema = z
+  .object({
+    vacancyId: z.string().trim().min(1).max(512),
+    copy: z
+      .object({
+        sourceId: resumeId,
+        knownIds: z.array(resumeId).min(1).max(HH_COPY_KNOWN_MAX),
+        stage: z.enum(HH_COPY_STAGES),
+        copyId: resumeId.optional(),
+      })
+      .strict()
+      .refine((copy) => copy.knownIds.includes(copy.sourceId), { message: 'source_not_listed' })
+      .refine((copy) => !copy.copyId || !copy.knownIds.includes(copy.copyId), { message: 'not_a_copy' })
+      .refine((copy) => copy.stage === 'creating' || Boolean(copy.copyId), { message: 'copy_id_missing' })
+      .nullable(),
+  })
+  .strict();
+
 const attemptSchema = z
   .object({
     vacancyId: z.string().regex(HH_VACANCY_ID),
@@ -132,6 +152,7 @@ const resultSchema = z
 const REFUSAL_REPLY: Readonly<Record<HhApplyRefusal, readonly [number, string]>> = {
   hh_resumes_not_read: [409, 'Сначала выберите резюме hh.ru.'],
   hh_resume_not_in_session: [409, 'Этого резюме нет среди ваших резюме на hh.ru. Выберите его заново.'],
+  hh_copy_not_ready: [409, 'Резюме под вакансию ещё не готово. Повторите его создание.'],
   hh_apply_in_progress: [409, 'Отклик на эту вакансию уже отправляется.'],
   hh_already_applied: [409, 'Вы уже откликнулись на эту вакансию через hh.ru.'],
   hh_daily_limit_reached: [429, 'На сегодня отклики через hh.ru закончились. Завтра можно продолжить.'],
@@ -160,8 +181,9 @@ const getResumes: Handler = async (deps, request, reply) => {
 /** B678: тексты остальных резюме нужны только сверке на сервере, в интерфейс они не уходят. */
 function visibleResumes(deps: RouteDeps, snapshot: HhResumeSnapshot, vacancyId: string | undefined) {
   const shown = vacancyId ? resumesForVacancy(deps, snapshot, vacancyId) : snapshot;
-  const { contents: _contents, choices: _choices, ...visible } = shown;
-  return visible;
+  const { contents: _contents, choices: _choices, copies, ...visible } = shown;
+  const copy = vacancyId ? copies?.[vacancyId] : undefined;
+  return copy ? { ...visible, copy } : visible;
 }
 
 /** Выбор резюме для одной вакансии: другие вакансии и общий выбор не меняются. */
@@ -177,6 +199,23 @@ const putChoice: Handler = async (deps, request, reply) => {
     return sendError(reply, request, status, 'hh_resume_not_in_session', message, false);
   }
   const next = chooseHhResume(snapshot, vacancyId, chosen);
+  deps.hh.saveSnapshot(candidateId, next);
+  return { data: visibleResumes(deps, next, vacancyId), meta: { requestId: request.id } };
+};
+
+/** B787: что известно о копии под вакансию; `null` — копии больше нет. */
+const putCopy: Handler = async (deps, request, reply) => {
+  const candidateId = hhCandidateOf(deps, request, reply);
+  if (!candidateId) return reply;
+  const parsed = copySchema.safeParse(request.body ?? {});
+  if (!parsed.success) return sendError(reply, request, 400, 'invalid_hh_copy', 'Резюме под вакансию не создано. Повторите.', false);
+  const snapshot = deps.hh.getSnapshot(candidateId);
+  if (!snapshot) {
+    const [status, message] = REFUSAL_REPLY.hh_resumes_not_read;
+    return sendError(reply, request, status, 'hh_resumes_not_read', message, false);
+  }
+  const { vacancyId, copy } = parsed.data;
+  const next = saveHhCopy(snapshot, vacancyId, copy);
   deps.hh.saveSnapshot(candidateId, next);
   return { data: visibleResumes(deps, next, vacancyId), meta: { requestId: request.id } };
 };
@@ -208,6 +247,7 @@ const putResumes: Handler = async (deps, request, reply) => {
     ...(vacancyId ? { selected: commonSelected(previous, rest.selected, listed) } : {}),
     ...mergedContents(previous, listed, vacancyId && rest.selected ? [rest.selected, ...contents.filter(({ id }) => id !== rest.selected?.id)] : contents),
     ...(previous?.choices ? { choices: previous.choices } : {}),
+    ...(previous?.copies ? { copies: previous.copies } : {}),
     readAt: (read ? null : previous?.readAt) ?? new Date().toISOString(),
   };
   deps.hh.saveSnapshot(candidateId, snapshot);
@@ -232,7 +272,7 @@ const getReview: Handler = async (deps, request, reply) => {
   const { vacancyId, edits } = query.data;
   const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, vacancyId);
   if (!cluster) return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
-  const review = reviewHhResumes(snapshot, cluster.skills, titleRank(cluster.canonicalTitle));
+  const review = reviewHhResumes(withoutOtherCopies(snapshot, vacancyId), cluster.skills, titleRank(cluster.canonicalTitle));
   if (!edits) return { data: { vacancyId, ...review }, meta: { requestId: request.id } };
   const counts = await editCounts(deps, candidateId, snapshot, cluster, vacancyId);
   const resumes = review.resumes.map((fit) => {
@@ -440,6 +480,7 @@ export function registerHhSessionRoutes(
   // Снимок с разделами и текстами до 5 резюме кириллицей (2 байта на символ) больше общего предела 256 КБ.
   app.put(`${base}/resumes`, { ...write, bodyLimit: RESUMES_BODY_LIMIT }, withDeps(bound, putResumes));
   app.put(`${base}/resumes/choice`, write, withDeps(bound, putChoice));
+  app.put(`${base}/resumes/copy`, write, withDeps(bound, putCopy));
   app.get(`${base}/resumes/review`, withDeps(bound, getReview));
   app.get(`${base}/resumes/edits`, withDeps(bound, getEdits));
   app.post(`${base}/applications`, write, withDeps(bound, postAttempt));

@@ -84,6 +84,19 @@ export interface HhResumeEdit {
   readonly variantOf?: { readonly vacancyId: string; readonly subjectId: string };
 }
 
+/** B787: `creating` — копия могла появиться; `hidden` — скрыта, не заполнена; `ready` — скрыта и заполнена. */
+export const HH_COPY_STAGES = ['creating', 'hidden', 'ready'] as const;
+/** Резюме кандидата до копии: их шаги копии не трогают. */
+export const HH_COPY_KNOWN_MAX = 100;
+
+/** B787: скрытая копия резюме hh.ru под одну вакансию. */
+export interface HhResumeCopy {
+  readonly sourceId: string;
+  readonly knownIds: readonly string[];
+  readonly stage: (typeof HH_COPY_STAGES)[number];
+  readonly copyId?: string;
+}
+
 export interface HhResumeSnapshot {
   readonly resumes: readonly HhResumeSummary[];
   /** Резюме, которым кандидат откликается. */
@@ -92,6 +105,10 @@ export interface HhResumeSnapshot {
   readonly contents?: readonly HhResumeContent[];
   /** Какое резюме кандидат выбрал для вакансии; нет — предлагается подходящее. */
   readonly choices?: Readonly<Record<string, string>>;
+  /** Копии под вакансии: повтор после сбоя продолжает начатую. */
+  readonly copies?: Readonly<Record<string, HhResumeCopy>>;
+  /** Копия этой вакансии. */
+  readonly copy?: HhResumeCopy;
   readonly readAt: string;
 }
 

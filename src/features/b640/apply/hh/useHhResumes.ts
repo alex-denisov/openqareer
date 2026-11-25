@@ -42,6 +42,8 @@ export interface HhResumesState {
   readonly pick: (resumeId: string) => Promise<void>;
   /** Прочитать страницу выбранного резюме ещё раз. */
   readonly reread: () => void;
+  /** Снимок, сохранённый сервером. */
+  readonly replace: (saved: HhResumeSnapshot) => void;
 }
 
 export interface HhResumesOptions {
@@ -124,6 +126,16 @@ function listFailure(reason: unknown): HhPicker {
   };
 }
 
+/** Список для листа: прочитан в окне hh.ru и сверен с вакансией. */
+async function pickerList(previous: HhResumeSnapshot | null, vacancyId: string, pace: ReadPace | undefined) {
+  const list = await readHhResumes();
+  if (list.kind !== 'ready') return { kind: list.kind === 'empty' ? ('empty' as const) : ('signin' as const) };
+  const outcome = await reviewList(list.resumes, previous, vacancyId, pace);
+  return { kind: 'choose' as const, resumes: list.resumes, ...outcome };
+}
+
+const signInHh = () => void openHhSignIn();
+
 /** Резюме hh.ru кандидата: список и содержимое — из его сессии hh.ru; сверка с вакансией — на сервере. */
 export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}): HhResumesState {
   const load = useCallback((signal: AbortSignal) => getHhResumes(signal, vacancyId), [vacancyId]);
@@ -136,17 +148,16 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
   const { refreshing, settled, reread } = useSectionsRefresh(vacancyId, snapshot, replaceData);
   const pick = async (resumeId: string) => replaceData(await chooseHhResumeFor(vacancyId, resumeId));
 
+  // Окно hh.ru одно: список читается после перечитывания выбранного.
   const openPicker = () => {
     setPicker({ kind: 'reading' });
-    // Окно hh.ru одно: список читается после перечитывания выбранного.
     settled()
       .then(async (previous) => {
-        const list = await readHhResumes();
-        if (list.kind !== 'ready') return setPicker({ kind: list.kind === 'empty' ? 'empty' : 'signin' });
-        const outcome = await reviewList(list.resumes, previous, vacancyId, options.pace);
+        const outcome = await pickerList(previous, vacancyId, options.pace);
+        if (outcome.kind !== 'choose') return setPicker(outcome);
         read.current = outcome.read;
         if (outcome.saved) replaceData(outcome.saved);
-        return setPicker({ kind: 'choose', resumes: list.resumes, review: outcome.review });
+        return setPicker({ kind: 'choose', resumes: outcome.resumes, review: outcome.review });
       })
       .catch((reason: unknown) => setPicker(listFailure(reason)));
   };
@@ -175,10 +186,11 @@ export function useHhResumes(vacancyId: string, options: HhResumesOptions = {}):
     picker,
     openPicker,
     closePicker: () => setPicker({ kind: 'closed' }),
-    signIn: () => void openHhSignIn(),
+    signIn: signInHh,
     saving,
     choose,
     pick,
     reread,
+    replace: replaceData,
   };
 }

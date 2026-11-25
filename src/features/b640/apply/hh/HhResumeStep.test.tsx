@@ -8,8 +8,10 @@ const api = vi.hoisted(() => ({
   getHhResumeEdits: vi.fn(),
   saveHhResumes: vi.fn(),
   chooseHhResumeFor: vi.fn(),
+  getHhResumeReview: vi.fn(),
+  saveHhCopyFor: vi.fn(),
 }));
-const desktop = vi.hoisted(() => ({ readHhResumeContent: vi.fn() }));
+const desktop = vi.hoisted(() => ({ readHhResumeContent: vi.fn(), readHhResumes: vi.fn(), copyHhResume: vi.fn(), hideHhCopy: vi.fn() }));
 const bridge = vi.hoisted(() => ({ isTauriEnvironment: vi.fn() }));
 vi.mock('./hhSessionApi', () => api);
 vi.mock('./hhDesktop', async (original) => ({ ...(await original<object>()), ...desktop }));
@@ -45,6 +47,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.getHhResumes.mockResolvedValue(READ);
   api.getHhResumeEdits.mockResolvedValue({ edits: [] });
+  api.getHhResumeReview.mockResolvedValue({ resumes: [{ resumeId: 'cio', status: 'fits', matched: [], missing: [] }] });
   bridge.isTauriEnvironment.mockReturnValue(false);
   desktop.readHhResumeContent.mockRejectedValue(new Error('hh_resume_not_read'));
 });
@@ -52,7 +55,7 @@ afterEach(() => view?.unmount());
 
 async function render(): Promise<string> {
   view = await mount(
-    <HhResumeStep vacancyId="v1" confirmed={false} onConfirm={onConfirm} dock={null} />,
+    <HhResumeStep vacancyId="v1" vacancyTitle="Head of Platform" confirmed={false} onConfirm={onConfirm} dock={null} />,
   );
   await act(async () => undefined);
   await act(async () => undefined);
@@ -141,4 +144,53 @@ it('в браузере без прочитанных резюме — без в
   bridge.isTauriEnvironment.mockReturnValue(true);
   await render();
   expect(button('Выбрать резюме hh.ru')).toBeTruthy();
+});
+
+const GAPS = { resumes: [{ resumeId: 'cio', status: 'gaps', matched: [], missing: ['Kotlin'] }] };
+const EDITS = { edits: [{ id: 's', section: 'skills', was: 'ITIL', now: 'ITIL, Kotlin', added: ['Kotlin'] }] };
+const COPY = { sourceId: 'cio', knownIds: ['cio', 'coo'], copyId: 'new' };
+
+it('B787: резюме подходит — создавать другое не предлагаем', async () => {
+  bridge.isTauriEnvironment.mockReturnValue(true);
+  api.getHhResumeEdits.mockResolvedValue(EDITS);
+  await render();
+  expect(button('Создать резюме под вакансию')).toBeUndefined();
+  expect(button('Применить все на hh.ru')).toBeDefined();
+});
+
+it('B787: не подходит — одно нажатие создаёт, это резюме на hh.ru не правим', async () => {
+  bridge.isTauriEnvironment.mockReturnValue(true);
+  api.getHhResumeReview.mockResolvedValue(GAPS);
+  api.getHhResumeEdits.mockResolvedValue(EDITS);
+  api.saveHhCopyFor.mockResolvedValue(READ);
+  desktop.readHhResumes.mockResolvedValue({ kind: 'ready', resumes: RESUMES });
+  desktop.copyHhResume.mockResolvedValue({ outcome: 'failed', failureCode: 'limit_reached' });
+  expect(await render()).toContain('Не хватает: Kotlin');
+  expect(button('Применить')).toBeUndefined();
+  click(button('Создать резюме под вакансию'));
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  expect(desktop.copyHhResume).toHaveBeenCalledWith('cio', ['cio', 'coo']);
+  expect(view!.container.textContent).toContain('На hh.ru уже 20 резюме');
+  expect(button('Повторить')).toBeDefined();
+});
+
+it('B787: править нечем или не приложение — не предлагаем', async () => {
+  api.getHhResumeReview.mockResolvedValue(GAPS);
+  bridge.isTauriEnvironment.mockReturnValue(true);
+  await render();
+  expect(button('Создать резюме под вакансию')).toBeUndefined();
+  view?.unmount();
+  bridge.isTauriEnvironment.mockReturnValue(false);
+  api.getHhResumeEdits.mockResolvedValue(EDITS);
+  await render();
+  expect(button('Создать резюме под вакансию')).toBeUndefined();
+});
+
+it.each([['hidden', false], ['ready', true]])('B787: копия «%s» — одобрить можно: %s', async (stage, can) => {
+  bridge.isTauriEnvironment.mockReturnValue(true);
+  api.getHhResumes.mockResolvedValue({ ...READ, selected: { ...READ.selected, id: 'new' }, copy: { ...COPY, stage } });
+  const text = await render();
+  expect(button('Одобрить резюме') !== undefined).toBe(can);
+  expect(button('Продолжить создание') !== undefined).toBe(!can);
+  expect(text.includes('не видно никому')).toBe(can);
 });
