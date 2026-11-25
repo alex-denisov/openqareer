@@ -8,6 +8,7 @@ mod ats_boards;
 mod ats_files;
 mod ats_form_scripts;
 mod ats_model;
+mod ats_smartrecruiters;
 mod ats_steps;
 mod ats_target;
 mod automation_worker;
