@@ -3,14 +3,9 @@ import { ChartBar } from '@phosphor-icons/react';
 import { formatMarketSalaryRange, marketSalaryBasis } from '../../../shared/marketSalaryEstimate';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { formatStatedCompensation } from './vacancyCompensation';
 
 type MarketSalary = NonNullable<MatchedVacancyItem['explanation']['marketSalary']>;
-
-/** Оценка — в месяц; годовая сумма вакансии называет период, чтобы их не сравнивали напрямую. */
-function statedMoney(salary: NonNullable<MatchedVacancyItem['cluster']['salary']>): string {
-  return `${formatCompensationCompact(salary)}${salary.period === 'year' ? ' в год' : ''}`;
-}
 
 /** 390 says «без зарплаты» in place of the wide value (mockup 390 list). */
 function NarrowMissing() {
@@ -37,7 +32,7 @@ function StatedOrMissing({
   return (
     <>
       <span className="career-numeric vacancy-screen-money-value">
-        {statedMoney(item.cluster.salary)}
+        {formatStatedCompensation(item.cluster.salary)}
       </span>
       <span className="vacancy-screen-money-source">указана в вакансии · {sourceLine}</span>
     </>
@@ -131,7 +126,7 @@ export function vacancyMoneySummary(item: MatchedVacancyItem): {
   if (item.cluster.salary || !estimate) {
     return item.cluster.salary
       ? {
-          value: statedMoney(item.cluster.salary),
+          value: formatStatedCompensation(item.cluster.salary),
           note: 'Зарплата указана в вакансии',
           fromSource: true,
         }

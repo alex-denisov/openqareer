@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { monthlySalary } from '../../../../../shared/monthlyRubSalary';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { CampaignMetaView } from '../../../coach/matchedVacancyApi';
@@ -78,7 +79,7 @@ export function MoneyBlock({ item, rates, campaign, expectation }: MoneyBlockPro
   const lines = moneyLines(item, rates, useTargetCurrency(campaign));
   if (!lines) return null;
   const market = item.explanation.marketSalary;
-  const scale = moneyScale(market, item.cluster.salary, rates, expectation);
+  const scale = moneyScale(market, monthlySalary(item.cluster.salary, rates), rates, expectation);
   return (
     <section className="mod v4-money" aria-labelledby={titleId}>
       <h3 className="mod-title" id={titleId}>

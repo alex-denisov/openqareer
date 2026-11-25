@@ -1,7 +1,7 @@
 import { formatMarketSalaryRange, marketSalaryBasis } from '../../../../../shared/marketSalaryEstimate';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
-import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
+import { formatStatedCompensation } from '../../../vacancies/vacancyCompensation';
 import { moneyView, type MoneyCurrency } from '../format';
 
 const TARGETS: readonly MoneyCurrency[] = ['RUB', 'USD', 'EUR', 'AED', 'ORIG'];
@@ -52,7 +52,7 @@ export function moneyLines(
   const salary = item.cluster.salary;
   if (!salary || (salary.from === undefined && salary.to === undefined)) return marketLines(item);
   const view = moneyView(item, { currency, rates });
-  const converted = view.title && rates ? `в вакансии ${formatCompensationCompact(salary)}, курс ЦБ на ${ratesDate(rates)}` : undefined;
+  const converted = view.title && rates ? `в вакансии ${formatStatedCompensation(salary, rates)}, курс ЦБ на ${ratesDate(rates)}` : undefined;
   const parts = [
     hasMarket(item) ? marketLines(item)!.tip : 'Вилка — из текста вакансии.',
     ...(converted && rates ? [`Пересчёт валют — по курсу ЦБ на ${ratesDate(rates)}.`] : []),

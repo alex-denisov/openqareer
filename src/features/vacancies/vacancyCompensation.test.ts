@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { formatCompensationCompact, formatStatedCompensation } from './vacancyCompensation';
 
 describe('formatCompensationCompact (B446-g4: thousands, ₽ at the end)', () => {
   it('formats a rouble range as «450–600 тыс. ₽»', () => {
@@ -56,5 +56,18 @@ describe('formatCompensationCompact: суммы меньше тысячи (B765,
     expect(
       formatCompensationCompact({ from: 218000, to: 265000, currency: 'USD', period: 'year' }),
     ).toBe('$218–265 тыс.');
+  });
+});
+
+describe('B803: период суммы вакансии', () => {
+  it('называет год и час, неуказанный период выводит сам', () => {
+    expect(formatStatedCompensation({ from: 90_000, to: 120_000, currency: 'EUR' })).toBe(
+      '€90–120 тыс. в год',
+    );
+    expect(
+      formatStatedCompensation({ from: 200_000, to: 300_000, currency: 'USD', period: 'year' }),
+    ).toBe('$200–300 тыс. в год');
+    expect(formatStatedCompensation({ from: 450_000, currency: 'RUR' })).toBe('от 450 тыс. ₽');
+    expect(formatStatedCompensation({ from: 800_000, currency: 'KZT' })).toBe('от 800 тыс. KZT');
   });
 });
