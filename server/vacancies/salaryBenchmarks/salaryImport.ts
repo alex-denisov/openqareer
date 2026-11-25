@@ -1,7 +1,7 @@
 /** B803: разовая загрузка собранных срезов. Сбой источника не мешает остальным; цифр в итоге нет. */
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { writeSalarySlice } from './sqliteSalaryBenchmarkStore';
+import { previewSalarySlice, writeSalarySlice } from './sqliteSalaryBenchmarkStore';
 
 const bundleSchema = z.object({
   sources: z.array(z.looseObject({ name: z.string() })).max(500),
@@ -19,7 +19,12 @@ function failureOf(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
-export function importSalarySlices(database: DatabaseSync, input: unknown): ImportedSource[] {
+export function importSalarySlices(
+  database: DatabaseSync,
+  input: unknown,
+  dryRun = false,
+): ImportedSource[] {
+  const write = dryRun ? previewSalarySlice : writeSalarySlice;
   const { sources, benchmarks } = bundleSchema.parse(input);
   const names = new Set(sources.map(({ name }) => name));
   if (names.size !== sources.length) throw new Error('duplicate source');
@@ -32,7 +37,7 @@ export function importSalarySlices(database: DatabaseSync, input: unknown): Impo
       .sort()
       .at(-1);
     try {
-      const { written } = writeSalarySlice(database, { source, sliceDate, benchmarks: rows });
+      const { written } = write(database, { source, sliceDate, benchmarks: rows });
       return { source: source.name, written };
     } catch (error: unknown) {
       return { source: source.name, written: 0, error: failureOf(error) };
