@@ -5,15 +5,20 @@
 //! itself; an outcome the board did not state is "unconfirmed", never "sent".
 //! Field values are never written to diagnostics.
 
-use crate::ats_attempts::{self, Attempt, AttemptResult};
-use crate::ats_files::validate_file;
+use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
-use crate::ats_target::{is_confirmation, navigation_allowed, on_target, resolve, AtsTarget};
+use crate::ats_model::{
+    attempt_result, decode, file_fields_of, form_report, is_id, listed, outcome_of, press_refusal,
+    rejection_of, submit_refusal, validate_fill, values_of, FileFields, FillReport, FillRequest,
+    FormReport, OpenRequest, Receipt, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+};
+use crate::ats_target::{
+    is_confirmation, navigation_allowed, on_target, resolve, top_level_allowed, AtsTarget,
+};
 use crate::connector_session::{
     append_connector_diagnostic, candidate_store, candidate_store_of, eval_json,
     is_transient_eval_error,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -30,271 +35,36 @@ const READ_WAIT: Duration = Duration::from_secs(25);
 const FILL_WAIT: Duration = Duration::from_secs(40);
 const OUTCOME_WAIT: Duration = Duration::from_secs(45);
 const POLL: Duration = Duration::from_millis(500);
-const MAX_ENTRIES: usize = 120;
-const MAX_VALUE_CHARS: usize = 10_000;
-const MAX_FILES: usize = 2;
-const MAX_CONSENTS: usize = 20;
 const STORE_REMOVE_TRIES: u32 = 10;
-const MAX_ID_CHARS: usize = 200;
 /// Keeps the form's cookies apart from the hh.ru and LinkedIn sessions.
 const STORE_MASK: [u8; 16] = *b"openqareer-ats-1";
 
-/// What the page may answer instead of a press. Anything else is "press_unknown".
-const PRESS_REFUSALS: &[&str] = &[
-    "captcha",
-    "submit_ambiguous",
-    "submit_disabled",
-    "form_missing",
-];
-const FILL_RESULTS: &[&str] = &[
-    "set",
-    "option_missing",
-    "menu_missing",
-    "field_missing",
-    "file_missing",
-    "file_not_attached",
-];
-
-type Values = BTreeMap<String, String>;
-/// `accept` of every file field, by field key.
-type FileFields = BTreeMap<String, Option<String>>;
-
-struct Run {
-    vacancy_id: String,
+pub(crate) struct Run {
+    pub(crate) vacancy_id: String,
     target: AtsTarget,
     /// What the form held right after filling; the candidate confirms these.
-    filled: Option<Values>,
-    file_fields: FileFields,
+    pub(crate) filled: Option<Values>,
+    pub(crate) file_fields: FileFields,
     attempt: Option<Uuid>,
+    /// Fields the page had already marked when the button was pressed.
+    invalid_before: Value,
 }
 
 #[derive(Default)]
 pub struct AtsFormState {
-    run: Mutex<Option<Run>>,
+    pub(crate) run: Mutex<Option<Run>>,
     /// Held while the attempts file is read and written.
     attempts: Mutex<()>,
     /// Opening a form window and erasing its store never overlap.
     store: tokio::sync::Mutex<()>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct OpenRequest {
-    pub vacancy_id: String,
-    pub url: String,
-    #[serde(default)]
-    pub board: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FileValue {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub mime: String,
-    pub base64: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Entry {
-    pub key: String,
-    #[serde(default)]
-    pub value: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file: Option<FileValue>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FillRequest {
-    pub vacancy_id: String,
-    pub entries: Vec<Entry>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SubmitRequest {
-    pub vacancy_id: String,
-    /// The candidate pressed «Отправить» on our screen for exactly these values.
-    pub confirmed: bool,
-    pub values: Values,
-    /// Chosen by the cabinet and written to disk before the press.
-    pub attempt_id: Uuid,
-    /// Entries the cabinet already wrote to the consent journal for this attempt.
-    #[serde(default)]
-    pub consent_ids: Vec<Uuid>,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct FormReport {
-    /// ready | account_required | form_missing | captcha | off_target | unreadable
-    pub state: String,
-    pub adapter: String,
-    pub host: String,
-    pub form: Value,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct FillReport {
-    pub results: BTreeMap<String, String>,
-    pub values: Values,
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct Receipt {
-    /// confirmed | unconfirmed | rejected | captcha | not_submitted
-    pub outcome: String,
-    pub reason: Option<String>,
-    pub host: String,
-    pub path: String,
-    pub pressed_at_ms: Option<u64>,
-    /// Keys of the fields that were in the form when the button was pressed.
-    pub field_keys: Vec<String>,
-    /// Keys the form itself marked invalid.
-    pub invalid_keys: Vec<String>,
-}
-
-fn is_id(value: &str) -> bool {
-    !value.is_empty() && value.len() <= MAX_ID_CHARS && !value.chars().any(char::is_control)
-}
-
-fn validate_fill(request: &FillRequest, file_fields: &FileFields) -> Result<(), String> {
-    let sound = |entry: &Entry| is_id(&entry.key) && entry.value.chars().count() <= MAX_VALUE_CHARS;
-    let files = request
-        .entries
-        .iter()
-        .filter(|entry| entry.file.is_some())
-        .count();
-    if !is_id(&request.vacancy_id)
-        || request.entries.is_empty()
-        || request.entries.len() > MAX_ENTRIES
-        || files > MAX_FILES
-        || !request.entries.iter().all(sound)
-    {
-        return Err("ats_fill_invalid".to_string());
-    }
-    for entry in &request.entries {
-        if let Some(file) = &entry.file {
-            let accept = file_fields
-                .get(&entry.key)
-                .ok_or("ats_file_field_unknown")?;
-            validate_file(file, accept.as_deref())?;
-        }
-    }
-    Ok(())
-}
-
-fn file_fields_of(form: &Value) -> FileFields {
-    form["fields"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|field| field["kind"] == "file")
-        .filter_map(|field| {
-            let accept = field["accept"].as_str().map(str::to_string);
-            Some((field["key"].as_str()?.to_string(), accept))
-        })
-        .collect()
-}
-
-fn listed(value: Option<&str>, list: &[&'static str], other: &'static str) -> &'static str {
-    list.iter()
-        .find(|known| Some(**known) == value)
-        .copied()
-        .unwrap_or(other)
-}
-
-/// The press answer: `None` — pressed; otherwise why not, from the fixed list.
-/// A press whose answer was lost may have happened.
-fn press_refusal(press: Option<&Value>) -> Option<&'static str> {
-    let state = press.and_then(|value| value["state"].as_str());
-    (state != Some("clicked")).then(|| listed(state, PRESS_REFUSALS, "press_unknown"))
-}
-
-/// What the attempt on disk becomes after the board's answer.
-fn attempt_result(outcome: &str) -> AttemptResult {
-    match outcome {
-        "confirmed" => AttemptResult::Sent,
-        // The form refused its own fields: nothing was sent.
-        "rejected" | "not_submitted" => AttemptResult::Failed,
-        _ => AttemptResult::Unconfirmed,
-    }
-}
-
-/// Why the button must not be pressed, if anything is off. `second` is the
-/// read taken immediately before the press.
-pub fn submit_refusal(
-    request: &SubmitRequest,
-    filled: Option<&Values>,
-    second: &Values,
-    already_pressed: bool,
-) -> Option<&'static str> {
-    if !request.confirmed {
-        return Some("not_confirmed");
-    }
-    if already_pressed {
-        return Some("already_submitted");
-    }
-    let Some(first) = filled else {
-        return Some("form_not_filled");
-    };
-    if first != &request.values {
-        return Some("confirmed_values_differ");
-    }
-    (second != first).then_some("form_changed")
-}
-
-/// What the board said after the press; silence is "unconfirmed". Only the
-/// window's own address on the confirmation page confirms.
-fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, Vec<String>) {
-    let keys = || {
-        last["keys"]
-            .as_array()
-            .map(|keys| {
-                keys.iter()
-                    .filter_map(Value::as_str)
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    match last["state"].as_str() {
-        Some("confirmed") if on_confirmation => ("confirmed", Vec::new()),
-        Some("invalid") => ("rejected", keys()),
-        Some("captcha") => ("captcha", Vec::new()),
-        _ => ("unconfirmed", Vec::new()),
-    }
-}
-
-fn store_identifier(account: [u8; 16]) -> [u8; 16] {
+pub(crate) fn store_identifier(account: [u8; 16]) -> [u8; 16] {
     let mut identifier = account;
     for (slot, mask) in identifier.iter_mut().zip(STORE_MASK) {
         *slot ^= mask;
     }
     identifier
-}
-
-fn decode(raw: &str) -> Value {
-    match serde_json::from_str::<Value>(raw) {
-        Ok(Value::String(inner)) => serde_json::from_str(&inner).unwrap_or(Value::Null),
-        Ok(value) => value,
-        Err(_) => Value::Null,
-    }
-}
-
-fn values_of(snapshot: &Value) -> Values {
-    snapshot["values"]
-        .as_object()
-        .map(|map| {
-            map.iter()
-                .map(|(key, value)| (key.clone(), value.as_str().unwrap_or_default().to_string()))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 fn now_ms() -> u64 {
@@ -304,11 +74,15 @@ fn now_ms() -> u64 {
         .unwrap_or_default()
 }
 
-fn note(app: &AppHandle, event: &str, detail: &str) {
+pub(crate) fn note(app: &AppHandle, event: &str, detail: &str) {
     let _ = append_connector_diagnostic(app, "ats-form", event, Some(detail));
 }
 
-async fn page(app: &AppHandle, operation: &str, argument: &Value) -> Result<Value, String> {
+pub(crate) async fn page(
+    app: &AppHandle,
+    operation: &str,
+    argument: &Value,
+) -> Result<Value, String> {
     let window = app
         .get_webview(FORM_WINDOW_LABEL)
         .ok_or("form_window_missing")?;
@@ -318,7 +92,7 @@ async fn page(app: &AppHandle, operation: &str, argument: &Value) -> Result<Valu
 
 /// Repeats a read until `settled` accepts it or the wait runs out; the last
 /// answer is returned either way.
-async fn poll(
+pub(crate) async fn poll(
     app: &AppHandle,
     operation: &str,
     argument: &Value,
@@ -341,7 +115,7 @@ async fn poll(
     }
 }
 
-fn current_target(app: &AppHandle, vacancy_id: &str) -> Result<AtsTarget, String> {
+pub(crate) fn current_target(app: &AppHandle, vacancy_id: &str) -> Result<AtsTarget, String> {
     let state = app.state::<AtsFormState>();
     let run = state.run.lock().map_err(|_| "form_state_unavailable")?;
     run.as_ref()
@@ -354,7 +128,7 @@ fn window_location(app: &AppHandle) -> Option<Url> {
     app.get_webview(FORM_WINDOW_LABEL)?.url().ok()
 }
 
-fn still_on_target(app: &AppHandle, target: &AtsTarget) -> bool {
+pub(crate) fn still_on_target(app: &AppHandle, target: &AtsTarget) -> bool {
     window_location(app).is_some_and(|url| on_target(target, url.as_str()))
 }
 
@@ -383,12 +157,21 @@ fn with_attempts<T>(
         .attempts
         .lock()
         .map_err(|_| "form_state_unavailable")?;
+    let _held = ats_attempts::lock(&directory)?;
     action(&directory)
 }
 
-fn settle(app: &AppHandle, id: Uuid, outcome: &str) {
+fn settle(app: &AppHandle, id: Uuid, outcome: &str, pressed_at_ms: Option<u64>) {
+    let confirmation = (outcome == "confirmed").then(|| {
+        let shown = receipt(app, outcome, None, Vec::new());
+        Confirmation {
+            host: shown.host,
+            path: shown.path,
+            pressed_at_ms,
+        }
+    });
     let result = with_attempts(app, |directory| {
-        ats_attempts::finish(directory, id, attempt_result(outcome))
+        ats_attempts::finish(directory, id, attempt_result(outcome), confirmation)
     });
     // An unsettled attempt keeps blocking: the safe side.
     if result.is_err() {
@@ -462,6 +245,7 @@ fn build_window(app: &AppHandle, target: &AtsTarget) -> Result<(), String> {
     std::fs::create_dir_all(&directory).map_err(|_| "form_store_unavailable")?;
     let url = Url::parse(&target.entry_url).map_err(|_| "ats_address_invalid")?;
     let allowed = target.clone();
+    let top_level = target.clone();
     WebviewWindowBuilder::new(app, FORM_WINDOW_LABEL, WebviewUrl::External(url))
         .title("OpenQareer")
         .inner_size(WINDOW_SIZE.0, WINDOW_SIZE.1)
@@ -471,6 +255,12 @@ fn build_window(app: &AppHandle, target: &AtsTarget) -> Result<(), String> {
         // A hidden WKWebView keeps its timers only with this policy (B157).
         .background_throttling(BackgroundThrottlingPolicy::Disabled)
         .on_navigation(move |next| navigation_allowed(&allowed, next.as_str()))
+        .on_page_load(move |window, payload| {
+            if !top_level_allowed(&top_level, payload.url().as_str()) {
+                note(window.app_handle(), "top_level", "refused");
+                let _ = window.destroy();
+            }
+        })
         .on_new_window(|_, _| NewWindowResponse::Deny)
         .on_download(|_, event| !matches!(event, DownloadEvent::Requested { .. }))
         .data_directory(directory)
@@ -478,22 +268,6 @@ fn build_window(app: &AppHandle, target: &AtsTarget) -> Result<(), String> {
         .build()
         .map(|_| ())
         .map_err(|_| "form_window_build_failed".to_string())
-}
-
-fn form_report(target: &AtsTarget, form: Value, on_board: bool) -> FormReport {
-    let state = match form["state"].as_str() {
-        _ if !on_board => "off_target",
-        Some("ready") if form["captcha"] == true => "captcha",
-        Some("ready") if form["unkeyed"].as_u64().unwrap_or(0) > 0 => "unreadable",
-        Some(state @ ("ready" | "account_required" | "form_missing")) => state,
-        _ => "unreadable",
-    };
-    FormReport {
-        state: state.to_string(),
-        adapter: target.adapter.to_string(),
-        host: form["host"].as_str().unwrap_or_default().to_string(),
-        form,
-    }
 }
 
 pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormReport, String> {
@@ -513,13 +287,28 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             filled: None,
             file_fields: FileFields::new(),
             attempt: None,
+            invalid_before: Value::Null,
         });
     }
+    read_page(app, &target).await
+}
+
+/// The page as it is now: an answer may have brought new questions onto it.
+pub async fn read_form(app: &AppHandle, vacancy_id: &str) -> Result<FormReport, String> {
+    let target = current_target(app, vacancy_id)?;
+    if !still_on_target(app, &target) {
+        return Err("off_target".to_string());
+    }
+    read_page(app, &target).await
+}
+
+async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, String> {
     let form = poll(app, "read", &Value::Null, READ_WAIT, |value| {
-        value["state"] == "ready" && value["submitButtons"] == 1
+        value["state"] == "ready" && (value["submitButtons"] == 1 || value["step"] == "next")
     })
     .await?;
-    if let Some(run) = state
+    if let Some(run) = app
+        .state::<AtsFormState>()
         .run
         .lock()
         .map_err(|_| "form_state_unavailable")?
@@ -527,7 +316,8 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
     {
         run.file_fields = file_fields_of(&form);
     }
-    let report = form_report(&target, form, still_on_target(app, &target));
+    let form = crate::ats_steps::with_menus(app, form).await;
+    let report = form_report(target, form, still_on_target(app, target));
     note(app, "read", &format!("{}_{}", target.adapter, report.state));
     Ok(report)
 }
@@ -604,7 +394,16 @@ async fn read_outcome(
     target: &AtsTarget,
     wait: Duration,
 ) -> (&'static str, Vec<String>) {
-    let argument = json!({ "confirmationPath": target.confirmation_path });
+    let invalid_before = app
+        .state::<AtsFormState>()
+        .run
+        .lock()
+        .ok()
+        .and_then(|run| run.as_ref().map(|run| run.invalid_before.clone()));
+    let argument = json!({
+        "confirmationPath": target.confirmation_path,
+        "invalidBefore": invalid_before,
+    });
     let last = poll(app, "outcome", &argument, wait, |value| {
         matches!(
             value["state"].as_str(),
@@ -618,6 +417,14 @@ async fn read_outcome(
     }
     let confirmed = window_location(app).is_some_and(|url| is_confirmation(target, url.as_str()));
     outcome_of(&last, confirmed)
+}
+
+/// Where the page must be at the moment of the press; the page checks it itself.
+pub(crate) fn place_of(target: &AtsTarget) -> Value {
+    let path = Url::parse(&target.entry_url)
+        .map(|url| url.path().to_string())
+        .unwrap_or_default();
+    json!({ "hosts": target.hosts, "path": path })
 }
 
 pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Receipt, String> {
@@ -639,10 +446,10 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
     let attempt = request.attempt_id;
     // The page may have moved on while the values were read and recorded.
     if !still_on_target(app, &target) {
-        settle(app, attempt, "not_submitted");
+        settle(app, attempt, "not_submitted", None);
         return Ok(receipt(app, "not_submitted", Some("off_target"), keys));
     }
-    let press = page(app, "submit", &Value::Null).await.ok();
+    let press = page(app, "submit", &place_of(&target)).await.ok();
     if let Some(reason) = press_refusal(press.as_ref()) {
         let outcome = match reason {
             "press_unknown" => "unconfirmed",
@@ -655,13 +462,28 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
         } else {
             outcome
         };
-        settle(app, attempt, held);
+        settle(app, attempt, held, None);
         note(app, "submit", &format!("{}_{reason}", target.adapter));
         return Ok(receipt(app, outcome, Some(reason), keys));
     }
     let pressed_at_ms = now_ms();
-    let (outcome, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
-    settle(app, attempt, outcome);
+    if let (Some(press), Ok(mut run)) = (press, app.state::<AtsFormState>().run.lock()) {
+        if let Some(run) = run.as_mut() {
+            run.invalid_before = press["invalidBefore"].clone();
+        }
+    }
+    let (read, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
+    let outcome = if read == "rejected" {
+        let after = page(app, "snapshot", &Value::Null).await.ok();
+        rejection_of(
+            &second,
+            after.as_ref().map(values_of).as_ref(),
+            &invalid_keys,
+        )
+    } else {
+        read
+    };
+    settle(app, attempt, outcome, Some(pressed_at_ms));
     note(app, "submit", &format!("{}_{outcome}", target.adapter));
     Ok(Receipt {
         pressed_at_ms: Some(pressed_at_ms),
@@ -696,6 +518,7 @@ fn begin_attempt(
             started_at_ms: now_ms(),
             consent_ids: request.consent_ids.clone(),
             result: None,
+            confirmation: None,
         };
         match ats_attempts::begin(directory, attempt) {
             Ok(()) => {}
@@ -706,6 +529,10 @@ fn begin_attempt(
             run.attempt = Some(request.attempt_id);
         }
         Ok(None)
+    })
+    .or_else(|error| match error.as_str() {
+        "attempts_locked" => Ok(Some("attempt_unrecorded")),
+        _ => Err(error),
     })
 }
 
@@ -721,7 +548,7 @@ pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Rece
             .ok()
             .and_then(|run| run.as_ref().and_then(|run| run.attempt));
         if let Some(attempt) = attempt {
-            settle(app, attempt, outcome);
+            settle(app, attempt, outcome, None);
         }
     }
     Ok(Receipt {
@@ -738,214 +565,4 @@ pub fn show_form_window(app: &AppHandle, vacancy_id: &str) -> Result<bool, Strin
     };
     let _ = window.center();
     Ok(window.show().is_ok() && window.set_focus().is_ok())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn values(pairs: &[(&str, &str)]) -> Values {
-        pairs
-            .iter()
-            .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
-            .collect()
-    }
-
-    fn submit(confirmed: bool, pairs: &[(&str, &str)]) -> SubmitRequest {
-        SubmitRequest {
-            vacancy_id: "v1".into(),
-            confirmed,
-            values: values(pairs),
-            attempt_id: Uuid::new_v4(),
-            consent_ids: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn the_button_is_pressed_only_for_confirmed_values_read_twice_the_same() {
-        let filled = values(&[("id:email", "a@b.c"), ("id:resume", "cv.pdf:10")]);
-        let same = [("id:email", "a@b.c"), ("id:resume", "cv.pdf:10")];
-        assert_eq!(
-            submit_refusal(&submit(true, &same), Some(&filled), &filled, false),
-            None
-        );
-        let cases: [(SubmitRequest, Option<&Values>, Values, bool, &str); 5] = [
-            (
-                submit(false, &same),
-                Some(&filled),
-                filled.clone(),
-                false,
-                "not_confirmed",
-            ),
-            (
-                submit(true, &same),
-                Some(&filled),
-                filled.clone(),
-                true,
-                "already_submitted",
-            ),
-            (
-                submit(true, &same),
-                None,
-                filled.clone(),
-                false,
-                "form_not_filled",
-            ),
-            (
-                submit(true, &[("id:email", "x@b.c"), ("id:resume", "cv.pdf:10")]),
-                Some(&filled),
-                filled.clone(),
-                false,
-                "confirmed_values_differ",
-            ),
-            (
-                submit(true, &same),
-                Some(&filled),
-                values(&[("id:email", "a@b.c"), ("id:resume", "")]),
-                false,
-                "form_changed",
-            ),
-        ];
-        for (request, first, second, pressed, reason) in cases {
-            assert_eq!(
-                submit_refusal(&request, first, &second, pressed),
-                Some(reason)
-            );
-        }
-    }
-
-    #[test]
-    fn only_the_board_s_own_statement_counts_as_sent() {
-        let confirmed = json!({ "state": "confirmed" });
-        assert_eq!(outcome_of(&confirmed, true).0, "confirmed");
-        assert_eq!(outcome_of(&confirmed, false).0, "unconfirmed");
-        assert_eq!(
-            outcome_of(&json!({ "state": "invalid", "keys": ["id:email"] }), false),
-            ("rejected", vec!["id:email".to_string()])
-        );
-        assert_eq!(
-            outcome_of(&json!({ "state": "captcha" }), false).0,
-            "captcha"
-        );
-        for silent in [
-            json!({ "state": "pending" }),
-            Value::Null,
-            json!({ "state": "script_failed" }),
-        ] {
-            assert_eq!(outcome_of(&silent, true).0, "unconfirmed");
-        }
-    }
-
-    #[test]
-    fn a_reason_is_never_the_page_s_own_text() {
-        let press = |state: &str| press_refusal(Some(&json!({ "state": state })));
-        assert_eq!(press("clicked"), None);
-        for known in PRESS_REFUSALS {
-            assert_eq!(press(known), Some(*known));
-        }
-        assert_eq!(press("a@b.c <script>"), Some("press_unknown"));
-        assert_eq!(press_refusal(None), Some("press_unknown"));
-        assert_eq!(
-            listed(Some("x"), FILL_RESULTS, "fill_failed"),
-            "fill_failed"
-        );
-    }
-
-    #[test]
-    fn only_a_stated_refusal_frees_the_vacancy() {
-        for (outcome, result) in [
-            ("confirmed", AttemptResult::Sent),
-            ("rejected", AttemptResult::Failed),
-            ("not_submitted", AttemptResult::Failed),
-            ("captcha", AttemptResult::Unconfirmed),
-            ("unconfirmed", AttemptResult::Unconfirmed),
-        ] {
-            assert_eq!(attempt_result(outcome), result, "{outcome}");
-        }
-    }
-
-    #[test]
-    fn a_file_goes_only_into_a_file_field_the_page_had() {
-        let form = json!({ "fields": [
-            { "key": "id:resume", "kind": "file", "accept": ".pdf" },
-            { "key": "id:email", "kind": "text", "accept": null },
-        ] });
-        let fields = file_fields_of(&form);
-        assert_eq!(fields.len(), 1);
-        let with = |key: &str, name: &str, mime: &str| FillRequest {
-            vacancy_id: "v1".into(),
-            entries: vec![Entry {
-                key: key.into(),
-                value: String::new(),
-                file: Some(FileValue {
-                    name: name.into(),
-                    mime: mime.into(),
-                    base64: "AAAA".into(),
-                }),
-            }],
-        };
-        let check = |request: FillRequest| validate_fill(&request, &fields);
-        assert_eq!(
-            check(with("id:resume", "cv.pdf", "application/pdf")),
-            Ok(())
-        );
-        assert_eq!(
-            check(with("id:email", "cv.pdf", "application/pdf")).unwrap_err(),
-            "ats_file_field_unknown"
-        );
-        assert_eq!(
-            check(with("id:resume", "cv.txt", "text/plain")).unwrap_err(),
-            "ats_file_not_accepted"
-        );
-    }
-
-    #[test]
-    fn a_form_is_ready_only_on_its_board_fully_keyed_and_without_a_check() {
-        let target = resolve("https://boards.greenhouse.io/acme/jobs/1", None).unwrap();
-        let ready = json!({ "state": "ready", "host": "boards.greenhouse.io", "captcha": false, "unkeyed": 0 });
-        assert_eq!(form_report(&target, ready.clone(), true).state, "ready");
-        assert_eq!(
-            form_report(&target, ready.clone(), false).state,
-            "off_target"
-        );
-        let mut check = ready.clone();
-        check["captcha"] = json!(true);
-        assert_eq!(form_report(&target, check, true).state, "captcha");
-        let mut loose = ready;
-        loose["unkeyed"] = json!(1);
-        assert_eq!(form_report(&target, loose, true).state, "unreadable");
-        assert_eq!(form_report(&target, Value::Null, true).state, "unreadable");
-        let sign_in = json!({ "state": "account_required", "host": "boards.greenhouse.io" });
-        assert_eq!(
-            form_report(&target, sign_in, true).state,
-            "account_required"
-        );
-    }
-
-    #[test]
-    fn fill_input_is_bounded_and_the_store_is_not_the_shared_one() {
-        let entry = |key: &str, value: &str| Entry {
-            key: key.into(),
-            value: value.into(),
-            file: None,
-        };
-        let check = |request: FillRequest| validate_fill(&request, &FileFields::new());
-        let request = |entries: Vec<Entry>| FillRequest {
-            vacancy_id: "v1".into(),
-            entries,
-        };
-        assert!(check(request(vec![entry("id:a", "x")])).is_ok());
-        assert!(check(request(Vec::new())).is_err());
-        assert!(check(request(vec![entry("", "x")])).is_err());
-        assert!(check(request(vec![entry(
-            "id:a",
-            &"x".repeat(MAX_VALUE_CHARS + 1)
-        )]))
-        .is_err());
-        assert!(check(request(vec![entry("id:a", "x"); MAX_ENTRIES + 1])).is_err());
-        let account = [7u8; 16];
-        assert_ne!(store_identifier(account), account);
-        assert_eq!(decode(r#""{\"state\":\"ready\"}""#)["state"], "ready");
-        assert_eq!(decode("not json"), Value::Null);
-    }
 }

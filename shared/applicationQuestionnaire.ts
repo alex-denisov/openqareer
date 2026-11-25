@@ -57,3 +57,12 @@ export interface ApplicationQuestionnaire {
   /** Кандидат отметил, что отправил анкету на сайте работодателя. */
   readonly submittedAt: string | null;
 }
+
+/** B787: вопросы формы работодателя, прочитанные приложением. */
+export interface AtsFormInput {
+  readonly url: string;
+  readonly questions: readonly (QuestionnaireQuestion & {
+    /** Ответ из профиля: ставится, пока кандидат не ответил и не стёр его сам. */
+    readonly known?: string;
+  })[];
+}

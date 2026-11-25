@@ -132,6 +132,33 @@ describe('план заполнения формы работодателя', ()
     expect(no.consents).toEqual([]);
   });
 
+  it.each(['Я даю согласие', 'Даю согласие', 'Я согласна', 'I give my consent'])(
+    '«%s» в списке — согласие: поручение и журнал',
+    (label) => {
+      const options = [
+        { value: '1', label },
+        { value: '0', label: 'Я не даю согласие' },
+      ];
+      const list = field('id:l', 'Обработка персональных данных', { kind: 'select', options });
+      const given = plan([list], true, { 'id:l': '1' });
+      expect(given.consents.map((item) => item.key)).toEqual(['id:l']);
+      expect(plan([list], false, { 'id:l': '1' }).entries).toEqual([]);
+      expect(plan([list], true, { 'id:l': '0' }).consents).toEqual([]);
+    },
+  );
+
+  it('согласие среди нескольких галочек одного вопроса тоже требует поручения и журнала', () => {
+    const options = ['Москва', 'Даю согласие на обработку персональных данных'].map((label) => ({
+      value: label,
+      label,
+    }));
+    const group = field('name:g', 'Отметьте нужное', { kind: 'checkbox_group', options });
+    const both = { 'name:g': options.map((option) => option.value).join('\n') };
+    expect(plan([group], true, both).consents.map((item) => item.key)).toEqual(['name:g']);
+    expect(plan([group], false, both).entries).toEqual([]);
+    expect(plan([group], true, { 'name:g': 'Москва' }).consents).toEqual([]);
+  });
+
   it('рассылки и хранение на будущее не ставит никогда, даже по ответу; обязательные — вопрос', () => {
     const fields = [
       box('id:news', 'Send me job alerts and marketing emails', false),
@@ -145,6 +172,38 @@ describe('план заполнения формы работодателя', ()
     expect(result.questions.map((item) => [item.key, item.reason])).toEqual([
       ['id:keep2', 'optional_consent_required'],
     ]);
+  });
+
+  it.each([
+    'I want to receive communications',
+    'Send me updates about new roles',
+    'You may contact me about other jobs',
+    'Join our talent pool',
+    'Согласен получать рекламные материалы',
+    'Включить в кадровый резерв',
+  ])('«%s» не ставится', (label) => {
+    const result = plan([box('id:m', label, false), box('id:r', label)], true, { 'id:r': 'true' });
+    expect(result.entries).toEqual([]);
+    expect(result.questions.map((item) => item.reason)).toEqual(['optional_consent_required']);
+  });
+
+  it('составную галочку «обработка и рассылка» ставит только кандидат, с записью в журнал', () => {
+    const label = 'I agree to the Privacy Policy and to receive marketing communications';
+    for (const required of [true, false]) {
+      const mixed = box('id:m', label, required);
+      expect(plan([mixed]).entries).toEqual([]);
+      const given = plan([mixed], true, { 'id:m': 'true' });
+      expect(given.entries).toEqual([{ key: 'id:m', value: 'true' }]);
+      expect(given.consents.map((item) => item.key)).toEqual(['id:m']);
+      expect(plan([mixed], false, { 'id:m': 'true' }).entries).toEqual([]);
+      expect(plan([mixed], true, { 'id:m': 'false' }).entries).toEqual([]);
+    }
+  });
+
+  it('вопрос с полем для текста рассылкой не считается', () => {
+    const essay = field('id:e', 'Describe your marketing communications experience');
+    expect(plan([essay]).questions.map((item) => item.reason)).toEqual(['no_answer']);
+    expect(plan([essay], true, { 'id:e': 'Пять лет' }).entries).toHaveLength(1);
   });
 
   it('факты о кандидате берёт только из его ответа, иначе спрашивает', () => {

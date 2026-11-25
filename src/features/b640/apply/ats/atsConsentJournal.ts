@@ -1,27 +1,11 @@
+import type { ApplyConsentInput, ApplyConsentResult } from '../../../../../shared/applyConsent';
 import { apiFetch, throwApiError } from '../../../coach/apiClient';
 
-/**
- * B787: журнал согласий. Тело и итоги — контракт `shared/applyConsent.ts` (PR #1188);
- * после его слияния типы брать оттуда.
- */
-export interface AtsConsentInput {
-  readonly id: string;
-  readonly applicationId: string | null;
-  readonly host: string;
-  readonly employer: string;
-  readonly checkboxText: string;
-  readonly policyUrl: string | null;
-  readonly policySha256: string | null;
-  readonly checkboxLabel: string | null;
-  readonly command: string;
-}
-
-export type AtsConsentResult = 'sent' | 'failed' | 'unconfirmed';
-
+/** B787: журнал согласий по поручению кандидата. */
 export interface AtsConsentJournal {
   /** Записать согласие до нажатия; ошибка означает, что нажимать нельзя. */
-  readonly record: (entry: AtsConsentInput) => Promise<void>;
-  readonly result: (id: string, result: AtsConsentResult) => Promise<void>;
+  readonly record: (entry: ApplyConsentInput) => Promise<void>;
+  readonly result: (id: string, result: ApplyConsentResult) => Promise<void>;
 }
 
 const PATH = '/api/v1/candidate/apply-consents';
