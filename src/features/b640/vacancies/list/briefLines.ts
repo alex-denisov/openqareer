@@ -7,6 +7,9 @@ import {
 } from '../../../vacancies/vacancyRequirementChips';
 
 const SHOWN = 3;
+/** Абзац длиннее в раскрытой строке не читается: он целиком на карточке. */
+const MAX_LINE_CHARS = 400;
+const fits = (text: string): boolean => text.length <= MAX_LINE_CHARS;
 
 export interface BriefLine {
   readonly text: string;
@@ -32,12 +35,12 @@ function requirementLines(
       text: requirement.text.trim(),
       missing: requirementVerdict(fit, requirement.id).status === 'unmatched',
     }));
-  if (lines.length === 0) return brief.requirements.map((text) => ({ text, missing: false }));
+  if (lines.length === 0) return brief.requirements.filter(fits).map((text) => ({ text, missing: false }));
   return [...lines.filter((line) => line.missing), ...lines.filter((line) => !line.missing)];
 }
 
 export function briefView(brief: VacancyBrief, fit: VacancyFitView | undefined): BriefView {
-  const duties = brief.duties.slice(0, SHOWN);
+  const duties = brief.duties.filter(fits).slice(0, SHOWN);
   const requirements = requirementLines(brief, fit).slice(0, SHOWN);
   const named = duties.length > 0 || requirements.length > 0;
   return { duties, requirements, opening: named ? '' : brief.opening };

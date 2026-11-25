@@ -68,6 +68,15 @@ const DETAIL = {
   truncated: false,
   skills: [],
   responsibilities: [],
+  brief: {
+    duties: [
+      'Руководить развитием платёжной платформы и антифрода',
+      'Нанимать и растить руководителей групп',
+    ],
+    requirements: ['Go и PostgreSQL', 'Kubernetes', 'Найм руководителей', 'English C1'],
+    conditions: ['Гибрид, 2 дня в офисе в Москве', 'ДМС, оплата обучения'],
+    opening: 'Команда платежей, 40 человек.',
+  },
 };
 
 async function openCard(page: Page, remaining: number | null = 3): Promise<void> {
@@ -103,7 +112,7 @@ test.describe('B654: карточка вакансии нового кабине
     await openCard(page);
     await expect(page.locator('.r6-steps [aria-current="page"]')).toHaveText('Вакансия');
     await expect(page.locator('.v4-head .lead-title')).toBeVisible();
-    await expect(page.locator('.v4-req-row')).toContainText('Требования: 2 из 4 есть в профиле');
+    await expect(page.locator('.v4-req-row')).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Откликнуться' }).first()).toBeVisible();
   });
 
@@ -119,14 +128,19 @@ test.describe('B654: карточка вакансии нового кабине
     await expect(dialog).toBeHidden();
   });
 
-  test('«Текст вакансии» показывает текст и закрывается', async ({ page }) => {
+  test('B800: задачи, требования и условия под «Откликнуться»', async ({ page }) => {
     await openCard(page);
-    await page.getByRole('button', { name: 'Текст вакансии' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.locator('.v4-tx-h').first()).toHaveText('О вакансии');
-    await expect(dialog).toContainText('Команда платежей, 40 человек.');
-    await dialog.getByRole('button', { name: 'Закрыть' }).click();
-    await expect(dialog).toBeHidden();
+    const text = page.getByRole('region', { name: 'Вакансия', exact: true });
+    await expect(text.locator('h4')).toHaveText(['Задачи', 'Требования', 'Условия']);
+    await expect(text.locator('li').filter({ hasText: 'Найм руководителей' })).toContainText(
+      'Найм руководителей · частично',
+    );
+    await expect(text.locator('.miss')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Текст вакансии' })).toHaveCount(0);
+    const money = await page.locator('.v4-money').boundingBox();
+    const box = await text.boundingBox();
+    const phone = (page.viewportSize()?.width ?? 0) < 768;
+    if (phone) expect(box!.y).toBeLessThan(money!.y);
   });
 
   test('«Сохранить» отмечает вакансию', async ({ page }) => {
