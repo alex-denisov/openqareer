@@ -1,5 +1,5 @@
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
-import { vacancyFitPercent, vacancyFitTone } from '../../../../../shared/vacancyFitPercent';
+import { vacancyFitPercent, vacancyFitTier } from '../../../../../shared/vacancyFitPercent';
 import { Icon } from '../../kit';
 import { BarPart } from '../Bar';
 import type { FitBlockState } from './fitRows';
@@ -56,7 +56,7 @@ function NoPercent({ hidden }: { readonly hidden: boolean }) {
 
 function Counted({ view, sourceName }: { readonly view: VacancyFitView; readonly sourceName: string }) {
   const percent = vacancyFitPercent(view) ?? 0;
-  const tone = vacancyFitTone(percent);
+  const tone = `is-${vacancyFitTier(percent)}`;
   return (
     <div className="v4-fit">
       <span className="v4-fit-n num">

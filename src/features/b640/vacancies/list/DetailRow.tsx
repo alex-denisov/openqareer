@@ -1,4 +1,3 @@
-import { vacancyFitTone } from '../../../../../shared/vacancyFitPercent';
 import { pressApply } from '../../apply/applyIntent';
 import { useEffect, useId, useState } from 'react';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
@@ -90,7 +89,7 @@ function moneyNote(item: MatchedVacancyItem): string {
 function FitScale({ item }: { item: MatchedVacancyItem }) {
   const mark = vacancyFitMark(item.explanation.fitView);
   if (mark.kind !== 'number') return null;
-  const tone = vacancyFitTone(mark.percent);
+  const tone = `is-${mark.tier}`;
   return (
     <div className="vs-sc">
       <span className="vs-k">Совпадение</span>

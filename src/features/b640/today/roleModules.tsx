@@ -1,4 +1,4 @@
-import { vacancyFitTone } from '../../../../shared/vacancyFitPercent';
+import { vacancyFitTier } from '../../../../shared/vacancyFitPercent';
 import { getMatchedVacancies } from '../../coach/matchedVacancyApi';
 import { getRoleHypotheses } from '../../coach/coachApi';
 import { getRoleSkillDemand } from '../../skills/roleSkillDemandApi';
@@ -35,7 +35,7 @@ function VacancyRows({ rows }: { readonly rows: readonly VacancyRow[] }) {
           </div>
           <div className="row-meta num">{row.salary}</div>
           {row.fit === null ? null : (
-            <span className={`fit ${vacancyFitTone(row.fit)} num`}>
+            <span className={`fit is-${vacancyFitTier(row.fit)} num`}>
               {row.fit}
               <small>%</small>
               <span className="vh"> совпадение</span>
