@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeDraft } from '../../resume/resumeTypes';
-import { nextQuestion, teamAnswer } from './partTwoModel';
+import { nextQuestion, questionCount, teamAnswer } from './partTwoModel';
 
 const draft = (experience: unknown[]) =>
   ({ candidate: {}, experience, education: [], languages: [] }) as unknown as ResumeDraft;
@@ -27,6 +27,15 @@ describe('b640 profile: один вопрос о профиле', () => {
     );
     expect(nextQuestion(draft([{ id: 'e1', employer: 'x', teamSize: 3 }]))).toBeNull();
     expect(nextQuestion(draft([]))).toBeNull();
+  });
+
+  it('B801: «Не хочу указывать» — вопрос о месте больше не задаётся', () => {
+    const answered = draft([
+      { id: 'e1', employer: 'x', teamSizeDeclined: true },
+      { id: 'e2', employer: 'y' },
+    ]);
+    expect(nextQuestion(answered)?.entryId).toBe('e2');
+    expect(questionCount(answered)).toBe(1);
   });
 
   it('ответ — целое число от 1 до 100 000', () => {

@@ -13,7 +13,7 @@ const BRACKETED_REFS = new RegExp(String.raw`\s*[(\[]\s*${REF}(?:\s*[,;]\s*${REF
 const BARE_REF = new RegExp(String.raw`\s*${REF}`, 'gu');
 const FLAG = /\s*\(?`?(?:source|confirmed)=[a-z]+`?\)?/gu;
 
-const FIELD = String.raw`\x60?(?:knowledgeContext|stageContext|careerContext|resumeContext|confirmedFacts|openQuestions|starStories|otherStoryTitles|marketObservations|priorRoleContributions|consultantHistory|pastMessageMatches|memoryCandidates|evidenceRefs)(?:\.\w+)*\x60?`;
+const FIELD = String.raw`\x60?(?:knowledgeContext|stageContext|careerContext|resumeContext|confirmedFacts|openQuestions|starStories|otherStoryTitles|marketObservations|priorRoleContributions|consultantHistory|pastMessageMatches|correctionCards|memoryCandidates|evidenceRefs)(?:\.\w+)*\x60?`;
 const FIELD_AFTER_PREPOSITION = new RegExp(String.raw`(?<!\p{L})(в|во|из|по)\s+${FIELD}`, 'giu');
 const BARE_FIELD = new RegExp(FIELD, 'gu');
 

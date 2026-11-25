@@ -52,6 +52,13 @@ describe('целевая роль кампании (B794)', () => {
     expect(roleOf('Deputy CIO')).not.toBe('target');
   });
 
+  it('кампания «CIO» узнаёт ту же роль под другими названиями и отсекает чужую сферу', () => {
+    expect(roleOf('Директор по информационным технологиям (CIO)', ['CIO'])).toBe('target');
+    expect(roleOf('CIO', ['CIO'])).toBe('target');
+    expect(isForeignSectorTitle('Операционный директор (строительство)', ['CIO'])).toBe(true);
+    expect(isForeignSectorTitle('CIO (строительный холдинг)', ['CIO'])).toBe(false);
+  });
+
   it('роль вне кампании остаётся частичной', () => {
     expect(roleOf('IT Manager')).toBe('partial');
   });

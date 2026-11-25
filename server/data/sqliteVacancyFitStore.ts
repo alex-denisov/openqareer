@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
 import { OWN_VACANCY_ID_PREFIX } from '../../shared/b640OwnVacancy';
-import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
+import { evaluateVacancyFit, isVacancyFitEvidence, sourcedRequirements, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
 import { syncSection } from '../observability/syncSections';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
@@ -41,6 +41,26 @@ const LATE_CACHE_COLUMNS = [['answered_by', 'TEXT'], ['fallback_recount_at', 'TE
 
 const VERIFIED_FIELDS = ['gates', 'assessments', 'status', 'dataState', 'coveragePercent', 'coverage', 'conditionCoverage', 'requiredCoverage', 'reason'] as const;
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
+
+/**
+ * A quote moved with its text (a place added above shifts the ids) is cited where it stands now; a
+ * quote the profile no longer holds is left as it was, and the evaluation drops it.
+ */
+function recited(input: VacancyFitInput, stored: VacancyFitResult): VacancyFitResult['assessments'] {
+  const facts = input.facts.filter((fact) => fact.candidateId === input.candidateId && isVacancyFitEvidence(fact));
+  const byId = new Map(facts.map((fact) => [fact.id, fact]));
+  return stored.assessments.map((item) => ({
+    ...item,
+    evidence: item.evidence.map((entry) => {
+      if (!entry.quote.trim() || byId.get(entry.factId)?.statement.includes(entry.quote)) return entry;
+      const kind = factSection(entry.factId);
+      const moved = facts.find((fact) => factSection(fact.id) === kind && fact.statement.includes(entry.quote));
+      return moved ? { ...entry, factId: moved.id } : entry;
+    }),
+  }));
+}
+/** `profile:experience:0` → `profile:experience`: a quote never moves from a job to a bare skill tag. */
+const factSection = (id: string) => (id.startsWith('profile:') ? id.split(':').slice(0, 2).join(':') : 'memory');
 
 /** Candidate facts/results are encrypted; all tenant correlation indexes use keyed HMAC. */
 /** `backgroundRank` — position in the background sweep; absent for work a candidate is looking at. */
@@ -307,7 +327,9 @@ export class SqliteVacancyFitStore {
   /**
    * The last result for this vacancy under any profile (01.11): after a profile edit the row says
    * «пересчитывается» with it instead of «не посчитан». Its evidence is checked against the current
-   * profile when it still holds; otherwise the stored numbers are shown as they were computed.
+   * profile; the numbers are always those of the current rules (25.11: a
+   * rule that lowers a percent left the old, higher one on screen until the recount). Only a result
+   * that misses a requirement of the current text stays as stored, and the runtime hides it.
    */
   private getLatest(input: VacancyFitInput): VacancyFitResult | undefined {
     const key = this.latestKey(input.candidateId, input.vacancyId);
@@ -316,8 +338,9 @@ export class SqliteVacancyFitStore {
     try {
       const stored = JSON.parse(this.sealedText.open(row.result_cipher, key)) as VacancyFitResult;
       if (stored.candidateId !== input.candidateId || stored.vacancyId !== input.vacancyId || !Number.isFinite(Date.parse(stored.calculatedAt))) return undefined;
-      const rechecked = evaluateVacancyFit({ ...input, assessments: stored.assessments }, stored.calculatedAt);
-      return rechecked.status === 'assessed' && (rechecked.coveragePercent ?? 0) >= (stored.coveragePercent ?? 0) ? rechecked : stored;
+      const assessed = new Set(stored.assessments.map((item) => item.requirementId));
+      if (!sourcedRequirements(input).every((item) => assessed.has(item.id))) return stored;
+      return evaluateVacancyFit({ ...input, assessments: recited(input, stored) }, stored.calculatedAt);
     } catch { return undefined; }
   }
 

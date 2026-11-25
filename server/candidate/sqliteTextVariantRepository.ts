@@ -65,6 +65,7 @@ interface StaleRow {
   readonly kind: TextVariantKind;
   readonly subject_id: string;
   readonly text_cipher: string;
+  readonly payload_cipher: string | null;
 }
 
 export class SqliteTextVariantRepository {
@@ -140,21 +141,25 @@ export class SqliteTextVariantRepository {
 
   /** B796: варианты с исправленным фактом ждут пересборки: не показаны, пока правка не отменена. */
   markStale(candidateId: string, correctionId: string, isStale: (text: string) => boolean,
-    isSent: (subject: TextSubject) => boolean): number {
+    isSent: (subject: TextSubject, payload: unknown) => boolean): number {
     const rows = this.database
       .prepare(
-        `SELECT id, kind, subject_id, text_cipher FROM text_variants
+        `SELECT id, kind, subject_id, text_cipher, payload_cipher FROM text_variants
          WHERE candidate_id = ? AND kind IN (${TEXT_VARIANT_KINDS.map(() => '?').join(', ')}) ${FRESH}`,
       )
       .all(candidateId, ...TEXT_VARIANT_KINDS) as unknown as StaleRow[];
     const subjectOf = (row: StaleRow): TextSubject => ({ candidateId, kind: row.kind, subjectId: row.subject_id });
     const keyOf = (row: StaleRow) => `${row.kind}:${row.subject_id}`;
     // Номера вариантов идут подряд: помечается весь набор текста, а не строка из середины.
+    const opened = rows.flatMap((row) => {
+      const stored = this.openText(subjectOf(row), row);
+      return stored ? [{ row, ...stored }] : [];
+    });
+    const sent = new Set(
+      opened.filter(({ row, payload }) => isSent(subjectOf(row), payload)).map(({ row }) => keyOf(row)),
+    );
     const stale = new Set(
-      rows.filter((row) => {
-        const text = this.openText(subjectOf(row), row);
-        return text !== null && isStale(text) && !isSent(subjectOf(row));
-      }).map(keyOf),
+      opened.filter(({ row, text }) => isStale(text) && !sent.has(keyOf(row))).map(({ row }) => keyOf(row)),
     );
     const mark = this.database.prepare(
       'INSERT OR IGNORE INTO text_variant_stale (variant_id, correction_id) VALUES (?, ?)',
@@ -168,9 +173,13 @@ export class SqliteTextVariantRepository {
     this.database.prepare('DELETE FROM text_variant_stale WHERE correction_id = ?').run(correctionId);
   }
 
-  private openText(subject: TextSubject, row: StaleRow): string | null {
+  private openText(subject: TextSubject, row: StaleRow): { text: string; payload: unknown } | null {
     try {
-      return this.sealedText.open(row.text_cipher, this.scope(subject, row.id));
+      const scope = this.scope(subject, row.id);
+      const payload = row.payload_cipher
+        ? (JSON.parse(this.sealedText.open(row.payload_cipher, scope)) as unknown)
+        : null;
+      return { text: this.sealedText.open(row.text_cipher, scope), payload };
     } catch {
       return null;
     }
