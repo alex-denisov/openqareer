@@ -5,7 +5,8 @@ import type { ResumeDocument } from '../../../resume/resumeTypes';
 import { apiFetch, throwApiError } from '../../../coach/apiClient';
 import { exportResumeFile } from '../../../site/resumeBuilder/resumeBuilderApi';
 import { sheetFromDocument } from '../model/resumeSheet';
-import { splitName, type IdentityFacts } from './atsIdentity';
+import { splitName } from '../../../../../shared/candidateName';
+import type { IdentityFacts } from './atsIdentity';
 import type { AtsFile } from './atsFormTypes';
 
 type ApprovedResume = ApprovedVacancyLetterResult['resume'] | null;

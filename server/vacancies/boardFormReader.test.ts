@@ -115,6 +115,25 @@ describe('B787: вопросы Recruitee', () => {
 });
 
 describe('B787: вопросы Teamtailor', () => {
+  it('ползунок несёт границы, шаг и единицу', () => {
+    const name = 'candidate[answers_attributes][1]';
+    const slider = `${job('77')}<div data-question-mandatory="true">
+      <input type="hidden" value="4082600" name="${name}[question_id]">
+      <label for="pay">Salary?<sup>*</sup></label>
+      <input value="0" min="0" max="50000" step="500" data-unit="$" type="range" name="${name}[range]" id="pay"></div>`;
+    expect(parseTeamtailorQuestions(slider, '77')).toEqual([
+      {
+        id: 'teamtailor_4082600',
+        text: 'Salary?',
+        required: true,
+        kind: 'text',
+        singleLine: true,
+        numeric: true,
+        limits: { min: 0, max: 50000, step: 500, unit: '$' },
+      },
+    ]);
+  });
+
   it('читает вопросы страницы; видео и согласие — не вопросы', async () => {
     expect(await readBoardFormQuestions(teamtailor, answering(PAGE) as never)).toEqual([
       {
