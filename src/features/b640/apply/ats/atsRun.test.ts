@@ -206,6 +206,16 @@ describe('отклик формой работодателя', () => {
     expect((await run(form(name))).kind).toBe(kind);
   });
 
+  it.each(['submit_ambiguous', 'submit_disabled'] as const)(
+    'кнопка не нажата (%s): причина названа, отклик остаётся на «Отправке»',
+    async (reason) => {
+      desktop.submitAtsForm.mockResolvedValue(
+        receipt({ outcome: 'not_submitted', reason, pressedAtMs: null }),
+      );
+      expect(await run(form(name))).toEqual({ kind: 'failed', rejected: 'button' });
+    },
+  );
+
   it('ответ приложения потерян после нажатия — не подтверждено', async () => {
     desktop.submitAtsForm.mockRejectedValue(new Error('lost'));
     expect(await run(form(name))).toEqual({ kind: 'unconfirmed', host: HOST });

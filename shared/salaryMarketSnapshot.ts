@@ -1,4 +1,6 @@
 export const MIN_SALARY_MARKET_SAMPLE = 5;
+/** Меньше вилок — страна в ответ анкеты не попадает (B788). */
+export const MIN_COUNTRY_SALARY_SAMPLE = 20;
 export const MAX_SALARY_MARKET_GROUPS = 12;
 export const SALARY_MARKET_ROLE_LIMIT = 100;
 export const SALARY_MARKET_INDEX_LIMIT = SALARY_MARKET_ROLE_LIMIT;
@@ -70,6 +72,14 @@ export interface SalaryMarketSnapshot {
   readonly geography?: SalaryMarketGeographyEvidence;
   readonly locationSlices?: readonly SalaryMarketLocationSlice[];
   readonly cityMarket?: SalaryCityMarket;
+  readonly countrySlices?: readonly SalaryMarketCountrySlice[];
+}
+
+/** Вилки вакансий одной явно названной страны; `all` — все уровни вместе. */
+export interface SalaryMarketCountrySlice {
+  readonly country: string;
+  readonly grade: SalaryMarketGrade | 'all';
+  readonly groups: readonly SalaryMarketGroup[];
 }
 
 /** Explicit comparable salary evidence only. No currency conversion or inferred periods.

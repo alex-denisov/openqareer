@@ -1,6 +1,9 @@
+import { officialName, withOfficialNames } from './officialEmployerNames';
+
 /**
  * B640, 10.11 (решение CPO): в английском письме название работодателя не пишется кириллицей
- * («Россети Цифра» в письмах CoinsPaid и LIYAN). Латиница берётся из уточнений и фактов кандидата,
+ * («Россети Цифра» в письмах CoinsPaid и LIYAN). Официальное английское название, если известно,
+ * важнее всего (решение владельца, 25.11). Иначе латиница берётся из уточнений и фактов кандидата,
  * если там она есть («Rosseti Tsifra»), иначе — транслитерация.
  */
 const CYRILLIC = /\p{Script=Cyrillic}/u;
@@ -51,10 +54,16 @@ export function latinEmployerNames(
   return new Map(
     cyrillic
       .sort((left, right) => right.length - left.length)
-      .map((name) => [name, latinFromTexts(name, candidateTexts) ?? transliterate(name)] as const),
+      .map((name) => [
+        name,
+        officialName(name) ?? latinFromTexts(name, candidateTexts) ?? transliterate(name),
+      ] as const),
   );
 }
 
 export function withLatinEmployerNames(text: string, names: ReadonlyMap<string, string>): string {
-  return [...names].reduce((result, [name, latin]) => result.split(name).join(latin), text);
+  return [...names].reduce(
+    (result, [name, latin]) => result.split(name).join(latin),
+    withOfficialNames(text),
+  );
 }

@@ -2,6 +2,7 @@ import type { ResumeLang } from '../../shared/resumeVacancyEdits';
 import type { LetterFactTranslator } from './letterFactTranslation';
 import { latinEmployerNames, transliterate, withLatinEmployerNames } from './letterLatinEmployers';
 import { textLanguage } from './profileLanguage';
+import { withRussianProjectEmployers } from './resumeProjectEmployer';
 import type { ResumeDocument, ResumeExperience, ResumeProject } from './resumeStudioTypes';
 import {
   checkedTranslation,
@@ -247,7 +248,8 @@ export function translatedDocument(
     if (known) return known;
     return read(line) === 'translated' ? (translations[translationKey(lang, text)] ?? text) : text;
   };
-  return mapDocument(document, lang, translate, latinNamesOf(basis, facts));
+  const result = mapDocument(document, lang, translate, latinNamesOf(basis, facts));
+  return lang === 'ru' ? withRussianProjectEmployers(result, basis) : result;
 }
 
 export function isTranslated(

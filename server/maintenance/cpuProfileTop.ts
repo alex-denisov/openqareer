@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Session } from 'node:inspector/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -170,14 +171,14 @@ function bundleSource(): (url: string) => readonly string[] | undefined {
   };
 }
 
-async function profileOnce(durationMs: number): Promise<CpuProfile> {
+async function profileOnce(durationMs: number, signal: AbortSignal): Promise<CpuProfile> {
   const session = new Session();
   session.connect();
   try {
     await session.post('Profiler.enable');
     await session.post('Profiler.setSamplingInterval', { interval: 1_000 });
     await session.post('Profiler.start');
-    await new Promise((resolve) => setTimeout(resolve, durationMs).unref());
+    await delay(durationMs, undefined, { ref: false, signal });
     const { profile } = await session.post('Profiler.stop');
     return profile as CpuProfile;
   } finally {
@@ -194,18 +195,21 @@ export function startCpuProfileLog(
   if (env.OPENQAREER_CPU_PROFILE_OFF?.trim() === '1') return () => undefined;
   const durationMs = options.durationMs ?? 60_000;
   const source = bundleSource();
+  const stopping = new AbortController();
   const run = (): void => {
-    profileOnce(durationMs).then(
+    profileOnce(durationMs, stopping.signal).then(
       (profile) =>
         log.info(
           { ...summarizeCpuProfile(profile, { top: options.top ?? 25, source }) },
           'cpu-profile-top',
         ),
-      (error: unknown) =>
+      (error: unknown) => {
+        if (stopping.signal.aborted) return;
         log.warn(
           { errorName: error instanceof Error ? error.name : 'Error' },
           'cpu-profile-failed',
-        ),
+        );
+      },
     );
   };
   // B759: стоянки 20–30 с сразу после перезапуска — первая минута снимается отдельно.
@@ -221,6 +225,7 @@ export function startCpuProfileLog(
   );
   first.unref();
   return () => {
+    stopping.abort();
     clearTimeout(first);
     if (every) clearInterval(every);
   };
