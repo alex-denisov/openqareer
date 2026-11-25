@@ -108,14 +108,13 @@ const US_STATE_CODES: ReadonlySet<string> = new Set(
     'NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY'
   ).split(' '),
 );
-/** Код — ещё и страна (DE, IN, CA), штат Австралии (WA) или провинция Италии (MI): решает город. */
-const SHARED_STATE_CODES: ReadonlySet<string> = new Set([
-  ...ISO_CODES.filter((code) => US_STATE_CODES.has(code)),
-  'WA',
-  'MI',
-  'MO',
-  'SC',
-]);
+const PROVINCE_CODES: ReadonlySet<string> = new Set(
+  'ON BC AB MB SK NS NB QC PE NL NT YT NU'.split(' '),
+);
+/** Тот же код — регион другой страны (Западная Австралия, Милан, Санта-Катарина, Северная Голландия). */
+const FOREIGN_REGIONS: ReadonlyMap<string, string> = new Map(
+  Object.entries({ WA: 'AU', NT: 'AU', MI: 'IT', MO: 'IT', SC: 'BR', NH: 'NL', NB: 'NL' }),
+);
 /** Города США с именем страны: «Lebanon, NH», «Jordan, Minnesota». */
 const COUNTRY_NAMESAKES: ReadonlySet<string> = new Set(
   'lebanon peru jordan mexico cuba panama poland norway denmark china italy ireland brazil greece egypt turkey chile georgia'.split(
@@ -146,13 +145,33 @@ function cityRead(part: string, deps: CountryHintDeps): PlaceAnswer {
   return read(deps.resolvePlace(part), 'place') ?? read(cityCountry(part), 'city');
 }
 
+function regionOf(code: string): 'US' | 'CA' | undefined {
+  if (US_STATE_CODES.has(code)) return 'US';
+  return PROVINCE_CODES.has(code) ? 'CA' : undefined;
+}
+
+/**
+ * «Lebanon, NH», «London, ON». Код, который ещё и страна (DE, IN, NL), решает город: он должен быть в
+ * одной из двух стран, иначе спор («Warsaw, IN», «Dublin, CA»).
+ */
+function codeRead(code: string, city: string, deps: CountryHintDeps): PlaceAnswer {
+  const region = regionOf(code);
+  const isCountry = ISO_CODES.includes(code);
+  const found = cityRead(city, deps);
+  const foreign = FOREIGN_REGIONS.get(code);
+  if (found && found !== 'dispute' && found.country === foreign) return found;
+  if (!isCountry || COUNTRY_NAMESAKES.has(city.toLowerCase())) return read(region, 'place');
+  if (!found || found === 'dispute') return found;
+  return found.country === region || found.country === code ? found : 'dispute';
+}
+
 /** «Город, штат»: полное имя штата или его код. `undefined` — штата в месте нет. */
 function stateRead(
   parts: readonly string[],
   deps: CountryHintDeps,
 ): { readonly answer: PlaceAnswer } | undefined {
   const isState = (part: string, index: number) =>
-    US_STATES.has(part.toLowerCase()) || (index > 0 && US_STATE_CODES.has(part));
+    US_STATES.has(part.toLowerCase()) || (index > 0 && regionOf(part) !== undefined);
   const at = parts.findIndex(isState);
   const state = parts[at];
   if (state === undefined) return undefined;
@@ -164,15 +183,12 @@ function stateRead(
   const us: PlaceAnswer = { country: 'US', basis: 'place' };
   if (named.length > 0) {
     const country = single(named);
-    const isUs = country === 'US' || (country !== undefined && cityCountry(state) === country);
-    return { answer: isUs ? read(country, 'place') : 'dispute' };
+    // «Amsterdam, NH, Netherlands»: названная страна важнее кода, но не полного имени штата.
+    const agrees =
+      regionOf(state) !== undefined || country === 'US' || cityCountry(state) === country;
+    return { answer: (agrees ? read(country, 'place') : undefined) ?? 'dispute' };
   }
-  if (SHARED_STATE_CODES.has(state)) {
-    const [city = ''] = before;
-    return {
-      answer: COUNTRY_NAMESAKES.has(city.toLowerCase()) ? us : cityRead(city, deps),
-    };
-  }
+  if (regionOf(state)) return { answer: codeRead(state, before[0] ?? '', deps) };
   const others = STATE_CITIES.has(state.toLowerCase()) ? [...before, ...after] : after;
   return { answer: agreed([us, ...others.map((part) => cityRead(part, deps))]) };
 }
@@ -196,6 +212,10 @@ function clauseRead(clause: string, deps: CountryHintDeps): PlaceAnswer {
   if (parts.some((part) => part.toLowerCase() === 'georgia')) return georgiaRead(parts, deps);
   const named = parts.map(countryName).filter((code) => code !== undefined);
   if (named.length > 0) return read(single(named), 'place') ?? 'dispute';
+  const places = agreed(
+    parts.filter((part) => part.length > 2).map((part) => cityRead(part, deps)),
+  );
+  if (places === 'dispute') return places;
   return (
     read(deps.resolvePlace(parts.join(', ')) ?? deps.resolvePlace(first), 'place') ??
     read(cityCountry(first) ?? single(parts.map(cityCountryInText)), 'city')

@@ -26,6 +26,9 @@ describe('vacancyCountryHint', () => {
     ['Peru, IN, United States', 'US'],
     ['Jordan, Minnesota', 'US'],
     ['London, Ohio', 'US'],
+    ['Moscow, WA', 'US'],
+    ['London, ON', 'CA'],
+    ['Amsterdam, NH, Netherlands', 'NL'],
     ['New York, NY', 'US'],
     ['Austin, TX; Seattle, Washington', 'US'],
   ])('reads the place of %s', (location, country) => {
@@ -37,6 +40,9 @@ describe('vacancyCountryHint', () => {
     ['Atlanta, Georgia', 'US'],
     ['Tbilisi, Georgia', 'GE'],
     ['Perth, WA', 'AU'],
+    ['Milano, MI', 'IT'],
+    ['Rotterdam, NL', 'NL'],
+    ['Bengaluru, IN', 'IN'],
     ['Palo Alto, CA', 'US'],
     ['Toronto; Vancouver', 'CA'],
   ])('a dictionary city is a separate basis: %s', (location, country) => {
@@ -62,6 +68,11 @@ describe('vacancyCountryHint', () => {
       'London, New York',
       'New York; Berlin; Toronto',
       'Canada, Texas',
+      'Warsaw, IN',
+      'Moscow, ID',
+      'Dublin, CA',
+      'Berlin, London',
+      'Москва, Минск',
     ]) {
       expect(hint(location, [], 'DE')).toBeUndefined();
     }
