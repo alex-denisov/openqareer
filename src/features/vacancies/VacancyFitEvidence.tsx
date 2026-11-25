@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { publishVacancyFitRead } from './vacancyFitViewUpdates';
 import type { VacancyFitView, VacancyFitResult } from '../../../shared/vacancyFit';
 import { VacancyFitSummary, fitHasNumber } from './VacancyFitSummary';
-import { isWorkTerm } from '../../../shared/vacancyWorkTerm';
+import { isCountedLine, isWorkTerm } from '../../../shared/vacancyWorkTerm';
 import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 const IMPORTANCE = {
   critical: 'Обязательное',
@@ -84,6 +84,13 @@ function FitEvidenceRow({
     </tr>
   );
 }
+/** A line met by experience or by place reads as met, as «N из M» counts it. */
+function shownAssessment(result: VacancyFitResult | undefined, id: string) {
+  const own = result?.assessments.find((item) => item.requirementId === id);
+  const met =
+    result?.implied?.some((item) => item.requirementId === id) || result?.placeCovered?.includes(id);
+  return met && own ? { ...own, status: 'matched' as const } : own;
+}
 function FitEvidenceTable({
   view,
   onAddToProfile,
@@ -94,6 +101,16 @@ function FitEvidenceTable({
   const duties = new Set(view.result?.duties ?? []);
   const asked = view.requirements.filter((item) => !duties.has(item.id) && !isWorkTerm(item));
   if (!asked.length) return null;
+  const counted = asked.filter(isCountedLine);
+  const conditions = asked.filter((item) => !isCountedLine(item));
+  const row = (requirement: VacancyFitView['requirements'][number]) => (
+    <FitEvidenceRow
+      key={requirement.id}
+      requirement={requirement}
+      assessment={shownAssessment(view.result, requirement.id)}
+      onAddToProfile={onAddToProfile}
+    />
+  );
   return (
     <table className="vacancy-fit-table">
       <caption>Требования и подтверждения</caption>
@@ -104,18 +121,17 @@ function FitEvidenceTable({
           <th scope="col">Факты профиля</th>
         </tr>
       </thead>
-      <tbody>
-        {asked.map((requirement) => (
-          <FitEvidenceRow
-            key={requirement.id}
-            requirement={requirement}
-            assessment={view.result?.assessments.find(
-              (item) => item.requirementId === requirement.id,
-            )}
-            onAddToProfile={onAddToProfile}
-          />
-        ))}
-      </tbody>
+      {counted.length ? <tbody>{counted.map(row)}</tbody> : null}
+      {conditions.length ? (
+        <tbody>
+          <tr>
+            <th scope="rowgroup" colSpan={3}>
+              Условия
+            </th>
+          </tr>
+          {conditions.map(row)}
+        </tbody>
+      ) : null}
     </table>
   );
 }

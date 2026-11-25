@@ -12,6 +12,8 @@ describe('B794: employer terms are no requirements', () => {
     'Полная занятость',
     'Место работы: м. Бутырская',
     'Permanent, Full-Time',
+    'Contract, 6 months',
+    'Contract position',
     'ДМС через 1 год работы в компании',
     'Прямое подчинение Генеральному директору',
   ])('hides «%s»', (text) => expect(other(text)).toBe(true));
@@ -19,6 +21,11 @@ describe('B794: employer terms are no requirements', () => {
   it.each([
     'Высшее (специалитет/магистратура) по направлению деятельности',
     'Готовность к командировкам',
+    'Contract negotiation skills',
+    'Contract management',
+    'В подчинении 15 человек',
+    'В подчинении от 10 сотрудников',
+    'Работа с подрядчиками',
     'Сертификат 1С:Специалист/1С:Эксперт.',
     'An active U.S. security clearance, or eligibility to obtain one',
     'релокация в Краснодар - обязательна',

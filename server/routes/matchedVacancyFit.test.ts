@@ -377,6 +377,7 @@ describe('списки карточки берутся из разбора, ко
         { id: 'r2', text: 'Work Location: Remote', kind: 'workFormat', skill: false },
         { id: 'r3', text: 'Комфортный офис', kind: 'other', skill: false },
         { id: 'r4', text: 'Вести отчётность', kind: 'experience' },
+        { id: 'r5', text: 'Высшее образование', kind: 'education' },
       ],
       result: { ...view.result, duties: ['r4'] },
     } as unknown as typeof view;
