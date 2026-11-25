@@ -52,11 +52,7 @@ export function clearProgress(db: DatabaseSync): void {
 }
 
 /** Основатель переписан: кластер разбит. */
-export function finishSplit(
-  context: StepContext,
-  plan: PlannedSplit,
-  redirectStepId: string,
-): void {
+function finishSplit(context: StepContext, plan: PlannedSplit, redirectStepId: string): void {
   const outcome = writeFounder(context.writers, plan, redirectStepId);
   if (outcome) {
     context.result.catalogMoved += 1;
@@ -91,8 +87,8 @@ function writeParts(
   return null;
 }
 
-/** Первая часть: журнал и первые куски. `partial` — продолжение в следующих шагах. */
-export function startLargeSplit(context: StepContext, plan: PlannedSplit): 'done' | 'partial' {
+/** Кластер целиком или его первая часть: журнал и первые куски. `partial` — продолжение в следующих шагах. */
+export function startSplit(context: StepContext, plan: PlannedSplit): 'done' | 'partial' {
   const pieceIds = plan.pieces.slice(1).map((piece) => piece.id);
   if (pieceIdTaken(context.db, pieceIds)) {
     context.result.skippedIdTaken += 1;
