@@ -103,6 +103,18 @@ describe('computeMarketSalaryEstimates', () => {
     });
   });
 
+  it('a foreign amount without a stated month or year is never a sample (B803)', async () => {
+    const berlin = (index: number, from: number, period?: string): Row => ({
+      ...moscow(index, 0, 0),
+      location: 'Berlin, DE',
+      salary: { from, to: from, currency: 'EUR', period },
+    });
+    const estimates = await computeMarketSalaryEstimates(
+      poolDatabase([berlin(1, 5_000), berlin(2, 90_000), berlin(3, 700, 'week')]),
+    );
+    expect(estimates.has('it-eng-mgmt|4|country|de')).toBe(false);
+  });
+
   it('gives the queue back between slices and counts every row once', async () => {
     const rows = [1, 2, 3, 4, 5].map((index) => moscow(index, 100_000, 200_000));
     const multiFunction = { ...moscow(1, 100_000, 200_000), functionCode: 'it-product' };
