@@ -21,6 +21,7 @@ import {
 } from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
+import { HH_STUB_TEXT_CHARS } from './hhStubText';
 import {
   DETAIL_TEXT_PRIORITY_TABLE,
   peekDetailTextPriority,
@@ -2041,7 +2042,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const rows = this.database
       .prepare(
         `SELECT q.vacancy_id AS id,
-                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_TEXT} THEN 1 ELSE 0 END AS need
+                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_PRIORITY_TEXT} THEN 1 ELSE 0 END AS need
            FROM hh_text_priority q
            LEFT JOIN vacancy_pool p ON p.id = q.vacancy_id
           ORDER BY q.rank ASC, q.requested_ms DESC
@@ -3463,6 +3464,10 @@ const HH_TEXT_TARGET_REFRESH_MS = 60 * 60 * 1_000;
 /** Живая hh-запись, которой нужен текст: не снята, текста нет, работодатель его не скрыл. */
 const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
       length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0 AND
+      coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
+/** B794: строка подборки с обрывком текста читается ещё раз; общий обход обрывков не трогает. */
+const HH_NEEDS_PRIORITY_TEXT = `p.expired_at IS NULL AND
+      length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) < ${HH_STUB_TEXT_CHARS} AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 const HH_TEXT_PHASES = ['catalog', 'pool'] as const;
 
