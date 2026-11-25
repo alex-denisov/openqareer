@@ -7,6 +7,7 @@ const detail = vi.hoisted(() => ({ state: {} as unknown }));
 const fit = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock('../../../vacancies/vacancyDetailApi', () => ({ useVacancyDetail: () => detail.state }));
 vi.mock('../../../vacancies/vacancyFitApi', () => ({ readVacancyFit: fit.read }));
+const { bindSectionCacheOwner, clearSectionCache } = await import('../../../shell/sectionCache');
 const { BriefBlock } = await import('./BriefBlock');
 
 let host: HTMLDivElement;
@@ -17,7 +18,10 @@ beforeEach(() => {
   root = createRoot(host);
   fit.read.mockRejectedValue(new Error('no fit'));
 });
-afterEach(() => act(() => root.unmount()));
+afterEach(() => {
+  act(() => root.unmount());
+  clearSectionCache();
+});
 
 const show = (state: unknown) => {
   detail.state = state;
@@ -47,5 +51,18 @@ describe('BriefBlock (B791)', () => {
     expect(host.textContent).toBe('ЗадачиВести командуТребованияGo');
     await show(ready({ brief: { duties: [], requirements: [], opening: 'О команде.' } }));
     expect(host.textContent).toBe('О команде.');
+  });
+
+  it('повторное раскрытие берёт прочитанное; дубли строк не теряются', async () => {
+    bindSectionCacheOwner('me');
+    fit.read.mockReset();
+    fit.read.mockResolvedValue({ state: 'no_requirements', requirements: [] });
+    await show(ready({ brief: { duties: ['a', 'a'], requirements: [], opening: 'О.' } }));
+    expect(host.querySelectorAll('li')).toHaveLength(2);
+    act(() => root.unmount());
+    root = createRoot(host);
+    await show({ status: 'loading' });
+    expect(host.querySelectorAll('li')).toHaveLength(2);
+    expect(fit.read).toHaveBeenCalledTimes(1);
   });
 });
