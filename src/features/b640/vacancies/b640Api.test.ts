@@ -45,11 +45,14 @@ describe('подборка с серверной сортировкой', () => 
     expect(query.has('dir')).toBe(false);
   });
 
-  it('B726: «Дата» — дни и пояс кандидата; без даты их нет', () => {
+  it('B726: «Дата» — дни и пояс кандидата; пояс — и столбцу «Дата»', () => {
     const dated = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0, 30));
     expect(dated.get('days')).toBe('30');
     expect(dated.get('tz')).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    const plain = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0));
+    const sorted = new URLSearchParams(matchedPageQuery({ key: 'date', dir: 'desc' }, ['COO'], 0));
+    expect(sorted.has('days')).toBe(false);
+    expect(sorted.get('tz')).toBe(dated.get('tz'));
+    const plain = new URLSearchParams(matchedPageQuery({ key: 'fit', dir: 'desc' }, ['COO'], 0));
     expect(plain.has('days')).toBe(false);
     expect(plain.has('tz')).toBe(false);
   });
