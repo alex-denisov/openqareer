@@ -11,8 +11,11 @@ import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi
 import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { BarPart } from '../Bar';
-import { moneyView } from '../format';
 import { BriefBlock } from './BriefBlock';
+import { AppliedLink } from '../card/AppliedLink';
+import { companyFacts } from '../card/CompanyBlock';
+import { detailMoneyText, expectationCaption, expectationMark } from './detailMoney';
+import { useDetailCompany, useExpectation } from './useDetailFacts';
 import { CompanyName, type RowEnv } from './VacancyRow';
 
 function SourceTip({ label, text }: { label: string; text: string }) {
@@ -56,6 +59,9 @@ interface Fork {
   readonly start: number;
   readonly size: number;
   readonly caption: string;
+  /** Конец оси полосы и её валюта. */
+  readonly top: number;
+  readonly currency: string;
 }
 
 function marketRange(item: MatchedVacancyItem) {
@@ -78,6 +84,8 @@ export function forkOf(item: MatchedVacancyItem, rates: RowEnv['rates']): Fork |
   return {
     start,
     size: Math.max(((to - from) / top) * 100, 2),
+    top,
+    currency: market.currency,
     caption: formatCompensationCompact({ from, to, currency: market.currency }),
   };
 }
@@ -108,24 +116,28 @@ function FitScale({ item }: { item: MatchedVacancyItem }) {
 }
 
 function MoneyScale({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
-  const money = moneyView(item, { currency: env.currency, rates: env.rates });
+  const expectation = useExpectation();
+  const compare = expectationCaption(item, env.rates, expectation);
   const fork = forkOf(item, env.rates);
+  const me = fork ? expectationMark(fork, env.rates, expectation) : undefined;
   return (
     <div className="vs-sc">
       <span className="vs-k">Деньги</span>
-      <span className="vs-v num">{money.text === 'не указана' ? 'не указаны' : money.text}</span>
+      <span className="vs-v num">{detailMoneyText(item, { currency: env.currency, rates: env.rates })}</span>
       {fork ? (
         <span className="vs-bar is-money" role="img" aria-label={`Вилка ${fork.caption}`}>
           <BarPart className="vs-fork" start={fork.start} size={fork.size} />
+          {me === undefined ? null : <BarPart className="vs-me" start={me} />}
         </span>
       ) : null}
+      {compare ? <span className="vs-k vs-cmp">{compare}</span> : null}
       <SourceTip label="Откуда это число" text={moneyNote(item)} />
     </div>
   );
 }
 
 /** v06b2: на 390 «Откликнуться» — в полосе страницы над навигацией, в строке остаётся «Открыть». */
-function RowActions({ vacancyId }: { vacancyId: string }) {
+function RowActions({ vacancyId, responseId }: { vacancyId: string; responseId?: string | undefined }) {
   const mobile = useIsMobile();
   const [page, setPage] = useState<Element | null>(null);
   const findPage = useCallback((node: HTMLElement | null) => setPage(node?.closest('.page') ?? null), []);
@@ -135,10 +147,11 @@ function RowActions({ vacancyId }: { vacancyId: string }) {
       Откликнуться
     </Link>
   );
+  const primary = responseId ? <AppliedLink responseId={responseId} className="btn is-primary" /> : apply;
   const docked = mobile && page !== null;
   return (
     <div className="actions vd-actions vs-acts" ref={findPage}>
-      {docked ? createPortal(<ActionDock kind="auto" primary={apply} />, page) : apply}
+      {docked ? createPortal(<ActionDock kind="auto" primary={primary} />, page) : primary}
       <Link className="row-act vs-open" to={buildNodePath('v04', { vacancyId })} aria-label="Открыть полностью">
         <Icon name="out" />
         <span className="vs-open-t">Открыть полностью</span>
@@ -150,14 +163,18 @@ function RowActions({ vacancyId }: { vacancyId: string }) {
 export interface DetailRowProps {
   readonly item: MatchedVacancyItem;
   readonly env: RowEnv;
+  /** Отклик уже отправлен. */
+  readonly responseId?: string | undefined;
 }
 
 /** Сводка раскрытой строки (v06b): шкалы, компания, знакомый, «Откликнуться». */
-export function DetailRow({ item, env }: DetailRowProps) {
+export function DetailRow({ item, env, responseId }: DetailRowProps) {
   const { cluster } = item;
   const friend = useFriend(cluster.id);
   const company = cluster.canonicalCompany ?? '';
-  const industry = cluster.companyFeatures?.industry;
+  const card = useDetailCompany(company)?.company;
+  const { sourceTip } = companyFacts({ item, sources: card?.sources });
+  const industry = card?.industry || cluster.companyFeatures?.industry;
   return (
     <tr className="vt-detail-row">
       <td colSpan={8}>
@@ -173,6 +190,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
               <CompanyName name={company} />
               {industry ? <> · <span className="vs-co-t">{industry}</span></> : null}
             </span>
+            {sourceTip ? <SourceTip label="Откуда эти сведения" text={sourceTip} /> : null}
           </p>
           {friend ? (
             <p className="vs-fr">
@@ -180,7 +198,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
               Знакомый: {friend}
             </p>
           ) : null}
-          <RowActions vacancyId={cluster.id} />
+          <RowActions vacancyId={cluster.id} responseId={responseId} />
         </section>
       </td>
     </tr>

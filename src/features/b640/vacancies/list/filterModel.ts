@@ -250,15 +250,24 @@ export interface Blocker {
   readonly label: string;
 }
 
-function activeKinds(filters: ListFilters, currency: MoneyCurrency): readonly Blocker[] {
-  const quoted = (name: string, values: readonly string[]) => `${name} «${values.join(', ')}»`;
+/** Одно значение — словами, несколько — числом, как у секций фильтров («Роли · 11»). */
+function blockerLabel(one: string, many: string, values: readonly string[]): string {
+  return values.length === 1 ? `${one} «${values[0]}»` : `${many} · ${values.length}`;
+}
+
+function activeKinds(
+  filters: ListFilters,
+  currency: MoneyCurrency,
+  titlesRu: RoleTitlesRu = {},
+): readonly Blocker[] {
+  const roles = filters.roles.map((id) => roleLabel(id, titlesRu));
   return [
-    ...(filters.roles.length ? [{ kind: 'roles' as const, label: quoted('Роль', filters.roles) }] : []),
+    ...(filters.roles.length ? [{ kind: 'roles' as const, label: blockerLabel('Роль', 'Роли', roles) }] : []),
     ...(filters.locations.length
-      ? [{ kind: 'locations' as const, label: quoted('Локация', filters.locations) }]
+      ? [{ kind: 'locations' as const, label: blockerLabel('Локация', 'Локации', filters.locations) }]
       : []),
     ...(filters.formats.length
-      ? [{ kind: 'formats' as const, label: quoted('Формат', filters.formats.map(formatLabel)) }]
+      ? [{ kind: 'formats' as const, label: `Формат «${filters.formats.map(formatLabel).join(', ')}»` }]
       : []),
     ...(filters.reloc ? [{ kind: 'reloc' as const, label: 'Релокация' }] : []),
     ...(filters.moneyFrom !== null
@@ -272,12 +281,21 @@ function activeKinds(filters: ListFilters, currency: MoneyCurrency): readonly Bl
 export function blockersOf(
   items: readonly MatchedVacancyItem[],
   filters: ListFilters,
-  context: { readonly currency: MoneyCurrency; readonly rates?: CurrencyRates; readonly now: Date },
+  context: {
+    readonly currency: MoneyCurrency;
+    readonly rates?: CurrencyRates;
+    readonly now: Date;
+    readonly titlesRu?: RoleTitlesRu;
+    /** Строки уже срезаны сервером по деньгам и дате: что вернёт их снятие, клиент не видит. */
+    readonly serverCut?: boolean;
+  },
 ): readonly Blocker[] {
-  const active = activeKinds(filters, context.currency);
+  const active = activeKinds(filters, context.currency, context.titlesRu);
+  const unseen = (kind: Blocker['kind']) =>
+    kind === 'roles' || (context.serverCut === true && (kind === 'money' || kind === 'dates'));
   const freeing = active.filter(
     (entry) =>
-      entry.kind === 'roles' ||
+      unseen(entry.kind) ||
       applyFilters(items, withoutKind(filters, entry.kind), context).length > 0,
   );
   return freeing.length > 0 ? freeing : active;

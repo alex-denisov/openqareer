@@ -10,36 +10,46 @@ export interface DiaryContext {
   readonly origin: string | null;
   /** Основное место работы; `null` — его нет или обзор не прочитался. */
   readonly workplace: CareerDiaryWorkplace | null;
-  /** Цели и обзор прочитаны (успешно или нет): можно решать, что показать справа. */
-  readonly loaded: boolean;
+  /** Обзор прочитан: место работы известно (или его точно нет). */
+  readonly workplaceKnown: boolean;
+  /** Цели прочитаны. */
+  readonly goalsKnown: boolean;
 }
 
-const EMPTY: DiaryContext = { goals: [], origin: null, workplace: null, loaded: false };
+const EMPTY: DiaryContext = {
+  goals: [],
+  origin: null,
+  workplace: null,
+  workplaceKnown: false,
+  goalsKnown: false,
+};
 
 /**
  * Цели и начало дневника для подписей ленты. Сбой чтения не мешает записям:
- * лента показывается без названий целей и без номеров недель.
+ * лента показывается без названий целей и без номеров недель. Новое значение `attempt`
+ * перечитывает непрочитанное вместе с лентой.
  */
-export function useDiaryContext(): DiaryContext {
+export function useDiaryContext(attempt = 0): DiaryContext {
   const [context, setContext] = useState<DiaryContext>(EMPTY);
   useEffect(() => {
     let active = true;
     void Promise.allSettled([listGoalCards(), getOverview()]).then(([cards, overview]) => {
       if (!active) return;
-      setContext({
-        goals: cards.status === 'fulfilled' ? cards.value.items : [],
-        origin:
-          overview.status === 'fulfilled'
-            ? (overview.value.platformStartedAt?.slice(0, 10) ?? null)
-            : null,
-        workplace:
-          overview.status === 'fulfilled' ? (overview.value.primaryWorkplace ?? null) : null,
-        loaded: true,
-      });
+      setContext((current) => ({
+        ...current,
+        ...(cards.status === 'fulfilled' ? { goals: cards.value.items, goalsKnown: true } : {}),
+        ...(overview.status === 'fulfilled'
+          ? {
+              origin: overview.value.platformStartedAt?.slice(0, 10) ?? null,
+              workplace: overview.value.primaryWorkplace ?? null,
+              workplaceKnown: true,
+            }
+          : {}),
+      }));
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [attempt]);
   return context;
 }

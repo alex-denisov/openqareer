@@ -7,6 +7,7 @@ import type {
   CareerDiaryAdaptationTask,
   CareerDiaryProgress,
 } from '../../../../shared/careerDiaryCards';
+import type { CareerDiaryDay30Check } from '../../../../shared/careerDiaryCheckpoints';
 import type { CareerDiaryPeopleMap } from '../../../../shared/careerDiaryPeople';
 
 const MONTHS = [
@@ -86,6 +87,17 @@ export const STEP_TAG: Readonly<Record<CareerDiaryProgress, readonly [string, st
   ahead: ['miss', 'впереди'],
 };
 
+/** Метка шага; сигнал проверки на 30-й день виден и в списке шагов. */
+export function stepTag(
+  step: CareerDiaryAdaptationStepView,
+  check: CareerDiaryDay30Check | null,
+): readonly [string, string] {
+  if (step.id === 'day_30_check' && step.status !== 'ahead' && check?.signal) {
+    return ['part', 'есть сигнал'];
+  }
+  return STEP_TAG[step.status];
+}
+
 export function stageTitle(stage: CareerDiaryAdaptationStageView): string {
   return stage.title ? `${STAGE_DAY[stage.stage]}: ${stage.title}` : STAGE_DAY[stage.stage];
 }
@@ -114,7 +126,12 @@ export function stepSub(
   step: CareerDiaryAdaptationStepView,
   details: Pick<CareerDiaryAdaptationDetails, 'firstMeeting' | 'relocated'>,
   people: CareerDiaryPeopleMap | null,
+  check: CareerDiaryDay30Check | null = null,
 ): string {
+  if (step.id === 'day_30_check' && check) {
+    const signal = step.status !== 'ahead' && check.signal ? ' · 1 сигнал' : '';
+    return `${dayLabel(check.dueOn)}${signal}`;
+  }
   if (step.id === 'people_map') {
     if (!people || people.total === 0) return 'с кем и как часто встречаться';
     return `${peopleCount(people.total)} · ${people.withoutMeeting} без встречи`;

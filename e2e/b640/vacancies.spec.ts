@@ -410,6 +410,48 @@ test.describe('B654: раздел «Вакансии», подборка и со
     await expect(sheet).toHaveCount(0);
   });
 
+  test('B801 v08: в листе один список без своей прокрутки и вход в условия поиска', async ({
+    page,
+  }, testInfo) => {
+    test.skip(!isMobile(testInfo.project.name), 'только телефон');
+    await openCabinet(page, '/app/vacancies');
+    await page.getByRole('button', { name: /^Фильтры · / }).click();
+    const sheet = page.getByRole('dialog', { name: 'Фильтры' });
+    await expect(
+      sheet.getByRole('link', { name: 'Зарплата от — в условиях поиска' }),
+    ).toHaveAttribute('href', /conditions/);
+    const scrolling = await sheet.locator('.vt-sheet-body *').evaluateAll(
+      (nodes) =>
+        nodes.filter((node) => {
+          const { overflowY, display } = getComputedStyle(node);
+          return display !== 'contents' && /auto|scroll/.test(overflowY) && node.clientHeight > 0;
+        }).length,
+    );
+    expect(scrolling).toBe(0);
+  });
+
+  test('B801 v06p: пустой отбор — «0 вакансий», «Снять» по-русски и без выхода за край', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'отбор ставится поповером');
+    await openCabinet(page, '/app/vacancies');
+    await page.getByRole('button', { name: /^Дата/ }).click();
+    await page.getByRole('radio', { name: /^Сегодня/ }).check();
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    await page.getByRole('button', { name: /^Деньги/ }).click();
+    await page.getByLabel('Зарплата от', { exact: true }).fill('9000');
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    const empty = page.locator('.vl-empty');
+    await expect(empty).toBeVisible();
+    await expect(page.locator('#list-title')).toContainText('0 вакансий');
+    await expect(empty.getByRole('button', { name: /Снять: Деньги от 9000/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Помочь выбрать' })).toBeVisible();
+    const over = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(over).toBeLessThanOrEqual(0);
+  });
+
   test('скрыть с причиной: строка уходит, «Отменить» возвращает', async ({ page }, testInfo) => {
     await openCabinet(page, '/app/vacancies');
     const first = await page.locator(`${ROWS} .vt-toggle`).first().getAttribute('title');

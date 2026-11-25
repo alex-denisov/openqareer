@@ -5,6 +5,7 @@ import { companyLookupKey } from '../../../vacancies/vacancyScreenCollections';
 import { Icon, InfoTip } from '../../kit';
 import { DetailRow } from './DetailRow';
 import { SORT_COLUMNS, type SortKey, type SortState } from './sortModel';
+import { appliedOn } from '../vacancyLinks';
 import { RowBoundary } from './RowBoundary';
 import { VacancyRow, type RowEnv, type RowPick } from './VacancyRow';
 import type { MenuView, RowMenuActions } from './RowMenu';
@@ -65,12 +66,13 @@ function rowsOf(item: MatchedVacancyItem, props: VacancyTableProps): ReactNode[]
   const id = item.cluster.id;
   const title = item.cluster.canonicalTitle;
   const open = openId === id;
+  const application = props.byCluster.get(id);
   const row = (
     <RowBoundary key={id} title={title}>
       <VacancyRow
         item={item}
         env={env}
-        application={props.byCluster.get(id)}
+        application={application}
         wanted={props.wantedKeys.has(companyLookupKey(item.cluster.canonicalCompany ?? ''))}
         open={open}
         menuView={menu?.id === id ? menu.view : null}
@@ -87,7 +89,11 @@ function rowsOf(item: MatchedVacancyItem, props: VacancyTableProps): ReactNode[]
   return [
     row,
     <RowBoundary key={`${id}-detail`} title={title}>
-      <DetailRow item={item} env={env} />
+      <DetailRow
+        item={item}
+        env={env}
+        responseId={appliedOn(application) ? application?.id : undefined}
+      />
     </RowBoundary>,
   ];
 }
