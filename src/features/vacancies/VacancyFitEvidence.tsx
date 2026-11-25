@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { publishVacancyFitRead } from './vacancyFitViewUpdates';
 import type { VacancyFitView, VacancyFitResult } from '../../../shared/vacancyFit';
 import { VacancyFitSummary, fitHasNumber } from './VacancyFitSummary';
+import { isWorkTerm } from '../../../shared/vacancyWorkTerm';
 import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 const IMPORTANCE = {
   critical: 'Обязательное',
@@ -90,7 +91,9 @@ function FitEvidenceTable({
   readonly view: VacancyFitView;
   readonly onAddToProfile?: (requirement: string) => void;
 }) {
-  if (!view.requirements.length) return null;
+  const duties = new Set(view.result?.duties ?? []);
+  const asked = view.requirements.filter((item) => !duties.has(item.id) && !isWorkTerm(item));
+  if (!asked.length) return null;
   return (
     <table className="vacancy-fit-table">
       <caption>Требования и подтверждения</caption>
@@ -102,7 +105,7 @@ function FitEvidenceTable({
         </tr>
       </thead>
       <tbody>
-        {view.requirements.map((requirement) => (
+        {asked.map((requirement) => (
           <FitEvidenceRow
             key={requirement.id}
             requirement={requirement}

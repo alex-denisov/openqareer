@@ -1,4 +1,5 @@
 import { leanFitView } from '../vacancies/leanMatchedPage';
+import { isWorkTerm } from '../../shared/vacancyWorkTerm';
 import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
@@ -622,7 +623,10 @@ function explanationWithFitPoints(explanation: Explanation, fitView: VacancyFitV
  * только сводка; раскрытая карточка читает полный разбор сама.
  */
 export function compactFitView(view: VacancyFitView): VacancyFitView {
-  const text = new Map(view.requirements.map((item) => [item.id, item.text]));
+  // B794: employer terms and duties of the job are not candidate requirements, so not points either.
+  const duties = new Set(view.result?.duties ?? []);
+  const asked = view.requirements.filter((item) => !duties.has(item.id) && !isWorkTerm(item));
+  const text = new Map(asked.map((item) => [item.id, item.text]));
   const implied = new Set((view.result?.implied ?? []).map((item) => item.requirementId));
   const points = (view.result?.assessments ?? [])
     .filter((item) => text.has(item.requirementId))
