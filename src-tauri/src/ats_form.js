@@ -91,6 +91,15 @@
   var MAX_OPTIONS = 300;
   var CAPTCHA_FRAMES =
     'iframe[src*="recaptcha"][src*="bframe"], iframe[src*="hcaptcha.com"][src*="challenge"], iframe[src*="challenges.cloudflare.com"], iframe[src*="captcha-delivery.com"], iframe[src*="/captcha/v1/"][src*="frame=challenge"]';
+  // A field that takes only a suggestion of its own list and clears anything else.
+  var SUGGESTED = 'input.location-input';
+  var SUGGESTION = '.dropdown-location';
+  var SUGGESTED_TRIES = 40;
+  var GENERATED_ID = /^Fabric\w*-\d+$/;
+  var HELD_WAIT_MS = 300;
+  var HELD_LIMIT_MS = 20000;
+  var DATE_MASK = /^(mm|dd|yyyy|\d{2})([./-])(mm|dd|yyyy|\d{2})\2(yyyy|dd|\d{2,4})$/i;
+  var HELD_LEVELS = 8;
   var MENU_WAIT_MS = 120;
   var MENU_TRIES = 15;
 
@@ -240,6 +249,7 @@
   function kindOf(node) {
     if (node.tagName === 'SELECT') return 'select';
     if (node.tagName === 'TEXTAREA') return 'textarea';
+    if (node.matches(SUGGESTED)) return 'combobox';
     if (node.getAttribute('role') === 'combobox' || node.tagName === 'BUTTON') return 'combobox';
     var type = (node.getAttribute('type') || 'text').toLowerCase();
     return [
@@ -265,6 +275,7 @@
     if ((kind === 'radio' || kind === 'checkbox_group') && name) return 'name:' + name;
     // Generated ids change on every load of the page.
     if (name && (profile().byName || /radix|^:|:$/.test(node.id))) return 'name:' + name;
+    if (!name && GENERATED_ID.test(node.id)) return 'label:' + ownLabel(node).slice(0, 120);
     if (node.id) return 'id:' + node.id;
     return name ? 'name:' + name : '';
   }
@@ -481,7 +492,8 @@
       .filter(function (button) {
         return shown(button) && /^apply for this job$/i.test(text(button));
       });
-    if (openers.length !== 1) return;
+    // The page repeats the same button at its top and bottom.
+    if (openers.length === 0) return;
     window.__oqAtsOpened = true;
     openers[0].click();
   }
@@ -499,6 +511,7 @@
     var buttons = submitButtons(form);
     base.state = form.querySelector('input[type="password"]') ? 'account_required' : 'ready';
     base.fields = result.fields;
+    base.loaded = document.readyState === 'complete';
     base.unkeyed = result.unkeyed;
     base.submitButtons = buttons.length;
     base.submitLabel = buttons.length === 1 ? caption(buttons[0]) : '';
@@ -537,6 +550,7 @@
           var block = blockOf(candidate);
           return Boolean(block) && block.getAttribute('data-field-path') === name;
         }
+        if (key.indexOf('label:') === 0) return keyOf(candidate, kindOf(candidate)) === key;
         return nameOf(candidate) === name;
       })[0] || null
     );
@@ -577,13 +591,30 @@
       var node = nodeFor(form, field.key);
       if (node) values[field.key] = valueOf(form, node);
     });
+    Object.keys(heldFiles()).forEach(function (key) {
+      if (!values[key] && isHeld(key)) values[key] = heldFiles()[key].value;
+    });
     return { state: 'ready', values: values };
   }
 
   function fire(node, type) {
     node.dispatchEvent(new Event(type, { bubbles: true }));
   }
-  function setText(node, value) {
+  // A date written the way the field itself spells it.
+  function dateFor(node, value) {
+    var date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    var mask = [node.value, node.placeholder].filter(function (hint) {
+      return hint && /[mdy]/i.test(hint) && DATE_MASK.test(hint);
+    })[0];
+    if (!date || !mask) return value;
+    return mask
+      .toLowerCase()
+      .replace('yyyy', date[1])
+      .replace('mm', date[2])
+      .replace('dd', date[3]);
+  }
+  function setText(node, text) {
+    var value = dateFor(node, text);
     var proto =
       node.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(node, value);
@@ -624,6 +655,9 @@
     });
   }
   function menuOptions(node) {
+    if (node.matches(SUGGESTED)) {
+      return Array.prototype.slice.call(node.parentNode.querySelectorAll(SUGGESTION)).filter(shown);
+    }
     var menuId = node.getAttribute('aria-controls') || node.getAttribute('aria-owns');
     var scope =
       (menuId && byId(node, menuId)) ||
@@ -639,25 +673,48 @@
     });
     node.click();
   }
-  function openMenu(node) {
+  // A page in an unfocused window moves its focus without telling its own scripts.
+  function focusOn(node) {
+    var told = false;
+    var heard = function () {
+      told = true;
+    };
+    node.addEventListener('focus', heard);
     if (node.focus) node.focus();
+    node.removeEventListener('focus', heard);
+    if (told || document.hasFocus()) return;
+    node.dispatchEvent(new FocusEvent('focus'));
+    node.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  }
+  function openMenu(node) {
+    focusOn(node);
     var control = node.closest('[class*="select__control"]');
-    if (control) control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-    else press(node);
+    if (!control) return press(node);
+    // Some boards open the list on the press, others on its release.
+    ['mousedown', 'mouseup'].forEach(function (type) {
+      control.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+    });
   }
   function typeInto(node, value) {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(node, value);
     fire(node, 'input');
+    if (node.matches(SUGGESTED)) {
+      node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true }));
+    }
   }
   function closeMenu(node) {
     node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     fire(node, 'blur');
     if (node.blur) node.blur();
+    if (!document.hasFocus()) {
+      node.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    }
   }
   async function menuFor(node, query) {
     if (query && node.tagName === 'INPUT') typeInto(node, query);
     var before = -1;
-    for (var attempt = 0; attempt < MENU_TRIES; attempt += 1) {
+    var tries = query && node.matches(SUGGESTED) ? SUGGESTED_TRIES : MENU_TRIES;
+    for (var attempt = 0; attempt < tries; attempt += 1) {
       await wait(MENU_WAIT_MS);
       var found = menuOptions(node);
       if (found.length > 0 && found.length === before) return found;
@@ -768,6 +825,68 @@
     setText(node, entry.value);
     return 'set';
   }
+  // Files the board took away from their fields: it shows the name in the field's place.
+  function heldFiles() {
+    window.__oqAtsHeld = window.__oqAtsHeld || {};
+    return window.__oqAtsHeld;
+  }
+  function placesOf(node) {
+    var places = [];
+    for (var at = node; at && places.length < HELD_LEVELS;) {
+      at = at.parentNode || at.host;
+      if (!at || at === document.body || at.tagName === 'FORM') break;
+      if (at.nodeType === 1) places.push(at);
+    }
+    return places;
+  }
+  function shows(place, name) {
+    if (place.textContent.indexOf(name) >= 0) return true;
+    if (!profile().deep) return false;
+    return [place].concat(Array.prototype.slice.call(findAll(place, '*'))).some(function (node) {
+      return node.shadowRoot && node.shadowRoot.textContent.indexOf(name) >= 0;
+    });
+  }
+  function isHeld(key) {
+    var held = heldFiles()[key];
+    return Boolean(
+      held &&
+      held.places.some(function (place) {
+        return (
+          place.isConnected &&
+          shows(place, held.name) &&
+          !place.querySelector('[role="progressbar"], [aria-busy="true"]')
+        );
+      }),
+    );
+  }
+  async function settledFile(form, entry, places, result) {
+    if (profile().uploaded || ['set', 'file_not_attached'].indexOf(result) < 0) return result;
+    var value = entry.file.name + ':' + atob(entry.file.base64).length;
+    if (places.length > 0) {
+      heldFiles()[entry.key] = { name: entry.file.name, value: value, places: places };
+    }
+    var kept = 0;
+    var deadline = Date.now() + HELD_LIMIT_MS;
+    while (Date.now() < deadline) {
+      var node = nodeFor(form, entry.key);
+      kept = node && kindOf(node) === 'file' && valueOf(form, node) === value ? kept + 1 : 0;
+      if (kept > 5 || (kept === 0 && isHeld(entry.key))) return 'set';
+      await wait(HELD_WAIT_MS);
+    }
+    delete heldFiles()[entry.key];
+    return 'file_not_attached';
+  }
+  async function setEntry(form, entry) {
+    var node = entry.file ? nodeFor(form, entry.key) : null;
+    var held = entry.file && !node && isHeld(entry.key) && heldFiles()[entry.key];
+    if (held) {
+      var same = held.value === entry.file.name + ':' + atob(entry.file.base64).length;
+      return same ? 'set' : 'file_not_attached';
+    }
+    var places = node ? placesOf(node) : [];
+    var result = await setOne(form, entry);
+    return node && kindOf(node) === 'file' ? settledFile(form, entry, places, result) : result;
+  }
   function fill() {
     var form = findForm();
     if (!form) return { state: 'form_missing' };
@@ -777,7 +896,7 @@
       for (var i = 0; i < ARG.entries.length; i += 1) {
         var entry = ARG.entries[i];
         try {
-          job.results[entry.key] = await setOne(form, entry);
+          job.results[entry.key] = await setEntry(form, entry);
         } catch (_) {
           job.results[entry.key] = 'fill_failed';
         }

@@ -21,6 +21,7 @@ use crate::connector_session::{
     is_transient_eval_error,
 };
 use serde_json::{json, Value};
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -32,8 +33,10 @@ use uuid::Uuid;
 
 pub const FORM_WINDOW_LABEL: &str = "connector-ats";
 const WINDOW_SIZE: (f64, f64) = (920.0, 720.0);
-const READ_WAIT: Duration = Duration::from_secs(25);
-const FILL_WAIT: Duration = Duration::from_secs(40);
+const READ_WAIT: Duration = Duration::from_secs(45);
+/// Reads in a row that find the same fields on a loaded page: boards draw late.
+const STEADY_READS: usize = 3;
+const FILL_WAIT: Duration = Duration::from_secs(90);
 const OUTCOME_WAIT: Duration = Duration::from_secs(45);
 const POLL: Duration = Duration::from_millis(500);
 const STORE_REMOVE_TRIES: u32 = 10;
@@ -304,9 +307,29 @@ pub async fn read_form(app: &AppHandle, vacancy_id: &str) -> Result<FormReport, 
     read_page(app, &target).await
 }
 
+/// Says when the page has stopped drawing its form.
+#[derive(Default)]
+struct Steady {
+    fields: Cell<usize>,
+    reads: Cell<usize>,
+}
+
+impl Steady {
+    fn settled(&self, form: &Value) -> bool {
+        let fields = form["fields"].as_array().map_or(0, Vec::len);
+        let same = fields > 0 && fields == self.fields.get() && form["loaded"] == true;
+        self.reads.set(if same { self.reads.get() + 1 } else { 0 });
+        self.fields.set(fields);
+        form["state"] == "ready"
+            && (form["submitButtons"] == 1 || form["step"] == "next")
+            && self.reads.get() >= STEADY_READS
+    }
+}
+
 async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, String> {
-    let form = poll(app, "read", &place_of(&target), READ_WAIT, |value| {
-        value["state"] == "ready" && (value["submitButtons"] == 1 || value["step"] == "next")
+    let steady = Steady::default();
+    let form = poll(app, "read", &place_of(&target), READ_WAIT, move |value| {
+        steady.settled(value)
     })
     .await?;
     if let Some(run) = app
@@ -570,4 +593,31 @@ pub fn show_form_window(app: &AppHandle, vacancy_id: &str) -> Result<bool, Strin
     };
     let _ = window.center();
     Ok(window.show().is_ok() && window.set_focus().is_ok())
+}
+
+#[cfg(test)]
+mod steady_tests {
+    use super::*;
+
+    #[test]
+    fn the_form_is_taken_only_once_a_loaded_page_stops_adding_fields() {
+        let form = |fields: usize, loaded: bool| {
+            json!({ "state": "ready", "submitButtons": 1, "step": "submit", "loaded": loaded,
+                    "fields": vec![json!({}); fields] })
+        };
+        let steady = Steady::default();
+        for value in [
+            form(7, false),
+            form(7, false),
+            form(7, true),
+            form(18, true),
+        ] {
+            assert!(!steady.settled(&value));
+        }
+        assert!(!steady.settled(&form(18, true)));
+        assert!(!steady.settled(&form(18, true)));
+        assert!(steady.settled(&form(18, true)));
+        let empty = Steady::default();
+        assert!((0..9).all(|_| !empty.settled(&form(0, true))));
+    }
 }
