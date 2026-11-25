@@ -68,6 +68,38 @@ function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyR
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
 }
 
+async function openedClusterGone(
+  deps: CardDeps,
+  request: FastifyRequest,
+  cluster: VacancyCluster,
+): Promise<boolean> {
+  try {
+    return (await deps.multiSourceEngine.openedVacancyGone?.(cluster)) ?? false;
+  } catch (error: unknown) {
+    // Сбой сверки карточку не закрывает: следующее открытие спросит снова.
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    request.log.warn({ errorName }, 'opened-vacancy-check-failed');
+    return false;
+  }
+}
+
+/** B797: открытая карточка сверяется с площадкой своим запросом, пока кандидат её уже читает. */
+async function postVacancyLiveness(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  const id = (request.params as { id?: string }).id ?? '';
+  const cluster = id && id.length <= ID_MAX ? cardCluster(deps, candidate.id, id) : undefined;
+  if (!cluster && !(id && deps.multiSourceEngine.isKnownVacancyGone?.(id))) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+  const closed = cluster
+    ? await openedClusterGone(deps, request, { ...cluster, id })
+    : (deps.multiSourceEngine.detachedRowGone?.(id) ?? true);
+  return { data: { closed }, meta: { requestId: request.id } };
+}
+
 /** B787: кандидат открыл отклик — адрес трекера раскрывается одним переходом и запоминается. */
 async function postApplyTarget(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
@@ -95,5 +127,6 @@ export function registerB640VacancyCardRoutes(app: FastifyInstance, deps: RouteD
   app.addHook('onClose', async () => hh.close());
   const bound: CardDeps = { ...deps, hh };
   app.post(`${BASE}/:id/apply-target`, withDeps(bound, postApplyTarget));
+  app.post(`${BASE}/:id/liveness`, withDeps(bound, postVacancyLiveness));
   app.get(`${BASE}/:id`, withDeps(bound, getVacancyCard));
 }
