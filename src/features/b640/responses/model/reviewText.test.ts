@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RejectionReview } from '../../../../../shared/rejectionReview';
-import { guessLine, rejectionsTitle, recommendationText, reviewTitle } from './reviewText';
+import { guessLine, rejectionsTitle, recommendationText, resumePathOf, reviewTitle } from './reviewText';
 
 const BASE: RejectionReview = {
   state: 'ready',
@@ -21,6 +21,21 @@ describe('B679: тексты разбора отказов', () => {
     expect(guessLine({ requirement: 'Брокерские системы', quote: 'q', profileFact: null })).toBe(
       'Вероятно, не хватило: Брокерские системы — так в вакансии; подтверждения в профиле не нашли',
     );
+  });
+
+  it('правка резюме открывается над «Резюме» последнего отказа с тем же требованием', () => {
+    const item = (applicationId: string, requirement: string, rejectedAt: string) => ({
+      applicationId,
+      title: 'Роль',
+      company: null,
+      rejectedAt,
+      guess: { requirement, quote: 'q', profileFact: null },
+      candidateReason: null,
+    });
+    const step = { kind: 'show_in_resume' as const, requirement: 'Команда', profileFact: 'к', count: 2, total: 3 };
+    const items = [item('old', 'Команда', '2026-11-01'), item('new', 'Команда', '2026-11-09'), item('x', 'SQL', '2026-11-20')];
+    expect(resumePathOf(step, items)).toBe('/app/responses/new/letter?step=resume');
+    expect(resumePathOf({ ...step, requirement: 'Нет' }, items)).toBeNull();
   });
 
   it('рекомендация ведёт туда, где это правится', () => {

@@ -86,6 +86,8 @@ interface PlatformRowProps {
 interface HhMenuItems {
   readonly onRefresh: () => void;
   readonly onChange?: () => void;
+  /** B704: вход истёк — вход заново вместо «Отключить» в строке. */
+  readonly onConnect?: () => void;
 }
 
 interface ConfirmProps {
@@ -192,6 +194,7 @@ function ActionsMenu({ open, updated, hh, onDisconnect }: MenuProps) {
 /** Пункт меню сначала закрывает меню, потом действует. */
 function closingFirst(hh: HhMenuItems, close: () => void): HhMenuItems {
   return {
+    ...hh,
     onRefresh: () => {
       close();
       hh.onRefresh();
@@ -205,6 +208,27 @@ function closingFirst(hh: HhMenuItems, close: () => void): HhMenuItems {
   };
 }
 
+interface RowButtonProps {
+  readonly name: string;
+  readonly onConnect?: () => void;
+  readonly onDisconnect: () => void;
+}
+
+/** Кнопка строки: «Отключить», а при истёкшем входе — «Подключить» (отключение остаётся в меню). */
+function RowButton({ name, onConnect, onDisconnect }: RowButtonProps) {
+  const label = onConnect ? 'Подключить' : 'Отключить';
+  return (
+    <button
+      className={onConnect ? 'btn is-sm' : 'btn is-sm cn-off'}
+      type="button"
+      aria-label={`${label} ${name}`}
+      onClick={onConnect ?? onDisconnect}
+    >
+      {label}
+    </button>
+  );
+}
+
 /** Действия подключённой площадки: «Отключить», меню с временем обновления, подтверждение. */
 function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & { readonly hh: HhMenuItems | null }) {
   const name = PLATFORM_NAME[connection.platform];
@@ -216,14 +240,7 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
   return (
     <div className="set-r cn-end" ref={ref}>
       {opened === 'confirm' ? null : (
-        <button
-          className="btn is-sm cn-off"
-          type="button"
-          aria-label={`Отключить ${name}`}
-          onClick={() => setOpened('confirm')}
-        >
-          Отключить
-        </button>
+        <RowButton name={name} onConnect={hh?.onConnect} onDisconnect={() => setOpened('confirm')} />
       )}
       <div className="lk-menu cn-menu">
         <button
@@ -259,7 +276,8 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
 function PlatformRow({ connection, onDisconnected, expired, onRefreshed }: PlatformRowProps) {
   const hhActions = useHhRowActions(onRefreshed ?? (() => undefined), connection.platform);
   const change = connection.platform === 'hh' ? hhActions.change : undefined;
-  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: change } : null;
+  const onConnect = expired ? hhActions.connect : undefined;
+  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: change, onConnect } : null;
   return (
     <li className="set-row cn-row">
       <div className="set-l">

@@ -11,6 +11,8 @@ const session = vi.hoisted(() => ({
 vi.mock('../../../connections/connectorSession', () => session);
 const bridge = vi.hoisted(() => ({ invokeDesktopCommand: vi.fn() }));
 vi.mock('../../../../services/desktop/desktopBridge', () => bridge);
+const alive = vi.hoisted(() => ({ reportHhAlive: vi.fn(async () => undefined) }));
+vi.mock('./hhAlive', () => alive);
 
 const { applyHhResumeEditInSession, readHhResumeContent, readHhResumes, runHhApplyInSession } = await import('./hhDesktop');
 const { HH_WINDOW_READY_MS } = await import('./hhWindow');
@@ -38,6 +40,15 @@ describe('B704/B708: список резюме hh.ru в приложении', (
   it('окна нет, вход жив — окно открывается в фоне и список читается', async () => {
     await expect(readHhResumes()).resolves.toMatchObject({ kind: 'ready', resumes: [{ id: 'abc1' }] });
     expect(session.openConnectorSession).toHaveBeenCalledOnce();
+    expect(alive.reportHhAlive).toHaveBeenCalledOnce();
+  });
+
+  it('B704: страница не определилась (403, сбой) — сбой окна, а не «нужен вход»', async () => {
+    session.inspectSessionPage.mockResolvedValue({ ...home, signedInApplicant: false });
+    const reading = expect(readHhResumeContent({ id: 'abc1', title: 'COO', url: list.url })).rejects.toThrow('hh_window_not_loaded');
+    await vi.advanceTimersByTimeAsync(HH_WINDOW_READY_MS + 1000);
+    await reading;
+    expect(alive.reportHhAlive).not.toHaveBeenCalled();
   });
 
   it('страница, которая ещё дорисовывается, входа не просит — и в открытом окне', async () => {

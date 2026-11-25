@@ -24,9 +24,10 @@ import {
   type HhResumeItem,
 } from '../../../connections/hhSessionPoll';
 import { invokeDesktopCommand } from '../../../../services/desktop/desktopBridge';
+import { reportHhAlive } from './hhAlive';
 import { hideHhWindow } from './hhPersonWindow';
 import { ensureHhWindow, ensureSettledHhWindow } from './hhWindow';
-export { openHhSignIn, showHhCaptcha, showHhResponse } from './hhPersonWindow';
+export { openHhSignIn, showHhCaptcha, showHhResponse, signInToHh } from './hhPersonWindow';
 import type { ParsedResume } from '../../../workspace/resumeParserTypes';
 
 /**
@@ -64,6 +65,7 @@ export async function readHhResumes(): Promise<HhSessionRead> {
     const page = await inspectSessionPage('hh').catch(() => null);
     throw new Error(page?.captcha ? HH_CAPTCHA : 'hh_resumes_not_read');
   }
+  await reportHhAlive();
   if (result.status === 'authenticated_empty') return { kind: 'empty' };
   const usable = result.resumes.filter((item) => HH_RESUME_ID.test(item.id) && item.title.trim());
   return usable.length > 0 ? { kind: 'ready', resumes: usable.slice(0, HH_RESUMES_MAX) } : { kind: 'empty' };

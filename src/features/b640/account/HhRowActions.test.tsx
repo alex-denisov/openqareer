@@ -9,6 +9,8 @@ import { ConnectionsScreen } from './ConnectionsScreen';
 
 const api = vi.hoisted(() => ({
   getConnections: vi.fn(),
+  getHhSessionState: vi.fn(),
+  signInToHh: vi.fn(),
   inApp: vi.fn(() => true),
   readHhResumeList: vi.fn(),
   chooseHhResume: vi.fn(),
@@ -24,7 +26,8 @@ vi.mock('../../coach/coachApi', async (original) => ({
 vi.mock('../../account/notificationPreferencesApi', () => ({
   getNotificationChannelStatus: async () => ({ telegram: { available: false } }),
 }));
-vi.mock('./hhSessionApi', () => ({ getHhSessionState: async () => ({ expired: false }) }));
+vi.mock('./hhSessionApi', () => ({ getHhSessionState: api.getHhSessionState }));
+vi.mock('../apply/hh/hhDesktop', () => ({ signInToHh: api.signInToHh }));
 vi.mock('../../../services/desktop/desktopBridge', async (original) => ({
   ...(await original<typeof import('../../../services/desktop/desktopBridge')>()),
   isTauriEnvironment: api.inApp,
@@ -105,6 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.inApp.mockReturnValue(true);
   api.getConnections.mockResolvedValue([hh]);
+  api.getHhSessionState.mockResolvedValue({ expired: false });
   api.readHhResumeList.mockResolvedValue({ kind: 'ready', resumes, selectedId: 'r2' });
   api.refreshHhProfile.mockResolvedValue(undefined);
   api.chooseHhResume.mockResolvedValue(undefined);
@@ -123,6 +127,43 @@ describe('n03, строка hh.ru: «Обновить сейчас» и «Сме
     expect(menuItem(root, 'Обновить сейчас')).toBeUndefined();
     expect(menuItem(root, 'Сменить резюме')).toBeUndefined();
     expect(menuItem(root, 'Отключить')).toBeDefined();
+  });
+
+  it('B704: вход истёк — «Подключить» на месте; после входа данные обновлены, пометки нет', async () => {
+    api.getHhSessionState.mockResolvedValue({ expired: true });
+    let signedIn: (ok: boolean) => void = () => undefined;
+    api.signInToHh.mockReturnValue(new Promise<boolean>((resolve) => { signedIn = resolve; }));
+    const root = await open();
+    const connect = root.querySelector('[aria-label="Подключить hh.ru"]');
+    expect(connect?.textContent).toBe('Подключить');
+    expect(root.querySelector('.cn-off')).toBeNull();
+    expect(menuItem(root, 'Отключить')).toBeDefined();
+    click(connect);
+    await settle();
+    expect(api.readHhResumeList).not.toHaveBeenCalled();
+    api.getHhSessionState.mockResolvedValue({ expired: false });
+    signedIn(true);
+    await settle();
+    expect(result(root)).toContain('Профиль обновлён из hh.ru');
+    expect(root.querySelector('.set-v.is-warn')).toBeNull();
+  });
+
+  it('B704: вход снят, даже если сам профиль не обновился', async () => {
+    api.getHhSessionState.mockResolvedValueOnce({ expired: true });
+    api.refreshHhProfile.mockRejectedValue(new Error('сеть'));
+    const root = await open();
+    click(menuItem(root, 'Обновить сейчас') ?? null);
+    await settle();
+    expect(root.querySelector('.set-v.is-warn')).toBeNull();
+    expect(root.textContent).toContain('Профиль из hh.ru не обновился');
+  });
+
+  it('B704: в вебе вход истёк — войти можно только в приложении, кнопки входа нет', async () => {
+    api.inApp.mockReturnValue(false);
+    api.getHhSessionState.mockResolvedValue({ expired: true });
+    const root = await open();
+    expect(root.querySelector('[aria-label="Подключить hh.ru"]')).toBeNull();
+    expect(root.querySelector('.cn-off')).not.toBeNull();
   });
 
   it('капча hh.ru — «Открыть окно hh.ru», а не общий сбой', async () => {
