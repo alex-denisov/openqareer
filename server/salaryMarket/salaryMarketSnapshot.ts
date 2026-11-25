@@ -30,6 +30,7 @@ import {
   salaryRangeDistribution,
   type MutableExclusions,
 } from './salaryMarketRanges';
+import { prepareSalaryCountries, type CountryCounter } from './salaryMarketCountries';
 import { prepareSalaryCityScratch, salaryCityOf, type CityCounter } from './salaryMarketCities';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SalaryMarketSnapshot, SalaryObservation } from '../../shared/salaryMarketSnapshot';
@@ -142,6 +143,7 @@ function accumulateClassifiedRoles(
   database: DatabaseSync,
   skills: SkillCounter,
   cities: CityCounter,
+  countries: CountryCounter,
   roles: readonly string[],
 ): Map<string, RoleState> {
   const groups = new Map<string, RoleState>();
@@ -162,6 +164,7 @@ function accumulateClassifiedRoles(
         row.salary_json,
       );
       const geography = salaryGeography(row.location, row.is_remote === 1);
+      countries.record(row.role, geography.countryCode, row.grade, row.cluster_id, row.salary_json);
       if (geography.status === 'explicit_country') group.geography.explicitCountryCount += 1;
       else if (geography.status === 'ambiguous_country') group.geography.ambiguousCountryCount += 1;
       else group.geography.unknownCountryCount += 1;
@@ -235,6 +238,7 @@ function assembleRoleSnapshot(
   group: RoleState,
   now: Date,
   cities: CityCounter,
+  countries: CountryCounter,
 ): SalaryMarketSnapshot {
   const all = assembleCohort(database, skills, role, group);
   return {
@@ -261,6 +265,7 @@ function assembleRoleSnapshot(
       ),
     })),
     cityMarket: cities.assemble(role),
+    countrySlices: countries.assemble(role),
   };
 }
 
@@ -272,8 +277,9 @@ function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMa
   const skills = prepareSalarySkillCounts(database);
   prepareSalaryRangeScratch(database);
   const cities = prepareSalaryCityScratch(database);
-  return [...accumulateClassifiedRoles(database, skills, cities, roles)].map(([role, state]) =>
-    assembleRoleSnapshot(database, skills, role, state, now, cities),
+  const countries = prepareSalaryCountries(database);
+  return [...accumulateClassifiedRoles(database, skills, cities, countries, roles)].map(
+    ([role, state]) => assembleRoleSnapshot(database, skills, role, state, now, cities, countries),
   );
 }
 
