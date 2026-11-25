@@ -14,6 +14,7 @@ import { salaryMarketAnswers, type SalaryMarketInput } from './salaryMarketAnswe
 import { isSalaryExpectation } from './salaryQuestion';
 import { workRightAnswers } from './workRightAnswers';
 import type { WorkRight } from '../../shared/workPreferences';
+import { isBadNumber } from '../../shared/questionnaireNumber';
 import { clip, isRecord, OPTION_MAX_LENGTH, QUESTION_TEXT_MAX_LENGTH } from './questionText';
 
 /** Защита от чужого ответа, а не страница списка: настоящие списки (страны) — около 250. */
@@ -102,7 +103,7 @@ export function atsQuestions(raw: AtsFormInput['questions']): readonly Questionn
     byId.set(
       item.id,
       item.kind === 'text'
-        ? { ...base, kind: 'text', ...(item.singleLine ? { singleLine: true } : {}), ...(item.numeric ? { numeric: true } : {}) }
+        ? { ...base, kind: 'text', ...(item.singleLine ? { singleLine: true } : {}), ...(item.numeric ? { numeric: true } : {}), ...(item.numeric && item.limits ? { limits: item.limits } : {}) }
         : { ...base, kind: 'choice', options, ...(item.multiple ? { multiple: true } : {}) },
     );
   }
@@ -276,7 +277,9 @@ export function buildQuestionnaire(input: QuestionnaireInput): ApplicationQuesti
     answered: answers.length,
     total: input.questions.length,
     missingRequired: input.questions.filter(
-      (question) => question.required && !answered.has(question.id),
+      (question) =>
+        question.required &&
+        (!answered.has(question.id) || isBadNumber(question, texts.get(question.id) ?? '')),
     ).length,
     readAt: input.readAt,
     submittedAt: input.submittedAt,
