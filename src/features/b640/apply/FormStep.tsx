@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type {
   ApplicationQuestionnaire,
   AtsFormInput,
@@ -150,6 +150,7 @@ interface AnswerFieldProps {
   readonly question: QuestionnaireQuestion;
   readonly value: string;
   readonly state: QuestionnaireState;
+  readonly invalid: boolean;
 }
 
 function isChoice(question: QuestionnaireQuestion): boolean {
@@ -157,7 +158,7 @@ function isChoice(question: QuestionnaireQuestion): boolean {
 }
 
 /** Поле ответа: у вопроса с вариантами — выбор из них, иначе свободный текст. */
-function AnswerField({ fieldId, question, value, state }: AnswerFieldProps) {
+function AnswerField({ fieldId, question, value, state, invalid }: AnswerFieldProps) {
   if (isChoice(question)) {
     const pick = (next: string) => {
       state.setAnswer(question.id, next);
@@ -165,16 +166,21 @@ function AnswerField({ fieldId, question, value, state }: AnswerFieldProps) {
     };
     return <ChoiceField fieldId={fieldId} question={question} value={value} onPick={pick} />;
   }
-  return (
-    <textarea
-      id={fieldId}
-      rows={2}
-      placeholder="Ваш ответ"
-      maxLength={QUESTIONNAIRE_ANSWER_MAX_LENGTH}
-      value={value}
-      onChange={(event) => state.setAnswer(question.id, event.currentTarget.value)}
-      onBlur={() => state.save()}
-    />
+  const shared = {
+    id: fieldId,
+    placeholder: 'Ваш ответ',
+    maxLength: QUESTIONNAIRE_ANSWER_MAX_LENGTH,
+    value,
+    'aria-invalid': invalid || undefined,
+    'aria-describedby': invalid ? `${fieldId}-err` : undefined,
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      state.setAnswer(question.id, event.currentTarget.value),
+    onBlur: () => state.save(),
+  };
+  return question.singleLine ? (
+    <input type="text" {...shared} />
+  ) : (
+    <textarea rows={2} {...shared} />
   );
 }
 
@@ -182,11 +188,13 @@ interface QuestionProps {
   readonly question: QuestionnaireQuestion;
   readonly suggestion: QuestionnaireSuggestion | undefined;
   readonly state: QuestionnaireState;
+  readonly rejected: FormStepProps['rejected'];
 }
 
-function Question({ question, suggestion, state }: QuestionProps) {
+function Question({ question, suggestion, state, rejected }: QuestionProps) {
   const fieldId = `qa-${question.id}`;
   const value = answerOf(state.draft, question.id);
+  const invalid = rejected?.answers.get(question.id) === value;
   return (
     <li className="qa">
       <div className="qa-q">
@@ -203,7 +211,12 @@ function Question({ question, suggestion, state }: QuestionProps) {
             {`Ваш ответ: ${question.text}`}
           </label>
         )}
-        <AnswerField fieldId={fieldId} question={question} value={value} state={state} />
+        <AnswerField fieldId={fieldId} question={question} value={value} state={state} invalid={invalid} />
+        {invalid ? (
+          <div id={`${fieldId}-err`}>
+            <StatusLine state="err" text={`${rejected?.host ?? ''} не принял ответ`} />
+          </div>
+        ) : null}
       </div>
     </li>
   );
@@ -316,11 +329,13 @@ export interface FormStepProps {
   readonly visibility: VisibilityState;
   /** Форма сайта работодателя уходит из приложения (B787). */
   readonly viaApp?: 'open' | 'locked';
+  /** Ответы, которые сайт работодателя не принял. */
+  readonly rejected?: { readonly host: string; readonly answers: ReadonlyMap<string, string> };
   readonly onSend: () => void;
 }
 
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepProps) {
+export function FormStep({ state, form, visibility, viaApp, rejected, onSend }: FormStepProps) {
   const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
   const hhInApp = onHh && isTauriEnvironment();
   const inApp = hhInApp || viaApp !== undefined;
@@ -345,6 +360,7 @@ export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepPr
                 question={question}
                 suggestion={suggestions.get(question.id)}
                 state={state}
+                rejected={rejected}
               />
             ))}
             {asked ? <VisibilityRow visibility={visibility} /> : null}

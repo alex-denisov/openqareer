@@ -119,6 +119,30 @@ describe('отклик формой работодателя', () => {
     expect(desktop.readAtsOptions).toHaveBeenCalledWith('v1', 'id:city', 'Berlin');
   });
 
+  it('страница дорисовала поле резюме: оно заполняется без возврата на «Анкету»', async () => {
+    desktop.fillAtsForm.mockResolvedValueOnce({
+      results: { 'id:name': 'set' },
+      values: { 'id:name': 'Марина', 'id:resume': '' },
+    });
+    desktop.readAtsForm.mockResolvedValue(report([name, resume]));
+    expect((await run(form(name))).kind).toBe('sent');
+    expect(desktop.fillAtsForm).toHaveBeenCalledTimes(2);
+  });
+
+  it('форма не взяла ответ: возвращается вопрос с отметкой', async () => {
+    desktop.fillAtsForm.mockResolvedValue({ results: { 'id:name': 'set' }, values: {} });
+    expect(await run(form(name))).toMatchObject({ kind: 'ask', rejected: ['id:name'] });
+  });
+
+  it('форма не взяла резюме: причина названа, кнопка не нажата', async () => {
+    desktop.fillAtsForm.mockResolvedValue({
+      results: { 'id:name': 'set', 'id:resume': 'upload_failed' },
+      values: { 'id:name': 'Марина' },
+    });
+    expect(await run(form(name, resume))).toEqual({ kind: 'failed', rejected: 'resume' });
+    expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+  });
+
   it('нет файла для обязательного резюме — отклик уходит в очередь', async () => {
     expect(await run(form(name, resume), { resume: null })).toEqual({
       kind: 'manual',

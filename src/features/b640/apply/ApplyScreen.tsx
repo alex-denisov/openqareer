@@ -545,6 +545,7 @@ function FormBody({ body }: { readonly body: BodyProps }) {
       state={questionnaire}
       form={questionnaire.form}
       visibility={ask.visibility}
+      rejected={ats.apply ? { host: ats.apply.host, answers: ats.apply.rejected } : undefined}
       viaApp={kind ? (canSendAts(kind) ? 'open' : 'locked') : undefined}
       onSend={ask.sendWithForm}
     />

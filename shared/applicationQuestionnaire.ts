@@ -18,6 +18,8 @@ export interface QuestionnaireQuestion {
   readonly options?: readonly string[];
   /** B703: у вопроса с выбором можно отметить несколько вариантов; ответ — по варианту на строку. */
   readonly multiple?: boolean;
+  /** Поле формы в одну строку: имя, почта, телефон. */
+  readonly singleLine?: boolean;
 }
 
 export interface QuestionnaireAnswer {
