@@ -1,3 +1,4 @@
+import { vacancyBrief } from '../domain/vacancyBrief';
 import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { loadDetailText } from './vacancyDetailText';
 import { registerResumeBuilderRoutes } from './resumeBuilderRoutes';
@@ -628,6 +629,8 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
         : {}),
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
       responsibilities: full?.responsibilities ?? [],
+      // B791: краткое содержание раскрытой строки — правилами из того же текста.
+      brief: vacancyBrief(description || cluster?.descriptionSummary?.trim() || ''),
     },
     meta: { requestId: request.id },
   };
