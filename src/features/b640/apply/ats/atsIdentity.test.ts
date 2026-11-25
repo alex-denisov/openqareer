@@ -22,6 +22,12 @@ const factOf = (label: string, ...others: string[]) =>
   );
 
 describe('поля о кандидате', () => {
+  it('две одинаковые подписи: имя не подставляется ни в одну', () => {
+    expect(factOf('Name', 'Name')).toBeNull();
+    expect(factOf('Last name *', 'Last name')).toBeNull();
+    expect(factOf('Name', 'Company name')).toBe('fullName');
+  });
+
   it.each([
     ['Full name', 'fullName'],
     ['Full Name (as in passport)', 'fullName'],
