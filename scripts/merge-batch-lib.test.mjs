@@ -5,6 +5,8 @@ import {
   effectiveChecks,
   inheritParentChecks,
   isOwnMainMerge,
+  isRetryableMergeError,
+  retryMerge,
   shouldNoticeStuck,
   deferStacked,
   parseGhJson,
@@ -47,6 +49,13 @@ describe('rejectReason', () => {
       expect(rejectReason(pr(1, { statusCheckRollup: [...green, own] }))).toBeNull();
     },
   );
+  it('skips an unreadable PR with the reason (B804)', () => {
+    expect(rejectReason(pr(1, { readError: 'boom' }))).toBe('could not be read (boom)');
+  });
+  it('fails closed when GitHub cannot list every file', () => {
+    expect(rejectReason(pr(1, { changedFiles: 3000 }))).toBe('too many files (3000)');
+    expect(rejectReason(pr(1, { changedFiles: 2999 }))).toBeNull();
+  });
   it('ignores the Full verify status itself', () => {
     expect(
       rejectReason(
@@ -300,5 +309,108 @@ describe('shouldNoticeStuck', () => {
       shouldNoticeStuck({ reason: 'already in a batch', ageMin: 300, alreadyNoticed: false }),
     ).toBe(false);
     expect(shouldNoticeStuck({ reason: null, ageMin: 300, alreadyNoticed: false })).toBe(false);
+  });
+});
+
+describe('isRetryableMergeError', () => {
+  it.each([
+    'GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)',
+    'GraphQL: Pull Request is not mergeable (mergePullRequest)',
+    'X Pull request o/r#1 is not mergeable: the base branch policy prohibits the merge.',
+  ])('retries %s', (text) => {
+    expect(isRetryableMergeError(`Command failed: gh pr merge 1 --squash\n${text}`)).toBe(true);
+  });
+  it.each([
+    'tree abc ≠ batch def',
+    'Command failed: gh pr merge 1\nGraphQL: Head branch was modified. Review and try again.',
+    'Command failed: gh api statuses\nBase branch was modified',
+    'main does not merge into #1 cleanly',
+    '',
+  ])('does not retry %s', (text) => {
+    expect(isRetryableMergeError(text)).toBe(false);
+  });
+});
+
+describe('retryMerge', () => {
+  const refusal = 'Command failed: gh pr merge 1\nGraphQL: Base branch was modified.';
+  const run = async (outcomes, merged = []) => {
+    let calls = 0;
+    let reads = 0;
+    const result = await retryMerge({
+      attempt: async () => {
+        const o = outcomes[Math.min(calls++, outcomes.length - 1)];
+        if (o === 'ok') return 'tree equals';
+        throw new Error(o);
+      },
+      isMerged: async () => {
+        const m = merged[reads++] ?? false;
+        if (m === 'fail') throw new Error('HTTP 502');
+        return m;
+      },
+      wait: async () => {},
+      note: () => {},
+    }).catch((err) => `threw: ${err.message.split('\n')[0]}`);
+    return { result, calls };
+  };
+  it('retries a refusal, even when the merged state cannot be read', async () => {
+    expect(await run([refusal, 'ok'], ['fail'])).toEqual({ result: 'tree equals', calls: 2 });
+  });
+  it('counts a PR that merged despite the fourth refusal', async () => {
+    const out = await run([refusal], [false, false, false, true]);
+    expect(out).toEqual({ result: 'merged despite the refusal', calls: 4 });
+  });
+  it('gives up after four refusals', async () => {
+    const out = await run([refusal]);
+    expect(out).toEqual({ result: 'threw: Command failed: gh pr merge 1', calls: 4 });
+  });
+  it('stops at once on a tree mismatch or a moved head', async () => {
+    expect((await run(['tree a ≠ batch b'])).calls).toBe(1);
+    const moved = 'Command failed: gh pr merge 1\nHead branch was modified';
+    expect((await run([moved])).calls).toBe(1);
+  });
+});
+
+describe('stale and cancelled runs (B804)', () => {
+  const check = (name, id, conclusion, over = {}) => ({
+    name,
+    workflowName: 'Verify and deploy',
+    status: conclusion ? 'COMPLETED' : 'IN_PROGRESS',
+    conclusion,
+    completedAt: conclusion ? `2026-11-25T10:0${id}:00Z` : '0001-01-01T00:00:00Z',
+    detailsUrl: `https://github.com/o/r/actions/runs/${id}/job/1`,
+    ...over,
+  });
+  const reason = (...checks) => rejectReason(pr(1, { statusCheckRollup: checks }));
+  const reruns = (...checks) => cancelledOnlyRuns(pr(1, { statusCheckRollup: checks }));
+
+  it('ignores a cancelled shard that the later green run does not have', () => {
+    const old = check('Affected tests (shard 1/8)', 1, 'CANCELLED');
+    expect(reason(old, check('Verify', 2, 'SUCCESS'))).toBeNull();
+    expect(reruns(old, check('Verify', 2, 'SUCCESS'))).toEqual([]);
+  });
+  it('keeps a cancelled check without a later green Verify', () => {
+    const old = check('Lint', 2, 'CANCELLED');
+    expect(reason(old)).toMatch(/CANCELLED/);
+    expect(reason(old, check('Verify', 1, 'SUCCESS'))).toMatch(/CANCELLED/);
+    expect(reason(old, check('Verify', 3, 'FAILURE'))).toMatch(/CANCELLED|FAILURE/);
+    expect(reason(old, check('Verify', 3, 'SUCCESS', { workflowName: 'Other' }))).toMatch(
+      /CANCELLED/,
+    );
+  });
+  it('never ignores a real failure of an older run', () => {
+    const red = check('Affected tests (shard 7/8)', 1, 'FAILURE');
+    expect(reason(red, check('Verify', 2, 'SUCCESS'))).toMatch(/FAILURE/);
+  });
+  it('waits for a running check instead of trusting its earlier result', () => {
+    const going = check('Verify', 2, '');
+    expect(reason(check('Verify', 1, 'SUCCESS'), going)).toMatch(/Verify: IN_PROGRESS/);
+    expect(reason(check('Verify', 1, 'FAILURE'), going)).toMatch(/Verify: IN_PROGRESS/);
+  });
+  it('re-runs a cancelled run whose only failure is the aggregate Verify', () => {
+    expect(reruns(check('Verify', 7, 'FAILURE'), check('Affected', 7, 'CANCELLED'))).toEqual(['7']);
+  });
+  it('does not re-run a run with a really failed shard', () => {
+    const run = [check('S1', 7, 'CANCELLED'), check('S7', 7, 'FAILURE')];
+    expect(reruns(...run, check('Verify', 7, 'FAILURE'))).toEqual([]);
   });
 });
