@@ -37,7 +37,7 @@ export async function refreshPrices(
     const response = await fetchImpl(PRICES_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`prices HTTP ${response.status}`);
     writePrices(database, parsePrices(JSON.parse(await readBoundedText(response, MAX_BYTES))));
-    log.info({ rows: rebuildSalaryBenchmarks(database) }, 'salary-benchmarks-rebuilt');
+    log.info({ ...rebuildSalaryBenchmarks(database) }, 'salary-benchmarks-rebuilt');
     return true;
   } catch (error: unknown) {
     log.error(details(error), 'salary-prices-failed');
