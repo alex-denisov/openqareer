@@ -1,9 +1,9 @@
-import type { HhResumeEdit, HhResumeSections } from '../../shared/hhCandidateSession';
+import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
 /**
  * B678: правки резюме hh.ru «было → станет». Платформа ничего не придумывает: «станет» — то, что
  * она уже написала и кандидат подтвердил: пункты места работы мастер-резюме (с фактами консультанта),
- * «о себе», навыки, которые подтверждает профиль, и название вакансии для должности. Текст на другом
+ * «о себе» и навыки, которые подтверждает факт профиля. Должность не меняется. Текст на другом
  * языке помечен своим языком: его переводят до показа, непереведённое не показывается.
  */
 export type HhEditLanguage = 'ru' | 'en';
@@ -18,12 +18,8 @@ export interface HhPlatformPlace {
 
 export interface HhEditsInput {
   readonly resume: { readonly id: string; readonly title: string; readonly sections: HhResumeSections };
-  /** Заголовки остальных резюме кандидата: hh.ru требует уникальных. */
-  readonly otherTitles: readonly string[];
   readonly vacancy: {
     readonly title: string;
-    /** Название — роль, родственная целевым ролям кандидата: иначе должность в резюме не меняется. */
-    readonly titleFits: boolean;
     readonly requirements: readonly string[];
   };
   readonly platform: {
@@ -41,7 +37,6 @@ export interface HhEditDraft extends HhResumeEdit {
 }
 
 const PLACE_LINES_MAX = 8;
-const TITLE_MAX = 100;
 /** Короче трёх символов ключ работодателя совпадает с чужими названиями («IT», «A»). */
 const EMPLOYER_KEY_MIN = 3;
 /** Навык длиннее — не навык, а фраза из описания вакансии. */
@@ -82,14 +77,6 @@ function samePlace(hhEmployer: string, place: HhPlatformPlace): boolean {
     const key = employerKey(name);
     return key.length >= EMPLOYER_KEY_MIN && (` ${hh} `.includes(` ${key} `) || ` ${key} `.includes(` ${hh} `));
   });
-}
-
-function titleEdit(input: HhEditsInput): HhEditDraft[] {
-  const was = input.resume.sections.title || input.resume.title;
-  const now = input.vacancy.title.trim().slice(0, TITLE_MAX);
-  const taken = input.otherTitles.some((title) => normalized(title) === normalized(now));
-  if (!input.vacancy.titleFits || !now || taken || contains(was, now)) return [];
-  return [{ id: 'title', section: 'title', was, now, language: languageOf(now) }];
 }
 
 /** Каждое место профиля платформы достаётся не больше чем одному месту hh.ru: первому совпавшему. */
@@ -164,5 +151,6 @@ function aboutEdit(input: HhEditsInput): HhEditDraft[] {
 }
 
 export function draftHhResumeEdits(input: HhEditsInput): HhEditDraft[] {
-  return [...titleEdit(input), ...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  if (!hhSectionsRead(input.resume.sections)) return [];
+  return [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
 }

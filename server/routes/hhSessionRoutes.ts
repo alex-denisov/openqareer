@@ -24,6 +24,7 @@ import { draftHhResumeEdits, hhResumeLanguage } from '../domain/hhResumeEdits';
 import { localizeHhResumeEdits } from '../domain/hhResumeEditTranslation';
 import { hasVariants, hhResumeVariantSubject } from '../domain/hhResumeVariant';
 import { reviewHhResumes } from '../domain/hhResumeReview';
+import { chooseHhResume, mergedContents, resumesForVacancy, titleRank } from './hhVacancyResume';
 import { cachedEdits, editsCacheKey, hhEditsInput, rememberEdits, readWithSections, selectedWithSections, type SelectedWithSections } from './hhResumeEditsInput';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
@@ -79,6 +80,8 @@ const snapshotSchema = z
       .array(contentSchema.extend({ text: z.string().trim().min(1).max(HH_REVIEW_TEXT_MAX_LENGTH) }))
       .max(HH_REVIEW_RESUMES_MAX)
       .optional(),
+    /** Отклик на вакансию: прочитанное сохраняется, общий выбор резюме не меняется. */
+    vacancyId: z.string().trim().min(1).max(512).optional(),
     /** B704: `false` — выбор из прочитанного раньше, hh.ru не читали. */
     contentRead: z.literal(false).optional(),
   })
@@ -95,6 +98,8 @@ const reviewQuerySchema = z.object({ vacancyId: z.string().trim().min(1).max(512
 
 /** `edits=1` — лист выбора резюме: счёт правок может звать переводчика, карточке вакансии он не нужен. */
 const reviewCountsSchema = reviewQuerySchema.extend({ edits: z.literal('1').optional() });
+
+const choiceSchema = z.object({ vacancyId: z.string().trim().min(1).max(512), resumeId }).strict();
 
 const attemptSchema = z
   .object({
@@ -145,15 +150,43 @@ const getResumes: Handler = async (deps, request, reply) => {
   const candidateId = hhCandidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const snapshot = deps.hh.getSnapshot(candidateId);
-  // B678: тексты остальных резюме нужны только сверке на сервере, в интерфейс они не уходят.
-  const { contents: _contents, ...visible } = snapshot ?? { contents: undefined };
-  return { data: snapshot ? visible : null, meta: { requestId: request.id } };
+  const query = reviewQuerySchema.safeParse(request.query ?? {});
+  const vacancyId = query.success ? query.data.vacancyId : undefined;
+  return { data: snapshot ? visibleResumes(deps, snapshot, vacancyId) : null, meta: { requestId: request.id } };
 };
 
-/** PUT без `contents` (выбор резюме) сохраняет прочитанное раньше для резюме, что остались в списке. */
-function keptContents(previous: HhResumeSnapshot | null, listed: ReadonlySet<string>) {
-  const kept = (previous?.contents ?? []).filter((content) => listed.has(content.id));
-  return kept.length > 0 ? { contents: kept } : {};
+/** B678: тексты остальных резюме нужны только сверке на сервере, в интерфейс они не уходят. */
+function visibleResumes(deps: RouteDeps, snapshot: HhResumeSnapshot, vacancyId: string | undefined) {
+  const shown = vacancyId ? resumesForVacancy(deps, snapshot, vacancyId) : snapshot;
+  const { contents: _contents, choices: _choices, ...visible } = shown;
+  return visible;
+}
+
+/** Выбор резюме для одной вакансии: другие вакансии и общий выбор не меняются. */
+const putChoice: Handler = async (deps, request, reply) => {
+  const candidateId = hhCandidateOf(deps, request, reply);
+  if (!candidateId) return reply;
+  const parsed = choiceSchema.safeParse(request.body ?? {});
+  if (!parsed.success) return sendError(reply, request, 400, 'invalid_hh_choice', 'Выберите резюме hh.ru.', false);
+  const { vacancyId, resumeId: chosen } = parsed.data;
+  const snapshot = deps.hh.getSnapshot(candidateId);
+  if (!snapshot?.resumes.some((item) => item.id === chosen)) {
+    const [status, message] = REFUSAL_REPLY.hh_resume_not_in_session;
+    return sendError(reply, request, status, 'hh_resume_not_in_session', message, false);
+  }
+  const next = chooseHhResume(snapshot, vacancyId, chosen);
+  deps.hh.saveSnapshot(candidateId, next);
+  return { data: visibleResumes(deps, next, vacancyId), meta: { requestId: request.id } };
+};
+
+/** Общий выбор: прежний, если резюме ещё в списке; прочитанное заново обновляет его текст. */
+function commonSelected(
+  previous: HhResumeSnapshot | null,
+  read: HhResumeSnapshot['selected'],
+  listed: ReadonlySet<string>,
+): HhResumeSnapshot['selected'] {
+  const kept = previous?.selected && listed.has(previous.selected.id) ? previous.selected : null;
+  return !kept || kept.id === read?.id ? read : kept;
 }
 
 const putResumes: Handler = async (deps, request, reply) => {
@@ -163,21 +196,22 @@ const putResumes: Handler = async (deps, request, reply) => {
   if (!parsed.success) {
     return sendError(reply, request, 400, 'invalid_hh_resumes', 'Резюме hh.ru не прочитались. Повторите.', false);
   }
-  const { contents, contentRead, ...rest } = parsed.data;
+  const { contents = [], contentRead, vacancyId, ...rest } = parsed.data;
   const previous = deps.hh.getSnapshot(candidateId);
   // B704: дата чтения меняется, только когда прочитано содержимое, а не выбор и не список.
-  const read = contentRead !== false && contents?.length !== 0;
+  const read = contentRead !== false && parsed.data.contents?.length !== 0;
   const listed = new Set(rest.resumes.map((item) => item.id));
   const snapshot: HhResumeSnapshot = {
     ...rest,
-    ...(contents ? { contents } : keptContents(previous, listed)),
+    ...(vacancyId ? { selected: commonSelected(previous, rest.selected, listed) } : {}),
+    ...mergedContents(previous, listed, vacancyId && rest.selected ? [rest.selected, ...contents.filter(({ id }) => id !== rest.selected?.id)] : contents),
+    ...(previous?.choices ? { choices: previous.choices } : {}),
     readAt: (read ? null : previous?.readAt) ?? new Date().toISOString(),
   };
   deps.hh.saveSnapshot(candidateId, snapshot);
   // B690: резюме прочитаны в окне hh.ru — вход жив, уведомление «вход истёк» больше не нужно.
   resolveHhLoginNotice(deps, request, candidateId);
-  const { contents: _contents, ...visible } = snapshot;
-  return { data: visible, meta: { requestId: request.id } };
+  return { data: visibleResumes(deps, snapshot, vacancyId), meta: { requestId: request.id } };
 };
 
 /** B678: какое из прочитанных резюме hh.ru подходит вакансии платформы и чего в каждом не хватает. */
@@ -196,7 +230,7 @@ const getReview: Handler = async (deps, request, reply) => {
   const { vacancyId, edits } = query.data;
   const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, vacancyId);
   if (!cluster) return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
-  const review = reviewHhResumes(snapshot, cluster.skills);
+  const review = reviewHhResumes(snapshot, cluster.skills, titleRank(cluster.canonicalTitle));
   if (!edits) return { data: { vacancyId, ...review }, meta: { requestId: request.id } };
   const counts = await editCounts(deps, candidateId, snapshot, cluster, vacancyId);
   const resumes = review.resumes.map((fit) => {
@@ -213,12 +247,11 @@ const RESUMES_BODY_LIMIT = 1_048_576;
 async function freshEdits(
   deps: RouteDeps,
   candidateId: string,
-  snapshot: HhResumeSnapshot,
   selected: SelectedWithSections,
   cluster: VacancyCluster,
   vacancyId: string,
 ): Promise<HhResumeEdit[]> {
-  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, selected, cluster, vacancyId));
+  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, selected, cluster, vacancyId));
   const language = hhResumeLanguage(selected.sections);
   return localizeHhResumeEdits(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
 }
@@ -226,13 +259,12 @@ async function freshEdits(
 export async function hhResumeEditsOf(
   deps: RouteDeps,
   candidateId: string,
-  snapshot: HhResumeSnapshot,
   resume: SelectedWithSections,
   cluster: VacancyCluster,
   vacancyId: string,
 ): Promise<readonly HhResumeEdit[]> {
-  const key = editsCacheKey(candidateId, snapshot, resume, vacancyId);
-  const edits = cachedEdits(key) ?? (await freshEdits(deps, candidateId, snapshot, resume, cluster, vacancyId));
+  const key = editsCacheKey(candidateId, resume, vacancyId);
+  const edits = cachedEdits(key) ?? (await freshEdits(deps, candidateId, resume, cluster, vacancyId));
   rememberEdits(key, edits);
   return edits;
 }
@@ -241,13 +273,12 @@ export async function hhResumeEditsOf(
 export function withVariantSubjects(
   deps: RouteDeps,
   candidateId: string,
-  snapshot: HhResumeSnapshot,
   resume: SelectedWithSections,
   cluster: VacancyCluster,
   vacancyId: string,
   edits: readonly HhResumeEdit[],
 ): HhResumeEdit[] {
-  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, snapshot, resume, cluster, vacancyId));
+  const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, resume, cluster, vacancyId));
   const subjects = new Map(drafts.filter(hasVariants).map((draft) => [draft.id, hhResumeVariantSubject(vacancyId, resume.id, draft)]));
   return edits.map((edit) => {
     const subjectId = subjects.get(edit.id);
@@ -265,7 +296,7 @@ async function editCounts(
 ): Promise<ReadonlyMap<string, number>> {
   const counted = await Promise.allSettled(
     readWithSections(snapshot).map(async (resume) => {
-      const edits = await hhResumeEditsOf(deps, candidateId, snapshot, resume, cluster, vacancyId);
+      const edits = await hhResumeEditsOf(deps, candidateId, resume, cluster, vacancyId);
       return [resume.id, edits.length] as const;
     }),
   );
@@ -279,15 +310,15 @@ const getEdits: Handler = async (deps, request, reply) => {
   const query = reviewQuerySchema.safeParse(request.query ?? {});
   if (!query.success) return sendError(reply, request, 400, 'invalid_hh_review', 'Не указана вакансия.', false);
   const snapshot = deps.hh.getSnapshot(candidateId);
-  const selected = selectedWithSections(snapshot);
-  if (!snapshot || !selected) {
+  const selected = selectedWithSections(snapshot && resumesForVacancy(deps, snapshot, query.data.vacancyId));
+  if (!selected) {
     return sendError(reply, request, 409, 'hh_resume_sections_missing', 'Выберите резюме hh.ru ещё раз: его разделы не прочитаны.', false);
   }
   const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, query.data.vacancyId);
   if (!cluster) return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   const { vacancyId } = query.data;
-  const found = await hhResumeEditsOf(deps, candidateId, snapshot, selected, cluster, vacancyId);
-  const edits = withVariantSubjects(deps, candidateId, snapshot, selected, cluster, vacancyId, found);
+  const found = await hhResumeEditsOf(deps, candidateId, selected, cluster, vacancyId);
+  const edits = withVariantSubjects(deps, candidateId, selected, cluster, vacancyId, found);
   return { data: { resumeId: selected.id, vacancyId, edits }, meta: { requestId: request.id } };
 };
 
@@ -406,6 +437,7 @@ export function registerHhSessionRoutes(
   app.get(`${base}/resumes`, withDeps(bound, getResumes));
   // Снимок с разделами и текстами до 5 резюме кириллицей (2 байта на символ) больше общего предела 256 КБ.
   app.put(`${base}/resumes`, { ...write, bodyLimit: RESUMES_BODY_LIMIT }, withDeps(bound, putResumes));
+  app.put(`${base}/resumes/choice`, write, withDeps(bound, putChoice));
   app.get(`${base}/resumes/review`, withDeps(bound, getReview));
   app.get(`${base}/resumes/edits`, withDeps(bound, getEdits));
   app.post(`${base}/applications`, write, withDeps(bound, postAttempt));

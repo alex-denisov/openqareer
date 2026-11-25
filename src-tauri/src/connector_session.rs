@@ -2095,6 +2095,9 @@ async fn read_page(
         }
     }
 
+    if request.platform == "hh" && url_is_resume(&requested_url) {
+        expand_hh_resume(&window).await;
+    }
     let body_json = sanitized_page_json(app, request, &window).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
@@ -2111,6 +2114,23 @@ async fn read_page(
         url: final_url,
         body,
     })
+}
+
+/// Opens the collapsed experience text of the candidate's own hh.ru resume.
+const HH_RESUME_EXPAND_SCRIPT: &str = include_str!("hh_resume_expand.js");
+const HH_RESUME_EXPAND_DELAY: Duration = Duration::from_millis(400);
+
+fn url_is_resume(raw: &str) -> bool {
+    Url::parse(raw).is_ok_and(|url| url.path().starts_with("/resume/"))
+}
+
+/// The page is still readable when nothing opens, so a failure is not an error.
+async fn expand_hh_resume(window: &Webview) {
+    if let Ok(opened) = eval_json(window, HH_RESUME_EXPAND_SCRIPT).await {
+        if opened.trim() != "0" {
+            tokio::time::sleep(HH_RESUME_EXPAND_DELAY).await;
+        }
+    }
 }
 
 /// Reads `true` once the contact-info dialog shows its profile row (B561).

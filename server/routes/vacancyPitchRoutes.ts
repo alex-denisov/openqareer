@@ -23,6 +23,9 @@ import {
   prepareLetterResume,
   ResumeSnapshotError,
 } from './letterApprovalResume';
+import type { ResumeEditChoices } from '../../shared/resumeVacancyEdits';
+import { appliesOnHh } from '../vacancies/applyOnHh';
+import { prepareVacancyLang } from './resumeDefaultLang';
 import { currentMaster, masterProjectionOf } from './resumeMaster';
 import { APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
 import { letterVacancyTexts, registerLetterDraftRoutes, type LetterDraftDeps } from './letterDraftRoutes';
@@ -575,7 +578,11 @@ const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyR
   const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
-    const state = prepareLetterResume(deps, candidate.id, cluster, deps.resumeEdits.read(candidate.id, cluster.id));
+    if (appliesOnHh(deps, candidate.id, vacancyId, cluster)) {
+      const state = letterResumeState(deps, candidate.id, currentMaster(deps, candidate.id).document);
+      return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: false, versionId: null }, meta: { requestId: request.id } };
+    }
+    const state = prepareLetterResume(deps, candidate.id, cluster, await prepareVacancyLang(deps, candidate.id, cluster));
     return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId }, meta: { requestId: request.id } };
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
@@ -608,10 +615,12 @@ const handleApproveVacancyLetter = async (deps: LetterDeps, request: FastifyRequ
   if (profileHash && profileHash !== source.profileHash && factMark.ownNumbers.length > 0) {
     return changedLetterFacts(reply, request);
   }
+  const onHh = appliesOnHh(deps, candidate.id, vacancyId, cluster);
+  const choices = onHh ? null : await prepareVacancyLang(deps, candidate.id, cluster);
   const approvedAt = new Date().toISOString();
   let stored: ReturnType<typeof persistApprovedLetterSnapshot>;
   try {
-    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt, factMark);
+    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt, factMark, choices);
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
     throw error;
@@ -649,6 +658,8 @@ function persistApprovedLetterSnapshot(
   input: z.infer<typeof approvedLetterSnapshotSchema>,
   approvedAt: string,
   factMark: LetterFactMark,
+  /** `null` — отклик уходит на hh.ru резюме hh.ru, своё не прикладываем. */
+  choices: ResumeEditChoices | null,
 ) {
   const { candidateStore } = deps;
   const manualVacancy = letterVacancySnapshot(deps, vacancyId, cluster);
@@ -659,8 +670,8 @@ function persistApprovedLetterSnapshot(
       manualVacancy,
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).
-    const resume = attachApprovedResume(deps, candidateId, {
-      applicationId: application.id, cluster, approvedAt, choices: deps.resumeEdits.read(candidateId, cluster.id),
+    const resume = choices === null ? null : attachApprovedResume(deps, candidateId, {
+      applicationId: application.id, cluster, approvedAt, choices,
       ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
     });
     const approvalId = randomUUID();

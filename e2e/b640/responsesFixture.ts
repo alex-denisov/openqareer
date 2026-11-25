@@ -42,6 +42,22 @@ function application(
   };
 }
 
+/** Те же отклики, но черновик — на сайте компании: отклик hh.ru своего резюме не готовит. */
+export function siteDraft(): Stub[] {
+  return responseFixtures().map((item) =>
+    item.id === 'a-draft'
+      ? {
+          ...item,
+          vacancy: {
+            ...(item.vacancy as object),
+            url: 'https://greencode.example/jobs/1',
+            source: 'company_site',
+          },
+        }
+      : item,
+  );
+}
+
 export function responseFixtures(): Stub[] {
   return [
     application('a-draft', 'Head of Engineering', 'Гринкод', {

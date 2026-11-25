@@ -10,9 +10,9 @@ const ORIGIN = 'http://localhost:3000';
 const SNAPSHOT = {
   resumes: [
     { id: 'lead', title: 'Руководитель разработки' },
-    { id: 'node', title: 'Node.js-разработчик' },
+    { id: 'node', title: 'Руководитель бэкенда' },
   ],
-  selected: { id: 'node', title: 'Node.js-разработчик', text: 'Node.js, TypeScript, PostgreSQL.' },
+  selected: { id: 'node', title: 'Руководитель бэкенда', text: 'Node.js, TypeScript, PostgreSQL.' },
   contents: [{ id: 'lead', title: 'Руководитель разработки', text: 'Node.js, TypeScript, Kubernetes, PostgreSQL.' }],
 };
 
@@ -88,5 +88,30 @@ describe('B678: сверка резюме hh.ru с вакансией', () => {
     expect((await call('PUT', RESUMES, six)).statusCode).toBe(400);
     const long = { ...SNAPSHOT, contents: [{ ...SNAPSHOT.contents[0]!, text: 'я'.repeat(8_001) }] };
     expect((await call('PUT', RESUMES, long)).statusCode).toBe(400);
+  });
+
+  it('подходящее по роли предлагается само, выбор хранится за вакансией и общий не меняет', async () => {
+    const { call } = await harness(true);
+    const resumes = [
+      { id: 'coo', title: 'Операционный директор' },
+      { id: 'eng', title: 'Platform Engineer' },
+    ];
+    await call('PUT', RESUMES, { resumes, selected: { id: 'coo', title: 'Операционный директор', text: 'Node.js' } });
+    const selected = async (query = '') => (await call('GET', `${RESUMES}${query}`)).json().data.selected.id;
+    expect(await selected('?vacancyId=cluster-99')).toBe('eng');
+    expect(await selected()).toBe('coo');
+
+    const chosen = await call('PUT', `${RESUMES}/choice`, { vacancyId: 'cluster-99', resumeId: 'coo' });
+    expect(chosen.statusCode).toBe(200);
+    expect(chosen.json().data).not.toHaveProperty('choices');
+    expect(await selected('?vacancyId=cluster-99')).toBe('coo');
+
+    await call('PUT', `${RESUMES}/choice`, { vacancyId: 'cluster-99', resumeId: 'eng' });
+    const read = { id: 'eng', title: 'Platform Engineer', text: 'Kubernetes' };
+    await call('PUT', RESUMES, { resumes, selected: read, vacancyId: 'cluster-99' });
+    expect(await selected('?vacancyId=cluster-99')).toBe('eng');
+    expect(await selected()).toBe('coo');
+    expect((await call('PUT', `${RESUMES}/choice`, { vacancyId: 'cluster-99', resumeId: 'чужое' })).statusCode).toBe(400);
+    expect((await call('PUT', `${RESUMES}/choice`, { vacancyId: 'cluster-99', resumeId: 'other' })).statusCode).toBe(409);
   });
 });

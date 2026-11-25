@@ -28,6 +28,8 @@ import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
 import { latestLetterApproval } from './letterApprovalRead';
 import { letterVacancyTexts } from './letterDraftRoutes';
+import { appliesOnHh } from '../vacancies/applyOnHh';
+import { prepareVacancyLang } from './resumeDefaultLang';
 import { prepareLetterResume } from './letterApprovalResume';
 import { poolReader, questionnaireView, type Signed } from './questionnaireRoutes';
 import type { ResumeEditDeps } from './resumeEditRoutes';
@@ -129,16 +131,17 @@ async function prepareQuestions(
 }
 
 /** Резюме под вакансию заранее; не собралось — письмо и ответы всё равно готовятся. */
-function prepareResume(
+async function prepareResume(
   deps: Bound,
   request: LogContext,
   candidateId: string,
   vacancyId: string,
-): void {
+): Promise<void> {
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
-  if (!cluster) return;
+  if (!cluster || appliesOnHh(deps, candidateId, vacancyId, cluster)) return;
   try {
-    prepareLetterResume(deps, candidateId, cluster, deps.resumeEdits.read(candidateId, cluster.id));
+    const choices = await prepareVacancyLang(deps, candidateId, cluster);
+    prepareLetterResume(deps, candidateId, cluster, choices);
   } catch (error) {
     request.log.warn({ err: error, vacancyId }, 'manual-apply-resume-failed');
   }
@@ -179,7 +182,7 @@ async function prepare(
 ): Promise<void> {
   const { vacancyId } = item;
   await prepareQuestions(deps, candidateId, item);
-  prepareResume(deps, request, candidateId, vacancyId);
+  await prepareResume(deps, request, candidateId, vacancyId);
   const source = factSource(deps, candidateId);
   if (!item.letter && !latestLetterApproval(deps, candidateId, vacancyId, source)) {
     const letter = await deps.writeLetter(deps, request, candidateId, vacancyId);

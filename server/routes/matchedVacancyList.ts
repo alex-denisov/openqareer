@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import type { FastifyRequest } from 'fastify';
-import { filteredFacetsOf } from '../../shared/listFilterFacets';
+import { filteredFacetSteps } from '../../shared/listFilterFacets';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
 import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
@@ -302,21 +302,23 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
   const hypotheses = phase.run('hypotheses', () => hypothesisRows(input));
   const counts = yield* phase.steps('roleCounts', matchedRoleCountSteps(hypotheses, targetRoles));
   const { facets, filtered } = yield* facetAndFilterSteps(input, matched, phase);
-  const catalogSummary = matchedCatalogSummary(
-    input.catalogTotals?.(),
-    roleLevelCount(hypotheses, targetRoles),
-    {
+  const totals = phase.run('catalogTotals', () => input.catalogTotals?.());
+  const catalogSummary = phase.run('catalogSummary', () =>
+    matchedCatalogSummary(totals, roleLevelCount(hypotheses, targetRoles), {
       selectionTotal: filtered.length,
       fitCounted: filtered.filter((item) => vacancyFitPercent(item.explanation.fitView) !== null)
         .length,
-    },
+    }),
   );
   yield;
   const pageOffsets = yield* phase.steps('pagePlan', matchedPagePlanSteps(filtered));
   const campaignWithHypotheses = phase.run('campaign', () =>
     readCampaign(candidateStore, candidateId, counts),
   );
-  const { observed, ...filteredCounts } = filteredFacetsOf(filtered);
+  const { observed, ...filteredCounts } = yield* phase.steps(
+    'filteredFacets',
+    filteredFacetSteps(filtered),
+  );
   const withFiltered = { ...facets, filtered: filteredCounts };
   return {
     filtered,
