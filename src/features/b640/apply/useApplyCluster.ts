@@ -17,7 +17,9 @@ const GONE_CODES: ReadonlySet<string> = new Set(['vacancy_not_found', 'vacancy_g
 const LOADING: ApplyClusterState = { status: 'loading' };
 
 function cachedCluster(vacancyId: string): Cluster | null {
-  const pooled = readCachedMatchedPool()?.matched.find((item) => item.cluster.id === vacancyId);
+  const pooled = [readCachedMatchedPool('latest'), readCachedMatchedPool()]
+    .flatMap((pool) => pool?.matched ?? [])
+    .find((item) => item.cluster.id === vacancyId);
   return pooled?.cluster ?? null;
 }
 

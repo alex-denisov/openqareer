@@ -7,7 +7,7 @@ import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { CampaignMetaView } from '../../../coach/matchedVacancyApi';
 import { getRecruiterContacts } from '../../../vacancies/recruiterContactsApi';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
-import { useMatchedPool } from '../../../vacancies/useMatchedPool';
+import { useMatchedPool, type MatchedPoolOptions } from '../../../vacancies/useMatchedPool';
 import {
   getVacancyConnectionCircles,
   type VacancyConnectionCircles,
@@ -141,8 +141,14 @@ function expectationOf(
   return amount && amount > 0 ? { amount, currency: currency ?? 'RUB' } : undefined;
 }
 
+/**
+ * B770, прод 25.11: открытая карточка читала всю подборку — 46 страниц волнами по 8, p90 2,2 с.
+ * Вакансию даёт чтение по id, от подборки нужны кампания и то, что уже есть в кэше.
+ */
+const CARD_POOL: MatchedPoolOptions = { pageLimit: 1 };
+
 export function useCardData(vacancyId: string): CardData {
-  const pool = useMatchedPool();
+  const pool = useMatchedPool(undefined, CARD_POOL);
   const rates = useCurrencyRates();
   const links = useVacancyLinks();
   const pooled = pool.matched.find((entry) => entry.cluster.id === vacancyId);
