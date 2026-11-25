@@ -7,8 +7,10 @@ import { buildNodePath } from '../../routes';
 import type { ApplyStep } from '../model/applyModel';
 import { elapsedLabel } from '../hh/hhSendModel';
 import { useMarkSent } from '../hh/useMarkSent';
+import { AtsAgain } from './AtsAgain';
 import type { AtsConfirmation } from './atsFormTypes';
 import type { AtsObstacle } from './atsRun';
+import { isLive } from './useAtsWindow';
 import { canSendAts, type AtsApplyControls, type AtsApplyState } from './useAtsApply';
 
 export interface AtsSendStepProps {
@@ -118,6 +120,10 @@ function Outcome({
       return (
         <StatusLine state="wait" text={`Ждём ответа ${host} · ${elapsedLabel(state.seconds)}`} />
       );
+    case 'code':
+      return <StatusLine state="wait" text="На почту пришёл код" />;
+    case 'captcha':
+      return <StatusLine state="wait" text={`Проверка на ${state.host}`} />;
     case 'unconfirmed':
       return (
         <StatusLine
@@ -191,7 +197,12 @@ function SendActions({
           {`Ответить · ${noun}`}
         </Button>
       ) : null}
-      {state.kind === 'unconfirmed' || answerFirst ? null : (
+      {isLive(state) ? (
+        <Button variant="primary" icon="out" onClick={apply.showForm}>
+          {state.kind === 'code' ? 'Ввести код' : 'Открыть форму'}
+        </Button>
+      ) : null}
+      {'live' in state || answerFirst ? null : (
         <Button
           variant="primary"
           icon="send"
@@ -242,6 +253,8 @@ function Answers({ items }: Pick<AtsApplyControls, 'items'>) {
 const UNREAD: ReadonlySet<AtsApplyState['kind']> = new Set(['reading', 'read_failed']);
 
 function titleOf({ state, missing }: AtsApplyControls): string {
+  if (state.kind === 'code') return 'Введите код';
+  if (state.kind === 'captcha') return 'Пройдите проверку';
   if (state.kind === 'unconfirmed') return 'Отклик не подтверждён';
   return missing > 0 ? 'Отправьте отклик' : 'Всё одобрено — можно отправлять';
 }
@@ -258,7 +271,7 @@ export function AtsSendStep(props: AtsSendStepProps) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        {marked ? 'Отклик отправлен' : titleOf(apply)}
+        {done ? 'Отклик отправлен' : titleOf(apply)}
       </h2>
       <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
         <li className="row">
@@ -289,6 +302,9 @@ export function AtsSendStep(props: AtsSendStepProps) {
       ) : (
         <Outcome state={state} host={apply.host} path={path} onRetry={apply.retry} />
       )}
+      {state.kind === 'unconfirmed' && !state.live && !done ? (
+        <AtsAgain onAgain={apply.again} />
+      ) : null}
       {marking.state.kind === 'error' ? <StatusLine state="err" text={marking.state.text} /> : null}
       <MandateDialog apply={apply} />
     </section>

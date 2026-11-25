@@ -11,7 +11,7 @@ use crate::ats_model::{
     attempt_result, decode, file_fields_of, form_report, is_id, kinds_of, listed, outcome_of,
     path_code, press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill,
     values_of, FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt,
-    SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+    ReleaseRequest, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
     is_confirmation, navigation_allowed, on_target, resolve, sent_base, thanks_in_place,
@@ -53,6 +53,8 @@ pub(crate) struct Run {
     /// Kinds of the fields read, for diagnostics.
     pub(crate) kinds: BTreeMap<String, &'static str>,
     attempt: Option<Uuid>,
+    /// The board asked for a mailed code: the app never presses this form again.
+    code_asked: bool,
     /// Fields the page had already marked when the button was pressed.
     invalid_before: Value,
     /// Whether the page already named a sent application before the press.
@@ -298,6 +300,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             file_fields: FileFields::new(),
             kinds: BTreeMap::new(),
             attempt: None,
+            code_asked: false,
             invalid_before: Value::Null,
             counted_before: Value::Null,
         });
@@ -458,7 +461,7 @@ async fn read_outcome(
     let last = poll(app, "outcome", &argument, wait, |value| {
         matches!(
             value["state"].as_str(),
-            Some("confirmed" | "invalid" | "captcha")
+            Some("confirmed" | "invalid" | "captcha" | "code")
         )
     })
     .await
@@ -546,6 +549,17 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
     } else {
         read
     };
+    if outcome == "code" {
+        if let Some(run) = app
+            .state::<AtsFormState>()
+            .run
+            .lock()
+            .map_err(|_| "form_state_unavailable")?
+            .as_mut()
+        {
+            run.code_asked = true;
+        }
+    }
     settle(app, attempt, outcome, Some(pressed_at_ms));
     note_outcome(app, "submit", &target, outcome);
     Ok(Receipt {
@@ -569,7 +583,8 @@ fn begin_attempt(
     let state = app.state::<AtsFormState>();
     with_attempts(app, |directory| {
         let mut run = state.run.lock().map_err(|_| "form_state_unavailable")?;
-        let already = ats_attempts::is_blocked(directory, &request.vacancy_id, &target.entry_url)?;
+        let already = run.as_ref().is_some_and(|run| run.code_asked)
+            || ats_attempts::is_blocked(directory, &request.vacancy_id, &target.entry_url)?;
         let first = run.as_ref().and_then(|run| run.filled.as_ref());
         if let Some(reason) = submit_refusal(request, first, second, already) {
             return Ok(Some(reason));
@@ -582,6 +597,7 @@ fn begin_attempt(
             consent_ids: request.consent_ids.clone(),
             result: None,
             confirmation: None,
+            released_at_ms: None,
         };
         match ats_attempts::begin(directory, attempt) {
             Ok(()) => {}
@@ -599,20 +615,27 @@ fn begin_attempt(
     })
 }
 
+/// The press made in the window that is still open for this vacancy.
+fn pressed_attempt(app: &AppHandle, vacancy_id: &str) -> Result<Uuid, String> {
+    current_target(app, vacancy_id)?;
+    if app.get_webview_window(FORM_WINDOW_LABEL).is_none() {
+        return Err("form_not_open".to_string());
+    }
+    let state = app.state::<AtsFormState>();
+    let run = state.run.lock().map_err(|_| "form_state_unavailable")?;
+    run.as_ref()
+        .and_then(|run| run.attempt)
+        .ok_or_else(|| "form_not_pressed".to_string())
+}
+
 /// A later look at the same window, e.g. after the candidate passed a check in it.
 pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Receipt, String> {
     let target = current_target(app, vacancy_id)?;
+    let attempt = pressed_attempt(app, vacancy_id)?;
     let (outcome, invalid_keys) = read_outcome(app, &target, POLL).await;
     if outcome == "confirmed" {
-        let attempt = app
-            .state::<AtsFormState>()
-            .run
-            .lock()
-            .ok()
-            .and_then(|run| run.as_ref().and_then(|run| run.attempt));
-        if let Some(attempt) = attempt {
-            settle(app, attempt, outcome, None);
-        }
+        settle(app, attempt, outcome, None);
+        note_outcome(app, "later_outcome", &target, outcome);
     }
     Ok(Receipt {
         invalid_keys,
@@ -620,14 +643,46 @@ pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Rece
     })
 }
 
+/// The candidate states that the earlier application did not leave. Refused while
+/// its window is open: there the outcome is read, not stated.
+pub fn release_attempt(app: &AppHandle, request: ReleaseRequest) -> Result<(), String> {
+    if !request.confirmed || !is_id(&request.vacancy_id) {
+        return Err("not_confirmed".to_string());
+    }
+    if pressed_attempt(app, &request.vacancy_id).is_ok() {
+        return Err("form_open".to_string());
+    }
+    with_attempts(app, |directory| {
+        ats_attempts::release(directory, &request.vacancy_id, now_ms())
+    })?;
+    note(app, "attempt", "released");
+    Ok(())
+}
+
 /// Puts the form window on screen. Called only for the candidate's own press.
-pub fn show_form_window(app: &AppHandle, vacancy_id: &str) -> Result<bool, String> {
-    current_target(app, vacancy_id)?;
+/// From here the candidate may send the form, so the attempt blocks a new one.
+pub async fn show_form_window(app: &AppHandle, vacancy_id: &str) -> Result<bool, String> {
+    let attempt = match pressed_attempt(app, vacancy_id) {
+        Ok(attempt) => attempt,
+        Err(reason) if reason == "form_state_unavailable" => return Err(reason),
+        Err(_) => return Ok(false),
+    };
+    with_attempts(app, |directory| {
+        ats_attempts::finish(
+            directory,
+            attempt,
+            ats_attempts::AttemptResult::Unconfirmed,
+            None,
+        )
+    })?;
     let Some(window) = app.get_webview_window(FORM_WINDOW_LABEL) else {
         return Ok(false);
     };
     let _ = window.center();
-    Ok(window.show().is_ok() && window.set_focus().is_ok())
+    let shown = window.show().is_ok() && window.set_focus().is_ok();
+    // Best effort: the window is already useful without the scroll.
+    let _ = page(app, "show_code", &Value::Null).await;
+    Ok(shown)
 }
 
 #[cfg(test)]
