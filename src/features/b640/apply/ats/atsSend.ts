@@ -1,4 +1,5 @@
-import type { AtsConsentInput, AtsConsentJournal, AtsConsentResult } from './atsConsentJournal';
+import type { ApplyConsentInput, ApplyConsentResult } from '../../../../../shared/applyConsent';
+import type { AtsConsentJournal } from './atsConsentJournal';
 import { submitAtsForm } from './atsDesktop';
 import type { AtsConsentRecord } from './atsFieldPlan';
 import type { AtsAttempt, AtsReceipt } from './atsFormTypes';
@@ -26,7 +27,11 @@ export type AtsSendResult =
   /** Не в приложении или ответ команды потерян: итог нажатия неизвестен. */
   | { readonly kind: 'unknown' };
 
-function consentInput(input: AtsSendInput, consent: AtsConsentRecord, id: string): AtsConsentInput {
+function consentInput(
+  input: AtsSendInput,
+  consent: AtsConsentRecord,
+  id: string,
+): ApplyConsentInput {
   return {
     id,
     applicationId: input.applicationId,
@@ -40,7 +45,7 @@ function consentInput(input: AtsSendInput, consent: AtsConsentRecord, id: string
   };
 }
 
-function resultOf(receipt: AtsReceipt): AtsConsentResult {
+function resultOf(receipt: AtsReceipt): ApplyConsentResult {
   if (receipt.outcome === 'confirmed') return 'sent';
   const notPressed = receipt.outcome === 'captcha' && receipt.pressedAtMs === null;
   const refused = receipt.outcome === 'rejected' || receipt.outcome === 'not_submitted';
@@ -51,7 +56,7 @@ function resultOf(receipt: AtsReceipt): AtsConsentResult {
 async function settle(
   journal: AtsConsentJournal,
   ids: readonly string[],
-  result: AtsConsentResult,
+  result: ApplyConsentResult,
 ): Promise<void> {
   await Promise.allSettled(ids.map((id) => journal.result(id, result)));
 }

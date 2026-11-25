@@ -36,14 +36,13 @@ const target = (
   ...(email ? { email } : {}),
 });
 
-/** Доска ATS встроена в сайт работодателя: номер в адресе, доска — в источнике или параметре. */
+/** Доска ATS встроена в сайт работодателя: номер в адресе, доска — только в источнике. */
 function embeddedAddress(vacancy: UnifiedVacancy): ApplyAddress | null {
   const url = parseHttpUrl(vacancy.url);
   const ref = parseAtsBoardSourceId(vacancy.provenance.sourceId);
   const greenhouseId = url?.searchParams.get('gh_jid') ?? '';
   if (JOB_ID.test(greenhouseId)) {
-    const board =
-      ref?.provider === 'greenhouse' ? ref.board : (url!.searchParams.get('board') ?? '');
+    const board = ref?.provider === 'greenhouse' ? ref.board : '';
     if (BOARD.test(board)) return greenhouseAddress(board, greenhouseId);
     return { channel: 'greenhouse', url: url!.href, formUrl: url!.href };
   }

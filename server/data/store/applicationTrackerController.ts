@@ -38,6 +38,23 @@ export interface ReadApplicationOptions {
 }
 
 /**
+ * B678: снимок карточки снят до отправки и может нести площадку подборки. Отправленный отклик
+ * показывает площадку и адрес, с которыми записана сама отправка.
+ */
+function withSentChannel(
+  application: StoredApplication,
+  sent: VacancyApplication | null,
+): StoredApplication['vacancy'] {
+  const { vacancy, stage } = application;
+  if (!vacancy || stage === 'saved' || sent?.status !== 'applied') return vacancy;
+  return {
+    ...vacancy,
+    source: sent.vacancy.source || vacancy.source,
+    url: sent.vacancy.url || vacancy.url,
+  };
+}
+
+/**
  * Связывает старый фасад (`vacancy_applications`) с трекером откликов
  * (B251, S1–S2, architecture.md §3–4). Владеет своими репозиториями, чтобы
  * `SqliteCandidateStore` не разрастался сверх гейта 800 строк.
@@ -84,9 +101,10 @@ export class ApplicationTrackerController {
 
   /** Ленивый перенос старых `applied` перед каждым чтением; идемпотентен. */
   list(candidateId: string, options: ReadApplicationOptions = {}): ApplicationView[] {
-    const legacyApplied = this.legacyApplications
+    const sent = this.legacyApplications
       .list(candidateId)
-      .filter((application) => application.status === 'applied')
+      .filter((application) => application.status === 'applied');
+    const legacyApplied = sent
       .map((application) => ({
         clusterId: application.clusterId,
         vacancy: application.vacancy,
@@ -94,7 +112,10 @@ export class ApplicationTrackerController {
       }));
     this.applications.migrateLegacyApplied(candidateId, legacyApplied);
     const applications = this.applications.list(candidateId);
-    return applications.map((application) => this.toView(application, options));
+    const sentByCluster = new Map(sent.map((item) => [item.clusterId, item]));
+    return applications.map((application) =>
+      this.toView(application, options, sentByCluster.get(application.clusterId ?? '') ?? null),
+    );
   }
 
   get(candidateId: string, id: string, options: ReadApplicationOptions = {}): ApplicationView | null {
@@ -329,7 +350,16 @@ export class ApplicationTrackerController {
     return application;
   }
 
-  private toView(application: StoredApplication, options: ReadApplicationOptions): ApplicationView {
+  private sentRecord(application: StoredApplication): VacancyApplication | null {
+    if (!application.clusterId) return null;
+    return this.legacyApplications.get(application.candidateId, application.clusterId);
+  }
+
+  private toView(
+    application: StoredApplication,
+    options: ReadApplicationOptions,
+    sent: VacancyApplication | null = this.sentRecord(application),
+  ): ApplicationView {
     const events = this.applications.listEvents(application.candidateId, application.id);
     const materials = this.materials
       .list(application.id)
@@ -346,6 +376,7 @@ export class ApplicationTrackerController {
     });
     return {
       ...application,
+      vacancy: withSentChannel(application, sent),
       ...derived,
       offer: offer ?? null,
       archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
