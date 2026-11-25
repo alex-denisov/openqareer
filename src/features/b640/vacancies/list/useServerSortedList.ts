@@ -8,6 +8,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
+import type { MatchedPool } from '../../../vacancies/useMatchedPool';
 import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
 import { DEFAULT_LIST_SORT, type SortState } from './sortModel';
 
@@ -28,6 +29,17 @@ export type FirstPortion = {
   readonly total: number;
   readonly roles: readonly string[];
 } | null;
+
+/** Чтение закончилось без ответа (сбой тихого обновления кэша) — ждать нечего, список читает сам. */
+export function firstPortionOf({
+  matched,
+  total,
+  readRoles,
+  reading,
+}: Pick<MatchedPool, 'matched' | 'total' | 'readRoles' | 'reading'>): FirstPortion | undefined {
+  if (reading === true) return null;
+  return readRoles ? { rows: matched, total, roles: readRoles } : undefined;
+}
 
 interface State {
   readonly key: string;

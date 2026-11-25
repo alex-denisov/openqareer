@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getMatchedVacancyFacets, getMatchedVacancyPage } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { MatchedVacancyPage } from '../coach/matchedVacancyApi';
-import { writeCachedMatchedPool } from './matchedPoolCache';
+import { readCachedMatchedPool, writeCachedMatchedPool } from './matchedPoolCache';
 import { useMatchedPool, type MatchedPool, type MatchedPoolOptions } from './useMatchedPool';
 
 vi.mock('../coach/coachApi', () => ({
@@ -14,7 +14,7 @@ vi.mock('../coach/coachApi', () => ({
   getVacancySources: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('./matchedPoolCache', () => ({
-  readCachedMatchedPool: () => undefined,
+  readCachedMatchedPool: vi.fn(),
   writeCachedMatchedPool: vi.fn(),
 }));
 
@@ -83,6 +83,16 @@ describe('B645 s07: подборка не читает весь список д�
     expect(firstPage).toHaveBeenLastCalledWith(expect.anything(), none);
     expect(pool.readRoles).toEqual([]);
     await act(async () => root.unmount());
+  });
+
+  it('тихое обновление кэша упало — чтение закончено, роли чтения неизвестны, строки на месте', async () => {
+    vi.mocked(readCachedMatchedPool).mockReturnValueOnce({
+      matched: [row(1)], total: TOTAL, poolTotal: TOTAL, complete: false,
+    });
+    const pool = await readPool({ pageLimit: 1, firstPage: () => Promise.reject(new Error('сбой')) });
+    expect(pool).toMatchObject({ reading: false, loading: false, failed: false, complete: false, total: TOTAL });
+    expect(pool.readRoles).toBeUndefined();
+    expect(pool.matched).toHaveLength(1);
   });
 
   it('без ограничения прежнее чтение — все страницы (старый кабинет)', async () => {

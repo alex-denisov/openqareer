@@ -22,6 +22,7 @@ import {
 import { defaultRoles } from './defaultRoles';
 import { buildOptions, countPending, listCount, serverCountState, type FilterOptions } from './filterOptions';
 import {
+  firstPortionOf,
   useServerSortedList,
   type FirstPortion,
   type ServerListStatus,
@@ -310,10 +311,10 @@ function seedWith(setFilters: (update: (current: ListFilters) => ListFilters) =>
 }
 
 /** Первая порция уже пришла с пулом: список сервера её не читает второй раз. */
-function useFirstPortion(pool: MatchedPool): FirstPortion {
+function useFirstPortion(pool: MatchedPool): FirstPortion | undefined {
   const { matched, total, readRoles, reading } = pool;
   return useMemo(
-    () => (reading === true || !readRoles ? null : { rows: matched, total, roles: readRoles }),
+    () => firstPortionOf({ matched, total, readRoles, reading }),
     [matched, total, readRoles, reading],
   );
 }

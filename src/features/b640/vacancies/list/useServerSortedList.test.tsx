@@ -5,7 +5,7 @@ import { click, mount } from '../../kit/testDom';
 import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
 import { makeItem } from './fixtures';
 import { DEFAULT_LIST_SORT, type SortState } from './sortModel';
-import { useServerSortedList, type FirstPortion } from './useServerSortedList';
+import { firstPortionOf, useServerSortedList, type FirstPortion } from './useServerSortedList';
 
 vi.mock('../b640Api', () => ({ getSortedMatchedPage: vi.fn() }));
 const read = vi.mocked(getSortedMatchedPage);
@@ -95,6 +95,29 @@ describe('серверная сортировка неполной подбор�
     expect(read).not.toHaveBeenCalled();
     expect(out(view.container).dataset.status).toBe('loading');
     view.unmount();
+  });
+
+  it('чтение пула упало без ролей — список перестаёт ждать и читает сам', async () => {
+    read.mockResolvedValue(page(['a'], 1, null));
+    const cached = { matched: [makeItem({ id: 'old' })], total: 9, readRoles: undefined };
+    function Failing() {
+      const [reading, setReading] = useState(true);
+      return (
+        <div>
+          <button id="fail" onClick={() => setReading(false)} />
+          <Probe active sort={DEFAULT_LIST_SORT} first={firstPortionOf({ ...cached, reading })} />
+        </div>
+      );
+    }
+    const waiting = mount(<Failing />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    click(waiting.container.querySelector('#fail'));
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(out(waiting.container).dataset.status).toBe('ready');
+    expect(out(waiting.container).textContent).toBe('a');
+    waiting.unmount();
   });
 
   it('первая порция, затем дочитывание со следующего смещения', async () => {
