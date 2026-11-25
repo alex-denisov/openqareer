@@ -30,6 +30,7 @@ pub(crate) const FILL_RESULTS: &[&str] = &[
     "field_missing",
     "file_missing",
     "file_not_attached",
+    "upload_failed",
 ];
 
 pub(crate) type Values = BTreeMap<String, String>;
@@ -145,6 +146,60 @@ pub(crate) fn validate_fill(request: &FillRequest, file_fields: &FileFields) -> 
         }
     }
     Ok(())
+}
+
+/// What the log says of fields the form did not take: kind and code, never a value.
+pub(crate) fn rejected_fields(
+    entries: &[Entry],
+    results: &BTreeMap<String, String>,
+    values: &Values,
+    kinds: &BTreeMap<String, &'static str>,
+) -> Vec<String> {
+    entries
+        .iter()
+        .filter_map(|entry| {
+            let result = results
+                .get(&entry.key)
+                .map_or("fill_failed", String::as_str);
+            let given = entry.file.is_some() || !entry.value.is_empty();
+            let empty = values.get(&entry.key).is_none_or(String::is_empty);
+            let kind = kinds.get(&entry.key).copied().unwrap_or("unknown");
+            match result {
+                "set" if given && empty => Some(format!("{kind}_not_kept")),
+                "set" => None,
+                code => Some(format!("{kind}_{code}")),
+            }
+        })
+        .collect()
+}
+
+const FIELD_KINDS: &[&str] = &[
+    "text",
+    "textarea",
+    "email",
+    "tel",
+    "url",
+    "number",
+    "date",
+    "password",
+    "select",
+    "combobox",
+    "radio",
+    "checkbox",
+    "checkbox_group",
+    "file",
+];
+
+pub(crate) fn kinds_of(form: &Value) -> BTreeMap<String, &'static str> {
+    form["fields"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|field| {
+            let kind = listed(field["kind"].as_str(), FIELD_KINDS, "unknown");
+            Some((field["key"].as_str()?.to_string(), kind))
+        })
+        .collect()
 }
 
 pub(crate) fn file_fields_of(form: &Value) -> FileFields {

@@ -86,6 +86,11 @@ function ReadFailed({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
+function failedText(rejected: 'resume' | 'letter' | undefined, host: string): string {
+  if (!rejected) return 'Отклик не отправлен. Повторите.';
+  return `${host} не принял ${rejected === 'resume' ? 'резюме' : 'письмо'}. Повторите.`;
+}
+
 function Outcome({
   state,
   host,
@@ -120,7 +125,7 @@ function Outcome({
     case 'refused':
       return <StatusLine state="err" text={`${state.host} не принял отклик.`} />;
     case 'failed':
-      return <StatusLine state="err" text="Отклик не отправлен. Повторите." />;
+      return <StatusLine state="err" text={failedText(state.rejected, host)} />;
     case 'sent':
       return <Done text={sentText(state.receipt)} path={path} />;
     default:

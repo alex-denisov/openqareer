@@ -31,7 +31,7 @@ export type AtsApplyState =
   | { readonly kind: 'sent'; readonly receipt: AtsConfirmation }
   | { readonly kind: 'unconfirmed'; readonly host: string }
   | { readonly kind: 'refused'; readonly host: string }
-  | { readonly kind: 'failed' }
+  | { readonly kind: 'failed'; readonly rejected?: 'resume' | 'letter' }
   /** Отклик уходит в очередь кандидата. */
   | { readonly kind: 'manual' };
 
@@ -105,7 +105,9 @@ export async function sendSession(
   { form, facts }: AtsSession,
   { vacancyId, employer, approved, letterText, draft }: AtsSendInput,
 ): Promise<AtsRunResult> {
-  const needsFile = allFields(form).some((field) => isResumeFile(field));
+  // Teamtailor дорисовывает поле файла позже остальных: там резюме нужно заранее.
+  const needsFile =
+    form.host.endsWith('.teamtailor.com') || allFields(form).some((field) => isResumeFile(field));
   const resume = needsFile
     ? await loadAtsResume(vacancyId, approved.resume, facts.fullName ?? '')
     : null;

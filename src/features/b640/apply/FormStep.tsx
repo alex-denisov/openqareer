@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import type {
   ApplicationQuestionnaire,
   AtsFormInput,
@@ -32,8 +32,7 @@ import {
 } from './model/formModel';
 
 type Mark =
-  | { readonly kind: 'idle' | 'busy' | 'done' }
-  | { readonly kind: 'error'; readonly text: string };
+  { readonly kind: 'idle' | 'busy' | 'done' } | { readonly kind: 'error'; readonly text: string };
 
 export interface QuestionnaireState {
   /** Анкета с вопросами; `null` — её нет или вопросы заранее не читаются. */
@@ -103,7 +102,10 @@ function formTakers(
 
 /** Анкета работодателя по вакансии: загрузка, черновик ответов и их сохранение. */
 export function useQuestionnaire(vacancyId: string): QuestionnaireState {
-  const load = useCallback((signal: AbortSignal) => getQuestionnaire(vacancyId, signal), [vacancyId]);
+  const load = useCallback(
+    (signal: AbortSignal) => getQuestionnaire(vacancyId, signal),
+    [vacancyId],
+  );
   const { state, reload, replaceData } = useAsync(load, '');
   const data = state.data;
   const form = data?.state === 'ready' ? data : null;
@@ -122,7 +124,9 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
     form,
     loading: state.status === 'loading' && !data,
     known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
-    draft, reload, saveError,
+    draft,
+    reload,
+    saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
     setAnswer: (questionId, text) => setDraft((current) => ({ ...current, [questionId]: text })),
     save: (next = draft) => {
@@ -150,6 +154,7 @@ interface AnswerFieldProps {
   readonly question: QuestionnaireQuestion;
   readonly value: string;
   readonly state: QuestionnaireState;
+  readonly invalid: boolean;
 }
 
 function isChoice(question: QuestionnaireQuestion): boolean {
@@ -157,7 +162,7 @@ function isChoice(question: QuestionnaireQuestion): boolean {
 }
 
 /** Поле ответа: у вопроса с вариантами — выбор из них, иначе свободный текст. */
-function AnswerField({ fieldId, question, value, state }: AnswerFieldProps) {
+function AnswerField({ fieldId, question, value, state, invalid }: AnswerFieldProps) {
   if (isChoice(question)) {
     const pick = (next: string) => {
       state.setAnswer(question.id, next);
@@ -165,16 +170,21 @@ function AnswerField({ fieldId, question, value, state }: AnswerFieldProps) {
     };
     return <ChoiceField fieldId={fieldId} question={question} value={value} onPick={pick} />;
   }
-  return (
-    <textarea
-      id={fieldId}
-      rows={2}
-      placeholder="Ваш ответ"
-      maxLength={QUESTIONNAIRE_ANSWER_MAX_LENGTH}
-      value={value}
-      onChange={(event) => state.setAnswer(question.id, event.currentTarget.value)}
-      onBlur={() => state.save()}
-    />
+  const shared = {
+    id: fieldId,
+    placeholder: 'Ваш ответ',
+    maxLength: QUESTIONNAIRE_ANSWER_MAX_LENGTH,
+    value,
+    'aria-invalid': invalid || undefined,
+    'aria-describedby': invalid ? `${fieldId}-err` : undefined,
+    onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      state.setAnswer(question.id, event.currentTarget.value),
+    onBlur: () => state.save(),
+  };
+  return question.singleLine ? (
+    <input type="text" {...shared} />
+  ) : (
+    <textarea rows={2} {...shared} />
   );
 }
 
@@ -182,11 +192,13 @@ interface QuestionProps {
   readonly question: QuestionnaireQuestion;
   readonly suggestion: QuestionnaireSuggestion | undefined;
   readonly state: QuestionnaireState;
+  readonly rejected: FormStepProps['rejected'];
 }
 
-function Question({ question, suggestion, state }: QuestionProps) {
+function Question({ question, suggestion, state, rejected }: QuestionProps) {
   const fieldId = `qa-${question.id}`;
   const value = answerOf(state.draft, question.id);
+  const invalid = rejected?.answers.get(question.id) === value;
   return (
     <li className="qa">
       <div className="qa-q">
@@ -203,7 +215,18 @@ function Question({ question, suggestion, state }: QuestionProps) {
             {`Ваш ответ: ${question.text}`}
           </label>
         )}
-        <AnswerField fieldId={fieldId} question={question} value={value} state={state} />
+        <AnswerField
+          fieldId={fieldId}
+          question={question}
+          value={value}
+          state={state}
+          invalid={invalid}
+        />
+        {invalid ? (
+          <div id={`${fieldId}-err`}>
+            <StatusLine state="err" text={`${rejected?.host ?? ''} не принял ответ`} />
+          </div>
+        ) : null}
       </div>
     </li>
   );
@@ -262,7 +285,11 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   return (
     <>
       {ready.nextRequired ? (
-        <Button variant="primary" icon="edit" onClick={() => focusField(`qa-${ready.nextRequired?.id}`)}>
+        <Button
+          variant="primary"
+          icon="edit"
+          onClick={() => focusField(`qa-${ready.nextRequired?.id}`)}
+        >
           <span>
             Ответьте<span className="qa-must"> на обязательные</span>
             {` · ${ready.missingRequired}`}
@@ -296,7 +323,13 @@ function SiteLink({ form, onSend }: Pick<ActionsProps, 'form' | 'onSend'>) {
   );
 }
 
-function SubmittedBlock({ state, onHh }: { readonly state: QuestionnaireState; readonly onHh: boolean }) {
+function SubmittedBlock({
+  state,
+  onHh,
+}: {
+  readonly state: QuestionnaireState;
+  readonly onHh: boolean;
+}) {
   const mark = state.submitted;
   return (
     <section className="mod" aria-labelledby="qb-back">
@@ -307,7 +340,12 @@ function SubmittedBlock({ state, onHh }: { readonly state: QuestionnaireState; r
         <ResultLine text="Анкета отмечена как отправленная" />
       ) : (
         <div className="actions">
-          <Button variant="quiet" icon="check" busy={mark.kind === 'busy'} onClick={state.markSubmitted}>
+          <Button
+            variant="quiet"
+            icon="check"
+            busy={mark.kind === 'busy'}
+            onClick={state.markSubmitted}
+          >
             Анкета отправлена
           </Button>
         </div>
@@ -323,6 +361,8 @@ export interface FormStepProps {
   readonly visibility: VisibilityState;
   /** Форма сайта работодателя уходит из приложения (B787). */
   readonly viaApp?: 'open' | 'locked';
+  /** Ответы, которые сайт работодателя не принял. */
+  readonly rejected?: { readonly host: string; readonly answers: ReadonlyMap<string, string> };
   readonly onSend: () => void;
 }
 
@@ -331,19 +371,47 @@ function FormDock({ children }: { readonly children: ReactNode }) {
   return useIsMobile() ? null : <div className="act-dock is-auto qa-dock">{children}</div>;
 }
 
+/** Готовность анкеты вместе с вопросом о показе резюме, когда он задан. */
+function readinessOf(
+  form: ApplicationQuestionnaire,
+  state: QuestionnaireState,
+  visibility: VisibilityState | null,
+) {
+  if (!visibility) return readiness(form.questions, state.draft);
+  return readiness([...form.questions, VISIBILITY_QUESTION], {
+    ...state.draft,
+    [VISIBILITY_QUESTION.id]: visibility.value ?? '',
+  });
+}
+
+function FormSide(props: {
+  readonly form: ApplicationQuestionnaire;
+  readonly ready: ReturnType<typeof readiness>;
+  readonly onSend: (() => void) | null;
+}) {
+  return (
+    <aside className="qa-side" aria-label="Готовность анкеты">
+      <p className="qa-count">
+        <b className="num">{`${props.ready.answered} из ${props.ready.total}`}</b> готовы
+      </p>
+      <SiteLink form={props.form} onSend={props.onSend} />
+    </aside>
+  );
+}
+
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepProps) {
+export function FormStep({ state, form, visibility, viaApp, rejected, onSend }: FormStepProps) {
   const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
   const hhInApp = onHh && isTauriEnvironment();
   const inApp = hhInApp || viaApp !== undefined;
   const send = inApp ? onSend : null;
   const asked = hhInApp && visibility.value !== null;
-  const ready = asked
-    ? readiness([...form.questions, VISIBILITY_QUESTION], { ...state.draft, [VISIBILITY_QUESTION.id]: visibility.value ?? '' })
-    : readiness(form.questions, state.draft);
-  const declined = (asked && !visibility.agreed) || viaApp === 'locked';
+  const ready = readinessOf(form, state, asked ? visibility : null);
   const suggestions = new Map(form.suggestions.map((item) => [item.questionId, item]));
-  const actions = <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />;
+  const declined = (asked && !visibility.agreed) || viaApp === 'locked';
+  const actions = (
+    <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
+  );
   return (
     <>
       <div className="col">
@@ -358,6 +426,7 @@ export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepPr
                 question={question}
                 suggestion={suggestions.get(question.id)}
                 state={state}
+                rejected={rejected}
               />
             ))}
             {asked ? <VisibilityRow visibility={visibility} /> : null}
@@ -370,12 +439,7 @@ export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepPr
         </section>
       </div>
       <div className="col">
-        <aside className="qa-side" aria-label="Готовность анкеты">
-          <p className="qa-count">
-            <b className="num">{`${ready.answered} из ${ready.total}`}</b> готовы
-          </p>
-          <SiteLink form={form} onSend={send} />
-        </aside>
+        <FormSide form={form} ready={ready} onSend={send} />
         {inApp ? null : <SubmittedBlock state={state} onHh={onHh} />}
       </div>
       <FormDock>{actions}</FormDock>
