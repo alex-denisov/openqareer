@@ -47,3 +47,15 @@ it('B761: одно чтение смотрит окно ключей, а не и
   expect(discovery.readPendingPage(db, '', 500, 0, 'c00499')).toEqual([]);
   db.close();
 });
+
+it('B761: окно читается по первичному ключу, а не по индексу статуса всего справочника', () => {
+  const db = directory(3, () => true);
+  const prepare = vi.spyOn(db, 'prepare');
+  discovery.readPendingPage(db, '', 500, 0, 'c00499');
+  const sql = prepare.mock.calls.map(([text]) => text).find((text) => text.includes('FROM company_directory d'))!;
+  prepare.mockRestore();
+  const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all('', 0, 'c00499', 500) as { detail: string }[];
+  const walk = plan.find((step) => /(SEARCH|SCAN) d /.test(step.detail))!.detail;
+  expect(walk).toContain('company_key>? AND company_key<?');
+  db.close();
+});

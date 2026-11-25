@@ -127,7 +127,7 @@ export interface FunnelSummary {
   /** B645: ответы компаний на автоотклики. */
   readonly autoResponded: number;
   readonly responded: number;
-  /** B645: интервью и офферы — по текущей стадии, как чипы экрана «Отклики». */
+  /** Интервью и офферы — по истории, как строка пути на «Сегодня» (решение CPO 25.11). */
   readonly interview: number;
   readonly offer: number;
   /** Компании, которым можно напомнить о себе. */
@@ -152,22 +152,9 @@ function platformLabel(source: string): string {
   return platform.site ? 'Сайт компании' : platform.label;
 }
 
-function countStage(
-  items: readonly ListedResponse[],
-  label: string,
-  stage: ApplicationView['stage'],
-): number {
-  return items.filter(
-    (item) =>
-      item.application.stage === stage &&
-      platformLabel(item.application.vacancy?.source ?? 'other') === label,
-  ).length;
-}
-
-/** Отклики по площадкам: отправлено и ответили — по истории, интервью и офферы — по текущей стадии. */
+/** Отклики по площадкам; все числа — по истории, как строка пути на «Сегодня». */
 function byPlatform(
   sources: readonly SourceBreakdownItem[],
-  items: readonly ListedResponse[],
 ): readonly SourceBreakdownItem[] {
   const groups = new Map<string, SourceBreakdownItem>();
   for (const source of sources) {
@@ -178,8 +165,8 @@ function byPlatform(
       sourceLabel: label,
       total: (known?.total ?? 0) + source.total,
       responded: (known?.responded ?? 0) + source.responded,
-      interview: countStage(items, label, 'interview'),
-      offer: countStage(items, label, 'offer'),
+      interview: (known?.interview ?? 0) + source.interview,
+      offer: (known?.offer ?? 0) + source.offer,
     });
   }
   return [...groups.values()].sort((a, b) => b.total - a.total);
@@ -191,7 +178,7 @@ export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
   const sentItems = sentAll.filter((item) => item.auto !== true);
   const analytics = computePipelineAnalytics(sentItems.map((item) => item.application));
   const autoAnalytics = computePipelineAnalytics(autoItems.map((item) => item.application));
-  const sources = byPlatform(analytics.sources, sentItems);
+  const sources = byPlatform(analytics.sources);
   const first = sentItems.reduce<number | null>(
     (min, item) => (min === null || item.row.sentAt < min ? item.row.sentAt : min),
     null,

@@ -83,7 +83,8 @@ export async function page(
 }
 
 const SITE_NOT_SEARCHED = `(d.evidence IS NULL OR instr(d.evidence, 'B643-9') = 0)`;
-const PENDING_WHERE = `d.status = 'active' AND d.ats_provider IS NULL
+/** Unary `+` keeps the planner on the key window: the status and board indexes read the whole directory per page (B761). */
+const PENDING_WHERE = `+d.status = 'active' AND +d.ats_provider IS NULL
   AND NOT EXISTS (SELECT 1 FROM company_placement p WHERE p.company_key = d.company_key AND p.type = 'ats')`;
 
 type PendingRow = { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null; dropped_careers_url: string | null; freehire_slug?: string | null; site_searched: number };

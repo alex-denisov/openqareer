@@ -64,18 +64,20 @@ function RaiseResume({ resumes, value, disabled, onChange }: RaiseResumeProps) {
   );
 }
 
-function useHhRaise() {
-  const [view, setView] = useState<B640HhRaiseState | null>(null);
+function useHhRaise(initial: B640HhRaiseState | null) {
+  const [view, setView] = useState(initial);
+  const [known] = useState(initial !== null);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (known) return undefined;
     const controller = new AbortController();
     getHhRaise(controller.signal).then(setView, () => {
       if (!controller.signal.aborted) setFailed(true);
     });
     return () => controller.abort();
-  }, []);
+  }, [known]);
 
   // Во время записи чтение снимается, чтобы старый ответ не затёр новый.
   const waiting = Boolean(view?.pending && view.enabled) && !busy;
@@ -118,8 +120,13 @@ function useHhRaise() {
  * B699: переключатель «Автоподнятие резюме» по макету a11 (`.hh-sw`) и тихая строка состояния
  * под ним. Монтируется в шапке экрана hh.ru (a11), когда hh.ru подключён.
  */
-export function HhRaiseStatus() {
-  const { view, failed, busy, change } = useHhRaise();
+interface HhRaiseStatusProps {
+  /** Состояние, которое экран уже прочитал. */
+  readonly initial?: B640HhRaiseState | null;
+}
+
+export function HhRaiseStatus({ initial = null }: HhRaiseStatusProps) {
+  const { view, failed, busy, change } = useHhRaise(initial);
   if (failed && !view) return <StatusLine state="err" text="Состояние поднятия не загрузилось" />;
   if (!view) return <StatusLine state="wait" text="Загружаем состояние поднятия" />;
   if (!view.connected) return null;

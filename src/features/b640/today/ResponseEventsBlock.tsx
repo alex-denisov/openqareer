@@ -1,3 +1,4 @@
+import { pressSend } from '../apply/applyIntent';
 import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
 import type { ResponseEvent } from './responseEventsModel';
@@ -19,7 +20,7 @@ function EventCard({ event, first }: { readonly event: ResponseEvent; readonly f
         <p className="re-why">{event.why}</p>
       </div>
       <div className="actions re-acts">
-        <Link className={first ? 'btn is-primary' : 'btn'} to={event.action.path}>
+        <Link className={first ? 'btn is-primary' : 'btn'} to={event.action.path} onClick={() => pressSend(event.action, event.action.path)}>
           <Icon name={event.action.icon} />
           {event.action.label}
         </Link>

@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { wasSent } from '../../shared/applicationSent';
 import {
   REJECTION_NOTE_MAX_LENGTH,
   REJECTION_REASONS,
@@ -77,12 +78,19 @@ function guessFor(
 
 type StoredView = ReturnType<RouteDeps['candidateStore']['listApplications']>[number];
 
+const sentFacts = ({ stage, appliedAt, archivePreviousStage, reachedStages }: StoredView) => ({
+  stage,
+  appliedAt,
+  archivePreviousStage,
+  reachedStages,
+});
+
 /** Вилка и дата публикации из пула; вакансии там нет — `null`, проверка её не считает. */
 function checkApplication(deps: BoundDeps, application: StoredView): ReviewCheckApplication {
   const sourceId = application.clusterId?.replace(/^cluster-/u, '');
   const vacancy = sourceId ? deps.multiSourceEngine.getVacancy?.(sourceId) : undefined;
   return {
-    stage: application.stage,
+    ...sentFacts(application),
     appliedAt: application.appliedAt ?? null,
     publishedAt: vacancy?.publishedAt ?? null,
     salaryTo: vacancy?.salary?.to ?? null,
@@ -98,7 +106,7 @@ function salaryFloorOf(deps: BoundDeps, candidate: string): SalaryFloor | null {
 
 /** B645: проверки «Мало данных» — только пока откликов меньше порога. */
 function lowDataChecks(deps: BoundDeps, candidate: string, stored: readonly StoredView[]) {
-  const sent = stored.filter((application) => application.stage !== 'saved');
+  const sent = stored.filter(wasSent);
   if (sent.length >= REJECTION_REVIEW_MIN_SAMPLE) return undefined;
   return buildReviewChecks(
     sent.map((application) => checkApplication(deps, application)),
@@ -120,7 +128,7 @@ const getReview: Handler = async (deps, request, reply) => {
   const stored = deps.candidateStore.listApplications(candidate);
   const applications: RejectionReviewApplication[] = stored.map((application) => ({
     id: application.id,
-    stage: application.stage,
+    ...sentFacts(application),
     title: application.vacancy?.title ?? '',
     company: application.vacancy?.company || null,
     stageChangedAt: application.stageChangedAt,
