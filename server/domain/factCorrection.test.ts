@@ -86,6 +86,27 @@ describe('B796: консультант не говорит о записи, ко
     expect(withoutWriteClaims('Исправлено.', false)).toContain('не меняю');
   });
 
+  it('под карточкой отказ и просьба внести вручную заменены', () => {
+    const reply =
+      'Понял: рентабельность 40 %. Саму правку в двух местах вносите в карточке профиля — текст за вас я не меняю. Что дальше?';
+    const text = withoutWriteClaims(reply, true);
+    expect(text).not.toMatch(/не меняю|вносите/u);
+    expect(text).toContain('Понял: рентабельность 40 %.');
+    expect(text).toContain('Что дальше?');
+    expect(text).toContain('после «Применить»');
+    expect(withoutWriteClaims('Исправьте цифру в резюме вручную.', true)).toContain('«Применить»');
+    expect(withoutWriteClaims(reply, false)).toBe(reply);
+  });
+
+  it('верный ответ о карточке и чужое «не меняю» остаются', () => {
+    for (const text of [
+      'Правка готова ниже: внесите её кнопкой «Применить».',
+      'Я не меняю мнение: роль вам подходит.',
+      'Лучше не менять компанию до весны.',
+    ])
+      expect(withoutWriteClaims(text, true)).toBe(text);
+  });
+
   it('рассказ о работе кандидата остаётся', () => {
     const text = 'Вы изменили процесс и обновили команду.';
     expect(withoutWriteClaims(text, true)).toBe(text);
