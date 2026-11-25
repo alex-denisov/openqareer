@@ -563,6 +563,23 @@ mod tests {
     }
 
     #[test]
+    fn a_teamtailor_question_carries_the_number_of_its_open_page() {
+        let html = r#"<form id="job-application-form">
+<input type="hidden" value="4082600" name="candidate[answers_attributes][1][question_id]">
+<label for="pay">Salary?<sup data-asterisk="true">*</sup><span class="sr-only">Required</span></label>
+<input id="pay" type="range" name="candidate[answers_attributes][1][range]" min="0" max="50000" step="500">
+<label for="name">Name</label><input id="name" name="candidate[first_name]">
+<button type="submit">Apply</button></form>"#;
+        let Some(out) = run(html, "/acme", "", &[op("read", Value::Null)]) else {
+            return;
+        };
+        let read = parsed(&out, 0);
+        assert_eq!(read["fields"][0]["question"], "4082600");
+        assert_eq!(read["fields"][0]["label"], "Salary?");
+        assert_eq!(read["fields"][1]["question"], Value::Null);
+    }
+
+    #[test]
     fn a_field_that_would_send_its_own_number_is_never_optional() {
         let html = r#"<form id="job-application-form">
 <label for="pay">Salary</label><input id="pay" type="range" min="0" max="50000">

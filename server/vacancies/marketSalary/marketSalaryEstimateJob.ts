@@ -1,8 +1,8 @@
 /**
  * B546: market salary estimates, computed in the maintenance process only.
  *
- * Keyset slices over salaried live vacancies (never the whole pool in memory):
- * each midpoint goes to a city group and a region group of
+ * Rowid slices over salaried live vacancies (never the whole pool in memory):
+ * each midpoint goes to a city group and a country group of
  * the same normalised function and level. The result replaces
  * `market_salary_estimates`; the web server reads it by primary key.
  */
@@ -13,42 +13,48 @@ import {
   marketSalaryKey,
   salaryMidpoint,
   type MarketSalaryEstimate,
+  type MarketSalaryPeriod,
 } from '../../../shared/marketSalaryEstimate';
-import { regionOfVacancy } from '../vacancyGeography';
+import type { CurrencyRates } from '../../../shared/currencyRates';
+import { salaryPeriodOf } from '../../../shared/monthlyRubSalary';
+import { readCurrencyRates } from '../../currency/cbrRates';
+import { marketSalaryCityPlace, marketSalaryCountry } from './marketSalaryCountry';
 
 export const MARKET_SALARY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS market_salary_estimates (
   key TEXT PRIMARY KEY,
   low INTEGER,
   high INTEGER,
   currency TEXT NOT NULL,
+  period TEXT,
   sample_size INTEGER NOT NULL,
   computed_at TEXT NOT NULL
 ) STRICT`;
 
 interface SalariedRow {
-  readonly id: string;
   readonly function_code: string;
   readonly level_rank: number | null;
   readonly salary_from: number | null;
   readonly salary_to: number | null;
   readonly currency: string | null;
+  readonly period: string | null;
   readonly location: string | null;
 }
 
+/** Ключ группы → «валюта|период» → середины вилок. */
 type Groups = Map<string, Map<string, number[]>>;
 
-function addSample(groups: Groups, key: string, currency: string, midpoint: number): void {
-  const byCurrency = groups.get(key) ?? new Map<string, number[]>();
-  const values = byCurrency.get(currency) ?? [];
+function addSample(groups: Groups, key: string, unit: string, midpoint: number): void {
+  const byUnit = groups.get(key) ?? new Map<string, number[]>();
+  const values = byUnit.get(unit) ?? [];
   values.push(midpoint);
-  byCurrency.set(currency, values);
-  groups.set(key, byCurrency);
+  byUnit.set(unit, values);
+  groups.set(key, byUnit);
 }
 
-/** Dominant currency of a group: no exchange rates exist, so others are dropped. */
-function dominant(byCurrency: Map<string, number[]>): [string, number[]] {
+/** Dominant currency and period of a group: amounts are never converted, others are dropped. */
+function dominant(byUnit: Map<string, number[]>): [string, number[]] {
   let best: [string, number[]] = ['', []];
-  for (const entry of byCurrency) if (entry[1].length > best[1].length) best = entry;
+  for (const entry of byUnit) if (entry[1].length > best[1].length) best = entry;
   return best;
 }
 
@@ -57,55 +63,63 @@ export interface MarketSalarySliceOptions {
   readonly pause?: () => Promise<void>;
 }
 
-// B761: холодная порция в 2 000 строк держала очередь до 1,2 с; 500 — около 0,3 с.
-const DEFAULT_SLICE_ROWS = 500;
+/** Номеров строк за порцию: на проде около 0,08 с чтения. */
+const DEFAULT_SLICE_ROWS = 1_000;
 const SLICE_PAUSE_MS = 50;
 
 /**
- * B761 23.11: `json_extract` по `payload` разбирал полный текст каждой живой вакансии —
- * 46 % профиля обслуживания ночью. Зарплату и место проекция сведения хранит как есть
- * (`clusterProjectionOf`), а она в разы короче; `payload` читается только у строки
- * без проекции, так что цифры оценки не меняются.
+ * B803 25.11: проход шёл от `vacancy_semantic` (2,7 млн строк, по трём таблицам на каждую) 34 мин и
+ * не успевал между выкатами. Зарплата есть у меньшинства: сначала проекция по номеру строки,
+ * остальное — только для строк с зарплатой. Проекция есть у всех живых вакансий (выборка 39 626).
  */
-const fieldOf = (path: string) =>
-  `CASE WHEN c.id IS NOT NULL THEN json_extract(c.cluster_json, '${path}')
-        ELSE json_extract(p.payload, '${path}') END`;
+const SLICE_SQL = `SELECT s.function_code, s.level_rank, c.salary_from, c.salary_to, c.currency, c.period, c.location
+  FROM (SELECT id,
+          json_extract(cluster_json, '$.salary.from') AS salary_from,
+          json_extract(cluster_json, '$.salary.to') AS salary_to,
+          json_extract(cluster_json, '$.salary.currency') AS currency,
+          json_extract(cluster_json, '$.salary.period') AS period,
+          json_extract(cluster_json, '$.location') AS location
+        FROM vacancy_cluster_input WHERE rowid > ? AND rowid <= ?) c
+  CROSS JOIN vacancy_pool_index i ON i.id = c.id AND i.is_active = 1 AND i.expired = 0
+  CROSS JOIN vacancy_semantic s ON s.id = c.id
+  WHERE c.salary_from IS NOT NULL OR c.salary_to IS NOT NULL`;
 
-const SLICE_SQL = `SELECT s.id, s.function_code, s.level_rank,
-    ${fieldOf('$.salary.from')} AS salary_from,
-    ${fieldOf('$.salary.to')} AS salary_to,
-    ${fieldOf('$.salary.currency')} AS currency,
-    ${fieldOf('$.location')} AS location
-  FROM (SELECT id, function_code, level_rank FROM vacancy_semantic
-        WHERE (id, function_code) > (?, ?)
-        ORDER BY id, function_code LIMIT ?) s
-  LEFT JOIN vacancy_pool_index i ON i.id = s.id AND i.is_active = 1 AND i.expired = 0
-  LEFT JOIN vacancy_cluster_input c ON c.id = i.id
-  LEFT JOIN vacancy_pool p ON p.id = i.id AND c.id IS NULL
-  ORDER BY s.id, s.function_code`;
+/** Валюта и период суммы; почасовая и неизвестного периода в оценку не входит. */
+function unitOf(row: SalariedRow, rates: CurrencyRates | undefined): string | undefined {
+  const code = row.currency?.trim().toUpperCase();
+  if (!code) return undefined;
+  // hh пишет RUR, остальные RUB: одна валюта — одна группа.
+  const currency = code === 'RUB' ? 'RUR' : code;
+  // Без курсов сумму без периода не отличить: 90 000 EUR — год, 800 000 KZT — месяц.
+  if (!row.period && currency !== 'RUR' && !rates) return undefined;
+  const period = salaryPeriodOf(
+    {
+      from: row.salary_from ?? undefined,
+      to: row.salary_to ?? undefined,
+      currency,
+      period: row.period ?? undefined,
+    },
+    rates,
+  );
+  return period === 'month' || period === 'year' ? `${currency}|${period}` : undefined;
+}
 
-function addRow(groups: Groups, row: SalariedRow): void {
+function addRow(groups: Groups, row: SalariedRow, rates: CurrencyRates | undefined): void {
   const midpoint = salaryMidpoint({ from: row.salary_from, to: row.salary_to });
-  if (midpoint === undefined || !row.currency) return;
-  const currency = row.currency.toUpperCase();
+  if (midpoint === undefined) return;
+  const unit = unitOf(row, rates);
+  const country = marketSalaryCountry(row.location);
+  if (!unit || !country) return;
   const city = marketSalaryCity(row.location);
-  const region = regionOfVacancy({ location: row.location ?? undefined });
-  if (city) {
+  const add = (basis: 'city' | 'country', place: string) =>
     addSample(
       groups,
-      marketSalaryKey(row.function_code, row.level_rank, 'city', city),
-      currency,
+      marketSalaryKey(row.function_code, row.level_rank, basis, place),
+      unit,
       midpoint,
     );
-  }
-  if (region) {
-    addSample(
-      groups,
-      marketSalaryKey(row.function_code, row.level_rank, 'region', region),
-      currency,
-      midpoint,
-    );
-  }
+  if (city) add('city', marketSalaryCityPlace(country, city));
+  add('country', country);
 }
 
 /**
@@ -121,25 +135,30 @@ export async function computeMarketSalaryEstimates(
   const pause =
     options.pause ?? (() => new Promise<void>((done) => setTimeout(done, SLICE_PAUSE_MS)));
   const statement = database.prepare(SLICE_SQL);
+  const rates = readCurrencyRates(database);
   const groups: Groups = new Map();
-  let lastId = '';
-  let lastFunction = '';
-  for (;;) {
-    const rows = statement.all(lastId, lastFunction, sliceRows) as unknown as SalariedRow[];
-    for (const row of rows) addRow(groups, row);
-    const last = rows.at(-1);
-    if (!last) break;
-    lastId = last.id;
-    lastFunction = last.function_code;
-    if (rows.length < sliceRows) break;
-    await pause();
+  const { last } = database
+    .prepare('SELECT coalesce(max(rowid), 0) AS last FROM vacancy_cluster_input')
+    .get() as { last: number };
+  for (let from = 0; from < last; from += sliceRows) {
+    if (from > 0) await pause();
+    const rows = statement.all(from, from + sliceRows) as unknown as SalariedRow[];
+    for (const row of rows) addRow(groups, row, rates);
   }
   const estimates = new Map<string, MarketSalaryEstimate>();
-  for (const [key, byCurrency] of groups) {
-    const [currency, midpoints] = dominant(byCurrency);
-    estimates.set(key, estimateFromMidpoints(midpoints, currency));
+  for (const [key, byUnit] of groups) {
+    const [unit, midpoints] = dominant(byUnit);
+    const [currency = '', period] = unit.split('|');
+    estimates.set(key, estimateFromMidpoints(midpoints, currency, period as MarketSalaryPeriod));
   }
   return estimates;
+}
+
+function addPeriodColumn(database: DatabaseSync): void {
+  const exists = database
+    .prepare("SELECT 1 FROM pragma_table_info('market_salary_estimates') WHERE name = 'period'")
+    .get();
+  if (!exists) database.exec('ALTER TABLE market_salary_estimates ADD COLUMN period TEXT');
 }
 
 export function writeMarketSalaryEstimates(
@@ -148,8 +167,9 @@ export function writeMarketSalaryEstimates(
   now: Date,
 ): void {
   database.exec(MARKET_SALARY_TABLE_SQL);
+  addPeriodColumn(database);
   const insert = database.prepare(
-    'INSERT INTO market_salary_estimates (key, low, high, currency, sample_size, computed_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO market_salary_estimates (key, low, high, currency, period, sample_size, computed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
   );
   const computedAt = now.toISOString();
   database.exec('BEGIN IMMEDIATE');
@@ -161,6 +181,7 @@ export function writeMarketSalaryEstimates(
         estimate.low ?? null,
         estimate.high ?? null,
         estimate.currency,
+        estimate.period ?? null,
         estimate.sampleSize,
         computedAt,
       );

@@ -1,3 +1,5 @@
+import type { CurrencyRates } from '../../../shared/currencyRates';
+import { shownSalaryPeriod, type SalaryPeriod } from '../../../shared/monthlyRubSalary';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
 type Salary = MatchedVacancyItem['cluster']['salary'];
@@ -51,6 +53,30 @@ export function formatCompensationCompact(salary: Salary): string {
     return `от ${withCurrency(thousandsAmount(salary.from), salary.currency)}`;
   }
   return `до ${withCurrency(thousandsAmount(salary.to as number), salary.currency)}`;
+}
+
+const PERIOD_WORDS: Readonly<Record<SalaryPeriod, string>> = {
+  hour: ' в час',
+  month: '',
+  year: ' в год',
+  unknown: '',
+};
+
+/** Сумма как в вакансии, с периодом: «$218–265 тыс. в год», «$250–400 в час». */
+export function formatStatedCompensation(salary: Salary, rates?: CurrencyRates): string {
+  if (!salary || (salary.from === undefined && salary.to === undefined))
+    return formatCompensationCompact(salary);
+  return formatPeriodAmounts(salary, shownSalaryPeriod(salary, rates));
+}
+
+export function formatPeriodAmounts(salary: NonNullable<Salary>, period: SalaryPeriod): string {
+  if (period === 'hour') return `${formatRateAmounts(salary)}${PERIOD_WORDS.hour}`;
+  return `${formatCompensationCompact(salary)}${PERIOD_WORDS[period]}`;
+}
+
+/** Слова периода для строк, которые сумму пишут сами. */
+export function compensationPeriodWord(salary: NonNullable<Salary>, rates?: CurrencyRates): string {
+  return PERIOD_WORDS[shownSalaryPeriod(salary, rates)];
 }
 
 const THOUSAND = 1000;

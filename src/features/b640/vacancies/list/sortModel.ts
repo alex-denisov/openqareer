@@ -1,4 +1,5 @@
 import { convertAmount, type CurrencyRates } from '../../../../../shared/currencyRates';
+import { monthlySalary } from '../../../../../shared/monthlyRubSalary';
 import {
   compareListed,
   compareListedDate,
@@ -53,7 +54,7 @@ export function nextSort(current: SortState | null, key: SortKey): SortState {
 }
 
 function moneyValue(item: MatchedVacancyItem, rates?: CurrencyRates): number | undefined {
-  const salary = item.cluster.salary;
+  const salary = monthlySalary(item.cluster.salary, rates);
   const amount = salary?.from ?? salary?.to;
   if (amount === undefined || !salary?.currency) return undefined;
   return convertAmount(amount, salary.currency, 'RUB', rates) ?? amount;

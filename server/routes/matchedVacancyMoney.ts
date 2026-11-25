@@ -70,7 +70,8 @@ export function createMoneyReader(
           })
         : undefined);
     if (!estimate || estimate.low === undefined || estimate.high === undefined) return NONE;
-    return monthRank({ from: estimate.low, to: estimate.high, currency: estimate.currency }, rates);
+    const { low, high, currency, period } = estimate;
+    return monthRank({ from: low, to: high, currency, period }, rates);
   };
 }
 

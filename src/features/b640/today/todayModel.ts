@@ -8,7 +8,7 @@ import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import type { RoleSkillDemand } from '../../skills/roleSkillDemandApi';
 import type { TodayFunnelCounts, TodayNextInterview, TodayQueueItem } from '../../today/todayApi';
 import { queueActionTitle, queueDesktopSubtitle } from '../../today/todayFormat';
-import { formatCompensationCompact } from '../../vacancies/vacancyCompensation';
+import { formatStatedCompensation } from '../../vacancies/vacancyCompensation';
 import type { IconName } from '../kit';
 import { buildNodePath } from '../routes';
 
@@ -106,7 +106,7 @@ export function moreTitle(count: number): string {
  */
 export function leadText(item: TodayQueueItem): string | null {
   if (item.kind === 'linkedin_post') return null;
-  const salary = item.salary ? formatCompensationCompact(item.salary) : null;
+  const salary = item.salary ? formatStatedCompensation(item.salary) : null;
   // Вакансия уже в заголовке («Ваш ход: …», «Новая вакансия: …») — второй раз её не пишем.
   const title = queueActionTitle(item).includes(item.title) ? null : item.title.trim();
   const parts = [title, item.location?.trim(), salary === 'не указана' ? null : salary];
@@ -203,7 +203,7 @@ export function vacancyRow(item: MatchedVacancyItem): VacancyRow {
     id: cluster.id,
     title: cluster.canonicalTitle,
     sub: [cluster.canonicalCompany, cluster.canonicalLocation].filter(Boolean).join(' · '),
-    salary: formatCompensationCompact(cluster.salary),
+    salary: formatStatedCompensation(cluster.salary),
     fit: typeof percent === 'number' ? Math.round(percent) : null,
     path: buildNodePath('v04', { vacancyId: cluster.id }),
   };
