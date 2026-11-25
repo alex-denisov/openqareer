@@ -41,7 +41,7 @@ const journal = (list: unknown[], total = list.length) => ({
 afterEach(() => vi.clearAllMocks());
 
 describe('a11: hh.ru', () => {
-  it('подключён: «Автоподнятие резюме» по макету, цифры из учёта, поле «Резюме», без аналитики', async () => {
+  it('подключён: «Автоподнятие резюме» по макету, цифры из учёта, поле «Резюме», без просмотров', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('connected')] as never);
     vi.mocked(raise.getHhRaise).mockResolvedValue({
       connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер' }], enabled: false, everyHours: 4,
@@ -50,6 +50,7 @@ describe('a11: hh.ru', () => {
     const view = mount(<Section node={node('a11')} params={{}} />);
     await flush();
     expect(view.container.querySelector('[data-b640-node="a11"]')).not.toBeNull();
+    expect(view.container.querySelector('#hh-an')!.textContent).toBe('Аналитика');
     expect(view.container.textContent).toContain('Последнее поднятие');
     expect(view.container.textContent).toContain('Поднятий сегодня2');
     expect(raise.getHhRaise).toHaveBeenCalledTimes(1);

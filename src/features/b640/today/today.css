@@ -14,8 +14,8 @@
       position: fixed; z-index: 11; inset-inline: 0; margin: 0;
       inset-block-end: calc(var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px));
       display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0;
-      padding: var(--career-space-3) var(--career-space-4) var(--career-space-2);
-      background: var(--career-bg); border-block-start: var(--career-border-width) solid var(--career-line);
+      padding: var(--career-space-2) var(--career-space-4);
+      background: var(--career-surface); border-block-start: var(--career-border-width) solid var(--career-line-strong);
     }
     .b640 .route.why.col-wide .why-body > .actions > .btn { min-block-size: var(--career-target-min); }
     .b640 .route.why.col-wide .why-body > .actions > .btn:nth-child(1) { grid-area: 2 / 2; justify-content: center; }

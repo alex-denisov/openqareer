@@ -65,7 +65,7 @@ function Stats({ stats }: { readonly stats: readonly HhStat[] }) {
     <>
       <div className="hh-stats-h">
         <h3 className="li-sec-t" id="hh-an">
-          Данные
+          Аналитика
         </h3>
         <InfoTip
           label="Откуда данные"

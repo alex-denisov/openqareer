@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
+import { matchedVacancyPage } from '../fixtures/readabilityWorkspace';
 import { expectGates } from './gates';
 
 const SHOTS = process.env.B640_SHOTS;
@@ -451,6 +452,44 @@ test.describe('B654: раздел «Вакансии», подборка и со
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(over).toBeLessThanOrEqual(0);
+  });
+
+  test('B801 Н-А: под «Формат» дочитывается порция строк, кнопки справа и без счётчика', async ({
+    page,
+  }, testInfo) => {
+    test.skip(isMobile(testInfo.project.name), 'отбор ставится поповером');
+    await openCabinet(page, '/app/vacancies', { total: 60 });
+    await page.route('**/candidate/b640/matched-vacancies?**', (route) => {
+      const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? 0);
+      const portion = matchedVacancyPage(offset, 60, 20);
+      const data = portion.data.map((item, index) => ({
+        ...item,
+        cluster: { ...item.cluster, workFormat: index % 2 === 0 ? 'hybrid' : 'remote' },
+      }));
+      return route.fulfill({ json: { ...portion, data } });
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    const acts = page.locator('.vl-countbar .vl-acts');
+    const right = async () => {
+      const box = (await acts.boundingBox())!;
+      return Math.round(box.x + box.width);
+    };
+    const edge = await right();
+    await page
+      .locator('.vt-fbar')
+      .getByRole('button', { name: /^Формат/ })
+      .click();
+    await page.getByRole('checkbox', { name: /^гибрид/i }).check();
+    await page.locator('.vt-pop-foot .btn.is-primary').click();
+    // Гибридная каждая вторая: в первой порции их 10, список дочитывает до 20.
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    await expect(page.locator('.vl-count')).toHaveCount(0);
+    expect(await right()).toBe(edge);
+    await page.getByRole('button', { name: /^Показать ещё/ }).click();
+    await expect(page.locator(ROWS)).toHaveCount(30);
+    await expect(page.locator('#list-title')).toContainText('30 вакансий');
+    expect(await right()).toBe(edge);
   });
 
   test('скрыть с причиной: строка уходит, «Отменить» возвращает', async ({ page }, testInfo) => {
