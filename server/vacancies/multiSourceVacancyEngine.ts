@@ -99,6 +99,7 @@ import {
   type WorkdayDescriptionReport,
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
+import { isHhStubText } from './hhStubText';
 import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
 /**
@@ -1470,7 +1471,8 @@ export class MultiSourceVacancyEngine {
     if (
       this.persistedDescriptionIds.has(id) ||
       // 01.11: дочитанный текст без навыков — тоже готов; иначе он запрашивался каждый раз.
-      existing.fullDescription?.trim()
+      // B794: обрывок («Обязанности:») читается ещё раз, один раз за процесс.
+      !isHhStubText(existing.fullDescription)
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
