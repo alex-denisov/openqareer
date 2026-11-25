@@ -86,6 +86,41 @@ describe('B690: вход в hh.ru истёк', () => {
     expect(ctx.unread()).toHaveLength(0);
   });
 
+  it('B704: a successful hh read clears the mark everywhere, a later real logout marks it again', async () => {
+    const ctx = await setup();
+    await ctx.raiseWith('logged_out');
+    expect((await ctx.send('POST', `${SESSION}/alive`, {})).statusCode).toBe(200);
+    expect((await ctx.get(SESSION, 'flagged.test')).json().data).toEqual({ expired: false, since: null });
+    expect(ctx.unread()).toHaveLength(0);
+    const raise = (await ctx.get(`${RAISE}?resumeId=abc123`, 'flagged.test')).json().data;
+    expect(raise.pauseReason).toBeNull();
+    expect(typeof raise.nextRaiseAt).toBe('string');
+    await ctx.raiseWith('logged_out', 'def456');
+    expect((await ctx.get(SESSION, 'flagged.test')).json().data.expired).toBe(true);
+    expect(ctx.unread()).toHaveLength(1);
+  });
+
+  it('B704: the alive report needs the session and the flag', async () => {
+    const { send, app } = await setup();
+    expect((await app.inject({ method: 'POST', url: `${SESSION}/alive`, payload: {} })).statusCode).toBe(404);
+    expect((await send('POST', `${SESSION}/alive`, { expired: true })).statusCode).toBe(400);
+  });
+
+  it.each(['captcha', 'foreign_page', 'error', 'too_early'])('B704: %s of one operation does not mark the login expired', async (outcome) => {
+    const ctx = await setup();
+    await ctx.raiseWith(outcome);
+    expect((await ctx.get(SESSION, 'flagged.test')).json().data.expired).toBe(false);
+    expect(ctx.unread()).toHaveLength(0);
+  });
+
+  it('B704: «too early» is a signed-in answer: the mark and the notice go', async () => {
+    const ctx = await setup();
+    await ctx.raiseWith('logged_out');
+    await ctx.raiseWith('too_early', 'def456');
+    expect((await ctx.get(SESSION, 'flagged.test')).json().data.expired).toBe(false);
+    expect(ctx.unread()).toHaveLength(0);
+  });
+
   it('a read notice does not come back on the next refusal of the same expiry', async () => {
     const ctx = await setup();
     await ctx.raiseWith('logged_out');

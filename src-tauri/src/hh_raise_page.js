@@ -107,13 +107,18 @@
     }
 
     var signedIn = !!q(signedSelector);
+    // Only hh.ru itself naming another user type confirms the sign-out; a page
+    // without the menu and the state (403, failure, half drawn) says nothing.
+    var signedOut = false;
     if (!signedIn) {
       var state = document.getElementById('HH-Lux-InitialState');
       var raw = state
         ? (state.content && state.content.textContent) || state.textContent || ''
         : '';
       try {
-        signedIn = JSON.parse(raw).userType === 'applicant';
+        var userType = JSON.parse(raw).userType;
+        signedIn = userType === 'applicant';
+        signedOut = !!userType && !signedIn;
       } catch (_e) {
         signedIn = false;
       }
@@ -121,10 +126,11 @@
     if (
       location.pathname.indexOf('/account/login') === 0 ||
       shown(q('input[type="password"]')) ||
-      !signedIn
+      signedOut
     ) {
       return { code: 'logged_out' };
     }
+    if (!signedIn) return { code: 'waiting', pressed: !mayPress };
 
     var onList = /^\/applicant\/(resumes|profile)(\/|$)/.test(location.pathname);
     if (listMode !== onList) {

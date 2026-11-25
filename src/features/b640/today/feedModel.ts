@@ -40,9 +40,17 @@ const KIND_ACTION: Record<
   post_reminder: { label: 'Открыть пост', path: buildNodePath('a03b') },
 };
 
+const HH_LOGIN_ACTION: NotificationAction = { label: 'Подключить', path: buildNodePath('n03') };
+
+function isHhLogin(item: B640Notification): boolean {
+  return item.kind === 'delivery_error' && item.sourceType === 'hh_session';
+}
+
 /** Одно действие события: отклик по его id, иначе раздел кабинета. */
 export function feedAction(item: B640Notification): NotificationAction {
   if (item.sourceType === 'linkedin_queue_comment') return COMMENT_ACTION;
+  // B704: вход в hh.ru истёк — вход заново в «Подключениях», отклика у события нет.
+  if (isHhLogin(item)) return HH_LOGIN_ACTION;
   const action = KIND_ACTION[item.kind];
   if (!('response' in action)) return action;
   return item.sourceType === 'application'
@@ -108,5 +116,5 @@ export function pinnedAction(item: B640Notification): PinnedAction {
     };
   }
   const action = feedAction(item);
-  return item.kind === 'platform_login_required' ? { ...action, icon: 'refresh' } : action;
+  return item.kind === 'platform_login_required' || isHhLogin(item) ? { ...action, icon: 'refresh' } : action;
 }
