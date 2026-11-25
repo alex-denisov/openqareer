@@ -3,10 +3,9 @@ import {
   MARKET_SALARY_MIN_SAMPLE,
   estimateFromMidpoints,
   formatMarketSalaryRange,
-  marketSalaryBasis,
+  marketSalaryLabel,
   marketSalaryKey,
   monthlyMarketEstimate,
-  pickMarketSalaryEstimate,
   salaryMidpoint,
 } from './marketSalaryEstimate';
 
@@ -47,28 +46,6 @@ describe('estimateFromMidpoints', () => {
   });
 });
 
-describe('pickMarketSalaryEstimate', () => {
-  const city = { low: 480_000, high: 560_000, currency: 'RUR', sampleSize: 41 };
-  const region = { low: 400_000, high: 520_000, currency: 'RUR', sampleSize: 300 };
-  it('prefers the city and falls back to the region when the city sample is too small', () => {
-    expect(pickMarketSalaryEstimate(city, region)).toEqual({ ...city, basis: 'city' });
-    expect(pickMarketSalaryEstimate({ currency: 'RUR', sampleSize: 2 }, region)).toEqual({
-      ...region,
-      basis: 'country',
-    });
-  });
-
-  it('keeps the larger thin sample when neither level has enough data', () => {
-    expect(
-      pickMarketSalaryEstimate(
-        { currency: 'RUR', sampleSize: 3 },
-        { currency: 'RUR', sampleSize: 4 },
-      ),
-    ).toEqual({ currency: 'RUR', sampleSize: 4, basis: 'country' });
-    expect(pickMarketSalaryEstimate(undefined, undefined)).toBeUndefined();
-  });
-});
-
 describe('marketSalaryKey', () => {
   it('normalises the place and marks an unknown level', () => {
     expect(marketSalaryKey('it-eng', 4, 'city', ' Москва ')).toBe('it-eng|4|city|москва');
@@ -104,9 +81,8 @@ describe('formatting', () => {
     );
   });
 
-  it('names the sample and the cut date in the dative', () => {
-    expect(marketSalaryBasis(41, '2026-10-05T03:00:00.000Z')).toBe('по 41 вакансии, 05.10');
-    expect(marketSalaryBasis(29, '2026-10-05T03:00:00.000Z')).toBe('по 29 вакансиям, 05.10');
-    expect(marketSalaryBasis(3, '2026-10-05T03:00:00.000Z')).toBe('по 3 вакансиям, 05.10');
+  it('names the estimate and its date, never the sources', () => {
+    expect(marketSalaryLabel('2026-10-05T03:00:00.000Z')).toBe('Оценка openqareer, 05.10');
+    expect(marketSalaryLabel('')).toBe('Оценка openqareer');
   });
 });

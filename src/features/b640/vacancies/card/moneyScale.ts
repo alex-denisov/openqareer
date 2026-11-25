@@ -1,5 +1,5 @@
 import { convertAmount, type CurrencyRates } from '../../../../../shared/currencyRates';
-import type { MarketSalaryEstimate } from '../../../../../shared/marketSalaryEstimate';
+import type { MarketSalaryEstimateView } from '../../../../../shared/marketSalaryEstimate';
 
 export interface ScalePart {
   /** Отступ от начала шкалы, % */
@@ -58,15 +58,14 @@ function verdictOf(me: number, range: readonly [number, number]): 'below' | 'ins
  * Нет ни рынка, ни вилки — шкалы нет; рынок без границ не рисуется.
  */
 export function moneyScale(
-  market: MarketSalaryEstimate | undefined,
+  market: MarketSalaryEstimateView | undefined,
   fork: Fork | undefined,
   rates: CurrencyRates | undefined,
   expectation?: Expectation,
 ): MoneyScale | null {
-  const marketRange: readonly [number, number] | undefined =
-    market && market.low !== undefined && market.high !== undefined
-      ? [market.low, market.high]
-      : undefined;
+  const marketRange: readonly [number, number] | undefined = market
+    ? [market.low, market.high]
+    : undefined;
   const currency = market?.currency ?? fork?.currency;
   if (!currency) return null;
   const mine = forkRange(fork, currency, rates);
