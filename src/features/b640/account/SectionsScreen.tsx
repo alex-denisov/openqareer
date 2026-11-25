@@ -4,6 +4,7 @@ import {
   getNotificationPreferences,
 } from '../../account/notificationPreferencesApi';
 import { getAccount, getConnections } from '../../coach/coachApi';
+import { getSearchConsent } from '../../vacancies/recruiterContactsApi';
 import { useCandidateMediaSrc } from '../../resume/candidateMediaSrc';
 import { getResumeStudio } from '../../resume/resumeApi';
 import { getCandidateBillingSummary } from '../../shell/candidateBillingApi';
@@ -11,6 +12,7 @@ import { Icon } from '../kit/Icon';
 import { buildNodePath, type B640Node } from '../routes';
 import { Link } from '../shell/Link';
 import { useShell } from '../shell/ShellContext';
+import { countGranted } from './dataModel';
 import {
   connectionsSummary,
   consentsSummary,
@@ -36,20 +38,22 @@ const valueOf = <T,>(result: PromiseSettledResult<T>): T | null =>
   result.status === 'fulfilled' ? result.value : null;
 
 async function loadSummaries(): Promise<Summaries> {
-  const [account, connections, preferences, channels, consents, billing, profile] =
+  const [account, connections, preferences, channels, consents, searchConsent, billing, profile] =
     await Promise.allSettled([
       getAccount(),
       getConnections(),
       getNotificationPreferences(),
       getNotificationChannelStatus(),
       getAccountCapabilityConsents(),
+      getSearchConsent(),
       getCandidateBillingSummary(),
       getResumeStudio(),
     ]);
   const sessions = valueOf(account)?.sessions;
   const links = valueOf(connections);
   const events = valueOf(preferences);
-  const granted = valueOf(consents)?.filter((item) => item.revokedAt === null);
+  const given = valueOf(consents);
+  const search = valueOf(searchConsent);
   const plan = valueOf(billing)?.currentPlan;
   return {
     security: sessions ? securitySummary(sessions.length) : null,
@@ -58,7 +62,8 @@ async function loadSummaries(): Promise<Summaries> {
     notifications: events
       ? notificationsSummary(events, valueOf(channels)?.telegram.connected === true)
       : null,
-    consents: granted ? consentsSummary(granted.length) : null,
+    // «Вы в поиске» не прочиталось — подпись без числа: меньшее число было бы неверным.
+    consents: given ? consentsSummary(search ? countGranted(given, search.granted) : 0) : null,
     plan: plan ? PLAN_NAME[plan] : null,
     photoMediaId: valueOf(profile)?.draft?.candidate.photoMediaId ?? null,
   };

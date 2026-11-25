@@ -325,3 +325,21 @@ describe('порог зарплаты в рублях в месяц (04.11)', ()
     expect(passes({ to: 950_000, currency: 'RUR' }, true, inUsd)).toBe(true);
   });
 });
+
+describe('«Показывать вакансии без зарплаты»', () => {
+  const base = { citizenship: [], languages: [], workFormats: [] };
+  const shown = (salary: object | undefined, showWithoutSalary?: boolean) =>
+    matchesDecisionProfile({ salary } as never, { ...base, showWithoutSalary });
+
+  it('выключено — без суммы не показываются, с суммой остаются', () => {
+    expect(shown(undefined, false)).toBe(false);
+    expect(shown({ currency: 'USD' }, false)).toBe(false);
+    expect(shown({ from: 1 }, false)).toBe(true);
+    expect(shown({ to: 1 }, false)).toBe(true);
+  });
+
+  it('включено или не задано — показываются все', () => {
+    expect(shown(undefined)).toBe(true);
+    expect(shown(undefined, true)).toBe(true);
+  });
+});

@@ -12,11 +12,11 @@ function item(title: string, location: string, salary?: { from: number; currency
 const computedAt = '2026-10-05T03:00:00.000Z';
 const estimates = new Map([
   [
-    'it-eng-mgmt|4|city|москва',
+    'it-eng-mgmt|4|city|ru:москва',
     { low: 480_000, high: 560_000, currency: 'RUR', sampleSize: 41, computedAt },
   ],
-  ['it-eng-mgmt|4|city|казань', { currency: 'RUR', sampleSize: 2, computedAt }],
-  ['it-eng-mgmt|4|region|ru', { currency: 'RUR', sampleSize: 3, computedAt }],
+  ['it-eng-mgmt|4|city|ru:казань', { currency: 'RUR', sampleSize: 2, computedAt }],
+  ['it-eng-mgmt|4|country|ru', { currency: 'RUR', sampleSize: 3, computedAt }],
 ]);
 const deps = {
   store: { get: (key: string) => estimates.get(key) },
@@ -44,7 +44,7 @@ describe('attachMarketSalaryEstimates', () => {
     expect(thin?.explanation.marketSalary).toEqual({
       currency: 'RUR',
       sampleSize: 3,
-      basis: 'region',
+      basis: 'country',
       computedAt,
     });
     expect(salaried?.explanation.marketSalary).toBeUndefined();

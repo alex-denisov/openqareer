@@ -3,7 +3,7 @@ import type {
   VacancyFitView,
 } from '../../../../../shared/vacancyFit';
 import { vacancyFitPercent } from '../../../../../shared/vacancyFitPercent';
-import { countedSkillRequirements, requirementVerdict } from '../../../vacancies/vacancyRequirementChips';
+import { countedSkillRequirements, requirementVerdict, wishRequirements } from '../../../vacancies/vacancyRequirementChips';
 import { pluralRu } from '../format';
 
 export type FitStatus = VacancyFitRequirementAssessment['status'];
@@ -62,6 +62,22 @@ export function fitRows(view: VacancyFitView | undefined): readonly FitRow[] {
       canCheck: status === 'partial' || status === 'unknown',
     };
   });
+}
+
+/** Строки карточки: посчитанные, за ними пожелания, которых профиль не показывает, — вне счёта. */
+export function listedRows(view: VacancyFitView | undefined): readonly FitRow[] {
+  const wishes = wishRequirements(view).map((requirement) => {
+    const { status, evidence } = requirementVerdict(view, requirement.id);
+    const partial = status === 'partial';
+    return {
+      id: requirement.id,
+      text: requirement.label?.trim() || requirement.text,
+      status: partial ? status : ('unknown' as const),
+      evidence: partial ? evidenceText(status, evidence[0]?.quote, undefined) : 'желательно',
+      canCheck: false,
+    };
+  });
+  return [...fitRows(view), ...wishes];
 }
 
 function shortDate(iso: string | undefined): string {

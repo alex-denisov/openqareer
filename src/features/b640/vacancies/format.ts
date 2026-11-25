@@ -8,7 +8,10 @@ import type { VacancyFitTier } from '../../../../shared/vacancyFitPercent';
 import { workFormatLabel } from '../../../../shared/vacancyWorkFormat';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { compactPlaceLabel } from '../../vacancies/VacancyScreenRowCells';
-import { formatCompensationCompact, formatRateAmounts } from '../../vacancies/vacancyCompensation';
+import {
+  formatCompensationCompact,
+  formatPeriodAmounts,
+} from '../../vacancies/vacancyCompensation';
 import { hasRemoteMark, vacancyRemoteLabel } from '../../vacancies/vacancyRemoteLabel';
 import { vacancyFormat } from '../../vacancies/vacancyScreenCriteria';
 
@@ -128,19 +131,6 @@ function ratesNote(rates: CurrencyRates, target: MoneyCurrency): string {
 
 type ClusterSalary = NonNullable<MatchedVacancyItem['cluster']['salary']>;
 
-const PERIOD_WORDS: Readonly<Record<SalaryPeriod, string>> = {
-  hour: ' в час',
-  month: '',
-  year: ' в год',
-  unknown: '',
-};
-
-/** Сумма как в вакансии, с периодом: «$218–265 тыс. в год», «$250–400 в час». */
-function originalText(salary: ClusterSalary, period: SalaryPeriod): string {
-  if (period === 'hour') return `${formatRateAmounts(salary)}${PERIOD_WORDS.hour}`;
-  return `${formatCompensationCompact(salary)}${PERIOD_WORDS[period]}`;
-}
-
 /** B765: колонка — в месяц (правило периода общее с сервером), ставка в час — как есть. */
 function shownAmounts(salary: ClusterSalary, period: SalaryPeriod): ClusterSalary {
   if (period === 'hour') return salary;
@@ -164,7 +154,7 @@ export function salaryMoneyView(
   if (!salary || (salary.from === undefined && salary.to === undefined))
     return { text: formatCompensationCompact(salary) };
   const period = salaryPeriodOf(salary, options.rates);
-  const original = originalText(salary, period);
+  const original = formatPeriodAmounts(salary, period);
   const target = options.currency;
   const source = salary.currency ?? '';
   // Период неизвестен — сумма как в вакансии: пересчёт в месяц и в ₽ был бы выдумкой.
@@ -179,7 +169,7 @@ export function salaryMoneyView(
     (shown.from !== undefined && from === undefined) ||
     (shown.to !== undefined && to === undefined);
   if (missing || !options.rates) return splitRouble(original);
-  const suffix = period === 'hour' ? PERIOD_WORDS.hour : '';
+  const suffix = period === 'hour' ? ' в час' : '';
   const converted = `${formatCompensationCompact({ ...salary, from, to, currency: target })}${suffix}`;
   if (converted === original) return splitRouble(original);
   const view = suffix ? { text: `≈ ${converted}` } : splitRouble(`≈ ${converted}`);

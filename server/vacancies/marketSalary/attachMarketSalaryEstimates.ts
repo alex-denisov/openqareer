@@ -5,12 +5,14 @@
 import {
   marketSalaryCity,
   marketSalaryKey,
+  monthlyMarketEstimate,
   pickMarketSalaryEstimate,
+  type MarketSalaryBasis,
   type MarketSalaryEstimateView,
 } from '../../../shared/marketSalaryEstimate';
 import type { MatchedVacancyItem } from '../multiSourceVacancyEngine';
-import { matchedVacancyRegion } from '../matchedVacancyFacets';
 import { normalizeTitleKey } from '../titleParse/normalizeTitleKey';
+import { marketSalaryCityPlace, marketSalaryCountry } from './marketSalaryCountry';
 import type { StoredMarketSalaryEstimate } from './sqliteMarketSalaryEstimateStore';
 
 export interface MarketSalaryEstimateDeps {
@@ -32,19 +34,22 @@ export function estimateFor(
   const parsed = deps.readTitle(normalizeTitleKey(item.cluster.canonicalTitle));
   const functionCode = parsed?.functions[0];
   if (!parsed || !functionCode) return undefined;
-  const city = marketSalaryCity(item.cluster.canonicalLocation);
-  // Регион читается только по кластеру.
-  const region = matchedVacancyRegion(item as MatchedVacancyItem);
+  const location = item.cluster.canonicalLocation;
+  const country = marketSalaryCountry(location);
+  if (!country) return undefined;
+  const city = marketSalaryCity(location);
+  const read = (basis: MarketSalaryBasis, place: string) =>
+    deps.store.get(marketSalaryKey(functionCode, parsed.levelRank, basis, place));
+  // Старый ключ города живёт до первого прохода после B803; в России он не смешивал страны.
   const cityEstimate = city
-    ? deps.store.get(marketSalaryKey(functionCode, parsed.levelRank, 'city', city))
+    ? (read('city', marketSalaryCityPlace(country, city)) ??
+      (country === 'RU' ? read('city', city) : undefined))
     : undefined;
-  const regionEstimate = region
-    ? deps.store.get(marketSalaryKey(functionCode, parsed.levelRank, 'region', region))
-    : undefined;
-  const picked = pickMarketSalaryEstimate(cityEstimate, regionEstimate);
+  const countryEstimate = read('country', country);
+  const picked = pickMarketSalaryEstimate(cityEstimate, countryEstimate);
   if (!picked) return undefined;
-  const source = picked.basis === 'city' ? cityEstimate : regionEstimate;
-  return { ...picked, computedAt: source?.computedAt ?? '' };
+  const source = picked.basis === 'city' ? cityEstimate : countryEstimate;
+  return { ...monthlyMarketEstimate(picked), computedAt: source?.computedAt ?? '' };
 }
 
 export function attachMarketSalaryEstimates(

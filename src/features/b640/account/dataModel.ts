@@ -44,6 +44,15 @@ export const CONSENT_ROWS: readonly ConsentRow[] = [
   },
 ];
 
+/** Сколько согласий включено на n05; то же число показывает n00. */
+export function countGranted(
+  consents: readonly { readonly capability: CandidateCapability; readonly revokedAt: string | null }[],
+  searchConsent: boolean,
+): number {
+  const granted = new Set(consents.filter((item) => item.revokedAt === null).map((item) => item.capability));
+  return CONSENT_ROWS.filter((row) => granted.has(row.capability)).length + (searchConsent ? 1 : 0);
+}
+
 export interface AutomationState {
   readonly enabled: boolean;
   readonly pausedUntil: string | null;

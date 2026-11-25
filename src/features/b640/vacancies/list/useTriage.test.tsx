@@ -40,13 +40,19 @@ function Probe({
   hideMany = async () => [],
   items = ITEMS,
   query = null,
+  ready,
+  failed,
+  onRetry,
 }: {
   query?: string | null;
+  ready?: boolean;
+  failed?: boolean;
+  onRetry?: () => void;
   hideMany?: (entries: readonly { item: unknown; reason: string }[]) => Promise<readonly string[]>;
   items?: typeof ITEMS;
 }) {
   const [shown, setShown] = useState(items);
-  const triage = useTriage(shown, hideMany as never, { query, expected: 883 });
+  const triage = useTriage(shown, hideMany as never, { query, expected: 883, ready, failed, retry: onRetry });
   return (
     <div>
       <output
@@ -97,6 +103,47 @@ describe('режим «Помочь выбрать»', () => {
     expect(request.mock.calls[0]![0]).toEqual({ clusterIds: ['a', 'b', 'c'] });
     expect(request.mock.calls[0]![1]).toEqual({});
     expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', pickA: 'true', whyA: 'не та роль' });
+    view.unmount();
+  });
+
+  it('B801 Н2: роли списка ещё не поставлены — разбор ждёт их и берёт ту же выборку, что шапка', async () => {
+    request.mockResolvedValue(result([keep('a')]));
+    let roles: () => void = () => {};
+    function Seeded() {
+      const [set, setSet] = useState(false);
+      roles = () => setSet(true);
+      return <Probe query={set ? 'role=CTO' : ''} ready={set} />;
+    }
+    const view = mount(<Seeded />);
+    press(view.container, 'start');
+    await flush();
+    expect(request).not.toHaveBeenCalled();
+    expect(out(view.container).dataset).toMatchObject({ active: 'true', status: 'loading', total: '883' });
+    await act(async () => roles());
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]![0]).toEqual({ query: 'role=CTO' });
+    view.unmount();
+  });
+
+  it('B801 Н2: подборка не прочиталась — ошибка, «Повторить» читает её, затем разбор', async () => {
+    request.mockResolvedValue(result([hide('a')]));
+    const reread = vi.fn();
+    let recover: () => void = () => {};
+    function Failing() {
+      const [ok, setOk] = useState(false);
+      recover = () => setOk(true);
+      return <Probe query="role=CTO" ready={ok} failed={!ok} onRetry={reread} />;
+    }
+    const view = mount(<Failing />);
+    press(view.container, 'start');
+    await flush();
+    expect(out(view.container).dataset).toMatchObject({ active: 'true', status: 'failed' });
+    press(view.container, 'retry');
+    expect(reread).toHaveBeenCalledTimes(1);
+    expect(request).not.toHaveBeenCalled();
+    await act(async () => recover());
+    expect(out(view.container).dataset.status).toBe('ready');
+    expect(request).toHaveBeenCalledTimes(1);
     view.unmount();
   });
 

@@ -76,7 +76,7 @@ export function buildLeanMatchedPage(
 export function leanFitView(view: VacancyFitView): VacancyFitView {
   const { points: _points, ...rest } = view;
   if (!view.result) return { ...rest, requirements: [] };
-  const { gates: _gates, implied: _implied, duties: _duties, ...result } = view.result;
+  const { gates: _gates, implied: _implied, duties: _duties, wishes: _wishes, ...result } = view.result;
   // Без `gates`: тип требует поле, а строке B640 оно не нужно (B725).
   return {
     ...rest,

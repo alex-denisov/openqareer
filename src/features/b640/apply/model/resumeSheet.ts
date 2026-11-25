@@ -56,8 +56,8 @@ function langOf(document: ResumeDocument, jobs: readonly BuilderJob[]): 'ru' | '
 }
 
 const EXTRA_TITLES = {
-  ru: { courses: 'Курсы', projects: 'Проекты', native: 'родной' },
-  en: { courses: 'Courses', projects: 'Projects', native: 'native' },
+  ru: { certificates: 'Сертификаты', courses: 'Курсы', projects: 'Проекты', native: 'родной' },
+  en: { certificates: 'Certifications', courses: 'Courses', projects: 'Projects', native: 'native' },
 } as const;
 
 type Lang = keyof typeof EXTRA_TITLES;
@@ -82,7 +82,11 @@ function extraOf(document: ResumeDocument, lang: Lang): NonNullable<BuilderResum
   const projects = (document.projects ?? []).map((item) =>
     [item.name.value, item.employer?.value, item.description?.value].filter(Boolean).join('. '),
   );
+  const certificates = (document.certifications ?? []).map((item) =>
+    [item.name, item.issuer, yearOf(item.issuedAt)].filter(Boolean).join(', '),
+  );
   return [
+    { title: EXTRA_TITLES[lang].certificates, lines: certificates },
     { title: EXTRA_TITLES[lang].courses, lines: courses },
     { title: EXTRA_TITLES[lang].projects, lines: projects },
   ]

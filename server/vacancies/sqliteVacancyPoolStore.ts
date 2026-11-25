@@ -3467,6 +3467,7 @@ const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 /** B794: строка подборки с обрывком текста читается ещё раз; общий обход обрывков не трогает. */
 const HH_NEEDS_PRIORITY_TEXT = `p.expired_at IS NULL AND
+      coalesce(json_extract(p.payload, '$.descriptionShort'), 0) = 0 AND
       length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) < ${HH_STUB_TEXT_CHARS} AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 const HH_TEXT_PHASES = ['catalog', 'pool'] as const;
