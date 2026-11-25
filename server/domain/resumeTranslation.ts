@@ -17,7 +17,8 @@ import {
  * и каждая проходит проверку: те же числа и валюты, ни личного действия сверх исходной строки. Имена
  * людей, компаний и вузов отдельно в модель не уходят: в английском резюме они транслитерируются.
  * Состав фактов на обоих языках один: непереведённая строка остаётся исходной. Отклонённая дважды
- * хранится как есть (перевод равен строке); должность и строка без ответа спрашиваются снова.
+ * хранится как есть (перевод равен строке); должность, сохранённая так раньше,
+ * спрашивается ещё один раз; строка без ответа спрашивается снова.
  */
 export type ResumeTranslations = Readonly<Record<string, string>>;
 
@@ -29,6 +30,8 @@ const PARALLEL = 30;
 const MAX_SOURCE_SHARE = 1 / 3;
 
 export const translationKey = (lang: ResumeLang, text: string) => `${lang}:${text}`;
+/** Должность оставлена как есть после вопроса: «Scrum Master» больше не спрашивается. */
+const askedKey = (lang: ResumeLang, text: string) => `asked:${translationKey(lang, text)}`;
 
 type Map1 = (text: string, kind: Kind) => string;
 type Claim = { readonly value: string };
@@ -153,8 +156,11 @@ function reader(document: ResumeDocument, lang: ResumeLang, translations: Resume
   const companies = companiesOf(document);
   return (line: Line): Answered => {
     const text = translations[translationKey(lang, line.text)];
-    // Должность, сохранённая как есть, спрашивается снова: по-русски она пишется переводом.
-    if (text === line.text) return line.kind === 'title' ? 'missing' : 'rejected';
+    // Должность, сохранённая как есть до отметки, спрашивается ещё один раз.
+    if (text === line.text)
+      return line.kind === 'title' && !(askedKey(lang, line.text) in translations)
+        ? 'missing'
+        : 'rejected';
     // Перевод, сохранённый до проверки чисел, спрашивается заново.
     return text && isFaithful(line, text, lang, companies) ? 'translated' : 'missing';
   };
@@ -255,13 +261,16 @@ export async function translateDocument(
   const read = reader(document, lang, known);
   const queue = all.filter((line) => read(line) === 'missing');
   const arrived = new Map<string, string>();
+  const asked = new Map<string, string>();
   const translate = translator?.translate?.bind(translator);
   if (queue.length > 0 && translate) {
     const deadline = Date.now() + budgetMs;
     const worker = async () => {
       for (let line = queue.shift(); line && Date.now() < deadline; line = queue.shift()) {
         const text = await askLine(translate, line, lang, companies);
-        if (text !== undefined) arrived.set(translationKey(lang, line.text), text);
+        if (text === undefined) continue;
+        arrived.set(translationKey(lang, line.text), text);
+        if (line.kind === 'title' && text === line.text) asked.set(askedKey(lang, text), text);
       }
     };
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -271,10 +280,10 @@ export async function translateDocument(
     await Promise.race([Promise.all(Array.from({ length: PARALLEL }, worker)), expired]);
     clearTimeout(timer);
   }
-  const translations = { ...known, ...Object.fromEntries(arrived) };
+  const translations = { ...known, ...Object.fromEntries([...arrived, ...asked]) };
   const final = reader(document, lang, translations);
   const rejected = all.filter((line) => final(line) === 'rejected');
   if (rejected.length > all.length * MAX_SOURCE_SHARE)
-    return { translations: known, complete: false };
+    return { translations: { ...known, ...Object.fromEntries(asked) }, complete: false };
   return { translations, complete: isTranslated(document, lang, translations) };
 }

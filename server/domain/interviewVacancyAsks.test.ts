@@ -49,6 +49,16 @@ describe('interviewVacancyAsks (B635)', () => {
     expect(asks).not.toMatch(/At Snowflake|Join us|just use tools/u);
   });
 
+  it.each([
+    'At least 5 years of experience with Kafka',
+    'At minimum, a BS degree in Computer Science',
+    'We look for 5+ years of Go experience',
+  ])('требование с тем же началом остаётся: %s', (line) => {
+    expect(texts(`Snowflake builds a data platform for everyone. ${line}.`).join('\n')).toContain(
+      line,
+    );
+  });
+
   it('часть уже названного требования не повторяется', () => {
     const base = extractVacancyRequirements({
       vacancyId: 'v',

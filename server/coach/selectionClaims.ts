@@ -107,9 +107,8 @@ function wrongRest(sentence: string, message: string, rows: readonly SelectionRo
   return rows.some((row) => !names(message, row) && !isRemote(row));
 }
 
-/** «Строки 1, 7, 14» и «шесть: 1, 7, 14»: номеров у строк списка нет. */
-const ROW_NUMBERS =
-  /(?<!\p{L})(?:строк[аиеу]|строках|строками|позици[яию]|позициях)\s+(?:№\s*)?\d{1,2}(?!\d|\s*[%–-])|(?<![\d.,])\d{1,2}(?:,\s+\d{1,2}(?!\d|\s*%)){2,}/iu;
+/** «Строки 1, 7, 14»: номеров у строк списка нет. */
+const ROW_NUMBERS = /(?<!\p{L})строк(?:[аиеу]|ах|ами)\s+(?:№\s*)?\d{1,2}(?!\d|\s*[%–-])/iu;
 
 function broken(sentence: string, message: string, selection: SelectionContext): boolean {
   const { rows } = selection;

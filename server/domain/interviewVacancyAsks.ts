@@ -23,9 +23,9 @@ const BOILERPLATE =
 const DUTY_SENTENCE =
   /\byou(?:(?:'|’)ll| will)\b|\bresponsible for\b|\byour (?:team|role|mission)\b|^(?:lead|build|own|drive|design|develop|manage|define|partner|deliver|hire|mentor|scale|operate)\b|вы будете|вам предстоит|предстоит|отвечать за|будете/iu;
 const EXPERIENCE_SENTENCE = /\b(?:experience|years|expertise|knowledge)\b|опыт|знани|умени|навык/iu;
-/** Рассказ компании о себе и образ кандидата — не повод для вопроса. */
+/** Рассказ компании о себе и образ кандидата — не повод для вопроса, если в строке нет требования. */
 const COMPANY_SENTENCE =
-  /^at \p{L}|\byour role isn(?:'|’)t\b|\b(?:(?:we are|we're)(?! (?:looking|seeking|hiring))|we look for|you don(?:'|’)t just|our (?:mission|culture|values))\b|мы —|наша компания|компани\p{L}* —/iu;
+  /^at (?!(?:a )?(?:least|minimum|most)(?!\p{L}))\p{L}|\byour role isn(?:'|’)t\b|\b(?:(?:we are|we're)(?! (?:looking|seeking|hiring))|we look for|you don(?:'|’)t just|our (?:mission|culture|values))\b|мы —|наша компания|компани\p{L}* —/iu;
 /** «OUR IDEAL CANDIDATE WILL HAVE: 10+ years…» — заголовок перед строкой. */
 const INLINE_HEADING = /^[\p{Lu}\s'’,&-]{8,}[:：]\s*(?=\S)/u;
 
@@ -75,7 +75,7 @@ function sentenceAsks(lines: readonly string[]): readonly InterviewAsk[] {
       line.length <= MAX_SENTENCE_CHARS &&
       !/[:：?]$/u.test(line) &&
       !BOILERPLATE.test(line) &&
-      !COMPANY_SENTENCE.test(line.replace(BULLET, '')) &&
+      (EXPERIENCE_SENTENCE.test(line) || !COMPANY_SENTENCE.test(line.replace(BULLET, ''))) &&
       !isCompensationLine(line),
   );
   const rank = (line: string): number => {
