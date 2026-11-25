@@ -5,6 +5,7 @@ import type {
   QuestionnaireQuestion,
   QuestionnaireSuggestion,
 } from '../../../../shared/applicationQuestionnaire';
+import { isBadNumber, numberRule } from '../../../../shared/questionnaireNumber';
 import { hhFormUrl, type HhForm } from '../../../../shared/hhCandidateSession';
 import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQuestionnaire';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
@@ -198,7 +199,9 @@ interface QuestionProps {
 function Question({ question, suggestion, state, rejected }: QuestionProps) {
   const fieldId = `qa-${question.id}`;
   const value = answerOf(state.draft, question.id);
-  const invalid = rejected?.answers.get(question.id) === value;
+  const badNumber = isBadNumber(question, value);
+  const invalid = badNumber || rejected?.answers.get(question.id) === value;
+  const problem = badNumber ? numberRule(question) : `${rejected?.host ?? ''} не принял ответ`;
   return (
     <li className="qa">
       <div className="qa-q">
@@ -224,7 +227,7 @@ function Question({ question, suggestion, state, rejected }: QuestionProps) {
         />
         {invalid ? (
           <div id={`${fieldId}-err`}>
-            <StatusLine state="err" text={`${rejected?.host ?? ''} не принял ответ`} />
+            <StatusLine state="err" text={problem} />
           </div>
         ) : null}
       </div>
@@ -267,7 +270,7 @@ function focusField(fieldId: string): void {
   field?.focus();
 }
 
-/** Главное действие анкеты: дойти до пропущенного обязательного вопроса или скопировать ответы. */
+/** Главное действие: ответы для сайта копируются всегда (o04b), отправка ведёт к обязательным. */
 function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   const toast = useToast();
   const copy = () => {
@@ -284,7 +287,11 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   };
   return (
     <>
-      {ready.nextRequired ? (
+      {!onSend ? (
+        <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
+          Скопировать ответы
+        </Button>
+      ) : ready.nextRequired ? (
         <Button
           variant="primary"
           icon="edit"
@@ -295,11 +302,7 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
             {` · ${ready.missingRequired}`}
           </span>
         </Button>
-      ) : onSend ? null : (
-        <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
-          Скопировать ответы
-        </Button>
-      )}
+      ) : null}
       {onSend ? (
         <Button
           variant={ready.nextRequired ? undefined : 'primary'}

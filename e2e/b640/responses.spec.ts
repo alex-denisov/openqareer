@@ -376,13 +376,18 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     const mock = await open(page, '/app/responses/wanted', 'o08');
     await expect(page.locator('.cw-row')).toHaveCount(4);
     await expect(page.locator('.cw-row').first().locator('.tag')).toHaveText('новые вакансии');
-    await expect(
-      page
-        .locator('.cw-row')
-        .first()
-        .getByRole('link', { name: /Смотреть вакансии/u }),
-    ).toHaveAttribute('href', '/app/vacancies');
-    await expect(page.locator('.cw-row a[href^="/app/vacancies/companies"]')).toHaveCount(0);
+    // B801: черновик письма — главное действие, остальное ведёт в карточку этой компании.
+    const rows = page.locator('.cw-row');
+    await expect(rows.first().getByRole('link', { name: /Проверить письмо/u })).toHaveAttribute(
+      'href',
+      '/app/responses/a-draft/letter',
+    );
+    await expect(rows.first()).toHaveClass(/is-next/u);
+    await expect(rows.nth(1).getByRole('link', { name: /Смотреть вакансии/u })).toHaveAttribute(
+      'href',
+      /^\/app\/vacancies\/companies\/[^/]+$/u,
+    );
+    await expect(rows.locator('a.cw-co[href^="/app/vacancies/companies/"]')).toHaveCount(4);
     // B645: действие строки — цель 44 px и 14px/600, как a.btn в макете.
     const action = await page
       .locator('.cw-act .btn')

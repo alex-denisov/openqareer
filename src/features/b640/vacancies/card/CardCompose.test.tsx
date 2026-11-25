@@ -38,7 +38,7 @@ vi.mock('./useSave', () => ({
 }));
 vi.mock('./QuotaLine', () => ({ QuotaLine: () => null }));
 vi.mock('./FitBlock', () => ({ FitBlock: () => null }));
-vi.mock('./ReqsBox', () => ({ ReqsBox: () => null }));
+vi.mock('./VacancyText', () => ({ VacancyText: () => null }));
 vi.mock('./ActBar', () => ({ ActBar: () => null }));
 vi.mock('./MoneyBlock', () => ({ MoneyBlock: () => null, useTargetCurrency: () => 'RUB' }));
 vi.mock('./LetterBlock', () => ({ LetterBlock: () => null }));

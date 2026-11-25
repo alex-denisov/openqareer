@@ -667,6 +667,7 @@ function persistApprovedLetterSnapshot(
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
       stage: 'saved',
+      draft: true,
       manualVacancy,
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).

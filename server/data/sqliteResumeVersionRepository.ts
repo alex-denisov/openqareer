@@ -222,6 +222,7 @@ function contentOf(version: StoredResumeVersion): ResumeVersionContent {
     requirements: version.requirements,
     status: version.status,
     snapshot: version.snapshot,
+    ...(version.vacancyId ? { vacancyId: version.vacancyId } : {}),
   };
 }
 

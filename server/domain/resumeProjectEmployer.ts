@@ -1,9 +1,11 @@
+import type { ResumeLang } from '../../shared/resumeVacancyEdits';
 import { transliterate } from './letterLatinEmployers';
+import { officialName } from './officialEmployerNames';
 import type { ResumeDocument, ResumeProject } from './resumeStudioTypes';
 
 /**
- * Д17: в русском листе работодатель проекта, записанный по-английски, назван так же, как место работы
- * в профиле. Место узнаём по двум общим корням названия («Corporate University» — «Корпоративный
+ * Д17: работодатель проекта назван так же, как место работы в профиле: в русском листе его названием,
+ * в английском — официальным английским, если оно известно. Место узнаём по двум общим корням названия («Corporate University» — «Корпоративный
  * университет») и по годам; если подходит не одно место, строка остаётся исходной.
  */
 const CYRILLIC = /\p{Script=Cyrillic}/u;
@@ -53,15 +55,17 @@ export function russianProjectEmployer(
   return names.length === 1 ? names[0] : undefined;
 }
 
-export function withRussianProjectEmployers(
+export function withProjectEmployers(
   document: ResumeDocument,
   basis: ResumeDocument,
+  lang: ResumeLang,
 ): ResumeDocument {
   if (!document.projects) return document;
   return {
     ...document,
     projects: document.projects.map((project) => {
-      const value = russianProjectEmployer(project, basis);
+      const place = russianProjectEmployer(project, basis);
+      const value = place && lang === 'en' ? officialName(place) : place;
       return value && project.employer
         ? { ...project, employer: { ...project.employer, value } }
         : project;

@@ -6,11 +6,12 @@ import type {
 } from '../../../../../shared/b640ContactMessage';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import {
-  computePipelineAnalytics,
+  applicationGotReply,
+  applicationReachedStage,
   type SourceBreakdownItem,
 } from '../../../applications/pipelineAnalytics';
 import type { IconName } from '../../kit';
-import { platformOf, viaPlatform } from './platform';
+import { responsePlatform, viaPlatform, type Platform } from './platform';
 import { wasSent } from './sentState';
 import { longDate, shortDate, type ResponseRow } from './responseRow';
 
@@ -147,38 +148,36 @@ function sum(
 }
 
 /** Площадка словами кандидата: внутренние коды источников сливаются в «Сайт компании». */
-function platformLabel(source: string): string {
-  const platform = platformOf(source);
+function platformLabel(platform: Platform): string {
   return platform.site ? 'Сайт компании' : platform.label;
 }
 
 /** Отклики по площадкам; все числа — по истории, как строка пути на «Сегодня». */
-function byPlatform(
-  sources: readonly SourceBreakdownItem[],
-): readonly SourceBreakdownItem[] {
-  const groups = new Map<string, SourceBreakdownItem>();
-  for (const source of sources) {
-    const label = platformLabel(source.source);
-    const known = groups.get(label);
-    groups.set(label, {
+function byPlatform(applications: readonly ApplicationView[]): readonly SourceBreakdownItem[] {
+  const groups = new Map<string, readonly ApplicationView[]>();
+  for (const application of applications) {
+    const label = platformLabel(responsePlatform(application));
+    groups.set(label, [...(groups.get(label) ?? []), application]);
+  }
+  const reached = (items: readonly ApplicationView[], stage: 'interview' | 'offer') =>
+    items.filter((item) => applicationReachedStage(item, stage)).length;
+  return [...groups]
+    .map(([label, items]) => ({
       source: label,
       sourceLabel: label,
-      total: (known?.total ?? 0) + source.total,
-      responded: (known?.responded ?? 0) + source.responded,
-      interview: (known?.interview ?? 0) + source.interview,
-      offer: (known?.offer ?? 0) + source.offer,
-    });
-  }
-  return [...groups.values()].sort((a, b) => b.total - a.total);
+      total: items.length,
+      responded: items.filter(applicationGotReply).length,
+      interview: reached(items, 'interview'),
+      offer: reached(items, 'offer'),
+    }))
+    .sort((a, b) => b.total - a.total);
 }
 
 export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
   const sentAll = items.filter((item) => wasSent(item.application));
   const autoItems = sentAll.filter((item) => item.auto === true);
   const sentItems = sentAll.filter((item) => item.auto !== true);
-  const analytics = computePipelineAnalytics(sentItems.map((item) => item.application));
-  const autoAnalytics = computePipelineAnalytics(autoItems.map((item) => item.application));
-  const sources = byPlatform(analytics.sources);
+  const sources = byPlatform(sentItems.map((item) => item.application));
   const first = sentItems.reduce<number | null>(
     (min, item) => (min === null || item.row.sentAt < min ? item.row.sentAt : min),
     null,
@@ -186,7 +185,7 @@ export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
   return {
     sent: sentItems.length,
     auto: autoItems.length,
-    autoResponded: sum(autoAnalytics.sources, (source) => source.responded),
+    autoResponded: autoItems.filter((item) => applicationGotReply(item.application)).length,
     responded: sum(sources, (source) => source.responded),
     interview: sum(sources, (source) => source.interview),
     offer: sum(sources, (source) => source.offer),
@@ -268,7 +267,7 @@ export function timeline(
   consents: readonly ApplyConsentEntry[] = [],
 ): readonly TimelineEvent[] {
   if (application.stage === 'saved') return consentEvents(consents);
-  const via = viaPlatform(platformOf(application.vacancy?.source));
+  const via = viaPlatform(responsePlatform(application));
   const receipt = application.deliveryReceipt ?? null;
   const delivery = receipt ? deliveryState('applied', receipt) : null;
   const stage = STAGE_EVENTS[application.stage];

@@ -177,6 +177,17 @@ describe('B656: строка отклика', () => {
     expect(closed.event).toBe('закрыта 25.10');
   });
 
+  it('B801: архив после интервью, отказа или ответа — не «Без ответа»', () => {
+    const next = (reachedStages: ApplicationView['reachedStages'], more: Partial<ApplicationView> = {}) =>
+      row({ stage: 'archived', whoseTurn: null, reachedStages, ...more }).next;
+    expect(next(['applied', 'interview', 'archived'])).toBe('Было интервью');
+    expect(next(['applied', 'archived'], { archivePreviousStage: 'interview' })).toBe('Было интервью');
+    expect(next(['applied', 'interview', 'offer', 'archived'])).toBe('Был оффер');
+    expect(next(['applied', 'rejected', 'archived'])).toBe('Отказ получен');
+    expect(next(['applied', 'responded', 'archived'])).toBe('Компания ответила');
+    expect(next(['applied', 'archived'])).toBe('Без ответа');
+  });
+
   it('компания без названия не выдумывается', () => {
     const view = row({
       vacancy: { title: 'Аналитик', company: '', url: '', source: 'manual', companyHidden: true },

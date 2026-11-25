@@ -6,6 +6,7 @@ import {
   type CandidateStatusState,
   type StatusChangeOptionKey,
 } from '../../../../shared/candidateStatus';
+import { dropSectionCache, SECTION_CACHE_KEYS } from '../../shell/sectionCache';
 import { apiFetch, readData } from '../../coach/apiClient';
 
 const STATUS_API = '/api/v1/candidate/status';
@@ -69,6 +70,7 @@ export async function changeStatus(
     headers: JSON_HEADERS,
     body: JSON.stringify({ ...choiceBody(choice), options }),
   });
+  dropSectionCache(SECTION_CACHE_KEYS.careerStatus);
   return readData<CandidateStatusState>(response);
 }
 

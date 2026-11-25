@@ -369,6 +369,21 @@ describe('списки карточки берутся из разбора, ко
     expect(compact.result?.assessments).toEqual([]);
   });
 
+  it('B794: условия работодателя и обязанности не идут в пункты требований', () => {
+    const terms = {
+      ...view,
+      requirements: [
+        { id: 'r1', text: 'Опыт SAP', kind: 'experience' },
+        { id: 'r2', text: 'Work Location: Remote', kind: 'workFormat', skill: false },
+        { id: 'r3', text: 'Комфортный офис', kind: 'other', skill: false },
+        { id: 'r4', text: 'Вести отчётность', kind: 'experience' },
+        { id: 'r5', text: 'Высшее образование', kind: 'education' },
+      ],
+      result: { ...view.result, duties: ['r4'] },
+    } as unknown as typeof view;
+    expect(compactFitView(terms).points).toEqual([{ text: 'Опыт SAP', status: 'matched' }]);
+  });
+
   it('без результата разбора старые списки помечены как предварительные', () => {
     const base = item('v2', null);
     const pending = { state: 'processing', requirements: [] } as unknown as typeof view;

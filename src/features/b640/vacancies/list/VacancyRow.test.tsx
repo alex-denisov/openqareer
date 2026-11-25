@@ -57,7 +57,7 @@ describe('строка таблицы по макету s07', () => {
   });
 
   it('сохранена: звезда закрашена и нажата', () => {
-    const out = html({ item, application: { stage: 'saved' } as never });
+    const out = html({ item, application: { stage: 'saved', starred: true } as never });
     expect(out).toContain('va-fav is-on');
     expect(out).toContain('aria-pressed="true"');
     expect(out).toContain('Убрать из сохранённых');
