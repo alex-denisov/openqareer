@@ -1,6 +1,7 @@
 import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
 import { isAtsBoardSourceId } from './atsSourceId';
 import { sourceKind } from './poolLiveness';
+import { withTextSalary } from './textSalary';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import type {
   UnifiedVacancy,
@@ -285,6 +286,22 @@ function prefersIncomingSalary(
   return !current.to && incoming.to !== undefined;
 }
 
+/**
+ * B803: доска Recruitee перечитывает запись целиком; вилка с неподдержанным периодом
+ * (неделя) больше не приходит — прежняя, без периода, снимается. Вилку, которую могла
+ * дать другая площадка, и вилку с доказанным периодом повторное чтение не трогает.
+ */
+function dropsWithdrawnSalary(cluster: VacancyCluster, vacancy: UnifiedVacancy): boolean {
+  const { sourceId } = vacancy.provenance;
+  return (
+    !vacancy.salary &&
+    cluster.salary !== undefined &&
+    /^(?:ats|src-fh)-recruitee-/.test(sourceId) &&
+    !hasExplicitSalaryPeriod(cluster.salary) &&
+    cluster.sources.every((source) => source.sourceId === sourceId)
+  );
+}
+
 export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
   const existingSourceIndex = cluster.sources.findIndex((source) => {
     if (source.sourceId !== vacancy.provenance.sourceId) return false;
@@ -321,6 +338,9 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
 
   if (vacancy.salary && prefersIncomingSalary(cluster.salary, vacancy.salary)) {
     cluster.salary = vacancy.salary;
+  } else if (!isNewMembership && dropsWithdrawnSalary(cluster, vacancy)) {
+    // Опрос приносит запись до вилки из её текста: её доска не отзывала.
+    cluster.salary = withTextSalary(vacancy).salary;
   }
 
   updateClusterLocation(cluster, vacancy.location);

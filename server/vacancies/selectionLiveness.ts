@@ -68,12 +68,15 @@ export function requestSelectionLiveness(
     .run(JSON.stringify(rows), nowMs);
 }
 
-/** Сверенные и снятые с площадки: индекс уже без них, а снимок подборки — ещё нет. */
+/**
+ * Сверенные и снятые с площадки: индекс уже без них, а снимок подборки — ещё нет. `CROSS JOIN`
+ * закрепляет обход от короткой очереди: сам планировщик обходил весь пул (прод 25.11: 119 с против 11 мс).
+ */
 export function closedSelection(database: DatabaseSync): ReadonlySet<string> {
   const rows = database
     .prepare(
       `SELECT q.vacancy_id AS id FROM selection_liveness q
-         JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 1`,
+         CROSS JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 1`,
     )
     .all() as Array<{ id: string }>;
   return new Set(rows.map((row) => row.id));
@@ -98,7 +101,7 @@ export function dueSelectionLiveness(
 ): string[] {
   const read = database.prepare(
     `SELECT q.vacancy_id AS id FROM selection_liveness q
-       JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 0
+       CROSS JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 0
        LEFT JOIN selection_liveness_tried t ON t.vacancy_id = q.vacancy_id
       WHERE q.requested_ms >= ? AND q.checked_ms < ?
         AND coalesce(t.tried_ms, 0) < ?

@@ -100,7 +100,8 @@ export interface ResumeStepProps {
   readonly approved: ApprovedVacancyLetterResult['resume'] | null;
   /** Резюме уже одобрено на этом шаге. */
   readonly confirmed: boolean;
-  readonly onConfirm: () => void;
+  /** Одобрена показанная версия. */
+  readonly onConfirm: (versionId: string | null) => Promise<void>;
   /** Полоса действия страницы (макет o03, от 768); без неё кнопка стоит под листом. */
   readonly dock: HTMLElement | null;
   readonly onDocument: (document: ResumeDocument | null) => void;
@@ -186,10 +187,26 @@ function titleOf(preview: LetterResumePreview, edits: ResumeEditsState['edits'])
   return active > 0 ? `${editsWord(active)} под эту вакансию` : TITLES[preview.kind];
 }
 
+/** «Одобрить резюме»: отказ сервера оставляет кандидата на шаге. */
+function useConfirm(onConfirm: ResumeStepProps['onConfirm'], versionId: string | null) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const confirm = () => {
+    setBusy(true);
+    onConfirm(versionId)
+      .catch((reason: unknown) =>
+        toast.show({ text: apiErrorMessage(reason, 'Резюме не одобрилось. Повторите.') }),
+      )
+      .finally(() => setBusy(false));
+  };
+  return { busy, confirm };
+}
+
 /** Шаг «Резюме» (O3): то резюме, которое уйдёт с откликом. */
 export function ResumeStep(props: ResumeStepProps) {
   const { vacancyId, approved, confirmed, onConfirm, dock, onDocument } = props;
   const { state, reload, decide, lang } = useResumeStep(vacancyId, approved);
+  const { busy, confirm } = useConfirm(onConfirm, state.data?.preview.versionId ?? null);
   const preview = state.data?.preview;
   const edits = state.data?.choices.edits ?? [];
   useEffect(() => onDocument(preview?.document ?? null), [onDocument, preview?.document]);
@@ -224,8 +241,8 @@ export function ResumeStep(props: ResumeStepProps) {
       <StepActions
         kind={preview.kind}
         confirmed={confirmed}
-        disabled={state.status !== 'ready' || Boolean(lang?.busy)}
-        onConfirm={onConfirm}
+        disabled={busy || state.status !== 'ready' || Boolean(lang?.busy)}
+        onConfirm={confirm}
         dock={dock}
       />
     </section>
