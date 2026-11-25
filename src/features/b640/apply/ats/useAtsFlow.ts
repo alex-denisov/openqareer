@@ -18,6 +18,8 @@ export interface AtsFlowInput {
   /** Отклик уже в очереди кандидата. */
   readonly queued: boolean;
   readonly queue: QueueManual;
+  /** «Не откликаюсь» без нового нажатия «Откликнуться». */
+  readonly declined: boolean;
   readonly step: ApplyStep;
   readonly setStep: (update: (now: ApplyStep) => ApplyStep) => void;
   readonly letter: LetterScreenState;
@@ -50,6 +52,14 @@ function useOwnSiteQueue(
   return Boolean(open && reason) && state !== 'done';
 }
 
+/** После «Не откликаюсь» открытый адрес сам ничего не ставит, пока кандидат не сменил шаг. */
+function useHeld(declined: boolean, step: ApplyStep): boolean {
+  const [opened] = useState(step);
+  const [moved, setMoved] = useState(false);
+  if (!moved && step !== opened) setMoved(true);
+  return declined && !moved && step === opened;
+}
+
 const hostOf = (url: string | null): string =>
   url && URL.canParse(url) ? new URL(url).hostname : '';
 
@@ -73,7 +83,8 @@ export function useAtsFlow(input: AtsFlowInput): AtsFlow {
   const { vacancyId } = target;
   const { questionnaire } = input;
   const approved = input.letter.approval.saved;
-  const onSend = step === 'send' && Boolean(approved);
+  const held = useHeld(input.declined, step);
+  const onSend = step === 'send' && Boolean(approved) && !held;
   // Площадка, узнанная при открытии, не меняется: очередь выключает форму через её состояние.
   const address = useAddress(input);
   const onSent = async () => {
@@ -84,7 +95,7 @@ export function useAtsFlow(input: AtsFlowInput): AtsFlow {
   const apply = useAtsApply({
     vacancyId,
     address,
-    wanted: step === 'form' || onSend,
+    wanted: (step === 'form' && !held) || onSend,
     employer: head.company,
     approved,
     letterText: input.letter.draft.text,
