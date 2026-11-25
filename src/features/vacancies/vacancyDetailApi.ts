@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, readData } from '../coach/apiClient';
+import type { VacancyBrief } from '../../../shared/vacancyBrief';
 import { decodeVacancyText } from './vacancyText';
 
 export interface VacancyDetailText {
@@ -14,6 +15,8 @@ export interface VacancyDetailText {
   readonly pending?: boolean;
   /** 02.11: the employer opened the text only to some applicants on hh. */
   readonly textHidden?: boolean;
+  /** B791: задачи и требования строками текста. */
+  readonly brief?: VacancyBrief;
 }
 
 /** Full vacancy text for «Подробнее»; the matched list carries none (B266). */
@@ -49,9 +52,11 @@ export function useVacancyDetail(clusterId: string, enabled: boolean): VacancyDe
       fetchVacancyDetail(clusterId)
         .then((detail) => {
           if (!alive) return;
-          setState({ status: 'ready', detail });
           // 02.11: the worker reads an opened card first, usually within seconds.
-          if (detail.pending && attempt < DETAIL_PENDING_RETRIES) {
+          const again = Boolean(detail.pending) && attempt < DETAIL_PENDING_RETRIES;
+          // Попытки кончились — текста нет, а не «ещё читаем» без конца.
+          setState({ status: 'ready', detail: { ...detail, pending: again } });
+          if (again) {
             timer = setTimeout(() => read(attempt + 1), DETAIL_PENDING_DELAY_MS);
           }
         })

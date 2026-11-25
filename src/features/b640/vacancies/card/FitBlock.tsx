@@ -56,11 +56,14 @@ function NoPercent({ hidden }: { readonly hidden: boolean }) {
 
 function Counted({ view, sourceName }: { readonly view: VacancyFitView; readonly sourceName: string }) {
   const percent = vacancyFitPercent(view) ?? 0;
+  const tone = `is-${vacancyFitTier(percent)}`;
   return (
     <div className="v4-fit">
-      <span className="v4-fit-n num">Совпадение {percent} %</span>
+      <span className="v4-fit-n num">
+        Совпадение <span className={`vt-tone ${tone}`}>{percent} %</span>
+      </span>
       <span className="v4-fit-bar" role="img" aria-label={`Совпадение ${percent} %`}>
-        <BarPart className={`is-${vacancyFitTier(percent)}`} size={percent} />
+        <BarPart className={tone} size={percent} />
       </span>
       <FitWhy percent={percent} view={view} sourceName={sourceName} />
     </div>

@@ -1723,6 +1723,9 @@ export class MultiSourceVacancyEngine {
     );
     const fetched: UnifiedVacancy[] = Array.isArray(reading) ? reading : reading.vacancies;
     const partial = Array.isArray(reading) ? false : reading.partial;
+    // B759: полное чтение площадки повторит следующий старт, а его запись и сведение держали
+    // остановку десятки секунд. Частичное (обход hh) уже сдвинуло курсор — его записываем.
+    if (this.signal?.aborted && !partial) throw new ReadingStopped();
     const dropObservedBefore = Array.isArray(reading) ? undefined : reading.dropObservedBefore;
 
     // Перепись улова считается по тому, что площадка отдала, — до фильтра
@@ -1780,7 +1783,7 @@ export class MultiSourceVacancyEngine {
       if (!this.fetcher) {
         throw new Error('vacancy_source_transport_unavailable');
       }
-      const permission = await this.robotsPermission(source, nowMs);
+      const permission = await untilStopped(this.robotsPermission(source, nowMs), this.signal, 0);
       if (this.signal?.aborted) return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
       if (permission.disallowed) {
         // Запрет словами — не поломка: площадка сказала «не ходи», и продукт
@@ -1953,6 +1956,8 @@ export class MultiSourceVacancyEngine {
     const clusterChunk = async (chunk: readonly UnifiedVacancy[]) => {
       await this.clusterInBatches(store, chunk);
       for (const vacancy of chunk) clustered.add(vacancy.id);
+      // Записанная порция сведена; остальное полное чтение повторит следующий старт (B759).
+      if (this.signal?.aborted && !partial) throw new ReadingStopped();
     };
     let gone: readonly VacancyLink[];
     if (partial) {
@@ -2075,6 +2080,16 @@ export class MultiSourceVacancyEngine {
     }
   }
 
+  /** Проверку ссылок остановка не ждёт: записи ей не нужны, следующий такт проверит снова (B759). */
+  private async unlessStopped<T>(work: Promise<T>): Promise<T | undefined> {
+    try {
+      return await untilStopped(work, this.signal, 0);
+    } catch (error: unknown) {
+      if (error instanceof ReadingStopped) return undefined;
+      throw error;
+    }
+  }
+
   /**
    * Обходит выборку ссылок площадки. Улов может исправно приходить свежим у
    * объявлений, которых на сайте уже нет; единственное доказательство — сходить
@@ -2098,10 +2113,11 @@ export class MultiSourceVacancyEngine {
     const links = this.pool.loadSourceLinks(sourceId);
     if (links.length === 0) return undefined;
 
-    const { census, goneVacancyIds } = await probeVacancyLinks(links, this.linkProbe, {
-      sample,
-      nowMs,
-    });
+    const probed = await this.unlessStopped(
+      probeVacancyLinks(links, this.linkProbe, { sample, nowMs }),
+    );
+    if (!probed) return undefined;
+    const { census, goneVacancyIds } = probed;
 
     this.observations.set(
       sourceId,
@@ -2132,17 +2148,15 @@ export class MultiSourceVacancyEngine {
   /** B642: проверка ссылок записей работодателей, невиденных в последнем чтении. */
   public async probeUnseenEmployerLinks(nowMs: number = Date.now()): Promise<UnseenLinkReport> {
     const empty = { checked: 0, gone: 0, open: 0, unknown: 0 };
-    if (!this.linkProbe) return empty;
+    if (!this.linkProbe || this.signal?.aborted) return empty;
     const sourceIds = [...this.sources.values()]
       .filter((source) => source.enabled && confirmsLiveness(source.id))
       .map((source) => source.id);
-    const { goneLinks, ...report } = await checkUnseenLinks(
-      this.pool,
-      this.linkProbe,
-      sourceIds,
-      this.unseenWalk,
-      nowMs,
+    const checked = await this.unlessStopped(
+      checkUnseenLinks(this.pool, this.linkProbe, sourceIds, this.unseenWalk, nowMs),
     );
+    if (!checked) return empty;
+    const { goneLinks, ...report } = checked;
     if (goneLinks.length > 0) {
       if (this.reclusterMode.mode === 'keyed') detachVacanciesByKeys(this.keyedStore(), goneLinks);
       else {
@@ -2304,7 +2318,7 @@ export class MultiSourceVacancyEngine {
     const linksWereDead =
       this.healthOf(sourceId, nowMs).liveness.pausedBecause === 'links_not_opening';
     const outcome = await this.syncOne(sourceId, undefined, nowMs);
-    if (linksWereDead) await this.probeSourceLinks(sourceId, nowMs, DEAD_SOURCE_LINK_SAMPLE);
+    if (linksWereDead && !this.signal?.aborted) await this.probeSourceLinks(sourceId, nowMs, DEAD_SOURCE_LINK_SAMPLE);
     return outcome;
   }
 

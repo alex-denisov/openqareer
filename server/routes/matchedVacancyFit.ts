@@ -1,26 +1,21 @@
 import { leanFitView } from '../vacancies/leanMatchedPage';
 import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
-import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
-import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
-import {
-  compareFitDirected,
-  DEFAULT_VACANCY_SORT,
-  type VacancySort,
-} from '../../shared/vacancySort';
+import { compareListed, compareListedGroup } from '../../shared/vacancyListOrder';
+import { exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
+import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
 import { compareMoneyRank, createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
 import type { ListPhasesMs } from './matchedListPhases';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
-import { vacancyFitStage } from '../../shared/vacancyFitPercent';
+import { vacancyFitPercent, vacancyFitStage } from '../../shared/vacancyFitPercent';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 import { createGeoBlocker } from './vacancyFitGeoBlocks';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
 import { mapYielding } from '../vacancies/mapYielding';
 import { queueRowsYielding } from './queueRowsYielding';
-import { wantedCompaniesBreakTies, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
 /** Столько точных разборов считается между уступками event loop при фоновом пересчёте. */
@@ -151,25 +146,14 @@ export function matchedOrderChoiceKeys(
 ): Pick<MatchedOrder, 'cacheKey' | 'fitStamp'> {
   return {
     fitStamp: deps.vacancyMechanics ? fitProfileStamp(deps, candidateId) : 'none',
-    cacheKey: sort.by === 'fit' ? fitChoiceKey(deps, candidateId) : '',
+    cacheKey: sort.by === 'fit' ? FIT_ORDER_RULE : '',
   };
 }
 
 /** A stored list built by an older rule must not be served again: part of the list's `choice`. */
-const FIT_ORDER_RULE = 'role-v1';
+export const FIT_ORDER_RULE = `percent-date-v2:${VACANCY_FIT_ALGORITHM_VERSION}`;
 
-function fitChoiceKey(deps: RouteDeps, candidateId: string): string {
-  return `${FIT_ORDER_RULE}|${wantedCacheKey(deps, candidateId)}`;
-}
-
-function wantedCacheKey(deps: RouteDeps, candidateId: string): string {
-  return [...wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId)].sort().join(',');
-}
-
-/**
- * 28.10: «по совпадению» ведёт процент; вакансии компаний «Хочу» поднимаются только
- * среди вакансий с тем же процентом (B422 стал вторым ключом). «Деньги» отметку не учитывают.
- */
+/** B789 (владелец 25.11): процент, затем дата — отметка «Хочу» и роль порядок процентов не меняют. */
 export function withWantedCompanyOrder(
   deps: RouteDeps,
   candidateId: string,
@@ -181,26 +165,9 @@ export function withWantedCompanyOrder(
   const isExact = targetRoles.length > 0 ? exactRoleTest(targetRoles) : undefined;
   const byFit = withVacancyFitOrder(deps, candidateId, sort, log, use, isExact);
   if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '', dataKey: '' });
-  const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
-  // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
-  const cacheKey = fitChoiceKey(deps, candidateId);
   // 01.11: a result that landed must reach the ordered list too, not wait out the list window.
   const dataKey = String(deps.vacancyMechanics?.cachedVacancyIds(candidateId).size ?? 0);
-  return Object.assign(
-    (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
-      wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
-        isExact && sort.dir === 'desc'
-          ? compareFitRelevance(rankedRow(left), rankedRow(right), isExact)
-          : compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
-      ),
-    {
-      cacheKey,
-      dataKey,
-      prepare: byFit.prepare,
-      preparePhases: byFit.preparePhases,
-      fitStamp: byFit.fitStamp,
-    },
-  );
+  return Object.assign(byFit, { cacheKey: FIT_ORDER_RULE, dataKey });
 }
 
 /** Rows read on one list request when their percent landed after the order snapshot. */
@@ -325,14 +292,22 @@ function createFitViewReader(
 
 /** PRB-041: each row retries, seals and writes, so it runs after the read and in slices. */
 function requeueStaleRows<Input>(
-  runtime: { enqueue(input: Input): unknown },
+  runtime: {
+    enqueue(input: Input): unknown;
+    fitJobHoldsKey?(input: Input): boolean;
+    takeFitRefreshSlot?(): boolean;
+  },
   inputs: readonly Input[],
   log?: FitOrderLog,
 ): void {
   if (inputs.length === 0) return;
   const rows = inputs.slice(0, STALE_REFIT_LIMIT);
   void yieldToEventLoop()
-    .then(() => queueRowsYielding(rows, (input) => runtime.enqueue(input)))
+    .then(() => queueRowsYielding(rows, (input) => {
+        // B794: a reread selection spends the day's ceiling too; the shown page and the card do not.
+        if (runtime.fitJobHoldsKey?.(input)) return;
+        if (runtime.takeFitRefreshSlot?.() ?? true) runtime.enqueue(input);
+      }))
     .catch((error: unknown) =>
       log?.warn(
         { errorName: error instanceof Error ? error.name : 'UnknownError', rows: rows.length },
@@ -435,10 +410,6 @@ async function refreshFitViews(
   }
 }
 
-function rankedRow(item: MatchedVacancyItem) {
-  return { title: item.cluster.canonicalTitle, view: item.explanation.fitView };
-}
-
 const ROLE_SLICE_MS = 20;
 const ROLE_ROWS_PER_CHECK = 25;
 
@@ -489,10 +460,10 @@ function orderByFit(
       : item;
   });
   if (isExact) {
-    return decorated.sort(
-      (left, right) =>
-        compareFitRelevance(rankedRow(left), rankedRow(right), isExact) ||
-        compareMatchedVacancies(left, right),
+    const role = (item: MatchedVacancyItem) => Number(!isExact(item.cluster.canonicalTitle));
+    return decorated.sort((left, right) =>
+      // Непосчитанные — сначала роль кандидата: очередь подсчёта идёт по этому порядку.
+      compareListed(left, right, 'desc', () => role(left) - role(right)),
     );
   }
   if (sort.by !== 'money' || !money) {
@@ -501,6 +472,7 @@ function orderByFit(
   const amounts = new Map(decorated.map((item) => [item.cluster.id, money(item)]));
   return decorated.sort(
     (left, right) =>
+      compareListedGroup(left, right) ||
       compareMoneyRank(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
       compareFitOrder(left, right),
   );
@@ -543,6 +515,36 @@ export async function withShownPageFitViews(
       ),
     );
     return { ...item, explanation: explain(item.explanation, fitView) };
+  });
+}
+
+const COUNTING_VIEW: VacancyFitView = { state: 'processing', requirements: [] };
+
+const blocksOf = (view: VacancyFitView | undefined): number => view?.result?.conditionBlocks?.length ?? 0;
+
+const withFitView = (item: MatchedVacancyItem, view: VacancyFitView): MatchedVacancyItem => ({
+  ...item,
+  explanation: explanationWithFitView(item.explanation, compactFitView(view)),
+});
+
+/**
+ * B789: показан тот процент, по которому строка встала на место. Живой разбор бывает новее снимка
+ * порядка, и страница показывала 100 → 80 → 100 до следующего чтения.
+ */
+export function withOrderedPercents(
+  shown: readonly MatchedVacancyItem[],
+  ordered: readonly MatchedVacancyItem[],
+): MatchedVacancyItem[] {
+  return shown.map((item, index) => {
+    const view = ordered[index]?.explanation.fitView;
+    const live = item.explanation.fitView;
+    if (vacancyFitPercent(view) === null) {
+      // Досчитан после снимка: место среди непосчитанных, число придёт вместе с новым местом.
+      return vacancyFitPercent(live) === null ? item : withFitView(item, view ?? COUNTING_VIEW);
+    }
+    if (!view || (vacancyFitPercent(view) === vacancyFitPercent(live) && blocksOf(view) === blocksOf(live)))
+      return item;
+    return withFitView(item, view);
   });
 }
 
@@ -750,14 +752,11 @@ export async function requestFitForShownPage(
   );
 }
 
-/** «Совпадение» in the chosen direction; rows that cannot be counted go last (29.10). */
+/** «Совпадение» in the chosen direction, then the date; rows that cannot be counted go last. */
 export function compareFitOrder(
   left: MatchedVacancyItem,
   right: MatchedVacancyItem,
   sort: Pick<VacancySort, 'dir'> = DEFAULT_VACANCY_SORT,
 ): number {
-  return (
-    compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir) ||
-    compareMatchedVacancies(left, right)
-  );
+  return compareListed(left, right, sort.dir);
 }
