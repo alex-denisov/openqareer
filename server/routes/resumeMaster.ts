@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import { buildResumeStudioProjection, buildTargetedResumeSlice } from '../domain/resumeStudio';
-import { estimateResumePages } from '../domain/resumeTargetedVolume';
+import { estimateResumePages, type TargetedResumeVolume } from '../domain/resumeTargetedVolume';
 import type { TargetedResumeSlice } from '../domain/resumeStudioTypes';
 import type { ResumeVersionContent } from '../domain/resumeVersions';
 import type { ResumeDocument, ResumeStudioProjection } from '../domain/resumeStudioTypes';
@@ -84,10 +84,11 @@ export function buildVersionContent(
   /** Перевод ложится после подгонки объёма: более длинный язык не теряет пунктов (B785). */
   translate: (fitted: ResumeDocument, tailored: ResumeDocument) => ResumeDocument = (fitted) =>
     fitted,
+  fit: (slice: TargetedResumeSlice) => TargetedResumeVolume = estimateResumePages,
 ): ResumeVersionContent {
   const slice = buildTargetedResumeSlice(master.document, { title, requirements });
   const tailored = tailor(slice);
-  const fitted = estimateResumePages(tailored);
+  const fitted = fit(tailored);
   return {
     title: title.trim(),
     requirements: slice.requirements.map((item) => item.requirement),
