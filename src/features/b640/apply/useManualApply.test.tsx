@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationView } from '../../applications/applicationsApi';
 import { mount, type Mounted } from '../kit/testDom';
-import { pressApply } from './applyIntent';
+import { pressApply, pressSend } from './applyIntent';
 import { useManualApply } from './useManualApply';
 
 const api = vi.hoisted(() => ({ getManualApply: vi.fn(), queueManualApply: vi.fn() }));
@@ -40,7 +40,11 @@ describe('отклик LinkedIn после «Не откликаюсь» (Д16)'
     expect(api.queueManualApply).toHaveBeenCalledTimes(1);
   });
 
-  it('черновик встаёт в очередь при открытии', () => {
+  it('черновик при открытии адреса в очередь не встаёт, по «Откликнуться» — встаёт (Н2)', () => {
+    view = mount(<Probe stage="saved" />);
+    expect(api.queueManualApply).not.toHaveBeenCalled();
+    view.unmount();
+    pressSend({ label: 'Отправить' }, '/app/responses/a/letter?step=send');
     view = mount(<Probe stage="saved" />);
     expect(api.queueManualApply).toHaveBeenCalledTimes(1);
   });

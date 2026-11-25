@@ -1,4 +1,5 @@
 import { build } from 'esbuild';
+import { SERVER_MINIFY } from './serverMinify.mjs';
 import { writeFingerprints } from './maintenanceFingerprint.mjs';
 
 const release = process.env.VITE_OPENQAREER_RELEASE || 'local';
@@ -9,7 +10,7 @@ const shared = {
   format: 'esm',
   target: 'node24',
   sourcemap: false,
-  minify: true,
+  ...SERVER_MINIFY,
   legalComments: 'none',
   define: {
     __OPENQAREER_RELEASE__: JSON.stringify(release),

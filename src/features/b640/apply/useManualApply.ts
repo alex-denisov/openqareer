@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ManualApplyItem, ManualApplyReason } from '../../../../shared/manualApply';
 import { platformOf } from '../responses/model/platform';
 import { getManualApply, queueManualApply } from './data/manualApplyApi';
@@ -23,11 +23,32 @@ export function isUnsent({ application }: ApplyTarget): boolean {
   return !application || application.stage === 'saved' || application.stage === 'archived';
 }
 
-/** После «Не откликаюсь» отклик возвращает в очередь только нажатие «Откликнуться». */
-function useDeclined({ vacancyId, application }: ApplyTarget): boolean {
-  const [pressed] = useState(() => applyPressed(vacancyId));
-  useEffect(() => forgetApply(vacancyId), [vacancyId]);
-  return application?.stage === 'archived' && !pressed;
+/** В очередь отклик ставит только нажатие «Откликнуться» или «Отправить», а не открытый адрес. */
+function usePressed({ vacancyId, application }: ApplyTarget) {
+  const applicationId = application?.id;
+  const [pressed, setPressed] = useState(
+    () => applyPressed(vacancyId) || Boolean(applicationId && applyPressed(applicationId)),
+  );
+  useEffect(() => {
+    forgetApply(vacancyId);
+    if (applicationId) forgetApply(applicationId);
+  }, [vacancyId, applicationId]);
+  // Отправка, начатая нажатием, узнаёт о нём до следующей отрисовки.
+  const now = useRef(pressed);
+  const press = useCallback(() => {
+    now.current = true;
+    setPressed(true);
+  }, []);
+  return { pressed, press, now };
+}
+
+function useRefreshWhilePreparing(known: Known, refresh: () => void): void {
+  const preparing = known !== null && known !== 'loading' && known.preparing;
+  useEffect(() => {
+    if (!preparing) return undefined;
+    const timer = window.setInterval(refresh, REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [preparing, refresh]);
 }
 
 /**
@@ -40,11 +61,17 @@ export function useManualApply(
 ): {
   readonly manual: ManualApplyFlow | 'loading' | null;
   readonly queue: QueueManual;
+  /** Открыто без нажатия: сам экран ничего не ставит. */
   readonly declined: boolean;
+  /** После «Не откликаюсь» без нажатия форма сайта сама не читается. */
+  readonly held: boolean;
+  readonly press: () => void;
 } {
   const { vacancyId } = target;
-  const declined = useDeclined(target);
+  const { pressed, press, now } = usePressed(target);
   const unsent = isUnsent(target);
+  const declined = unsent && !pressed;
+  const held = declined && target.application?.stage === 'archived';
   const linkedin = Boolean(source) && platformOf(source).label === 'LinkedIn';
   const [known, setKnown] = useState<Known>(unsent ? 'loading' : null);
 
@@ -67,15 +94,11 @@ export function useManualApply(
       .catch(() => undefined);
   }, [vacancyId]);
 
-  const preparing = known !== null && known !== 'loading' && known.preparing;
-  useEffect(() => {
-    if (!preparing) return undefined;
-    const timer = window.setInterval(refresh, REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [preparing, refresh]);
+  useRefreshWhilePreparing(known, refresh);
 
   const queue = useCallback(
     async (reason: ManualApplyReason, host?: string): Promise<boolean> => {
+      if (!now.current) return false;
       try {
         setKnown(await queueManualApply({ vacancyId, reason, ...(host ? { host } : {}) }));
         return true;
@@ -83,8 +106,8 @@ export function useManualApply(
         return false;
       }
     },
-    [vacancyId],
+    [vacancyId, now],
   );
   const manual = known === null || known === 'loading' ? known : { item: known, refresh };
-  return { manual, queue, declined };
+  return { manual, queue, declined, held, press };
 }

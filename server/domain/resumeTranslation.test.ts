@@ -324,4 +324,22 @@ describe('один язык листа (Д17)', () => {
     const russian = translatedDocument(sheet, 'ru', result.translations);
     expect(russian.projects?.[0]?.description?.value).toBe('Built e-therapy service');
   });
+
+  it('описательное название, сохранённое как есть, спрашивается ещё раз', async () => {
+    const answers = { ...RU, 'Support portal': 'Портал поддержки' };
+    const known = { 'ru:Support portal': 'Support portal' };
+    const result = await translateDocument(sheet, 'ru', known, translator(answers), 5_000);
+    expect(result.translations['ru:Support portal']).toBe('Портал поддержки');
+  });
+
+  it('e-therapy в пункте опыта не переводится, хотя такого проекта нет', async () => {
+    const own = {
+      ...sheet,
+      experience: [{ ...sheet.experience[1]!, bullets: [item('Built e-therapy service')] }, ...sheet.experience.slice(1)],
+      projects: [],
+    } as unknown as ResumeDocument;
+    const answers = { ...RU, 'Built e-therapy service': 'Создал сервис электронной терапии' };
+    const result = await translateDocument(own, 'ru', {}, translator(answers), 5_000);
+    expect(JSON.stringify(result.translations)).not.toContain('терапии');
+  });
 });

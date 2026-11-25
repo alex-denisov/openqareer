@@ -1,3 +1,4 @@
+import { pressSend } from '../apply/applyIntent';
 import { Fragment, type ReactNode } from 'react';
 import { Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
@@ -96,6 +97,7 @@ function RowActionCell({ row, primary }: { readonly row: ResponseRow; readonly p
     <Link
       className={primary ? 'btn ev-act is-primary' : 'btn ev-act'}
       to={actionPath(row)}
+      onClick={() => row.action && pressSend(row.action, actionPath(row))}
       aria-label={row.action.label}
     >
       <Icon name={row.action.icon} />

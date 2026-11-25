@@ -1,5 +1,5 @@
 import { getConnections } from '../../../coach/coachApi';
-import { getCandidateActionUsage } from '../../../applications/applicationsApi';
+import type { B640HhRaiseState } from '../../../../../shared/b640HhRaise';
 import { getHhResumes } from '../../apply/hh/hhSessionApi';
 import { Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -7,21 +7,29 @@ import type { SectionProps } from '../../sections';
 import { useLoad } from '../../today/useLoad';
 import { PlatformRetry } from '../PlatformRetry';
 import { HhRaiseStatus } from './HhRaiseStatus';
-import { buildHhView, type HhStat, type HhUsage, type HhView } from './hhModel';
+import { getHhRaise } from './hhRaiseApi';
+import { buildHhView, type HhStat, type HhView } from './hhModel';
 
 interface HhData {
   readonly view: HhView;
+  readonly raise: B640HhRaiseState | null;
+}
+
+async function readRaise(signal: AbortSignal): Promise<B640HhRaiseState | null> {
+  try {
+    return (await getHhRaise(signal)) ?? null;
+  } catch {
+    return null; // Строка поднятия читает состояние сама и показывает сбой.
+  }
 }
 
 async function loadHh(signal: AbortSignal): Promise<HhData> {
-  const connections = await getConnections();
-  const [usage, snapshot] = await Promise.all([
-    getCandidateActionUsage(signal)
-      .then((value): HhUsage | null => value.usage)
-      .catch(() => null),
+  const [connections, raise, snapshot] = await Promise.all([
+    getConnections(),
+    readRaise(signal),
     getHhResumes(signal).catch(() => null),
   ]);
-  return { view: buildHhView(connections, usage, snapshot) };
+  return { view: buildHhView(connections, raise?.connected ? raise : null, snapshot), raise };
 }
 
 function NotConnected() {
@@ -85,7 +93,7 @@ function Body({ load }: { readonly load: ReturnType<typeof useLoad<HhData>> }) {
       <h2 className="lead-title" id="hh-t">
         Резюме на hh.ru
       </h2>
-      <HhRaiseStatus />
+      <HhRaiseStatus initial={load.data.raise} />
       <Stats stats={load.data.view.stats} />
     </section>
   );

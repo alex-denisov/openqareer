@@ -223,7 +223,8 @@ export class MaintenanceWorker {
   private readonly memoryGuard: MemoryGuard;
   private readonly readHeap: () => HeapReading;
   private readonly timers: NodeJS.Timeout[] = [];
-  private readonly inFlight = new Set<Promise<unknown>>();
+  /** Идущая работа и её имя: остановка называет в журнале, чего не дождалась (B759). */
+  private readonly inFlight = new Map<Promise<unknown>, string>();
   private readonly manualInFlight = new Set<string>();
   private readonly titleParse?: TitleParseStep;
   private readonly titleModel?: TitleModelStep;
@@ -921,12 +922,15 @@ export class MaintenanceWorker {
       timer = setTimeout(() => resolve('timeout'), graceMs);
     });
     const outcome = await Promise.race([
-      Promise.allSettled(Array.from(this.inFlight)).then(() => 'finished' as const),
+      Promise.allSettled(Array.from(this.inFlight.keys())).then(() => 'finished' as const),
       deadline,
     ]);
     if (timer) clearTimeout(timer);
     if (outcome === 'timeout') {
-      this.log.warn({ graceMs }, 'maintenance-stop-wave-abandoned');
+      this.log.warn(
+        { graceMs, pending: Array.from(this.inFlight.values()) },
+        'maintenance-stop-wave-abandoned',
+      );
       return { waveFinished: false };
     }
     return { waveFinished: true };
@@ -941,7 +945,7 @@ export class MaintenanceWorker {
       .finally(() => {
         this.inFlight.delete(tracked);
       });
-    this.inFlight.add(tracked);
+    this.inFlight.set(tracked, failureMessage.replace(/-failed$/, ''));
     return tracked;
   }
 }

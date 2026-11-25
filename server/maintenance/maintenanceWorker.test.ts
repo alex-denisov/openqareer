@@ -414,7 +414,8 @@ describe('MaintenanceWorker (B230)', () => {
       recluster: { mode: 'keyed', batchSize: 100 },
     });
     const log = silentLog();
-    const worker = new MaintenanceWorker({ engine: composed.engine, log });
+    const warn = vi.fn();
+    const worker = new MaintenanceWorker({ engine: composed.engine, log: { ...log, warn } });
     await worker.restore();
     void worker.runSyncWave();
 
@@ -423,7 +424,8 @@ describe('MaintenanceWorker (B230)', () => {
 
     expect(result).toEqual({ waveFinished: false });
     expect(Date.now() - started).toBeLessThan(timeBudget(2_000));
-    expect(log.entries.some((e) => e.msg === 'maintenance-stop-wave-abandoned')).toBe(true);
+    const details = expect.objectContaining({ pending: ['multi-source-sync'] });
+    expect(warn).toHaveBeenCalledWith(details, 'maintenance-stop-wave-abandoned');
     composed.close();
   });
 

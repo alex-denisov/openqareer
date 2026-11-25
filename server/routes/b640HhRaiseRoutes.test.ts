@@ -86,6 +86,7 @@ describe('b640 hh raise routes', () => {
     const done = await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'flagged.test');
     const data = done.json().data;
     expect(data.lastResult.status).toBe('ok');
+    expect(data.raisedToday).toBe(1);
     expect(Date.parse(data.nextRaiseAt) - Date.parse(data.lastRaisedAt)).toBeGreaterThanOrEqual(4 * 3_600_000);
     expect((await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'flagged.test')).statusCode).toBe(409);
     expect((await ctx.send('POST', `${BASE}/${taskId}/result`, { outcome: 'ok' }, 'other.test')).statusCode).toBe(409);

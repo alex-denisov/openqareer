@@ -1,3 +1,4 @@
+import { wasSent, type SentFacts } from '../../shared/applicationSent';
 import type { ApplicationStage } from '../../shared/applicationStage';
 import {
   REJECTION_REVIEW_LIMIT,
@@ -68,7 +69,7 @@ export function guessFromFit(view: VacancyFitView): SourcedRejectionGuess | null
   };
 }
 
-export interface RejectionReviewApplication {
+export interface RejectionReviewApplication extends SentFacts {
   readonly id: string;
   readonly stage: ApplicationStage;
   readonly title: string;
@@ -133,7 +134,7 @@ function recommendations(
 
 /** Собирает ответ экрана «Разбор отказов». Рекомендации стоят только на догадках из сверки. */
 export function buildRejectionReview(input: RejectionReviewInput): RejectionReview {
-  const sent = input.applications.filter((application) => application.stage !== 'saved');
+  const sent = input.applications.filter(wasSent);
   const rejected = sent.filter((application) => application.stage === 'rejected');
   const rejections: RejectionReviewItem[] = rejectedForReview(sent).map((application) => ({
     applicationId: application.id,

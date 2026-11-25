@@ -4,7 +4,7 @@ import { apiErrorMessage } from '../../coach/apiClient';
 import { getCandidate } from '../../coach/candidateSnapshotApi';
 import { confirmProfileExperience } from '../../resume/profileHistoryApi';
 import { getResumeStudio } from '../../resume/resumeApi';
-import { ActionDock, Button, Icon, Link, StatusLine } from '../kit';
+import { ActionDock, Button, Icon, Link, StatusLine, useIsMobile } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
@@ -104,6 +104,13 @@ function ReviewList({ rows }: { readonly rows: readonly ReviewRow[] }) {
 /** p06 «Проверка записей»: как прочитан профиль, «Верно» или «Исправить» у каждого места. */
 export function ReviewScreen({ node }: { readonly node: B640Node }) {
   const rows = useLoad(loadReview);
+  const mobile = useIsMobile();
+  const next = (
+    <Link className="btn is-primary" to={buildNodePath('s01')}>
+      <Icon name="arrow" />
+      Дальше
+    </Link>
+  );
   return (
     <div className="page pf" data-b640-node={node.code} data-b640-section={node.section}>
       <div className="col">
@@ -116,17 +123,10 @@ export function ReviewScreen({ node }: { readonly node: B640Node }) {
             <BlockError text="Не удалось загрузить записи." onRetry={rows.retry} />
           ) : null}
           {rows.state === 'ready' ? <ReviewList rows={rows.data} /> : null}
-          <ActionDock
-            kind="commit"
-            primary={
-              <Link className="btn is-primary" to={buildNodePath('s01')}>
-                <Icon name="arrow" />
-                Дальше
-              </Link>
-            }
-          />
+          {mobile ? <ActionDock kind="commit" primary={next} /> : null}
         </section>
       </div>
+      {mobile ? null : <ActionDock kind="auto" primary={next} />}
     </div>
   );
 }

@@ -383,8 +383,8 @@ try {
     },
   });
   startStepTimingLog(log);
-  // B761: что держит цикл — минута профиля процессора через 15 минут после старта, дальше раз в час.
-  startCpuProfileLog(log);
+  // B761: что держит цикл — минута профиля процессора на старте и через 15 минут, дальше раз в час.
+  startCpuProfileLog(log, { atStart: true });
   worker.start();
   // B752: разбиение склеенных кластеров — только по флагу и не в такте старта.
   const clusterSplitConfig = readClusterSplitConfig(process.env);

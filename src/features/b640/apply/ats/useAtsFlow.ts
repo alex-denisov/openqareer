@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ManualApplyReason } from '../../../../../shared/manualApply';
+import type { ManualApplyItem, ManualApplyReason } from '../../../../../shared/manualApply';
 import { isTauriEnvironment } from '../../../../services/desktop/desktopBridge';
 import { hhVacancyIdFromUrl } from '../../../../../shared/hhCandidateSession';
 import type { LetterScreenState } from '../../../vacancies/vacancyLetterController';
 import type { QuestionnaireState } from '../FormStep';
 import type { ApplyDestination, ApplyHead, ApplyStep, ApplyTarget } from '../model/applyModel';
 import { isUnsent, type QueueManual } from '../useManualApply';
+import { closeManualApply } from '../data/manualApplyApi';
 import { markApplied } from '../SendStep';
 import { atsAddressOf, ownSiteReason } from './atsTarget';
 import { useAtsApply, type AtsApplyControls } from './useAtsApply';
@@ -16,9 +17,11 @@ export interface AtsFlowInput {
   readonly head: ApplyHead;
   readonly sourceType: string;
   /** Отклик уже в очереди кандидата. */
-  readonly queued: boolean;
+  readonly manual: ManualApplyItem | null;
   readonly queue: QueueManual;
   /** «Не откликаюсь» без нового нажатия «Откликнуться». */
+  readonly held: boolean;
+  /** Экран открыт без нажатия: сам в очередь не ставит. */
   readonly declined: boolean;
   readonly step: ApplyStep;
   readonly setStep: (update: (now: ApplyStep) => ApplyStep) => void;
@@ -65,7 +68,9 @@ const hostOf = (url: string | null): string =>
 
 /** Адрес формы для приложения; вакансии hh.ru уходят своим путём. */
 function useAddress(input: AtsFlowInput) {
-  const { target, destination, head, queued } = input;
+  const { target, destination, head, manual } = input;
+  // «Отправить на сайте» ставит и веб, где формы нет; приложение читает такую форму само.
+  const queued = manual !== null && manual.reason !== 'other';
   const open =
     isTauriEnvironment() &&
     !queued &&
@@ -79,16 +84,20 @@ function useAddress(input: AtsFlowInput) {
 
 /** Отклик на сайте работодателя (B787): форма внутри приложения или очередь кандидата. */
 export function useAtsFlow(input: AtsFlowInput): AtsFlow {
-  const { target, destination, head, sourceType, queued, queue, step, setStep } = input;
+  const { target, destination, head, sourceType, manual, queue, step, setStep } = input;
   const { vacancyId } = target;
   const { questionnaire } = input;
   const approved = input.letter.approval.saved;
-  const held = useHeld(input.declined, step);
+  const held = useHeld(input.held, step);
   const onSend = step === 'send' && Boolean(approved) && !held;
   // Площадка, узнанная при открытии, не меняется: очередь выключает форму через её состояние.
   const address = useAddress(input);
   const onSent = async () => {
     if (questionnaire.form) questionnaire.markSubmitted();
+    if (manual) {
+      await closeManualApply(vacancyId, 'sent');
+      return;
+    }
     if (!approved) return;
     await markApplied({ vacancyId, head, sourceType, applicationId: approved.applicationId });
   };
@@ -109,7 +118,7 @@ export function useAtsFlow(input: AtsFlowInput): AtsFlow {
   });
   const active = address !== null && apply.state.kind !== 'manual';
   const queuing = useOwnSiteQueue(
-    onSend && !queued && isUnsent(target) && address === null,
+    onSend && !input.declined && !manual && isUnsent(target) && address === null,
     ownSiteReason(destination),
     hostOf(head.url),
     queue,

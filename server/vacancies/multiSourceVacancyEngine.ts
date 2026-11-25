@@ -31,6 +31,7 @@ import {
 import { clusterOfRecord } from './vacancyIdentity';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { mapWithConcurrency } from './boundedConcurrency';
+import { ReadingStopped, STOP_READING_GRACE_MS, untilStopped } from './stopReading';
 import {
   DEFAULT_LINK_SAMPLE,
   probeVacancyLinks,
@@ -178,7 +179,8 @@ export interface SourceSyncOutcome {
     | 'disabled'
     | 'skipped_needs_query'
     /** B628: канал компании не ответил за отведённое полосе время; опрос идёт дальше в фоне. */
-    | 'lane_timeout';
+    | 'lane_timeout'
+    | 'stopped';
   /** How many records the source returned before the freshness filter. */
   readonly fetched: number;
   /** How many of them the pool now holds for this source. */
@@ -476,6 +478,8 @@ export class MultiSourceVacancyEngine {
   private readonly holdSource: (source: VacancySourceConfig) => boolean;
   private readonly loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
   private readonly companyLaneSourceTimeoutMs: number;
+  private readonly signal?: AbortSignal;
+  private readonly stopReadingGraceMs: number;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
    * хранилищу, и память следует за размером запроса, а не пула (B221). Без
@@ -540,7 +544,12 @@ export class MultiSourceVacancyEngine {
     loadRequestedSource?: (sourceId: string) => VacancySourceConfig | undefined;
     /** B628: сколько полоса каналов компаний ждёт один источник, прежде чем освободить место. */
     companyLaneSourceTimeoutMs?: number;
+    /** B759: после отмены площадки не опрашиваются, начатые чтения получают короткий срок. */
+    signal?: AbortSignal;
+    stopReadingGraceMs?: number;
   }) {
+    this.signal = options?.signal;
+    this.stopReadingGraceMs = options?.stopReadingGraceMs ?? STOP_READING_GRACE_MS;
     this.holdSource = options?.holdSource ?? (() => false);
     this.loadRequestedSource = options?.loadRequestedSource;
     this.companyLaneSourceTimeoutMs =
@@ -1694,7 +1703,11 @@ export class MultiSourceVacancyEngine {
     query: string | undefined,
     nowMs: number,
   ): Promise<SourceSyncOutcome> {
-    const reading = await this.fetcher!(source, query ? { query } : undefined);
+    const reading = await untilStopped(
+      this.fetcher!(source, query ? { query } : undefined),
+      this.signal,
+      this.stopReadingGraceMs,
+    );
     const fetched: UnifiedVacancy[] = Array.isArray(reading) ? reading : reading.vacancies;
     const partial = Array.isArray(reading) ? false : reading.partial;
     const dropObservedBefore = Array.isArray(reading) ? undefined : reading.dropObservedBefore;
@@ -1740,6 +1753,7 @@ export class MultiSourceVacancyEngine {
     const source = this.sources.get(sourceId);
     if (!source) return { sourceId, status: 'unknown_source', fetched: 0, kept: 0 };
     if (!source.enabled) return { sourceId, status: 'disabled', fetched: 0, kept: 0 };
+    if (this.signal?.aborted) return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
     // An endpoint that answers nothing usable without a search term must be
     // skipped rather than recorded as an empty success (B164).
     if (source.requiresQuery && !query?.trim()) {
@@ -1753,6 +1767,7 @@ export class MultiSourceVacancyEngine {
         throw new Error('vacancy_source_transport_unavailable');
       }
       const permission = await this.robotsPermission(source, nowMs);
+      if (this.signal?.aborted) return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
       if (permission.disallowed) {
         // Запрет словами — не поломка: площадка сказала «не ходи», и продукт
         // не ходит. Красным отказом это выглядеть не должно (B204).
@@ -1760,6 +1775,8 @@ export class MultiSourceVacancyEngine {
       }
       return await this.readSource(source, query, nowMs);
     } catch (err) {
+      if (err instanceof ReadingStopped)
+        return { sourceId, status: 'stopped', fetched: 0, kept: 0 };
       const message = failureMessage(err);
       if (message.startsWith('source_not_configured')) {
         // The tool this source needs is not installed here: say so once, do not

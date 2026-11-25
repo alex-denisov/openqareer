@@ -398,6 +398,13 @@ test.describe('B651: «Проверка записей» (p06)', () => {
     const calls = await openCabinet(page, '/app/profile/review');
     const screen = node(page, 'p06');
     await expect(screen.locator('.pw').first().locator('.pw-ok')).toHaveText('Подтверждено');
+    if ((page.viewportSize()?.width ?? 0) >= 768) {
+      // Д13: «Дальше» видно на первом экране, полоса у низа окна.
+      const dock = screen.locator('.act-dock');
+      const box = await dock.boundingBox();
+      expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(page.viewportSize()?.height);
+      await expect(dock.getByRole('link', { name: 'Дальше' })).toBeInViewport();
+    }
     const card = screen.locator('.pw').nth(1);
     await expect(card.locator('.pg-t')).toHaveText('Старший продуктовый менеджер');
     await expectGates(page);

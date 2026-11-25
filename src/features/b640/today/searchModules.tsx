@@ -1,3 +1,4 @@
+import { pressSend } from '../apply/applyIntent';
 import { Button, Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
 import type { TodayDay } from './useTodayDay';
@@ -86,7 +87,7 @@ function ActionRow({ action }: { readonly action: TodayAction }) {
         <div className="row-title">{action.title}</div>
         {action.sub ? <div className="row-sub">{action.sub}</div> : null}
       </div>
-      <Link className="btn ev-act" to={action.path} aria-label={action.label}>
+      <Link className="btn ev-act" to={action.path} aria-label={action.label} onClick={() => pressSend(action, action.path)}>
         <Icon name={action.icon} />
         <span className="ev-lbl">
           <span className="ev-full">{action.label}</span>
