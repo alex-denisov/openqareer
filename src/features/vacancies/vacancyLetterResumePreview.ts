@@ -46,8 +46,8 @@ const GENERAL: LetterResumePreview = { kind: 'general', title: 'Ваше общ�
 const NONE: LetterResumePreview = { kind: 'none', title: 'Резюме', text: '' };
 
 /**
- * The targeted version is prepared anew until the response is sent (B785): the server keeps the sent
- * one and attaches the fresh one to an approved response. The approved one is read when it fails.
+ * After approval the attached resume is read as it is; before approval the letter prepares the
+ * targeted version it will attach (one per vacancy and master revision, so nothing duplicates).
  */
 export async function loadLetterResumePreview(
   vacancyId: string,
@@ -56,9 +56,7 @@ export async function loadLetterResumePreview(
 ): Promise<LetterResumePreview> {
   if (approved) {
     if (approved.kind === 'general') return GENERAL;
-    if (!approved.versionId) return masterPreview();
-    const fresh = await prepareVacancyLetterResume(vacancyId).catch(() => null);
-    return targetedPreview(fresh?.versionId ?? approved.versionId, signal);
+    return approved.versionId ? targetedPreview(approved.versionId, signal) : masterPreview();
   }
   const prepared = await prepareVacancyLetterResume(vacancyId);
   if (!prepared.ready) return NONE;
