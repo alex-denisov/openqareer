@@ -41,6 +41,7 @@ export function clearSectionCache(): void {
 export const SECTION_CACHE_KEYS = {
   today: 'today:snapshot',
   matchedPool: 'vacancies:matched-pool',
+  matchedPoolLatest: 'vacancies:matched-pool-latest',
   vacancyApplications: 'vacancies:applications',
   applications: 'responses:applications-page',
   resumeStudio: 'profile:resume-studio',

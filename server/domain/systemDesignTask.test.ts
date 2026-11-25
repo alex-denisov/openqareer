@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { scoreInterviewAnswerWithQuotes } from './interviewAnswerReview';
 import { scoreInterviewAnswer } from './interviewSimulator';
 import {
   buildSystemDesignTask,
@@ -65,14 +66,36 @@ describe('buildSystemDesignTask', () => {
     expect(family('Data Scientist')).toBe('ml_genai');
     expect(family('Senior Frontend-разработчик')).toBe('frontend');
     expect(family('DevOps / SRE')).toBe('infra');
-    expect(family('VP of Engineering')).toBe('management');
-    expect(family('Руководитель разработки')).toBe('management');
+    expect(family('VP of Engineering')).toBe('leadership');
+    expect(family('Руководитель разработки')).toBe('leadership');
+    expect(family('Тимлид')).toBe('management');
     expect(family('Go-разработчик')).toBe('backend');
-    expect(family('Менеджер по продажам')).toBe('core_api');
+    expect(family('Менеджер по продажам')).toBe('work');
+  });
+
+  it('B635: руководящая роль — управленческий кейс, инженер вне ПО — рабочая задача', () => {
+    for (const vacancyTitle of [
+      'Технический директор / Ведущий инженер СЭС (СНЭ)',
+      'Операционный директор (COO)',
+      'Head of IT Infrastructure & Support',
+    ]) {
+      const task = buildSystemDesignTask({ vacancyTitle, description: 'Доставка и поиск' });
+      expect(task.caseKind).toBe('leadership');
+      expect(JSON.stringify(task)).not.toMatch(/сервис|архитектур|трафик|Kubernetes/iu);
+      const score = scoreInterviewAnswerWithQuotes(task.exampleAnswer, 'system_design', 'leadership');
+      expect(score.points).toBe(score.maxPoints);
+    }
+    const engineer = buildSystemDesignTask({ vacancyTitle: 'Инженер СЭС' });
+    expect(engineer.caseKind).toBe('work');
+    const score = scoreInterviewAnswerWithQuotes(engineer.exampleAnswer, 'system_design', 'work');
+    expect(score.points).toBe(score.maxPoints);
+    expect(
+      buildSystemDesignTask({ vacancyTitle: 'Инженер', description: 'Микросервисы на Kafka' }).caseKind,
+    ).toBe('system');
   });
 
   it('general task only without a domain and a role family', () => {
-    const task = buildSystemDesignTask({ vacancyTitle: 'Специалист' });
+    const task = buildSystemDesignTask({ vacancyTitle: 'Специалист', description: 'Software' });
     expect(task.title).toBe('Основной API продукта');
     expect(task.points).toHaveLength(4);
   });
@@ -101,12 +124,12 @@ describe('buildSystemDesignTask', () => {
       'доставка',
       '',
     ]) {
-      const task = buildSystemDesignTask({ vacancyTitle: 'Роль', description });
+      const task = buildSystemDesignTask({ vacancyTitle: 'Backend', description });
       const score = scoreInterviewAnswer(task.exampleAnswer, 'system_design');
       expect(score.points, `${task.domain}`).toBe(score.maxPoints);
       expect(task.points, `${task.domain}`).toHaveLength(4);
     }
-    for (const vacancyTitle of ['ML Engineer', 'Data Engineer', 'iOS', 'SRE', 'CTO', 'Java']) {
+    for (const vacancyTitle of ['ML Engineer', 'Data Engineer', 'iOS', 'SRE', 'Тимлид', 'Java']) {
       const task = buildSystemDesignTask({ vacancyTitle });
       const score = scoreInterviewAnswer(task.exampleAnswer, 'system_design');
       expect(score.points, `${task.domain}`).toBe(score.maxPoints);

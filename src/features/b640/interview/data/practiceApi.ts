@@ -3,6 +3,7 @@ import {
   buildSystemDesignTask,
   type SystemDesignTask,
 } from '../../../../../server/domain/systemDesignTask';
+import type { TrainingCase } from '../../../../../server/domain/trainingCase';
 import { apiFetch, readDataObject } from '../../../coach/apiClient';
 import {
   getCurrentInterviewSession,
@@ -49,6 +50,7 @@ export interface PracticeReview {
   readonly questionId: string;
   readonly evaluation: ReviewEvaluation;
   readonly exampleAnswer: string | null;
+  readonly caseKind?: TrainingCase;
   readonly helpful: boolean | null;
   readonly schema: { readonly schema: SchemaToSave | null; readonly source: string } | null;
 }
