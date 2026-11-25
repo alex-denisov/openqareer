@@ -93,7 +93,11 @@ function changedProjections(database: DatabaseSync, rows: readonly CandidateRow[
     if (!stored || !vacancy) return [];
     const projection = clusterProjectionOf({ ...vacancy, id: row.id });
     if (row.projection && storedScope(row.projection) === projection.remoteScope) return [];
-    return [{ id: row.id, payload: stored.payload, projection: JSON.stringify(projection) }];
+    // Прочие поля проекции остаются как записаны: проход меняет только область.
+    const next = row.projection
+      ? { ...(JSON.parse(row.projection) as object), remoteScope: projection.remoteScope }
+      : projection;
+    return [{ id: row.id, payload: stored.payload, projection: JSON.stringify(next) }];
   });
 }
 
