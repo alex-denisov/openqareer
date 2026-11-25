@@ -76,16 +76,16 @@ function StepBody({ data, step, actions }: {
       <div className="actions">
         <Link className="btn" to={buildNodePath(next ?? 'd01')}>
           <Icon name={next ? 'right' : 'left'} />
-          {next ? STEP_TITLE[NEXT_STEP[next]!] : 'План адаптации'}
+          {next ? NEXT_LABEL[next] : 'План адаптации'}
         </Link>
       </div>
     </section>
   );
 }
 
-const NEXT_STEP: Readonly<Record<string, CareerDiaryAdaptationStepId>> = {
-  d01b: 'first_two_weeks',
-  d01c: 'first_meeting',
+const NEXT_LABEL: Readonly<Record<string, string>> = {
+  d01b: STEP_TITLE.first_two_weeks,
+  d01c: 'Встреча с руководителем',
 };
 
 /** Экраны шагов d01a, d01b, d01f: задачи шага по группам с отметками. */

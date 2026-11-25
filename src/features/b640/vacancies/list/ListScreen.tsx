@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { poolFilterQuery } from '../b640Api';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { vacanciesWord } from '../format';
@@ -120,17 +120,36 @@ function ListTable({ list, rows, section, env, links, triage, own }: ListTablePr
         own={<OwnRows items={own.items} money={env} onRemove={own.removeWithToast} />}
         pickFor={(item) => pickOf(triage, item)}
       />
-      {status === 'loading' ? <LoadingLine text="Сортируем подборку…" /> : null}
+      {status === 'loading' || (list.hunting && status !== 'failed') ? (
+        <LoadingLine text={list.hunting ? undefined : 'Сортируем подборку…'} />
+      ) : null}
       {status === 'failed' ? <SortError onRetry={retry} /> : null}
-      {status === 'loading' || status === 'failed' ? null : (
+      {status === 'loading' || status === 'failed' || list.hunting ? null : (
         <MoreFoot total={list.more.total} shown={list.more.shown} onMore={list.showMore} />
       )}
     </>
   );
 }
 
+/** v06p: по фильтрам пусто — «Помочь выбрать» снимает их и разбирает подборку, как только она есть. */
+function useReviewStart(list: VacancyList, start: () => void): () => void {
+  const [pending, setPending] = useState(false);
+  const filled = list.all.length > 0;
+  useEffect(() => {
+    if (!pending || !filled) return;
+    setPending(false);
+    start();
+  }, [pending, filled, start]);
+  return () => {
+    if (filled) return start();
+    setPending(true);
+    list.resetFilters();
+  };
+}
+
 /** Строка счётчика: число вакансий слева, «Проверить свою вакансию» и «Помочь выбрать» справа. */
 function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCount: boolean; triage: Triage; own: OwnSection }) {
+  const start = useReviewStart(list, triage.start);
   return (
     <>
       <div className="vl-top vl-countbar">
@@ -139,8 +158,8 @@ function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCou
         )}
         <div className="va-lact vl-acts">
           <OwnAddButton open={own.panelOpen} onClick={own.togglePanel} />
-          {list.all.length > 0 || triage.active ? (
-            <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : triage.start} />
+          {list.all.length > 0 || triage.active || list.blockers.length > 0 ? (
+            <ReviewButton active={triage.active} onClick={triage.active ? triage.cancel : start} />
           ) : null}
         </div>
       </div>
@@ -180,6 +199,7 @@ export function ListScreen() {
   const triage = useListTriage(list, rows);
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';
+  const searching = serverBusy || (list.hunting && list.server.status !== 'failed');
   const empty = pool.matched.length === 0;
   // Числа и список появляются с первой прочитанной порцией: «0 вакансий» на время чтения не пишем.
   const unread = empty && (pool.loading || retrying || pool.failed);
@@ -202,7 +222,7 @@ export function ListScreen() {
         <TriagePanel triage={triage} />
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed && !retrying} />
         {empty && (pool.loading || retrying) ? <LoadingLine /> : null}
-        {!unread && list.all.length === 0 && !serverBusy ? <EmptyList list={list} /> : null}
+        {!unread && list.all.length === 0 && !searching ? <EmptyList list={list} /> : null}
         <ListTable list={list} rows={rows} section={section} env={{ currency: list.currency, rates: list.rates, noRole: list.noRole }} links={links} triage={triage} own={own} />
       </section>
       <FilterSheet

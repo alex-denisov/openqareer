@@ -11,9 +11,13 @@ import { useCompanyList, type CompanyList } from './useCompanyList';
 
 const PAGE = 20;
 
+/** Сузило только место: ни поиск, ни быстрый фильтр список не режут. */
+const onlyByPlace = ({ relocation, search, filter }: CompanyList['query']): boolean =>
+  relocation && !search && filter === 'all';
+
 /** Пустой результат по месту (v10g): сортировать и быстро фильтровать нечего. */
 const isEmptyPlace = (list: CompanyList): boolean =>
-  list.load === 'ready' && list.items.length === 0 && list.query.relocation;
+  list.load === 'ready' && list.items.length === 0 && onlyByPlace(list.query);
 
 function SortField({ list }: { readonly list: CompanyList }) {
   const current = SORT_OPTIONS.find((option) => option.id === list.query.sort);
@@ -161,9 +165,9 @@ function Body({ list }: { readonly list: CompanyList }) {
     return <StatusLine state="wait" text="Загружаем компании…" />;
   }
   if (list.load === 'error') return <RetryLine text="Не удалось загрузить компании" onRetry={list.retry} />;
-  if (!list.items.length && list.query.relocation) return <RelocationEmpty city={list.query.city} />;
+  if (!list.items.length && onlyByPlace(list.query)) return <RelocationEmpty city={list.query.city} />;
   if (!list.items.length) {
-    const narrowed = list.query.search || list.query.filter !== 'all' || list.query.city;
+    const narrowed = list.query.search || list.query.filter !== 'all' || list.query.city || list.query.relocation;
     return (
       <div className="vl-empty" role="status">
         <p className="vl-empty-t">{narrowed ? 'Таких компаний в подборке нет' : 'В подборке пока нет компаний'}</p>

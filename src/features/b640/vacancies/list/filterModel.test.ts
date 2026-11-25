@@ -103,6 +103,25 @@ describe('фильтрация по загруженным строкам', () =
   });
 });
 
+describe('B801 v06p: кнопки «Снять»', () => {
+  const titlesRu = { 'VP of Engineering': 'Вице-президент по разработке' };
+
+  it('одна роль — русским названием, несколько — числом', () => {
+    const one = { ...EMPTY_FILTERS, roles: ['VP of Engineering'] };
+    const label = (filters: typeof one) => blockersOf([], filters, { ...context, titlesRu })[0]!.label;
+    expect(label(one)).toBe('Роль «Вице-президент по разработке»');
+    expect(label({ ...one, roles: ['VP of Engineering', 'COO'] })).toBe('Роли · 2');
+  });
+
+  it('срез сервера по деньгам и дате всегда можно снять', () => {
+    const filters = { ...EMPTY_FILTERS, roles: ['A'], moneyFrom: 9000, date: '7' as const };
+    const kinds = (serverCut: boolean) =>
+      blockersOf([], filters, { ...context, serverCut }).map((entry) => entry.kind);
+    expect(kinds(false)).toEqual(['roles']);
+    expect(kinds(true)).toEqual(['roles', 'money', 'dates']);
+  });
+});
+
 describe('значения фильтров', () => {
   it('частые и остальные, поиск', () => {
     const items = Array.from({ length: 8 }, (_, i) => makeItem({ id: String(i), location: `Город ${i}` }));
