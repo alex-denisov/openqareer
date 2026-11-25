@@ -435,16 +435,17 @@ test.describe('B654: раздел «Вакансии», подборка и со
   }, testInfo) => {
     test.skip(isMobile(testInfo.project.name), 'отбор ставится поповером');
     await openCabinet(page, '/app/vacancies');
-    await page.getByRole('button', { name: /^Дата/ }).click();
-    await page.getByRole('radio', { name: /^Сегодня/ }).check();
+    const bar = page.locator('.vt-fbar');
+    await bar.getByRole('button', { name: /^Дата/ }).click();
+    await page.getByRole('radio', { name: /^сегодня/ }).check();
     await page.locator('.vt-pop-foot .btn.is-primary').click();
-    await page.getByRole('button', { name: /^Деньги/ }).click();
+    await bar.getByRole('button', { name: /^Деньги/ }).click();
     await page.getByLabel('Зарплата от', { exact: true }).fill('9000');
     await page.locator('.vt-pop-foot .btn.is-primary').click();
     const empty = page.locator('.vl-empty');
     await expect(empty).toBeVisible();
     await expect(page.locator('#list-title')).toContainText('0 вакансий');
-    await expect(empty.getByRole('button', { name: /Снять: Деньги от 9000/ })).toBeVisible();
+    await expect(empty.getByRole('button', { name: /Снять: Дата: сегодня/ })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Помочь выбрать' })).toBeVisible();
     const over = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
