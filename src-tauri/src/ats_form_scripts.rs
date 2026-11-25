@@ -534,6 +534,35 @@ mod tests {
     }
 
     #[test]
+    fn teamtailor_confirms_on_the_page_of_the_sent_application() {
+        let sent = include_str!("ats_fixtures/teamtailor_sent.html");
+        let notice = sent.split("<main>").next().unwrap();
+        let spanish = sent.replace("Thanks for applying", "Gracias por la solicitud");
+        let with_form = format!("{sent}{TEAMTAILOR}");
+        let loaded = "Object.defineProperty(document, 'readyState', { value: 'complete' });";
+        let base = "/jobs/8-x/applications/";
+        for (html, path, state) in [
+            (sent, "/jobs/8-x/applications/9f3c2a-71", "confirmed"),
+            (&spanish, "/jobs/8-x/applications/9f3c2a-71/", "confirmed"),
+            (notice, "/jobs/8-x/applications/9f3c2a-71", "pending"),
+            (&with_form, "/jobs/8-x/applications/9f3c2a-71", "other"),
+            (sent, "/jobs/8-x/applications/new", "pending"),
+            (sent, "/jobs/9-x/applications/9f3c2a-71", "pending"),
+        ] {
+            let argument = json!({ "thanks": "teamtailor", "thanksPaths": [], "sentBase": base });
+            let Some(out) = run(html, path, loaded, &[op("outcome", argument)]) else {
+                return;
+            };
+            let got = parsed(&out, 0)["state"].clone();
+            if state == "other" {
+                assert_ne!(got, "confirmed");
+            } else {
+                assert_eq!(got, state, "{path}");
+            }
+        }
+    }
+
+    #[test]
     fn a_field_that_would_send_its_own_number_is_never_optional() {
         let html = r#"<form id="job-application-form">
 <label for="pay">Salary</label><input id="pay" type="range" min="0" max="50000">

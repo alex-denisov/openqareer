@@ -89,7 +89,7 @@ async function writeVariant(
     ...subject,
     text: checked.text,
     wish: normalizeWish(undefined),
-    payload: checked.added ? { added: checked.added } : null,
+    payload: { vacancyId, ...(checked.added ? { added: checked.added } : {}) },
     createdAt: new Date().toISOString(),
   });
   if (!variant) return limitReached(reply, request);

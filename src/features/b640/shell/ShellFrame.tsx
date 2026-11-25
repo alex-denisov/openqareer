@@ -21,6 +21,7 @@ import { backLabel } from './navigation';
 import { ShellPanels } from './panels';
 import { Rail } from './Rail';
 import { isReturning } from './scrollMemory';
+import { CONTEXT_NODES, ScreenLoading } from './ScreenLoading';
 import { SecTabs, type SecTab } from './SecTabs';
 import { useShell } from './ShellContext';
 import { Topbar } from './Topbar';
@@ -98,15 +99,12 @@ function NotFound() {
 
 const pageFrame = (failure: ReactNode) => <div className="page">{failure}</div>;
 
-/** Шапка отклика стоит в пути с первого кадра: путь не перестраивается после загрузки (B798). */
-const CONTEXT_NODES: ReadonlySet<string> = new Set(['o02']);
-
 /** Экран без сохранения: каждый адрес открывается заново. */
 function Screen({ match, path }: { readonly match: B640Match; readonly path: string }) {
   const section = SECTION_ENTRIES[match.node.section];
   return (
     <ChunkBoundary chunk={section} resetKey={path} frame={pageFrame}>
-      <Suspense fallback={<div className="page b640-loading" aria-busy="true" />}>
+      <Suspense fallback={<ScreenLoading code={match.node.code} />}>
         <ChunkView key={path} chunk={section} props={{ node: match.node, params: match.params }} />
       </Suspense>
     </ChunkBoundary>

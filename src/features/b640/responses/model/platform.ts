@@ -49,6 +49,25 @@ export function platformOf(source: string | null | undefined): Platform {
   return { label: bare.charAt(0).toUpperCase() + bare.slice(1), site: false };
 }
 
+interface PlacedVacancy {
+  readonly clusterId?: string | null;
+  readonly vacancy?: { readonly source?: string; readonly company?: string } | null;
+}
+
+const ATS_CLUSTER = /^cluster-ats[-._]/u;
+
+/**
+ * Площадка отклика. Доски работодателей называют источник именем компании («Q-Tech»): это сайт
+ * компании, а не площадка (B801).
+ */
+export function responsePlatform({ clusterId, vacancy }: PlacedVacancy): Platform {
+  const platform = platformOf(vacancy?.source);
+  if (platform.site || KNOWN.some(([, label]) => label === platform.label)) return platform;
+  const same = platform.label.toLowerCase() === vacancy?.company?.trim().toLowerCase();
+  const listed = [...FREEHIRE_PLATFORMS.values()].includes(platform.label);
+  return !listed && (same || ATS_CLUSTER.test(clusterId ?? '')) ? SITE : platform;
+}
+
 /** «через hh.ru», «через сайт компании». */
 export function viaPlatform(platform: Platform): string {
   return `через ${platform.label}`;

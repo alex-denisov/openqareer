@@ -2,17 +2,22 @@ import { pressApply } from '../../apply/applyIntent';
 import type { ReactNode } from 'react';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
+import { AppliedLink } from './AppliedLink';
 import { SaveButton, type SaveButtonProps } from './SaveButton';
 
 export interface ActBarProps {
   readonly vacancyId: string;
+  /** Отклик по вакансии уже отправлен: вместо «Откликнуться» — он. */
+  readonly responseId?: string | undefined;
   /** Профиля нет: главная кнопка — «Добавить опыт», «Откликнуться» обычная. */
   readonly noProfile: boolean;
   readonly save: Omit<SaveButtonProps, 'mobile'> | null;
-  readonly onOpenText: () => void;
 }
 
-function applyLink(vacancyId: string, primary: boolean): ReactNode {
+function applyLink({ vacancyId, responseId }: ActBarProps, primary: boolean): ReactNode {
+  if (responseId) {
+    return <AppliedLink responseId={responseId} className={primary ? 'btn is-primary' : 'btn'} />;
+  }
   return (
     <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
       <Icon name="responses" />
@@ -21,8 +26,9 @@ function applyLink(vacancyId: string, primary: boolean): ReactNode {
   );
 }
 
-/** Действия: «Откликнуться» (на 390 закреплена внизу), «Текст вакансии», «Сохранить». */
-export function ActBar({ vacancyId, noProfile, save, onOpenText }: ActBarProps) {
+/** Действия: «Откликнуться» (на 390 закреплена внизу) и «Сохранить». */
+export function ActBar(props: ActBarProps) {
+  const { noProfile, save } = props;
   const addExperience = (
     <Link className="btn is-primary" to={buildNodePath('p04')}>
       <Icon name="plus" />
@@ -32,13 +38,9 @@ export function ActBar({ vacancyId, noProfile, save, onOpenText }: ActBarProps) 
   return (
     <div className="v4-act">
       <div className="actions v4-act-main">
-        {noProfile ? addExperience : applyLink(vacancyId, true)}
+        {noProfile ? addExperience : applyLink(props, true)}
       </div>
-      {noProfile ? applyLink(vacancyId, false) : null}
-      <button className="btn v4-text" type="button" onClick={onOpenText}>
-        <Icon name="file" />
-        Текст вакансии
-      </button>
+      {noProfile ? applyLink(props, false) : null}
       {save ? <SaveButton {...save} /> : null}
     </div>
   );

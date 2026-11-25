@@ -6,6 +6,7 @@ import { extractPdfResume, PdfResumeImportError } from '../../workspace/pdfResum
 import { Button, Dialog, Icon, Link, ResultLine, StatusLine, type IconName } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { CONSULTANT_PATH } from '../shell/navigation';
+import { NEW_ENTRY_ID } from './newExperience';
 import { freshDraft } from './ExperienceEditScreen';
 
 type UploadState =
@@ -202,7 +203,7 @@ function LinkSource({ icon, title, action, path }: LinkSourceProps) {
   );
 }
 
-/** p04 «Откуда взять опыт»: резюме файлом, LinkedIn, hh.ru или разговор с консультантом. */
+/** p04 «Откуда взять опыт»: резюме файлом, LinkedIn, hh.ru, разговор с консультантом или вручную. */
 export function SourcesScreen({ node }: { readonly node: B640Node }) {
   return (
     <div className="page pf" data-b640-node={node.code} data-b640-section={node.section}>
@@ -230,6 +231,12 @@ export function SourcesScreen({ node }: { readonly node: B640Node }) {
               title="Рассказать консультанту"
               action="Начать разговор"
               path={CONSULTANT_PATH}
+            />
+            <LinkSource
+              icon="edit"
+              title="Заполнить вручную"
+              action="Заполнить"
+              path={buildNodePath('p07', { entryId: NEW_ENTRY_ID })}
             />
           </ul>
         </section>

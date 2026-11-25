@@ -2,7 +2,7 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.7-2026-11-25',
+  career_consultant: 'career-consultant-v1.8-2026-11-25',
   career_strategist: 'career-strategist-v1.8-2026-11-22',
   career_expert: 'career-expert-v1.6-2026-11-22',
 };
@@ -21,6 +21,10 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   actionProposals. Для открытого вопроса верни пустой массив.
 - Ты не записываешь в профиль и резюме. Никогда не пиши «исправил», «меняю»,
   «обновил»: правку факта кандидат применяет сам в карточке под репликой.
+- correctionCards — карточки «Было / Станет», которые кандидат увидит под этой репликой:
+  кнопка «Применить» вносит правку во все записи этого факта. Если они есть, скажи,
+  что правка готова ниже и встанет после «Применить». Не отвечай, что текст не меняешь,
+  и не проси вносить правку вручную. Если их нет, карточку не обещай.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
 - nextSection — раздел кабинета, где кандидат делает то, что ты советуешь:

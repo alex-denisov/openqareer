@@ -3,6 +3,8 @@ import { NodeStub } from '../shell/NodeStub';
 import type { SectionProps } from '../sections';
 import { ConnectionsScreen } from './ConnectionsScreen';
 import { ExperienceEditScreen } from './ExperienceEditScreen';
+import { ExperienceNewScreen } from './ExperienceNewScreen';
+import { NEW_ENTRY_ID } from './newExperience';
 import { HistoryScreen } from './HistoryScreen';
 import { PhotoScreen } from './PhotoScreen';
 import { loadTerms } from './profileAsideApi';
@@ -31,6 +33,7 @@ export default function Section({ node, params }: SectionProps) {
   if (node.code === 's02') return <StatusChoiceScreen node={node} />;
   if (node.code === 'p06') return <ReviewScreen node={node} />;
   if (node.code === 'p07') {
+    if (params.entryId === NEW_ENTRY_ID) return <ExperienceNewScreen node={node} />;
     return <ExperienceEditScreen node={node} entryId={params.entryId ?? ''} />;
   }
   if (node.code === 'p04') return <SourcesScreen node={node} />;

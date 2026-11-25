@@ -51,7 +51,7 @@ async function arrangeList(page: Page) {
   const toggle = page.locator(ROWS).nth(30).locator('.vt-toggle');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  const apply = page.locator('.vs-acts').getByRole('link', { name: 'Откликнуться' });
+  const apply = page.locator('.vs-acts, .act-dock').getByRole('link', { name: 'Откликнуться' });
   await apply.scrollIntoViewIfNeeded();
   const title = (await toggle.getAttribute('title')) ?? '';
   return { toggle, apply, title, scroll: await page.evaluate(() => window.scrollY) };
@@ -165,5 +165,29 @@ test.describe('B798: список → объект → назад', () => {
     await page.goBack();
     await expect(page.locator('[data-b640-node="o01"]')).toBeVisible();
     await expect(chip).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+test.describe('B791: «Откликнуться» на 390 (v06b2)', () => {
+  test('полоса над навигацией, в строке «Открыть», конец списка не перекрыт', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openList(page);
+    await page.locator(`${ROWS} .vt-toggle`).first().click();
+    const apply = page.locator('.page > .act-dock.is-auto').getByRole('link');
+    await expect(apply).toHaveText('Откликнуться');
+    const button = (await apply.boundingBox())!;
+    expect([button.x, button.width, button.height]).toEqual([16, 358, 44]);
+    const inRow = page.locator('.vs-acts a');
+    await expect(inRow).toHaveCount(1);
+    await expect(inRow).toHaveAccessibleName('Открыть полностью');
+    const more = page.getByRole('button', { name: /Показать ещё/u });
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const dock = (await page.locator('.act-dock.is-auto').boundingBox())!;
+    const nav = (await page.locator('nav').last().boundingBox())!;
+    const last = (await more.boundingBox())!;
+    expect(dock.y + dock.height).toBeLessThanOrEqual(nav.y + 1);
+    expect(last.y + last.height).toBeLessThanOrEqual(dock.y);
+    await page.locator(`${ROWS} .vt-toggle`).first().click();
+    await expect(page.locator('.act-dock.is-auto')).toHaveCount(0);
   });
 });
