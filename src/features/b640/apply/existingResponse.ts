@@ -9,8 +9,10 @@ export function existingResponseId(
   applications: readonly ApplicationView[],
 ): string | null {
   if (applications.some((application) => application.id === responseId)) return null;
-  const sent = applications.find((application) => application.clusterId === responseId);
-  return sent && appliedOn(sent) ? sent.id : null;
+  const sent = applications.find(
+    (application) => application.clusterId === responseId && appliedOn(application),
+  );
+  return sent?.id ?? null;
 }
 
 /**
@@ -25,7 +27,7 @@ export async function openExistingFirst(
   const existing = existingResponseId(responseId, applications);
   if (!existing || signal.aborted) return applications;
   forgetApply(responseId);
-  window.history.replaceState(null, '', buildNodePath('o01c', { responseId: existing }));
+  window.history.replaceState(window.history.state, '', buildNodePath('o01c', { responseId: existing }));
   window.dispatchEvent(new PopStateEvent('popstate'));
   return new Promise(() => undefined);
 }

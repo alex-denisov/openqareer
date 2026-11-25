@@ -34,6 +34,7 @@ import { appliesOnHh } from '../vacancies/applyOnHh';
 import { prepareVacancyLang } from './resumeDefaultLang';
 import { prepareLetterResume } from './letterApprovalResume';
 import { poolReader, questionnaireView, type Signed } from './questionnaireRoutes';
+import { refuseWhenSent } from './sentApplicationGuard';
 import type { ResumeEditDeps } from './resumeEditRoutes';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 
@@ -391,6 +392,7 @@ async function enqueueVacancy(
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
   if (!cluster)
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  if (refuseWhenSent(deps, request, reply, candidateId, vacancyId)) return reply;
   const known = deps.queue.get(candidateId, vacancyId);
   const facts = vacancyFacts(cluster, reason, host);
   if (known?.status !== 'open' && deps.queue.listOpen(candidateId).length >= MAX_OPEN) {

@@ -554,7 +554,8 @@ function ensureSavedApplication(
         source: platform === 'hh' ? 'hh.ru' : 'LinkedIn',
       }),
     });
-    return application.id;
+    // B801: по этому кластеру отклик уже отправлен — второй в автоочередь не встаёт.
+    return application.stage === 'saved' ? application.id : null;
   } catch (error) {
     request.log.warn({ event: 'automation-application-create-failed', candidateId, failureType: failureType(error) }, 'candidate-automation-queue');
     return null;
