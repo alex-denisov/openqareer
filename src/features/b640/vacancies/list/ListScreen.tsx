@@ -151,6 +151,25 @@ function CountBar({ list, hideCount, triage, own }: { list: VacancyList; hideCou
   );
 }
 
+/** Разбор «Помочь выбрать» по той же выборке, что число в шапке. */
+function useListTriage(list: VacancyList, rows: RowInteractions): Triage {
+  // Всю подборку по фильтрам сервер разбирает сам; с фильтрами, которых он не знает, — показанные строки.
+  const triageQuery = isNarrowed(list.filters) ? null : poolFilterQuery(list.filters.roles);
+  const triage = useTriage(list.all, rows.hideMany, {
+    query: triageQuery,
+    expected: list.count,
+    ready: list.rolesReady,
+    failed: list.pool.failed,
+    retry: list.pool.refresh,
+  });
+  // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
+  const { clearResult, start } = triage;
+  const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
+  useEffect(() => clearResult(), [listAction, clearResult]);
+  useReviewDeepLink(list.all.length, start);
+  return triage;
+}
+
 /** Узел s07: подборка вакансий с фильтрами, сортировкой и порциями по 20. */
 export function ListScreen() {
   const links = useVacancyLinks();
@@ -158,14 +177,7 @@ export function ListScreen() {
   const list = useVacancyList(links, rows.hiddenIds);
   const { pool } = list;
   const section = useHiddenSection(rows, pool.refresh);
-  // Всю подборку по фильтрам сервер разбирает сам; с фильтрами, которых он не знает, — показанные строки.
-  const triageQuery = isNarrowed(list.filters) ? null : poolFilterQuery(list.filters.roles);
-  const triage = useTriage(list.all, rows.hideMany, { query: triageQuery, expected: list.count });
-  // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
-  const { clearResult, start } = triage;
-  const listAction = `${JSON.stringify(list.filters)}|${JSON.stringify(list.sort)}|${rows.hiddenIds.size}`;
-  useEffect(() => clearResult(), [listAction, clearResult]);
-  useReviewDeepLink(list.all.length, start);
+  const triage = useListTriage(list, rows);
   const retrying = usePoolRetry(pool);
   const serverBusy = list.server.active && list.server.status !== 'ready';
   const empty = pool.matched.length === 0;

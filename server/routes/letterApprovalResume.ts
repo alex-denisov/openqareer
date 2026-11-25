@@ -81,7 +81,7 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
  * Правило сборки версии под вакансию. B713: версии до него перечисляли места работы без пунктов, и
  * одобренная такая версия возвращалась бы для той же вакансии и ревизии; новая сборка даёт новый id.
  */
-export const TARGETED_RESUME_BUILD = 'b785-relevant-sections';
+export const TARGETED_RESUME_BUILD = 'b785-results-first';
 
 function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string, choices: ResumeEditChoices, assessed: boolean): string {
   // Без выбранного языка переводы на версию не влияют.
@@ -155,9 +155,9 @@ function approvedVersion(
   if (sent) return sent;
   const tailor = (slice: ReturnType<typeof targetedSliceFor>) => tailorResumeSlice(slice, choices);
   // Факты показывают, как кандидат сам пишет названия латиницей.
-  const facts = (deps.candidateStore.getSnapshot(candidateId).memory ?? []).flatMap((fact) =>
+  const facts = [master.document.about ?? '', ...(deps.candidateStore.getSnapshot(candidateId).memory ?? []).flatMap((fact) =>
     fact.sensitive === true ? [] : [fact.statement],
-  );
+  )];
   const translate = (fitted: ResumeDocument, tailored: ResumeDocument) =>
     translatedDocument(fitted, choices.lang, choices.translations ?? {}, tailored, facts);
   const { candidateStore } = deps;

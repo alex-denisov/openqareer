@@ -182,7 +182,7 @@ function Editor(props: EditorProps) {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const found = validateForm(form, entry);
+    const found = validateForm(form, entry, props.initial);
     setErrors(found);
     if (Object.keys(found).length === 0) void save(form);
   }
@@ -213,7 +213,7 @@ function Editor(props: EditorProps) {
         <FormatField form={form} onChange={change} />
         <TeamField {...fields} />
       </div>
-      <DescriptionField form={form} onChange={change} isNew={!entry.descriptionMemoryId} />
+      <DescriptionField {...fields} />
       <ResultsField form={form} onChange={change} />
       <SkillsField form={form} onChange={change} />
       {error ? <StatusLine state="err" text={error} /> : null}

@@ -31,7 +31,7 @@ import {
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { withOrderedPercents, withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
-import { readMatchedList } from './matchedVacancyList';
+import { engineListReads, readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
 import { createListPages } from './b640ListPages';
 import { readB640Sealed } from './b640SealedAnswer';
@@ -141,9 +141,7 @@ async function readList(
       sourceRegistry,
       order: read.order,
       seal: sealsMainView(filters),
-      ...(typeof deps.multiSourceEngine.getCatalogTotals === 'function'
-        ? { catalogTotals: () => deps.multiSourceEngine.getCatalogTotals!() }
-        : {}),
+      ...engineListReads(deps.multiSourceEngine),
     },
     request.log,
   );

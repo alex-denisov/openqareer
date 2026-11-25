@@ -65,10 +65,10 @@ import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleSitemapHealth } from './seo/sitemapHealth';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
-import { loadSalaryBenchmarksFile } from './vacancies/salaryBenchmarks/sqliteSalaryBenchmarkStore';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { scheduleSemanticCoverIndex } from './vacancies/semanticCoverIndex';
+import { scheduleOpenStatisticsJob } from './vacancies/occupationEarnings/occupationEarningSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
 import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
 import {
@@ -430,12 +430,12 @@ try {
     config,
     log,
   );
-  // B803: цифры открытой аналитики из файла рядом с базой.
-  loadSalaryBenchmarksFile(semanticDatabase, config.databasePath, log);
   // B546: market salary estimates stream every salaried vacancy, so only here.
   stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   stopJobs.push(scheduleRemoteScopeBackfill(semanticDatabase, log));
+  // B803: открытая статистика заработков, раз в неделю.
+  stopJobs.push(scheduleOpenStatisticsJob(semanticDatabase, log));
   // B725: покрывающий индекс подбора — один раз, вне старта веб-процесса.
   stopJobs.push(scheduleSemanticCoverIndex(semanticDatabase, log));
   // B627 / B643-9: домен, карьеры и ATS без модели (решение владельца 11.11), ≤480 компаний в сутки.

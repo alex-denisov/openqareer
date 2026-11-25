@@ -22,10 +22,13 @@ import { join } from 'node:path';
 import {
   FULL_VERIFY,
   IN_BATCH_LABEL,
+  MAX_BATCH,
+  MAX_POOL,
   READY_LABEL,
   cancelledOnlyRuns,
   inheritParentChecks,
   isOwnMainMerge,
+  retryMerge,
   shouldNoticeStuck,
   stuckMarker,
   creditDecision,
@@ -51,6 +54,7 @@ const assumeReady =
 const WORKFLOW = 'verify-and-deploy.yml';
 const RUN_TIMEOUT_MS = 60 * 60 * 1000;
 const POLL_MS = 30 * 1000;
+const MERGE_RETRY_MS = 5 * 1000;
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '');
 const log = (...m) => console.log('[merge-batch]', ...m);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -81,7 +85,7 @@ function act(what, fn) {
 
 function listPrs() {
   const fields =
-    'number,title,headRefName,headRefOid,labels,isDraft,mergeable,baseRefName,statusCheckRollup,isCrossRepository';
+    'number,title,headRefName,headRefOid,labels,isDraft,mergeable,baseRefName,statusCheckRollup,isCrossRepository,changedFiles';
   const prs = ghJson(
     'pr',
     'list',
@@ -94,35 +98,46 @@ function listPrs() {
     '--json',
     fields,
   );
-  return prs.map((raw) => {
-    const pr = assumeReady.has(raw.number)
-      ? {
-          ...raw,
-          labels: [...raw.labels, { name: READY_LABEL }],
-          statusCheckRollup: raw.statusCheckRollup.map((c) => ({
-            ...c,
-            conclusion: c.conclusion || 'SUCCESS',
-          })),
-        }
-      : raw;
-    if (!(pr.labels ?? []).some((l) => l.name === READY_LABEL)) return pr;
-    // One name per line: --paginate applies --jq page by page, so a JSON array
-    // per page would not parse for a PR of more than 30 files.
-    const files = parseLines(
-      gh(
-        'api',
-        `repos/${repo()}/pulls/${pr.number}/files?per_page=100`,
-        '--paginate',
-        '--jq',
-        '.[].filename',
-      ),
-    );
-    const withFiles = {
-      ...pr,
-      touchesWorkflows: files.some((f) => f.startsWith('.github/workflows/')),
-    };
-    return rejectReason(withFiles) === null ? withFiles : resolveBotHead(withFiles);
-  });
+  return prs.map((raw) => readPr(raw));
+}
+
+/** One unreadable PR is skipped with a reason; it must not stop the whole queue. */
+function readPr(raw) {
+  try {
+    return inspectPr(raw);
+  } catch (err) {
+    return { ...raw, readError: err.message.split('\n')[0] };
+  }
+}
+
+function inspectPr(raw) {
+  const pr = assumeReady.has(raw.number)
+    ? {
+        ...raw,
+        labels: [...raw.labels, { name: READY_LABEL }],
+        statusCheckRollup: raw.statusCheckRollup.map((c) => ({
+          ...c,
+          conclusion: c.conclusion || 'SUCCESS',
+        })),
+      }
+    : raw;
+  if (!(pr.labels ?? []).some((l) => l.name === READY_LABEL)) return pr;
+  // One name per line: --paginate applies --jq page by page, so a JSON array
+  // per page would not parse for a PR of more than 30 files.
+  const files = parseLines(
+    gh(
+      'api',
+      `repos/${repo()}/pulls/${pr.number}/files?per_page=100`,
+      '--paginate',
+      '--jq',
+      '.[].filename',
+    ),
+  );
+  const withFiles = {
+    ...pr,
+    touchesWorkflows: files.some((f) => f.startsWith('.github/workflows/')),
+  };
+  return rejectReason(withFiles) === null ? withFiles : resolveBotHead(withFiles);
 }
 
 function headCommit(sha) {
@@ -221,12 +236,13 @@ function noticeStuck(pr, reason) {
   );
 }
 
-/** main + each PR via --no-ff merge; conflicting PRs are dropped. */
-function buildBranch(name, prs, baseSha) {
+/** main + each PR via --no-ff merge, up to `max`; conflicting PRs are dropped. */
+function buildBranch(name, prs, baseSha, max = prs.length) {
   git('checkout', '-q', '-B', name, baseSha);
   const members = [];
   const dropped = [];
   for (const pr of prs) {
+    if (members.length >= max) break;
     git('fetch', '-q', 'origin', `pull/${pr.number}/head`);
     try {
       git('merge', '-q', '--no-ff', '--no-edit', '-m', `batch: #${pr.number}`, 'FETCH_HEAD');
@@ -237,15 +253,58 @@ function buildBranch(name, prs, baseSha) {
       });
     } catch {
       git('merge', '--abort');
-      dropped.push(pr);
+      dropped.push({ ...pr, headAtBatch: git('rev-parse', 'FETCH_HEAD') });
     }
   }
   return { name, members, dropped, tip: git('rev-parse', 'HEAD') };
 }
 
+/** True only for a real conflict of the PR with main alone, not for a git failure. */
+function conflictsWithMain(head, mainSide) {
+  try {
+    git('merge-tree', '--write-tree', mainSide, head);
+    return false;
+  } catch (err) {
+    return err.status === 1;
+  }
+}
+
+/** A conflict with main needs its author; one with a batch neighbour just waits a batch. */
+function reportDropped(dropped, base) {
+  for (const pr of dropped) {
+    if (!conflictsWithMain(pr.headAtBatch, base)) {
+      log(`#${pr.number} conflicts with a PR of this batch, waits for the next one`);
+      continue;
+    }
+    comment(
+      pr,
+      `Групповое слияние: PR конфликтует с main, исключён из группы. Метка ${READY_LABEL} снята; перебазируйте ветку на main и поставьте её снова.`,
+    );
+    setLabel(pr, READY_LABEL, false);
+  }
+}
+
+/** All heads in one fetch; one by one only when a head is gone and the fetch fails. */
+function fetchHeads(prs) {
+  const heads = prs.map((pr) => pr.headRefOid);
+  if (heads.length === 0) return;
+  try {
+    git('fetch', '-q', 'origin', ...heads);
+  } catch (err) {
+    log(`joint fetch failed, fetching one by one: ${err.message.split('\n')[0]}`);
+    for (const head of heads) {
+      try {
+        git('fetch', '-q', 'origin', head);
+      } catch {
+        log(`head ${head.slice(0, 8)} could not be fetched`);
+      }
+    }
+  }
+}
+
+/** Both commits must be fetched already (fetchHeads). */
 function isAncestor(a, b) {
   try {
-    git('fetch', '-q', 'origin', a, b);
     git('merge-base', '--is-ancestor', a, b);
     return true;
   } catch {
@@ -403,6 +462,45 @@ async function apiUpdateBranch(pr, cur) {
   throw new Error(`update-branch of #${pr.number} did not land`);
 }
 
+/** Update, compare trees, post the status and squash one PR; returns why it was credited. */
+async function tryMerge(pr, { position, size, tipTree, url }) {
+  const head = await headAfterUpdate(pr);
+  const headTree = ghText('api', `repos/${repo()}/commits/${head}`, '--jq', '.commit.tree.sha');
+  const d = creditDecision({ headTree, expectedTree: pr.tree });
+  if (!d.credit) throw new Error(d.reason);
+  gh(
+    'api',
+    '-X',
+    'POST',
+    `repos/${repo()}/statuses/${head}`,
+    '-f',
+    'state=success',
+    '-f',
+    `context=${FULL_VERIFY}`,
+    '-f',
+    `target_url=${url}`,
+    '-f',
+    `description=${statusDescription({ position, size, tipTree })}`,
+  );
+  gh('pr', 'merge', String(pr.number), '--squash', '--match-head-commit', head);
+  return d.reason;
+}
+
+/**
+ * GitHub refuses a correct merge while it still digests the previous squash
+ * ("Base branch was modified"). Every attempt repeats all checks from scratch:
+ * if main or the head really moved, the tree comparison stops the merge.
+ */
+function mergeMember(pr, ctx) {
+  return retryMerge({
+    attempt: () => tryMerge(pr, ctx),
+    isMerged: () =>
+      ghText('api', `repos/${repo()}/pulls/${pr.number}`, '--jq', '.merged') === 'true',
+    wait: (n) => sleep(n * MERGE_RETRY_MS),
+    note: (text) => log(`#${pr.number}: ${text}`),
+  });
+}
+
 /** Squash-merge members in order, each credited by tree equality. */
 async function mergeGroup(members, run) {
   const merged = [];
@@ -416,27 +514,14 @@ async function mergeGroup(members, run) {
       continue;
     }
     try {
-      const head = await headAfterUpdate(pr);
-      const headTree = ghText('api', `repos/${repo()}/commits/${head}`, '--jq', '.commit.tree.sha');
-      const d = creditDecision({ headTree, expectedTree: pr.tree });
-      if (!d.credit) throw new Error(d.reason);
-      gh(
-        'api',
-        '-X',
-        'POST',
-        `repos/${repo()}/statuses/${head}`,
-        '-f',
-        'state=success',
-        '-f',
-        `context=${FULL_VERIFY}`,
-        '-f',
-        `target_url=${run.url}`,
-        '-f',
-        `description=${statusDescription({ position: i + 1, size: members.length, tipTree })}`,
-      );
-      gh('pr', 'merge', String(pr.number), '--squash', '--match-head-commit', head);
+      const reason = await mergeMember(pr, {
+        position: i + 1,
+        size: members.length,
+        tipTree,
+        url: run.url,
+      });
       merged.push(pr);
-      log(`#${pr.number} merged (${d.reason})`);
+      log(`#${pr.number} merged (${reason})`);
     } catch (err) {
       log(`#${pr.number} not merged: ${err.message}; the rest go back to the queue`);
       // The later members' batch trees include this PR, so they cannot be
@@ -482,23 +567,23 @@ async function runBatch() {
   for (const pr of prs) {
     const why = rejectReason(pr);
     if (why !== 'no merge-ready label') log(`#${pr.number} ${why ?? 'ready'} — ${pr.title}`);
-    if (why?.includes('CANCELLED') && (pr.labels ?? []).some((l) => l.name === READY_LABEL))
+    if (
+      why?.startsWith('light run not green') &&
+      (pr.labels ?? []).some((l) => l.name === READY_LABEL)
+    )
       rerunCancelled(pr);
     if (why && (pr.labels ?? []).some((l) => l.name === READY_LABEL)) noticeStuck(pr, why);
   }
-  const { take: candidates, deferred } = deferStacked(selectCandidates(prs), isAncestor);
+  const pool = selectCandidates(prs, MAX_POOL);
+  fetchHeads(pool);
+  const { take: candidates, deferred } = deferStacked(pool, isAncestor);
   for (const { pr, on } of deferred) log(`#${pr.number} waits: stacked on #${on}`);
   if (!shouldStart(candidates, trigger))
     return log(`nothing to do (${candidates.length} ready, trigger ${trigger})`);
 
   const base = mainSha();
-  const batch = buildBranch(`batch/${stamp}`, candidates, base);
-  for (const pr of batch.dropped) {
-    comment(
-      pr,
-      `Групповое слияние: PR не сливается с main и остальными PR группы без конфликта, исключён из группы. Обновите ветку на main (gh pr update-branch ${pr.number}).`,
-    );
-  }
+  const batch = buildBranch(`batch/${stamp}`, candidates, base, MAX_BATCH);
+  reportDropped(batch.dropped, base);
   if (batch.members.length === 0) return log('every candidate conflicted');
   log(
     `batch ${batch.name}: ${batch.members.map((p) => `#${p.number}`).join(' ')} → tree ${batch.members.at(-1).tree.slice(0, 12)}`,

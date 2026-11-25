@@ -9,7 +9,12 @@ export const FULL_VERIFY = 'Full verify';
 // job, which runs on the merge-ready label event (.github/workflows/merge-batch.yml).
 export const NOT_LIGHT_RUN = new Set([FULL_VERIFY, 'Merge batch']);
 export const MAX_BATCH = 8;
+// Ready PRs looked at to fill a batch when some of them conflict.
+export const MAX_POOL = 24;
 export const MAX_PARALLEL_RUNS = 2;
+// GitHub lists at most this many files of a PR.
+export const MAX_LISTED_FILES = 3000;
+export const MERGE_ATTEMPTS = 4;
 
 const GREEN = new Set(['SUCCESS', 'SKIPPED', 'NEUTRAL']);
 
@@ -25,6 +30,9 @@ export function rejectReason(pr) {
   if (pr.isDraft) return 'draft';
   if (pr.baseRefName && pr.baseRefName !== 'main') return 'base is not main';
   if (pr.mergeable === 'CONFLICTING') return 'conflicts with main';
+  if (pr.readError) return `could not be read (${pr.readError})`;
+  // Past the limit the API cuts the list, so a workflow change could stay unseen.
+  if ((pr.changedFiles ?? 0) >= MAX_LISTED_FILES) return `too many files (${pr.changedFiles})`;
   if (pr.touchesWorkflows) return 'changes .github/workflows (goes the single route)';
   const checks = effectiveChecks(
     (pr.statusCheckRollup ?? []).filter((c) => !NOT_LIGHT_RUN.has(checkName(c))),
@@ -38,6 +46,29 @@ export function rejectReason(pr) {
 const checkKey = (c) => `${c.workflowName ?? ''}/${checkName(c)}`;
 const finishedAt = (c) => c.completedAt || c.startedAt || '';
 const isCancelled = (c) => checkState(c) === 'CANCELLED';
+const runId = (c) => Number(/\/actions\/runs\/(\d+)/.exec(c.detailsUrl ?? '')?.[1] ?? 0);
+// gh prints completedAt "0001-01-01T00:00:00Z" for a check that still runs.
+const isPending = (c) =>
+  !c.conclusion && !c.state && (c.status ? c.status !== 'COMPLETED' : !c.completedAt);
+
+/**
+ * Cancelled checks of a run that a later run of the same workflow replaced with
+ * a green Verify. Their names may be gone from the later run (another shard
+ * count, an unexpanded matrix), so nothing there would ever outvote them.
+ */
+function isSuperseded(check, checks) {
+  return (
+    isCancelled(check) &&
+    runId(check) > 0 &&
+    checks.some(
+      (c) =>
+        c.workflowName === check.workflowName &&
+        runId(c) > runId(check) &&
+        checkName(c) === 'Verify' &&
+        checkState(c) === 'SUCCESS',
+    )
+  );
+}
 
 /**
  * One entry per check. A head often has two runs of the same job: the label
@@ -47,20 +78,33 @@ const isCancelled = (c) => checkState(c) === 'CANCELLED';
  */
 export function effectiveChecks(checks) {
   const groups = new Map();
-  for (const c of checks) groups.set(checkKey(c), [...(groups.get(checkKey(c)) ?? []), c]);
+  const current = checks.filter((c) => !isSuperseded(c, checks));
+  for (const c of current) groups.set(checkKey(c), [...(groups.get(checkKey(c)) ?? []), c]);
   return [...groups.values()].map((runs) => {
     const live = runs.filter((c) => !isCancelled(c));
     const pool = live.length > 0 ? live : runs;
-    const pending = pool.find((c) => !c.completedAt && !c.conclusion && !c.state);
+    const pending = pool.find(isPending);
     if (pending) return pending;
     return [...pool].sort((a, b) => finishedAt(b).localeCompare(finishedAt(a)))[0];
   });
 }
 
-/** Run ids to re-run: checks whose only runs on this head were cancelled. */
+// Red only because another job of the run was cancelled.
+const AGGREGATES = new Set(['Verify', 'Deploy production']);
+
+/**
+ * Run ids to re-run: checks whose only runs on this head were cancelled. None
+ * when a gate really failed: fail-fast cancelled its sibling shards, and a
+ * re-run would only repeat the failure on every tick.
+ */
 export function cancelledOnlyRuns(pr) {
   const checks = (pr.statusCheckRollup ?? []).filter((c) => !NOT_LIGHT_RUN.has(checkName(c)));
-  const ids = effectiveChecks(checks)
+  const effective = effectiveChecks(checks);
+  const failed = effective.some(
+    (c) => checkState(c) === 'FAILURE' && !AGGREGATES.has(checkName(c)),
+  );
+  if (failed) return [];
+  const ids = effective
     .filter(isCancelled)
     .map((c) => /\/actions\/runs\/(\d+)/.exec(c.detailsUrl ?? '')?.[1])
     .filter(Boolean);
@@ -131,6 +175,37 @@ export function creditDecision({ headTree, expectedTree }) {
     };
   }
   return { credit: true, reason: 'tree equals the batch tree' };
+}
+
+/** GitHub's transient refusals of `gh pr merge`; a moved head or a tree mismatch is not one. */
+export function isRetryableMergeError(message) {
+  return (
+    /gh pr merge/.test(message ?? '') && /Base branch was modified|is not mergeable/i.test(message)
+  );
+}
+
+/**
+ * Runs `attempt` up to MERGE_ATTEMPTS times. Any refused `gh pr merge`, the last
+ * one included, may have merged after all: an uncounted merge would leave main
+ * without its deploy. A failed `isMerged` read counts as "unknown", not as an error.
+ */
+export async function retryMerge({ attempt, isMerged, wait, note }) {
+  for (let n = 1; ; n += 1) {
+    try {
+      return await attempt();
+    } catch (err) {
+      if (!/gh pr merge/.test(err.message)) throw err;
+      const last = n >= MERGE_ATTEMPTS || !isRetryableMergeError(err.message);
+      note(`merge attempt ${n} refused: ${err.message.split('\n')[1] ?? err.message}`);
+      await wait(n);
+      try {
+        if (await isMerged()) return 'merged despite the refusal';
+      } catch (readErr) {
+        note(`merged state unknown: ${readErr.message.split('\n')[0]}`);
+      }
+      if (last) throw err;
+    }
+  }
 }
 
 export function statusDescription({ position, size, tipTree }) {
