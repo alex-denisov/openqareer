@@ -29,7 +29,9 @@ export interface CachedMatchedPool {
  */
 export type CachedPoolKind = 'whole' | 'latest';
 
-export function readCachedMatchedPool(kind: CachedPoolKind = 'whole'): CachedMatchedPool | undefined {
+export function readCachedMatchedPool(
+  kind: CachedPoolKind = 'whole',
+): CachedMatchedPool | undefined {
   return readSectionCache<CachedMatchedPool>(
     kind === 'whole' ? SECTION_CACHE_KEYS.matchedPool : SECTION_CACHE_KEYS.matchedPoolLatest,
   );
