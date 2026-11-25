@@ -145,6 +145,7 @@ interface FlowProps {
   /** Отклик из очереди «отправить вручную» (B787). */
   readonly manual: ManualApplyFlow | null;
   readonly queue: QueueManual;
+  readonly declined: boolean;
   readonly cluster: Parameters<typeof buildHead>[0]['cluster'];
 }
 
@@ -477,7 +478,7 @@ function useResumeStep(
 }
 
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
-function useApplyFlow({ target, cluster, manual, queue }: FlowProps): FlowState {
+function useApplyFlow({ target, cluster, manual, queue, declined }: FlowProps): FlowState {
   const { search } = useShell();
   const [step, setStep] = useState(() => parseStep(search, manual ? 'send' : 'letter'));
   const { letter, variants, approvalPending } = useApplyLetter(target.vacancyId);
@@ -494,6 +495,7 @@ function useApplyFlow({ target, cluster, manual, queue }: FlowProps): FlowState 
     ...route,
     queued: manual !== null,
     queue,
+    declined,
     step,
     setStep,
     letter,
@@ -623,8 +625,8 @@ function LoadFailed({ text, onRetry }: { readonly text: string; readonly onRetry
 }
 
 /** До отправки: отклик, который кандидат отправляет сам, собран заранее (B787). */
-function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue'>) {
-  const { manual, queue } = useManualApply(
+function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue' | 'declined'>) {
+  const { manual, queue, declined } = useManualApply(
     target,
     applyRoute({ application: target.application, cluster }).source,
   );
@@ -635,7 +637,7 @@ function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue'>) {
       </Pending>
     );
   }
-  return <ApplyFlow target={target} cluster={cluster} manual={manual} queue={queue} />;
+  return <ApplyFlow target={target} cluster={cluster} manual={manual} queue={queue} declined={declined} />;
 }
 
 /**

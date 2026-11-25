@@ -1,3 +1,4 @@
+import { pressApply } from '../../apply/applyIntent';
 import type { ReactNode } from 'react';
 import type { ApplicationStage } from '../../../../../shared/applicationStage';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -63,7 +64,7 @@ function RoleRow({ item, stage }: { readonly item: MatchedVacancyItem; readonly 
       {tag ? (
         <span className="tag ok">{tag}</span>
       ) : (
-        <Link className="btn" to={buildNodePath('o02', { responseId: item.cluster.id })}>
+        <Link className="btn" to={buildNodePath('o02', { responseId: item.cluster.id })} onClick={() => pressApply(item.cluster.id)}>
           <Icon name="responses" />
           Откликнуться
         </Link>
