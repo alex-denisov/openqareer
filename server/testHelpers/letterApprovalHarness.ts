@@ -112,7 +112,7 @@ export async function setup(role?: string, options: SetupOptions = {}) {
       database.close();
     }
   };
-  const call = (method: 'GET' | 'PUT', url: string, payload?: object) => app.inject({
+  const call = (method: 'GET' | 'PUT' | 'PATCH', url: string, payload?: object) => app.inject({
     method, url, headers: { cookie, origin: 'http://localhost:3000' }, ...(payload ? { payload } : {}),
   });
   return { call, candidates, candidateId, approve, readApproval, prepareResume, pitch, resumeDocuments, versions, linkedResume };

@@ -7,6 +7,8 @@ import { translatedDocument } from '../domain/resumeTranslation';
 import { relevanceOf, type ResumeRelevance } from '../domain/resumeRelevance';
 import { fitVacancyResume } from '../domain/resumeSheetVolume';
 import { tailorResumeSlice } from '../domain/resumeVacancyEdits';
+import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
+import { wasSent } from '../../shared/applicationSent';
 import { NO_EDIT_CHOICES, type ResumeEditChoices } from '../../shared/resumeVacancyEdits';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { RouteDeps } from './deps';
@@ -115,6 +117,32 @@ function vacancyRelevance(deps: RouteDeps, candidateId: string, cluster: Vacancy
   return relevanceOf(view, cluster.skills);
 }
 
+const VERSION_FILE = /-(\p{Hex_Digit}{8}(?:-\p{Hex_Digit}{4}){3}-\p{Hex_Digit}{12})\.json$/u;
+
+/** Снимок резюме, с которым отклик уже ушёл: после отправки он не пересобирается. */
+function sentSnapshot(deps: RouteDeps, candidateId: string, applicationId: string) {
+  const application = deps.candidateStore.getApplication(candidateId, applicationId);
+  return application && wasSent(application) ? linkedSnapshot(deps, candidateId, applicationId) : undefined;
+}
+
+function sentVersion(deps: RouteDeps, candidateId: string, cluster: VacancyCluster): StoredResumeVersion | undefined {
+  for (const application of deps.candidateStore.listApplications(candidateId)) {
+    if (!wasSent(application)) continue;
+    const { clusterId } = application;
+    const same =
+      clusterId === cluster.id ||
+      (clusterId !== null && resolveRowVacancyCluster(deps.multiSourceEngine, clusterId)?.id === cluster.id);
+    if (!same) continue;
+    const versionId = VERSION_FILE.exec(sentSnapshot(deps, candidateId, application.id)?.fileName ?? '')?.[1];
+    const version = versionId ? candidateVersion(deps, candidateId, versionId) : undefined;
+    if (version) return version;
+  }
+  return undefined;
+}
+
+const candidateVersion = (deps: RouteDeps, candidateId: string, versionId: string) =>
+  deps.candidateStore.getResumeVersion(candidateId, versionId) ?? undefined;
+
 /** Существующая механика версий: черновик из мастер-резюме, затем одобрение тем же содержимым. */
 function approvedVersion(
   deps: RouteDeps,
@@ -123,6 +151,8 @@ function approvedVersion(
   cluster: VacancyCluster,
   choices: ResumeEditChoices,
 ): StoredResumeVersion {
+  const sent = sentVersion(deps, candidateId, cluster);
+  if (sent) return sent;
   const tailor = (slice: ReturnType<typeof targetedSliceFor>) => tailorResumeSlice(slice, choices);
   // Факты показывают, как кандидат сам пишет названия латиницей.
   const facts = (deps.candidateStore.getSnapshot(candidateId).memory ?? []).flatMap((fact) =>
@@ -276,13 +306,18 @@ export function attachApprovedResume(deps: RouteDeps, candidateId: string, input
   const { applicationId, cluster, approvedAt, generalResumeId } = input;
   const master = currentMaster(deps, candidateId);
   if (!hasAttachableResume(master.document)) return null;
+  const sent = sentSnapshot(deps, candidateId, applicationId);
+  if (sent) {
+    const versionId = VERSION_FILE.exec(sent.fileName)?.[1] ?? null;
+    return { kind: versionId ? 'targeted' : 'master', versionId, documentId: sent.id, snapshotAt: sent.createdAt };
+  }
   if (generalResumeId) {
     const general = attachGeneralResume(deps, candidateId, applicationId, generalResumeId);
     if (general) return general;
   }
   try {
-    const plan = planSnapshot(deps, candidateId, applicationId, cluster, approvedAt, master, input.choices ?? NO_EDIT_CHOICES);
     const linked = linkedSnapshot(deps, candidateId, applicationId);
+    const plan = planSnapshot(deps, candidateId, applicationId, cluster, approvedAt, master, input.choices ?? NO_EDIT_CHOICES);
     if (linked?.fileName === plan.fileName) {
       return { kind: plan.kind, versionId: plan.versionId, documentId: linked.id, snapshotAt: plan.kind === 'master' ? linked.createdAt : plan.snapshotAt };
     }

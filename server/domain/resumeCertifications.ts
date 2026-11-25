@@ -10,6 +10,22 @@ const PROFESSIONAL =
 const COURSE =
   /coursera|udemy|stepik|skillbox|edx|linkedin learning|нетолог|geekbrains|яндекс.?практикум|school|школ|(?<!\p{L})(?:course|webinar|workshop|bootcamp)(?!\p{L})|курс|вебинар|олимпиад/iu;
 
+/** Начала русских названий месяцев: «окт 2026», «октября 2026», «мая 2026». */
+const RU_MONTHS = [
+  'янв',
+  'фев',
+  'мар',
+  'апр',
+  'ма[йя]',
+  'июн',
+  'июл',
+  'авг',
+  'сен',
+  'окт',
+  'ноя',
+  'дек',
+] as const;
+
 /** Конец месяца (или года, если месяц неизвестен); непонятная дата — `null`. */
 function endOf(value: string | undefined): number | null {
   const text = value?.trim() ?? '';
@@ -17,10 +33,12 @@ function endOf(value: string | undefined): number | null {
   if (!year) return null;
   const iso = /(?:19|20)\d{2}-(\d{2})/u.exec(text)?.[1];
   const short = /(?<!\d)(\d{1,2})[./](?:19|20)\d{2}/u.exec(text)?.[1];
+  const russian =
+    RU_MONTHS.findIndex((stem) => new RegExp(`(?<!\\p{L})${stem}`, 'iu').test(text)) + 1;
   const named = Date.parse(
     text.replace(/^\D*?(\p{L}{3})\p{L}*\.?\s+((?:19|20)\d{2}).*$/u, '1 $1 $2'),
   );
-  const month = Number(iso ?? short ?? 0);
+  const month = Number(iso ?? short ?? russian);
   if (month >= 1 && month <= 12) return Date.UTC(Number(year), month, 1);
   if (/\p{L}/u.test(text) && Number.isFinite(named)) {
     return Date.UTC(Number(year), new Date(named).getMonth() + 1, 1);
