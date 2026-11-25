@@ -25,6 +25,11 @@ export interface TodayAction {
   readonly path: string;
 }
 
+interface DayQueue {
+  readonly queue: readonly TodayQueueItem[];
+  readonly queueTotal?: number;
+}
+
 type ActionFace = Pick<TodayAction, 'label' | 'shortLabel' | 'icon' | 'path'>;
 
 function responsePath(applicationId: string | undefined): string {
@@ -76,6 +81,18 @@ function actionFace(item: TodayQueueItem): ActionFace {
  */
 function actionSub(item: TodayQueueItem): string {
   return item.kind === 'linkedin_post' ? 'LinkedIn · черновик готов' : queueDesktopSubtitle(item);
+}
+
+/** День без дел по откликам, которые уже стоят в «Событиях откликов»: одна вакансия — одна строка. */
+export function withoutEvents<T extends DayQueue>(day: T, shown: ReadonlySet<string>): T {
+  const queue = day.queue.filter((item) => !item.applicationId || !shown.has(item.applicationId));
+  const removed = day.queue.length - queue.length;
+  if (removed === 0) return day;
+  return {
+    ...day,
+    queue,
+    ...(day.queueTotal === undefined ? {} : { queueTotal: day.queueTotal - removed }),
+  };
 }
 
 /** Заголовок модуля остальных дел: «Ещё 3 дела». */
