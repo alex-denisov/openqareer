@@ -96,7 +96,6 @@ it('the fetch helper takes only a hash', () => {
   const noKey = spawnSync('bash', [join(import.meta.dirname, 'openqareer-salary-fetch')], {
     input: `${sha(BODY)}\n`,
     encoding: 'utf8',
-    env: { ...process.env, OPENQAREER_SALARY_KEY_ENV: '/nonexistent/salary.env' },
   });
   expect(noKey.status).toBe(3);
   expect(noKey.stderr).toContain('нет ключа');

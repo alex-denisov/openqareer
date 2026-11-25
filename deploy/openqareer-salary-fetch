@@ -3,9 +3,10 @@
 # На хост ничего не пишет; хеш приходит со stdin, чтобы правило sudoers было без шаблонов.
 set -Eeuo pipefail
 umask 077
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
 # Отдельный ключ: только GetObject на salary-benchmarks/*. Ключ бэкапов здесь не используется.
-readonly KEY_ENV="${OPENQAREER_SALARY_KEY_ENV:-/etc/openqareer/salary-data.env}"
+readonly KEY_ENV=/etc/openqareer/salary-data.env
 readonly BUCKET=openqareer-data
 
 sha=""
@@ -13,6 +14,10 @@ IFS= read -r sha || true
 [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { printf 'openqareer-salary-fetch: invalid sha256\n' >&2; exit 2; }
 
 [[ -f "$KEY_ENV" ]] || { printf 'нет ключа\n' >&2; exit 3; }
+[[ "$(stat -c '%u:%a' "$KEY_ENV")" == 0:600 ]] || {
+  printf 'openqareer-salary-fetch: key file must be root 0600\n' >&2
+  exit 4
+}
 set -a
 # shellcheck disable=SC1090
 . "$KEY_ENV"
