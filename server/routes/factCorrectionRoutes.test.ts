@@ -226,12 +226,12 @@ describe('B796: исправление факта', () => {
   it('варианты резюме и постов ушедшего отклика и публикации остаются', async () => {
     const { call, candidate, variants, database } = await setup();
     const now = '2026-11-25T00:00:00.000Z';
-    const add = (kind: 'resume' | 'post' | 'headline', subjectId: string, payload?: object) =>
+    const add = (kind: 'resume' | 'post' | 'headline', subjectId: string, payload?: object, text = 'Margin from 16% to 80%') =>
       variants.add({
         candidateId: candidate.id,
         kind,
         subjectId,
-        text: 'Margin from 16% to 80%',
+        text,
         wish: { chips: [], text: '' },
         payload,
         createdAt: now,
@@ -242,6 +242,7 @@ describe('B796: исправление факта', () => {
     add('post', 'p-done');
     add('post', 'p-open');
     add('headline', 'h');
+    add('headline', 'h-other', undefined, 'CTO');
     database
       .prepare(
         `INSERT INTO applications (id, candidate_id, cluster_id, stage, stage_changed_at, created_at, updated_at)
@@ -256,15 +257,14 @@ describe('B796: исправление факта', () => {
       )
       .run(candidate.id, now, now, now);
     const response = await call('POST', URL, { target, before: OLD, after: NEW });
-    expect(response.json().data.staleVariants).toBe(2);
+    expect(response.json().data.staleVariants).toBe(4);
     const left = (kind: 'resume' | 'post' | 'headline', subjectId: string) =>
       variants.list({ candidateId: candidate.id, kind, subjectId }).variants.length;
-    expect([left('resume', 'r-sent'), left('resume', 'r-unknown'), left('post', 'p-done')]).toEqual(
-      [1, 1, 1],
-    );
-    expect([left('headline', 'h'), left('resume', 'r-open'), left('post', 'p-open')]).toEqual([
-      1, 0, 0,
-    ]);
+    expect([left('resume', 'r-sent'), left('post', 'p-done')]).toEqual([1, 1]);
+    expect([left('resume', 'r-open'), left('post', 'p-open')]).toEqual([0, 0]);
+    // Пункт резюме без вакансии и заголовок со старым фактом никуда не ушли.
+    expect([left('resume', 'r-unknown'), left('headline', 'h')]).toEqual([0, 0]);
+    expect(left('headline', 'h-other')).toBe(1);
   });
 
   it('сбой на копиях откатывает и профиль', async () => {

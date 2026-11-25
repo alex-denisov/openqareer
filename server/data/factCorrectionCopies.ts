@@ -122,15 +122,15 @@ export class FactCorrectionCopies {
     this.database.prepare('DELETE FROM candidate_fact_corrections WHERE id = ?').run(id);
   }
 
-  /** Текст уже у работодателя или в LinkedIn; чей он, неизвестно — тоже не трогаем. */
+  /** Текст уже у работодателя или в LinkedIn. Вариант пункта резюме без вакансии никуда не ушёл. */
   private isSent({ candidateId, kind, subjectId }: TextSubject, payload: unknown, sent: ReadonlySet<string>): boolean {
     if (kind === 'letter') return sent.has(subjectId);
     if (kind === 'resume') {
       const vacancyId = (payload as { vacancyId?: unknown } | null)?.vacancyId;
-      return typeof vacancyId !== 'string' || sent.has(vacancyId);
+      return typeof vacancyId === 'string' && sent.has(vacancyId);
     }
     if (kind === 'post' || kind === 'comment') return this.isPublished(candidateId, subjectId);
-    return kind === 'headline' || this.messages.get(candidateId, subjectId)?.state === 'sent';
+    return kind === 'message' && this.messages.get(candidateId, subjectId)?.state === 'sent';
   }
 
   /** Опубликован или уже скопирован для LinkedIn. */
