@@ -292,14 +292,22 @@ function createFitViewReader(
 
 /** PRB-041: each row retries, seals and writes, so it runs after the read and in slices. */
 function requeueStaleRows<Input>(
-  runtime: { enqueue(input: Input): unknown },
+  runtime: {
+    enqueue(input: Input): unknown;
+    fitJobHoldsKey?(input: Input): boolean;
+    takeFitRefreshSlot?(): boolean;
+  },
   inputs: readonly Input[],
   log?: FitOrderLog,
 ): void {
   if (inputs.length === 0) return;
   const rows = inputs.slice(0, STALE_REFIT_LIMIT);
   void yieldToEventLoop()
-    .then(() => queueRowsYielding(rows, (input) => runtime.enqueue(input)))
+    .then(() => queueRowsYielding(rows, (input) => {
+        // B794: a reread selection spends the day's ceiling too; the shown page and the card do not.
+        if (runtime.fitJobHoldsKey?.(input)) return;
+        if (runtime.takeFitRefreshSlot?.() ?? true) runtime.enqueue(input);
+      }))
     .catch((error: unknown) =>
       log?.warn(
         { errorName: error instanceof Error ? error.name : 'UnknownError', rows: rows.length },

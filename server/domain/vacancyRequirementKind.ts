@@ -15,6 +15,8 @@ const SOFT_PATTERNS: readonly RegExp[] = [
   word('time[- ]management|тайм[- ]?менеджмент|управление временем|умение расставлять приоритеты|prioriti[sz]ation'),
   word('responsib(?:le|ility)|ответственност'),
   word('fast learner|quick learner|willingness to learn|self[- ]motivated|proactive|обучаем|быстро обуча|самомотивац|инициативност|проактивност'),
+  // B794: «Системность, самостоятельность, ориентация на результат» weighed as much as a skill.
+  word('системност|системн\\S* мышлен|стратегическ\\S* мышлен|стратегически мыслить|самостоятельност|ориентац\\S* на результат|аналитическ\\S* способност|желание делать|systems? thinking|strategic thinking|curiosity|intellectual'),
   word('organi[sz]ational skills|организаторск|емпати|empathy|customer[- ]focus|клиентоориентир'),
 ];
 const YEARS = /\d+\s*\+?\s*(?:years?|yrs?|лет|года?)/iu;
