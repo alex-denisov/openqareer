@@ -293,7 +293,7 @@ export function HhSendStep(props: HhSendStepProps) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        Всё одобрено — можно отправлять
+        {done && !sent ? 'Отклик отправлен' : 'Всё одобрено — можно отправлять'}
       </h2>
       <Parts props={props} resumes={resumes} editCount={edits.length} onEdits={() => setReviewing(true)} />
       {done ? null : (
@@ -310,7 +310,7 @@ export function HhSendStep(props: HhSendStepProps) {
           </Button>
         </div>
       )}
-      <Outcome apply={apply} resumes={resumes} responsePath={responsePath} props={props} />
+      {done && !sent ? null : <Outcome apply={apply} resumes={resumes} responsePath={responsePath} props={props} />}
       {sent ? null : <MarkedOutcome marked={marked.state} responsePath={responsePath} />}
       <ConfirmDialog apply={apply} title={props.head.title} />
       <HhResumeSheet

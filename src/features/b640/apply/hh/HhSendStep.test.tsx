@@ -479,6 +479,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(desktop.runHhApplyInSession).not.toHaveBeenCalled();
     const text = view!.container.textContent ?? '';
     expect(text).toContain('Отклик отмечен как отправленный');
+    expect(text).not.toContain('можно отправлять');
     expect(text).not.toContain('Отправить отклик');
   });
 

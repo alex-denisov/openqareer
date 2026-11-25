@@ -1063,23 +1063,80 @@
     }
     var marked = keysOf(form, invalidNodes(form));
     window.__oqAtsSubmitted = true;
+    watchAnswer();
     buttons[0].click();
     return { state: 'clicked', invalidBefore: marked };
   }
-  // BambooHR thanks on the vacancy's own address, in place of the form.
-  function thanked(form) {
-    if (form || !ARG || !ARG.thanksPath) return false;
-    if (location.pathname.replace(/\/+$/, '') !== ARG.thanksPath) return false;
-    var heads = Array.prototype.slice.call(document.querySelectorAll('h2')).filter(shown);
-    return heads.some(function (head) {
-      var said = head.nextElementSibling;
+  function visible(selector) {
+    return Array.prototype.slice.call(document.querySelectorAll(selector)).filter(shown);
+  }
+  // Signs a board itself draws or sends after it took the application. Only
+  // BambooHR has none but its words.
+  var THANKS = {
+    ashby: function () {
       return (
-        text(head) === 'Thank You' &&
-        Boolean(said) &&
-        shown(said) &&
-        text(said) === 'Your application was submitted successfully'
+        visible('.ashby-application-form-success-container').length > 0 &&
+        visible(
+          '.ashby-application-form-failure-container, .ashby-application-form-blocked-application-container',
+        ).length === 0
       );
+    },
+    workable: function () {
+      return (
+        visible('[data-ui="successful-submit"]').length > 0 &&
+        !document.querySelector('form[data-ui="application-form"]')
+      );
+    },
+    // The server answered the press with success, or drew its own frame on the
+    // address the form posts to, and a heading stands where the form was.
+    teamtailor: function () {
+      if (document.querySelector('form#job-application-form, .turbo-frame-error')) return false;
+      var before = window.__oqAtsHeads || [];
+      if (window.__oqAtsAnswer === true) {
+        return visible('h1, h2, h3').some(function (head) {
+          return text(head) !== '' && before.indexOf(text(head)) < 0;
+        });
+      }
+      return (
+        location.pathname === '/applications' &&
+        visible('turbo-frame#application_form h1, turbo-frame#application_form h2').some(text)
+      );
+    },
+    // Its thank-you page names the sent application for the site's counters.
+    pinpoint: function () {
+      return (
+        Boolean(window.gtmFormSubmissionData) && !document.querySelector('form#application-form')
+      );
+    },
+    bamboohr: function (form) {
+      if (form) return false;
+      return visible('h2').some(function (head) {
+        var said = head.nextElementSibling;
+        return (
+          text(head) === 'Thank You' &&
+          Boolean(said) &&
+          shown(said) &&
+          text(said) === 'Your application was submitted successfully'
+        );
+      });
+    },
+  };
+  // What the page shows before the press and how its server answers it.
+  function watchAnswer() {
+    window.__oqAtsHeads = visible('h1, h2, h3').map(text);
+    window.__oqAtsAnswer = null;
+    document.addEventListener('turbo:submit-end', function (event) {
+      var sent = event.detail && event.detail.formSubmission;
+      var form = (sent && sent.formElement) || event.target;
+      if (form && form.id === 'job-application-form') {
+        window.__oqAtsAnswer = event.detail.success === true;
+      }
     });
+  }
+  function thanked(form) {
+    var sign = ARG && THANKS[ARG.thanks];
+    var here = location.pathname.replace(/\/+$/, '');
+    return Boolean(sign) && (ARG.thanksPaths || []).indexOf(here) >= 0 && sign(form);
   }
   function outcome() {
     var confirmPath = ARG && ARG.confirmationPath;

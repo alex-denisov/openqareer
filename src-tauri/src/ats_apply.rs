@@ -9,12 +9,12 @@ use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
 use crate::ats_model::{
     attempt_result, decode, file_fields_of, form_report, is_id, kinds_of, listed, outcome_of,
-    press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill, values_of,
-    FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt, SubmitRequest, Values,
-    FILL_RESULTS, MAX_CONSENTS,
+    path_code, press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill,
+    values_of, FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt,
+    SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
-    is_confirmation, navigation_allowed, on_target, resolve, thanks_in_place, thanks_path,
+    is_confirmation, navigation_allowed, on_target, resolve, thanks_in_place, thanks_paths,
     top_level_allowed, AtsTarget,
 };
 use crate::connector_session::{
@@ -442,7 +442,8 @@ async fn read_outcome(
         .and_then(|run| run.as_ref().map(|run| run.invalid_before.clone()));
     let argument = json!({
         "confirmationPath": target.confirmation_path,
-        "thanksPath": thanks_path(target),
+        "thanks": target.adapter,
+        "thanksPaths": thanks_paths(target),
         "invalidBefore": invalid_before,
     });
     let last = poll(app, "outcome", &argument, wait, |value| {
@@ -453,13 +454,22 @@ async fn read_outcome(
     })
     .await
     .unwrap_or(Value::Null);
-    if !still_on_target(app, target) {
-        return ("unconfirmed", Vec::new());
-    }
     let confirmed = window_location(app).is_some_and(|url| {
         is_confirmation(target, url.as_str()) || thanks_in_place(target, url.as_str())
     });
+    if !confirmed && !still_on_target(app, target) {
+        return ("unconfirmed", Vec::new());
+    }
     outcome_of(&last, confirmed)
+}
+
+/// Where the board left the window when it did not confirm: the path alone.
+fn note_outcome(app: &AppHandle, event: &str, target: &AtsTarget, outcome: &str) {
+    note(app, event, &format!("{}_{outcome}", target.adapter));
+    if outcome == "unconfirmed" {
+        let path = window_location(app).map(|url| path_code(url.path()));
+        note(app, "unconfirmed_path", path.as_deref().unwrap_or("none"));
+    }
 }
 
 /// Where the page must be at the moment of the press; the page checks it itself.
@@ -527,7 +537,7 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
         read
     };
     settle(app, attempt, outcome, Some(pressed_at_ms));
-    note(app, "submit", &format!("{}_{outcome}", target.adapter));
+    note_outcome(app, "submit", &target, outcome);
     Ok(Receipt {
         pressed_at_ms: Some(pressed_at_ms),
         invalid_keys,

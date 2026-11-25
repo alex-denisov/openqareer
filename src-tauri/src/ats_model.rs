@@ -14,6 +14,8 @@ const MAX_VALUE_CHARS: usize = 10_000;
 const MAX_FILES: usize = 2;
 pub(crate) const MAX_CONSENTS: usize = 20;
 const MAX_ID_CHARS: usize = 200;
+/// The longest detail the diagnostics journal takes.
+const PATH_CODE_MAX: usize = 60;
 
 /// What the page may answer instead of a press. Anything else is "press_unknown".
 pub(crate) const PRESS_REFUSALS: &[&str] = &[
@@ -303,6 +305,23 @@ pub(crate) fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, 
     }
 }
 
+/// A path as one journal code: its end, `__` between the segments.
+pub(crate) fn path_code(path: &str) -> String {
+    let code: String = path
+        .trim_matches('/')
+        .to_ascii_lowercase()
+        .replace('/', "__")
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | '0'..='9' | '-' | '_' => c,
+            _ => '_',
+        })
+        .collect();
+    // Every character is one byte here.
+    let end = &code[code.len().saturating_sub(PATH_CODE_MAX)..];
+    if end.is_empty() { "root" } else { end }.to_string()
+}
+
 pub(crate) fn decode(raw: &str) -> Value {
     match serde_json::from_str::<Value>(raw) {
         Ok(Value::String(inner)) => serde_json::from_str(&inner).unwrap_or(Value::Null),
@@ -344,6 +363,17 @@ mod tests {
     use crate::ats_apply::store_identifier;
     use crate::ats_target::resolve;
     use serde_json::json;
+
+    #[test]
+    fn a_path_becomes_a_journal_code_of_bounded_length() {
+        assert_eq!(
+            path_code("/Jobs/8-x/applications"),
+            "jobs__8-x__applications"
+        );
+        assert_eq!(path_code("/"), "root");
+        assert_eq!(path_code("/оферта"), "______");
+        assert_eq!(path_code(&format!("/{}/new", "a".repeat(90))).len(), 60);
+    }
 
     #[test]
     fn a_refusal_stands_only_for_our_fields_of_the_same_form() {
