@@ -6,6 +6,7 @@ import { isImportedMemoryId } from './resumeImport';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { impliedSoftRole, isCompensationLine, isSoftRequirementText } from './vacancyRequirementKind';
 import { leadershipMet, workShownRole } from './vacancyFitWorkEvidence';
+import { withDomainRule } from './vacancyFitDomainRule';
 import { vacancyDutyIds } from './vacancyRequirementDuty';
 import { vacancyWishIds } from './vacancyWish';
 import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
@@ -169,6 +170,13 @@ function withEvidenceRules(items: readonly VacancyFitRequirementAssessment[], fa
   });
 }
 
+/** B794: an industry or a tool the profile never names is not counted as shown. */
+function withDomainRules(items: readonly VacancyFitRequirementAssessment[], requirements: readonly VacancyRequirement[], facts: readonly VacancyFitFact[]): VacancyFitRequirementAssessment[] {
+  const statements = facts.map((fact) => fact.statement);
+  const skills = new Map(requirements.filter(isSkillRequirement).map((item) => [item.id, item.text]));
+  return items.map((item) => withDomainRule(item, skills.get(item.requirementId) ?? '', statements));
+}
+
 /** Where the candidate lives: the resume draft section or the imported contact line. */
 const isLocationFact = (factId: string) => factId === 'profile:location' || (isImportedMemoryId(factId) && factId.endsWith('-location'));
 const NON_LOCATION_CONDITIONS: readonly string[] = ['education', 'language', 'license'];
@@ -279,7 +287,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !evidence.length) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
     return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status !== 'unmatched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
-  const assessments = withEvidenceRules(claimed, factMap);
+  const assessments = withDomainRules(withEvidenceRules(claimed, factMap), requirements, facts);
   // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
   // answer (no claims at all) the requirements are not assessed yet.
   const answered = (input.assessments?.length ?? 0) > 0;
