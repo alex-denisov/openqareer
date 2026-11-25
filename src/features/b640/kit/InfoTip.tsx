@@ -7,7 +7,7 @@ export interface InfoTipProps {
   readonly text: string;
 }
 
-/** Закреплённая подсказка снимается по Esc и нажатию мимо. */
+/** Закреплённая подсказка снимается по Esc, нажатию мимо и уходу фокуса на другой элемент. */
 function useUnpinOnOutside(pinned: boolean, root: RefObject<HTMLElement>, unpin: () => void): void {
   useEffect(() => {
     if (!pinned) return undefined;
@@ -18,10 +18,13 @@ function useUnpinOnOutside(pinned: boolean, root: RefObject<HTMLElement>, unpin:
       if (event.target instanceof Node && !root.current?.contains(event.target)) unpin();
     };
     document.addEventListener('keydown', onKey);
-    document.addEventListener('click', onPointer);
+    // Погружение: строка таблицы останавливает всплытие, а нажатие в ней — тоже мимо.
+    document.addEventListener('click', onPointer, true);
+    document.addEventListener('focusin', onPointer);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.removeEventListener('click', onPointer);
+      document.removeEventListener('click', onPointer, true);
+      document.removeEventListener('focusin', onPointer);
     };
   }, [pinned, root, unpin]);
 }
