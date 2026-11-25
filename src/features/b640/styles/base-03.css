@@ -581,6 +581,9 @@
   .b640 .lead .actions .btn { max-inline-size: 100%; white-space: normal; }
   .b640 .crumbs { max-inline-size: var(--career-page-max); margin-inline: auto; padding: var(--career-space-4) var(--career-space-10) 0;
     font-size: var(--career-text-xs); color: var(--career-text-dim); }
+  .b640 .kept-slot,
+  .b640 .kept { display: contents; }
+  .b640 .crumbs + :where(.kept-slot) > :where(.kept) > .page,
   .b640 .crumbs + .page { padding-block-start: var(--career-space-2); }
   .b640 .crumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--career-space-1); margin: 0; padding: 0; list-style: none; }
   .b640 .crumbs li { display: inline-flex; align-items: center; gap: var(--career-space-1); }

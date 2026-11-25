@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { listApplicationsPool, type ApplicationView } from '../../applications/applicationsApi';
 import { Button, Icon, Link, StatusLine } from '../kit';
+import { useOnReveal } from '../kit/screenActive';
 import { buildNodePath } from '../routes';
+import { rememberVacancy } from '../shell/vacancyNames';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { AutomationBar, useAutomationLoad } from './AutomationBar';
 import { useResponseMarks } from './data/responseSummaryApi';
@@ -143,6 +145,14 @@ function useResponsesList(): ListState {
       setData((items) => items.map((item) => (item.id === next.id ? next : item))),
     [setData],
   );
+  useOnReveal(reload);
+  // Отклик, открытый из строки, называет вакансию с первого кадра.
+  useEffect(() => {
+    for (const { application, row } of all) {
+      const vacancyId = application.clusterId;
+      if (vacancyId) rememberVacancy(application.id, { vacancyId, title: row.role, company: row.company });
+    }
+  }, [all]);
   return { state, reload, all, onChanged };
 }
 
