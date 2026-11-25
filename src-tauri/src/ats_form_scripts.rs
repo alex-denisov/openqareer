@@ -522,6 +522,27 @@ mod tests {
     }
 
     #[test]
+    fn the_button_of_a_taken_file_or_of_another_form_is_not_the_send_button() {
+        let preview = r#"<div class="dz-preview dz-success"><button tabindex="0" title="Borrar" data-dz-remove>Borrar</button></div>"#;
+        let other = r#"<form><button type="submit">Subscribe</button></form></body>"#;
+        let blank = r#"<button><svg></svg></button>"#;
+        let taken = TEAMTAILOR
+            .replacen("</form>", &format!("{preview}{blank}</form>"), 1)
+            .replace("</body>", other);
+        let apply = r#"<button type="submit">Apply</button></form>"#;
+        let second = taken.replacen("</form>", apply, 1);
+        for (html, state, presses) in [(taken, "clicked", 1), (second, "submit_ambiguous", 0)] {
+            let scripts = [press("submit")];
+            let setup = "document.addEventListener('submit', e => e.preventDefault(), true);";
+            let Some(out) = run(&html, "/acme/jobs/1", setup, &scripts) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], state);
+            assert_eq!(out["clicks"].as_array().unwrap().len(), presses);
+        }
+    }
+
+    #[test]
     fn every_board_s_public_form_is_read_with_labels_kinds_and_one_send_button() {
         // (form, fields, required, send button)
         for (html, fields, required, send) in [
