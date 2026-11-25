@@ -137,6 +137,25 @@ export function learnedWorkRights(
   });
 }
 
+/** Страны, чей прежний факт кандидат стёр в анкете или опроверг ответом «виза не нужна». */
+export function withdrawnCountries(
+  questions: readonly QuestionnaireQuestion[],
+  changed: ReadonlyMap<string, string>,
+  known: readonly WorkRight[],
+  vacancyCountry: string | undefined,
+): ReadonlySet<string> {
+  return new Set(
+    questions.flatMap((question) => {
+      const text = changed.get(question.id)?.trim();
+      const asked = text === undefined ? null : askedRight(question.text, vacancyCountry);
+      if (!asked || text === undefined) return [];
+      const status = known.find((item) => item.country === asked.country)?.status;
+      const refuted = asked.kind === 'sponsor' && NO.test(text) && status === 'needs_visa';
+      return text === '' || refuted ? [asked.country] : [];
+    }),
+  );
+}
+
 export function mergeWorkRights(
   known: readonly WorkRight[],
   learned: readonly WorkRight[],

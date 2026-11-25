@@ -314,6 +314,27 @@ describe('questionnaire routes with the B640 flag', () => {
       workFormats: ['office'],
       workRights: [{ country: 'US', status: 'needs_visa' }],
     });
+    const rights = () => candidateStore.decisionProfileRepo.get(candidateId)?.workRights;
+    const authorized = [{ country: 'US', status: 'authorized' }];
+    await call(app, 'PUT', path, flagged, { workRights: authorized });
+    expect(rights()).toEqual(authorized);
+    await call(app, 'PUT', path, flagged, { workRights: [] });
+    expect(rights()).toEqual([]);
+    await call(app, 'PUT', path, flagged, {});
+    expect(rights()).toEqual([]);
+    // Исправить и стереть можно и самим ответом в анкете.
+    const reply = (vacancyId: string, text: string) =>
+      call(app, 'PUT', url(vacancyId, '/answers'), flagged, {
+        answers: [{ questionId: 'q1', text }],
+      });
+    await reply('v1', 'Yes');
+    expect(rights()).toEqual(authorized);
+    await reply('v1', '');
+    expect(rights()).toEqual([]);
+    await reply('v2', 'Yes');
+    expect(rights()).toEqual([{ country: 'US', status: 'needs_visa' }]);
+    await reply('v2', 'No');
+    expect(rights()).toEqual([]);
   });
 
   it('B641: fills LinkedIn from a profile link written without https', async () => {

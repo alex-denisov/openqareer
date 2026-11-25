@@ -4,7 +4,8 @@ import type {
 } from '../../shared/applicationQuestionnaire';
 import { convertAmount, currencyCode, type CurrencyRates } from '../../shared/currencyRates';
 import {
-  MIN_SALARY_MARKET_SAMPLE,
+  MIN_COUNTRY_SALARY_SAMPLE,
+  type SalaryMarketGroup,
   type SalaryMarketSnapshot,
 } from '../../shared/salaryMarketSnapshot';
 import { pluralRu } from '../../shared/pluralRu';
@@ -16,7 +17,7 @@ import type { VacancySalary } from './unifiedVacancy';
 
 /**
  * B788: ответ на обязательный вопрос о зарплате, когда кандидат ожиданий не назвал. Сначала вилка
- * самой вакансии, затем готовый расчёт роли по рынку. Без периода, выборки и даты цифры нет.
+ * самой вакансии, затем готовый расчёт роли по стране вакансии. Без периода, выборки и даты цифры нет.
  */
 export interface SalaryVacancy {
   readonly title: string;
@@ -51,20 +52,6 @@ const PERIOD_WORDS: Readonly<Record<Period, readonly [ru: string, en: string]>> 
   year: ['в год', 'per year'],
 };
 const BASIS_WORDS = { gross: ['до вычета налогов', 'gross'], net: ['на руки', 'net'] } as const;
-
-const EURO = 'AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK'.split(' ');
-const COUNTRY_CURRENCY: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(EURO.map((code) => [code, 'EUR'])),
-  RU: 'RUB',
-  US: 'USD',
-  CA: 'CAD',
-  GB: 'GBP',
-  PL: 'PLN',
-  KZ: 'KZT',
-  BY: 'BYN',
-  UZ: 'UZS',
-  KG: 'KGS',
-};
 
 const CODES: Readonly<Record<string, string>> = { BYR: 'BYN' };
 const codeOf = (currency: string): string => {
@@ -121,9 +108,8 @@ interface MarketGroup {
   readonly amount: number;
 }
 
-function groupsOf(salary: SalaryMarketSnapshot['salary'] | undefined): readonly MarketGroup[] {
-  if (salary?.status !== 'available') return [];
-  return salary.groups.map((group) => ({
+function groupsOf(groups: readonly SalaryMarketGroup[]): readonly MarketGroup[] {
+  return groups.map((group) => ({
     currency: codeOf(group.currency),
     period: group.period,
     basis: group.taxBasis,
@@ -132,30 +118,24 @@ function groupsOf(salary: SalaryMarketSnapshot['salary'] | undefined): readonly 
   }));
 }
 
-/** Рынок вакансии: страна по её валюте; удалёнка без страны — срез удалённых вакансий. */
+/** Рынок вакансии — срез её страны. Страна не названа или среза нет — цифры нет. */
 function marketGroups(
   snapshot: SalaryMarketSnapshot,
   grade: string,
   vacancy: SalaryVacancy,
 ): { readonly groups: readonly MarketGroup[]; readonly market: string } | null {
   const country = salaryGeography(vacancy.location, vacancy.isRemote).countryCode;
-  if (country) {
-    const currency = COUNTRY_CURRENCY[country];
-    const scope =
-      grade === 'unknown'
-        ? snapshot.salary
-        : snapshot.gradeSlices?.find((slice) => slice.grade === grade)?.salary;
-    const groups = groupsOf(scope).filter((group) => group.currency === currency);
-    return { groups, market: `вакансии с зарплатой в ${currency ?? ''}` };
-  }
-  if (!vacancy.isRemote || grade !== 'unknown') return null;
-  const slice = snapshot.locationSlices?.find((item) => item.location === 'remote');
-  return { groups: groupsOf(slice?.salary), market: 'удалённые вакансии' };
+  const slice = snapshot.countrySlices?.find(
+    (item) => item.country === country && item.grade === (grade === 'unknown' ? 'all' : grade),
+  );
+  if (!country || !slice) return null;
+  const name = new Intl.DisplayNames(['ru'], { type: 'region' }).of(country) ?? country;
+  return { groups: groupsOf(slice.groups), market: name };
 }
 
 function usable(group: MarketGroup, ask: SalaryAsk): boolean {
   return (
-    group.sample >= MIN_SALARY_MARKET_SAMPLE &&
+    group.sample >= MIN_COUNTRY_SALARY_SAMPLE &&
     (!ask.currency || ask.currency === group.currency) &&
     (!ask.basis || ask.basis === group.basis) &&
     (!ask.period ||
@@ -225,7 +205,10 @@ export function salaryMarketAnswers(
   return questions.flatMap((question) => {
     const ask = question.required ? salaryAsk(question) : null;
     if (!ask) return [];
+    // Число без периода читается и как месяц, и как год.
+    if (question.numeric && !ask.period) return [];
     const own = vacancyFigure(input.vacancy);
+    if (question.numeric && own && !own.period) return [];
     const answer =
       (own && answerText(own, ask, question, input.rates)) ??
       (() => {

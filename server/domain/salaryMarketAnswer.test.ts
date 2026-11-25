@@ -28,6 +28,16 @@ const snapshot = {
   role: 'product-manager',
   updatedAt: '2026-11-25T04:00:00.000Z',
   salary: { status: 'available', groups },
+  countrySlices: [
+    { country: 'US', grade: 'all', groups: [groups[0]] },
+    { country: 'RU', grade: 'all', groups: [groups[1]] },
+    { country: 'FR', grade: 'all', groups: [group('EUR', 'year', 'unknown', 50_000, 70_000)] },
+    {
+      country: 'PL',
+      grade: 'all',
+      groups: [{ ...group('PLN', 'month', 'unknown', 1, 2), sampleSize: 19 }],
+    },
+  ],
 } as unknown as SalaryMarketSnapshot;
 const VACANCY: SalaryVacancy = {
   title: 'Product Manager',
@@ -81,7 +91,7 @@ describe('B788: рыночная зарплата', () => {
     const answer = run(ask('Salary expectations'));
     expect(answer?.text).toBe('140 000 USD per year');
     expect(answer?.source).toMatch(
-      /вакансии с зарплатой в USD, 20 вилок, каталог OpenQareer, 25\.11\.2026/u,
+      /Соединенные Штаты, 20 вилок, каталог OpenQareer, 25\.11\.2026/u,
     );
     expect(run(ask('Желаемая зарплата на руки'), { location: 'Россия' })?.text).toBe(
       '200 000 ₽ в месяц на руки',
@@ -102,6 +112,20 @@ describe('B788: рыночная зарплата', () => {
     ['gross у данных без налоговой базы', ask('Gross salary expectation'), {}],
     ['почасовой вопрос без почасовых данных', ask('Hourly salary expectation'), {}],
     ['две валюты', ask('Salary expectations (USD or EUR)'), {}],
+    [
+      'Германия: среза нет, Франция за неё не отвечает',
+      ask('Salary expectations'),
+      { location: 'Germany' },
+    ],
+    ['Польша: 19 вилок', ask('Salary expectations'), { location: 'Poland' }],
+    ['удалёнка без страны', ask('Salary expectations'), { location: 'Remote', isRemote: true }],
+    ['числовое поле без периода', ask('Salary expectations', { numeric: true }), {}],
+    ['числовое поле без периода при вилке', ask('Salary expectations', { numeric: true }), own],
+    [
+      'числовое поле при вилке неизвестного периода',
+      ask('Annual salary expectation', { numeric: true }),
+      { salary: { from: 5000, to: 7000, currency: 'USD' } },
+    ],
     ['страна не названа', ask('Salary expectations'), { location: null }],
     ['уровень без своего среза', ask('Salary expectations'), { title: 'Junior Product Manager' }],
     ['роль не из справочника', ask('Salary expectations'), { title: 'Zzz Qqq' }],

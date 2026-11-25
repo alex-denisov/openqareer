@@ -28,7 +28,7 @@ import {
   linkedinProfileLink,
   type QuestionnaireProfileFacts,
 } from '../domain/questionnaireProfileAnswers';
-import { learnedWorkRights, mergeWorkRights } from '../domain/workRightAnswers';
+import { learnedWorkRights, mergeWorkRights, withdrawnCountries } from '../domain/workRightAnswers';
 import type { SalaryMarketInput } from '../domain/salaryMarketAnswer';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { readMarketSnapshot } from '../salaryMarket/readMarketSnapshot';
@@ -385,10 +385,13 @@ function rememberWorkRights(
   );
   const country = countryOf(vacancyMarket(deps, who.vacancyId));
   const learned = learnedWorkRights(questions, changed, country);
-  if (learned.length === 0) return;
   const repo = deps.candidateStore.decisionProfileRepo;
   const profile = repo.get(who.candidateId) ?? DEFAULT_DECISION_PROFILE;
-  const workRights = mergeWorkRights(profile.workRights ?? [], learned);
+  const known = profile.workRights ?? [];
+  const withdrawn = withdrawnCountries(questions, changed, known, country);
+  const kept = known.filter((item) => !withdrawn.has(item.country));
+  if (learned.length === 0 && kept.length === known.length) return;
+  const workRights = mergeWorkRights(kept, learned);
   repo.put(who.candidateId, { ...profile, workRights }, new Date().toISOString());
 }
 
