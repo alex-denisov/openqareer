@@ -15,6 +15,7 @@ import {
 } from './matchedPoolContext';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
 import { backgroundStep } from '../observability/backgroundSteps';
+import { syncSection } from '../observability/syncSections';
 
 const RECENT_VISIT_MS = 14 * 24 * 60 * 60 * 1_000;
 const DEFAULT_PAUSE_MS = 50;
@@ -146,7 +147,7 @@ export class MatchedPoolPrecompute {
 
   private async runOnce(): Promise<void> {
     const startedAt = this.now();
-    const candidates = this.nextCandidates();
+    const candidates = syncSection('precompute:candidates', () => this.nextCandidates());
     candidates.forEach((candidateId) => this.ahead.add(candidateId));
     if (!this.preloaded) {
       this.preloaded = true;

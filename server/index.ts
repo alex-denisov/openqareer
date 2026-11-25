@@ -511,7 +511,7 @@ try {
   // Первый semantic-read не платит за создание отдельного SQLite-процесса.
   // Это только запуск reader: данные и SQL остаются запросом кандидата, а
   // HTTP уже слушает, когда OS начинает создавать дочерний процесс.
-  setImmediate(() => vacancyEngine.pool.warmMatchReader()).unref();
+  setImmediate(webStep('web:match-reader-start', () => vacancyEngine.pool.warmMatchReader())).unref();
   // Снимки считаются через тот же изолированный reader, но до первого
   // кандидатского запроса и далее без параллельного дискового шквала.
   setImmediate(() => {
