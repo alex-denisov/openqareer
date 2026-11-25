@@ -11,6 +11,7 @@ import { output, turnRequest } from '../data/sqliteTestHarness';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
 import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
+import { LINKEDIN_QUEUE_TABLES } from '../data/linkedinQueueSchema';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -220,6 +221,50 @@ describe('B796: исправление факта', () => {
     });
     expect(text(BULLET)).toBe(OLD);
     expect((await call('POST', `${URL}/revert`, { id })).statusCode).toBe(409);
+  });
+
+  it('варианты резюме и постов ушедшего отклика и публикации остаются', async () => {
+    const { call, candidate, variants, database } = await setup();
+    const now = '2026-11-25T00:00:00.000Z';
+    const add = (kind: 'resume' | 'post' | 'headline', subjectId: string, payload?: object, text = 'Margin from 16% to 80%') =>
+      variants.add({
+        candidateId: candidate.id,
+        kind,
+        subjectId,
+        text,
+        wish: { chips: [], text: '' },
+        payload,
+        createdAt: now,
+      });
+    add('resume', 'r-sent', { vacancyId: 'sent' });
+    add('resume', 'r-open', { vacancyId: 'open' });
+    add('resume', 'r-unknown');
+    add('post', 'p-done');
+    add('post', 'p-open');
+    add('headline', 'h');
+    add('headline', 'h-other', undefined, 'CTO');
+    database
+      .prepare(
+        `INSERT INTO applications (id, candidate_id, cluster_id, stage, stage_changed_at, created_at, updated_at)
+         VALUES ('app', ?, 'sent', 'applied', ?, ?, ?)`,
+      )
+      .run(candidate.id, now, now, now);
+    database.exec(LINKEDIN_QUEUE_TABLES);
+    database
+      .prepare(
+        `INSERT INTO candidate_linkedin_queue (id, candidate_id, draft_id, kind, scheduled_at, state, created_at, updated_at)
+         VALUES ('q', ?, 'p-done', 'post', ?, 'done', ?, ?)`,
+      )
+      .run(candidate.id, now, now, now);
+    const response = await call('POST', URL, { target, before: OLD, after: NEW });
+    expect(response.json().data.staleVariants).toBe(4);
+    const left = (kind: 'resume' | 'post' | 'headline', subjectId: string) =>
+      variants.list({ candidateId: candidate.id, kind, subjectId }).variants.length;
+    expect([left('resume', 'r-sent'), left('post', 'p-done')]).toEqual([1, 1]);
+    expect([left('resume', 'r-open'), left('post', 'p-open')]).toEqual([0, 0]);
+    // Пункт резюме без вакансии и заголовок со старым фактом никуда не ушли.
+    expect([left('resume', 'r-unknown'), left('headline', 'h')]).toEqual([0, 0]);
+    expect(left('headline', 'h-other')).toBe(1);
   });
 
   it('сбой на копиях откатывает и профиль', async () => {
