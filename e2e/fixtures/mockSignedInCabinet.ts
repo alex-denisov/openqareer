@@ -355,6 +355,7 @@ interface ApplicationStub {
   readonly candidateId: string;
   readonly clusterId: string | null;
   stage: string;
+  starred?: boolean;
   archivePreviousStage: string | null;
   version: number;
   readonly vacancy: unknown;
@@ -559,6 +560,7 @@ function savedApplicationFixtures(count: number): ApplicationStub[] {
       candidateId: 'candidate-fixture',
       clusterId: `saved-cluster-${sequence}`,
       stage: 'saved',
+      starred: true,
       archivePreviousStage: null,
       version: 1,
       vacancy: {
@@ -1952,6 +1954,7 @@ export async function mockSignedInCabinet(
           candidateId: 'candidate-fixture',
           clusterId: body.clusterId ?? null,
           stage: body.stage ?? 'saved',
+          starred: (body.stage ?? 'saved') === 'saved',
           archivePreviousStage: null,
           version: 1,
           vacancy: body.manualVacancy ?? null,
@@ -1970,7 +1973,8 @@ export async function mockSignedInCabinet(
         (item) => item.id === decodeURIComponent(applicationRoute[1]!),
       );
       if (!record) return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
-      const body = route.request().postDataJSON() as { stage?: string };
+      const body = route.request().postDataJSON() as { stage?: string; starred?: boolean };
+      if (body.starred !== undefined) record.starred = body.starred;
       if (body.stage === 'archived') record.archivePreviousStage = record.stage;
       if (body.stage) record.stage = body.stage;
       record.version += 1;
