@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   ApplicationQuestionnaire,
   AtsFormInput,
@@ -9,7 +9,7 @@ import { hhFormUrl, type HhForm } from '../../../../shared/hhCandidateSession';
 import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQuestionnaire';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { apiErrorMessage } from '../../coach/apiClient';
-import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
+import { Button, InfoTip, ResultLine, StatusLine, useIsMobile, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { VISIBILITY_QUESTION, type VisibilityState } from './visibilityQuestion';
 import { ChoiceField } from './ChoiceField';
@@ -263,7 +263,10 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
     <>
       {ready.nextRequired ? (
         <Button variant="primary" icon="edit" onClick={() => focusField(`qa-${ready.nextRequired?.id}`)}>
-          {`Ответьте на обязательные · ${ready.missingRequired}`}
+          <span>
+            Ответьте<span className="qa-must"> на обязательные</span>
+            {` · ${ready.missingRequired}`}
+          </span>
         </Button>
       ) : onSend ? null : (
         <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
@@ -280,12 +283,16 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
           Отправить отклик с анкетой
         </Button>
       ) : null}
-      {form.formUrl && !onSend ? (
-        <a className="row-act" href={form.formUrl} target="_blank" rel="noopener noreferrer">
-          Анкета на сайте ↗
-        </a>
-      ) : null}
     </>
+  );
+}
+
+function SiteLink({ form, onSend }: Pick<ActionsProps, 'form' | 'onSend'>) {
+  if (!form.formUrl || onSend) return null;
+  return (
+    <a className="row-act" href={form.formUrl} target="_blank" rel="noopener noreferrer">
+      Анкета на сайте ↗
+    </a>
   );
 }
 
@@ -319,6 +326,11 @@ export interface FormStepProps {
   readonly onSend: () => void;
 }
 
+/** Действие анкеты на широком экране — в полосе внизу; на 390 оно закреплено под вопросами. */
+function FormDock({ children }: { readonly children: ReactNode }) {
+  return useIsMobile() ? null : <div className="act-dock is-auto qa-dock">{children}</div>;
+}
+
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
 export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepProps) {
   const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
@@ -331,6 +343,7 @@ export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepPr
     : readiness(form.questions, state.draft);
   const declined = (asked && !visibility.agreed) || viaApp === 'locked';
   const suggestions = new Map(form.suggestions.map((item) => [item.questionId, item]));
+  const actions = <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />;
   return (
     <>
       <div className="col">
@@ -351,7 +364,8 @@ export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepPr
           </ul>
           {state.saveError ? <StatusLine state="err" text={state.saveError} /> : null}
           <div className="actions m-commit qa-mob">
-            <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
+            {actions}
+            <SiteLink form={form} onSend={send} />
           </div>
         </section>
       </div>
@@ -360,12 +374,11 @@ export function FormStep({ state, form, visibility, viaApp, onSend }: FormStepPr
           <p className="qa-count">
             <b className="num">{`${ready.answered} из ${ready.total}`}</b> готовы
           </p>
-          <div className="actions">
-            <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
-          </div>
+          <SiteLink form={form} onSend={send} />
         </aside>
         {inApp ? null : <SubmittedBlock state={state} onHh={onHh} />}
       </div>
+      <FormDock>{actions}</FormDock>
     </>
   );
 }

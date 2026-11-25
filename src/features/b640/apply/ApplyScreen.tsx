@@ -560,10 +560,10 @@ function ApplyFlow(props: FlowProps) {
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
     crumb: head.title,
-    ...(shown === 'resume' ? { title: 'Резюме' } : {}),
+    ...(shown === 'letter' ? {} : { title: shown === 'resume' ? 'Резюме' : 'Отклик' }),
     rootData: {
-      // Шаг «Резюме» (макет o03) без плотных отступов, письмо и анкета — с ними.
-      ...(shown === 'resume' && !quota ? {} : { mtight: '1' }),
+      // «Резюме» (o03) и «Отправка» в вебе (o04d) без плотных отступов; письмо, анкета и a01 — с ними.
+      ...((shown === 'resume' || (shown === 'send' && !isTauriEnvironment())) && !quota ? {} : { mtight: '1' }),
       ...(wide ? { 'main-right': '1' } : {}),
       // Открытое «Что поменять» на 390 — лист снизу (признак макета `data-vsheet`).
       ...(body.variants.wishOpen ? { vsheet: '1' } : {}),

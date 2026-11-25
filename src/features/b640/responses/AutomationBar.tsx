@@ -96,16 +96,20 @@ function BarRow({ id, view, toggle, onSetup }: BarRowProps) {
   );
 }
 
+/** Загрузка строки: список рисуется вместе с ней и после не сдвигается. */
+export function useAutomationLoad() {
+  const load = useCallback(() => loadAutomation(), []);
+  return useAsync(load, 'Автоотклики не загрузились.');
+}
+
 /**
  * Строка «Автоотклики» над списком (O1): переключатель, счётчик дня и «Настроить».
  * Не загрузилась — строки нет, список работает без неё. Согласий ещё нет — включение открывает
  * лист настроек с отметкой согласия (B645).
  */
-export function AutomationBar() {
+export function AutomationBar({ state, reload }: ReturnType<typeof useAutomationLoad>) {
   const id = useId();
   const toast = useToast();
-  const load = useCallback(() => loadAutomation(), []);
-  const { state, reload } = useAsync(load, 'Автоотклики не загрузились.');
   const [sheet, setSheet] = useState(false);
   const snapshot = state.data?.snapshot ?? null;
   const view = snapshot ? buildAutomationView(snapshot, state.data?.quotas ?? null) : null;
