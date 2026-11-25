@@ -3,7 +3,7 @@ import type { ApplyChannel, ApplyTarget } from '../../../../../shared/applyTarge
 
 /** B787: площадки, форму которых приложение заполняет само. Точный адрес проверяет приложение. */
 const HOSTS =
-  /^(?:(?:job-)?boards(?:\.eu)?\.greenhouse\.io|jobs\.ashbyhq\.com|jobs(?:\.eu)?\.lever\.co|apply\.workable\.com|[a-z0-9-]+\.(?:recruitee|teamtailor|pinpointhq)\.com)$/u;
+  /^(?:(?:job-)?boards(?:\.eu)?\.greenhouse\.io|jobs\.ashbyhq\.com|jobs(?:\.eu)?\.lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|[a-z0-9-]+\.(?:recruitee|teamtailor|pinpointhq|bamboohr)\.com|[a-z0-9-]+\.breezy\.hr)$/u;
 
 const parse = (value: string | null | undefined): URL | null => {
   const url = value && URL.canParse(value) ? new URL(value) : null;

@@ -2096,6 +2096,9 @@ async fn read_page(
     }
 
     if request.platform == "hh" && url_is_resume(&requested_url) {
+        if on_resume_page(&window) {
+            await_hh_resume(app, request, &window).await;
+        }
         expand_hh_resume(&window).await;
     }
     let body_json = sanitized_page_json(app, request, &window).await?;
@@ -2122,6 +2125,78 @@ const HH_RESUME_EXPAND_DELAY: Duration = Duration::from_millis(400);
 
 fn url_is_resume(raw: &str) -> bool {
     Url::parse(raw).is_ok_and(|url| url.path().starts_with("/resume/"))
+}
+
+/// Scrolls one screen further and reads counters only; see the script's header.
+const HH_RESUME_READY_SCRIPT: &str = include_str!("hh_resume_ready.js");
+const HH_RESUME_READY_TIMEOUT: Duration = Duration::from_secs(12);
+
+#[derive(Debug, PartialEq, Eq)]
+enum HhResumeReady {
+    Ready,
+    Waiting,
+    /// Not a single resume block so far.
+    Empty,
+}
+
+/// `c2_s5_a1_l0_w920_e1`: experience is drawn and the page is scrolled to its end.
+fn hh_resume_ready(state: &str, previous: Option<&str>) -> HhResumeReady {
+    let field = |key: char| {
+        state
+            .split('_')
+            .find_map(|part| part.strip_prefix(key)?.parse::<u32>().ok())
+            .unwrap_or(0)
+    };
+    let experience = (field('c') > 0 && field('s') > 0) || field('l') > 0;
+    if !experience {
+        return if field('a') > 0 {
+            HhResumeReady::Waiting
+        } else {
+            HhResumeReady::Empty
+        };
+    }
+    // Two equal reads at the end: nothing more is being drawn.
+    if field('e') > 0 && previous == Some(state) {
+        HhResumeReady::Ready
+    } else {
+        HhResumeReady::Waiting
+    }
+}
+
+/// A sign-in redirect or the resume editor has no experience cards to wait for.
+fn on_resume_page(window: &Webview) -> bool {
+    window
+        .url()
+        .is_ok_and(|url| url_is_resume(url.as_str()) && !url.path().starts_with("/resume/edit"))
+}
+
+/// Waits for the experience cards. After the timeout the page is read as it is: the
+/// screen refuses a resume without experience, and a captcha page stays recognisable.
+async fn await_hh_resume(app: &AppHandle, request: &SessionWindowRequest, window: &Webview) {
+    let started = std::time::Instant::now();
+    let mut previous: Option<String> = None;
+    let mut last = HhResumeReady::Empty;
+    loop {
+        if let Ok(raw) = eval_json(window, HH_RESUME_READY_SCRIPT).await {
+            let state = raw.trim().trim_matches('"').to_string();
+            last = hh_resume_ready(&state, previous.as_deref());
+            if last == HhResumeReady::Ready {
+                read_diagnostic(app, request, "resume_state", Some(&state));
+                return;
+            }
+            previous = Some(state);
+        }
+        if started.elapsed() >= HH_RESUME_READY_TIMEOUT {
+            read_diagnostic(app, request, "resume_state", previous.as_deref());
+            let code = match last {
+                HhResumeReady::Empty => "resume_not_rendered",
+                _ => "resume_no_experience",
+            };
+            read_diagnostic(app, request, code, None);
+            return;
+        }
+        tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+    }
 }
 
 /// The page is still readable when nothing opens, so a failure is not an error.
@@ -2954,6 +3029,24 @@ https://media.licdn.com/dms/image/c 800w";
         assert!(script
             .contains("const source=onOverlay?(overlay&&visibleText(overlay)>0?overlay:null)"));
         assert!(script.contains("if(!source){return '';}"));
+    }
+
+    #[test]
+    fn an_hh_resume_is_ready_once_experience_is_drawn_and_the_page_is_at_its_end() {
+        use super::{diagnostic_line, hh_resume_ready, HhResumeReady};
+        let done = "c2_s5_a1_l0_w920_e1";
+        assert_eq!(hh_resume_ready(done, None), HhResumeReady::Waiting);
+        assert_eq!(hh_resume_ready(done, Some(done)), HhResumeReady::Ready);
+        let moving = "c2_s5_a1_l0_w920_e0";
+        assert_eq!(hh_resume_ready(moving, Some(moving)), HhResumeReady::Waiting);
+        let legacy = "c0_s0_a0_l1_w920_e1";
+        assert_eq!(hh_resume_ready(legacy, Some(legacy)), HhResumeReady::Ready);
+        let about = "c0_s0_a1_l0_w920_e1";
+        assert_eq!(hh_resume_ready(about, Some(about)), HhResumeReady::Waiting);
+        let empty = "c0_s0_a0_l0_w920_e1";
+        assert_eq!(hh_resume_ready(empty, Some(empty)), HhResumeReady::Empty);
+        assert_eq!(hh_resume_ready("failed", None), HhResumeReady::Empty);
+        assert!(diagnostic_line(1, "hh-read", "resume_state", Some(done)).is_some());
     }
 
     #[test]
