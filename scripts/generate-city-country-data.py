@@ -55,14 +55,15 @@ def read(path: str) -> tuple[Names, Names]:
 
 
 def namesakes(best: Names, largest: Names) -> dict[str, list[str]]:
-    """Тёзки: имя → все страны. Читаются только рядом с кодом штата («Cambridge, MA»)."""
+    """Тёзки: имя → все страны, от крупнейшего города. Читаются только рядом с кодом штата («Cambridge, MA»)."""
     result: dict[str, list[str]] = collections.defaultdict(list)
     for key, countries in best.items():
         ranked = sorted(countries.items(), key=lambda item: -item[1])
         if len(ranked) < 2 or not {"US", "CA"} & countries.keys():
             if "IN" not in countries or len(ranked) < 2:
                 continue
-        codes = sorted(code for code in countries if largest[key][code] >= WORD_POPULATION)
+        known = [code for code in countries if largest[key][code] >= WORD_POPULATION]
+        codes = sorted(known, key=lambda code: (-largest[key][code], code))
         if codes:
             result["~" + ",".join(codes)].append(key)
     return result

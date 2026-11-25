@@ -10,7 +10,7 @@ import { ROLLUP_TABLES_SQL, writeRollups } from './benchmarkRollups';
 import { PRICE_TABLE_SQL, pricesOf } from './priceIndex';
 import {
   plausible,
-  salaryBenchmarkSchema,
+  readableBenchmark,
   salarySliceSchema,
   type SalaryBenchmark,
   type SalarySlice,
@@ -112,15 +112,6 @@ function insertRecords(database: DatabaseSync, sliceId: number, rows: readonly S
     );
 }
 
-function readable({ row_json }: { readonly row_json: string }): SalaryBenchmark[] {
-  try {
-    const parsed = salaryBenchmarkSchema.safeParse(JSON.parse(row_json));
-    return parsed.success ? [parsed.data] : [];
-  } catch {
-    return [];
-  }
-}
-
 interface Published {
   /** Строк в подборе из срезов. */
   readonly published: number;
@@ -131,7 +122,7 @@ interface Published {
 /** Пересборка подбора из последних срезов. Строки источника без единого среза остаются. */
 function publish(database: DatabaseSync): Published {
   const texts = database.prepare(CURRENT_SQL).all() as { row_json: string }[];
-  const records = texts.flatMap(readable);
+  const records = texts.flatMap(readableBenchmark);
   const rows = records.flatMap(plausible).map(pricesOf(database));
   database.exec(`DELETE FROM salary_benchmarks WHERE json_extract(row_json, '$.sourceName') IN (
     SELECT s.name FROM salary_sources s
@@ -330,9 +321,7 @@ export function createSalaryBenchmarkReader(database: DatabaseSync): SalaryBench
     const read = (place: string): readonly SalaryBenchmark[] => {
       const known = cache.places.get(place);
       if (known) return known;
-      const rows = (ready.rows.all(place) as { row_json: string }[]).map((row) =>
-        salaryBenchmarkSchema.parse(JSON.parse(row.row_json)),
-      );
+      const rows = (ready.rows.all(place) as { row_json: string }[]).flatMap(readableBenchmark);
       cache.places.set(place, rows);
       return rows;
     };

@@ -2,7 +2,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { worldKeyOf } from './benchmarkRollups';
 import type { BlendResult } from './blendSalaryBenchmarks';
-import { salaryBenchmarkSchema, type SalaryBenchmark } from './salaryBenchmark';
+import { readableBenchmark, type SalaryBenchmark } from './salaryBenchmark';
 
 export interface BenchmarkLookup {
   rows(places: readonly string[], keys: readonly string[]): readonly SalaryBenchmark[];
@@ -37,7 +37,7 @@ export function createBenchmarkLookup(database: DatabaseSync): BenchmarkLookup {
         keys.flatMap((key) => statement.all(place, key) as { row_json: string }[]),
       );
       const texts = [...new Set(found.map(({ row_json }) => row_json))];
-      return texts.map((text) => salaryBenchmarkSchema.parse(JSON.parse(text)));
+      return texts.flatMap((row_json) => readableBenchmark({ row_json }));
     },
     world(functionCode, levelRank) {
       const row = prepared()?.world.get(worldKeyOf(functionCode, levelRank)) as

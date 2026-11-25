@@ -44,6 +44,7 @@ describe('vacancyCountryHint', () => {
     ['Atlanta, Georgia', 'US'],
     ['Tbilisi, Georgia', 'GE'],
     ['Perth, WA', 'AU'],
+    ['Windsor, CA', 'CA'],
     ['Hyderabad, IN', 'IN'],
     ['Moscow, ID', 'US'],
     ['Dublin, CA', 'US'],
@@ -82,13 +83,25 @@ describe('vacancyCountryHint', () => {
       'Warsaw, IN',
       'Berlin, London',
       'New York or London',
-      'Nowhereville, CA',
       'Москва, Минск',
     ]) {
       expect(hint(location, [], 'DE')).toBeUndefined();
     }
     expect(hint('Georgia')).toBeUndefined();
     expect(hint('Remote')).toBeUndefined();
+  });
+
+  it('a code of two countries leaves the choice between them to the next signs', () => {
+    for (const city of ['Vancouver', 'Hamilton', 'Burlington', 'Richmond', 'Victoria']) {
+      expect(hint(`${city}, CA`, [], 'CA')).toMatchObject({ country: 'CA', basis: 'employer' });
+      expect(hint(`${city}, CA`, [], 'US')).toMatchObject({ country: 'US', basis: 'employer' });
+    }
+    for (const place of ['Vancouver, CA', 'Hamilton, CA'])
+      expect(hint(place, [], 'DE')).toEqual({ country: 'CA', basis: 'city', lowConfidence: true });
+    expect(hint('Nowhereville, CA', [], 'US')?.country).toBe('US');
+    for (const place of ['Salem, IN', 'Mobile, AL'])
+      expect(hint(place, ['https://acme.ca/1'], 'CA')?.country).not.toBe('CA');
+    expect(hint('Vancouver, CA; Berlin', [], 'CA')).toBeUndefined();
   });
 
   it('reads the Workday address, then the employer, then the domain', () => {

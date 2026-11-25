@@ -13,7 +13,7 @@ export interface CityDictionary {
 
 export interface Cities {
   country(city: string): string | undefined;
-  /** Страны, где есть город с таким именем; у однозначного — одна. */
+  /** Страны, где есть город с таким именем, от крупнейшего; у однозначного — одна. */
   countries(city: string): readonly string[];
   inText(text: string): string | undefined;
 }
