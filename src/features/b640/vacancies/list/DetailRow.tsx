@@ -1,3 +1,4 @@
+import { pressApply } from '../../apply/applyIntent';
 import { useEffect, useId, useState } from 'react';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
@@ -150,7 +151,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
             </p>
           ) : null}
           <div className="actions vd-actions vs-acts">
-            <Link className="btn is-primary" to={buildNodePath('o02', { responseId: cluster.id })}>
+            <Link className="btn is-primary" to={buildNodePath('o02', { responseId: cluster.id })} onClick={() => pressApply(cluster.id)}>
               <Icon name="responses" />
               Откликнуться
             </Link>

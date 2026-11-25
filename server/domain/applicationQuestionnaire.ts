@@ -10,9 +10,8 @@ import {
   type QuestionnaireSuggestion,
 } from '../../shared/applicationQuestionnaire';
 import { profileAnswers, type QuestionnaireProfileFacts } from './questionnaireProfileAnswers';
+import { clip, isRecord, OPTION_MAX_LENGTH, QUESTION_TEXT_MAX_LENGTH } from './questionText';
 
-const QUESTION_TEXT_MAX_LENGTH = 500;
-const OPTION_MAX_LENGTH = 200;
 /** Защита от чужого ответа, а не страница списка: настоящие списки (страны) — около 250. */
 const MAX_OPTIONS = 2000;
 /** Поля, которые Greenhouse добавляет сам: это не вопросы работодателя. */
@@ -22,19 +21,6 @@ const CHOICE_TYPES = new Set(['multi_value_single_select', 'multi_value_multi_se
 
 /** Идентификатор вопроса идёт в ключи и адреса на клиенте: только простые символы. */
 const QUESTION_ID = /^[A-Za-z0-9_\-[\]]{1,100}$/u;
-
-function clip(value: string, max: number): string {
-  // Управляющие символы и символы смены направления текста в чужом тексте не нужны.
-  const flat = value
-    .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
 
 function optionLabels(values: unknown): readonly string[] {
   if (!Array.isArray(values)) return [];
@@ -129,6 +115,30 @@ export function withKnownAnswers(
     text && !answered.has(id) ? [{ questionId: id, text }] : [],
   );
   return [...saved, ...known];
+}
+
+const sameText = (text: string): string =>
+  text.replace(/\s*[*✱]\s*$/u, '').toLowerCase();
+
+/** Ответы на вопросы с тем же текстом под новым номером; при повторе текста не переносятся. */
+export function carryAnswers(
+  from: readonly QuestionnaireQuestion[],
+  to: readonly QuestionnaireQuestion[],
+  saved: readonly QuestionnaireAnswer[],
+): readonly QuestionnaireAnswer[] {
+  const answered = new Set(saved.map((answer) => answer.questionId));
+  const only = (list: readonly QuestionnaireQuestion[], text: string) => {
+    const found = list.filter((item) => sameText(item.text) === text);
+    return found.length === 1 ? found[0] : null;
+  };
+  const carried = to.flatMap((question) => {
+    const text = sameText(question.text);
+    const before = only(from, text);
+    if (!before || answered.has(question.id) || !only(to, text)) return [];
+    const answer = saved.find((item) => item.questionId === before.id);
+    return answer ? [{ questionId: question.id, text: answer.text }] : [];
+  });
+  return [...saved, ...carried];
 }
 
 export interface SalaryProfile {
