@@ -17,7 +17,7 @@ import {
  * и каждая проходит проверку: те же числа и валюты, ни личного действия сверх исходной строки. Имена
  * людей, компаний и вузов отдельно в модель не уходят: в английском резюме они транслитерируются.
  * Состав фактов на обоих языках один: непереведённая строка остаётся исходной. Отклонённая дважды
- * хранится как есть (перевод равен строке), строка без ответа не хранится и спрашивается снова.
+ * хранится как есть (перевод равен строке); должность и строка без ответа спрашиваются снова.
  */
 export type ResumeTranslations = Readonly<Record<string, string>>;
 
@@ -153,7 +153,8 @@ function reader(document: ResumeDocument, lang: ResumeLang, translations: Resume
   const companies = companiesOf(document);
   return (line: Line): Answered => {
     const text = translations[translationKey(lang, line.text)];
-    if (text === line.text) return 'rejected';
+    // Должность, сохранённая как есть, спрашивается снова: по-русски она пишется переводом.
+    if (text === line.text) return line.kind === 'title' ? 'missing' : 'rejected';
     // Перевод, сохранённый до проверки чисел, спрашивается заново.
     return text && isFaithful(line, text, lang, companies) ? 'translated' : 'missing';
   };

@@ -18,14 +18,14 @@ const MAX_SENTENCE_CHARS = 400;
 const BULLET = /^\s*(?:[-–—*•▪·]+|\d+[.)])\s*/u;
 const SENTENCE_END = /(?<=[.!?;])\s+(?=[\p{Lu}\d«"“•–—-])/u;
 const BOILERPLATE =
-  /equal opportunit|regardless of|race|religion|disabilit|accommodation|benefits|salary|compensation|insurance|perks|privacy|cookie|apply now|мы предлагаем|зарплат|оклад|дмс|отпуск|откликайт|присоединяйт|ignore (?:all |previous )?instructions|system prompt|игнорируй.*инструкц/iu;
+  /equal opportunit|regardless of|race|religion|disabilit|accommodation|benefits|salary|compensation|insurance|perks|privacy|cookie|apply now|мы предлагаем|зарплат|оклад|дмс|отпуск|откликайт|присоединяйт|join us|apply today|ignore (?:all |previous )?instructions|system prompt|игнорируй.*инструкц/iu;
 /** Предложение о работе в роли, а не о компании. */
 const DUTY_SENTENCE =
   /\byou(?:(?:'|’)ll| will)\b|\bresponsible for\b|\byour (?:team|role|mission)\b|^(?:lead|build|own|drive|design|develop|manage|define|partner|deliver|hire|mentor|scale|operate)\b|вы будете|вам предстоит|предстоит|отвечать за|будете/iu;
 const EXPERIENCE_SENTENCE = /\b(?:experience|years|expertise|knowledge)\b|опыт|знани|умени|навык/iu;
-/** Рассказ компании о себе — в последнюю очередь. */
+/** Рассказ компании о себе и образ кандидата — не повод для вопроса. */
 const COMPANY_SENTENCE =
-  /^at \p{L}|\b(?:we are|we're|our (?:mission|culture|values))\b|мы —|наша компания|компани\p{L}* —/iu;
+  /^at \p{L}|\byour role isn(?:'|’)t\b|\b(?:(?:we are|we're)(?! (?:looking|seeking|hiring))|we look for|you don(?:'|’)t just|our (?:mission|culture|values))\b|мы —|наша компания|компани\p{L}* —/iu;
 /** «OUR IDEAL CANDIDATE WILL HAVE: 10+ years…» — заголовок перед строкой. */
 const INLINE_HEADING = /^[\p{Lu}\s'’,&-]{8,}[:：]\s*(?=\S)/u;
 
@@ -41,6 +41,11 @@ function tidy(text: string): string {
   const space = cut.lastIndexOf(' ');
   return `${(space > 0 ? cut.slice(0, space) : cut).replace(/[\s.;,:–—-]+$/u, '')}…`;
 }
+
+/** «Предстоит:», «Ключевые цели:» — задачи; разметка процента этих заголовков не меняется. */
+const DUTY_LINE = /^[ \t]*(?:(?:вам )?предстоит|(?:ключевые |основные )?цели|вы будете)[ \t]*:[ \t]*$/gimu;
+const withDutyHeadings = (text: string): string =>
+  vacancySourceText(text).replace(DUTY_LINE, 'Обязанности:');
 
 /** Снимок отклика бывает одной строкой: правила требований читают его по предложениям. */
 function sentenceLines(description: string): readonly string[] {
@@ -69,13 +74,13 @@ function sentenceAsks(lines: readonly string[]): readonly InterviewAsk[] {
       line.length <= MAX_SENTENCE_CHARS &&
       !/[:：?]$/u.test(line) &&
       !BOILERPLATE.test(line) &&
+      !COMPANY_SENTENCE.test(line.replace(BULLET, '')) &&
       !isCompensationLine(line),
   );
   const rank = (line: string): number => {
     const body = line.replace(BULLET, '');
     if (DUTY_SENTENCE.test(body)) return 0;
-    if (EXPERIENCE_SENTENCE.test(body)) return 1;
-    return COMPANY_SENTENCE.test(body) ? 3 : 2;
+    return EXPERIENCE_SENTENCE.test(body) ? 1 : 2;
   };
   return [...usable]
     .sort((left, right) => rank(left) - rank(right))
@@ -93,13 +98,13 @@ function interleave(
     .filter((ask): ask is InterviewAsk => ask !== undefined);
 }
 
-/** Повтор — тот же текст или строка описания, в которой требование уже названо. */
+/** Повтор — тот же текст или его часть: «более 3 лет управляет командой» уже есть в требовании целиком. */
 function distinct(asks: readonly InterviewAsk[]): readonly InterviewAsk[] {
   return asks.reduce<readonly InterviewAsk[]>((kept, ask) => {
     const key = ask.text.toLocaleLowerCase('ru-RU');
     const repeated = kept.some((item) => {
       const other = item.text.toLocaleLowerCase('ru-RU');
-      return key === other || (ask.kind === 'text' && key.includes(other));
+      return other.includes(key) || (ask.kind === 'text' && key.includes(other));
     });
     return repeated || !key ? kept : [...kept, ask];
   }, []);
@@ -124,7 +129,7 @@ export function interviewVacancyAsks(
     : extractVacancyRequirements({ vacancyId: 'interview', description: text }).requirements.filter(
         askableRequirement,
       );
-  const dutyIds = vacancyDutyIds(fromModel ? description : text, requirements);
+  const dutyIds = vacancyDutyIds(withDutyHeadings(fromModel ? description : text), requirements);
   const ofKind = (kind: 'duty' | 'req') =>
     requirements
       .filter((item) => dutyIds.has(item.id) === (kind === 'duty'))

@@ -41,6 +41,44 @@ describe('interviewVacancyAsks (B635)', () => {
     expect(JSON.stringify(asks)).not.toMatch(/Догадка|Berlin/u);
   });
 
+  it('рассказ компании о себе и призыв — не вопросы', () => {
+    const asks = texts(
+      "At Snowflake, your role isn't just to execute a function, but to help redefine the future of how work gets done. You will hire and mentor senior technical leaders. Join us at the forefront of AI innovation where you'll lead transformative initiatives. You don’t just use tools; you will treat AI as a high-trust collaborator in your role.",
+    ).join('\n');
+    expect(asks).toContain('mentor senior technical leaders');
+    expect(asks).not.toMatch(/At Snowflake|Join us|just use tools/u);
+  });
+
+  it('часть уже названного требования не повторяется', () => {
+    const base = extractVacancyRequirements({
+      vacancyId: 'v',
+      description: 'Требования:\nKafka под нагрузкой',
+    }).requirements[0]!;
+    const asks = interviewVacancyAsks(SNOWFLAKE, [
+      { ...base, id: 'a', text: 'Пишет на Go 7 лет, более 3 лет управляет командой' },
+      { ...base, id: 'b', text: 'более 3 лет управляет командой' },
+    ]);
+    expect(asks.filter(({ text }) => text.includes('управляет командой'))).toHaveLength(1);
+  });
+
+  it('«Предстоит» и «Ключевые цели» — задачи роли, а не требования', () => {
+    for (const heading of ['Предстоит:', 'Ключевые цели:']) {
+      const quote = 'Управление командой системных администраторов';
+      const need = 'Опыт эксплуатации серверов от 5 лет';
+      const description = `${heading}\n\n- ${quote}\n\nМы ожидаем:\n\n- ${need}`;
+      const base = extractVacancyRequirements({
+        vacancyId: 'v',
+        description: `Требования:\n- ${need}`,
+      }).requirements[0]!;
+      const asks = interviewVacancyAsks(description, [
+        { ...base, id: 'a', text: quote, sourceQuote: quote },
+        { ...base, id: 'b', text: need, sourceQuote: need },
+      ]);
+      expect(asks).toContainEqual({ kind: 'duty', text: quote });
+      expect(asks).toContainEqual({ kind: 'req', text: need });
+    }
+  });
+
   it('описания нет — вопросов по нему нет', () => {
     expect(interviewVacancyAsks('  ')).toEqual([]);
   });

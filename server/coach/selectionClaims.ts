@@ -2,7 +2,8 @@ import { SELECTION_UNKNOWN, type SelectionContext, type SelectionRow } from './s
 
 /**
  * B735: что в ответе консультанта о подборке сервер может опровергнуть по строкам: страна без
- * данных, неверный счёт по городу, «удалёнки из РФ не видно», «остальные — Remote». Правило
+ * данных, неверный счёт по городу, «удалёнки из РФ не видно», «остальные — Remote», номера строк,
+ * которых кандидат не видит. Правило
  * бракует только то, чему строки прямо противоречат; спорное остаётся.
  */
 const HOME = 'Россия';
@@ -106,8 +107,13 @@ function wrongRest(sentence: string, message: string, rows: readonly SelectionRo
   return rows.some((row) => !names(message, row) && !isRemote(row));
 }
 
+/** «Строки 1, 7, 14» и «шесть: 1, 7, 14»: номеров у строк списка нет. */
+const ROW_NUMBERS =
+  /(?<!\p{L})(?:строк[аиеу]|строках|строками|позици[яию]|позициях)\s+(?:№\s*)?\d{1,2}(?!\d|\s*[%–-])|(?<![\d.,])\d{1,2}(?:,\s+\d{1,2}(?!\d|\s*%)){2,}/iu;
+
 function broken(sentence: string, message: string, selection: SelectionContext): boolean {
   const { rows } = selection;
+  if (ROW_NUMBERS.test(sentence)) return true;
   if (wrongCityCount(sentence, selection) || deniesHomeRemote(sentence, rows)) return true;
   if (wrongRest(sentence, message, rows)) return true;
   if (ADMITS_UNKNOWN.test(sentence)) return false;
