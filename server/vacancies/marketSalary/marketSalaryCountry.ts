@@ -40,7 +40,7 @@ const COUNTRY_ALIASES: Readonly<Record<string, string>> = {
   nederland: 'NL',
 };
 const WORK_MODE = /\b(?:remote|hybrid|on-?site)\b|удал[её]нно|гибрид/giu;
-const WORKDAY_CODE = /^([A-Z]{2})[-_]\S/u;
+const WORKDAY_CODE = /^([A-Z]{2})([-_])(.+)$/u;
 const NOT_LISTED_PLACE = /^\d+\s+locations?$/iu;
 
 function partsOf(location: string): string[] {
@@ -97,10 +97,19 @@ function cityCountry(city: string, text: string): string | undefined {
   return code;
 }
 
+/** «DE_Ulm» — страна, «MO-St. Louis» — штат: общий код через дефис решает город. */
+function workdayCountry(text: string): string | undefined {
+  const [, code = '', separator, rest = ''] = WORKDAY_CODE.exec(text) ?? [];
+  const iso = code ? countryCodeFromNameOrCode(code) : undefined;
+  if (!iso || separator === '_' || !northAmericanCountryOf(code)) return iso;
+  const [city = ''] = partsOf(rest);
+  const byCity = PLAIN_CITIES.get(city.toLowerCase()) ?? countryCodeOf(city);
+  return byCity === iso || byCity === 'US' ? byCity : undefined;
+}
+
 function countryOfPlace(text: string): string | undefined {
-  const workday = WORKDAY_CODE.exec(text)?.[1];
-  const workdayCode = workday ? countryCodeFromNameOrCode(workday) : undefined;
-  if (workdayCode) return workdayCode;
+  const workday = workdayCountry(text);
+  if (workday) return workday;
   const parts = partsOf(text);
   const first = parts[0];
   const last = parts.at(-1);
