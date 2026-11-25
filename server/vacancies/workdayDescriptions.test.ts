@@ -365,8 +365,7 @@ describe('площадка, где дочитывать нечего (B761)', ()
   it('пауза разбросана на ±20 %, чтобы площадки не сходились в один такт', async () => {
     const seen: string[] = [];
     let nowMs = 0;
-    // Первое число — начало обхода, дальше разброс пауз площадок.
-    const draws = [0, 0, 1];
+    const draws = [0, 1];
     const pool = new FakePool(new Map());
     pool.loadVacanciesWithoutFullText = (sourceId) => {
       seen.push(sourceId);
@@ -403,7 +402,6 @@ describe('площадка, где дочитывать нечего (B761)', ()
       pool,
       sourceIds: () => ids,
       now: () => 0,
-      random: () => 0.5,
       elapsed: () => clock,
       maxAttempts: 100,
       fetchDetail: async () => ({ status: 500 }),
@@ -416,6 +414,51 @@ describe('площадка, где дочитывать нечего (B761)', ()
       expect(seen[0]).toBe(SOURCE);
       expect(seen).toHaveLength(expected + 1);
     }
+  });
+
+  it('обход продолжается с места остановки: разбуженные в начале не отодвигают хвост', async () => {
+    const ids = Array.from({ length: 250 }, (_, index) => `ats-workday-s${index}`);
+    const seen: string[] = [];
+    let clock = 0;
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = (sourceId) => {
+      seen.push(sourceId);
+      clock += 20;
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ids,
+      now: () => 0,
+      elapsed: () => clock,
+    });
+    for (let step = 0; step < 3; step += 1) {
+      await backfill.step();
+      for (const id of ids.slice(0, 100)) backfill.wake(id);
+    }
+    expect(seen.slice(0, 250)).toEqual(ids);
+    expect(seen.slice(250)).toEqual(ids.slice(0, 50));
+  });
+
+  it('бюджет считает и работу между площадками, а не только сам обход', async () => {
+    const ids = Array.from({ length: 10 }, (_, index) => `ats-workday-s${index}`);
+    let clock = 0;
+    let scans = 0;
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = () => {
+      scans += 1;
+      // Чужая работа занимает цикл после обхода, до следующей площадки.
+      queueMicrotask(() => (clock += 1_000));
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ids,
+      now: () => 0,
+      elapsed: () => clock,
+    });
+    await backfill.step();
+    expect(scans).toBe(2);
   });
 
   it('новое чтение не снимает паузу после 429', async () => {

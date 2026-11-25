@@ -129,6 +129,11 @@ export const fetchWorkdayDetail: WorkdayDetailFetch = async (url, format) => {
   return { status: res.status, payload: format === 'json' ? await res.json() : await res.text() };
 };
 
+interface SourceAt {
+  readonly sourceId: string;
+  readonly position: number;
+}
+
 type Outcome = 'loaded' | 'gone' | 'failed' | 'throttled';
 
 const DEFAULT_THROTTLE_PAUSE_MS = 15 * 60_000;
@@ -173,6 +178,8 @@ export class WorkdayDescriptionBackfill {
   /** Неудачи по id: после `maxAttempts` запись больше не запрашивается до перезапуска. */
   private readonly attempts = new Map<string, number>();
   private running = false;
+  /** С какого места списка площадок продолжается обход без известной работы. */
+  private probeCursor = 0;
 
   constructor(options: {
     pool: WorkdayDescriptionPool;
@@ -211,15 +218,18 @@ export class WorkdayDescriptionBackfill {
       // B641 10.11: выборка площадки без текста — до 100 мс; 147 площадок подряд
       // держали цикл событий до 8 с. Каждая площадка начинается в своём обороте.
       const started: Promise<Outcome[]>[] = [];
-      let probeMs = 0;
-      for (const [index, sourceId] of [...working, ...probes].entries()) {
-        if (probeMs >= PROBE_BUDGET_MS) break;
+      let probesFrom: number | undefined;
+      for (const [index, { sourceId, position }] of [...working, ...probes].entries()) {
         await new Promise<void>((resolve) => setImmediate(resolve));
+        if (index >= working.length) {
+          // Время по часам: в него входит и работа, идущая между площадками.
+          probesFrom ??= this.elapsed();
+          if (this.elapsed() - probesFrom >= PROBE_BUDGET_MS) break;
+          this.probeCursor = position + 1;
+        }
         // B756 22.11: обработчик — сразу. Площадка, упавшая, пока цикл ещё ждёт оборота,
         // давала отказ без обработчика и роняла процесс (exit 1 на «database is locked»).
-        const scanAt = this.elapsed();
         started.push(this.stepSource(sourceId).catch((): Outcome[] => ['failed']));
-        if (index >= working.length) probeMs += this.elapsed() - scanAt;
       }
       const outcomes = await Promise.all(started);
       const flat = outcomes.flat();
@@ -236,17 +246,21 @@ export class WorkdayDescriptionBackfill {
   }
 
   /** Площадки с работой — все; новые, разбуженные и пустые — в пределах бюджета такта. */
-  private dueSources(nowMs: number): { working: string[]; probes: string[] } {
+  private dueSources(nowMs: number): { working: SourceAt[]; probes: SourceAt[] } {
     const due = this.sourceIds()
-      .filter(isDetailTextSource)
-      .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= nowMs);
-    const isProbe = (sourceId: string) => this.idle.has(sourceId) || !this.nextDueAt.has(sourceId);
+      .map((sourceId, position) => ({ sourceId, position }))
+      .filter(({ sourceId }) => isDetailTextSource(sourceId))
+      .filter(({ sourceId }) => (this.nextDueAt.get(sourceId) ?? 0) <= nowMs);
+    const isProbe = ({ sourceId }: SourceAt) =>
+      this.idle.has(sourceId) || !this.nextDueAt.has(sourceId);
     const probes = due.filter(isProbe);
-    // Начало со случайного места: при частых выкатах хвост списка иначе не дождался бы очереди.
-    const from = Math.floor(this.random() * probes.length);
     return {
-      working: due.filter((sourceId) => !isProbe(sourceId)),
-      probes: [...probes.slice(from), ...probes.slice(0, from)],
+      working: due.filter((source) => !isProbe(source)),
+      // Продолжение с места остановки: разбуженные в начале списка не отодвигают хвост.
+      probes: [
+        ...probes.filter(({ position }) => position >= this.probeCursor),
+        ...probes.filter(({ position }) => position < this.probeCursor),
+      ],
     };
   }
 
