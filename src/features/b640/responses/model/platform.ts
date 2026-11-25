@@ -17,6 +17,12 @@ const KNOWN: readonly (readonly [RegExp, string])[] = [
   [/^trudvsem$/u, 'ТрудВсем'],
   [/^himalayas/u, 'Himalayas'],
 ];
+/** Коды freehire «src-fh-…»: из них площадки вакансий — эти, остальные — карьерные сайты компаний. */
+const FREEHIRE = /^fh[-._](.+)$/u;
+const FREEHIRE_PLATFORMS: ReadonlyMap<string, string> = new Map([
+  ['getmatch', 'Getmatch'],
+  ['habr-career', 'Хабр Карьера'],
+]);
 const SITE: Platform = { label: 'сайт компании', site: true };
 /**
  * Внутренние обозначения источника: доска работодателя (`ats-ashby-snowflake`), тип чтения
@@ -31,6 +37,11 @@ export function platformOf(source: string | null | undefined): Platform {
   const name = vacancySourceDisplayName(raw);
   // Коды сбора «src-hh-search», «src-indeed»: приставка — внутреннее имя канала, не площадка.
   const lower = name.toLowerCase().replace(/^src[-._]/u, '');
+  const feed = FREEHIRE.exec(lower)?.[1];
+  if (feed) {
+    const label = FREEHIRE_PLATFORMS.get(feed);
+    return label ? { label, site: false } : SITE;
+  }
   if (INTERNAL.test(lower)) return SITE;
   const known = KNOWN.find(([pattern]) => pattern.test(lower));
   if (known) return { label: known[1], site: false };

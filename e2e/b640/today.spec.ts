@@ -704,6 +704,7 @@ test.describe('B650 s05b: «События откликов»', () => {
     await openCabinet(page, '/app/today', { responses: [UNDELIVERED] });
     const events = page.locator('.b640 section.re-today');
     await expect(events.locator('li.re-card')).toHaveCount(1);
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expect(events.locator('.tag.miss')).toHaveText('Не доставлен');
     await expect(events.locator('.re-why')).toHaveText(
       'Руководитель платформы · Нужен вход в hh.ru',

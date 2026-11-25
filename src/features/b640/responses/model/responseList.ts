@@ -11,6 +11,7 @@ import {
 } from '../../../applications/pipelineAnalytics';
 import type { IconName } from '../../kit';
 import { platformOf, viaPlatform } from './platform';
+import { wasSent } from './sentState';
 import { longDate, shortDate, type ResponseRow } from './responseRow';
 
 export interface ListedResponse {
@@ -185,7 +186,7 @@ function byPlatform(
 }
 
 export function funnelSummary(items: readonly ListedResponse[]): FunnelSummary {
-  const sentAll = items.filter((item) => item.application.stage !== 'saved');
+  const sentAll = items.filter((item) => wasSent(item.application));
   const autoItems = sentAll.filter((item) => item.auto === true);
   const sentItems = sentAll.filter((item) => item.auto !== true);
   const analytics = computePipelineAnalytics(sentItems.map((item) => item.application));

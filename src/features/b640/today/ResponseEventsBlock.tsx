@@ -1,8 +1,6 @@
-import type { ApplicationView } from '../../applications/applicationsApi';
 import { Icon } from '../kit/Icon';
 import { Link } from '../shell/Link';
-import { useManualQueue } from '../responses/data/manualQueue';
-import { responseEvents, type ResponseEvent } from './responseEventsModel';
+import type { ResponseEvent } from './responseEventsModel';
 
 function EventCard({ event, first }: { readonly event: ResponseEvent; readonly first: boolean }) {
   return (
@@ -36,13 +34,10 @@ function EventCard({ event, first }: { readonly event: ResponseEvent; readonly f
  * пустую рамку ради второстепенного блока.
  */
 export function ResponseEventsBlock({
-  applications,
+  events,
 }: {
-  /** Отклики кандидата — одно чтение на «Сегодня» с путём откликов; `null` — не прочитаны. */
-  readonly applications: readonly ApplicationView[] | null;
+  readonly events: readonly ResponseEvent[];
 }) {
-  const manual = useManualQueue();
-  const events = applications ? responseEvents(applications, new Date(), manual) : [];
   if (events.length === 0) return null;
   return (
     <section className="re-today" aria-labelledby="re-today-t">
