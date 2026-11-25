@@ -8,9 +8,10 @@
 use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
 use crate::ats_model::{
-    attempt_result, decode, file_fields_of, form_report, is_id, listed, outcome_of, press_refusal,
-    rejection_of, submit_refusal, validate_fill, values_of, FileFields, FillReport, FillRequest,
-    FormReport, OpenRequest, Receipt, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+    attempt_result, decode, file_fields_of, form_report, is_id, kinds_of, listed, outcome_of,
+    press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill, values_of,
+    FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt, SubmitRequest, Values,
+    FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
     is_confirmation, navigation_allowed, on_target, resolve, thanks_in_place, thanks_path,
@@ -21,6 +22,7 @@ use crate::connector_session::{
     is_transient_eval_error,
 };
 use serde_json::{json, Value};
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -32,8 +34,10 @@ use uuid::Uuid;
 
 pub const FORM_WINDOW_LABEL: &str = "connector-ats";
 const WINDOW_SIZE: (f64, f64) = (920.0, 720.0);
-const READ_WAIT: Duration = Duration::from_secs(25);
-const FILL_WAIT: Duration = Duration::from_secs(40);
+const READ_WAIT: Duration = Duration::from_secs(45);
+/// Reads in a row that find the same fields on a loaded page: boards draw late.
+const STEADY_READS: usize = 3;
+const FILL_WAIT: Duration = Duration::from_secs(90);
 const OUTCOME_WAIT: Duration = Duration::from_secs(45);
 const POLL: Duration = Duration::from_millis(500);
 const STORE_REMOVE_TRIES: u32 = 10;
@@ -46,6 +50,8 @@ pub(crate) struct Run {
     /// What the form held right after filling; the candidate confirms these.
     pub(crate) filled: Option<Values>,
     pub(crate) file_fields: FileFields,
+    /// Kinds of the fields read, for diagnostics.
+    pub(crate) kinds: BTreeMap<String, &'static str>,
     attempt: Option<Uuid>,
     /// Fields the page had already marked when the button was pressed.
     invalid_before: Value,
@@ -288,6 +294,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             target: target.clone(),
             filled: None,
             file_fields: FileFields::new(),
+            kinds: BTreeMap::new(),
             attempt: None,
             invalid_before: Value::Null,
         });
@@ -304,9 +311,29 @@ pub async fn read_form(app: &AppHandle, vacancy_id: &str) -> Result<FormReport, 
     read_page(app, &target).await
 }
 
+/// Says when the page has stopped drawing its form.
+#[derive(Default)]
+struct Steady {
+    fields: Cell<usize>,
+    reads: Cell<usize>,
+}
+
+impl Steady {
+    fn settled(&self, form: &Value) -> bool {
+        let fields = form["fields"].as_array().map_or(0, Vec::len);
+        let same = fields > 0 && fields == self.fields.get() && form["loaded"] == true;
+        self.reads.set(if same { self.reads.get() + 1 } else { 0 });
+        self.fields.set(fields);
+        form["state"] == "ready"
+            && (form["submitButtons"] == 1 || form["step"] == "next")
+            && self.reads.get() >= STEADY_READS
+    }
+}
+
 async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, String> {
-    let form = poll(app, "read", &place_of(&target), READ_WAIT, |value| {
-        value["state"] == "ready" && (value["submitButtons"] == 1 || value["step"] == "next")
+    let steady = Steady::default();
+    let form = poll(app, "read", &place_of(&target), READ_WAIT, move |value| {
+        steady.settled(value)
     })
     .await?;
     if let Some(run) = app
@@ -317,22 +344,25 @@ async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, St
         .as_mut()
     {
         run.file_fields = file_fields_of(&form);
+        run.kinds = kinds_of(&form);
     }
+    let fields = kinds_of(&form).len();
     let form = crate::ats_steps::with_menus(app, form).await;
     let report = form_report(target, form, still_on_target(app, target));
-    note(app, "read", &format!("{}_{}", target.adapter, report.state));
+    let detail = format!("{}_{}_fields{fields}", target.adapter, report.state);
+    note(app, "read", &detail);
     Ok(report)
 }
 
 pub async fn fill_form(app: &AppHandle, request: FillRequest) -> Result<FillReport, String> {
     let target = current_target(app, &request.vacancy_id)?;
-    let file_fields = app
+    let (file_fields, kinds) = app
         .state::<AtsFormState>()
         .run
         .lock()
         .map_err(|_| "form_state_unavailable")?
         .as_ref()
-        .map(|run| run.file_fields.clone())
+        .map(|run| (run.file_fields.clone(), run.kinds.clone()))
         .unwrap_or_default();
     validate_fill(&request, &file_fields)?;
     if !still_on_target(app, &target) {
@@ -369,6 +399,9 @@ pub async fn fill_form(app: &AppHandle, request: FillRequest) -> Result<FillRepo
         run.filled = Some(values.clone());
     }
     note(app, "fill", &format!("fields{}", results.len()));
+    for rejected in rejected_fields(&request.entries, &results, &values, &kinds) {
+        note(app, "fill_rejected", &rejected);
+    }
     Ok(FillReport { results, values })
 }
 
@@ -570,4 +603,31 @@ pub fn show_form_window(app: &AppHandle, vacancy_id: &str) -> Result<bool, Strin
     };
     let _ = window.center();
     Ok(window.show().is_ok() && window.set_focus().is_ok())
+}
+
+#[cfg(test)]
+mod steady_tests {
+    use super::*;
+
+    #[test]
+    fn the_form_is_taken_only_once_a_loaded_page_stops_adding_fields() {
+        let form = |fields: usize, loaded: bool| {
+            json!({ "state": "ready", "submitButtons": 1, "step": "submit", "loaded": loaded,
+                    "fields": vec![json!({}); fields] })
+        };
+        let steady = Steady::default();
+        for value in [
+            form(7, false),
+            form(7, false),
+            form(7, true),
+            form(18, true),
+        ] {
+            assert!(!steady.settled(&value));
+        }
+        assert!(!steady.settled(&form(18, true)));
+        assert!(!steady.settled(&form(18, true)));
+        assert!(steady.settled(&form(18, true)));
+        let empty = Steady::default();
+        assert!((0..9).all(|_| !empty.settled(&form(0, true))));
+    }
 }

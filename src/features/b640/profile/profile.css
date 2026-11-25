@@ -9,6 +9,11 @@
       white-space: nowrap;
     }
   }
+  /* Д13: «Дальше» p06 стоит у низа окна. */
+  @media (min-width: 768px) {
+    .b640 .page.pf:has(> .act-dock.is-auto) { padding-block-end: 0; }
+    .b640 .pf > .act-dock.is-auto { padding-inline-start: calc(var(--career-space-6) + var(--career-border-width)); }
+  }
   /* S1 390: круг инициалов того же размера, что фото на 390 (56). */
   @media (max-width: 767px) {
     .b640 .phead-pic > .phead-ini {

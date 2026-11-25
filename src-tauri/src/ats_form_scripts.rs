@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn bamboohr_s_form_is_opened_once_and_only_on_a_vacancy_page() {
-        let page = r#"<div data-fabric-component="Box"><button type="button" id="open">Apply for This Job</button></div>"#;
+        let page = r#"<div data-fabric-component="Box"><button type="button" id="open">Apply for This Job</button><button type="button" id="again">Apply for This Job</button></div>"#;
         let read = || op("read", json!({ "hosts": ["hh.ru"], "path": "/careers/1" }));
         for (path, presses) in [
             ("/careers/1", 1),
@@ -409,6 +409,27 @@ mod tests {
             assert_eq!(parsed(&out, 1)["state"], "form_missing");
             assert_eq!(out["clicks"].as_array().unwrap().len(), presses, "{path}");
         }
+    }
+
+    #[test]
+    fn bamboohr_s_date_keeps_its_key_and_the_way_the_field_spells_it() {
+        let page = r#"<form id="job-application-form"><div data-fabric-component="TextInputWrapper"><label for="FabricTextField-77">Date Available</label><input type="text" id="FabricTextField-77" placeholder="mm/dd/yyyy"></div><button type="submit">Submit Application</button></form>"#;
+        let key = "label:Date Available";
+        let Some(out) = run(
+            page,
+            "/careers/1",
+            "",
+            &[
+                op("read", Value::Null),
+                op("fill", json!({ "entries": [{ "key": key, "value": "2027-01-15" }] })),
+                op("job", Value::Null),
+                op("snapshot", Value::Null),
+            ],
+        ) else {
+            return;
+        };
+        assert_eq!(parsed(&out, 0)["fields"][0]["key"], key);
+        assert_eq!(parsed(&out, 3)["values"][key], "01/15/2027");
     }
 
     #[test]
@@ -475,6 +496,30 @@ mod tests {
 
     /// Menus answer at once in jsdom; the page script waits between looks.
     const NO_WAIT: &str = "window.setTimeout = (f) => { queueMicrotask(f); };";
+
+    #[test]
+    fn teamtailor_waits_for_its_file_fields_and_for_the_upload() {
+        let box_up = "const b = document.querySelector('#upload_resume_field'); b.dataset.controller = 'forms--inputs--upload'; const f = b.querySelector('input[type=file]');";
+        let late = format!("{box_up} f.remove();");
+        let read = [op("read", json!(null))];
+        let Some(out) = run(TEAMTAILOR, "/jobs/1/applications/new", &late, &read) else {
+            return;
+        };
+        assert_eq!(parsed(&out, 0)["state"], "loading");
+        let key = "id:candidate_resume_remote_url";
+        let file = json!({ "name": "cv.pdf", "type": "application/pdf", "base64": "JVBERg==" });
+        let entries = json!({ "entries": [{ "key": key, "value": "", "file": file }] });
+        let transfer = "window.DataTransfer = class { constructor() { this.files = []; this.items = { add: (x) => this.files.push(x) }; } };";
+        let swap = format!("{NO_WAIT} {transfer} {box_up} Object.defineProperty(f, 'files', {{ writable: true }}); f.addEventListener('change', () => {{ f.disabled = true; const u = document.createElement('input'); u.id = f.id; u.value = 'https://s3.example/tmp/cv.pdf'; u.setAttribute('data-forms--inputs--upload-preview-target', 'urlInput'); b.append(u); }});");
+        let scripts = [
+            op("fill", entries),
+            op("job", json!(null)),
+            op("snapshot", json!(null)),
+        ];
+        let out = run(TEAMTAILOR, "/jobs/1/applications/new", &swap, &scripts).unwrap();
+        assert_eq!(parsed(&out, 1)["results"][key], "set");
+        assert_eq!(parsed(&out, 2)["values"][key], "cv.pdf");
+    }
 
     #[test]
     fn every_board_s_public_form_is_read_with_labels_kinds_and_one_send_button() {
