@@ -145,8 +145,8 @@ export function useCompanyList(): CompanyList {
 }
 
 function markedWant(before: Loaded, key: string, want: boolean): Loaded {
-  // Строки нет в списке или она уже с этой отметкой: число «Хочу» второй раз не меняем.
-  if (!before.items.some((item) => item.key === key && item.want !== want)) return before;
+  // Строка уже с этой отметкой: число «Хочу» второй раз не меняем.
+  if (before.items.some((item) => item.key === key && item.want === want)) return before;
   return {
     ...before,
     items: withWant(before.items, key, want),

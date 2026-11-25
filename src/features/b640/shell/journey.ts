@@ -95,7 +95,9 @@ const pathnameOf = (address: string): string => address.split(/[?#]/u)[0];
 export function journeyTo(to: string, from: string, current: Journey): Journey {
   if (!isObject(to)) return {};
   const id = Object.values(matchNode(to)?.params ?? {})[0] ?? '';
-  const vacancy = knownVacancy(id);
+  // После перезагрузки название помнит только запись истории.
+  const kept = id === current.vacancy?.vacancyId || pathnameOf(to) === pathnameOf(from);
+  const vacancy = knownVacancy(id) ?? (kept ? current.vacancy : null);
   const name = vacancy ? { vacancy } : {};
   const stops = stopsTo(from, current);
   const seen = stops.findIndex((stop) => pathnameOf(stop.path) === pathnameOf(to));
