@@ -1,4 +1,5 @@
 import type { B640Node } from '../routes';
+import { SECTION_CACHE_KEYS } from '../../shell/sectionCache';
 import { BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import { loadStatusId } from './careerApi';
@@ -13,7 +14,7 @@ import { RolesLoad, RolesView } from './RolesScreen';
  * «Меняю профессию» — путь в профессию (s11), «Работаю» — цель роста (s12), остальные — роль поиска и роли по профилю (s09).
  */
 export function CareerRoot({ node }: { readonly node: B640Node }) {
-  const status = useLoad(loadStatusId);
+  const status = useLoad(loadStatusId, SECTION_CACHE_KEYS.careerStatus);
   if (status.state !== 'ready') {
     return (
       <div className="page" {...pageAttrs(node)}>
@@ -30,5 +31,5 @@ export function CareerRoot({ node }: { readonly node: B640Node }) {
   }
   if (status.data === 'changing_profession') return <ProfessionScreen node={node} state="s11" />;
   if (status.data === 'working') return <GrowthScreen node={node} />;
-  return <RolesLoad node={node}>{(data) => <RolesView node={node} data={data} />}</RolesLoad>;
+  return <RolesView node={node} />;
 }
