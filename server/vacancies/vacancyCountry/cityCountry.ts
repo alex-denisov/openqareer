@@ -38,7 +38,7 @@ function lines(): readonly string[] {
     .split('\n');
 }
 
-/** Страны, где есть город с таким именем; у однозначного — одна. */
+/** Страны, где есть город с таким именем, от крупнейшего; у однозначного — одна. */
 export function cityCountries(city: string): readonly string[] {
   namesakes ??= new Map(
     lines().flatMap((line) => {

@@ -128,7 +128,17 @@ interface PlaceRead {
   readonly country: string;
   readonly basis: 'place' | 'city';
 }
-type PlaceAnswer = PlaceRead | 'dispute' | undefined;
+/** Место сузило выбор до двух стран: решают следующие признаки, при их молчании — `otherwise`. */
+interface OpenRead {
+  readonly among: readonly string[];
+  readonly otherwise?: string;
+}
+type PlaceAnswer = PlaceRead | OpenRead | 'dispute' | undefined;
+
+const isOpen = (answer: PlaceAnswer): answer is OpenRead =>
+  typeof answer === 'object' && 'among' in answer;
+const isRead = (answer: PlaceAnswer): answer is PlaceRead =>
+  typeof answer === 'object' && 'country' in answer;
 
 const read = (country: string | undefined, basis: PlaceRead['basis']): PlaceAnswer =>
   country ? { country, basis } : undefined;
@@ -136,9 +146,17 @@ const read = (country: string | undefined, basis: PlaceRead['basis']): PlaceAnsw
 function agreed(answers: readonly PlaceAnswer[]): PlaceAnswer {
   const reads = answers.filter((answer) => answer !== undefined);
   if (reads.some((answer) => answer === 'dispute')) return 'dispute';
-  const places = reads.filter((answer) => answer !== 'dispute');
-  if (new Set(places.map(({ country }) => country)).size > 1) return 'dispute';
-  return places.find(({ basis }) => basis === 'place') ?? places[0];
+  const places = reads.filter(isRead);
+  const countries = new Set(places.map(({ country }) => country));
+  const open = reads.filter(isOpen);
+  if (countries.size > 1) return 'dispute';
+  if (open.some(({ among }) => [...countries].some((country) => !among.includes(country))))
+    return 'dispute';
+  if (countries.size === 0 && new Set(open.map(({ among }) => among.join())).size > 1)
+    return 'dispute';
+  return places.length === 0
+    ? open[0]
+    : (places.find(({ basis }) => basis === 'place') ?? places[0]);
 }
 
 function cityRead(part: string, deps: CountryHintDeps): PlaceAnswer {
@@ -152,20 +170,24 @@ function regionOf(code: string): 'US' | 'CA' | undefined {
 
 /**
  * «Lebanon, NH», «London, ON». Код, который ещё и страна (DE, IN, NL), решает город: он должен быть в
- * одной из двух стран, иначе спор («Warsaw, IN», «Dublin, CA»).
+ * одной из двух стран; неясно — выбирают из этих двух следующие признаки («Warsaw, IN»).
  */
 function codeRead(code: string, city: string, deps: CountryHintDeps): PlaceAnswer {
   const region = regionOf(code);
   const isCountry = ISO_CODES.includes(code);
   const found = cityRead(city, deps);
   const foreign = FOREIGN_REGIONS.get(code);
-  if (found && found !== 'dispute' && found.country === foreign) return found;
+  if (isRead(found) && found.country === foreign) return found;
   if (!isCountry || COUNTRY_NAMESAKES.has(city.toLowerCase())) return read(region, 'place');
   const pair = cityCountries(city).filter((country) => country === region || country === code);
   const only = single(pair);
   if (only) return read(only, 'city');
-  const fits = found && found !== 'dispute' && [region, code].includes(found.country);
-  return fits ? found : 'dispute';
+  if (isRead(found) && [region, code].includes(found.country)) return found;
+  // «Vancouver, CA»: оба города — тёзки; крупнейший отвечает, когда молчат и остальные признаки.
+  return {
+    among: [region, code].filter((country) => country !== undefined),
+    ...(code === 'CA' && pair[0] ? { otherwise: pair[0] } : {}),
+  };
 }
 
 /** «Город, штат»: полное имя штата или его код. `undefined` — штата в месте нет. */
@@ -202,7 +224,7 @@ function georgiaRead(parts: readonly string[], deps: CountryHintDeps): PlaceAnsw
   const named = others.map(countryName).filter((code) => code !== undefined);
   if (named.length > 0) return read(single(named), 'place') ?? 'dispute';
   const city = agreed(others.map((part) => cityRead(part, deps)));
-  if (city === undefined || city === 'dispute') return city;
+  if (!isRead(city)) return city;
   return city.country === 'US' || city.country === 'GE' ? city : 'dispute';
 }
 
@@ -288,7 +310,8 @@ export function vacancyCountryHint(
   const urls = parsedUrls(input.urls);
   const place = input.location ? placeRead(input.location, deps) : undefined;
   if (place === 'dispute') return undefined;
-  if (place) return { ...place, lowConfidence: false };
+  if (isRead(place)) return { ...place, lowConfidence: false };
+  const among = isOpen(place) ? place.among : undefined;
   const steps: readonly [CountryHintBasis, () => string | undefined][] = [
     ['address', () => addressCountry(urls, deps)],
     ['employer', () => deps.employerCountry(input.company)],
@@ -297,9 +320,12 @@ export function vacancyCountryHint(
   ];
   for (const [basis, read] of steps) {
     const country = read();
-    if (country) return { country, basis, lowConfidence: basis === 'text' };
+    if (country && (!among || among.includes(country)))
+      return { country, basis, lowConfidence: basis === 'text' };
   }
-  return undefined;
+  return isOpen(place) && place.otherwise
+    ? { country: place.otherwise, basis: 'city', lowConfidence: true }
+    : undefined;
 }
 
 const MIN_EMPLOYER_VACANCIES = 3;
