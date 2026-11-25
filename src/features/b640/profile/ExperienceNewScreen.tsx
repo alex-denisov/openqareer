@@ -108,7 +108,7 @@ export function ExperienceNewScreen({ node }: { readonly node: B640Node }) {
               <FormatField form={form} onChange={change} />
               <TeamField {...fields} />
             </div>
-            <DescriptionField form={form} onChange={change} isNew />
+            <DescriptionField {...fields} />
             <ResultsField form={form} onChange={change} />
             <SkillsField form={form} onChange={change} />
             {error ? <StatusLine state="err" text={error} /> : null}

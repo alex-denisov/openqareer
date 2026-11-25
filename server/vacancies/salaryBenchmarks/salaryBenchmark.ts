@@ -1,7 +1,6 @@
 /**
  * B803: отдельная цифра открытой аналитики (агентство, портал, СМИ, госданные) с источником,
- * ссылкой, годом и датой чтения. Файл с цифрами лежит рядом с базой на хосте, не в репозитории:
- * репозиторий публичный, а цифры наружу не отдаются — только кандидату в кабинете.
+ * ссылкой, годом и датой чтения. Цифры живут только в базе: репозиторий публичный.
  */
 import { z } from 'zod';
 
@@ -70,41 +69,35 @@ const usesRefusedHost = (url: string) => REFUSED_HOSTS.test(new URL(url).hostnam
 export const salaryBenchmarkSourceSchema = z.strictObject({
   name,
   kind: z.enum(BENCHMARK_SOURCE_KINDS),
-  /** `false` убирает все цифры источника при следующей загрузке. */
+  /** `false` убирает цифры источника из подбора; его срезы остаются. */
   enabled: z.boolean(),
 });
 
-/** Файл: список источников и цифры; `sourceName` и `sourceKind` цифры — из списка. */
-export const salaryBenchmarksFileSchema = z
+/** Один срез источника: все его цифры на дату; `sourceName` и `sourceKind` цифры — его же. */
+export const salarySliceSchema = z
   .strictObject({
-    sources: z.array(salaryBenchmarkSourceSchema).max(500),
+    source: salaryBenchmarkSourceSchema,
+    sliceDate: isoDate,
     benchmarks: z.array(salaryBenchmarkSchema).max(50_000),
   })
-  .superRefine(({ sources, benchmarks }, context) => {
+  .superRefine(({ source, benchmarks }, context) => {
     const fail = (message: string) => context.addIssue({ code: 'custom', message });
-    const kinds = new Map(sources.map(({ name: source, kind }) => [source, kind]));
-    if (kinds.size !== sources.length) fail('duplicate source');
     if (new Set(benchmarks.map(({ id }) => id)).size !== benchmarks.length) fail('duplicate id');
     for (const row of benchmarks) {
-      if (kinds.get(row.sourceName) !== row.sourceKind) fail(`unknown source of ${row.id}`);
+      if (row.sourceName !== source.name || row.sourceKind !== source.kind)
+        fail(`another source of ${row.id}`);
       if (usesRefusedHost(row.sourceUrl)) fail(`refused source of ${row.id}`);
     }
   });
+export type SalarySlice = z.infer<typeof salarySliceSchema>;
 
 const MIN_SAMPLE = 15;
 /** Границы дальше друг от друга — это края выборки со сбоями («742–1 000 000»), а не вилка должности. */
 const MAX_RANGE_RATIO = 5;
 
 /** Отсев при загрузке: малая выборка не берётся, у неправдоподобных границ остаётся медиана. */
-function plausible(row: SalaryBenchmark): SalaryBenchmark[] {
+export function plausible(row: SalaryBenchmark): SalaryBenchmark[] {
   if (row.sampleSize !== null && row.sampleSize < MIN_SAMPLE) return [];
   if (row.low === null || row.high === null || row.high <= row.low * MAX_RANGE_RATIO) return [row];
   return row.median === null ? [] : [{ ...row, low: null, high: null }];
-}
-
-export function enabledBenchmarks(
-  file: z.infer<typeof salaryBenchmarksFileSchema>,
-): SalaryBenchmark[] {
-  const enabled = new Set(file.sources.filter((row) => row.enabled).map((row) => row.name));
-  return file.benchmarks.filter((row) => enabled.has(row.sourceName)).flatMap(plausible);
 }

@@ -292,7 +292,10 @@ export interface VacancyPoolStore {
   ): string[];
   /** B797: верх подборки в сверку живости и чтение очереди воркером обслуживания. */
   requestSelectionLiveness?(vacancyIds: readonly string[], nowMs?: number): void;
+  closedSelection?(): ReadonlySet<string>;
+  selectionRecentlyChecked?(id: string, nowMs?: number): boolean;
   dueSelectionLiveness?(limit: number, nowMs?: number): string[];
+  markSelectionLivenessTried?(vacancyId: string, nowMs?: number): void;
   markSelectionLivenessChecked?(vacancyId: string, nowMs?: number): void;
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
   loadHhTextCandidates?(

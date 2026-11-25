@@ -62,7 +62,8 @@ import { readTargetLevel } from './vacancyRoleContext';
 import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
-import { SELECTION_LIVENESS_TOP } from '../vacancies/selectionLiveness';
+import { engineListReads } from './matchedVacancyList';
+import { topSelectionIds } from './selectionTop';
 import type { ListPhasesMs } from './matchedListPhases';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -194,13 +195,6 @@ function logMatchedTiming(
     },
     'matched-vacancies-timing',
   );
-}
-
-/** B797: записи верха подборки для сверки живости. */
-function topSelectionIds(items: readonly MatchedVacancyItem[]): string[] {
-  return items
-    .slice(0, SELECTION_LIVENESS_TOP)
-    .map((item) => item.cluster.id.replace(/^cluster-/u, ''));
 }
 
 /** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
@@ -362,12 +356,8 @@ async function readMatchedPage(
     geography,
   );
   const snapshotMs = elapsedMs(startedAt);
-  const catalogTotals =
-    typeof engine.getCatalogTotals === 'function'
-      ? { catalogTotals: () => engine.getCatalogTotals!() }
-      : {};
   const { list, served } = await readMatchedList(
-    { ...read, snapshot, geography, ...catalogTotals },
+    { ...read, snapshot, geography, ...engineListReads(engine) },
     log,
   );
   const built = served === 'built';
