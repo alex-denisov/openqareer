@@ -1,3 +1,4 @@
+import { shownCertifications } from './resumeCertifications';
 import type { ResumeExperience, ResumeDocument, TargetedResumeSlice } from './resumeStudioTypes';
 import { relevanceScore, type ResumeRelevance } from './resumeRelevance';
 import type { TargetedResumeTrim, TargetedResumeVolume } from './resumeTargetedVolume';
@@ -16,7 +17,7 @@ const RECENT_BULLETS = 3;
 const OLDER_BULLETS = 1;
 /** Столько остаётся в разделе, когда он уступает место пунктам опыта. */
 const MIN_SKILLS = 8;
-const MIN_CREDENTIALS = 4;
+const MIN_CERTIFICATES = 2;
 const REASON = 'В пункте меньше всего совпадений с требованиями вакансии.';
 
 const wrapped = (text: string): number =>
@@ -80,9 +81,9 @@ function yieldSection(document: ResumeDocument, relevance: ResumeRelevance): Res
   if (project >= 0) return { ...document, projects: without(document.projects, project) };
   const skill = weakest(document.skills, MIN_SKILLS, (item) => score(item.name));
   if (skill >= 0) return { ...document, skills: without(document.skills, skill) };
-  const certificate = weakest(document.certifications, MIN_CREDENTIALS, (item) => score(item.name));
-  if (certificate >= 0) {
-    return { ...document, certifications: without(document.certifications, certificate) };
+  const certificates = document.certifications ?? [];
+  if (certificates.length > MIN_CERTIFICATES) {
+    return { ...document, certifications: certificates.slice(0, -1) };
   }
   return null;
 }
@@ -110,13 +111,26 @@ function weakestBullet(document: ResumeDocument, relevance: ResumeRelevance): We
   );
 }
 
+function withShownCertificates(
+  document: ResumeDocument,
+  relevance: ResumeRelevance,
+  now: Date,
+): ResumeDocument {
+  if (!document.certifications) return document;
+  return {
+    ...document,
+    certifications: shownCertifications(document.certifications, relevance, now),
+  };
+}
+
 /** Версия под вакансию на двух страницах: остаются пункты, отвечающие её требованиям, дословно. */
 export function fitVacancyResume(
   slice: TargetedResumeSlice,
   relevance: ResumeRelevance,
+  now: Date = new Date(),
 ): TargetedResumeVolume {
   const trimmed: TargetedResumeTrim[] = [];
-  let document = slice.document;
+  let document = withShownCertificates(slice.document, relevance, now);
   let size = measure(document);
   while (size.pages > MAX_PAGES) {
     const less = yieldSection(document, relevance);
