@@ -8,6 +8,7 @@ import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { BarPart } from '../Bar';
 import { moneyView } from '../format';
+import { BriefBlock } from './BriefBlock';
 import { CompanyName, type RowEnv } from './VacancyRow';
 
 function SourceTip({ label, text }: { label: string; text: string }) {
@@ -137,6 +138,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
             <FitScale item={item} />
             <MoneyScale item={item} env={env} />
           </div>
+          <BriefBlock clusterId={cluster.id} />
           <p className="vs-co">
             <Icon name="building" />
             <span>
