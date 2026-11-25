@@ -18,7 +18,7 @@ fn fills_the_only_field_and_presses_save_once() {
         html,
         FORM,
         &[
-            fill_script("Стало\n\"два\""),
+            fill_script("Было", "Стало\n\"два\""),
             save_script("Стало\n\"два\""),
             save_script("Стало\n\"два\""),
             read_script(),
@@ -63,7 +63,7 @@ fn refuses_every_unfamiliar_form_without_touching_it() {
         ),
         (format!("<div>{save}</div>"), "waiting"),
     ] {
-        let Some(out) = answers(&html, FORM, &[fill_script("Текст")]) else {
+        let Some(out) = answers(&html, FORM, &[fill_script("", "Текст")]) else {
             return;
         };
         assert_eq!(codes(&out), [expected], "{html}");
@@ -98,7 +98,7 @@ fn stops_on_sign_in_security_check_and_other_pages() {
             "target_redirect_rejected",
         ),
     ] {
-        let Some(out) = answers(html, url, &[fill_script("Текст")]) else {
+        let Some(out) = answers(html, url, &[fill_script("", "Текст")]) else {
             return;
         };
         assert_eq!(codes(&out), [expected], "{url}");
@@ -119,4 +119,14 @@ fn takes_the_form_address_from_the_captured_profile_link() {
         out["results"][0]["value"],
         "https://www.linkedin.com/in/ivan/edit/forms/summary/new/"
     );
+}
+
+#[test]
+fn does_not_replace_a_text_the_import_does_not_know() {
+    let html = "<div><textarea>Своя новая правка</textarea><button>Save</button></div>";
+    let Some(out) = answers(html, FORM, &[fill_script("Из импорта", "Стало")]) else {
+        return;
+    };
+    assert_eq!(codes(&out), ["changed_since_import"]);
+    assert_eq!(out["typed"].as_array().map(Vec::len), Some(0));
 }

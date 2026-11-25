@@ -48,14 +48,17 @@ return {{code:'read',value:a[0].href}};",
     ))
 }
 
-/// Polled: puts `text` into the field.
-pub fn fill_script(text: &str) -> String {
+/// Polled: puts `text` into the field, only over the text the import knows.
+pub fn fill_script(was: &str, text: &str) -> String {
     wrap(&format!(
-        "{form}if(el.maxLength>0&&{text}.length>el.maxLength)return {{code:'text_too_long'}};\
+        "{form}var norm=function(s){{return s.replace(/\\s+/g,' ').trim();}};\
+if(el.value!=={text}&&norm(el.value)!==norm({was}))return {{code:'changed_since_import'}};\
+if(el.maxLength>0&&{text}.length>el.maxLength)return {{code:'text_too_long'}};\
 Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,{text});\
 el.dispatchEvent(new Event('input',{{bubbles:true}}));el.dispatchEvent(new Event('change',{{bubbles:true}}));\
 return {{code:el.value==={text}?'field_set':'field_not_kept'}};",
         form = form(),
+        was = literal(was),
         text = literal(text),
     ))
 }

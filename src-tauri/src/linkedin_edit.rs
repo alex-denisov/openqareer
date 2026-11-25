@@ -33,6 +33,10 @@ pub struct LinkedinEditRequest {
     /// Only `about`; every other section keeps «Скопировать» and «Выполнено».
     pub section: String,
     pub text: String,
+    /// The section as the import read it; another text on LinkedIn is not replaced.
+    pub was: String,
+    /// `<slug>` of the imported profile (`/in/<slug>`): another account is not edited.
+    pub profile: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,14 +87,30 @@ fn validate(request: &LinkedinEditRequest) -> Result<String, String> {
         return Err("section_unsupported".into());
     }
     let text = field_text(&request.text);
-    if text.is_empty() || text.encode_utf16().count() > ABOUT_MAX_UTF16 {
+    if request.profile.trim().is_empty()
+        || text.is_empty()
+        || text.encode_utf16().count() > ABOUT_MAX_UTF16
+    {
         return Err("edit_invalid".into());
     }
     Ok(text)
 }
 
-/// The form address comes from a page: only the «О себе» form on linkedin.com passes.
-fn form_url(raw: &str) -> Option<Url> {
+/// The form address comes from a page: only the «О себе» form of the imported
+/// profile on linkedin.com passes.
+fn form_url(raw: &str, profile: &str) -> Result<Url, &'static str> {
+    let url = about_form(raw).ok_or("layout_unknown")?;
+    let expected = Url::parse(&format!("https://www.linkedin.com/in/{}/", profile.trim()))
+        .map_err(|_| "account_mismatch")?;
+    let slug = |url: &Url| url.path().split('/').nth(2).map(str::to_lowercase);
+    if slug(&url) == slug(&expected) {
+        Ok(url)
+    } else {
+        Err("account_mismatch")
+    }
+}
+
+fn about_form(raw: &str) -> Option<Url> {
     let url = Url::parse(raw).ok()?;
     let segments: Vec<&str> = url
         .path()
@@ -152,13 +172,24 @@ async fn expect(window: &Webview, script: &str, done: &str, late: &str) -> Resul
     }
 }
 
-async fn apply(app: &AppHandle, window: &Webview, text: &str) -> Result<(), String> {
+async fn apply(
+    app: &AppHandle,
+    window: &Webview,
+    request: &LinkedinEditRequest,
+    text: &str,
+) -> Result<(), String> {
     let profile = Url::parse(PROFILE_URL).map_err(|_| "page_load_failed".to_string())?;
     open(app, window, profile).await?;
     let link = read(window, &edit_link_script()).await?;
-    let form = form_url(&link).ok_or("layout_unknown")?;
+    let form = form_url(&link, &request.profile)?;
     open(app, window, form.clone()).await?;
-    expect(window, &fill_script(text), "field_set", "layout_unknown").await?;
+    expect(
+        window,
+        &fill_script(&field_text(&request.was), text),
+        "field_set",
+        "layout_unknown",
+    )
+    .await?;
     expect(
         window,
         &save_script(text),
@@ -200,7 +231,7 @@ pub async fn run_linkedin_edit(
     if is_session_window_on_screen(app, "linkedin") {
         return Ok(EditReport::failed("linkedin_busy"));
     }
-    Ok(match apply(app, &window, &text).await {
+    Ok(match apply(app, &window, &request, &text).await {
         Ok(()) => EditReport::applied(),
         Err(code) => EditReport::failed(&code),
     })
@@ -215,6 +246,8 @@ mod tests {
         let request = |section: &str, text: &str| LinkedinEditRequest {
             section: section.into(),
             text: text.into(),
+            was: String::new(),
+            profile: "ivan".into(),
         };
         assert_eq!(
             validate(&request("about", " a\r\nb ")).as_deref(),
@@ -229,14 +262,25 @@ mod tests {
 
     #[test]
     fn opens_only_the_about_form_of_linkedin() {
-        assert!(form_url("https://www.linkedin.com/in/ivan/edit/forms/summary/new/").is_some());
+        assert!(form_url(
+            "https://www.linkedin.com/in/ivan/edit/forms/summary/new/",
+            "Ivan"
+        )
+        .is_ok());
+        assert_eq!(
+            form_url(
+                "https://www.linkedin.com/in/petr/edit/forms/summary/new/",
+                "ivan"
+            ),
+            Err("account_mismatch")
+        );
         for bad in [
             "https://www.linkedin.com/in/ivan/edit/intro/",
             "https://www.linkedin.com/in/ivan/edit/forms/position/1/",
             "https://www.linkedin.com.evil.example/in/ivan/edit/forms/summary/new/",
             "http://www.linkedin.com/in/ivan/edit/forms/summary/new/",
         ] {
-            assert!(form_url(bad).is_none(), "{bad}");
+            assert!(form_url(bad, "ivan").is_err(), "{bad}");
         }
     }
 
