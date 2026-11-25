@@ -5,6 +5,7 @@
  * цифру, которой нет в профиле, и компанию, которой нет ни в профиле, ни в вакансии. Стиль, самооценка
  * и термины направления не отклоняются. Цифры прописью и слово в начале фразы не проверяются.
  */
+import { withWrittenAmounts } from './writtenAmounts';
 import { letterPlaceCheck } from './letterPlaces';
 import { distortedWords } from './letterWordDistortion';
 
@@ -65,26 +66,6 @@ function scaleOf(raw: string | undefined): number {
   if (text.startsWith('миллиард')) return 1e9;
   if (text.startsWith('тысяч')) return 1e3;
   return SCALE_VALUES[text] ?? 1;
-}
-
-/** Сумма словами: «двух миллиардов», «two billion» — такое же число, как «2 млрд». */
-const NUMBER_WORDS: readonly (readonly [string, number])[] = [
-  ['од(?:ин|на|ного|ной|ному|ним)', 1], ['полтора|полутора|полторы', 1.5], ['дв(?:а|е|ух|ум|умя)', 2],
-  ['тр(?:и|[её]х|[её]м|емя)', 3], ['четыр(?:е|[её]х|[её]м|ьмя)', 4], ['пят(?:ь|и|ью)', 5], ['шест(?:ь|и|ью)', 6],
-  ['сем(?:ь|и|ью)', 7], ['вос(?:емь|ьми|емью)', 8], ['девят(?:ь|и|ью)', 9], ['десят(?:ь|и|ью)', 10],
-  ['двадцат(?:ь|и|ью)', 20], ['тридцат(?:ь|и|ью)', 30], ['сорока?', 40], ['пятьдесят|пятидесяти', 50], ['ст[оа]', 100],
-  ['one', 1], ['two', 2], ['three', 3], ['four', 4], ['five', 5], ['six', 6], ['seven', 7], ['eight', 8], ['nine', 9], ['ten', 10],
-];
-const WORD_AMOUNTS = NUMBER_WORDS.map(([word, value]) => ({
-  value,
-  pattern: new RegExp(
-    String.raw`(?<!\p{L})(?:${word})\s+(?=млн|млрд|миллион|миллиард|million|billion)`,
-    'giu',
-  ),
-}));
-
-function withWrittenAmounts(text: string): string {
-  return WORD_AMOUNTS.reduce((rest, { pattern, value }) => rest.replace(pattern, `${value} `), text);
 }
 
 function currencyOf(raw: string | undefined): string | undefined {
