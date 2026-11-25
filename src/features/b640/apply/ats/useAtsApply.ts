@@ -46,7 +46,12 @@ export interface AtsApplyInput {
   readonly onManual: (reason: ManualApplyReason, host: string) => void;
 }
 
+/** Вопрос и ответ, который форма не взяла: изменённый ответ уже не отмечен. */
+export type Rejected = ReadonlyMap<string, string>;
+const NONE_REJECTED: Rejected = new Map();
+
 export interface AtsApplyControls {
+  readonly rejected: Rejected;
   readonly state: AtsApplyState;
   readonly host: string;
   /** Вопросы, на которые кандидат ещё не ответил. */
@@ -75,6 +80,7 @@ interface Core {
   /** Вопросы формы встают в «Анкету»; ответ не из списка стирается. */
   readonly takeForm: (next: AtsSession) => Promise<boolean>;
   readonly dropSession: () => void;
+  readonly reject: (questionIds: readonly string[]) => void;
   readonly toManual: (reason: ManualApplyReason, host: string) => void;
 }
 
@@ -84,7 +90,11 @@ const offList = (form: AtsSession['form']) => (draft: AnswerDraft) =>
     .filter(({ field, id }) => isOffList(field, answerOf(draft, id)))
     .map(({ id }) => id);
 
-function useCore(input: AtsApplyInput, setState: (next: AtsApplyState) => void): Core {
+function useCore(
+  input: AtsApplyInput,
+  setState: (next: AtsApplyState) => void,
+  reject: Core['reject'],
+): Core {
   const [session, setSession] = useState<AtsSession | null>(null);
   const latest = useRef(input);
   latest.current = input;
@@ -114,7 +124,7 @@ function useCore(input: AtsApplyInput, setState: (next: AtsApplyState) => void):
     [show],
   );
   const dropSession = useCallback(() => setSession(null), []);
-  return { latest, alive, inFlight, session, show, takeForm, dropSession, toManual };
+  return { latest, alive, inFlight, session, show, takeForm, dropSession, reject, toManual };
 }
 
 /** Открыть форму; прежнее нажатие показывает свой итог вместо неё. */
@@ -168,6 +178,12 @@ async function finish(core: Core, result: AtsRunResult, current: AtsSession): Pr
     const taken = await core.takeForm({ ...current, form: result.form });
     show({ kind: taken ? 'ready' : 'read_failed' });
     if (taken) latest.current.onAsk();
+    core.reject(
+      (result.rejected ?? []).flatMap((key) => {
+        const field = result.form.page.find((item) => item.key === key);
+        return field ? [questionIdOf(field)] : [];
+      }),
+    );
     return undefined;
   }
   if (result.kind === 'sent') {
@@ -186,6 +202,7 @@ async function sendNow(core: Core, open: () => Promise<void>): Promise<void> {
   // Форма отказала или потеряна: она читается заново, дальше — снова по команде кандидата.
   if (!current) return open();
   show({ kind: 'sending', seconds: 0 });
+  core.reject([]);
   const { vacancyId, employer, approved, letterText, questionnaire } = latest.current;
   if (!approved) return show({ kind: 'failed' });
   let result: AtsRunResult = { kind: 'failed' };
@@ -205,7 +222,10 @@ async function sendNow(core: Core, open: () => Promise<void>): Promise<void> {
 export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
   const { address, wanted, questionnaire } = input;
   const [state, setState] = useState<AtsApplyState>({ kind: 'reading' });
-  const core = useCore(input, setState);
+  const [rejected, setRejected] = useState<Rejected>(NONE_REJECTED);
+  const core = useCore(input, setState, (ids) =>
+    setRejected(new Map(ids.map((id) => [id, answerOf(questionnaire.draft, id)]))),
+  );
   const { session, inFlight, alive } = core;
   const open = useOpen(core);
   useAutoOpen(core, wanted && address !== null, open);
@@ -229,6 +249,7 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
     [session, questionnaire.draft, host],
   );
   return {
+    rejected,
     state,
     host,
     missing,

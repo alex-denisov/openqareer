@@ -498,6 +498,30 @@ mod tests {
     const NO_WAIT: &str = "window.setTimeout = (f) => { queueMicrotask(f); };";
 
     #[test]
+    fn teamtailor_waits_for_its_file_fields_and_for_the_upload() {
+        let box_up = "const b = document.querySelector('#upload_resume_field'); b.dataset.controller = 'forms--inputs--upload'; const f = b.querySelector('input[type=file]');";
+        let late = format!("{box_up} f.remove();");
+        let read = [op("read", json!(null))];
+        let Some(out) = run(TEAMTAILOR, "/jobs/1/applications/new", &late, &read) else {
+            return;
+        };
+        assert_eq!(parsed(&out, 0)["state"], "loading");
+        let key = "id:candidate_resume_remote_url";
+        let file = json!({ "name": "cv.pdf", "type": "application/pdf", "base64": "JVBERg==" });
+        let entries = json!({ "entries": [{ "key": key, "value": "", "file": file }] });
+        let transfer = "window.DataTransfer = class { constructor() { this.files = []; this.items = { add: (x) => this.files.push(x) }; } };";
+        let swap = format!("{NO_WAIT} {transfer} {box_up} Object.defineProperty(f, 'files', {{ writable: true }}); f.addEventListener('change', () => {{ f.disabled = true; const u = document.createElement('input'); u.id = f.id; u.value = 'https://s3.example/tmp/cv.pdf'; u.setAttribute('data-forms--inputs--upload-preview-target', 'urlInput'); b.append(u); }});");
+        let scripts = [
+            op("fill", entries),
+            op("job", json!(null)),
+            op("snapshot", json!(null)),
+        ];
+        let out = run(TEAMTAILOR, "/jobs/1/applications/new", &swap, &scripts).unwrap();
+        assert_eq!(parsed(&out, 1)["results"][key], "set");
+        assert_eq!(parsed(&out, 2)["values"][key], "cv.pdf");
+    }
+
+    #[test]
     fn every_board_s_public_form_is_read_with_labels_kinds_and_one_send_button() {
         // (form, fields, required, send button)
         for (html, fields, required, send) in [

@@ -67,11 +67,22 @@ function placeAgrees(left: string | undefined, right: string | undefined): boole
   return city(a, b) || city(b, a);
 }
 
+/** Название и место одни и те же: запись — та вакансия, которую показывает карточка. */
+export function isShownPosting(
+  shown: Pick<Posting, 'title' | 'location'>,
+  posting: Pick<Posting, 'title' | 'location'>,
+): boolean {
+  const title = wordList(shown.title).join(' ');
+  return (
+    title !== '' &&
+    title === wordList(posting.title).join(' ') &&
+    placeAgrees(shown.location, posting.location)
+  );
+}
+
 export function isSameVacancy(own: Posting, other: Posting): boolean {
   if (other.status !== 'active') return false;
   const company = companyKey(own.company);
   if (!company || company !== companyKey(other.company)) return false;
-  const title = wordList(own.title).join(' ');
-  if (!title || title !== wordList(other.title).join(' ')) return false;
-  return placeAgrees(own.location, other.location) && sameText(textOf(own), textOf(other));
+  return isShownPosting(own, other) && sameText(textOf(own), textOf(other));
 }

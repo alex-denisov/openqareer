@@ -146,6 +146,7 @@ const atsFormSchema = z
             text: z.string().min(1).max(500),
             required: z.boolean(),
             kind: z.enum(['text', 'choice']),
+            singleLine: z.boolean().optional(),
             options: z.array(z.string().min(1).max(200)).max(300).optional(),
             multiple: z.boolean().optional(),
             known: z.string().max(QUESTIONNAIRE_ANSWER_MAX_LENGTH).optional(),

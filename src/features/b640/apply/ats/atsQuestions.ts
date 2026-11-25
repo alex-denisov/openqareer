@@ -76,14 +76,28 @@ function isAsked(field: AtsField): boolean {
   return true;
 }
 
-function shapeOf(field: AtsField): Pick<QuestionnaireQuestion, 'kind' | 'options' | 'multiple'> {
+/** Поля, которые на форме — одна строка. */
+const SINGLE_LINE: ReadonlySet<AtsField['kind']> = new Set([
+  'text',
+  'email',
+  'tel',
+  'url',
+  'number',
+  'date',
+]);
+
+function shapeOf(
+  field: AtsField,
+): Pick<QuestionnaireQuestion, 'kind' | 'options' | 'multiple' | 'singleLine'> {
   if (field.kind === 'checkbox') {
     return field.required
       ? { kind: 'choice', options: [YES], multiple: true }
       : { kind: 'choice', options: [YES, NO] };
   }
   const options = optionsOf(field).map((option) => tidy(option.label));
-  if (options.length === 0) return { kind: 'text' };
+  if (options.length === 0) {
+    return SINGLE_LINE.has(field.kind) ? { kind: 'text', singleLine: true } : { kind: 'text' };
+  }
   return { kind: 'choice', options, ...(isChecks(field) ? { multiple: true } : {}) };
 }
 

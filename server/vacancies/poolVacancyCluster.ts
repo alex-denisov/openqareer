@@ -1,3 +1,4 @@
+import { isShownPosting } from '../domain/applyTarget/sameVacancy';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import type { RouteDeps } from '../routes/deps';
 import { clusterVacancies, createClusterFromVacancy, sourceMemberKey } from './vacancyDeduplicator';
@@ -64,7 +65,9 @@ export function resolveRowVacancyCluster(engine: Engine, id: string): VacancyClu
   const own = createClusterFromVacancy(record);
   if (own.id !== id) return resolved;
   const pieces = clusterVacancies([record, ...memberRecords(engine, resolved, record)]);
-  if (resolved.id === id && pieces.length === 1) return resolved;
+  // B787: у склейки название и место бывают от другого участника — тогда карточка — сама запись.
+  const shown = { title: resolved.canonicalTitle, location: resolved.canonicalLocation };
+  if (resolved.id === id && pieces.length === 1 && isShownPosting(shown, record)) return resolved;
   const sources = pieces.find((piece) => piece.id === id)?.sources ?? own.sources;
   return { ...own, sources, vacanciesCount: sources.length };
 }
