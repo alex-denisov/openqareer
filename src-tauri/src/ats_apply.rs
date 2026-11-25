@@ -46,6 +46,8 @@ pub(crate) struct Run {
     pub(crate) filled: Option<Values>,
     pub(crate) file_fields: FileFields,
     attempt: Option<Uuid>,
+    /// Fields the page had already marked when the button was pressed.
+    invalid_before: Value,
 }
 
 #[derive(Default)]
@@ -286,6 +288,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             filled: None,
             file_fields: FileFields::new(),
             attempt: None,
+            invalid_before: Value::Null,
         });
     }
     read_page(app, &target).await
@@ -392,7 +395,16 @@ async fn read_outcome(
     target: &AtsTarget,
     wait: Duration,
 ) -> (&'static str, Vec<String>) {
-    let argument = json!({ "confirmationPath": target.confirmation_path });
+    let invalid_before = app
+        .state::<AtsFormState>()
+        .run
+        .lock()
+        .ok()
+        .and_then(|run| run.as_ref().map(|run| run.invalid_before.clone()));
+    let argument = json!({
+        "confirmationPath": target.confirmation_path,
+        "invalidBefore": invalid_before,
+    });
     let last = poll(app, "outcome", &argument, wait, |value| {
         matches!(
             value["state"].as_str(),
@@ -456,6 +468,11 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
         return Ok(receipt(app, outcome, Some(reason), keys));
     }
     let pressed_at_ms = now_ms();
+    if let (Some(press), Ok(mut run)) = (press, app.state::<AtsFormState>().run.lock()) {
+        if let Some(run) = run.as_mut() {
+            run.invalid_before = press["invalidBefore"].clone();
+        }
+    }
     let (read, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
     let outcome = if read == "rejected" {
         let after = page(app, "snapshot", &Value::Null).await.ok();

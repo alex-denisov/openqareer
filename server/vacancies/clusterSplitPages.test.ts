@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { vacancyKey, vacancyPath } from '../../shared/vacancyCatalogRoutes';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { pageOwner } from './clusterSplitPages';
 import { revertClusterSplitStep, splitClustersStep } from './clusterSplitStep';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { createClusterFromVacancy, mergeVacancyIntoCluster } from './vacancyDeduplicator';
@@ -43,6 +44,8 @@ interface Seed {
 }
 
 const VK = vacancy('src-fh-vk', 'VK', 'Go Developer');
+/** Площадка того же ранга, что у основателя: ссылка карточки остаётся за ним. */
+const PEER = vacancy('src-w', 'Tata Capital', 'Relationship Manager');
 const TATA = vacancy('src-fh-oracle', 'Tata Capital', 'Relationship Manager');
 
 function seed({ founder = VK, other = TATA, link, title = 'Teller' }: Seed) {
@@ -152,5 +155,93 @@ describe('B752: published page addresses after a split', () => {
       expect(pathOf(world.db, world.id)).toBeUndefined();
       expect(outcomes(world.db)).toEqual([{ old_path: world.path, outcome: 'redirect' }]);
     });
+  });
+
+  it('the founder record is stored under another id — the cluster and its page stay with it', () => {
+    const founder = {
+      ...vacancy('dou-geniusee', 'Geniusee', 'Go Architect'),
+      id: 'dou-geniusee-55418',
+    };
+    const world = seed({ founder, other: PEER, link: founder.url });
+    splitThenRevert(world, (pages) => {
+      expect(pages).toMatchObject({ kept: 1 });
+      const own = world.store.getCluster(world.id)!;
+      expect(own).toMatchObject({ canonicalTitle: 'Go Architect', vacanciesCount: 1 });
+      expect(own.sources).toHaveLength(1);
+    });
+  });
+
+  it('the founder record dropped out of the sources — its page stays with it', () => {
+    const founder = vacancy('src-x', 'Summize', 'Legal Engineer');
+    const world = seed({ founder, other: PEER, link: founder.url });
+    const extra = vacancy('src-y', 'VIPcare', 'Office Manager');
+    world.store.replaceSourceSlice('src-y', [extra]);
+    const cluster = world.store.getCluster(world.id)!;
+    world.db
+      .prepare('UPDATE vacancy_clusters SET cluster_json = ? WHERE id = ?')
+      .run(JSON.stringify({ ...cluster, sources: [PEER.provenance, extra.provenance] }), world.id);
+    splitThenRevert(world, (pages) => {
+      expect(pages).toMatchObject({ kept: 1 });
+      expect(world.store.getCluster(world.id)!.canonicalTitle).toBe('Legal Engineer');
+    });
+  });
+
+  it('a withdrawn founder record is not brought back', () => {
+    const founder = { ...vacancy('src-x', 'Summize', 'Legal Engineer'), id: 'src-x-55418' };
+    const world = seed({ founder, other: PEER, link: founder.url });
+    const other = vacancy('src-y', 'VIPcare', 'Office Manager');
+    world.store.replaceSourceSlice('src-y', [other]);
+    const cluster = world.store.getCluster(world.id)!;
+    world.db
+      .prepare('UPDATE vacancy_clusters SET cluster_json = ? WHERE id = ?')
+      .run(
+        JSON.stringify({ ...cluster, sources: [...cluster.sources, other.provenance] }),
+        world.id,
+      );
+    world.db
+      .prepare("UPDATE vacancy_pool SET expired_at = '2026-11-20' WHERE id = ?")
+      .run(founder.id);
+    splitThenRevert(world, (pages) => expect(pages).toMatchObject({ gone: 1 }));
+  });
+
+  it('another cluster holds the same link and title — the address redirects to it', () => {
+    const outside = vacancy('src-z', 'Fulton Bank', 'Mortgage Officer');
+    const world = seed({ link: outside.url, title: 'Mortgage Officer' });
+    world.store.saveClusters([createClusterFromVacancy(outside)]);
+    splitThenRevert(world, (pages) => {
+      expect(pages).toMatchObject({ redirect: 1 });
+      expect(redirects(world.db)).toMatchObject([{ new_cluster_id: `cluster-${outside.id}` }]);
+    });
+  });
+
+  it('another cluster with the same link but another title is not a guess', () => {
+    const outside = vacancy('src-z', 'Fulton Bank', 'Mortgage Officer');
+    const world = seed({ link: outside.url, title: 'Teller' });
+    world.store.saveClusters([createClusterFromVacancy(outside)]);
+    splitThenRevert(world, (pages) => expect(pages).toMatchObject({ gone: 1 }));
+  });
+});
+
+describe('B752: one link at two pieces', () => {
+  const pieces = [
+    { ...createClusterFromVacancy(VK), primaryUrl: 'https://a.example/1' },
+    { ...createClusterFromVacancy(TATA), primaryUrl: 'https://a.example/1' },
+  ];
+  const links = new Map([['https://a.example/1', new Set([0, 1])]]);
+  const owner = (title: string, company: string) =>
+    pageOwner(
+      { entry_key: 'k', path: '/p', title, company, source_url: 'https://a.example/1' },
+      pieces,
+      links,
+    );
+
+  it.each([
+    ['Relationship Manager', 'Tata Capital', 1],
+    ['Relationship Manager', 'Renamed Ltd', 1],
+    ['Renamed role', 'VK', 0],
+    ['Renamed role', 'Tata Capital Limited', 1],
+    ['Renamed role', 'Renamed Ltd', undefined],
+  ])('%s / %s → %s', (title, company, expected) => {
+    expect(owner(title, company)).toBe(expected);
   });
 });

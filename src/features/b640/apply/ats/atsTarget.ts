@@ -3,7 +3,7 @@ import type { ApplyChannel, ApplyTarget } from '../../../../../shared/applyTarge
 
 /** B787: площадки, форму которых приложение заполняет само. Точный адрес проверяет приложение. */
 const HOSTS =
-  /^(?:(?:job-)?boards(?:\.eu)?\.greenhouse\.io|jobs\.ashbyhq\.com|jobs(?:\.eu)?\.lever\.co|apply\.workable\.com|[a-z0-9-]+\.(?:recruitee|teamtailor|pinpointhq)\.com)$/u;
+  /^(?:(?:job-)?boards(?:\.eu)?\.greenhouse\.io|jobs\.ashbyhq\.com|jobs(?:\.eu)?\.lever\.co|apply\.workable\.com|jobs\.smartrecruiters\.com|[a-z0-9-]+\.(?:recruitee|teamtailor|pinpointhq|bamboohr)\.com|[a-z0-9-]+\.breezy\.hr)$/u;
 
 const parse = (value: string | null | undefined): URL | null => {
   const url = value && URL.canParse(value) ? new URL(value) : null;
@@ -13,18 +13,12 @@ const parse = (value: string | null | undefined): URL | null => {
 export interface AtsAddress {
   readonly url: string;
   readonly host: string;
-  readonly board?: string;
 }
 
 function knownAddress(value: string | null | undefined): AtsAddress | null {
   const url = parse(value);
-  if (!url || !(HOSTS.test(url.hostname) || url.searchParams.has('gh_jid'))) return null;
-  const board = url.searchParams.get('board') ?? '';
-  return {
-    url: url.href,
-    host: url.hostname,
-    ...(/^[\w-]{1,100}$/u.test(board) ? { board } : {}),
-  };
+  // Доску знает сервер: её форма уже в `formUrl`. Параметрам адреса вакансии веры нет.
+  return url && HOSTS.test(url.hostname) ? { url: url.href, host: url.hostname } : null;
 }
 
 /** Адрес формы узнанной площадки: страница формы цели отклика, затем адрес вакансии. */

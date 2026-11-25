@@ -5,29 +5,21 @@ import {
   CLUSTER_SPLIT_BUDGET_MS,
   CLUSTER_SPLIT_MAX_PIECES,
   emptyResult,
-  pieceIdTaken,
   saveState,
   type ClusterSplitLog,
   type ClusterSplitStepResult,
   type StepContext,
 } from './clusterSplitContext';
-import { journalClusterSplit } from './clusterSplitJournal';
 import {
   clearProgress,
   continueLargeSplit,
-  finishSplit,
   readProgress,
-  startLargeSplit,
+  startSplit,
   type SplitProgress,
 } from './clusterSplitLarge';
-import {
-  planChunk,
-  planOf,
-  rememberPlan,
-  type PlannedItem,
-  type PlannedSplit,
-} from './clusterSplitPlan';
-import { prepareSplitWriters, writePiece } from './clusterSplitWrite';
+import { planChunk, planOf, rememberPlan, type PlannedItem } from './clusterSplitPlan';
+import { warmSplit } from './clusterSplitWarm';
+import { prepareSplitWriters } from './clusterSplitWrite';
 
 export { revertClusterSplitChunk, revertClusterSplitStep } from './clusterSplitRevert';
 export type { ClusterSplitLog, ClusterSplitStepResult } from './clusterSplitContext';
@@ -47,9 +39,13 @@ export interface ClusterSplitStepOptions {
   readonly maxPieces?: number;
   /** Время транзакции записи, после которого шаг не начинает новый кусок. */
   readonly budgetMs?: number;
+  /** Время планирования, после которого шаг не берёт следующий кластер. */
+  readonly planMs?: number;
 }
 
 export const CLUSTER_SPLIT_CHUNK = 200;
+/** Процесс обслуживания не стоит в планировании дольше одного кластера сверх этого. */
+export const CLUSTER_SPLIT_PLAN_MS = 500;
 const MAX_CHUNK = 1_000;
 export { CLUSTER_SPLIT_BUDGET_MS, CLUSTER_SPLIT_MAX_PIECES };
 
@@ -81,28 +77,6 @@ function clusterJson(db: DatabaseSync, id: string): string | undefined {
   return row?.cluster_json;
 }
 
-/** Кластер целиком в одной транзакции: журнал, куски, основатель. */
-function splitWhole(context: StepContext, plan: PlannedSplit): void {
-  const pieceIds = plan.pieces.slice(1).map((piece) => piece.id);
-  if (pieceIdTaken(context.db, pieceIds)) {
-    context.result.skippedIdTaken += 1;
-    return;
-  }
-  journalClusterSplit(context.db, {
-    stepId: context.stepId,
-    clusterId: plan.cluster.id,
-    pieceIds,
-    now: context.now,
-  });
-  for (const piece of plan.pieces.slice(1)) {
-    writePiece(context.writers, piece);
-    context.units += 1;
-  }
-  context.result.pieces += pieceIds.length;
-  context.result.newPieceIds.push(...pieceIds);
-  finishSplit(context, plan, context.stepId);
-}
-
 function applyItem(context: StepContext, item: PlannedItem): 'done' | 'partial' {
   if (item.kind === 'pass') return 'done';
   if (item.kind === 'ref') {
@@ -113,9 +87,10 @@ function applyItem(context: StepContext, item: PlannedItem): 'done' | 'partial' 
     });
     return 'done';
   }
-  if (item.pieces.length > context.maxPieces) return startLargeSplit(context, item);
-  splitWhole(context, item);
-  return 'done';
+  // Время вышло посреди кластера — остаток допишут следующие шаги, как у большого.
+  const outcome = startSplit(context, item);
+  if (outcome === 'partial') rememberPlan(item);
+  return outcome;
 }
 
 /** Пункты плана по порядку, пока есть бюджет; курсор встаёт на последний пройденный. */
@@ -176,6 +151,8 @@ function continueStep(
   const plan = row ? planOf(db, row.rowid, row.cluster_json) : undefined;
   if (plan) rememberPlan(plan);
   const referenced = candidateReferencedClusters(db);
+  const limit = Math.max(1, Math.trunc(options.maxPieces ?? CLUSTER_SPLIT_MAX_PIECES));
+  if (plan) warmSplit(db, [plan], { from: progress.next_index, limit });
   return inTransaction(db, () => {
     const context = started(contextFor(db, state.cursor_rowid, options, progress.journal_step_id));
     if (row && clusterJson(db, progress.cluster_id) !== row.cluster_json) return context.result;
@@ -207,7 +184,13 @@ export function splitClustersStep(
     chunk: Math.max(1, Math.min(Math.trunc(options.chunk ?? CLUSTER_SPLIT_CHUNK), MAX_CHUNK)),
     maxPieces: base.maxPieces,
     referenced: candidateReferencedClusters(db),
+    planMs: Math.max(0, options.planMs ?? CLUSTER_SPLIT_PLAN_MS),
   });
+  warmSplit(
+    db,
+    items.filter((item) => item.kind === 'split'),
+    { from: 1, limit: base.maxPieces },
+  );
   return inTransaction(db, () => {
     const context = started(base);
     writeItems(context, items, state.cursor_rowid);

@@ -19,6 +19,13 @@ describe('funnelLine (B650 s05b)', () => {
       }),
       sent('old', '2026-09-20T10:00:00.000Z', { stage: 'interview' }),
       application({ id: 'saved', stage: 'saved', appliedAt: null }),
+      application({
+        id: 'declined',
+        stage: 'archived',
+        appliedAt: null,
+        createdAt: '2026-10-05T10:00:00.000Z',
+        reachedStages: ['saved', 'archived'],
+      }),
     ];
     expect(funnelLine(items, SINCE)).toBe('С 2 октября: 3 отклика → 2 интервью → 1 оффер');
   });

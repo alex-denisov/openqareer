@@ -62,13 +62,14 @@ export function seedResume(candidates: Candidates, candidateId: string, title: s
 }
 
 export interface SetupOptions {
+  readonly vacancy?: Partial<VacancyCluster>;
   readonly billingEnforcement?: boolean;
   readonly coverLetterWriter?: CoverLetterWriter;
   readonly experienceFactRewriter?: PitchAppOptions['experienceFactRewriter'];
 }
 
 export async function setup(role?: string, options: SetupOptions = {}) {
-  const { app, candidates, databasePath } = await createApp([cluster], {
+  const { app, candidates, databasePath } = await createApp([{ ...cluster, ...options.vacancy }], {
     ...(options.billingEnforcement ? { billingEnforcement: true } : {}),
     ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter } : {}),
     ...(options.coverLetterWriter ? { coverLetterWriter: options.coverLetterWriter } : {}),

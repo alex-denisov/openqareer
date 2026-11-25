@@ -11,7 +11,7 @@ import { resolveCompany } from './deterministicResolver';
 import { politeFetch } from './hostLimiter';
 import { publicApiCounter } from '../freehire/freehireRepoCheck';
 import { DirectAtsDiscovery, DIRECT_ATS_FRESH_MS } from './directAtsDiscovery';
-import { orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
+import { directoryWindowEnd, orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -23,9 +23,10 @@ const BATCH = 200;
 const WORKERS = 12;
 const FIRST_RUN_MS = 7 * 60_000;
 const BETWEEN_MS = 5_000;
-const PAGE = 2_000;
+/** Directory rows one read looks at; a page of matches walked the whole directory at once (B761). */
+const WINDOW = 500;
 const QUEUE_TTL_MS = 6 * 60 * 60_000;
-const IDLE_MS = 6 * 60 * 60_000;
+const IDLE_MS = 10 * 60_000;
 
 export interface TickResult {
   readonly checked: number;
@@ -36,9 +37,10 @@ export interface TickResult {
 }
 
 /**
- * Pending companies, most pool vacancies first. The directory is read in pages
- * of PAGE rows with the event loop free between pages; the list is reread when
- * empty or older than QUEUE_TTL_MS.
+ * Pending companies, most pool vacancies first. The directory is read in windows
+ * of WINDOW rows with the event loop free between them; the list is reread when older
+ * than QUEUE_TTL_MS. A drained list is not: companies with a known board stay pending,
+ * and rereading for them held 75 % of the maintenance CPU (B761, prod 25.11).
  */
 export class PendingQueue {
   private items: PendingCompany[] = [];
@@ -51,18 +53,19 @@ export class PendingQueue {
   ) {}
 
   async next(count: number): Promise<readonly PendingCompany[]> {
-    if (this.items.length === 0 || this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh();
+    if (this.now() - this.readAt > QUEUE_TTL_MS) await this.refresh();
     return this.items.splice(0, count);
   }
 
   private async refresh(): Promise<void> {
     const all: PendingCompany[] = [];
     let after = '';
+    const directSince = this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined;
     for (;;) {
-      const page = readPendingPage(this.database, after, PAGE, this.direct ? this.now() - DIRECT_ATS_FRESH_MS : undefined);
-      all.push(...page);
-      if (page.length < PAGE) break;
-      after = page.at(-1)!.companyKey;
+      const until = directoryWindowEnd(this.database, after, WINDOW);
+      if (until === undefined) break;
+      all.push(...readPendingPage(this.database, after, WINDOW, directSince, until));
+      after = until;
       await new Promise((resolve) => setImmediate(resolve));
     }
     const ordered = orderByVacancies(all, vacancyCounts(this.database));

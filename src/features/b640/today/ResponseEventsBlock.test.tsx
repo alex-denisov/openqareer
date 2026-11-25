@@ -7,6 +7,7 @@ import { mount, type Mounted } from '../kit/testDom';
 import { application } from '../responses/model/testApplication';
 import { ShellProvider } from '../shell/ShellContext';
 import { ResponseEventsBlock } from './ResponseEventsBlock';
+import { responseEvents } from './responseEventsModel';
 
 const session = {
   username: 't',
@@ -36,7 +37,7 @@ async function open(applications: readonly ApplicationView[] | null): Promise<HT
   };
   view = mount(
     <ShellProvider value={value}>
-      <ResponseEventsBlock applications={applications} />
+      <ResponseEventsBlock events={applications ? responseEvents(applications) : []} />
     </ShellProvider>,
   );
   await act(async () => {

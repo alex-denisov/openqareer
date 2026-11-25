@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
-import { LIST_DATE_PERIODS, dateFacet, filteredFacetsOf, type FacetRow } from './listFilterFacets';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  LIST_DATE_PERIODS,
+  dateFacet,
+  filteredFacetSteps,
+  filteredFacetsOf,
+  type FacetRow,
+} from './listFilterFacets';
 
 const NOW = Date.parse('2026-11-20T10:00:00Z');
 const START = Date.parse('2026-11-20T00:00:00Z');
@@ -68,5 +74,27 @@ describe('filteredFacetsOf (B729)', () => {
   it('skips rows without a readable date', () => {
     const broken: FacetRow = { cluster: { firstObservedAt: 'не дата', sources: [] } };
     expect(filteredFacetsOf([broken]).observed).toEqual([]);
+  });
+});
+
+describe('filteredFacetSteps (B702)', () => {
+  const rows = Array.from({ length: 620 }, (_, index) =>
+    row({ at: NOW - index * DAY, location: `Город ${index % 90}`, isRemote: index % 3 === 0 }),
+  );
+
+  it('gives the same counts in pieces', () => {
+    const steps = filteredFacetSteps(rows);
+    let turns = 0;
+    let step = steps.next();
+    for (; !step.done; step = steps.next()) turns += 1;
+    expect(step.value).toEqual(filteredFacetsOf(rows));
+    expect(turns).toBeGreaterThan(10);
+  });
+
+  it('does not build a collator per comparison: the place sort held the loop on prod', () => {
+    const compare = vi.spyOn(String.prototype, 'localeCompare');
+    filteredFacetsOf(rows);
+    expect(compare).not.toHaveBeenCalled();
+    compare.mockRestore();
   });
 });

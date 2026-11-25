@@ -247,6 +247,31 @@ mod tests {
     }
 
     #[test]
+    fn a_mark_older_than_the_press_is_not_a_refusal() {
+        let stale = BOARD.replace(r#"id="email" "#, r#"id="email" aria-invalid="true" "#);
+        let outcome = || op("outcome", json!({ "invalidBefore": ["id:email"] }));
+        let quiet = "document.getElementById('application-form').addEventListener('submit', e => e.preventDefault());";
+        let refuse = "document.querySelector('button[type=submit]').addEventListener('click', e => { e.preventDefault(); document.getElementById('first_name').setAttribute('aria-invalid', 'true'); });";
+        for (setup, expected) in [
+            (quiet, json!({ "state": "pending" })),
+            (
+                refuse,
+                json!({ "state": "invalid", "keys": ["id:first_name"] }),
+            ),
+        ] {
+            let scripts = [press("submit"), outcome()];
+            let Some(out) = run(&stale, "/acme/jobs/1", setup, &scripts) else {
+                return;
+            };
+            assert_eq!(
+                parsed(&out, 0),
+                json!({ "state": "clicked", "invalidBefore": ["id:email"] })
+            );
+            assert_eq!(parsed(&out, 1), expected);
+        }
+    }
+
+    #[test]
     fn a_sign_in_page_or_a_missing_form_is_named_not_guessed() {
         let sign_in = r#"<form><input name="user"><input type="password" name="p"><button type="submit">Sign in</button></form>"#;
         for (html, state) in [

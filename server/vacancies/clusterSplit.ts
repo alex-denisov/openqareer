@@ -1,4 +1,4 @@
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { vacancyKey } from '../../shared/vacancyCatalogRoutes';
 import { parseVacancy } from './sqliteVacancyPoolStore';
@@ -46,12 +46,18 @@ export function planClusterSplit(
     if (found) members.push(found);
     else orphans.push(source);
   }
+  const founderId = founderOf(cluster);
+  // Запись, давшая кластеру id и страницу, могла выпасть из площадок: её кусок остаётся за ней.
+  const founderRecord = vacancies.get(founderId);
+  if (founderRecord && !members.includes(founderRecord)) members.unshift(founderRecord);
   const rebuilt = clusterVacancies(members);
   if (rebuilt.length <= 1) return [cluster];
-  const founderId = founderOf(cluster);
+  const founderKey = founderRecord ? sourceMemberKey(founderRecord.provenance) : undefined;
   const founderAt = Math.max(
     0,
-    rebuilt.findIndex((piece) => piece.sources.some((s) => sourceMemberKey(s) === founderId)),
+    rebuilt.findIndex((piece) =>
+      piece.sources.some((s) => [founderId, founderKey].includes(sourceMemberKey(s))),
+    ),
   );
   const pieces = rebuilt.map((piece, index) =>
     index === founderAt
@@ -112,7 +118,7 @@ export function loadMemberVacancies(
   db: DatabaseSync,
   cluster: VacancyCluster,
 ): Map<string, UnifiedVacancy> {
-  const statement = db.prepare('SELECT payload FROM vacancy_pool WHERE id = ?');
+  const statement = db.prepare('SELECT payload, expired_at FROM vacancy_pool WHERE id = ?');
   const found = new Map<string, UnifiedVacancy>();
   for (const source of cluster.sources) {
     const id = sourceMemberKey(source);
@@ -121,7 +127,28 @@ export function loadMemberVacancies(
     const vacancy = row ? parseVacancy(row.payload) : undefined;
     if (vacancy) found.set(id, vacancy);
   }
+  addFounderRecord(statement, cluster, found);
   return found;
+}
+
+/**
+ * Живая запись основателя, чья ссылка стоит на карточке кластера, даже когда её нет в
+ * площадках или её id в пуле другой («dou-x-1» против «dou-x:1»): иначе id кластера и
+ * страница достаются чужому куску (25.11: 12 живых страниц ушли в снятые).
+ */
+function addFounderRecord(
+  statement: StatementSync,
+  cluster: VacancyCluster,
+  found: Map<string, UnifiedVacancy>,
+): void {
+  const id = founderOf(cluster);
+  if (found.has(id)) return;
+  const row = statement.get(id) as { payload: string; expired_at: string | null } | undefined;
+  const vacancy = row && !row.expired_at ? parseVacancy(row.payload) : undefined;
+  if (!vacancy || vacancy.status !== 'active' || vacancy.url !== cluster.primaryUrl) return;
+  found.set(id, vacancy);
+  const key = sourceMemberKey(vacancy.provenance);
+  if (key && !found.has(key)) found.set(key, vacancy);
 }
 
 export function parseCluster(json: string): VacancyCluster | undefined {

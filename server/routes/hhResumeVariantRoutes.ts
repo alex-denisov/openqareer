@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { HhResumeEdit, HhResumeSnapshot } from '../../shared/hhCandidateSession';
+import type { HhResumeEdit } from '../../shared/hhCandidateSession';
 import { MAX_TEXT_VARIANTS } from '../../shared/textVariants';
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { SqliteTextVariantRepository, type TextSubject } from '../candidate/sqliteTextVariantRepository';
@@ -12,6 +12,7 @@ import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolvePoolVacancyCluster } from '../vacancies/poolVacancyCluster';
 import type { RouteDeps } from './deps';
 import { sendError } from './helpers';
+import { resumesForVacancy } from './hhVacancyResume';
 import { hhEditsInput, selectedWithSections, type SelectedWithSections } from './hhResumeEditsInput';
 import { hhCandidateOf, hhResumeEditsOf, withVariantSubjects } from './hhSessionRoutes';
 import { currentMaster } from './resumeMaster';
@@ -31,7 +32,6 @@ interface Stores {
 }
 
 interface Source {
-  readonly snapshot: HhResumeSnapshot;
   readonly resume: SelectedWithSections;
   readonly cluster: VacancyCluster;
 }
@@ -40,13 +40,13 @@ function sourceOf(
   deps: RouteDeps, stores: Stores, request: FastifyRequest, reply: FastifyReply, candidateId: string, vacancyId: string,
 ): Source | null {
   const snapshot = stores.hh.getSnapshot(candidateId);
-  const resume = selectedWithSections(snapshot);
-  if (!snapshot || !resume) {
+  const resume = selectedWithSections(snapshot && resumesForVacancy(deps, snapshot, vacancyId));
+  if (!resume) {
     sendError(reply, request, 409, 'hh_resume_sections_missing', 'Выберите резюме hh.ru ещё раз: его разделы не прочитаны.', false);
     return null;
   }
   const cluster = resolvePoolVacancyCluster(deps.multiSourceEngine, vacancyId);
-  if (cluster) return { snapshot, resume, cluster };
+  if (cluster) return { resume, cluster };
   sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   return null;
 }
@@ -54,7 +54,7 @@ function sourceOf(
 function variantRequest(
   deps: RouteDeps, stores: Stores, subject: TextSubject, source: Source, edit: HhResumeEdit, vacancyId: string,
 ): HhResumeVariantRequest | null {
-  const { platform, vacancy } = hhEditsInput(deps, subject.candidateId, source.snapshot, source.resume, source.cluster, vacancyId);
+  const { platform, vacancy } = hhEditsInput(deps, subject.candidateId, source.resume, source.cluster, vacancyId);
   return hhResumeVariantRequest({
     edit,
     language: hhResumeLanguage(source.resume.sections),
@@ -72,8 +72,8 @@ async function writeVariant(
 ) {
   const { candidateId } = subject;
   const edits = withVariantSubjects(
-    deps, candidateId, source.snapshot, source.resume, source.cluster, vacancyId,
-    await hhResumeEditsOf(deps, candidateId, source.snapshot, source.resume, source.cluster, vacancyId),
+    deps, candidateId, source.resume, source.cluster, vacancyId,
+    await hhResumeEditsOf(deps, candidateId, source.resume, source.cluster, vacancyId),
   );
   const edit = edits.find((item) => item.variantOf?.subjectId === subject.subjectId);
   const input = edit ? variantRequest(deps, stores, subject, source, edit, vacancyId) : null;

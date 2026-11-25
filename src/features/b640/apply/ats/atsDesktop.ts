@@ -10,13 +10,9 @@ import type {
 } from './atsFormTypes';
 
 /** B787: форма работодателя в скрытом окне приложения. Вне приложения каждая команда отвечает `null`. */
-export function openAtsForm(
-  vacancyId: string,
-  url: string,
-  board?: string,
-): Promise<AtsFormReport | null> {
+export function openAtsForm(vacancyId: string, url: string): Promise<AtsFormReport | null> {
   return invokeDesktopCommand<AtsFormReport>('ats_form_open', {
-    request: { vacancyId, url, board: board ?? null },
+    request: { vacancyId, url },
   });
 }
 
