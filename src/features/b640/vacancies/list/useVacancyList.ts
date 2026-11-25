@@ -332,10 +332,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     rates,
     now,
     sortState,
-    serverMode,
-    rolesReady,
-    server,
-    shown,
+    ...{ serverMode, rolesReady, server, shown },
   });
   return {
     pool,
@@ -356,6 +353,6 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     showMore: serverMode ? server.loadMore : () => setShown((value) => value + PAGE_SIZE),
     server: { active: serverMode, status: server.status, retry: server.retry },
     rolesReady,
-    noRole: pool.campaign !== undefined && pool.campaign.roles.value.length === 0,
+    noRole: pool.campaign?.roles.value.length === 0,
   };
 }
