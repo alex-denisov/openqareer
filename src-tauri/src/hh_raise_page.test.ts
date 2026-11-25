@@ -15,6 +15,8 @@ const script = (list: boolean, mayPress: boolean) =>
 
 const menu = '<div data-qa="mainmenu_applicantProfile"></div>';
 const raiseButton = '<button data-qa="resume-update-button">Поднять в поиске</button>';
+const state = (userType: string) =>
+  `<template id="HH-Lux-InitialState">${JSON.stringify({ userType })}</template>`;
 
 function open(
   html: string,
@@ -82,7 +84,15 @@ describe('B699: страница поднятия резюме hh.ru', () => {
     expect(open('<form><input type="password"></form>', 'https://hh.ru/account/login').run()).toBe(
       'logged_out',
     );
-    expect(open(raiseButton).run()).toBe('logged_out');
+    expect(open(`${state('anonymous')}${raiseButton}`).run()).toBe('logged_out');
+  });
+
+  it('B704: нет меню и нет состояния страницы — вход не подтверждён и не опровергнут', () => {
+    for (const html of [raiseButton, `${state('')}`, '<h1>403</h1>']) {
+      const page = open(html);
+      expect(page.run()).toBe('waiting');
+      expect(page.clicks).toHaveLength(0);
+    }
   });
 
   it('чужой домен — foreign_page', () => {

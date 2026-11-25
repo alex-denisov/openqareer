@@ -86,6 +86,8 @@ interface PlatformRowProps {
 interface HhMenuItems {
   readonly onRefresh: () => void;
   readonly onChange?: () => void;
+  /** B704: вход истёк — вход заново вместо «Отключить» в строке. */
+  readonly onConnect?: () => void;
 }
 
 interface ConfirmProps {
@@ -192,6 +194,7 @@ function ActionsMenu({ open, updated, hh, onDisconnect }: MenuProps) {
 /** Пункт меню сначала закрывает меню, потом действует. */
 function closingFirst(hh: HhMenuItems, close: () => void): HhMenuItems {
   return {
+    ...hh,
     onRefresh: () => {
       close();
       hh.onRefresh();
@@ -215,7 +218,17 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
 
   return (
     <div className="set-r cn-end" ref={ref}>
-      {opened === 'confirm' ? null : (
+      {opened !== 'confirm' && hh?.onConnect ? (
+        <button
+          className="btn is-sm"
+          type="button"
+          aria-label={`Подключить ${name}`}
+          onClick={hh.onConnect}
+        >
+          Подключить
+        </button>
+      ) : null}
+      {opened === 'confirm' || hh?.onConnect ? null : (
         <button
           className="btn is-sm cn-off"
           type="button"
@@ -259,7 +272,8 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
 function PlatformRow({ connection, onDisconnected, expired, onRefreshed }: PlatformRowProps) {
   const hhActions = useHhRowActions(onRefreshed ?? (() => undefined), connection.platform);
   const change = connection.platform === 'hh' ? hhActions.change : undefined;
-  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: change } : null;
+  const onConnect = expired ? hhActions.connect : undefined;
+  const hh = onRefreshed ? { onRefresh: hhActions.refresh, onChange: change, onConnect } : null;
   return (
     <li className="set-row cn-row">
       <div className="set-l">

@@ -1,3 +1,4 @@
+import { reportHhAlive } from '../b640/apply/hh/hhAlive';
 import { useEffect, useRef, useState } from 'react';
 import type { HhProfileIdentity } from '../../services/connectors/hhProfileParser';
 import { ArrowSquareOut, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
@@ -222,6 +223,7 @@ export function HhConnectModal({
         // parking it here failed every capture that followed a perfectly good
         // sign-in — and the step then reported the import as failed (B157).
         signedIn.current = true;
+        void reportHhAlive();
         setWaiting({ text: 'Вход выполнен — читаем список ваших резюме…', stuck: false });
       },
       onChoiceRequired: (result) => {

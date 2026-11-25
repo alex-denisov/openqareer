@@ -37,10 +37,10 @@ const READING = {
   linkedin: 'Читаем профиль в LinkedIn…',
 } as const;
 
-/** Окно входа hh.ru; код сессии грузится по нажатию. */
-async function openHhSignIn(): Promise<void> {
+/** Вход в окне hh.ru до исхода (сбой окна — входа нет); код сессии грузится по нажатию. */
+async function signInToHh(): Promise<boolean> {
   const desktop = await import('../apply/hh/hhDesktop');
-  await desktop.openHhSignIn().catch(() => false);
+  return desktop.signInToHh().catch(() => false);
 }
 
 async function showHhCaptcha(): Promise<void> {
@@ -91,14 +91,18 @@ export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linke
   async function run(flow: Flow) {
     if (platform === 'linkedin') return refreshLinkedIn();
     setState({ kind: 'reading' });
+    let signedIn = false;
     try {
       const list = await readHhResumeList();
+      signedIn = list.kind !== 'signin';
       if (list.kind !== 'ready') {
         setState({ kind: list.kind });
+        if (signedIn) onRefreshed();
         return;
       }
       if (flow === 'change') {
         setState({ kind: 'choose', resumes: list.resumes, selectedId: list.selectedId });
+        onRefreshed();
         return;
       }
       await refreshHhProfile(list.resumes, list.selectedId);
@@ -106,7 +110,15 @@ export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linke
       onRefreshed();
     } catch (reason: unknown) {
       setState(failedState(flow, reason, () => void run(flow)));
+      // Вход виден, хотя профиль не обновился: пометка «вход истёк» снята — строку перечитать.
+      if (signedIn) onRefreshed();
     }
+  }
+
+  /** B704: вход заново на месте строки; после него данные hh.ru читаются сразу. */
+  async function connect() {
+    close();
+    if (await signInToHh()) await run('refresh');
   }
 
   async function choose(resumes: readonly HhResumeItem[], chosen: HhResumeItem) {
@@ -120,7 +132,8 @@ export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linke
     refresh: () => void run('refresh'),
     change: () => void run('change'),
     choose,
-    signIn: leave(openHhSignIn),
+    connect: () => void connect(),
+    signIn: () => void connect(),
     captcha: leave(showHhCaptcha),
     close,
   };
