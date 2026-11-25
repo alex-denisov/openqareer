@@ -4,11 +4,15 @@ import type {
   CandidateCompanyWantPage,
   CandidateCompanyWantStageFilter,
 } from '../../../../shared/candidateCompany';
+import { listApplicationsPool, type ApplicationView } from '../../applications/applicationsApi';
 import { DEFAULT_COMPANY_WANT_QUERY, getCompanyWantPage } from '../../applications/companyWantsApi';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { setCandidateCompanyWantByName } from '../../vacancies/candidateCompaniesApi';
+import { companyLookupKey } from '../../vacancies/vacancyScreenCollections';
 import { Button, InfoTip, Link, ResultLine, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
+import { companyNodePath } from '../vacancies/companyPath';
+import { useResponseMarks } from './data/responseSummaryApi';
 import { useAsync, type AsyncState } from './data/useAsync';
 import { longDate, pluralRu, type TagTone } from './model/responseRow';
 
@@ -31,8 +35,8 @@ export interface CompanyWantFace {
   readonly tag: { readonly tone: TagTone; readonly label: string };
   readonly brief: string;
   readonly actionLabel: string;
-  /** Куда ведёт следующий шаг: подборка или контакты (страница компании v10b ещё заглушка). */
-  readonly actionNode: 's07' | 'a02';
+  /** Куда ведёт следующий шаг: письмо черновика или карточка этой компании (v10b). */
+  readonly actionPath: string;
 }
 
 function vacanciesBrief(company: CandidateCompanyOpportunity, pending: boolean): string | null {
@@ -54,6 +58,58 @@ function nextStepLabel(company: CandidateCompanyOpportunity): string | null {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : null;
 }
 
+/** Карточка компании; без названия компании ссылки на неё нет. */
+function companyPath(company: CandidateCompanyOpportunity): string {
+  return companyNodePath(company.name) ?? buildNodePath('a02');
+}
+
+/** Отклик-черновик компании: письмо ещё не одобрено, вакансия известна. */
+export function companyDraftId(
+  company: CandidateCompanyOpportunity,
+  applications: readonly ApplicationView[],
+  approved: ReadonlySet<string>,
+): string | null {
+  const vacancyIds = new Set(company.vacancies.map((vacancy) => vacancy.id));
+  const name = companyLookupKey(company.name);
+  const draft = applications.find((item) => {
+    if (item.stage !== 'saved' || !item.clusterId) return false;
+    if (item.materials.coverLetter || approved.has(item.id)) return false;
+    if (vacancyIds.has(item.clusterId)) return true;
+    const vacancy = item.vacancy;
+    return Boolean(
+      name && !vacancy?.companyHidden && companyLookupKey(vacancy?.company ?? '') === name,
+    );
+  });
+  return draft?.id ?? null;
+}
+
+type FaceAction = Pick<CompanyWantFace, 'actionLabel' | 'actionPath'>;
+
+function faceAction(
+  company: CandidateCompanyOpportunity,
+  pending: boolean,
+  draftId: string | null,
+): FaceAction {
+  if (draftId) {
+    return {
+      actionLabel: 'Проверить письмо',
+      actionPath: buildNodePath('o02', { responseId: draftId }),
+    };
+  }
+  const hasVacancies = company.hasNewVacancies || (!pending && company.vacancyCount > 0);
+  return {
+    actionLabel: hasVacancies ? 'Смотреть вакансии' : (nextStepLabel(company) ?? 'Найти путь'),
+    actionPath: companyPath(company),
+  };
+}
+
+function faceTag(company: CandidateCompanyOpportunity): CompanyWantFace['tag'] {
+  if (company.hasNewVacancies) return { tone: 'ok', label: 'новые вакансии' };
+  if (company.wantStage === 'waiting') return { tone: 'part', label: 'жду вакансию' };
+  if (company.wantStage === 'path') return { tone: 'miss', label: 'ищу путь' };
+  return { tone: '', label: 'хочу' };
+}
+
 /**
  * Строка компании: статус, «вакансии · знакомые» и следующий шаг. Пока подборка догружается
  * (`pending`), число вакансий не показывается, чтобы не написать «нет вакансий» раньше времени.
@@ -61,25 +117,12 @@ function nextStepLabel(company: CandidateCompanyOpportunity): string | null {
 export function companyWantFace(
   company: CandidateCompanyOpportunity,
   pending = false,
+  draftId: string | null = null,
 ): CompanyWantFace {
   const brief = [vacanciesBrief(company, pending), contactsBrief(company)]
     .filter(Boolean)
     .join(' · ');
-  const step = nextStepLabel(company);
-  if (company.hasNewVacancies) {
-    return {
-      tag: { tone: 'ok', label: 'новые вакансии' },
-      brief,
-      actionLabel: 'Смотреть вакансии',
-      actionNode: 's07',
-    };
-  }
-  const action = { actionLabel: step ?? 'Найти путь', actionNode: 'a02' } as const;
-  if (company.wantStage === 'waiting')
-    return { tag: { tone: 'part', label: 'жду вакансию' }, brief, ...action };
-  if (company.wantStage === 'path')
-    return { tag: { tone: 'miss', label: 'ищу путь' }, brief, ...action };
-  return { tag: { tone: '', label: 'хочу' }, brief, ...action };
+  return { tag: faceTag(company), brief, ...faceAction(company, pending, draftId) };
 }
 
 function headline(page: CandidateCompanyWantPage): string {
@@ -144,17 +187,19 @@ function AddCompanyForm({ primary, onAdded }: AddFormProps) {
 interface CompanyRowProps {
   readonly company: CandidateCompanyOpportunity;
   readonly pending: boolean;
+  readonly draftId: string | null;
+  /** Первая строка с черновиком письма: главное действие экрана. */
+  readonly next: boolean;
 }
 
-function CompanyRow({ company, pending }: CompanyRowProps) {
-  const face = companyWantFace(company, pending);
-  const path = buildNodePath(face.actionNode);
+function CompanyRow({ company, pending, draftId, next }: CompanyRowProps) {
+  const face = companyWantFace(company, pending, draftId);
   return (
-    <li className="cw-row">
-      <span className="cw-co">
+    <li className={next ? 'cw-row is-next' : 'cw-row'}>
+      <Link className="cw-co" to={companyPath(company)}>
         <b>{company.name}</b>
         {company.industry ? <span className="cw-ind"> · {company.industry}</span> : null}
-      </span>
+      </Link>
       <span className="cw-st">
         <span className={`tag ${face.tag.tone}`}>{face.tag.label}</span>
       </span>
@@ -165,7 +210,11 @@ function CompanyRow({ company, pending }: CompanyRowProps) {
         {face.brief}
       </span>
       <span className="cw-act">
-        <Link className="btn cw-ib" to={path} aria-label={`${face.actionLabel}: ${company.name}`}>
+        <Link
+          className={next ? 'btn is-primary' : 'btn cw-ib'}
+          to={face.actionPath}
+          aria-label={`${face.actionLabel}: ${company.name}`}
+        >
           {face.actionLabel}
         </Link>
       </span>
@@ -181,6 +230,8 @@ interface WantsState {
   readonly extra: readonly CandidateCompanyOpportunity[];
   readonly moreState: 'idle' | 'busy' | 'error';
   readonly showMore: (offset: number) => void;
+  readonly applications: readonly ApplicationView[];
+  readonly approved: ReadonlySet<string>;
   readonly added: string | null;
   readonly onAdded: (name: string) => void;
 }
@@ -208,6 +259,19 @@ function usePendingRefresh(state: AsyncState<CandidateCompanyWantPage>, reload: 
   }, [pending, tries, reload]);
 }
 
+const NO_APPLICATIONS: readonly ApplicationView[] = [];
+
+async function loadApplications(signal: AbortSignal): Promise<readonly ApplicationView[]> {
+  return (await listApplicationsPool({}, signal)).items;
+}
+
+/** Отклики для «Проверить письмо»; не загрузились — строки ведут в карточки компаний. */
+function useDrafts(): Pick<WantsState, 'applications' | 'approved'> {
+  const { state } = useAsync(loadApplications, 'Отклики не загрузились.');
+  const { approvedLetters } = useResponseMarks();
+  return { applications: state.data ?? NO_APPLICATIONS, approved: approvedLetters };
+}
+
 function useCompanyWantsList(): WantsState {
   const [stage, setStage] = useState<CandidateCompanyWantStageFilter>('all');
   const [extra, setExtra] = useState<readonly CandidateCompanyOpportunity[]>([]);
@@ -219,7 +283,9 @@ function useCompanyWantsList(): WantsState {
   );
   const { state, reload } = useAsync(load, 'Компании не загрузились.');
   usePendingRefresh(state, reload);
+  const drafts = useDrafts();
   return {
+    ...drafts,
     stage,
     state,
     reload,
@@ -293,6 +359,8 @@ interface WantsListProps {
 function WantsList({ wants, page }: WantsListProps) {
   const items = [...page.items, ...wants.extra];
   const left = page.total - items.length;
+  const draftIds = items.map((item) => companyDraftId(item, wants.applications, wants.approved));
+  const nextIndex = draftIds.findIndex((id) => id !== null);
   return (
     <>
       {items.length === 0 ? (
@@ -301,11 +369,13 @@ function WantsList({ wants, page }: WantsListProps) {
         </p>
       ) : (
         <ul className="cw-rows cw-list" aria-label="Компании">
-          {items.map((company) => (
+          {items.map((company, index) => (
             <CompanyRow
               company={company}
               key={company.key}
               pending={page.vacanciesPending === true}
+              draftId={draftIds[index] ?? null}
+              next={index === nextIndex}
             />
           ))}
         </ul>

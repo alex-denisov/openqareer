@@ -57,7 +57,7 @@ function readTextVariants(sources: ContentExportSources, candidateId: string): E
   return subjects.map(({ kind, subjectId }) => ({
     kind,
     subjectId,
-    variants: repository.list({ candidateId, kind, subjectId }).variants,
+    variants: repository.list({ candidateId, kind, subjectId }, 'all').variants,
   }));
 }
 
