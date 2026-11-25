@@ -1925,7 +1925,7 @@ fn admit_linkedin_read(app: &AppHandle, path: &str) -> Result<Duration, String> 
 
 /// Spaces a sign-in window navigation without spending the read budget; a
 /// poisoned guard only skips the pause, it never blocks the sign-in.
-fn pace_linkedin_navigation(app: &AppHandle) -> Duration {
+pub(crate) fn pace_linkedin_navigation(app: &AppHandle) -> Duration {
     app.state::<LinkedInReadGuardState>()
         .0
         .lock()
