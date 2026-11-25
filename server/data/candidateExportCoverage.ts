@@ -153,6 +153,8 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_draft_workflow: { export: 'content' },
   candidate_feed_posts: { export: 'content' },
   text_variants: { export: 'content' },
+  text_variant_stale: { internal: 'отметка «ждёт пересборки»: сами варианты — в text_variants' },
+  candidate_fact_corrections: { internal: 'журнал для отмены правки: сами записи — в профиле, письмах и правках резюме' },
   candidate_resume_edit_choices: { export: 'content' },
   candidate_linkedin_offer_variants: { export: 'content' },
   candidate_linkedin_queue: { export: 'content' },
