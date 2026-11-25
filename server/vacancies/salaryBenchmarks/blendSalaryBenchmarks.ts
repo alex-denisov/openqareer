@@ -22,6 +22,7 @@ export interface BlendInput {
   readonly tax: Tax;
   readonly payBase: PayBase;
   readonly year: number;
+  readonly confidence: SalaryBenchmark['confidence'];
 }
 
 /** Только то, что можно отдать экрану. */
@@ -48,6 +49,8 @@ const KIND_WEIGHT: Readonly<Record<BenchmarkSourceKind, number>> = {
   media: 2,
   gov: 1,
 };
+/** Вес цифры, у которой период или вид выведен, а не назван. */
+const REDUCED_WEIGHT = 0.5;
 /** Каждый год возраста снижает вес. */
 const YEAR_DECAY = 0.7;
 /** Один источник: границы раздвигаются, чтобы не повторять его цифру и не обещать точность. */
@@ -75,12 +78,14 @@ export function blendInputOf(row: SalaryBenchmark): BlendInput | undefined {
         tax: row.tax,
         payBase: row.payBase,
         year: row.year,
+        confidence: row.confidence,
       }
     : undefined;
 }
 
 function weightOf(input: BlendInput, year: number): number {
-  return KIND_WEIGHT[input.kind] * YEAR_DECAY ** Math.max(0, year - input.year);
+  const trust = input.confidence === 'reduced' ? REDUCED_WEIGHT : 1;
+  return trust * KIND_WEIGHT[input.kind] * YEAR_DECAY ** Math.max(0, year - input.year);
 }
 
 /** Сумма в валюте и периоде опорного источника; нет курса — источник не участвует. */
@@ -133,12 +138,15 @@ export function blendSalary(
   );
   const [base] = ordered;
   if (!base) return undefined;
-  const used = ordered.flatMap((input) => {
+  const converted = ordered.flatMap((input) => {
     const range = convertTo(input, base, rates);
     return range
       ? [{ ...range, name: input.sourceName, tax: input.tax, weight: weightOf(input, year) }]
       : [];
   });
+  // Источник голосует один раз, сколько бы строк он ни дал.
+  const rowsOf = (source: string) => converted.filter(({ name }) => name === source).length;
+  const used = converted.map((row) => ({ ...row, weight: row.weight / rowsOf(row.name) }));
   const total = used.reduce((sum, { weight }) => sum + weight, 0);
   if (total <= 0) return undefined;
   const single = new Set(used.map(({ name }) => name)).size === 1;

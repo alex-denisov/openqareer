@@ -33,6 +33,7 @@ const row = (patch: Partial<SalaryBenchmark> = {}): SalaryBenchmark => ({
   period: 'month',
   tax: 'unknown',
   payBase: 'unknown',
+  confidence: 'full',
   year: 2026,
   sampleSize: null,
   readOn: '2026-11-25',
@@ -219,6 +220,15 @@ describe('blendSalary kinds and rounding', () => {
     const base = at('B', 1_000, { payBase: 'base', year: 2020 });
     const unknown = at('U', 1_000, { year: 2020 });
     expect(blendOf(total, base, unknown)).toMatchObject({ low: 1_000, high: 2_000 });
+  });
+
+  it('a source with many rows votes once and a doubtful one votes half', () => {
+    const many = [1, 2, 3, 4].map((index) => at('A', 1_000, { id: `a-${index}-row` }));
+    expect(blendOf(...many, at('B', 2_000, {}))).toMatchObject({ low: 1_500, high: 3_000 });
+    expect(blendOf(at('A', 1_000, {}), at('B', 2_500, { confidence: 'reduced' }))).toMatchObject({
+      low: 1_500,
+      high: 3_000,
+    });
   });
 
   it('rounds an hourly and a daily rate by its size', () => {

@@ -41,6 +41,8 @@ export const salaryBenchmarkSchema = z
     payBase: z.enum(['base', 'total', 'unknown']).default('unknown'),
     year: z.number().int().min(2015).max(2100),
     sampleSize: z.number().int().positive().nullable(),
+    /** Период или вид цифры выведен по порядку величин, а не назван источником. */
+    confidence: z.enum(['full', 'reduced']).default('full'),
     readOn: isoDate,
   })
   .refine((row) => (row.country === null) !== (row.region === null), 'country or region, not both')
