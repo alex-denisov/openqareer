@@ -249,3 +249,79 @@ describe('RU и EN — один состав фактов (B785)', () => {
     expect(quantitiesOf(en)).toEqual(quantitiesOf(ru));
   });
 });
+
+describe('один язык листа (Д17)', () => {
+  const sheet = {
+    ...english,
+    experience: [
+      {
+        ...english.experience[2]!,
+        employer: item('Россети Цифра'),
+        bullets: [item('Joined Россети Цифра')],
+      },
+      ...english.experience.slice(0, 2),
+    ],
+    courses: [
+      { id: 'c', name: 'Project Management', institution: 'Корпоративный университет Сбербанка' },
+    ],
+    projects: [
+      {
+        id: 'p',
+        name: item('Support portal'),
+        employer: null,
+        description: item('Built e-therapy service'),
+      },
+      { id: 'q', name: item('e-therapy'), employer: null, description: null },
+    ],
+  } as unknown as ResumeDocument;
+
+  it.each(['en', undefined] as const)(
+    'английский лист без перевода (%s): названия латиницей',
+    (lang) => {
+      const result = translatedDocument(sheet, lang, {});
+      const text = JSON.stringify(result);
+      expect(text).not.toMatch(/[а-яё]/iu);
+      expect(text).toContain('Joined Rosseti Tsifra');
+      expect(text).toContain('Korporativnyy universitet Sberbanka');
+    },
+  );
+
+  it('написание кандидата важнее транслитерации, чужие буквы не меняются', () => {
+    const moldova = {
+      ...sheet,
+      education: [
+        { ...sheet.education[0]!, institution: item('Universitatea Tehnică a Moldovei') },
+      ],
+    } as unknown as ResumeDocument;
+    const result = translatedDocument(moldova, 'en', {}, moldova, [
+      'Rosseti Digital is the employer',
+    ]);
+    expect(result.experience[0]?.employer?.value).toBe('Rosseti Digital');
+    expect(result.education[0]?.institution?.value).toBe('Universitatea Tehnică a Moldovei');
+  });
+
+  it('русский лист: курс и проект переведены, e-therapy остаётся', async () => {
+    const answers = {
+      ...RU,
+      'Project Management': 'Управление проектами',
+      'Support portal': 'Портал поддержки',
+      'Built e-therapy service': 'Создал сервис e-therapy',
+      'Joined Россети Цифра': 'Пришёл в Россети Цифра',
+    };
+    const result = await translateDocument(sheet, 'ru', {}, translator(answers), 5_000);
+    const russian = translatedDocument(sheet, 'ru', result.translations);
+    expect(russian.courses?.[0]?.name).toBe('Управление проектами');
+    expect(russian.projects?.map(({ name }) => name.value)).toEqual([
+      'Портал поддержки',
+      'e-therapy',
+    ]);
+    expect(russian.projects?.[0]?.description?.value).toBe('Создал сервис e-therapy');
+  });
+
+  it('перевод, потерявший e-therapy, не берётся', async () => {
+    const answers = { ...RU, 'Built e-therapy service': 'Создал сервис электронной терапии' };
+    const result = await translateDocument(sheet, 'ru', {}, translator(answers), 5_000);
+    const russian = translatedDocument(sheet, 'ru', result.translations);
+    expect(russian.projects?.[0]?.description?.value).toBe('Built e-therapy service');
+  });
+});
