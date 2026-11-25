@@ -312,6 +312,12 @@ describe('очередь «отправить вручную»', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(inputs).toHaveLength(1);
     age();
+    // B649: флаг кабинета снят — такт кандидата не берёт.
+    run("UPDATE users SET username = 'without.flag' WHERE username = 'candidate.pitch'");
+    tick();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inputs).toHaveLength(1);
+    run("UPDATE users SET username = 'candidate.pitch' WHERE username = 'without.flag'");
     tick();
     tick();
     await vi.waitFor(() => expect(inputs).toHaveLength(2));
