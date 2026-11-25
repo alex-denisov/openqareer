@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CoachTurnInput } from './coach';
+import { coachTurnInputSchema, type CoachTurnInput } from './coach';
 import { serializeCoachInput } from './coachInputSerialization';
 import { correctionCards, type FactSource } from './factCorrectionProposals';
 
@@ -29,5 +29,16 @@ describe('B796: консультант знает о карточке под р�
       JSON.parse(serializeCoachInput({ ...input, correctionCards: cards })).correctionCards,
     ).toEqual(cards);
     expect(serializeCoachInput(input)).not.toContain('"correctionCards"');
+  });
+
+  it('снаружи карточки не принимаются', () => {
+    const parsed = coachTurnInputSchema.parse({
+      candidateReference: 'candidate-1',
+      messages: [
+        { id: 'm1', role: 'user', content: 'Привет', createdAt: '2026-11-25T12:00:00.000Z' },
+      ],
+      correctionCards: [{ place: 'О себе', from: '80', to: '40' }],
+    });
+    expect(parsed).not.toHaveProperty('correctionCards');
   });
 });
