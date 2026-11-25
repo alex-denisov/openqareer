@@ -249,6 +249,7 @@ function documentFactTexts(document: ResumeDocument): string[] {
       return [...assertionTexts([item.name, item.cefr]), ...nativeFacts];
     }),
     ...(document.courses ?? []).flatMap((item) => [item.name, item.provider, item.institution]),
+    ...(document.certifications ?? []).map((item) => item.name),
     ...(document.tests ?? []).flatMap((item) => [item.name, item.provider, item.score]),
     ...(document.recommendations ?? []).flatMap((item) => [
       item.author,

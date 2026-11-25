@@ -97,8 +97,12 @@ function formatAtsCourses(doc: ResumeDocument, draft: ResumeDraft): string | nul
     })
     .filter(Boolean);
 
-  return coursesList.length > 0
-    ? '=== COURSES AND CERTIFICATIONS ===\n' + coursesList.join('\n')
+  const certificates = (doc.certifications ?? []).map((item) =>
+    [item.name, item.issuer, item.issuedAt].filter(Boolean).join(' | '),
+  );
+  const list = [...coursesList, ...certificates];
+  return list.length > 0
+    ? '=== COURSES AND CERTIFICATIONS ===\n' + list.join('\n')
     : null;
 }
 
