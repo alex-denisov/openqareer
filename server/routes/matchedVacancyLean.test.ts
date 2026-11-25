@@ -10,10 +10,13 @@ afterEach(async () => {
   forgetMatchedListsForTests();
 });
 
+/** Равные строки идут по id, поэтому номер одной ширины. */
+const rowId = (index: number) => `v-${String(index).padStart(2, '0')}`;
+
 /** Строка весом ~3 КБ: страница по 40 КБ берёт меньше двадцати таких строк. */
 function heavyRow(index: number): MatchedVacancyItem {
   const base = poolItem({
-    id: `v-${index}`,
+    id: rowId(index),
     title: `Инженер ${index}`,
     company: `Компания ${index}`,
   });
@@ -77,7 +80,7 @@ describe('B725: облегчённые строки подбора для каб
       const page = (await get(`${OLD}?offset=${offset}`, 'flagged.test')).json();
       ids.push(...page.data.map((row: { cluster: { id: string } }) => row.cluster.id));
     }
-    expect(ids).toEqual(Array.from({ length: 87 }, (_, index) => `v-${index}`));
+    expect(ids).toEqual(Array.from({ length: 87 }, (_, index) => rowId(index)));
   });
 
   describe('страница 0 и фасеты двумя запросами', () => {

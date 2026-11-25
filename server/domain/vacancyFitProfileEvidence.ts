@@ -1,13 +1,15 @@
 import type { CandidateSnapshot } from '../data/candidateStore';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import type { ResumeDraft } from './resumeDraft';
+import { mergedMonths, monthIndex } from './resumeMonth';
+import { isLeadingItTitle } from './vacancyFitWorkEvidence';
 import { isVacancyFitEvidence, type VacancyFitFact } from './vacancyFit';
 
 /** Profile sections sent besides dossier facts; the model call stays bounded (01.11). */
 export const MAX_PROFILE_EVIDENCE_FACTS = 120;
 export const MAX_PROFILE_EVIDENCE_CHARS = 600;
 /** A place carries its description and bullets (02.11: P&L lived there and was never sent). */
-export const MAX_EXPERIENCE_EVIDENCE_CHARS = 1500;
+export const MAX_EXPERIENCE_EVIDENCE_CHARS = 3000;
 /**
  * Bytes of the facts JSON the model sees. The bulk client refuses a call whose upper bound exceeds
  * the $0.01 hold (~58 KB with 4096 output tokens) before the network: 01.11 a large profile hit it
@@ -128,10 +130,6 @@ function credentialSections(draft: ResumeDraft): readonly SectionText[] {
   ];
 }
 
-const monthOf = (date: string | undefined): number | null => {
-  const match = date?.match(/^(\d{4})(?:-(\d{2}))?/u);
-  return match ? Number(match[1]) * 12 + (Number(match[2] ?? 1) - 1) : null;
-};
 const yearsWord = (years: number): string => {
   const [tens, ones] = [years % 100, years % 10];
   if (tens >= 11 && tens <= 14) return 'лет';
@@ -141,25 +139,22 @@ const yearsWord = (years: number): string => {
 /** 02.11 owner: «опыт от 5 лет» needs the total, counted from the place dates with overlaps merged. */
 function tenureText(draft: ResumeDraft, now: Date): string {
   const today = now.getUTCFullYear() * 12 + now.getUTCMonth();
-  const spans = draft.experience
-    .map(
-      (item) =>
-        [monthOf(item.startDate), item.current ? today : (monthOf(item.endDate) ?? null)] as const,
-    )
-    .filter(
-      (span): span is readonly [number, number] =>
-        span[0] !== null && span[1] !== null && span[1] >= span[0],
-    )
-    .sort((left, right) => left[0] - right[0]);
-  const { months } = spans.reduce(
-    (total, [start, end]) => {
-      const from = Math.max(start, total.until);
-      return end + 1 > from ? { months: total.months + end + 1 - from, until: end + 1 } : total;
-    },
-    { months: 0, until: -Infinity },
-  );
-  const years = Math.floor(months / 12);
-  return years > 0 ? `Общий стаж работы: ${years} ${yearsWord(years)} (по датам мест работы)` : '';
+  const yearsOf = (places: ResumeDraft['experience']): number => {
+    const spans = places.flatMap((item): readonly (readonly [number, number])[] => {
+      const start = monthIndex(item.startDate);
+      const end = item.current ? today : monthIndex(item.endDate);
+      return start !== null && end !== null && end >= start ? [[start, end + 1] as const] : [];
+    });
+    return Math.floor(mergedMonths(spans) / 12);
+  };
+  const years = yearsOf(draft.experience);
+  if (years <= 0) return '';
+  const total = `Общий стаж работы: ${years} ${yearsWord(years)} (по датам мест работы)`;
+  // B794: «опыт ИТ-директором от 5 лет» needs the sum of leading places, which no single place shows.
+  const leading = yearsOf(draft.experience.filter((item) => isLeadingItTitle(item.title ?? '')));
+  return leading > 0
+    ? `${total}; на руководящих ИТ-должностях: ${leading} ${yearsWord(leading)}`
+    : total;
 }
 
 function draftSections(draft: ResumeDraft, text: MemoryText, now: Date): readonly SectionText[] {

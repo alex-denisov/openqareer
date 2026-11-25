@@ -333,6 +333,8 @@ function readNonNegativeInteger(value: string | undefined, fallback: number): nu
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+/** B759: фоновые задания по расписанию — после SIGTERM новые не начинаются. */
+const stopJobs: Array<() => void> = [];
 let stopSalaryMarketSnapshots: (() => void) | undefined;
 let stopCatalogRuSummaries: (() => void) | undefined;
 let stopOpenRouterBalance: (() => void) | undefined;
@@ -345,6 +347,7 @@ function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   return shutdownMaintenance(signal, {
     stopTimers: () => {
+      for (const stop of stopJobs.splice(0)) stop();
       stopSalaryMarketSnapshots?.();
       stopCatalogRuSummaries?.();
       stopOpenRouterBalance?.();
@@ -403,14 +406,14 @@ try {
     }, CLUSTER_SPLIT_START_DELAY_MS);
   }
   // B535: landing numbers are counted here, never on the web server's event loop.
-  scheduleLandingStatsJob(semanticDatabase, log);
+  stopJobs.push(scheduleLandingStatsJob(semanticDatabase, log));
   // CPO 27.10: курсы ЦБ для фильтра «Зарплата», раз в сутки, наружу ходит только этот процесс.
-  scheduleCurrencyRatesJob(semanticDatabase, log);
+  stopJobs.push(scheduleCurrencyRatesJob(semanticDatabase, log));
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
-  scheduleCatalogSitemapJob(semanticDatabase, log, config);
+  stopJobs.push(scheduleCatalogSitemapJob(semanticDatabase, log, config));
   // 11.11: 2 000 random sitemap addresses a day by the same rules as verify-sitemap.
-  scheduleSitemapHealth(semanticDatabase, log, config);
+  stopJobs.push(scheduleSitemapHealth(semanticDatabase, log, config));
   // 04.11: listings with impressions in Google keep `index` below their threshold.
   stopCatalogSearchEvidence = scheduleCatalogSearchEvidence(
     semanticDatabase,
@@ -427,18 +430,18 @@ try {
     log,
   );
   // B546: market salary estimates stream every salaried vacancy, so only here.
-  scheduleMarketSalaryEstimateJob(semanticDatabase, log);
+  stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
-  scheduleRemoteScopeBackfill(semanticDatabase, log);
+  stopJobs.push(scheduleRemoteScopeBackfill(semanticDatabase, log));
   // B725: покрывающий индекс подбора — один раз, вне старта веб-процесса.
-  scheduleSemanticCoverIndex(semanticDatabase, log);
+  stopJobs.push(scheduleSemanticCoverIndex(semanticDatabase, log));
   // B627 / B643-9: домен, карьеры и ATS без модели (решение владельца 11.11), ≤480 компаний в сутки.
   if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1')
-    scheduleSiteDiscovery(semanticDatabase, log);
+    stopJobs.push(scheduleSiteDiscovery(semanticDatabase, log));
   // B644: компании и доски ATS из каталога репозитория freehire (файл), вместо API freehire.me (B641).
-  scheduleFreehireRepo(semanticDatabase, log, process.env);
+  stopJobs.push(scheduleFreehireRepo(semanticDatabase, log, process.env));
   // B645: все ~520 тыс. компаний freehire по публичным страницам (__data.json), ~3 запроса/с, без модели.
-  scheduleFreehirePages(semanticDatabase, log, process.env);
+  stopJobs.push(scheduleFreehirePages(semanticDatabase, log, process.env));
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
     stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(

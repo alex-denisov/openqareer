@@ -177,7 +177,7 @@ describe('vacancy fit evidence from the whole profile (01.11)', () => {
       new Date('2026-11-02'),
     );
     expect(facts.find((fact) => fact.id === 'profile:tenure')?.statement).toBe(
-      'Общий стаж работы: 22 года (по датам мест работы)',
+      'Общий стаж работы: 22 года (по датам мест работы); на руководящих ИТ-должностях: 22 года',
     );
   });
 });

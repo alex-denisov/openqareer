@@ -4,6 +4,8 @@
  * Отправляет анкету кандидат сам — на странице работодателя.
  */
 
+import type { NumberLimits } from './questionnaireNumber';
+
 export const QUESTIONNAIRE_MAX_QUESTIONS = 40;
 export const QUESTIONNAIRE_ANSWER_MAX_LENGTH = 4000;
 
@@ -22,6 +24,8 @@ export interface QuestionnaireQuestion {
   readonly singleLine?: boolean;
   /** Поле формы принимает только число. */
   readonly numeric?: boolean;
+  /** Границы числового поля. */
+  readonly limits?: NumberLimits;
 }
 
 export interface QuestionnaireAnswer {
