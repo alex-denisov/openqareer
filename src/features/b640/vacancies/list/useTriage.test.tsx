@@ -40,13 +40,15 @@ function Probe({
   hideMany = async () => [],
   items = ITEMS,
   query = null,
+  ready,
 }: {
   query?: string | null;
+  ready?: boolean;
   hideMany?: (entries: readonly { item: unknown; reason: string }[]) => Promise<readonly string[]>;
   items?: typeof ITEMS;
 }) {
   const [shown, setShown] = useState(items);
-  const triage = useTriage(shown, hideMany as never, { query, expected: 883 });
+  const triage = useTriage(shown, hideMany as never, { query, expected: 883, ready });
   return (
     <div>
       <output
@@ -97,6 +99,25 @@ describe('режим «Помочь выбрать»', () => {
     expect(request.mock.calls[0]![0]).toEqual({ clusterIds: ['a', 'b', 'c'] });
     expect(request.mock.calls[0]![1]).toEqual({});
     expect(out(view.container).dataset).toMatchObject({ status: 'ready', picked: '1', pickA: 'true', whyA: 'не та роль' });
+    view.unmount();
+  });
+
+  it('B801 Н2: роли списка ещё не поставлены — разбор ждёт их и берёт ту же выборку, что шапка', async () => {
+    request.mockResolvedValue(result([keep('a')]));
+    let roles: () => void = () => {};
+    function Seeded() {
+      const [set, setSet] = useState(false);
+      roles = () => setSet(true);
+      return <Probe query={set ? 'role=CTO' : ''} ready={set} />;
+    }
+    const view = mount(<Seeded />);
+    press(view.container, 'start');
+    await flush();
+    expect(request).not.toHaveBeenCalled();
+    expect(out(view.container).dataset).toMatchObject({ active: 'true', status: 'loading', total: '883' });
+    await act(async () => roles());
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0]![0]).toEqual({ query: 'role=CTO' });
     view.unmount();
   });
 
