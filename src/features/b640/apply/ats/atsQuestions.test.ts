@@ -62,6 +62,10 @@ describe('вопросы формы работодателя в «Анкете»
 
   it('вопрос Greenhouse несёт номер открытого списка; одинаковые подписи не путаются', () => {
     expect(questionIdOf(visa)).toBe('question_77');
+    expect(questionIdOf(field('id:x', 'Salary', { question: '4082600' }))).toBe(
+      'teamtailor_4082600',
+    );
+    expect(questionIdOf(field('id:x', 'Salary', { question: 'a b' }))).toMatch(/^ats-/u);
     expect(questionIdOf(field('id:a', 'X'))).not.toBe(questionIdOf(field('id:b', 'X')));
   });
 

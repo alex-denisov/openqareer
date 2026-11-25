@@ -1,3 +1,4 @@
+import { compensationPeriodWord } from './vacancyCompensation';
 import { vacancyRemoteLabel } from './vacancyRemoteLabel';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { useCallback, useMemo, useState } from 'react';
@@ -679,6 +680,7 @@ function renderSalary(salary: MatchedVacancyItem['cluster']['salary']): React.Re
       {from && to ? ' ' : null}
       {to}
       {currency ? `\u00a0${currency}` : null}
+      {compensationPeriodWord(salary)}
     </>
   );
 }

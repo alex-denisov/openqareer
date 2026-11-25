@@ -25,7 +25,7 @@ import { funnelLine } from './funnelLineModel';
 import { getStatusToday } from './statusApi';
 import { StatusSignalBlock } from './StatusSignalBlock';
 import { StatusStrip } from './StatusStrip';
-import { moduleLayout } from './todayModel';
+import { moduleLayout, withoutEvents } from './todayModel';
 import { useLoad } from './useLoad';
 
 function weeklyTitle(today: TodayDay, fallback: string): string {
@@ -88,6 +88,9 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
   const items = applications.state === 'ready' ? applications.data : null;
   const manual = useManualQueue();
   const events = items ? responseEvents(items, new Date(), manual) : [];
+  const { snapshot } = today;
+  const shown = new Set(events.map((event) => event.id));
+  const day = snapshot ? { ...today, snapshot: withoutEvents(snapshot, shown) } : today;
   const funnel = items ? funnelLine(items, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
@@ -102,7 +105,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
         key={module.key}
         module={module}
         status={status}
-        today={today}
+        today={day}
         lead={withLead && index === 0}
       />
     ));
