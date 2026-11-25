@@ -10,14 +10,30 @@ import { useCardData, type CardData } from './useCardData';
 
 vi.mock('../../../vacancies/useMatchedPool', () => ({ useMatchedPool: vi.fn() }));
 vi.mock('../../../vacancies/useCurrencyRates', () => ({ useCurrencyRates: () => undefined }));
-vi.mock('../../../vacancies/recruiterContactsApi', () => ({ getRecruiterContacts: () => Promise.resolve({ contacts: [] }) }));
-vi.mock('../../../vacancies/vacancyLetterApi', () => ({ getVacancyConnectionCircles: () => Promise.resolve(undefined) }));
+vi.mock('../../../vacancies/recruiterContactsApi', () => ({
+  getRecruiterContacts: () => Promise.resolve({ contacts: [] }),
+}));
+vi.mock('../../../vacancies/vacancyLetterApi', () => ({
+  getVacancyConnectionCircles: () => Promise.resolve(undefined),
+}));
 vi.mock('../vacancyLinks', () => ({ useVacancyLinks: () => ({}) }));
 vi.mock('../b640Api', () => ({ getVacancyCard: vi.fn() }));
 
 const HH_ID = 'cluster-src-hh-search:139180469';
-const item = (id: string) => ({ cluster: { id, canonicalTitle: 'Директор по данным' }, explanation: { clusterId: id } }) as unknown as MatchedVacancyItem;
-const pool = (patch: Partial<MatchedPool>): MatchedPool => ({ matched: [], total: 0, poolTotal: 0, loading: false, failed: false, complete: true, ...patch });
+const item = (id: string) =>
+  ({
+    cluster: { id, canonicalTitle: 'Директор по данным' },
+    explanation: { clusterId: id },
+  }) as unknown as MatchedVacancyItem;
+const pool = (patch: Partial<MatchedPool>): MatchedPool => ({
+  matched: [],
+  total: 0,
+  poolTotal: 0,
+  loading: false,
+  failed: false,
+  complete: true,
+  ...patch,
+});
 const readCard = vi.mocked(getVacancyCard);
 
 let seen: CardData | undefined;
@@ -28,11 +44,19 @@ function Probe({ id }: { readonly id: string }) {
 let mounted: Mounted | undefined;
 async function render(id: string) {
   mounted = mount(<Probe id={id} />);
-  await act(async () => { await Promise.resolve(); });
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
-beforeEach(() => { seen = undefined; readCard.mockReset(); });
-afterEach(() => { mounted?.unmount(); mounted = undefined; });
+beforeEach(() => {
+  seen = undefined;
+  readCard.mockReset();
+});
+afterEach(() => {
+  mounted?.unmount();
+  mounted = undefined;
+});
 
 describe('B715: карточка v04 по id вакансии пула', () => {
   it('вакансии нет в подборке (после отклика, ссылка hh.ru) — читает её отдельно и показывает', async () => {
@@ -61,18 +85,43 @@ describe('B715: карточка v04 по id вакансии пула', () => {
   });
   it('пока подборка читается, «не найдена» ещё не окончательно — «загружаем»', async () => {
     vi.mocked(useMatchedPool).mockReturnValue(pool({ loading: true }));
-    readCard.mockRejectedValueOnce(new CoachApiError('Вакансия не найдена.', 'vacancy_not_found', false));
+    readCard.mockRejectedValueOnce(
+      new CoachApiError('Вакансия не найдена.', 'vacancy_not_found', false),
+    );
     await render(HH_ID);
     expect(seen?.load).toBe('loading');
   });
   it('сервер не знает вакансию — «не найдена»; сбой сети — «не удалось загрузить»', async () => {
     vi.mocked(useMatchedPool).mockReturnValue(pool({}));
-    readCard.mockRejectedValueOnce(new CoachApiError('Вакансия не найдена.', 'vacancy_not_found', false));
+    readCard.mockRejectedValueOnce(
+      new CoachApiError('Вакансия не найдена.', 'vacancy_not_found', false),
+    );
     await render(HH_ID);
     expect(seen?.load).toBe('missing');
     mounted?.unmount();
     readCard.mockRejectedValueOnce(new CoachApiError('Нет сети', 'network_error', true));
     await render('cluster-src-hh-search:2');
     expect(seen?.load).toBe('failed');
+  });
+});
+
+describe('B787: hh.ru в склейке подборки показан только после сверки', () => {
+  const GETMATCH = { sourceId: 'src-fh-getmatch', sourceUrl: 'https://getmatch.ru/vacancies/7' };
+  const HH = { sourceId: 'src-hh-search', sourceUrl: 'https://hh.ru/vacancy/1' };
+  const glued = (...sources: object[]) =>
+    ({
+      ...item('cluster-g'),
+      cluster: { ...item('cluster-g').cluster, sources, primaryUrl: GETMATCH.sourceUrl },
+    }) as unknown as MatchedVacancyItem;
+  it.each([
+    ['ответа ещё нет', undefined, [GETMATCH]],
+    ['чужая запись', glued(GETMATCH), [GETMATCH]],
+    ['своя запись', glued(GETMATCH, HH), [GETMATCH, HH]],
+  ])('%s', async (_, answer, sources) => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [glued(GETMATCH, HH)] }));
+    readCard.mockReturnValue(answer ? Promise.resolve(answer) : new Promise(() => undefined));
+    await render('cluster-g');
+    expect(seen?.load).toBe('ready');
+    expect(seen?.item?.cluster.sources).toEqual(sources);
   });
 });
