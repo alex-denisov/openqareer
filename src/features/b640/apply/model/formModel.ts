@@ -4,6 +4,7 @@ import type {
   QuestionnaireQuestion,
 } from '../../../../../shared/applicationQuestionnaire';
 import type { HhFormAnswer } from '../../../../../shared/hhCandidateSession';
+import { isBadNumber } from '../../../../../shared/questionnaireNumber';
 import { choiceValues } from './choiceModel';
 import { pluralRu } from '../../responses/model/responseRow';
 
@@ -32,8 +33,15 @@ export interface FormReadiness {
 }
 
 export function readiness(questions: readonly QuestionnaireQuestion[], draft: AnswerDraft): FormReadiness {
-  const filled = (question: QuestionnaireQuestion) => Boolean(answerOf(draft, question.id).trim());
-  const missing = questions.filter((question) => question.required && !filled(question));
+  const filled = (question: QuestionnaireQuestion) => {
+    const text = answerOf(draft, question.id);
+    return Boolean(text.trim()) && !isBadNumber(question, text);
+  };
+  const missing = questions.filter(
+    (question) =>
+      !filled(question) &&
+      (question.required || isBadNumber(question, answerOf(draft, question.id))),
+  );
   return {
     answered: questions.filter(filled).length,
     total: questions.length,

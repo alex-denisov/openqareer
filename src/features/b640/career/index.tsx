@@ -1,8 +1,10 @@
+import { startEarlyRead } from '../../shell/earlyRead';
 import { NodeStub } from '../shell/NodeStub';
 import { useShell } from '../shell/ShellContext';
 import type { SectionProps } from '../sections';
 import './career.css';
 import { CareerRoot } from './CareerRoot';
+import { loadCampaign, loadRoles, loadStatusId } from './careerApi';
 import { isConditionsView } from './careerPaths';
 import { CompareView } from './CompareView';
 import { ConditionsScreen } from './ConditionsScreen';
@@ -12,6 +14,16 @@ import { RolesLoad } from './RolesScreen';
 import { ProfessionScreen } from './ProfessionScreen';
 import { SkillCheckScreen } from './SkillCheckScreen';
 import { useB640Title } from '../kit/useB640Title';
+
+/** B792: статус, роль поиска и роли — рядом с вопросом о сессии, а не друг за другом. */
+export function preload(code: string, search: string): void {
+  if (code === 's09' && !isConditionsView(search)) {
+    startEarlyRead(loadStatusId);
+    startEarlyRead(loadCampaign);
+    startEarlyRead(loadRoles);
+  }
+  if (code === 's10') startEarlyRead(loadRoles);
+}
 
 /** Вход раздела «Карьера»: экран по коду узла (см. ../README.md). */
 export default function Section({ node }: SectionProps) {

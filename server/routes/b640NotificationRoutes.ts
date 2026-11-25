@@ -1,6 +1,7 @@
 import { roleTitleRu } from '../vacancies/roleTitleRu';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { footprintFindingCounts } from '../domain/footprintRisk';
 import {
   buildB640NotificationFeed,
   type B640ApplicationContext,
@@ -87,15 +88,21 @@ function searchRolesOf(
     .filter(Boolean);
 }
 
-/** B671 (n01b): число находок для «Цифровой след: N новых находок». */
+/** B671 (n01b): «Цифровой след: N новых находок» — то же число, что на экране следа (B801). */
 function findingCountsOf(
   deps: RouteDeps,
   candidateId: string,
-  rows: readonly { readonly kind: string }[],
+  rows: readonly { readonly kind: string; readonly sourceId: string }[],
 ): Map<string, number> {
-  if (!rows.some((row) => row.kind === 'footprint_findings')) return new Map();
-  const audits = deps.candidateReputationRepo?.listFootprintAudits(candidateId) ?? [];
-  return new Map(audits.map((audit) => [audit.id, audit.findings.length]));
+  const ids = new Set(
+    rows.filter((row) => row.kind === 'footprint_findings').map((row) => row.sourceId),
+  );
+  const repository = deps.candidateReputationRepo;
+  if (ids.size === 0 || !repository) return new Map();
+  const discrepancies =
+    repository.getLatestAudit(candidateId, { trustedOnly: true })?.consistencyDiscrepancies ?? [];
+  const audits = repository.listFootprintAudits(candidateId).filter((audit) => ids.has(audit.id));
+  return footprintFindingCounts(audits, discrepancies);
 }
 
 function readFeed(deps: RouteDeps, candidateId: string, query: FeedQuery) {

@@ -28,7 +28,7 @@ import { getVacancyCard } from '../b640Api';
 import type { Expectation } from './moneyScale';
 import { useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
 
-export type CardLoad = 'loading' | 'ready' | 'missing' | 'failed';
+export type CardLoad = 'loading' | 'ready' | 'missing' | 'closed' | 'failed';
 
 export interface CardData {
   readonly load: CardLoad;
@@ -71,9 +71,14 @@ function useOptional<T>(load: () => Promise<T>, key: string): T | undefined {
 type SingleRead =
   | { readonly key: string; readonly state: 'loading' }
   | { readonly key: string; readonly state: 'ready'; readonly item: MatchedVacancyItem }
-  | { readonly key: string; readonly state: 'missing' | 'failed' };
+  | { readonly key: string; readonly state: 'missing' | 'closed' | 'failed' };
 
-const GONE_CODES: ReadonlySet<string> = new Set(['vacancy_not_found', 'vacancy_gone']);
+/** Код ответа карточки: снята с площадки (B797), неизвестна или сбой чтения. */
+function failedRead(reason: unknown): 'missing' | 'closed' | 'failed' {
+  const code = reason instanceof CoachApiError ? reason.code : undefined;
+  if (code === 'vacancy_gone') return 'closed';
+  return code === 'vacancy_not_found' ? 'missing' : 'failed';
+}
 
 /**
  * B715: вакансии нет в загруженной подборке (ссылка hh.ru из «Своей вакансии», вакансия после
@@ -94,8 +99,7 @@ function useSingleVacancy(
       (item) => setRead({ key: vacancyId, state: 'ready', item }),
       (reason: unknown) => {
         if (controller.signal.aborted) return;
-        const gone = reason instanceof CoachApiError && GONE_CODES.has(reason.code);
-        setRead({ key: vacancyId, state: gone ? 'missing' : 'failed' });
+        setRead({ key: vacancyId, state: failedRead(reason) });
       },
     );
     return () => controller.abort();
@@ -110,15 +114,20 @@ function hasGluedHh(item: MatchedVacancyItem | undefined): boolean {
   return sources.length > 1 && sources.some(isHhSource);
 }
 
-/** Площадки строки — сверенные сервером; до ответа hh.ru в склейке не показывается (B787). */
+/**
+ * Площадки строки — сверенные сервером; до ответа hh.ru в склейке не показывается (B787). Чтение не
+ * удалось или без hh.ru площадок нет — строки нет: экран ждёт ответа или предлагает повтор.
+ */
 function withOwnSources(
   pooled: MatchedVacancyItem | undefined,
   single: SingleRead | undefined,
 ): MatchedVacancyItem | undefined {
   const own = single?.state === 'ready' ? single.item : undefined;
   if (!pooled || !hasGluedHh(pooled)) return pooled ?? own;
+  if (single?.state === 'failed') return undefined;
   const sources =
     own?.cluster.sources ?? pooled.cluster.sources.filter((source) => !isHhSource(source));
+  if (sources.length === 0) return undefined;
   const primaryUrl = own?.cluster.primaryUrl ?? pooled.cluster.primaryUrl;
   return { ...pooled, cluster: { ...pooled.cluster, sources, primaryUrl } };
 }
@@ -131,7 +140,7 @@ function cardLoad(
 ): CardLoad {
   if (item) return 'ready';
   if (poolLoading || !single || single.state === 'loading') return 'loading';
-  return single.state === 'failed' ? 'failed' : 'missing';
+  return single.state === 'ready' ? 'missing' : single.state;
 }
 
 function expectationOf(

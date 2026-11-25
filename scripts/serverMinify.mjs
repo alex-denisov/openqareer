@@ -8,4 +8,6 @@ export const SERVER_MINIFY = {
   minifySyntax: true,
   minifyWhitespace: true,
   minifyIdentifiers: false,
+  // Кириллица как есть: \\uXXXX раздувал релиз за предел распаковки 64 МиБ (выкаты 25.11).
+  charset: 'utf8',
 };

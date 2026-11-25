@@ -137,3 +137,15 @@ export function applyWays(input: WaysInput): readonly ApplyWay[] {
     : undefined;
   return [friend, hh, siteWay(input)].filter((way): way is ApplyWay => way !== undefined);
 }
+
+/** Вакансия на площадке — когда её текста нет и ни один способ отклика туда не ведёт (B800). */
+export function sourceLinkOf(
+  input: Pick<WaysInput, 'primaryUrl'>,
+  ways: readonly ApplyWay[],
+): { readonly url: string; readonly label: string } | undefined {
+  if (ways.some((way) => way.action?.kind === 'external')) return undefined;
+  const url = safeUrl(input.primaryUrl);
+  if (!url) return undefined;
+  const name = isHhHost(url.hostname) ? 'hh.ru' : url.hostname.replace(/^www\./u, '');
+  return { url: url.toString(), label: `Открыть на ${name}` };
+}

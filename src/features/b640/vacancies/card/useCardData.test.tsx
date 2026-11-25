@@ -103,6 +103,14 @@ describe('B715: карточка v04 по id вакансии пула', () => {
     await render('cluster-src-hh-search:2');
     expect(seen?.load).toBe('failed');
   });
+  it('B797: вакансия снята с площадки — «закрыта»', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({}));
+    readCard.mockRejectedValueOnce(
+      new CoachApiError('Вакансия снята с площадки.', 'vacancy_gone', false),
+    );
+    await render(HH_ID);
+    expect(seen?.load).toBe('closed');
+  });
   it('B770: карточка читает одну страницу подборки, а не все 46', async () => {
     vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [item(HH_ID)] }));
     await render(HH_ID);
@@ -128,5 +136,25 @@ describe('B787: hh.ru в склейке подборки показан толь
     await render('cluster-g');
     expect(seen?.load).toBe('ready');
     expect(seen?.item?.cluster.sources).toEqual(sources);
+  });
+  it('сбой сверки — «не удалось загрузить», повтор читает карточку снова', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [glued(GETMATCH, HH)] }));
+    readCard.mockRejectedValueOnce(new CoachApiError('Нет сети', 'network_error', true));
+    await render('cluster-g');
+    expect(seen?.load).toBe('failed');
+    readCard.mockResolvedValue(glued(GETMATCH, HH));
+    await act(async () => {
+      seen?.reload();
+      await Promise.resolve();
+    });
+    expect(seen?.load).toBe('ready');
+    expect(seen?.item?.cluster.sources).toEqual([GETMATCH, HH]);
+  });
+  it('в склейке только записи hh.ru — до ответа «загружаем»', async () => {
+    const second = { ...HH, sourceUrl: 'https://hh.ru/vacancy/2' };
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [glued(HH, second)] }));
+    readCard.mockReturnValue(new Promise(() => undefined));
+    await render('cluster-g');
+    expect(seen?.load).toBe('loading');
   });
 });

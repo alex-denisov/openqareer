@@ -9,7 +9,6 @@ export interface ActBarProps {
   /** Профиля нет: главная кнопка — «Добавить опыт», «Откликнуться» обычная. */
   readonly noProfile: boolean;
   readonly save: Omit<SaveButtonProps, 'mobile'> | null;
-  readonly onOpenText: () => void;
 }
 
 function applyLink(vacancyId: string, primary: boolean): ReactNode {
@@ -21,8 +20,8 @@ function applyLink(vacancyId: string, primary: boolean): ReactNode {
   );
 }
 
-/** Действия: «Откликнуться» (на 390 закреплена внизу), «Текст вакансии», «Сохранить». */
-export function ActBar({ vacancyId, noProfile, save, onOpenText }: ActBarProps) {
+/** Действия: «Откликнуться» (на 390 закреплена внизу) и «Сохранить». */
+export function ActBar({ vacancyId, noProfile, save }: ActBarProps) {
   const addExperience = (
     <Link className="btn is-primary" to={buildNodePath('p04')}>
       <Icon name="plus" />
@@ -35,10 +34,6 @@ export function ActBar({ vacancyId, noProfile, save, onOpenText }: ActBarProps) 
         {noProfile ? addExperience : applyLink(vacancyId, true)}
       </div>
       {noProfile ? applyLink(vacancyId, false) : null}
-      <button className="btn v4-text" type="button" onClick={onOpenText}>
-        <Icon name="file" />
-        Текст вакансии
-      </button>
       {save ? <SaveButton {...save} /> : null}
     </div>
   );

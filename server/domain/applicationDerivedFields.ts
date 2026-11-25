@@ -25,6 +25,8 @@ export interface ApplicationInterviewSummary {
 }
 
 export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {
+  /** B798: «Сохранена» звездой кандидата; черновик отклика в той же стадии — нет. */
+  readonly starred?: boolean;
   readonly archiveStaleDays?: number;
   readonly offer?: StoredApplicationOffer | null;
 }

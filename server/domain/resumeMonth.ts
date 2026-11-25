@@ -82,3 +82,22 @@ export function parseResumeMonth(value: string | null | undefined): ResumeMonth 
   const month = MONTH_BY_NAME.get(named[1]!);
   return month ? { year: Number(named[2]), month } : null;
 }
+
+/** Months since year 0 of a place date in any format above; null when it is not read. */
+export function monthIndex(date: string | undefined): number | null {
+  const parsed = date ? parseResumeMonth(date) : null;
+  return parsed ? parsed.year * 12 + (parsed.month - 1) : null;
+}
+
+/** Months covered by [start, end) spans, overlaps counted once. */
+export function mergedMonths(spans: readonly (readonly [number, number])[]): number {
+  return [...spans]
+    .sort((left, right) => left[0] - right[0])
+    .reduce(
+      (sum, [start, end]) => {
+        const from = Math.max(start, sum.until);
+        return end > from ? { months: sum.months + end - from, until: end } : sum;
+      },
+      { months: 0, until: -Infinity },
+    ).months;
+}

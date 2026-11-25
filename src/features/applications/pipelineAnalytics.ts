@@ -74,6 +74,14 @@ export function applicationReachedStage(app: ApplicationView, targetStage: Appli
 }
 
 /**
+ * Ответила ли компания: ответ записан или отклик дошёл до интервью либо оффера — без ответа туда
+ * не доходят, хотя отдельной отметки «ответили» в истории может не быть (B801).
+ */
+export function applicationGotReply(app: ApplicationView): boolean {
+  return (['responded', 'interview', 'offer'] as const).some((stage) => applicationReachedStage(app, stage));
+}
+
+/**
  * Рассчитывает этапы воронки и их конверсии.
  */
 function buildFunnelSteps(applications: readonly ApplicationView[]): readonly StageFunnelStep[] {
@@ -164,7 +172,7 @@ function buildSourceBreakdown(
     source,
     sourceLabel: humanSourceLabel(source),
     total: items.length,
-    responded: items.filter((a) => applicationReachedStage(a, 'responded')).length,
+    responded: items.filter(applicationGotReply).length,
     interview: items.filter((a) => applicationReachedStage(a, 'interview')).length,
     offer: items.filter((a) => applicationReachedStage(a, 'offer')).length,
   }));

@@ -3,6 +3,7 @@ import {
   type AtsFormInput,
   type QuestionnaireQuestion,
 } from '../../../../../shared/applicationQuestionnaire';
+import { acceptedNumber, isBadNumber } from '../../../../../shared/questionnaireNumber';
 import { answerOf, type AnswerDraft } from '../model/formModel';
 import { choiceValues } from '../model/choiceModel';
 import { categoryOf, consentOption, declines, isCoverLetter, isResumeFile } from './atsFieldPlan';
@@ -83,12 +84,20 @@ const SINGLE_LINE: ReadonlySet<AtsField['kind']> = new Set([
   'tel',
   'url',
   'number',
+  'range',
   'date',
 ]);
 
+/** Поле берёт только число: `number` и ползунок. */
+export const isNumeric = (field: AtsField): boolean =>
+  field.kind === 'number' || field.kind === 'range';
+
 function shapeOf(
   field: AtsField,
-): Pick<QuestionnaireQuestion, 'kind' | 'options' | 'multiple' | 'singleLine' | 'numeric'> {
+): Pick<
+  QuestionnaireQuestion,
+  'kind' | 'options' | 'multiple' | 'singleLine' | 'numeric' | 'limits'
+> {
   if (field.kind === 'checkbox') {
     return field.required
       ? { kind: 'choice', options: [YES], multiple: true }
@@ -96,7 +105,10 @@ function shapeOf(
   }
   const options = optionsOf(field).map((option) => tidy(option.label));
   if (options.length === 0) {
-    if (field.kind === 'number') return { kind: 'text', singleLine: true, numeric: true };
+    if (isNumeric(field)) {
+      const limits = field.limits ? { limits: field.limits } : {};
+      return { kind: 'text', singleLine: true, numeric: true, ...limits };
+    }
     return SINGLE_LINE.has(field.kind) ? { kind: 'text', singleLine: true } : { kind: 'text' };
   }
   return { kind: 'choice', options, ...(isChecks(field) ? { multiple: true } : {}) };
@@ -160,6 +172,10 @@ function fieldValue(field: AtsField, text: string): string {
   const options = optionsOf(field);
   const valueOf = (answer: string) =>
     options.find((option) => tidy(option.label) === answer)?.value ?? answer;
+  if (isNumeric(field)) {
+    const value = acceptedNumber(text, field.limits);
+    return value === null ? text.slice(0, ANSWER_MAX) : String(value);
+  }
   if (isChecks(field)) return choiceValues(text).map(valueOf).join('\n');
   if (options.length > 0) return valueOf(text);
   const day = field.kind === 'date' ? /^(\d{2})\.(\d{2})\.(\d{4})$/u.exec(text) : null;
@@ -191,6 +207,8 @@ export function isOffList(field: AtsField, text: string): boolean {
 export function missingAnswers(fields: readonly AtsField[], draft: AnswerDraft): number {
   return askedFields(fields).filter((field) => {
     const text = answerOf(draft, questionIdOf(field)).trim();
-    return (field.required && !text) || isOffList(field, text);
+    const numeric = isNumeric(field);
+    const bad = isBadNumber({ numeric, limits: field.limits ?? undefined }, text);
+    return (field.required && !text) || isOffList(field, text) || bad;
   }).length;
 }

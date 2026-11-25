@@ -8,7 +8,7 @@ export function loadCabinetB640() {
   // B773: раздел адреса и его данные грузятся рядом с корнем, а не после его отрисовки.
   if (browser)
     void import('./sections')
-      .then((module) => module.preloadSection(window.location.pathname))
+      .then((module) => module.preloadSection(window.location.pathname, window.location.search))
       .catch(() => undefined);
   return styles.then(() => import('./CabinetB640'));
 }
