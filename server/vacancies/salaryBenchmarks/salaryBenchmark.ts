@@ -1,0 +1,64 @@
+/**
+ * B803: отдельная цифра открытой аналитики (агентство, портал, СМИ, госданные) с источником,
+ * ссылкой, годом и датой чтения. Файл с цифрами лежит рядом с базой на хосте, не в репозитории:
+ * репозиторий публичный, а цифры наружу не отдаются — только кандидату в кабинете.
+ */
+import { z } from 'zod';
+
+export const BENCHMARK_SOURCE_KINDS = ['agency', 'portal', 'media', 'gov'] as const;
+export type BenchmarkSourceKind = (typeof BENCHMARK_SOURCE_KINDS)[number];
+
+const name = z.string().trim().min(1).max(200);
+const amount = z.number().positive().finite().nullable();
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/u)
+  .refine((value) => !Number.isNaN(Date.parse(value)), 'not a date');
+
+export const salaryBenchmarkSchema = z
+  .strictObject({
+    id: z.string().regex(/^[a-z0-9][a-z0-9._-]{2,120}$/u),
+    sourceKind: z.enum(BENCHMARK_SOURCE_KINDS),
+    sourceName: name,
+    sourceUrl: z.url({ protocol: /^https$/u }).max(1000),
+    role: name,
+    roleAliases: z.array(name).max(40).default([]),
+    functionCode: z.string().min(1).max(60).nullable(),
+    levelRank: z.number().int().min(0).max(4).nullable(),
+    country: z
+      .string()
+      .regex(/^[A-Z]{2}$/u)
+      .nullable(),
+    region: z.enum(['us', 'eu', 'ru', 'cis', 'mena', 'apac', 'latam']).nullable(),
+    city: name.nullable(),
+    low: amount,
+    median: amount,
+    high: amount,
+    currency: z.string().regex(/^[A-Z]{3}$/u),
+    period: z.enum(['month', 'year']),
+    tax: z.enum(['gross', 'net', 'unknown']),
+    year: z.number().int().min(2015).max(2100),
+    sampleSize: z.number().int().positive().nullable(),
+    readOn: isoDate,
+  })
+  .refine((row) => (row.country === null) !== (row.region === null), 'country or region, not both')
+  .refine((row) => row.city === null || row.country !== null, 'city needs a country')
+  .refine((row) => (row.low === null) === (row.high === null), 'low and high come together')
+  .refine((row) => row.median !== null || row.low !== null, 'low and high, or median')
+  .refine(
+    (row) => row.low === null || row.high === null || row.low <= row.high,
+    'low is above high',
+  )
+  .refine(
+    (row) =>
+      row.median === null ||
+      ((row.low ?? row.median) <= row.median && row.median <= (row.high ?? row.median)),
+    'median is outside the range',
+  );
+
+export type SalaryBenchmark = z.infer<typeof salaryBenchmarkSchema>;
+
+export const salaryBenchmarksSchema = z
+  .array(salaryBenchmarkSchema)
+  .max(20_000)
+  .refine((rows) => new Set(rows.map(({ id }) => id)).size === rows.length, 'duplicate id');
