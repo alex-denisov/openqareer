@@ -59,8 +59,14 @@ describe('useApplyCluster: порядок состояний площадки (B
     expect(api.getVacancyCard).toHaveBeenCalledTimes(1);
   });
 
-  it('hh.ru уже в показанной подборке — без ожидания и без запроса', async () => {
+  it('B787: hh.ru в склейке подборки сверяет сервер — чужая запись не показана ни разу', async () => {
     api.readCachedMatchedPool.mockReturnValue({ matched: [item([GETMATCH, HH])] });
+    api.getVacancyCard.mockResolvedValue(item([GETMATCH]));
+    expect((await mount()).seen).toEqual(['loading', GETMATCH.sourceUrl]);
+  });
+
+  it('hh.ru — единственный источник показанной строки: без ожидания и без запроса', async () => {
+    api.readCachedMatchedPool.mockReturnValue({ matched: [item([HH])] });
     expect((await mount()).seen).toEqual([HH.sourceUrl]);
     expect(api.getVacancyCard).not.toHaveBeenCalled();
   });

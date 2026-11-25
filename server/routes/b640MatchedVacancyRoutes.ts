@@ -30,9 +30,10 @@ import {
 } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
-import { withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
+import { withOrderedPercents, withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
 import { readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
+import { createListPages } from './b640ListPages';
 import { readB640Sealed } from './b640SealedAnswer';
 import { careerTimeZone, withinLastDays } from './careerRoleCounts';
 import { selectionFitLimit } from './fitSelectionSweep';
@@ -192,7 +193,9 @@ function logListTiming(
 
 type Rows = readonly MatchedVacancyItem[];
 
-/** Порядок «Совпадение» или «Деньги» поверх готового списка; список уже в этом порядке — не трогаем. */
+const inPageOrder = createListPages();
+
+/** Порядок «Совпадение» или «Деньги» поверх готового списка. */
 async function reordered(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -217,18 +220,18 @@ async function orderRows(
   request: FastifyRequest,
   candidateId: string,
   context: B640ListContext,
-  read: { readonly list: { readonly filtered: Rows }; readonly saved: VacancySort },
+  read: { readonly list: { readonly filtered: Rows } },
   query: Query,
 ): Promise<Ordering> {
   const { filtered } = read.list;
-  const sameAsSaved = (order: VacancySort) => order.by === read.saved.by && order.dir === read.saved.dir;
-  const arrange = (order: VacancySort) =>
-    sameAsSaved(order) ? Promise.resolve(filtered) : reordered(deps, request, candidateId, context, filtered, order);
+  // B789: и в порядке готового списка — проценты досчитались после его сборки.
+  const arrange = (order: VacancySort) => reordered(deps, request, candidateId, context, filtered, order);
   const byFit = await arrange(DEFAULT_VACANCY_SORT);
+  if (query.sort === 'fit' && query.direction === 'desc') return { byFit, rows: byFit };
   if (query.sort === 'fit' || query.sort === 'money') {
     return { byFit, rows: await arrange({ by: query.sort, dir: query.direction }) };
   }
-  return { byFit, rows: sortMatchedByColumn(byFit, query.sort as ColumnSortKey, query.direction) };
+  return { byFit, rows: sortMatchedByColumn(byFit, query.sort as ColumnSortKey, query.direction, careerTimeZone(query)) };
 }
 
 /** B702: страница из списка прошлого процесса; проценты, уровни и деньги читаются как обычно. */
@@ -254,9 +257,10 @@ async function sealedAnswer(
   if (!slice) return undefined;
   const shown = slice.rows.map(trim);
   const levels = addStoredVacancyLevels(shown, context.targetLevel, (key) => deps.titleParseStore.getByKey(key));
-  const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidateId, levels));
+  const live = await withShownPageFitViews(deps, candidateId, levels);
+  const data = withMarketSalary(deps, withOrderedPercents(live, slice.rows));
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidateId));
-  startShownPageFit(backgroundDeps, candidateId, data, query.offset, fitLimit, request);
+  startShownPageFit(backgroundDeps, candidateId, live, query.offset, fitLimit, request);
   request.log.info({ rows: slice.total, offset: query.offset }, 'b640-matched-served-sealed');
   return {
     data,
@@ -315,13 +319,16 @@ const getMatchedVacancies = async (
   const ordered = await orderRows(deps, request, candidate.id, context, read, query);
   logListTiming(request, query, read.timing, performance.now() - orderStartedAt);
   const { byFit } = ordered;
-  const rows = withinMoney(withinDays(ordered.rows, query), query);
+  const { offset: _offset, limit: _limit, ...view } = query;
+  const pagesKey = `${candidate.id}|${JSON.stringify(view)}`;
+  const rows = inPageOrder(pagesKey, withinMoney(withinDays(ordered.rows, query), query), query.offset);
   const shown = rows.slice(query.offset, query.offset + query.limit).map(trim);
   const levels = addStoredVacancyLevels(shown, targetLevel, (key) => deps.titleParseStore.getByKey(key));
-  const data = withMarketSalary(deps, await withShownPageFitViews(deps, candidate.id, levels));
+  const live = await withShownPageFitViews(deps, candidate.id, levels);
+  const data = withMarketSalary(deps, withOrderedPercents(live, rows.slice(query.offset)));
   // Подсчёт процентов идёт по порядку совпадения, а не по выбранному столбцу.
   const work = fitWorkIds(byFit, query.offset, fitLimit);
-  startFitWork(backgroundDeps, candidate.id, { ...work, data }, { offset: query.offset, fitLimit }, request);
+  startFitWork(backgroundDeps, candidate.id, { ...work, data: live }, { offset: query.offset, fitLimit }, request);
   return {
     data,
     meta: {

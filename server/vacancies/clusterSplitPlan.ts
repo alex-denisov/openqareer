@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import {
   hasCrossSourceIdCollision,
+  isUnchangedPlan,
   loadMemberVacancies,
   parseCluster,
   planClusterSplit,
@@ -51,7 +52,7 @@ export function planOf(db: DatabaseSync, rowid: number, json: string): PlannedSp
   if (!cluster || !hasCrossSourceIdCollision(cluster)) return undefined;
   const vacancies = loadMemberVacancies(db, cluster);
   const pieces = planClusterSplit(cluster, vacancies);
-  if (pieces.length <= 1) return undefined;
+  if (isUnchangedPlan(cluster, pieces)) return undefined;
   return { kind: 'split', rowid, json, cluster, pieces, links: linkOwnersOf(pieces, vacancies) };
 }
 

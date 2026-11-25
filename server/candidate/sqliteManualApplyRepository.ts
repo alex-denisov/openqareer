@@ -169,19 +169,31 @@ export class SqliteManualApplyRepository {
       .run(candidateId, vacancyId);
   }
 
-  /** Несобранные отклики, которых никто не касался с `before`: сбор прервался. */
+  /**
+   * Несобранные отклики, которых никто не касался с `before`: сбор прервался. Строки кандидатов
+   * без `allowed` отсекает запрос (B649): места в `limit` они не занимают.
+   */
   listStale(
     before: string,
     maxAttempts: number,
     limit: number,
+    allowed: (candidateId: string) => boolean,
   ): Array<{ readonly candidateId: string; readonly item: StoredManualApply }> {
+    const stale = "status = 'open' AND prepared = 0 AND attempts <= ? AND updated_at < ?";
+    const waiting = this.database
+      .prepare(`SELECT DISTINCT candidate_id FROM manual_apply_queue WHERE ${stale}`)
+      .all(maxAttempts, before) as Array<{ candidate_id: string }>;
+    const candidateIds = waiting.map((row) => row.candidate_id).filter(allowed);
+    if (candidateIds.length === 0) return [];
     const rows = this.database
       .prepare(
         `SELECT * FROM manual_apply_queue
-         WHERE status = 'open' AND prepared = 0 AND attempts <= ? AND updated_at < ?
+         WHERE ${stale} AND candidate_id IN (SELECT value FROM json_each(?))
          ORDER BY updated_at LIMIT ?`,
       )
-      .all(maxAttempts, before, limit) as unknown as Array<Row & { candidate_id: string }>;
+      .all(maxAttempts, before, JSON.stringify(candidateIds), limit) as unknown as Array<
+      Row & { candidate_id: string }
+    >;
     return rows.flatMap((row) =>
       this.toStored(row.candidate_id, row).map((item) => ({
         candidateId: row.candidate_id,

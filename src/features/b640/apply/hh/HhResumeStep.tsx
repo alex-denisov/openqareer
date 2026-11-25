@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
 import { useId, type ReactNode } from 'react';
 import { hhSectionsRead, type HhResumeSections } from '../../../../../shared/hhCandidateSession';
+import { isPositionTerms } from '../../../../../shared/hhPositionTerms';
 import { isTauriEnvironment } from '../../../../services/desktop/desktopBridge';
 import { Button, StatusLine } from '../../kit';
 import { HhResumeSelect } from '../HhResumeSelect';
@@ -65,7 +66,7 @@ function ResumeContent({ sections }: { readonly sections: HhResumeSections }) {
           <Text text={sections.skills.join(', ')} />
         </Section>
       ) : null}
-      {sections.about ? (
+      {sections.about && !isPositionTerms(sections.about) ? (
         <Section title="О себе">
           <Text text={sections.about} />
         </Section>
