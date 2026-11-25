@@ -1,17 +1,43 @@
-/** B803: таблица `salary_benchmarks`. Пишет процесс обслуживания из файла рядом с базой, веб читает. */
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+/**
+ * B803: внутреннее хранилище зарплат. `salary_sources`, `salary_slices`, `salary_records` — источник
+ * истины: срезы источников с датой и версией, прежние остаются. `salary_benchmarks` пересобирается из
+ * последних срезов включённых источников, её читает веб.
+ */
+import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
-  enabledBenchmarks,
+  plausible,
   salaryBenchmarkSchema,
-  salaryBenchmarksFileSchema,
+  salarySliceSchema,
   type SalaryBenchmark,
+  type SalarySlice,
 } from './salaryBenchmark';
 
-export const SALARY_BENCHMARKS_FILE = 'salary-benchmarks.json';
-
-const TABLE_SQL = `CREATE TABLE IF NOT EXISTS salary_benchmarks (
+const TABLES_SQL = `CREATE TABLE IF NOT EXISTS salary_sources (
+  name TEXT PRIMARY KEY, kind TEXT NOT NULL, enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
+) STRICT;
+CREATE TABLE IF NOT EXISTS salary_slices (
+  id INTEGER PRIMARY KEY,
+  source TEXT NOT NULL REFERENCES salary_sources(name),
+  slice_date TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  digest TEXT NOT NULL,
+  loaded_at TEXT NOT NULL,
+  UNIQUE (source, slice_date, version),
+  UNIQUE (source, digest)
+) STRICT;
+CREATE TABLE IF NOT EXISTS salary_records (
+  slice_id INTEGER NOT NULL REFERENCES salary_slices(id),
+  id TEXT NOT NULL,
+  function_code TEXT, level_rank INTEGER,
+  country TEXT, region TEXT, city TEXT,
+  currency TEXT NOT NULL, period TEXT NOT NULL, tax TEXT NOT NULL,
+  low REAL, median REAL, high REAL,
+  sample_size INTEGER, year INTEGER NOT NULL, read_on TEXT NOT NULL,
+  row_json TEXT NOT NULL,
+  PRIMARY KEY (slice_id, id)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS salary_benchmarks (
   id TEXT PRIMARY KEY,
   place TEXT NOT NULL,
   row_json TEXT NOT NULL
@@ -21,59 +47,134 @@ CREATE TABLE IF NOT EXISTS salary_benchmarks_version (
   id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL
 ) STRICT`;
 
+const CURRENT_SQL = `SELECT r.row_json FROM salary_sources s
+  JOIN salary_records r ON r.slice_id = (
+    SELECT id FROM salary_slices WHERE source = s.name
+    ORDER BY slice_date DESC, version DESC LIMIT 1)
+  WHERE s.enabled = 1`;
+
 const placeKey = (row: SalaryBenchmark): string =>
   row.country ? `country:${row.country}` : `region:${row.region}`;
 
-/** Заменяет таблицу целиком; неверный файл не меняет ничего. */
-export function writeSalaryBenchmarks(database: DatabaseSync, input: unknown): number {
-  const rows = enabledBenchmarks(salaryBenchmarksFileSchema.parse(input));
-  database.exec(TABLE_SQL);
-  const insert = database.prepare(
-    'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
-  );
+function inTransaction<Result>(database: DatabaseSync, work: () => Result): Result {
   database.exec('BEGIN IMMEDIATE');
   try {
-    database.exec('DELETE FROM salary_benchmarks');
-    for (const row of rows) insert.run(row.id, placeKey(row), JSON.stringify(row));
-    database.exec(
-      `INSERT INTO salary_benchmarks_version VALUES (1, 1)
-        ON CONFLICT (id) DO UPDATE SET version = version + 1`,
-    );
+    const result = work();
     database.exec('COMMIT');
+    return result;
   } catch (error: unknown) {
     database.exec('ROLLBACK');
     throw error;
   }
+}
+
+function digestOf({ sliceDate, benchmarks }: SalarySlice): string {
+  const rows = benchmarks.map((row) => JSON.stringify(row)).sort();
+  return createHash('sha256')
+    .update(JSON.stringify([sliceDate, rows]))
+    .digest('hex');
+}
+
+function insertRecords(database: DatabaseSync, sliceId: number, rows: readonly SalaryBenchmark[]) {
+  const insert = database.prepare(
+    'INSERT INTO salary_records VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  );
+  for (const row of rows)
+    insert.run(
+      sliceId,
+      row.id,
+      row.functionCode,
+      row.levelRank,
+      row.country,
+      row.region,
+      row.city,
+      row.currency,
+      row.period,
+      row.tax,
+      row.low,
+      row.median,
+      row.high,
+      row.sampleSize,
+      row.year,
+      row.readOn,
+      JSON.stringify(row),
+    );
+}
+
+/** Пересборка таблицы подбора из последних срезов; возвращает число строк. */
+function publish(database: DatabaseSync): number {
+  const texts = database.prepare(CURRENT_SQL).all() as { row_json: string }[];
+  const rows = texts.flatMap(({ row_json }) =>
+    plausible(salaryBenchmarkSchema.parse(JSON.parse(row_json))),
+  );
+  database.exec('DELETE FROM salary_benchmarks');
+  const insert = database.prepare(
+    'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
+  );
+  for (const row of rows)
+    insert.run(`${row.sourceName}|${row.id}`, placeKey(row), JSON.stringify(row));
+  database.exec(
+    `INSERT INTO salary_benchmarks_version VALUES (1, 1)
+      ON CONFLICT (id) DO UPDATE SET version = version + 1`,
+  );
   return rows.length;
 }
 
-interface LoadLog {
-  info(details: Record<string, unknown>, message: string): void;
-  error(details: Record<string, unknown>, message: string): void;
+/**
+ * Пишет срез одного источника; неверный срез не меняет ничего, чужие источники не трогаются.
+ * Тот же срез второй раз не пишется. Включить выключенный источник импорт не может.
+ */
+export function writeSalarySlice(
+  database: DatabaseSync,
+  input: unknown,
+): { readonly written: number } {
+  const slice = salarySliceSchema.parse(input);
+  const { source, sliceDate, benchmarks } = slice;
+  const digest = digestOf(slice);
+  database.exec(TABLES_SQL);
+  return inTransaction(database, () => {
+    const known = database.prepare('SELECT kind, enabled FROM salary_sources WHERE name = ?');
+    const before = known.get(source.name) as { kind: string; enabled: number } | undefined;
+    if (before && before.kind !== source.kind) throw new Error('another kind of the source');
+    database
+      .prepare(
+        `INSERT INTO salary_sources VALUES (?, ?, ?)
+          ON CONFLICT (name) DO UPDATE SET enabled = min(enabled, excluded.enabled)`,
+      )
+      .run(source.name, source.kind, Number(source.enabled));
+    const repeated = database
+      .prepare('SELECT 1 FROM salary_slices WHERE source = ? AND digest = ?')
+      .get(source.name, digest);
+    if (!repeated) {
+      const { lastInsertRowid } = database
+        .prepare(
+          `INSERT INTO salary_slices (source, slice_date, version, digest, loaded_at)
+            SELECT ?, ?, coalesce(max(version), 0) + 1, ?, ?
+            FROM salary_slices WHERE source = ? AND slice_date = ?`,
+        )
+        .run(source.name, sliceDate, digest, new Date().toISOString(), source.name, sliceDate);
+      insertRecords(database, Number(lastInsertRowid), benchmarks);
+    }
+    const switchedOff = before?.enabled === 1 && !source.enabled;
+    if (!repeated || switchedOff) publish(database);
+    return { written: repeated ? 0 : benchmarks.length };
+  });
 }
 
-/** Нет файла — таблица остаётся как была. */
-export function loadSalaryBenchmarksFile(
+/** Выключенный источник уходит из подбора сразу, его срезы остаются. */
+export function setSalarySourceEnabled(
   database: DatabaseSync,
-  databasePath: string,
-  log: LoadLog,
+  name: string,
+  enabled: boolean,
 ): void {
-  try {
-    const text = readFileSync(join(dirname(databasePath), SALARY_BENCHMARKS_FILE), 'utf8');
-    log.info(
-      { rows: writeSalaryBenchmarks(database, JSON.parse(text)) },
-      'salary-benchmarks-loaded',
-    );
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
-    log.error(
-      {
-        errorName: error instanceof Error ? error.name : 'UnknownError',
-        detail: error instanceof Error ? error.message.slice(0, 500) : undefined,
-      },
-      'salary-benchmarks-load-failed',
-    );
-  }
+  database.exec(TABLES_SQL);
+  inTransaction(database, () => {
+    const { changes } = database
+      .prepare('UPDATE salary_sources SET enabled = ? WHERE name = ?')
+      .run(Number(enabled), name);
+    if (changes === 0) throw new Error('unknown salary source');
+    publish(database);
+  });
 }
 
 export type SalaryBenchmarkReader = (place: {
@@ -88,7 +189,7 @@ function prepareReader(database: DatabaseSync) {
   };
 }
 
-/** Таблицы ещё нет — пусто. Разобранные строки места живут до следующей загрузки файла. */
+/** Таблицы ещё нет — пусто. Разобранные строки места живут до следующей пересборки. */
 export function createSalaryBenchmarkReader(database: DatabaseSync): SalaryBenchmarkReader {
   let statements: ReturnType<typeof prepareReader> | undefined;
   let cache = { version: -1, places: new Map<string, readonly SalaryBenchmark[]>() };
