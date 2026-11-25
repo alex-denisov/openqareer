@@ -99,6 +99,7 @@ import {
   type WorkdayDescriptionReport,
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
+import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
 /**
  * Улов одного опроса. Простой список означает полное чтение: площадка показала
@@ -1364,10 +1365,23 @@ export class MultiSourceVacancyEngine {
     if (typeof pool.loadVacanciesWithoutFullText !== 'function') {
       return Promise.resolve({ requested: 0, loaded: 0, gone: 0, failed: 0, throttled: 0 });
     }
-    this.workdayDescriptions ??= new WorkdayDescriptionBackfill({
+    this.workdayDescriptions ??= this.createTextBackfill(pool);
+    return this.workdayDescriptions.step();
+  }
+
+  private createTextBackfill(pool: VacancyPoolStore): WorkdayDescriptionBackfill {
+    const load: WithoutTextReader['load'] = (sourceId, limit, excludeIds) =>
+      pool.loadVacanciesWithoutFullText!(sourceId, limit, excludeIds);
+    const queue = pool.reloadVacanciesWithoutFullText
+      ? new WithoutTextQueue({
+          load,
+          reload: (sourceId, ids) => pool.reloadVacanciesWithoutFullText!(sourceId, ids),
+        })
+      : undefined;
+    return new WorkdayDescriptionBackfill({
       pool: {
         loadVacanciesWithoutFullText: (sourceId, limit, excludeIds) =>
-          pool.loadVacanciesWithoutFullText!(sourceId, limit, excludeIds),
+          queue ? queue.take(sourceId, limit, excludeIds) : load(sourceId, limit, excludeIds),
         mergeSourceSlice: (sourceId, vacancies) => pool.mergeSourceSlice(sourceId, vacancies),
         markExpired: (ids, atIso) => pool.markExpired(ids, atIso),
       },
@@ -1379,7 +1393,6 @@ export class MultiSourceVacancyEngine {
       defaultIntervalMs: 20_000,
       ...(this.workdayDetailFetch ? { fetchDetail: this.workdayDetailFetch } : {}),
     });
-    return this.workdayDescriptions.step();
   }
 
   /**
