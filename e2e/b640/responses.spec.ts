@@ -161,11 +161,18 @@ test.describe('B656: «Отклики» нового кабинета', () => {
 
   test('автоотклики: счётчик дня, настройка в листе, выключение', async ({ page }) => {
     const mock = await open(page, '/app/responses', 'o01');
+    await page.route('**/api/v1/candidate/campaign', (route) =>
+      route.fulfill({
+        json: { data: { roles: { value: ['Руководитель проектного офиса'], origin: 'explicit' } } },
+      }),
+    );
     const bar = page.getByRole('group', { name: 'Автоотклики' });
     await expect(bar.getByText('12 сегодня из 30')).toBeVisible();
     await bar.getByRole('button', { name: 'Настроить' }).click();
     const dialog = page.getByRole('dialog', { name: 'Настроить автоотклики' });
     await expect(dialog).toBeVisible();
+    // a04e: роль поиска вне правил видна и не отмечена.
+    await expect(dialog.getByLabel('Руководитель проектного офиса')).not.toBeChecked();
     await expectGates(page, { only: ['modal_fit', 'field_height'] });
     await dialog.getByLabel('Лимит в день').fill('99');
     await dialog.getByRole('button', { name: 'Сохранить' }).click();
@@ -228,6 +235,7 @@ test.describe('B656: «Отклики» нового кабинета', () => {
   test('откликов нет: одна строка и путь к вакансиям', async ({ page }) => {
     await open(page, '/app/responses', 'o01', { applications: [] });
     await expect(page.getByRole('heading', { name: 'Откликов пока нет' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Откликнулся сам — добавить' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Подобрать вакансии' })).toHaveAttribute(
       'href',
       '/app/vacancies',

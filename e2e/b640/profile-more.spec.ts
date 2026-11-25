@@ -491,7 +491,7 @@ test.describe('B651: «Связи» (p11)', () => {
   test('связей нет: заголовок и путь к подключению LinkedIn', async ({ page }) => {
     await openCabinet(page, '/app/profile/connections', { noContacts: true });
     const screen = node(page, 'p11');
-    await expect(screen.getByRole('heading', { name: 'Связей пока нет' })).toBeVisible();
+    await expect(screen.getByRole('heading', { name: 'Связи ещё не подключены' })).toBeVisible();
     await screen.getByRole('link', { name: 'Подключить LinkedIn' }).click();
     await expect(page).toHaveURL(/\/app\/profile\/linkedin$/u);
   });

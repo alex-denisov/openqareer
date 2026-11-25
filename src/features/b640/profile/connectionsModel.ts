@@ -38,7 +38,7 @@ export function connectionsHeading(connections: number, companies: number): Conn
     return { full: `Знакомые есть в ${where} из подборки`, short: `Знакомые в ${where}` };
   }
   const text =
-    connections > 0 ? pluralRu(connections, ['связь', 'связи', 'связей']) : 'Связей пока нет';
+    connections > 0 ? pluralRu(connections, ['связь', 'связи', 'связей']) : 'Связи ещё не подключены';
   return { full: text, short: text };
 }
 

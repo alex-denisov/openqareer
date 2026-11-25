@@ -122,37 +122,30 @@ function EditRow({ canWrite, edit, shown, apply, onShow }: EditRowProps) {
   );
 }
 
-function sectionLabel(section: HhResumeEditSection): string {
-  return SECTIONS.find(([key]) => key === section)?.[1] ?? '';
-}
-
 function ApplyAllDialog({
   open,
   resumeTitle,
-  edits,
   onCancel,
   onConfirm,
 }: {
   readonly open: boolean;
   readonly resumeTitle: string;
-  readonly edits: readonly HhResumeEdit[];
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
 }) {
   const footer = (
     <>
-      <Button onClick={onCancel}>Отмена</Button>
-      <Button variant="primary" onClick={onConfirm}>
-        Изменить
+      <Button variant="primary" icon="check" onClick={onConfirm}>
+        Применить
+      </Button>
+      <Button variant="quiet" onClick={onCancel}>
+        Отмена
       </Button>
     </>
   );
   return (
-    <Dialog open={open} onClose={onCancel} title="Изменить резюме на hh.ru?" footer={footer}>
-      <p>
-        Приложение откроет резюме «{resumeTitle}» в окне hh.ru и изменит: {edits.map((edit) => sectionLabel(edit.section)).join(', ')}.
-        Работодатели увидят новый текст.
-      </p>
+    <Dialog open={open} onClose={onCancel} title="Применить все на hh.ru?" footer={footer}>
+      <p className="hh-ok-d">Резюме «{resumeTitle}» изменится на hh.ru для всех работодателей.</p>
     </Dialog>
   );
 }
@@ -262,7 +255,6 @@ export function HhEditsList({ resumeId, resumeTitle, edits, canWrite = true, swi
       <ApplyAllDialog
         open={confirming}
         resumeTitle={resumeTitle}
-        edits={pending}
         onCancel={() => setConfirming(false)}
         onConfirm={confirm}
       />

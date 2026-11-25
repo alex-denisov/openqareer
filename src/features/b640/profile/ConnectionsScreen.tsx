@@ -71,7 +71,7 @@ function Tools({ query, onQuery, pool, onPool }: ToolsProps) {
 function NoContacts() {
   return (
     <div className="actions">
-      <Link className="btn" to={buildNodePath('a03')}>
+      <Link className="btn is-primary" to={buildNodePath('a03')}>
         <Icon name="linkedin" />
         Подключить LinkedIn
       </Link>
@@ -116,16 +116,22 @@ function Found({ list, feed }: FoundProps) {
   );
 }
 
-function Head({ list }: { readonly list: B640ConnectionList | null }) {
+function Head({ id, list }: { readonly id: string; readonly list: B640ConnectionList | null }) {
   const heading = list
     ? connectionsHeading(list.connections, list.selectionCompanies)
     : { full: 'Связи', short: 'Связи' };
   const tip = list ? sourceTip(list) : null;
   return (
     <div className="lead-head">
-      <h2 className="lead-title is-long" id="ln-title">
-        <span className="ln-h-d">{heading.full}</span>
-        <span className="ln-h-m">{heading.short}</span>
+      <h2 className="lead-title is-long" id={id}>
+        {heading.full === heading.short ? (
+          heading.full
+        ) : (
+          <>
+            <span className="ln-h-d">{heading.full}</span>
+            <span className="ln-h-m">{heading.short}</span>
+          </>
+        )}
         {tip ? (
           <span className="ln-tip-m">
             <InfoTip label="Источник и круги" text={`${tip} ${CIRCLES_TIP}`} />
@@ -143,11 +149,13 @@ export function ConnectionsScreen({ node }: { readonly node: B640Node }) {
   const [pool, setPool] = useState(false);
   const feed = useConnections(query, pool);
   const { list } = feed;
+  // p11b: у экрана без связей свой размер заголовка на 390.
+  const titleId = list?.connections === 0 ? 'ln0-title' : 'ln-title';
   return (
     <div className="page" data-b640-node={node.code} data-b640-section={node.section}>
       <div className="col">
-        <section className="lead" aria-labelledby="ln-title">
-          <Head list={list} />
+        <section className="lead" aria-labelledby={titleId}>
+          <Head id={titleId} list={list} />
           {!list && !feed.failed ? <BlockSkeleton label="Загружаем связи" rows={4} /> : null}
           {!list && feed.failed ? (
             <BlockError text="Не удалось загрузить связи." onRetry={feed.retry} />
