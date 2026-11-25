@@ -170,6 +170,21 @@ describe('«Отправка» формы работодателя', () => {
     expect(onManual).not.toHaveBeenCalled();
   });
 
+  it('кнопка не нажата: причина на «Отправке», повтор на месте, в очередь не уходит', async () => {
+    desktop.submitAtsForm.mockResolvedValue({
+      ...receipt,
+      outcome: 'not_submitted',
+      reason: 'submit_ambiguous',
+      pressedAtMs: null,
+    });
+    await open();
+    await send();
+    expect(text()).toContain(`кнопка отправки на ${HOST} не сработала`);
+    expect(button('Отправить отклик')).toBeDefined();
+    expect(onManual).not.toHaveBeenCalled();
+    expect(onSent).not.toHaveBeenCalled();
+  });
+
   it('прежнее нажатие без итога: форма не открывается заново', async () => {
     desktop.readAtsAttempt.mockResolvedValue({
       id: 'x',
