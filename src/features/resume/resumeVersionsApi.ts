@@ -39,12 +39,15 @@ export async function getResumeVersions(
   input: {
     readonly limit?: number;
     readonly cursor?: string | null;
+    /** Последняя версия каждой вакансии, без страниц (B801). */
+    readonly perVacancy?: boolean;
     readonly signal?: AbortSignal;
   } = {},
 ): Promise<ResumeVersionList> {
   const query = new URLSearchParams({
     limit: String(input.limit ?? 20),
     ...(input.cursor ? { cursor: input.cursor } : {}),
+    ...(input.perVacancy ? { perVacancy: '1' } : {}),
   });
   const path = '/api/v1/candidate/resume/versions?' + query.toString();
   const read = sharedRead(path, async () => {

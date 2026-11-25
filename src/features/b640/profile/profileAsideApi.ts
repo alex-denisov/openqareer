@@ -33,6 +33,6 @@ export interface ProfileVersions {
 }
 
 export async function loadVersions(signal: AbortSignal): Promise<ProfileVersions> {
-  const page = await getResumeVersions({ limit: VERSIONS_SHOWN, signal });
+  const page = await getResumeVersions({ limit: VERSIONS_SHOWN, perVacancy: true, signal });
   return { items: page.items.slice(0, VERSIONS_SHOWN), total: page.totalCount };
 }

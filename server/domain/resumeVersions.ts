@@ -8,6 +8,8 @@ export interface ResumeVersionContent {
   readonly requirements: readonly string[];
   readonly status: ResumeVersionStatus;
   readonly snapshot: TargetedResumeVolume;
+  /** Вакансия, под которую собрана версия; у прежних и созданных вручную её нет (B801). */
+  readonly vacancyId?: string;
 }
 
 export interface StoredResumeVersion extends ResumeVersionContent {
@@ -54,6 +56,7 @@ export const resumeVersionContentSchema = z.object({
   snapshot: z.custom<TargetedResumeVolume>(isTargetedResumeVolume, {
     message: 'Invalid targeted resume snapshot.',
   }),
+  vacancyId: z.string().min(1).optional(),
 });
 
 export function isTargetedResumeVolume(value: unknown): value is TargetedResumeVolume {
