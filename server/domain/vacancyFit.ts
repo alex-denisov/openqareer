@@ -255,14 +255,14 @@ function weighting(requirements: readonly VacancyRequirement[], skills: readonly
  * A wish («будет плюсом») never lowers the percent (owner 25.11): a met one counts, a missing one
  * stays out of the count, a partial one counts only while it does not pull the percent down.
  */
-function uncountedWishes(description: string, requirements: readonly VacancyRequirement[], skills: readonly VacancyFitRequirementAssessment[], facts: readonly VacancyFitFact[]): ReadonlySet<string> {
+function uncountedWishes(description: string, requirements: readonly VacancyRequirement[], skills: readonly VacancyFitRequirementAssessment[], facts: readonly VacancyFitFact[], now: string): ReadonlySet<string> {
   const ids = new Set(skills.map((item) => item.requirementId));
   const wishes = vacancyWishIds(description, requirements, (item) => ids.has(item.id));
   if (!wishes.size) return wishes;
-  const { impliedIds } = weighting(requirements, skills, facts, true);
+  const { impliedIds } = weighting(requirements, skills, facts, true, now);
   const met = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId);
   const open = skills.filter((item) => wishes.has(item.requirementId) && !met(item));
-  const base = weighting(requirements, skills.filter((item) => !open.includes(item)), facts, true);
+  const base = weighting(requirements, skills.filter((item) => !open.includes(item)), facts, true, now);
   const raises = (base.percent(skills.filter((item) => !open.includes(item))) ?? 0) < PARTIAL_REQUIREMENT_CREDIT * 100;
   return new Set(open.filter((item) => !(raises && item.status === 'partial')).map((item) => item.requirementId));
 }
@@ -297,7 +297,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const unknownGate = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status !== 'matched');
   const duties = countedDuties(input.description, requirements);
   const allSkillIds = new Set(requirements.filter((item) => isSkillRequirement(item) && !duties.has(item.id)).map((item) => item.id));
-  const uncounted = uncountedWishes(input.description, requirements, assessments.filter((item) => allSkillIds.has(item.requirementId)), facts);
+  const uncounted = uncountedWishes(input.description, requirements, assessments.filter((item) => allSkillIds.has(item.requirementId)), facts, now);
   const skillIds = new Set([...allSkillIds].filter((id) => !uncounted.has(id)));
   const skills = assessments.filter((item) => skillIds.has(item.requirementId));
   const conditions = assessments.filter((item) => !allSkillIds.has(item.requirementId) && !duties.has(item.requirementId));
