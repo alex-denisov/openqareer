@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { APPLICATION_STAGES } from '../../shared/applicationStage';
+import { approvedLetterApplicationIds } from './letterApprovalRead';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
 import { isoDateField } from './isoDateField';
@@ -459,6 +460,7 @@ async function readTodaySnapshot(
     ...sinceVisitCounts(candidateStore, candidateId, since),
     campaignRole: targetRoles[0] ?? null,
     shortlist: newVacancies,
+    approvedLetterIds: new Set(approvedLetterApplicationIds(deps, candidateId)),
     pendingLinkedinPosts: pendingLinkedinPosts(deps, candidateId),
     contacts: new Map(
       [...readApplicationContacts(deps, candidateId, applications)].map(([id, contact]) => [
@@ -496,7 +498,7 @@ function todayTeamSizeDecision(
   now: Date,
 ) {
   const experience = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
-  if (!experience.some((entry) => entry.current && !entry.teamSize)) return undefined;
+  if (!experience.some((entry) => entry.current && !entry.teamSize && !entry.teamSizeDeclined)) return undefined;
   const summaries = new Map(
     matched.map((item) => [item.cluster.id, item.cluster.descriptionSummary]),
   );

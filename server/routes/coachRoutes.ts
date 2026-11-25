@@ -1,5 +1,5 @@
 import { withoutWriteClaims } from '../domain/factCorrection';
-import { factCorrectionProposals } from '../domain/factCorrectionProposals';
+import { correctionCards } from '../domain/factCorrectionProposals';
 import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
 import { selectionClaimsHold, withoutBrokenClaims } from '../coach/selectionClaims';
@@ -138,17 +138,22 @@ function withCheckedMessage<T extends { readonly message: string }>(
   return message !== result.message && isFinishedReply(message) ? { ...result, message } : result;
 }
 
-/** B796: консультант в профиль не пишет — слова «исправил» заменяются карточкой правки или отказом. */
-function honestReply(
+/**
+ * B796: консультант в профиль не пишет — слова «исправил» заменяются карточкой правки или отказом;
+ * о карточке под репликой он знает заранее.
+ */
+function honestTurn(
   deps: RouteDeps,
   candidateId: string,
   input: Parameters<CoachProvider['createTurn']>[0],
-): (message: string) => string {
+): { readonly input: typeof input; readonly honest: (message: string) => string } {
   const latest = input.messages.at(-1);
-  if (input.internalPurpose || latest?.role !== 'user') return (message) => message;
-  const snapshot = deps.candidateStore.getSnapshot(candidateId);
-  const hasCard = factCorrectionProposals(snapshot, latest.content).length > 0;
-  return (message) => withoutWriteClaims(message, hasCard);
+  if (input.internalPurpose || latest?.role !== 'user') return { input, honest: (message) => message };
+  const cards = correctionCards(deps.candidateStore.getSnapshot(candidateId), latest.content);
+  return {
+    input: cards.length > 0 ? { ...input, correctionCards: cards } : input,
+    honest: (message) => withoutWriteClaims(message, cards.length > 0),
+  };
 }
 
 async function completeTurnWithProvider(
@@ -165,14 +170,14 @@ async function completeTurnWithProvider(
     // 29.10: the consultant's words reach the stream reader while they are written.
     const stream = turnStreamHub(deps);
     const streamId = turnStreamId(candidateId, key);
-    const honest = honestReply(deps, candidateId, input);
+    const { input: informed, honest } = honestTurn(deps, candidateId, input);
     const onMessageText = (text: string) => stream.publish(streamId, honest(text));
     // B735: ответ, которому строки подборки противоречат, пишет следующая ступень.
     const selection = input.careerContext?.selection;
     const prefer = (result: { readonly message: string }) =>
       preferFinishedReply(result) && selectionClaimsHold(result.message, selection);
     const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText, prefer };
-    const answered = await deps.coachProvider.createTurn(input, key, options);
+    const answered = await deps.coachProvider.createTurn(informed, key, options);
     const checked = withCheckedMessage(answered.result, selection);
     const turn = { ...answered, result: { ...checked, message: honest(checked.message) } };
     const pending = { analysis: 'pending' as const, analysisStartedAt: new Date().toISOString() };

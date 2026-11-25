@@ -38,7 +38,7 @@ vi.mock('./useSave', () => ({
 }));
 vi.mock('./QuotaLine', () => ({ QuotaLine: () => null }));
 vi.mock('./FitBlock', () => ({ FitBlock: () => null }));
-vi.mock('./ReqsBox', () => ({ ReqsBox: () => null }));
+vi.mock('./VacancyText', () => ({ VacancyText: () => null }));
 vi.mock('./ActBar', () => ({ ActBar: () => null }));
 vi.mock('./MoneyBlock', () => ({ MoneyBlock: () => null, useTargetCurrency: () => 'RUB' }));
 vi.mock('./LetterBlock', () => ({ LetterBlock: () => null }));
@@ -60,7 +60,7 @@ vi.mock('./useCardData', () => ({
   useCardData: () => ({
     load: 'ready',
     item: makeItem({ id: 'v1', title: 'Руководитель разработки', company: 'Ладога Банк' }),
-    links: {},
+    links: { byCluster: new Map() },
     people: { items: people, total: people.length, offset: 0, nextOffset: null },
     reload: () => undefined,
   }),

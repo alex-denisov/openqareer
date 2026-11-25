@@ -1,3 +1,6 @@
+import { vacancyBoardName } from '../../../../shared/vacancyBoards';
+import { platformOf } from '../responses/model/platform';
+
 /** Ссылка вакансии и её источники: что нужно, чтобы назвать кнопку тем, куда она ведёт. */
 export interface SourceLinkInput {
   readonly primaryUrl: string;
@@ -28,6 +31,16 @@ function parsed(value: string): URL | undefined {
   }
 }
 
+/** Ленты freehire, которые ведут на площадку; остальные `src-fh-…` — карьерные сайты компаний. */
+const FREEHIRE_ID = /^src-fh-/u;
+
+function boardName(url: URL | undefined, sourceId: string | undefined): string | null {
+  const byHost = url ? vacancyBoardName(url.hostname) : null;
+  if (byHost || !sourceId || !FREEHIRE_ID.test(sourceId)) return byHost;
+  const platform = platformOf(sourceId);
+  return platform.site ? null : platform.label;
+}
+
 /** Источник этой ссылки: по адресу как есть или после разбора (`URL` дописывает «/»). */
 function sourceOf(input: SourceLinkInput, link: string, url: URL | undefined) {
   const href = url?.toString();
@@ -51,6 +64,9 @@ export function sourceLinkTarget(input: SourceLinkInput): SourceLinkTarget {
     source?.sourceType === 'telegram' ||
     /^tg-/u.test(source?.sourceId ?? '');
   if (telegram) return { kind: 'telegram' };
+  // B801: агрегатор — площадка со своим именем, а не сайт работодателя.
+  const board = boardName(url, source?.sourceId);
+  if (board) return { kind: 'source', name: board };
   if (input.canonicalCompany?.trim()) return { kind: 'employer' };
   const name = source?.sourceName?.trim() || url?.hostname.replace(/^www\./u, '');
   return { kind: 'source', name: name || null };

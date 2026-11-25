@@ -1,3 +1,4 @@
+import { CoachApiError } from '../../coach/apiClient';
 import { getRoleHypotheses } from '../../coach/coachApi';
 import {
   getCandidateCampaign,
@@ -41,7 +42,7 @@ const key = (title: string): string => title.trim().toLocaleLowerCase('ru');
 /** Требования ролей из вакансий; не прочитались — пустой список, экран читается. */
 async function readDemand(): Promise<readonly RoleSkillDemand[]> {
   try {
-    return (await getRoleSkillDemand()).roles;
+    return (await shareRead(getRoleSkillDemand)).roles;
   } catch {
     return [];
   }
@@ -150,9 +151,39 @@ const forgetRoles = () =>
     SECTION_CACHE_KEYS.matchedPoolLatest,
   );
 
+const ROLES_RETRY_MS = 5_000;
+const ROLES_RETRIES = 2;
+
+function pauseUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done);
+  });
+}
+
+/** B801: подбор ещё считается — сервер просит повторить через 5 с, страница ждёт скелетом. */
+async function readRolesWhenCounted(signal: AbortSignal): ReturnType<typeof getRoleHypotheses> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  for (let left = ROLES_RETRIES; ; left -= 1) {
+    try {
+      return await getRoleHypotheses(signal, timeZone);
+    } catch (error) {
+      const counting = error instanceof CoachApiError && error.code === 'vacancy_match_busy';
+      if (!counting || left === 0 || signal.aborted) throw error;
+      await pauseUnlessAborted(ROLES_RETRY_MS, signal);
+      if (signal.aborted) throw error;
+    }
+  }
+}
+
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
-    getRoleHypotheses(signal, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
+    readRolesWhenCounted(signal),
     loadCampaign(),
     getCheckedRoles(signal),
     readDemand(),
