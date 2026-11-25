@@ -75,4 +75,9 @@ describe('B715: карточка v04 по id вакансии пула', () => {
     await render('cluster-src-hh-search:2');
     expect(seen?.load).toBe('failed');
   });
+  it('B770: карточка читает одну страницу подборки, а не все 46', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [item(HH_ID)] }));
+    await render(HH_ID);
+    expect(vi.mocked(useMatchedPool).mock.lastCall?.[1]).toEqual({ pageLimit: 1 });
+  });
 });
