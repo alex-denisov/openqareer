@@ -34,6 +34,8 @@ interface Scenario {
   readonly formState?: 'ready' | 'captcha';
   readonly mandate?: boolean;
   readonly channel?: 'lever' | 'site';
+  /** Отклик уже в очереди с причиной «Отправить на сайте». */
+  readonly queued?: boolean;
 }
 
 /** Команды приложения: форма, заполнение, одно нажатие. Наружу ничего не уходит. */
@@ -216,26 +218,32 @@ async function mockSending(page: Page, calls: string[], scenario: Scenario): Pro
     calls.push(path.endsWith('/result') ? 'consent result' : 'consent');
     await route.fulfill(json({}, 201));
   });
-  let queued: Record<string, unknown> | null = null;
+  const queueItem = (reason: string, host: string) => ({
+    vacancyId: VACANCY,
+    applicationId: 'a-ats',
+    title: 'Head of Engineering',
+    company: 'Гринкод',
+    url: FORM_URL,
+    reason,
+    host,
+    state: 'ready',
+    preparing: false,
+    missingAnswers: 0,
+    letter: LETTER,
+    createdAt: '2026-11-25T10:00:00.000Z',
+  });
+  let queued: Record<string, unknown> | null = scenario.queued ? queueItem('other', HOST) : null;
   await page.route('**/api/v1/candidate/manual-applications**', async (route) => {
     const request = route.request();
+    if (request.method() === 'POST' && request.url().endsWith('/sent')) {
+      calls.push('queue sent');
+      await route.fulfill(json({ applicationId: 'a-ats' }));
+      return;
+    }
     if (request.method() === 'POST') {
       const body = request.postDataJSON() as { reason: string; host: string };
       calls.push(`queue ${body.reason} ${body.host}`);
-      queued = {
-        vacancyId: VACANCY,
-        applicationId: 'a-ats',
-        title: 'Head of Engineering',
-        company: 'Гринкод',
-        url: FORM_URL,
-        reason: body.reason,
-        host: body.host,
-        state: 'ready',
-        preparing: false,
-        missingAnswers: 0,
-        letter: LETTER,
-        createdAt: '2026-11-25T10:00:00.000Z',
-      };
+      queued = queueItem(body.reason, body.host);
     }
     if (queued) await route.fulfill(json(queued));
     else await route.fulfill({ status: 404, json: { error: { code: 'not_found', message: '' } } });
@@ -268,6 +276,7 @@ const commands = (page: Page, name: string) =>
       ),
     name,
   );
+const toSend = (page: Page) => page.getByRole('button', { name: 'К отправке' }).click();
 const send = (page: Page) => page.getByRole('button', { name: 'Отправить отклик', exact: true });
 const withForm = (page: Page) =>
   page.getByRole('button', { name: 'Отправить отклик с анкетой' }).locator('visible=true');
@@ -373,15 +382,32 @@ test.describe('B787: отклик на сайте работодателя в п
   });
 
   test('капча до нажатия: отклик в очереди, всё готово для копирования', async ({ page }) => {
-    const calls = await open(page, 'send', { formState: 'captcha' });
+    const calls = await open(page, 'letter', { formState: 'captcha' });
+    await toSend(page);
     await expect.poll(() => calls).toContain(`queue captcha ${HOST}`);
     await expect(page.getByRole('button', { name: 'Скопировать' }).first()).toBeVisible();
     expect(await commands(page, 'ats_form_submit')).toHaveLength(0);
   });
 
   test('сайт вне списка и веб: отклик встаёт в очередь', async ({ page }) => {
-    const calls = await open(page, 'send', { inApp: false, channel: 'site' });
+    const calls = await open(page, 'letter', { inApp: false, channel: 'site' });
+    await toSend(page);
     await expect.poll(() => calls).toContain('queue other grinkod.example');
     await expect(page.getByRole('button', { name: 'Скопировать' }).first()).toBeVisible();
+  });
+
+  test('открытый адрес «Отправки» в очередь не ставит (Н2)', async ({ page }) => {
+    const calls = await open(page, 'send', { inApp: false, channel: 'site' });
+    await expect(page.getByRole('button', { name: 'Скопировать' }).first()).toBeVisible();
+    expect(calls.some((call) => call.startsWith('queue'))).toBe(false);
+  });
+
+  test('отклик из очереди «Отправить на сайте» приложение отправляет само', async ({ page }) => {
+    const calls = await open(page, 'form', { queued: true });
+    await answerQuestion(page);
+    await withForm(page).first().click();
+    await send(page).click();
+    await expect(page.getByText(new RegExp(`^Отправлено .* · ${HOST}$`, 'u'))).toBeVisible();
+    await expect.poll(() => calls).toContain('queue sent');
   });
 });

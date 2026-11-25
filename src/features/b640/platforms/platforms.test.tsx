@@ -16,7 +16,6 @@ vi.mock('./hh/hhRaiseApi', () => ({ getHhRaise: vi.fn(), setHhRaiseEnabled: vi.f
 vi.mock('./journal/journalApi', () => ({ getLinkedinJournal: vi.fn() }));
 
 const coach = await import('../../coach/coachApi');
-const apps = await import('../../applications/applicationsApi');
 const raise = await import('./hh/hhRaiseApi');
 const li = await import('./journal/journalApi');
 
@@ -46,13 +45,14 @@ describe('a11: hh.ru', () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('connected')] as never);
     vi.mocked(raise.getHhRaise).mockResolvedValue({
       connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер' }], enabled: false, everyHours: 4,
-      lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null, pending: false,
+      lastRaisedAt: '2026-11-16T09:40:00Z', nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null, pending: false, raisedToday: 2,
     } as never);
-    vi.mocked(apps.getCandidateActionUsage).mockResolvedValue({ usage: { hhBoostsCount: 1, lastHhBoostAt: '2026-11-16T09:40:00Z' } } as never);
     const view = mount(<Section node={node('a11')} params={{}} />);
     await flush();
     expect(view.container.querySelector('[data-b640-node="a11"]')).not.toBeNull();
     expect(view.container.textContent).toContain('Последнее поднятие');
+    expect(view.container.textContent).toContain('Поднятий сегодня2');
+    expect(raise.getHhRaise).toHaveBeenCalledTimes(1);
     const sw = view.container.querySelector<HTMLInputElement>('.hh-sw input#hh-up[role="switch"]');
     expect(sw?.checked).toBe(false);
     expect(view.container.querySelector('.hh-sw label[for="hh-up"]')!.textContent).toBe('Автоподнятие резюме');
@@ -63,7 +63,7 @@ describe('a11: hh.ru', () => {
   });
   it('не подключён: строка площадки со ссылкой «Подключить»', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('disconnected')] as never);
-    vi.mocked(apps.getCandidateActionUsage).mockRejectedValue(new Error('x'));
+    vi.mocked(raise.getHhRaise).mockRejectedValue(new Error('x'));
     const view = mount(<Section node={node('a11')} params={{}} />);
     await flush();
     expect(view.container.querySelector('.src-title')!.textContent).toContain('hh.ru');
@@ -72,7 +72,7 @@ describe('a11: hh.ru', () => {
   });
   it('учёт недоступен: экран остаётся, показывает дату данных', async () => {
     vi.mocked(coach.getConnections).mockResolvedValue([hh('connected')] as never);
-    vi.mocked(apps.getCandidateActionUsage).mockRejectedValue(new Error('x'));
+    vi.mocked(raise.getHhRaise).mockRejectedValue(new Error('x'));
     const view = mount(<Section node={node('a11')} params={{}} />);
     await flush();
     expect(view.container.textContent).toContain('Данные из резюме обновлены');

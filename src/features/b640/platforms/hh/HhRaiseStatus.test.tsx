@@ -18,7 +18,7 @@ vi.mock('../../../../services/desktop/desktopBridge', async (original) => ({
 const { HH_RAISE_REFRESH_MS, HhRaiseStatus } = await import('./HhRaiseStatus');
 
 const base: B640HhRaiseState = {
-  connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер', updatedLabel: 'обновлено 3 ноября' }], enabled: true, everyHours: 4,
+  connected: true, resumeId: 'abc', resumes: [{ id: 'abc', title: 'Инженер', updatedLabel: 'обновлено 3 ноября' }], enabled: true, everyHours: 4, raisedToday: 0,
   lastRaisedAt: null, nextRaiseAt: null, lastResult: null, pausedUntil: null, pauseReason: null, pending: false,
 };
 const time = (iso: string) => new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });

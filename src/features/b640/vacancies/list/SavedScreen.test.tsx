@@ -5,9 +5,15 @@ import { SavedScreen } from './SavedScreen';
 
 const pool = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock('../../../vacancies/useMatchedPool', () => ({ useMatchedPool: () => pool.value }));
+const saved = vi.hoisted(() => ({ value: new Map<string, object>() }));
 vi.mock('../vacancyLinks', () => ({
-  isSaved: () => false,
-  useVacancyLinks: () => ({ byCluster: new Map(), loading: false, failed: false }),
+  isSaved: (application: unknown) => Boolean(application),
+  useVacancyLinks: () => ({ byCluster: saved.value, loading: false, failed: false }),
+}));
+vi.mock('./TableBlock', () => ({ TableBlock: () => null }));
+vi.mock('./sortModel', async (original) => ({
+  ...(await original<object>()),
+  sortItems: (items: unknown) => items,
 }));
 vi.mock('../../../vacancies/useCurrencyRates', () => ({ useCurrencyRates: () => null }));
 vi.mock('./useRowInteractions', () => ({ useRowInteractions: () => ({ hiddenIds: new Set() }) }));
@@ -17,7 +23,10 @@ vi.mock('../../kit', async (original) => ({
 }));
 
 let view: Mounted | null = null;
-afterEach(() => view?.unmount());
+afterEach(() => {
+  view?.unmount();
+  saved.value = new Map();
+});
 
 function text(reading: boolean): string {
   const row = { cluster: { id: 'c' } };
@@ -32,5 +41,14 @@ describe('v06s «Сохранённые» (Д3)', () => {
   });
   it('дочитана — пусто', () => {
     expect(text(false)).toContain('Сохранённых вакансий нет');
+  });
+  it('найдены не все сохранённые — число не называется; все — называется', () => {
+    saved.value = new Map([['c', {}], ['d', {}]]);
+    expect(text(true)).not.toContain('сохранённая вакансия');
+    view?.unmount();
+    expect(text(false)).toContain('1 сохранённая вакансия');
+    view?.unmount();
+    saved.value = new Map([['c', {}]]);
+    expect(text(true)).toContain('1 сохранённая вакансия');
   });
 });

@@ -83,6 +83,7 @@ async function mockHh(page: Page, connected: boolean): Promise<void> {
             : [],
           enabled,
           everyHours: 4,
+          raisedToday: 1,
           lastRaisedAt: '2026-11-19T06:40:00.000Z',
           nextRaiseAt: '2026-11-19T10:40:00.000Z',
           lastResult: { status: 'ok', reason: null, at: '2026-11-19T06:40:00.000Z' },

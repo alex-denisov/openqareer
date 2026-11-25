@@ -24,6 +24,7 @@ describe('B645: три проверки разбора при малых дан�
         app({ stage: 'interview', salaryTo: 600_000, salaryCurrency: 'RUB' }),
         app({ stage: 'applied', publishedAt: new Date(BASE - 11 * DAY).toISOString() }),
         app({ stage: 'responded', salaryTo: 300_000, salaryCurrency: 'USD' }),
+        app({ stage: 'archived', appliedAt: null, archivePreviousStage: 'saved' }),
         app({ stage: 'saved', salaryTo: 100_000, salaryCurrency: 'RUB' }),
       ],
       { amount: 500_000, currency: 'RUB' },

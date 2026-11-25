@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
-import { useMatchedPool } from '../../../vacancies/useMatchedPool';
+import { useMatchedPool, type MatchedPool } from '../../../vacancies/useMatchedPool';
 import { Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { pluralRu } from '../format';
-import { isSaved, useVacancyLinks } from '../vacancyLinks';
+import { isSaved, useVacancyLinks, type VacancyLinks } from '../vacancyLinks';
 import { CountTitle, LoadErrors, LoadingLine } from './ListParts';
 import { SERVER_SORT, nextSort, sortItems, type SortState } from './sortModel';
 import { useRowInteractions } from './useRowInteractions';
@@ -22,6 +22,18 @@ function EmptySaved() {
       </Link>
     </p>
   );
+}
+
+/** Подборка читается порциями: пока найдены не все сохранённые, число не называем. */
+function isCounting(
+  pool: MatchedPool,
+  links: VacancyLinks,
+  hiddenIds: ReadonlySet<string>,
+  found: number,
+): boolean {
+  if (pool.reading !== true || pool.complete) return false;
+  const saved = [...links.byCluster].filter(([id, item]) => isSaved(item) && !hiddenIds.has(id));
+  return found < saved.length;
 }
 
 /** Узел v06s: та же таблица по вакансиям, у которых карточка в стадии «сохранено». */
@@ -44,15 +56,16 @@ export function SavedScreen() {
     [pool.matched, links.byCluster, rows.hiddenIds, sortState, rates],
   );
   const waiting = items.length === 0 && (pool.loading || pool.reading === true || links.loading);
+  const counting = isCounting(pool, links, rows.hiddenIds, items.length);
   const env = { currency: 'RUB' as const, rates, noRole: false };
   const empty = !waiting && items.length === 0 && !pool.failed && !links.failed;
   return (
     <div className="page" data-b640-node="v06s" data-b640-section="vacancies">
       {empty ? <EmptySaved /> : null}
-      <section className="col vl vt-wrap is-v6" aria-labelledby="list-title">
+      <section className="col vl vt-wrap is-v6" {...(counting ? { 'aria-label': 'Сохранённые вакансии' } : { 'aria-labelledby': 'list-title' })}>
         {items.length > 0 ? (
           <div className="vl-top">
-            <CountTitle count={items.length} word={SAVED_WORD(items.length)} />
+            {counting ? <LoadingLine /> : <CountTitle count={items.length} word={SAVED_WORD(items.length)} />}
           </div>
         ) : null}
         <LoadErrors pool={pool} links={links} poolFailed={pool.failed} />

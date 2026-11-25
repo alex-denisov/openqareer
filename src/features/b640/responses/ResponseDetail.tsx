@@ -1,3 +1,4 @@
+import { pressSend } from '../apply/applyIntent';
 import { useRef, useState } from 'react';
 import type { ApplicationView } from '../../applications/applicationsApi';
 import type { ApplyConsentEntry } from '../../../../shared/applyConsent';
@@ -210,7 +211,11 @@ function NextActions({ item, actions, draft }: ActionsProps) {
   return (
     <div className="actions">
       {row.action && row.action.kind !== 'debrief' ? (
-        <Link className="btn is-primary" to={actionPath(row)}>
+        <Link
+          className="btn is-primary"
+          to={actionPath(row)}
+          onClick={() => row.action && pressSend(row.action, actionPath(row))}
+        >
           <Icon name={row.action.icon} />
           {row.action.label}
         </Link>

@@ -98,9 +98,8 @@ describe('B656: воронка', () => {
     const summary = funnelSummary(ITEMS);
     expect(summary.sent).toBe(5);
     expect(summary.responded).toBe(3);
-    // B645: интервью и офферы — по текущей стадии, как в чипах экрана «Отклики».
-    expect(summary.interview).toBe(chipCounts(ITEMS).interview);
-    expect(summary.interview).toBe(1);
+    // Н1: интервью и офферы — по истории, как на «Сегодня».
+    expect(summary.interview).toBe(2);
     expect(summary.offer).toBe(1);
     expect(summary.silent).toBe(1);
     expect(summary.since).toBe('2 октября');
@@ -211,7 +210,7 @@ describe('B680: автоотклики отдельно', () => {
   it('B645: числа воронки — без автооткликов, автоотклики и ответы на них отдельно', () => {
     const summary = funnelSummary(marked);
     expect(summary.sent).toBe(3);
-    expect(summary.interview).toBe(0);
+    expect(summary.interview).toBe(1);
     expect(summary.silent).toBe(0);
     expect(summary.autoResponded).toBe(1);
     expect(summary.sources.reduce((total, source) => total + source.total, 0)).toBe(3);

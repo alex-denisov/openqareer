@@ -3,8 +3,8 @@ import type { HhResumeSnapshot } from '../../../../../shared/hhCandidateSession'
 import { formatDay, formatWhen } from '../format';
 
 export interface HhUsage {
-  readonly hhBoostsCount: number;
-  readonly lastHhBoostAt: string | null;
+  readonly raisedToday: number;
+  readonly lastRaisedAt: string | null;
 }
 
 export interface HhStat {
@@ -40,9 +40,9 @@ export function buildHhView(
   const hh = connections.find((item) => item.platform === 'hh');
   if (!hh || hh.status === 'disconnected') return { kind: 'off' };
   const stats: HhStat[] = [];
-  const lastBoost = formatWhen(usage?.lastHhBoostAt);
+  const lastBoost = formatWhen(usage?.lastRaisedAt);
   if (lastBoost) stats.push({ id: 'last', label: 'Последнее поднятие', value: lastBoost });
-  if (usage) stats.push({ id: 'today', label: 'Поднятий сегодня', value: String(usage.hhBoostsCount) });
+  if (usage) stats.push({ id: 'today', label: 'Поднятий сегодня', value: String(usage.raisedToday) });
   const loaded = formatDay(lastReadAt(hh, snapshot));
   if (loaded) stats.push({ id: 'loaded', label: 'Данные из резюме обновлены', value: loaded });
   return { kind: 'on', stats };

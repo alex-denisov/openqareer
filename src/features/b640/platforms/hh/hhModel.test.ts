@@ -14,7 +14,7 @@ describe('buildHhView', () => {
     expect(buildHhView([], null)).toEqual({ kind: 'off' });
   });
   it('собирает цифры из подключения и учёта действий', () => {
-    const view = buildHhView([on], { hhBoostsCount: 2, lastHhBoostAt: '2026-11-16T09:40:00Z' });
+    const view = buildHhView([on], { raisedToday: 2, lastRaisedAt: '2026-11-16T09:40:00Z' });
     expect(view.kind).toBe('on');
     const ids = view.kind === 'on' ? view.stats.map((stat) => stat.id) : [];
     expect(ids).toEqual(['last', 'today', 'loaded']);
@@ -24,7 +24,7 @@ describe('buildHhView', () => {
     expect(view.kind === 'on' && view.stats.map((stat) => stat.id)).toEqual(['loaded']);
   });
   it('без последнего поднятия строки о нём нет', () => {
-    const view = buildHhView([on], { hhBoostsCount: 0, lastHhBoostAt: null });
+    const view = buildHhView([on], { raisedToday: 0, lastRaisedAt: null });
     expect(view.kind === 'on' && view.stats.map((stat) => stat.id)).toEqual(['today', 'loaded']);
   });
   it('дата данных — последнее чтение резюме: снимок новее импорта или импорт новее снимка', () => {

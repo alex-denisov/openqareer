@@ -1,4 +1,5 @@
 import type { ApplicationStage } from '../../shared/applicationStage';
+import { wasSent, type SentFacts } from '../../shared/applicationSent';
 import type { RejectionReviewChecks } from '../../shared/rejectionReview';
 
 /** Отклик позже стольких дней после публикации вакансии считается поздним. */
@@ -7,7 +8,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** hh.ru пишет рубли как RUR. */
 const CURRENCY_ALIASES: Readonly<Record<string, string>> = { RUR: 'RUB' };
 
-export interface ReviewCheckApplication {
+export interface ReviewCheckApplication extends SentFacts {
   readonly stage: ApplicationStage;
   readonly appliedAt: string | null;
   /** Дата публикации вакансии из пула; `null` — вакансии в пуле уже нет. */
@@ -50,7 +51,7 @@ export function buildReviewChecks(
   applications: readonly ReviewCheckApplication[],
   floor: SalaryFloor | null,
 ): RejectionReviewChecks {
-  const sent = applications.filter((application) => application.stage !== 'saved');
+  const sent = applications.filter(wasSent);
   const total = sent.length;
   const since = sent
     .flatMap((application) => (application.appliedAt ? [application.appliedAt] : []))

@@ -1,3 +1,4 @@
+import { pressSend } from '../apply/applyIntent';
 import { createContext, useContext, type ReactNode } from 'react';
 import { Button, Icon, Link, StatusLine, type IconName } from '../kit';
 
@@ -72,7 +73,7 @@ export function LeadActions({
   return (
     <div className="actions">
       {primary ? (
-        <Link className={quiet ? 'btn' : 'btn is-primary'} to={primary.path}>
+        <Link className={quiet ? 'btn' : 'btn is-primary'} to={primary.path} onClick={() => pressSend(primary, primary.path)}>
           <Icon name={primary.icon} />
           {primary.label}
         </Link>
@@ -85,7 +86,7 @@ export function LeadActions({
 /** Вторая и следующие кнопки блока: контурные ссылки. */
 export function ActionLink({ action }: { readonly action: ScreenAction }) {
   return (
-    <Link className="btn" to={action.path}>
+    <Link className="btn" to={action.path} onClick={() => pressSend(action, action.path)}>
       <Icon name={action.icon} />
       {action.label}
     </Link>
