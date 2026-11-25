@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import type { HhRaisePauseReason } from '../../shared/b640HhRaise';
+import type { HhRaiseOutcome, HhRaisePauseReason } from '../../shared/b640HhRaise';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
 /** B699: расписание поднятия по резюме и очередь заданий клиенту. Только новые таблицы. */
@@ -79,6 +79,30 @@ export class SqliteHhRaiseRepository {
     this.database.exec('PRAGMA journal_mode = WAL;');
     applySqliteBusyTimeout(this.database);
     this.database.exec(HH_RAISE_SCHEMA);
+    this.ensureOutcomeColumn();
+  }
+
+  private ensureOutcomeColumn(): void {
+    const known = () =>
+      (this.database.prepare('PRAGMA table_info(hh_raise_tasks)').all() as unknown as { name: string }[]).some(
+        ({ name }) => name === 'outcome',
+      );
+    if (known()) return;
+    try {
+      this.database.exec('ALTER TABLE hh_raise_tasks ADD COLUMN outcome TEXT');
+    } catch (error) {
+      // Соседний процесс мог добавить столбец первым.
+      if (!known()) throw error;
+    }
+  }
+
+  /** Окончания удачных поднятий с `since`. Прежние задания исхода не хранили: взятое и закрытое — поднятие. */
+  raisedAt(candidateId: string, since: string): string[] {
+    const rows = this.database
+      .prepare(`SELECT finished_at FROM hh_raise_tasks WHERE candidate_id = ? AND status = 'done'
+                AND claimed_at IS NOT NULL AND finished_at >= ? AND (outcome = 'ok' OR outcome IS NULL)`)
+      .all(candidateId, since) as unknown as { finished_at: string }[];
+    return rows.map((row) => row.finished_at);
   }
 
   close(): void {
@@ -206,12 +230,12 @@ export class SqliteHhRaiseRepository {
   }
 
   /** Закрывает выполняемое задание кандидата один раз; чужое или закрытое — null. */
-  finish(candidateId: string, taskId: string, now: string): HhRaiseTask | null {
+  finish(candidateId: string, taskId: string, now: string, outcome: HhRaiseOutcome): HhRaiseTask | null {
     const row = this.database
       .prepare(`SELECT resume_id FROM hh_raise_tasks WHERE id = ? AND candidate_id = ? AND status = 'running'`)
       .get(taskId, candidateId) as { resume_id: string } | undefined;
     if (!row) return null;
-    this.database.prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ? WHERE id = ?`).run(now, taskId);
+    this.database.prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?, outcome = ? WHERE id = ?`).run(now, outcome, taskId);
     return { id: taskId, candidateId, resumeId: row.resume_id, status: 'done' };
   }
 
@@ -222,7 +246,7 @@ export class SqliteHhRaiseRepository {
   releaseStale(claimedBefore: string, now: string): number {
     return Number(
       this.database
-        .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ? WHERE status = 'running' AND claimed_at <= ?`)
+        .prepare(`UPDATE hh_raise_tasks SET status = 'done', finished_at = ?, outcome = 'stale' WHERE status = 'running' AND claimed_at <= ?`)
         .run(now, claimedBefore).changes,
     );
   }

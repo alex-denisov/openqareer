@@ -33,6 +33,8 @@ export const translationKey = (lang: ResumeLang, text: string) => `${lang}:${tex
 /** Должность оставлена как есть после вопроса: «Scrum Master» больше не спрашивается. */
 const askedKey = (lang: ResumeLang, text: string) => `asked:${translationKey(lang, text)}`;
 
+const reasked = ({ kind }: Line) => kind === 'title' || kind === 'term';
+
 type Map1 = (text: string, kind: Kind) => string;
 type Claim = { readonly value: string };
 
@@ -179,11 +181,19 @@ export function documentLang(document: ResumeDocument): ResumeLang {
 function companiesOf(document: ResumeDocument): string[] {
   const projects = (document.projects ?? []).map(({ name }) => name.value.trim());
   const employers = document.experience.flatMap(({ employer }) => employer?.value.trim() || []);
-  // «e-therapy» в названии проекта или компании — имя продукта.
-  const products = [...projects, ...employers].flatMap(
+  const texts = [
+    document.about ?? '',
+    ...document.experience.flatMap((place) => [
+      place.description?.value ?? '',
+      ...place.bullets.map(({ value }) => value),
+    ]),
+    ...(document.projects ?? []).map(({ description }) => description?.value ?? ''),
+  ];
+  // «e-therapy» — имя продукта, где бы оно ни стояло.
+  const products = [...projects, ...employers, ...texts].flatMap(
     (text) =>
       text.match(
-        /(?<![\p{L}\p{N}-])e-(?!commerce|learning|mail|gov|sign|doc)\p{Script=Latin}+(?![\p{L}\p{N}-])/giu,
+        /(?<![\p{L}\p{N}-])e-(?!commerce|learning|mail|gov|sign|doc|business|wallet|book|bike|scooter|invoic|procure|bank|pay|health|shop|ticket|services?|money|trad)\p{Script=Latin}+(?![\p{L}\p{N}-])/giu,
       ) ?? [],
   );
   return [
@@ -203,7 +213,7 @@ function reader(document: ResumeDocument, lang: ResumeLang, translations: Resume
     const text = translations[translationKey(lang, line.text)];
     // Должность, сохранённая как есть до отметки, спрашивается ещё один раз.
     if (text === line.text)
-      return line.kind === 'title' && !(askedKey(lang, line.text) in translations)
+      return reasked(line) && !(askedKey(lang, line.text) in translations)
         ? 'missing'
         : 'rejected';
     // Перевод, сохранённый до проверки чисел, спрашивается заново.
@@ -322,7 +332,7 @@ export async function translateDocument(
         const text = await askLine(translate, line, lang, companies);
         if (text === undefined) continue;
         arrived.set(translationKey(lang, line.text), text);
-        if (line.kind === 'title' && text === line.text) asked.set(askedKey(lang, text), text);
+        if (reasked(line) && text === line.text) asked.set(askedKey(lang, text), text);
       }
     };
     let timer: ReturnType<typeof setTimeout> | undefined;

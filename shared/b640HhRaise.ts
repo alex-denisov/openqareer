@@ -30,6 +30,8 @@ export interface B640HhRaiseState {
   readonly enabled: boolean;
   readonly everyHours: typeof HH_RAISE_EVERY_HOURS;
   readonly lastRaisedAt: string | null;
+  /** Удачные поднятия всех резюме за сегодня по часовому поясу аккаунта. */
+  readonly raisedToday: number;
   readonly nextRaiseAt: string | null;
   readonly lastResult: B640HhRaiseLastResult | null;
   readonly pausedUntil: string | null;

@@ -1,3 +1,4 @@
+import { withTextSalary } from './textSalary';
 import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolLiveness';
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
@@ -3437,7 +3438,9 @@ function mergeUpsertRows(
   const latest = new Map(existing);
   return chunk.map((vacancy) => {
     const previous = latest.get(vacancy.id);
-    const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
+    const stored = withTextSalary(
+      previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy,
+    );
     latest.set(vacancy.id, stored);
     return {
       vacancy,

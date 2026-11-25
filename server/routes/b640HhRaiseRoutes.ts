@@ -6,6 +6,7 @@ import {
   type B640HhRaiseClaim,
   type B640HhRaiseState,
 } from '../../shared/b640HhRaise';
+import { DEFAULT_ACCOUNT_TIMEZONE, formatLocalDate } from '../../shared/timezoneUtils';
 import { HH_RESUME_ID, type HhResumeSummary } from '../../shared/hhCandidateSession';
 import { applyOutcome, canRaiseAt, choicePatch, firstRaiseAt, raiseAvailableAt } from '../candidate/hhRaiseSchedule';
 import { SqliteHhRaiseRepository, type HhRaiseScheduleRow } from '../candidate/sqliteHhRaiseRepository';
@@ -34,7 +35,7 @@ type Handler = (stores: Stores, candidateId: string, request: FastifyRequest, re
 
 const answer = (request: FastifyRequest, data: unknown) => ({ data, meta: { requestId: request.id } });
 
-function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhRaiseScheduleRow | null, pending: boolean): B640HhRaiseState {
+function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhRaiseScheduleRow | null, pending: boolean, raisedToday = 0): B640HhRaiseState {
   const connected = resumes.length > 0;
   return {
     connected, resumeId: id, resumes,
@@ -42,6 +43,7 @@ function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhR
     enabled: row ? row.enabled : connected,
     everyHours: HH_RAISE_EVERY_HOURS,
     lastRaisedAt: row?.lastRaisedAt ?? null,
+    raisedToday,
     nextRaiseAt: row?.enabled === false ? null : (row?.nextRaiseAt ?? null),
     lastResult: row?.lastResult && row.lastResultAt
       ? { status: row.lastResult, reason: row.lastReason, at: row.lastResultAt } : null,
@@ -49,6 +51,15 @@ function viewOf(resumes: readonly HhResumeSummary[], id: string | null, row: HhR
     pauseReason: row?.pauseReason ?? null,
     pending,
   };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function raisedToday(stores: Stores, candidateId: string, now = new Date()): number {
+  const dayOf = (date: Date) => formatLocalDate(date, DEFAULT_ACCOUNT_TIMEZONE);
+  return stores.raise
+    .raisedAt(candidateId, new Date(now.getTime() - DAY_MS).toISOString())
+    .filter((at) => dayOf(new Date(at)) === dayOf(now)).length;
 }
 
 /** Резюме, о котором речь: из запроса, если оно есть в снимке, иначе выбранное кандидатом или первое. */
@@ -85,12 +96,12 @@ const getState: Handler = (stores, candidateId, request, reply) => {
     const former = stores.raise.getSchedule(candidateId, picked.former);
     const moved = stores.raise.chooseResume(candidateId, picked.id,
       choicePatch(former, stores.raise.getSchedule(candidateId, picked.id), former?.enabled ?? true, now), now.toISOString());
-    return answer(request, viewOf(picked.listed, picked.id, moved, stores.raise.hasOpenTask(candidateId, picked.id)));
+    return answer(request, viewOf(picked.listed, picked.id, moved, stores.raise.hasOpenTask(candidateId, picked.id), raisedToday(stores, candidateId)));
   }
   // Расписание заводится при первом чтении подключённого резюме: первое поднятие со сдвигом.
   const row = stores.raise.getSchedule(candidateId, picked.id) ?? stores.raise.patchSchedule(
     candidateId, picked.id, { nextRaiseAt: firstRaiseAt(now) }, now.toISOString());
-  return answer(request, viewOf(picked.listed, picked.id, row, stores.raise.hasOpenTask(candidateId, picked.id)));
+  return answer(request, viewOf(picked.listed, picked.id, row, stores.raise.hasOpenTask(candidateId, picked.id), raisedToday(stores, candidateId)));
 };
 
 const putToggle = withResume((stores, candidateId, id, request, reply) => {
@@ -102,7 +113,7 @@ const putToggle = withResume((stores, candidateId, id, request, reply) => {
   if (former && former !== id) {
     const chosen = stores.raise.chooseResume(candidateId, id,
       choicePatch(stores.raise.getSchedule(candidateId, former), current, body.data.enabled, now), now.toISOString());
-    return answer(request, viewOf(listed, id, chosen, stores.raise.hasOpenTask(candidateId, id)));
+    return answer(request, viewOf(listed, id, chosen, stores.raise.hasOpenTask(candidateId, id), raisedToday(stores, candidateId)));
   }
   const reconnect = body.data.enabled && current?.pauseReason === 'logged_out';
   const row = stores.raise.chooseResume(candidateId, id, {
@@ -110,7 +121,7 @@ const putToggle = withResume((stores, candidateId, id, request, reply) => {
     ...(reconnect ? { pauseReason: null, pausedUntil: null } : {}),
     ...(body.data.enabled && !current?.nextRaiseAt ? { nextRaiseAt: firstRaiseAt(now) } : {}),
   }, now.toISOString());
-  return answer(request, viewOf(listed, id, row, stores.raise.hasOpenTask(candidateId, id)));
+  return answer(request, viewOf(listed, id, row, stores.raise.hasOpenTask(candidateId, id), raisedToday(stores, candidateId)));
 }, (request) => (request.body as { resumeId?: string } | null)?.resumeId);
 
 const postRetry = withResume((stores, candidateId, id, request, reply) => {
@@ -131,7 +142,7 @@ const postRetry = withResume((stores, candidateId, id, request, reply) => {
   }
   if (!stores.raise.hasOpenTask(candidateId, id)) stores.raise.enqueue(candidateId, id, now.toISOString());
   const queued = stores.raise.patchSchedule(candidateId, id, { enabled: true, pauseReason: null, pausedUntil: null, nextRaiseAt: now.toISOString() }, now.toISOString());
-  return answer(request, viewOf(listed, id, queued, stores.raise.hasOpenTask(candidateId, id)));
+  return answer(request, viewOf(listed, id, queued, stores.raise.hasOpenTask(candidateId, id), raisedToday(stores, candidateId)));
 }, (request) => (request.body as { resumeId?: string } | null)?.resumeId);
 
 /** Клиент берёт задание и исполняет его в окне сессии кандидата; сервер в hh не ходит. */
@@ -148,11 +159,11 @@ const postResult: Handler = (stores, candidateId, request, reply) => {
     return sendError(reply, request, 400, 'invalid_hh_raise_result', 'Исход не записался.', false);
   }
   const now = new Date();
-  const task = stores.raise.finish(candidateId, params.data.taskId, now.toISOString());
+  const task = stores.raise.finish(candidateId, params.data.taskId, now.toISOString(), body.data.outcome);
   if (!task) return sendError(reply, request, 409, 'hh_raise_task_closed', 'Это задание закрыто или чужое.', false);
   const row = stores.raise.patchSchedule(candidateId, task.resumeId, applyOutcome(body.data.outcome, now, Math.random, body.data.availableAt), now.toISOString());
   noteLoginChange(stores, request, candidateId, body.data.outcome);
-  return answer(request, viewOf(pickResume(stores, candidateId).listed, task.resumeId, row, stores.raise.hasOpenTask(candidateId, task.resumeId)));
+  return answer(request, viewOf(pickResume(stores, candidateId).listed, task.resumeId, row, stores.raise.hasOpenTask(candidateId, task.resumeId), raisedToday(stores, candidateId)));
 };
 
 /** B690: первый упор в страницу входа — уведомление; удачное поднятие — вход жив, уведомление снято. */

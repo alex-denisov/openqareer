@@ -146,6 +146,8 @@ interface FlowProps {
   readonly manual: ManualApplyFlow | null;
   readonly queue: QueueManual;
   readonly declined: boolean;
+  readonly held: boolean;
+  readonly press: () => void;
   readonly cluster: Parameters<typeof buildHead>[0]['cluster'];
 }
 
@@ -158,6 +160,7 @@ interface SendAsk {
 }
 
 interface BodyProps {
+  readonly onLetterSend: () => void;
   readonly vacancyId: string;
   readonly head: ApplyHead;
   readonly sourceType: string;
@@ -278,7 +281,7 @@ function SendBody(props: BodyProps) {
 }
 
 function EditorBody(props: BodyProps) {
-  const { vacancyId, head, step, setStep, letter, variants, resumeOk, resumeSeen } = props;
+  const { vacancyId, head, step, letter, variants, resumeOk, resumeSeen } = props;
   const [document, setDocument] = useState<ResumeDocument | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const mobile = useIsMobile();
@@ -315,7 +318,7 @@ function EditorBody(props: BodyProps) {
             letter={letter}
             variants={variants}
             head={head}
-            onSend={() => setStep('send')}
+            onSend={props.onLetterSend}
           />
         </div>
       </div>
@@ -424,6 +427,7 @@ function applyForm(
 function useSendAsk(
   questionnaire: QuestionnaireState,
   setStep: Dispatch<SetStateAction<ApplyStep>>,
+  press: () => void,
 ): SendAsk {
   const [askNow, setAskNow] = useState(false);
   const visibility = useVisibilityQuestion();
@@ -433,6 +437,7 @@ function useSendAsk(
     onAsked,
     visibility,
     sendWithForm: () => {
+      press();
       questionnaire.save();
       setAskNow(true);
       setStep('send');
@@ -477,32 +482,42 @@ function useResumeStep(
   return { resumeOk, resumeSeen, onResumeOk };
 }
 
+/** Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо. */
+const shownStep = (step: ApplyStep, hasForm: boolean): ApplyStep =>
+  step === 'form' && !hasForm ? 'letter' : step;
+
+const withPress = (press: () => void) => (action: () => void) => () => {
+  press();
+  action();
+};
+
+const pressedAts = (ats: AtsFlow, press: () => void): AtsFlow =>
+  ats.apply ? { ...ats, apply: { ...ats.apply, send: withPress(press)(ats.apply.send) } } : ats;
+
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
-function useApplyFlow({ target, cluster, manual, queue, declined }: FlowProps): FlowState {
+function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): FlowState {
   const { search } = useShell();
   const [step, setStep] = useState(() => parseStep(search, manual ? 'send' : 'letter'));
   const { letter, variants, approvalPending } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
-  const ask = useSendAsk(questionnaire, setStep);
+  const ask = useSendAsk(questionnaire, setStep, press);
   useQueuedQuestions(manual, questionnaire);
   // Название вакансии: из связей по вакансии, а если их нет — из ответа об анкете.
   const known = letter.circles.data ?? questionnaire.known;
   const head = buildHead({ application: target.application, known, cluster });
   const sourceType = applyRoute({ application: target.application, cluster }).source ?? 'manual';
-  const route = { target, destination: cluster?.applyTarget ?? null, head, sourceType };
+  const destination = cluster?.applyTarget ?? null;
   const ats = useAtsFlow({
-    ...route,
-    queued: manual !== null,
-    queue,
-    declined,
+    ...{ target, destination, head, sourceType },
+    manual: manual?.item ?? null,
+    ...rest,
     step,
     setStep,
     letter,
     questionnaire,
   });
-  // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
-  const shown: ApplyStep = step === 'form' && !questionnaire.form && !ats.apply ? 'letter' : step;
+  const shown = shownStep(step, Boolean(questionnaire.form ?? ats.apply));
   const resume = useResumeStep(step, setStep, letter);
   return {
     shown,
@@ -523,8 +538,10 @@ function useApplyFlow({ target, cluster, manual, queue, declined }: FlowProps): 
       variants,
       ask,
       ...applyForm(questionnaire, ask.visibility, setStep),
-      manual,
-      ats,
+      // Форма сайта снова читается приложением: очередь показывается, только если она не подошла.
+      manual: ats.apply ? null : manual,
+      ats: pressedAts(ats, press),
+      onLetterSend: withPress(press)(() => setStep('send')),
       questionnaire,
       ...resume,
     },
@@ -625,8 +642,8 @@ function LoadFailed({ text, onRetry }: { readonly text: string; readonly onRetry
 }
 
 /** До отправки: отклик, который кандидат отправляет сам, собран заранее (B787). */
-function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue' | 'declined'>) {
-  const { manual, queue, declined } = useManualApply(
+function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue' | 'declined' | 'held' | 'press'>) {
+  const { manual, queue, declined, held, press } = useManualApply(
     target,
     applyRoute({ application: target.application, cluster }).source,
   );
@@ -637,7 +654,17 @@ function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue' | 'd
       </Pending>
     );
   }
-  return <ApplyFlow target={target} cluster={cluster} manual={manual} queue={queue} declined={declined} />;
+  return (
+    <ApplyFlow
+      target={target}
+      cluster={cluster}
+      manual={manual}
+      queue={queue}
+      declined={declined}
+      held={held}
+      press={press}
+    />
+  );
 }
 
 /**

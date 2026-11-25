@@ -107,7 +107,7 @@ function MoneyScale({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   return (
     <div className="vs-sc">
       <span className="vs-k">Деньги</span>
-      <span className="vs-v num">{money.text}</span>
+      <span className="vs-v num">{money.text === 'не указана' ? 'не указаны' : money.text}</span>
       {fork ? (
         <span className="vs-bar is-money" role="img" aria-label={`Вилка ${fork.caption}`}>
           <BarPart className="vs-fork" start={fork.start} size={fork.size} />
