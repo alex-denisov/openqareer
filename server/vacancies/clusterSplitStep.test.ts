@@ -181,4 +181,35 @@ describe('cluster split step (B752)', () => {
     expect(db.prepare('SELECT completed FROM cluster_split_state').get()).toEqual({ completed: 0 });
     expect(splitClustersStep(db, { chunk: 200, now: 4_000 })).toMatchObject({ split: 1 });
   });
+
+  it('drops a foreign source without a pool record, names it in the log and reverts it', () => {
+    const { db } = seed();
+    const cluster = collided(
+      vacancy(VK, '99', 'VK', 'Analyst'),
+      vacancy('ats-orphan', '99', 'Acrylicize', 'Artist'),
+    );
+    store!.mergeSourceSlice(VK, [vacancy(VK, '99', 'VK', 'Analyst')]);
+    store!.saveClusters([cluster]);
+    const before = snapshot(db);
+    const events: Array<[string, Record<string, unknown>]> = [];
+
+    const result = splitClustersStep(db, {
+      now: 1_000,
+      log: (event, fields) => events.push([event, fields]),
+    });
+
+    const row = db
+      .prepare('SELECT cluster_json FROM vacancy_clusters WHERE id = ?')
+      .get(cluster.id) as {
+      cluster_json: string;
+    };
+    const stored = JSON.parse(row.cluster_json) as { sources: { sourceId: string }[] };
+    expect(stored.sources.map((source) => source.sourceId)).toEqual([VK]);
+    expect(events).toContainEqual([
+      'cluster_split_sources_dropped',
+      { clusterId: cluster.id, count: 1, sample: ['ats-orphan:99'] },
+    ]);
+    revertClusterSplitStep(db, result.stepId!);
+    expect(snapshot(db)).toEqual(before);
+  });
 });

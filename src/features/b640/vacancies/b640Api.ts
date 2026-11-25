@@ -82,10 +82,9 @@ export function matchedPageQuery(
   query.set('sort', SERVER_KEY[sort.key]);
   query.set('direction', sort.dir);
   query.set('limit', String(B640_PAGE_SIZE));
-  if (days !== null) {
-    query.set('days', String(days));
-    query.set('tz', candidateTimeZone());
-  }
+  // Граница дня нужна и порядку «Даты».
+  if (days !== null || sort.key === 'date') query.set('tz', candidateTimeZone());
+  if (days !== null) query.set('days', String(days));
   if (money !== null) {
     query.set('money', String(money.from));
     query.set('moneyCurrency', money.currency);
