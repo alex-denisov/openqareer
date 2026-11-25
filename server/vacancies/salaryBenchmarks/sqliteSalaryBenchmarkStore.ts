@@ -16,7 +16,10 @@ const TABLE_SQL = `CREATE TABLE IF NOT EXISTS salary_benchmarks (
   place TEXT NOT NULL,
   row_json TEXT NOT NULL
 ) STRICT;
-CREATE INDEX IF NOT EXISTS salary_benchmarks_place ON salary_benchmarks(place)`;
+CREATE INDEX IF NOT EXISTS salary_benchmarks_place ON salary_benchmarks(place);
+CREATE TABLE IF NOT EXISTS salary_benchmarks_version (
+  id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL
+) STRICT`;
 
 const placeKey = (row: SalaryBenchmark): string =>
   row.country ? `country:${row.country}` : `region:${row.region}`;
@@ -32,6 +35,10 @@ export function writeSalaryBenchmarks(database: DatabaseSync, input: unknown): n
   try {
     database.exec('DELETE FROM salary_benchmarks');
     for (const row of rows) insert.run(row.id, placeKey(row), JSON.stringify(row));
+    database.exec(
+      `INSERT INTO salary_benchmarks_version VALUES (1, 1)
+        ON CONFLICT (id) DO UPDATE SET version = version + 1`,
+    );
     database.exec('COMMIT');
   } catch (error: unknown) {
     database.exec('ROLLBACK');
@@ -69,19 +76,47 @@ export function loadSalaryBenchmarksFile(
   }
 }
 
-/** Цифры страны вместе с цифрами её региона; таблицы ещё нет — пусто. */
-export function readSalaryBenchmarks(
-  database: DatabaseSync,
-  place: { readonly country?: string; readonly region?: string },
-): SalaryBenchmark[] {
-  const exists = database
-    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'salary_benchmarks'")
-    .get();
-  if (!exists) return [];
-  const rows = database
-    .prepare('SELECT row_json FROM salary_benchmarks WHERE place IN (?, ?) ORDER BY id')
-    .all(`country:${place.country ?? ''}`, `region:${place.region ?? ''}`) as {
-    row_json: string;
-  }[];
-  return rows.map((row) => salaryBenchmarkSchema.parse(JSON.parse(row.row_json)));
+export type SalaryBenchmarkReader = (place: {
+  readonly country?: string;
+  readonly region?: string;
+}) => readonly SalaryBenchmark[];
+
+function prepareReader(database: DatabaseSync) {
+  return {
+    version: database.prepare('SELECT version FROM salary_benchmarks_version'),
+    rows: database.prepare('SELECT row_json FROM salary_benchmarks WHERE place = ? ORDER BY id'),
+  };
+}
+
+/** Таблицы ещё нет — пусто. Разобранные строки места живут до следующей загрузки файла. */
+export function createSalaryBenchmarkReader(database: DatabaseSync): SalaryBenchmarkReader {
+  let statements: ReturnType<typeof prepareReader> | undefined;
+  let cache = { version: -1, places: new Map<string, readonly SalaryBenchmark[]>() };
+  const prepared = () => {
+    try {
+      statements ??= prepareReader(database);
+    } catch (error: unknown) {
+      if (!(error instanceof Error && error.message.includes('no such table'))) throw error;
+    }
+    return statements;
+  };
+  return ({ country, region }) => {
+    const ready = prepared();
+    const current = ready?.version.get() as { version: number } | undefined;
+    if (!ready || !current) return [];
+    if (current.version !== cache.version) cache = { version: current.version, places: new Map() };
+    const read = (place: string): readonly SalaryBenchmark[] => {
+      const known = cache.places.get(place);
+      if (known) return known;
+      const rows = (ready.rows.all(place) as { row_json: string }[]).map((row) =>
+        salaryBenchmarkSchema.parse(JSON.parse(row.row_json)),
+      );
+      cache.places.set(place, rows);
+      return rows;
+    };
+    return [
+      ...(country ? read(`country:${country}`) : []),
+      ...(region ? read(`region:${region}`) : []),
+    ];
+  };
 }

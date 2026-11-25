@@ -37,6 +37,8 @@ export const salaryBenchmarkSchema = z
     currency: z.string().regex(/^[A-Z]{3}$/u),
     period: z.enum(['hour', 'day', 'month', 'year']),
     tax: z.enum(['gross', 'net', 'unknown']),
+    /** Оклад или полный доход с премией; источник не сказал — `unknown`. */
+    payBase: z.enum(['base', 'total', 'unknown']).default('unknown'),
     year: z.number().int().min(2015).max(2100),
     sampleSize: z.number().int().positive().nullable(),
     readOn: isoDate,
@@ -59,7 +61,7 @@ export const salaryBenchmarkSchema = z
 export type SalaryBenchmark = z.infer<typeof salaryBenchmarkSchema>;
 
 /** Источники, которыми не пользуемся. */
-const REFUSED_HOSTS = /(?:^|\.)(?:glassdoor\.[a-z.]+|levels\.fyi)$/u;
+const REFUSED_HOSTS = /(?:^|\.)glassdoor\.[a-z.]+$/u;
 
 const usesRefusedHost = (url: string) => REFUSED_HOSTS.test(new URL(url).hostname);
 
@@ -74,7 +76,7 @@ export const salaryBenchmarkSourceSchema = z.strictObject({
 export const salaryBenchmarksFileSchema = z
   .strictObject({
     sources: z.array(salaryBenchmarkSourceSchema).max(500),
-    benchmarks: z.array(salaryBenchmarkSchema).max(15_000),
+    benchmarks: z.array(salaryBenchmarkSchema).max(50_000),
   })
   .superRefine(({ sources, benchmarks }, context) => {
     const fail = (message: string) => context.addIssue({ code: 'custom', message });

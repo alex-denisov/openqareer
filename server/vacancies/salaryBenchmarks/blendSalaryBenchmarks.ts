@@ -9,6 +9,7 @@ import type { BenchmarkSourceKind, SalaryBenchmark } from './salaryBenchmark';
 
 type Period = SalaryBenchmark['period'];
 type Tax = SalaryBenchmark['tax'];
+type PayBase = SalaryBenchmark['payBase'];
 
 /** Цифра источника или оценка каталога, приведённая к одному виду. */
 export interface BlendInput {
@@ -19,6 +20,7 @@ export interface BlendInput {
   readonly currency: string;
   readonly period: Period;
   readonly tax: Tax;
+  readonly payBase: PayBase;
   readonly year: number;
 }
 
@@ -69,6 +71,7 @@ export function blendInputOf(row: SalaryBenchmark): BlendInput | undefined {
         currency: row.currency,
         period: row.period,
         tax: row.tax,
+        payBase: row.payBase,
         year: row.year,
       }
     : undefined;
@@ -89,15 +92,27 @@ function convertTo(input: BlendInput, base: BlendInput, rates: CurrencyRates | u
   return low === undefined || high === undefined ? undefined : { low, high };
 }
 
-const taxFits = (tax: Tax, base: Tax) => tax === 'unknown' || base === 'unknown' || tax === base;
+/** Неизвестное сводится с известным; два разных известных — никогда. */
+function oneKind<Value extends string>(
+  inputs: readonly BlendInput[],
+  read: (input: BlendInput) => Value | 'unknown',
+  preferred?: Value,
+): readonly BlendInput[] {
+  const known = inputs.map(read).filter((value) => value !== 'unknown');
+  const kind = known.find((value) => value === preferred) ?? known[0];
+  return inputs.filter((input) => read(input) === 'unknown' || read(input) === kind);
+}
 
 function stepOf(value: number): number {
   if (value >= 50_000) return 10_000;
-  return value >= 5_000 ? 1_000 : 100;
+  if (value >= 5_000) return 1_000;
+  if (value >= 1_000) return 100;
+  if (value >= 100) return 10;
+  return value >= 10 ? 1 : 0.1;
 }
 
 function roundTo(value: number, step: number): number {
-  return Math.round(value / step) * step;
+  return Number((Math.round(value / step) * step).toFixed(1));
 }
 
 export function blendSalary(
@@ -107,17 +122,19 @@ export function blendSalary(
   now: Date,
 ): BlendResult | undefined {
   const year = now.getUTCFullYear();
-  const ordered = [...inputs].sort(
+  const sorted = [...inputs].sort(
     (a, b) => weightOf(b, year) - weightOf(a, year) || b.year - a.year,
+  );
+  const ordered = oneKind(
+    oneKind(sorted, (input) => input.payBase, 'base'),
+    (input) => input.tax,
   );
   const [base] = ordered;
   if (!base) return undefined;
-  const used = ordered
-    .filter((input) => taxFits(input.tax, base.tax))
-    .flatMap((input) => {
-      const range = convertTo(input, base, rates);
-      return range ? [{ ...range, name: input.sourceName, weight: weightOf(input, year) }] : [];
-    });
+  const used = ordered.flatMap((input) => {
+    const range = convertTo(input, base, rates);
+    return range ? [{ ...range, name: input.sourceName, weight: weightOf(input, year) }] : [];
+  });
   const total = used.reduce((sum, { weight }) => sum + weight, 0);
   if (total <= 0) return undefined;
   const single = new Set(used.map(({ name }) => name)).size === 1;

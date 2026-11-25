@@ -8,8 +8,8 @@ import { matchSalaryBenchmarks, type BenchmarkQuery } from './pickSalaryBenchmar
 import { salaryBenchmarkSchema, type SalaryBenchmark } from './salaryBenchmark';
 import {
   SALARY_BENCHMARKS_FILE,
+  createSalaryBenchmarkReader,
   loadSalaryBenchmarksFile,
-  readSalaryBenchmarks,
   writeSalaryBenchmarks,
 } from './sqliteSalaryBenchmarkStore';
 
@@ -32,6 +32,7 @@ const row = (patch: Partial<SalaryBenchmark> = {}): SalaryBenchmark => ({
   currency: 'AED',
   period: 'month',
   tax: 'unknown',
+  payBase: 'unknown',
   year: 2026,
   sampleSize: null,
   readOn: '2026-11-25',
@@ -185,14 +186,73 @@ describe('blendSalary', () => {
   });
 });
 
+describe('blendSalary kinds and rounding', () => {
+  const blendOf = (...patches: Partial<SalaryBenchmark>[]) =>
+    blendSalary(
+      patches.map((patch) => blendInputOf(row(patch))!),
+      'role-country',
+      undefined,
+      new Date('2026-11-25T12:00:00.000Z'),
+    )!.estimate;
+  const at = (sourceName: string, low: number, patch: Partial<SalaryBenchmark>) => ({
+    sourceName,
+    low,
+    high: low * 2,
+    ...patch,
+  });
+
+  it('an unknown tax does not join gross with net', () => {
+    const unknown = at('U', 1_000, {});
+    const gross = at('G', 1_000, { tax: 'gross', year: 2025 });
+    const net = at('N', 400, { tax: 'net', year: 2024 });
+    expect(blendOf(unknown, gross, net)).toMatchObject({ low: 1_000, high: 2_000 });
+  });
+
+  it('keeps total pay out of base pay', () => {
+    const total = at('T', 4_000, { payBase: 'total' });
+    const base = at('B', 1_000, { payBase: 'base', year: 2020 });
+    const unknown = at('U', 1_000, { year: 2020 });
+    expect(blendOf(total, base, unknown)).toMatchObject({ low: 1_000, high: 2_000 });
+  });
+
+  it('rounds an hourly and a daily rate by its size', () => {
+    expect(blendOf(at('H', 25, { period: 'hour' }))).toMatchObject({ low: 23, high: 55 });
+    expect(blendOf(at('D', 450, { period: 'day' }))).toMatchObject({ low: 410, high: 990 });
+    expect(blendOf(at('L', 3, { period: 'hour' }))).toMatchObject({ low: 2.7, high: 6.6 });
+  });
+
+  it('a single source is never shown as it is', () => {
+    for (let low = 1; low < 2_000_000; low = Math.ceil(low * 1.07)) {
+      for (const ratio of [1.1, 1.6, 4]) {
+        const high = Math.round(low * ratio);
+        const shown = blendOf({ low, high });
+        expect(shown.low).toBeLessThan(low);
+        expect(shown.high).toBeGreaterThan(high);
+      }
+    }
+  });
+});
+
 describe('salary_benchmarks', () => {
+  it('reads the rows once until the file is loaded again', () => {
+    const database = new DatabaseSync(':memory:');
+    const read = createSalaryBenchmarkReader(database);
+    expect(read({ country: 'AE' })).toEqual([]);
+    writeSalaryBenchmarks(database, fileOf([row()]));
+    const first = read({ country: 'AE' })[0];
+    expect(read({ country: 'AE' })[0]).toBe(first);
+    writeSalaryBenchmarks(database, fileOf([row({ low: 11 })]));
+    expect(read({ country: 'AE' })[0]?.low).toBe(11);
+  });
+
   it('replaces the table and keeps it when the file is wrong', () => {
     const database = new DatabaseSync(':memory:');
-    expect(readSalaryBenchmarks(database, { country: 'AE' })).toEqual([]);
+    const read = createSalaryBenchmarkReader(database);
+    expect(read({ country: 'AE' })).toEqual([]);
     writeSalaryBenchmarks(database, fileOf([row(), row({ id: 'qa-row', country: 'QA' })]));
-    expect(readSalaryBenchmarks(database, { country: 'AE', region: 'mena' })).toEqual([row()]);
+    expect(read({ country: 'AE', region: 'mena' })).toEqual([row()]);
     expect(() => writeSalaryBenchmarks(database, fileOf([row(), row()]))).toThrow();
-    expect(readSalaryBenchmarks(database, { country: 'QA' })).toHaveLength(1);
+    expect(read({ country: 'QA' })).toHaveLength(1);
   });
 
   it('refuses an unlisted or refused source', () => {
@@ -201,7 +261,6 @@ describe('salary_benchmarks', () => {
       [row({ sourceName: 'Other' })],
       [row({ sourceKind: 'gov' })],
       [row({ sourceUrl: 'https://www.glassdoor.co.uk/x' })],
-      [row({ sourceUrl: 'https://www.levels.fyi/x' })],
     ]) {
       expect(() => writeSalaryBenchmarks(database, fileOf(bad))).toThrow();
     }
@@ -209,6 +268,7 @@ describe('salary_benchmarks', () => {
 
   it('drops thin samples and keeps only the median of an implausible range', () => {
     const database = new DatabaseSync(':memory:');
+    const read = createSalaryBenchmarkReader(database);
     const rows = [
       row({ id: 'thin', sampleSize: 14 }),
       row({ id: 'wide', low: 1, high: 20 }),
@@ -216,7 +276,7 @@ describe('salary_benchmarks', () => {
       row({ id: 'enough', sampleSize: 15 }),
     ];
     writeSalaryBenchmarks(database, fileOf(rows));
-    const stored = readSalaryBenchmarks(database, { country: 'AE' });
+    const stored = read({ country: 'AE' });
     expect(stored.map(({ id, low }) => [id, low])).toEqual([
       ['enough', 10],
       ['wide-median', null],
@@ -225,14 +285,16 @@ describe('salary_benchmarks', () => {
 
   it('removes a source by one flag', () => {
     const database = new DatabaseSync(':memory:');
+    const read = createSalaryBenchmarkReader(database);
     writeSalaryBenchmarks(database, fileOf([row()]));
     expect(writeSalaryBenchmarks(database, fileOf([row()], false))).toBe(0);
-    expect(readSalaryBenchmarks(database, { country: 'AE' })).toEqual([]);
+    expect(read({ country: 'AE' })).toEqual([]);
   });
 
   it('loads the file beside the database and stays quiet without it', () => {
     const directory = mkdtempSync(join(tmpdir(), 'benchmarks-'));
     const database = new DatabaseSync(':memory:');
+    const read = createSalaryBenchmarkReader(database);
     const log = { info: vi.fn(), error: vi.fn() };
     try {
       const path = join(directory, 'openqareer.db');
@@ -244,7 +306,7 @@ describe('salary_benchmarks', () => {
       writeFileSync(join(directory, SALARY_BENCHMARKS_FILE), '{');
       loadSalaryBenchmarksFile(database, path, log);
       expect(log.error).toHaveBeenCalledOnce();
-      expect(readSalaryBenchmarks(database, { country: 'AE' })).toHaveLength(1);
+      expect(read({ country: 'AE' })).toHaveLength(1);
     } finally {
       rmSync(directory, { recursive: true });
     }
