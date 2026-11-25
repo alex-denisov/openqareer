@@ -10,6 +10,11 @@ const SOURCE_TIP: Readonly<Record<Task['basis'], string>> = {
   role: 'По должности: в сохранённом описании вакансии нет деталей о системе.',
 };
 
+const sourceTip = (task: Task): string =>
+  (task.caseKind ?? 'system') === 'system' || task.basis === 'vacancy'
+    ? SOURCE_TIP[task.basis]
+    : 'По должности из отклика.';
+
 function HowToAnswer(props: {
   readonly mode: InterviewAnswerMode;
   readonly voice: boolean;
@@ -48,7 +53,7 @@ function Requirements({ task }: { readonly task: Task }) {
     <section className="sd-task" aria-labelledby="sa-task">
       <h3 className="mod-title" id="sa-task">
         Что важно в задаче
-        <InfoTip label="Источник" text={SOURCE_TIP[task.basis]} />
+        <InfoTip label="Источник" text={sourceTip(task)} />
       </h3>
       <ul className="sd-reqs">
         {shownPoints(task).map((point) => (

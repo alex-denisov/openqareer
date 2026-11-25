@@ -23,7 +23,7 @@ import { SchemaView } from './SchemaEditor';
 function Rows({ review }: { readonly review: Review }) {
   return (
     <ul className="rows exp-rows">
-      {reviewRows(review.evaluation).map((row) => (
+      {reviewRows(review.evaluation, review.caseKind).map((row) => (
         <li className="row" key={row.key}>
           <div>
             <div className="row-title">{row.title}</div>
