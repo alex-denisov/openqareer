@@ -199,6 +199,13 @@ afterEach(() => {
 });
 
 describe('n00 «Аккаунт»: разделы', () => {
+  it('«Вы в поиске» не прочиталось — подпись согласий остаётся, без числа', async () => {
+    api.getSearchConsent.mockRejectedValue(new Error('down'));
+    const root = await open(<SectionsScreen node={node('n00')} />);
+    const row = root.querySelector('a[href="/app/account/data"]')?.closest('.set-row');
+    expect(row?.querySelector('.set-v')?.textContent).toBe('Выгрузка, удаление');
+  });
+
   it('шесть разделов со ссылками и подписями по данным', async () => {
     const root = await open(<SectionsScreen node={node('n00')} />);
     expect(root.querySelector('.lead-title')?.textContent).toBe('Марина Соколова');

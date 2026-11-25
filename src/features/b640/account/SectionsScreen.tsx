@@ -62,7 +62,8 @@ async function loadSummaries(): Promise<Summaries> {
     notifications: events
       ? notificationsSummary(events, valueOf(channels)?.telegram.connected === true)
       : null,
-    consents: given && search ? consentsSummary(countGranted(given, search.granted)) : null,
+    // «Вы в поиске» не прочиталось — подпись без числа: меньшее число было бы неверным.
+    consents: given ? consentsSummary(search ? countGranted(given, search.granted) : 0) : null,
     plan: plan ? PLAN_NAME[plan] : null,
     photoMediaId: valueOf(profile)?.draft?.candidate.photoMediaId ?? null,
   };

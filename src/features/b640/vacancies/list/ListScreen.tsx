@@ -160,6 +160,8 @@ function useListTriage(list: VacancyList, rows: RowInteractions): Triage {
     query: triageQuery,
     expected: list.count,
     ready: useRolesReady(list.filters, list.pool),
+    failed: list.pool.failed,
+    retry: list.pool.refresh,
   });
   // Итог «скрывать нечего» живёт до следующего действия со списком: фильтры, сортировка, скрытие.
   const { clearResult, start } = triage;

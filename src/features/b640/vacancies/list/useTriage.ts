@@ -127,6 +127,9 @@ export interface TriageSource {
   readonly expected: number;
   /** `false`: список ещё ставит свои роли; нажатие дождётся их, чтобы разобрать ту же выборку. */
   readonly ready?: boolean;
+  /** Подборка не прочиталась, пока нажатие её ждёт: ошибка разбора, «Повторить» читает подборку. */
+  readonly failed?: boolean;
+  readonly retry?: () => void;
 }
 
 const SHOWN_ROWS: TriageSource = { query: null, expected: 0 };
@@ -181,6 +184,8 @@ function rowView(
     isPicked: (id) => active && rows.get(id)?.verdict === 'hide' && !unchecked.has(id),
   };
 }
+
+const waitStatus = (source: TriageSource): TriageStatus => (source.failed ? 'failed' : 'loading');
 
 /** Нажатие: сразу или когда список поставит свои роли. */
 function useStart(
@@ -238,7 +243,7 @@ export function useTriage(
   return {
     active: active || waiting,
     triage: request.triage,
-    ...progressOf(waiting ? 'loading' : request.status, request.triage, waiting ? null : target, source.expected),
+    ...progressOf(waiting ? waitStatus(source) : request.status, request.triage, waiting ? null : target, source.expected),
     ...result,
     question: currentQuestion(request.triage),
     picked: picked.length,
@@ -249,7 +254,7 @@ export function useTriage(
     answer: (value) => setAnswers((current) => withAnswer(current, request.triage, value)),
     start,
     cancel,
-    retry: request.retry,
+    retry: (waiting && source.retry) || request.retry,
     hideSelected,
   };
 }
