@@ -55,6 +55,8 @@ pub(crate) struct Run {
     attempt: Option<Uuid>,
     /// Fields the page had already marked when the button was pressed.
     invalid_before: Value,
+    /// Whether the page already named a sent application before the press.
+    counted_before: Value,
 }
 
 #[derive(Default)]
@@ -297,6 +299,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             kinds: BTreeMap::new(),
             attempt: None,
             invalid_before: Value::Null,
+            counted_before: Value::Null,
         });
     }
     read_page(app, &target).await
@@ -434,17 +437,22 @@ async fn read_outcome(
     target: &AtsTarget,
     wait: Duration,
 ) -> (&'static str, Vec<String>) {
-    let invalid_before = app
+    let (invalid_before, counted_before) = app
         .state::<AtsFormState>()
         .run
         .lock()
         .ok()
-        .and_then(|run| run.as_ref().map(|run| run.invalid_before.clone()));
+        .and_then(|run| {
+            run.as_ref()
+                .map(|run| (run.invalid_before.clone(), run.counted_before.clone()))
+        })
+        .unwrap_or_default();
     let argument = json!({
         "confirmationPath": target.confirmation_path,
         "thanks": target.adapter,
         "thanksPaths": thanks_paths(target),
         "invalidBefore": invalid_before,
+        "countedBefore": counted_before,
     });
     let last = poll(app, "outcome", &argument, wait, |value| {
         matches!(
@@ -523,6 +531,7 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
     if let (Some(press), Ok(mut run)) = (press, app.state::<AtsFormState>().run.lock()) {
         if let Some(run) = run.as_mut() {
             run.invalid_before = press["invalidBefore"].clone();
+            run.counted_before = press["countedBefore"].clone();
         }
     }
     let (read, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;

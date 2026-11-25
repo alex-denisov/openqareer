@@ -14,8 +14,34 @@ const MAX_VALUE_CHARS: usize = 10_000;
 const MAX_FILES: usize = 2;
 pub(crate) const MAX_CONSENTS: usize = 20;
 const MAX_ID_CHARS: usize = 200;
-/// The longest detail the diagnostics journal takes.
-const PATH_CODE_MAX: usize = 60;
+/// Keeps a path code within the sixty characters the journal takes.
+const PATH_PARTS_MAX: usize = 4;
+const PATH_WORDS: &[&str] = &[
+    "application",
+    "applications",
+    "applied",
+    "apply",
+    "c",
+    "candidates",
+    "careers",
+    "company",
+    "confirmation",
+    "connect",
+    "errors",
+    "j",
+    "jobs",
+    "new",
+    "o",
+    "oneclick-ui",
+    "p",
+    "postings",
+    "publication",
+    "submitted",
+    "success",
+    "thank-you",
+    "thank_you",
+    "thanks",
+];
 
 /// What the page may answer instead of a press. Anything else is "press_unknown".
 pub(crate) const PRESS_REFUSALS: &[&str] = &[
@@ -305,21 +331,25 @@ pub(crate) fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, 
     }
 }
 
-/// A path as one journal code: its end, `__` between the segments.
+/// A path as one journal code. Only words the boards themselves use are kept;
+/// a slug, an id or a token in it becomes `x`.
 pub(crate) fn path_code(path: &str) -> String {
-    let code: String = path
-        .trim_matches('/')
-        .to_ascii_lowercase()
-        .replace('/', "__")
-        .chars()
-        .map(|c| match c {
-            'a'..='z' | '0'..='9' | '-' | '_' => c,
-            _ => '_',
+    let parts: Vec<&str> = path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            PATH_WORDS
+                .iter()
+                .find(|word| **word == part)
+                .copied()
+                .unwrap_or("x")
         })
+        .take(PATH_PARTS_MAX)
         .collect();
-    // Every character is one byte here.
-    let end = &code[code.len().saturating_sub(PATH_CODE_MAX)..];
-    if end.is_empty() { "root" } else { end }.to_string()
+    if parts.is_empty() {
+        return "root".to_string();
+    }
+    parts.join("_")
 }
 
 pub(crate) fn decode(raw: &str) -> Value {
@@ -366,13 +396,11 @@ mod tests {
 
     #[test]
     fn a_path_becomes_a_journal_code_of_bounded_length() {
-        assert_eq!(
-            path_code("/Jobs/8-x/applications"),
-            "jobs__8-x__applications"
-        );
+        assert_eq!(path_code("/jobs/8-x/applications"), "jobs_x_applications");
+        assert_eq!(path_code("/applications/5f3a-token"), "applications_x");
         assert_eq!(path_code("/"), "root");
-        assert_eq!(path_code("/оферта"), "______");
-        assert_eq!(path_code(&format!("/{}/new", "a".repeat(90))).len(), 60);
+        let long = path_code(&"/confirmation".repeat(9));
+        assert!(long.len() <= 60, "{long}");
     }
 
     #[test]

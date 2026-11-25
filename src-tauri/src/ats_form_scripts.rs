@@ -265,7 +265,7 @@ mod tests {
             };
             assert_eq!(
                 parsed(&out, 0),
-                json!({ "state": "clicked", "invalidBefore": ["id:email"] })
+                json!({ "state": "clicked", "invalidBefore": ["id:email"], "countedBefore": false })
             );
             assert_eq!(parsed(&out, 1), expected);
         }
@@ -476,7 +476,7 @@ mod tests {
             ("ashby", "/a", blocked, "", "pending"),
             ("workable", "/a", workable, "", "confirmed"),
             ("workable", "/a", "<h3>Danke</h3>", "", "pending"),
-            ("teamtailor", "/applications", frame, "", "confirmed"),
+            ("teamtailor", "/applications", frame, "", "pending"),
             ("teamtailor", "/applications", "<h1>500</h1>", "", "pending"),
             ("teamtailor", "/a", frame, "", "pending"),
             ("pinpoint", "/a", "<h1>Merci</h1>", sent, "confirmed"),
@@ -484,11 +484,19 @@ mod tests {
             ("lever", "/a", workable, sent, "pending"),
         ];
         for (board, path, html, setup, state) in cases {
-            let argument = json!({ "thanks": board, "thanksPaths": ["/a", "/applications"] });
+            let argument = json!({ "thanks": board, "thanksPaths": ["/a", "/applications"], "countedBefore": false });
             let Some(out) = run(html, path, setup, &[op("outcome", argument)]) else {
                 return;
             };
             assert_eq!(parsed(&out, 0)["state"], state, "{board} {path}");
+        }
+        for counted in [json!(true), json!(null)] {
+            let argument =
+                json!({ "thanks": "pinpoint", "thanksPaths": ["/a"], "countedBefore": counted });
+            let Some(out) = run("<h1>Merci</h1>", "/a", sent, &[op("outcome", argument)]) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], "pending");
         }
     }
 

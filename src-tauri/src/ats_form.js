@@ -1062,10 +1062,11 @@
       return { state: 'submit_disabled' };
     }
     var marked = keysOf(form, invalidNodes(form));
+    var counted = Boolean(window.gtmFormSubmissionData);
     window.__oqAtsSubmitted = true;
     watchAnswer();
     buttons[0].click();
-    return { state: 'clicked', invalidBefore: marked };
+    return { state: 'clicked', invalidBefore: marked, countedBefore: counted };
   }
   function visible(selector) {
     return Array.prototype.slice.call(document.querySelectorAll(selector)).filter(shown);
@@ -1087,25 +1088,23 @@
         !document.querySelector('form[data-ui="application-form"]')
       );
     },
-    // The server answered the press with success, or drew its own frame on the
-    // address the form posts to, and a heading stands where the form was.
+    // The server answered the press with success and a new heading stands where
+    // the form was. Words alone may be an error drawn in the same frame.
     teamtailor: function () {
+      if (window.__oqAtsAnswer !== true) return false;
       if (document.querySelector('form#job-application-form, .turbo-frame-error')) return false;
       var before = window.__oqAtsHeads || [];
-      if (window.__oqAtsAnswer === true) {
-        return visible('h1, h2, h3').some(function (head) {
-          return text(head) !== '' && before.indexOf(text(head)) < 0;
-        });
-      }
-      return (
-        location.pathname === '/applications' &&
-        visible('turbo-frame#application_form h1, turbo-frame#application_form h2').some(text)
-      );
+      return visible('h1, h2, h3').some(function (head) {
+        return text(head) !== '' && before.indexOf(text(head)) < 0;
+      });
     },
-    // Its thank-you page names the sent application for the site's counters.
+    // Its thank-you page names the sent application for the site's counters;
+    // the name must be absent at the press.
     pinpoint: function () {
       return (
-        Boolean(window.gtmFormSubmissionData) && !document.querySelector('form#application-form')
+        ARG.countedBefore === false &&
+        Boolean(window.gtmFormSubmissionData) &&
+        !document.querySelector('form#application-form')
       );
     },
     bamboohr: function (form) {
