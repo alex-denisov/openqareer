@@ -115,7 +115,7 @@ export const isResumeFile = (field: AtsField): boolean =>
   field.kind === 'file' && RESUME_FILE.test(field.label);
 
 export const isCoverLetter = (field: AtsField): boolean =>
-  field.kind === 'textarea' && COVER_LETTER.test(field.label);
+  (field.kind === 'textarea' || field.kind === 'text') && COVER_LETTER.test(field.label);
 
 /** Сам отказ отвечать на анкету о поле, национальности и подобном. */
 export const declines = (field: AtsField): boolean =>

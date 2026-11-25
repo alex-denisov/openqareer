@@ -311,6 +311,9 @@ pub async fn read_form(app: &AppHandle, vacancy_id: &str) -> Result<FormReport, 
     read_page(app, &target).await
 }
 
+/// A page whose load never ends is taken by its steady form alone after this.
+const LOAD_WAIT: Duration = Duration::from_secs(15);
+
 /// Says when the page has stopped drawing its form.
 #[derive(Default)]
 struct Steady {
@@ -319,9 +322,10 @@ struct Steady {
 }
 
 impl Steady {
-    fn settled(&self, form: &Value) -> bool {
+    fn settled(&self, form: &Value, waited: Duration) -> bool {
         let fields = form["fields"].as_array().map_or(0, Vec::len);
-        let same = fields > 0 && fields == self.fields.get() && form["loaded"] == true;
+        let loaded = form["loaded"] == true || waited >= LOAD_WAIT;
+        let same = fields > 0 && fields == self.fields.get() && loaded;
         self.reads.set(if same { self.reads.get() + 1 } else { 0 });
         self.fields.set(fields);
         form["state"] == "ready"
@@ -332,8 +336,9 @@ impl Steady {
 
 async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, String> {
     let steady = Steady::default();
+    let opened = tokio::time::Instant::now();
     let form = poll(app, "read", &place_of(&target), READ_WAIT, move |value| {
-        steady.settled(value)
+        steady.settled(value, opened.elapsed())
     })
     .await?;
     if let Some(run) = app
@@ -622,12 +627,22 @@ mod steady_tests {
             form(7, true),
             form(18, true),
         ] {
-            assert!(!steady.settled(&value));
+            assert!(!steady.settled(&value, Duration::ZERO));
         }
-        assert!(!steady.settled(&form(18, true)));
-        assert!(!steady.settled(&form(18, true)));
-        assert!(steady.settled(&form(18, true)));
+        assert!(!steady.settled(&form(18, true), Duration::ZERO));
+        assert!(!steady.settled(&form(18, true), Duration::ZERO));
+        assert!(steady.settled(&form(18, true), Duration::ZERO));
         let empty = Steady::default();
-        assert!((0..9).all(|_| !empty.settled(&form(0, true))));
+        assert!((0..9).all(|_| !empty.settled(&form(0, true), LOAD_WAIT)));
+    }
+
+    #[test]
+    fn a_page_that_never_finishes_loading_is_taken_by_its_steady_form() {
+        let form = json!({ "state": "ready", "submitButtons": 1, "loaded": false, "fields": [{}] });
+        let early = Steady::default();
+        assert!((0..9).all(|_| !early.settled(&form, LOAD_WAIT - Duration::from_secs(1))));
+        assert!(!early.settled(&form, LOAD_WAIT));
+        assert!(!early.settled(&form, LOAD_WAIT));
+        assert!(early.settled(&form, LOAD_WAIT));
     }
 }
