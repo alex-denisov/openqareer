@@ -82,13 +82,11 @@ const many = (count: number, kind = 'post', status = 'published') =>
 afterEach(() => vi.clearAllMocks());
 
 describe('a03: профиль LinkedIn', () => {
-  it('без импорта LinkedIn: строка с «Импортировать из LinkedIn»', async () => {
+  it('без импорта LinkedIn: строка с «Подключить»', async () => {
     vi.mocked(profileApi.getLinkedinProfile).mockResolvedValue({ kind: 'no_import' });
     const view = mount(<Section node={node('a03')} params={{}} />);
     await flush();
-    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain(
-      'Импортировать из LinkedIn',
-    );
+    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain('Подключить');
     expect(view.container.querySelector('.li-sec')).toBeNull();
     view.unmount();
   });

@@ -264,9 +264,12 @@ test.describe('B651: «История изменений» (p10)', () => {
     await expect(row.getByRole('button', { name: /Отменить/u })).toBeVisible();
   });
 
-  test('правок нет: один заголовок', async ({ page }) => {
+  test('правок нет: p10b с «Открыть профиль»', async ({ page }) => {
     await openCabinet(page, '/app/profile/history', { historyTotal: 0 });
-    await expect(node(page, 'p10').locator('#hx-title')).toHaveText('Правок пока нет');
+    await expect(node(page, 'p10').locator('#hx-title')).toHaveText('История изменений');
+    await expect(node(page, 'p10').locator('.vl-empty-t')).toHaveText('Правок пока нет');
+    await expect(node(page, 'p10').getByRole('link', { name: 'Открыть профиль' })).toBeVisible();
+    await expectGates(page);
     await expect(node(page, 'p10').locator('.hx-row')).toHaveCount(0);
   });
 });
@@ -336,6 +339,41 @@ test.describe('B651: «Откуда взять опыт» (p04)', () => {
       .getByRole('link', { name: 'Подключить' })
       .click();
     await expect(page).toHaveURL(/\/app\/profile\/hh$/u);
+  });
+
+  test('p04b: LinkedIn прочитан — «Готово · дата», «Обновить», проверка записей и «Дальше»', async ({
+    page,
+  }) => {
+    await openCabinet(page, '/app/profile');
+    await page.route('**/api/v1/candidate/connections', (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            {
+              platform: 'linkedin',
+              available: true,
+              capabilities: [],
+              importsCareerHistory: true,
+              status: 'imported',
+              importedAt: '2026-11-12T10:00:00.000Z',
+            },
+          ],
+        },
+      }),
+    );
+    await page.goto('/app/profile/sources', { waitUntil: 'domcontentloaded' });
+    const screen = node(page, 'p04');
+    const linkedin = screen.locator('.src', { hasText: 'LinkedIn' });
+    await expect(linkedin).toContainText('Готово · 12.11');
+    await expect(linkedin.getByRole('link', { name: 'Обновить LinkedIn' })).toBeVisible();
+    await expect(screen.locator('.pr-block .pw').first()).toBeVisible();
+    await expect(screen.getByRole('link', { name: 'Дальше' })).toHaveAttribute(
+      'href',
+      /\/app\/career\/roles$/u,
+    );
+    await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
+    await expectGates(page);
+    await page.screenshot({ path: `.s13-shots/p04b-${test.info().project.name}.png` });
   });
 
   test('файл не PDF: причина на месте, в профиль ничего не ушло', async ({ page }) => {

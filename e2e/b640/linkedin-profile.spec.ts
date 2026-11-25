@@ -190,6 +190,9 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
   test('«Скопировать», «Предложить заново» и листание «Вариант N из 4»', async ({ page }) => {
     await mock(page);
     await open(page);
+    // М6-1: листание стоит под текстом и не сжимает его (было 166 на 1440).
+    const text = (await page.locator('.li-offer .li-new').first().boundingBox())!;
+    expect(text.width).toBeGreaterThan(300);
     await page.getByRole('button', { name: 'Скопировать: Заголовок' }).click();
     await expect(page.getByText('Скопировано')).toBeVisible();
     await page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 3' }).click();
@@ -204,13 +207,17 @@ test.describe('B645 a03: профиль LinkedIn по макету', () => {
     await expect(
       page.getByRole('button', { name: 'Другой вариант: Заголовок · осталось 2' }),
     ).toBeVisible();
+    const sw = (await page.locator('.li-offer .var-sw').first().boundingBox())!;
+    const shown = (await page.locator('.li-offer .li-new').first().boundingBox())!;
+    expect(shown.width).toBeGreaterThan(300);
+    expect(sw.y).toBeGreaterThanOrEqual(shown.y + shown.height);
     expect(await noOverflow(page)).toBe(true);
   });
 
-  test('без импорта LinkedIn — «Импортировать из LinkedIn», разделов нет', async ({ page }) => {
+  test('без импорта LinkedIn — «Подключить», разделов нет', async ({ page }) => {
     await mock(page, { view: { kind: 'no_import' } });
     await page.goto(PROFILE, { waitUntil: 'domcontentloaded' });
-    const link = page.getByRole('link', { name: 'Импортировать из LinkedIn' });
+    const link = page.getByRole('link', { name: 'Подключить LinkedIn' });
     await expect(link).toBeVisible({ timeout: 15_000 });
     await expect(link).toHaveAttribute('href', '/app/account/connections');
     await expect(page.locator('.li-sec')).toHaveCount(0);

@@ -123,11 +123,11 @@ test.describe('B664: LinkedIn нового кабинета', () => {
     await expectGates(page);
   });
 
-  test('без импорта LinkedIn: строка с «Импортировать из LinkedIn»', async ({ page }) => {
+  test('без импорта LinkedIn: строка с «Подключить»', async ({ page }) => {
     await mock(page, { connected: false });
     await page.goto(PROFILE, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.src-title')).toContainText('LinkedIn', { timeout: 15_000 });
-    await page.getByRole('link', { name: 'Импортировать из LinkedIn' }).click();
+    await page.getByRole('link', { name: 'Подключить LinkedIn' }).click();
     await expect(page).toHaveURL(/\/app\/account\/connections/);
   });
 
