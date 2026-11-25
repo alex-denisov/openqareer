@@ -5,7 +5,7 @@ import { importSalarySlices } from '../salaryBenchmarks/salaryImport';
 import { bundledCities } from '../vacancyCountry/bundledCities';
 import { createCities } from '../vacancyCountry/cityCountry';
 import { openqareerEstimate, type EstimateDeps, type EstimateQuery } from './openqareerEstimate';
-import { estimateResult, estimateView } from './salaryEstimateReader';
+import { estimateResult, estimateView, vacancyCountry } from './salaryEstimateReader';
 
 /** Вымышленные числа. */
 const row = (id: string, patch: Record<string, unknown> = {}) => ({
@@ -136,6 +136,34 @@ describe('openqareerEstimate', () => {
     expect(openqareerEstimate(query({ country: undefined, ...unnamed }), deps())).toBeUndefined();
     expect(openqareerEstimate(query(unnamed), deps({ earning }))?.step).toBe('statistics');
   });
+
+  it('a CIS country without its own numbers takes the Russian market, not the world', () => {
+    const catalog = {
+      get: (key: string) =>
+        key === 'data|0|country|ru'
+          ? ({ low: 80_000, high: 100_000, currency: 'RUR', sampleSize: 40 } as const)
+          : undefined,
+    };
+    const kazakhstan = query({ country: 'KZ', location: 'Алматы' });
+    const result = openqareerEstimate(kazakhstan, deps({ catalog }));
+    expect(result).toMatchObject({ step: 'direct', lowConfidence: true });
+    expect(result?.estimate.currency).toBe('RUB');
+    expect(openqareerEstimate(kazakhstan, deps())?.step).toBe('world');
+  });
+});
+
+it('a Russian title without a known place is the Russian market', () => {
+  const hint = {
+    resolvePlace: () => undefined,
+    cities: createCities(bundledCities()),
+    employerCountry: () => undefined,
+  };
+  const country = (canonicalTitle: string, canonicalLocation?: string) =>
+    vacancyCountry({ canonicalTitle, canonicalLocation }, hint);
+  expect(country('Бухгалтер')).toBe('RU');
+  expect(country('Бухгалтер', 'Berlin')).toBe('DE');
+  expect(country('Менеджер з продажу і сервісу')).toBeUndefined();
+  expect(country('Accountant')).toBeUndefined();
 });
 
 it('the answer carries a month range and no trace of the sources', () => {

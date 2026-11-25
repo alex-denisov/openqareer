@@ -21,7 +21,11 @@ describe('B593: валюта показа сумм', () => {
 
 describe('moneyLines', () => {
   it('рубли в вакансии: крупно сумма, подпись «в вакансии», пересчёта нет', () => {
-    const lines = moneyLines(item({ from: 480_000, to: 580_000, currency: 'RUB' }), undefined, 'RUB')!;
+    const lines = moneyLines(
+      item({ from: 480_000, to: 580_000, currency: 'RUB' }),
+      undefined,
+      'RUB',
+    )!;
     expect(lines.big).toContain('480');
     expect(lines.small).toBe('в вакансии');
     expect(lines.converted).toBeUndefined();
@@ -36,7 +40,14 @@ describe('moneyLines', () => {
   });
 
   it('нет зарплаты, есть оценка рынка — крупно она, подпись «Оценка openqareer»', () => {
-    const market = { low: 380_000, high: 520_000, currency: 'RUB', period: 'month', tax: 'unknown', computedAt: '2026-11-10T00:00:00Z' };
+    const market = {
+      low: 380_000,
+      high: 520_000,
+      currency: 'RUB',
+      period: 'month',
+      tax: 'unknown',
+      computedAt: '2026-11-10T00:00:00Z',
+    };
     const lines = moneyLines(item(undefined, market), undefined, 'RUB')!;
     expect(lines.big).toContain('380–520');
     expect(lines.small).toBe('Оценка openqareer');

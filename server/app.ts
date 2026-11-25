@@ -31,7 +31,10 @@ import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import { roleTitleTranslatorOf, type RoleNamer } from './providers/roleNamer';
 import { RoleNamingFailureLog } from './providers/roleNamingFailureLog';
-import { COVER_LETTER_VERTEX_TIMEOUT_MS, type CoverLetterWriter } from './providers/coverLetterWriter';
+import {
+  COVER_LETTER_VERTEX_TIMEOUT_MS,
+  type CoverLetterWriter,
+} from './providers/coverLetterWriter';
 import type { SessionAuth } from './auth/authService';
 import type { VacancySample } from './domain/vacancy';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
@@ -79,7 +82,10 @@ import {
   buildLinkedinDraftWriter,
   type LinkedinDraftWriter,
 } from './providers/linkedinDraftWriter';
-import { buildAdaptationStepsWriter, type AdaptationStepsWriter } from './providers/adaptationStepsWriter';
+import {
+  buildAdaptationStepsWriter,
+  type AdaptationStepsWriter,
+} from './providers/adaptationStepsWriter';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 import { SqliteCandidateCompanyWantsRepository } from './data/sqliteCandidateCompanyWantsRepository';
 import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes';
@@ -474,7 +480,12 @@ function assembleRouteDeps(
     roleNamer,
     campaignRoleModel,
     // d01: шаги плана адаптации — та же цепочка моделей, что у письма.
-    coverLetterWriter, contactMessageWriter: options.contactMessageWriter, recordingTranscriber: options.recordingTranscriber, interviewDebriefWriter: options.interviewDebriefWriter, interviewAnswerJudge: options.interviewAnswerJudge, adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
+    coverLetterWriter,
+    contactMessageWriter: options.contactMessageWriter,
+    recordingTranscriber: options.recordingTranscriber,
+    interviewDebriefWriter: options.interviewDebriefWriter,
+    interviewAnswerJudge: options.interviewAnswerJudge,
+    adaptationStepsWriter: options.adaptationStepsWriter ?? createAdaptationStepsWriter(config),
     ...createCandidateRepositories(options),
     ...createCandidateDraftDeps(options),
     ...(options.candidateActionExecutor
@@ -490,7 +501,9 @@ function assembleRouteDeps(
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
-    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}), ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}), ...(options.skillNameTranslator ? { skillNameTranslator: options.skillNameTranslator } : {}),
+    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}),
+    ...(options.smmTelegram ? { smmTelegram: options.smmTelegram } : {}),
+    ...(options.skillNameTranslator ? { skillNameTranslator: options.skillNameTranslator } : {}),
     ...services,
   };
 }
@@ -505,7 +518,10 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
     await rebuildCampaignRoles(deps, candidateId, { log });
     // B748: старые роли поиска без русского названия — тот же проход, раз за запуск.
     if (!translator) return;
-    const written = await backfillRoleTitlesRu({ candidateStore: deps.candidateStore, translator }, candidateId);
+    const written = await backfillRoleTitlesRu(
+      { candidateStore: deps.candidateStore, translator },
+      candidateId,
+    );
     if (written > 0) log({ written }, 'role-titles-ru-backfill');
   });
   deps.matchedPoolPrecompute?.setListWarmer?.(async (candidateId, log) => {
@@ -521,10 +537,12 @@ function createBillingRouteDependencies(
   options: BuildAppOptions,
   config: ServerConfig,
 ): Pick<RouteDeps, 'robokassaGateway' | 'billingRepository'> {
-  const robokassaGateway = options.robokassaGateway
-    ?? (config.robokassa?.recurringApproved ? createRobokassaGateway(config.robokassa) : undefined);
-  const billingRepository = options.billingRepository
-    ?? (config.databasePath === ':memory:'
+  const robokassaGateway =
+    options.robokassaGateway ??
+    (config.robokassa?.recurringApproved ? createRobokassaGateway(config.robokassa) : undefined);
+  const billingRepository =
+    options.billingRepository ??
+    (config.databasePath === ':memory:'
       ? undefined
       : new SqliteBillingRepository({ databasePath: config.databasePath }));
   return {
@@ -540,7 +558,12 @@ function registerBillingRenewalScheduler(
 ): () => void {
   const repository = deps.billingRepository;
   const gateway = deps.robokassaGateway;
-  if (config.billingEnforcement !== true || !config.robokassa?.recurringApproved || !repository || !gateway) {
+  if (
+    config.billingEnforcement !== true ||
+    !config.robokassa?.recurringApproved ||
+    !repository ||
+    !gateway
+  ) {
     return () => undefined;
   }
   let timer: NodeJS.Timeout | undefined;
@@ -554,12 +577,19 @@ function registerBillingRenewalScheduler(
         gateway,
         emailVerificationRequired: config.emailVerificationRequired,
         ...(config.accountEmail
-          ? { sendReminder: (reminder) => sendBillingRenewalReminder(config.accountEmail!, reminder) }
+          ? {
+              sendReminder: (reminder) =>
+                sendBillingRenewalReminder(config.accountEmail!, reminder),
+            }
           : {}),
       });
-      if (Object.values(result).some((count) => count > 0)) app.log.info(result, 'billing_renewal_run_completed');
+      if (Object.values(result).some((count) => count > 0))
+        app.log.info(result, 'billing_renewal_run_completed');
     } catch (error) {
-      app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'billing_renewal_run_failed');
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'billing_renewal_run_failed',
+      );
     } finally {
       inFlight = false;
     }
@@ -569,7 +599,9 @@ function registerBillingRenewalScheduler(
     timer = setInterval(() => void run(), 60_000);
     timer.unref();
   });
-  return () => { if (timer) clearInterval(timer); };
+  return () => {
+    if (timer) clearInterval(timer);
+  };
 }
 
 /** d01: шаги плана из «Что от вас ждут» на цепочке и таймауте Vertex письма. */
@@ -640,11 +672,17 @@ function attachMarketSalaryStore(
 function closeOwnedCandidateRepos(
   options: Pick<
     BuildAppOptions,
-    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo' | 'accountDeletionStore'
+    | 'candidateCompanyWantsRepo'
+    | 'networkIndexRepo'
+    | 'companyDirectoryRepo'
+    | 'accountDeletionStore'
   >,
   deps: Pick<
     RouteDeps,
-    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo' | 'accountDeletionStore'
+    | 'candidateCompanyWantsRepo'
+    | 'networkIndexRepo'
+    | 'companyDirectoryRepo'
+    | 'accountDeletionStore'
   >,
 ): void {
   if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
@@ -678,7 +716,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     titleParseStore: options.titleParseStore,
   });
   const deps = withPrecomputedFit(assembleRouteDeps(options, services));
-  deps.vacancyMechanics = new VacancyMechanicsRuntime(config.databasePath, config.dataEncryptionKey, currentVacancyFitProfileValidator(candidateStore));
+  deps.vacancyMechanics = new VacancyMechanicsRuntime(
+    config.databasePath,
+    config.dataEncryptionKey,
+    currentVacancyFitProfileValidator(candidateStore),
+  );
   deps.bulkLlmRuntime =
     options.bulkLlmRuntime ?? createBulkLlmRuntime({ databasePath: config.databasePath });
   const ownedMarketSalaryEstimates = attachMarketSalaryStore(deps, options);
@@ -700,6 +742,12 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
-  await registerStaticDelivery(app, config, serveStatic, isSignedIn, profilePhotoReader(config.databasePath, deps.candidateStore));
+  await registerStaticDelivery(
+    app,
+    config,
+    serveStatic,
+    isSignedIn,
+    profilePhotoReader(config.databasePath, deps.candidateStore),
+  );
   return app;
 }

@@ -119,6 +119,18 @@ export async function getVacancyCard(vacancyId: string, signal?: AbortSignal): P
   return data;
 }
 
+/** B797: сверить открытую карточку с площадкой. */
+export async function postVacancyLiveness(vacancyId: string): Promise<{ readonly closed: boolean }> {
+  const data = await readDataObject<{ closed: boolean }>(
+    await apiFetch(`${BASE}/vacancies/${encodeURIComponent(vacancyId)}/liveness`, {
+      method: 'POST',
+      body: '{}',
+    }),
+  );
+  if (typeof data.closed !== 'boolean') throw malformedResponseError();
+  return data;
+}
+
 /** B787: раскрыть адрес трекера, когда кандидат открыл отклик. */
 export async function postApplyTarget(
   vacancyId: string,

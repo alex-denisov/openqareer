@@ -29,7 +29,12 @@ import {
   matchSalaryBenchmarks,
   type BenchmarkPrecision,
 } from '../salaryBenchmarks/pickSalaryBenchmark';
-import { GULF_COUNTRIES, neighbourCountries, regionOfCountry } from './neighbourCountries';
+import {
+  GULF_COUNTRIES,
+  isCisCountry,
+  neighbourCountries,
+  regionOfCountry,
+} from './neighbourCountries';
 
 export interface EstimateQuery {
   readonly title: string;
@@ -75,6 +80,7 @@ const STATISTICS_NAME = 'open statistics';
 const ENOUGH_ADVERTS = 30;
 const MANAGER_RANK = 2;
 const VP_RANK = 3;
+const CIS_DONOR = 'RU';
 const LEVELS = [0, 1, 2, 3, 4] as const;
 /** Функция не названа: остаётся средний заработок страны по всем занятиям. */
 export const NO_FUNCTION = 'other';
@@ -269,6 +275,20 @@ export function openqareerEstimate(
 ): EstimateResult | undefined {
   const { country } = query;
   if (!country) return worldStep(query, deps);
+  const own = placeEstimate(query, country, deps);
+  if (own) return own;
+  // Мир завышает СНГ в 6–8 раз; рынок России ближе.
+  const near = isCisCountry(country)
+    ? placeEstimate({ ...query, location: undefined }, CIS_DONOR, deps)
+    : undefined;
+  return near ? { ...near, lowConfidence: true } : worldStep(query, deps);
+}
+
+function placeEstimate(
+  query: EstimateQuery,
+  country: string,
+  deps: EstimateDeps,
+): EstimateResult | undefined {
   const place: Place = {
     country,
     city: marketSalaryCity(query.location),
@@ -289,7 +309,6 @@ export function openqareerEstimate(
   return (
     blended(direct, deps, 'direct') ??
     levelStep(query, place, deps) ??
-    statisticsStep(query, place, deps) ??
-    worldStep(query, deps)
+    statisticsStep(query, place, deps)
   );
 }

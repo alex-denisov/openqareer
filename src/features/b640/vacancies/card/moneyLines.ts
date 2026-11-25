@@ -1,4 +1,7 @@
-import { formatMarketSalaryRange, marketSalaryLabel } from '../../../../../shared/marketSalaryEstimate';
+import {
+  formatMarketSalaryRange,
+  marketSalaryLabel,
+} from '../../../../../shared/marketSalaryEstimate';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { formatStatedCompensation } from '../../../vacancies/vacancyCompensation';
@@ -7,7 +10,10 @@ import { moneyView, type MoneyCurrency } from '../format';
 const TARGETS: readonly MoneyCurrency[] = ['RUB', 'USD', 'EUR', 'AED', 'ORIG'];
 
 /** B593: валюта, в которой показываем суммы: выбор в «Приложении», затем валюта условий, иначе рубли. */
-export function targetMoneyCurrency(preferred: string | null, conditions: string | undefined): MoneyCurrency {
+export function targetMoneyCurrency(
+  preferred: string | null,
+  conditions: string | undefined,
+): MoneyCurrency {
   const code = (preferred ?? conditions)?.toUpperCase();
   return TARGETS.find((value) => value === code) ?? 'RUB';
 }
@@ -35,7 +41,11 @@ function hasMarket(item: MatchedVacancyItem): boolean {
 function marketLines(item: MatchedVacancyItem): MoneyLines | null {
   const market = item.explanation.marketSalary;
   if (!market) return null;
-  const range = formatMarketSalaryRange({ low: market.low, high: market.high, currency: market.currency });
+  const range = formatMarketSalaryRange({
+    low: market.low,
+    high: market.high,
+    currency: market.currency,
+  });
   return {
     big: range,
     small: 'Оценка openqareer',
@@ -52,10 +62,18 @@ export function moneyLines(
   const salary = item.cluster.salary;
   if (!salary || (salary.from === undefined && salary.to === undefined)) return marketLines(item);
   const view = moneyView(item, { currency, rates });
-  const converted = view.title && rates ? `в вакансии ${formatStatedCompensation(salary, rates)}, курс ЦБ на ${ratesDate(rates)}` : undefined;
+  const converted =
+    view.title && rates
+      ? `в вакансии ${formatStatedCompensation(salary, rates)}, курс ЦБ на ${ratesDate(rates)}`
+      : undefined;
   const parts = [
     hasMarket(item) ? marketLines(item)!.tip : 'Вилка — из текста вакансии.',
     ...(converted && rates ? [`Пересчёт валют — по курсу ЦБ на ${ratesDate(rates)}.`] : []),
   ];
-  return { big: view.text, small: 'в вакансии', ...(converted ? { converted } : {}), tip: parts.join(' ') };
+  return {
+    big: view.text,
+    small: 'в вакансии',
+    ...(converted ? { converted } : {}),
+    tip: parts.join(' '),
+  };
 }

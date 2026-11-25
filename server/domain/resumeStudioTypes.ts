@@ -2,6 +2,7 @@ import type { ResumeEvidenceIneligibilityReason } from './resumeEvidenceEligibil
 import type {
   CefrLevel,
   ResumeAdditionalInput,
+  ResumeCertificationInput,
   ResumeCourseInput,
   ResumeDraft,
   ResumeRecommendationInput,
@@ -143,6 +144,8 @@ export interface ResumeDocument {
   readonly skills?: readonly ResumeSkillInput[];
   readonly education: readonly ResumeEducation[];
   readonly courses?: readonly ResumeCourseInput[];
+  /** Сертификаты с подтверждением в профиле. */
+  readonly certifications?: readonly ResumeCertificationInput[];
   readonly tests?: readonly ResumeTestInput[];
   readonly recommendations?: readonly ResumeRecommendationInput[];
   readonly projects?: readonly ResumeProject[];

@@ -5,7 +5,10 @@ import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { sameCurrency } from '../../../../../shared/currencyRates';
 import { monthlySalary } from '../../../../../shared/monthlyRubSalary';
-import { formatMarketSalaryRange, marketSalaryLabel } from '../../../../../shared/marketSalaryEstimate';
+import {
+  formatMarketSalaryRange,
+  marketSalaryLabel,
+} from '../../../../../shared/marketSalaryEstimate';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
 import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
@@ -20,7 +23,14 @@ function SourceTip({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <span className="v4-src">
-      <button className="icon-btn info" type="button" aria-label={label} aria-expanded={open} aria-controls={id} onClick={() => setOpen((value) => !value)}>
+      <button
+        className="icon-btn info"
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((value) => !value)}
+      >
         <Icon name="info" />
       </button>
       <span className="v4-pop" id={id} role="note" hidden={!open}>
@@ -37,7 +47,9 @@ function useFriend(clusterId: string): string | null {
     let alive = true;
     getVacancyConnectionCircles(clusterId)
       .then((result) => {
-        const first = result.circles.find((circle) => circle.circle === 1 && circle.state === 'available');
+        const first = result.circles.find(
+          (circle) => circle.circle === 1 && circle.state === 'available',
+        );
         const known = first?.paths.find((path) => path.source !== 'cold');
         const person = known?.recipient.fullName?.trim();
         if (alive) setName(person || null);
@@ -82,7 +94,9 @@ export function forkOf(item: MatchedVacancyItem, rates: RowEnv['rates']): Fork |
 
 function moneyNote(item: MatchedVacancyItem): string {
   const market = marketRange(item);
-  const base = item.cluster.salary ? 'Вилка — из текста вакансии.' : 'В вакансии зарплата не указана.';
+  const base = item.cluster.salary
+    ? 'Вилка — из текста вакансии.'
+    : 'В вакансии зарплата не указана.';
   if (!market) return base;
   const range = formatMarketSalaryRange(market);
   return `${base} ${marketSalaryLabel(market.computedAt)}: ${range}.`;
@@ -99,7 +113,10 @@ function FitScale({ item }: { item: MatchedVacancyItem }) {
       <span className="vs-bar" role="img" aria-label={`Совпадение ${mark.percent} %`}>
         <BarPart className={tone} size={mark.percent} />
       </span>
-      <SourceTip label="Откуда это число" text="Требования из текста вакансии сверены с опытом в профиле: есть в профиле — целиком, частично — наполовину." />
+      <SourceTip
+        label="Откуда это число"
+        text="Требования из текста вакансии сверены с опытом в профиле: есть в профиле — целиком, частично — наполовину."
+      />
     </div>
   );
 }
@@ -125,9 +142,16 @@ function MoneyScale({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
 function RowActions({ vacancyId }: { vacancyId: string }) {
   const mobile = useIsMobile();
   const [page, setPage] = useState<Element | null>(null);
-  const findPage = useCallback((node: HTMLElement | null) => setPage(node?.closest('.page') ?? null), []);
+  const findPage = useCallback(
+    (node: HTMLElement | null) => setPage(node?.closest('.page') ?? null),
+    [],
+  );
   const apply = (
-    <Link className="btn is-primary" to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
+    <Link
+      className="btn is-primary"
+      to={buildNodePath('o02', { responseId: vacancyId })}
+      onClick={() => pressApply(vacancyId)}
+    >
       <Icon name="responses" />
       Откликнуться
     </Link>
@@ -136,7 +160,11 @@ function RowActions({ vacancyId }: { vacancyId: string }) {
   return (
     <div className="actions vd-actions vs-acts" ref={findPage}>
       {docked ? createPortal(<ActionDock kind="auto" primary={apply} />, page) : apply}
-      <Link className="row-act vs-open" to={buildNodePath('v04', { vacancyId })} aria-label="Открыть полностью">
+      <Link
+        className="row-act vs-open"
+        to={buildNodePath('v04', { vacancyId })}
+        aria-label="Открыть полностью"
+      >
         <Icon name="out" />
         <span className="vs-open-t">Открыть полностью</span>
       </Link>
@@ -158,7 +186,11 @@ export function DetailRow({ item, env }: DetailRowProps) {
   return (
     <tr className="vt-detail-row">
       <td colSpan={8}>
-        <section className="vd vs" id={`vacancy-details-${cluster.id}`} aria-label={`Сводка: ${cluster.canonicalTitle} · ${company}`}>
+        <section
+          className="vd vs"
+          id={`vacancy-details-${cluster.id}`}
+          aria-label={`Сводка: ${cluster.canonicalTitle} · ${company}`}
+        >
           <div className="vs-scales">
             <FitScale item={item} />
             <MoneyScale item={item} env={env} />
@@ -168,7 +200,12 @@ export function DetailRow({ item, env }: DetailRowProps) {
             <Icon name="building" />
             <span>
               <CompanyName name={company} />
-              {industry ? <> · <span className="vs-co-t">{industry}</span></> : null}
+              {industry ? (
+                <>
+                  {' '}
+                  · <span className="vs-co-t">{industry}</span>
+                </>
+              ) : null}
             </span>
           </p>
           {friend ? (

@@ -36,3 +36,5 @@ const REGION_COUNTRIES: Readonly<Record<string, readonly string[]>> = {
 export function regionOfCountry(country: string): string | undefined {
   return Object.entries(REGION_COUNTRIES).find(([, codes]) => codes.includes(country))?.[0];
 }
+
+export const isCisCountry = (country: string): boolean => regionOfCountry(country) === 'cis';

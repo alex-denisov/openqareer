@@ -62,6 +62,9 @@ export function titleFunction(title: string, readTitle: ReadTitle) {
   };
 }
 
+/** Мир по объявлениям на русском завышал впятеро: такой найм платит по рынку России и соседей. */
+const RUSSIAN_TITLE = /^(?!.*[іїєґў]).*[а-яё]{3}/iu;
+
 export function vacancyCountry(
   cluster: EstimateCluster,
   deps: CountryHintDeps,
@@ -80,7 +83,8 @@ export function vacancyCountry(
         text: cluster.descriptionSummary,
       },
       deps,
-    )?.country
+    )?.country ??
+    (RUSSIAN_TITLE.test(cluster.canonicalTitle) ? 'RU' : undefined)
   );
 }
 

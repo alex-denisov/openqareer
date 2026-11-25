@@ -441,6 +441,8 @@ export interface CandidateDecisionProfile {
   readonly workFormats: readonly DecisionWorkFormatId[];
   readonly salaryFloor?: number;
   readonly salaryCurrency?: string;
+  /** `false` — вакансии без зарплаты не показывать; без поля они показаны. */
+  readonly showWithoutSalary?: boolean;
   readonly cushionMonths?: number;
   readonly hasFamily?: boolean;
   readonly updatedAt?: string;
@@ -482,6 +484,7 @@ const storedDecisionProfileSchema = z
     workFormats: z.array(z.enum(decisionProfileFormatIds)).max(10),
     salaryFloor: z.number().finite().min(0).max(1_000_000_000).optional(),
     salaryCurrency: z.string().max(8).optional(),
+    showWithoutSalary: z.boolean().optional(),
     cushionMonths: z.number().finite().min(0).max(240).optional(),
     hasFamily: z.boolean().optional(),
     updatedAt: z.string().optional(),
@@ -505,6 +508,7 @@ export function parseStoredDecisionProfile(raw: string | null): CandidateDecisio
 export const CONFIDENTIAL_DECISION_KEYS = [
   'salaryFloor',
   'salaryCurrency',
+  'showWithoutSalary',
   'cushionMonths',
   'citizenship',
   'workRights',
@@ -566,6 +570,10 @@ function matchesWorkFormat(
   return true;
 }
 
+function hasSalary(salary: SalaryAmounts | undefined): boolean {
+  return salary?.from !== undefined || salary?.to !== undefined;
+}
+
 export function matchesDecisionProfile(
   cluster: {
     readonly isRemote?: boolean;
@@ -577,6 +585,7 @@ export function matchesDecisionProfile(
   rates?: CurrencyRates,
 ): boolean {
   if (!profile) return true;
+  if (profile.showWithoutSalary === false && !hasSalary(cluster.salary)) return false;
   if (!matchesSalaryFloor(cluster.salary, profile.salaryFloor, profile.salaryCurrency, rates)) {
     return false;
   }
