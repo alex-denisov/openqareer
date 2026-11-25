@@ -87,7 +87,7 @@ export const salaryBenchmarksFileSchema = z
     }
   });
 
-const MIN_SAMPLE = 30;
+const MIN_SAMPLE = 15;
 /** Границы дальше друг от друга — это края выборки со сбоями («742–1 000 000»), а не вилка должности. */
 const MAX_RANGE_RATIO = 5;
 

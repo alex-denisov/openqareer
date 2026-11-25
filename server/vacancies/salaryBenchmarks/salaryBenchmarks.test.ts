@@ -210,10 +210,10 @@ describe('salary_benchmarks', () => {
   it('drops thin samples and keeps only the median of an implausible range', () => {
     const database = new DatabaseSync(':memory:');
     const rows = [
-      row({ id: 'thin', sampleSize: 29 }),
+      row({ id: 'thin', sampleSize: 14 }),
       row({ id: 'wide', low: 1, high: 20 }),
       row({ id: 'wide-median', low: 1, median: 12, high: 20 }),
-      row({ id: 'enough', sampleSize: 30 }),
+      row({ id: 'enough', sampleSize: 15 }),
     ];
     writeSalaryBenchmarks(database, fileOf(rows));
     const stored = readSalaryBenchmarks(database, { country: 'AE' });
