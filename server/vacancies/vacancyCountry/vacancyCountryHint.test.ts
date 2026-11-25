@@ -18,12 +18,18 @@ describe('vacancyCountryHint', () => {
     ['8038 Zürich, ZH', 'CH'],
     ['10178 Berlin', 'DE'],
     ['Hong Kong SAR', 'HK'],
+    ['Atlanta, Georgia', 'US'],
+    ['Georgia, United States', 'US'],
+    ['Tbilisi, Georgia', 'GE'],
+    ['Springfield, Illinois', 'US'],
+    ['Virginia, South Africa', 'ZA'],
   ])('reads the place of %s', (location, country) => {
     expect(hint(location)).toEqual({ country, basis: 'place' });
   });
 
   it('two countries are no country', () => {
     expect(hint('Argentina; Brazil')).toBeUndefined();
+    expect(hint('Georgia')).toBeUndefined();
     expect(hint('Remote')).toBeUndefined();
   });
 

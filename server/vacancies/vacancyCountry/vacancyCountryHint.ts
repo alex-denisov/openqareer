@@ -85,8 +85,34 @@ function single(codes: readonly (string | undefined)[]): string | undefined {
   return known.size === 1 ? [...known][0] : undefined;
 }
 
+const US_STATES: ReadonlySet<string> = new Set(
+  (
+    'alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|hawaii|idaho|' +
+    'illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|' +
+    'mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|' +
+    'north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|' +
+    'south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming'
+  ).split('|'),
+);
+
+/** Штат США в месте. «Georgia» — штат и страна: решает город, без города ответа нет. */
+function stateCountry(parts: readonly string[]): { readonly country?: string } | undefined {
+  const names = parts.map((part) => part.toLowerCase());
+  const others = names.map(countryName).filter((code) => code !== undefined && code !== 'GE');
+  if (others.some((code) => code !== 'US')) return undefined;
+  if (names.some((name) => US_STATES.has(name))) return { country: 'US' };
+  if (!names.includes('georgia')) return undefined;
+  if (others.length > 0) return { country: 'US' };
+  const city = single(
+    parts.filter((part) => part.toLowerCase() !== 'georgia').map((part) => cityCountry(part)),
+  );
+  return city === 'US' || city === 'GE' ? { country: city } : {};
+}
+
 function placeCountry(location: string, deps: CountryHintDeps): string | undefined {
   const parts = placesOf(location);
+  const state = stateCountry(parts);
+  if (state) return state.country;
   const named = parts.map(countryName).filter((code) => code !== undefined);
   if (named.length > 0) return single(named);
   const [first] = parts;
