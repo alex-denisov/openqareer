@@ -64,7 +64,7 @@ const STAGE_RANK: Readonly<Record<VacancyFitStage, number>> = {
 
 /**
  * Every counted row by percent, then rows still counting (the caller keeps relevance among them),
- * then rows that cannot be counted. Rows blocked by a condition go after all of them (vacancySort).
+ * then rows that cannot be counted.
  */
 export function compareFitPercent(
   left: VacancyFitView | undefined,
