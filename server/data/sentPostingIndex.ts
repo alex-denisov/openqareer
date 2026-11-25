@@ -60,24 +60,46 @@ export class SentPostingIndex {
     return row?.id ?? null;
   }
 
-  /** Расшифровываются только отправленные отклики, которых ещё нет в указателе: каждый — один раз. */
+  /**
+   * Расшифровываются отправленные отклики, которых ещё нет в указателе, и те, у кого объявления
+   * не было: снимок вакансии мог появиться позже. Индексация — целиком или никак.
+   */
   private indexMissing(candidateId: string): void {
     const missing = this.database
       .prepare(
         `SELECT a.id FROM applications a
           WHERE a.candidate_id = ? AND a.${SENT}
-            AND NOT EXISTS (SELECT 1 FROM application_sent_postings p WHERE p.application_id = a.id)`,
+            AND NOT EXISTS (
+              SELECT 1 FROM application_sent_postings p
+               WHERE p.application_id = a.id
+                 AND (p.posting_token IS NOT NULL OR a.vacancy_cipher IS NULL))`,
       )
       .all(candidateId) as unknown as { id: string }[];
     if (missing.length === 0) return;
     const insert = this.database.prepare(
-      `INSERT OR IGNORE INTO application_sent_postings (application_id, candidate_id, posting_token)
-       VALUES (?, ?, ?)`,
+      `INSERT INTO application_sent_postings (application_id, candidate_id, posting_token)
+       VALUES (?, ?, ?)
+       ON CONFLICT(application_id) DO UPDATE SET posting_token = excluded.posting_token`,
     );
-    for (const { id } of missing) {
+    const rows = missing.map(({ id }) => {
       const vacancy = this.readVacancy(candidateId, id);
-      insert.run(id, candidateId, this.token(candidateId, vacancy?.url, vacancy?.title));
+      return { id, token: this.token(candidateId, vacancy?.url, vacancy?.title) };
+    });
+    this.atomically(() => {
+      for (const { id, token } of rows) insert.run(id, candidateId, token);
+    });
+  }
+
+  /** SAVEPOINT, а не BEGIN: поиск может идти внутри чужой транзакции. */
+  private atomically(write: () => void): void {
+    this.database.exec('SAVEPOINT sent_postings');
+    try {
+      write();
+    } catch (error) {
+      this.database.exec('ROLLBACK TO sent_postings; RELEASE sent_postings');
+      throw error;
     }
+    this.database.exec('RELEASE sent_postings');
   }
 
   private token(candidateId: string, url: string | null | undefined, title: string | undefined) {
