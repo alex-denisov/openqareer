@@ -122,28 +122,39 @@ export function withKnownAnswers(
   return [...saved, ...known];
 }
 
-const sameText = (text: string): string =>
-  text.replace(/\s*[*✱]\s*$/u, '').toLowerCase();
+/** Подпись обязательного поля кончается звёздочкой, иногда со словом для чтения с экрана. */
+const REQUIRED_MARK = /\s*[*✱]\s*(?:required|obligatorio|obligatoire|obrigatório|erforderlich|обязательно)?\s*$/iu;
 
-/** Ответы на вопросы с тем же текстом под новым номером; при повторе текста не переносятся. */
+const sameText = (text: string): string =>
+  text.replace(REQUIRED_MARK, '').replace(/\s+/gu, ' ').trim().toLowerCase();
+
+/**
+ * Ответы на вопросы с тем же текстом под новым номером; при повторе текста не переносятся.
+ * Пустой ответ под новым номером перенос не останавливает.
+ */
 export function carryAnswers(
   from: readonly QuestionnaireQuestion[],
   to: readonly QuestionnaireQuestion[],
   saved: readonly QuestionnaireAnswer[],
 ): readonly QuestionnaireAnswer[] {
-  const answered = new Set(saved.map((answer) => answer.questionId));
+  const answered = new Set(
+    saved.filter((answer) => answer.text.trim()).map((answer) => answer.questionId),
+  );
   const only = (list: readonly QuestionnaireQuestion[], text: string) => {
     const found = list.filter((item) => sameText(item.text) === text);
     return found.length === 1 ? found[0] : null;
   };
+  const holds = (id: string) => saved.some((answer) => answer.questionId === id);
   const carried = to.flatMap((question) => {
     const text = sameText(question.text);
     const before = only(from, text);
     if (!before || answered.has(question.id) || !only(to, text)) return [];
     const answer = saved.find((item) => item.questionId === before.id);
-    return answer ? [{ questionId: question.id, text: answer.text }] : [];
+    const isMoved = answer && (answer.text.trim() || !holds(question.id));
+    return isMoved && before.id !== question.id ? [{ questionId: question.id, text: answer.text }] : [];
   });
-  return [...saved, ...carried];
+  const moved = new Set(carried.map((answer) => answer.questionId));
+  return [...saved.filter((answer) => !moved.has(answer.questionId)), ...carried];
 }
 
 export interface SalaryProfile {

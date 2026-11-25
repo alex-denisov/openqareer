@@ -4,9 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useBellCount, type BellState } from './useBellCount';
 
-const legacy = vi.hoisted(() => ({ listNotifications: vi.fn() }));
 const feed = vi.hoisted(() => ({ listB640Notifications: vi.fn() }));
-vi.mock('../../notifications/notificationsApi', () => legacy);
 vi.mock('../today/b640NotificationsApi', () => feed);
 
 const page = (pinned: number) => ({
@@ -37,20 +35,17 @@ async function mount(path: string): Promise<BellState> {
 
 describe('useBellCount (n01: счётчик колокольчика)', () => {
   it('важное непрочитанное делает счётчик критическим', async () => {
-    legacy.listNotifications.mockResolvedValue({ items: [], unreadCount: 3 });
     feed.listB640Notifications.mockResolvedValue(page(1));
     expect(await mount('/app/today')).toEqual({ count: 3, critical: true });
   });
 
   it('без важного — обычный счётчик', async () => {
-    legacy.listNotifications.mockResolvedValue({ items: [], unreadCount: 3 });
     feed.listB640Notifications.mockResolvedValue(page(0));
     expect(await mount('/app/today')).toEqual({ count: 3, critical: false });
   });
 
-  it('сбой ленты не красит счётчик', async () => {
-    legacy.listNotifications.mockResolvedValue({ items: [], unreadCount: 2 });
+  it('сбой ленты оставляет прежнее значение', async () => {
     feed.listB640Notifications.mockRejectedValue(new Error('offline'));
-    expect(await mount('/app/vacancies')).toEqual({ count: 2, critical: false });
+    expect(await mount('/app/vacancies')).toEqual({ count: 0, critical: false });
   });
 });
