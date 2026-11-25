@@ -10,6 +10,10 @@ describe('coverLetterPrompt: запрос, который принял влад�
     expect(hash).toBe('257eef537a4d41cab2eb36dafc1c98ce86a5865de521396e4c47f4689371c3b3');
   });
 
+  it('25.11: места вакансии не упоминать, назвать можно только место из профиля', () => {
+    expect(coverLetterPrompt(base)).toContain('Города и регионы из вакансии не упоминай');
+  });
+
   it('B639: работа в компании вакансии или её группе — во вводном абзаце сверх длины и числа мест', () => {
     const prompt = coverLetterPrompt({ ...base, companyLink: 'Корпоративный университет Сбера' });
     expect(prompt).toContain(
