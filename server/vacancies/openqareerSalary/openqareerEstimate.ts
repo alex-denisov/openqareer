@@ -60,6 +60,8 @@ export type EstimateStep = 'direct' | 'level' | 'statistics' | 'world';
 export interface EstimateResult extends BlendResult {
   /** Внутренняя пометка: в ответ API не входит. */
   readonly step: EstimateStep;
+  /** Рынок соседней страны вместо своего. */
+  readonly donor?: boolean;
 }
 
 interface Place {
@@ -281,7 +283,7 @@ export function openqareerEstimate(
   const near = isCisCountry(country)
     ? placeEstimate({ ...query, location: undefined }, CIS_DONOR, deps)
     : undefined;
-  return near ? { ...near, lowConfidence: true } : worldStep(query, deps);
+  return near ? { ...near, lowConfidence: true, donor: true } : worldStep(query, deps);
 }
 
 function placeEstimate(

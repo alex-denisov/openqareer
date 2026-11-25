@@ -74,7 +74,6 @@ export function vacancyCountry(
     ...(cluster.sources ?? []).map(({ sourceUrl }) => sourceUrl),
   ].filter((url) => url !== undefined);
   return (
-    deps.resolvePlace(cluster.canonicalLocation ?? '') ??
     vacancyCountryHint(
       {
         location: cluster.canonicalLocation,
@@ -83,8 +82,7 @@ export function vacancyCountry(
         text: cluster.descriptionSummary,
       },
       deps,
-    )?.country ??
-    (RUSSIAN_TITLE.test(cluster.canonicalTitle) ? 'RU' : undefined)
+    )?.country ?? (RUSSIAN_TITLE.test(cluster.canonicalTitle) ? 'RU' : undefined)
   );
 }
 
@@ -106,7 +104,11 @@ export function estimateResult(
   );
 }
 
-/** Наружу — только диапазон в месяц, валюта, налог и дата. */
+/** Точная ступень — своя страна и свой уровень; остальное выведено шире, какая ступень — не говорим. */
+const isWide = ({ step, precision, donor }: EstimateResult): boolean =>
+  step !== 'direct' || donor === true || precision.endsWith('-region');
+
+/** Наружу — только диапазон в месяц, валюта, налог, дата и признак широкой оценки. */
 export function estimateView(result: EstimateResult): MarketSalaryEstimateView {
   const { low, high, currency, period, tax, computedAt } = result.estimate;
   const month = monthlyMarketEstimate({
@@ -115,7 +117,7 @@ export function estimateView(result: EstimateResult): MarketSalaryEstimateView {
     currency,
     period: period === 'year' ? 'year' : 'month',
   });
-  return { ...month, tax, computedAt };
+  return { ...month, tax, computedAt, ...(isWide(result) ? { wide: true } : {}) };
 }
 
 export type SalaryEstimator = (

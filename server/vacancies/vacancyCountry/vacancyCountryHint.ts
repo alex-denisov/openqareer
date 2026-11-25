@@ -221,6 +221,8 @@ function stateRead(
   return { answer: agreed([us, ...others.map((part) => cityRead(part, deps))]) };
 }
 
+const GEORGIA = /\bgeorgia\b/iu;
+
 /** «Georgia» — штат и страна: решает город, без города ответа нет. */
 function georgiaRead(parts: readonly string[], deps: CountryHintDeps): PlaceAnswer {
   const others = parts.filter((part) => part.toLowerCase() !== 'georgia');
@@ -255,6 +257,12 @@ function placeRead(location: string, deps: CountryHintDeps): PlaceAnswer {
   return agreed(
     location.split(/[;|/·]+|\s(?:or|или)\s/iu).map((clause) => clauseRead(clause, deps)),
   );
+}
+
+/** Общий разбор всего места («DE_Ulm») — только там, где части молчат: спор он не решает. */
+function locationRead(location: string, deps: CountryHintDeps): PlaceAnswer {
+  const found = placeRead(location, deps);
+  return found ?? (GEORGIA.test(location) ? undefined : read(deps.resolvePlace(location), 'place'));
 }
 
 /** Workday пишет место в адрес вакансии: `/job/McLean-VA/…`. */
@@ -311,7 +319,7 @@ export function vacancyCountryHint(
   deps: CountryHintDeps,
 ): CountryHint | undefined {
   const urls = parsedUrls(input.urls);
-  const place = input.location ? placeRead(input.location, deps) : undefined;
+  const place = input.location ? locationRead(input.location, deps) : undefined;
   if (place === 'dispute') return undefined;
   if (isRead(place)) return { ...place, lowConfidence: false };
   const among = isOpen(place) ? place.among : undefined;

@@ -1,5 +1,5 @@
 /**
- * B803: постоянная работа хранилища зарплат: рост цен и пересборка раз в неделю, покрытие и свежесть
+ * B803: постоянная работа хранилища зарплат: рост цен, пересборка, покрытие и свежесть
  * раз в сутки в журнал. В журнале только счётчики.
  */
 import type { DatabaseSync } from 'node:sqlite';
@@ -37,10 +37,20 @@ export async function refreshPrices(
     const response = await fetchImpl(PRICES_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!response.ok) throw new Error(`prices HTTP ${response.status}`);
     writePrices(database, parsePrices(JSON.parse(await readBoundedText(response, MAX_BYTES))));
-    log.info({ ...rebuildSalaryBenchmarks(database) }, 'salary-benchmarks-rebuilt');
     return true;
   } catch (error: unknown) {
     log.error(details(error), 'salary-prices-failed');
+    return false;
+  }
+}
+
+/** Пересборка идёт и без новых цен: отказ World Bank её не держит. */
+export function rebuildBenchmarks(database: DatabaseSync, log: Log): boolean {
+  try {
+    log.info({ ...rebuildSalaryBenchmarks(database) }, 'salary-benchmarks-rebuilt');
+    return true;
+  } catch (error: unknown) {
+    log.error(details(error), 'salary-rebuild-failed');
     return false;
   }
 }
@@ -105,8 +115,15 @@ export function scheduleSalaryUpkeep(database: DatabaseSync, log: Log): () => vo
     schedulePersistedJob(database, log, {
       job: 'salary-prices',
       firstRunMs: 40 * 60_000,
-      intervalMs: 7 * DAY_MS,
+      // Один запрос в сутки: после отказа World Bank повтор завтра, а не через неделю.
+      intervalMs: DAY_MS,
       run: () => refreshPrices(database, log),
+    }),
+    schedulePersistedJob(database, log, {
+      job: 'salary-rebuild',
+      firstRunMs: HOUR_MS,
+      intervalMs: DAY_MS,
+      run: () => rebuildBenchmarks(database, log),
     }),
     schedulePersistedJob(database, log, {
       job: 'salary-coverage',

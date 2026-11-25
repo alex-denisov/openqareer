@@ -4,7 +4,7 @@ import {
   writeSalarySlice,
   createSalaryBenchmarkReader,
 } from '../salaryBenchmarks/sqliteSalaryBenchmarkStore';
-import { measureCoverage, refreshPrices } from './salaryUpkeep';
+import { measureCoverage, rebuildBenchmarks, refreshPrices } from './salaryUpkeep';
 
 const codes = Array.from({ length: 101 }, (_, index) =>
   index === 0
@@ -68,6 +68,8 @@ describe('refreshPrices', () => {
   it('brings an older figure in the money of the country to the last known year, records stay', async () => {
     const { database, lows } = stored();
     expect(await refreshPrices(database, quiet(), fetchOf(answer(10)))).toBe(true);
+    expect(lows()['row-one']).toBe(1_000);
+    expect(rebuildBenchmarks(database, quiet())).toBe(true);
     expect(lows()).toEqual({ 'row-one': 1_100, 'row-usd': 1_000, 'row-new': 1_000 });
     expect(database.prepare("SELECT low FROM salary_records WHERE id = 'row-one'").get()?.low).toBe(
       1_000,
@@ -78,6 +80,7 @@ describe('refreshPrices', () => {
     for (const percent of [150, -5, null]) {
       const { database, lows } = stored();
       await refreshPrices(database, quiet(), fetchOf(answer(percent)));
+      rebuildBenchmarks(database, quiet());
       expect(lows()['row-one']).toBe(1_000);
     }
   });

@@ -5,7 +5,7 @@ import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareListed, compareListedGroup } from '../../shared/vacancyListOrder';
 import { exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
-import { compareMoneyRank, createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
+import { compareMoneyRank, createPreparedMoney, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
 import type { ListPhasesMs } from './matchedListPhases';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -80,7 +80,7 @@ export function withVacancyFitOrder(
   isExact?: ExactRoleTest,
 ) {
   const relevance = sort.by === 'fit' && sort.dir === 'desc' ? isExact : undefined;
-  const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
+  const money = sort.by === 'money' ? createPreparedMoney(deps) : undefined;
   const reader = createFitViewReader(deps, candidateId, log, use);
   const stamp = reader ? fitProfileStamp(deps, candidateId) : 'none';
   const key = `${candidateId}|${stamp}`;
@@ -116,6 +116,7 @@ export function withVacancyFitOrder(
       prepareRoles: roundMs(roles.busyMs),
       prepareRoleTurns: roles.turns,
     };
+    await money?.prepare(items);
     prepared = views;
     return rows;
   };

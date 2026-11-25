@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createBenchmarkLookup } from '../salaryBenchmarks/benchmarkLookup';
 import { importSalarySlices } from '../salaryBenchmarks/salaryImport';
 import { bundledCities } from '../vacancyCountry/bundledCities';
+import { marketSalaryCountry } from '../marketSalary/marketSalaryCountry';
 import { createCities } from '../vacancyCountry/cityCountry';
 import { openqareerEstimate, type EstimateDeps, type EstimateQuery } from './openqareerEstimate';
 import { estimateResult, estimateView, vacancyCountry } from './salaryEstimateReader';
@@ -186,4 +187,39 @@ it('the answer carries a month range and no trace of the sources', () => {
   expect(view).toMatchObject({ period: 'month', tax: 'gross', currency: 'EUR' });
   expect(view.high).toBeLessThan(10_000);
   expect(JSON.stringify(view)).not.toMatch(/secret|agency|http/iu);
+});
+
+it('reads the place with the real resolver: a namesake code or a dispute is not decided by its first city', () => {
+  const hint = (employer?: string) => ({
+    resolvePlace: marketSalaryCountry,
+    cities: createCities(bundledCities()),
+    employerCountry: () => employer,
+  });
+  const country = (canonicalLocation: string, employer?: string) =>
+    vacancyCountry({ canonicalTitle: 'Accountant', canonicalLocation }, hint(employer));
+  expect(
+    ['Vancouver, CA', 'Hamilton, CA', 'Richmond, CA', 'Kingston, CA'].map((p) => country(p, 'CA')),
+  ).toEqual(['CA', 'CA', 'CA', 'CA']);
+  expect(country('Vancouver, CA')).toBe('CA');
+  expect(country('Berlin, London')).toBeUndefined();
+  expect(country('DE_Ulm')).toBe('DE');
+  expect(country('Chicago, IL')).toBe('US');
+  expect(country('Москва')).toBe('RU');
+});
+
+it('marks a wide estimate without naming the step', () => {
+  const view = (patch: Partial<EstimateQuery>, extra: Partial<EstimateDeps> = {}) =>
+    estimateView(openqareerEstimate(query(patch), deps(extra))!);
+  expect(view({}).wide).toBeUndefined();
+  expect(view({ country: undefined }).wide).toBe(true);
+  const catalog = {
+    get: (key: string) =>
+      key === 'data|0|country|ru'
+        ? ({ low: 80_000, high: 100_000, currency: 'RUR', sampleSize: 40 } as const)
+        : undefined,
+  };
+  const donor = view({ country: 'KZ', location: 'Алматы' }, { catalog });
+  expect(donor.wide).toBe(true);
+  expect(donor).not.toHaveProperty('step');
+  expect(donor).not.toHaveProperty('donor');
 });

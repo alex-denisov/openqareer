@@ -53,8 +53,8 @@ const KIND_WEIGHT: Readonly<Record<BenchmarkSourceKind, number>> = {
 const REDUCED_WEIGHT = 0.5;
 /** Каждый год возраста снижает вес. */
 const YEAR_DECAY = 0.7;
-/** Один источник: границы раздвигаются, чтобы не повторять его цифру и не обещать точность. */
-const SINGLE_SOURCE_SPREAD = 0.1;
+/** Одна цифра, от одного источника или совпавшая у всех: границы раздвигаются, чтобы не повторять его цифру и не обещать точность. */
+export const SINGLE_SOURCE_SPREAD = 0.1;
 /** Источник назвал только медиану: границ у него нет. */
 const MEDIAN_SPREAD = 0.15;
 /** Ставка часа и дня с окладом не сводится: сколько часов в месяце, источник не говорит. */
@@ -122,6 +122,30 @@ export function roundTo(value: number, step: number): number {
   return Number((Math.round(value / step) * step).toFixed(1));
 }
 
+interface Range {
+  readonly low: number;
+  readonly high: number;
+}
+
+function rounded({ low, high }: Range): Range {
+  const step = stepOf(low);
+  return { low: roundTo(low, step), high: roundTo(high, step) };
+}
+
+/** Округлённая вилка, которая не повторяет вилку ни одного из источников. */
+export function hideSourceRange(range: Range, sources: readonly Range[], always = false): Range {
+  const plain = rounded(range);
+  const repeats = sources.some((source) => {
+    const own = rounded(source);
+    return own.low === plain.low && own.high === plain.high;
+  });
+  if (!always && !repeats) return plain;
+  return rounded({
+    low: range.low * (1 - SINGLE_SOURCE_SPREAD),
+    high: range.high * (1 + SINGLE_SOURCE_SPREAD),
+  });
+}
+
 export function blendSalary(
   inputs: readonly BlendInput[],
   precision: BenchmarkPrecision,
@@ -150,16 +174,12 @@ export function blendSalary(
   const total = used.reduce((sum, { weight }) => sum + weight, 0);
   if (total <= 0) return undefined;
   const single = new Set(used.map(({ name }) => name)).size === 1;
-  const spread = single ? SINGLE_SOURCE_SPREAD : 0;
   const mean = (pick: 'low' | 'high') =>
     used.reduce((sum, row) => sum + row[pick] * row.weight, 0) / total;
-  const low = mean('low') * (1 - spread);
-  const high = mean('high') * (1 + spread);
-  const step = stepOf(low);
+  const range = hideSourceRange({ low: mean('low'), high: mean('high') }, used, single);
   return {
     estimate: {
-      low: roundTo(low, step),
-      high: roundTo(high, step),
+      ...range,
       currency: base.currency,
       period: base.period,
       tax: used.find(({ tax }) => tax !== 'unknown')?.tax ?? 'unknown',

@@ -33,7 +33,8 @@ export function levelMultipliers(rows: readonly SalaryBenchmark[]): LevelMultipl
   const cells = new Map<string, number[]>();
   for (const row of rows) {
     if (!row.functionCode || row.levelRank === null || !row.country) continue;
-    const place = [row.sourceName, row.country, row.currency, row.period, row.payBase].join('|');
+    const { sourceName, country, currency, period, payBase, tax } = row;
+    const place = [sourceName, country, currency, period, payBase, tax].join('|');
     pushTo(cells, `${place}|${row.functionCode}|${row.levelRank}`, middleOf(row));
   }
   const ratios = new Map<string, number[]>();

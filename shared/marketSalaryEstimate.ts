@@ -45,6 +45,8 @@ export interface MarketSalaryEstimateView {
   readonly currency: string;
   readonly period: MarketSalaryPeriod;
   readonly tax: 'gross' | 'net' | 'unknown';
+  /** Оценка выведена шире страны и уровня вакансии: не точная ступень. */
+  readonly wide?: boolean;
   /** ISO time of the computation: the date the screen shows. */
   readonly computedAt: string;
 }
