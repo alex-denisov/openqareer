@@ -19,6 +19,8 @@ export interface SalaryAmounts {
 const YEARLY_WITHOUT_PERIOD = 20_000;
 /** …если это не 800 000 тенге: месячная сумма в слабой валюте тоже больше порога (04.11). */
 const YEARLY_WITHOUT_PERIOD_RUB = 1_000_000;
+/** Без курса: 20 000 в этих валютах заведомо больше порога в рублях. */
+const STRONG_CURRENCIES: ReadonlySet<string> = new Set(['USD', 'EUR', 'GBP', '$', '€', '£']);
 const MONTHS = 12;
 /**
  * B765 (прод 23.11, решение оркестратора): иностранная сумма 100–999 без периода — это и месячная
@@ -55,6 +57,18 @@ export function salaryPeriodOf(
   return yearly ? 'year' : 'month';
 }
 
+/** Период для подписи суммы на экране, где курсов может не быть. */
+export function shownSalaryPeriod(
+  salary: SalaryAmounts,
+  rates: CurrencyRates | undefined,
+): SalaryPeriod {
+  const period = salaryPeriodOf(salary, rates);
+  const strong = STRONG_CURRENCIES.has((salary.currency ?? '').trim().toUpperCase());
+  const largest = Math.max(salary.from ?? 0, salary.to ?? 0);
+  const yearly = !rates && !salary.period && strong && largest >= YEARLY_WITHOUT_PERIOD;
+  return yearly ? 'year' : period;
+}
+
 /** Сумма в месяц в валюте вакансии; у ставки в час и у неизвестного периода её нет. */
 export function monthlyAmount(
   amount: number | undefined,
@@ -62,6 +76,20 @@ export function monthlyAmount(
 ): number | undefined {
   if (!amount || period === 'hour' || period === 'unknown') return undefined;
   return period === 'year' ? amount / MONTHS : amount;
+}
+
+/** Вилка вакансии в месяц в её валюте — для сравнения с оценкой; нет месяца — нет и вилки. */
+export function monthlySalary<T extends SalaryAmounts>(
+  salary: T | undefined,
+  rates: CurrencyRates | undefined,
+): T | undefined {
+  if (!salary) return undefined;
+  const period = salaryPeriodOf(salary, rates);
+  const from = monthlyAmount(salary.from, period);
+  const to = monthlyAmount(salary.to, period);
+  return from === undefined && to === undefined
+    ? undefined
+    : { ...salary, from, to, period: 'month' };
 }
 
 export function monthlyRubSalary(

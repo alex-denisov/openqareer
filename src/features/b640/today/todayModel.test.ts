@@ -9,6 +9,7 @@ import {
   queueAction,
   skillFit,
   vacancyRow,
+  withoutEvents,
 } from './todayModel';
 
 function item(overrides: Partial<TodayQueueItem>): TodayQueueItem {
@@ -251,5 +252,16 @@ describe('b640 today: раскладка модулей по колонкам', 
     );
     expect(keys(layout.main)).toEqual(['onboarding_plan']);
     expect(layout.side).toEqual([]);
+  });
+});
+
+describe('«Сегодня»: одна вакансия — одна строка', () => {
+  const turn = (applicationId: string) =>
+    ({ kind: 'candidate_turn', applicationId, title: 'IT Director' }) as TodayQueueItem;
+
+  it('отклик из «Событий» в делах не повторяется, счёт дел меньше на него', () => {
+    const day = { queue: [turn('a1'), turn('a2')], queueTotal: 5 };
+    expect(withoutEvents(day, new Set(['a2']))).toEqual({ queue: [turn('a1')], queueTotal: 4 });
+    expect(withoutEvents(day, new Set())).toBe(day);
   });
 });

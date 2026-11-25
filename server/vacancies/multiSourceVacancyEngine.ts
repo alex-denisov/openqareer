@@ -102,7 +102,7 @@ import {
   type WorkdayDescriptionReport,
   type WorkdayDetailFetch,
 } from './workdayDescriptions';
-import { isHhStubText } from './hhStubText';
+import { hhTextNeedsRead, isHhStubText } from './hhStubText';
 import { hasDetailText } from './detailTextPriority';
 import { WithoutTextQueue, type WithoutTextReader } from './withoutTextQueue';
 
@@ -1487,8 +1487,8 @@ export class MultiSourceVacancyEngine {
     if (
       this.persistedDescriptionIds.has(id) ||
       // 01.11: дочитанный текст без навыков — тоже готов; иначе он запрашивался каждый раз.
-      // B794: обрывок («Обязанности:») читается ещё раз, один раз за процесс.
-      !isHhStubText(existing.fullDescription)
+      // B794: обрывок («Обязанности:») читается ещё раз, один раз на вакансию.
+      !hhTextNeedsRead(existing)
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
@@ -1673,6 +1673,7 @@ export class MultiSourceVacancyEngine {
       ...vacancy,
       ...(fullDescription ? { fullDescription } : {}),
       requiredSkills: skillsToSave,
+      ...(fullDescription && isHhStubText(fullDescription) ? { descriptionShort: true } : {}),
     };
     try {
       this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);

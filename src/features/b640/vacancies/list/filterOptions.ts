@@ -156,6 +156,21 @@ export function serverCountState(input: {
   return { serverKnows: serverMode && (total > 0 || (dated && !serverPending)), serverPending };
 }
 
+/**
+ * Числа подборки ещё нет: роли не выбраны, идёт первая порция сервера или перечитывается пул.
+ * Промежуточное число (вся подборка до ролей) не показываем.
+ */
+export function countPending(input: {
+  readonly rolesReady: boolean;
+  readonly waitingFirst: boolean;
+  readonly serverMode: boolean;
+  readonly serverKnows: boolean;
+  readonly reading: boolean;
+}): boolean {
+  const { rolesReady, waitingFirst, serverMode, serverKnows, reading } = input;
+  return !rolesReady || waitingFirst || (serverMode && !serverKnows && reading);
+}
+
 export function splitOptions(options: readonly FilterOption[], query: string): {
   readonly top: readonly FilterOption[];
   readonly rest: readonly FilterOption[];

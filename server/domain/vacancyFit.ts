@@ -319,7 +319,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: percent(skills),
     requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
-    ...(implied.length ? { implied } : {}), ...(duties.size || uncounted.size ? { duties: [...duties, ...uncounted] } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
+    ...(implied.length ? { implied } : {}), ...(duties.size || uncounted.size ? { duties: [...duties, ...uncounted] } : {}), ...(uncounted.size ? { wishes: [...uncounted] } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
     coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments, placed),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,
