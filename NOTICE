@@ -31,3 +31,8 @@ The source board files were concatenated into a single file. The data is under
 CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). The license and
 individual contribution credits accompany the snapshot.
 
+The city dictionary in server/vacancies/vacancyCountry/cityCountryData.ts is
+derived from GeoNames (https://www.geonames.org), cities5000, licensed under
+CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Only names and
+country codes are kept; names shared by comparable cities of different
+countries are dropped.

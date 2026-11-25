@@ -3,6 +3,8 @@
  * пусто). Порядок — от места в тексте к адресу вакансии и к стране работодателя; ничего не нашли или
  * признаки спорят — страны нет.
  */
+import { cityCountry, cityCountryInText } from './cityCountry';
+
 export type CountryHintBasis = 'place' | 'address' | 'employer' | 'domain';
 
 export interface CountryHint {
@@ -35,27 +37,29 @@ const COUNTRY_NAMES: ReadonlyMap<string, string> = new Map(
     );
   }),
 );
-const NAME_ALIASES: Readonly<Record<string, string>> = {
-  'hong kong': 'HK',
-  'hong kong sar': 'HK',
-  гонконг: 'HK',
-  оаэ: 'AE',
-  uae: 'AE',
-  uk: 'GB',
-  великобритания: 'GB',
-  usa: 'US',
-  сша: 'US',
-  турция: 'TR',
-  turkey: 'TR',
-  الرياض: 'SA',
-  deutschland: 'DE',
-  österreich: 'AT',
-  schweiz: 'CH',
-};
+const NAME_ALIASES: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    'hong kong': 'HK',
+    'hong kong sar': 'HK',
+    гонконг: 'HK',
+    оаэ: 'AE',
+    uae: 'AE',
+    uk: 'GB',
+    великобритания: 'GB',
+    usa: 'US',
+    сша: 'US',
+    турция: 'TR',
+    turkey: 'TR',
+    الرياض: 'SA',
+    deutschland: 'DE',
+    österreich: 'AT',
+    schweiz: 'CH',
+  }),
+);
 
 function countryName(text: string): string | undefined {
   const name = text.trim().toLocaleLowerCase('ru');
-  return NAME_ALIASES[name] ?? COUNTRY_NAMES.get(name);
+  return NAME_ALIASES.get(name) ?? COUNTRY_NAMES.get(name);
 }
 
 const NOISE = [
@@ -87,7 +91,12 @@ function placeCountry(location: string, deps: CountryHintDeps): string | undefin
   if (named.length > 0) return single(named);
   const [first] = parts;
   if (!first) return undefined;
-  return deps.resolvePlace(parts.join(', ')) ?? deps.resolvePlace(first);
+  return (
+    deps.resolvePlace(parts.join(', ')) ??
+    deps.resolvePlace(first) ??
+    cityCountry(first) ??
+    single(parts.map(cityCountryInText))
+  );
 }
 
 /** Workday пишет место в адрес вакансии: `/job/McLean-VA/…`. */
