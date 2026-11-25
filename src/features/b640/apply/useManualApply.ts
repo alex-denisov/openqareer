@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ManualApplyItem } from '../../../../shared/manualApply';
+import type { ManualApplyItem, ManualApplyReason } from '../../../../shared/manualApply';
 import { platformOf } from '../responses/model/platform';
 import { getManualApply, queueManualApply } from './data/manualApplyApi';
 import type { ApplyTarget } from './model/applyModel';
@@ -12,10 +12,13 @@ export interface ManualApplyFlow {
   readonly refresh: () => void;
 }
 
+/** Поставить этот отклик в очередь: отправить его может только кандидат. `false` — не вышло. */
+export type QueueManual = (reason: ManualApplyReason, host?: string) => Promise<boolean>;
+
 type Known = ManualApplyItem | 'loading' | null;
 
 /** Отклик ещё не отправлен: черновик, архив после «Не откликаюсь» или отклика пока нет. */
-function isUnsent({ application }: ApplyTarget): boolean {
+export function isUnsent({ application }: ApplyTarget): boolean {
   return !application || application.stage === 'saved' || application.stage === 'archived';
 }
 
@@ -26,7 +29,7 @@ function isUnsent({ application }: ApplyTarget): boolean {
 export function useManualApply(
   target: ApplyTarget,
   source: string | undefined,
-): ManualApplyFlow | 'loading' | null {
+): { readonly manual: ManualApplyFlow | 'loading' | null; readonly queue: QueueManual } {
   const { vacancyId } = target;
   const unsent = isUnsent(target);
   const linkedin = Boolean(source) && platformOf(source).label === 'LinkedIn';
@@ -57,5 +60,17 @@ export function useManualApply(
     return () => window.clearInterval(timer);
   }, [preparing, refresh]);
 
-  return known === null || known === 'loading' ? known : { item: known, refresh };
+  const queue = useCallback(
+    async (reason: ManualApplyReason, host?: string): Promise<boolean> => {
+      try {
+        setKnown(await queueManualApply({ vacancyId, reason, ...(host ? { host } : {}) }));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [vacancyId],
+  );
+  const manual = known === null || known === 'loading' ? known : { item: known, refresh };
+  return { manual, queue };
 }

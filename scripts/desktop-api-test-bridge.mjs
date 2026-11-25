@@ -12,12 +12,17 @@ export function installDesktopApiTestBridge() {
         if (command !== 'desktop_native_fetch') return original?.(command, args) ?? null;
         const { url, ...init } = args.request;
         const response = await fetch(url, init);
-        return {
+        const answer = {
           status: response.status,
           ok: response.ok,
           headers: Object.fromEntries(response.headers.entries()),
-          body: await response.text(),
         };
+        if (!/^application\/pdf/.test(response.headers.get('content-type') ?? '')) {
+          return { ...answer, body: await response.text() };
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+        return { ...answer, body: '', body_base64: btoa(binary) };
       },
     };
   };

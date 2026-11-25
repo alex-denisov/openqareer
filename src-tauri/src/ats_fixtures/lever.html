@@ -1,0 +1,431 @@
+<form id="application-form">
+<div class="application-form">
+<ul>
+<li class="application-question">
+<label>
+<div class="application-label">Resume/CV </div>
+<div class="application-field">
+<a href="https://acme.example/privacy">
+<span>ATTACH RESUME/CV</span>
+<input id="resume-upload-input" name="resume" type="file" class="application-file-input">
+</a>
+<span hidden="">
+<div hidden="">Couldn't auto-read resume.</div>
+</span>
+<span hidden="">
+<div hidden="">Analyzing resume...</div>
+</span>
+<span hidden="">
+<div hidden="">Success!</div>
+</span>
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Full name<span class="required">✱</span>
+</div>
+<div class="application-field">
+<input type="text" name="name" required="">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Email<span class="required">✱</span>
+</div>
+<div class="application-field">
+<input name="email" type="email" required="">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Phone <span class="required">✱</span>
+</div>
+<div class="application-field">
+<input type="text" name="phone" required="">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Current location </div>
+<div class="application-field">
+<input id="location-input" type="text" name="location">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Current company <span class="required">✱</span>
+</div>
+<div class="application-field">
+<input type="text" name="org" required="">
+</div>
+</label>
+</li>
+</ul>
+</div>
+<div class="application-form">
+<ul>
+<li class="application-question">
+<label>
+<div class="application-label">LinkedIn URL</div>
+<div class="application-field">
+<input type="text" name="urls[LinkedIn]">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Twitter URL</div>
+<div class="application-field">
+<input type="text" name="urls[Twitter]">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">GitHub URL</div>
+<div class="application-field">
+<input type="text" name="urls[GitHub]">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Portfolio URL</div>
+<div class="application-field">
+<input type="text" name="urls[Portfolio]">
+</div>
+</label>
+</li>
+<li class="application-question">
+<label>
+<div class="application-label">Other website</div>
+<div class="application-field">
+<input type="text" name="urls[Other]">
+</div>
+</label>
+</li>
+</ul>
+</div>
+<div class="application-form">
+<ul>
+<li class="application-question">
+<div>
+<div class="application-label">
+<div>Are you 18 years of age or older?<span class="required">✱</span>
+</div>
+</div>
+<div class="application-field">
+<ul>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field0]" value="Yes" required="required">
+<span class="application-answer-alternative">Yes</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field0]" value="No" required="required">
+<span class="application-answer-alternative">No</span>
+</label>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li class="application-question">
+<div>
+<div class="application-label">
+<div>Please indicate your eligibility to work in the United States.<span class="required">✱</span>
+</div>
+</div>
+<div class="application-field">
+<ul>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field1]" value="I am eligible to work for any employer in the United States without sponsorship." required="required">
+<span class="application-answer-alternative">I am eligible to work for any employer in the United States without sponsorship.</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field1]" value="My current employer is sponsoring my visa." required="required">
+<span class="application-answer-alternative">My current employer is sponsoring my visa.</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field1]" value="I am not currently eligible and require sponsorship of a visa." required="required">
+<span class="application-answer-alternative">I am not currently eligible and require sponsorship of a visa.</span>
+</label>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li class="application-question">
+<div>
+<div class="application-label">
+<div>Have you ever worked for Acme, Able Services, Quality Uptime Services (QUS), RavenVolt, and WGNSTAR, or any of their previous or existing subsidiaries or affiliates?<span class="required">✱</span>
+</div>
+</div>
+<div class="application-field">
+<ul>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field2]" value="Yes" required="required">
+<span class="application-answer-alternative">Yes</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field2]" value="No" required="required">
+<span class="application-answer-alternative">No</span>
+</label>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li class="application-question">
+<div>
+<div class="application-label">
+<div>Have you served in the military?<span class="required">✱</span>
+</div>
+</div>
+<div class="application-field">
+<ul>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field3]" value="Yes" required="required">
+<span class="application-answer-alternative">Yes</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field3]" value="No" required="required">
+<span class="application-answer-alternative">No</span>
+</label>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li class="application-question">
+<div>
+<div class="application-label">
+<div>If yes, which branch?</div>
+</div>
+<div class="application-field">
+<ul>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field4]" value="Army">
+<span class="application-answer-alternative">Army</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field4]" value="Navy">
+<span class="application-answer-alternative">Navy</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field4]" value="Marine Corps">
+<span class="application-answer-alternative">Marine Corps</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field4]" value="Air Force">
+<span class="application-answer-alternative">Air Force</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field4]" value="Coast Guard">
+<span class="application-answer-alternative">Coast Guard</span>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field4]" value="Space Force">
+<span class="application-answer-alternative">Space Force</span>
+</label>
+</li>
+</ul>
+</div>
+</div>
+</li>
+<li class="application-question">
+<div>
+<div class="application-label">
+<div>If applicable, what is / was your separation date</div>
+</div>
+<div class="application-field">
+<input type="text" value="" name="cards[4aa3b700-4ce6-4ea3-9986-d260a838dac6][field5]">
+</div>
+</div>
+</li>
+</ul>
+</div>
+<div id="eeoSurvey_2aad758f-2f3c-4d33-a771-0465f45a0d63" class="application-form">
+<hr>
+<div class="application-question">
+<label>
+<div class="application-label">Gender</div>
+<div class="application-field">
+<div class="application-dropdown">
+<select name="eeo[gender]">
+<option value="">Select ...</option>
+<option value="Male">Male</option>
+<option value="Female">Female</option>
+<option value="Decline to self-identify">Decline to self-identify</option>
+</select>
+</div>
+</div>
+</label>
+</div>
+<div class="application-question">
+<label>
+<div class="application-label">Race</div>
+<div class="application-field"> <ul>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="Hispanic or Latino">
+<span class="application-answer-alternative">Hispanic or Latino</span>
+<div>A person of Cuban, Mexican, Puerto Rican, South or Central American, or other Spanish culture or origin regardless of race.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="White (Not Hispanic or Latino)">
+<span class="application-answer-alternative">White (Not Hispanic or Latino)</span>
+<div>A person having origins in any of the original peoples of Europe, the Middle East, or North Africa.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="Black or African American (Not Hispanic or Latino)">
+<span class="application-answer-alternative">Black or African American (Not Hispanic or Latino)</span>
+<div>A person having origins in any of the black racial groups of Africa.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="Native Hawaiian or Other Pacific Islander (Not Hispanic or Latino)">
+<span class="application-answer-alternative">Native Hawaiian or Other Pacific Islander (Not Hispanic or Latino)</span>
+<div>A person having origins in any of the peoples of Hawaii, Guam, Samoa, or other Pacific Islands.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="Asian (Not Hispanic or Latino)">
+<span class="application-answer-alternative">Asian (Not Hispanic or Latino)</span>
+<div>A person having origins in any of the original peoples of the Far East, Southeast Asia, or the Indian Subcontinent, including, for example, Cambodia, China, India, Japan, Korea, Malaysia, Pakistan, the Philippine Islands, Thailand, and Vietnam.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="American Indian or Alaska Native (Not Hispanic or Latino)">
+<span class="application-answer-alternative">American Indian or Alaska Native (Not Hispanic or Latino)</span>
+<div>A person having origins in any of the original peoples of North and South America (including Central America), and who maintain tribal affiliation or community attachment.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="Two or More Races (Not Hispanic or Latino)">
+<span class="application-answer-alternative">Two or More Races (Not Hispanic or Latino)</span>
+<div>All persons who identify with more than one of the above five races.</div>
+</label>
+</li>
+<li>
+<label>
+<input type="radio" name="eeo[race]" value="Decline to self-identify">
+<span class="application-answer-alternative">Decline to self-identify</span>
+</label>
+</li>
+</ul>
+</div>
+</label>
+</div>
+<hr>
+<div class="application-question">
+<label>
+<div class="application-label">Veteran status</div>
+<div class="application-field">
+<div class="application-dropdown">
+<select name="eeo[veteran]">
+<option value="">Select ...</option>
+<option value="I am a Protected Veteran">I identify as one or more of the classifications of protected veteran listed above</option>
+<option value="I am not a Protected Veteran">I am not a protected veteran</option>
+<option value="Decline to self-identify">I decline to self-identify for protected veteran status</option>
+</select>
+</div>
+</div>
+</label>
+</div>
+<hr>
+<h5>Why are you being asked to complete this form?</h5>
+<h5>How do you know if you have a disability?</h5>
+<ul>
+<li>Alcohol or other substance use disorder (not currently using drugs illegally)</li>
+<li>Autoimmune disorder, for example, lupus, fibromyalgia, rheumatoid arthritis, HIV/AIDS</li>
+<li>Blind or low vision</li>
+<li>Cancer (past or present)</li>
+<li>Cardiovascular or heart disease</li>
+<li>Celiac disease</li>
+<li>Cerebral palsy</li>
+<li>Deaf or serious difficulty hearing</li>
+<li>Diabetes</li>
+<li>Disfigurement, for example, disfigurement caused by burns, wounds, accidents, or congenital disorders</li>
+<li>Epilepsy or other seizure disorder</li>
+<li>Gastrointestinal disorders, for example, Crohn's Disease, irritable bowel syndrome</li>
+<li>Intellectual or developmental disability</li>
+<li>Mental health conditions, for example, depression, bipolar disorder, anxiety disorder, schizophrenia, PTSD</li>
+<li>Missing limbs or partially missing limbs</li>
+<li>Mobility impairment, benefiting from the use of a wheelchair, scooter, walker, leg brace(s) and/or other supports</li>
+<li>Nervous system condition, for example, migraine headaches, Parkinson’s disease, multiple sclerosis (MS)</li>
+<li>Neurodivergence, for example, attention-deficit/hyperactivity disorder (ADHD), autism spectrum disorder, dyslexia, dyspraxia, other learning disabilities</li>
+<li>Partial or complete paralysis (any cause)</li>
+<li>Pulmonary or respiratory conditions, for example, tuberculosis, asthma, emphysema</li>
+<li>Short stature (dwarfism)</li>
+<li>Traumatic brain injury</li>
+</ul>
+<div class="application-question">
+<label>
+<div class="application-label">Disability status</div>
+<div class="application-field">
+<div class="application-dropdown">
+<select id="disabilitySelectElement" name="eeo[disability]">
+<option value="">Select ...</option>
+<option value="Yes, I have a disability, or have had one in the past">Yes, I have a disability, or have had one in the past</option>
+<option value="No, I do not have a disability and have not had one in the past">No, I do not have a disability and have not had one in the past</option>
+<option value="I do not want to answer ">I do not want to answer</option>
+</select>
+</div>
+</div>
+</label>
+</div>
+<div id="disabilitySignatureSection" hidden="">
+<div class="application-question" hidden="">
+<label hidden="">
+<div class="application-label" hidden="">Name</div>
+</label>
+</div>
+<div class="application-question" hidden="">
+<label hidden="">
+<div class="application-label" hidden="">Date</div>
+</label>
+</div>
+</div>
+</div>
+<div class="application-form">
+<button id="btn-submit" type="button" href="#" class="template-btn-submit">Submit application</button>
+</div>
+</form>

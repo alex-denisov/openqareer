@@ -86,14 +86,14 @@ export async function markApplied({
 }
 
 /** «одобрено 18.11» — дата одобрения письма. */
-function approvedLabel(approvedAt: string): string {
+export function approvedLabel(approvedAt: string): string {
   const date = new Date(approvedAt);
   if (Number.isNaN(date.getTime())) return 'одобрено';
   const pad = (value: number) => String(value).padStart(2, '0');
   return `одобрено ${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
 }
 
-function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
+export function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
