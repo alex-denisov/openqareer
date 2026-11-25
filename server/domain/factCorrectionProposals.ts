@@ -7,6 +7,7 @@ import {
   saysPercent,
   statedCorrection,
 } from './factCorrection';
+import type { CorrectionCard } from './coach';
 import type { ResumeDraft } from './resumeDraft';
 
 /** Что нужно знать о кандидате, чтобы найти записи с исправляемым фактом. */
@@ -93,7 +94,7 @@ export function placeOf(source: FactSource, target: FactCorrectionTarget): strin
 export function correctionCards(
   source: FactSource,
   message: string,
-): { place: string; from: string; to: string }[] {
+): readonly CorrectionCard[] {
   const stated = statedCorrection(message);
   if (!stated) return [];
   return factCorrectionProposals(source, message).map(({ place }) => ({

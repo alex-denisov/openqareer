@@ -9,8 +9,12 @@ interface TextsProps {
 const DESCRIPTION_MAX_LENGTH = 5_000;
 const DESCRIPTION_ROWS = 3;
 
-/** «Что делали»: описание места работы. */
-export function DescriptionField({ form, onChange }: TextsProps) {
+/** «Что делали»: описание места работы; у новой записи (`isNew`) предел — как у результата. */
+export function DescriptionField({
+  form,
+  onChange,
+  isNew = false,
+}: TextsProps & { readonly isNew?: boolean }) {
   if (form.description === null) return null;
   return (
     <div className="pf-f">
@@ -18,7 +22,7 @@ export function DescriptionField({ form, onChange }: TextsProps) {
       <textarea
         id="wk"
         rows={DESCRIPTION_ROWS}
-        maxLength={DESCRIPTION_MAX_LENGTH}
+        maxLength={isNew ? RESULT_MAX_LENGTH : DESCRIPTION_MAX_LENGTH}
         value={form.description}
         onChange={(event) => onChange({ description: event.target.value })}
       />
