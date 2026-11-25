@@ -13,6 +13,7 @@ import {
   isUnknownForm,
   runAtsForm,
   type AtsForm,
+  type AtsObstacle,
   type AtsRunResult,
 } from './atsRun';
 import { settleAtsConsents } from './atsSend';
@@ -31,7 +32,7 @@ export type AtsApplyState =
   | { readonly kind: 'sent'; readonly receipt: AtsConfirmation }
   | { readonly kind: 'unconfirmed'; readonly host: string }
   | { readonly kind: 'refused'; readonly host: string }
-  | { readonly kind: 'failed'; readonly rejected?: 'resume' | 'letter' }
+  | { readonly kind: 'failed'; readonly rejected?: AtsObstacle }
   /** Отклик уходит в очередь кандидата. */
   | { readonly kind: 'manual' };
 

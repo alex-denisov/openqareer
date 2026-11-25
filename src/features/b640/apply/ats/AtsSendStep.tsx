@@ -8,6 +8,7 @@ import type { ApplyStep } from '../model/applyModel';
 import { elapsedLabel } from '../hh/hhSendModel';
 import { useMarkSent } from '../hh/useMarkSent';
 import type { AtsConfirmation } from './atsFormTypes';
+import type { AtsObstacle } from './atsRun';
 import { canSendAts, type AtsApplyControls, type AtsApplyState } from './useAtsApply';
 
 export interface AtsSendStepProps {
@@ -86,8 +87,10 @@ function ReadFailed({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function failedText(rejected: 'resume' | 'letter' | undefined, host: string): string {
+function failedText(rejected: AtsObstacle | undefined, host: string): string {
   if (!rejected) return 'Отклик не отправлен. Повторите.';
+  if (rejected === 'button')
+    return `Отклик не отправлен: кнопка отправки на ${host} не сработала. Повторите.`;
   return `${host} не принял ${rejected === 'resume' ? 'резюме' : 'письмо'}. Повторите.`;
 }
 
