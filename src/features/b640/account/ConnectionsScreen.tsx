@@ -208,6 +208,27 @@ function closingFirst(hh: HhMenuItems, close: () => void): HhMenuItems {
   };
 }
 
+interface RowButtonProps {
+  readonly name: string;
+  readonly onConnect?: () => void;
+  readonly onDisconnect: () => void;
+}
+
+/** Кнопка строки: «Отключить», а при истёкшем входе — «Подключить» (отключение остаётся в меню). */
+function RowButton({ name, onConnect, onDisconnect }: RowButtonProps) {
+  const label = onConnect ? 'Подключить' : 'Отключить';
+  return (
+    <button
+      className={onConnect ? 'btn is-sm' : 'btn is-sm cn-off'}
+      type="button"
+      aria-label={`${label} ${name}`}
+      onClick={onConnect ?? onDisconnect}
+    >
+      {label}
+    </button>
+  );
+}
+
 /** Действия подключённой площадки: «Отключить», меню с временем обновления, подтверждение. */
 function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & { readonly hh: HhMenuItems | null }) {
   const name = PLATFORM_NAME[connection.platform];
@@ -218,25 +239,8 @@ function PlatformActions({ connection, onDisconnected, hh }: PlatformRowProps & 
 
   return (
     <div className="set-r cn-end" ref={ref}>
-      {opened !== 'confirm' && hh?.onConnect ? (
-        <button
-          className="btn is-sm"
-          type="button"
-          aria-label={`Подключить ${name}`}
-          onClick={hh.onConnect}
-        >
-          Подключить
-        </button>
-      ) : null}
-      {opened === 'confirm' || hh?.onConnect ? null : (
-        <button
-          className="btn is-sm cn-off"
-          type="button"
-          aria-label={`Отключить ${name}`}
-          onClick={() => setOpened('confirm')}
-        >
-          Отключить
-        </button>
+      {opened === 'confirm' ? null : (
+        <RowButton name={name} onConnect={hh?.onConnect} onDisconnect={() => setOpened('confirm')} />
       )}
       <div className="lk-menu cn-menu">
         <button

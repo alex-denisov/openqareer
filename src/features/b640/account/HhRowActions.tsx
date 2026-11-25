@@ -69,6 +69,31 @@ function failedState(flow: Flow, reason: unknown, retry: () => void): HhRowState
   return { kind: 'error', text: FAILED[flow], retry };
 }
 
+/** Чтение hh.ru; вход виден — строка перечитывается, даже если профиль не обновился (B704). */
+async function runHh(
+  flow: Flow,
+  setState: (state: HhRowState) => void,
+  onRefreshed: () => void,
+  retry: () => void,
+): Promise<void> {
+  let signedIn = false;
+  try {
+    const list = await readHhResumeList();
+    signedIn = list.kind !== 'signin';
+    if (list.kind !== 'ready') {
+      setState({ kind: list.kind });
+    } else if (flow === 'change') {
+      setState({ kind: 'choose', resumes: list.resumes, selectedId: list.selectedId });
+    } else {
+      await refreshHhProfile(list.resumes, list.selectedId);
+      setState({ kind: 'done', text: 'Профиль обновлён из hh.ru' });
+    }
+  } catch (reason: unknown) {
+    setState(failedState(flow, reason, retry));
+  }
+  if (signedIn) onRefreshed();
+}
+
 /** «Обновить сейчас» и «Сменить резюме» строки hh.ru (у LinkedIn — только «Обновить сейчас»): итог — строкой под ней. */
 export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linkedin' = 'hh') {
   const [state, setState] = useState<HhRowState>({ kind: 'idle' });
@@ -91,28 +116,7 @@ export function useHhRowActions(onRefreshed: () => void, platform: 'hh' | 'linke
   async function run(flow: Flow) {
     if (platform === 'linkedin') return refreshLinkedIn();
     setState({ kind: 'reading' });
-    let signedIn = false;
-    try {
-      const list = await readHhResumeList();
-      signedIn = list.kind !== 'signin';
-      if (list.kind !== 'ready') {
-        setState({ kind: list.kind });
-        if (signedIn) onRefreshed();
-        return;
-      }
-      if (flow === 'change') {
-        setState({ kind: 'choose', resumes: list.resumes, selectedId: list.selectedId });
-        onRefreshed();
-        return;
-      }
-      await refreshHhProfile(list.resumes, list.selectedId);
-      setState({ kind: 'done', text: 'Профиль обновлён из hh.ru' });
-      onRefreshed();
-    } catch (reason: unknown) {
-      setState(failedState(flow, reason, () => void run(flow)));
-      // Вход виден, хотя профиль не обновился: пометка «вход истёк» снята — строку перечитать.
-      if (signedIn) onRefreshed();
-    }
+    await runHh(flow, setState, onRefreshed, () => void run(flow));
   }
 
   /** B704: вход заново на месте строки; после него данные hh.ru читаются сразу. */
