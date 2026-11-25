@@ -6,7 +6,7 @@ import type { SplitWriters } from './clusterSplitWrite';
 
 /** 23.11, копия прода: 5–10 мс на кусок с ключами и каталогом, холодный кэш. */
 export const CLUSTER_SPLIT_MAX_PIECES = 40;
-export const CLUSTER_SPLIT_BUDGET_MS = 500;
+export const CLUSTER_SPLIT_BUDGET_MS = 350;
 
 export type ClusterSplitLog = (event: string, fields: Record<string, unknown>) => void;
 
