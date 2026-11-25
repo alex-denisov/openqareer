@@ -2,10 +2,16 @@ import type { ManualApplyReason } from '../../../../../shared/manualApply';
 import type { AnswerDraft } from '../model/formModel';
 import type { AtsConsentJournal } from './atsConsentJournal';
 import type * as desktop from './atsDesktop';
-import { planForm, type AtsConsentRecord, type CandidateFacts } from './atsFieldPlan';
+import {
+  isCoverLetter,
+  isResumeFile,
+  planForm,
+  type AtsConsentRecord,
+  type CandidateFacts,
+} from './atsFieldPlan';
 import type { AtsEntry, AtsField, AtsFile, AtsFormReport, AtsReceipt } from './atsFormTypes';
 import type { IdentityFacts } from './atsIdentity';
-import { fieldAnswers, isBeyondForm, missingAnswers } from './atsQuestions';
+import { askedFields, fieldAnswers, isBeyondForm, missingAnswers } from './atsQuestions';
 import { sendAtsForm } from './atsSend';
 
 /** B787: форма работодателя целиком — от чтения до одного нажатия. Экрана здесь нет. */
@@ -36,11 +42,16 @@ export type AtsRunResult =
   /** Нажатие было, подтверждения нет: второго нажатия не будет. */
   | { readonly kind: 'unconfirmed'; readonly host: string }
   /** Появились вопросы, на которые отвечает кандидат. */
-  | { readonly kind: 'ask'; readonly form: AtsForm }
+  | {
+      readonly kind: 'ask';
+      readonly form: AtsForm;
+      /** Поля, ответ на которые форма не взяла. */
+      readonly rejected?: readonly string[];
+    }
   /** Форма отказала своим полям: ничего не ушло. */
   | { readonly kind: 'refused'; readonly host: string }
   /** До нажатия не дошло: можно повторить. */
-  | { readonly kind: 'failed' }
+  | { readonly kind: 'failed'; readonly rejected?: 'resume' | 'letter' }
   | AtsManual;
 
 const READ_REASONS: Readonly<Record<Exclude<AtsFormReport['state'], 'ready'>, ManualApplyReason>> =
@@ -159,14 +170,16 @@ async function fill(
 ): Promise<Filled | 'page_ticked' | null> {
   const first = await deps.desktop.fillAtsForm(input.vacancyId, entries);
   if (!first) return null;
-  const failed = entries.filter((entry) => !wrote(entry, first.results, first.values));
-  const fields = page.filter((field) => failed.some((entry) => entry.key === field.key));
+  const missed = (values: Filled['values']): readonly AtsField[] => {
+    const failed = entries.filter((entry) => !wrote(entry, first.results, values));
+    return page.filter((field) => failed.some((entry) => entry.key === field.key));
+  };
   const ticked = tickedByPage(page, entries, first.values);
-  if (ticked.length === 0) return { values: first.values, failed: fields };
+  if (ticked.length === 0) return { values: first.values, failed: missed(first.values) };
   const second = await deps.desktop.fillAtsForm(input.vacancyId, ticked);
   if (!second) return null;
   const left = tickedByPage(page, entries, second.values);
-  return left.length > 0 ? 'page_ticked' : { values: second.values, failed: fields };
+  return left.length > 0 ? 'page_ticked' : { values: second.values, failed: missed(second.values) };
 }
 
 /** Список не взял значение: его варианты читаются и выбираются кандидатом. */
@@ -175,7 +188,10 @@ async function withOptions(
   deps: AtsRunDeps,
   form: AtsForm,
   failed: readonly AtsField[],
-): Promise<AtsForm | AtsManual> {
+): Promise<AtsForm | AtsRunResult> {
+  // Подготовленное резюме или письмо форма не взяла: без него отклик не уходит.
+  if (failed.some(isResumeFile)) return { kind: 'failed', rejected: 'resume' };
+  if (failed.some(isCoverLetter)) return { kind: 'failed', rejected: 'letter' };
   const { answers } = candidateFacts(input, form.page);
   const read = new Map<string, AtsField>();
   for (const field of failed) {
@@ -186,13 +202,21 @@ async function withOptions(
         : null;
     if (options && options.length > 0) read.set(field.key, { ...field, options });
   }
-  if (failed.some((field) => field.required && !read.has(field.key))) {
-    return manual('other', form.host);
+  const left = failed.filter((field) => field.required && !read.has(field.key));
+  if (left.length > 0) {
+    const asked = new Set(askedFields(left).map((field) => field.key));
+    if (asked.size < left.length) return manual('other', form.host);
+    return { kind: 'ask', form: withRead(form, read), rejected: [...asked] };
   }
   if (read.size === 0) return form;
-  const page = form.page.map((field) => read.get(field.key) ?? field);
-  return isBeyondForm(page) ? manual('other', form.host) : { ...form, page };
+  const next = withRead(form, read);
+  return isBeyondForm(next.page) ? manual('other', form.host) : next;
 }
+
+const withRead = (form: AtsForm, read: ReadonlyMap<string, AtsField>): AtsForm => ({
+  ...form,
+  page: form.page.map((field) => read.get(field.key) ?? field),
+});
 
 /** Ответ открыл на странице новые вопросы: страница читается заново. */
 async function reread(
@@ -212,7 +236,21 @@ type Page =
   | { readonly kind: 'filled'; readonly form: AtsForm; readonly values: Filled['values'] }
   | AtsRunResult;
 
-async function fillPage(input: AtsRunInput, deps: AtsRunDeps, form: AtsForm): Promise<Page> {
+/** Столько раз страница заполняется заново, когда дорисовала поля, о которых не спрашивают. */
+const MAX_REFILLS = 2;
+
+/** На перечитанной странице есть вопрос, которого кандидат не видел. */
+function hasNewQuestion(before: AtsForm, now: AtsForm): boolean {
+  const known = new Set(before.page.map((field) => field.key));
+  return askedFields(now.page).some((field) => !known.has(field.key));
+}
+
+async function fillPage(
+  input: AtsRunInput,
+  deps: AtsRunDeps,
+  form: AtsForm,
+  refills = MAX_REFILLS,
+): Promise<Page> {
   if (missingAnswers(form.page, input.draft) > 0) return { kind: 'ask', form };
   const context = { host: form.host, mandateAccepted: true, now: input.now() };
   const facts = shownFacts(candidateFacts(input, form.page));
@@ -229,7 +267,12 @@ async function fillPage(input: AtsRunInput, deps: AtsRunDeps, form: AtsForm): Pr
   }
   const shown = await reread(input, deps, form, filled.values);
   if ('kind' in shown) return shown;
-  if (shown !== form) return { kind: 'ask', form: shown };
+  if (shown !== form) {
+    if (hasNewQuestion(form, shown) || missingAnswers(shown.page, input.draft) > 0) {
+      return { kind: 'ask', form: shown };
+    }
+    return refills > 0 ? fillPage(input, deps, shown, refills - 1) : { kind: 'failed' };
+  }
   const consents = [...form.consents, ...plan.consents];
   return { kind: 'filled', form: { ...form, consents }, values: filled.values };
 }

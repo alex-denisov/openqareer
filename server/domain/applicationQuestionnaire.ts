@@ -98,7 +98,7 @@ export function atsQuestions(raw: AtsFormInput['questions']): readonly Questionn
     byId.set(
       item.id,
       item.kind === 'text'
-        ? { ...base, kind: 'text' }
+        ? { ...base, kind: 'text', ...(item.singleLine ? { singleLine: true } : {}) }
         : { ...base, kind: 'choice', options, ...(item.multiple ? { multiple: true } : {}) },
     );
   }

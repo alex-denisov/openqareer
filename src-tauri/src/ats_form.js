@@ -68,6 +68,10 @@
       root: 'form#job-application-form',
       drop: '.sr-only, [data-asterisk]',
       mark: '[data-asterisk]',
+      // The board sends the file away at once; its address takes the field's place.
+      uploaded: '[data-forms--inputs--upload-preview-target="urlInput"]',
+      unload: '[data-dz-remove]',
+      uploader: '[data-controller~="forms--inputs--upload"]',
     },
     {
       root: 'form#application-form.external-form',
@@ -91,8 +95,19 @@
   var MAX_OPTIONS = 300;
   var CAPTCHA_FRAMES =
     'iframe[src*="recaptcha"][src*="bframe"], iframe[src*="hcaptcha.com"][src*="challenge"], iframe[src*="challenges.cloudflare.com"], iframe[src*="captcha-delivery.com"], iframe[src*="/captcha/v1/"][src*="frame=challenge"]';
+  // A field that takes only a suggestion of its own list and clears anything else.
+  var SUGGESTED = 'input.location-input';
+  var SUGGESTION = '.dropdown-location';
+  var SUGGESTED_TRIES = 40;
+  var GENERATED_ID = /^Fabric\w*-\d+$/;
+  var HELD_WAIT_MS = 300;
+  var HELD_LIMIT_MS = 20000;
+  var DATE_MASK = /^(mm|dd|yyyy|\d{2})([./-])(mm|dd|yyyy|\d{2})\2(yyyy|dd|\d{2,4})$/i;
+  var HELD_LEVELS = 8;
   var MENU_WAIT_MS = 120;
   var MENU_TRIES = 15;
+  var UPLOAD_WAIT_MS = 300;
+  var UPLOAD_TRIES = 90;
 
   function text(node) {
     return node ? (node.textContent || '').replace(/\s+/g, ' ').trim() : '';
@@ -237,9 +252,25 @@
       plain(node.closest('label'))
     );
   }
+  function isUploaded(node) {
+    var known = profile().uploaded;
+    return Boolean(known && node.matches(known) && !node.disabled && node.value);
+  }
+  // The address a board keeps in place of the file it has taken.
+  function uploadedFor(form, id) {
+    var known = profile().uploaded;
+    if (!known) return null;
+    return (
+      Array.prototype.slice.call(form.querySelectorAll(known)).filter(function (node) {
+        return node.id === id && isUploaded(node);
+      })[0] || null
+    );
+  }
   function kindOf(node) {
+    if (isUploaded(node)) return 'file';
     if (node.tagName === 'SELECT') return 'select';
     if (node.tagName === 'TEXTAREA') return 'textarea';
+    if (node.matches(SUGGESTED)) return 'combobox';
     if (node.getAttribute('role') === 'combobox' || node.tagName === 'BUTTON') return 'combobox';
     var type = (node.getAttribute('type') || 'text').toLowerCase();
     return [
@@ -265,6 +296,7 @@
     if ((kind === 'radio' || kind === 'checkbox_group') && name) return 'name:' + name;
     // Generated ids change on every load of the page.
     if (name && (profile().byName || /radix|^:|:$/.test(node.id))) return 'name:' + name;
+    if (!name && GENERATED_ID.test(node.id)) return 'label:' + ownLabel(node).slice(0, 120);
     if (node.id) return 'id:' + node.id;
     return name ? 'name:' + name : '';
   }
@@ -299,7 +331,7 @@
   }
   // A styled file, radio or checkbox may itself be unpainted inside a painted question.
   function reachable(node, type) {
-    if (shown(node)) return true;
+    if (shown(node) || isUploaded(node)) return true;
     // The narrow-screen twin of a list that is already on the page.
     if (node.tagName === 'SELECT' && node.closest('div').querySelector('[role="combobox"]')) {
       return false;
@@ -481,9 +513,18 @@
       .filter(function (button) {
         return shown(button) && /^apply for this job$/i.test(text(button));
       });
-    if (openers.length !== 1) return;
+    // The page repeats the same button at its top and bottom.
+    if (openers.length === 0) return;
     window.__oqAtsOpened = true;
     openers[0].click();
+  }
+  // The page draws its file fields after its scripts have come.
+  function drawn(form) {
+    var known = profile().uploader;
+    if (!known) return true;
+    return Array.prototype.slice.call(form.querySelectorAll(known)).every(function (box) {
+      return box.querySelector('input[type="file"]') || box.querySelector(profile().uploaded);
+    });
   }
   function read() {
     var form = findForm();
@@ -498,7 +539,9 @@
     var result = readFields(form);
     var buttons = submitButtons(form);
     base.state = form.querySelector('input[type="password"]') ? 'account_required' : 'ready';
+    if (!drawn(form)) base.state = 'loading';
     base.fields = result.fields;
+    base.loaded = document.readyState === 'complete';
     base.unkeyed = result.unkeyed;
     base.submitButtons = buttons.length;
     base.submitLabel = buttons.length === 1 ? caption(buttons[0]) : '';
@@ -527,6 +570,8 @@
         })[0] || null
       );
     }
+    var uploaded = key.indexOf('id:') === 0 && uploadedFor(form, name);
+    if (uploaded) return uploaded;
     if (key.indexOf('id:') === 0) {
       var node = document.getElementById(name);
       return node && form.contains(node) ? node : null;
@@ -537,6 +582,7 @@
           var block = blockOf(candidate);
           return Boolean(block) && block.getAttribute('data-field-path') === name;
         }
+        if (key.indexOf('label:') === 0) return keyOf(candidate, kindOf(candidate)) === key;
         return nameOf(candidate) === name;
       })[0] || null
     );
@@ -556,6 +602,7 @@
     if (kind === 'radio') {
       return picked(choices(radios(form, node.name)))[0] || '';
     }
+    if (isUploaded(node)) return node.value.split('/').pop().slice(-200);
     if (kind === 'file') {
       var file = node.files && node.files[0];
       return file ? file.name + ':' + file.size : '';
@@ -577,13 +624,30 @@
       var node = nodeFor(form, field.key);
       if (node) values[field.key] = valueOf(form, node);
     });
+    Object.keys(heldFiles()).forEach(function (key) {
+      if (!values[key] && isHeld(key)) values[key] = heldFiles()[key].value;
+    });
     return { state: 'ready', values: values };
   }
 
   function fire(node, type) {
     node.dispatchEvent(new Event(type, { bubbles: true }));
   }
-  function setText(node, value) {
+  // A date written the way the field itself spells it.
+  function dateFor(node, value) {
+    var date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    var mask = [node.value, node.placeholder].filter(function (hint) {
+      return hint && /[mdy]/i.test(hint) && DATE_MASK.test(hint);
+    })[0];
+    if (!date || !mask) return value;
+    return mask
+      .toLowerCase()
+      .replace('yyyy', date[1])
+      .replace('mm', date[2])
+      .replace('dd', date[3]);
+  }
+  function setText(node, text) {
+    var value = dateFor(node, text);
     var proto =
       node.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(node, value);
@@ -618,12 +682,45 @@
       return 'file_not_attached';
     }
   }
+  // A file already taken makes room for the new one.
+  async function emptyFile(form, node) {
+    var box = isUploaded(node) && node.closest('.dz-preview, [data-controller]');
+    var button = box && box.querySelector(profile().unload);
+    if (!button) return isUploaded(node) ? null : node;
+    var id = node.id;
+    button.click();
+    for (var attempt = 0; attempt < MENU_TRIES; attempt += 1) {
+      await wait(MENU_WAIT_MS);
+      var fresh = uploadedFor(form, id) ? null : document.getElementById(id);
+      if (fresh && fresh.type === 'file' && !fresh.disabled) return fresh;
+    }
+    return null;
+  }
+  async function setUpload(form, node, file) {
+    var id = node.id;
+    var input = await emptyFile(form, node);
+    if (!input) return 'file_not_attached';
+    var result = setFile(input, file);
+    // The board may have swapped the field while it was being set.
+    if (result !== 'set' && input.isConnected) return result;
+    for (var attempt = 0; attempt < UPLOAD_TRIES; attempt += 1) {
+      if (uploadedFor(form, id)) {
+        await wait(MENU_WAIT_MS);
+        return 'set';
+      }
+      await wait(UPLOAD_WAIT_MS);
+    }
+    return 'upload_failed';
+  }
   function wait(ms) {
     return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
   }
   function menuOptions(node) {
+    if (node.matches(SUGGESTED)) {
+      return Array.prototype.slice.call(node.parentNode.querySelectorAll(SUGGESTION)).filter(shown);
+    }
     var menuId = node.getAttribute('aria-controls') || node.getAttribute('aria-owns');
     var scope =
       (menuId && byId(node, menuId)) ||
@@ -639,25 +736,48 @@
     });
     node.click();
   }
-  function openMenu(node) {
+  // A page in an unfocused window moves its focus without telling its own scripts.
+  function focusOn(node) {
+    var told = false;
+    var heard = function () {
+      told = true;
+    };
+    node.addEventListener('focus', heard);
     if (node.focus) node.focus();
+    node.removeEventListener('focus', heard);
+    if (told || document.hasFocus()) return;
+    node.dispatchEvent(new FocusEvent('focus'));
+    node.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  }
+  function openMenu(node) {
+    focusOn(node);
     var control = node.closest('[class*="select__control"]');
-    if (control) control.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-    else press(node);
+    if (!control) return press(node);
+    // Some boards open the list on the press, others on its release.
+    ['mousedown', 'mouseup'].forEach(function (type) {
+      control.dispatchEvent(new MouseEvent(type, { bubbles: true, button: 0 }));
+    });
   }
   function typeInto(node, value) {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(node, value);
     fire(node, 'input');
+    if (node.matches(SUGGESTED)) {
+      node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true }));
+    }
   }
   function closeMenu(node) {
     node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     fire(node, 'blur');
     if (node.blur) node.blur();
+    if (!document.hasFocus()) {
+      node.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    }
   }
   async function menuFor(node, query) {
     if (query && node.tagName === 'INPUT') typeInto(node, query);
     var before = -1;
-    for (var attempt = 0; attempt < MENU_TRIES; attempt += 1) {
+    var tries = query && node.matches(SUGGESTED) ? SUGGESTED_TRIES : MENU_TRIES;
+    for (var attempt = 0; attempt < tries; attempt += 1) {
       await wait(MENU_WAIT_MS);
       var found = menuOptions(node);
       if (found.length > 0 && found.length === before) return found;
@@ -749,6 +869,9 @@
     var kind = fieldKind(form, node);
     if (kind === 'checkbox_group') return setChecks(form, node, entry.value);
     if (kind === 'radio' && yesNoOf(node)) return setYesNo(node, entry.value);
+    if (kind === 'file' && entry.file && profile().uploaded) {
+      return setUpload(form, node, entry.file);
+    }
     if (kind === 'file') return entry.file ? setFile(node, entry.file) : 'file_missing';
     if (kind === 'checkbox') {
       if (node.checked !== (entry.value === 'true')) node.click();
@@ -768,6 +891,68 @@
     setText(node, entry.value);
     return 'set';
   }
+  // Files the board took away from their fields: it shows the name in the field's place.
+  function heldFiles() {
+    window.__oqAtsHeld = window.__oqAtsHeld || {};
+    return window.__oqAtsHeld;
+  }
+  function placesOf(node) {
+    var places = [];
+    for (var at = node; at && places.length < HELD_LEVELS;) {
+      at = at.parentNode || at.host;
+      if (!at || at === document.body || at.tagName === 'FORM') break;
+      if (at.nodeType === 1) places.push(at);
+    }
+    return places;
+  }
+  function shows(place, name) {
+    if (place.textContent.indexOf(name) >= 0) return true;
+    if (!profile().deep) return false;
+    return [place].concat(Array.prototype.slice.call(findAll(place, '*'))).some(function (node) {
+      return node.shadowRoot && node.shadowRoot.textContent.indexOf(name) >= 0;
+    });
+  }
+  function isHeld(key) {
+    var held = heldFiles()[key];
+    return Boolean(
+      held &&
+      held.places.some(function (place) {
+        return (
+          place.isConnected &&
+          shows(place, held.name) &&
+          !place.querySelector('[role="progressbar"], [aria-busy="true"]')
+        );
+      }),
+    );
+  }
+  async function settledFile(form, entry, places, result) {
+    if (profile().uploaded || ['set', 'file_not_attached'].indexOf(result) < 0) return result;
+    var value = entry.file.name + ':' + atob(entry.file.base64).length;
+    if (places.length > 0) {
+      heldFiles()[entry.key] = { name: entry.file.name, value: value, places: places };
+    }
+    var kept = 0;
+    var deadline = Date.now() + HELD_LIMIT_MS;
+    while (Date.now() < deadline) {
+      var node = nodeFor(form, entry.key);
+      kept = node && kindOf(node) === 'file' && valueOf(form, node) === value ? kept + 1 : 0;
+      if (kept > 5 || (kept === 0 && isHeld(entry.key))) return 'set';
+      await wait(HELD_WAIT_MS);
+    }
+    delete heldFiles()[entry.key];
+    return 'file_not_attached';
+  }
+  async function setEntry(form, entry) {
+    var node = entry.file ? nodeFor(form, entry.key) : null;
+    var held = entry.file && !node && isHeld(entry.key) && heldFiles()[entry.key];
+    if (held) {
+      var same = held.value === entry.file.name + ':' + atob(entry.file.base64).length;
+      return same ? 'set' : 'file_not_attached';
+    }
+    var places = node ? placesOf(node) : [];
+    var result = await setOne(form, entry);
+    return node && kindOf(node) === 'file' ? settledFile(form, entry, places, result) : result;
+  }
   function fill() {
     var form = findForm();
     if (!form) return { state: 'form_missing' };
@@ -777,7 +962,7 @@
       for (var i = 0; i < ARG.entries.length; i += 1) {
         var entry = ARG.entries[i];
         try {
-          job.results[entry.key] = await setOne(form, entry);
+          job.results[entry.key] = await setEntry(form, entry);
         } catch (_) {
           job.results[entry.key] = 'fill_failed';
         }
