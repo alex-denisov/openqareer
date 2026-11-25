@@ -1,18 +1,12 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { logout, type AuthUser } from '../coach/coachApi';
 import { startHhRaisePoller } from './apply/hh/hhRaisePoller';
 import { panelViewOf, type PanelView } from './consultant/panelRoute';
 import { B640_HOME_PATH, B640_TAB_SETS, matchNode, type B640Match } from './routes';
 import { ToastHost } from './kit/Toast';
 import { journeyTo, navOfTrail, parseJourney, returnsTo } from './shell/journey';
-import { arrived, beforeNavigate, hereAddress, restoreScroll, watchScroll } from './shell/scrollMemory';
+import { arrived, beforeNavigate, hereAddress, watchScroll } from './shell/scrollMemory';
+import { useRestoreScroll } from './shell/useRestoreScroll';
 import { ShellFrame } from './shell/ShellFrame';
 import { ShellProvider, useShell } from './shell/ShellContext';
 import { preferredTheme } from './account/appPreferencesApi';
@@ -48,7 +42,7 @@ export function CabinetB640({ session, path, onNavigate, onSessionChange }: Cabi
     [pathname, search],
   );
   const { journey, navigate } = useJourney(onNavigate);
-  useLayoutEffect(() => restoreScroll(), [pathname, search]);
+  useRestoreScroll(pathname, search);
   const signOut = useCallback(async () => {
     await logout();
     onSessionChange(null);
