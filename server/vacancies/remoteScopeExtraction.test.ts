@@ -84,6 +84,49 @@ describe('remote scope from the description', () => {
     expect(scope(undefined, 'Работа из любой точки мира.')).toBe('global');
   });
 
+  it('B794: US-only employment terms restrict a bare «Remote»', () => {
+    expect(scope('Remote', 'Location\n\nUS Remote\n\nFull time')).toBe('US');
+    expect(scope('Remote', 'Location\n\nRemote: US')).toBe('US');
+    expect(scope('Remote', 'Benefits: health, dental, 401(k) match.')).toBe('US');
+    expect(scope('Remote', 'We participate in E-Verify.')).toBe('US');
+    expect(scope('Remote', 'Candidates must provide proof of U.S. citizenship.')).toBe('US');
+    expect(
+      scope('Remote', 'Applicants must be authorized to work for any employer in the U.S.'),
+    ).toBe('US');
+  });
+
+  it('B794: a company hiring elsewhere keeps its scope', () => {
+    expect(scope('Remote', '401(k) for US employees; contractors worldwide.')).toBe('global');
+    expect(scope('Remote', 'Based in Germany. US colleagues get 401(k).')).toBe('DE');
+    expect(scope('Remote - Global', '401(k) match.')).toBe('global');
+    expect(scope('Remote', 'Remote-first. Equal opportunity employer.')).toBe('global');
+  });
+
+  it.each([
+    'Equal opportunity for protected veterans and individuals with disabilities.',
+    'Regardless of race or status as a U.S. citizen.',
+    'Non-US citizens welcome. 401(k) match.',
+    'We serve customers across the US.',
+    'Location: US Remote. Contractors worldwide are welcome.',
+    'Hiring in US/Canada. 401(k) match.',
+  ])('B794: «%s» does not mean US only', (text) => {
+    expect(scope('Remote', text)).not.toBe('US');
+  });
+
+  it.each([
+    'Location\nRemote: US\nData may be transferred to the United States, Canada, and the EU.',
+    'This is a remote position within the United States.',
+    'The candidate will have to qualify as either a U.S. citizen or a permanent resident.',
+  ])('B794: «%s» stays US', (text) => {
+    expect(scope('Remote', text)).toBe('US');
+  });
+
+  it('B794: several remote areas are all kept', () => {
+    expect(scope('Remote', 'Remote (US) / Remote (Germany)')).toBe('DE,US');
+    expect(scope('Remote', 'Remote (US) / Remote (EU)').split(',').length).toBeGreaterThan(1);
+    expect(scope('Remote', 'Remote: US/Canada')).not.toBe('US');
+  });
+
   it('countries outside a scope phrase do not restrict', () => {
     expect(scope('Remote', 'We serve customers in the US and Germany. Remote-first culture.')).toBe(
       'global',

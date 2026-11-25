@@ -144,6 +144,15 @@ const hhFormSchema = z
 
 /** Вопросы формы работодателя: список стран в ней — около 250 вариантов. */
 const ATS_FORM_MAX_OPTIONS = 1_500;
+const limitNumber = z.number().finite().nullable();
+const numberLimitsSchema = z
+  .object({
+    min: limitNumber,
+    max: limitNumber,
+    step: z.number().positive().nullable(),
+    unit: z.string().max(20).nullable(),
+  })
+  .strict();
 const atsFormSchema = z
   .object({
     url: z.string().max(FORM_URL_MAX_LENGTH),
@@ -157,6 +166,7 @@ const atsFormSchema = z
             kind: z.enum(['text', 'choice']),
             singleLine: z.boolean().optional(),
             numeric: z.boolean().optional(),
+            limits: numberLimitsSchema.optional(),
             options: z.array(z.string().min(1).max(200)).max(300).optional(),
             multiple: z.boolean().optional(),
             known: z.string().max(QUESTIONNAIRE_ANSWER_MAX_LENGTH).optional(),

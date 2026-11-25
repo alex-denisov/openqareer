@@ -21,6 +21,11 @@ import {
 } from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
+import {
+  DETAIL_TEXT_PRIORITY_TABLE,
+  peekDetailTextPriority,
+  requestDetailTextPriority,
+} from './detailTextPriority';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
@@ -474,7 +479,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE + CATALOG_ENTRIES_TOTAL_TABLE);
-    this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
+    this.database.exec(
+      HH_TEXT_PRIORITY_TABLE + DETAIL_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE,
+    );
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES + CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
@@ -2045,6 +2052,24 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   dropHhTextPriority(vacancyIds: readonly string[]): void {
     const remove = this.database.prepare('DELETE FROM hh_text_priority WHERE vacancy_id = ?');
     for (const id of vacancyIds) remove.run(id);
+  }
+
+  /** B791: подборки и открытые карточки первыми в дочитке площадок без текста в списке. */
+  requestDetailTextPriority(
+    vacancyIds: readonly string[],
+    baseRank = 0,
+    nowMs: number = Date.now(),
+  ): void {
+    if (vacancyIds.length === 0) return;
+    this.inTransaction(() => requestDetailTextPriority(this.database, vacancyIds, baseRank, nowMs));
+  }
+
+  peekDetailTextPriority(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): string[] {
+    return peekDetailTextPriority(this.database, sourceId, limit, excludeIds);
   }
 
   /** Позиция обхода текста hh (02.11): воркер перезапускается ~22 раза в сутки и шёл заново. */

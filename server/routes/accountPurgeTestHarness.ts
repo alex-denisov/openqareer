@@ -3,6 +3,7 @@ import { AuthService } from '../auth/authService';
 import { AppCodeStore } from '../auth/appCodeStore';
 import { PasskeyStore } from '../auth/passkeyStore';
 import { TwoFactorStore } from '../auth/twoFactorStore';
+import { FactCorrectionCopies } from '../data/factCorrectionCopies';
 import { SealedText } from '../data/sealedText';
 import type { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { SqliteDiaryCheckpointRepository } from '../data/sqliteDiaryCheckpointRepository';
@@ -40,6 +41,8 @@ export function openSideTablesForPurgeTest(
   new SqliteInterviewRecordingRepository({ databasePath }).close();
   const telegram = new DatabaseSync(databasePath);
   new SqliteTelegramUsernameStore(telegram, new SealedText(encryptionKey));
+  // B796: журнал правок факта создаётся при первой правке; стирается каскадом от кандидата.
+  new FactCorrectionCopies(telegram, new SealedText(encryptionKey));
   telegram.exec(HH_TEXT_PRIORITY_TABLE);
   telegram.close();
   // Таблицу возобновлений разговора хранилище создаёт только при первом возобновлении.

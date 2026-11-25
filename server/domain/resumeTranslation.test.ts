@@ -369,14 +369,22 @@ describe('один язык листа (Д17)', () => {
   const ANSWERS = { ...RU, 'IT Lead (Acting Head of IT)': 'Руководитель направления ИТ (врио руководителя ИТ)' };
 
   it.each([
-    [UNIVERSITY, 'Mar 2013', 'Sep 2015', 'Корпоративный университет Сбербанка'],
-    [UNIVERSITY, 'Mar 2018', 'Sep 2019', UNIVERSITY],
-    ['Enterprise Energy IT Services', 'Mar 2013', 'Sep 2015', 'Enterprise Energy IT Services'],
-  ])('русский лист: работодатель проекта %s, %s — %s', async (employer, from, to, shown) => {
+    [UNIVERSITY, 'Mar 2013', 'Sep 2015', 'Корпоративный университет Сбербанка', 'Corporate University of Sberbank (SberUniversity)'],
+    [UNIVERSITY, 'Mar 2018', 'Sep 2019', UNIVERSITY, UNIVERSITY],
+    ['Enterprise Energy IT Services', 'Mar 2013', 'Sep 2015', 'Enterprise Energy IT Services', 'Enterprise Energy IT Services'],
+  ])('работодатель проекта %s, %s — %s', async (employer, from, to, shown, english) => {
     const own = campus(employer, from, to);
     const { translations } = await translateDocument(own, 'ru', {}, translator(ANSWERS), 5_000);
     expect(translatedDocument(own, 'ru', translations).projects?.[0]?.employer?.value).toBe(shown);
-    expect(translatedDocument(own, 'en', translations).projects?.[0]?.employer?.value).toBe(employer);
+    expect(translatedDocument(own, 'en', translations).projects?.[0]?.employer?.value).toBe(english);
+  });
+
+  it('должность, переведённая наполовину, спрашивается заново', async () => {
+    const own = campus(UNIVERSITY, 'Mar 2013', 'Sep 2015');
+    const title = 'IT Lead (Acting Head of IT)';
+    const known = { [`ru:${title}`]: 'IT Lead (исполняющий обязанности руководителя IT)' };
+    const again = await translateDocument(own, 'ru', known, translator(ANSWERS), 5_000);
+    expect(again.translations[`ru:${title}`]).toBe(ANSWERS[title]);
   });
 
   it('должность, потерявшая часть, спрашивается заново', async () => {

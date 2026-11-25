@@ -74,6 +74,46 @@ beforeEach(() => {
   desktop.submitAtsForm.mockResolvedValue(receipt());
 });
 
+const LIMITS = { min: 0, max: 50_000, step: 500, unit: '$' };
+const pay = field('id:pay', 'Salary, monthly', { kind: 'range', limits: LIMITS });
+
+describe('числовое поле формы', () => {
+  const answer = (text: string, more: Partial<AtsField> = {}) =>
+    run(form({ ...pay, ...more }, resume), { draft: { [questionIdOf(pay)]: text } });
+
+  it('число в границах уходит числом', async () => {
+    expect((await answer('5 000')).kind).toBe('sent');
+    expect(desktop.fillAtsForm.mock.calls[0]![1]).toContainEqual({ key: 'id:pay', value: '5000' });
+  });
+
+  it.each(['от 5 000 $', '7300', '60000'])('%s: форма не трогается, нажатия нет', async (text) => {
+    expect((await answer(text, { required: false })).kind).toBe('ask');
+    expect(desktop.fillAtsForm).not.toHaveBeenCalled();
+    expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+  });
+
+  it('без ответа кандидата ползунок остаётся вопросом, нажатия нет', async () => {
+    expect((await answer('')).kind).toBe('ask');
+    expect(desktop.fillAtsForm).not.toHaveBeenCalled();
+    expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])(
+    'форма держит другое число (required %s): нажатия нет',
+    async (required) => {
+      desktop.fillAtsForm.mockResolvedValue({
+        results: { 'id:pay': 'set', 'id:resume': 'set' },
+        values: { 'id:pay': '25000', 'id:resume': 'cv.pdf' },
+      });
+      expect(await answer('5000', { required })).toMatchObject({
+        kind: 'ask',
+        rejected: ['id:pay'],
+      });
+      expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('отклик формой работодателя', () => {
   it('заполняет поля, ведёт согласие до одного нажатия и отдаёт квитанцию', async () => {
     const order: string[] = [];

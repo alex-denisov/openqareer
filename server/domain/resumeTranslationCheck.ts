@@ -73,6 +73,13 @@ const count = (text: string, pattern: RegExp) => [...text.matchAll(pattern)].len
 const keepsTitleParts = (source: string, text: string): boolean =>
   (!source.includes('(') || text.includes('(')) && count(text, TITLE_JOINT) >= count(source, TITLE_PART);
 
+const ROLE_WORD =
+  /(?<!\p{L})(?:lead|leader|head|manager|director|engineer|specialist|developer|analyst|architect|consultant)(?!\p{L})/iu;
+
+/** «IT Lead (исполняющий обязанности…)» — должность переведена наполовину. */
+const keepsForeignRole = (text: string, lang: ResumeLang): boolean =>
+  lang === 'ru' && ROLE_WORD.test(text);
+
 /** Перевод на нужном языке с теми же числами, валютами и названиями компаний, что в исходной строке. */
 export function isFaithful(
   line: ResumeLine,
@@ -83,7 +90,11 @@ export function isFaithful(
   if (!text.trim()) return false;
   if (lang === 'en' ? CYRILLIC.test(text) : !CYRILLIC.test(text) || textLanguage(text) === 'en')
     return false;
-  if (line.kind === 'title' && !keepsTitleParts(line.text, text)) return false;
+  if (
+    line.kind === 'title' &&
+    (keepsForeignRole(text, lang) || !keepsTitleParts(line.text, text))
+  )
+    return false;
   if (!same(quantitiesOf(line.text), quantitiesOf(text))) return false;
   if (!same(currenciesOf(line.text), currenciesOf(text))) return false;
   if (lang === 'en') return true;
