@@ -5,17 +5,21 @@
  */
 import { cityCountry, cityCountryInText } from './cityCountry';
 
-export type CountryHintBasis = 'place' | 'address' | 'employer' | 'domain';
+export type CountryHintBasis = 'place' | 'address' | 'employer' | 'domain' | 'text';
 
 export interface CountryHint {
   readonly country: string;
   readonly basis: CountryHintBasis;
+  /** Страна из описания верна в 86 % (прод 25.11): пометка сервера, в ответ API не входит. */
+  readonly lowConfidence: boolean;
 }
 
 export interface CountryHintInput {
   readonly location: string | null | undefined;
   readonly company: string;
   readonly urls: readonly string[];
+  /** Начало описания вакансии. */
+  readonly text?: string;
 }
 
 export interface CountryHintDeps {
@@ -165,6 +169,15 @@ function addressCountry(urls: readonly URL[], deps: CountryHintDeps): string | u
   );
 }
 
+/** Первая страна, названная в описании полным именем; коды не считаются. */
+function textCountry(text: string): string | undefined {
+  for (const [words] of text.matchAll(/\p{Lu}\p{L}{3,}(?:\s\p{Lu}\p{L}+)?/gu)) {
+    const country = countryName(words) ?? countryName(words.split(/\s/u)[0] ?? '');
+    if (country) return country;
+  }
+  return undefined;
+}
+
 export function vacancyCountryHint(
   input: CountryHintInput,
   deps: CountryHintDeps,
@@ -175,10 +188,11 @@ export function vacancyCountryHint(
     ['address', () => addressCountry(urls, deps)],
     ['employer', () => deps.employerCountry(input.company)],
     ['domain', () => single(urls.map(domainCountry))],
+    ['text', () => (input.text ? textCountry(input.text) : undefined)],
   ];
   for (const [basis, read] of steps) {
     const country = read();
-    if (country) return { country, basis };
+    if (country) return { country, basis, lowConfidence: basis === 'text' };
   }
   return undefined;
 }
