@@ -50,7 +50,8 @@ const YEAR_DECAY = 0.7;
 const SINGLE_SOURCE_SPREAD = 0.1;
 /** Источник назвал только медиану: границ у него нет. */
 const MEDIAN_SPREAD = 0.15;
-const MONTHS = 12;
+/** Ставка часа и дня с окладом не сводится: сколько часов в месяце, источник не говорит. */
+const PER_YEAR: Readonly<Partial<Record<Period, number>>> = { year: 1, month: 12 };
 
 export function blendInputOf(row: SalaryBenchmark): BlendInput | undefined {
   const { low, high, median } = row;
@@ -79,7 +80,10 @@ function weightOf(input: BlendInput, year: number): number {
 
 /** Сумма в валюте и периоде опорного источника; нет курса — источник не участвует. */
 function convertTo(input: BlendInput, base: BlendInput, rates: CurrencyRates | undefined) {
-  const factor = input.period === base.period ? 1 : input.period === 'month' ? MONTHS : 1 / MONTHS;
+  const from = PER_YEAR[input.period];
+  const to = PER_YEAR[base.period];
+  const factor = input.period === base.period ? 1 : from && to ? from / to : undefined;
+  if (factor === undefined) return undefined;
   const low = convertAmount(input.low * factor, input.currency, base.currency, rates);
   const high = convertAmount(input.high * factor, input.currency, base.currency, rates);
   return low === undefined || high === undefined ? undefined : { low, high };

@@ -172,6 +172,11 @@ describe('blendSalary', () => {
     ]);
   });
 
+  it('keeps an hourly rate out of a salary', () => {
+    const hourly = input({ sourceName: 'H', period: 'hour', year: 2025, low: 1, high: 2 });
+    expect(blend(input(), hourly)?.lowConfidence).toBe(true);
+  });
+
   it('makes a range of a median alone', () => {
     expect(blend(input({ low: null, high: null, median: 50_000 }))?.estimate).toMatchObject({
       low: 38_000,
@@ -200,6 +205,22 @@ describe('salary_benchmarks', () => {
     ]) {
       expect(() => writeSalaryBenchmarks(database, fileOf(bad))).toThrow();
     }
+  });
+
+  it('drops thin samples and keeps only the median of an implausible range', () => {
+    const database = new DatabaseSync(':memory:');
+    const rows = [
+      row({ id: 'thin', sampleSize: 29 }),
+      row({ id: 'wide', low: 1, high: 20 }),
+      row({ id: 'wide-median', low: 1, median: 12, high: 20 }),
+      row({ id: 'enough', sampleSize: 30 }),
+    ];
+    writeSalaryBenchmarks(database, fileOf(rows));
+    const stored = readSalaryBenchmarks(database, { country: 'AE' });
+    expect(stored.map(({ id, low }) => [id, low])).toEqual([
+      ['enough', 10],
+      ['wide-median', null],
+    ]);
   });
 
   it('removes a source by one flag', () => {

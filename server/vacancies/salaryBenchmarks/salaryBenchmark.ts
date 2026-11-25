@@ -35,7 +35,7 @@ export const salaryBenchmarkSchema = z
     median: amount,
     high: amount,
     currency: z.string().regex(/^[A-Z]{3}$/u),
-    period: z.enum(['month', 'year']),
+    period: z.enum(['hour', 'day', 'month', 'year']),
     tax: z.enum(['gross', 'net', 'unknown']),
     year: z.number().int().min(2015).max(2100),
     sampleSize: z.number().int().positive().nullable(),
@@ -87,9 +87,20 @@ export const salaryBenchmarksFileSchema = z
     }
   });
 
+const MIN_SAMPLE = 30;
+/** Границы дальше друг от друга — это края выборки со сбоями («742–1 000 000»), а не вилка должности. */
+const MAX_RANGE_RATIO = 5;
+
+/** Отсев при загрузке: малая выборка не берётся, у неправдоподобных границ остаётся медиана. */
+function plausible(row: SalaryBenchmark): SalaryBenchmark[] {
+  if (row.sampleSize !== null && row.sampleSize < MIN_SAMPLE) return [];
+  if (row.low === null || row.high === null || row.high <= row.low * MAX_RANGE_RATIO) return [row];
+  return row.median === null ? [] : [{ ...row, low: null, high: null }];
+}
+
 export function enabledBenchmarks(
   file: z.infer<typeof salaryBenchmarksFileSchema>,
 ): SalaryBenchmark[] {
   const enabled = new Set(file.sources.filter((row) => row.enabled).map((row) => row.name));
-  return file.benchmarks.filter((row) => enabled.has(row.sourceName));
+  return file.benchmarks.filter((row) => enabled.has(row.sourceName)).flatMap(plausible);
 }
