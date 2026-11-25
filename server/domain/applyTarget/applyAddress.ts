@@ -1,4 +1,5 @@
 import type { ApplyChannel } from '../../../shared/applyTarget';
+import { vacancyBoardName } from '../../../shared/vacancyBoards';
 import { hhVacancyIdFromUrl } from '../../../shared/hhCandidateSession';
 
 export interface ApplyAddress {
@@ -11,38 +12,6 @@ export interface ApplyAddress {
 /** Адрес длиннее — мусор, а не ссылка на вакансию. */
 const URL_MAX_LENGTH = 2048;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-
-/** Площадки вакансий: отклик идёт через них, это не сайт работодателя. */
-const BOARD_HOSTS: readonly string[] = [
-  'himalayas.app',
-  'getmatch.ru',
-  'career.habr.com',
-  'news.ycombinator.com',
-  'themuse.com',
-  'getonbrd.com',
-  'remotive.com',
-  'weworkremotely.com',
-  'remoteok.com',
-  'remoteok.io',
-  'nodesk.co',
-  'jobicy.com',
-  'arbeitnow.com',
-  'jobs.dou.ua',
-  'djinni.co',
-  'workingnomads.com',
-  'trudvsem.ru',
-  'superjob.ru',
-  'rabota.ru',
-  'zarplata.ru',
-  'glassdoor.com',
-  'ziprecruiter.com',
-  'wellfound.com',
-  'ycombinator.com',
-  'workatastartup.com',
-  'landing.jobs',
-  'justjoin.it',
-  'nofluffjobs.com',
-];
 
 /** Трекеры: адрес сам не форма, а переход на неё. Только их сервер вправе открыть. */
 const TRACKER_HOSTS: readonly string[] = ['grnh.se', 'appcast.io', 'recruitics.com', 'jometer.com'];
@@ -207,7 +176,7 @@ function plainChannel(url: URL): ApplyChannel {
   if (/(?:^|\.)indeed\.[a-z.]{2,6}$/u.test(url.hostname)) return 'indeed';
   if (isHost(url.hostname, 'linkedin.com')) return 'linkedin';
   if (isHost(url.hostname, 'hh.ru')) return 'hh';
-  return inHosts(url.hostname, BOARD_HOSTS) ? 'board' : 'site';
+  return vacancyBoardName(url.hostname) ? 'board' : 'site';
 }
 
 /** Любой адрес вакансии: узнанная ATS, площадка или сайт работодателя. */
