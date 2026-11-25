@@ -203,7 +203,9 @@ export function computeTodayFunnel(
   const reached = (stages: ReadonlySet<string>) =>
     cohort.filter((application) => stages.has(application.stage)).length;
   return {
-    favorites: applications.filter((application) => application.stage === 'saved').length,
+    favorites: applications.filter(
+      (application) => application.stage === 'saved' && application.starred !== false,
+    ).length,
     applied: reached(APPLIED_STAGES),
     responses: reached(ANSWERED_STAGES),
     interviews: reached(INTERVIEW_STAGES),

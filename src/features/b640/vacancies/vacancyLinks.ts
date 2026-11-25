@@ -19,8 +19,9 @@ import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 
 type Cluster = MatchedVacancyItem['cluster'];
 
+/** Только звезда кандидата: черновик отклика в той же стадии звездой не считается (B798). */
 export function isSaved(application: ApplicationView | undefined): boolean {
-  return application?.stage === 'saved';
+  return application?.stage === 'saved' && application.starred !== false;
 }
 
 /** Кандидат уже откликнулся: карточка есть и она не «сохранено» и не архив. */
@@ -81,10 +82,18 @@ async function persistSaved(
   existing: ApplicationView | undefined,
 ): Promise<ApplicationView> {
   if (existing?.stage === 'saved') {
-    return patchApplication(existing.id, { expectedVersion: existing.version, stage: 'archived' });
+    const { id, version: expectedVersion } = existing;
+    // Черновик отклика с письмом звезда не создаёт и не убирает (B798).
+    if (!isSaved(existing)) return patchApplication(id, { expectedVersion, starred: true });
+    if (existing.materials?.coverLetter || existing.materials?.resume) {
+      return patchApplication(id, { expectedVersion, starred: false });
+    }
+    return patchApplication(id, { expectedVersion, stage: 'archived' });
   }
   if (existing?.stage === 'archived' && existing.archivePreviousStage === 'saved') {
-    return restoreApplicationFromArchive(existing.id, existing.version);
+    const restored = await restoreApplicationFromArchive(existing.id, existing.version);
+    if (isSaved(restored)) return restored;
+    return patchApplication(restored.id, { expectedVersion: restored.version, starred: true });
   }
   if (existing) throw new Error('По этой вакансии уже есть отклик');
   return createApplication({

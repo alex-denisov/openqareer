@@ -10,6 +10,8 @@ describe('vacancyLinks: связь вакансии с карточкой отк
   it('сохранённая — карточка стадии saved', () => {
     expect(isSaved(application({}))).toBe(true);
     expect(isSaved(application({ stage: 'applied' }))).toBe(false);
+    // B798: черновик отклика после «Откликнуться» — не избранное.
+    expect(isSaved(application({ starred: false }))).toBe(false);
     expect(isSaved(undefined)).toBe(false);
   });
 
