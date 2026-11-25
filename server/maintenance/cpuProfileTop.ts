@@ -148,6 +148,8 @@ export interface CpuProfileLogOptions {
   readonly everyMs?: number;
   readonly durationMs?: number;
   readonly top?: number;
+  /** Снять ещё и первую минуту процесса. */
+  readonly atStart?: boolean;
   readonly env?: NodeJS.ProcessEnv;
 }
 
@@ -206,6 +208,8 @@ export function startCpuProfileLog(
         ),
     );
   };
+  // B759: стоянки 20–30 с сразу после перезапуска — первая минута снимается отдельно.
+  if (options.atStart) run();
   let every: NodeJS.Timeout | undefined;
   const first = setTimeout(
     () => {

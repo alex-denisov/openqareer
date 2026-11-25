@@ -180,6 +180,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
       rate: new HhTextRateController(),
     }),
     ...(options.recluster ? { recluster: options.recluster } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   return {
     engine,

@@ -90,4 +90,15 @@ describe('B761: живой профиль в этом процессе', () => {
     );
     expect(sink).toBeGreaterThan(0);
   });
+
+  it('B759: снимает первую минуту сразу, не дожидаясь срока', async () => {
+    const { startCpuProfileLog } = await import('./cpuProfileTop');
+    const message = await new Promise<string>((resolve) => {
+      startCpuProfileLog(
+        { info: (_, text) => resolve(text), warn: (_, text) => resolve(text) },
+        { firstDelayMs: 60_000, durationMs: 20, atStart: true, env: {} },
+      );
+    });
+    expect(message).toBe('cpu-profile-top');
+  });
 });
