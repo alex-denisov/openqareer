@@ -99,6 +99,12 @@ export function countedSkillRequirements(view: VacancyFitView | undefined): read
   );
 }
 
+/** Wishes the profile does not fully show: listed on the card, never in «N из M» (25.11). */
+export function wishRequirements(view: VacancyFitView | undefined): readonly Requirement[] {
+  const wishes = new Set(view?.result?.wishes ?? []);
+  return (view?.requirements ?? []).filter((item) => wishes.has(item.id));
+}
+
 /** Requirement id → matched by a skill check (true) or only stated in the profile (false). */
 export function matchedRequirements(
   view: VacancyFitView | undefined,

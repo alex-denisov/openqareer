@@ -1,3 +1,4 @@
+import { isHhStubText } from './hhStubText';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 
 function textOrEmpty(value: unknown): string {
@@ -46,6 +47,8 @@ export function mergeHhVacancySnapshot(
     ...(fullDescription ? { fullDescription } : {}),
     // A new search slice does not know the page answered «доступ ограничен» (02.11).
     ...(existing.descriptionHidden ? { descriptionHidden: true } : {}),
+    // B794: a search slice does not know the page was read and is short; a longer text clears it.
+    ...(existing.descriptionShort && isHhStubText(fullDescription) ? { descriptionShort: true } : {}),
     ...(existing.descriptionHiddenSeen
       ? { descriptionHiddenSeen: Math.max(existing.descriptionHiddenSeen, incoming.descriptionHiddenSeen ?? 0) }
       : {}),
@@ -53,5 +56,6 @@ export function mergeHhVacancySnapshot(
   if (!isTextArray(responsibilities)) delete merged.responsibilities;
   if (!isTextArray(qualifications)) delete merged.qualifications;
   if (!fullDescription) delete merged.fullDescription;
+  if (!isHhStubText(fullDescription)) delete merged.descriptionShort;
   return merged;
 }

@@ -13,7 +13,7 @@ export const whole = (words: string) =>
 const FIRST = whole(
   "first(?: |-)?name(?: ?[/&-].*)?|given name|forename|имя|vorname|prénom|prenom|nombres?|primeiro nome|nome próprio|voornaam|imi[ęe]|förnamn|fornavn|etunimi|jméno|krstné meno|keresztnév|prenume|ім[’'ʼ]я",
 );
-export const LAST = whole(
+const LAST = whole(
   'last(?: |-)?name|surname|family name|фамилия|nachname|familienname|nom de famille|apellidos?|cognome|sobrenome|apelido|último nome|achternaam|nazwisko|efternamn|etternavn|efternavn|sukunimi|příjmení|priezvisko|vezetéknév|nume de familie|прізвище',
 );
 const FULL = whole(
@@ -26,8 +26,12 @@ const BARE_SURNAME = whole('nom');
 /** Какое имя спрашивает подпись; `labels` — подписи всей формы. */
 export function nameFact(label: string, labels: readonly string[]): NameFact | null {
   const has = (pattern: RegExp) => labels.some((other) => other !== label && pattern.test(other));
+  // Две одинаковые подписи: чьё имя во второй, форма не говорит — обе впишет кандидат.
+  const key = label.toLowerCase();
+  if (labels.filter((other) => other.toLowerCase() === key).length > 1) return null;
   if (FULL.test(label)) return 'fullName';
   if (BARE_SURNAME.test(label)) return has(FIRST) ? 'lastName' : 'fullName';
+  if (BARE_NAME.test(label) && (has(BARE_NAME) || has(FULL))) return null;
   if (BARE_NAME.test(label)) return has(LAST) ? 'firstName' : 'fullName';
   if (LAST.test(label)) return 'lastName';
   return FIRST.test(label) ? 'firstName' : null;
