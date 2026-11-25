@@ -300,7 +300,7 @@ describe('a03p, a03b, a05', () => {
     expect(field().value).toBe('Комментарий B');
     view.unmount();
   });
-  it('лента: карточки, «Одобрить» у каждой, пакетного нет (a05)', async () => {
+  it('лента: карточки, «Одобрить» и пакетное «Одобрить все»', async () => {
     const post = (n: number) => ({
       draftId: `f${n}`,
       postUrl: null,
@@ -321,12 +321,11 @@ describe('a03p, a03b, a05', () => {
     await flush();
     expect(view.container.querySelectorAll('.lk-card')).toHaveLength(2);
     expect(view.container.querySelector('.lk-au')).toBeNull();
-    expect(view.container.textContent).not.toContain('Одобрить все');
-    const approve = [...view.container.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Одобрить'),
+    const all = [...view.container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Одобрить все'),
     )!;
-    await act(async () => click(approve));
-    expect(queue.approveFeedPosts).toHaveBeenCalledWith(['f1']);
+    await act(async () => click(all));
+    expect(queue.approveFeedPosts).toHaveBeenCalledWith(['f1', 'f2']);
     view.unmount();
   });
   it('лента: принести пост — текст обязателен, ссылка нет', async () => {
