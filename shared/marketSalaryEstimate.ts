@@ -2,14 +2,14 @@
  * B546: market salary estimate for vacancies that state no salary.
  *
  * The maintenance process groups salaried vacancies of the same normalised
- * function and level by city and by region; the estimate is the
+ * function and level by city and by country; the estimate is the
  * interquartile range (p25–p75) of the salary midpoints. Below
  * `MARKET_SALARY_MIN_SAMPLE` vacancies there is no number, only the sample
  * size, so the screen says «мало данных» instead of inventing a range.
  *
  * There is no exchange-rate source in the system, so samples are never
  * converted: a group keeps its dominant currency and other currencies are
- * left out of it.
+ * left out of it. Its dominant period wins the same way (B803).
  */
 import { pluralWordRu } from './pluralRu';
 import { normalizeCityLabel } from './cityLabel';
@@ -24,10 +24,14 @@ export interface MarketSalaryEstimate {
   readonly low?: number;
   readonly high?: number;
   readonly currency: string;
+  /** B803: суммы разных периодов не смешиваются; нет у строк, посчитанных раньше. */
+  readonly period?: MarketSalaryPeriod;
   readonly sampleSize: number;
 }
 
-export type MarketSalaryBasis = 'city' | 'region';
+export type MarketSalaryPeriod = 'month' | 'year';
+
+export type MarketSalaryBasis = 'city' | 'country';
 
 /** What the matched-vacancies response carries for a vacancy without salary. */
 export interface MarketSalaryEstimateView extends MarketSalaryEstimate {
@@ -63,31 +67,34 @@ function roundEstimate(value: number, step: number): number {
 export function estimateFromMidpoints(
   midpoints: readonly number[],
   currency: string,
+  period?: MarketSalaryPeriod,
 ): MarketSalaryEstimate {
   const sampleSize = midpoints.length;
-  if (sampleSize < MARKET_SALARY_MIN_SAMPLE) return { currency, sampleSize };
+  const group = { currency, ...(period ? { period } : {}), sampleSize };
+  if (sampleSize < MARKET_SALARY_MIN_SAMPLE) return group;
   const sorted = [...midpoints].sort((left, right) => left - right);
   const p25 = quantile(sorted, 0.25);
   const p75 = quantile(sorted, 0.75);
   // Ten thousand is the step for monthly roubles and yearly dollars; a monthly
   // euro salary of 6 000 would round to zero, so small amounts use a thousand.
-  const step = p75 >= 100_000 ? 10_000 : 1_000;
-  return { low: roundEstimate(p25, step), high: roundEstimate(p75, step), currency, sampleSize };
+  const step = p25 >= 50_000 && p75 >= 100_000 ? 10_000 : 1_000;
+  return { low: roundEstimate(p25, step), high: roundEstimate(p75, step), ...group };
 }
 
 function hasNumber(estimate: MarketSalaryEstimate | undefined): boolean {
   return estimate?.low !== undefined && estimate.high !== undefined;
 }
 
-/** City first; the region when the city has no number; otherwise the larger thin sample. */
+/** City first; the country when the city has no number; otherwise the larger thin sample. */
 export function pickMarketSalaryEstimate(
   city: MarketSalaryEstimate | undefined,
-  region: MarketSalaryEstimate | undefined,
+  country: MarketSalaryEstimate | undefined,
 ): (MarketSalaryEstimate & { readonly basis: MarketSalaryBasis }) | undefined {
   if (city && hasNumber(city)) return { ...city, basis: 'city' };
-  if (region && hasNumber(region)) return { ...region, basis: 'region' };
-  if (city && (!region || city.sampleSize >= region.sampleSize)) return { ...city, basis: 'city' };
-  return region ? { ...region, basis: 'region' } : undefined;
+  if (country && hasNumber(country)) return { ...country, basis: 'country' };
+  if (city && (!country || city.sampleSize >= country.sampleSize))
+    return { ...city, basis: 'city' };
+  return country ? { ...country, basis: 'country' } : undefined;
 }
 
 export function marketSalaryKey(

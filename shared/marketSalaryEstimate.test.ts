@@ -53,7 +53,7 @@ describe('pickMarketSalaryEstimate', () => {
     expect(pickMarketSalaryEstimate(city, region)).toEqual({ ...city, basis: 'city' });
     expect(pickMarketSalaryEstimate({ currency: 'RUR', sampleSize: 2 }, region)).toEqual({
       ...region,
-      basis: 'region',
+      basis: 'country',
     });
   });
 
@@ -63,7 +63,7 @@ describe('pickMarketSalaryEstimate', () => {
         { currency: 'RUR', sampleSize: 3 },
         { currency: 'RUR', sampleSize: 4 },
       ),
-    ).toEqual({ currency: 'RUR', sampleSize: 4, basis: 'region' });
+    ).toEqual({ currency: 'RUR', sampleSize: 4, basis: 'country' });
     expect(pickMarketSalaryEstimate(undefined, undefined)).toBeUndefined();
   });
 });
@@ -71,7 +71,7 @@ describe('pickMarketSalaryEstimate', () => {
 describe('marketSalaryKey', () => {
   it('normalises the place and marks an unknown level', () => {
     expect(marketSalaryKey('it-eng', 4, 'city', ' Москва ')).toBe('it-eng|4|city|москва');
-    expect(marketSalaryKey('it-eng', null, 'region', 'russia')).toBe('it-eng|-|region|russia');
+    expect(marketSalaryKey('it-eng', null, 'country', 'RU')).toBe('it-eng|-|country|ru');
   });
 });
 
