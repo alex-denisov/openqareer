@@ -561,6 +561,20 @@ test.describe('B691: сигналы на «Сегодня»', () => {
     expect(Math.round(later.x + later.width)).toBe(width - 16);
     expect(Math.round(later.y + later.height)).toBe(Math.round(yes.y));
     expect(yes.height).toBe(44);
+    // B801: отступ полосы 8/16, фон и линия как в макете (--career-surface, --career-line-strong).
+    const bar = page.locator('.route.why .why-body > .actions');
+    await expect(bar).toHaveCSS('padding', '8px 16px');
+    const tokens = await bar.evaluate((el) => {
+      const probe = document.createElement('i');
+      probe.style.cssText = 'color:var(--career-surface);outline-color:var(--career-line-strong)';
+      el.append(probe);
+      const { color, outlineColor } = getComputedStyle(probe);
+      probe.remove();
+      const { backgroundColor, borderTopColor } = getComputedStyle(el);
+      return { color, outlineColor, backgroundColor, borderTopColor };
+    });
+    expect(tokens.backgroundColor).toBe(tokens.color);
+    expect(tokens.borderTopColor).toBe(tokens.outlineColor);
     // «Верно» остаётся контурной (решение CPO): главная кнопка экрана — не она.
     await expect(card(page).getByRole('button', { name: 'Верно' })).not.toHaveClass(/is-primary/u);
     // Полоса над нижней навигацией и при полной прокрутке не закрывает содержимое (урок s03).

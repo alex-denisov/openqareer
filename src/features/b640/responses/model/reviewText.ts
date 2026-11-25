@@ -2,8 +2,10 @@ import type {
   RejectionGuess,
   RejectionRecommendation,
   RejectionReview,
+  RejectionReviewItem,
 } from '../../../../../shared/rejectionReview';
 import type { IconName } from '../../kit';
+import { buildNodePath } from '../../routes';
 import { pluralRu } from './responseRow';
 
 const REJECTIONS = ['отказ', 'отказа', 'отказов'] as const;
@@ -84,6 +86,18 @@ export function recommendationText(item: RejectionRecommendation): Recommendatio
     icon: 'vacancies',
     node: 's07',
   };
+}
+
+/** Шаг «Резюме» последнего отказа с этим требованием; отказа нет — правка остаётся над разбором. */
+export function resumePathOf(
+  step: RejectionRecommendation,
+  rejections: readonly RejectionReviewItem[],
+): string | null {
+  if (step.requirement === null) return null;
+  const [latest] = rejections
+    .filter((item) => item.guess?.requirement === step.requirement)
+    .sort((a, b) => b.rejectedAt.localeCompare(a.rejectedAt));
+  return latest ? `${buildNodePath('o02', { responseId: latest.applicationId })}?step=resume` : null;
 }
 
 /** Заголовок экрана по состоянию разбора. */
