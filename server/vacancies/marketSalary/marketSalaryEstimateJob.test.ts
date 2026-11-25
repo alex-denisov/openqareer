@@ -11,7 +11,7 @@ interface Row {
   readonly functionCode: string;
   readonly levelRank: number | null;
   readonly location: string;
-  readonly salary?: { from?: number; to?: number; currency?: string };
+  readonly salary?: { from?: number; to?: number; currency?: string; period?: string };
   readonly expired?: boolean;
 }
 
@@ -58,14 +58,49 @@ describe('computeMarketSalaryEstimates', () => {
     ];
     const estimates = await computeMarketSalaryEstimates(poolDatabase(rows));
     // midpoints 450 500 550 570 650 → p25 500, p75 570
-    expect(estimates.get('it-eng-mgmt|4|city|москва')).toEqual({
+    expect(estimates.get('it-eng-mgmt|4|city|ru:москва')).toEqual({
       low: 500_000,
       high: 570_000,
       currency: 'RUR',
+      period: 'month',
       sampleSize: 5,
     });
-    expect(estimates.get('it-eng-mgmt|4|city|казань')).toEqual({ currency: 'RUR', sampleSize: 1 });
-    expect(estimates.get('it-eng-mgmt|4|region|ru')?.sampleSize).toBe(6);
+    expect(estimates.get('it-eng-mgmt|4|city|ru:казань')).toEqual({
+      currency: 'RUR',
+      period: 'month',
+      sampleSize: 1,
+    });
+    expect(estimates.get('it-eng-mgmt|4|country|ru')?.sampleSize).toBe(6);
+  });
+
+  it('keeps periods apart, drops hourly rates and joins RUR with RUB (B803)', async () => {
+    const eur = (index: number, from: number, period?: string): Row => ({
+      ...moscow(index, 0, 0),
+      location: 'Berlin, DE',
+      salary: { from, to: from, currency: 'EUR', period },
+    });
+    const rub = { ...moscow(20, 100_000, 100_000), salary: { from: 100_000, currency: 'RUB' } };
+    const estimates = await computeMarketSalaryEstimates(
+      poolDatabase([
+        ...[1, 2, 3, 4, 5].map((index) => eur(index, 70_000 + index * 1_000, 'year')),
+        eur(6, 5_000, 'month'),
+        eur(7, 1_200, 'hour'),
+        eur(8, 90_000),
+        moscow(21, 100_000, 100_000),
+        rub,
+      ]),
+    );
+    expect(estimates.get('it-eng-mgmt|4|country|de')).toEqual({
+      low: 72_000,
+      high: 74_000,
+      currency: 'EUR',
+      period: 'year',
+      sampleSize: 5,
+    });
+    expect(estimates.get('it-eng-mgmt|4|country|ru')).toMatchObject({
+      currency: 'RUR',
+      sampleSize: 2,
+    });
   });
 
   it('gives the queue back between slices and counts every row once', async () => {
@@ -83,8 +118,8 @@ describe('computeMarketSalaryEstimates', () => {
       },
     });
     expect(pauses).toBe(2);
-    expect(estimates.get('it-eng-mgmt|4|city|москва')?.sampleSize).toBe(5);
-    expect(estimates.get('it-product|4|city|москва')?.sampleSize).toBe(1);
+    expect(estimates.get('it-eng-mgmt|4|city|ru:москва')?.sampleSize).toBe(5);
+    expect(estimates.get('it-product|4|city|ru:москва')?.sampleSize).toBe(1);
   });
 });
 
@@ -93,7 +128,7 @@ describe('SqliteMarketSalaryEstimateStore', () => {
     const database = poolDatabase([]);
     const estimates = new Map([
       [
-        'it-eng-mgmt|4|city|москва',
+        'it-eng-mgmt|4|city|ru:москва',
         { low: 480_000, high: 560_000, currency: 'RUR', sampleSize: 41 },
       ],
       ['it-eng-mgmt|4|region|russia', { currency: 'RUR', sampleSize: 3 }],
@@ -101,7 +136,7 @@ describe('SqliteMarketSalaryEstimateStore', () => {
     const now = new Date('2026-10-05T03:00:00.000Z');
     writeMarketSalaryEstimates(database, estimates, now);
     const store = new SqliteMarketSalaryEstimateStore({ database });
-    expect(store.get('it-eng-mgmt|4|city|москва')).toEqual({
+    expect(store.get('it-eng-mgmt|4|city|ru:москва')).toEqual({
       low: 480_000,
       high: 560_000,
       currency: 'RUR',
@@ -118,6 +153,6 @@ describe('SqliteMarketSalaryEstimateStore', () => {
 
   it('answers undefined before the maintenance process has written anything', () => {
     const store = new SqliteMarketSalaryEstimateStore({ database: new DatabaseSync(':memory:') });
-    expect(store.get('it-eng-mgmt|4|city|москва')).toBeUndefined();
+    expect(store.get('it-eng-mgmt|4|city|ru:москва')).toBeUndefined();
   });
 });

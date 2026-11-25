@@ -236,6 +236,24 @@ describe('Resume Studio canonical projection', () => {
     expect(serialized).not.toContain('Forbidden Religion');
   });
 
+  it('сертификат без своего факта в резюме не попадает', () => {
+    const input = completeInput();
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [
+        ...input.evidence,
+        evidence('cert-itil', 'ITIL 4 — PeopleCert'),
+        evidence('cert-pmi', 'PMI', { status: 'proposed' }),
+      ],
+      certifications: [
+        { id: 'itil', evidenceMemoryId: 'cert-itil', name: 'ITIL 4' },
+        { id: 'pmi', evidenceMemoryId: 'cert-pmi', name: 'PMI' },
+        { id: 'bare', name: 'CISA' },
+      ],
+    });
+    expect(projection.master.certifications?.map((item) => item.id)).toEqual(['itil']);
+  });
+
   it('projects only eligible master project facts and keeps their provenance', () => {
     const input = completeInput();
     const projection = buildResumeStudioProjection({

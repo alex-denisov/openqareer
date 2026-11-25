@@ -106,9 +106,11 @@ function workFormatOf(text: string, location: string | null): OwnVacancyWorkForm
   const format = detectVacancyWorkFormat({
     location: location ?? '',
     summary: text,
-    isRemote: REMOTE.test(text),
+    isRemote: false,
   });
-  return format === 'unknown' ? null : format;
+  // Текст вставил кандидат: признака площадки нет, «офис» и «удалённо» в нём равны — как прежде, офис.
+  if (format === 'unknown') return REMOTE.test(text) ? 'remote' : null;
+  return format;
 }
 
 function isCityPart(part: string): boolean {

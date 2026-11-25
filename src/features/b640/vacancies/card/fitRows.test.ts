@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { vacancyFitSentence } from '../../../vacancies/vacancyFitModel';
-import { fitBlockState, fitRows, sourceLine } from './fitRows';
+import { fitBlockState, fitRows, listedRows, sourceLine } from './fitRows';
 
 function req(id: string, text: string, skill = true) {
   return {
@@ -111,6 +111,17 @@ describe('fitRows', () => {
       }),
     );
     expect(rows.map((row) => row.id)).toEqual(['a', 'b']);
+  });
+
+  it('пожелание видно после посчитанных и не входит в их число', () => {
+    const base = view();
+    const wish = view({ result: { ...base.result!, duties: ['d'], wishes: ['d'] } });
+    expect(fitRows(wish).map((row) => row.id)).toEqual(['a', 'b', 'c']);
+    expect(listedRows(wish).map((row) => row.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(listedRows(wish)[3]).toMatchObject({ evidence: 'желательно', canCheck: false });
+    expect(sourceLine(wish, 'hh.ru')).toContain('· 3 требования');
+    const duty = view({ result: { ...base.result!, duties: ['d'] } });
+    expect(listedRows(duty)).toHaveLength(3);
   });
 
   it('без оценки требование неизвестно', () => {
