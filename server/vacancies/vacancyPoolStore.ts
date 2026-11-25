@@ -89,6 +89,11 @@ export interface CatalogChipQuery {
   readonly after?: CatalogCursor;
 }
 
+/** Невиденная ссылка и когда запись видели в последний раз. */
+export interface UnseenLink extends VacancyLink {
+  readonly seenMs: number;
+}
+
 export interface VacancyPoolStore {
   /** Непохороненные записи; с окном — только свежие (вход сведения кластеров). */
   loadVacancies(window?: FreshnessWindow): UnifiedVacancy[];
@@ -195,8 +200,13 @@ export interface VacancyPoolStore {
    * сколько записей похоронено этим вызовом (B200 срез 2).
    */
   markExpired(vacancyIds: readonly string[], atIso: string): number;
-  /** B642: ссылки записей этих источников, невиденных с `beforeMs`, давние первыми. */
-  loadUnseenLinks?(sourceIds: readonly string[], beforeMs: number, limit: number): VacancyLink[];
+  /** B642: ссылки записей этих источников, невиденных с `beforeMs`, недавние первыми; `after` — продолжить. */
+  loadUnseenLinks?(
+    sourceIds: readonly string[],
+    beforeMs: number,
+    limit: number,
+    after?: UnseenLink,
+  ): UnseenLink[];
   /** B642: ссылка открылась — запись считается виденной в `nowMs`. */
   markSeen?(vacancyIds: readonly string[], nowMs: number): void;
   /** Drops rows of sources the registry no longer knows and stale readings. */
