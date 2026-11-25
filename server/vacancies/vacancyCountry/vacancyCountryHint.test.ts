@@ -18,17 +18,53 @@ describe('vacancyCountryHint', () => {
     ['8038 Zürich, ZH', 'CH'],
     ['10178 Berlin', 'DE'],
     ['Hong Kong SAR', 'HK'],
-    ['Atlanta, Georgia', 'US'],
     ['Georgia, United States', 'US'],
-    ['Tbilisi, Georgia', 'GE'],
     ['Springfield, Illinois', 'US'],
     ['Virginia, South Africa', 'ZA'],
+    ['Lebanon, NH', 'US'],
+    ['Peru, IN', 'US'],
+    ['Peru, IN, United States', 'US'],
+    ['Jordan, Minnesota', 'US'],
+    ['London, Ohio', 'US'],
+    ['New York, NY', 'US'],
+    ['Austin, TX; Seattle, Washington', 'US'],
   ])('reads the place of %s', (location, country) => {
     expect(hint(location)).toEqual({ country, basis: 'place', lowConfidence: false });
   });
 
+  it.each([
+    ['Friedrichshafen', 'DE'],
+    ['Atlanta, Georgia', 'US'],
+    ['Tbilisi, Georgia', 'GE'],
+    ['Perth, WA', 'AU'],
+    ['Palo Alto, CA', 'US'],
+    ['Toronto; Vancouver', 'CA'],
+  ])('a dictionary city is a separate basis: %s', (location, country) => {
+    expect(hint(location)).toEqual({ country, basis: 'city', lowConfidence: false });
+  });
+
+  it('regions and common words are not cities', () => {
+    for (const location of [
+      ...['Latin America', 'North America', 'South America', 'Asia', 'Asia Pacific'],
+      ...['Pacific Time', 'Field Sales', 'Center', 'Union', 'Victoria'],
+    ]) {
+      expect(hint(location)).toBeUndefined();
+    }
+    expect(hint('Macedonia')?.country).toBe('MK');
+  });
+
   it('two countries are no country', () => {
     expect(hint('Argentina; Brazil')).toBeUndefined();
+    for (const location of [
+      'Texas; London',
+      'Delaware; Toronto',
+      'London / New York',
+      'London, New York',
+      'New York; Berlin; Toronto',
+      'Canada, Texas',
+    ]) {
+      expect(hint(location, [], 'DE')).toBeUndefined();
+    }
     expect(hint('Georgia')).toBeUndefined();
     expect(hint('Remote')).toBeUndefined();
   });
@@ -69,6 +105,14 @@ describe('vacancyCountryHint', () => {
 
   it('a board or a generic domain says nothing', () => {
     expect(hint('Remote', ['https://hh.ru/vacancy/1', 'https://acme.io/1'])).toBeUndefined();
+    for (const host of [
+      'youtu.be',
+      'lnkd.in',
+      'acme.recruitee.nl',
+      'www.adzuna.de',
+      'stepstone.de',
+    ])
+      expect(hint('Remote', [`https://${host}/1`])).toBeUndefined();
     expect(hint('Remote', ['https://acme.ai/1', 'not a url'])).toBeUndefined();
   });
 });

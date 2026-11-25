@@ -5,7 +5,8 @@
  */
 import { cityCountry, cityCountryInText } from './cityCountry';
 
-export type CountryHintBasis = 'place' | 'address' | 'employer' | 'domain' | 'text';
+/** `place` — страна или штат названы, либо место знает общий разбор; `city` — догадка по словарю. */
+export type CountryHintBasis = 'place' | 'city' | 'address' | 'employer' | 'domain' | 'text';
 
 export interface CountryHint {
   readonly country: string;
@@ -48,9 +49,11 @@ const NAME_ALIASES: ReadonlyMap<string, string> = new Map(
     гонконг: 'HK',
     оаэ: 'AE',
     uae: 'AE',
+    macedonia: 'MK',
     uk: 'GB',
     великобритания: 'GB',
     usa: 'US',
+    us: 'US',
     сша: 'US',
     турция: 'TR',
     turkey: 'TR',
@@ -78,7 +81,7 @@ const MAX_PLACES = 8;
 function placesOf(location: string): string[] {
   const bare = NOISE.reduce((text, noise) => text.replace(noise, ' '), location);
   return bare
-    .split(/[;|/·,()]+/u)
+    .split(/[,()]+/u)
     .map((part) => part.replace(/\s+/gu, ' ').trim())
     .filter((part) => part.length > 1)
     .slice(0, MAX_PLACES);
@@ -99,34 +102,109 @@ const US_STATES: ReadonlySet<string> = new Set(
   ).split('|'),
 );
 
-/** Штат США в месте. «Georgia» — штат и страна: решает город, без города ответа нет. */
-function stateCountry(parts: readonly string[]): { readonly country?: string } | undefined {
-  const names = parts.map((part) => part.toLowerCase());
-  const others = names.map(countryName).filter((code) => code !== undefined && code !== 'GE');
-  if (others.some((code) => code !== 'US')) return undefined;
-  if (names.some((name) => US_STATES.has(name))) return { country: 'US' };
-  if (!names.includes('georgia')) return undefined;
-  if (others.length > 0) return { country: 'US' };
-  const city = single(
-    parts.filter((part) => part.toLowerCase() !== 'georgia').map((part) => cityCountry(part)),
-  );
-  return city === 'US' || city === 'GE' ? { country: city } : {};
+const US_STATE_CODES: ReadonlySet<string> = new Set(
+  (
+    'AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM ' +
+    'NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY'
+  ).split(' '),
+);
+/** Код — ещё и страна (DE, IN, CA), штат Австралии (WA) или провинция Италии (MI): решает город. */
+const SHARED_STATE_CODES: ReadonlySet<string> = new Set([
+  ...ISO_CODES.filter((code) => US_STATE_CODES.has(code)),
+  'WA',
+  'MI',
+  'MO',
+  'SC',
+]);
+/** Города США с именем страны: «Lebanon, NH», «Jordan, Minnesota». */
+const COUNTRY_NAMESAKES: ReadonlySet<string> = new Set(
+  'lebanon peru jordan mexico cuba panama poland norway denmark china italy ireland brazil greece egypt turkey chile georgia'.split(
+    ' ',
+  ),
+);
+/** Штат, который чаще пишут как город. */
+const STATE_CITIES: ReadonlySet<string> = new Set(['new york', 'washington']);
+
+interface PlaceRead {
+  readonly country: string;
+  readonly basis: 'place' | 'city';
+}
+type PlaceAnswer = PlaceRead | 'dispute' | undefined;
+
+const read = (country: string | undefined, basis: PlaceRead['basis']): PlaceAnswer =>
+  country ? { country, basis } : undefined;
+
+function agreed(answers: readonly PlaceAnswer[]): PlaceAnswer {
+  const reads = answers.filter((answer) => answer !== undefined);
+  if (reads.some((answer) => answer === 'dispute')) return 'dispute';
+  const places = reads.filter((answer) => answer !== 'dispute');
+  if (new Set(places.map(({ country }) => country)).size > 1) return 'dispute';
+  return places.find(({ basis }) => basis === 'place') ?? places[0];
 }
 
-function placeCountry(location: string, deps: CountryHintDeps): string | undefined {
-  const parts = placesOf(location);
-  const state = stateCountry(parts);
-  if (state) return state.country;
-  const named = parts.map(countryName).filter((code) => code !== undefined);
-  if (named.length > 0) return single(named);
+function cityRead(part: string, deps: CountryHintDeps): PlaceAnswer {
+  return read(deps.resolvePlace(part), 'place') ?? read(cityCountry(part), 'city');
+}
+
+/** «Город, штат»: полное имя штата или его код. `undefined` — штата в месте нет. */
+function stateRead(
+  parts: readonly string[],
+  deps: CountryHintDeps,
+): { readonly answer: PlaceAnswer } | undefined {
+  const isState = (part: string, index: number) =>
+    US_STATES.has(part.toLowerCase()) || (index > 0 && US_STATE_CODES.has(part));
+  const at = parts.findIndex(isState);
+  const state = parts[at];
+  if (state === undefined) return undefined;
+  const before = parts.slice(0, at);
+  const after = parts.slice(at + 1).filter((part, index) => !isState(part, index + 1));
+  const named = [...before.filter((part) => !COUNTRY_NAMESAKES.has(part.toLowerCase())), ...after]
+    .map(countryName)
+    .filter((code) => code !== undefined);
+  const us: PlaceAnswer = { country: 'US', basis: 'place' };
+  if (named.length > 0) {
+    const country = single(named);
+    const isUs = country === 'US' || (country !== undefined && cityCountry(state) === country);
+    return { answer: isUs ? read(country, 'place') : 'dispute' };
+  }
+  if (SHARED_STATE_CODES.has(state)) {
+    const [city = ''] = before;
+    return {
+      answer: COUNTRY_NAMESAKES.has(city.toLowerCase()) ? us : cityRead(city, deps),
+    };
+  }
+  const others = STATE_CITIES.has(state.toLowerCase()) ? [...before, ...after] : after;
+  return { answer: agreed([us, ...others.map((part) => cityRead(part, deps))]) };
+}
+
+/** «Georgia» — штат и страна: решает город, без города ответа нет. */
+function georgiaRead(parts: readonly string[], deps: CountryHintDeps): PlaceAnswer {
+  const others = parts.filter((part) => part.toLowerCase() !== 'georgia');
+  const named = others.map(countryName).filter((code) => code !== undefined);
+  if (named.length > 0) return read(single(named), 'place') ?? 'dispute';
+  const city = agreed(others.map((part) => cityRead(part, deps)));
+  if (city === undefined || city === 'dispute') return city;
+  return city.country === 'US' || city.country === 'GE' ? city : 'dispute';
+}
+
+function clauseRead(clause: string, deps: CountryHintDeps): PlaceAnswer {
+  const parts = placesOf(clause);
   const [first] = parts;
   if (!first) return undefined;
+  const state = stateRead(parts, deps);
+  if (state) return state.answer;
+  if (parts.some((part) => part.toLowerCase() === 'georgia')) return georgiaRead(parts, deps);
+  const named = parts.map(countryName).filter((code) => code !== undefined);
+  if (named.length > 0) return read(single(named), 'place') ?? 'dispute';
   return (
-    deps.resolvePlace(parts.join(', ')) ??
-    deps.resolvePlace(first) ??
-    cityCountry(first) ??
-    single(parts.map(cityCountryInText))
+    read(deps.resolvePlace(parts.join(', ')) ?? deps.resolvePlace(first), 'place') ??
+    read(cityCountry(first) ?? single(parts.map(cityCountryInText)), 'city')
   );
+}
+
+/** Места через «;», «/», «|» разбираются порознь: разные страны — спор. */
+function placeRead(location: string, deps: CountryHintDeps): PlaceAnswer {
+  return agreed(location.split(/[;|/·]+/u).map((clause) => clauseRead(clause, deps)));
 }
 
 /** Workday пишет место в адрес вакансии: `/job/McLean-VA/…`. */
@@ -147,7 +225,7 @@ const COUNTRY_TLDS: ReadonlySet<string> = new Set(
 
 /** Площадки и системы найма обслуживают все страны: их домен ничего не говорит. */
 const SHARED_HOSTS =
-  /(?:^|\.)(?:hh\.ru|indeed\.[a-z.]+|linkedin\.[a-z]+|arbeitnow\.[a-z]+|breezy\.hr|grnh\.se|personio\.[a-z]+|teamtailor\.[a-z]+|jobvite\.[a-z]+|join\.[a-z]+)$/u;
+  /(?:^|\.)(?:hh\.ru|indeed\.[a-z.]+|linkedin\.[a-z]+|arbeitnow\.[a-z]+|breezy\.hr|grnh\.se|personio\.[a-z]+|teamtailor\.[a-z]+|jobvite\.[a-z]+|join\.[a-z]+|youtu\.be|lnkd\.in|bit\.ly|goo\.gl|t\.me|recruitee\.[a-z]+|adzuna\.[a-z.]+|stepstone\.[a-z]+|jooble\.[a-z]+|xing\.[a-z]+|glassdoor\.[a-z.]+|monster\.[a-z.]+|superjob\.ru|rabota\.ru|habr\.com|jobs\.cz|pracuj\.pl|smartrecruiters\.[a-z]+|workable\.[a-z]+|softgarden\.[a-z]+|factorial\.[a-z]+|homerun\.[a-z]+|notion\.[a-z]+|youtube\.[a-z]+|google\.[a-z.]+|facebook\.[a-z]+)$/u;
 
 function domainCountry(url: URL): string | undefined {
   if (SHARED_HOSTS.test(url.hostname)) return undefined;
@@ -183,8 +261,10 @@ export function vacancyCountryHint(
   deps: CountryHintDeps,
 ): CountryHint | undefined {
   const urls = parsedUrls(input.urls);
+  const place = input.location ? placeRead(input.location, deps) : undefined;
+  if (place === 'dispute') return undefined;
+  if (place) return { ...place, lowConfidence: false };
   const steps: readonly [CountryHintBasis, () => string | undefined][] = [
-    ['place', () => (input.location ? placeCountry(input.location, deps) : undefined)],
     ['address', () => addressCountry(urls, deps)],
     ['employer', () => deps.employerCountry(input.company)],
     ['domain', () => single(urls.map(domainCountry))],
