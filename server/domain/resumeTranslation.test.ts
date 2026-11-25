@@ -342,4 +342,50 @@ describe('один язык листа (Д17)', () => {
     const result = await translateDocument(own, 'ru', {}, translator(answers), 5_000);
     expect(JSON.stringify(result.translations)).not.toContain('терапии');
   });
+
+  const campus = (employer: string, startDate: string, endDate: string) =>
+    ({
+      ...sheet,
+      experience: [
+        {
+          ...sheet.experience[0]!,
+          title: item('IT Lead (Acting Head of IT)'),
+          employer: item('Корпоративный университет Сбербанка'),
+          startDate: item('Dec 2012'),
+          endDate: item('Jul 2016'),
+        },
+        ...sheet.experience.slice(1),
+      ],
+      projects: [
+        {
+          ...sheet.projects![0]!,
+          employer: item(employer),
+          startDate: item(startDate),
+          endDate: item(endDate),
+        },
+      ],
+    }) as unknown as ResumeDocument;
+  const UNIVERSITY = 'Corporate University of a Top-Tier Financial Institution';
+  const ANSWERS = { ...RU, 'IT Lead (Acting Head of IT)': 'Руководитель направления ИТ (врио руководителя ИТ)' };
+
+  it.each([
+    [UNIVERSITY, 'Mar 2013', 'Sep 2015', 'Корпоративный университет Сбербанка'],
+    [UNIVERSITY, 'Mar 2018', 'Sep 2019', UNIVERSITY],
+    ['Enterprise Energy IT Services', 'Mar 2013', 'Sep 2015', 'Enterprise Energy IT Services'],
+  ])('русский лист: работодатель проекта %s, %s — %s', async (employer, from, to, shown) => {
+    const own = campus(employer, from, to);
+    const { translations } = await translateDocument(own, 'ru', {}, translator(ANSWERS), 5_000);
+    expect(translatedDocument(own, 'ru', translations).projects?.[0]?.employer?.value).toBe(shown);
+    expect(translatedDocument(own, 'en', translations).projects?.[0]?.employer?.value).toBe(employer);
+  });
+
+  it('должность, потерявшая часть, спрашивается заново', async () => {
+    const own = campus(UNIVERSITY, 'Mar 2013', 'Sep 2015');
+    const title = 'IT Lead (Acting Head of IT)';
+    const known = { [`ru:${title}`]: 'Врио руководителя ИТ' };
+    const again = await translateDocument(own, 'ru', known, translator(ANSWERS), 5_000);
+    expect(again.translations[`ru:${title}`]).toBe(ANSWERS[title]);
+    const lost = await translateDocument(own, 'ru', known, translator({ ...ANSWERS, [title]: 'Врио руководителя ИТ' }), 5_000);
+    expect(lost.translations[`ru:${title}`]).toBe(title);
+  });
 });

@@ -37,6 +37,9 @@ export interface AtsManual {
   readonly host: string;
 }
 
+/** Что форма не взяла; `button` — кнопка отправки не нашлась или не нажимается. */
+export type AtsObstacle = 'resume' | 'letter' | 'button';
+
 export type AtsRunResult =
   | { readonly kind: 'sent'; readonly receipt: AtsReceipt }
   /** Нажатие было, подтверждения нет: второго нажатия не будет. */
@@ -51,7 +54,7 @@ export type AtsRunResult =
   /** Форма отказала своим полям: ничего не ушло. */
   | { readonly kind: 'refused'; readonly host: string }
   /** До нажатия не дошло: можно повторить. */
-  | { readonly kind: 'failed'; readonly rejected?: 'resume' | 'letter' }
+  | { readonly kind: 'failed'; readonly rejected?: AtsObstacle }
   | AtsManual;
 
 const READ_REASONS: Readonly<Record<Exclude<AtsFormReport['state'], 'ready'>, ManualApplyReason>> =
@@ -292,7 +295,15 @@ async function turnPage(
 }
 
 /** Причины, по которым приложение не нажало кнопку, хотя могло бы: повтор уместен. */
-const RETRY = new Set(['not_confirmed', 'attempt_unrecorded', 'form_not_filled']);
+const RETRY: ReadonlySet<string> = new Set([
+  'not_confirmed',
+  'attempt_unrecorded',
+  'form_not_filled',
+  'confirmed_values_differ',
+  'form_changed',
+  'form_missing',
+]);
+const NO_BUTTON: ReadonlySet<string> = new Set(['submit_ambiguous', 'submit_disabled']);
 
 function resultOfReceipt(receipt: AtsReceipt, fallbackHost: string): AtsRunResult {
   const host = receipt.host || fallbackHost;
@@ -301,6 +312,9 @@ function resultOfReceipt(receipt: AtsReceipt, fallbackHost: string): AtsRunResul
   if (receipt.outcome === 'rejected') return { kind: 'refused', host };
   if (receipt.outcome === 'captcha' && receipt.pressedAtMs === null) return manual('captcha', host);
   if (receipt.outcome !== 'not_submitted') return { kind: 'unconfirmed', host };
+  if (receipt.pressedAtMs !== null) return { kind: 'unconfirmed', host };
+  if (receipt.reason && NO_BUTTON.has(receipt.reason))
+    return { kind: 'failed', rejected: 'button' };
   return receipt.reason && RETRY.has(receipt.reason) ? { kind: 'failed' } : manual('other', host);
 }
 
