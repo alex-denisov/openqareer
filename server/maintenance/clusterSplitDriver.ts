@@ -6,7 +6,7 @@ import { splitClustersStep, type ClusterSplitStepResult } from '../vacancies/clu
 /**
  * B752: водитель разбиения склеенных кластеров в процессе обслуживания.
  * Выключен по умолчанию (`CLUSTER_SPLIT_ENABLED`). Между шагами — пауза
- * таймером и `wal_checkpoint(TRUNCATE)`; остановка при задержке цикла
+ * таймером и `wal_checkpoint(PASSIVE)`; остановка при задержке цикла
  * событий, памяти процесса, росте WAL или просьбе шага.
  */
 
@@ -87,6 +87,8 @@ export async function runClusterSplitDriver(
     );
     return { steps, reason };
   };
+  // Накопленный WAL переносится до первой записи, а не внутри её COMMIT.
+  options.checkpoint();
   while (!options.isStopped()) {
     const result = options.step();
     steps += 1;
@@ -119,6 +121,14 @@ function fileSize(path: string): number {
   }
 }
 
+/**
+ * TRUNCATE держит блокировку записи всё время переноса (25.11: WAL 412 МБ — другие
+ * писатели ждали 1,5 с, PASSIVE — 50 мс), поэтому файл WAL здесь не усекается.
+ */
+export function checkpointPassive(db: DatabaseSync): void {
+  db.exec('PRAGMA wal_checkpoint(PASSIVE)');
+}
+
 /** Боевые пробы: своя гистограмма задержки, RSS процесса, размер `-wal` файла базы. */
 export function startClusterSplit(input: {
   readonly db: DatabaseSync;
@@ -135,7 +145,7 @@ export function startClusterSplit(input: {
     config: input.config,
     step: () => splitClustersStep(input.db, { log: logStep }),
     dropClusterSnapshot: input.dropClusterSnapshot,
-    checkpoint: () => input.db.exec('PRAGMA wal_checkpoint(TRUNCATE)'),
+    checkpoint: () => checkpointPassive(input.db),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     log: input.log,
     lagP99Ms: () => {
