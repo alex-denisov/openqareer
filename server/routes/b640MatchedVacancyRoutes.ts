@@ -30,6 +30,7 @@ import {
 } from './b640VacancyContext';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
+import { withFilteredDates, type FacetsSource } from './matchedVacancyPart';
 import { withOrderedPercents, withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
 import { engineListReads, readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
@@ -63,6 +64,8 @@ const querySchema = matchedVacanciesQuerySchema
      */
     money: z.coerce.number().int().min(1).max(1_000_000_000).optional(),
     moneyCurrency: z.enum(MONEY_FILTER_CURRENCIES).default('RUB'),
+    /** Первое чтение списка: роли поиска подставляет сервер и называет их в `meta.roles`. */
+    roles: z.literal('campaign').optional(),
   });
 type Query = z.infer<typeof querySchema>;
 
@@ -232,6 +235,15 @@ async function orderRows(
   return { byFit, rows: sortMatchedByColumn(byFit, query.sort as ColumnSortKey, query.direction, careerTimeZone(query)) };
 }
 
+/** Фасеты — с первой порцией; числа «Даты» — по поясу кандидата, как у прежнего маршрута. */
+function firstPageFacets(
+  query: Query,
+  source: Pick<FacetsSource, 'facets' | 'filteredObserved'>,
+): { readonly facets?: FacetsSource['facets'] } {
+  if (query.offset !== 0 || !source.facets) return {};
+  return { facets: withFilteredDates(source.facets, source.filteredObserved, careerTimeZone(query)) };
+}
+
 /** B702: страница из списка прошлого процесса; проценты, уровни и деньги читаются как обычно. */
 async function sealedAnswer(
   deps: RouteDeps,
@@ -271,7 +283,7 @@ async function sealedAnswer(
       nextOffset: nextOffsetOf(query.offset, shown.length, slice.total),
       campaign: campaignMeta(slice.campaignWithHypotheses),
       candidateLevel: context.targetLevel ?? null,
-      ...(query.offset === 0 ? { facets: slice.facets } : {}),
+      ...firstPageFacets(query, slice),
     },
   };
 }
@@ -291,6 +303,20 @@ function withinDays(rows: Rows, query: Query): Rows {
   return withinLastDays(rows, days, new Date(), careerTimeZone(query));
 }
 
+interface ListQuery {
+  readonly query: Query;
+  /** Роли, которые подставил сервер; их не выбирали — пусто. */
+  readonly roles: { readonly roles: readonly string[] } | undefined;
+}
+
+/** Роли «по умолчанию» (кандидат их не выбирал) подборку не сужают — как `defaultRoles` клиента. */
+function withCampaignRoles(parsed: Query, { campaign }: B640ListContext): ListQuery {
+  const { roles: asked, ...query } = parsed;
+  if (!asked || query.role?.length) return { query, roles: undefined };
+  const roles = campaign.roles.origin === 'default' ? [] : [...campaign.roles.value];
+  return { query: roles.length > 0 ? { ...query, role: roles } : query, roles: { roles } };
+}
+
 const getMatchedVacancies = async (
   backgroundDeps: RouteDeps,
   request: FastifyRequest,
@@ -302,15 +328,15 @@ const getMatchedVacancies = async (
   if (!candidate) return reply;
   const parsed = querySchema.safeParse(request.query);
   if (!parsed.success) return invalidQuery(request, reply);
-  const query = parsed.data;
   const deps = withRequestScopedCandidateReads(backgroundDeps);
   const context = readB640ListContext(deps, candidate.id);
+  const { query, roles } = withCampaignRoles(parsed.data, context);
   if (profileIsEmpty(context)) return emptyResponse(request, query, context);
   // Запечатанный список прошлого процесса — без окна дат и суммы: с ними читаем список как обычно.
   const sealed = query.days || query.money
     ? undefined
     : await sealedAnswer(deps, backgroundDeps, request, candidate.id, context, query);
-  if (sealed) return sealed;
+  if (sealed) return { ...sealed, meta: { ...sealed.meta, ...roles } };
   const read = await readList(deps, request, candidate.id, context, query);
   const { list, fitLimit, targetLevel } = read;
   const orderStartedAt = performance.now();
@@ -338,7 +364,8 @@ const getMatchedVacancies = async (
       nextOffset: nextOffsetOf(query.offset, shown.length, rows.length),
       campaign: campaignMeta(list.campaignWithHypotheses),
       candidateLevel: targetLevel ?? null,
-      ...(query.offset === 0 ? { facets: list.facets } : {}),
+      ...roles,
+      ...firstPageFacets(query, list),
     },
   };
 };

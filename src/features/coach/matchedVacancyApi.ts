@@ -97,7 +97,13 @@ export async function getMatchedVacancyPage(
   part?: 'rows',
 ): Promise<MatchedVacancyPage> {
   const query = matchedPageQuery(offset, filters, part);
-  const response = await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal });
+  return readMatchedPage(
+    await apiFetch(`/api/v1/candidate/matched-vacancies?${query}`, { signal }),
+  );
+}
+
+/** Страница подборки из ответа: прежний маршрут и список s07 отдают одну форму. */
+export async function readMatchedPage(response: Response): Promise<MatchedVacancyPage> {
   if (!response.ok) {
     await throwApiError(response);
   }
@@ -111,6 +117,8 @@ export async function getMatchedVacancyPage(
       campaign?: CampaignMetaView;
       candidateLevel?: string | null;
       initialFilters?: VacanciesScreenState;
+      /** Роли поиска, которые сервер подставил сам. */
+      roles?: unknown;
       sort?: VacancySort;
     };
   };
@@ -138,9 +146,19 @@ export async function getMatchedVacancyPage(
     ...(envelope.meta?.candidateLevel !== undefined
       ? { candidateLevel: envelope.meta.candidateLevel }
       : {}),
-    ...(envelope.meta?.initialFilters ? { initialFilters: envelope.meta.initialFilters } : {}),
+    ...initialFiltersOf(envelope.meta),
     ...(isVacancySort(envelope.meta?.sort) ? { sort: envelope.meta.sort } : {}),
   };
+}
+
+function initialFiltersOf(
+  meta: { initialFilters?: VacanciesScreenState; roles?: unknown } | undefined,
+): Pick<MatchedVacancyPage, 'initialFilters'> {
+  if (meta?.initialFilters) return { initialFilters: meta.initialFilters };
+  const roles = meta?.roles;
+  return Array.isArray(roles) && roles.every((role) => typeof role === 'string')
+    ? { initialFilters: { roles, regions: [], remoteOnly: false } }
+    : {};
 }
 
 /**

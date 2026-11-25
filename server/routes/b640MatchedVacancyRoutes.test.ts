@@ -187,3 +187,21 @@ describe('GET b640/matched-vacancies: «Зарплата от» на серве�
     expect((await get(`${NEW}?money=100000&moneyCurrency=XYZ`, 'flagged.test')).statusCode).toBe(400);
   });
 });
+
+describe('GET b640/matched-vacancies: первое чтение с ролями поиска', () => {
+  it('roles=campaign отвечает тем же, что явные роли, и называет их; с role — не подставляет', async () => {
+    const { get } = await setup();
+    const auto = (await get(`${NEW}?roles=campaign&tz=Europe/Moscow`, 'flagged.test')).json();
+    const { value, origin } = auto.meta.campaign.roles as { value: string[]; origin: string };
+    expect(auto.meta.roles).toEqual(origin === 'default' ? [] : value);
+    const query = (auto.meta.roles as string[]).map((role) => `&role=${encodeURIComponent(role)}`).join('');
+    const explicit = (await get(`${NEW}?tz=Europe/Moscow${query}`, 'flagged.test')).json();
+    expect(auto.data).toEqual(explicit.data);
+    expect(auto.meta.total).toBe(explicit.meta.total);
+    expect(auto.meta.facets).toEqual(explicit.meta.facets);
+    expect(explicit.meta.roles).toBeUndefined();
+    const own = (await get(`${NEW}?roles=campaign&role=CTO`, 'flagged.test')).json();
+    expect(own.meta.roles).toBeUndefined();
+    expect((await get(`${NEW}?roles=all`, 'flagged.test')).statusCode).toBe(400);
+  });
+});

@@ -17,7 +17,7 @@ async function openList(page: Page): Promise<void> {
     ...item,
     cluster: { ...item.cluster, canonicalTitle: LONG_ROLE },
   }));
-  await page.route('**/api/v1/candidate/matched-vacancies**', (route) =>
+  await page.route('**/api/v1/candidate/**matched-vacancies**', (route) =>
     route.fulfill({ json: { ...source, data } }),
   );
   await page.goto('/app/vacancies', { waitUntil: 'domcontentloaded' });
