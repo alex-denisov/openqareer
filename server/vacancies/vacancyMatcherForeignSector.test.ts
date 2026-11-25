@@ -47,6 +47,11 @@ describe('целевая роль кампании (B794)', () => {
     expect(roleOf(title)).toBe('target');
   });
 
+  it('заместитель целевой роли — «частично»', () => {
+    expect(roleOf('Заместитель технического директора')).toBe('partial');
+    expect(roleOf('Deputy CIO')).not.toBe('target');
+  });
+
   it('роль вне кампании остаётся частичной', () => {
     expect(roleOf('IT Manager')).toBe('partial');
   });
@@ -70,12 +75,19 @@ describe('чужая сфера (B794)', () => {
     'Head of Engineering/Technical Lead - Paid Research',
     'Head of Engineering (Volunteer)',
     'Open Application- Business Operations',
-    'Заместитель начальника отдела поддержки инфраструктуры',
   ])('«%s» не входит в подборку', (title) => {
     expect(roleOf(title)).toBe('none');
   });
 
   it.each([
+    'Директор по технологиям (ресторанная сеть)',
+    'Head of Engineering, Fleet Management Platform',
+    'Head of Engineering, Claims Platform',
+    'Директор по эксплуатации облачной платформы',
+    'Director of Engineering, Intellectual Property',
+    'Заместитель руководителя ИТ-департамента',
+    'Заместитель начальника отдела поддержки инфраструктуры',
+    'Руководитель внедрения и эксплуатации (Автоматизация)',
     'ИТ-директор ресторанного холдинга',
     'Director of Information Technology (Hospital)',
     'Директор по эксплуатации ИТ-инфраструктуры',

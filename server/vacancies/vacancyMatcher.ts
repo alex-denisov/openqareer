@@ -164,7 +164,11 @@ const NOT_A_VACANCY_TITLE =
  * B794: уровень кандидата один, а ролей в кампании несколько. У VP с ролями CIO и COO «Директор по
  * ИТ (CIO)» отличался на ступень и стоял «частично»: роль сверяется с ролями, а не с уровнем.
  */
+/** Заместитель целевой роли — ступень ниже: остаётся в подборке «частично». */
+const DEPUTY_TITLE = /(?<!\p{L})(?:заместител\p{L}*|зам\.|deputy)(?!\p{L})/iu;
+
 function isOneOfTargetRoles(title: string, targetRoles: readonly string[]): boolean {
+  if (DEPUTY_TITLE.test(title)) return false;
   const key = careerRoleRowKey(title);
   return (
     key !== null &&
@@ -230,9 +234,7 @@ function isCeoOutsideCampaign(
   return !(roleFunctions.includes('ops') && COO_TITLE.test(vacancyTitle));
 }
 
-/** B794: заместитель начальника отдела — тоже не уровень VP; заместитель технического директора остаётся. */
-const ASSISTANT_TITLE =
-  /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*|заместител\p{L}* (?:начальник|руководител|главного инженер)\p{L}*)(?!\p{L})/iu;
+const ASSISTANT_TITLE = /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*)(?!\p{L})/iu;
 
 /**
  * Аудит 01.11: «Call Center Assistant Operations Manager» в подборке
