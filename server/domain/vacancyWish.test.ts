@@ -102,6 +102,7 @@ describe('the percent with a wish', () => {
     expect(result.coveragePercent).toBe(67);
     expect(result.coverage.total).toBe(3);
     expect(result.duties).toEqual([WISH]);
+    expect(result.wishes).toEqual([WISH]);
   });
   it('a met wish counts', () => expect(of('matched', 'matched').coveragePercent).toBe(75));
   it('a partial wish never lowers the percent', () => {

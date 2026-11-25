@@ -433,7 +433,6 @@ try {
   );
   // B546: market salary estimates stream every salaried vacancy, so only here.
   stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
-  // B803: открытая статистика заработков, раз в неделю.
   // B803: страны работодателей и словарь городов для вакансий без названной страны.
   stopJobs.push(scheduleEmployerCountryJob(semanticDatabase, log));
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
