@@ -37,7 +37,7 @@ jobs:
     # One batcher at a time; a waiting tick is replaced by the newest one. On the
     # job, not the workflow: an event skipped by `if` must not push out a real tick.
     concurrency:
-      group: merge-batch
+      group: merge-batch${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '-dry' || '' }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     # Two rounds of full runs (~10 min each) plus bisection fit in the hour.
