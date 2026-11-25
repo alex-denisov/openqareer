@@ -44,6 +44,11 @@ fn jsdom_path() -> Option<PathBuf> {
 }
 
 pub(crate) fn run(html: &str, path: &str, setup: &str, scripts: &[String]) -> Option<Value> {
+    run_on(html, &format!("https://hh.ru{path}"), setup, scripts)
+}
+
+/// The same on any address (LinkedIn, B802).
+pub(crate) fn run_on(html: &str, url: &str, setup: &str, scripts: &[String]) -> Option<Value> {
     let Some(jsdom) = jsdom_path() else {
         // In CI a missing jsdom must fail the run, not skip every script test silently.
         assert!(
@@ -64,7 +69,7 @@ pub(crate) fn run(html: &str, path: &str, setup: &str, scripts: &[String]) -> Op
         .ok()?;
     let payload = json!({
         "html": format!("<!doctype html><html><body>{SIGNED_IN}{html}</body></html>"),
-        "url": format!("https://hh.ru{path}"),
+        "url": url,
         "setup": setup,
         "scripts": scripts,
     });

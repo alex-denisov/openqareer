@@ -25,6 +25,8 @@ mod hh_resume_edit;
 mod hh_resume_edit_scripts;
 mod hh_resume_experience;
 mod hh_resume_experience_scripts;
+mod linkedin_edit;
+mod linkedin_edit_scripts;
 mod linkedin_form_capture;
 mod linkedin_read_guard;
 mod native_answer;
@@ -304,6 +306,20 @@ async fn run_hh_experience_edit(
         return Err("forbidden_caller".into());
     }
     hh_resume_experience::run_hh_experience_edit(&app, request).await
+}
+
+/// B802: one section of the candidate's LinkedIn profile, after they pressed
+/// «Применить».
+#[tauri::command]
+async fn run_linkedin_edit(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: linkedin_edit::LinkedinEditRequest,
+) -> Result<hh_resume_edit::HhResumeEditReport, String> {
+    if webview.label() != "main" {
+        return Err("forbidden_caller".into());
+    }
+    linkedin_edit::run_linkedin_edit(&app, request).await
 }
 
 /// B699: raises the candidate's hh.ru resume in their own hh.ru window; only the cabinet may ask.
@@ -776,6 +792,7 @@ fn main() {
             ats_form_close,
             run_hh_resume_edit,
             run_hh_experience_edit,
+            run_linkedin_edit,
             run_hh_raise,
             desktop_native_fetch,
             print_resume,
