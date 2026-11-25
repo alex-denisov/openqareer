@@ -233,7 +233,11 @@ export function loadPublicSalarySnapshot(
   if (!salaryRolePath(role) || !existsSync(databasePath)) return null;
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    return readSalaryMarketSnapshot(database, role);
+    const snapshot = readSalaryMarketSnapshot(database, role);
+    if (!snapshot) return null;
+    // Срезы стран нужны анкете отклика, странице они только добавили бы вес.
+    const { countrySlices: _countrySlices, ...shown } = snapshot;
+    return shown;
   } finally {
     database.close();
   }

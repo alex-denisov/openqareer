@@ -88,7 +88,7 @@ const SINGLE_LINE: ReadonlySet<AtsField['kind']> = new Set([
 
 function shapeOf(
   field: AtsField,
-): Pick<QuestionnaireQuestion, 'kind' | 'options' | 'multiple' | 'singleLine'> {
+): Pick<QuestionnaireQuestion, 'kind' | 'options' | 'multiple' | 'singleLine' | 'numeric'> {
   if (field.kind === 'checkbox') {
     return field.required
       ? { kind: 'choice', options: [YES], multiple: true }
@@ -96,6 +96,7 @@ function shapeOf(
   }
   const options = optionsOf(field).map((option) => tidy(option.label));
   if (options.length === 0) {
+    if (field.kind === 'number') return { kind: 'text', singleLine: true, numeric: true };
     return SINGLE_LINE.has(field.kind) ? { kind: 'text', singleLine: true } : { kind: 'text' };
   }
   return { kind: 'choice', options, ...(isChecks(field) ? { multiple: true } : {}) };

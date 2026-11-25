@@ -23,7 +23,7 @@ function seedSession(harness: Harness, user: HarnessUser, answer = SD_ANSWER) {
   const session = createInterviewSession({
     id: `session-${user}`,
     mode: 'text',
-    roleTitle: 'Инженер',
+    roleTitle: 'Backend-инженер',
     applicationId: null,
     questionTypes: ['system_design', 'behavioral'],
     stressMode: false,

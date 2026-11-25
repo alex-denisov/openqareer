@@ -3,10 +3,13 @@ import {
   CORE_API,
   DOMAINS,
   FAMILIES,
+  LEADERSHIP_CASE,
+  WORK_CASE,
   type RoleFamily,
   type TaskSpec,
   type VacancyDomain,
 } from './systemDesignTaskSpecs';
+import { trainingCase, type TrainingCase } from './trainingCase';
 
 /**
  * B681: задача System Design под вакансию без модели. Сначала предметная область по
@@ -17,7 +20,7 @@ import {
 
 export const SYSTEM_DESIGN_TIME_LIMIT_MINUTES = 45;
 
-export type SystemDesignDomain = VacancyDomain | RoleFamily | 'core_api';
+export type SystemDesignDomain = VacancyDomain | RoleFamily | Exclude<TrainingCase, 'system'> | 'core_api';
 
 export interface SystemDesignTaskInput {
   readonly vacancyTitle: string;
@@ -39,6 +42,8 @@ export interface SystemDesignTask {
   readonly stack: readonly string[];
   /** `model` — задачу написала модель по вакансии; `rules` — шаблон. */
   readonly origin: 'model' | 'rules';
+  /** У задач до B635 вида нет: они все System Design. */
+  readonly caseKind?: TrainingCase;
 }
 
 const STACK_TERMS: ReadonlyArray<readonly [string, RegExp]> = [
@@ -116,7 +121,20 @@ export function detectStack(text: string): string[] {
     .map((term) => term.name);
 }
 
-function exampleAnswerFor(spec: TaskSpec): string {
+const VERB: Readonly<Record<TrainingCase, string>> = {
+  system: 'Спроектируйте',
+  leadership: 'Предложите',
+  work: 'Предложите',
+};
+
+function exampleAnswerFor(spec: TaskSpec, kind: TrainingCase): string {
+  if (kind !== 'system')
+    return [
+      `Цели и ограничения: ${spec.requirements}.`,
+      `Решение по этапам: ${spec.components}.`,
+      `Компромисс: ${spec.tradeoff}.`,
+      `Контроль: показатели и риски; ${spec.operations}.`,
+    ].join(' ');
   return [
     `Требования: ${spec.requirements}; нагрузка и SLO по задержке фиксирую до выбора решения.`,
     `Компоненты: ${spec.components}.`,
@@ -132,6 +150,9 @@ interface SpecPick {
 }
 
 function pickSpec(input: SystemDesignTaskInput, description: string): SpecPick {
+  const kind = trainingCase(input);
+  if (kind === 'leadership') return { id: kind, spec: LEADERSHIP_CASE, basis: 'role' };
+  if (kind === 'work') return { id: kind, spec: WORK_CASE, basis: 'role' };
   const domain = description ? detectDomain(description) : null;
   if (domain) return { id: domain, spec: DOMAINS[domain], basis: 'vacancy' };
   const family = roleFamily(input.vacancyTitle);
@@ -146,16 +167,20 @@ export function taskFromSpec(
   meta: Pick<SystemDesignTask, 'basis' | 'domain' | 'origin'>,
 ): SystemDesignTask {
   const description = input.description?.trim() ?? '';
-  const stack = description ? detectStack(description) : [];
+  const kind = trainingCase(input);
+  const stack = description && kind === 'system' ? detectStack(description) : [];
   const company = input.company?.trim() ? ` в «${input.company.trim()}»` : '';
   const stackLine = stack.length ? ` Используйте стек из вакансии: ${stack.join(', ')}.` : '';
   return {
     title: spec.title,
-    prompt: `Спроектируйте ${spec.service} для «${input.vacancyTitle}»${company}: ${spec.scope}.${stackLine} Начните с требований и ограничений.`,
+    prompt: `${VERB[kind]} ${spec.service} для «${input.vacancyTitle}»${company}: ${spec.scope}.${stackLine} Начните с ${kind === 'system' ? 'требований' : 'целей'} и ограничений.`,
     points: [...spec.points],
-    hint: `Начните с вопросов о нагрузке: ${spec.requirements}.`,
+    hint: kind === 'system'
+        ? `Начните с вопросов о нагрузке: ${spec.requirements}.`
+        : `Начните с вопросов: ${spec.requirements}.`,
     timeLimitMinutes: SYSTEM_DESIGN_TIME_LIMIT_MINUTES,
-    exampleAnswer: exampleAnswerFor(spec),
+    exampleAnswer: exampleAnswerFor(spec, kind),
+    caseKind: kind,
     stack,
     ...meta,
   };
@@ -163,10 +188,7 @@ export function taskFromSpec(
 
 /** Тема задачи для журнала и шаблона: область вакансии, иначе семья роли, иначе общая. */
 export function taskTopic(input: SystemDesignTaskInput): SystemDesignDomain {
-  const description = input.description?.trim() ?? '';
-  return (
-    (description ? detectDomain(description) : null) ?? roleFamily(input.vacancyTitle) ?? 'core_api'
-  );
+  return pickSpec(input, input.description?.trim() ?? '').id;
 }
 
 export function buildSystemDesignTask(input: SystemDesignTaskInput): SystemDesignTask {
