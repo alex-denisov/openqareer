@@ -10,6 +10,12 @@ vi.mock('../../../services/desktop/desktopBridge', async (original) => ({
   isTauriEnvironment: () => true,
 }));
 
+vi.stubGlobal('matchMedia', () => ({
+  matches: false,
+  addEventListener: () => undefined,
+  removeEventListener: () => undefined,
+}));
+
 const form = {
   questions: [{ id: 'q1', text: 'Почему мы?', required: true, kind: 'text' }],
   suggestions: [],

@@ -40,7 +40,7 @@ export function SearchState({ data, onStarted }: StartPanelProps) {
       <p className="li-err" role="alert">
         <Icon name="warn" />
         {repeat.error ?? uncheckedLine(failed)}
-        <Button variant="primary" size="sm" icon="repeat" busy={repeat.busy}
+        <Button size="sm" icon="repeat" busy={repeat.busy}
           onClick={() => void repeat.start(repeatIds(data))}>
           Повторить
         </Button>

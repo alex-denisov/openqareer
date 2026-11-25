@@ -1,5 +1,12 @@
 /* «Сегодня»: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* Д11: заголовок ленты, «Отметить всё» и шестерёнка на 390 — в один ряд. */
+  @media (max-width: 767px) {
+    .b640 .np-full > .list-head { flex-wrap: nowrap; gap: var(--career-space-1); }
+    .b640 .np-full > .list-head > h2 { white-space: nowrap; }
+    .b640 .np-full > .list-head > .btn { min-inline-size: 0; padding-inline: var(--career-space-2); white-space: normal; }
+    .b640 .np-full > .list-head > .icon-btn { flex: none; }
+  }
   @media (max-width: 767px) {
     /* Макет s04 на 390: ответы на вопрос над колонками — в нижней полосе над навигацией.
        «Нет» слева, «Верно» справа на полширины, «Не сейчас» строкой выше справа (B645-2). */
