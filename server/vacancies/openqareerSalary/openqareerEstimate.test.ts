@@ -90,6 +90,17 @@ describe('openqareerEstimate', () => {
     expect(result?.estimate).toMatchObject({ low: 3_600, high: 5_500, period: 'month' });
   });
 
+  it('a large sample of adverts stands alone, above any guide', () => {
+    const catalog = {
+      get: (key: string) =>
+        key === 'data|0|country|de'
+          ? ({ low: 2_000, high: 3_000, currency: 'EUR', period: 'month', sampleSize: 30 } as const)
+          : undefined,
+    };
+    const result = openqareerEstimate(query(), deps({ catalog }));
+    expect(result?.estimate).toMatchObject({ low: 1_800, high: 3_300 });
+  });
+
   it('moves a level inside the country by the measured ratio, two levels at most', () => {
     const lead = openqareerEstimate(query({ levelRank: 3 }), deps());
     expect(lead?.step).not.toBe('level');
@@ -107,9 +118,9 @@ describe('openqareerEstimate', () => {
     expect(openqareerEstimate(away, deps({ earning }))?.step).toBe('statistics');
     expect(openqareerEstimate(away, deps())?.step).toBe('world');
     expect(openqareerEstimate(query({ country: undefined }), deps())?.step).toBe('world');
-    expect(
-      openqareerEstimate(query({ country: undefined, functionCode: 'none' }), deps()),
-    ).toBeUndefined();
+    const unnamed = { functionCode: 'other' };
+    expect(openqareerEstimate(query({ country: undefined, ...unnamed }), deps())).toBeUndefined();
+    expect(openqareerEstimate(query(unnamed), deps({ earning }))?.step).toBe('statistics');
   });
 });
 

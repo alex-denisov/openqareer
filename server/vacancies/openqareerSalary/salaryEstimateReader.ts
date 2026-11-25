@@ -20,7 +20,12 @@ import {
   vacancyCountryHint,
   type CountryHintDeps,
 } from '../vacancyCountry/vacancyCountryHint';
-import { openqareerEstimate, type EstimateDeps, type EstimateResult } from './openqareerEstimate';
+import {
+  NO_FUNCTION,
+  openqareerEstimate,
+  type EstimateDeps,
+  type EstimateResult,
+} from './openqareerEstimate';
 
 export type EstimateCluster = Pick<VacancyCluster, 'canonicalTitle'> &
   Partial<
@@ -51,9 +56,10 @@ export function titleFunction(title: string, readTitle: ReadTitle) {
   if (byRules) return { functionCode: byRules, levelRank: rules.levelRank };
   const stored = readTitle(normalizeTitleKey(title));
   const functionCode = known(stored?.functions ?? []);
-  return functionCode
-    ? { functionCode, levelRank: rules.levelRank ?? stored?.levelRank ?? null }
-    : undefined;
+  return {
+    functionCode: functionCode ?? NO_FUNCTION,
+    levelRank: rules.levelRank ?? stored?.levelRank ?? null,
+  };
 }
 
 export function vacancyCountry(
@@ -85,7 +91,6 @@ export function estimateResult(
   hint: CountryHintDeps,
 ): EstimateResult | undefined {
   const title = titleFunction(cluster.canonicalTitle, readTitle);
-  if (!title) return undefined;
   return openqareerEstimate(
     {
       ...title,

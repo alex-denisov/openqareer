@@ -17,6 +17,8 @@ import {
   blendInputOf,
   blendSalary,
   PER_YEAR,
+  roundTo,
+  stepOf,
   type BlendInput,
   type BlendResult,
 } from '../salaryBenchmarks/blendSalaryBenchmarks';
@@ -63,13 +65,25 @@ interface Place {
 interface Candidate {
   readonly precision: BenchmarkPrecision;
   readonly inputs: readonly BlendInput[];
+  /** Объявлений каталога хватает, чтобы цифра стояла одна. */
+  readonly enough?: boolean;
 }
 
 const CATALOG_NAME = 'openqareer';
 const STATISTICS_NAME = 'open statistics';
+/** Обзоры агентств по России выше объявлений в 2–3 раза: от этой выборки верим объявлениям. */
+const ENOUGH_ADVERTS = 30;
 const MANAGER_RANK = 2;
 const VP_RANK = 3;
 const LEVELS = [0, 1, 2, 3, 4] as const;
+/** Функция не названа: остаётся средний заработок страны по всем занятиям. */
+export const NO_FUNCTION = 'other';
+
+/** Уровни от ближайшего к искомому. */
+const levelsFrom = (target: number): number[] =>
+  [...LEVELS].sort(
+    (left, right) => Math.abs(left - target) - Math.abs(right - target) || left - right,
+  );
 
 const monthly = (input: BlendInput): boolean => PER_YEAR[input.period] !== undefined;
 
@@ -104,8 +118,10 @@ function catalogCandidates(
 ): Candidate[] {
   const read = (basis: 'city' | 'country', name: string): Candidate[] => {
     const key = marketSalaryKey(query.functionCode, levelRank, basis, name);
-    const input = catalogInput(deps.catalog.get(key), deps.now);
-    return input ? [{ precision: catalogPrecision(basis), inputs: [input] }] : [];
+    const estimate = deps.catalog.get(key);
+    const input = catalogInput(estimate, deps.now);
+    const enough = (estimate?.sampleSize ?? 0) >= ENOUGH_ADVERTS;
+    return input ? [{ precision: catalogPrecision(basis), inputs: [input], enough }] : [];
   };
   return [
     ...(place.city ? read('city', marketSalaryCityPlace(place.country, place.city)) : []),
@@ -136,8 +152,10 @@ function sourceCandidate(
   return [{ precision: first.precision, inputs }];
 }
 
-/** Все цифры самой точной ступени. */
+/** Каталог с достаточной выборкой стоит один; иначе все цифры самой точной ступени. */
 function bestCandidate(candidates: readonly Candidate[]): Candidate | undefined {
+  const measured = candidates.find(({ enough }) => enough);
+  if (measured) return measured;
   const order = ({ precision }: Candidate) => BENCHMARK_PRECISIONS.indexOf(precision);
   const [best] = [...candidates].sort((left, right) => order(left) - order(right));
   return best
@@ -175,10 +193,8 @@ function levelStep(
   deps: EstimateDeps,
 ): EstimateResult | undefined {
   const target = query.levelRank ?? 0;
-  const levels = LEVELS.filter((level) => level !== target).sort(
-    (left, right) => Math.abs(left - target) - Math.abs(right - target) || left - right,
-  );
-  for (const level of levels) {
+  for (const level of levelsFrom(target)) {
+    if (level === target) continue;
     if (GULF_COUNTRIES.has(place.country) && (level === VP_RANK || target === VP_RANK)) continue;
     const ratio = levelRatio(deps.lookup.multipliers, query.functionCode, level, target);
     if (ratio === undefined) continue;
@@ -223,8 +239,17 @@ function statisticsStep(
 }
 
 function worldStep(query: EstimateQuery, deps: EstimateDeps): EstimateResult | undefined {
-  const result = deps.lookup.world(query.functionCode, query.levelRank ?? 0);
-  return result ? { ...result, step: 'world' } : undefined;
+  const target = query.levelRank ?? 0;
+  for (const level of levelsFrom(target)) {
+    const result = deps.lookup.world(query.functionCode, level);
+    const ratio = levelRatio(deps.lookup.multipliers, query.functionCode, level, target);
+    if (!result || ratio === undefined) continue;
+    const { low, high, ...estimate } = result.estimate;
+    const step = stepOf(low * ratio);
+    const range = { low: roundTo(low * ratio, step), high: roundTo(high * ratio, step) };
+    return { ...result, estimate: { ...estimate, ...range }, step: 'world' };
+  }
+  return undefined;
 }
 
 export function openqareerEstimate(
@@ -238,6 +263,7 @@ export function openqareerEstimate(
     city: marketSalaryCity(query.location),
     region: regionOfCountry(country),
   };
+  if (query.functionCode === NO_FUNCTION) return statisticsStep(query, place, deps);
   const direct = bestCandidate([
     ...catalogCandidates(query, query.levelRank, place, deps),
     ...sourceCandidate(query, query.levelRank, place, deps),
