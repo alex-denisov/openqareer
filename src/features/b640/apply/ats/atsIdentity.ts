@@ -1,4 +1,4 @@
-import { LAST, nameFact, whole } from '../../../../../shared/candidateName';
+import { nameFact, whole } from '../../../../../shared/candidateName';
 import type { AtsField } from './atsFormTypes';
 
 /** B787: поля о самом кандидате. Узнаются по разметке формы, затем по фиксированным подписям. */
@@ -17,7 +17,6 @@ export interface IdentityFacts {
 type Fact = keyof IdentityFacts;
 
 const LABELS: readonly (readonly [RegExp, Fact])[] = [
-  [LAST, 'lastName'],
   [
     whole(
       'e-?mail(?:[ -]?(?:address|adresse|adres|adress))?|correo(?: electrónico)?|adresse e-?mail|courriel|indirizzo e-?mail|posta elettronica|endereço de e-?mail|электронная почта|эл\\. почта|почта|адрес(?: электронной)? почты|email-?адрес|e-post(?:adress)?|sähköposti|adres e-?mail|електронна пошта',
