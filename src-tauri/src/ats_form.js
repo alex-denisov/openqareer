@@ -89,6 +89,7 @@
   // A trap for robots: the form itself asks to leave it empty.
   // Greenhouse mails a code after the press; only the candidate types it.
   var CODE_INPUTS = 'fieldset#email-verification input, input[id^="security-input-"]';
+  var CODE_CELLS = 'input[id^="security-input-"]';
   var LEAVE_BLANK = /leave (this|it)( field)? (blank|empty)/i;
   var CALLING_CODE = /calling code|country code|dial code|phone code/i;
   var CONTROLS =
@@ -500,6 +501,59 @@
     input.scrollIntoView({ block: 'center' });
     input.focus();
     return { state: 'shown' };
+  }
+
+  // Writes the code the candidate typed in the app; the press is a step of its own,
+  // once the board has taken the last sign.
+  function codeFill() {
+    window.__oqAtsCodeArmed = false;
+    if (!inPlace()) return { state: 'off_target' };
+    if (captcha()) return { state: 'captcha' };
+    var cells = visible(CODE_CELLS);
+    if (cells.length !== ARG.code.length) return { state: 'code_missing' };
+    cells.forEach(function (cell) {
+      setText(cell, '');
+    });
+    cells.forEach(function (cell, index) {
+      setText(cell, ARG.code.charAt(index));
+    });
+    var held = visible(CODE_CELLS)
+      .map(function (cell) {
+        return cell.value;
+      })
+      .join('');
+    if (held !== ARG.code) return { state: 'code_refused' };
+    window.__oqAtsCodeArmed = true;
+    return { state: 'filled' };
+  }
+  function codeButton() {
+    var form = findForm();
+    var buttons = form ? submitButtons(form) : [];
+    return buttons.length === 1 ? buttons[0] : null;
+  }
+  function isOff(button) {
+    return button.disabled || button.getAttribute('aria-disabled') === 'true';
+  }
+  function codeSubmit() {
+    if (!inPlace()) return { state: 'off_target' };
+    if (captcha()) return { state: 'captcha' };
+    if (!window.__oqAtsCodeArmed) return { state: 'code_missing' };
+    var button = codeButton();
+    if (!button) return { state: 'submit_ambiguous' };
+    if (isOff(button)) return { state: 'submit_disabled' };
+    window.__oqAtsCodeArmed = false;
+    button.click();
+    return { state: 'clicked' };
+  }
+  // The board clears its mark at the press and sets it again with a refusal; an
+  // expired code also turns the button off.
+  function codeAnswer() {
+    var marked = visible(CODE_CELLS).some(function (cell) {
+      return cell.getAttribute('aria-invalid') === 'true';
+    });
+    if (!marked) return 'pending';
+    var button = codeButton();
+    return button && isOff(button) ? 'code_expired' : 'code_wrong';
   }
 
   // The board's own number of the question: its open page names the same one.
@@ -1219,7 +1273,8 @@
     var form = findForm();
     if (sentPage() || thanked(form)) return { state: 'confirmed', path: location.pathname };
     if (captcha()) return { state: 'captcha' };
-    if (codeInput()) return { state: 'code' };
+    if (codeInput() && !(ARG && ARG.codeSent)) return { state: 'code' };
+    if (codeInput() && codeAnswer() !== 'pending') return { state: codeAnswer() };
     if (form) {
       // A mark older than the press is not the board's answer to it.
       var before = (ARG && ARG.invalidBefore) || [];
@@ -1241,6 +1296,8 @@
     moved: moved,
     submit: submit,
     show_code: showCode,
+    code_fill: codeFill,
+    code_submit: codeSubmit,
     outcome: outcome,
   };
   try {

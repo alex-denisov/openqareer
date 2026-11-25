@@ -5,6 +5,7 @@ import type { VacancySortDirection } from '../../shared/vacancySort';
 import { getCurrencyRates } from '../currency/cbrRates';
 import { estimateFor } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
+import { mapYielding } from '../vacancies/mapYielding';
 import { monthlyRubSalary } from '../vacancies/roleWageSalary';
 import type { RouteDeps } from './deps';
 
@@ -73,6 +74,17 @@ export function createMoneyReader(
     const { low, high, currency, period } = estimate;
     return monthRank({ from: low, to: high, currency, period }, rates);
   };
+}
+
+/** B803: `prepare` читает оценки порциями с уступкой event loop, порядок берёт готовые. */
+export function createPreparedMoney(deps: Parameters<typeof createMoneyReader>[0]) {
+  const read = createMoneyReader(deps);
+  let ranks: ReadonlyMap<string, MoneyRank> = new Map();
+  const money: MoneyReader = (item) => ranks.get(item.cluster.id) ?? read(item);
+  const prepare = async (items: readonly MatchedVacancyItem[]): Promise<void> => {
+    ranks = new Map(await mapYielding(items, (item) => [item.cluster.id, read(item)] as const));
+  };
+  return Object.assign(money, { prepare });
 }
 
 /** Группы «сумма → ставка → не указана» в обе стороны; внутри группы — по направлению. */

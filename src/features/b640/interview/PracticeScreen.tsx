@@ -6,9 +6,11 @@ import {
   type InterviewAnswerMode,
   type InterviewSessionView,
 } from '../../interview/interviewSimulatorApi';
+import type { TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
 import { Button, Icon, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
+import { TrainingUpgrade } from './TrainingUpgrade';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { useVoiceInput } from '../voice/useVoiceInput';
 import { loadPractice, startPractice, type PracticeLoad } from './data/practiceApi';
@@ -125,7 +127,11 @@ function useStart(load: Ready, onSession: (session: InterviewSessionView) => voi
   return { busy, error, start };
 }
 
-function StartError({ error }: { readonly error: string }) {
+function StartError({ error, quota }: {
+  readonly error: string;
+  readonly quota: TariffQuotaStatus | null;
+}) {
+  if (error === 'paywall' && quota?.upgradePlan) return null;
   if (error !== 'paywall') return <StatusLine state="err" text={error} />;
   return (
     <StatusLine
@@ -153,6 +159,9 @@ function TaskStep(props: {
   const mode = answerModeOf(chosen, voice);
   const started = useStart(load, props.onSession);
   const running = practiceChoice(load.session, load.response.id) === 'resume';
+  const { quota } = load;
+  const spent = quota !== null && (quota.remaining <= 0 || started.error === 'paywall');
+  const upgrade = spent ? quota.upgradePlan : null;
   return (
     <div className="col">
       <PracticeTask
@@ -162,6 +171,7 @@ function TaskStep(props: {
         voice={voice}
         quota={load.quota}
         busy={started.busy}
+        running={running}
         action={
           running ? (
             <div className="actions">
@@ -170,12 +180,14 @@ function TaskStep(props: {
                 Вернуться к ответу
               </Link>
             </div>
+          ) : upgrade ? (
+            <TrainingUpgrade planId={upgrade} />
           ) : null
         }
         onMode={setMode}
         onStart={() => void started.start(mode)}
       />
-      {started.error ? <StartError error={started.error} /> : null}
+      {started.error ? <StartError error={started.error} quota={load.quota} /> : null}
     </div>
   );
 }

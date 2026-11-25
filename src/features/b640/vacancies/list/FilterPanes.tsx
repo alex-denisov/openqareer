@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
-import { Icon } from '../../kit';
+import { Icon, Link } from '../../kit';
+import { conditionsPath } from '../../career/careerPaths';
 import { vacanciesWord } from '../format';
 import type { MoneyCurrency } from '../format';
 import { splitOptions, type FilterOption, type FilterOptions } from './filterOptions';
@@ -114,6 +115,15 @@ function DatePane({ filters, options, onChange }: PaneProps) {
   );
 }
 
+/** Порог денег кандидата живёт в условиях поиска. */
+function FloorLink() {
+  return (
+    <Link className="row-act vt-floor" to={conditionsPath()}>
+      Зарплата от — в условиях поиска
+    </Link>
+  );
+}
+
 function MoneyPane({ filters, currency, onChange, onCurrency }: PaneProps) {
   const id = useId();
   const [text, setText] = useState(filters.moneyFrom === null ? '' : String(filters.moneyFrom));
@@ -158,6 +168,7 @@ function MoneyPane({ filters, currency, onChange, onCurrency }: PaneProps) {
             </p>
           ) : null}
         </div>
+        <FloorLink />
       </div>
     </>
   );

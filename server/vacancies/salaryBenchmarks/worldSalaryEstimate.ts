@@ -6,11 +6,10 @@ import { convertAmount, type CurrencyRates } from '../../../shared/currencyRates
 import {
   blendInputOf,
   oneKind,
-  PER_YEAR,
-  roundTo,
-  stepOf,
+  SINGLE_SOURCE_SPREAD,
   type BlendResult,
 } from './blendSalaryBenchmarks';
+import { distinctRange, PER_YEAR, roundTo, stepOf } from './sourceRanges';
 import type { SalaryBenchmark } from './salaryBenchmark';
 
 const CURRENCY = 'USD';
@@ -69,6 +68,20 @@ function countryRanges(
   }));
 }
 
+/** Четверть ряда может попасть точно на страну: такая граница раздвигается, чужой цифры в ответе нет. */
+function hideCountryBounds(range: CountryRange, countries: readonly CountryRange[]): CountryRange {
+  const step = stepOf(range.low);
+  const bound = (side: 'low' | 'high', factor: number) => {
+    const value = roundTo(range[side], step);
+    const repeats = countries.some((country) => roundTo(country[side], step) === value);
+    return repeats ? roundTo(range[side] * factor, step) : value;
+  };
+  return {
+    low: bound('low', 1 - SINGLE_SOURCE_SPREAD),
+    high: bound('high', 1 + SINGLE_SOURCE_SPREAD),
+  };
+}
+
 export function worldSalaryEstimate(
   rows: readonly SalaryBenchmark[],
   query: { readonly functionCode: string; readonly levelRank: number | null },
@@ -92,11 +105,16 @@ export function worldSalaryEstimate(
     ranges.map((range) => range.high),
     HIGH_SHARE,
   );
-  const step = stepOf(low);
+  const range = distinctRange(
+    hideCountryBounds({ low, high }, ranges),
+    { currency: CURRENCY, period: 'month' },
+    kept.flatMap((row) => blendInputOf(row) ?? []),
+    rates,
+  );
+  if (!range) return undefined;
   return {
     estimate: {
-      low: roundTo(low, step),
-      high: roundTo(high, step),
+      ...range,
       currency: CURRENCY,
       period: 'month',
       tax: kept.find(({ tax }) => tax !== 'unknown')?.tax ?? 'unknown',

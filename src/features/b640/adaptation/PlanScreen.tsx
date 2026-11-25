@@ -17,13 +17,15 @@ import {
   PROGRESS_TAG,
   stageSub,
   stageTitle,
-  STEP_TAG,
   STEP_TITLE,
   stepSub,
+  stepTag,
   taskWhen,
 } from './adaptationModel';
 import { AddTaskDialog } from './AddTaskDialog';
 import { AdaptationGate, type AdaptationActions } from './AdaptationGate';
+import { getDay30 } from './checkpointsApi';
+import { useCheckpoint } from './useCheckpoint';
 import type { AdaptationData } from './useAdaptation';
 
 /** Узел экрана шага; шаг без готового экрана в списке не показывается. */
@@ -81,18 +83,20 @@ function Stage({ stage, onToggle }: {
 }
 
 function Steps({ data }: { readonly data: AdaptationData }) {
+  const day30 = useCheckpoint(data.workplace.id, getDay30).data;
+  const check = day30.state === 'ready' ? day30.value : null;
   const shown = data.view.steps.filter((step) => STEP_NODE[step.id]);
   return (
     <section className="mod" aria-labelledby="pl-subs">
       <h3 className="mod-title" id="pl-subs">Адаптация по шагам</h3>
       <ul className="rows">
         {shown.map((step) => {
-          const [tone, text] = STEP_TAG[step.status];
+          const [tone, text] = stepTag(step, check);
           return (
             <li className="row" key={step.id}>
               <div>
                 <Link className="row-title" to={buildNodePath(STEP_NODE[step.id]!)}>{STEP_TITLE[step.id]}</Link>
-                <div className="row-sub">{stepSub(step, data.view, data.people)}</div>
+                <div className="row-sub">{stepSub(step, data.view, data.people, check)}</div>
               </div>
               <span className={`tag ${tone}`.trim()}>{text}</span>
             </li>

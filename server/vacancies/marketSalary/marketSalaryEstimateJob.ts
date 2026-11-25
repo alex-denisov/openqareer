@@ -15,9 +15,6 @@ import {
   type MarketSalaryEstimate,
   type MarketSalaryPeriod,
 } from '../../../shared/marketSalaryEstimate';
-import type { CurrencyRates } from '../../../shared/currencyRates';
-import { salaryPeriodOf } from '../../../shared/monthlyRubSalary';
-import { readCurrencyRates } from '../../currency/cbrRates';
 import { marketSalaryCityPlace, marketSalaryCountry } from './marketSalaryCountry';
 
 export const MARKET_SALARY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS market_salary_estimates (
@@ -84,30 +81,23 @@ const SLICE_SQL = `SELECT s.function_code, s.level_rank, c.salary_from, c.salary
   CROSS JOIN vacancy_semantic s ON s.id = c.id
   WHERE c.salary_from IS NOT NULL OR c.salary_to IS NOT NULL`;
 
-/** Валюта и период суммы; почасовая и неизвестного периода в оценку не входит. */
-function unitOf(row: SalariedRow, rates: CurrencyRates | undefined): string | undefined {
+/**
+ * Валюта и период суммы. Период назвала площадка; без него в оценку входят только рубли (месяц):
+ * в иностранной ленте по сумме не отличить час, месяц и год.
+ */
+function unitOf(row: SalariedRow): string | undefined {
   const code = row.currency?.trim().toUpperCase();
   if (!code) return undefined;
   // hh пишет RUR, остальные RUB: одна валюта — одна группа.
   const currency = code === 'RUB' ? 'RUR' : code;
-  // Без курсов сумму без периода не отличить: 90 000 EUR — год, 800 000 KZT — месяц.
-  if (!row.period && currency !== 'RUR' && !rates) return undefined;
-  const period = salaryPeriodOf(
-    {
-      from: row.salary_from ?? undefined,
-      to: row.salary_to ?? undefined,
-      currency,
-      period: row.period ?? undefined,
-    },
-    rates,
-  );
+  const period = row.period || (currency === 'RUR' ? 'month' : undefined);
   return period === 'month' || period === 'year' ? `${currency}|${period}` : undefined;
 }
 
-function addRow(groups: Groups, row: SalariedRow, rates: CurrencyRates | undefined): void {
+function addRow(groups: Groups, row: SalariedRow): void {
   const midpoint = salaryMidpoint({ from: row.salary_from, to: row.salary_to });
   if (midpoint === undefined) return;
-  const unit = unitOf(row, rates);
+  const unit = unitOf(row);
   const country = marketSalaryCountry(row.location);
   if (!unit || !country) return;
   const city = marketSalaryCity(row.location);
@@ -135,7 +125,6 @@ export async function computeMarketSalaryEstimates(
   const pause =
     options.pause ?? (() => new Promise<void>((done) => setTimeout(done, SLICE_PAUSE_MS)));
   const statement = database.prepare(SLICE_SQL);
-  const rates = readCurrencyRates(database);
   const groups: Groups = new Map();
   const { last } = database
     .prepare('SELECT coalesce(max(rowid), 0) AS last FROM vacancy_cluster_input')
@@ -143,7 +132,7 @@ export async function computeMarketSalaryEstimates(
   for (let from = 0; from < last; from += sliceRows) {
     if (from > 0) await pause();
     const rows = statement.all(from, from + sliceRows) as unknown as SalariedRow[];
-    for (const row of rows) addRow(groups, row, rates);
+    for (const row of rows) addRow(groups, row);
   }
   const estimates = new Map<string, MarketSalaryEstimate>();
   for (const [key, byUnit] of groups) {

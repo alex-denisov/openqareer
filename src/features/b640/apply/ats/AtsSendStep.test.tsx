@@ -12,6 +12,7 @@ const desktop = vi.hoisted(() => ({
   nextAtsStep: vi.fn(),
   fillAtsForm: vi.fn(),
   submitAtsForm: vi.fn(),
+  sendAtsCode: vi.fn(),
   readAtsAttempt: vi.fn(),
   readAtsOutcome: vi.fn(),
   showAtsForm: vi.fn(),
@@ -105,6 +106,14 @@ function Screen() {
   );
 }
 
+async function setValue(input: HTMLInputElement, value: string) {
+  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+  await act(async () => {
+    set.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 let view: Mounted | null = null;
 const settle = () => act(async () => void (await new Promise((done) => setTimeout(done, 0))));
 const text = () => document.body.textContent ?? '';
@@ -183,30 +192,123 @@ describe('«Отправка» формы работодателя', () => {
     startedAtMs: 1,
     consentIds: ['c1'],
   };
-  const tick = async (ms: number) => {
-    await act(async () => void (await new Promise((done) => setTimeout(done, ms))));
-  };
 
-  it('код на почте: окно формы открывает кандидат, подтверждение даёт квитанцию', async () => {
+  const CODE = 'aB3dE9x0';
+  const field = () => document.querySelector<HTMLInputElement>('.ap-code input');
+  async function asked() {
     desktop.submitAtsForm.mockResolvedValue(code);
     desktop.readAtsOutcome.mockResolvedValue(code);
     await open();
     await send();
+  }
+  async function enter(value = CODE) {
+    await setValue(field()!, value);
+    await send();
+  }
+
+  it('код на почте: вводится в приложении, подтверждение даёт квитанцию', async () => {
+    await asked();
     expect(text()).toContain('На почту пришёл код');
-    expect(text()).not.toContain('не подтвер');
-    expect(button('Отправить отклик')).toBeUndefined();
-    expect(desktop.showAtsForm).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(field());
+    expect(field()!.labels?.[0]?.textContent).toBe('Код');
+    expect(button('Ввести код')).toBeUndefined();
+    expect(button('Открыть форму')).toBeUndefined();
+    expect(button('Отправить отклик')!.disabled).toBe(true);
     expect(journal.result).not.toHaveBeenCalled();
-    await click(button('Ввести код')!);
-    expect(desktop.showAtsForm).toHaveBeenCalledWith('v1');
+    const logs = (['log', 'warn', 'error', 'info', 'debug'] as const).map((name) =>
+      vi.spyOn(console, name).mockImplementation(() => undefined),
+    );
     desktop.readAtsAttempt.mockResolvedValue({ ...past, result: 'sent' });
-    desktop.readAtsOutcome.mockResolvedValue({ ...receipt, pressedAtMs: null });
-    await tick(3200);
-    expect(text()).toContain('Отклик отправлен');
-    expect(text()).toContain(`· ${HOST}`);
+    desktop.sendAtsCode.mockResolvedValue(receipt);
+    await enter(' aB3d-E9x0\n');
+    expect(desktop.sendAtsCode).toHaveBeenCalledWith('v1', CODE);
+    expect(text()).toContain(`Отправлено 25.11, 14:32 · ${HOST}`);
     expect(onSent).toHaveBeenCalledTimes(1);
     expect(journal.result).toHaveBeenCalledWith('c1', 'sent');
     expect(desktop.submitAtsForm).toHaveBeenCalledTimes(1);
+    expect(desktop.showAtsForm).not.toHaveBeenCalled();
+    const spoken = JSON.stringify([
+      ...logs.flatMap((log) => log.mock.calls),
+      ...journal.record.mock.calls,
+      ...journal.result.mock.calls,
+      ...onSent.mock.calls,
+      Object.entries(localStorage),
+      Object.entries(sessionStorage),
+    ]);
+    expect(spoken).not.toContain(CODE);
+    expect(document.body.innerHTML).not.toContain(CODE);
+    logs.forEach((log) => log.mockRestore());
+  });
+
+  it('двойное нажатие — код уходит один раз', async () => {
+    await asked();
+    let answer = (_: unknown) => undefined as void;
+    desktop.sendAtsCode.mockReturnValue(new Promise((done) => (answer = done)));
+    await setValue(field()!, CODE);
+    const press = button('Отправить отклик')!;
+    await act(async () => {
+      press.click();
+      press.click();
+    });
+    await click(button('Отправить отклик')!);
+    expect(desktop.sendAtsCode).toHaveBeenCalledTimes(1);
+    expect(text()).toContain(`Ждём ответа ${HOST}`);
+    await act(async () => answer(receipt));
+    await settle();
+    expect(onSent).toHaveBeenCalledTimes(1);
+  });
+
+  it('неверный код: ошибка у поля, ввод снова без нового отклика', async () => {
+    await asked();
+    desktop.sendAtsCode.mockResolvedValueOnce({ ...code, reason: 'code_wrong' });
+    await enter();
+    expect(field()!.getAttribute('aria-invalid')).toBe('true');
+    expect(document.getElementById(field()!.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'Неверный код',
+    );
+    expect(document.activeElement).toBe(field());
+    desktop.sendAtsCode.mockResolvedValueOnce(receipt);
+    await enter('zzzz1111');
+    expect(text()).toContain('Отправлено');
+    expect(desktop.submitAtsForm).toHaveBeenCalledTimes(1);
+    expect(desktop.sendAtsCode).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['истёк', { ...receipt, outcome: 'unconfirmed', reason: 'code_expired' }],
+    ['окно закрыто', null],
+  ])('код %s: «Отправить снова» с подтверждением', async (_, answer) => {
+    await asked();
+    if (answer) desktop.sendAtsCode.mockResolvedValue(answer);
+    else desktop.sendAtsCode.mockRejectedValue('form_not_open');
+    desktop.readAtsOutcome.mockRejectedValue('form_not_open');
+    await enter();
+    await settle();
+    expect(field()).toBeNull();
+    expect(button('Отправить снова')).toBeDefined();
+    expect(button('Открыть форму')).toBeUndefined();
+    expect(desktop.releaseAtsAttempt).not.toHaveBeenCalled();
+  });
+
+  it('нет ответа на код: «не подтверждён», без повтора', async () => {
+    await asked();
+    desktop.sendAtsCode.mockResolvedValue({ ...receipt, outcome: 'unconfirmed' });
+    await enter();
+    expect(text()).toContain('не подтвердил отклик');
+    expect(button('Открыть форму')).toBeDefined();
+    expect(desktop.sendAtsCode).toHaveBeenCalledTimes(1);
+  });
+
+  it('кнопка формы не нажата: ошибка у поля', async () => {
+    await asked();
+    desktop.sendAtsCode.mockResolvedValue({
+      ...receipt,
+      outcome: 'not_submitted',
+      reason: 'submit_disabled',
+      pressedAtMs: null,
+    });
+    await enter();
+    expect(text()).toContain('Код не отправлен. Повторите.');
   });
 
   it('код ещё не введён: уход с экрана окно не закрывает, возврат его находит', async () => {
@@ -218,7 +320,7 @@ describe('«Отправка» формы работодателя', () => {
     expect(desktop.closeAtsForm).not.toHaveBeenCalled();
     desktop.readAtsAttempt.mockResolvedValue({ ...past, result: 'failed' });
     await open();
-    expect(button('Ввести код')).toBeDefined();
+    expect(field()).not.toBeNull();
     expect(desktop.openAtsForm).toHaveBeenCalledTimes(1);
     expect(journal.result).not.toHaveBeenCalled();
   });

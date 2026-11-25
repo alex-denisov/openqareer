@@ -126,4 +126,22 @@ describe('v10: компании подборки', () => {
     expect(api.getCandidateCompanyPage).toHaveBeenLastCalledWith(expect.objectContaining({ relocation: false }));
     view.unmount();
   });
+
+  it('B801: с релокацией пусто из-за поиска — не пишем, что компаний с релокацией нет', async () => {
+    vi.mocked(api.getCandidateCompanyPage)
+      .mockResolvedValueOnce(page([company('a'.repeat(24), 'Ладога Банк')], 1, 9))
+      .mockResolvedValue(page([], 0, 9));
+    const view = mount(<CompanyListScreen />);
+    await flush();
+    click([...view.container.querySelectorAll('.chip')].find((button) => button.textContent?.startsWith('Релокация'))!);
+    await flush();
+    const search = view.container.querySelector<HTMLInputElement>('#co-q')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'zzqq');
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(view.container.querySelector('.vl-empty-t')!.textContent).toBe('Таких компаний в подборке нет');
+    expect(view.container.querySelector('.vl-empty a')).toBeNull();
+    view.unmount();
+  });
 });

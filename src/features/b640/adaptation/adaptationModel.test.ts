@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CareerDiaryAdaptationStageView, CareerDiaryAdaptationStepView } from '../../../../shared/careerDiaryCards';
-import { addDays, PROGRESS_TAG, STEP_TAG, dayHeading, peopleCount, dayLabel, probationLine, rangeLabel, stageForDate, stepSub } from './adaptationModel';
+import { addDays, PROGRESS_TAG, STEP_TAG, dayHeading, peopleCount, dayLabel, probationLine, rangeLabel, stageForDate, stepSub, stepTag } from './adaptationModel';
 
 const stage = (over: Partial<CareerDiaryAdaptationStageView>): CareerDiaryAdaptationStageView => ({
   stage: 'days_31_60',
@@ -34,6 +34,21 @@ describe('даты', () => {
     expect(stageForDate('2026-12-01', '2026-12-30')).toBe('days_1_30');
     expect(stageForDate('2026-12-01', '2027-01-08')).toBe('days_31_60');
     expect(stageForDate('2026-12-01', '2027-02-20')).toBe('days_61_90');
+  });
+});
+
+describe('B801: проверка на 30-й день в списке шагов', () => {
+  const check = { workplaceId: 'w', dueOn: '2026-12-30', facts: [], signal: { area: 'plan' as const, text: 'x' }, letter: '', sentOn: null };
+  const step = (status: 'active' | 'ahead') => ({ id: 'day_30_check' as const, groups: [], tasksTotal: 0, tasksDone: 0, status });
+  const details = { firstMeeting: null, relocated: null };
+
+  it('сигнал виден датой и меткой; до срока и без сигнала — обычная метка', () => {
+    expect(stepSub(step('active'), details, null, check)).toBe('30 декабря · 1 сигнал');
+    expect(stepTag(step('active'), check)).toEqual(['part', 'есть сигнал']);
+    expect(stepSub(step('ahead'), details, null, check)).toBe('30 декабря');
+    expect(stepTag(step('ahead'), check)).toEqual(['miss', 'впереди']);
+    expect(stepTag(step('active'), { ...check, signal: null })).toEqual(['part', 'идёт']);
+    expect(stepTag(step('active'), null)).toEqual(['part', 'идёт']);
   });
 });
 

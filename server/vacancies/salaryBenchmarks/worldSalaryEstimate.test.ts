@@ -43,7 +43,7 @@ describe('worldSalaryEstimate', () => {
   it('spans the countries in monthly dollars and is low confidence', () => {
     expect(world(three)).toEqual({
       estimate: {
-        low: 4_000,
+        low: 3_600,
         high: 10_500,
         currency: 'USD',
         period: 'month',
@@ -71,7 +71,14 @@ describe('worldSalaryEstimate', () => {
 
   it('divides a year by twelve and skips a currency without a rate', () => {
     const yearly = row('DE', 48_000, { period: 'year' });
-    expect(world([yearly, ...three.slice(1)])?.estimate.low).toBe(4_000);
+    expect(world([yearly, ...three.slice(1)])?.estimate.low).toBe(3_600);
     expect(world([...three.slice(0, 2), row('JP', 1, { currency: 'JPY' })])).toBeUndefined();
+  });
+
+  it('five countries: a bound is never the figure of one country', () => {
+    const five = ['DE', 'US', 'FR', 'GB', 'IT'].map((code, at) => row(code, (at + 1) * 2_000));
+    const estimate = world(five)!.estimate;
+    expect(five.map(({ low }) => low)).not.toContain(estimate.low);
+    expect(five.map(({ high }) => high)).not.toContain(estimate.high);
   });
 });

@@ -5,9 +5,12 @@
  */
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
+import { readCurrencyRates } from '../../currency/cbrRates';
+import { ROLLUP_TABLES_SQL, writeRollups } from './benchmarkRollups';
+import { PRICE_TABLE_SQL, pricesOf } from './priceIndex';
 import {
   plausible,
-  salaryBenchmarkSchema,
+  readableBenchmark,
   salarySliceSchema,
   type SalaryBenchmark,
   type SalarySlice,
@@ -48,7 +51,9 @@ CREATE TABLE IF NOT EXISTS salary_benchmarks (
 CREATE INDEX IF NOT EXISTS salary_benchmarks_place ON salary_benchmarks(place);
 CREATE TABLE IF NOT EXISTS salary_benchmarks_version (
   id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL
-) STRICT`;
+) STRICT;
+${ROLLUP_TABLES_SQL};
+${PRICE_TABLE_SQL}`;
 
 const CURRENT_SQL = `SELECT r.row_json FROM salary_sources s
   JOIN salary_records r ON r.slice_id = (
@@ -59,6 +64,8 @@ const CURRENT_SQL = `SELECT r.row_json FROM salary_sources s
 
 const placeKey = (row: SalaryBenchmark): string =>
   row.country ? `country:${row.country}` : `region:${row.region}`;
+
+const recordKey = (row: SalaryBenchmark): string => `${row.sourceName}|${row.id}`;
 
 function inTransaction<Result>(database: DatabaseSync, work: () => Result): Result {
   database.exec('BEGIN IMMEDIATE');
@@ -105,15 +112,6 @@ function insertRecords(database: DatabaseSync, sliceId: number, rows: readonly S
     );
 }
 
-function readable({ row_json }: { readonly row_json: string }): SalaryBenchmark[] {
-  try {
-    const parsed = salaryBenchmarkSchema.safeParse(JSON.parse(row_json));
-    return parsed.success ? [parsed.data] : [];
-  } catch {
-    return [];
-  }
-}
-
 interface Published {
   /** Строк в подборе из срезов. */
   readonly published: number;
@@ -124,16 +122,16 @@ interface Published {
 /** Пересборка подбора из последних срезов. Строки источника без единого среза остаются. */
 function publish(database: DatabaseSync): Published {
   const texts = database.prepare(CURRENT_SQL).all() as { row_json: string }[];
-  const records = texts.flatMap(readable);
-  const rows = records.flatMap(plausible);
+  const records = texts.flatMap(readableBenchmark);
+  const rows = records.flatMap(plausible).map(pricesOf(database));
   database.exec(`DELETE FROM salary_benchmarks WHERE json_extract(row_json, '$.sourceName') IN (
     SELECT s.name FROM salary_sources s
     WHERE s.enabled = 0 OR EXISTS (SELECT 1 FROM salary_slices WHERE source = s.name))`);
   const insert = database.prepare(
     'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
   );
-  for (const row of rows)
-    insert.run(`${row.sourceName}|${row.id}`, placeKey(row), JSON.stringify(row));
+  for (const row of rows) insert.run(recordKey(row), placeKey(row), JSON.stringify(row));
+  writeRollups(database, rows, placeKey, readCurrencyRates(database), new Date());
   database.exec(
     `INSERT INTO salary_benchmarks_version VALUES (1, 1)
       ON CONFLICT (id) DO UPDATE SET version = version + 1`,
@@ -223,6 +221,12 @@ export function writeSalarySlice(database: DatabaseSync, input: unknown): Writte
     if (skipped && !switchedOff) return { written: 0 };
     return { written: skipped ? 0 : benchmarks.length, ...publish(database) };
   });
+}
+
+/** Пересборка без нового среза: изменились цены, курсы или правила. */
+export function rebuildSalaryBenchmarks(database: DatabaseSync): Published {
+  database.exec(TABLES_SQL);
+  return inTransaction(database, () => publish(database));
 }
 
 /**
@@ -317,9 +321,7 @@ export function createSalaryBenchmarkReader(database: DatabaseSync): SalaryBench
     const read = (place: string): readonly SalaryBenchmark[] => {
       const known = cache.places.get(place);
       if (known) return known;
-      const rows = (ready.rows.all(place) as { row_json: string }[]).map((row) =>
-        salaryBenchmarkSchema.parse(JSON.parse(row.row_json)),
-      );
+      const rows = (ready.rows.all(place) as { row_json: string }[]).flatMap(readableBenchmark);
       cache.places.set(place, rows);
       return rows;
     };

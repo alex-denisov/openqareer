@@ -65,6 +65,8 @@ import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleSitemapHealth } from './seo/sitemapHealth';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
+import { scheduleSalaryUpkeep } from './vacancies/openqareerSalary/salaryUpkeep';
+import { scheduleEmployerCountryJob } from './vacancies/vacancyCountry/employerCountryJob';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { scheduleSemanticCoverIndex } from './vacancies/semanticCoverIndex';
@@ -432,6 +434,10 @@ try {
   );
   // B546: market salary estimates stream every salaried vacancy, so only here.
   stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
+  // B803: страны работодателей и словарь городов для вакансий без названной страны.
+  stopJobs.push(scheduleEmployerCountryJob(semanticDatabase, log));
+  // B803: рост цен, пересборка, покрытие и свежесть оценок.
+  stopJobs.push(scheduleSalaryUpkeep(semanticDatabase, log));
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   stopJobs.push(scheduleRemoteScopeBackfill(semanticDatabase, log));
   // B803: открытая статистика заработков, раз в неделю.
