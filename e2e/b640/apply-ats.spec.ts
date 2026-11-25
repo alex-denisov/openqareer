@@ -30,7 +30,7 @@ const FIELDS = [
 
 interface Scenario {
   readonly inApp?: boolean;
-  readonly outcome?: 'confirmed' | 'unconfirmed';
+  readonly outcome?: 'confirmed' | 'unconfirmed' | 'code';
   readonly formState?: 'ready' | 'captcha';
   readonly mandate?: boolean;
   readonly channel?: 'lever' | 'site';
@@ -67,16 +67,22 @@ async function installApp(page: Page, scenario: Scenario): Promise<void> {
             request.entries.map(({ key, value, file }) => [key, file?.name ?? value]),
           ),
         }),
-        ats_form_submit: () => ({
-          outcome,
+        ats_form_outcome: () => receipt(outcome),
+        ats_form_submit: () => receipt(outcome),
+        ats_form_code: ({ request }: { request: { code: string } }) =>
+          request.code === 'aB3dE9x0' ? receipt('confirmed') : receipt('code'),
+      };
+      function receipt(result: string) {
+        return {
+          outcome: result,
           reason: null,
           host,
           path: '/grinkod/1/thanks',
           pressedAtMs: Date.now(),
           fieldKeys: [],
           invalidKeys: [],
-        }),
-      };
+        };
+      }
       state.__TAURI_INTERNALS__ = {
         invoke: async (command: string, args: never) => {
           if (command.startsWith('ats_form')) state.__ats.push({ command, args });
@@ -379,6 +385,37 @@ test.describe('B787: отклик на сайте работодателя в п
     await shot(page, 'unconfirmed', info.project.name);
     expect(calls).not.toContain('applied');
     expect(calls.some((call) => call.startsWith('queue'))).toBe(false);
+  });
+
+  test('код из письма вводится в приложении', async ({ page }, info) => {
+    await open(page, 'form', { outcome: 'code' });
+    await answerQuestion(page);
+    await withForm(page).first().click();
+    await send(page).click();
+    const field = page.getByLabel('Код', { exact: true });
+    await expect(field).toBeFocused();
+    await expect(page.getByRole('heading', { name: 'На почту пришёл код' })).toBeVisible();
+    for (const theme of ['light', 'dark'] as const) {
+      await page
+        .getByTestId('cabinet-b640')
+        .evaluate((cabinet, value) => cabinet.setAttribute('data-theme', value), theme);
+      await expectLayout(page);
+      await expectGates(page);
+      await shot(page, `code-${theme}`, info.project.name);
+    }
+    await field.fill('zzzz1111');
+    await field.press('Enter');
+    await expect(page.getByText('Неверный код')).toBeVisible();
+    await expect(field).toBeFocused();
+    await expectGates(page);
+    await shot(page, 'code-wrong', info.project.name);
+    await field.fill(' aB3d E9x0 ');
+    await expect(field).toHaveValue('aB3dE9x0');
+    await send(page).click();
+    await expect(page.getByText(new RegExp(`^Отправлено .* · ${HOST}$`, 'u'))).toBeVisible();
+    expect(await commands(page, 'ats_form_code')).toHaveLength(2);
+    expect(await commands(page, 'ats_form_submit')).toHaveLength(1);
+    expect(await commands(page, 'ats_form_show')).toHaveLength(0);
   });
 
   test('капча до нажатия: отклик в очереди, всё готово для копирования', async ({ page }) => {

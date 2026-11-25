@@ -8,10 +8,11 @@
 use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
 use crate::ats_model::{
-    attempt_result, decode, file_fields_of, form_report, is_id, kinds_of, listed, outcome_of,
-    path_code, press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill,
-    values_of, FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt,
-    ReleaseRequest, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+    attempt_result, code_outcome, decode, file_fields_of, form_report, is_id, kinds_of, listed,
+    outcome_of, path_code, press_refusal, rejected_fields, rejection_of, submit_refusal,
+    validate_code, validate_fill, values_of, CodeRequest, FileFields, FillReport, FillRequest,
+    FormReport, OpenRequest, Receipt, ReleaseRequest, SubmitRequest, Values, FILL_RESULTS,
+    MAX_CONSENTS,
 };
 use crate::ats_target::{
     is_confirmation, navigation_allowed, on_target, resolve, sent_base, thanks_in_place,
@@ -39,6 +40,7 @@ const READ_WAIT: Duration = Duration::from_secs(45);
 const STEADY_READS: usize = 3;
 const FILL_WAIT: Duration = Duration::from_secs(90);
 const OUTCOME_WAIT: Duration = Duration::from_secs(45);
+const CODE_BUTTON_WAIT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(500);
 const STORE_REMOVE_TRIES: u32 = 10;
 /// Keeps the form's cookies apart from the hh.ru and LinkedIn sessions.
@@ -55,6 +57,8 @@ pub(crate) struct Run {
     attempt: Option<Uuid>,
     /// The board asked for a mailed code: the app never presses this form again.
     code_asked: bool,
+    /// A typed code is on its way: a second one waits for its answer.
+    code_sending: bool,
     /// Fields the page had already marked when the button was pressed.
     invalid_before: Value,
     /// Whether the page already named a sent application before the press.
@@ -301,6 +305,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             kinds: BTreeMap::new(),
             attempt: None,
             code_asked: false,
+            code_sending: false,
             invalid_before: Value::Null,
             counted_before: Value::Null,
         });
@@ -439,6 +444,7 @@ async fn read_outcome(
     app: &AppHandle,
     target: &AtsTarget,
     wait: Duration,
+    code_sent: bool,
 ) -> (&'static str, Vec<String>) {
     let (invalid_before, counted_before) = app
         .state::<AtsFormState>()
@@ -457,11 +463,12 @@ async fn read_outcome(
         "sentBase": sent_base(target),
         "invalidBefore": invalid_before,
         "countedBefore": counted_before,
+        "codeSent": code_sent,
     });
     let last = poll(app, "outcome", &argument, wait, |value| {
         matches!(
             value["state"].as_str(),
-            Some("confirmed" | "invalid" | "captcha" | "code")
+            Some("confirmed" | "invalid" | "captcha" | "code" | "code_wrong" | "code_expired")
         )
     })
     .await
@@ -538,7 +545,7 @@ pub async fn submit_form(app: &AppHandle, request: SubmitRequest) -> Result<Rece
             run.counted_before = press["countedBefore"].clone();
         }
     }
-    let (read, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT).await;
+    let (read, invalid_keys) = read_outcome(app, &target, OUTCOME_WAIT, false).await;
     let outcome = if read == "rejected" {
         let after = page(app, "snapshot", &Value::Null).await.ok();
         rejection_of(
@@ -632,7 +639,7 @@ fn pressed_attempt(app: &AppHandle, vacancy_id: &str) -> Result<Uuid, String> {
 pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Receipt, String> {
     let target = current_target(app, vacancy_id)?;
     let attempt = pressed_attempt(app, vacancy_id)?;
-    let (outcome, invalid_keys) = read_outcome(app, &target, POLL).await;
+    let (outcome, invalid_keys) = read_outcome(app, &target, POLL, false).await;
     if outcome == "confirmed" {
         settle(app, attempt, outcome, None);
         note_outcome(app, "later_outcome", &target, outcome);
@@ -641,6 +648,104 @@ pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Rece
         invalid_keys,
         ..receipt(app, outcome, None, Vec::new())
     })
+}
+
+/// Takes the one place a typed code has; `false` — another is on its way.
+fn take_code_turn(app: &AppHandle) -> Result<bool, String> {
+    let state = app.state::<AtsFormState>();
+    let mut run = state.run.lock().map_err(|_| "form_state_unavailable")?;
+    let run = run.as_mut().ok_or("form_not_open")?;
+    if !run.code_asked {
+        return Err("code_not_asked".to_string());
+    }
+    Ok(!std::mem::replace(&mut run.code_sending, true))
+}
+
+fn end_code_turn(app: &AppHandle) {
+    if let Ok(mut run) = app.state::<AtsFormState>().run.lock() {
+        if let Some(run) = run.as_mut() {
+            run.code_sending = false;
+        }
+    }
+}
+
+/// The board turns its button on after the last sign of the code.
+async fn press_code(app: &AppHandle, target: &AtsTarget) -> Option<Value> {
+    let deadline = tokio::time::Instant::now() + CODE_BUTTON_WAIT;
+    loop {
+        // A lost answer may hide a press: it is never asked for again.
+        let press = page(app, "code_submit", &place_of(target)).await.ok()?;
+        let off = press["state"] == "submit_disabled";
+        if !off || tokio::time::Instant::now() >= deadline {
+            return Some(press);
+        }
+        tokio::time::sleep(POLL).await;
+    }
+}
+
+async fn send_code(
+    app: &AppHandle,
+    target: &AtsTarget,
+    attempt: Uuid,
+    code: &str,
+) -> Result<Receipt, String> {
+    // From here the application may leave, so the attempt blocks a new one.
+    with_attempts(app, |directory| {
+        let result = ats_attempts::AttemptResult::Unconfirmed;
+        ats_attempts::finish(directory, attempt, result, None)
+    })
+    .map_err(|_| "attempt_unrecorded")?;
+    let mut argument = place_of(target);
+    argument["code"] = Value::from(code);
+    let filled = page(app, "code_fill", &argument).await.ok();
+    drop(argument);
+    let press = match filled {
+        Some(filled) if filled["state"] == "filled" => press_code(app, target).await,
+        Some(refused) => Some(refused),
+        None => Some(json!({ "state": "code_refused" })),
+    };
+    if let Some(reason) = press_refusal(press.as_ref()).filter(|reason| *reason != "press_unknown")
+    {
+        settle(app, attempt, "not_submitted", None);
+        note(app, "code", reason);
+        let outcome = if reason == "captcha" {
+            "captcha"
+        } else {
+            "not_submitted"
+        };
+        return Ok(receipt(app, outcome, Some(reason), Vec::new()));
+    }
+    let pressed_at_ms = now_ms();
+    let (read, _) = read_outcome(app, target, OUTCOME_WAIT, true).await;
+    let (outcome, reason) = code_outcome(read);
+    settle(app, attempt, outcome, Some(pressed_at_ms));
+    note_outcome(app, "code", target, outcome);
+    let shown = Receipt {
+        pressed_at_ms: Some(pressed_at_ms),
+        ..receipt(app, outcome, reason, Vec::new())
+    };
+    // This form takes no other code: a new application starts from a new window.
+    if reason == Some("code_expired") {
+        close_form_window(app);
+    }
+    Ok(shown)
+}
+
+/// Carries the code the candidate typed in the app into the open form and presses
+/// its button once. Called only for the candidate's own press; the code is kept nowhere.
+pub async fn submit_code(app: &AppHandle, request: CodeRequest) -> Result<Receipt, String> {
+    validate_code(&request)?;
+    let attempt = pressed_attempt(app, &request.vacancy_id)?;
+    let target = current_target(app, &request.vacancy_id)?;
+    if !still_on_target(app, &target) {
+        return Err("off_target".to_string());
+    }
+    if !take_code_turn(app)? {
+        return Err("code_busy".to_string());
+    }
+    let sent = send_code(app, &target, attempt, &request.code).await;
+    end_code_turn(app);
+    sent
 }
 
 /// The candidate states that the earlier application did not leave. Refused while

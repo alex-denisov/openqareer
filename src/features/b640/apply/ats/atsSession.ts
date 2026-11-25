@@ -21,6 +21,8 @@ import type { AtsAddress } from './atsTarget';
 import type { AnswerDraft } from '../model/formModel';
 import type { ApprovedVacancyLetterResult } from '../../../vacancies/vacancyLetterApi';
 
+export type AtsCodeError = 'wrong' | 'failed';
+
 /** B787: форма работодателя в окне приложения — открыть, узнать прежний итог, отправить. */
 export type AtsApplyState =
   | { readonly kind: 'reading' }
@@ -32,9 +34,17 @@ export type AtsApplyState =
   | { readonly kind: 'sent'; readonly receipt: AtsConfirmation }
   /** `live` — окно формы открыто, и кандидат может закончить в нём сам. */
   | {
-      readonly kind: 'unconfirmed' | 'code' | 'captcha';
+      readonly kind: 'unconfirmed' | 'captcha';
       readonly host: string;
       readonly live: boolean;
+    }
+  /** Форма ждёт код из письма; `sending` — введённый код ушёл в форму. */
+  | {
+      readonly kind: 'code';
+      readonly host: string;
+      readonly live: true;
+      readonly sending?: boolean;
+      readonly error?: AtsCodeError;
     }
   | { readonly kind: 'refused'; readonly host: string }
   | { readonly kind: 'failed'; readonly rejected?: AtsObstacle }

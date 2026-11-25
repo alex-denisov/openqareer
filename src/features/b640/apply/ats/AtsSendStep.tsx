@@ -8,6 +8,7 @@ import type { ApplyStep } from '../model/applyModel';
 import { elapsedLabel } from '../hh/hhSendModel';
 import { useMarkSent } from '../hh/useMarkSent';
 import { AtsAgain } from './AtsAgain';
+import { AtsCode } from './AtsCode';
 import type { AtsConfirmation } from './atsFormTypes';
 import type { AtsObstacle } from './atsRun';
 import { isLive } from './useAtsWindow';
@@ -121,7 +122,7 @@ function Outcome({
         <StatusLine state="wait" text={`Ждём ответа ${host} · ${elapsedLabel(state.seconds)}`} />
       );
     case 'code':
-      return <StatusLine state="wait" text="На почту пришёл код" />;
+      return state.sending ? <StatusLine state="wait" text={`Ждём ответа ${state.host}`} /> : null;
     case 'captcha':
       return <StatusLine state="wait" text={`Проверка на ${state.host}`} />;
     case 'unconfirmed':
@@ -179,6 +180,32 @@ function OpenOnSite({ url }: { readonly url: string }) {
   );
 }
 
+/** Действия мимо формы: сама вакансия и отметка об отклике. */
+function OtherActions({
+  state,
+  url,
+  marking,
+}: {
+  readonly state: AtsApplyState;
+  readonly url: string | null;
+  readonly marking: ReturnType<typeof useMarkSent>;
+}) {
+  return (
+    <>
+      {url ? <OpenOnSite url={url} /> : null}
+      <Button
+        variant="quiet"
+        icon="checkc"
+        busy={marking.state.kind === 'busy'}
+        disabled={state.kind === 'sending' || (state.kind === 'code' && state.sending)}
+        onClick={marking.mark}
+      >
+        Я уже откликнулся
+      </Button>
+    </>
+  );
+}
+
 function SendActions({
   props,
   marking,
@@ -190,6 +217,13 @@ function SendActions({
   const { state, missing } = apply;
   const answerFirst = canSendAts(state.kind) && missing > 0;
   const noun = pluralRu(missing, ['вопрос', 'вопроса', 'вопросов']);
+  if (state.kind === 'code') {
+    return (
+      <AtsCode sending={state.sending === true} error={state.error} onSend={apply.sendCode}>
+        <OtherActions state={state} url={url} marking={marking} />
+      </AtsCode>
+    );
+  }
   return (
     <div className="actions">
       {answerFirst ? (
@@ -199,7 +233,7 @@ function SendActions({
       ) : null}
       {isLive(state) ? (
         <Button variant="primary" icon="out" onClick={apply.showForm}>
-          {state.kind === 'code' ? 'Ввести код' : 'Открыть форму'}
+          Открыть форму
         </Button>
       ) : null}
       {'live' in state || answerFirst ? null : (
@@ -213,16 +247,7 @@ function SendActions({
           Отправить отклик
         </Button>
       )}
-      {url ? <OpenOnSite url={url} /> : null}
-      <Button
-        variant="quiet"
-        icon="checkc"
-        busy={marking.state.kind === 'busy'}
-        disabled={state.kind === 'sending'}
-        onClick={marking.mark}
-      >
-        Я уже откликнулся
-      </Button>
+      <OtherActions state={state} url={url} marking={marking} />
     </div>
   );
 }
@@ -253,7 +278,7 @@ function Answers({ items }: Pick<AtsApplyControls, 'items'>) {
 const UNREAD: ReadonlySet<AtsApplyState['kind']> = new Set(['reading', 'read_failed']);
 
 function titleOf({ state, missing }: AtsApplyControls): string {
-  if (state.kind === 'code') return 'Введите код';
+  if (state.kind === 'code') return 'На почту пришёл код';
   if (state.kind === 'captcha') return 'Пройдите проверку';
   if (state.kind === 'unconfirmed') return 'Отклик не подтверждён';
   return missing > 0 ? 'Отправьте отклик' : 'Всё одобрено — можно отправлять';
