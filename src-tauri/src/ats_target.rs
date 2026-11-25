@@ -20,6 +20,8 @@ const GREENHOUSE_HOSTS: &[&str] = &["job-boards.greenhouse.io", "boards.greenhou
 const GREENHOUSE_EU_HOSTS: &[&str] = &["job-boards.eu.greenhouse.io", "boards.eu.greenhouse.io"];
 const TOKEN_MAX: usize = 80;
 const JOB_ID_MAX: usize = 20;
+/// Longer than `new`, `edit` and the other words that stand in this place.
+const APPLICATION_NAME_MIN: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AtsTarget {
@@ -195,6 +197,7 @@ pub fn on_target(target: &AtsTarget, url: &str) -> bool {
         return false;
     };
     is_confirmation(target, url)
+        || is_sent_page(target, url)
         || (within(next.path(), entry.path()) && same_identity(&entry, &next))
 }
 
@@ -223,12 +226,41 @@ pub fn thanks_paths(target: &AtsTarget) -> Vec<String> {
         .collect()
 }
 
+/// Teamtailor moves to the page of the sent application: the form's address
+/// with the application's own name in place of `new`.
+pub fn sent_base(target: &AtsTarget) -> Option<String> {
+    if target.adapter != "teamtailor" {
+        return None;
+    }
+    let entry = Url::parse(&target.entry_url).ok()?;
+    entry.path().strip_suffix("new").map(str::to_string)
+}
+
+fn is_sent_page(target: &AtsTarget, url: &str) -> bool {
+    let (Some(base), Some(next)) = (sent_base(target), on_target_host(target, url)) else {
+        return false;
+    };
+    next.path()
+        .trim_end_matches('/')
+        .strip_prefix(base.as_str())
+        .is_some_and(is_application_name)
+}
+
+fn is_application_name(value: &str) -> bool {
+    value.len() >= APPLICATION_NAME_MIN
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+}
+
+/// The address alone never confirms: the page must also show its own sign.
 pub fn thanks_in_place(target: &AtsTarget, url: &str) -> bool {
-    on_target_host(target, url).is_some_and(|next| {
-        thanks_paths(target)
-            .iter()
-            .any(|path| next.path().trim_end_matches('/') == path)
-    })
+    is_sent_page(target, url)
+        || on_target_host(target, url).is_some_and(|next| {
+            thanks_paths(target)
+                .iter()
+                .any(|path| next.path().trim_end_matches('/') == path)
+        })
 }
 
 #[cfg(test)]
@@ -483,6 +515,24 @@ mod tests {
             &target,
             "https://other.teamtailor.com/applications"
         ));
+    }
+
+    #[test]
+    fn the_page_of_the_sent_application_belongs_to_its_vacancy_only() {
+        let target = resolve("https://acme.teamtailor.com/jobs/8-x", None).unwrap();
+        let sent = "https://acme.teamtailor.com/jobs/8-x/applications/9f3c2a-71_bd";
+        assert!(navigation_allowed(&target, sent) && on_target(&target, sent));
+        assert!(thanks_in_place(&target, sent) && !is_confirmation(&target, sent));
+        for url in [
+            "https://acme.teamtailor.com/jobs/8-x/applications/edit",
+            "https://acme.teamtailor.com/jobs/8-x/applications/9f3c2a71/edit",
+            "https://acme.teamtailor.com/jobs/9-x/applications/9f3c2a71",
+            "https://other.teamtailor.com/jobs/8-x/applications/9f3c2a71",
+        ] {
+            assert!(!thanks_in_place(&target, url), "{url}");
+            assert!(!navigation_allowed(&target, url), "{url}");
+        }
+        assert_eq!(sent_base(&acme()), None);
     }
 
     #[test]
