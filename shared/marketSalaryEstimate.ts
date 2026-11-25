@@ -18,6 +18,9 @@ import { isCountryName } from './placeNames';
 export const MARKET_SALARY_MIN_SAMPLE = 5;
 /** Below this a stated amount is an hourly rate, not a monthly or yearly salary. */
 const MIN_PERIOD_SALARY = 1_000;
+const MONTHS = 12;
+/** Ниже — шаг сотня и знак после запятой: «€4,2–4,4 тыс.», не «€4–4 тыс.». */
+const DECIMAL_BELOW = 20_000;
 
 export interface MarketSalaryEstimate {
   /** Absent when the sample is below the minimum: no number is shown. */
@@ -64,6 +67,29 @@ function roundEstimate(value: number, step: number): number {
   return Math.round(value / step) * step;
 }
 
+function estimateStep(low: number, high: number): number {
+  if (low >= 50_000 && high >= 100_000) return 10_000;
+  return low >= DECIMAL_BELOW ? 1_000 : 100;
+}
+
+/**
+ * Колонка «Деньги» — в месяц (B765): годовая оценка делится на 12 один раз, на сервере, и все
+ * экраны, фильтр и порядок получают месячную сумму.
+ */
+export function monthlyMarketEstimate<T extends MarketSalaryEstimate>(estimate: T): T {
+  const { low, high, period } = estimate;
+  if (period !== 'year') return estimate;
+  if (low === undefined || high === undefined) return { ...estimate, period: 'month' };
+  const month = [low / MONTHS, high / MONTHS] as const;
+  const step = estimateStep(...month);
+  return {
+    ...estimate,
+    low: roundEstimate(month[0], step),
+    high: roundEstimate(month[1], step),
+    period: 'month',
+  };
+}
+
 export function estimateFromMidpoints(
   midpoints: readonly number[],
   currency: string,
@@ -76,8 +102,8 @@ export function estimateFromMidpoints(
   const p25 = quantile(sorted, 0.25);
   const p75 = quantile(sorted, 0.75);
   // Ten thousand is the step for monthly roubles and yearly dollars; a monthly
-  // euro salary of 6 000 would round to zero, so small amounts use a thousand.
-  const step = p25 >= 50_000 && p75 >= 100_000 ? 10_000 : 1_000;
+  // euro salary of 6 000 would round to zero, so small amounts use a smaller one.
+  const step = estimateStep(p25, p75);
   return { low: roundEstimate(p25, step), high: roundEstimate(p75, step), ...group };
 }
 
@@ -125,7 +151,8 @@ const CURRENCY_SIGN: Readonly<Record<string, string>> = {
 };
 
 function thousands(value: number): string {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(value / 1_000);
+  const maximumFractionDigits = value < DECIMAL_BELOW ? 1 : 0;
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits }).format(value / 1_000);
 }
 
 /** «≈ 480–560 тыс. ₽», «≈ $150–190 тыс.» */

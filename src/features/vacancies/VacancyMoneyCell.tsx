@@ -7,6 +7,11 @@ import { formatCompensationCompact } from './vacancyCompensation';
 
 type MarketSalary = NonNullable<MatchedVacancyItem['explanation']['marketSalary']>;
 
+/** Оценка — в месяц; годовая сумма вакансии называет период, чтобы их не сравнивали напрямую. */
+function statedMoney(salary: NonNullable<MatchedVacancyItem['cluster']['salary']>): string {
+  return `${formatCompensationCompact(salary)}${salary.period === 'year' ? ' в год' : ''}`;
+}
+
 /** 390 says «без зарплаты» in place of the wide value (mockup 390 list). */
 function NarrowMissing() {
   return <span className="vacancy-screen-money-narrow vacancy-screen-money-alt">без зарплаты</span>;
@@ -32,7 +37,7 @@ function StatedOrMissing({
   return (
     <>
       <span className="career-numeric vacancy-screen-money-value">
-        {formatCompensationCompact(item.cluster.salary)}
+        {statedMoney(item.cluster.salary)}
       </span>
       <span className="vacancy-screen-money-source">указана в вакансии · {sourceLine}</span>
     </>
@@ -126,7 +131,7 @@ export function vacancyMoneySummary(item: MatchedVacancyItem): {
   if (item.cluster.salary || !estimate) {
     return item.cluster.salary
       ? {
-          value: formatCompensationCompact(item.cluster.salary),
+          value: statedMoney(item.cluster.salary),
           note: 'Зарплата указана в вакансии',
           fromSource: true,
         }

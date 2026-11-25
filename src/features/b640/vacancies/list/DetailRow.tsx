@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
+import { formatMarketSalaryRange } from '../../../../../shared/marketSalaryEstimate';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
 import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
@@ -83,7 +84,7 @@ function moneyNote(item: MatchedVacancyItem): string {
   const market = marketRange(item);
   const base = item.cluster.salary ? 'Вилка — из текста вакансии.' : 'В вакансии зарплата не указана.';
   if (!market) return base;
-  const range = formatCompensationCompact({ from: market.low, to: market.high, currency: market.currency });
+  const range = formatMarketSalaryRange(market);
   const day = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(new Date(market.at));
   return `${base} Рынок по роли ${range} — ${market.sample} вакансий с зарплатой, ${day}.`;
 }

@@ -5,6 +5,7 @@
 import {
   marketSalaryCity,
   marketSalaryKey,
+  monthlyMarketEstimate,
   pickMarketSalaryEstimate,
   type MarketSalaryBasis,
   type MarketSalaryEstimateView,
@@ -48,7 +49,7 @@ export function estimateFor(
   const picked = pickMarketSalaryEstimate(cityEstimate, countryEstimate);
   if (!picked) return undefined;
   const source = picked.basis === 'city' ? cityEstimate : countryEstimate;
-  return { ...picked, computedAt: source?.computedAt ?? '' };
+  return { ...monthlyMarketEstimate(picked), computedAt: source?.computedAt ?? '' };
 }
 
 export function attachMarketSalaryEstimates(
