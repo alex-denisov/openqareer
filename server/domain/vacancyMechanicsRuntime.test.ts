@@ -589,7 +589,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     runtime.enqueue(source);
     await runtime.runNext(client);
     expect(runtime.view(source).state).toBe('ready');
-    const edited = { ...source, facts: [{ ...source.facts[0], statement: 'PRIVATE_OWNER_STATEMENT Go services' }] };
+    const edited = { ...source, facts: [{ ...source.facts[0], statement: `${source.facts[0].statement}, Go services` }] };
     const view = runtime.view(edited);
     expect(view.state).toBe('refreshing');
     expect(view.result?.coveragePercent).toBe(100);

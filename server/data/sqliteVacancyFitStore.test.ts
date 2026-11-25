@@ -130,11 +130,17 @@ describe('the last result after a profile edit (25.11)', () => {
     expect(store.getPreviousCache(edit(row, `${row.facts[0]!.statement}, Go`))?.coveragePercent).toBe(percent);
     database.close();
   });
-  it('keeps the verdicts whose quotes the edit removed, with a removed fact too', () => {
+  it('a deleted or corrected fact holds no percent', () => {
     const { database, store, row } = stored(100);
-    const percent = evaluateVacancyFit({ ...row, assessments: row.assessments!.slice(0, 2) }, now).coveragePercent;
-    expect(store.getPreviousCache(edit(row, 'Go services'))?.coveragePercent).toBe(percent);
-    expect(store.getPreviousCache({ ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2' }] })?.coveragePercent).toBe(percent);
+    const deleted = { ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2', statement: 'Go services' }] };
+    expect(store.getPreviousCache(edit(row, 'Go services'))?.coveragePercent).toBe(0);
+    expect(store.getPreviousCache(deleted)?.coveragePercent).toBe(0);
+    database.close();
+  });
+  it('a text that only moved to another id keeps its verdicts', () => {
+    const { database, store, row } = stored(100);
+    const moved = { ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2' }] };
+    expect(store.getPreviousCache(moved)?.coveragePercent).toBe(71);
     database.close();
   });
 });
