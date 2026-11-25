@@ -1,10 +1,11 @@
 import { pressApply } from '../../apply/applyIntent';
-import { useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
-import { Icon, Link } from '../../kit';
+import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { BarPart } from '../Bar';
 import { moneyView } from '../format';
@@ -120,6 +121,29 @@ function MoneyScale({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   );
 }
 
+/** v06b2: на 390 «Откликнуться» — в полосе страницы над навигацией, в строке остаётся «Открыть». */
+function RowActions({ vacancyId }: { vacancyId: string }) {
+  const mobile = useIsMobile();
+  const [page, setPage] = useState<Element | null>(null);
+  const findPage = useCallback((node: HTMLElement | null) => setPage(node?.closest('.page') ?? null), []);
+  const apply = (
+    <Link className="btn is-primary" to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
+      <Icon name="responses" />
+      Откликнуться
+    </Link>
+  );
+  const docked = mobile && page !== null;
+  return (
+    <div className="actions vd-actions vs-acts" ref={findPage}>
+      {docked ? createPortal(<ActionDock kind="auto" primary={apply} />, page) : apply}
+      <Link className="row-act vs-open" to={buildNodePath('v04', { vacancyId })} aria-label="Открыть полностью">
+        <Icon name="out" />
+        <span className="vs-open-t">Открыть полностью</span>
+      </Link>
+    </div>
+  );
+}
+
 export interface DetailRowProps {
   readonly item: MatchedVacancyItem;
   readonly env: RowEnv;
@@ -153,16 +177,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
               Знакомый: {friend}
             </p>
           ) : null}
-          <div className="actions vd-actions vs-acts">
-            <Link className="btn is-primary" to={buildNodePath('o02', { responseId: cluster.id })} onClick={() => pressApply(cluster.id)}>
-              <Icon name="responses" />
-              Откликнуться
-            </Link>
-            <Link className="row-act vs-open" to={buildNodePath('v04', { vacancyId: cluster.id })} aria-label="Открыть полностью">
-              <Icon name="out" />
-              <span className="vs-open-t">Открыть полностью</span>
-            </Link>
-          </div>
+          <RowActions vacancyId={cluster.id} />
         </section>
       </td>
     </tr>
