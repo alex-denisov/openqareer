@@ -62,10 +62,16 @@ export interface MatchedPoolOptions {
   readonly initialFilters?: VacanciesScreenState;
 }
 
+/** Чтение всей подборки начинает только с полной записи, чтение страницы — с последней (B770). */
+function cachedStart(provided: MatchedPool | undefined, options: MatchedPoolOptions) {
+  if (provided || options.initialFilters) return undefined;
+  return readCachedMatchedPool(options.pageLimit === undefined ? 'whole' : 'latest');
+}
+
 /** One cabin-wide read; the owner screen can retry the bounded page sequence. */
 export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptions = {}): MatchedPool {
   // B589: the last unfiltered selection renders at once on a repeat visit.
-  const [cached] = useState(() => (provided || options.initialFilters ? undefined : readCachedMatchedPool()));
+  const [cached] = useState(() => cachedStart(provided, options));
   const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
   const [initialFilters, setInitialFilters] = useState<VacanciesScreenState | undefined>(
     cached?.initialFilters,

@@ -206,17 +206,28 @@ pub fn is_confirmation(target: &AtsTarget, url: &str) -> bool {
         })
 }
 
-/// Where a board that thanks on the vacancy's own address does so.
-pub fn thanks_path(target: &AtsTarget) -> Option<String> {
-    (target.adapter == "bamboohr")
-        .then(|| Url::parse(&target.entry_url).ok())
-        .flatten()
-        .map(|url| url.path().trim_end_matches('/').to_string())
+/// Boards that thank on the form's own address; the page knows each one's sign.
+const THANKS_IN_PLACE: &[&str] = &["ashby", "workable", "teamtailor", "pinpoint", "bamboohr"];
+
+/// Where such a board thanks: the form's address or the one its button posts to.
+pub fn thanks_paths(target: &AtsTarget) -> Vec<String> {
+    if !THANKS_IN_PLACE.contains(&target.adapter) {
+        return Vec::new();
+    }
+    Url::parse(&target.entry_url)
+        .ok()
+        .map(|url| url.path().to_string())
+        .into_iter()
+        .chain(target.post_path.clone())
+        .map(|path| path.trim_end_matches('/').to_string())
+        .collect()
 }
 
 pub fn thanks_in_place(target: &AtsTarget, url: &str) -> bool {
-    thanks_path(target).is_some_and(|path| {
-        on_target_host(target, url).is_some_and(|next| next.path().trim_end_matches('/') == path)
+    on_target_host(target, url).is_some_and(|next| {
+        thanks_paths(target)
+            .iter()
+            .any(|path| next.path().trim_end_matches('/') == path)
     })
 }
 
@@ -463,6 +474,7 @@ mod tests {
         let post = "https://acme.teamtailor.com/applications";
         assert!(navigation_allowed(&target, post) && !on_target(&target, post));
         assert!(!is_confirmation(&target, post));
+        assert!(thanks_in_place(&target, post));
         assert!(!navigation_allowed(
             &target,
             "https://acme.teamtailor.com/applications/5"
