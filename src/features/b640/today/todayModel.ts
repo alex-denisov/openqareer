@@ -53,6 +53,10 @@ function actionFace(item: TodayQueueItem): ActionFace {
       : buildNodePath('s07');
     return { label: 'Открыть вакансию', shortLabel: 'Открыть', icon: 'vacancies', path };
   }
+  if (item.material === 'letter_draft' && item.applicationId) {
+    const path = buildNodePath('o02', { responseId: item.applicationId });
+    return { label: 'Проверить письмо', shortLabel: 'Проверить', icon: 'file', path };
+  }
   if (item.material === 'cover_letter' && item.applicationId) {
     const path = buildNodePath('o02', { responseId: item.applicationId });
     // Письмо одобрено (B717): кнопка ведёт к шагу отправки на странице письма.
