@@ -132,6 +132,14 @@ pub struct FillReport {
     pub values: Values,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReleaseRequest {
+    pub vacancy_id: String,
+    /// The candidate confirmed that the earlier application did not leave.
+    pub confirmed: bool,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Receipt {

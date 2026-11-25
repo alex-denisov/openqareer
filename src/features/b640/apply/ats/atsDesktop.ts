@@ -78,6 +78,13 @@ export function readAtsAttempt(vacancyId: string): Promise<AtsAttempt | null> {
   return invokeDesktopCommand<AtsAttempt | null>('ats_form_attempt', { vacancyId });
 }
 
+/** Прежний отклик не ушёл: вызывать только после подтверждения кандидата. */
+export function releaseAtsAttempt(vacancyId: string): Promise<void | null> {
+  return invokeDesktopCommand<void>('ats_form_release', {
+    request: { vacancyId, confirmed: true },
+  });
+}
+
 /** Стирает cookies и файлы форм работодателей, когда кандидат удаляет аккаунт. */
 export function eraseAtsForms(): Promise<void | null> {
   return invokeDesktopCommand<void>('ats_form_erase', {});

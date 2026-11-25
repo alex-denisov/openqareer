@@ -100,6 +100,7 @@ export async function priorAttempt(vacancyId: string): Promise<AtsApplyState | n
   if (seen?.outcome === 'code' && attempt.result !== 'sent')
     return { kind: 'code', host: seen.host, live: true };
   if (attempt.result === 'failed') return null;
+  if (attempt.result !== 'sent' && attempt.releasedAtMs !== undefined) return null;
   const host = URL.canParse(attempt.entryUrl) ? new URL(attempt.entryUrl).hostname : '';
   if (attempt.result !== 'sent') {
     const kind = seen?.outcome === 'captcha' ? 'captcha' : 'unconfirmed';

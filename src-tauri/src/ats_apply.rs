@@ -11,7 +11,7 @@ use crate::ats_model::{
     attempt_result, decode, file_fields_of, form_report, is_id, kinds_of, listed, outcome_of,
     path_code, press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill,
     values_of, FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt,
-    SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+    ReleaseRequest, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
     is_confirmation, navigation_allowed, on_target, resolve, sent_base, thanks_in_place,
@@ -597,6 +597,7 @@ fn begin_attempt(
             consent_ids: request.consent_ids.clone(),
             result: None,
             confirmation: None,
+            released_at_ms: None,
         };
         match ats_attempts::begin(directory, attempt) {
             Ok(()) => {}
@@ -640,6 +641,22 @@ pub async fn read_form_outcome(app: &AppHandle, vacancy_id: &str) -> Result<Rece
         invalid_keys,
         ..receipt(app, outcome, None, Vec::new())
     })
+}
+
+/// The candidate states that the earlier application did not leave. Refused while
+/// its window is open: there the outcome is read, not stated.
+pub fn release_attempt(app: &AppHandle, request: ReleaseRequest) -> Result<(), String> {
+    if !request.confirmed || !is_id(&request.vacancy_id) {
+        return Err("not_confirmed".to_string());
+    }
+    if pressed_attempt(app, &request.vacancy_id).is_ok() {
+        return Err("form_open".to_string());
+    }
+    with_attempts(app, |directory| {
+        ats_attempts::release(directory, &request.vacancy_id, now_ms())
+    })?;
+    note(app, "attempt", "released");
+    Ok(())
 }
 
 /// Puts the form window on screen. Called only for the candidate's own press.

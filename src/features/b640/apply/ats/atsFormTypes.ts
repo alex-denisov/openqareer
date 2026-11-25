@@ -107,6 +107,8 @@ export interface AtsAttempt {
   readonly startedAtMs: number;
   readonly consentIds: readonly string[];
   readonly result: 'sent' | 'failed' | 'unconfirmed' | null;
+  /** Кандидат подтвердил, что отклик не ушёл: повтор разрешён. */
+  readonly releasedAtMs?: number;
   /** Квитанция: где и когда доска подтвердила отклик. */
   readonly confirmation?: AtsConfirmation;
 }

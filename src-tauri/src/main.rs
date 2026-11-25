@@ -240,6 +240,17 @@ async fn ats_form_attempt(
     ats_apply::read_attempt(&app, &vacancy_id)
 }
 
+/// Lets the candidate send again after they confirm that nothing left.
+#[tauri::command]
+async fn ats_form_release(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::ReleaseRequest,
+) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::release_attempt(&app, request)
+}
+
 /// Removes the cookies and files of employer forms when the candidate leaves.
 #[tauri::command]
 async fn ats_form_erase(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
@@ -777,6 +788,7 @@ fn main() {
             ats_form_next,
             ats_form_submit,
             ats_form_outcome,
+            ats_form_release,
             ats_form_attempt,
             ats_form_erase,
             ats_form_show,

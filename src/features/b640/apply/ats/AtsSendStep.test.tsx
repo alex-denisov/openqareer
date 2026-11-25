@@ -15,6 +15,7 @@ const desktop = vi.hoisted(() => ({
   readAtsAttempt: vi.fn(),
   readAtsOutcome: vi.fn(),
   showAtsForm: vi.fn(),
+  releaseAtsAttempt: vi.fn(),
   closeAtsForm: vi.fn(),
 }));
 const journal = vi.hoisted(() => ({ record: vi.fn(), result: vi.fn() }));
@@ -233,6 +234,35 @@ describe('«Отправка» формы работодателя', () => {
     expect(button('Отправить отклик')).toBeUndefined();
     expect(button('Открыть форму')).toBeUndefined();
     expect(onSent).not.toHaveBeenCalled();
+  });
+
+  it('«Отправить снова» — только после подтверждения, одно новое нажатие', async () => {
+    const held = { ...past, result: 'unconfirmed' };
+    desktop.readAtsAttempt.mockResolvedValue(held);
+    desktop.releaseAtsAttempt.mockImplementation(async () => {
+      desktop.readAtsAttempt.mockResolvedValue({ ...held, releasedAtMs: 5 });
+    });
+    await open();
+    await click(button('Отправить снова')!);
+    await click(button('Отмена')!);
+    expect(desktop.releaseAtsAttempt).not.toHaveBeenCalled();
+    expect(desktop.openAtsForm).not.toHaveBeenCalled();
+    await click(button('Отправить снова')!);
+    await click(button('Не ушёл')!);
+    await settle();
+    await settle();
+    expect(desktop.releaseAtsAttempt).toHaveBeenCalledTimes(1);
+    expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+    await send();
+    expect(desktop.submitAtsForm).toHaveBeenCalledTimes(1);
+  });
+
+  it('отправленный отклик снова не отправить', async () => {
+    desktop.readAtsAttempt.mockResolvedValue({ ...past, result: 'sent', releasedAtMs: 5 });
+    await open();
+    expect(text()).toContain('Отправлено');
+    expect(button('Отправить снова')).toBeUndefined();
+    expect(button('Отправить отклик')).toBeUndefined();
   });
 
   it.each(['unconfirmed', 'captcha'] as const)(

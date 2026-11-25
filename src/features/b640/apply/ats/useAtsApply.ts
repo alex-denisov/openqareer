@@ -3,7 +3,7 @@ import type { ManualApplyReason } from '../../../../../shared/manualApply';
 import type { ApprovedVacancyLetterResult } from '../../../vacancies/vacancyLetterApi';
 import type { QuestionnaireState } from '../FormStep';
 import { answerOf, type AnswerDraft } from '../model/formModel';
-import { closeAtsForm } from './atsDesktop';
+import { closeAtsForm, releaseAtsAttempt } from './atsDesktop';
 import { askedFields, atsFormInput, isOffList, missingAnswers, questionIdOf } from './atsQuestions';
 import { allFields, isOffTarget, type AtsRunResult } from './atsRun';
 import {
@@ -65,6 +65,8 @@ export interface AtsApplyControls {
   readonly cancel: () => void;
   /** Окно формы на экран: код и отправку в нём делает кандидат. */
   readonly showForm: () => void;
+  /** Кандидат подтвердил, что прежний отклик не ушёл: форма читается заново. */
+  readonly again: () => Promise<void>;
 }
 
 const closeWindow = (): void => {
@@ -292,6 +294,10 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
     send,
     retry: () => void open(),
     showForm,
+    again: async () => {
+      await releaseAtsAttempt(input.vacancyId);
+      await open();
+    },
     cancel: () => setState((now) => (now.kind === 'mandate' ? { kind: 'ready' } : now)),
   };
 }

@@ -7,6 +7,7 @@ import { buildNodePath } from '../../routes';
 import type { ApplyStep } from '../model/applyModel';
 import { elapsedLabel } from '../hh/hhSendModel';
 import { useMarkSent } from '../hh/useMarkSent';
+import { AtsAgain } from './AtsAgain';
 import type { AtsConfirmation } from './atsFormTypes';
 import type { AtsObstacle } from './atsRun';
 import { isLive } from './useAtsWindow';
@@ -301,6 +302,9 @@ export function AtsSendStep(props: AtsSendStepProps) {
       ) : (
         <Outcome state={state} host={apply.host} path={path} onRetry={apply.retry} />
       )}
+      {state.kind === 'unconfirmed' && !state.live && !done ? (
+        <AtsAgain onAgain={apply.again} />
+      ) : null}
       {marking.state.kind === 'error' ? <StatusLine state="err" text={marking.state.text} /> : null}
       <MandateDialog apply={apply} />
     </section>
