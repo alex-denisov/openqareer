@@ -165,7 +165,7 @@ export async function mockLadoga(page: Page, options: LadogaOptions = {}): Promi
       recommendedId: 'r1',
     }),
   );
-  await page.route('**/api/v1/candidate/hh/resumes', (route) =>
+  await page.route('**/api/v1/candidate/hh/resumes*', (route) =>
     json(route, {
       resumes: [],
       selected: { id: 'r1', title: 'Руководитель разработки', text: '' },

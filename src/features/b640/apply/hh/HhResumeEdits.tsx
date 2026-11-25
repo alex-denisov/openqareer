@@ -79,6 +79,7 @@ function ApplyAction({ edit, state, busy, onApply }: { readonly edit: HhResumeEd
 }
 
 interface EditRowProps {
+  readonly canWrite: boolean;
   readonly edit: HhResumeEdit;
   /** Правка с выбранным вариантом текста: она и копируется, и применяется. */
   readonly shown: HhResumeEdit;
@@ -86,7 +87,7 @@ interface EditRowProps {
   readonly onShow: (edit: HhResumeEdit) => void;
 }
 
-function EditRow({ edit, shown, apply, onShow }: EditRowProps) {
+function EditRow({ canWrite, edit, shown, apply, onShow }: EditRowProps) {
   const state = apply.stateOf(edit.id);
   const variants = useHhEditVariants(edit, shown, onShow);
   // Текст, который уже переносится или перенесён на hh.ru, не меняем.
@@ -101,7 +102,9 @@ function EditRow({ edit, shown, apply, onShow }: EditRowProps) {
         <div className="hh2-acts">
           <CopyButton text={shown.now} />
           {edit.variantOf ? <HhEditVariantButton variants={variants} disabled={settled} /> : null}
-          <ApplyAction edit={shown} state={state} busy={variants.busy} onApply={() => void apply.apply(shown)} />
+          {canWrite ? (
+            <ApplyAction edit={shown} state={state} busy={variants.busy} onApply={() => void apply.apply(shown)} />
+          ) : null}
         </div>
       </div>
       <HhEditVariantError variants={variants} />
@@ -155,6 +158,7 @@ function ApplyAllDialog({
 }
 
 interface EditsTopProps {
+  readonly switcher: boolean;
   readonly resumeId: string;
   readonly resumeTitle: string;
   readonly busy: boolean;
@@ -163,17 +167,20 @@ interface EditsTopProps {
 }
 
 /** a01c: сверху выбранное резюме и «Применить все на hh.ru». */
-function EditsTop({ resumeId, resumeTitle, busy, onApplyAll }: EditsTopProps) {
+function EditsTop({ switcher, resumeId, resumeTitle, busy, onApplyAll }: EditsTopProps) {
   const switchName = useId();
+  if (!switcher && !onApplyAll) return null;
   return (
     <div className="hh2-top">
-      <SegControl
-        label="Резюме hh.ru"
-        name={switchName}
-        value={resumeId}
-        options={[{ value: resumeId, label: resumeTitle }]}
-        onChange={NO_CHANGE}
-      />
+      {switcher ? (
+        <SegControl
+          label="Резюме hh.ru"
+          name={switchName}
+          value={resumeId}
+          options={[{ value: resumeId, label: resumeTitle }]}
+          onChange={NO_CHANGE}
+        />
+      ) : null}
       {onApplyAll ? (
         <div className="actions">
           <Button variant="primary" icon="check" disabled={busy} busy={busy} onClick={onApplyAll}>
@@ -186,13 +193,14 @@ function EditsTop({ resumeId, resumeTitle, busy, onApplyAll }: EditsTopProps) {
 }
 
 interface EditSectionsProps {
+  readonly canWrite: boolean;
   readonly edits: readonly HhResumeEdit[];
   readonly shownOf: (edit: HhResumeEdit) => HhResumeEdit;
   readonly apply: HhResumeApply;
   readonly onShow: (edit: HhResumeEdit) => void;
 }
 
-function EditSections({ edits, shownOf, apply, onShow }: EditSectionsProps) {
+function EditSections({ canWrite, edits, shownOf, apply, onShow }: EditSectionsProps) {
   const groups = SECTIONS.map(([section, label]) => [label, edits.filter((edit) => edit.section === section)] as const)
     .filter(([, items]) => items.length > 0);
   return (
@@ -204,7 +212,7 @@ function EditSections({ edits, shownOf, apply, onShow }: EditSectionsProps) {
           </h3>
           <ul className="hh2-rows">
             {items.map((edit) => (
-              <EditRow edit={edit} shown={shownOf(edit)} apply={apply} onShow={onShow} key={edit.variantOf?.subjectId ?? edit.id} />
+              <EditRow canWrite={canWrite} edit={edit} shown={shownOf(edit)} apply={apply} onShow={onShow} key={edit.variantOf?.subjectId ?? edit.id} />
             ))}
           </ul>
         </section>
@@ -216,14 +224,18 @@ function EditSections({ edits, shownOf, apply, onShow }: EditSectionsProps) {
 /** Выбор держится за содержимым правки: новый разбор того же места прежний вариант не подставит. */
 const choiceKey = (edit: HhResumeEdit) => edit.variantOf?.subjectId ?? edit.id;
 
-export interface HhResumeEditsProps {
+export interface HhEditsListProps {
   readonly resumeId: string;
   readonly resumeTitle: string;
   readonly edits: readonly HhResumeEdit[];
-  readonly onBack: () => void;
+  /** На hh.ru правит только приложение. */
+  readonly canWrite?: boolean;
+  /** Строка выбранного резюме сверху (a01c); на шаге «Резюме» её место занимает выбор. */
+  readonly switcher?: boolean;
 }
 
-export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResumeEditsProps) {
+/** Правки по разделам с переносом на hh.ru. */
+export function HhEditsList({ resumeId, resumeTitle, edits, canWrite = true, switcher = false }: HhEditsListProps) {
   const apply = useHhResumeApply(resumeId);
   const [confirming, setConfirming] = useState(false);
   const [chosen, setChosen] = useState<Readonly<Record<string, HhResumeEdit>>>({});
@@ -238,22 +250,15 @@ export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResume
     void apply.applyAll(pending);
   };
   return (
-    <section className="lead" aria-labelledby="hh2-title">
-      <h2 className="lead-title" id="hh2-title">
-        Резюме «{resumeTitle}» · {editsWord(edits.length)}
-      </h2>
+    <>
       <EditsTop
+        switcher={switcher}
         resumeId={resumeId}
         resumeTitle={resumeTitle}
         busy={apply.busy}
-        onApplyAll={pending.length > 0 ? () => setConfirming(true) : null}
+        onApplyAll={canWrite && pending.length > 0 ? () => setConfirming(true) : null}
       />
-      <EditSections edits={edits} shownOf={shownOf} apply={apply} onShow={show} />
-      <div className="actions">
-        <Button icon="back" onClick={onBack}>
-          К отправке
-        </Button>
-      </div>
+      <EditSections canWrite={canWrite} edits={edits} shownOf={shownOf} apply={apply} onShow={show} />
       <ApplyAllDialog
         open={confirming}
         resumeTitle={resumeTitle}
@@ -261,6 +266,26 @@ export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResume
         onCancel={() => setConfirming(false)}
         onConfirm={confirm}
       />
+    </>
+  );
+}
+
+export interface HhResumeEditsProps extends Pick<HhEditsListProps, 'resumeId' | 'resumeTitle' | 'edits'> {
+  readonly onBack: () => void;
+}
+
+export function HhResumeEdits({ resumeId, resumeTitle, edits, onBack }: HhResumeEditsProps) {
+  return (
+    <section className="lead" aria-labelledby="hh2-title">
+      <h2 className="lead-title" id="hh2-title">
+        Резюме «{resumeTitle}» · {editsWord(edits.length)}
+      </h2>
+      <HhEditsList resumeId={resumeId} resumeTitle={resumeTitle} edits={edits} switcher />
+      <div className="actions">
+        <Button icon="back" onClick={onBack}>
+          К отправке
+        </Button>
+      </div>
     </section>
   );
 }

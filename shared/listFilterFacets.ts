@@ -78,28 +78,47 @@ export function rowPlace(row: FacetRow): string | undefined {
   return row.cluster.canonicalLocation?.trim() || undefined;
 }
 
-function placeCounts(rows: readonly FacetRow[]): readonly ListPlaceCount[] {
-  const counts = new Map<string, number>();
-  for (const row of rows) {
-    const place = rowPlace(row);
-    if (place) counts.set(place, (counts.get(place) ?? 0) + 1);
-  }
+/** B702: `localeCompare(x, 'ru-RU')` на 450 местах — в 20 раз дольше общего сравнения. */
+const PLACE_ORDER = new Intl.Collator('ru-RU');
+const ROWS_PER_STEP = 25;
+
+function sortedPlaces(counts: ReadonlyMap<string, number>): readonly ListPlaceCount[] {
   return [...counts]
     .map(([location, count]) => ({ location, count }))
-    .sort((a, b) => b.count - a.count || a.location.localeCompare(b.location, 'ru-RU'));
+    .sort((a, b) => b.count - a.count || PLACE_ORDER.compare(a.location, b.location));
+}
+
+/** Один проход по строкам кусками: сервер между ними отвечает на запросы (B702). */
+export function* filteredFacetSteps(
+  rows: readonly FacetRow[],
+): Generator<void, FilteredFacetCounts, void> {
+  const formats = new Map<VacancyWorkFormat, number>();
+  const places = new Map<string, number>();
+  const observed: number[] = [];
+  let remote = 0;
+  for (const [index, row] of rows.entries()) {
+    const format = rowWorkFormat(row);
+    formats.set(format, (formats.get(format) ?? 0) + 1);
+    const place = rowPlace(row);
+    if (place) places.set(place, (places.get(place) ?? 0) + 1);
+    if (row.cluster.isRemote) remote += 1;
+    const at = rowObservedAt(row);
+    if (!Number.isNaN(at)) observed.push(at);
+    if ((index + 1) % ROWS_PER_STEP === 0) yield;
+  }
+  return {
+    formats: LIST_WORK_FORMATS.map((id) => ({ id, count: formats.get(id) ?? 0 })),
+    places: sortedPlaces(places),
+    remote,
+    observed,
+  };
 }
 
 export function filteredFacetsOf(rows: readonly FacetRow[]): FilteredFacetCounts {
-  const formats = LIST_WORK_FORMATS.map((id) => ({
-    id,
-    count: rows.filter((row) => rowWorkFormat(row) === id).length,
-  }));
-  return {
-    formats,
-    places: placeCounts(rows),
-    remote: rows.filter((row) => row.cluster.isRemote).length,
-    observed: rows.map(rowObservedAt).filter((at) => !Number.isNaN(at)),
-  };
+  const steps = filteredFacetSteps(rows);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
 }
 
 /** Начало периода: та же граница, что у фильтра «Дата» в списке. */

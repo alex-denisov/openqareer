@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { HhResumeEdit, HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
+import { hhSectionsRead, type HhResumeEdit, type HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
 import { getHhResumeEdits } from './hhSessionApi';
 
 /**
@@ -15,7 +15,7 @@ export interface HhResumeEditsState {
 export function useHhResumeEdits(vacancyId: string, snapshot: HhResumeSnapshot | null): HhResumeEditsState {
   const [loaded, setLoaded] = useState<{ readonly key: string; readonly edits: readonly HhResumeEdit[] } | null>(null);
   const selected = snapshot?.selected;
-  const key = selected?.sections ? `${vacancyId}:${selected.id}:${snapshot?.readAt ?? ''}` : null;
+  const key = selected && hhSectionsRead(selected.sections) ? `${vacancyId}:${selected.id}:${snapshot?.readAt ?? ''}` : null;
   useEffect(() => {
     if (!key) return undefined;
     const controller = new AbortController();

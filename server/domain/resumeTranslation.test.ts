@@ -208,6 +208,30 @@ describe('RU и EN — один состав фактов (B785)', () => {
     expect(again.translations).toEqual(result.translations);
   });
 
+  it('должность, сохранённая непереведённой раньше, спрашивается ещё один раз', async () => {
+    const title = 'Premium Support Lead';
+    const old = { ...(await toRu(RU)).translations, [`ru:${title}`]: title };
+    const rewriter = translator(RU);
+    const again = await translateDocument(english, 'ru', old, rewriter, 5_000);
+    expect(rewriter.translate).toHaveBeenCalledTimes(1);
+    expect(translatedDocument(english, 'ru', again.translations).experience[2]?.title?.value).toBe(
+      RU[title],
+    );
+  });
+
+  it('должность, оставленная как есть, второй раз не спрашивается', async () => {
+    const title = 'Premium Support Lead';
+    const result = await toRu({ ...RU, [title]: title });
+    expect(result.complete).toBe(true);
+    const rewriter = translator(RU);
+    const again = await translateDocument(english, 'ru', result.translations, rewriter, 5_000);
+    expect(rewriter.translate).not.toHaveBeenCalled();
+    expect(again.complete).toBe(true);
+    expect(translatedDocument(english, 'ru', again.translations).experience[2]?.title?.value).toBe(
+      title,
+    );
+  });
+
   it('название компании переводить нельзя', async () => {
     const line = OPTILAB[4]!;
     const result = await toRu({ ...RU, [line]: 'Внедрение платформы ОптиЛаб в 5 регионах' });

@@ -44,6 +44,10 @@
   .b640 .act-dock.cv-dock > .btn {
     grid-column: -2 / -1;
   }
+  /* Под полосой страницы нет: полоса стоит у низа окна и в конце прокрутки. */
+  .b640 .page:has(> .act-dock.cv-dock:not(:empty)) {
+    padding-block-end: 0;
+  }
   .b640 .act-dock.is-auto.cv-dock:empty {
     display: none;
   }

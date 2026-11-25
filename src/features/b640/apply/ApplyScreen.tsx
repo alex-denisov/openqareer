@@ -42,6 +42,7 @@ import {
 import { QuotaBlock } from './QuotaBlock';
 import { ResumeDates } from './ResumeDates';
 import { ResumeStep } from './ResumeStep';
+import { HhResumeStep } from './hh/HhResumeStep';
 import { SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
 import { useApplyCluster } from './useApplyCluster';
@@ -222,6 +223,7 @@ function EditorBody(props: BodyProps) {
   const [document, setDocument] = useState<ResumeDocument | null>(null);
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const mobile = useIsMobile();
+  const onHh = Boolean(head.url && hhVacancyIdFromUrl(head.url));
   return (
     <>
       <VacancyColumn vacancyId={vacancyId} head={head}>
@@ -229,14 +231,21 @@ function EditorBody(props: BodyProps) {
       </VacancyColumn>
       <div className="col">
         {/* Резюме собирается один раз и остаётся при переходе между шагами. */}
-        {resumeSeen ? (
+        {onHh && step === 'resume' ? (
+          <HhResumeStep
+            vacancyId={vacancyId}
+            confirmed={resumeOk}
+            onConfirm={props.onResumeOk}
+            dock={dock}
+          />
+        ) : null}
+        {!onHh && resumeSeen ? (
           <div hidden={step !== 'resume'}>
             <ResumeStep
               vacancyId={vacancyId}
               approved={letter.approval.saved?.resume ?? null}
               confirmed={resumeOk}
               onConfirm={props.onResumeOk}
-              onHh={Boolean(head.url && hhVacancyIdFromUrl(head.url))}
               dock={dock}
               onDocument={setDocument}
             />

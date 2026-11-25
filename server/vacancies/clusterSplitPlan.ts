@@ -38,6 +38,7 @@ interface PlanInput {
   readonly cursor: number;
   readonly chunk: number;
   readonly maxPieces: number;
+  readonly planMs: number;
   readonly referenced: ReadonlyMap<string, string>;
 }
 
@@ -72,7 +73,7 @@ function planRow(
 
 /**
  * Кластеры после курсора по порядку rowid, пока куски плана не заполнят бюджет
- * шага. Большой кластер (кусков больше бюджета) замыкает план.
+ * шага или не выйдет время планирования. Большой кластер (кусков больше бюджета) замыкает план.
  */
 export function planChunk(db: DatabaseSync, input: PlanInput): PlannedItem[] {
   const rows = db
@@ -81,14 +82,17 @@ export function planChunk(db: DatabaseSync, input: PlanInput): PlannedItem[] {
     )
     .all(input.cursor, input.chunk) as { rowid: number; cluster_json: string }[];
   const items: PlannedItem[] = [];
+  const startedAt = performance.now();
   let cost = 0;
   for (const row of rows) {
     const item = planRow(db, row, input.referenced);
     items.push(item);
-    if (item.kind !== 'split') continue;
-    cost += item.pieces.length;
-    if (item.pieces.length > input.maxPieces) rememberPlan(item);
-    if (cost >= input.maxPieces) break;
+    if (item.kind === 'split') {
+      cost += item.pieces.length;
+      if (item.pieces.length > input.maxPieces) rememberPlan(item);
+      if (cost >= input.maxPieces) break;
+    }
+    if (performance.now() - startedAt > input.planMs) break;
   }
   return items;
 }
