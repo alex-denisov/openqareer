@@ -330,3 +330,18 @@ describe('HhVacancyDescriptionLoader', () => {
     expect(transport).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('описание с вложенными блоками', () => {
+  it('не обрывается на заголовке в div', async () => {
+    const loader = new HhVacancyDescriptionLoader({
+      transport: async () => ({
+        status: 200,
+        body: '<div data-qa="vacancy-description"><p>О компании</p><div><strong>Чем предстоит заниматься</strong></div><ul> <li> <p>Разобраться в инфраструктуре.</p> </li> </ul></div><div>Похожие вакансии</div>',
+      }),
+      sleep: async () => undefined,
+    });
+    const details = await loader.load('https://hh.ru/vacancy/139702509');
+    expect(details?.description).toContain('- Разобраться в инфраструктуре.');
+    expect(details?.description).not.toContain('Похожие');
+  });
+});

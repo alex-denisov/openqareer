@@ -84,6 +84,8 @@ export function htmlToFeedText(html: string): string {
     const stripped = decodeOnce(
       text
         .replace(/<(?:script|style)\b[^>]*>[\s\S]*?<\/(?:script|style)>/gi, ' ')
+        // `<li><p>…`: текст пункта стоит на строке маркера.
+        .replace(/(<li\b[^>]*>)\s*(?:<(?:p|div)\b[^>]*>\s*)+/gi, '$1')
         // Safe text keeps the structure candidates need, but never the source
         // markup itself: React only receives strings and creates the elements.
         .replace(/<\/?(?:p|div|section|article|h[1-6]|blockquote)\b[^>]*>/gi, '\n\n')
@@ -99,6 +101,8 @@ export function htmlToFeedText(html: string): string {
     .replace(/\r\n?/g, '\n')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n[ \t]+/g, '\n')
+    // Пустой пункт не показывается.
+    .replace(/^-[ \t]*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
