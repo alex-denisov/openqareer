@@ -117,6 +117,14 @@ export class SqliteContactMessageRepository {
     return rows.map(toMessage);
   }
 
+  /** B796: ещё не отправленные — их текст пересобирается после исправления факта. */
+  listUnsent(candidateId: string): StoredContactMessage[] {
+    const rows = this.database
+      .prepare(`SELECT * FROM candidate_contact_messages WHERE candidate_id = ? AND state != 'sent'`)
+      .all(candidateId) as unknown as Row[];
+    return rows.map(toMessage);
+  }
+
   /** Отправленные по вакансии, свежие сверху: «Что было» в отклике. */
   listSentForVacancy(candidateId: string, vacancyId: string, limit: number): StoredContactMessage[] {
     const rows = this.database

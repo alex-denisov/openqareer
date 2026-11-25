@@ -807,8 +807,8 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   declare addManualExperienceFact: MemoryMethods['addManualExperienceFact'];
-  declare answerEmployerName: MemoryMethods['answerEmployerName'];
-  declare reviewMemories: MemoryMethods['reviewMemories'];
+  declare correctFact: MemoryMethods['correctFact']; declare revertFactCorrection: MemoryMethods['revertFactCorrection'];
+  declare answerEmployerName: MemoryMethods['answerEmployerName']; declare reviewMemories: MemoryMethods['reviewMemories'];
   declare applyExperienceFactRewrite: MemoryMethods['applyExperienceFactRewrite'];
   declare revertExperienceFactRewrite: MemoryMethods['revertExperienceFactRewrite'];
   declare saveFactRewriteProposal: MemoryMethods['saveFactRewriteProposal'];

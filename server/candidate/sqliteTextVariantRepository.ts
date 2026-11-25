@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   MAX_TEXT_VARIANTS,
+  TEXT_VARIANT_KINDS,
   type TextVariant,
   type TextVariantKind,
   type TextVariantList,
@@ -51,6 +52,13 @@ interface Row {
   payload_cipher: string | null;
   wish_cipher: string;
   created_at: string;
+}
+
+interface StaleRow {
+  readonly id: string;
+  readonly kind: TextVariantKind;
+  readonly subject_id: string;
+  readonly text_cipher: string;
 }
 
 export class SqliteTextVariantRepository {
@@ -121,6 +129,32 @@ export class SqliteTextVariantRepository {
       }),
       remaining: Math.max(0, MAX_TEXT_VARIANTS - rows.length),
     };
+  }
+
+  /** B796: варианты с исправленным фактом убираются, следующий соберётся по новому профилю. */
+  removeStale(candidateId: string, isStale: (text: string) => boolean): number {
+    const rows = this.database
+      .prepare(
+        `SELECT id, kind, subject_id, text_cipher FROM text_variants
+         WHERE candidate_id = ? AND kind IN (${TEXT_VARIANT_KINDS.map(() => '?').join(', ')})`,
+      )
+      .all(candidateId, ...TEXT_VARIANT_KINDS) as unknown as StaleRow[];
+    const stale = rows.flatMap((row): TextSubject[] => {
+      const subject = { candidateId, kind: row.kind, subjectId: row.subject_id };
+      const text = this.openText(subject, row);
+      return text !== null && isStale(text) ? [subject] : [];
+    });
+    // Номера вариантов идут подряд: убирается весь набор текста, а не строка из середины.
+    for (const subject of stale) this.removeAll(subject);
+    return stale.length;
+  }
+
+  private openText(subject: TextSubject, row: StaleRow): string | null {
+    try {
+      return this.sealedText.open(row.text_cipher, this.scope(subject, row.id));
+    } catch {
+      return null;
+    }
   }
 
   /** Черновик убран — вместе с его вариантами. */

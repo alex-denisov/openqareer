@@ -17,7 +17,21 @@ export interface ExperienceForm {
   readonly workplaceType: WorkplaceType | null;
   readonly teamSize: string;
   readonly skills: readonly string[];
+  /** «Что делали»; `null` — такой записи у места нет. */
+  readonly description: string | null;
+  readonly results: readonly ResultRow[];
+  /** Записи, убранные из «Результатов»: место работы на них больше не ссылается. */
+  readonly removed: readonly string[];
 }
+
+/** Строка «Результаты»: запись профиля или новая, ещё не сохранённая. */
+export interface ResultRow {
+  readonly key: string;
+  readonly memoryId: string | null;
+  readonly text: string;
+}
+
+export const RESULT_MAX_LENGTH = 1_000;
 
 export type ExperienceFormErrors = Partial<
   Record<'employer' | 'title' | 'period' | 'city' | 'teamSize', string>
@@ -31,7 +45,11 @@ const CITIES: readonly string[] = [...new Set(Object.values(CITY_NAMES))].sort((
 );
 const CITY_KEYS = new Set(CITIES.map((city) => city.toLocaleLowerCase('ru')));
 
-export function formOf(entry: ResumeExperienceInput): ExperienceForm {
+export function formOf(
+  entry: ResumeExperienceInput,
+  statements: ReadonlyMap<string, string> = new Map(),
+): ExperienceForm {
+  const { descriptionMemoryId } = entry;
   return {
     employer: entry.employer ?? '',
     title: entry.title ?? '',
@@ -42,6 +60,12 @@ export function formOf(entry: ResumeExperienceInput): ExperienceForm {
     workplaceType: entry.workplaceType ?? null,
     teamSize: entry.teamSize ? String(entry.teamSize) : '',
     skills: entry.skills ?? [],
+    description: descriptionMemoryId ? (statements.get(descriptionMemoryId) ?? null) : null,
+    results: entry.bulletMemoryIds.flatMap((id) => {
+      const text = statements.get(id);
+      return text === undefined ? [] : [{ key: id, memoryId: id, text }];
+    }),
+    removed: [],
   };
 }
 
@@ -144,6 +168,7 @@ function patched(entry: ResumeExperienceInput, form: ExperienceForm): ResumeExpe
     workplaceType: form.workplaceType ?? undefined,
     teamSize: team ? Number(team) : undefined,
     skills: form.skills.length > 0 ? [...form.skills] : undefined,
+    bulletMemoryIds: rest.bulletMemoryIds.filter((id) => !form.removed.includes(id)),
   };
   return Object.fromEntries(
     Object.entries(next).filter(([, value]) => value !== undefined),
