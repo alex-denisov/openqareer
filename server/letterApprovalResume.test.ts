@@ -86,9 +86,11 @@ describe('B785: резюме отправленного отклика', () => {
     // Профиль, а с ним и разбор изменились: id версии был бы другим.
     seedResume(candidates, candidateId, 'VP Platform Engineering');
     expect((await prepareResume()).json().data.versionId).toBe(first.resume.versionId);
-    const again = await approve();
-    expect(again.statusCode).toBe(200);
-    expect(again.json().data.resume).toMatchObject({
+    // Сам отклик заново не одобряется; письмо знакомому пишется и после отправки — с тем же резюме.
+    expect((await approve()).statusCode).toBe(409);
+    const toContact = await approve({ recipient: { name: 'Пётр Пример' } });
+    expect(toContact.statusCode).toBe(200);
+    expect(toContact.json().data.resume).toMatchObject({
       versionId: first.resume.versionId,
       documentId: first.resume.documentId,
     });
