@@ -28,6 +28,7 @@ import {
   cancelledOnlyRuns,
   inheritParentChecks,
   isOwnMainMerge,
+  landedMembers,
   retryMerge,
   shouldNoticeStuck,
   stuckMarker,
@@ -591,17 +592,16 @@ async function runBatch() {
   ensureLabel(IN_BATCH_LABEL, 'In a merge batch (scripts/merge-batch.mjs)');
   for (const pr of batch.members) setLabel(pr, IN_BATCH_LABEL, true);
 
-  let outcome = { mergedAny: false, verifiedTip: '' };
+  let verifiedTip = '';
   try {
-    outcome = await bisectAndMerge(batch.members, base);
+    verifiedTip = await bisectAndMerge(batch.members, base);
   } finally {
-    finish(batch.members, outcome);
+    finish(batch.members, { base, verifiedTip });
   }
 }
 
 /** Full runs round by round until every member is merged, blamed or requeued. */
 async function bisectAndMerge(members, base) {
-  let mergedAny = false;
   let verifiedTip = '';
   let groups = [members];
   for (let round = 0; groups.length > 0; round += 1) {
@@ -618,7 +618,6 @@ async function bisectAndMerge(members, base) {
     if (decision.merge.length > 0) {
       const run = results.find((r) => r.prs === decision.merge);
       const merged = await mergeGroup(decision.merge, run);
-      mergedAny = merged.length > 0 || mergedAny;
       // Only a fully merged group leaves main on the tree its run verified.
       verifiedTip = merged.length === decision.merge.length ? decision.merge.at(-1).tree : '';
     }
@@ -632,11 +631,16 @@ async function bisectAndMerge(members, base) {
     }
     groups = DRY ? [] : decision.retest;
   }
-  return { mergedAny, verifiedTip };
+  return verifiedTip;
 }
 
 /** Labels off, one deploy for the whole batch, batch branches deleted. */
-function finish(members, { mergedAny, verifiedTip }) {
+function finish(members, { base, verifiedTip }) {
+  // Main itself says what landed: a squash GitHub accepted but answered with an
+  // error, or one before a crash of this script, still needs its deploy.
+  const tip = mainSha();
+  const subjects = git('log', '--format=%s', `${base}..${tip}`).split('\n');
+  const mergedAny = DRY || landedMembers(subjects, members).length > 0;
   for (const pr of members) setLabel(pr, IN_BATCH_LABEL, false);
   if (mergedAny) {
     const mainTree = DRY ? verifiedTip : git('rev-parse', `${mainSha()}^{tree}`);

@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
 import { getSortedMatchedPage, type ServerMoney } from '../b640Api';
 import { makeItem } from './fixtures';
-import type { SortState } from './sortModel';
-import { useServerSortedList } from './useServerSortedList';
+import { DEFAULT_LIST_SORT, type SortState } from './sortModel';
+import { firstPortionOf, useServerSortedList, type FirstPortion } from './useServerSortedList';
 
 vi.mock('../b640Api', () => ({ getSortedMatchedPage: vi.fn() }));
 const read = vi.mocked(getSortedMatchedPage);
@@ -17,12 +17,18 @@ const page = (ids: string[], total: number, nextOffset: number | null) => ({
 
 const OTHER: SortState = { key: 'role', dir: 'asc' };
 
-function Probe({ active, sort: initial }: { active: boolean; sort: SortState }) {
+interface ProbeProps {
+  readonly active: boolean;
+  readonly sort: SortState;
+  readonly first?: FirstPortion;
+}
+
+function Probe({ active, sort: initial, first }: ProbeProps) {
   const [sort, setSort] = useState(initial);
   const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
   const [days, setDays] = useState<number | null>(null);
   const [money, setMoney] = useState<ServerMoney | null>(null);
-  const list = useServerSortedList(active, sort, ['CTO'], hidden, days, money);
+  const list = useServerSortedList(active, sort, ['CTO'], hidden, days, money, first);
   return (
     <div>
       <button id="days" onClick={() => setDays(30)} />
@@ -51,6 +57,67 @@ describe('серверная сортировка неполной подбор�
     expect(read).not.toHaveBeenCalled();
     expect(out(view.container).dataset.status).toBe('idle');
     view.unmount();
+  });
+
+  it('порция пула с теми же ролями — без запроса, продолжение и другой столбец — запросом', async () => {
+    const first = { rows: [makeItem({ id: 'a' }), makeItem({ id: 'b' })], total: 5, roles: ['CTO'] };
+    read.mockResolvedValue(page(['c'], 5, null));
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).textContent).toBe('a,b');
+    expect(out(view.container).dataset.more).toBe('true');
+    click(view.container.querySelector('#more'));
+    await flush();
+    expect(read.mock.calls[0]?.[2]).toBe(2);
+    click(view.container.querySelector('#sort'));
+    await flush();
+    expect(read).toHaveBeenLastCalledWith(OTHER, ['CTO'], 0, expect.anything(), null, null);
+    view.unmount();
+  });
+
+  it('порция пула с датой не подменяет отбор сервера', async () => {
+    read.mockResolvedValue(page(['d'], 1, null));
+    const first = { rows: [makeItem({ id: 'a' })], total: 5, roles: ['CTO'] };
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    click(view.container.querySelector('#days'));
+    await flush();
+    expect(out(view.container).textContent).toBe('d');
+    view.unmount();
+  });
+
+  it.each([
+    ['пул ещё читается', null],
+    ['пул прочитан с другими ролями', { rows: [], total: 0, roles: [] }],
+  ])('%s — список ждёт, запроса нет', async (_, first) => {
+    const view = mount(<Probe active sort={DEFAULT_LIST_SORT} first={first} />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    expect(out(view.container).dataset.status).toBe('loading');
+    view.unmount();
+  });
+
+  it('чтение пула упало без ролей — список перестаёт ждать и читает сам', async () => {
+    read.mockResolvedValue(page(['a'], 1, null));
+    const cached = { matched: [makeItem({ id: 'old' })], total: 9, readRoles: undefined };
+    function Failing() {
+      const [reading, setReading] = useState(true);
+      return (
+        <div>
+          <button id="fail" onClick={() => setReading(false)} />
+          <Probe active sort={DEFAULT_LIST_SORT} first={firstPortionOf({ ...cached, reading })} />
+        </div>
+      );
+    }
+    const waiting = mount(<Failing />);
+    await flush();
+    expect(read).not.toHaveBeenCalled();
+    click(waiting.container.querySelector('#fail'));
+    await flush();
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(out(waiting.container).dataset.status).toBe('ready');
+    expect(out(waiting.container).textContent).toBe('a');
+    waiting.unmount();
   });
 
   it('первая порция, затем дочитывание со следующего смещения', async () => {

@@ -6,6 +6,7 @@ import {
   inheritParentChecks,
   isOwnMainMerge,
   isRetryableMergeError,
+  landedMembers,
   retryMerge,
   shouldNoticeStuck,
   deferStacked,
@@ -412,5 +413,30 @@ describe('stale and cancelled runs (B804)', () => {
   it('does not re-run a run with a really failed shard', () => {
     const run = [check('S1', 7, 'CANCELLED'), check('S7', 7, 'FAILURE')];
     expect(reruns(...run, check('Verify', 7, 'FAILURE'))).toEqual([]);
+  });
+});
+
+describe('skipped checks and landed PRs (B804)', () => {
+  const verify = (conclusion, minute) => ({
+    name: 'Verify',
+    workflowName: 'Verify and deploy',
+    status: 'COMPLETED',
+    conclusion,
+    completedAt: `2026-11-25T10:${minute}:00Z`,
+  });
+  const reason = (...checks) => rejectReason(pr(1, { statusCheckRollup: checks }));
+
+  it.each(['FAILURE', 'CANCELLED'])('a later skipped run does not hide %s', (state) => {
+    expect(reason(verify(state, '10'), verify('SKIPPED', '30'))).toContain(`Verify: ${state}`);
+  });
+  it('a later green run replaces a failure; an only-skipped check stays fine', () => {
+    expect(reason(verify('FAILURE', '10'), verify('SUCCESS', '30'))).toBeNull();
+    expect(reason(verify('SUCCESS', '10'), verify('SKIPPED', '30'))).toBeNull();
+  });
+  it('finds members by the squash subject, not by a longer number or a mention', () => {
+    const subjects = ['fix: a (#12)', 'fix: after (#7) more', 'feat: b (#130)'];
+    const members = [pr(12), pr(7), pr(13), pr(130)];
+    expect(landedMembers(subjects, members).map((p) => p.number)).toEqual([12, 130]);
+    expect(landedMembers([''], members)).toEqual([]);
   });
 });

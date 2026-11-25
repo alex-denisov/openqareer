@@ -14,19 +14,16 @@ import type { CountryEarning } from '../occupationEarnings/occupationEarningStor
 import type { BenchmarkLookup } from '../salaryBenchmarks/benchmarkLookup';
 import { familyKeyOf, titleKeyOf } from '../salaryBenchmarks/benchmarkRollups';
 import {
-  blendInputOf,
   blendSalary,
-  PER_YEAR,
-  roundTo,
-  stepOf,
   type BlendInput,
   type BlendResult,
 } from '../salaryBenchmarks/blendSalaryBenchmarks';
+import { matchCells } from '../salaryBenchmarks/benchmarkCells';
+import { distinctRange, rounded } from '../salaryBenchmarks/sourceRanges';
 import { levelRatio } from '../salaryBenchmarks/levelMultipliers';
 import {
   BENCHMARK_PRECISIONS,
   catalogPrecision,
-  matchSalaryBenchmarks,
   type BenchmarkPrecision,
 } from '../salaryBenchmarks/pickSalaryBenchmark';
 import {
@@ -93,8 +90,6 @@ const levelsFrom = (target: number): number[] =>
     (left, right) => Math.abs(left - target) - Math.abs(right - target) || left - right,
   );
 
-const monthly = (input: BlendInput): boolean => PER_YEAR[input.period] !== undefined;
-
 function catalogInput(
   estimate: MarketSalaryEstimate | undefined,
   now: Date,
@@ -137,27 +132,51 @@ function catalogCandidates(
   ];
 }
 
+const placesOf = (place: Place): string[] => [
+  `country:${place.country}`,
+  ...(place.region ? [`region:${place.region}`] : []),
+];
+
+function roleAndFamily(
+  query: EstimateQuery,
+  levelRank: number | null,
+  place: Place,
+  deps: EstimateDeps,
+) {
+  const places = placesOf(place);
+  const families = new Set([levelRank, ...((levelRank ?? 0) < MANAGER_RANK ? [null] : [])]);
+  return {
+    role: deps.lookup.group(places, query.title ? [titleKeyOf(query.title)] : []),
+    family: deps.lookup.group(
+      places,
+      [...families].map((level) => familyKeyOf(query.functionCode, level)),
+    ),
+  };
+}
+
 function sourceCandidate(
   query: EstimateQuery,
   levelRank: number | null,
   place: Place,
   deps: EstimateDeps,
 ): Candidate[] {
-  const places = [`country:${place.country}`, ...(place.region ? [`region:${place.region}`] : [])];
-  const keys = [
-    titleKeyOf(query.title),
-    familyKeyOf(query.functionCode, levelRank),
-    familyKeyOf(query.functionCode, null),
-  ];
-  const usable = deps.lookup.rows(places, [...new Set(keys)]).flatMap((row) => {
-    const input = blendInputOf(row);
-    return input && monthly(input) ? [row] : [];
-  });
-  const matches = matchSalaryBenchmarks(usable, { ...query, levelRank, ...place });
-  const [first] = matches;
-  if (!first) return [];
-  const inputs = matches.flatMap(({ benchmark }) => blendInputOf(benchmark) ?? []);
-  return [{ precision: first.precision, inputs }];
+  const { role, family } = roleAndFamily(query, levelRank, place, deps);
+  const match = matchCells(role, family, place.city);
+  return match ? [match] : [];
+}
+
+/** Последняя сверка любой ступени с вилками той же должности и функции этого места. */
+function apartFromSources(
+  result: EstimateResult | undefined,
+  query: EstimateQuery,
+  place: Place,
+  deps: EstimateDeps,
+): EstimateResult | undefined {
+  if (!result) return undefined;
+  const { role, family } = roleAndFamily(query, query.levelRank, place, deps);
+  const ranges = [...role.ranges, ...family.ranges];
+  const range = distinctRange(result.estimate, result.estimate, ranges, deps.rates);
+  return range ? { ...result, estimate: { ...result.estimate, ...range } } : undefined;
 }
 
 /** VP и выше в объявлениях — малые компании: лучшая цифра каталога и источники вместе. */
@@ -264,12 +283,18 @@ function worldStep(query: EstimateQuery, deps: EstimateDeps): EstimateResult | u
     const ratio = levelRatio(deps.lookup.multipliers, query.functionCode, level, target);
     if (!result || ratio === undefined) continue;
     const { low, high, ...estimate } = result.estimate;
-    const step = stepOf(low * ratio);
-    const range = { low: roundTo(low * ratio, step), high: roundTo(high * ratio, step) };
+    const range = rounded({ low: low * ratio, high: high * ratio });
     return { ...result, estimate: { ...estimate, ...range }, step: 'world' };
   }
   return undefined;
 }
+
+const placeFor = ({ location }: Pick<EstimateQuery, 'location'>, country: string): Place => ({
+  country,
+  city: marketSalaryCity(location),
+  region: regionOfCountry(country),
+});
+const DONOR_PLACE = placeFor({ location: undefined }, CIS_DONOR);
 
 export function openqareerEstimate(
   query: EstimateQuery,
@@ -277,25 +302,25 @@ export function openqareerEstimate(
 ): EstimateResult | undefined {
   const { country } = query;
   if (!country) return worldStep(query, deps);
-  const own = placeEstimate(query, country, deps);
+  const place = placeFor(query, country);
+  const apart = (result: EstimateResult | undefined, at: Place) =>
+    apartFromSources(result, query, at, deps);
+  const own = apart(placeEstimate(query, place, deps), place);
   if (own) return own;
   // Мир завышает СНГ в 6–8 раз; рынок России ближе.
   const near = isCisCountry(country)
-    ? placeEstimate({ ...query, location: undefined }, CIS_DONOR, deps)
+    ? apart(placeEstimate(query, DONOR_PLACE, deps), DONOR_PLACE)
     : undefined;
-  return near ? { ...near, lowConfidence: true, donor: true } : worldStep(query, deps);
+  return near
+    ? { ...near, lowConfidence: true, donor: true }
+    : apart(worldStep(query, deps), place);
 }
 
 function placeEstimate(
   query: EstimateQuery,
-  country: string,
+  place: Place,
   deps: EstimateDeps,
 ): EstimateResult | undefined {
-  const place: Place = {
-    country,
-    city: marketSalaryCity(query.location),
-    region: regionOfCountry(country),
-  };
   if (query.functionCode === NO_FUNCTION) {
     const named = sourceCandidate(query, query.levelRank, place, deps).filter(({ precision }) =>
       precision.startsWith('role-'),

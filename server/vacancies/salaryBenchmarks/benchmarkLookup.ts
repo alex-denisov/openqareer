@@ -1,19 +1,20 @@
-/** B803: чтение цифр по ключам — только нужные строки места; таблиц ещё нет — пусто. */
+/** B803: чтение цифр по ключам — только сводка места; таблиц ещё нет — пусто. */
 import type { DatabaseSync } from 'node:sqlite';
 import { worldKeyOf } from './benchmarkRollups';
 import type { BlendResult } from './blendSalaryBenchmarks';
-import { readableBenchmark, type SalaryBenchmark } from './salaryBenchmark';
+import { NO_CELLS, type CellGroup } from './benchmarkCells';
 
 export interface BenchmarkLookup {
-  rows(places: readonly string[], keys: readonly string[]): readonly SalaryBenchmark[];
+  group(places: readonly string[], keys: readonly string[]): CellGroup;
   world(functionCode: string, levelRank: number): BlendResult | undefined;
   readonly multipliers: { get(key: string): number | undefined };
 }
 
 function prepareAll(database: DatabaseSync) {
   return {
-    rows: database.prepare(`SELECT b.row_json FROM salary_benchmark_keys k
-      JOIN salary_benchmarks b ON b.id = k.id WHERE k.place = ? AND k.key = ? ORDER BY k.id`),
+    group: database.prepare(
+      'SELECT group_json FROM salary_benchmark_cells WHERE place = ? AND key = ?',
+    ),
     world: database.prepare('SELECT result_json FROM salary_world_estimates WHERE key = ?'),
     multiplier: database.prepare('SELECT value FROM salary_level_multipliers WHERE key = ?'),
   };
@@ -30,14 +31,19 @@ export function createBenchmarkLookup(database: DatabaseSync): BenchmarkLookup {
     return statements;
   };
   return {
-    rows(places, keys) {
-      const statement = prepared()?.rows;
-      if (!statement) return [];
-      const found = places.flatMap((place) =>
-        keys.flatMap((key) => statement.all(place, key) as { row_json: string }[]),
+    group(places, keys) {
+      const statement = prepared()?.group;
+      if (!statement) return NO_CELLS;
+      const groups = places.flatMap((place) =>
+        keys.flatMap((key) => {
+          const row = statement.get(place, key) as { group_json: string } | undefined;
+          return row ? [JSON.parse(row.group_json) as CellGroup] : [];
+        }),
       );
-      const texts = [...new Set(found.map(({ row_json }) => row_json))];
-      return texts.flatMap((row_json) => readableBenchmark({ row_json }));
+      return {
+        cells: groups.flatMap(({ cells }) => cells),
+        ranges: groups.flatMap(({ ranges }) => ranges),
+      };
     },
     world(functionCode, levelRank) {
       const row = prepared()?.world.get(worldKeyOf(functionCode, levelRank)) as

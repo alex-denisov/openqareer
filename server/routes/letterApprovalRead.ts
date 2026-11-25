@@ -10,6 +10,7 @@ import {
 } from '../domain/letterFreshness';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate } from './helpers';
+import { attachedVersion } from './letterApprovalResume';
 import { letterVacancyTexts, type LetterDraftDeps } from './letterDraftRoutes';
 
 /** Имя файла снимка одобренного письма: `approved-letter-<approvalId>.json`. */
@@ -90,7 +91,7 @@ export function latestLetterApproval(
       approvedAt: snapshot.approvedAt,
       status: 'approved',
       sent: false,
-      resume: snapshot.resume ?? null,
+      resume: shownResume(deps, candidateId, snapshot.applicationId, snapshot.resume ?? null),
       subject: snapshot.subject ?? null,
       body: snapshot.body,
       variantId: snapshot.variantId ?? null,
@@ -100,6 +101,18 @@ export function latestLetterApproval(
     };
   }
   return null;
+}
+
+/** Показанную позже версию кандидат одобрил отдельно (B785). */
+function shownResume(
+  deps: RouteDeps,
+  candidateId: string,
+  applicationId: string,
+  approved: StoredLetterApproval['resume'],
+): StoredLetterApproval['resume'] {
+  if (approved?.kind !== 'targeted') return approved;
+  const attached = attachedVersion(deps, candidateId, applicationId);
+  return attached && attached.versionId !== approved.versionId ? attached : approved;
 }
 
 function freshnessOf(

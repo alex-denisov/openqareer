@@ -131,7 +131,7 @@ function publish(database: DatabaseSync): Published {
     'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
   );
   for (const row of rows) insert.run(recordKey(row), placeKey(row), JSON.stringify(row));
-  writeRollups(database, rows, { placeKey, recordKey }, readCurrencyRates(database), new Date());
+  writeRollups(database, rows, placeKey, readCurrencyRates(database), new Date());
   database.exec(
     `INSERT INTO salary_benchmarks_version VALUES (1, 1)
       ON CONFLICT (id) DO UPDATE SET version = version + 1`,

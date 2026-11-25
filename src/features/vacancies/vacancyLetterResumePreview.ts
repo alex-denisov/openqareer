@@ -15,6 +15,8 @@ export interface LetterResumePreview {
   readonly text: string;
   /** Документ, из которого собран текст: лист страницы и файл PDF/DOCX строятся из него. */
   readonly document?: ResumeDocument;
+  /** Показанная версия под вакансию. */
+  readonly versionId?: string;
 }
 
 type ApprovedResume = NonNullable<ApprovedVacancyLetterResult['resume']>;
@@ -26,6 +28,7 @@ async function targetedPreview(versionId: string, signal?: AbortSignal) {
     title: 'Резюме под вакансию',
     text: formatTargetedResumeAsAtsText(version.snapshot),
     document: version.snapshot.document,
+    versionId,
   } satisfies LetterResumePreview;
 }
 

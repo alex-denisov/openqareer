@@ -1,7 +1,6 @@
 import { levelMultipliers } from './levelMultipliers';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { createBenchmarkLookup } from './benchmarkLookup';
 import { blendInputOf, blendSalary } from './blendSalaryBenchmarks';
 import { matchSalaryBenchmarks, type BenchmarkQuery } from './pickSalaryBenchmark';
 import { salaryBenchmarkSchema, type SalaryBenchmark } from './salaryBenchmark';
@@ -381,7 +380,6 @@ describe('salary store', () => {
     writeSalarySlice(database, sliceOf([row(), row({ id: 'second-row' })]));
     database.exec("UPDATE salary_benchmarks SET row_json = '{' WHERE id = 'Agency|second-row'");
     expect(read({ country: 'AE' })).toEqual([row()]);
-    expect(createBenchmarkLookup(database).rows(['country:AE'], ['t:cto'])).toEqual([row()]);
   });
 
   it('keeps four slices of a source and ignores one older than all of them', () => {

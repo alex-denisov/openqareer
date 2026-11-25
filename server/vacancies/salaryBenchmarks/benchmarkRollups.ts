@@ -1,16 +1,17 @@
 /**
- * B803: при пересборке считается то, что не нужно считать на запрос: ключи поиска
- * строк, мировые оценки функции и уровня, множители уровней.
+ * B803: при пересборке считается то, что не нужно считать на запрос: сводки строк
+ * места, мировые оценки функции и уровня, множители уровней.
  */
 import type { DatabaseSync } from 'node:sqlite';
 import type { CurrencyRates } from '../../../shared/currencyRates';
 import { normalizeTitleKey } from '../titleParse/normalizeTitleKey';
+import { cellGroup } from './benchmarkCells';
 import { levelMultipliers } from './levelMultipliers';
 import type { SalaryBenchmark } from './salaryBenchmark';
 import { worldSalaryEstimate } from './worldSalaryEstimate';
 
-export const ROLLUP_TABLES_SQL = `CREATE TABLE IF NOT EXISTS salary_benchmark_keys (
-  place TEXT NOT NULL, key TEXT NOT NULL, id TEXT NOT NULL, PRIMARY KEY (place, key, id)
+export const ROLLUP_TABLES_SQL = `CREATE TABLE IF NOT EXISTS salary_benchmark_cells (
+  place TEXT NOT NULL, key TEXT NOT NULL, group_json TEXT NOT NULL, PRIMARY KEY (place, key)
 ) STRICT, WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS salary_world_estimates (
   key TEXT PRIMARY KEY, result_json TEXT NOT NULL
@@ -55,24 +56,37 @@ function writeWorld(
   }
 }
 
-interface RowKeys {
-  readonly placeKey: (row: SalaryBenchmark) => string;
-  readonly recordKey: (row: SalaryBenchmark) => string;
+function writeCells(
+  database: DatabaseSync,
+  rows: readonly SalaryBenchmark[],
+  placeKey: (row: SalaryBenchmark) => string,
+): void {
+  const groups = new Map<string, SalaryBenchmark[]>();
+  for (const row of rows)
+    for (const key of keysOf(row)) {
+      const name = JSON.stringify([placeKey(row), key]);
+      const group = groups.get(name);
+      if (group) group.push(row);
+      else groups.set(name, [row]);
+    }
+  const insert = database.prepare('INSERT INTO salary_benchmark_cells VALUES (?, ?, ?)');
+  for (const [name, group] of groups) {
+    const [place, key] = JSON.parse(name) as [string, string];
+    insert.run(place, key, JSON.stringify(cellGroup(group)));
+  }
 }
 
 /** Внутри транзакции пересборки. */
 export function writeRollups(
   database: DatabaseSync,
   rows: readonly SalaryBenchmark[],
-  { placeKey, recordKey }: RowKeys,
+  placeKey: (row: SalaryBenchmark) => string,
   rates: CurrencyRates | undefined,
   now: Date,
 ): void {
-  database.exec(`DELETE FROM salary_benchmark_keys; DELETE FROM salary_world_estimates;
+  database.exec(`DELETE FROM salary_benchmark_cells; DELETE FROM salary_world_estimates;
     DELETE FROM salary_level_multipliers`);
-  const key = database.prepare('INSERT INTO salary_benchmark_keys VALUES (?, ?, ?)');
-  for (const row of rows)
-    for (const name of keysOf(row)) key.run(placeKey(row), name, recordKey(row));
+  writeCells(database, rows, placeKey);
   writeWorld(database, rows, rates, now);
   const multiplier = database.prepare('INSERT INTO salary_level_multipliers VALUES (?, ?)');
   for (const [name, value] of levelMultipliers(rows)) multiplier.run(name, value);

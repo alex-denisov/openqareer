@@ -81,7 +81,7 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
  * Правило сборки версии под вакансию. B713: версии до него перечисляли места работы без пунктов, и
  * одобренная такая версия возвращалась бы для той же вакансии и ревизии; новая сборка даёт новый id.
  */
-export const TARGETED_RESUME_BUILD = 'b785-relevant-sections';
+export const TARGETED_RESUME_BUILD = 'b785-results-first';
 
 function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string, choices: ResumeEditChoices, assessed: boolean): string {
   // Без выбранного языка переводы на версию не влияют.
@@ -155,9 +155,9 @@ function approvedVersion(
   if (sent) return sent;
   const tailor = (slice: ReturnType<typeof targetedSliceFor>) => tailorResumeSlice(slice, choices);
   // Факты показывают, как кандидат сам пишет названия латиницей.
-  const facts = (deps.candidateStore.getSnapshot(candidateId).memory ?? []).flatMap((fact) =>
+  const facts = [master.document.about ?? '', ...(deps.candidateStore.getSnapshot(candidateId).memory ?? []).flatMap((fact) =>
     fact.sensitive === true ? [] : [fact.statement],
-  );
+  )];
   const translate = (fitted: ResumeDocument, tailored: ResumeDocument) =>
     translatedDocument(fitted, choices.lang, choices.translations ?? {}, tailored, facts);
   const { candidateStore } = deps;
@@ -232,7 +232,10 @@ interface SnapshotPlan {
 }
 
 function targetedPlan(deps: RouteDeps, candidateId: string, applicationId: string, master: CandidateResumeMaster, cluster: VacancyCluster, choices: ResumeEditChoices): SnapshotPlan {
-  const version = approvedVersion(deps, candidateId, master, cluster, choices);
+  return versionPlan(applicationId, approvedVersion(deps, candidateId, master, cluster, choices));
+}
+
+function versionPlan(applicationId: string, version: StoredResumeVersion): SnapshotPlan {
   return {
     kind: 'targeted',
     versionId: version.id,
@@ -278,6 +281,33 @@ export function prepareLetterResume(
   }
 }
 
+/** Версия под вакансию, приложенная к отклику сейчас; файл, который кандидат приложил сам, — `null`. */
+export function attachedVersion(deps: RouteDeps, candidateId: string, applicationId: string): AttachedResume | null {
+  const linked = linkedSnapshot(deps, candidateId, applicationId);
+  const versionId = linked ? VERSION_FILE.exec(linked.fileName)?.[1] : undefined;
+  if (!linked || !versionId) return null;
+  if (deps.candidateStore.linkedMaterialId(candidateId, applicationId, 'resume') !== linked.id) return null;
+  return { kind: 'targeted', versionId, documentId: linked.id, snapshotAt: linked.createdAt };
+}
+
+/** Одобренный отклик ещё не ушёл, и к нему приложена версия под вакансию: её можно заменить (B785). */
+export function canReplaceResume(deps: RouteDeps, candidateId: string, applicationId: string): boolean {
+  const application = deps.candidateStore.getApplication(candidateId, applicationId);
+  return Boolean(application && !wasSent(application) && attachedVersion(deps, candidateId, applicationId));
+}
+
+/** «Одобрить резюме»: прикладывает ровно показанную версию этой вакансии; нельзя — `null`. */
+export function attachShownVersion(deps: RouteDeps, candidateId: string, applicationId: string, cluster: VacancyCluster, versionId: string): AttachedResume | null {
+  if (!canReplaceResume(deps, candidateId, applicationId)) return null;
+  const current = attachedVersion(deps, candidateId, applicationId);
+  if (current?.versionId === versionId) return current;
+  const version = candidateVersion(deps, candidateId, versionId);
+  if (!version || version.vacancyId !== cluster.id || version.status === 'draft') return null;
+  return saveSnapshot(deps, candidateId, versionPlan(applicationId, version), {
+    applicationId, cluster, approvedAt: new Date().toISOString(),
+  });
+}
+
 /** Снимок не создался, и кандидат выбрал своё общее резюме: привязываем его как есть. */
 function attachGeneralResume(deps: RouteDeps, candidateId: string, applicationId: string, documentId: string): AttachedResume | undefined {
   const general = generalResumeOf(deps, candidateId);
@@ -295,6 +325,20 @@ export interface AttachResumeInput {
   readonly generalResumeId?: string;
   /** Решения кандидата по правкам под вакансию (B785). */
   readonly choices?: ResumeEditChoices;
+}
+
+function saveSnapshot(deps: RouteDeps, candidateId: string, plan: SnapshotPlan, { applicationId, cluster, approvedAt }: Pick<AttachResumeInput, 'applicationId' | 'cluster' | 'approvedAt'>): AttachedResume {
+  const content = { version: 1, kind: plan.kind, ...plan.content, vacancyId: cluster.id, applicationId, approvedAt, sent: false };
+  // Без разобранного текста: снимок не попадает в знания консультанта, там уже есть мастер-резюме.
+  const { document } = deps.candidateStore.saveDocumentAndLinkApplicationMaterial(candidateId, applicationId, 'resume', {
+    kind: 'resume',
+    source: 'generated',
+    fileName: plan.fileName,
+    mimeType: 'application/json',
+    contentBase64: Buffer.from(JSON.stringify(content), 'utf8').toString('base64'),
+    parseStatus: 'not_applicable',
+  });
+  return { kind: plan.kind, versionId: plan.versionId, documentId: document.id, snapshotAt: plan.snapshotAt };
 }
 
 /**
@@ -321,17 +365,7 @@ export function attachApprovedResume(deps: RouteDeps, candidateId: string, input
     if (linked?.fileName === plan.fileName) {
       return { kind: plan.kind, versionId: plan.versionId, documentId: linked.id, snapshotAt: plan.kind === 'master' ? linked.createdAt : plan.snapshotAt };
     }
-    const content = { version: 1, kind: plan.kind, ...plan.content, vacancyId: cluster.id, applicationId, approvedAt, sent: false };
-    // Без разобранного текста: снимок не попадает в знания консультанта, там уже есть мастер-резюме.
-    const { document } = deps.candidateStore.saveDocumentAndLinkApplicationMaterial(candidateId, applicationId, 'resume', {
-      kind: 'resume',
-      source: 'generated',
-      fileName: plan.fileName,
-      mimeType: 'application/json',
-      contentBase64: Buffer.from(JSON.stringify(content), 'utf8').toString('base64'),
-      parseStatus: 'not_applicable',
-    });
-    return { kind: plan.kind, versionId: plan.versionId, documentId: document.id, snapshotAt: plan.snapshotAt };
+    return saveSnapshot(deps, candidateId, plan, { applicationId, cluster, approvedAt });
   } catch (error) {
     throw new ResumeSnapshotError(error);
   }

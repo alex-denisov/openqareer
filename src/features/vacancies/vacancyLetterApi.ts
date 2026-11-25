@@ -228,6 +228,24 @@ export interface PreparedLetterResume {
   readonly ready: boolean;
   /** B631: the targeted version the approval will attach; `null` on Free or without experience. */
   readonly versionId?: string | null;
+  /** Письмо одобрено, не отправлено и версию под вакансию можно заменить этой (B785). */
+  readonly replaceable?: boolean;
+}
+
+/** «Одобрить резюме» после одобрения письма: прикладывает ровно эту версию. */
+export async function attachLetterResume(
+  vacancyId: string,
+  versionId: string,
+): Promise<ApprovedVacancyLetterResult['resume']> {
+  const response = await apiFetch(
+    '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-resume',
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versionId }),
+    },
+  );
+  return (await readData<{ readonly resume: ApprovedVacancyLetterResult['resume'] }>(response)).resume;
 }
 
 export async function prepareVacancyLetterResume(vacancyId: string): Promise<PreparedLetterResume> {

@@ -23,6 +23,7 @@ export interface SealedSlice {
   readonly rows: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly facets: SealedMatchedList['facets'];
+  readonly filteredObserved?: SealedMatchedList['filteredObserved'];
   readonly campaignWithHypotheses: SealedMatchedList['campaignWithHypotheses'];
 }
 
@@ -35,6 +36,7 @@ export function sealedSlice(sealed: SealedMatchedList, offset: number, limit: nu
     rows: prefix.slice(offset, end),
     total: sealed.total,
     facets: sealed.facets,
+    filteredObserved: sealed.filteredObserved,
     campaignWithHypotheses: sealed.campaignWithHypotheses,
   };
 }

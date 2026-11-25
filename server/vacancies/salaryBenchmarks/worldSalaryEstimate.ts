@@ -6,12 +6,10 @@ import { convertAmount, type CurrencyRates } from '../../../shared/currencyRates
 import {
   blendInputOf,
   oneKind,
-  PER_YEAR,
-  roundTo,
   SINGLE_SOURCE_SPREAD,
-  stepOf,
   type BlendResult,
 } from './blendSalaryBenchmarks';
+import { distinctRange, PER_YEAR, roundTo, stepOf } from './sourceRanges';
 import type { SalaryBenchmark } from './salaryBenchmark';
 
 const CURRENCY = 'USD';
@@ -107,9 +105,16 @@ export function worldSalaryEstimate(
     ranges.map((range) => range.high),
     HIGH_SHARE,
   );
+  const range = distinctRange(
+    hideCountryBounds({ low, high }, ranges),
+    { currency: CURRENCY, period: 'month' },
+    kept.flatMap((row) => blendInputOf(row) ?? []),
+    rates,
+  );
+  if (!range) return undefined;
   return {
     estimate: {
-      ...hideCountryBounds({ low, high }, ranges),
+      ...range,
       currency: CURRENCY,
       period: 'month',
       tax: kept.find(({ tax }) => tax !== 'unknown')?.tax ?? 'unknown',

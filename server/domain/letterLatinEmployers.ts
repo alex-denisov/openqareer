@@ -62,8 +62,10 @@ export function latinEmployerNames(
 }
 
 export function withLatinEmployerNames(text: string, names: ReadonlyMap<string, string>): string {
-  return [...names].reduce(
-    (result, [name, latin]) => result.split(name).join(latin),
-    withOfficialNames(text),
-  );
+  // Транслитерация рядом с написанием кандидата читалась бы как вторая компания.
+  return [...names].reduce((result, [name, latin]) => {
+    const own = transliterate(name);
+    const named = result.split(name).join(latin);
+    return words(own).length > 1 && own !== latin ? named.split(own).join(latin) : named;
+  }, withOfficialNames(text));
 }

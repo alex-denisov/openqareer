@@ -121,7 +121,7 @@ export function scheduleSalaryUpkeep(database: DatabaseSync, log: Log): () => vo
     }),
     schedulePersistedJob(database, log, {
       job: 'salary-rebuild',
-      firstRunMs: HOUR_MS,
+      firstRunMs: 5 * 60_000,
       intervalMs: DAY_MS,
       run: () => rebuildBenchmarks(database, log),
     }),
