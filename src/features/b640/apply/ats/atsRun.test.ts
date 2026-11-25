@@ -156,6 +156,19 @@ describe('отклик формой работодателя', () => {
     },
   );
 
+  it.each(['text', 'textarea'] as const)(
+    'письмо не взято полем %s: нажатия нет, даже если оно необязательное',
+    async (kind) => {
+      const letter = field('id:letter', 'Cover letter', { kind, required: false });
+      desktop.fillAtsForm.mockResolvedValue({
+        results: { 'id:name': 'set', 'id:letter': 'fill_failed' },
+        values: { 'id:name': 'Марина' },
+      });
+      expect(await run(form(name, letter))).toEqual({ kind: 'failed', rejected: 'letter' });
+      expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+    },
+  );
+
   it('нет файла для обязательного резюме — отклик уходит в очередь', async () => {
     expect(await run(form(name, resume), { resume: null })).toEqual({
       kind: 'manual',
