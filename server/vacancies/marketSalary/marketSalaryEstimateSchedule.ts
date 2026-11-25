@@ -21,6 +21,8 @@ const INTERVAL_MS = 24 * 60 * 60_000;
  * каждые 6 часов — в часы людей и в пик сбора 21–23Z. Раз в сутки в 01:30Z (04:30 МСК).
  */
 const DAILY_AT_UTC_MINUTE = 90;
+/** B803: 25.11 выкаты прервали проход дважды, и оценки не обновились сутки: догоняем до следующего слота. */
+const DAILY_CATCH_UP_MS = INTERVAL_MS;
 
 export function scheduleMarketSalaryEstimateJob(
   database: DatabaseSync,
@@ -52,6 +54,7 @@ export function scheduleMarketSalaryEstimateJob(
     firstRunMs: FIRST_RUN_MS,
     intervalMs: INTERVAL_MS,
     dailyAtUtcMinute: DAILY_AT_UTC_MINUTE,
+    dailyCatchUpMs: DAILY_CATCH_UP_MS,
     run,
   });
 }

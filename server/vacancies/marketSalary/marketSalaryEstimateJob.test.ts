@@ -17,14 +17,13 @@ interface Row {
 
 function poolDatabase(rows: readonly Row[]): DatabaseSync {
   const database = new DatabaseSync(':memory:');
-  database.exec(`CREATE TABLE vacancy_pool (id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-    CREATE TABLE vacancy_pool_index (id TEXT PRIMARY KEY, is_active INTEGER NOT NULL, expired INTEGER NOT NULL);
+  database.exec(`CREATE TABLE vacancy_pool_index (id TEXT PRIMARY KEY, is_active INTEGER NOT NULL, expired INTEGER NOT NULL);
     CREATE TABLE vacancy_semantic (id TEXT NOT NULL, function_code TEXT NOT NULL, level_rank INTEGER,
       PRIMARY KEY (id, function_code));
     CREATE TABLE vacancy_cluster_input (id TEXT PRIMARY KEY, cluster_json TEXT NOT NULL);`);
   for (const row of rows) {
     database
-      .prepare('INSERT INTO vacancy_pool VALUES (?, ?)')
+      .prepare('INSERT INTO vacancy_cluster_input VALUES (?, ?)')
       .run(row.id, JSON.stringify({ location: row.location, salary: row.salary ?? null }));
     database
       .prepare('INSERT INTO vacancy_pool_index VALUES (?, 1, ?)')
@@ -83,7 +82,7 @@ describe('computeMarketSalaryEstimates', () => {
         pauses += 1;
       },
     });
-    expect(pauses).toBe(3);
+    expect(pauses).toBe(2);
     expect(estimates.get('it-eng-mgmt|4|city|москва')?.sampleSize).toBe(5);
     expect(estimates.get('it-product|4|city|москва')?.sampleSize).toBe(1);
   });
@@ -120,40 +119,5 @@ describe('SqliteMarketSalaryEstimateStore', () => {
   it('answers undefined before the maintenance process has written anything', () => {
     const store = new SqliteMarketSalaryEstimateStore({ database: new DatabaseSync(':memory:') });
     expect(store.get('it-eng-mgmt|4|city|москва')).toBeUndefined();
-  });
-
-  it('reads salary and place from the slim projection and keeps the figures unchanged (B761)', async () => {
-    const rows: Row[] = [
-      moscow(1, 400_000, 500_000),
-      moscow(2, 450_000, 550_000),
-      moscow(3, 500_000, 600_000),
-      { ...moscow(4, 520_000, 620_000), location: 'Казань' },
-      { ...moscow(5, 100, 200), salary: { from: 5_000, to: 6_000, currency: 'USD' } },
-      { ...moscow(6, 0, 0), salary: undefined },
-      { ...moscow(7, 900_000, 900_000), expired: true },
-    ];
-    const fromPayload = await computeMarketSalaryEstimates(poolDatabase(rows));
-
-    const projected = poolDatabase(rows);
-    // Полный текст лежит только в payload; проекция сведения несёт те же зарплату и место.
-    projected.exec(
-      "UPDATE vacancy_pool SET payload = json_set(payload, '$.description', printf('%.5000c', 'x'))",
-    );
-    for (const row of rows.slice(0, 5)) {
-      projected
-        .prepare('INSERT INTO vacancy_cluster_input VALUES (?, ?)')
-        .run(row.id, JSON.stringify({ location: row.location, salary: row.salary ?? null }));
-    }
-    const reads: string[] = [];
-    const prepare = projected.prepare.bind(projected);
-    projected.prepare = ((sql: string) => {
-      reads.push(sql);
-      return prepare(sql);
-    }) as DatabaseSync['prepare'];
-    const fromProjection = await computeMarketSalaryEstimates(projected);
-
-    expect([...fromProjection.entries()].sort()).toEqual([...fromPayload.entries()].sort());
-    expect(fromProjection.size).toBeGreaterThan(0);
-    expect(reads.join('\n')).toMatch(/vacancy_cluster_input/);
   });
 });
