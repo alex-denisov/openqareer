@@ -1,5 +1,7 @@
+import { vacancyAbout } from './resumeAbout';
 import { languageRequirementMet } from './resumeLanguageRequirement';
 import { termAppears } from './requirementTerm';
+import { resultStrength } from './resumeResult';
 import { withoutIntentLines, withoutSearchIntent } from './resumeSearchIntent';
 import { estimateLength } from './resumeStudioInternals';
 import type {
@@ -66,7 +68,7 @@ function assertionQuantity(claim: ResumeAssertion | null | undefined, sources: r
 
 /** Quantitative achievements in a targeted draft must retain text and evidence from the same entry. */
 export function assertTargetedResumeQuantities(master: ResumeDocument, targeted: ResumeDocument): void {
-  checkQuantity(targeted.about, master.about ? [master.about] : []);
+  checkQuantity(targeted.about, master.about ? [master.about, vacancyAbout(master.about)] : []);
   for (const entry of targeted.experience) {
     const source = master.experience.find((item) => item.id === entry.id);
     assertionQuantity(entry.description, [source?.description, withoutIntentLines(source?.description)]);
@@ -101,11 +103,12 @@ function prepareTargetedDocument(
   vacancy: TargetedResumeInput,
   requirements: readonly { label: string; normalized: string }[],
 ): PreparedTargetedDocument {
-  const experience = latestFirst(master.experience.map(withoutSearchIntent));
+  const experience = latestFirst(master.experience.map(withoutSearchIntent).map(resultsFirst));
   const projects = targetedProjects(master.projects ?? [], requirements);
   const skills = targetedSkills(master.skills ?? [], requirements);
   const initialDocument: ResumeDocument = {
     ...master,
+    ...(master.about ? { about: vacancyAbout(master.about) } : {}),
     targetRole: clean(vacancy.title) || master.targetRole,
     experience,
     projects,
@@ -164,6 +167,14 @@ function monthOf(date: ResumeAssertion | null): number {
 function endMonth(role: ResumeExperience): number {
   if (role.current.value) return Number.MAX_SAFE_INTEGER;
   return monthOf(role.endDate) || monthOf(role.startDate);
+}
+
+/** Измеримые результаты места стоят первыми; правки под вакансию ложатся поверх этого порядка. */
+function resultsFirst(role: ResumeExperience): ResumeExperience {
+  const bullets = [...role.bullets].sort(
+    (left, right) => resultStrength(right.value) - resultStrength(left.value),
+  );
+  return { ...role, bullets };
 }
 
 function targetedProjects(

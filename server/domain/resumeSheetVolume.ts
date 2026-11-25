@@ -1,5 +1,11 @@
 import { shownCertifications } from './resumeCertifications';
-import type { ResumeExperience, ResumeDocument, TargetedResumeSlice } from './resumeStudioTypes';
+import type {
+  ResumeAssertion,
+  ResumeExperience,
+  ResumeDocument,
+  TargetedResumeSlice,
+} from './resumeStudioTypes';
+import { resultStrength } from './resumeResult';
 import { relevanceScore, type ResumeRelevance } from './resumeRelevance';
 import type { TargetedResumeTrim, TargetedResumeVolume } from './resumeTargetedVolume';
 
@@ -11,13 +17,16 @@ const HEAD_LINES = 4;
 const SECTION_LINES = 2.4;
 const PLACE_LINES = 2.4;
 const ENTRY_LINES = 2;
-/** Три последних места держат три пункта, остальные — один: ни одно место не становится голой строкой. */
+/** Три последних места держат три-четыре пункта, остальные — один: ни одно место не становится голой строкой. */
 const RECENT_PLACES = 3;
 const RECENT_BULLETS = 3;
+const MAX_RECENT_BULLETS = 4;
 const OLDER_BULLETS = 1;
 /** Столько остаётся в разделе, когда он уступает место пунктам опыта. */
 const MIN_SKILLS = 8;
 const MIN_CERTIFICATES = 2;
+/** Больше любой суммы совпадений: число в пункте всегда важнее. */
+const RESULT_WEIGHT = 1000;
 const REASON = 'В пункте меньше всего совпадений с требованиями вакансии.';
 
 const wrapped = (text: string): number =>
@@ -88,6 +97,24 @@ function yieldSection(document: ResumeDocument, relevance: ResumeRelevance): Res
   return null;
 }
 
+/** Сначала измеримые результаты, среди равных — отвечающие вакансии. */
+function rankOf(bullet: ResumeAssertion, relevance: ResumeRelevance): number {
+  return (
+    resultStrength(bullet.value) * RESULT_WEIGHT +
+    relevanceScore(relevance, bullet.value, bullet.memoryId)
+  );
+}
+
+/** Сильнейшие пункты места в прежнем порядке. */
+function strongest(place: ResumeExperience, relevance: ResumeRelevance): ResumeExperience {
+  const kept = new Set(
+    [...place.bullets]
+      .sort((left, right) => rankOf(right, relevance) - rankOf(left, relevance))
+      .slice(0, MAX_RECENT_BULLETS),
+  );
+  return { ...place, bullets: place.bullets.filter((bullet) => kept.has(bullet)) };
+}
+
 interface Weak {
   readonly place: ResumeExperience;
   readonly index: number;
@@ -102,7 +129,7 @@ function weakestBullet(document: ResumeDocument, relevance: ResumeRelevance): We
     return place.bullets.map((bullet, index) => ({
       place,
       index,
-      score: relevanceScore(relevance, bullet.value, bullet.memoryId),
+      score: rankOf(bullet, relevance),
     }));
   });
   return all.reduce<Weak | null>(
@@ -123,6 +150,13 @@ function withShownCertificates(
   };
 }
 
+const trimOf = (place: ResumeExperience, bullet: ResumeAssertion): TargetedResumeTrim => ({
+  id: `bullet:${place.id}:${bullet.memoryId}`,
+  kind: 'bullet',
+  label: bullet.value,
+  reason: REASON,
+});
+
 /** Версия под вакансию на двух страницах: остаются пункты, отвечающие её требованиям, дословно. */
 export function fitVacancyResume(
   slice: TargetedResumeSlice,
@@ -132,19 +166,24 @@ export function fitVacancyResume(
   const trimmed: TargetedResumeTrim[] = [];
   let document = withShownCertificates(slice.document, relevance, now);
   let size = measure(document);
+  if (size.pages > MAX_PAGES) {
+    const experience = document.experience.map((place, order) =>
+      order < RECENT_PLACES ? strongest(place, relevance) : place,
+    );
+    for (const [order, place] of document.experience.entries()) {
+      const dropped = place.bullets.filter((item) => !experience[order]!.bullets.includes(item));
+      trimmed.push(...dropped.map((item) => trimOf(place, item)));
+    }
+    document = { ...document, experience };
+    size = measure(document);
+  }
   while (size.pages > MAX_PAGES) {
     const less = yieldSection(document, relevance);
     const weak = less ? null : weakestBullet(document, relevance);
     if (!less && !weak) break;
     if (weak) {
       const { place, index } = weak;
-      const bullet = place.bullets[index]!;
-      trimmed.push({
-        id: `bullet:${place.id}:${bullet.memoryId}`,
-        kind: 'bullet',
-        label: bullet.value,
-        reason: REASON,
-      });
+      trimmed.push(trimOf(place, place.bullets[index]!));
       const bullets = without(place.bullets, index);
       document = {
         ...document,
