@@ -1,3 +1,4 @@
+import { levelMultipliers } from './levelMultipliers';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { blendInputOf, blendSalary } from './blendSalaryBenchmarks';
@@ -136,6 +137,14 @@ describe('blendSalary', () => {
     expect(blend(input(), input())?.lowConfidence).toBe(true);
   });
 
+  it('two sources with the same range are widened too', () => {
+    const twin = input({ sourceName: 'Twin' });
+    expect(blend(input(), twin)).toMatchObject({
+      estimate: { low: 36_000, high: 66_000 },
+      lowConfidence: false,
+    });
+  });
+
   it('weights sources by priority and freshness', () => {
     const gov = input({ sourceKind: 'gov', sourceName: 'Gov', low: 20_000, high: 30_000 });
     expect(blend(input(), gov)?.estimate).toMatchObject({ low: 36_000, high: 54_000 });
@@ -151,7 +160,7 @@ describe('blendSalary', () => {
       period: 'year',
       year: 2025,
     });
-    expect(blend(input(), yearly)?.estimate).toMatchObject({ low: 40_000, high: 60_000 });
+    expect(blend(input(), yearly)?.estimate).toMatchObject({ low: 36_000, high: 66_000 });
     const net = input({ sourceName: 'N', tax: 'net', low: 1, high: 2, year: 2025 });
     expect(blend(input({ tax: 'gross' }), net)?.estimate.low).toBe(36_000);
     const usd = input({ sourceName: 'U', currency: 'USD', year: 2025 });
@@ -203,8 +212,8 @@ describe('blendSalary kinds and rounding', () => {
     const gross = at('G', 1_000, { tax: 'gross', year: 2025 });
     const net = at('N', 400, { tax: 'net', year: 2024 });
     expect(blendOf(unknown, gross, net)).toMatchObject({
-      low: 1_000,
-      high: 2_000,
+      low: 900,
+      high: 2_200,
       tax: 'gross',
     });
   });
@@ -213,7 +222,7 @@ describe('blendSalary kinds and rounding', () => {
     const total = at('T', 4_000, { payBase: 'total' });
     const base = at('B', 1_000, { payBase: 'base', year: 2020 });
     const unknown = at('U', 1_000, { year: 2020 });
-    expect(blendOf(total, base, unknown)).toMatchObject({ low: 1_000, high: 2_000 });
+    expect(blendOf(total, base, unknown)).toMatchObject({ low: 900, high: 2_200 });
   });
 
   it('a source with many rows votes once and a doubtful one votes half', () => {
@@ -366,6 +375,13 @@ describe('salary store', () => {
     expect(read({ country: 'AE' })).toHaveLength(2);
   });
 
+  it('the reader skips a broken row', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row(), row({ id: 'second-row' })]));
+    database.exec("UPDATE salary_benchmarks SET row_json = '{' WHERE id = 'Agency|second-row'");
+    expect(read({ country: 'AE' })).toEqual([row()]);
+  });
+
   it('keeps four slices of a source and ignores one older than all of them', () => {
     const { database, read } = opened();
     for (const day of [1, 2, 3, 4, 5, 6])
@@ -430,4 +446,18 @@ describe('salary store', () => {
     expect(read({ country: 'AE' }).map(({ low }) => low)).toEqual([12, 10]);
     expect(() => importSalarySlices(database, { sources: [], benchmarks: [row()] })).toThrow();
   });
+});
+
+it('a level ratio never compares gross with net', () => {
+  const level = (levelRank: number, tax: 'gross' | 'net', low: number, id: string) =>
+    row({ id, functionCode: 'data', levelRank, tax, low, high: low });
+  const rows = [1, 2, 3].flatMap((at) =>
+    ['AE', 'SA', 'QA'].flatMap((country) => [
+      { ...level(0, 'net', 100, `base-${country}-${at}`), country },
+      { ...level(1, 'gross', 200, `lead-${country}-${at}`), country },
+    ]),
+  );
+  expect(levelMultipliers(rows).size).toBe(0);
+  const same = rows.map((entry) => ({ ...entry, tax: 'net' as const }));
+  expect(levelMultipliers(same).get('data|1')).toBe(2);
 });

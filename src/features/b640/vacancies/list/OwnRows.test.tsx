@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, mount } from '../../kit/testDom';
-import { OwnRows } from './OwnRows';
+import { ShellProvider } from '../../shell/ShellContext';
+import { OwnRows, type OwnRowsProps } from './OwnRows';
+
+const shell = {
+  session: {} as never, path: '/app/vacancies', search: '', match: null, consultantRoute: null, navigate: vi.fn(),
+  signOut: async () => undefined, theme: 'light' as const, setTheme: () => undefined,
+};
+const table = (props: OwnRowsProps) => <ShellProvider value={shell}><table><OwnRows {...props} /></table></ShellProvider>;
 
 vi.mock('../ownVacancyApi', () => ({
   getOwnVacancy: vi.fn(async () => ({
@@ -31,7 +38,7 @@ describe('свои вакансии в таблице', () => {
   it('B676: деньги — по правилам списка: в месяц, в валюте списка; без суммы — «не указана»', () => {
     const yearly = { ...item, salary: { from: 114_000, to: 130_000, currency: 'USD', period: 'year' as const } };
     const rouble = { ...item, id: 'own-2', salary: { from: 450_000, currency: 'RUB' } };
-    const view = mount(<table><OwnRows items={[yearly, rouble, { ...item, id: 'own-3' }]} money={RUB} onRemove={vi.fn()} /></table>);
+    const view = mount(table({ items: [yearly, rouble, { ...item, id: 'own-3' }], money: RUB, onRemove: vi.fn() }));
     const cells = [...view.container.querySelectorAll('.vt-money')].map((cell) => cell.textContent);
     expect(cells[0]).toBe('≈ 855–975 тыс. ₽');
     expect(cells[1]).toBe('от 450 тыс. ₽');
@@ -39,7 +46,7 @@ describe('свои вакансии в таблице', () => {
     view.unmount();
   });
   it('строка с меткой «ваша» и «3 из 5» без процента', () => {
-    const view = mount(<table><OwnRows items={[item]} money={RUB} onRemove={vi.fn()} /></table>);
+    const view = mount(table({ items: [item], money: RUB, onRemove: vi.fn() }));
     const row = view.container.querySelector('tr.vt-row')!;
     expect(row.querySelector('.va-mine')!.textContent).toContain('ваша');
     expect(row.querySelector('.vt-fitc')!.textContent).toContain('3 из 5');
@@ -48,7 +55,7 @@ describe('свои вакансии в таблице', () => {
   });
   it('пока сравнение идёт — «считаем»; удаление по кнопке', () => {
     const onRemove = vi.fn();
-    const view = mount(<table><OwnRows items={[{ ...item, coverage: null, comparing: true }]} money={RUB} onRemove={onRemove} /></table>);
+    const view = mount(table({ items: [{ ...item, coverage: null, comparing: true }], money: RUB, onRemove: onRemove }));
     expect(view.container.querySelector('.vt-counting')!.textContent).toContain('считаем');
     click(view.container.querySelector('.va-no'));
     expect(onRemove).toHaveBeenCalledWith('own-1');
@@ -59,7 +66,7 @@ describe('свои вакансии в таблице', () => {
     vi.mocked(getOwnVacancy).mockResolvedValueOnce({
       ...item, coverage: null, text: 'About the role', fit: { state: 'no_requirements', requirements: [] },
     } as never);
-    const view = mount(<table><OwnRows items={[item]} money={RUB} onRemove={vi.fn()} /></table>);
+    const view = mount(table({ items: [item], money: RUB, onRemove: vi.fn() }));
     click(view.container.querySelector('.vt-toggle'));
     await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
     expect(view.container.textContent).toContain('Требования в тексте не нашлись');
@@ -73,7 +80,7 @@ describe('свои вакансии в таблице', () => {
       fit: { state: 'ready', requirements: [{ id: 'r9', text: 'Готовность к командировкам по Европе', sourceQuote: 'x', origin: 'structural', importance: 'high', kind: 'other', hard: false, stopFactor: false, skill: false }],
         result: { status: 'blocked', reason: 'blocked_gate', gates, coverage: { matched: 0, total: 0, unknown: 0 }, assessments: [] } },
     } as never);
-    const view = mount(<table><OwnRows items={[{ ...item, coverage: null }]} money={RUB} onRemove={vi.fn()} /></table>);
+    const view = mount(table({ items: [{ ...item, coverage: null }], money: RUB, onRemove: vi.fn() }));
     expect(view.container.querySelector('.vt-fitc')!.textContent).toContain('—');
     click(view.container.querySelector('.vt-toggle'));
     await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
@@ -90,7 +97,7 @@ describe('свои вакансии в таблице', () => {
       ...item, coverage: null, text: 'x',
       fit: { state: 'ready', requirements: [], result: { status: 'unknown', reason: 'too_few_skills', gates, coverage: { matched: 0, total: 0, unknown: 0 }, assessments: [] } },
     } as never);
-    const view = mount(<table><OwnRows items={[{ ...item, coverage: null }]} money={RUB} onRemove={vi.fn()} /></table>);
+    const view = mount(table({ items: [{ ...item, coverage: null }], money: RUB, onRemove: vi.fn() }));
     click(view.container.querySelector('.vt-toggle'));
     await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
     expect(view.container.textContent).toContain('Мало требований для расчёта');
@@ -98,7 +105,7 @@ describe('свои вакансии в таблице', () => {
     view.unmount();
   });
   it('раскрытие: «не оценка рынка», требования и ссылка на сайт', async () => {
-    const view = mount(<table><OwnRows items={[item]} money={RUB} onRemove={vi.fn()} /></table>);
+    const view = mount(table({ items: [item], money: RUB, onRemove: vi.fn() }));
     click(view.container.querySelector('.vt-toggle'));
     await vi.waitFor(() => expect(view.container.querySelector('.v4-one')).not.toBeNull());
     expect(view.container.querySelector('.v4-one')!.textContent).toBe('Сравнение с одной вакансией — не оценка рынка');
@@ -110,7 +117,7 @@ describe('свои вакансии в таблице', () => {
   it('B676: на 390 удалить — через «…» → «Удалить», корзины в строке нет', () => {
     mobileScreen = true;
     const onRemove = vi.fn();
-    const view = mount(<table><OwnRows items={[item]} money={RUB} onRemove={onRemove} /></table>);
+    const view = mount(table({ items: [item], money: RUB, onRemove: onRemove }));
     const more = view.container.querySelector<HTMLButtonElement>('.va-more');
     expect(more?.getAttribute('aria-label')).toBe('Ещё действия');
     click(more!);

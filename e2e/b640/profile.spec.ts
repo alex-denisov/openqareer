@@ -239,7 +239,7 @@ test.describe('B651: «Статус» (s02)', () => {
     await expect(node(page, 's02').getByRole('radio', { name: /Ищу работу/u })).toBeChecked();
   });
 
-  test('раскладка как в макете: список справа, «Что изменится» и история слева, «Можно сразу»', async ({
+  test('раскладка как в макете: список справа, «Что изменится» и история слева', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'две колонки — на 1440');
@@ -247,8 +247,8 @@ test.describe('B651: «Статус» (s02)', () => {
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-main-right', '1');
     await expect(page.getByTestId('cabinet-b640')).toHaveAttribute('data-mtight', '1');
     const screen = node(page, 's02');
-    await screen.getByRole('radio', { name: 'Работаю' }).check();
-    await expect(screen.locator('.optin h3')).toHaveText('Можно сразу');
+    await screen.getByRole('radio', { name: 'Меняю профессию' }).check();
+    await expect(screen.locator('#pv-title')).toContainText('Меняю профессию');
     const box = async (selector: string) => (await screen.locator(selector).boundingBox())!;
     const [page2, pick, lead, history] = await Promise.all([
       screen.boundingBox(),
@@ -260,6 +260,29 @@ test.describe('B651: «Статус» (s02)', () => {
     expect(pick.x).toBeGreaterThan(lead.x + lead.width / 2);
     expect(Math.abs(history.x - lead.x)).toBeLessThan(40);
     expect(history.y).toBeLessThan(lead.y);
+  });
+
+  test('s15 «Работаю»: одна колонка 640, список сверху, истории нет, план до выхода', async ({
+    page,
+  }, testInfo) => {
+    await openCabinet(page, '/app/profile/status');
+    const screen = node(page, 's02');
+    await screen.getByRole('radio', { name: 'Работаю' }).check();
+    await expect(screen.locator('.optin h3')).toHaveText('Что можно поменять');
+    await expect(page.locator('#hist-title')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'До выхода: план в дневнике' })).toHaveAttribute(
+      'href',
+      /before-start$/u,
+    );
+    const pick = (await screen.locator('.pick').boundingBox())!;
+    const lead = (await screen.locator('section.lead').boundingBox())!;
+    expect(pick.y + pick.height).toBeLessThanOrEqual(lead.y);
+    expect(Math.abs(pick.x - lead.x)).toBeLessThan(2);
+    if (testInfo.project.name === 'desktop-1440') {
+      expect([Math.round(pick.x), Math.round(pick.width)]).toEqual([438, 640]);
+    }
+    await expectGates(page);
+    await page.screenshot({ path: `.s13-shots/s15-${testInfo.project.name}.png` });
   });
 
   test('сбой сохранения: строка на месте, выбор сохранён, повтор проходит', async ({ page }) => {

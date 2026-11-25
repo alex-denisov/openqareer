@@ -206,10 +206,10 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('#ls-skills ~ .li-rec .li-err')).toBeNull();
   });
 
-  it('без импорта LinkedIn — «Импортировать из LinkedIn», разделов нет', async () => {
+  it('без импорта LinkedIn — «Подключить», разделов нет', async () => {
     const root = (await open({ kind: 'no_import' })).container;
     expect(root.querySelector('.li-sec')).toBeNull();
-    const link = byText(root, 'a.btn', 'Импортировать из LinkedIn')!;
+    const link = byText(root, 'a.btn', 'Подключить')!;
     expect(link.getAttribute('href')).toBe('/app/account/connections');
   });
 });

@@ -37,8 +37,6 @@ function item(
             marketSalary: {
               ...marketSalary,
               currency: 'RUR',
-              sampleSize: marketSalary.low ? 41 : 3,
-              basis: 'city' as const,
               computedAt: '2026-10-05T00:00:00.000Z',
             },
           }

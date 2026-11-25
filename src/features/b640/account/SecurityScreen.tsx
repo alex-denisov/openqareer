@@ -13,7 +13,7 @@ import { ErrorLine, SettingsPage, useLoad, type Load } from './parts';
 import { EmailCodeForm, EmailForm, NameForm, PasswordForm } from './securityForms';
 import { PasskeyForm, PasskeyRow, usePasskeys, type PasskeyState } from './PasskeySection';
 import { getTwoFactorStatus } from './twoFactorApi';
-import { TwoFactorPanel, TwoFactorRow, type TwoFactorState, type TwoFactorView } from './TwoFactorSection';
+import { BackupCodesRow, TwoFactorPanel, TwoFactorRow, type TwoFactorState, type TwoFactorView } from './TwoFactorSection';
 
 interface Security {
   readonly account: AccountSnapshot;
@@ -166,6 +166,7 @@ function SignIn({ onChanged, twoFactor, passkeys, deviceLabel }: SignInProps) {
         <>
           <Row title="Пароль" action="Сменить пароль" onAction={() => setOpen(true)} />
           <TwoFactorRow state={twoFactor} />
+          <BackupCodesRow state={twoFactor} />
           <PasskeyRow state={passkeys} currentLabel={deviceLabel} />
           <PasskeyForm state={passkeys} needsCode={needsCode} />
         </>

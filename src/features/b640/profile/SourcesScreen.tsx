@@ -3,7 +3,22 @@ import { CoachApiError } from '../../coach/apiClient';
 import { importCandidateResume } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
 import { extractPdfResume, PdfResumeImportError } from '../../workspace/pdfResume';
-import { Button, Dialog, Icon, Link, ResultLine, StatusLine, type IconName } from '../kit';
+import { getConnections, type CandidateConnection } from '../../coach/coachApi';
+import { BlockSkeleton } from '../today/parts';
+import { useLoad } from '../today/useLoad';
+import type { ReviewRow } from './experienceForm';
+import { importedDay } from './importedDay';
+import { loadReview, ReviewList } from './ReviewScreen';
+import {
+  ActionDock,
+  Button,
+  Dialog,
+  Icon,
+  Link,
+  ResultLine,
+  StatusLine,
+  type IconName,
+} from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { CONSULTANT_PATH } from '../shell/navigation';
 import { NEW_ENTRY_ID } from './newExperience';
@@ -51,20 +66,22 @@ async function profileHasExperience(): Promise<boolean> {
 interface UploadActionProps {
   readonly done: boolean;
   readonly busy: boolean;
+  /** p04b: залитая кнопка на экране — «Дальше». */
+  readonly primary: boolean;
   readonly onPick: () => void;
 }
 
-function UploadAction({ done, busy, onPick }: UploadActionProps) {
+function UploadAction({ done, busy, primary, onPick }: UploadActionProps) {
   if (done) {
     return (
-      <Link className="btn is-primary" to={buildNodePath('p06')}>
+      <Link className={primary ? 'btn is-primary' : 'btn'} to={buildNodePath('p06')}>
         Проверить записи
         <Icon name="right" />
       </Link>
     );
   }
   return (
-    <Button variant="primary" busy={busy} onClick={onPick}>
+    <Button variant={primary ? 'primary' : 'default'} busy={busy} onClick={onPick}>
       Выбрать файл
       <Icon name="right" />
     </Button>
@@ -136,7 +153,7 @@ function ReplaceDialog({ open, onCancel, onReplace }: ReplaceDialogProps) {
 }
 
 /** «Загрузить резюме»: PDF читается в браузере, в профиль уходит его текст. */
-function UploadSource() {
+function UploadSource({ primary }: { readonly primary: boolean }) {
   const input = useRef<HTMLInputElement>(null);
   const { state, choose, run, cancel } = useUpload();
   const busy = state.step === 'checking' || state.step === 'reading';
@@ -148,7 +165,7 @@ function UploadSource() {
   }
 
   return (
-    <li className="src is-next">
+    <li className={primary ? 'src is-next' : 'src'}>
       <span className="src-ico">
         <Icon name="upload" />
       </span>
@@ -168,6 +185,7 @@ function UploadSource() {
       <UploadAction
         done={state.step === 'done'}
         busy={busy}
+        primary={primary}
         onPick={() => input.current?.click()}
       />
       <ReplaceDialog
@@ -203,8 +221,114 @@ function LinkSource({ icon, title, action, path }: LinkSourceProps) {
   );
 }
 
-/** p04 «Откуда взять опыт»: резюме файлом, LinkedIn, hh.ru, разговор с консультантом или вручную. */
+const PLATFORMS = [
+  { platform: 'linkedin', icon: 'linkedin', title: 'LinkedIn', node: 'a03' },
+  { platform: 'hh', icon: 'brief2', title: 'hh.ru', node: 'a11' },
+] as const;
+
+/** p04b: площадка уже прочитана — «Готово · дата» и «Обновить». */
+function ReadSource({
+  icon,
+  title,
+  day,
+}: Pick<LinkSourceProps, 'icon' | 'title'> & { readonly day: string | null }) {
+  return (
+    <li className="src is-next">
+      <span className="src-ico">
+        <Icon name={icon} />
+      </span>
+      <div className="src-main">
+        <h3 className="src-title">{title}</h3>
+        <ul className="src-stages">
+          <li>
+            Готово
+            {day ? (
+              <>
+                {' · '}
+                <span className="num">{day}</span>
+              </>
+            ) : null}
+          </li>
+        </ul>
+      </div>
+      <Link className="btn" to={buildNodePath('n03')} aria-label={`Обновить ${title}`}>
+        <Icon name="refresh" />
+        Обновить
+      </Link>
+    </li>
+  );
+}
+
+function ReviewBlock({ rows }: { readonly rows: readonly ReviewRow[] }) {
+  return (
+    <section className="pr-block" aria-labelledby="pr-t">
+      <h3 className="pr-block-t" id="pr-t">
+        Так мы прочитали ваш профиль — всё верно?
+      </h3>
+      <ReviewList rows={rows} level={4} />
+    </section>
+  );
+}
+
+interface Sources {
+  readonly connections: readonly CandidateConnection[];
+  readonly rows: readonly ReviewRow[];
+}
+
+/** Не прочиталось — источники показываем как неподключённые: все пути остаются. */
+async function loadSources(): Promise<Sources> {
+  const connections = await getConnections().catch(() => []);
+  if (!PLATFORMS.some(({ platform }) => importedDay(connections, platform) !== undefined))
+    return { connections, rows: [] };
+  return { connections, rows: await loadReview().catch(() => []) };
+}
+
+interface RestSourcesProps {
+  readonly days: readonly ((typeof PLATFORMS)[number] & {
+    readonly day: string | null | undefined;
+  })[];
+  /** p04b: сверху уже есть прочитанная площадка. */
+  readonly hasRead: boolean;
+}
+
+function RestSources({ days, hasRead }: RestSourcesProps) {
+  return (
+    <ul className="src-list">
+      <UploadSource primary={!hasRead} />
+      {days
+        .filter(({ day }) => day === undefined)
+        .map(({ platform, icon, title, node: code }) => (
+          <LinkSource
+            key={platform}
+            icon={icon}
+            title={title}
+            action="Подключить"
+            path={buildNodePath(code)}
+          />
+        ))}
+      <LinkSource
+        icon="chat"
+        title="Рассказать консультанту"
+        action="Начать разговор"
+        path={CONSULTANT_PATH}
+      />
+      <LinkSource
+        icon="edit"
+        title="Заполнить вручную"
+        action="Заполнить"
+        path={buildNodePath('p07', { entryId: NEW_ENTRY_ID })}
+      />
+    </ul>
+  );
+}
+
+/** p04 «Откуда взять опыт» и p04b: прочитанная площадка сверху, под ней записи на проверку. */
 export function SourcesScreen({ node }: { readonly node: B640Node }) {
+  const load = useLoad(loadSources);
+  const connections = load.state === 'ready' ? load.data.connections : [];
+  const rows = load.state === 'ready' ? load.data.rows : [];
+  const days = PLATFORMS.map((item) => ({ ...item, day: importedDay(connections, item.platform) }));
+  const read = days.filter(({ day }) => day !== undefined);
   return (
     <div className="page pf" data-b640-node={node.code} data-b640-section={node.section}>
       <div className="col">
@@ -212,33 +336,27 @@ export function SourcesScreen({ node }: { readonly node: B640Node }) {
           <h2 className="lead-title is-long" id="pf-t">
             Откуда взять опыт
           </h2>
-          <ul className="src-list">
-            <UploadSource />
-            <LinkSource
-              icon="linkedin"
-              title="LinkedIn"
-              action="Подключить"
-              path={buildNodePath('a03')}
+          {load.state === 'loading' ? <BlockSkeleton label="Загружаем источники" rows={3} /> : null}
+          {read.length > 0 ? (
+            <ul className="src-list">
+              {read.map(({ platform, icon, title, day }) => (
+                <ReadSource key={platform} icon={icon} title={title} day={day ?? null} />
+              ))}
+            </ul>
+          ) : null}
+          {rows.length > 0 ? <ReviewBlock rows={rows} /> : null}
+          {load.state === 'loading' ? null : <RestSources days={days} hasRead={read.length > 0} />}
+          {read.length > 0 ? (
+            <ActionDock
+              kind="commit"
+              primary={
+                <Link className="btn is-primary" to={buildNodePath('s10')}>
+                  <Icon name="arrow" />
+                  Дальше
+                </Link>
+              }
             />
-            <LinkSource
-              icon="brief2"
-              title="hh.ru"
-              action="Подключить"
-              path={buildNodePath('a11')}
-            />
-            <LinkSource
-              icon="chat"
-              title="Рассказать консультанту"
-              action="Начать разговор"
-              path={CONSULTANT_PATH}
-            />
-            <LinkSource
-              icon="edit"
-              title="Заполнить вручную"
-              action="Заполнить"
-              path={buildNodePath('p07', { entryId: NEW_ENTRY_ID })}
-            />
-          </ul>
+          ) : null}
         </section>
       </div>
     </div>

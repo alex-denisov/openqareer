@@ -12,8 +12,13 @@ vi.mock('./vacancyFitContext', () => ({
 }));
 vi.mock('../domain/vacancyFitProfileStamp', () => ({ vacancyFitProfileStamp: () => 'stamp' }));
 
-const { withVacancyFitOrder, withShownPageFitViews, withWantedCompanyOrder, withOrderedPercents, STALE_REFIT_LIMIT } =
-  await import('./matchedVacancyFit');
+const {
+  withVacancyFitOrder,
+  withShownPageFitViews,
+  withWantedCompanyOrder,
+  withOrderedPercents,
+  STALE_REFIT_LIMIT,
+} = await import('./matchedVacancyFit');
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { RouteDeps } from './deps';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
@@ -51,7 +56,10 @@ function deps(scored: Record<string, number>): RouteDeps {
 
 describe('процент и место из одного снимка (B789)', () => {
   it('число, которого не было в снимке, не показано среди непосчитанных; остальное — из снимка', async () => {
-    const live = await withShownPageFitViews(deps({ a: 90, b: 70 }), 'one-snapshot', [item('a'), item('b')]);
+    const live = await withShownPageFitViews(deps({ a: 90, b: 70 }), 'one-snapshot', [
+      item('a'),
+      item('b'),
+    ]);
     const [b] = await withShownPageFitViews(deps({ b: 40 }), 'one-snapshot-old', [item('b')]);
     const shown = withOrderedPercents(live, [item('a'), b!]);
     expect(shown[0]!.explanation.fitView?.state).toBe('processing');
@@ -199,5 +207,29 @@ describe('компании «Хочу» в порядке подборки', () 
     const order = withWantedCompanyOrder(wantDeps({}), 'want-b', { by: 'money', dir: 'asc' });
     expect(order.cacheKey).toBe('');
     expect(order(pool).map((row) => row.cluster.id)).toEqual(['a', 'b']);
+  });
+
+  it('«Деньги» читают оценки в prepare с уступкой event loop, сборка их не читает', async () => {
+    const pool = ['a', 'b', 'c'].map((id) => withCompany(id, 'Other'));
+    let turns = 0;
+    const tick = setInterval(() => (turns += 1), 0);
+    const estimate = vi.fn((cluster: { id: string }) => {
+      const until = performance.now() + 25;
+      while (performance.now() < until);
+      const low = cluster.id === 'b' ? 300_000 : 100_000;
+      return { low, high: low, currency: 'RUB', period: 'month', tax: 'unknown', computedAt: '' };
+    });
+    const deps = {
+      ...wantDeps({}),
+      marketSalaryEstimates: { estimate },
+      titleParseStore: { getByKey: () => undefined },
+    } as unknown as Parameters<typeof withWantedCompanyOrder>[0];
+    const order = withWantedCompanyOrder(deps, 'want-m', { by: 'money', dir: 'desc' });
+    await order.prepare(pool);
+    clearInterval(tick);
+    expect(turns).toBeGreaterThan(0);
+    expect(estimate).toHaveBeenCalledTimes(3);
+    expect(order(pool)[0]?.cluster.id).toBe('b');
+    expect(estimate).toHaveBeenCalledTimes(3);
   });
 });

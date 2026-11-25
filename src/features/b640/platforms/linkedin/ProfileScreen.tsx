@@ -21,11 +21,11 @@ function NoImport() {
         </span>
         <div className="src-main">
           <h2 className="src-title">
-            LinkedIn<span className="vh"> не импортирован</span>
+            LinkedIn<span className="vh"> не подключён</span>
           </h2>
         </div>
-        <Link className="btn is-primary" to={buildNodePath('n03')}>
-          Импортировать из LinkedIn
+        <Link className="btn is-primary" to={buildNodePath('n03')} aria-label="Подключить LinkedIn">
+          Подключить
           <Icon name="right" />
         </Link>
       </li>
@@ -86,7 +86,7 @@ function Next() {
   );
 }
 
-/** Узел a03 и его состояние a03n: семь разделов из импорта LinkedIn или «Импортировать из LinkedIn». */
+/** Узел a03 и его состояние a03n: семь разделов из импорта LinkedIn или «Подключить». */
 export function ProfileScreen({ node }: SectionProps) {
   const load = useLoad(getLinkedinProfile);
   useRewriteRefresh(load);

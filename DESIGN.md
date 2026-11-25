@@ -59,8 +59,9 @@ navigation; tariffs remain a visible top action.
 
 ## Data and copy rules
 
-- Never show a fit score, market demand, salary or probability without a source,
-  sample size and date.
+- Never show a fit score, market demand or probability without a source, sample
+  size and date. A salary is either the vacancy's own or «Оценка openqareer» with
+  its date; its sources stay on the server (owner, 25.11).
 - `Гипотеза`, `не проверено`, `неизвестно`, `подтверждено` and connector states
   are explicit text, not colour-only signals.
 - A single pasted vacancy is labelled as one-vacancy comparison, never as

@@ -101,3 +101,13 @@ export function plausible(row: SalaryBenchmark): SalaryBenchmark[] {
   if (row.low === null || row.high === null || row.high <= row.low * MAX_RANGE_RATIO) return [row];
   return row.median === null ? [] : [{ ...row, low: null, high: null }];
 }
+
+/** Строка базы; то, что нынешняя схема не читает, пропускается. */
+export function readableBenchmark({ row_json }: { readonly row_json: string }): SalaryBenchmark[] {
+  try {
+    const parsed = salaryBenchmarkSchema.safeParse(JSON.parse(row_json));
+    return parsed.success ? [parsed.data] : [];
+  } catch {
+    return [];
+  }
+}

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cityCountry, cityCountryInText } from './cityCountry';
+import { bundledCities } from './bundledCities';
+import { createCities } from './cityCountry';
+
+const { country: cityCountry, inText: cityCountryInText } = createCities(bundledCities());
 
 describe('cityCountry', () => {
   it.each([

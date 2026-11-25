@@ -31,6 +31,14 @@ The source board files were concatenated into a single file. The data is under
 CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). The license and
 individual contribution credits accompany the snapshot.
 
+Occupation earnings are taken from the International Labour Organization,
+ILOSTAT (indicator EAR_EMTA_SEX_OCU_CUR_NB_A, https://ilostat.ilo.org), under
+CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). GNI per capita is
+taken from the World Bank, World Development Indicators
+(https://data.worldbank.org), under CC BY 4.0. Both are selected, converted and
+extrapolated to countries without their own data by openqareer; the ILO and the
+World Bank do not endorse the result.
+
 The city dictionary in server/vacancies/vacancyCountry/cityCountryData.ts is
 derived from GeoNames (https://www.geonames.org), cities5000, licensed under
 CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Only names and

@@ -169,7 +169,17 @@ test('B401: enable 2FA, keep the codes once, sign in with an app code and a back
   expect(stored).not.toContain(CODES[0]);
   await screen.getByRole('button', { name: 'Готово' }).click();
   await expect(screen.locator('.fa-codes')).toHaveCount(0);
-  await expect(row.locator('.set-v')).toHaveText('включена · резервных кодов: 8');
+  await expect(row.locator('.set-v')).toHaveText('включена');
+
+  // n04c: «Отключить» сразу открывает окно; промежуточной формы на странице нет.
+  await expect(screen.getByLabel('Код из приложения-аутентификатора')).toHaveCount(0);
+  await row.getByRole('button', { name: 'Отключить' }).click();
+  const off = page.getByRole('dialog', { name: 'Отключить двухфакторную защиту?' });
+  await expect(off.getByRole('button', { name: 'Отключить' })).toBeDisabled();
+  await expectGates(page);
+  await page.screenshot({ path: `.s13-shots/n04c-${testInfo.project.name}.png` });
+  await off.getByRole('button', { name: 'Оставить' }).click();
+  await expect(off).toHaveCount(0);
 
   await screen.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await expect.poll(() => server.signedIn).toBe(false);
