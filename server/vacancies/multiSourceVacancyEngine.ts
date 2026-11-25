@@ -18,7 +18,7 @@ import type {
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
 import { confirmsLiveness } from './poolLiveness';
-import { checkUnseenLinks, type UnseenLinkReport } from './unseenLinkCheck';
+import { checkUnseenLinks, UnseenLinkWalk, type UnseenLinkReport } from './unseenLinkCheck';
 import {
   calculateSourceAuthenticity,
   clusterVacancies,
@@ -515,7 +515,7 @@ export class MultiSourceVacancyEngine {
    * ссылок — измерение, а не догадка, и выдумывать её нельзя (B200 срез 2).
    */
   private readonly linkProbe?: LinkProbe;
-  private readonly unseenAskedAt = new Map<string, number>();
+  private readonly unseenWalk = new UnseenLinkWalk();
   private readonly descriptionLoader?: VacancyDescriptionLoader;
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
@@ -2109,7 +2109,7 @@ export class MultiSourceVacancyEngine {
       this.pool,
       this.linkProbe,
       sourceIds,
-      this.unseenAskedAt,
+      this.unseenWalk,
       nowMs,
     );
     if (goneLinks.length > 0) {
