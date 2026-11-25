@@ -392,11 +392,6 @@ export const coachTurnInputSchema = z.object({
     })
     .strict()
     .optional(),
-  /** B796: под этой репликой встанут карточки правки факта с «Применить». */
-  correctionCards: z
-    .array(z.object({ place: z.string().max(300), from: z.string(), to: z.string() }).strict())
-    .max(4)
-    .optional(),
   stageContext: z.string().trim().max(10_000).optional(),
   rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),
   messages: z.array(coachMessageSchema).min(1).max(30),
@@ -520,7 +515,16 @@ export const coachTurnResultSchema = z.object({
     .optional(),
 });
 
-export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
+/** B796: карточка правки факта с «Применить», которая встанет под репликой. */
+export interface CorrectionCard {
+  readonly place: string;
+  readonly from: string;
+  readonly to: string;
+}
+export type CoachTurnInput = z.infer<typeof coachTurnInputSchema> & {
+  /** Считает сервер перед вызовом модели; в схеме входа этого поля нет. */
+  readonly correctionCards?: readonly CorrectionCard[];
+};
 export type ResumeRevisionProposal = z.infer<typeof resumeRevisionProposalSchema>;
 // The provider limit stays unchanged; only stored server-labeled replies have extra headroom.
 export const coachProviderTurnResultSchema = coachTurnResultSchema.extend({
