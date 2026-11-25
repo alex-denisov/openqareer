@@ -1,6 +1,7 @@
 import { presentNotification, type NotificationEventKind } from '../data/notificationPolicy';
 import { pluralWordRu } from '../../shared/pluralRu';
 import { digestCount, roleDigestTitle, roleInDigestTitle } from './roleVacancyDigest';
+import { collapseDailyRepeats } from './b640NotificationRepeats';
 import { digestSalaryNote } from './roleDigestMarks';
 
 /** B671: лента уведомлений нового кабинета поверх прежней таблицы уведомлений. */
@@ -28,6 +29,8 @@ export interface B640Notification {
   readonly readAt: string | null;
   readonly sourceType: string;
   readonly sourceId: string;
+  /** Непрочитанные повторы того же дня, свёрнутые в эту строку. */
+  readonly mergedUnreadIds?: readonly string[];
 }
 
 export interface B640NotificationSource {
@@ -276,8 +279,13 @@ function shownInApp(item: B640Notification, inApp: BuildB640FeedInput['inApp']):
 
 export function buildB640NotificationFeed(input: BuildB640FeedInput): B640NotificationFeed {
   const newestReplies = newestReplyIds(input.rows);
-  const all = input.rows.map((row) =>
-    classifyB640Notification(
+  const collapsed = collapseDailyRepeats(input.rows);
+  // Сколько непрочитанных записей ушло внутрь строк: счётчик считает строки.
+  const foldedUnread =
+    input.rows.filter((row) => row.readAt === null).length -
+    collapsed.filter(({ row }) => row.readAt === null).length;
+  const all = collapsed.map(({ row, mergedUnreadIds }) => ({
+    ...classifyB640Notification(
       row,
       row.sourceType === 'application' || row.sourceType === 'interview'
         ? input.applications.get(row.sourceId)
@@ -290,7 +298,8 @@ export function buildB640NotificationFeed(input: BuildB640FeedInput): B640Notifi
           row.kind === 'footprint_findings' ? input.findingCounts?.get(row.sourceId) : undefined,
       },
     ),
-  );
+    ...(mergedUnreadIds.length > 0 ? { mergedUnreadIds } : {}),
+  }));
   const classified = all.filter((item) => shownInApp(item, input.inApp));
   const hiddenUnread = all.filter(
     (item) => item.readAt === null && !shownInApp(item, input.inApp),
@@ -310,7 +319,7 @@ export function buildB640NotificationFeed(input: BuildB640FeedInput): B640Notifi
   return {
     items,
     pinned,
-    unreadCount: Math.max(0, input.unreadCount - hiddenUnread),
+    unreadCount: Math.max(0, input.unreadCount - hiddenUnread - foldedUnread),
     nextCursor: next < rest.length ? String(next) : null,
   };
 }

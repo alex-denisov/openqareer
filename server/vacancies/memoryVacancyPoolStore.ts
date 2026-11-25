@@ -1,3 +1,5 @@
+import { isHhStubText } from './hhStubText';
+import { hasDetailText } from './detailTextPriority';
 import { confirmsLiveness, freshnessAnchorMs, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
 import { sourceMemberKey } from './vacancyDeduplicator';
 
@@ -580,7 +582,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     const ordered = [...this.hhTextPriority.entries()].sort((a, b) => a[1] - b[1]);
     const needs = (id: string) => {
       const row = this.rows.get(id);
-      return Boolean(row && row.expiredAt === undefined && !row.vacancy.fullDescription?.trim());
+      return Boolean(row && row.expiredAt === undefined && isHhStubText(row.vacancy.fullDescription));
     };
     this.dropHhTextPriority(ordered.filter(([id]) => !needs(id)).map(([id]) => id));
     return ordered
@@ -593,6 +595,39 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     const next = new Map(this.hhTextPriority);
     vacancyIds.forEach((id) => next.delete(id));
     this.hhTextPriority = next;
+  }
+
+  private detailTextPriority: ReadonlyMap<string, number> = new Map();
+
+  /** Как в базе: подборки первыми в дочитке площадок без текста в списке (B791). */
+  requestDetailTextPriority(vacancyIds: readonly string[], baseRank = 0): void {
+    const next = new Map(this.detailTextPriority);
+    vacancyIds.filter(hasDetailText).forEach((id, index) => {
+      const rank = baseRank + index;
+      next.set(id, Math.min(next.get(id) ?? rank, rank));
+    });
+    this.detailTextPriority = next;
+  }
+
+  peekDetailTextPriority(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): string[] {
+    const excluded = new Set(excludeIds);
+    const needs = (id: string) => {
+      const row = this.rows.get(id);
+      return Boolean(
+        row?.sourceId === sourceId &&
+        row.expiredAt === undefined &&
+        !row.vacancy.fullDescription?.trim(),
+      );
+    };
+    return [...this.detailTextPriority]
+      .sort((a, b) => a[1] - b[1])
+      .map(([id]) => id)
+      .filter((id) => !excluded.has(id) && needs(id))
+      .slice(0, limit);
   }
 
   /** Как в базе, без каталога: живые hh-записи без текста, свежие первыми (B535). */

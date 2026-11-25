@@ -36,8 +36,9 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
   it('сохраняет показанные роли без отклонённых и уже выбранных в мастере', () => {
     const store = fakeStore({ campaign }, [careerRoleId('CIO')]);
     const prioritizeCampaign = vi.fn();
+    const refreshCampaign = vi.fn();
     const changed = persistCareerRoles(
-      { candidateStore: store as never, matchedPoolPrecompute: { prioritizeCampaign } as never },
+      { candidateStore: store as never, matchedPoolPrecompute: { prioritizeCampaign, refreshCampaign } as never },
       'c1',
       [
         role('Head of Product'),
@@ -51,7 +52,9 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
       { id: careerRoleId('Head of Product'), title: 'Head of Product' },
       { id: careerRoleId('Engineering Lead'), title: 'Engineering Lead' },
     ]);
-    expect(prioritizeCampaign).toHaveBeenCalledWith('c1');
+    expect(refreshCampaign).toHaveBeenCalledWith('c1');
+    // B801: снимки подбора не стираются — их читает соседний запрос.
+    expect(prioritizeCampaign).not.toHaveBeenCalled();
   });
 
   it('не пишет, когда набор ролей не изменился', () => {

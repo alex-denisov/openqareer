@@ -33,7 +33,7 @@ import { getStatus } from './statusChoice';
 import { ProfileAside, TermsRowMobile } from './ProfileAside';
 import { loadTerms, type ProfileTerms } from './profileAsideApi';
 
-function loadProfile(): Promise<ResumeStudioView> {
+export function loadProfile(): Promise<ResumeStudioView> {
   return getResumeStudio();
 }
 

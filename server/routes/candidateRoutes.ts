@@ -35,6 +35,7 @@ import { registerExperienceFactRewriteRoutes } from './experienceFactRewriteRout
 import { registerProfileHistoryRoutes } from './profileHistoryRoutes';
 import { withStoredFactRewrites } from '../domain/experienceFactRewrite';
 import { registerCandidateConsultantHistoryRoutes } from './candidateConsultantHistoryRoutes';
+import { registerFactCorrectionRoutes } from './factCorrectionRoutes';
 import { registerConsultantB640Routes } from './consultantB640Routes';
 import { registerCandidateMediaRoutes } from './candidateMediaRoutes';
 import { registerCandidateDocumentRoutes } from './candidateDocumentRoutes';
@@ -805,6 +806,7 @@ export async function registerCandidateRoutes(
   await registerCandidateLifecycle(app, deps);
   await registerCandidateConsultantHistoryRoutes(app, deps);
   registerConsultantB640Routes(app, deps);
+  registerFactCorrectionRoutes(app, deps);
   await registerCandidateExperienceFactRoutes(app, deps);
   await registerExperienceFactRewriteRoutes(app, deps);
   await registerProfileHistoryRoutes(app, deps);

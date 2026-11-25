@@ -68,7 +68,7 @@ export function LetterBlock({ vacancyId, ...rest }: LetterBlockProps) {
                 <div className="row-title">{row.title}</div>
                 <div className="row-sub">{row.sub}</div>
               </div>
-              <Link className="row-act" to={to} aria-label={`${row.action}: ${row.sub}`}>
+              <Link className="row-act" to={`${to}?step=resume`} aria-label={`${row.action}: ${row.sub}`}>
                 {row.action}
               </Link>
             </li>

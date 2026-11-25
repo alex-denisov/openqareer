@@ -21,6 +21,18 @@ import {
 } from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
+import { HH_STUB_TEXT_CHARS } from './hhStubText';
+import {
+  DETAIL_TEXT_PRIORITY_TABLE,
+  peekDetailTextPriority,
+  requestDetailTextPriority,
+} from './detailTextPriority';
+import {
+  dueSelectionLiveness,
+  markSelectionLivenessChecked,
+  requestSelectionLiveness,
+  SELECTION_LIVENESS_TABLE,
+} from './selectionLiveness';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
@@ -474,7 +486,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE + CATALOG_ENTRIES_TOTAL_TABLE);
-    this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
+    this.database.exec(
+      HH_TEXT_PRIORITY_TABLE + DETAIL_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE +
+        SELECTION_LIVENESS_TABLE,
+    );
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES + CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
@@ -2027,7 +2042,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const rows = this.database
       .prepare(
         `SELECT q.vacancy_id AS id,
-                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_TEXT} THEN 1 ELSE 0 END AS need
+                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_PRIORITY_TEXT} THEN 1 ELSE 0 END AS need
            FROM hh_text_priority q
            LEFT JOIN vacancy_pool p ON p.id = q.vacancy_id
           ORDER BY q.rank ASC, q.requested_ms DESC
@@ -2042,9 +2057,40 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .map((row) => row.id);
   }
 
+  /** B797: верх подборки в сверку живости. */
+  requestSelectionLiveness(vacancyIds: readonly string[], nowMs: number = Date.now()): void {
+    requestSelectionLiveness(this.database, vacancyIds, nowMs);
+  }
+
+  dueSelectionLiveness(limit: number, nowMs: number = Date.now()): string[] {
+    return dueSelectionLiveness(this.database, limit, nowMs);
+  }
+
+  markSelectionLivenessChecked(vacancyId: string, nowMs: number = Date.now()): void {
+    markSelectionLivenessChecked(this.database, vacancyId, nowMs);
+  }
+
   dropHhTextPriority(vacancyIds: readonly string[]): void {
     const remove = this.database.prepare('DELETE FROM hh_text_priority WHERE vacancy_id = ?');
     for (const id of vacancyIds) remove.run(id);
+  }
+
+  /** B791: подборки и открытые карточки первыми в дочитке площадок без текста в списке. */
+  requestDetailTextPriority(
+    vacancyIds: readonly string[],
+    baseRank = 0,
+    nowMs: number = Date.now(),
+  ): void {
+    if (vacancyIds.length === 0) return;
+    this.inTransaction(() => requestDetailTextPriority(this.database, vacancyIds, baseRank, nowMs));
+  }
+
+  peekDetailTextPriority(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[] = [],
+  ): string[] {
+    return peekDetailTextPriority(this.database, sourceId, limit, excludeIds);
   }
 
   /** Позиция обхода текста hh (02.11): воркер перезапускается ~22 раза в сутки и шёл заново. */
@@ -3418,6 +3464,10 @@ const HH_TEXT_TARGET_REFRESH_MS = 60 * 60 * 1_000;
 /** Живая hh-запись, которой нужен текст: не снята, текста нет, работодатель его не скрыл. */
 const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
       length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0 AND
+      coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
+/** B794: строка подборки с обрывком текста читается ещё раз; общий обход обрывков не трогает. */
+const HH_NEEDS_PRIORITY_TEXT = `p.expired_at IS NULL AND
+      length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) < ${HH_STUB_TEXT_CHARS} AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
 const HH_TEXT_PHASES = ['catalog', 'pool'] as const;
 

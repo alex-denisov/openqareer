@@ -1,10 +1,11 @@
 import { pressApply } from '../../apply/applyIntent';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { ApplicationStage } from '../../../../../shared/applicationStage';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { moneyView, rowDate, rowFormat } from '../../vacancies/format';
+import { rememberClusters } from '../../shell/vacancyNames';
 import { FitCell } from '../../vacancies/list/VacancyRow';
 import { applicationTag, formatCount } from '../format';
 
@@ -98,6 +99,8 @@ function Others({ others, total }: { readonly others: readonly MatchedVacancyIte
 /** «Вакансии по вашим ролям»: совпадение, деньги, формат, статус отклика; ниже — остальные вакансии. */
 export function CompanyVacancies(props: CompanyVacanciesProps) {
   const { vacancies, total, applications, moreBusy, moreFailed, onMore } = props;
+  // Отклик, открытый из строки, называет вакансию с первого кадра.
+  useEffect(() => rememberClusters(vacancies), [vacancies]);
   const left = total - vacancies.length;
   return (
     <section className="mod" aria-labelledby="co-vac">

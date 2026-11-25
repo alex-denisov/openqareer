@@ -1,3 +1,4 @@
+import { CoachApiError } from '../../coach/apiClient';
 import { getRoleHypotheses } from '../../coach/coachApi';
 import {
   getCandidateCampaign,
@@ -16,6 +17,8 @@ import {
   DEFAULT_CANDIDATE_STATUS,
   type CandidateStatusId,
 } from '../../../../shared/candidateStatus';
+import { shareRead } from '../../shell/earlyRead';
+import { dropSectionCache, SECTION_CACHE_KEYS } from '../../shell/sectionCache';
 import { getStatus } from '../profile/statusChoice';
 import { readSelectionTotal } from '../vacancies/list/selectionCount';
 import { buildRoleRows, type RoleRow } from './rolesModel';
@@ -39,7 +42,7 @@ const key = (title: string): string => title.trim().toLocaleLowerCase('ru');
 /** Требования ролей из вакансий; не прочитались — пустой список, экран читается. */
 async function readDemand(): Promise<readonly RoleSkillDemand[]> {
   try {
-    return (await getRoleSkillDemand()).roles;
+    return (await shareRead(getRoleSkillDemand)).roles;
   } catch {
     return [];
   }
@@ -129,10 +132,59 @@ export async function readSkillGap(
   return ready ? { gap: gapOf(demand, ready), role: ready.title } : { gap: 0, role: null };
 }
 
+/** B792: роль поиска читается быстро и отдельно — полоса не ждёт расчёта ролей. */
+export function loadCampaign(): Promise<CampaignMetaView> {
+  return shareRead(loadFreshCampaign);
+}
+
+/** Выбор ролей правит кампанию — открывается по свежей, не по показанной раньше. */
+export function loadFreshCampaign(signal: AbortSignal): Promise<CampaignMetaView> {
+  return getCandidateCampaign(signal);
+}
+
+const forgetRoles = () =>
+  dropSectionCache(
+    SECTION_CACHE_KEYS.careerCampaign,
+    SECTION_CACHE_KEYS.careerRoles,
+    SECTION_CACHE_KEYS.careerSkills,
+    SECTION_CACHE_KEYS.matchedPool,
+    SECTION_CACHE_KEYS.matchedPoolLatest,
+  );
+
+const ROLES_RETRY_MS = 5_000;
+const ROLES_RETRIES = 2;
+
+function pauseUnlessAborted(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done);
+  });
+}
+
+/** B801: подбор ещё считается — сервер просит повторить через 5 с, страница ждёт скелетом. */
+async function readRolesWhenCounted(signal: AbortSignal): ReturnType<typeof getRoleHypotheses> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  for (let left = ROLES_RETRIES; ; left -= 1) {
+    try {
+      return await getRoleHypotheses(signal, timeZone);
+    } catch (error) {
+      const counting = error instanceof CoachApiError && error.code === 'vacancy_match_busy';
+      if (!counting || left === 0 || signal.aborted) throw error;
+      await pauseUnlessAborted(ROLES_RETRY_MS, signal);
+      if (signal.aborted) throw error;
+    }
+  }
+}
+
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
-    getRoleHypotheses(signal, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
-    getCandidateCampaign(signal),
+    readRolesWhenCounted(signal),
+    loadCampaign(),
     getCheckedRoles(signal),
     readDemand(),
   ]);
@@ -156,9 +208,9 @@ export function loadSelectionTotal(
 }
 
 /** Полоса навыков догружается после таблицы ролей и её не держит. */
-export async function loadSkillStrip(signal: AbortSignal): Promise<SkillStripData | null> {
+export async function loadSkillStrip(): Promise<SkillStripData | null> {
   const demandRead = readDemand();
-  const campaign = await getCandidateCampaign(signal);
+  const campaign = await loadCampaign();
   const [ready, demand] = await Promise.all([readyRole(campaign.roles.value), demandRead]);
   return ready ? { gap: gapOf(demand, ready), role: ready.title } : null;
 }
@@ -211,12 +263,14 @@ export async function saveSearchRoles(
   campaign: CampaignMetaView,
 ): Promise<readonly string[]> {
   const saved = await updateCampaignRoles(titles, campaign);
+  forgetRoles();
   return saved.roles.value;
 }
 
 /** «Назвать свою роль»: роль становится ролью поиска. */
-export function addOwnRole(title: string): Promise<void> {
-  return changeCareerRole('add', title);
+export async function addOwnRole(title: string): Promise<void> {
+  await changeCareerRole('add', title);
+  forgetRoles();
 }
 
 /** Статус кандидата для выбора экрана; не прочитался — экран как при «Ищу работу». */

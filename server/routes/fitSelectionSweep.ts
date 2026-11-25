@@ -1,4 +1,5 @@
 import { vacancyFitStage } from '../../shared/vacancyFitPercent';
+import { hasDetailText } from '../vacancies/detailTextPriority';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 
 /** Rows per step: one text read batch (hh: one request a second) and one queue write. */
@@ -37,14 +38,17 @@ export function selectionToCount(
 }
 
 /**
- * 01.11: every hh row of the matched list needs its text, not only the rows the plan counts:
+ * 01.11: every hh row of the matched list (25.11: and every row whose list gives no text)
+ * needs its text, not only the rows the plan counts:
  * 1 552 of 1 648 short-text rows of the owner's roles were never read because the general
  * loader restarts from the newest of 585K rows on each of ~22 worker restarts a day.
  */
 export function selectionToRead(items: readonly MatchedVacancyItem[]): string[] {
   return items
     .map((item) => item.cluster.id)
-    .filter((id) => id.startsWith(HH_CLUSTER_PREFIX));
+    .filter(
+      (id) => id.startsWith(HH_CLUSTER_PREFIX) || hasDetailText(id.replace(/^cluster-/u, '')),
+    );
 }
 
 const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';

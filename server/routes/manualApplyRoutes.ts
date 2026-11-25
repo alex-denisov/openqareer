@@ -34,6 +34,7 @@ import { appliesOnHh } from '../vacancies/applyOnHh';
 import { prepareVacancyLang } from './resumeDefaultLang';
 import { prepareLetterResume } from './letterApprovalResume';
 import { poolReader, questionnaireView, type Signed } from './questionnaireRoutes';
+import { refuseWhenSent } from './sentApplicationGuard';
 import type { ResumeEditDeps } from './resumeEditRoutes';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 
@@ -339,6 +340,7 @@ function savedApplication(
   const application = deps.candidateStore.createApplication(candidateId, {
     clusterId: vacancyId,
     stage: 'saved',
+    draft: true,
     manualVacancy: snapshotWithDescription(deps.multiSourceEngine, vacancyId, {
       title: facts.title,
       company: facts.company,
@@ -390,6 +392,7 @@ async function enqueueVacancy(
   const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId);
   if (!cluster)
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  if (refuseWhenSent(deps, request, reply, candidateId, vacancyId)) return reply;
   const known = deps.queue.get(candidateId, vacancyId);
   const facts = vacancyFacts(cluster, reason, host);
   if (known?.status !== 'open' && deps.queue.listOpen(candidateId).length >= MAX_OPEN) {
@@ -404,7 +407,9 @@ async function enqueueVacancy(
   }
   const application = savedApplication(deps, candidateId, vacancyId, facts, known);
   if (application.stage !== 'saved') {
-    return sendError(reply, request, 409, 'already_applied', 'Отклик уже отправлен.', false);
+    return sendError(reply, request, 409, 'already_applied', 'Отклик уже отправлен.', false, undefined, {
+      applicationId: application.id,
+    });
   }
   if (
     !known?.prepared &&

@@ -1,3 +1,4 @@
+import type { SentLookup } from '../domain/sentApplication';
 import { randomUUID } from 'node:crypto';
 import { createApplicationContactMethods, type ApplicationContactMethods } from './applicationContacts';
 import { createRecordRemoval } from './applicationRecordRemoval';
@@ -82,6 +83,7 @@ export interface ApplicationTrackerMethods
   recordVacancyApplication(candidateId: string, input: VacancyApplicationInput): VacancyApplication;
   listApplications(candidateId: string, options?: ReadApplicationOptions): ApplicationView[];
   getApplication(candidateId: string, applicationId: string): ApplicationView | null;
+  findSentApplication(candidateId: string, lookup: SentLookup): string | null;
   createApplication(
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: VacancyApplicationSnapshot },
@@ -199,6 +201,7 @@ function createCoreApplicationMethods(
   | 'recordVacancyApplication'
   | 'listApplications'
   | 'getApplication'
+  | 'findSentApplication'
   | 'createApplication'
   | 'recordApplicationEvent'
   | 'applicationFunnel'
@@ -219,6 +222,10 @@ function createCoreApplicationMethods(
     getApplication(candidateId, applicationId) {
       requireCandidate(candidateId);
       return tracker.get(candidateId, applicationId);
+    },
+    findSentApplication(candidateId, lookup) {
+      requireCandidate(candidateId);
+      return tracker.findSent(candidateId, lookup);
     },
     createApplication(candidateId, input) {
       requireCandidate(candidateId);

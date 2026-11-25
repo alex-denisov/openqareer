@@ -1,8 +1,16 @@
+import { startEarlyRead } from '../../shell/earlyRead';
+import { readFirstRows } from '../../vacancies/useMatchedPool';
+import { linkedRole } from '../career/careerPaths';
 import { NodeStub } from '../shell/NodeStub';
 import type { SectionProps } from '../sections';
 import { CardScreen } from './card/CardScreen';
 import { ListScreen, SavedScreen } from './list';
 import { useB640Title } from '../kit/useB640Title';
+
+/** B792: первая страница подборки — рядом с вопросом о сессии. */
+export function preload(code: string, search: string): void {
+  if (code === 's07' && !linkedRole(search)) startEarlyRead(readFirstRows);
+}
 
 /** Вход раздела «Вакансии»: подборка, сохранённые и карточка вакансии. */
 export default function Section({ node, params }: SectionProps) {
