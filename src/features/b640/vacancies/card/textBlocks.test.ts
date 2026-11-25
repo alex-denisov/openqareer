@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { publishedLine, textBlocks } from './textBlocks';
+import { textBlocks } from './textBlocks';
 
 describe('textBlocks', () => {
   it('строка с двоеточием на конце — подзаголовок, остальное — абзацы', () => {
@@ -23,17 +23,5 @@ describe('textBlocks', () => {
 
   it('пустой текст — пустой список', () => {
     expect(textBlocks('  \n\n ')).toEqual([]);
-  });
-});
-
-describe('publishedLine', () => {
-  it('источник и дата прописью', () => {
-    expect(publishedLine('hh.ru', '2026-11-11T09:00:00Z', new Date('2026-11-16T00:00:00Z'))).toBe('hh.ru · опубликована 11 ноября');
-  });
-  it('прошлый год — с годом', () => {
-    expect(publishedLine('hh.ru', '2025-02-03T09:00:00Z', new Date('2026-11-16T00:00:00Z'))).toBe('hh.ru · опубликована 3 февраля 2025');
-  });
-  it('даты нет — только источник', () => {
-    expect(publishedLine('hh.ru', 'мусор')).toBe('hh.ru');
   });
 });

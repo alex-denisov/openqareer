@@ -293,6 +293,25 @@ test.describe('B651: «Уточнение профиля» (p09)', () => {
     expect(saved).toMatchObject({ teamSize: 9, employer: 'FinCloud' });
   });
 
+  test('«Не хочу указывать» хранится, вопрос о месте больше не задаётся', async ({ page }) => {
+    const calls = await openCabinet(page, '/app/profile/question');
+    await page.getByRole('button', { name: 'Не хочу указывать' }).click();
+    await expect.poll(() => calls.resumePuts.length).toBe(1);
+    expect(calls.resumePuts[0].experience.some((entry) => entry.teamSizeDeclined === true)).toBe(
+      true,
+    );
+  });
+
+  test('390: кнопки закреплены над навигацией, все три видны', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openCabinet(page, '/app/profile/question');
+    const actions = node(page, 'p09').locator('.actions');
+    await expect(actions).toHaveCSS('position', 'fixed');
+    for (const name of ['Ответить', 'Не сейчас', 'Не хочу указывать']) {
+      await expect(actions.getByText(name)).toBeInViewport();
+    }
+  });
+
   test('«Не сейчас» возвращает в профиль', async ({ page }) => {
     await openCabinet(page, '/app/profile/question');
     await page.getByRole('link', { name: 'Не сейчас' }).click();
@@ -304,7 +323,12 @@ test.describe('B651: «Откуда взять опыт» (p04)', () => {
   test('источники ведут в свои разделы, одна залитая кнопка; гейты', async ({ page }) => {
     await openCabinet(page, '/app/profile/sources');
     const screen = node(page, 'p04');
-    await expect(screen.locator('.src')).toHaveCount(4);
+    await expect(screen.locator('.src')).toHaveCount(5);
+    await expect(
+      screen
+        .locator('.src', { hasText: 'Заполнить вручную' })
+        .getByRole('link', { name: 'Заполнить' }),
+    ).toHaveAttribute('href', /\/app\/profile\/experience\/new/u);
     await expect(page.locator('.b640 .is-primary:visible')).toHaveCount(1);
     await expectGates(page);
     await screen

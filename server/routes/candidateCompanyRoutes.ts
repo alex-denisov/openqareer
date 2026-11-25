@@ -20,6 +20,7 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { VacancyMatchUnavailable } from '../vacancies/vacancyMatchReader';
+import { isJobCommunityName } from '../../shared/jobCommunity';
 import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
 import { readTargetLevel } from './vacancyRoleContext';
 import { companyCoachContextText } from './companyCoachContext';
@@ -103,7 +104,7 @@ function projectVacancyItems(
   return items.flatMap(({ cluster }) => {
     const companyName = (companyNameOverride ?? cluster.canonicalCompany).trim();
     // INC-023: частное лицо — не компания, в «Компаниях» его нет (CPO 26.10).
-    if (!companyName || isPrivateEmployerCluster(cluster)) return [];
+    if (!companyName || isJobCommunityName(companyName) || isPrivateEmployerCluster(cluster)) return [];
     const source = cluster.sources[0];
     return [
       {
