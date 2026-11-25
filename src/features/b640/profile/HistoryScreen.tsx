@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { apiErrorMessage, CoachApiError } from '../../coach/apiClient';
 import { getProfileHistory, revertProfileHistoryEntry } from '../../resume/profileHistoryApi';
-import { Button, Icon, InfoTip, StatusLine } from '../kit';
-import type { B640Node } from '../routes';
+import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
+import { buildNodePath, type B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
 import { reapplyChange } from './profileExtrasApi';
@@ -154,10 +154,31 @@ function Days({
   );
 }
 
+/** p10b: правок ещё нет. */
+function Empty() {
+  return (
+    <>
+      <h2 className="lead-title" id="hx-title">
+        История изменений
+      </h2>
+      <div className="vl-empty" role="status">
+        <p className="vl-empty-t">Правок пока нет</p>
+        <div className="actions">
+          <Link className="btn is-primary" to={buildNodePath('s01')}>
+            <Icon name="profile" />
+            Открыть профиль
+          </Link>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function History({ first }: { readonly first: FeedState }) {
   const { feed, busy, failed, source, choose, more, markReverted } = useHistoryFeed(first);
   const chips = sourceChips(feed.sources);
   const left = feed.total - feed.entries.length;
+  if ((feed.sources?.all ?? feed.total) === 0) return <Empty />;
   return (
     <>
       <div className="lead-head">

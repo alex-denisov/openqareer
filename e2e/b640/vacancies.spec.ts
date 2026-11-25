@@ -785,6 +785,31 @@ test.describe('B676: своя вакансия', () => {
     await expect.poll(() => deleted).toEqual([OWN.id]);
   });
 
+  test('v04c: «Открыть полностью» — отдельный экран своей вакансии', async ({ page }, testInfo) => {
+    await openCabinet(page, '/app/vacancies', { own: [OWN] });
+    await page.route('**/api/v1/candidate/b640/own-vacancies/*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            ...OWN,
+            url: 'https://ritm.example/jobs/1',
+            text: 'О нас',
+            fit: { state: 'no_requirements', requirements: [] },
+          },
+        },
+      }),
+    );
+    await page.locator(ROWS).first().locator('.vt-toggle').click();
+    await page.getByRole('link', { name: 'Открыть полностью' }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/vacancies/${OWN.id}$`, 'u'));
+    await expect(page.locator('#vc-title')).toHaveText(OWN.title);
+    await expect(page.locator('.v4-co-sub')).toHaveText('Москва · офис');
+    await expectGates(page);
+    await page.screenshot({ path: `.s13-shots/v04c-${testInfo.project.name}.png` });
+    await page.getByRole('button', { name: 'Текст вакансии' }).click();
+    await expect(page.getByRole('dialog', { name: 'Текст вакансии' })).toContainText('О нас');
+  });
+
   test('снимки панели и строки «ваша» для сверки с макетом', async ({ page }, testInfo) => {
     test.skip(!SHOTS, 'снимки снимаются по запросу: B640_SHOTS=1');
     mkdirSync('.s13-shots', { recursive: true });

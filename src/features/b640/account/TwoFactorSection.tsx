@@ -35,7 +35,7 @@ function Group({ title, children }: { readonly title: string; readonly children:
   );
 }
 
-/** Строка в «Вход» (n04f): выключена — «Включить»; включена — состояние и остаток кодов. */
+/** Строка в «Вход» (n04f): выключена — «Включить»; включена — «Отключить» (n04c). */
 export function TwoFactorRow({ state }: { readonly state: TwoFactorState }) {
   const { load, view, setView } = state;
   const [busy, setBusy] = useState(false);
@@ -52,15 +52,17 @@ export function TwoFactorRow({ state }: { readonly state: TwoFactorState }) {
       setBusy(false);
     }
   }
-  const { enabled, backupCodesLeft } = load.data;
+  const { enabled } = load.data;
   return (
     <li className="set-row">
       <div className="set-l">
         <span className="set-t">Двухфакторная защита</span>
-        <span className="set-v">{enabled ? `включена · резервных кодов: ${backupCodesLeft}` : 'выключена'}</span>
+        <span className="set-v">{enabled ? 'включена' : 'выключена'}</span>
         {error ? <ErrorLine text={error} /> : null}
       </div>
-      {enabled ? null : (
+      {enabled ? (
+        <CodeButton action="disable" label="Отключить" state={state} />
+      ) : (
         <div className="set-r">
           <button className="btn is-sm" type="button" disabled={busy} aria-busy={busy || undefined} onClick={() => void start()}>
             Включить
@@ -71,68 +73,95 @@ export function TwoFactorRow({ state }: { readonly state: TwoFactorState }) {
   );
 }
 
-/** n04c: отключение спрашивает подтверждение и отправляет уже введённый код. */
-function DisableDialog({ open, onClose, onConfirm }: { readonly open: boolean; readonly onClose: () => void; readonly onConfirm: () => void }) {
+type CodeAction = 'disable' | 'codes';
+
+interface CodeDialogProps {
+  readonly action: CodeAction;
+  readonly state: TwoFactorState;
+  readonly onClose: () => void;
+}
+
+/** n04c: окно отключения; код просим здесь же — без него сервер защиту не снимет. */
+function CodeDialog({ action, state, onClose }: CodeDialogProps) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const disabling = action === 'disable';
+  async function run() {
+    setBusy(true);
+    setError(null);
+    try {
+      if (disabling) await disableTwoFactor(code);
+      else state.setView({ kind: 'codes', codes: await regenerateBackupCodes(code) });
+      onClose();
+      if (disabling) state.load.retry();
+    } catch (reason) {
+      setError(failureText(reason, disabling ? 'Защита не отключилась' : 'Коды не обновились'));
+      setBusy(false);
+    }
+  }
   return (
-    <Dialog open={open} onClose={onClose} title="Отключить двухфакторную защиту?">
-      <div className="actions">
-        <button className="btn is-danger" type="button" onClick={onConfirm}>
-          Отключить
-        </button>
-        <button className="btn" type="button" onClick={onClose}>
-          Оставить
-        </button>
-      </div>
+    <Dialog
+      open
+      onClose={onClose}
+      title={disabling ? 'Отключить двухфакторную защиту?' : 'Показать новые коды'}
+    >
+      <form
+        className="c5-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (code.trim() && !busy) void run();
+        }}
+      >
+        <CodeField label="Код из приложения-аутентификатора" value={code} onChange={setCode} />
+        {error ? <ErrorLine text={error} /> : null}
+        <div className="actions">
+          <button
+            className={disabling ? 'btn is-danger' : 'btn is-primary'}
+            type="submit"
+            disabled={!code.trim() || busy}
+            aria-busy={busy || undefined}
+          >
+            {disabling ? 'Отключить' : 'Показать новые коды'}
+          </button>
+          <button className="btn" type="button" onClick={onClose}>
+            {disabling ? 'Оставить' : 'Отмена'}
+          </button>
+        </div>
+      </form>
     </Dialog>
   );
 }
 
-/** n04b/n04c: включённая защита — новые коды и отключение по коду из приложения или резервному. */
-function EnabledPanel({ state }: { readonly state: TwoFactorState }) {
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState(false);
-  async function run(action: () => Promise<void>, fallback: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (reason) {
-      setError(failureText(reason, fallback));
-    } finally {
-      setBusy(false);
-    }
-  }
-  const newCodes = () =>
-    run(async () => state.setView({ kind: 'codes', codes: await regenerateBackupCodes(code) }), 'Коды не обновились');
-  const disable = () =>
-    run(async () => {
-      setConfirming(false);
-      await disableTwoFactor(code);
-      state.load.retry();
-    }, 'Защита не отключилась');
-  const ready = code.trim().length > 0 && !busy;
+/** Кнопка строки, открывающая окно с кодом. */
+function CodeButton({ action, label, state }: { readonly action: CodeAction; readonly label: string; readonly state: TwoFactorState }) {
+  const [open, setOpen] = useState(false);
   return (
-    <li className="set-row is-block">
-      <form className="c5-form" onSubmit={(event) => event.preventDefault()}>
-        <CodeField label="Код из приложения-аутентификатора" value={code} onChange={setCode} />
-        {error ? <ErrorLine text={error} /> : null}
-        <div className="actions">
-          <button className="btn" type="button" disabled={!ready} onClick={() => void newCodes()}>
-            Показать новые коды
-          </button>
-          <button className="row-act is-danger" type="button" disabled={!ready} onClick={() => setConfirming(true)}>
-            Отключить
-          </button>
-        </div>
-      </form>
-      <DisableDialog open={confirming} onClose={() => setConfirming(false)} onConfirm={() => void disable()} />
+    <div className="set-r">
+      <button className="btn is-sm" type="button" onClick={() => setOpen(true)}>
+        {label}
+      </button>
+      {open ? <CodeDialog action={action} state={state} onClose={() => setOpen(false)} /> : null}
+    </div>
+  );
+}
+
+/** Строка включённой защиты: сколько кодов осталось и новые коды. */
+export function BackupCodesRow({ state }: { readonly state: TwoFactorState }) {
+  const { load, view } = state;
+  if (load.state !== 'ready' || view.kind !== 'idle' || !load.data.enabled) return null;
+  return (
+    <li className="set-row">
+      <div className="set-l">
+        <span className="set-t">Резервные коды</span>
+        <span className="set-v">{`осталось: ${load.data.backupCodesLeft}`}</span>
+      </div>
+      <CodeButton action="codes" label="Новые коды" state={state} />
     </li>
   );
 }
 
-/** Отдельная группа под «Вход»: подключение, коды один раз или управление включённой защитой. */
+/** Отдельная группа под «Вход»: подключение, коды один раз. */
 export function TwoFactorPanel({ state }: { readonly state: TwoFactorState }) {
   const { load, view, setView } = state;
   if (view.kind === 'setup') {
@@ -162,10 +191,5 @@ export function TwoFactorPanel({ state }: { readonly state: TwoFactorState }) {
       </Group>
     );
   }
-  if (load.state !== 'ready' || !load.data.enabled) return null;
-  return (
-    <Group title="Двухфакторная защита · включена">
-      <EnabledPanel state={state} />
-    </Group>
-  );
+  return null;
 }

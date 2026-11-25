@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Icon, Link } from '../../kit';
+import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { postsCount } from './linkedinModel';
 import { commentsToday } from './rhythmModel';
@@ -45,13 +45,10 @@ function TopicsMenu() {
 interface FeedHeadProps {
   readonly count: number;
   readonly plan: CommentPlan | null;
-  readonly open: readonly string[];
-  readonly busy: boolean;
-  readonly onApproveAll: () => void;
 }
 
 /** a05: «3 поста · Сегодня осталось 1 из 2» и меню «…» с «Изменить темы». */
-export function FeedHead({ count, plan, open, busy, onApproveAll }: FeedHeadProps) {
+export function FeedHead({ count, plan }: FeedHeadProps) {
   const today = plan
     ? commentsToday(plan.rhythm.comments, plan.rhythm.timezone, plan.items, Date.now())
     : null;
@@ -61,11 +58,6 @@ export function FeedHead({ count, plan, open, busy, onApproveAll }: FeedHeadProp
   return (
     <div className="list-head">
       <h2 id="cm-title">{title}</h2>
-      {open.length > 1 ? (
-        <Button size="sm" icon="check" busy={busy} onClick={onApproveAll}>
-          {`Одобрить все · ${Math.min(open.length, 20)}`}
-        </Button>
-      ) : null}
       <TopicsMenu />
     </div>
   );

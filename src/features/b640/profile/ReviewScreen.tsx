@@ -13,16 +13,30 @@ import { splitVisible } from './profileModel';
 
 const VISIBLE = 3;
 
-async function loadReview(): Promise<readonly ReviewRow[]> {
+export async function loadReview(): Promise<readonly ReviewRow[]> {
   const [view, candidate] = await Promise.all([getResumeStudio(), getCandidate()]);
   return view.draft ? reviewRows(view.draft, candidate.memory) : [];
 }
 
 type ConfirmState = 'idle' | 'busy' | 'done' | { readonly error: string };
 
-function ReviewCard({ row }: { readonly row: ReviewRow }) {
+function Facts({ row }: { readonly row: ReviewRow }) {
+  return (
+    <dl className="pw-kv">
+      <dt>Компания</dt>
+      <dd>{row.employer || <span className="dim">не указана</span>}</dd>
+      <dt>Даты</dt>
+      <dd className="num">{row.period || <span className="dim">не указаны</span>}</dd>
+      <dt>Команда</dt>
+      <dd>{row.team ?? <span className="dim">не указана</span>}</dd>
+    </dl>
+  );
+}
+
+function ReviewCard({ row, level }: { readonly row: ReviewRow; readonly level: 3 | 4 }) {
   const [state, setState] = useState<ConfirmState>(row.confirmed ? 'done' : 'idle');
   const name = row.employer || row.title;
+  const Title = `h${level}` as const;
 
   async function confirm() {
     setState('busy');
@@ -36,17 +50,10 @@ function ReviewCard({ row }: { readonly row: ReviewRow }) {
 
   return (
     <article className="pg pw" aria-labelledby={`pw-${row.id}`}>
-      <h3 className="pg-t" id={`pw-${row.id}`}>
+      <Title className="pg-t" id={`pw-${row.id}`}>
         {row.title}
-      </h3>
-      <dl className="pw-kv">
-        <dt>Компания</dt>
-        <dd>{row.employer || <span className="dim">не указана</span>}</dd>
-        <dt>Даты</dt>
-        <dd className="num">{row.period || <span className="dim">не указаны</span>}</dd>
-        <dt>Команда</dt>
-        <dd>{row.team ?? <span className="dim">не указана</span>}</dd>
-      </dl>
+      </Title>
+      <Facts row={row} />
       <div className="pr-acts">
         {state === 'done' ? (
           <span className="pw-ok">
@@ -73,7 +80,13 @@ function ReviewCard({ row }: { readonly row: ReviewRow }) {
   );
 }
 
-function ReviewList({ rows }: { readonly rows: readonly ReviewRow[] }) {
+interface ReviewListProps {
+  readonly rows: readonly ReviewRow[];
+  /** Уровень заголовков записей: в p04b они внутри блока с h3. */
+  readonly level?: 3 | 4;
+}
+
+export function ReviewList({ rows, level = 3 }: ReviewListProps) {
   const { shown, rest } = splitVisible(rows, VISIBLE);
   const names = rest
     .map((row) => row.employer)
@@ -83,7 +96,7 @@ function ReviewList({ rows }: { readonly rows: readonly ReviewRow[] }) {
   return (
     <>
       {shown.map((row) => (
-        <ReviewCard row={row} key={row.id} />
+        <ReviewCard row={row} level={level} key={row.id} />
       ))}
       {rest.length > 0 ? (
         <details className="more-n">
@@ -93,7 +106,7 @@ function ReviewList({ rows }: { readonly rows: readonly ReviewRow[] }) {
             {names ? <span className="dim">{` · ${names}`}</span> : null}
           </summary>
           {rest.map((row) => (
-            <ReviewCard row={row} key={row.id} />
+            <ReviewCard row={row} level={level} key={row.id} />
           ))}
         </details>
       ) : null}

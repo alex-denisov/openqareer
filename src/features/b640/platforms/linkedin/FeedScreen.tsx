@@ -64,10 +64,10 @@ function Item({
 }
 
 function useApprove(reload: () => void) {
-  const [busy, setBusy] = useState(false);
+  const [last, setLast] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const run: Approve = (ids) => {
-    setBusy(true);
+    setLast(ids);
     setError(null);
     approveFeedPosts(ids)
       .then(({ results }) => {
@@ -78,10 +78,9 @@ function useApprove(reload: () => void) {
           setError(`Не всё поставлено в очередь: ${[...new Set(failed)].join(', ')}`);
         reload();
       })
-      .catch(() => setError('Не удалось одобрить. Попробуйте ещё раз'))
-      .finally(() => setBusy(false));
+      .catch(() => setError('Не удалось одобрить. Попробуйте ещё раз'));
   };
-  return { busy, error, run };
+  return { error, run, retry: () => run(last) };
 }
 
 function Comments({
@@ -94,19 +93,10 @@ function Comments({
   readonly reload: () => void;
 }) {
   const approve = useApprove(reload);
-  const open = posts.filter((post) => post.state === 'draft').map((post) => post.draftId);
   return (
     <>
-      <FeedHead
-        count={posts.length}
-        plan={plan}
-        open={open}
-        busy={approve.busy}
-        onApproveAll={() => approve.run(open.slice(0, 20))}
-      />
-      {approve.error ? (
-        <LiError text={approve.error} onRetry={() => approve.run(open.slice(0, 20))} />
-      ) : null}
+      <FeedHead count={posts.length} plan={plan} />
+      {approve.error ? <LiError text={approve.error} onRetry={approve.retry} /> : null}
       <LinkedinList
         items={posts}
         listClassName="col"

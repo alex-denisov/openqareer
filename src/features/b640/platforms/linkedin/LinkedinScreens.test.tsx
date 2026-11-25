@@ -82,13 +82,11 @@ const many = (count: number, kind = 'post', status = 'published') =>
 afterEach(() => vi.clearAllMocks());
 
 describe('a03: профиль LinkedIn', () => {
-  it('без импорта LinkedIn: строка с «Импортировать из LinkedIn»', async () => {
+  it('без импорта LinkedIn: строка с «Подключить»', async () => {
     vi.mocked(profileApi.getLinkedinProfile).mockResolvedValue({ kind: 'no_import' });
     const view = mount(<Section node={node('a03')} params={{}} />);
     await flush();
-    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain(
-      'Импортировать из LinkedIn',
-    );
+    expect(view.container.querySelector('.li-off a.btn')!.textContent).toContain('Подключить');
     expect(view.container.querySelector('.li-sec')).toBeNull();
     view.unmount();
   });
@@ -302,7 +300,7 @@ describe('a03p, a03b, a05', () => {
     expect(field().value).toBe('Комментарий B');
     view.unmount();
   });
-  it('лента: карточки, «Одобрить» и пакетное «Одобрить все»', async () => {
+  it('лента: карточки, «Одобрить» у каждой, пакетного нет (a05)', async () => {
     const post = (n: number) => ({
       draftId: `f${n}`,
       postUrl: null,
@@ -323,11 +321,12 @@ describe('a03p, a03b, a05', () => {
     await flush();
     expect(view.container.querySelectorAll('.lk-card')).toHaveLength(2);
     expect(view.container.querySelector('.lk-au')).toBeNull();
-    const all = [...view.container.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Одобрить все'),
+    expect(view.container.textContent).not.toContain('Одобрить все');
+    const approve = [...view.container.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Одобрить'),
     )!;
-    await act(async () => click(all));
-    expect(queue.approveFeedPosts).toHaveBeenCalledWith(['f1', 'f2']);
+    await act(async () => click(approve));
+    expect(queue.approveFeedPosts).toHaveBeenCalledWith(['f1']);
     view.unmount();
   });
   it('лента: принести пост — текст обязателен, ссылка нет', async () => {
