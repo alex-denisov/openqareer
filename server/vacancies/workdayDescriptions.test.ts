@@ -365,7 +365,8 @@ describe('площадка, где дочитывать нечего (B761)', ()
   it('пауза разбросана на ±20 %, чтобы площадки не сходились в один такт', async () => {
     const seen: string[] = [];
     let nowMs = 0;
-    const draws = [0, 1];
+    // Первое число — начало обхода, дальше разброс пауз площадок.
+    const draws = [0, 0, 1];
     const pool = new FakePool(new Map());
     pool.loadVacanciesWithoutFullText = (sourceId) => {
       seen.push(sourceId);
@@ -387,20 +388,34 @@ describe('площадка, где дочитывать нечего (B761)', ()
     expect(seen).toContain('ats-workday-b');
   });
 
-  it('первый проход растянут: не больше 200 площадок за такт, и доходит до всех', async () => {
-    const ids = Array.from({ length: 450 }, (_, index) => `ats-workday-s${index}`);
+  it('первый проход растянут по времени, доходит до всех и не задерживает площадки с работой', async () => {
+    const probes = Array.from({ length: 250 }, (_, index) => `ats-workday-s${index}`);
+    let ids = [SOURCE];
     const seen: string[] = [];
-    const pool = new FakePool(new Map());
+    let clock = 0;
+    const pool = new FakePool(new Map([[SOURCE, [vacancy('v1', SOURCE)]]]));
     pool.loadVacanciesWithoutFullText = (sourceId) => {
       seen.push(sourceId);
-      return [];
+      clock += 20;
+      return sourceId === SOURCE ? [vacancy('v1', SOURCE)] : [];
     };
-    const backfill = new WorkdayDescriptionBackfill({ pool, sourceIds: () => ids, now: () => 0 });
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ids,
+      now: () => 0,
+      random: () => 0.5,
+      elapsed: () => clock,
+      maxAttempts: 100,
+      fetchDetail: async () => ({ status: 500 }),
+    });
     await backfill.step();
-    expect(seen).toHaveLength(200);
-    await backfill.step();
-    await backfill.step();
-    expect(new Set(seen).size).toBe(450);
+    ids = [...probes, SOURCE];
+    for (const expected of [100, 100, 50]) {
+      seen.length = 0;
+      await backfill.step();
+      expect(seen[0]).toBe(SOURCE);
+      expect(seen).toHaveLength(expected + 1);
+    }
   });
 
   it('новое чтение не снимает паузу после 429', async () => {
