@@ -8,6 +8,7 @@ describe('краткое содержание вакансии (B791)', () => {
     );
     expect(brief?.duties).toEqual(['Вести команду', 'Планировать бюджет']);
     expect(brief?.requirements).toEqual(['Опыт от 5 лет', 'Go, PostgreSQL']);
+    expect(brief?.conditions).toEqual(['ДМС']);
   });
 
   it('HTML и заголовок, где раздел назван внутри строки', () => {
@@ -24,6 +25,19 @@ describe('краткое содержание вакансии (B791)', () => {
     );
     expect(brief?.duties).toEqual(['вести команду', 'нанимать людей']);
     expect(brief?.requirements).toEqual(['опыт от 5 лет', 'Go']);
+  });
+
+  it('B800: условия по-английски и одной строкой, «о компании» в условия не попадает', () => {
+    const brief = vacancyBrief(
+      'What you will do:\n- Lead teams\nWhat we offer:\n- Remote work\n- Equity\nAbout us:\n- Founded in 2010',
+    );
+    expect(brief?.conditions).toEqual(['Remote work', 'Equity']);
+    const values = vacancyBrief(
+      'Требования:\n- Go\nУсловия:\nГрафик: 5/2\nБонусы по итогам года\n- ДМС',
+    );
+    expect(values?.conditions).toEqual(['График: 5/2', 'Бонусы по итогам года', 'ДМС']);
+    const inline = vacancyBrief('Обязанности: вести команду; нанимать. Условия: ДМС; гибрид.');
+    expect(inline?.conditions).toEqual(['ДМС', 'гибрид']);
   });
 
   it('разделов нет — первые предложения целиком', () => {

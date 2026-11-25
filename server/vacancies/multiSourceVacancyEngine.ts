@@ -17,7 +17,7 @@ import type {
   VacancyMatchExplanation,
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
-import { confirmsLiveness } from './poolLiveness';
+import { confirmsLiveness, sourceKind } from './poolLiveness';
 import { checkUnseenLinks, UnseenLinkWalk, type UnseenLinkReport } from './unseenLinkCheck';
 import {
   calculateSourceAuthenticity,
@@ -34,6 +34,8 @@ import { mapWithConcurrency } from './boundedConcurrency';
 import { ReadingStopped, STOP_READING_GRACE_MS, untilStopped } from './stopReading';
 import {
   DEFAULT_LINK_SAMPLE,
+  isPublicHttpUrl,
+  judgeLinkOutcome,
   probeVacancyLinks,
   type LinkCheckCensus,
   type LinkProbe,
@@ -59,6 +61,7 @@ import {
   MAX_VACANCY_AGE_DAYS,
   clusterProjectionOf,
 } from './vacancyPoolQuery';
+import { runSelectionLiveness, type SelectionLivenessReport } from './selectionLiveness';
 import type { VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
 import {
   clusterBatchByKeys,
@@ -141,6 +144,7 @@ export interface VacancyDescriptionLoaded {
 export interface VacancyDescriptionLoader {
   load(url: string): Promise<VacancyDescriptionLoaded | string | undefined>;
   isLoaded?(url: string): boolean;
+  recheck?(url: string): Promise<VacancyDescriptionLoaded | string | undefined>;
   /** 03.11: адаптивный темп загрузчика; без него остаются фиксированные порция и конвейер. */
   rateControl?(): HhTextRateController | undefined;
 }
@@ -1513,6 +1517,62 @@ export class MultiSourceVacancyEngine {
     // B791: площадки без текста в списке (LinkedIn, Workday…) — своя очередь, тот же вызов.
     const detail = ids.filter(hasDetailText);
     if (detail.length > 0) this.pool.requestDetailTextPriority?.(detail, baseRank);
+  }
+
+  /** B797: верх подборки — в очередь сверки живости; сеть здесь не трогается. */
+  public requestSelectionLiveness(ids: readonly string[]): void {
+    this.pool.requestSelectionLiveness?.(ids);
+  }
+
+  /** B797: один такт сверки живости верха подборок. Зовёт только воркер обслуживания. */
+  public runSelectionLivenessStep(stopped: () => boolean): Promise<SelectionLivenessReport> {
+    const pool = this.pool;
+    return runSelectionLiveness({
+      due: (limit) => pool.dueSelectionLiveness?.(limit) ?? [],
+      check: (id) => this.checkLiveness(id),
+      retire: (id) => this.retireGone(id),
+      markChecked: (id) => pool.markSelectionLivenessChecked?.(id),
+      stopped,
+    });
+  }
+
+  private async checkLiveness(id: string): Promise<'open' | 'gone' | 'unknown' | 'blocked'> {
+    const vacancy = this.pool.getVacancy(id);
+    if (!vacancy) return 'unknown';
+    const sourceId = vacancy.provenance.sourceId;
+    const source = this.sources.get(sourceId);
+    const { kind } = sourceKind(sourceId);
+    if (!source?.enabled || kind === 'linkedin') return 'unknown';
+    if (kind === 'hh') return this.checkHhLiveness(vacancy);
+    if (!this.linkProbe || !isPublicHttpUrl(vacancy.url)) return 'unknown';
+    const outcome = await this.linkProbe(vacancy.url);
+    return judgeLinkOutcome(outcome, vacancy.url).verdict;
+  }
+
+  private async checkHhLiveness(
+    vacancy: UnifiedVacancy,
+  ): Promise<'open' | 'gone' | 'unknown' | 'blocked'> {
+    const loader = this.descriptionLoader;
+    if (!loader?.recheck || this.rights.get(vacancy.provenance.sourceId) !== 'live') {
+      return 'unknown';
+    }
+    const details = await loader.recheck(vacancy.url);
+    if (!details || typeof details === 'string') return details ? 'open' : 'unknown';
+    if (details.blocked) return 'blocked';
+    if (details.restricted) return 'unknown';
+    return details.archived ? 'gone' : 'open';
+  }
+
+  private retireGone(id: string): void {
+    const vacancy = this.pool.getVacancy(id);
+    if (!vacancy) return;
+    this.pool.markExpired([id], new Date().toISOString());
+    if (this.reclusterMode.mode === 'keyed') {
+      detachVacanciesByKeys(this.keyedStore(), [{ id, url: vacancy.url }]);
+    } else {
+      this.handleExpiredVacancies([id]);
+      this.poolChangedSinceRecluster = true;
+    }
   }
 
   /** Первые карточки подбора греются последовательно, не создавая веер запросов. */
