@@ -98,5 +98,12 @@ for (const name of ['employer-boards.ndjson', 'LICENSE', 'CONTRIBUTIONS.md']) {
   await copyFile(`server/companyDirectory/careerOps/data/${name}`, `dist/data/careerOps/${name}`);
 }
 
+// B803: salary slices from stdin into the database, run by hand.
+await build({
+  ...shared,
+  entryPoints: ['server/vacancies/salaryBenchmarks/salaryImportRun.ts'],
+  outfile: 'dist/salary-import.mjs',
+});
+
 // B759: deploy restarts maintenance and the mechanics worker only when these change.
 writeFingerprints('dist', release, web.metafile);
