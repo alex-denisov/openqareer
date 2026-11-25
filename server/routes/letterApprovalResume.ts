@@ -125,7 +125,7 @@ function approvedVersion(
     candidateId,
     versionId,
     master.revision,
-    buildVersionContent(master, title, requirements, 'draft', tailor, translate),
+    { ...buildVersionContent(master, title, requirements, 'draft', tailor, translate), vacancyId: cluster.id },
   );
   const version = created.status === 'id_conflict'
     ? candidateStore.getResumeVersion(candidateId, versionId)
@@ -137,7 +137,7 @@ function approvedVersion(
     versionId,
     version.revision,
     master.revision,
-    buildVersionContent(master, title, requirements, 'approved', tailor, translate),
+    { ...buildVersionContent(master, title, requirements, 'approved', tailor, translate), vacancyId: cluster.id },
   );
   return approved.status === 'updated' ? approved.version : version;
 }
