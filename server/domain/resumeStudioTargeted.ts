@@ -1,5 +1,6 @@
 import { languageRequirementMet } from './resumeLanguageRequirement';
 import { termAppears } from './requirementTerm';
+import { withoutIntentLines, withoutSearchIntent } from './resumeSearchIntent';
 import { estimateLength } from './resumeStudioInternals';
 import type {
   ResumeAssertion,
@@ -10,6 +11,8 @@ import type {
   TargetedResumeSlice,
 } from './resumeStudioTypes';
 
+/** Навыков в резюме под вакансию, когда совпавших меньше. */
+const TARGET_SKILLS = 15;
 const TARGET_TEXT_CHARACTERS_PER_LINE = 88;
 
 interface RankedEntry<Entry> {
@@ -66,7 +69,7 @@ export function assertTargetedResumeQuantities(master: ResumeDocument, targeted:
   checkQuantity(targeted.about, master.about ? [master.about] : []);
   for (const entry of targeted.experience) {
     const source = master.experience.find((item) => item.id === entry.id);
-    assertionQuantity(entry.description, [source?.description]);
+    assertionQuantity(entry.description, [source?.description, withoutIntentLines(source?.description)]);
     for (const bullet of entry.bullets) assertionQuantity(bullet, source?.bullets ?? []);
   }
   for (const project of targeted.projects ?? []) {
@@ -98,18 +101,12 @@ function prepareTargetedDocument(
   vacancy: TargetedResumeInput,
   requirements: readonly { label: string; normalized: string }[],
 ): PreparedTargetedDocument {
-  const experience = latestFirst(master.experience);
+  const experience = latestFirst(master.experience.map(withoutSearchIntent));
   const projects = targetedProjects(master.projects ?? [], requirements);
   const skills = targetedSkills(master.skills ?? [], requirements);
-  const about =
-    requirements.length === 0 ||
-    matchingIndexes([master.about ?? ''], requirements).length > 0
-      ? master.about
-      : null;
   const initialDocument: ResumeDocument = {
     ...master,
     targetRole: clean(vacancy.title) || master.targetRole,
-    about,
     experience,
     projects,
     skills,
@@ -181,14 +178,17 @@ function targetedProjects(
     .map(({ entry }) => entry);
 }
 
+/** Навыки вакансии первыми, остальные — до полного раздела: пустым он не остаётся (B785). */
 function targetedSkills(
   skills: NonNullable<ResumeDocument['skills']>,
   requirements: readonly { label: string }[],
 ) {
   if (requirements.length === 0) return skills;
-  return skills.filter((skill) =>
-    matchingIndexes([skill.name], requirements).length > 0,
-  );
+  const isMatched = (skill: { readonly name: string }) =>
+    matchingIndexes([skill.name], requirements).length > 0;
+  const matched = skills.filter(isMatched);
+  if (matched.length >= TARGET_SKILLS) return matched;
+  return [...matched, ...skills.filter((skill) => !isMatched(skill))].slice(0, TARGET_SKILLS);
 }
 
 function rankEntries<Entry>(

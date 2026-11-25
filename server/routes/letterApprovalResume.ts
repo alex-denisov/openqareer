@@ -76,7 +76,7 @@ export function letterResumeState(deps: RouteDeps, candidateId: string, document
  * Правило сборки версии под вакансию. B713: версии до него перечисляли места работы без пунктов, и
  * одобренная такая версия возвращалась бы для той же вакансии и ревизии; новая сборка даёт новый id.
  */
-export const TARGETED_RESUME_BUILD = 'b785-one-language';
+export const TARGETED_RESUME_BUILD = 'b785-summary-skills';
 
 function stableVersionId(candidateId: string, vacancyId: string, masterRevision: string, choices: ResumeEditChoices): string {
   // Без выбранного языка переводы на версию не влияют.
