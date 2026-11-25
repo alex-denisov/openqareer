@@ -20,6 +20,8 @@ export interface PersistedJobOptions {
    * проход, позже — ждёт следующего слота.
    */
   readonly dailyAtUtcMinute?: number;
+  /** B803: сколько после слота догонять прерванный проход; по умолчанию час. */
+  readonly dailyCatchUpMs?: number;
   /** Истина: шаг удался, срок считается от этого запуска. */
   readonly run: () => boolean | Promise<boolean>;
 }
@@ -38,10 +40,11 @@ function dailyFirstDelayMs(
   nowMs: number,
   firstRunMs: number,
   atUtcMinute: number,
+  catchUpMs: number,
 ): number {
   const slot = slotAtOrBefore(nowMs, atUtcMinute);
   const missed = finished === undefined || finished < slot;
-  if (missed && nowMs - slot < DAILY_CATCH_UP_MS) return firstRunMs;
+  if (missed && nowMs - slot < catchUpMs) return firstRunMs;
   return slot + DAY_MS - nowMs;
 }
 
@@ -72,7 +75,7 @@ export function schedulePersistedJob(
   log: PersistedJobLog,
   options: PersistedJobOptions,
 ): () => void {
-  const { job, firstRunMs, intervalMs, dailyAtUtcMinute, run } = options;
+  const { job, firstRunMs, intervalMs, dailyAtUtcMinute, run, dailyCatchUpMs: catchUpMs = DAILY_CATCH_UP_MS } = options;
   const reportStateFailure = (error: unknown) =>
     log.error(
       { job, errorName: error instanceof Error ? error.name : 'UnknownError' },
@@ -83,7 +86,7 @@ export function schedulePersistedJob(
     try {
       const finished = lastFinishedMs(database, job);
       if (dailyAtUtcMinute !== undefined) {
-        return dailyFirstDelayMs(finished, Date.now(), firstRunMs, dailyAtUtcMinute);
+        return dailyFirstDelayMs(finished, Date.now(), firstRunMs, dailyAtUtcMinute, catchUpMs);
       }
       if (finished === undefined) return firstRunMs;
       return Math.max(firstRunMs, finished + intervalMs - Date.now());
