@@ -39,7 +39,7 @@ export interface OpenqareerSalaryEstimate {
 export interface BlendResult {
   readonly estimate: OpenqareerSalaryEstimate;
   /** Внутренняя пометка: в ответ API не входит. */
-  readonly precision: BenchmarkPrecision;
+  readonly precision: BenchmarkPrecision | 'family-world';
   readonly lowConfidence: boolean;
 }
 
@@ -58,7 +58,7 @@ const SINGLE_SOURCE_SPREAD = 0.1;
 /** Источник назвал только медиану: границ у него нет. */
 const MEDIAN_SPREAD = 0.15;
 /** Ставка часа и дня с окладом не сводится: сколько часов в месяце, источник не говорит. */
-const PER_YEAR: Readonly<Partial<Record<Period, number>>> = { year: 1, month: 12 };
+export const PER_YEAR: Readonly<Partial<Record<Period, number>>> = { year: 1, month: 12 };
 
 export function blendInputOf(row: SalaryBenchmark): BlendInput | undefined {
   const { low, high, median } = row;
@@ -100,17 +100,17 @@ function convertTo(input: BlendInput, base: BlendInput, rates: CurrencyRates | u
 }
 
 /** Неизвестное сводится с известным; два разных известных — никогда. */
-function oneKind<Value extends string>(
-  inputs: readonly BlendInput[],
-  read: (input: BlendInput) => Value | 'unknown',
+export function oneKind<Input, Value extends string>(
+  inputs: readonly Input[],
+  read: (input: Input) => Value | 'unknown',
   preferred?: Value,
-): readonly BlendInput[] {
+): readonly Input[] {
   const known = inputs.map(read).filter((value) => value !== 'unknown');
   const kind = known.find((value) => value === preferred) ?? known[0];
   return inputs.filter((input) => read(input) === 'unknown' || read(input) === kind);
 }
 
-function stepOf(value: number): number {
+export function stepOf(value: number): number {
   if (value >= 50_000) return 10_000;
   if (value >= 5_000) return 1_000;
   if (value >= 1_000) return 100;
@@ -118,7 +118,7 @@ function stepOf(value: number): number {
   return value >= 10 ? 1 : 0.1;
 }
 
-function roundTo(value: number, step: number): number {
+export function roundTo(value: number, step: number): number {
   return Number((Math.round(value / step) * step).toFixed(1));
 }
 
