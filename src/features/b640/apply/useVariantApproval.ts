@@ -59,7 +59,7 @@ export function useApprovalHold(vacancyId: string): ApprovalHold {
 
 /**
  * Сохранённый на сервере текст (B711) встаёт в поле, когда прочитаны варианты. Черновик при этом
- * придержан; если его всё же просили (B716: круги не загрузились), ждём, пока он соберётся, —
+ * придержан; если его всё же просили (B716), ждём, пока он соберётся, —
  * иначе пришедшее письмо перезаписало бы этот текст. Правка встаёт сразу: её бережёт следующий хук.
  */
 function useRestoredText(
@@ -71,8 +71,7 @@ function useRestoredText(
   const text = draft ?? stored;
   const [applied, setApplied] = useState<StoredText | null>(null);
   const { pitch, loading, error } = letter.draft;
-  const circlesFailed = !letter.circles.loading && letter.circles.error !== '';
-  const draftSettled = !loading && (pitch !== null || error !== '' || circlesFailed);
+  const draftSettled = !loading && (pitch !== null || error !== '');
   const { settled: variantsSettled, restore } = variants;
   const ready = hold || draft !== null || draftSettled;
   useEffect(() => {

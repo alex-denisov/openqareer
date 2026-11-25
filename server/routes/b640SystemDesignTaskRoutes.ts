@@ -6,6 +6,7 @@ import {
   type SystemDesignTaskWriter,
 } from '../providers/systemDesignTaskModel';
 import { sessionCandidate } from './b640VacancyContext';
+import { trainingCase } from '../domain/trainingCase';
 import { taskInputFor } from './b640SystemDesignTaskSource';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -25,6 +26,18 @@ const URL = '/api/v1/candidate/b640/interview-tasks';
 const bodySchema = z.object({ applicationId: z.string().trim().min(1).max(160) }).strict();
 
 const withoutExample = ({ exampleAnswer: _example, ...task }: SystemDesignTask) => task;
+
+/** На задачу уже ответили: разбор судит ответ по ней, поэтому она остаётся. */
+function hasAnswer(
+  deps: RouteDeps,
+  key: { readonly candidateId: string; readonly applicationId: string },
+): boolean {
+  const session = deps.candidateStore.interviewSimulatorRepo.getCurrent(key.candidateId);
+  return Boolean(
+    session?.applicationId === key.applicationId &&
+    session.questions.some(({ type, answer }) => type === 'system_design' && answer),
+  );
+}
 
 export function registerB640SystemDesignTaskRoutes(
   app: FastifyInstance,
@@ -56,10 +69,14 @@ export function registerB640SystemDesignTaskRoutes(
       const tasks = bound.candidateStore.interviewSimulatorRepo.designTasks;
       const key = { candidateId: candidate.id, applicationId: application.id };
       const stored = tasks.get(key);
-      if (stored) return { data: withoutExample(stored), meta: { requestId: request.id } };
       const input = taskInputFor(bound, application);
+      const fits = stored && (stored.caseKind ?? 'system') === trainingCase(input);
+      if (stored && (fits || hasAnswer(bound, key)))
+        return { data: withoutExample(stored), meta: { requestId: request.id } };
       const written = (await writer?.write(input)) ?? buildSystemDesignTask(input);
-      const kept = tasks.keep(key, written, new Date().toISOString());
+      const kept = stored
+        ? tasks.replace(key, stored, written)
+        : tasks.keep(key, written, new Date().toISOString());
       return { data: withoutExample(kept), meta: { requestId: request.id } };
     }),
   );

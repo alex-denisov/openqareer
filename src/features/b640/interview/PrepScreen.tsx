@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { StarStoryView } from '../../../../shared/starStories';
+import { TRAINING_CASE_LABEL, trainingCase } from '../../../../server/domain/trainingCase';
 import { SYSTEM_DESIGN_TIME_LIMIT_MINUTES } from '../../../../server/domain/systemDesignTask';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
@@ -63,17 +64,22 @@ function SalaryRow(props: { readonly floor: SalaryFloor; readonly vacancyPay: st
   );
 }
 
-/** Тренировка System Design по вакансии отклика (I3). */
-function PracticeRow({ responseId }: { readonly responseId: string }) {
+/** Тренировка по роли и вакансии отклика (I3). */
+function PracticeRow({ response }: { readonly response: PrepData['response'] }) {
+  const { vacancy } = response;
+  const label =
+    TRAINING_CASE_LABEL[
+      trainingCase({ vacancyTitle: vacancy?.title ?? '', description: vacancy?.description })
+    ];
   return (
     <li className="row">
       <div>
-        <div className="row-title">Пробное интервью · тема System Design</div>
+        <div className="row-title">Пробное интервью · тема {label}</div>
         <div className="row-sub">
-          System Design · <span className="num">{SYSTEM_DESIGN_TIME_LIMIT_MINUTES}</span> минут
+          {label} · <span className="num">{SYSTEM_DESIGN_TIME_LIMIT_MINUTES}</span> минут
         </div>
       </div>
-      <Link className="btn is-quiet" to={buildNodePath('i03', { responseId })}>
+      <Link className="btn is-quiet" to={buildNodePath('i03', { responseId: response.id })}>
         <Icon name="compass" />
         Тренировка
       </Link>
@@ -201,7 +207,7 @@ function PrepLead({
           <Row key={row.id} row={row} />
         ))}
         {data.floor ? <SalaryRow floor={data.floor} vacancyPay={data.vacancyPay} /> : null}
-        <PracticeRow responseId={data.response.id} />
+        <PracticeRow response={data.response} />
         <RecordingRow responseId={data.response.id} />
       </ul>
       <QuotaNote quota={data.quota} />

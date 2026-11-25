@@ -6,6 +6,8 @@ import {
   type SystemDesignSchema,
 } from '../../../../../server/domain/systemDesignSchema';
 
+import type { TrainingCase } from '../../../../../server/domain/trainingCase';
+
 /** I3: тренировка System Design — задача, ответ со схемой и критериями, разбор. */
 
 export type PracticeChoice = 'start' | 'resume' | 'review' | 'other';
@@ -16,6 +18,16 @@ const CRITERIA = [
   ['tradeoffs', 'Компромиссы'],
   ['operations', 'Эксплуатация'],
 ] as const;
+
+const CASE_CRITERIA_TITLES = [
+  ['requirements', 'Цели и ограничения'],
+  ['architecture', 'Решение'],
+  ['tradeoffs', 'Компромиссы'],
+  ['operations', 'Контроль'],
+] as const;
+
+const criteriaOf = (kind: TrainingCase = 'system'): readonly (readonly [string, string])[] =>
+  kind === 'system' ? CRITERIA : CASE_CRITERIA_TITLES;
 
 const QUOTE_SHOWN = 120;
 
@@ -94,11 +106,11 @@ function shortQuote(quote: string): string {
 }
 
 /** Критерии по мере ответа: те же правила, что у разбора, без модели. */
-export function liveCriteria(answer: string): LiveCriterion[] {
+export function liveCriteria(answer: string, kind: TrainingCase = 'system'): LiveCriterion[] {
   const criteria = answer.trim()
-    ? scoreInterviewAnswerWithQuotes(answer, 'system_design').criteria
+    ? scoreInterviewAnswerWithQuotes(answer, 'system_design', kind).criteria
     : {};
-  return CRITERIA.map(([key, title]) => {
+  return criteriaOf(kind).map(([key, title]) => {
     const criterion = criteria[key] as { points: number; quote?: string } | undefined;
     const sounded = Boolean(criterion && criterion.points > 0);
     return {
@@ -205,8 +217,8 @@ export interface ReviewRow {
 
 const REVIEW_TAG = ['не хватило', 'частично', 'прозвучало'] as const;
 
-export function reviewRows(evaluation: ReviewEvaluation): ReviewRow[] {
-  return CRITERIA.flatMap(([key, title]) => {
+export function reviewRows(evaluation: ReviewEvaluation, kind?: TrainingCase): ReviewRow[] {
+  return criteriaOf(kind).flatMap(([key, title]) => {
     const criterion = evaluation.criteria[key];
     if (!criterion) return [];
     return [

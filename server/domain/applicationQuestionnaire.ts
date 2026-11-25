@@ -10,6 +10,10 @@ import {
   type QuestionnaireSuggestion,
 } from '../../shared/applicationQuestionnaire';
 import { profileAnswers, type QuestionnaireProfileFacts } from './questionnaireProfileAnswers';
+import { salaryMarketAnswers, type SalaryMarketInput } from './salaryMarketAnswer';
+import { isSalaryExpectation } from './salaryQuestion';
+import { workRightAnswers } from './workRightAnswers';
+import type { WorkRight } from '../../shared/workPreferences';
 import { clip, isRecord, OPTION_MAX_LENGTH, QUESTION_TEXT_MAX_LENGTH } from './questionText';
 
 /** Защита от чужого ответа, а не страница списка: настоящие списки (страны) — около 250. */
@@ -98,7 +102,7 @@ export function atsQuestions(raw: AtsFormInput['questions']): readonly Questionn
     byId.set(
       item.id,
       item.kind === 'text'
-        ? { ...base, kind: 'text', ...(item.singleLine ? { singleLine: true } : {}) }
+        ? { ...base, kind: 'text', ...(item.singleLine ? { singleLine: true } : {}), ...(item.numeric ? { numeric: true } : {}) }
         : { ...base, kind: 'choice', options, ...(item.multiple ? { multiple: true } : {}) },
     );
   }
@@ -146,7 +150,6 @@ export interface SalaryProfile {
   readonly salaryCurrency?: string;
 }
 
-const SALARY_QUESTION = /доход|зарплат|оклад|вознагражд|компенсац|salary|compensation|pay expectation/iu;
 const CURRENCY_SIGNS: Readonly<Record<string, string>> = { RUB: '₽', USD: '$', EUR: '€' };
 
 /** Ответ на вопрос о деньгах: только если ожидания уже записаны в профиле. */
@@ -161,7 +164,8 @@ export function salarySuggestions(
   const sign = Object.hasOwn(CURRENCY_SIGNS, currency) ? CURRENCY_SIGNS[currency] : currency;
   const text = `от ${amount} ${sign}`;
   return questions
-    .filter((question) => question.kind === 'text' && SALARY_QUESTION.test(question.text))
+    // В числовое поле «от 500 000 ₽» не встанет, а период и валюту поля профиль не знает.
+    .filter((question) => isSalaryExpectation(question) && !question.numeric)
     .map((question) => ({ questionId: question.id, text, source: 'Ожидания из вашего профиля' }));
 }
 
@@ -174,6 +178,11 @@ export interface QuestionnaireInput {
   readonly profile: SalaryProfile | null;
   /** Контакты и гражданство из профиля: из них подставляются ответы. */
   readonly facts?: QuestionnaireProfileFacts | null;
+  /** Подтверждённое право на работу и страна вакансии (B788). */
+  readonly workRights?: readonly WorkRight[];
+  readonly vacancyCountry?: string;
+  /** Вакансия и рынок — для вопроса о зарплате, когда ожиданий в профиле нет. */
+  readonly salaryMarket?: SalaryMarketInput;
   readonly vacancyTitle?: string;
   readonly vacancyCompany?: string;
   readonly readAt: string | null;
@@ -238,9 +247,17 @@ export function buildQuestionnaire(input: QuestionnaireInput): ApplicationQuesti
   const cleared = new Set(
     input.answers.filter((answer) => !answer.text.trim()).map((answer) => answer.questionId),
   );
+  const answeredSaved = new Set(saved.map((answer) => answer.questionId));
+  const open = input.questions.filter(
+    ({ id }) => !taken.has(id) && !cleared.has(id) && !answeredSaved.has(id),
+  );
+  const expected = input.profile?.salaryFloor
+    ? salarySuggestions(input.questions, input.profile)
+    : salaryMarketAnswers(open, input.salaryMarket);
   const fromProfile = [
     ...contacts,
-    ...salarySuggestions(input.questions, input.profile).filter((item) => !taken.has(item.questionId)),
+    ...workRightAnswers(input.questions, input.workRights ?? [], input.vacancyCountry),
+    ...expected.filter((item) => !taken.has(item.questionId)),
   ].filter((item) => !cleared.has(item.questionId));
   const answers = withProfileAnswers(input.questions, saved, fromProfile);
   const answered = new Set(answers.map((answer) => answer.questionId));

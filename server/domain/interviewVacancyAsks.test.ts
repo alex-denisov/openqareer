@@ -92,4 +92,45 @@ describe('interviewVacancyAsks (B635)', () => {
   it('описания нет — вопросов по нему нет', () => {
     expect(interviewVacancyAsks('  ')).toEqual([]);
   });
+
+  it('где жить — не вопрос; дело роли — задача, а не требование', () => {
+    const [base] = extractVacancyRequirements({
+      vacancyId: 'v',
+      description: 'Требования:\nKafka под нагрузкой',
+    }).requirements;
+    const asks = interviewVacancyAsks('Описание', [
+      { ...base!, id: 'a', text: 'Обязательное проживание и работа в Дубае в течение первых 6-12 месяцев' },
+      { ...base!, id: 'b', text: 'возглавит направление внутренней IT-инфраструктуры' },
+      { ...base!, id: 'c', text: 'определить приоритеты' },
+      { ...base!, id: 'd', text: 'опыт работы с поставщиками' },
+      { ...base!, id: 'e', text: 'уметь вести переговоры' },
+      { ...base!, id: 'f', text: 'ответственность и гибкость' },
+    ]);
+    expect(Object.fromEntries(asks.map(({ text, kind }) => [text, kind]))).toEqual({
+      'возглавит направление внутренней IT-инфраструктуры': 'duty',
+      'определить приоритеты': 'duty',
+      'опыт работы с поставщиками': 'req',
+      'уметь вести переговоры': 'req',
+      'ответственность и гибкость': 'req',
+    });
+  });
+
+  it.each([
+    ['бюджет проектов от 100 млн', 'req'],
+    ['аудит информационной безопасности', 'req'],
+    ['кредит и факторинг в банке', 'req'],
+    ['приоритет на качество кода', 'req'],
+    ['интернет вещей и датчики', 'req'],
+    ['дефицит кадров в команде', 'req'],
+    ['области знаний PMBOK', 'req'],
+    ['управляет командой разработки', 'duty'],
+    ['снизит затраты на поддержку', 'duty'],
+    ['провести аудит процессов', 'duty'],
+  ])('«%s» — %s: имена на -ит и -ет не глаголы', (text, kind) => {
+    const [base] = extractVacancyRequirements({
+      vacancyId: 'v',
+      description: 'Требования:\nKafka под нагрузкой',
+    }).requirements;
+    expect(interviewVacancyAsks('Описание', [{ ...base!, text }])[0]).toMatchObject({ text, kind });
+  });
 });

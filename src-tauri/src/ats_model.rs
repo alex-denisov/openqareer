@@ -14,6 +14,34 @@ const MAX_VALUE_CHARS: usize = 10_000;
 const MAX_FILES: usize = 2;
 pub(crate) const MAX_CONSENTS: usize = 20;
 const MAX_ID_CHARS: usize = 200;
+/// Keeps a path code within the sixty characters the journal takes.
+const PATH_PARTS_MAX: usize = 4;
+const PATH_WORDS: &[&str] = &[
+    "application",
+    "applications",
+    "applied",
+    "apply",
+    "c",
+    "candidates",
+    "careers",
+    "company",
+    "confirmation",
+    "connect",
+    "errors",
+    "j",
+    "jobs",
+    "new",
+    "o",
+    "oneclick-ui",
+    "p",
+    "postings",
+    "publication",
+    "submitted",
+    "success",
+    "thank-you",
+    "thank_you",
+    "thanks",
+];
 
 /// What the page may answer instead of a press. Anything else is "press_unknown".
 pub(crate) const PRESS_REFUSALS: &[&str] = &[
@@ -303,6 +331,27 @@ pub(crate) fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, 
     }
 }
 
+/// A path as one journal code. Only words the boards themselves use are kept;
+/// a slug, an id or a token in it becomes `x`.
+pub(crate) fn path_code(path: &str) -> String {
+    let parts: Vec<&str> = path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            PATH_WORDS
+                .iter()
+                .find(|word| **word == part)
+                .copied()
+                .unwrap_or("x")
+        })
+        .take(PATH_PARTS_MAX)
+        .collect();
+    if parts.is_empty() {
+        return "root".to_string();
+    }
+    parts.join("_")
+}
+
 pub(crate) fn decode(raw: &str) -> Value {
     match serde_json::from_str::<Value>(raw) {
         Ok(Value::String(inner)) => serde_json::from_str(&inner).unwrap_or(Value::Null),
@@ -344,6 +393,15 @@ mod tests {
     use crate::ats_apply::store_identifier;
     use crate::ats_target::resolve;
     use serde_json::json;
+
+    #[test]
+    fn a_path_becomes_a_journal_code_of_bounded_length() {
+        assert_eq!(path_code("/jobs/8-x/applications"), "jobs_x_applications");
+        assert_eq!(path_code("/applications/5f3a-token"), "applications_x");
+        assert_eq!(path_code("/"), "root");
+        let long = path_code(&"/confirmation".repeat(9));
+        assert!(long.len() <= 60, "{long}");
+    }
 
     #[test]
     fn a_refusal_stands_only_for_our_fields_of_the_same_form() {
