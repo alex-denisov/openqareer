@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { MIGRATION_33, MIGRATION_38 } from './sqliteSchema';
+import { isStarred, savedMark } from './applicationStar';
 import { SealedText } from './sealedText';
 import { SqliteApplicationRepository } from './sqliteApplicationRepository';
 import { ApplicationNotFoundError, ApplicationVersionConflictError } from './store/errors';
@@ -53,6 +54,33 @@ describe('SqliteApplicationRepository', () => {
     const events = repo.listEvents('candidate-1', created.id);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ kind: 'stage', fromStage: null, toStage: 'saved', provenance: 'candidate' });
+  });
+
+  it('черновик отклика — не звезда; звезду ставит и снимает только кандидат (B798)', () => {
+    const { repo, database } = createRepo();
+    const mark = (id: string) => isStarred('saved', savedMark(database, 'candidate-1', id));
+    const draft = repo.create('candidate-1', { clusterId: 'c', stage: 'saved', vacancy, draft: true });
+    expect(mark(draft.id)).toBe(false);
+    const starred = repo.patch('candidate-1', draft.id, { expectedVersion: 1, starred: true });
+    expect(mark(draft.id)).toBe(true);
+    // Повторное «Откликнуться» звезду кандидата не снимает.
+    repo.create('candidate-1', { clusterId: 'c', stage: 'saved', vacancy, draft: true });
+    expect(mark(draft.id)).toBe(true);
+    const off = repo.patch('candidate-1', draft.id, { expectedVersion: starred.version, starred: false });
+    expect(off.stage).toBe('saved');
+    expect(mark(draft.id)).toBe(false);
+    const archived = repo.patch('candidate-1', draft.id, { expectedVersion: off.version, stage: 'archived' });
+    repo.restoreFromArchive('candidate-1', draft.id, archived.version);
+    expect(mark(draft.id)).toBe(false);
+    repo.create('candidate-1', { clusterId: 'c', stage: 'saved', vacancy });
+    expect(mark(draft.id)).toBe(true);
+  });
+
+  it('отклик, возвращённый в черновики, звезды не получает (B798)', () => {
+    const { repo, database } = createRepo();
+    const sent = repo.create('candidate-1', { clusterId: 'c', stage: 'applied', vacancy });
+    repo.patch('candidate-1', sent.id, { expectedVersion: 1, stage: 'saved' });
+    expect(isStarred('saved', savedMark(database, 'candidate-1', sent.id))).toBe(false);
   });
 
   it('does not create a duplicate for a repeated clusterId', () => {
