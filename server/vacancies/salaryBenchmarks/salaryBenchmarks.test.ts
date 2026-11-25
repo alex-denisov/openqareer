@@ -1,16 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { blendInputOf, blendSalary } from './blendSalaryBenchmarks';
 import { matchSalaryBenchmarks, type BenchmarkQuery } from './pickSalaryBenchmark';
 import { salaryBenchmarkSchema, type SalaryBenchmark } from './salaryBenchmark';
+import { importSalarySlices } from './salaryImport';
 import {
-  SALARY_BENCHMARKS_FILE,
   createSalaryBenchmarkReader,
-  loadSalaryBenchmarksFile,
-  writeSalaryBenchmarks,
+  setSalarySourceEnabled,
+  writeSalarySlice,
 } from './sqliteSalaryBenchmarkStore';
 
 /** Вымышленные числа: цифры источников в публичный репозиторий не входят. */
@@ -38,10 +35,6 @@ const row = (patch: Partial<SalaryBenchmark> = {}): SalaryBenchmark => ({
   sampleSize: null,
   readOn: '2026-11-25',
   ...patch,
-});
-const fileOf = (benchmarks: readonly SalaryBenchmark[], enabled = true) => ({
-  sources: [{ name: 'Agency', kind: 'agency', enabled }],
-  benchmarks,
 });
 const dubaiCto = {
   title: 'Chief Technology Officer (CTO)',
@@ -249,82 +242,116 @@ describe('blendSalary kinds and rounding', () => {
   });
 });
 
-describe('salary_benchmarks', () => {
-  it('reads the rows once until the file is loaded again', () => {
+describe('salary store', () => {
+  const sliceOf = (
+    benchmarks: readonly SalaryBenchmark[],
+    sliceDate = '2026-11-25',
+    enabled = true,
+  ) => ({ source: { name: 'Agency', kind: 'agency', enabled }, sliceDate, benchmarks });
+  const opened = () => {
     const database = new DatabaseSync(':memory:');
-    const read = createSalaryBenchmarkReader(database);
+    return { database, read: createSalaryBenchmarkReader(database) };
+  };
+  const count = (database: DatabaseSync, table: string) =>
+    (database.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+  const other = (patch: Partial<SalaryBenchmark> = {}) =>
+    row({ sourceName: 'Portal', sourceKind: 'portal', ...patch });
+
+  it('reads the rows once until a new slice is written', () => {
+    const { database, read } = opened();
     expect(read({ country: 'AE' })).toEqual([]);
-    writeSalaryBenchmarks(database, fileOf([row()]));
+    writeSalarySlice(database, sliceOf([row()]));
     const first = read({ country: 'AE' })[0];
+    expect(first).toEqual(row());
     expect(read({ country: 'AE' })[0]).toBe(first);
-    writeSalaryBenchmarks(database, fileOf([row({ low: 11 })]));
+    writeSalarySlice(database, sliceOf([row({ low: 11 })], '2026-11-26'));
     expect(read({ country: 'AE' })[0]?.low).toBe(11);
   });
 
-  it('replaces the table and keeps it when the file is wrong', () => {
-    const database = new DatabaseSync(':memory:');
-    const read = createSalaryBenchmarkReader(database);
-    expect(read({ country: 'AE' })).toEqual([]);
-    writeSalaryBenchmarks(database, fileOf([row(), row({ id: 'qa-row', country: 'QA' })]));
-    expect(read({ country: 'AE', region: 'mena' })).toEqual([row()]);
-    expect(() => writeSalaryBenchmarks(database, fileOf([row(), row()]))).toThrow();
-    expect(read({ country: 'QA' })).toHaveLength(1);
+  it('keeps earlier slices and never lets an older one become current', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row({ low: 11 })]));
+    writeSalarySlice(database, sliceOf([row({ low: 9 })], '2026-10-01'));
+    expect(read({ country: 'AE' })[0]?.low).toBe(11);
+    expect(count(database, 'salary_records')).toBe(2);
   });
 
-  it('refuses an unlisted or refused source', () => {
-    const database = new DatabaseSync(':memory:');
+  it('a corrected slice of the same date is the next version', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row()]));
+    writeSalarySlice(database, sliceOf([row({ low: 12 })]));
+    expect(read({ country: 'AE' })[0]?.low).toBe(12);
+    expect(
+      database
+        .prepare('SELECT version FROM salary_slices ORDER BY id')
+        .all()
+        .map((r) => r.version),
+    ).toEqual([1, 2]);
+  });
+
+  it('a wrong slice changes nothing', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row()]));
     for (const bad of [
+      [row(), row()],
       [row({ sourceName: 'Other' })],
       [row({ sourceKind: 'gov' })],
       [row({ sourceUrl: 'https://www.glassdoor.co.uk/x' })],
-    ]) {
-      expect(() => writeSalaryBenchmarks(database, fileOf(bad))).toThrow();
-    }
+    ])
+      expect(() => writeSalarySlice(database, sliceOf(bad, '2026-11-27'))).toThrow();
+    expect(read({ country: 'AE' })).toEqual([row()]);
+    expect(count(database, 'salary_slices')).toBe(1);
   });
 
   it('drops thin samples and keeps only the median of an implausible range', () => {
-    const database = new DatabaseSync(':memory:');
-    const read = createSalaryBenchmarkReader(database);
-    const rows = [
-      row({ id: 'thin', sampleSize: 14 }),
-      row({ id: 'wide', low: 1, high: 20 }),
-      row({ id: 'wide-median', low: 1, median: 12, high: 20 }),
-      row({ id: 'enough', sampleSize: 15 }),
-    ];
-    writeSalaryBenchmarks(database, fileOf(rows));
-    const stored = read({ country: 'AE' });
-    expect(stored.map(({ id, low }) => [id, low])).toEqual([
+    const { database, read } = opened();
+    writeSalarySlice(
+      database,
+      sliceOf([
+        row({ id: 'thin', sampleSize: 14 }),
+        row({ id: 'wide', low: 1, high: 20 }),
+        row({ id: 'wide-median', low: 1, median: 12, high: 20 }),
+        row({ id: 'enough', sampleSize: 15 }),
+      ]),
+    );
+    expect(read({ country: 'AE' }).map(({ id, low }) => [id, low])).toEqual([
       ['enough', 10],
       ['wide-median', null],
     ]);
+    expect(count(database, 'salary_records')).toBe(4);
   });
 
-  it('removes a source by one flag', () => {
-    const database = new DatabaseSync(':memory:');
-    const read = createSalaryBenchmarkReader(database);
-    writeSalaryBenchmarks(database, fileOf([row()]));
-    expect(writeSalaryBenchmarks(database, fileOf([row()], false))).toBe(0);
+  it('a switched-off source leaves the answer, keeps its slices and stays off', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row()]));
+    setSalarySourceEnabled(database, 'Agency', false);
     expect(read({ country: 'AE' })).toEqual([]);
+    writeSalarySlice(database, sliceOf([row({ low: 11 })], '2026-11-26'));
+    expect(read({ country: 'AE' })).toEqual([]);
+    setSalarySourceEnabled(database, 'Agency', true);
+    expect(read({ country: 'AE' })[0]?.low).toBe(11);
+    writeSalarySlice(database, sliceOf([row({ low: 11 })], '2026-11-26', false));
+    expect(read({ country: 'AE' })).toEqual([]);
+    expect(() => setSalarySourceEnabled(database, 'Nobody', true)).toThrow();
   });
 
-  it('loads the file beside the database and stays quiet without it', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'benchmarks-'));
-    const database = new DatabaseSync(':memory:');
-    const read = createSalaryBenchmarkReader(database);
-    const log = { info: vi.fn(), error: vi.fn() };
-    try {
-      const path = join(directory, 'openqareer.db');
-      loadSalaryBenchmarksFile(database, path, log);
-      expect(log.info).not.toHaveBeenCalled();
-      writeFileSync(join(directory, SALARY_BENCHMARKS_FILE), JSON.stringify(fileOf([row()])));
-      loadSalaryBenchmarksFile(database, path, log);
-      expect(log.info).toHaveBeenCalledWith({ rows: 1 }, 'salary-benchmarks-loaded');
-      writeFileSync(join(directory, SALARY_BENCHMARKS_FILE), '{');
-      loadSalaryBenchmarksFile(database, path, log);
-      expect(log.error).toHaveBeenCalledOnce();
-      expect(read({ country: 'AE' })).toHaveLength(1);
-    } finally {
-      rmSync(directory, { recursive: true });
-    }
+  it('imports source by source, twice without duplicates, with one failed source', () => {
+    const { database, read } = opened();
+    const sources = [
+      { name: 'Agency', kind: 'agency', enabled: true },
+      { name: 'Portal', kind: 'portal', enabled: true },
+    ];
+    const good = { sources, benchmarks: [row(), other()] };
+    expect(importSalarySlices(database, good).map(({ written }) => written)).toEqual([1, 1]);
+    expect(importSalarySlices(database, good).map(({ written }) => written)).toEqual([0, 0]);
+    expect(count(database, 'salary_records')).toBe(2);
+    const next = { sources, benchmarks: [row({ low: 12 }), other({ low: 30 })] };
+    const results = importSalarySlices(database, next);
+    expect(results).toEqual([
+      { source: 'Agency', written: 1 },
+      { source: 'Portal', written: 0, error: 'invalid slice: 1 problems' },
+    ]);
+    expect(read({ country: 'AE' }).map(({ low }) => low)).toEqual([12, 10]);
+    expect(() => importSalarySlices(database, { sources: [], benchmarks: [row()] })).toThrow();
   });
 });

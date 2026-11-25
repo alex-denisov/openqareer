@@ -1,5 +1,5 @@
 /**
- * B803: при загрузке файла обслуживание считает то, что не нужно считать на запрос: ключи поиска
+ * B803: при пересборке считается то, что не нужно считать на запрос: ключи поиска
  * строк, мировые оценки функции и уровня, множители уровней.
  */
 import type { DatabaseSync } from 'node:sqlite';
@@ -55,18 +55,24 @@ function writeWorld(
   }
 }
 
-/** Внутри транзакции загрузки файла. */
+interface RowKeys {
+  readonly placeKey: (row: SalaryBenchmark) => string;
+  readonly recordKey: (row: SalaryBenchmark) => string;
+}
+
+/** Внутри транзакции пересборки. */
 export function writeRollups(
   database: DatabaseSync,
   rows: readonly SalaryBenchmark[],
-  placeKey: (row: SalaryBenchmark) => string,
+  { placeKey, recordKey }: RowKeys,
   rates: CurrencyRates | undefined,
   now: Date,
 ): void {
   database.exec(`DELETE FROM salary_benchmark_keys; DELETE FROM salary_world_estimates;
     DELETE FROM salary_level_multipliers`);
   const key = database.prepare('INSERT INTO salary_benchmark_keys VALUES (?, ?, ?)');
-  for (const row of rows) for (const name of keysOf(row)) key.run(placeKey(row), name, row.id);
+  for (const row of rows)
+    for (const name of keysOf(row)) key.run(placeKey(row), name, recordKey(row));
   writeWorld(database, rows, rates, now);
   const multiplier = database.prepare('INSERT INTO salary_level_multipliers VALUES (?, ?)');
   for (const [name, value] of levelMultipliers(rows)) multiplier.run(name, value);

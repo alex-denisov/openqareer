@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { createBenchmarkLookup } from '../salaryBenchmarks/benchmarkLookup';
-import { writeSalaryBenchmarks } from '../salaryBenchmarks/sqliteSalaryBenchmarkStore';
+import { importSalarySlices } from '../salaryBenchmarks/salaryImport';
 import { bundledCities } from '../vacancyCountry/bundledCities';
 import { createCities } from '../vacancyCountry/cityCountry';
 import { openqareerEstimate, type EstimateDeps, type EstimateQuery } from './openqareerEstimate';
@@ -49,7 +49,7 @@ function deps(patch: Partial<EstimateDeps> = {}): EstimateDeps {
   const database = new DatabaseSync(':memory:');
   database.exec('CREATE TABLE currency_rates (code TEXT, rub_per_unit REAL, rate_date TEXT)');
   database.exec("INSERT INTO currency_rates VALUES ('USD', 100, 'd'), ('EUR', 100, 'd')");
-  writeSalaryBenchmarks(database, {
+  importSalarySlices(database, {
     sources: [{ name: 'Secret Agency', kind: 'agency', enabled: true }],
     benchmarks: pairs,
   });

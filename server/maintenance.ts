@@ -65,7 +65,6 @@ import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleSitemapHealth } from './seo/sitemapHealth';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
-import { loadSalaryBenchmarksFile } from './vacancies/salaryBenchmarks/sqliteSalaryBenchmarkStore';
 import { scheduleOpenStatisticsJob } from './vacancies/occupationEarnings/occupationEarningSchedule';
 import { scheduleEmployerCountryJob } from './vacancies/vacancyCountry/employerCountryJob';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
@@ -432,8 +431,6 @@ try {
     config,
     log,
   );
-  // B803: цифры открытой аналитики из файла рядом с базой.
-  loadSalaryBenchmarksFile(semanticDatabase, config.databasePath, log);
   // B546: market salary estimates stream every salaried vacancy, so only here.
   stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
   // B803: открытая статистика заработков, раз в неделю.
