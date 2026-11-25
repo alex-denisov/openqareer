@@ -2,6 +2,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import { readCurrencyRates } from '../../currency/cbrRates';
+import { ROLLUP_TABLES_SQL, writeRollups } from './benchmarkRollups';
 import {
   enabledBenchmarks,
   salaryBenchmarkSchema,
@@ -28,6 +30,7 @@ const placeKey = (row: SalaryBenchmark): string =>
 export function writeSalaryBenchmarks(database: DatabaseSync, input: unknown): number {
   const rows = enabledBenchmarks(salaryBenchmarksFileSchema.parse(input));
   database.exec(TABLE_SQL);
+  database.exec(ROLLUP_TABLES_SQL);
   const insert = database.prepare(
     'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
   );
@@ -35,6 +38,7 @@ export function writeSalaryBenchmarks(database: DatabaseSync, input: unknown): n
   try {
     database.exec('DELETE FROM salary_benchmarks');
     for (const row of rows) insert.run(row.id, placeKey(row), JSON.stringify(row));
+    writeRollups(database, rows, placeKey, readCurrencyRates(database), new Date());
     database.exec(
       `INSERT INTO salary_benchmarks_version VALUES (1, 1)
         ON CONFLICT (id) DO UPDATE SET version = version + 1`,
