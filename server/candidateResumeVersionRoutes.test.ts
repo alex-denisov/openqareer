@@ -6,6 +6,7 @@ import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { CoachProvider } from './providers/coachProvider';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
+import { buildVersionContent, currentMaster } from './routes/resumeMaster';
 import type { ProposedRole } from '../shared/roleProposals';
 
 const careerRoles = vi.hoisted(() => ({
@@ -435,6 +436,33 @@ describe('candidate resume version and ATS APIs', () => {
     });
     expect(staleCreate.statusCode).toBe(409);
     expect(staleCreate.json().error.code).toBe('resume_source_changed');
+  });
+
+  it('B801: perVacancy отдаёт последнюю одобренную версию вакансии', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    const master = currentMaster({ candidateStore: store, config } as never, candidateId);
+    for (const requirements of [['Kubernetes'], ['Terraform']]) {
+      const id = randomUUID();
+      const version = {
+        ...buildVersionContent(master, 'Platform Engineer', requirements),
+        vacancyId: 'cluster-1',
+      };
+      store.createResumeVersion(candidateId, id, master.revision, version);
+      store.updateResumeVersion(candidateId, id, 1, master.revision, {
+        ...version,
+        status: 'approved',
+      });
+    }
+    const list = async (query: string) =>
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/v1/candidate/resume/versions?limit=3${query}`,
+          headers: headers(authorization),
+        })
+      ).json().data;
+    expect((await list('')).totalCount).toBe(2);
+    expect(await list('&perVacancy=1')).toMatchObject({ totalCount: 1, nextCursor: null });
   });
 
   it('isolates versions by candidate and returns not found for another candidate', async () => {

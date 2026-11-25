@@ -10,6 +10,7 @@ import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
 import type { LinkedinPoolExecutorReport } from '../linkedinPool/companyPageExecutor';
 import type { WorkdayDescriptionReport } from '../vacancies/workdayDescriptions';
+import { startSelectionLiveness, type SelectionLivenessEngine } from './selectionLivenessStep';
 import type { HhCatalogTextReport } from '../vacancies/hhCatalogText';
 import {
   SYNC_BATCH_LIMIT,
@@ -32,7 +33,7 @@ export interface MaintenanceLog {
 }
 
 /** Ровно то, что обслуживатель просит у движка — остальное ему не нужно. */
-export interface MaintenanceEngine {
+export interface MaintenanceEngine extends SelectionLivenessEngine {
   getSources(): VacancySourceConfig[];
   restoreAsync(
     nowMs?: number,
@@ -744,12 +745,11 @@ export class MaintenanceWorker {
       poolSize = null;
     }
     const heap = this.readHeap();
-    const rss = process.memoryUsage().rss;
     this.log.info(
       {
         heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
         heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
-        rssMb: Math.round(rss / (1024 * 1024)),
+        rssMb: Math.round(process.memoryUsage().rss / (1024 * 1024)),
         poolSize,
         ingestPaused: this.memoryGuard.isPaused,
       },
@@ -793,6 +793,7 @@ export class MaintenanceWorker {
     // B763: догон записей без кластера, см. `unclusteredCatchUpStep.ts`.
     every(this.intervals.unclusteredCatchUpMs, () => this.catchUp.run(), 'runUnclusteredCatchUp');
     every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());
+    this.timers.push(...startSelectionLiveness(this.engine, this.log, () => this.stopped));
     every(this.intervals.reportMs, () => this.reportMemory());
     if (this.purgeRecruiters) {
       every(this.intervals.recruiterPurgeMs, () =>

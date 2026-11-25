@@ -23,19 +23,3 @@ export function textBlocks(description: string): readonly TextBlock[] {
       return heading ? { kind: 'h', text: heading } : { kind: 'p', text: line };
     });
 }
-
-/** «hh.ru · опубликована 11 ноября»; для другого года — с годом. */
-export function publishedLine(source: string, observedAt: string, now: Date = new Date()): string {
-  const date = new Date(observedAt);
-  if (Number.isNaN(date.getTime())) return source;
-  const sameYear = date.getUTCFullYear() === now.getUTCFullYear();
-  const text = new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    ...(sameYear ? {} : { year: 'numeric' }),
-    timeZone: 'Europe/Moscow',
-  })
-    .format(date)
-    .replace(/\s*г\.$/u, '');
-  return `${source} · опубликована ${text}`;
-}
