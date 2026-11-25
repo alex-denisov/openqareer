@@ -7,11 +7,16 @@ const EMOJI =
   /(?![©®™])\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\u{FE0F}|\u{200D}|\u{20E3}/gu;
 /** Метка пункта; «-5%» и перенос «— не только» — не метка. */
 const MARK = /^\s*(?:[•·●▪◦*✓]\s*|[–—-]\s+(?=[\p{Lu}\d$€£₽]))/u;
-const PHONE = /(?<!\d)\+?\d(?:[\s()-]*\d){9,}/u;
+const DASH = /^\s*[–—-]\s+/u;
+const PHONE = /(?<!\d)\+?\d(?:[\s()-]*\d){9,}/gu;
+/** «89 000 000 000» — сумма, а не телефон. */
+const AMOUNT = /^\d{1,3}(?:\s\d{3}){2,}$/u;
+const hasPhone = (text: string): boolean =>
+  [...text.matchAll(PHONE)].some(([match]) => !AMOUNT.test(match));
 const CONTACT =
   /\S@\S+\.\p{L}{2,}|(?<![\p{L}\d])@\w{3,}|\bt\.me\/|linkedin\.com|(?<!\p{L})(?:contacts?|e-?mail|telegram|whatsapp|phone|контакты?|почта|телеграм|телефон)\s*(?::|@|\+?\d|$)/iu;
 const SEARCH =
-  /^(?:(?:i am|i['’]m|i|currently|now|actively|also|я|сейчас|активно|также)\s+)*(?:open (?:to|for)|available (?:for|from|immediately|now)|seeking|looking for|searching for|ready to relocate|willing to|interested in\b.{0,80}\b(?:roles?|positions?|opportunit|jobs?|offers?|work)|reach out|contact me|let['’]s (?:connect|talk)|feel free|ищу|в поиске|открыт[аы]? (?:к|для)|готов[аы]? (?:к (?:переезд|релокац|предложени)|рассмотреть|переехать)|рассм[ао]тр\p{L}*|интересу(?:ют|ет|юсь).{0,60}(?:ваканси|позици|предложени|должност|рол[ьи])|свяжитесь|пишите|звоните)/iu;
+  /^(?:(?:i am|i['’]m|i|currently|now|actively|also|я|сейчас|активно|также)\s+)*(?:open (?:to|for)|available (?:for|from|immediately|now)|(?:seeking|looking for|searching for)(?!.*,\s*(?:i|we)(?!\p{L}))|ready to relocate|willing to|interested in\b.{0,80}\b(?:roles?|positions?|opportunit|jobs?|offers?|work)|reach out|contact me|let['’]s (?:connect|talk)|feel free|ищу|в поиске|открыт[аы]? (?:к|для)|готов[аы]? (?:к (?:переезд|релокац|предложени)|рассмотреть|переехать)|рассм[ао]тр\p{L}*|интересу(?:ют|ет|юсь).{0,60}(?:ваканси|позици|предложени|должност|рол[ьи])|свяжитесь|пишите|звоните)/iu;
 const RELOCATE = /\b(?:willing|ready|open|able) to relocate\b|готов[аы]? к (?:переезд|релокац)/iu;
 /** Слово, которым фраза не кончается: следующая строка её продолжает. */
 const OPEN_END =
@@ -33,7 +38,7 @@ const sentencesOf = (line: string): string[] =>
 
 const isOwnSentence = (text: string): boolean =>
   !CONTACT.test(text) &&
-  !PHONE.test(text) &&
+  !hasPhone(text) &&
   !SEARCH.test(text) &&
   !RELOCATE.test(text) &&
   !isSearchIntent(text);
@@ -41,8 +46,19 @@ const isOwnSentence = (text: string): boolean =>
 /** Строки профиля; перенос внутри фразы склеен обратно. */
 function linesOf(about: string): string[] {
   const lines: string[] = [];
-  for (const raw of about.split('\n')) {
-    const plain = raw.replace(EMOJI, '');
+  const rows = about.split('\n').map((raw) => ({ raw, plain: raw.replace(EMOJI, '') }));
+  const filled = rows.filter(({ plain }) => plain.trim() !== '');
+  // Одиночное тире продолжает фразу, тире подряд — список.
+  const listed = new Set(
+    filled.filter(
+      ({ plain }, index) =>
+        DASH.test(plain) &&
+        [filled[index - 1], filled[index + 1]].some((next) => next && DASH.test(next.plain)),
+    ),
+  );
+  for (const row of rows) {
+    const { raw } = row;
+    const plain = listed.has(row) ? row.plain.replace(DASH, '• ') : row.plain;
     const marked = plain !== raw || MARK.test(plain);
     const line = plain.replace(MARK, '').replace(/\s+/gu, ' ').trim();
     const last = lines.at(-1) ?? '';

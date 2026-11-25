@@ -84,4 +84,21 @@ describe('«О себе» в резюме под вакансию', () => {
     expect(result).toMatch(/эксплуатацией\.$/u);
     expect(vacancyAbout('слово '.repeat(200)).length).toBeLessThanOrEqual(700);
   });
+
+  it('строки с тире подряд — список, а не продолжение фразы', () => {
+    expect(vacancyAbout('— вырастил выручку до 3 млн\n— готов к переезду')).toBe(
+      'вырастил выручку до 3 млн.',
+    );
+    expect(vacancyAbout('Сделал:\n- внедрил ERP\n\n- сократил расходы')).toBe(
+      'внедрил ERP. сократил расходы.',
+    );
+    expect(vacancyAbout('- внедрил ERP\n- сократил расходы')).toBe(
+      'внедрил ERP. сократил расходы.',
+    );
+  });
+
+  it.each(['Управлял бюджетом 89 000 000 000 руб.', 'Seeking efficiency, I cut costs by 20%.'])(
+    '«%s» — не телефон и не поиск работы',
+    (line) => expect(vacancyAbout(line)).toBe(line),
+  );
 });
