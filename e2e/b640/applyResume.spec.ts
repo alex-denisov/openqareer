@@ -96,6 +96,12 @@ async function open(
   edits = (route: Route) => route.fulfill({ json: { data: { edits: [], lang: 'ru' } } }),
 ) {
   await mockResponses(page, { applications: siteDraft() });
+  await page.route('**/api/v1/candidate/b640/vacancies/*', (route) =>
+    route.fulfill({
+      status: 404,
+      json: { error: { code: 'vacancy_not_found', message: 'Вакансия не найдена.' } },
+    }),
+  );
   await page.route('**/api/v1/candidate/vacancies/*/resume-edits', edits);
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', (route) =>
     route.fulfill({ json: { data: { approval: null } } }),

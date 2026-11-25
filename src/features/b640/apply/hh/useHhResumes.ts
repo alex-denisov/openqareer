@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { hhSectionsRead, type HhResumeContent, type HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
+import { isTauriEnvironment } from '../../../../services/desktop/desktopBridge';
 import { apiErrorMessage } from '../../../coach/apiClient';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
 import { useAsync } from '../../responses/data/useAsync';
@@ -94,7 +95,8 @@ function useSectionsRefresh(vacancyId: string, snapshot: HhResumeSnapshot | null
   }, [vacancyId, snapshot, replaceData]);
   useEffect(() => {
     const selected = snapshot?.selected;
-    if (!selected || hhSectionsRead(selected.sections) || refreshed.current?.id === selected.id) return;
+    // Страницу hh.ru читает только приложение: в браузере ждать нечего.
+    if (!isTauriEnvironment() || !selected || hhSectionsRead(selected.sections) || refreshed.current?.id === selected.id) return;
     reread();
   }, [snapshot, reread]);
   const settled = async () => {

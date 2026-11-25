@@ -13,6 +13,10 @@ const desktop = vi.hoisted(() => ({
   openHhSignIn: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => api);
+vi.mock('../../../../services/desktop/desktopBridge', async (original) => ({
+  ...(await original<object>()),
+  isTauriEnvironment: () => true,
+}));
 vi.mock('./hhDesktop', async (original) => ({
   ...(await original<typeof import('./hhDesktop')>()),
   ...desktop,

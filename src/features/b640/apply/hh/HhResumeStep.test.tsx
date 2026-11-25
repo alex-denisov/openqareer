@@ -106,6 +106,12 @@ it('чтение без опыта — не прочиталось: правки
   expect(desktop.readHhResumeContent).toHaveBeenCalledTimes(2);
 });
 
+it('в браузере непрочитанное резюме сразу названо непрочитанным, hh.ru не читается', async () => {
+  api.getHhResumes.mockResolvedValue({ ...READ, selected: { id: 'coo', title: 'COO', text: '' } });
+  expect(await render()).toContain('не прочиталось');
+  expect(desktop.readHhResumeContent).not.toHaveBeenCalled();
+});
+
 it('правки — без «Применить» в браузере', async () => {
   api.getHhResumeEdits.mockResolvedValue({
     edits: [{ id: 'skills', section: 'skills', was: 'ITIL', now: 'ITIL, SQL', added: ['SQL'] }],

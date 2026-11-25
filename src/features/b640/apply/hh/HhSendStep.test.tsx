@@ -25,6 +25,10 @@ const desktop = vi.hoisted(() => ({
   readHhApplyWindow: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => api);
+vi.mock('../../../../services/desktop/desktopBridge', async (original) => ({
+  ...(await original<object>()),
+  isTauriEnvironment: () => true,
+}));
 vi.mock('./hhDesktop', () => desktop);
 // Темп чтения страниц hh.ru проверяет hhResumeReading.test.ts; здесь читаем без пауз.
 vi.mock('./hhResumeReading', () => ({
