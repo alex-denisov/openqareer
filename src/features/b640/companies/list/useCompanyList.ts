@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type { B640CompanyCity, B640CompanyItem, B640CompanyPage } from '../../../../../shared/b640Companies';
 import type { CandidateCompanyFilter, CandidateCompanySort } from '../../../../../shared/candidateCompany';
+import { useWantChanges } from '../useCompanyWant';
 import { getB640CompanyPage } from '../companiesApi';
 import { appendPage, withWant, withWantCount } from './listModel';
 
@@ -122,6 +123,7 @@ export function useCompanyList(): CompanyList {
     (key: string, want: boolean) => setLoaded((before) => markedWant(before, key, want)),
     [setLoaded],
   );
+  useWantChanges(markWant);
 
   return {
     load: first.load,
@@ -143,6 +145,8 @@ export function useCompanyList(): CompanyList {
 }
 
 function markedWant(before: Loaded, key: string, want: boolean): Loaded {
+  // Строки нет в списке или она уже с этой отметкой: число «Хочу» второй раз не меняем.
+  if (!before.items.some((item) => item.key === key && item.want !== want)) return before;
   return {
     ...before,
     items: withWant(before.items, key, want),

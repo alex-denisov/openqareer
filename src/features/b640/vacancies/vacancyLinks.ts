@@ -16,6 +16,7 @@ import {
   type ApplicationView,
 } from '../../applications/applicationsApi';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
+import { useOnReveal } from '../kit/screenActive';
 
 type Cluster = MatchedVacancyItem['cluster'];
 
@@ -156,6 +157,7 @@ function useLoadedApplications(): LoadedApplications {
 /** Карточки откликов кандидата: по ним строка знает «сохранена» и «откликнулся». */
 export function useVacancyLinks(): VacancyLinks {
   const { applications, setApplications, loading, failed, reload, refresh } = useLoadedApplications();
+  useOnReveal(refresh);
 
   const byCluster = useMemo(() => {
     const map = new Map<string, ApplicationView>();

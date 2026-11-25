@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { vacancySourceLabel } from '../../../../../shared/vacancySourceLabel';
 import { Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -6,6 +6,7 @@ import { useScreenChrome } from '../../shell/ShellContext';
 import { acquaintancesOf, friendOf, pathLine, writeLabel } from './acquaintances';
 import { AcquaintBlock } from './AcquaintBlock';
 import { ActBar } from './ActBar';
+import { rememberClusters } from '../../shell/vacancyNames';
 import { companyNodePath } from '../companyPath';
 import './card.css';
 import { CompanyBlock } from './CompanyBlock';
@@ -122,6 +123,8 @@ interface CardBodyProps {
 }
 
 function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyProps) {
+  // Отклик, открытый с карточки, называет вакансию с первого кадра.
+  useEffect(() => rememberClusters([item]), [item]);
   const [textOpen, setTextOpen] = useState(false);
   const fit = useVacancyFit(vacancyId);
   const save = useSave(item, data.links);
