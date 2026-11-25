@@ -266,6 +266,158 @@ mod tests {
     const WORKABLE: &str = include_str!("ats_fixtures/workable.html");
     const PINPOINT: &str = include_str!("ats_fixtures/pinpoint.html");
     const TEAMTAILOR: &str = include_str!("ats_fixtures/teamtailor.html");
+    const BREEZY: &str = include_str!("ats_fixtures/breezy.html");
+    const BAMBOOHR: &str = include_str!("ats_fixtures/bamboohr.html");
+    const SMART: &str = include_str!("ats_fixtures/smartrecruiters.html");
+    /// jsdom leaves declarative shadow trees closed.
+    const SHADOW: &str = "document.querySelectorAll('template[shadowrootmode]').forEach((t) => { const root = t.parentElement.attachShadow({ mode: 'open' }); root.append(t.content); t.remove(); });";
+
+    fn brief(form: &Value) -> Vec<(String, String, String, bool)> {
+        let text = |value: &Value| value.as_str().unwrap().to_string();
+        form["fields"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|field| {
+                (
+                    text(&field["key"]),
+                    text(&field["label"]),
+                    text(&field["kind"]),
+                    field["required"] == true,
+                )
+            })
+            .collect()
+    }
+
+    fn expected(rows: &[(&str, &str, &str, bool)]) -> Vec<(String, String, String, bool)> {
+        rows.iter()
+            .map(|(key, label, kind, required)| {
+                (
+                    key.to_string(),
+                    label.to_string(),
+                    kind.to_string(),
+                    *required,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn breezy_is_read_without_its_trap_and_left_for_the_candidate_to_send() {
+        let at = json!({ "hosts": ["hh.ru"], "path": "/p/1/apply" });
+        let scripts = [op("read", json!(null)), op("submit", at)];
+        let Some(out) = run(BREEZY, "/p/1/apply", "", &scripts) else {
+            return;
+        };
+        let form = parsed(&out, 0);
+        assert_eq!(
+            brief(&form),
+            expected(&[
+                ("name:cResume", "Resume", "file", true),
+                ("name:cName", "Full Name", "text", true),
+                ("name:cEmail", "Email Address", "email", true),
+                ("name:cPhoneNumber", "Phone Number", "text", false),
+                ("name:cCoverLetter", "Cover Letter", "textarea", false),
+                (
+                    "name:section_1_question_0",
+                    "Which tools do you use?",
+                    "text",
+                    true
+                ),
+                (
+                    "name:section_1_question_1",
+                    "How did you hear about us?",
+                    "radio",
+                    false
+                ),
+            ])
+        );
+        assert_eq!(form["step"], "submit");
+        assert_eq!(form["submitLabel"], "Submit Application");
+        assert_eq!(parsed(&out, 1)["state"], "captcha");
+        assert_eq!(out["clicks"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn bamboohr_is_read_without_its_trap_and_left_for_the_candidate_to_send() {
+        let at = json!({ "hosts": ["hh.ru"], "path": "/careers/1" });
+        let scripts = [op("read", json!(null)), op("submit", at)];
+        let Some(out) = run(BAMBOOHR, "/careers/1", "", &scripts) else {
+            return;
+        };
+        let form = parsed(&out, 0);
+        assert_eq!(
+            brief(&form),
+            expected(&[
+                ("name:firstName", "First Name", "text", true),
+                ("name:email", "Email", "text", true),
+                ("name:city.value", "City", "text", true),
+                ("name:state.value", "State", "combobox", true),
+                ("name:resumeFileId", "Resume", "file", true),
+                ("name:linkedinUrl", "LinkedIn URL", "text", false),
+                (
+                    "name:customQuestionAnswers.long_1",
+                    "Why us?",
+                    "textarea",
+                    true
+                ),
+            ])
+        );
+        assert_eq!(form["submitButtons"], 1);
+        assert_eq!(parsed(&out, 1)["state"], "captcha");
+        assert_eq!(out["clicks"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn bamboohr_s_form_is_opened_once_and_only_on_a_vacancy_page() {
+        let page = r#"<div data-fabric-component="Box"><button type="button" id="open">Apply for This Job</button></div>"#;
+        let read = || op("read", json!(null));
+        for (path, presses) in [("/careers/1", 1), ("/careers", 0), ("/x/careers/1", 0)] {
+            let Some(out) = run(page, path, "", &[read(), read()]) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 1)["state"], "form_missing");
+            assert_eq!(out["clicks"].as_array().unwrap().len(), presses, "{path}");
+        }
+    }
+
+    #[test]
+    fn smartrecruiters_is_read_and_filled_inside_its_shadow_trees() {
+        let entries =
+            json!({ "entries": [{ "key": "id:confirm-email-input", "value": "a@b.example" }] });
+        let scripts = [
+            op("read", json!(null)),
+            op("fill", entries),
+            op("snapshot", json!(null)),
+            op(
+                "submit",
+                json!({ "hosts": ["hh.ru"], "path": "/oneclick-ui" }),
+            ),
+        ];
+        let Some(out) = run(SMART, "/oneclick-ui", SHADOW, &scripts) else {
+            return;
+        };
+        let form = parsed(&out, 0);
+        let mut fields = brief(&form);
+        fields.sort();
+        assert_eq!(
+            fields,
+            expected(&[
+                ("id:confirm-email-input", "Confirm your email", "text", true),
+                ("id:email-input", "Email", "text", true),
+                ("id:file-1", "Resume", "file", false),
+                ("id:first-name-input", "First name", "text", true),
+                ("id:linkedin-input", "LinkedIn", "text", false),
+            ])
+        );
+        assert_eq!(form["step"], "next");
+        assert_eq!(
+            parsed(&out, 2)["values"]["id:confirm-email-input"],
+            "a@b.example"
+        );
+        assert_eq!(parsed(&out, 3)["state"], "submit_ambiguous");
+    }
+
     /// Menus answer at once in jsdom; the page script waits between looks.
     const NO_WAIT: &str = "window.setTimeout = (f) => { queueMicrotask(f); };";
 

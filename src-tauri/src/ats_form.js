@@ -30,6 +30,41 @@
       submit: '[data-testid="submit-application-form-button"]',
     },
     {
+      root: 'form#job-application-form [data-fabric-component]',
+      scope: formScope,
+      block: '[data-fabric-component$="InputWrapper"]',
+      title: 'label',
+      // A robot trap lives in a block hidden from readers.
+      skip: '[aria-hidden="true"]',
+      byName: true,
+      menuButtons: true,
+      fileBox: '[data-fabric-component="FileUpload"]',
+      submit:
+        'form#job-application-form button[type="submit"], button[form="job-application-form"]',
+      byHand: true,
+    },
+    {
+      root: 'form .navigation-buttons .bzyButtonColor',
+      scope: formScope,
+      block: '.question',
+      title: 'h3',
+      above: 'h3',
+      names: { cResume: 'Resume' },
+      skip: '.apply-field-extra, [aria-hidden="true"]',
+      byName: true,
+      submit: '.navigation-buttons button',
+      byHand: true,
+    },
+    {
+      root: 'oc-oneclick-form-root',
+      deep: true,
+      title: 'label',
+      skip: 'oc-easy-apply, oc-avatar, spl-dropdown-search',
+      section: 'oc-resume-upload',
+      submit: '[data-test="footer-submit"]',
+      next: '[data-test="footer-next"]',
+    },
+    {
       root: 'form#job-application-form',
       drop: '.sr-only, [data-asterisk]',
       mark: '[data-asterisk]',
@@ -55,7 +90,7 @@
   var SKIPPED_TYPES = ['hidden', 'submit', 'button', 'image', 'reset'];
   var MAX_OPTIONS = 300;
   var CAPTCHA_FRAMES =
-    'iframe[src*="recaptcha"][src*="bframe"], iframe[src*="hcaptcha.com"][src*="challenge"], iframe[src*="challenges.cloudflare.com"], iframe[src*="/captcha/v1/"][src*="frame=challenge"]';
+    'iframe[src*="recaptcha"][src*="bframe"], iframe[src*="hcaptcha.com"][src*="challenge"], iframe[src*="challenges.cloudflare.com"], iframe[src*="captcha-delivery.com"], iframe[src*="/captcha/v1/"][src*="frame=challenge"]';
   var MENU_WAIT_MS = 120;
   var MENU_TRIES = 15;
 
@@ -64,6 +99,56 @@
   }
   function shown(node) {
     return node.getClientRects().length > 0;
+  }
+  // Some boards draw their fields inside open shadow trees.
+  function findAll(scope, selector) {
+    var found = Array.prototype.slice.call(scope.querySelectorAll(selector));
+    if (!profile().deep) return found;
+    return Array.prototype.slice.call(scope.querySelectorAll('*')).reduce(function (list, node) {
+      return node.shadowRoot ? list.concat(findAll(node.shadowRoot, selector)) : list;
+    }, found);
+  }
+  function up(node, selector) {
+    for (var at = node; at; at = at.getRootNode().host) {
+      var hit = at.closest(selector);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  function byId(node, id) {
+    var root = node && profile().deep ? node.getRootNode() : document;
+    return root.getElementById(id);
+  }
+  // The heading right above a field that has no label of its own.
+  function aboveTitle(node) {
+    var known = profile();
+    for (var at = node; known.above && at && at.tagName !== 'FORM'; at = at.parentElement) {
+      for (var prev = at.previousElementSibling; prev; prev = prev.previousElementSibling) {
+        if (prev.matches('input, textarea, select, .form-divider, .error-container')) break;
+        var title = prev.matches(known.above) ? prev : prev.querySelector(known.above);
+        if (title) return text(title);
+      }
+    }
+    return '';
+  }
+  // The name the form itself sends the field under.
+  function nameOf(node) {
+    var known = profile();
+    if (node.name) return node.name;
+    var box = known.fileBox ? node.closest(known.fileBox) : null;
+    var twin =
+      node.tagName === 'BUTTON' && blockOf(node)
+        ? blockOf(node).querySelector('select[name]')
+        : box && box.querySelector('input[type="hidden"][name]');
+    return (twin && twin.name) || '';
+  }
+  function fileTitle(node) {
+    var known = profile();
+    if (known.section && up(node, known.section)) {
+      return text(up(node, known.section).querySelector('[data-test="section-title"]'));
+    }
+    var box = known.fileBox ? node.closest(known.fileBox) : null;
+    return (box && text(box.parentElement.querySelector('p'))) || '';
   }
   function ashbyScope(container) {
     var button = document.querySelector('.ashby-application-form-submit-button');
@@ -94,11 +179,11 @@
     if (withFile.length === 1) return withFile[0];
     return forms.length === 1 ? forms[0] : null;
   }
-  function byIds(ids) {
+  function byIds(ids, near) {
     return (ids || '')
       .split(/\s+/)
       .map(function (id) {
-        return id ? text(document.getElementById(id)) : '';
+        return id ? text(byId(near, id)) : '';
       })
       .filter(Boolean)
       .join(' ');
@@ -121,27 +206,32 @@
   }
   function blockTitle(node) {
     var block = blockOf(node);
-    return block ? text(block.querySelector(profile().title)) : '';
+    if (block) return text(block.querySelector(profile().title));
+    return aboveTitle(node) || (profile().names || {})[node.name] || '';
   }
   function groupLabel(node) {
-    var title = blockTitle(node);
+    var title = blockTitle(node) || fileTitle(node);
     if (title) return title;
     var group = groupOf(node);
     if (!group) return '';
-    return byIds(group.getAttribute('aria-labelledby')) || text(group.querySelector('legend'));
+    return (
+      byIds(group.getAttribute('aria-labelledby'), group) || text(group.querySelector('legend'))
+    );
   }
   function labelFor(node) {
     if (!node.id) return null;
     return (
-      Array.prototype.slice.call(document.querySelectorAll('label[for]')).filter(function (label) {
-        return label.htmlFor === node.id;
-      })[0] || null
+      Array.prototype.slice
+        .call((profile().deep ? node.getRootNode() : document).querySelectorAll('label[for]'))
+        .filter(function (label) {
+          return label.htmlFor === node.id;
+        })[0] || null
     );
   }
   function ownLabel(node) {
     var forLabel = labelFor(node);
     return (
-      byIds(node.getAttribute('aria-labelledby')) ||
+      byIds(node.getAttribute('aria-labelledby'), node) ||
       node.getAttribute('aria-label') ||
       plain(forLabel) ||
       plain(node.closest('label'))
@@ -171,11 +261,12 @@
       var path = blockOf(node).getAttribute('data-field-path');
       return path ? 'path:' + path : '';
     }
-    if ((kind === 'radio' || kind === 'checkbox_group') && node.name) return 'name:' + node.name;
+    var name = nameOf(node);
+    if ((kind === 'radio' || kind === 'checkbox_group') && name) return 'name:' + name;
     // Generated ids change on every load of the page.
-    if (node.name && (profile().byName || /radix|^:|:$/.test(node.id))) return 'name:' + node.name;
+    if (name && (profile().byName || /radix|^:|:$/.test(node.id))) return 'name:' + name;
     if (node.id) return 'id:' + node.id;
-    return node.name ? 'name:' + node.name : '';
+    return name ? 'name:' + name : '';
   }
   function isRequired(node, label) {
     var group = groupOf(node);
@@ -190,13 +281,14 @@
     );
   }
   function controls(form) {
-    return Array.prototype.slice.call(form.querySelectorAll(CONTROLS)).filter(function (node) {
+    return findAll(form, CONTROLS).filter(function (node) {
       var type = (node.getAttribute('type') || '').toLowerCase();
       return (
-        SKIPPED_TYPES.indexOf(type) < 0 &&
+        (SKIPPED_TYPES.indexOf(type) < 0 ||
+          (node.tagName === 'BUTTON' && Boolean(profile().menuButtons))) &&
         node.getAttribute('aria-hidden') !== 'true' &&
         !node.disabled &&
-        !(profile().skip && node.closest(profile().skip)) &&
+        !(profile().skip && up(node, profile().skip)) &&
         !/^(g-recaptcha|h-captcha)-response/.test(node.id + node.name) &&
         !(node.tagName === 'DIV' && node.querySelector('input')) &&
         !(kindOf(node) === 'combobox' && CALLING_CODE.test(ownLabel(node))) &&
@@ -213,7 +305,8 @@
       return false;
     }
     var styled = ['file', 'radio', 'checkbox'].indexOf(type) >= 0 || node.tagName === 'SELECT';
-    return styled && Boolean(node.parentElement && shown(node.parentElement));
+    if (!styled) return false;
+    return Boolean(node.parentElement && shown(node.parentElement));
   }
   function yesNoOf(node) {
     return node.closest('.ashby-application-form-input-yesno');
@@ -286,18 +379,26 @@
   }
   function radios(form, name) {
     return Array.prototype.slice
-      .call(form.querySelectorAll('input[type="radio"]'))
+      .call(findAll(form, 'input[type="radio"]'))
       .filter(function (radio) {
         return radio.name === name;
       });
   }
   function caption(button) {
-    return text(button) || button.value || button.getAttribute('aria-label') || '';
+    var host = profile().deep && button.getRootNode().host;
+    return (
+      text(button) ||
+      (host && text(host)) ||
+      button.value ||
+      button.getAttribute('aria-label') ||
+      ''
+    );
   }
   function submitButtons(form) {
     var known = profile().submit;
+    if (profile().deep) return footerButtons(form, known);
     var found = known
-      ? document.querySelectorAll(known)
+      ? findAll(document, known)
       : form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])');
     return Array.prototype.slice.call(found).filter(function (button) {
       var label = caption(button);
@@ -310,7 +411,14 @@
       );
     });
   }
+  // A button drawn inside the shadow tree of its named holder.
+  function footerButtons(form, holder) {
+    return findAll(form, 'button').filter(function (button) {
+      return shown(button) && up(button, holder);
+    });
+  }
   function nextButtons(form) {
+    if (profile().next) return footerButtons(form, profile().next);
     return Array.prototype.slice
       .call(form.querySelectorAll('button, input[type="submit"], input[type="button"]'))
       .filter(function (button) {
@@ -363,10 +471,24 @@
     });
     return { fields: fields, unkeyed: unkeyed };
   }
+  // BambooHR shows the form only after this press; the button sends nothing.
+  function openForm() {
+    if (window.__oqAtsOpened || !/^\/careers\/\d+\/?$/.test(location.pathname)) return;
+    if (!document.querySelector('[data-fabric-component]')) return;
+    var openers = Array.prototype.slice
+      .call(document.querySelectorAll('button'))
+      .filter(function (button) {
+        return shown(button) && /^apply for this job$/i.test(text(button));
+      });
+    if (openers.length !== 1) return;
+    window.__oqAtsOpened = true;
+    openers[0].click();
+  }
   function read() {
     var form = findForm();
     var base = { host: location.hostname, path: location.pathname, captcha: captcha() };
     if (!form) {
+      openForm();
       base.state = document.querySelector('input[type="password"]')
         ? 'account_required'
         : 'form_missing';
@@ -397,6 +519,13 @@
 
   function nodeFor(form, key) {
     var name = key.slice(key.indexOf(':') + 1);
+    if (key.indexOf('id:') === 0 && profile().deep) {
+      return (
+        controls(form).filter(function (candidate) {
+          return candidate.id === name;
+        })[0] || null
+      );
+    }
     if (key.indexOf('id:') === 0) {
       var node = document.getElementById(name);
       return node && form.contains(node) ? node : null;
@@ -407,7 +536,7 @@
           var block = blockOf(candidate);
           return Boolean(block) && block.getAttribute('data-field-path') === name;
         }
-        return candidate.name === name;
+        return nameOf(candidate) === name;
       })[0] || null
     );
   }
@@ -496,11 +625,11 @@
   function menuOptions(node) {
     var menuId = node.getAttribute('aria-controls') || node.getAttribute('aria-owns');
     var scope =
-      (menuId && document.getElementById(menuId)) ||
+      (menuId && byId(node, menuId)) ||
       node.closest('.select-shell, .select, .react-select') ||
       document;
     return Array.prototype.slice
-      .call(scope.querySelectorAll('[role="option"], [class*="select__option"]'))
+      .call(findAll(scope, '[role="option"], [class*="select__option"]'))
       .filter(shown);
   }
   function press(node) {
@@ -665,7 +794,7 @@
 
   function invalidKeys(form) {
     return Array.prototype.slice
-      .call(form.querySelectorAll('[aria-invalid="true"]'))
+      .call(findAll(form, '[aria-invalid="true"]'))
       .filter(shown)
       .map(function (node) {
         return keyOf(node, fieldKind(form, node));
@@ -713,6 +842,8 @@
     var form = findForm();
     if (!form) return { state: 'form_missing' };
     if (captcha()) return { state: 'captcha' };
+    // The board checks that a person sends the form: the last press is the candidate's.
+    if (profile().byHand) return { state: 'captcha' };
     var buttons = submitButtons(form);
     // A page that still offers «Next» is not the last one.
     if (nextButtons(form).length > 0) return { state: 'submit_ambiguous', count: buttons.length };
@@ -732,7 +863,7 @@
     if (captcha()) return { state: 'captcha' };
     if (form) {
       var invalid = Array.prototype.slice
-        .call(form.querySelectorAll('[aria-invalid="true"]'))
+        .call(findAll(form, '[aria-invalid="true"]'))
         .map(function (node) {
           return keyOf(node, kindOf(node));
         })

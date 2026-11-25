@@ -12,6 +12,7 @@ const CHECK_FRAMES: &[(&str, &str)] = &[
     ("www.recaptcha.net", "/recaptcha"),
     ("www.gstatic.com", "/recaptcha"),
     ("newassets.hcaptcha.com", "/captcha"),
+    ("geo.captcha-delivery.com", "/captcha"),
     ("captcha-assets.recruiteecdn.com", "/captcha"),
 ];
 
