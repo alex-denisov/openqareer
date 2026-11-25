@@ -5,12 +5,15 @@
 export const READY_LABEL = 'merge-ready';
 export const IN_BATCH_LABEL = 'in-batch';
 export const FULL_VERIFY = 'Full verify';
+export const LIGHT_VERIFY = 'Verify';
 // Not part of the light run: the required status itself and the batcher's own
 // job, which runs on the merge-ready label event (.github/workflows/merge-batch.yml).
 export const NOT_LIGHT_RUN = new Set([FULL_VERIFY, 'Merge batch']);
 export const MAX_BATCH = 8;
 export const MAX_PARALLEL_RUNS = 2;
 
+// Events that start a batch of one; only the schedule waits for company.
+const LONE_TRIGGERS = new Set(['label', 'checks', 'dispatch']);
 const GREEN = new Set(['SUCCESS', 'SKIPPED', 'NEUTRAL']);
 
 const labelNames = (pr) => (pr.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name));
@@ -32,25 +35,31 @@ export function rejectReason(pr) {
   if (checks.length === 0) return 'no light run yet';
   const bad = checks.find((c) => !GREEN.has(checkState(c)));
   if (bad) return `light run not green (${checkName(bad)}: ${checkState(bad) || 'pending'})`;
+  // Every job of a label run is skipped (B804): only a real green Verify counts.
+  const verify = checks.find((c) => checkName(c) === LIGHT_VERIFY);
+  if (!verify || checkState(verify) !== 'SUCCESS') return 'no light run yet';
   return null;
 }
 
 const checkKey = (c) => `${c.workflowName ?? ''}/${checkName(c)}`;
 const finishedAt = (c) => c.completedAt || c.startedAt || '';
+const isSkipped = (c) => checkState(c) === 'SKIPPED';
 const isCancelled = (c) => checkState(c) === 'CANCELLED';
 
 /**
  * One entry per check. A head often has two runs of the same job: the label
  * event arrives with synchronize and concurrency cancels one of them. A
  * cancelled run counts only when no other run of that job exists; otherwise
- * the newest non-cancelled run (pending ones included) decides.
+ * the newest non-cancelled run (pending ones included) decides. A skipped run
+ * (label event, B804) never outvotes one that really ran or was cancelled.
  */
 export function effectiveChecks(checks) {
   const groups = new Map();
   for (const c of checks) groups.set(checkKey(c), [...(groups.get(checkKey(c)) ?? []), c]);
   return [...groups.values()].map((runs) => {
-    const live = runs.filter((c) => !isCancelled(c));
-    const pool = live.length > 0 ? live : runs;
+    const ran = runs.filter((c) => !isSkipped(c));
+    const live = ran.filter((c) => !isCancelled(c));
+    const pool = [live, ran, runs].find((group) => group.length > 0);
     const pending = pool.find((c) => !c.completedAt && !c.conclusion && !c.state);
     if (pending) return pending;
     return [...pool].sort((a, b) => finishedAt(b).localeCompare(finishedAt(a)))[0];
@@ -75,12 +84,12 @@ export function selectCandidates(prs, max = MAX_BATCH) {
 
 /**
  * A batch starts with two or more ready PRs. A single PR starts at once only
- * when its own label event woke the batcher, which keeps today's single route
+ * when a label event or a finished light run woke the batcher, which keeps today's single route
  * "label → full run → merge"; a scheduled tick waits for company.
  */
 export function shouldStart(candidates, trigger) {
   if (candidates.length >= 2) return true;
-  return candidates.length === 1 && (trigger === 'label' || trigger === 'dispatch');
+  return candidates.length === 1 && LONE_TRIGGERS.has(trigger);
 }
 
 /** Two halves; the first gets the extra PR. Order is preserved. */

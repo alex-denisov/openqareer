@@ -2,7 +2,7 @@
 // Batch merge for main — our stand-in for GitHub merge queue (personal repo).
 // Run from .github/workflows/merge-batch.yml, or locally with --dry-run.
 //
-//   node scripts/merge-batch.mjs [--dry-run] [--trigger schedule|label|dispatch]
+//   node scripts/merge-batch.mjs [--dry-run] [--trigger schedule|label|checks|dispatch]
 //
 // 1. Ready PRs (merge-ready, green light run) are merged one by one onto main
 //    in a local batch/<ts> branch; a conflicting PR is dropped with a comment.
@@ -48,6 +48,7 @@ const assumeReady =
     ? new Set(args[args.indexOf('--assume-ready') + 1].split(',').map(Number))
     : new Set();
 const WORKFLOW = 'verify-and-deploy.yml';
+const BATCH_WORKFLOW = 'merge-batch.yml';
 const RUN_TIMEOUT_MS = 60 * 60 * 1000;
 const POLL_MS = 30 * 1000;
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '');
@@ -558,6 +559,14 @@ function finish(members, { mergedAny, verifiedTip }) {
       gh('workflow', 'run', WORKFLOW, '--ref', 'main', ...inputs),
     );
   }
+  if (mergedAny)
+    act('wake the next batch', () => {
+      try {
+        gh('workflow', 'run', BATCH_WORKFLOW, '--ref', 'main', '-f', 'dry_run=false');
+      } catch (err) {
+        log(`next batch not woken: ${err.message}`);
+      }
+    });
   if (DRY) return;
   const refs = git('ls-remote', '--heads', 'origin', `batch/${stamp}*`).split('\n').filter(Boolean);
   for (const line of refs) git('push', '-q', 'origin', `:${line.split('\t')[1]}`);
