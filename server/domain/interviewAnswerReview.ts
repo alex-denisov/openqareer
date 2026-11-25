@@ -5,6 +5,7 @@
  * не меняется: этот разбор считается на чтении и нигде не записывается.
  */
 import {
+  CASE_CRITERIA,
   RUBRIC_CRITERIA,
   scoreInterviewAnswer,
   type InterviewAnswerEvaluation,
@@ -14,6 +15,7 @@ import {
   isResumeEvidenceEligible,
   type ResumeEvidenceCandidate,
 } from './resumeEvidenceEligibility';
+import type { TrainingCase } from './trainingCase';
 
 export const QUOTE_LIMIT = 200;
 const NUMBER_PATTERN = /\d+(?:[.,]\d+)?/gu;
@@ -64,10 +66,13 @@ export function quoteFor(answer: string, cues: readonly (string | RegExp)[]): st
 export function scoreInterviewAnswerWithQuotes(
   answer: string,
   type: InterviewQuestionType,
+  caseKind: TrainingCase = 'system',
 ): QuotedAnswerEvaluation {
-  const plain = scoreInterviewAnswer(answer, type);
+  const definitions =
+    type === 'system_design' && caseKind !== 'system' ? CASE_CRITERIA : RUBRIC_CRITERIA[type];
+  const plain = scoreInterviewAnswer(answer, type, definitions);
   const cuesOf = new Map<string, readonly (string | RegExp)[]>(
-    RUBRIC_CRITERIA[type].map(([name, cues, details]) => [name, [...cues, ...details]]),
+    definitions.map(([name, cues, details]) => [name, [...cues, ...details]]),
   );
   const criteria = Object.fromEntries(
     Object.entries(plain.criteria).map(([name, criterion]) => {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { buildSystemDesignTask } from '../domain/systemDesignTask';
 import { createInterviewSession } from '../domain/interviewSimulator';
 import { createB640Harness, type HarnessUser } from '../testHelpers/b640VacancyHarness';
 
@@ -140,5 +141,26 @@ describe('B750 · POST interview-tasks: задача System Design под вак
     const task = (await harness.ask({ applicationId: application.id })).json().data;
     expect(task).toMatchObject({ origin: 'rules', domain: 'ml_genai' });
     expect(task.points).toHaveLength(4);
+  });
+
+  it('B635: сохранённая задача другого вида заменяется, пока на неё не ответили', async () => {
+    const harness = await setup(false);
+    const candidateId = harness.candidateIds['flagged.test'];
+    const application = harness.candidates.createApplication(candidateId, {
+      clusterId: 'b635-ses',
+      stage: 'applied',
+      manualVacancy: {
+        title: 'Технический директор / Ведущий инженер СЭС (СНЭ)',
+        company: 'Intouch Group',
+        url: 'https://example.test/ses',
+        source: 'hh.ru',
+      },
+    });
+    const { caseKind: _kind, ...old } = buildSystemDesignTask({ vacancyTitle: 'Тимлид' });
+    const key = { candidateId, applicationId: application.id };
+    harness.candidates.interviewSimulatorRepo.designTasks.keep(key, old, NOW);
+    const task = (await harness.ask({ applicationId: application.id })).json().data;
+    expect(task).toMatchObject({ caseKind: 'leadership', domain: 'leadership' });
+    expect((await harness.ask({ applicationId: application.id })).json().data).toEqual(task);
   });
 });
