@@ -191,6 +191,26 @@ describe('шаг раз в сутки в заданное время UTC', () =>
     stop();
   });
 
+  it('B803: с окном в сутки прерванный проход догоняет старт в любое время, но один раз', () => {
+    vi.setSystemTime(new Date('2026-11-05T12:00:00Z'));
+    const run = vi.fn(() => true);
+    const database = new DatabaseSync(':memory:');
+    const start = () =>
+      schedulePersistedJob(
+        database,
+        { error: vi.fn() },
+        { ...options, intervalMs: 24 * HOUR, dailyAtUtcMinute: 90, dailyCatchUpMs: 24 * HOUR, run },
+      );
+    const stopFirst = start();
+    vi.advanceTimersByTime(3 * MINUTE);
+    expect(run).toHaveBeenCalledOnce();
+    stopFirst();
+    const stopSecond = start();
+    vi.advanceTimersByTime(HOUR);
+    expect(run).toHaveBeenCalledOnce();
+    stopSecond();
+  });
+
   it('перезапуск в часе после слота, когда проход уже был, его не повторяет', () => {
     const database = new DatabaseSync(':memory:');
     const run = vi.fn(() => true);

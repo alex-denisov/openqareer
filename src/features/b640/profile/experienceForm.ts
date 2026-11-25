@@ -17,7 +17,7 @@ export interface ExperienceForm {
   readonly workplaceType: WorkplaceType | null;
   readonly teamSize: string;
   readonly skills: readonly string[];
-  /** «Что делали»; `null` — такой записи у места нет. */
+  /** «Что делали»; `null` — запись есть, но её текст не прочитан: поле не показываем. */
   readonly description: string | null;
   readonly results: readonly ResultRow[];
   /** Записи, убранные из «Результатов»: место работы на них больше не ссылается. */
@@ -60,7 +60,7 @@ export function formOf(
     workplaceType: entry.workplaceType ?? null,
     teamSize: entry.teamSize ? String(entry.teamSize) : '',
     skills: entry.skills ?? [],
-    description: descriptionMemoryId ? (statements.get(descriptionMemoryId) ?? null) : null,
+    description: descriptionMemoryId ? (statements.get(descriptionMemoryId) ?? null) : '',
     results: entry.bulletMemoryIds.flatMap((id) => {
       const text = statements.get(id);
       return text === undefined ? [] : [{ key: id, memoryId: id, text }];
@@ -189,6 +189,21 @@ export function applyForm(draft: ResumeDraft, entryId: string, form: ExperienceF
     ...draft,
     experience: draft.experience.map((entry) =>
       entry.id === entryId ? patched(entry, form) : entry,
+    ),
+  };
+}
+
+/** Новый черновик, где «Что делали» места — эта запись; без записи черновик прежний. */
+export function withDescription(
+  draft: ResumeDraft,
+  entryId: string,
+  descriptionMemoryId: string | null,
+): ResumeDraft {
+  if (!descriptionMemoryId) return draft;
+  return {
+    ...draft,
+    experience: draft.experience.map((entry) =>
+      entry.id === entryId ? { ...entry, descriptionMemoryId } : entry,
     ),
   };
 }
