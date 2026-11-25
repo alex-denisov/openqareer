@@ -12,7 +12,7 @@ const HANDS_ON = word(
   'тимлид\\p{L}*|team ?lead|tech(?:nical)? lead|техлид\\p{L}*|архитектор\\p{L}*|architect',
 );
 const LEADER = word(
-  'cto|cio|coo|ceo|cpo|cdo|ciso|chief|vp|svp|evp|vice president|вице-президент\\p{L}*|head|director|директор\\p{L}*|руководител\\p{L}*|начальник\\p{L}*|управляющ\\p{L}*|заведующ\\p{L}*|lead',
+  'cto|cio|coo|ceo|cpo|cdo|ciso|chief|vp|svp|evp|vice president|вице-президент\\p{L}*|head|director|директор\\p{L}*|руководител\\p{L}*|начальник\\p{L}*|управляющ\\p{L}*|заведующ\\p{L}*|engineering manager',
 );
 const SOFTWARE_TITLE = word(
   'software|backend|back-end|бэкенд\\p{L}*|бекенд\\p{L}*|front\\p{L}*|фронт\\p{L}*|full-?stack|developer|dev|разработчик\\p{L}*|программист\\p{L}*|devops|sre|site reliability|platform|платформ\\p{L}*|kubernetes|cloud|облачн\\p{L}*|react|vue|angular|ios|android|mobile|мобильн\\p{L}*|flutter|golang|java|python|php|node\\.js|\\.net|ml|ai|genai|gen ai|llm|nlp|mlops|machine learning|data scien\\p{L}*|data engineer|dwh|etl|big data|машинн\\p{L}* обучени\\p{L}*|нейросет\\p{L}*|computer vision|инженер\\p{L}* данных',
