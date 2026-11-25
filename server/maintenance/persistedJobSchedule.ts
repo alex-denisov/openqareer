@@ -75,7 +75,14 @@ export function schedulePersistedJob(
   log: PersistedJobLog,
   options: PersistedJobOptions,
 ): () => void {
-  const { job, firstRunMs, intervalMs, dailyAtUtcMinute, run, dailyCatchUpMs: catchUpMs = DAILY_CATCH_UP_MS } = options;
+  const {
+    job,
+    firstRunMs,
+    intervalMs,
+    dailyAtUtcMinute,
+    run,
+    dailyCatchUpMs: catchUpMs = DAILY_CATCH_UP_MS,
+  } = options;
   const reportStateFailure = (error: unknown) =>
     log.error(
       { job, errorName: error instanceof Error ? error.name : 'UnknownError' },
