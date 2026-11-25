@@ -249,6 +249,7 @@ function MandateDialog({ apply }: { readonly apply: HhApplyControls }) {
 function useStepApply(props: HhSendStepProps, { snapshot }: HhResumesState): HhApplyControls {
   const apply = useHhApply({
     vacancyId: props.hhVacancyId,
+    cardId: props.vacancyId,
     resumeId: snapshot?.selected?.id ?? null,
     vacancyTitle: props.head.title === UNKNOWN_VACANCY_TITLE ? undefined : props.head.title,
     letter: props.letterText,

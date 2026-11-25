@@ -15,6 +15,8 @@ export type HhApplyState =
 export interface HhApplyInput {
   readonly vacancyId: string;
   readonly resumeId: string | null;
+  /** Карточка платформы, с которой уходит отклик. */
+  readonly cardId: string;
   /** Название с экрана отклика: сервер сверяет его с вакансией hh.ru. */
   readonly vacancyTitle?: string;
   readonly letter: string;
@@ -77,7 +79,7 @@ async function sendOnce(
   let attemptId: string;
   let mandate: boolean | undefined;
   try {
-    ({ attemptId, consent: mandate } = await startHhApply(input.vacancyId, resumeId, input.vacancyTitle));
+    ({ attemptId, consent: mandate } = await startHhApply(input.vacancyId, resumeId, input.vacancyTitle, input.cardId));
   } catch (reason: unknown) {
     const refused = refusalOf(reason instanceof CoachApiError ? reason.code : undefined);
     if (refused.kind === 'already') await input.onSent().catch(() => undefined);

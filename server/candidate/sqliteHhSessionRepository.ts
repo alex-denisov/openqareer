@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS hh_apply_attempts (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS hh_apply_attempts_candidate
   ON hh_apply_attempts (candidate_id, started_at);
+CREATE TABLE IF NOT EXISTS hh_apply_attempt_cards (
+  attempt_id TEXT PRIMARY KEY REFERENCES hh_apply_attempts(id) ON DELETE CASCADE,
+  card_id TEXT NOT NULL
+) STRICT;
 `;
 
 /** Отклик без исхода дольше этого считается брошенным: приложение закрыли посреди отклика. */
@@ -142,7 +146,23 @@ export class SqliteHhSessionRepository {
     ).map(toAttempt);
   }
 
-  startAttempt(candidateId: string, input: { vacancyId: string; resumeId: string; now: Date }): string {
+  /** Вакансия hh.ru, на которую прямо сейчас уходит отклик с этой карточки. */
+  vacancyInProgress(candidateId: string, cardId: string, now: Date): string | null {
+    const row = this.database
+      .prepare(
+        `SELECT a.vacancy_id FROM hh_apply_attempts a JOIN hh_apply_attempt_cards c ON c.attempt_id = a.id
+         WHERE a.candidate_id = ? AND a.started_at > ? AND a.outcome IS NULL AND c.card_id = ?
+         ORDER BY a.started_at DESC LIMIT 1`,
+      )
+      .get(candidateId, new Date(now.getTime() - HH_ATTEMPT_STALE_MS).toISOString(), cardId) as
+      { vacancy_id: string } | undefined;
+    return row?.vacancy_id ?? null;
+  }
+
+  startAttempt(
+    candidateId: string,
+    input: { vacancyId: string; resumeId: string; cardId?: string; now: Date },
+  ): string {
     const id = randomUUID();
     this.database
       .prepare(
@@ -150,6 +170,11 @@ export class SqliteHhSessionRepository {
          VALUES (?, ?, ?, ?, ?)`,
       )
       .run(id, candidateId, input.vacancyId, input.resumeId, input.now.toISOString());
+    if (input.cardId) {
+      this.database
+        .prepare('INSERT INTO hh_apply_attempt_cards (attempt_id, card_id) VALUES (?, ?)')
+        .run(id, input.cardId);
+    }
     return id;
   }
 
