@@ -3,6 +3,8 @@ import type {
   QuestionnaireAnswer,
   QuestionnaireQuestion,
 } from '../../../../../shared/applicationQuestionnaire';
+import type { HhFormAnswer } from '../../../../../shared/hhCandidateSession';
+import { choiceValues } from './choiceModel';
 import { pluralRu } from '../../responses/model/responseRow';
 
 export type AnswerDraft = Readonly<Record<string, string>>;
@@ -45,6 +47,15 @@ export function readinessTitle(state: FormReadiness): string {
   const noun = pluralRu(state.answered, ['ответ', 'ответа', 'ответов']);
   const ready = state.answered === 1 ? 'готов' : 'готовы';
   return `${state.answered} ${noun} из ${state.total} ${ready}`;
+}
+
+/** Ответы для анкеты в окне hh.ru: у выбора — по варианту, у текста — целиком; пустых нет. */
+export function hhAnswers(questions: readonly QuestionnaireQuestion[], draft: AnswerDraft): readonly HhFormAnswer[] {
+  return questions.flatMap((question) => {
+    const text = answerOf(draft, question.id).trim();
+    if (!text) return [];
+    return [{ text: question.text, values: question.kind === 'choice' ? choiceValues(text) : [text] }];
+  });
 }
 
 /** Вопросы и ответы одним текстом — чтобы вставить на странице работодателя. */

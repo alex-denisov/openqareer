@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { desktopFailureCode, elapsedLabel, refusalText, resultOf, uniqueResumeTitle } from './hhSendModel';
+import { desktopFailureCode, elapsedLabel, refusalOf, refusalText, resultOf, uniqueResumeTitle } from './hhSendModel';
 
 describe('B704: исход отклика через hh.ru на экране', () => {
   it('отправлен, анкета, нужен вход', () => {
@@ -16,7 +16,10 @@ describe('B704: исход отклика через hh.ru на экране', (
       kind: 'error',
       text: 'hh.ru просит пройти проверку. Пройдите её в окне hh.ru и отправьте снова.',
       inWindow: true,
+      captcha: true,
     });
+    expect(resultOf('failed', 'no_response_button')).toMatchObject({ text: expect.stringContaining('не догрузилась') });
+    expect(refusalOf('hh_already_applied')).toEqual({ kind: 'already' });
     const unknown = resultOf('failed', 'script_error');
     expect(unknown).toEqual({ kind: 'error', text: 'Отклик не отправлен. Повторите.', inWindow: true });
     expect(refusalText('hh_daily_limit_reached')).toContain('Завтра');

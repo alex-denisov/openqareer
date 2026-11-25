@@ -67,7 +67,7 @@ describe('B738 · 8: автоотклики и hh.ru в выгрузке', () =>
     const own = createCandidate(store);
     const tables = () => new DatabaseSync(databasePath).prepare("SELECT group_concat(name) AS names FROM (SELECT name FROM sqlite_master WHERE type='table' ORDER BY name)").get();
     const before = tables();
-    expect(store.exportCandidate(own.id).automation).toMatchObject({ settings: null, queue: [], journal: [], hh: { applyAttempts: [], resumeSnapshot: null } });
+    expect(store.exportCandidate(own.id).automation).toMatchObject({ settings: null, queue: [], journal: [], applyConsents: [], hh: { applyAttempts: [], resumeSnapshot: null } });
     expect(tables()).toEqual(before);
   });
 });

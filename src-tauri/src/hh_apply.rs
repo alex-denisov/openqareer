@@ -11,10 +11,12 @@ use crate::connector_session::{
     read_fresh_session_page, session_window_label, SessionWindowRequest,
 };
 use crate::hh_apply_scripts::{
-    diagnostic_script, letter_script, open_script, popup_script, result_script, resume_script,
-    submit_script, window_script,
+    diagnostic_script, letter_script, open_script, page_result_script, popup_script, result_script,
+    resume_script, submit_script, window_script, Agreed,
 };
-use crate::hh_questionnaire::{read_questionnaire, HhQuestionnaire};
+use crate::hh_questionnaire::{
+    fill_questionnaire, read_questionnaire, valid_answers, HhAnswer, HhConsent, HhQuestionnaire,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -40,6 +42,16 @@ pub struct HhApplyRequest {
     /// The resume's title, only when no other resume of the candidate has it.
     #[serde(default)]
     pub unique_resume_title: Option<String>,
+    /// B787: confirmed answers to the employer's form; `None` — no form is known yet.
+    #[serde(default)]
+    pub answers: Option<Vec<HhAnswer>>,
+    /// The candidate's mandate (or own «yes» for this response) covers the data-processing box.
+    #[serde(default)]
+    pub consent: bool,
+    #[serde(default)]
+    pub agreed_relocation: bool,
+    #[serde(default)]
+    pub agreed_visibility: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -51,6 +63,9 @@ pub struct HhApplyReport {
     /// B641: the employer's form, when hh.ru asked for one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub questionnaire: Option<HhQuestionnaire>,
+    /// B787: consent boxes ticked under the mandate, for the candidate's journal.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub consents: Vec<HhConsent>,
 }
 
 impl HhApplyReport {
@@ -59,6 +74,7 @@ impl HhApplyReport {
             outcome: "sent".into(),
             failure_code: None,
             questionnaire: None,
+            consents: Vec::new(),
         }
     }
     fn questionnaire() -> Self {
@@ -66,6 +82,7 @@ impl HhApplyReport {
             outcome: "questionnaire".into(),
             failure_code: None,
             questionnaire: None,
+            consents: Vec::new(),
         }
     }
     fn failed(code: &str) -> Self {
@@ -73,6 +90,7 @@ impl HhApplyReport {
             outcome: "failed".into(),
             failure_code: Some(code.to_string()),
             questionnaire: None,
+            consents: Vec::new(),
         }
     }
 }
@@ -99,6 +117,13 @@ pub fn validate_request(request: &HhApplyRequest) -> Result<(), String> {
     if resume.is_empty() || resume.len() > 64 || !resume.chars().all(|c| c.is_ascii_alphanumeric())
     {
         return Err("resume_id_invalid".into());
+    }
+    if request
+        .answers
+        .as_deref()
+        .is_some_and(|all| !valid_answers(all))
+    {
+        return Err("answers_invalid".into());
     }
     if request.unique_resume_title.as_deref().is_some_and(|title| {
         title.trim().is_empty()
@@ -208,10 +233,11 @@ const QUESTIONNAIRE_REQUIRED: &str = "questionnaire_required";
 
 /// The code of a step that stopped before our submit.
 fn unsent_code(code: &str) -> &str {
-    if code == "questionnaire" {
-        QUESTIONNAIRE_REQUIRED
-    } else {
-        code
+    match code {
+        "questionnaire" | "answers_missing" | "answers_changed" | "unreadable" => {
+            QUESTIONNAIRE_REQUIRED
+        }
+        other => other,
     }
 }
 
@@ -273,12 +299,19 @@ pub async fn run_hh_apply(
     if !on_hh(&window) {
         return Ok(HhApplyReport::failed("target_redirect_rejected"));
     }
-    let outcome = respond(&window, &request).await;
+    let mut consents = Vec::new();
+    let mut outcome = respond(&window, &request, &mut consents).await;
+    if outcome.as_deref() == Ok("timeout") {
+        outcome = Ok(confirm_on_vacancy(app, &window, &page, &request.vacancy_id).await);
+    }
     let (at, code) = match &outcome {
         Ok(code) => ("result", code.as_str()),
         Err((at, code)) => (*at, unsent_code(code)),
     };
-    let report = report_for(code);
+    let report = HhApplyReport {
+        consents,
+        ..report_for(code)
+    };
     if report.outcome == "questionnaire" || code == QUESTIONNAIRE_REQUIRED {
         let url = window.url().map(|url| url.to_string()).unwrap_or_default();
         let form = read_questionnaire(&window, url).await;
@@ -303,20 +336,30 @@ pub async fn run_hh_apply(
 async fn respond(
     window: &tauri::Webview,
     request: &HhApplyRequest,
+    consents: &mut Vec<HhConsent>,
 ) -> Result<String, (&'static str, String)> {
     let title = request.unique_resume_title.as_deref();
     let opened = open_response(window, &request.vacancy_id).await;
     if opened != "opened" {
         return Err(("open", opened));
     }
+    let agreed = Agreed {
+        relocation: request.agreed_relocation,
+        visibility: request.agreed_visibility,
+    };
+    let shown = wait_for(window, &popup_script(agreed), POPUP_WAIT).await;
+    // Answers are entered only where hh.ru asked for them.
+    let answers = request
+        .answers
+        .as_deref()
+        .filter(|_| shown == "questionnaire");
+    match shown.as_str() {
+        "popup" => {}
+        "questionnaire" if answers.is_some() => {}
+        "timeout" => return Err(("popup", "popup_missing".into())),
+        _ => return Err(("popup", shown)),
+    }
     let steps = [
-        (
-            "popup",
-            popup_script(),
-            POPUP_WAIT,
-            "popup",
-            "popup_missing",
-        ),
         (
             "resume",
             resume_script(&request.resume_id, title),
@@ -340,6 +383,15 @@ async fn respond(
         ),
     ];
     for (at, script, limit, done, on_timeout) in steps {
+        if let Some(answers) = answers.filter(|_| at == "submit") {
+            *consents = fill_questionnaire(window, answers, request.consent)
+                .await
+                .map_err(|code| ("answers", code))?;
+            // A second look right before the submit: the fields still hold the answers.
+            fill_questionnaire(window, answers, request.consent)
+                .await
+                .map_err(|code| ("answers", code))?;
+        }
         let code = wait_for(window, &script, limit).await;
         if code == "timeout" {
             return Err((at, on_timeout.to_string()));
@@ -349,7 +401,26 @@ async fn respond(
         }
     }
     // After the click the pop-up may stay open while hh.ru answers.
-    Ok(wait_for(window, &result_script(), RESULT_WAIT).await)
+    let script = if answers.is_some() {
+        page_result_script(agreed)
+    } else {
+        result_script(agreed)
+    };
+    Ok(wait_for(window, &script, RESULT_WAIT).await)
+}
+
+/// No answer after the submit: the vacancy page is opened again and only read — it shows
+/// the response if hh.ru took it. Never submits.
+async fn confirm_on_vacancy(
+    app: &AppHandle,
+    window: &tauri::Webview,
+    page: &SessionWindowRequest,
+    vacancy_id: &str,
+) -> String {
+    if read_fresh_session_page(app, page).await.is_err() {
+        return "timeout".into();
+    }
+    wait_for(window, &window_script(vacancy_id), OPEN_WAIT).await
 }
 
 /// B708: `sent` when the open hh.ru window shows the response to this vacancy,
@@ -386,6 +457,10 @@ mod tests {
             resume_id: resume.into(),
             letter: letter.into(),
             unique_resume_title: None,
+            answers: None,
+            consent: false,
+            agreed_relocation: false,
+            agreed_visibility: false,
         }
     }
 
@@ -437,7 +512,13 @@ mod tests {
         ] {
             assert!(is_unsettled(code), "{code}");
         }
-        for code in ["opened", "already_applied", "captcha", "script_error"] {
+        for code in [
+            "opened",
+            "already_applied",
+            "vacancy_closed",
+            "captcha",
+            "script_error",
+        ] {
             assert!(!is_unsettled(code), "{code}");
         }
         assert_eq!(settled_code("waiting"), "target_redirect_rejected");
@@ -471,7 +552,12 @@ mod tests {
             report_for(unsent_code("questionnaire")),
             HhApplyReport::failed("questionnaire_required")
         );
-        assert_eq!(unsent_code("captcha"), "captcha");
+        for code in ["answers_missing", "answers_changed", "unreadable"] {
+            assert_eq!(unsent_code(code), QUESTIONNAIRE_REQUIRED, "{code}");
+        }
+        for code in ["captcha", "consent_required", "relocation_warning"] {
+            assert_eq!(unsent_code(code), code);
+        }
     }
 
     #[test]

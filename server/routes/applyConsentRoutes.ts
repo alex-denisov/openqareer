@@ -1,4 +1,3 @@
-import { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { APPLY_CONSENT_RESULTS } from '../../shared/applyConsent';
@@ -7,8 +6,7 @@ import {
   APPLY_MANDATE_VERSION,
   hasApplyMandate,
 } from '../candidate/applyMandate';
-import { SqliteApplyConsentJournal } from '../candidate/sqliteApplyConsentJournal';
-import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import type { SqliteApplyConsentJournal } from '../candidate/sqliteApplyConsentJournal';
 import type { RouteDeps } from './deps';
 import { hhCandidateOf } from './hhSessionRoutes';
 import { sendError, withDeps } from './helpers';
@@ -137,15 +135,7 @@ const getEntries: Handler = async (deps, request, reply) => {
   return { data: deps.journal.list(candidateId, parsed.data), meta: { requestId: request.id } };
 };
 
-export function registerApplyConsentRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  const database = new DatabaseSync(deps.config.databasePath);
-  database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-  applySqliteBusyTimeout(database);
-  app.addHook('onClose', async () => database.close());
-  const bound: BoundDeps = {
-    ...deps,
-    journal: new SqliteApplyConsentJournal(database, deps.config.dataEncryptionKey),
-  };
+export function registerApplyConsentRoutes(app: FastifyInstance, bound: BoundDeps): void {
   const base = '/api/v1/candidate/apply-consents';
   app.get(base, withDeps(bound, getEntries));
   app.post(base, withDeps(bound, postEntry));

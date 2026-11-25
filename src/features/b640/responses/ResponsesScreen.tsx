@@ -5,6 +5,7 @@ import { buildNodePath } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { AutomationBar } from './AutomationBar';
 import { useResponseMarks } from './data/responseSummaryApi';
+import { useManualQueue } from './data/manualQueue';
 import { useAsync, type AsyncState } from './data/useAsync';
 import {
   DEFAULT_SORT,
@@ -126,16 +127,18 @@ function useResponsesList(): ListState {
   const load = useCallback((signal: AbortSignal) => loadResponses(signal), []);
   const { state, reload, setData } = useAsync(load, 'Отклики не загрузились.');
   const marks = useResponseMarks();
+  const manual = useManualQueue();
   const all = useMemo<readonly ListedResponse[]>(() => {
     const now = new Date();
     const rows = (state.data ?? []).map((application) => ({
       application,
       row: buildResponseRow(application, now, {
         letterApproved: marks.approvedLetters.has(application.id),
+        manual: manual.get(application.id),
       }),
     }));
     return markAuto(rows, marks.auto);
-  }, [state.data, marks]);
+  }, [state.data, marks, manual]);
   const onChanged = useCallback(
     (next: ApplicationView) =>
       setData((items) => items.map((item) => (item.id === next.id ? next : item))),

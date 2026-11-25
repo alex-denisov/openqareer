@@ -6,9 +6,11 @@ import type {
 } from '../../../../shared/applicationQuestionnaire';
 import { hhFormUrl, type HhForm } from '../../../../shared/hhCandidateSession';
 import { QUESTIONNAIRE_ANSWER_MAX_LENGTH } from '../../../../shared/applicationQuestionnaire';
+import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, InfoTip, ResultLine, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
+import { VISIBILITY_QUESTION, type VisibilityState } from './visibilityQuestion';
 import { ChoiceField } from './ChoiceField';
 import {
   getQuestionnaire,
@@ -45,6 +47,8 @@ export interface QuestionnaireState {
   readonly saveError: string | null;
   readonly submitted: Mark;
   readonly markSubmitted: () => void;
+  /** Прочитать вопросы заново: их собрали в фоне (B787). */
+  readonly reload: () => void;
   /** Анкета hh.ru прочитана в окне кандидата; `false` — вопросов нет или они не сохранились. */
   readonly takeHhForm: (form: HhForm) => Promise<boolean>;
 }
@@ -52,7 +56,7 @@ export interface QuestionnaireState {
 /** Анкета работодателя по вакансии: загрузка, черновик ответов и их сохранение. */
 export function useQuestionnaire(vacancyId: string): QuestionnaireState {
   const load = useCallback((signal: AbortSignal) => getQuestionnaire(vacancyId, signal), [vacancyId]);
-  const { state, replaceData } = useAsync(load, '');
+  const { state, reload, replaceData } = useAsync(load, '');
   const data = state.data;
   const form = data?.state === 'ready' ? data : null;
   const [draft, setDraft] = useState<AnswerDraft>({});
@@ -70,8 +74,7 @@ export function useQuestionnaire(vacancyId: string): QuestionnaireState {
     form,
     loading: state.status === 'loading' && !data,
     known: title ? { vacancyTitle: title, companyName: data?.vacancyCompany ?? '' } : null,
-    draft,
-    saveError,
+    draft, reload, saveError,
     submitted: form?.submittedAt && submitted.kind === 'idle' ? { kind: 'done' } : submitted,
     setAnswer: (questionId, text) => setDraft((current) => ({ ...current, [questionId]: text })),
     save: (next = draft) => {
@@ -173,6 +176,28 @@ interface ActionsProps {
   readonly form: ApplicationQuestionnaire;
   readonly ready: FormReadiness;
   readonly state: QuestionnaireState;
+  /** Анкета hh.ru в приложении: отклик с ответами уходит отсюда (o04). */
+  readonly onSend: (() => void) | null;
+  readonly declined: boolean;
+}
+
+/** B787: вопрос hh.ru о показе резюме — строкой анкеты; без «Да» отклик не уходит. */
+function VisibilityRow({ visibility }: { readonly visibility: VisibilityState }) {
+  return (
+    <li className="qa">
+      <div className="qa-q">
+        <span>{VISIBILITY_QUESTION.text}</span>
+      </div>
+      <div className="field">
+        <ChoiceField
+          fieldId={`qa-${VISIBILITY_QUESTION.id}`}
+          question={VISIBILITY_QUESTION}
+          value={visibility.value ?? ''}
+          onPick={visibility.set}
+        />
+      </div>
+    </li>
+  );
 }
 
 /** Переводит к полю вопроса: прокрутка и фокус, без смены адреса. */
@@ -183,7 +208,7 @@ function focusField(fieldId: string): void {
 }
 
 /** Главное действие анкеты: дойти до пропущенного обязательного вопроса или скопировать ответы. */
-function FormActions({ form, ready, state }: ActionsProps) {
+function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   const toast = useToast();
   const copy = () => {
     state.save();
@@ -203,12 +228,22 @@ function FormActions({ form, ready, state }: ActionsProps) {
         <Button variant="primary" icon="edit" onClick={() => focusField(`qa-${ready.nextRequired?.id}`)}>
           {`Ответьте на обязательные · ${ready.missingRequired}`}
         </Button>
-      ) : (
+      ) : onSend ? null : (
         <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
           Скопировать ответы
         </Button>
       )}
-      {form.formUrl ? (
+      {onSend ? (
+        <Button
+          variant={ready.nextRequired ? undefined : 'primary'}
+          icon="send"
+          disabled={Boolean(ready.nextRequired) || declined || state.submitted.kind === 'done'}
+          onClick={onSend}
+        >
+          Отправить отклик с анкетой
+        </Button>
+      ) : null}
+      {form.formUrl && !onSend ? (
         <a className="row-act" href={form.formUrl} target="_blank" rel="noopener noreferrer">
           Анкета на сайте ↗
         </a>
@@ -241,11 +276,20 @@ function SubmittedBlock({ state, onHh }: { readonly state: QuestionnaireState; r
 export interface FormStepProps {
   readonly state: QuestionnaireState;
   readonly form: ApplicationQuestionnaire;
+  readonly visibility: VisibilityState;
+  readonly onSend: () => void;
 }
 
 /** Шаг «Анкета» (O4b): вопросы работодателя, ответы кандидата и переход на страницу анкеты. */
-export function FormStep({ state, form }: FormStepProps) {
-  const ready = readiness(form.questions, state.draft);
+export function FormStep({ state, form, visibility, onSend }: FormStepProps) {
+  const onHh = Boolean(form.formUrl && hhFormUrl(form.formUrl));
+  const inApp = onHh && isTauriEnvironment();
+  const send = inApp ? onSend : null;
+  const asked = inApp && visibility.value !== null;
+  const ready = asked
+    ? readiness([...form.questions, VISIBILITY_QUESTION], { ...state.draft, [VISIBILITY_QUESTION.id]: visibility.value ?? '' })
+    : readiness(form.questions, state.draft);
+  const declined = asked && !visibility.agreed;
   const suggestions = new Map(form.suggestions.map((item) => [item.questionId, item]));
   return (
     <>
@@ -263,10 +307,11 @@ export function FormStep({ state, form }: FormStepProps) {
                 state={state}
               />
             ))}
+            {asked ? <VisibilityRow visibility={visibility} /> : null}
           </ul>
           {state.saveError ? <StatusLine state="err" text={state.saveError} /> : null}
           <div className="actions m-commit qa-mob">
-            <FormActions form={form} ready={ready} state={state} />
+            <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
           </div>
         </section>
       </div>
@@ -276,10 +321,10 @@ export function FormStep({ state, form }: FormStepProps) {
             <b className="num">{`${ready.answered} из ${ready.total}`}</b> готовы
           </p>
           <div className="actions">
-            <FormActions form={form} ready={ready} state={state} />
+            <FormActions form={form} ready={ready} state={state} onSend={send} declined={declined} />
           </div>
         </aside>
-        <SubmittedBlock state={state} onHh={Boolean(form.formUrl && hhFormUrl(form.formUrl))} />
+        {inApp ? null : <SubmittedBlock state={state} onHh={onHh} />}
       </div>
     </>
   );

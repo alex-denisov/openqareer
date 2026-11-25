@@ -143,7 +143,7 @@ function safeUrl(url: string | undefined): string | null {
 }
 
 /** Вопросы по записи подбора: читаем заранее только у Greenhouse. */
-function poolReader(deps: RouteDeps): QuestionnaireReader {
+export function poolReader(deps: RouteDeps): QuestionnaireReader {
   return async (vacancyId) => {
     const vacancy = deps.multiSourceEngine.getVacancy?.(vacancyId.replace(/^cluster-/u, ''));
     if (!vacancy) return null;
@@ -155,7 +155,7 @@ function poolReader(deps: RouteDeps): QuestionnaireReader {
   };
 }
 
-interface Signed {
+export interface Signed {
   readonly candidateId: string;
   readonly vacancyId: string;
   /** Подтверждённая почта аккаунта: запасная, если в контактах профиля почты нет. */
@@ -224,8 +224,8 @@ function profileFacts(
   };
 }
 
-function view(
-  deps: BoundDeps,
+export function questionnaireView(
+  deps: RouteDeps,
   who: Signed,
   stored: StoredQuestionnaire | null,
   fallback: { readonly state: ApplicationQuestionnaire['state']; readonly formUrl: string | null },
@@ -251,7 +251,7 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const known = deps.forms.get(who.candidateId, who.vacancyId);
   if (known && isQuestionnaireFresh(known, Date.now())) {
     return {
-      data: view(deps, who, known, { state: 'ready', formUrl: null }),
+      data: questionnaireView(deps, who, known, { state: 'ready', formUrl: null }),
       meta: { requestId: request.id },
     };
   }
@@ -269,7 +269,7 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const unread = !stored && source && source.questions === null && source.formUrl;
   const state = unread ? 'unreadable' : 'none';
   return {
-    data: view(deps, who, stored, { state, formUrl: source?.formUrl ?? null }),
+    data: questionnaireView(deps, who, stored, { state, formUrl: source?.formUrl ?? null }),
     meta: { requestId: request.id },
   };
 };
@@ -295,7 +295,7 @@ const putAnswers: Handler = async (deps, request, reply) => {
   const answers = answersToStore(stored.questions, parsed.data.answers);
   deps.forms.saveAnswers(who.candidateId, who.vacancyId, answers);
   return {
-    data: view(deps, who, { ...stored, answers }, { state: 'ready', formUrl: null }),
+    data: questionnaireView(deps, who, { ...stored, answers }, { state: 'ready', formUrl: null }),
     meta: { requestId: request.id },
   };
 };
@@ -325,7 +325,7 @@ const putHhForm: Handler = async (deps, request, reply) => {
   });
   const stored = deps.forms.get(who.candidateId, who.vacancyId);
   return {
-    data: view(deps, who, stored, { state: 'none', formUrl: null }),
+    data: questionnaireView(deps, who, stored, { state: 'none', formUrl: null }),
     meta: { requestId: request.id },
   };
 };
