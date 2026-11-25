@@ -29,7 +29,9 @@ function row(id: string, percent: number | null, date: string, extra: object = {
 }
 
 const ids = (rows: readonly ListedMatch[], dir: 'asc' | 'desc' = 'desc') =>
-  [...rows].sort((a, b) => compareListed(a, b, dir)).map((item) => (item.cluster as { id?: string }).id);
+  [...rows]
+    .sort((a, b) => compareListed(a, b, dir))
+    .map((item) => (item.cluster as { id?: string }).id);
 
 const ROWS = [
   row('old-100', 100, '2026-11-01'),
