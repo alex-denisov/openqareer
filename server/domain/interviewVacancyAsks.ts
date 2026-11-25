@@ -19,6 +19,16 @@ const BULLET = /^\s*(?:[-–—*•▪·]+|\d+[.)])\s*/u;
 const SENTENCE_END = /(?<=[.!?;])\s+(?=[\p{Lu}\d«"“•–—-])/u;
 const BOILERPLATE =
   /equal opportunit|regardless of|race|religion|disabilit|accommodation|benefits|salary|compensation|insurance|perks|privacy|cookie|apply now|мы предлагаем|зарплат|оклад|дмс|отпуск|откликайт|присоединяйт|join us|apply today|ignore (?:all |previous )?instructions|system prompt|игнорируй.*инструкц/iu;
+/** Где жить и работать — условие: примера опыта для него нет. */
+const CONDITION =
+  /^(?:обязательн\p{L}* )?(?:проживани[ея]|переезд|релокаци[яи])(?!\p{L})|^(?:must (?:reside|live|relocate)|residing in|willing(?:ness)? to relocate)\b/iu;
+/** «Возглавит направление», «определить приоритеты» — дело роли, а не требование к кандидату. */
+const NOT_ROLE_ACTION =
+  /^(?:иметь|знать|уметь|владеть|понимать|обладать|быть|мочь|хотеть|любить|имеет|знает|умеет|владеет|понимает|обладает|печать|память|занят|принят|(?:кибер)?аудит|\p{L}*(?:кредит|лимит|визит|магнит|аппетит)|транзит|депозит|реквизит|\p{L}*цит)(?!\p{L})/u;
+/** «-ет» после согласной — обычно имя («бюджет», «приоритет»), поэтому такие глаголы названы. */
+const ROLE_VERB =
+  /^(?:\p{Ll}\p{L}{3,}(?:[аеиоуыя]ть(?:ся)?|[аеуюя]ет(?:ся)?|[ия]т(?:ся)?)|\p{L}*(?:вести|нести|йти|расти)(?:сь)?|(?:станет|поможет|сможет|займет(?:ся)?|(?:по|про|в)?ведет))\s/u;
+const isRoleAction = (text: string): boolean => ROLE_VERB.test(text) && !NOT_ROLE_ACTION.test(text);
 /** Предложение о работе в роли, а не о компании. */
 const DUTY_SENTENCE =
   /\byou(?:(?:'|’)ll| will)\b|\bresponsible for\b|\byour (?:team|role|mission)\b|^(?:lead|build|own|drive|design|develop|manage|define|partner|deliver|hire|mentor|scale|operate)\b|вы будете|вам предстоит|предстоит|отвечать за|будете/iu;
@@ -64,6 +74,7 @@ function askableRequirement(requirement: VacancyRequirement): boolean {
     ASKABLE.has(requirement.kind) &&
     text.length >= MIN_REQUIREMENT_CHARS &&
     !isCompensationLine(text) &&
+    !CONDITION.test(text) &&
     !BOILERPLATE.test(text)
   );
 }
@@ -75,6 +86,7 @@ function sentenceAsks(lines: readonly string[]): readonly InterviewAsk[] {
       line.length <= MAX_SENTENCE_CHARS &&
       !/[:：?]$/u.test(line) &&
       !BOILERPLATE.test(line) &&
+      !CONDITION.test(line.replace(BULLET, '')) &&
       (EXPERIENCE_SENTENCE.test(line) || !COMPANY_SENTENCE.test(line.replace(BULLET, ''))) &&
       !isCompensationLine(line),
   );
@@ -131,9 +143,11 @@ export function interviewVacancyAsks(
         askableRequirement,
       );
   const dutyIds = vacancyDutyIds(withDutyHeadings(fromModel ? description : text), requirements);
+  const isDuty = (item: VacancyRequirement) =>
+    dutyIds.has(item.id) || isRoleAction(item.text.trim().replace(BULLET, ''));
   const ofKind = (kind: 'duty' | 'req') =>
     requirements
-      .filter((item) => dutyIds.has(item.id) === (kind === 'duty'))
+      .filter((item) => isDuty(item) === (kind === 'duty'))
       .map((item): InterviewAsk => ({ kind, text: tidy(item.text) }));
   const named = interleave(ofKind('duty'), ofKind('req'));
   return distinct([...named, ...sentenceAsks(lines)]).slice(0, MAX_INTERVIEW_ASKS);
