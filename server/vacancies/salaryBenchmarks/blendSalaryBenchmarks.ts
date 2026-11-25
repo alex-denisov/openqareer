@@ -30,6 +30,8 @@ export interface OpenqareerSalaryEstimate {
   readonly high: number;
   readonly currency: string;
   readonly period: Period;
+  /** До или после налога; `unknown` — ни один источник не сказал. */
+  readonly tax: Tax;
   readonly computedAt: string;
 }
 
@@ -133,7 +135,9 @@ export function blendSalary(
   if (!base) return undefined;
   const used = ordered.flatMap((input) => {
     const range = convertTo(input, base, rates);
-    return range ? [{ ...range, name: input.sourceName, weight: weightOf(input, year) }] : [];
+    return range
+      ? [{ ...range, name: input.sourceName, tax: input.tax, weight: weightOf(input, year) }]
+      : [];
   });
   const total = used.reduce((sum, { weight }) => sum + weight, 0);
   if (total <= 0) return undefined;
@@ -150,6 +154,7 @@ export function blendSalary(
       high: roundTo(high, step),
       currency: base.currency,
       period: base.period,
+      tax: used.find(({ tax }) => tax !== 'unknown')?.tax ?? 'unknown',
       computedAt: now.toISOString(),
     },
     precision,

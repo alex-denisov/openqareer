@@ -132,6 +132,7 @@ describe('blendSalary', () => {
         high: 66_000,
         currency: 'AED',
         period: 'month',
+        tax: 'unknown',
         computedAt: now.toISOString(),
       },
       precision: 'role-country',
@@ -170,6 +171,7 @@ describe('blendSalary', () => {
       'high',
       'low',
       'period',
+      'tax',
     ]);
   });
 
@@ -205,7 +207,11 @@ describe('blendSalary kinds and rounding', () => {
     const unknown = at('U', 1_000, {});
     const gross = at('G', 1_000, { tax: 'gross', year: 2025 });
     const net = at('N', 400, { tax: 'net', year: 2024 });
-    expect(blendOf(unknown, gross, net)).toMatchObject({ low: 1_000, high: 2_000 });
+    expect(blendOf(unknown, gross, net)).toMatchObject({
+      low: 1_000,
+      high: 2_000,
+      tax: 'gross',
+    });
   });
 
   it('keeps total pay out of base pay', () => {
