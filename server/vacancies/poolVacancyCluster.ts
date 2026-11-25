@@ -1,6 +1,7 @@
 import { isShownPosting } from '../domain/applyTarget/sameVacancy';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import type { RouteDeps } from '../routes/deps';
+import { withOwnHhSources } from './hhApplySources';
 import { clusterVacancies, createClusterFromVacancy, sourceMemberKey } from './vacancyDeduplicator';
 
 type Engine = Pick<RouteDeps['multiSourceEngine'], 'getActiveCluster' | 'getVacancy'>;
@@ -57,6 +58,11 @@ function memberRecords(
  * Снятая запись — прежний порядок `resolvePoolVacancyCluster`.
  */
 export function resolveRowVacancyCluster(engine: Engine, id: string): VacancyCluster | undefined {
+  const cluster = rowCluster(engine, id);
+  return cluster && withOwnHhSources(cluster, (key) => engine.getVacancy?.(key));
+}
+
+function rowCluster(engine: Engine, id: string): VacancyCluster | undefined {
   const resolved = resolvePoolVacancyCluster(engine, id);
   if (!resolved || !id.startsWith(ROW_PREFIX)) return resolved;
   if (resolved.id === id && resolved.sources.length <= 1) return resolved;

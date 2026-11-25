@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { droppedSources } from './clusterSplit';
 import { budgetSpent, pieceIdTaken, type StepContext } from './clusterSplitContext';
 import { journalClusterSplit, setJournalPieces } from './clusterSplitJournal';
 import type { PlannedSplit } from './clusterSplitPlan';
@@ -10,6 +11,9 @@ import { removePiece, writeFounder, writePiece } from './clusterSplitWrite';
  * в первой части; куски — шаг за шагом; основатель — последним, поэтому до
  * конца он держит все прежние площадки и ключи: читатель видит дубль, не дыру.
  */
+
+/** Сколько отброшенных источников называет строка журнала событий. */
+const DROPPED_SAMPLE = 5;
 
 export interface SplitProgress {
   readonly cluster_id: string;
@@ -60,6 +64,14 @@ function finishSplit(context: StepContext, plan: PlannedSplit, redirectStepId: s
     if (outcome === 'unresolved') {
       context.log('cluster_split_page_unresolved', { clusterId: plan.cluster.id });
     }
+  }
+  const dropped = droppedSources(plan.cluster, plan.pieces);
+  if (dropped.length > 0) {
+    context.log('cluster_split_sources_dropped', {
+      clusterId: plan.cluster.id,
+      count: dropped.length,
+      sample: dropped.slice(0, DROPPED_SAMPLE).map((s) => `${s.sourceId}:${s.externalId}`),
+    });
   }
   context.units += 1;
   context.result.split += 1;

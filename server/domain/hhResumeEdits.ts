@@ -1,3 +1,4 @@
+import { isPositionTerms } from '../../shared/hhPositionTerms';
 import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
 /**
@@ -131,15 +132,6 @@ function skillsEdit(input: HhEditsInput): HhEditDraft[] {
   const now = [...sections.skills, ...added.map((item) => item.trim())].join(', ');
   const trimmed = added.map((item) => item.trim());
   return [{ id: 'skills', section: 'skills', was, now, language: hhResumeLanguage(sections), added: trimmed }];
-}
-
-/** Условия поиска из старых снимков («Уровень дохода не указан · Постоянная работа …») — не «О себе». */
-function isPositionTerms(text: string): boolean {
-  if (/^\s*уровень дохода не указан/iu.test(text)) return true;
-  const terms = text.match(
-    /постоянная работа|подработка|полная занятость|частичная занятость|гибрид|удал[её]нно|на месте работодателя|командировк/giu,
-  );
-  return text.length < 300 && (terms?.length ?? 0) >= 3;
 }
 
 function aboutEdit(input: HhEditsInput): HhEditDraft[] {

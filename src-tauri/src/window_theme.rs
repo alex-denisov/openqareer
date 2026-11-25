@@ -1,4 +1,4 @@
-//! B593: фон окна до первого кадра страницы. Тему кандидата страница хранит в
+//! B593: фон и шапка окна (B793) до первого кадра страницы. Тему кандидата страница хранит в
 //! localStorage, до загрузки он недоступен, поэтому выбор повторяется в файле рядом
 //! с приложением. Файла ещё нет — фон по теме системы.
 
@@ -51,7 +51,21 @@ fn background(stored: Option<WindowTheme>, system: Theme) -> Color {
     }
 }
 
+/// Тема шапки окна. `None` снимает прежний выбор: окно и `prefers-color-scheme`
+/// страницы снова идут за системой.
+fn title_bar(stored: Option<WindowTheme>) -> Option<Theme> {
+    match stored {
+        Some(WindowTheme::Light) => Some(Theme::Light),
+        Some(WindowTheme::Dark) => Some(Theme::Dark),
+        Some(WindowTheme::System) | None => None,
+    }
+}
+
+/// Сначала шапка: после неё `theme()` отвечает темой системы, а не прежним выбором.
 fn paint(window: &WebviewWindow, stored: Option<WindowTheme>) -> tauri::Result<()> {
+    if let Err(reason) = window.set_theme(title_bar(stored)) {
+        eprintln!("[window-theme] title bar: {reason}");
+    }
     let system = window.theme().unwrap_or(Theme::Light);
     window.set_background_color(Some(background(stored, system)))
 }
@@ -110,6 +124,14 @@ mod tests {
             assert_eq!(background(stored, Theme::Light), LIGHT_BACKGROUND);
             assert_eq!(background(stored, Theme::Dark), DARK_BACKGROUND);
         }
+    }
+
+    #[test]
+    fn title_bar_follows_the_choice_and_lets_the_system_back() {
+        assert_eq!(title_bar(Some(WindowTheme::Light)), Some(Theme::Light));
+        assert_eq!(title_bar(Some(WindowTheme::Dark)), Some(Theme::Dark));
+        assert_eq!(title_bar(Some(WindowTheme::System)), None);
+        assert_eq!(title_bar(None), None);
     }
 
     #[test]

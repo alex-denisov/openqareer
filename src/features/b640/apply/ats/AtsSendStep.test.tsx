@@ -170,6 +170,18 @@ describe('«Отправка» формы работодателя', () => {
     expect(onManual).not.toHaveBeenCalled();
   });
 
+  it('«Я уже откликнулся» после неподтверждённого: на экране итог отправленного', async () => {
+    desktop.submitAtsForm.mockResolvedValue({ ...receipt, outcome: 'unconfirmed' });
+    await open();
+    await send();
+    await click(button('Я уже откликнулся')!);
+    await settle();
+    expect(onSent).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('h2')?.textContent).toBe('Отклик отправлен');
+    expect(text()).toContain('Отклик отмечен как отправленный');
+    expect(text()).not.toContain('подтвер');
+  });
+
   it('кнопка не нажата: причина на «Отправке», повтор на месте, в очередь не уходит', async () => {
     desktop.submitAtsForm.mockResolvedValue({
       ...receipt,

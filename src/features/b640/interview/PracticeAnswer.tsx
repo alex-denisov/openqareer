@@ -28,12 +28,12 @@ function useNow(): number {
   return now;
 }
 
-function Criteria({ answer }: { readonly answer: string }) {
+function Criteria({ answer, task }: { readonly answer: string; readonly task: PracticeTask }) {
   return (
     <>
       <h3 className="mod-title">Критерии</h3>
       <ul className="rows exp-rows">
-        {liveCriteria(answer).map((row) => (
+        {liveCriteria(answer, task.caseKind).map((row) => (
           <li className="row" key={row.key}>
             <div>
               <div className="row-title">{row.title}</div>
@@ -157,7 +157,7 @@ export function PracticeAnswer(props: {
       {hint ? <p className="row-sub">{task.hint}</p> : null}
       {error ? <StatusLine state="err" text={error} /> : null}
       <SchemaEditor blocks={blocks} onEdit={(edit) => setEdits((list) => [...list, edit])} />
-      <Criteria answer={text} />
+      <Criteria answer={text} task={task} />
     </section>
   );
 }

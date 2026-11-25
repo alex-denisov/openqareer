@@ -13,6 +13,7 @@ import {
   SqliteManualApplyRepository,
   type StoredManualApply,
 } from '../candidate/sqliteManualApplyRepository';
+import { candidateFlagLookup } from '../candidate/hhRaiseQueue';
 import { SqliteQuestionnaireRepository } from '../candidate/sqliteQuestionnaireRepository';
 import { knownAnswers, skillYearAnswers, standardQuestions } from '../domain/manualApplyQuestions';
 import {
@@ -21,6 +22,7 @@ import {
   type LetterFactSource,
 } from '../domain/letterFreshness';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { snapshotWithDescription } from './applicationVacancyText';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -53,9 +55,12 @@ export type QueuedLetterWriter = (
 
 type Bound = ResumeEditDeps & {
   readonly queue: SqliteManualApplyRepository;
+  readonly hh: SqliteHhSessionRepository;
   readonly forms: SqliteQuestionnaireRepository;
   readonly writeLetter: QueuedLetterWriter;
   readonly inFlight: Map<string, Promise<void>>;
+  /** B649: фоновая задача кандидата без флага нового кабинета не берёт. */
+  readonly isFlagged: (candidateId: string) => boolean;
 };
 /** Фону нужен только журнал запроса. */
 type LogContext = Pick<FastifyRequest, 'log'>;
@@ -223,7 +228,8 @@ function startPreparing(
 /** Фоновый такт: сбор, прерванный перезапуском, продолжается без участия кандидата. */
 export function resumeStalled(deps: Bound, request: LogContext, now: number): void {
   const before = new Date(now - STALE_MS).toISOString();
-  for (const { candidateId, item } of deps.queue.listStale(before, MAX_ATTEMPTS, TICK_LIMIT)) {
+  const stale = deps.queue.listStale(before, MAX_ATTEMPTS, TICK_LIMIT, deps.isFlagged);
+  for (const { candidateId, item } of stale) {
     if (deps.inFlight.has(flightKey(candidateId, item.vacancyId))) continue;
     if (item.attempts >= MAX_ATTEMPTS) giveUp(deps, candidateId, item.vacancyId);
     else startPreparing(deps, request, candidateId, item);
@@ -360,6 +366,16 @@ const enqueue: Handler = async (deps, request, reply) => {
       false,
     );
   }
+  if (deps.hh.vacancyInProgress(who.candidateId, parsed.data.vacancyId, new Date())) {
+    return sendError(
+      reply,
+      request,
+      409,
+      'hh_apply_in_progress',
+      'Отклик уже отправляется через hh.ru.',
+      false,
+    );
+  }
   return enqueueVacancy(deps, request, reply, who, parsed.data);
 };
 
@@ -454,10 +470,15 @@ export function registerManualApplyRoutes(
   const key = deps.config.dataEncryptionKey;
   const bound: Bound = {
     ...deps,
+    hh: new SqliteHhSessionRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: key,
+    }),
     queue: new SqliteManualApplyRepository(database, key),
     forms: new SqliteQuestionnaireRepository(database, key),
     writeLetter,
     inFlight: new Map(),
+    isFlagged: (candidateId) => candidateFlagLookup(database, deps.config)(candidateId),
   };
   const write = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
   startTick(app, bound);
@@ -466,7 +487,10 @@ export function registerManualApplyRoutes(
   app.get(`${BASE}/:id`, withDeps(bound, readItem));
   app.post(`${BASE}/:id/sent`, write, withDeps(bound, markSent));
   app.post(`${BASE}/:id/skip`, write, withDeps(bound, skip));
-  app.addHook('onClose', async () => void (await Promise.allSettled(bound.inFlight.values())));
+  app.addHook('onClose', async () => {
+    await Promise.allSettled(bound.inFlight.values());
+    bound.hh.close();
+  });
   return {
     async preparedPitch(candidateId, vacancyId) {
       await bound.inFlight.get(flightKey(candidateId, vacancyId));
