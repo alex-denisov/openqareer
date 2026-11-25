@@ -1,4 +1,4 @@
-import { holdUncheckedRows, type UncheckedReader } from '../vacancies/selectionHold';
+import { holdFilteredRows, type UncheckedReader } from '../vacancies/selectionHold';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
@@ -288,11 +288,7 @@ function* facetAndFilterSteps(
   const { filters, targetRoles } = input;
   const readLevel = (item: MatchedVacancyItem) =>
     input.titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const facets = yield* phase.steps(
-    'facets',
-    matchedVacancyFacetSteps(matched, targetRoles, readLevel, input.sourceRegistry),
-  );
-  const filtered = yield* phase.steps(
+  const selected = yield* phase.steps(
     'filters',
     matchedVacancyFilterSteps(
       matched,
@@ -302,7 +298,15 @@ function* facetAndFilterSteps(
       input.sourceRegistry.map(({ id }) => id),
     ),
   );
-  return { facets, filtered };
+  // B797: строки до сверки не показываются и не входят ни в одно число.
+  const { rows: filtered, pool, hidden, heldIds } = phase.run('hold', () =>
+    holdFilteredRows(matched, selected, input.unchecked),
+  );
+  const facets = yield* phase.steps(
+    'facets',
+    matchedVacancyFacetSteps(pool, targetRoles, readLevel, input.sourceRegistry),
+  );
+  return { facets, filtered, hidden, heldIds };
 }
 
 function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
@@ -318,12 +322,11 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
   // B766: requirements of every plain «Технический директор» in one query, before the role checks.
   phase.run('roleRequirements', () => primeRoleRequirements(hypothesisRows(input)));
   yield;
-  const hypotheses = phase.run('hypotheses', () => hypothesisRows(input));
-  const counts = yield* phase.steps('roleCounts', matchedRoleCountSteps(hypotheses, targetRoles));
-  const { facets, filtered: selected } = yield* facetAndFilterSteps(input, matched, phase);
-  const { rows: filtered, heldIds } = phase.run('hold', () =>
-    holdUncheckedRows(selected, input.unchecked),
+  const { facets, filtered, hidden, heldIds } = yield* facetAndFilterSteps(input, matched, phase);
+  const hypotheses = phase.run('hypotheses', () =>
+    hypothesisRows(input).filter((item) => !hidden.has(item.cluster.id)),
   );
+  const counts = yield* phase.steps('roleCounts', matchedRoleCountSteps(hypotheses, targetRoles));
   const totals = phase.run('catalogTotals', () => input.catalogTotals?.());
   const catalogSummary = phase.run('catalogSummary', () =>
     matchedCatalogSummary(totals, roleLevelCount(hypotheses, targetRoles), {

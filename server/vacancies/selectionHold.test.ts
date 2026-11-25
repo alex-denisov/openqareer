@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
-import { holdUncheckedRows } from './selectionHold';
+import { holdFilteredRows, holdUncheckedRows } from './selectionHold';
 
 const NOW = Date.parse('2026-11-25T12:00:00Z');
 const DAY = 86_400_000;
@@ -42,5 +42,19 @@ describe('B797: строки hh ждут сверки до показа', () => 
     const held = holdUncheckedRows(rows, all, NOW);
     expect(held.rows).toBe(rows);
     expect(held.heldIds).toHaveLength(50);
+  });
+  it('числа фильтров считаются по тем же строкам, что показаны', () => {
+    const pool = [...old(10), ...fresh(60)];
+    const all60 = holdFilteredRows(pool, pool, all, NOW);
+    expect(all60.pool).toEqual(all60.rows);
+    expect(all60.rows).toHaveLength(60);
+    const filtered = pool.slice(5, 40);
+    const part = holdFilteredRows(pool, filtered, all, NOW);
+    expect(part.rows).toHaveLength(30);
+    expect(part.pool.filter((item) => filtered.includes(item))).toEqual(part.rows);
+    const few = pool.slice(0, 12);
+    const short = holdFilteredRows(pool, few, all, NOW);
+    expect(short.rows).toBe(few);
+    expect(short.pool.filter((item) => few.includes(item))).toEqual(few);
   });
 });

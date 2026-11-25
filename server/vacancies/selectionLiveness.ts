@@ -30,7 +30,7 @@ export const LIVENESS_RECHECK_MS = 24 * HOUR_MS;
  */
 export const LIVENESS_PER_TICK = 25;
 /** Строка ждёт первой сверки не дольше: при отказах площадки список не остаётся урезанным. */
-export const LIVENESS_HOLD_MS = 30 * 60_000;
+export const LIVENESS_HOLD_MS = 5 * 60_000;
 
 export function requestSelectionLiveness(
   database: DatabaseSync,

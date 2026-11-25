@@ -116,7 +116,7 @@ describe('B797: сверка живости верха подборок', () => 
     expect(await step(engine)).toEqual({ checked: 1, gone: 1, open: 0, unknown: 0, blocked: true });
   });
 
-  it('не сверенные: новые и недолго ждущие; сверенные и ждущие дольше получаса — нет', () => {
+  it('не сверенные: новые и недолго ждущие; сверенные и ждущие дольше пяти минут — нет', () => {
     const pool = openStore();
     const now = Date.now();
     pool.mergeSourceSlice(HH, [hh(1), hh(2), hh(3)]);

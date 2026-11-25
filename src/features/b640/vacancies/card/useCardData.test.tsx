@@ -5,7 +5,7 @@ import { CoachApiError } from '../../../coach/apiClient';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { useMatchedPool, type MatchedPool } from '../../../vacancies/useMatchedPool';
 import { mount, type Mounted } from '../../kit/testDom';
-import { getVacancyCard } from '../b640Api';
+import { getVacancyCard, postVacancyLiveness } from '../b640Api';
 import { useCardData, type CardData } from './useCardData';
 
 vi.mock('../../../vacancies/useMatchedPool', () => ({ useMatchedPool: vi.fn() }));
@@ -17,7 +17,7 @@ vi.mock('../../../vacancies/vacancyLetterApi', () => ({
   getVacancyConnectionCircles: () => Promise.resolve(undefined),
 }));
 vi.mock('../vacancyLinks', () => ({ useVacancyLinks: () => ({}) }));
-vi.mock('../b640Api', () => ({ getVacancyCard: vi.fn() }));
+vi.mock('../b640Api', () => ({ getVacancyCard: vi.fn(), postVacancyLiveness: vi.fn() }));
 
 const HH_ID = 'cluster-src-hh-search:139180469';
 const item = (id: string) =>
@@ -52,6 +52,7 @@ async function render(id: string) {
 beforeEach(() => {
   seen = undefined;
   readCard.mockReset();
+  vi.mocked(postVacancyLiveness).mockReset().mockResolvedValue({ closed: false });
 });
 afterEach(() => {
   mounted?.unmount();
@@ -103,16 +104,25 @@ describe('B715: карточка v04 по id вакансии пула', () => {
     await render('cluster-src-hh-search:2');
     expect(seen?.load).toBe('failed');
   });
-  it('B797: строка hh ещё в подборке, а площадка вакансию сняла — «закрыта»', async () => {
-    const row = item(HH_ID);
-    const sources = [{ sourceUrl: 'https://hh.ru/vacancy/139180469' }];
-    const pooled = { ...row, cluster: { ...row.cluster, sources } } as MatchedVacancyItem;
-    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [pooled] }));
-    readCard.mockRejectedValueOnce(
-      new CoachApiError('Вакансия снята с площадки.', 'vacancy_gone', false),
+  it('B797: карточка hh показана сразу, ответ площадки её закрывает', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [item(HH_ID)] }));
+    let answer: (value: { closed: boolean }) => void = () => undefined;
+    vi.mocked(postVacancyLiveness).mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
     );
     await render(HH_ID);
+    expect(seen?.load).toBe('ready');
+    await act(async () => answer({ closed: true }));
     expect(seen?.load).toBe('closed');
+    expect(seen?.item).toBeUndefined();
+  });
+  it('B797: сбой сверки карточку не закрывает', async () => {
+    vi.mocked(useMatchedPool).mockReturnValue(pool({ matched: [item(HH_ID)] }));
+    vi.mocked(postVacancyLiveness).mockRejectedValue(new Error('сеть'));
+    await render(HH_ID);
+    expect(seen?.load).toBe('ready');
   });
   it('B797: вакансия снята с площадки — «закрыта»', async () => {
     vi.mocked(useMatchedPool).mockReturnValue(pool({}));

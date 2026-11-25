@@ -23,6 +23,7 @@ async function setup() {
     engine: {
       getVacancy: (id: string) => (id === LIVE.id ? LIVE : undefined),
       getActiveCluster: () => undefined,
+      openedVacancyGone: async () => true,
       isKnownVacancyGone: (id: string) => id === 'cluster-src-hh-search:44444444',
     },
   });
@@ -43,6 +44,14 @@ describe('B715: GET b640/vacancies/:id — карточка вакансии в�
     const h = await setup();
     expect((await h.get(`${BASE}/cluster-src-hh-search:99999999`, 'flagged.test')).statusCode).toBe(404);
     expect((await h.get(`${BASE}/cluster-src-hh-search:44444444`, 'flagged.test')).statusCode).toBe(410);
+  });
+  it('B797: сверка отвечает отдельно от карточки; неизвестная запись — 404', async () => {
+    const h = await setup();
+    const path = `${BASE}/${encodeURIComponent('cluster-src-hh-search:139180469')}`;
+    expect((await h.post(`${path}/liveness`, {}, 'flagged.test')).json().data).toEqual({ closed: true });
+    expect((await h.get(path, 'flagged.test')).statusCode).toBe(200);
+    const unknown = `${BASE}/cluster-src-hh-search:99999999/liveness`;
+    expect((await h.post(unknown, {}, 'flagged.test')).statusCode).toBe(404);
   });
   it('B787: цель отклика — в карточке и по POST; чужому и без флага — 404', async () => {
     const h = await setup();

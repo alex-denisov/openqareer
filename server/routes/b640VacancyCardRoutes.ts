@@ -54,19 +54,32 @@ function cardItem(deps: CardDeps, candidateId: string, clusterId: string): Vacan
  * B715: карточка v04 для вакансии, которой нет в загруженной подборке кандидата — ссылка hh.ru
  * из «Своей вакансии» (`in_pool`), вакансия после отклика, переход по прямому адресу.
  */
-async function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
+function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return reply;
   const candidate = sessionCandidate(request, reply, principal.candidate);
   if (!candidate) return reply;
   const id = (request.params as { id?: string }).id ?? '';
   const item = id && id.length <= ID_MAX ? cardItem(deps, candidate.id, id) : undefined;
-  const closed = item && (await deps.multiSourceEngine.openedVacancyGone?.(id));
-  if (item && !closed) return { data: item, meta: { requestId: request.id } };
-  if (closed || (id && deps.multiSourceEngine.isKnownVacancyGone?.(id))) {
+  if (item) return { data: item, meta: { requestId: request.id } };
+  if (id && deps.multiSourceEngine.isKnownVacancyGone?.(id)) {
     return sendError(reply, request, 410, 'vacancy_gone', 'Вакансия снята с площадки.', false);
   }
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+}
+
+/** B797: открытая карточка сверяется с площадкой своим запросом, пока кандидат её уже читает. */
+async function postVacancyLiveness(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
+  const principal = requireCabinetB640(request, reply, deps);
+  if (!principal) return reply;
+  const candidate = sessionCandidate(request, reply, principal.candidate);
+  if (!candidate) return reply;
+  const id = (request.params as { id?: string }).id ?? '';
+  if (!id || id.length > ID_MAX || !cardCluster(deps, candidate.id, id)) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+  const closed = (await deps.multiSourceEngine.openedVacancyGone?.(id)) ?? false;
+  return { data: { closed }, meta: { requestId: request.id } };
 }
 
 /** B787: кандидат открыл отклик — адрес трекера раскрывается одним переходом и запоминается. */
@@ -96,5 +109,6 @@ export function registerB640VacancyCardRoutes(app: FastifyInstance, deps: RouteD
   app.addHook('onClose', async () => hh.close());
   const bound: CardDeps = { ...deps, hh };
   app.post(`${BASE}/:id/apply-target`, withDeps(bound, postApplyTarget));
+  app.post(`${BASE}/:id/liveness`, withDeps(bound, postVacancyLiveness));
   app.get(`${BASE}/:id`, withDeps(bound, getVacancyCard));
 }
