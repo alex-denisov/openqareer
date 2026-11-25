@@ -265,7 +265,7 @@ mod tests {
             };
             assert_eq!(
                 parsed(&out, 0),
-                json!({ "state": "clicked", "invalidBefore": ["id:email"] })
+                json!({ "state": "clicked", "invalidBefore": ["id:email"], "countedBefore": false })
             );
             assert_eq!(parsed(&out, 1), expected);
         }
@@ -421,7 +421,10 @@ mod tests {
             "",
             &[
                 op("read", Value::Null),
-                op("fill", json!({ "entries": [{ "key": key, "value": "2027-01-15" }] })),
+                op(
+                    "fill",
+                    json!({ "entries": [{ "key": key, "value": "2027-01-15" }] }),
+                ),
                 op("job", Value::Null),
                 op("snapshot", Value::Null),
             ],
@@ -445,7 +448,10 @@ mod tests {
             (with_form.as_str(), "/careers/1", "pending"),
         ];
         for (html, path, state) in cases {
-            let script = op("outcome", json!({ "thanksPath": "/careers/1" }));
+            let script = op(
+                "outcome",
+                json!({ "thanks": "bamboohr", "thanksPaths": ["/careers/1"] }),
+            );
             let Some(out) = run(html, path, "", &[script]) else {
                 return;
             };
@@ -454,6 +460,76 @@ mod tests {
                 state != "confirmed",
                 "{path}"
             );
+        }
+    }
+
+    #[test]
+    fn a_board_that_thanks_in_place_is_known_by_its_own_sign_in_any_language() {
+        let ashby = r#"<div class="ashby-application-form-success-container">Gracias</div>"#;
+        let blocked = r#"<div class="ashby-application-form-failure-container">No</div>"#;
+        let workable = r#"<div data-ui="successful-submit"><h3>Danke</h3></div>"#;
+        let frame = r#"<turbo-frame id="application_form"><h2>Gracias</h2></turbo-frame>"#;
+        let sent = "window.gtmFormSubmissionData = { id: 1 };";
+        let cases = [
+            ("ashby", "/a", ashby, "", "confirmed"),
+            ("ashby", "/b", ashby, "", "pending"),
+            ("ashby", "/a", blocked, "", "pending"),
+            ("workable", "/a", workable, "", "confirmed"),
+            ("workable", "/a", "<h3>Danke</h3>", "", "pending"),
+            ("teamtailor", "/applications", frame, "", "pending"),
+            ("teamtailor", "/applications", "<h1>500</h1>", "", "pending"),
+            ("teamtailor", "/a", frame, "", "pending"),
+            ("pinpoint", "/a", "<h1>Merci</h1>", sent, "confirmed"),
+            ("pinpoint", "/a", "<h1>Merci</h1>", "", "pending"),
+            ("lever", "/a", workable, sent, "pending"),
+        ];
+        for (board, path, html, setup, state) in cases {
+            let argument = json!({ "thanks": board, "thanksPaths": ["/a", "/applications"], "countedBefore": false });
+            let Some(out) = run(html, path, setup, &[op("outcome", argument)]) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], state, "{board} {path}");
+        }
+        for counted in [json!(true), json!(null)] {
+            let argument =
+                json!({ "thanks": "pinpoint", "thanksPaths": ["/a"], "countedBefore": counted });
+            let Some(out) = run("<h1>Merci</h1>", "/a", sent, &[op("outcome", argument)]) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], "pending");
+        }
+    }
+
+    #[test]
+    fn teamtailor_confirms_by_the_servers_answer_to_the_press() {
+        let html = format!(
+            r#"<h1>Tech</h1><turbo-frame id="application_form">{TEAMTAILOR}</turbo-frame>"#
+        );
+        let answer = |success: bool, left: &str| {
+            format!(
+                "document.addEventListener('submit', (e) => {{ e.preventDefault(); const form = e.target; form.dispatchEvent(new CustomEvent('turbo:submit-end', {{ bubbles: true, detail: {{ success: {success}, formSubmission: {{ formElement: form }} }} }})); document.querySelector('turbo-frame').innerHTML = '{left}'; }}); document.querySelectorAll('[required]').forEach((n) => n.removeAttribute('required'));"
+            )
+        };
+        let thanks = "<h2>Gracias por la solicitud</h2>";
+        for (setup, state) in [
+            (answer(true, thanks), "confirmed"),
+            (answer(false, thanks), "pending"),
+            (answer(true, "<h1>Tech</h1>"), "pending"),
+            (
+                answer(
+                    true,
+                    r#"<form id="job-application-form"></form><h2>No</h2>"#,
+                ),
+                "pending",
+            ),
+        ] {
+            let argument = json!({ "thanks": "teamtailor", "thanksPaths": ["/acme"] });
+            let scripts = [press("submit"), op("outcome", argument)];
+            let Some(out) = run(&html, "/acme", &setup, &scripts) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], "clicked");
+            assert_eq!(parsed(&out, 1)["state"], state, "{setup}");
         }
     }
 
