@@ -101,4 +101,17 @@ describe('B761: живой профиль в этом процессе', () => {
     });
     expect(message).toBe('cpu-profile-top');
   });
+
+  it('B759: остановка отменяет идущий профиль без записи в журнал', async () => {
+    const { startCpuProfileLog } = await import('./cpuProfileTop');
+    const messages: string[] = [];
+    const push = (_: unknown, text: string) => messages.push(text);
+    const stop = startCpuProfileLog(
+      { info: push, warn: push },
+      { firstDelayMs: 60_000, durationMs: 50, atStart: true, env: {} },
+    );
+    stop();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(messages).toEqual([]);
+  });
 });

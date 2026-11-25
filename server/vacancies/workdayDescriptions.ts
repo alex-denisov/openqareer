@@ -132,6 +132,16 @@ export const fetchWorkdayDetail: WorkdayDetailFetch = async (url, format) => {
 type Outcome = 'loaded' | 'gone' | 'failed' | 'throttled';
 
 const DEFAULT_THROTTLE_PAUSE_MS = 15 * 60_000;
+/**
+ * B761 25.11, прод: 12,7 из 13,7 тыс. площадок без единой записи на дочитку стоили 87 с
+ * чтения пула за проход, а проход шёл каждые 20 с. Пустая площадка ждёт час или нового
+ * принятого чтения (`wake`).
+ */
+const IDLE_PAUSE_MS = 60 * 60_000;
+/** Разброс паузы: без него пустые площадки снова смотрелись бы все разом раз в час. */
+const IDLE_PAUSE_JITTER = 0.2;
+/** Сколько площадок без известной работы смотрится за такт: первый проход растянут, а не залпом. */
+const PROBES_PER_STEP = 200;
 const EMPTY_REPORT: WorkdayDescriptionReport = {
   requested: 0,
   loaded: 0,
@@ -154,6 +164,8 @@ export class WorkdayDescriptionBackfill {
   private readonly defaultIntervalMs: number;
   /** Когда источник снова можно спрашивать (темп и пауза после 429). */
   private readonly nextDueAt = new Map<string, number>();
+  /** Площадки, где дочитывать было нечего. */
+  private readonly idle = new Set<string>();
   /** Неудачи по id: после `maxAttempts` запись больше не запрашивается до перезапуска. */
   private readonly attempts = new Map<string, number>();
   private running = false;
@@ -188,9 +200,7 @@ export class WorkdayDescriptionBackfill {
     this.running = true;
     try {
       const startedAt = this.now();
-      const sources = this.sourceIds()
-        .filter(isDetailTextSource)
-        .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= startedAt);
+      const sources = this.dueSources(startedAt);
       // B641 10.11: выборка площадки без текста — до 100 мс; 147 площадок подряд
       // держали цикл событий до 8 с. Каждая площадка начинается в своём обороте.
       const started: Promise<Outcome[]>[] = [];
@@ -214,6 +224,25 @@ export class WorkdayDescriptionBackfill {
     }
   }
 
+  /** Площадки с работой — все; новые, разбуженные и пустые — не больше предела за такт. */
+  private dueSources(nowMs: number): string[] {
+    const due = this.sourceIds()
+      .filter(isDetailTextSource)
+      .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= nowMs);
+    const isProbe = (sourceId: string) => this.idle.has(sourceId) || !this.nextDueAt.has(sourceId);
+    const probes = due.filter(isProbe).slice(0, PROBES_PER_STEP);
+    return [...due.filter((sourceId) => !isProbe(sourceId)), ...probes];
+  }
+
+  private idlePauseMs(): number {
+    return Math.round(IDLE_PAUSE_MS * (1 + IDLE_PAUSE_JITTER * (2 * this.random() - 1)));
+  }
+
+  /** Принято новое чтение: пустая площадка смотрится на ближайшем такте. Паузу 429 не снимает. */
+  wake(sourceId: string): void {
+    if (this.idle.delete(sourceId)) this.nextDueAt.delete(sourceId);
+  }
+
   private exhaustedIds(): string[] {
     return [...this.attempts].filter(([, count]) => count >= this.maxAttempts).map(([id]) => id);
   }
@@ -230,6 +259,12 @@ export class WorkdayDescriptionBackfill {
       paced ? 1 : this.perSource,
       this.exhaustedIds(),
     );
+    if (batch.length === 0) {
+      this.idle.add(sourceId);
+      this.nextDueAt.set(sourceId, this.now() + this.idlePauseMs());
+      return [];
+    }
+    this.idle.delete(sourceId);
     const outcomes: Outcome[] = [];
     for (let index = 0; index < batch.length; index += 1) {
       if (index > 0) await this.sleep(this.delayMs);

@@ -1736,6 +1736,7 @@ export class MultiSourceVacancyEngine {
       partial,
       dropObservedBefore,
     );
+    if (kept > 0) this.workdayDescriptions?.wake(source.id);
     return {
       sourceId: source.id,
       status: 'healthy',
