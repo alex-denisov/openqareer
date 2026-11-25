@@ -1,4 +1,4 @@
-import { leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import { leverSalaryPeriod, recruiteeSalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
 import {
@@ -422,7 +422,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         isRemote: offer.remote === true,
         description: text(offer.description) || text(offer.title),
         skills: [],
-        salary: rangeSalary(offer.salary),
+        salary: recruiteeSalary(offer.salary),
         url: text(offer.careers_url) || text(offer.careers_apply_url),
         publishedAt: fromLooseDate(offer.published_at ?? offer.created_at),
       });
@@ -694,6 +694,18 @@ function leverSalary(value: unknown): UnifiedVacancy['salary'] | undefined {
         periodEvidence: { field: 'lever.salaryRange.interval', value: rawPeriod },
       }
     : salary;
+}
+
+/** B803: период назван площадкой. Вилка с периодом без нашей подписи (неделя, день) не берётся. */
+function recruiteeSalary(value: unknown): UnifiedVacancy['salary'] | undefined {
+  const salary = rangeSalary(value);
+  if (!salary) return undefined;
+  const rawPeriod = text(record(value).period).trim();
+  if (!rawPeriod) return salary;
+  const period = recruiteeSalaryPeriod(rawPeriod);
+  return period
+    ? { ...salary, period, periodEvidence: { field: 'recruitee.salary.period', value: rawPeriod } }
+    : undefined;
 }
 
 /**
