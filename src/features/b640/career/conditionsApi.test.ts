@@ -62,6 +62,15 @@ describe('условия поиска', () => {
     expect(saved.conditions).toBe(after);
   });
 
+  it('«Показывать вакансии без зарплаты» читается из профиля и сохраняется одно', async () => {
+    api.getDecisionProfile.mockResolvedValue({ ...PROFILE, showWithoutSalary: false });
+    const data = await loadConditions(new AbortController().signal);
+    expect(data.conditions.salaryFrom.showWithoutSalary).toBe(false);
+    const salaryFrom = { ...data.conditions.salaryFrom, showWithoutSalary: true };
+    await saveConditions(data, { ...data.conditions, salaryFrom });
+    expect(api.putDecisionProfile.mock.calls[0]?.[0]).toMatchObject({ salaryFloor: 400_000, showWithoutSalary: true });
+  });
+
   it('стоп-лист: только добавленное и убранное, профиль не пишется', async () => {
     const data = await loadConditions(new AbortController().signal);
     const after = {

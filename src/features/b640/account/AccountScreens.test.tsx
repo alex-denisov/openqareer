@@ -30,6 +30,7 @@ const api = vi.hoisted(() => ({
   disconnectTelegram: vi.fn(),
   getTelegramLinkState: vi.fn(),
   getAccountCapabilityConsents: vi.fn(),
+  getSearchConsent: vi.fn(),
   getCandidateBillingSummary: vi.fn(),
   getPendingAccountEmailChange: vi.fn(),
   getResumeStudio: vi.fn(),
@@ -77,6 +78,10 @@ vi.mock('./deliverySettingsApi', () => ({
 }));
 vi.mock('../../account/accountCapabilityConsentApi', () => ({
   getAccountCapabilityConsents: api.getAccountCapabilityConsents,
+}));
+vi.mock('../../vacancies/recruiterContactsApi', async (original) => ({
+  ...(await original<typeof import('../../vacancies/recruiterContactsApi')>()),
+  getSearchConsent: api.getSearchConsent,
 }));
 vi.mock('../../resume/resumeApi', () => ({ getResumeStudio: api.getResumeStudio }));
 vi.mock('../../shell/candidateBillingApi', () => ({
@@ -183,6 +188,7 @@ beforeEach(() => {
     { id: 'c1', capability: 'profile_activity', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: null },
     { id: 'c2', capability: 'digital_footprint', versionId: 'v1', grantedAt: '2026-11-01', revokedAt: '2026-11-05' },
   ]);
+  api.getSearchConsent.mockResolvedValue({ granted: true, policyVersion: 'v', updatedAt: '' });
   api.getCandidateBillingSummary.mockResolvedValue({ currentPlan: 'pro', subscription: null, plans: [] });
   api.getPendingAccountEmailChange.mockResolvedValue(null);
   api.getResumeStudio.mockResolvedValue({ draft: { candidate: { photoMediaId: null } } });
@@ -193,6 +199,13 @@ afterEach(() => {
 });
 
 describe('n00 «Аккаунт»: разделы', () => {
+  it('«Вы в поиске» не прочиталось — подпись согласий остаётся, без числа', async () => {
+    api.getSearchConsent.mockRejectedValue(new Error('down'));
+    const root = await open(<SectionsScreen node={node('n00')} />);
+    const row = root.querySelector('a[href="/app/account/data"]')?.closest('.set-row');
+    expect(row?.querySelector('.set-v')?.textContent).toBe('Выгрузка, удаление');
+  });
+
   it('шесть разделов со ссылками и подписями по данным', async () => {
     const root = await open(<SectionsScreen node={node('n00')} />);
     expect(root.querySelector('.lead-title')?.textContent).toBe('Марина Соколова');
@@ -205,7 +218,7 @@ describe('n00 «Аккаунт»: разделы', () => {
       ['/app/account/security', 'Вход и безопасность', 'Пароль, 2 устройства'],
       ['/app/account/connections', 'Подключения', 'hh.ru подключён'],
       ['/app/account/notifications', 'Уведомления', 'В приложении и на почту'],
-      ['/app/account/data', 'Согласия и данные', '1 согласие, выгрузка, удаление'],
+      ['/app/account/data', 'Согласия и данные', '2 согласия, выгрузка, удаление'],
       ['/app/account/app', 'Приложение', 'Тема и часовой пояс'],
       ['/app/account/billing', 'Подписка и платежи', 'Pro'],
     ]);
