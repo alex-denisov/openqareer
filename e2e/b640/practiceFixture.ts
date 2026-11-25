@@ -4,6 +4,8 @@ import { mockPrep, PREP_NOW } from './interviewFixture';
 type Json = Record<string, unknown>;
 
 export interface PracticeOptions {
+  /** Free: пробных интервью на тарифе нет. */
+  readonly free?: boolean;
   /** Пробные интервью на тарифе закончились: старт отвечает 402. */
   readonly paywall?: boolean;
   /** Тренировка уже отвечена: экран открывает разбор. */
@@ -197,7 +199,7 @@ export async function mockPractice(
     route.fulfill({
       json: {
         data: {
-          plan: 'pro',
+          plan: options.free ? 'free' : 'pro',
           unlimited: false,
           period: null,
           fitPercentLimit: null,
@@ -205,10 +207,9 @@ export async function mockPractice(
             {
               key: 'interview_trainings',
               label: 'Пробные интервью',
-              limit: 30,
-              used: 3,
-              remaining: 27,
-              upgradePlan: null,
+              ...(options.free
+                ? { limit: 0, used: 0, remaining: 0, upgradePlan: 'basic' }
+                : { limit: 30, used: 3, remaining: 27, upgradePlan: null }),
             },
           ],
         },

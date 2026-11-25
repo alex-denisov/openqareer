@@ -79,7 +79,6 @@ export function DiarySideStart({
   readonly context: DiaryContext;
   readonly day: string;
 }) {
-  if (!context.loaded) return null;
   const { workplace } = context;
   return (
     <>
@@ -91,15 +90,15 @@ export function DiarySideStart({
           action="Открыть план"
           to={buildNodePath('d01')}
         />
-      ) : (
+      ) : context.workplaceKnown ? (
         <SideModule
           id="dn-plan"
           title="План адаптации"
           action="Добавить план"
           to={buildNodePath('d01')}
         />
-      )}
-      {context.goals.length === 0 ? (
+      ) : null}
+      {context.goalsKnown && context.goals.length === 0 ? (
         <SideModule id="dn-goals" title="Цели" action="Задать цель" to={buildNodePath('d02b')} />
       ) : null}
     </>

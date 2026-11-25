@@ -35,6 +35,7 @@
     .b640 .vt-sheet-head { display: flex; align-items: center; justify-content: space-between; min-block-size: var(--career-sheet-bar-height); padding-inline: var(--career-space-4) var(--career-space-2); }
     .b640 .vt-sheet-head h2 { font-size: var(--career-text-md); font-weight: 600; }
     .b640 .vt-sheet-body { overflow-y: auto; padding-inline: var(--career-space-4); }
+    .b640 .vt-sheet .vt-pop-list { display: contents; }
     .b640 .vt-sec > summary { display: flex; align-items: center; justify-content: space-between; min-block-size: var(--career-target-min); list-style: none; cursor: pointer; font-size: var(--career-text-sm); font-weight: 600; border-block-end: var(--career-border-width) solid var(--career-line); }
     .b640 .vt-sec > summary::-webkit-details-marker { display: none; }
     .b640 .vt-sec > summary:focus-visible { outline: 2px solid var(--career-accent); outline-offset: var(--career-focus-offset); }
