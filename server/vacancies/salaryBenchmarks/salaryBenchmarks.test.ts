@@ -336,6 +336,56 @@ describe('salary store', () => {
     expect(() => setSalarySourceEnabled(database, 'Nobody', true)).toThrow();
   });
 
+  it('A, then B, then A of one date: A is current again', () => {
+    const { database, read } = opened();
+    for (const low of [11, 12, 11]) writeSalarySlice(database, sliceOf([row({ low })]));
+    expect(read({ country: 'AE' })[0]?.low).toBe(11);
+    expect(count(database, 'salary_slices')).toBe(3);
+  });
+
+  it('keeps the rows of a source that has no slice yet', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row()]));
+    database
+      .prepare('INSERT INTO salary_benchmarks VALUES (?, ?, ?)')
+      .run('old-row', 'country:AE', JSON.stringify(other({ id: 'old-row' })));
+    writeSalarySlice(database, sliceOf([row({ low: 12 })]));
+    expect(read({ country: 'AE' }).map(({ low }) => low)).toEqual([12, 10]);
+  });
+
+  it('an unreadable record is skipped and counted', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row(), row({ id: 'second-row' })]));
+    database.exec("UPDATE salary_records SET row_json = '{' WHERE id = 'second-row'");
+    const slice = {
+      source: { name: 'Portal', kind: 'portal', enabled: true },
+      sliceDate: '2026-11-25',
+      benchmarks: [other()],
+    };
+    expect(writeSalarySlice(database, slice)).toEqual({ written: 1, published: 2, unreadable: 1 });
+    expect(read({ country: 'AE' })).toHaveLength(2);
+  });
+
+  it('keeps four slices of a source and ignores one older than all of them', () => {
+    const { database, read } = opened();
+    for (const day of [1, 2, 3, 4, 5, 6])
+      writeSalarySlice(database, sliceOf([row({ low: day })], `2026-11-0${day}`));
+    expect(count(database, 'salary_slices')).toBe(4);
+    expect(count(database, 'salary_records')).toBe(4);
+    expect(writeSalarySlice(database, sliceOf([row()], '2026-10-01')).written).toBe(0);
+    expect(read({ country: 'AE' })[0]?.low).toBe(6);
+  });
+
+  it('a dry run refuses another kind of the source', () => {
+    const { database } = opened();
+    writeSalarySlice(database, sliceOf([row()]));
+    const input = {
+      sources: [{ name: 'Agency', kind: 'portal', enabled: true }],
+      benchmarks: [row({ sourceKind: 'portal' })],
+    };
+    expect(importSalarySlices(database, input, true)[0]?.error).toBe('Error');
+  });
+
   it('an excluded country of a source leaves the answer and can come back', () => {
     const { database, read } = opened();
     writeSalarySlice(database, sliceOf([row(), row({ id: 'qa-row', country: 'QA' })]));
@@ -353,10 +403,12 @@ describe('salary store', () => {
       sources: [{ name: 'Agency', kind: 'agency', enabled: true }],
       benchmarks: [row()],
     };
-    expect(importSalarySlices(database, input, true)).toEqual([{ source: 'Agency', written: 1 }]);
+    expect(importSalarySlices(database, input, true)).toEqual([
+      { number: 1, written: 1, published: 1, unreadable: 0 },
+    ]);
     expect(database.prepare('SELECT name FROM sqlite_master').all()).toEqual([]);
     importSalarySlices(database, input);
-    expect(importSalarySlices(database, input, true)).toEqual([{ source: 'Agency', written: 0 }]);
+    expect(importSalarySlices(database, input, true)).toEqual([{ number: 1, written: 0 }]);
   });
 
   it('imports source by source, twice without duplicates, with one failed source', () => {
@@ -372,8 +424,8 @@ describe('salary store', () => {
     const next = { sources, benchmarks: [row({ low: 12 }), other({ low: 30 })] };
     const results = importSalarySlices(database, next);
     expect(results).toEqual([
-      { source: 'Agency', written: 1 },
-      { source: 'Portal', written: 0, error: 'invalid slice: 1 problems' },
+      { number: 1, written: 1, published: 2, unreadable: 0 },
+      { number: 2, written: 0, error: 'invalid slice: 1 problems' },
     ]);
     expect(read({ country: 'AE' }).map(({ low }) => low)).toEqual([12, 10]);
     expect(() => importSalarySlices(database, { sources: [], benchmarks: [row()] })).toThrow();

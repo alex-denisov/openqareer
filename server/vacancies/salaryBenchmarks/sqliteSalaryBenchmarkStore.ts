@@ -4,7 +4,7 @@
  * последних срезов включённых источников, её читает веб.
  */
 import { createHash } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync } from 'node:sqlite';
 import {
   plausible,
   salaryBenchmarkSchema,
@@ -27,8 +27,7 @@ CREATE TABLE IF NOT EXISTS salary_slices (
   version INTEGER NOT NULL,
   digest TEXT NOT NULL,
   loaded_at TEXT NOT NULL,
-  UNIQUE (source, slice_date, version),
-  UNIQUE (source, digest)
+  UNIQUE (source, slice_date, version)
 ) STRICT;
 CREATE TABLE IF NOT EXISTS salary_records (
   slice_id INTEGER NOT NULL REFERENCES salary_slices(id),
@@ -106,13 +105,30 @@ function insertRecords(database: DatabaseSync, sliceId: number, rows: readonly S
     );
 }
 
-/** Пересборка таблицы подбора из последних срезов; возвращает число строк. */
-function publish(database: DatabaseSync): number {
+function readable({ row_json }: { readonly row_json: string }): SalaryBenchmark[] {
+  try {
+    const parsed = salaryBenchmarkSchema.safeParse(JSON.parse(row_json));
+    return parsed.success ? [parsed.data] : [];
+  } catch {
+    return [];
+  }
+}
+
+interface Published {
+  /** Строк в подборе из срезов. */
+  readonly published: number;
+  /** Записей, которые не читаются нынешней схемой: пропущены, остальные источники живут. */
+  readonly unreadable: number;
+}
+
+/** Пересборка подбора из последних срезов. Строки источника без единого среза остаются. */
+function publish(database: DatabaseSync): Published {
   const texts = database.prepare(CURRENT_SQL).all() as { row_json: string }[];
-  const rows = texts.flatMap(({ row_json }) =>
-    plausible(salaryBenchmarkSchema.parse(JSON.parse(row_json))),
-  );
-  database.exec('DELETE FROM salary_benchmarks');
+  const records = texts.flatMap(readable);
+  const rows = records.flatMap(plausible);
+  database.exec(`DELETE FROM salary_benchmarks WHERE json_extract(row_json, '$.sourceName') IN (
+    SELECT s.name FROM salary_sources s
+    WHERE s.enabled = 0 OR EXISTS (SELECT 1 FROM salary_slices WHERE source = s.name))`);
   const insert = database.prepare(
     'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
   );
@@ -122,65 +138,112 @@ function publish(database: DatabaseSync): number {
     `INSERT INTO salary_benchmarks_version VALUES (1, 1)
       ON CONFLICT (id) DO UPDATE SET version = version + 1`,
   );
-  return rows.length;
+  return { published: rows.length, unreadable: texts.length - records.length };
+}
+
+/** Срезов источника на пересчёт; более старые уходят. */
+const KEPT_SLICES = 4;
+
+function dropOldSlices(database: DatabaseSync, source: string): void {
+  const old = `SELECT id FROM salary_slices WHERE source = ?
+    ORDER BY slice_date DESC, version DESC LIMIT -1 OFFSET ${KEPT_SLICES}`;
+  database.prepare(`DELETE FROM salary_records WHERE slice_id IN (${old})`).run(source);
+  database.prepare(`DELETE FROM salary_slices WHERE id IN (${old})`).run(source);
+}
+
+function sourceBefore(database: DatabaseSync, { name, kind }: SalarySlice['source']) {
+  const before = database
+    .prepare('SELECT kind, enabled FROM salary_sources WHERE name = ?')
+    .get(name) as { kind: string; enabled: number } | undefined;
+  if (before && before.kind !== kind) throw new Error('another kind of the source');
+  return before;
+}
+
+/** Срез повторяет последнюю версию своей даты. */
+function isRepeated(database: DatabaseSync, slice: SalarySlice): boolean {
+  const last = database
+    .prepare(
+      `SELECT digest FROM salary_slices WHERE source = ? AND slice_date = ?
+        ORDER BY version DESC LIMIT 1`,
+    )
+    .get(slice.source.name, slice.sliceDate) as { digest: string } | undefined;
+  return last?.digest === digestOf(slice);
+}
+
+/** Дата старше всех сохранённых при полном запасе: срез сразу выпал бы. */
+function isTooOld(database: DatabaseSync, { source, sliceDate }: SalarySlice): boolean {
+  const kept = database
+    .prepare(
+      'SELECT count(*) AS count, min(slice_date) AS oldest FROM salary_slices WHERE source = ?',
+    )
+    .get(source.name) as { count: number; oldest: string | null };
+  return kept.count >= KEPT_SLICES && kept.oldest !== null && sliceDate < kept.oldest;
+}
+
+export interface WrittenSlice extends Partial<Published> {
+  readonly written: number;
 }
 
 /**
  * Пишет срез одного источника; неверный срез не меняет ничего, чужие источники не трогаются.
  * Тот же срез второй раз не пишется. Включить выключенный источник импорт не может.
  */
-export function writeSalarySlice(
-  database: DatabaseSync,
-  input: unknown,
-): { readonly written: number } {
+export function writeSalarySlice(database: DatabaseSync, input: unknown): WrittenSlice {
   const slice = salarySliceSchema.parse(input);
   const { source, sliceDate, benchmarks } = slice;
-  const digest = digestOf(slice);
   database.exec(TABLES_SQL);
   return inTransaction(database, () => {
-    const known = database.prepare('SELECT kind, enabled FROM salary_sources WHERE name = ?');
-    const before = known.get(source.name) as { kind: string; enabled: number } | undefined;
-    if (before && before.kind !== source.kind) throw new Error('another kind of the source');
+    const before = sourceBefore(database, source);
     database
       .prepare(
         `INSERT INTO salary_sources VALUES (?, ?, ?)
           ON CONFLICT (name) DO UPDATE SET enabled = min(enabled, excluded.enabled)`,
       )
       .run(source.name, source.kind, Number(source.enabled));
-    const repeated = database
-      .prepare('SELECT 1 FROM salary_slices WHERE source = ? AND digest = ?')
-      .get(source.name, digest);
-    if (!repeated) {
+    const skipped = isRepeated(database, slice) || isTooOld(database, slice);
+    if (!skipped) {
       const { lastInsertRowid } = database
         .prepare(
           `INSERT INTO salary_slices (source, slice_date, version, digest, loaded_at)
             SELECT ?, ?, coalesce(max(version), 0) + 1, ?, ?
             FROM salary_slices WHERE source = ? AND slice_date = ?`,
         )
-        .run(source.name, sliceDate, digest, new Date().toISOString(), source.name, sliceDate);
+        .run(
+          source.name,
+          sliceDate,
+          digestOf(slice),
+          new Date().toISOString(),
+          source.name,
+          sliceDate,
+        );
       insertRecords(database, Number(lastInsertRowid), benchmarks);
+      dropOldSlices(database, source.name);
     }
     const switchedOff = before?.enabled === 1 && !source.enabled;
-    if (!repeated || switchedOff) publish(database);
-    return { written: repeated ? 0 : benchmarks.length };
+    if (skipped && !switchedOff) return { written: 0 };
+    return { written: skipped ? 0 : benchmarks.length, ...publish(database) };
   });
 }
 
-/** Что записал бы `writeSalarySlice`; базу не меняет и таблиц не создаёт. */
-export function previewSalarySlice(
-  database: DatabaseSync,
-  input: unknown,
-): { readonly written: number } {
+/**
+ * Что записал бы `writeSalarySlice`: те же проверки, а запись и пересборка — в базе в памяти. Саму
+ * базу не меняет и таблиц не создаёт.
+ */
+export function previewSalarySlice(database: DatabaseSync, input: unknown): WrittenSlice {
   const slice = salarySliceSchema.parse(input);
-  const table = database
+  const stored = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'salary_slices'")
     .get();
-  const repeated =
-    table &&
-    database
-      .prepare('SELECT 1 FROM salary_slices WHERE source = ? AND digest = ?')
-      .get(slice.source.name, digestOf(slice));
-  return { written: repeated ? 0 : slice.benchmarks.length };
+  if (stored) {
+    sourceBefore(database, slice.source);
+    if (isRepeated(database, slice) || isTooOld(database, slice)) return { written: 0 };
+  }
+  const memory = new DatabaseSync(':memory:');
+  try {
+    return writeSalarySlice(memory, input);
+  } finally {
+    memory.close();
+  }
 }
 
 /** Страна источника, чьи цифры расходятся с остальными, не участвует в подборе; срезы остаются. */
