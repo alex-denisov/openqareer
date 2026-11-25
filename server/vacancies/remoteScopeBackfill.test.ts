@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { vacancyFitFingerprint } from '../domain/vacancyFit';
+import { readVacancyFitTarget } from '../routes/vacancyFitContext';
 import { runRemoteScopeBackfillBatch } from './remoteScopeBackfill';
 
 function vacancy(id: string, location: string, isRemote: boolean, description = '') {
@@ -96,5 +98,59 @@ describe('remote scope backfill', () => {
     });
     expect(scopeOf(database, 'tidi')).toBe('US');
     expect(scopeOf(database, 'moscow')).toBe('RU');
+  });
+
+  it('B794: writes the scope alone and leaves the percent key as it was', () => {
+    const database = seeded();
+    const stored = {
+      id: 'tidi',
+      location: 'Remote',
+      isRemote: true,
+      canonicalTitle: 'Old title',
+      remoteScope: 'global',
+    };
+    database
+      .prepare('UPDATE vacancy_cluster_input SET cluster_json = ? WHERE id = ?')
+      .run(JSON.stringify(stored), 'tidi');
+    const read = (table: string, column: string) =>
+      (
+        database.prepare(`SELECT ${column} AS value FROM ${table} WHERE id = 'tidi'`).get() as {
+          value: string;
+        }
+      ).value;
+    const fitKey = () => {
+      const target = readVacancyFitTarget(
+        {
+          multiSourceEngine: {
+            getActiveCluster: () => JSON.parse(read('vacancy_cluster_input', 'cluster_json')),
+            getVacancy: () => JSON.parse(read('vacancy_pool', 'payload')),
+          },
+        } as never,
+        'tidi',
+      )!;
+      const unknown = { status: 'unknown', reason: '' } as const;
+      return vacancyFitFingerprint({
+        candidateId: 'c',
+        vacancyId: target.vacancyId,
+        description: target.description,
+        requirements: [],
+        facts: [],
+        gates: {
+          role: unknown,
+          level: unknown,
+          region: { ...unknown, reason: target.location ?? '' },
+          workFormat: { ...unknown, reason: String(target.isRemote) },
+          workAuthorization: unknown,
+        },
+      });
+    };
+    const [payload, key] = [read('vacancy_pool', 'payload'), fitKey()];
+    expect(runRemoteScopeBackfillBatch(database, 10).updated).toBeGreaterThan(0);
+    expect(JSON.parse(read('vacancy_cluster_input', 'cluster_json'))).toEqual({
+      ...stored,
+      remoteScope: 'US',
+    });
+    expect(read('vacancy_pool', 'payload')).toBe(payload);
+    expect(fitKey()).toEqual(key);
   });
 });

@@ -12,7 +12,7 @@ vi.mock('./vacancyFitContext', () => ({
 }));
 vi.mock('../domain/vacancyFitProfileStamp', () => ({ vacancyFitProfileStamp: () => 'stamp' }));
 
-const { withVacancyFitOrder, withShownPageFitViews, withWantedCompanyOrder, STALE_REFIT_LIMIT } =
+const { withVacancyFitOrder, withShownPageFitViews, withWantedCompanyOrder, withOrderedPercents, STALE_REFIT_LIMIT } =
   await import('./matchedVacancyFit');
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { RouteDeps } from './deps';
@@ -48,6 +48,17 @@ function deps(scored: Record<string, number>): RouteDeps {
     },
   } as unknown as RouteDeps;
 }
+
+describe('процент и место из одного снимка (B789)', () => {
+  it('число, которого не было в снимке, не показано среди непосчитанных; остальное — из снимка', async () => {
+    const live = await withShownPageFitViews(deps({ a: 90, b: 70 }), 'one-snapshot', [item('a'), item('b')]);
+    const [b] = await withShownPageFitViews(deps({ b: 40 }), 'one-snapshot-old', [item('b')]);
+    const shown = withOrderedPercents(live, [item('a'), b!]);
+    expect(shown[0]!.explanation.fitView?.state).toBe('processing');
+    expect(shown[0]!.explanation.fitView?.result).toBeUndefined();
+    expect(shown[1]!.explanation.fitView?.result?.coveragePercent).toBe(40);
+  });
+});
 
 describe('pool fit order', () => {
   it('reads full fit evidence only for vacancies that have a stored result', () => {
@@ -150,7 +161,7 @@ describe('B562: a stored result under an older profile key is computed again', (
   });
 });
 
-describe('B422: компании «Хочу» в порядке подборки', () => {
+describe('компании «Хочу» в порядке подборки', () => {
   const withCompany = (id: string, company: string) =>
     ({
       ...item(id),
@@ -162,29 +173,19 @@ describe('B422: компании «Хочу» в порядке подборки
       candidateCompanyWantsRepo: { list: () => [{ companyKey: candidateCompanyKey('Acme') }] },
     }) as unknown as RouteDeps;
 
-  it('«по совпадению»: процент первым, «Хочу» только при равном проценте (28.10)', () => {
-    const pool = [
-      withCompany('a', 'Other'),
-      withCompany('b', 'Acme'),
-      withCompany('c', 'Acme'),
-      withCompany('d', 'Other'),
-      withCompany('e', 'Acme'),
-    ];
-    const ordered = withWantedCompanyOrder(wantDeps({ a: 90, c: 50, d: 70, e: 70 }), 'want-a', {
-      by: 'fit',
-      dir: 'desc',
-    })(pool);
-    expect(ordered.map((entry) => entry.cluster.id)).toEqual(['a', 'e', 'd', 'c', 'b']);
-  });
-
-  it('ключ кэша списка меняется вместе с отметками «Хочу»', () => {
-    const none = withWantedCompanyOrder(deps({}), 'want-c', { by: 'fit', dir: 'desc' }).cacheKey;
-    const marked = withWantedCompanyOrder(wantDeps({}), 'want-c', {
-      by: 'fit',
-      dir: 'desc',
-    }).cacheKey;
-    expect(none).toBe('role-v1|');
-    expect(marked).toBe(`role-v1|${candidateCompanyKey('Acme')}`);
+  it('B789: «Хочу» и роль порядок процентов не меняют', () => {
+    const pool = ['a', 'b', 'c', 'd', 'e'].map((id) =>
+      withCompany(id, id === 'b' || id === 'c' || id === 'e' ? 'Acme' : 'Other'),
+    );
+    const order = withWantedCompanyOrder(
+      wantDeps({ a: 90, c: 50, d: 70, e: 70 }),
+      'want-a',
+      { by: 'fit', dir: 'desc' },
+      undefined,
+      'read',
+      ['Chief Technology Officer'],
+    );
+    expect(order(pool).map((entry) => entry.cluster.id)).toEqual(['a', 'd', 'e', 'c', 'b']);
   });
 
   it('«Деньги» отметку не учитывают и ставят вакансии без денег последними', () => {

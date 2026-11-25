@@ -8,6 +8,7 @@ import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
 import { BarPart } from '../Bar';
 import { moneyView } from '../format';
+import { BriefBlock } from './BriefBlock';
 import { CompanyName, type RowEnv } from './VacancyRow';
 
 function SourceTip({ label, text }: { label: string; text: string }) {
@@ -89,12 +90,13 @@ function moneyNote(item: MatchedVacancyItem): string {
 function FitScale({ item }: { item: MatchedVacancyItem }) {
   const mark = vacancyFitMark(item.explanation.fitView);
   if (mark.kind !== 'number') return null;
+  const tone = `is-${mark.tier}`;
   return (
     <div className="vs-sc">
       <span className="vs-k">Совпадение</span>
-      <span className="vs-v num">{mark.percent} %</span>
+      <span className={`vs-v vt-tone ${tone} num`}>{mark.percent} %</span>
       <span className="vs-bar" role="img" aria-label={`Совпадение ${mark.percent} %`}>
-        <BarPart className={`is-${mark.tier}`} size={mark.percent} />
+        <BarPart className={tone} size={mark.percent} />
       </span>
       <SourceTip label="Откуда это число" text="Требования из текста вакансии сверены с опытом в профиле: есть в профиле — целиком, частично — наполовину." />
     </div>
@@ -137,6 +139,7 @@ export function DetailRow({ item, env }: DetailRowProps) {
             <FitScale item={item} />
             <MoneyScale item={item} env={env} />
           </div>
+          <BriefBlock clusterId={cluster.id} />
           <p className="vs-co">
             <Icon name="building" />
             <span>
