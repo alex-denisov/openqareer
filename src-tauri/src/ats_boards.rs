@@ -124,6 +124,43 @@ fn pinpoint(host: &str, parts: &[&str]) -> Option<AtsTarget> {
     })
 }
 
+/// Breezy names a job by a twelve-character id that starts its address.
+fn breezy(host: &str, parts: &[&str]) -> Option<AtsTarget> {
+    let ["p", job, rest @ ..] = parts else {
+        return None;
+    };
+    let id = job.split('-').next().unwrap_or_default();
+    let known = id.len() == 12 && id.bytes().all(|byte| byte.is_ascii_hexdigit());
+    if !matches!(rest, [] | ["apply"]) || !is_token(job) || !known {
+        return None;
+    }
+    let path = format!("/p/{job}/apply");
+    let confirmation = format!("{path}/submitted");
+    Some(target("breezy", host, &path, confirmation))
+}
+
+/// The form opens on the job's own page; no confirmation address is known.
+fn bamboohr(host: &str, parts: &[&str]) -> Option<AtsTarget> {
+    let ["careers", job] = parts else {
+        return None;
+    };
+    let numbered = job.len() <= 12 && job.bytes().all(|byte| byte.is_ascii_digit());
+    numbered.then(|| target("bamboohr", host, &format!("/careers/{job}"), String::new()))
+}
+
+/// The form is addressed by the posting's uuid (`ats_smartrecruiters` finds it).
+fn smartrecruiters(host: &str, parts: &[&str]) -> Option<AtsTarget> {
+    let ["oneclick-ui", "company", company, "publication", posting] = parts else {
+        return None;
+    };
+    if !is_token(company) || !is_uuid(posting) {
+        return None;
+    }
+    let path = format!("/oneclick-ui/company/{company}/publication/{posting}");
+    let confirmation = format!("{path}/success");
+    Some(target("smartrecruiters", host, &path, confirmation))
+}
+
 /// `None` when the host is not one of these boards.
 pub fn resolve(url: &Url, board: Option<&str>) -> Option<Result<AtsTarget, String>> {
     let host = url.host_str()?;
@@ -139,7 +176,10 @@ pub fn resolve(url: &Url, board: Option<&str>) -> Option<Result<AtsTarget, Strin
     let found = match host {
         "jobs.ashbyhq.com" => ashby(host, &parts),
         "jobs.lever.co" | "jobs.eu.lever.co" => lever(host, &parts),
+        "jobs.smartrecruiters.com" => smartrecruiters(host, &parts),
         "apply.workable.com" => workable(host, &parts, board),
+        _ if company(".breezy.hr") => breezy(host, &parts),
+        _ if company(".bamboohr.com") => bamboohr(host, &parts),
         _ if company(".pinpointhq.com") => pinpoint(host, &parts),
         _ if company(".recruitee.com") => recruitee(host, &parts),
         _ if company(".teamtailor.com") => teamtailor(host, &parts),
@@ -150,7 +190,7 @@ pub fn resolve(url: &Url, board: Option<&str>) -> Option<Result<AtsTarget, Strin
 
 #[cfg(test)]
 mod tests {
-    use crate::ats_target::resolve;
+    use crate::ats_target::{is_confirmation, on_target, resolve};
 
     const JOB: &str = "fca52e03-9e9d-4dcd-bda8-c27dbdd0e0a4";
 
@@ -199,6 +239,51 @@ mod tests {
         }
         let target = resolve(&lever, None).unwrap();
         assert_eq!(target.confirmation_path, format!("/acme/{JOB}/thanks"));
+    }
+
+    #[test]
+    fn breezy_bamboohr_and_smartrecruiters_keep_to_one_vacancy() {
+        let breezy = resolve("https://acme.breezy.hr/p/3b2baa070de8-engineer?src=x", None).unwrap();
+        assert_eq!(
+            breezy.entry_url,
+            "https://acme.breezy.hr/p/3b2baa070de8-engineer/apply"
+        );
+        assert!(is_confirmation(
+            &breezy,
+            "https://acme.breezy.hr/p/3b2baa070de8-engineer/apply/submitted"
+        ));
+        for url in [
+            "https://other.breezy.hr/p/3b2baa070de8-engineer/apply/submitted",
+            "https://acme.breezy.hr/p/3b2baa070de9-engineer/apply/submitted",
+            "https://app.breezy.hr/api/apply/linkedin?position_id=3b2baa070de8",
+        ] {
+            assert!(!on_target(&breezy, url), "{url}");
+        }
+        let bamboo = resolve("https://acme.bamboohr.com/careers/133?source=indeed", None).unwrap();
+        assert_eq!(bamboo.entry_url, "https://acme.bamboohr.com/careers/133");
+        assert!(!on_target(
+            &bamboo,
+            "https://acme.bamboohr.com/careers/1334"
+        ));
+        assert!(!is_confirmation(&bamboo, &bamboo.entry_url));
+        let form =
+            format!("https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/{JOB}");
+        let smart = resolve(&format!("{form}?dcr_ci=Acme"), None).unwrap();
+        assert_eq!(smart.entry_url, form);
+        assert!(on_target(&smart, &format!("{form}/screening")));
+        assert!(is_confirmation(&smart, &format!("{form}/success")));
+        for url in [
+            "https://jobs.smartrecruiters.com/Acme/744000163561569-engineer",
+            "https://acme.breezy.hr/p/3b2baa070de8-engineer/apply/submitted",
+            "https://acme.breezy.hr/p/not-an-id",
+            "https://acme.bamboohr.com/careers/list",
+        ] {
+            assert_eq!(
+                resolve(url, None).unwrap_err(),
+                "ats_address_invalid",
+                "{url}"
+            );
+        }
     }
 
     #[test]

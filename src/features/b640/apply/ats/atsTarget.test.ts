@@ -19,6 +19,9 @@ describe('адрес формы работодателя', () => {
     'https://acme.recruitee.com/o/dev/c/new',
     'https://acme.teamtailor.com/jobs/1/applications/new',
     'https://acme.pinpointhq.com/postings/1/applications/new',
+    'https://acme.breezy.hr/p/0123456789ab-dev/apply',
+    'https://acme.bamboohr.com/careers/90',
+    'https://jobs.smartrecruiters.com/acme/744000145449249',
   ])('%s', (url) => {
     expect(atsAddressOf(target('site', url), null)?.url).toBe(url);
   });
@@ -27,6 +30,13 @@ describe('адрес формы работодателя', () => {
     expect(atsAddressOf(target('site', 'https://acme.example/jobs/1'), null)).toBeNull();
     expect(atsAddressOf(target('lever', 'http://jobs.lever.co/acme/1'), null)).toBeNull();
     expect(atsAddressOf(target('lever', 'https://jobs.lever.co.evil.example/1'), null)).toBeNull();
+    for (const url of [
+      'https://jobs.smartrecruiters.com.evil.example/acme/1',
+      'https://evilbreezy.hr/p/0123456789ab-dev/apply',
+      'https://acme.bamboohr.com.evil.example/careers/90',
+    ]) {
+      expect(atsAddressOf(target('site', url), null)).toBeNull();
+    }
     const tracker = target('site', 'https://jobs.lever.co/acme/1', { needsRedirect: true });
     expect(atsAddressOf(tracker, null)).toBeNull();
   });
