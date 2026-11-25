@@ -20,12 +20,21 @@ export function startEarlyRead<T>(reader: Reader<T>): void {
   started.set(reader, { promise, startedAt: Date.now() });
 }
 
-/** Начатое чтение — один раз; нет, устарело или сорвалось (ушло раньше сессии) — читаем заново. */
+/** Чтение ушло раньше сессии. Остальные сбои показывает экран со своим «Повторить». */
+function leftBeforeSession(reason: unknown): boolean {
+  const code = (reason as { readonly code?: unknown } | null)?.code;
+  return code === 'unauthorized' || code === 'http_401';
+}
+
+/** Начатое чтение — один раз; нет, устарело или ушло раньше сессии — читаем заново. */
 export function readEarlyOr<T>(reader: Reader<T>, signal: AbortSignal): Promise<T> {
   const early = started.get(reader);
   started.delete(reader);
   if (!early || Date.now() - early.startedAt >= EARLY_MAX_AGE_MS) return reader(signal);
-  return (early.promise as Promise<T>).catch(() => reader(signal));
+  return (early.promise as Promise<T>).catch((reason: unknown) => {
+    if (leftBeforeSession(reason)) return reader(signal);
+    throw reason;
+  });
 }
 
 /** Дольше общее чтение не служит: блоки одного экрана приходят раньше. */

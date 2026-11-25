@@ -16,8 +16,8 @@ describe('B792: раннее чтение', () => {
     expect(await readEarlyOr(reader, signal)).toBe('свежее');
     expect(reader).toHaveBeenCalledTimes(2);
   });
-  it('сорвалось или устарело — читаем заново', async () => {
-    const failing = vi.fn().mockRejectedValueOnce(new Error('401')).mockResolvedValue('ок');
+  it('ушло раньше сессии или устарело — читаем заново', async () => {
+    const failing = vi.fn().mockRejectedValueOnce({ code: 'unauthorized' }).mockResolvedValue('ок');
     startEarlyRead(failing);
     expect(await readEarlyOr(failing, signal)).toBe('ок');
     vi.useFakeTimers();
@@ -25,6 +25,14 @@ describe('B792: раннее чтение', () => {
     startEarlyRead(old);
     vi.advanceTimersByTime(30_000);
     expect(await readEarlyOr(old, signal)).toBe('новое');
+  });
+  it('сбой сервера или сети отдаём экрану без тихого повтора', async () => {
+    for (const reason of [{ code: 'http_500' }, new TypeError('network')]) {
+      const reader = vi.fn().mockRejectedValueOnce(reason).mockResolvedValue('ок');
+      startEarlyRead(reader);
+      await expect(readEarlyOr(reader, signal)).rejects.toBe(reason);
+      expect(reader).toHaveBeenCalledTimes(1);
+    }
   });
   it('первый вошедший забирает начатое; другому, после выхода и после правки — нет', async () => {
     const start = () => {
