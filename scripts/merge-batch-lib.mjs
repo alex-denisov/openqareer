@@ -45,6 +45,7 @@ export function rejectReason(pr) {
 
 const checkKey = (c) => `${c.workflowName ?? ''}/${checkName(c)}`;
 const finishedAt = (c) => c.completedAt || c.startedAt || '';
+const isSkipped = (c) => checkState(c) === 'SKIPPED';
 const isCancelled = (c) => checkState(c) === 'CANCELLED';
 const runId = (c) => Number(/\/actions\/runs\/(\d+)/.exec(c.detailsUrl ?? '')?.[1] ?? 0);
 // gh prints completedAt "0001-01-01T00:00:00Z" for a check that still runs.
@@ -74,15 +75,17 @@ function isSuperseded(check, checks) {
  * One entry per check. A head often has two runs of the same job: the label
  * event arrives with synchronize and concurrency cancels one of them. A
  * cancelled run counts only when no other run of that job exists; otherwise
- * the newest non-cancelled run (pending ones included) decides.
+ * the newest non-cancelled run (pending ones included) decides. A skipped check
+ * of a no-op label run never outvotes one that really ran.
  */
 export function effectiveChecks(checks) {
   const groups = new Map();
   const current = checks.filter((c) => !isSuperseded(c, checks));
   for (const c of current) groups.set(checkKey(c), [...(groups.get(checkKey(c)) ?? []), c]);
   return [...groups.values()].map((runs) => {
-    const live = runs.filter((c) => !isCancelled(c));
-    const pool = live.length > 0 ? live : runs;
+    const ran = runs.filter((c) => !isSkipped(c));
+    const live = ran.filter((c) => !isCancelled(c));
+    const pool = [live, ran, runs].find((group) => group.length > 0);
     const pending = pool.find(isPending);
     if (pending) return pending;
     return [...pool].sort((a, b) => finishedAt(b).localeCompare(finishedAt(a)))[0];
@@ -182,6 +185,11 @@ export function isRetryableMergeError(message) {
   return (
     /gh pr merge/.test(message ?? '') && /Base branch was modified|is not mergeable/i.test(message)
   );
+}
+
+/** Members whose squash is on main: GitHub ends the subject with "(#N)". */
+export function landedMembers(subjects, members) {
+  return members.filter((pr) => subjects.some((s) => s.endsWith(`(#${pr.number})`)));
 }
 
 /**
