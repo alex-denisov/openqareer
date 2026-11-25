@@ -1,7 +1,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
-import { hasCrossSourceIdCollision, planClusterSplit, runClusterSplitDryRun } from './clusterSplit';
+import {
+  droppedSources,
+  hasCrossSourceIdCollision,
+  planClusterSplit,
+  runClusterSplitDryRun,
+} from './clusterSplit';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { createClusterFromVacancy, mergeVacancyIntoCluster } from './vacancyDeduplicator';
 
@@ -73,10 +78,35 @@ describe('cluster split planner (B752)', () => {
     expect(planClusterSplit(cluster, byId(ats, site))).toEqual([cluster]);
   });
 
-  it('a source whose record left the pool stays with the founder', () => {
-    const pieces = planClusterSplit(collided(), byId(vk));
-    expect(pieces).toHaveLength(1);
-    expect(pieces[0]!.sources).toHaveLength(2);
+  it('drops a foreign source without a pool record, a lone founder too', () => {
+    const [founder, ...rest] = planClusterSplit(collided(), byId(vk));
+    expect(rest).toEqual([]);
+    expect(founder).toMatchObject({ id: `cluster-${VK}:55418`, vacanciesCount: 1 });
+    expect(founder!.sources.map((source) => source.sourceId)).toEqual([VK]);
+  });
+
+  it('drops a foreign orphan and still splits the rest', () => {
+    const orphan = vacancy('ats-orphan', '55418', 'Acrylicize', 'Artist');
+    const cluster = collided();
+    mergeVacancyIntoCluster(cluster, orphan);
+    const pieces = planClusterSplit(cluster, byId(vk, oracle));
+    expect(pieces.flatMap((piece) => piece.sources.map((s) => s.sourceId))).toEqual([VK, ORACLE]);
+    expect(droppedSources(cluster, pieces).map((s) => s.sourceId)).toEqual(['ats-orphan']);
+  });
+
+  it('keeps the orphan of the same vacancy: own host, or a number nobody else has', () => {
+    const site = vacancy('src-site', '55418', 'VK', 'Go Developer', 'https://src-fh-vk.example/x');
+    const unique = vacancy('src-other', '90001', 'VK', 'Go Developer');
+    const cluster = collided();
+    mergeVacancyIntoCluster(cluster, site);
+    mergeVacancyIntoCluster(cluster, unique);
+    const [founder] = planClusterSplit(cluster, byId(vk, oracle));
+    expect(founder!.sources.map((s) => s.sourceId)).toEqual([VK, 'src-site', 'src-other']);
+  });
+
+  it('leaves the cluster alone when no record is in the pool', () => {
+    const cluster = collided();
+    expect(planClusterSplit(cluster, new Map())).toEqual([cluster]);
   });
 });
 
@@ -139,7 +169,10 @@ describe('cluster split dry run (B752)', () => {
       .prepare(`INSERT INTO vacancy_requirements_cache VALUES ('k', ?, NULL, 'h', 'v', '{}', 0)`)
       .run(kept.id);
 
-    expect(runClusterSplitDryRun(database)).toMatchObject({ splitWithRequirements: 1, piecesWithRequirements: 1 });
+    expect(runClusterSplitDryRun(database)).toMatchObject({
+      splitWithRequirements: 1,
+      piecesWithRequirements: 1,
+    });
     store.close();
   });
 });
