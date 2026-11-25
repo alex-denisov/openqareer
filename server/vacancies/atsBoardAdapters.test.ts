@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import {
   ATS_PROVIDERS,
   atsBoardEndpoint,
@@ -316,6 +317,37 @@ describe('ats board adapters', () => {
 
     expect(vacancy?.requiredSkills).toEqual(['Infrastructure', 'Security']);
     expect(vacancy?.location).toBe('Amsterdam, Netherlands');
+  });
+
+  it('B803: период Recruitee — как у площадки; неназванный не придуман, неделя не читается', () => {
+    const read = (period: string | null) =>
+      normalizeAtsBoard(
+        'ats-recruitee-digitalforms',
+        {
+          offers: [
+            {
+              id: 1,
+              title: 'Technology Lead',
+              careers_url: 'https://digitalforms.recruitee.com/o/technology-lead',
+              created_at: '2026-11-20 10:00:00 UTC',
+              salary: { min: '140', max: '180', period, currency: 'PLN' },
+            },
+          ],
+        },
+        { observedAt: OBSERVED_AT },
+      )[0]?.salary;
+    const range = { from: 140, to: 180, currency: 'PLN' };
+    for (const period of ['hour', 'month', 'year'] as const) {
+      const salary = read(period);
+      expect(salary).toEqual({
+        ...range,
+        period,
+        periodEvidence: { field: 'recruitee.salary.period', value: period },
+      });
+      expect(periodOfEvidence(salary?.periodEvidence)).toBe(period);
+    }
+    expect(read(null)).toEqual(range);
+    expect(read('week')).toBeUndefined();
   });
 
   it('читает запись Recruitee с зарплатой и публичной ссылкой', () => {

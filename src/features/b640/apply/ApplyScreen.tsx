@@ -43,7 +43,8 @@ import { QuotaBlock } from './QuotaBlock';
 import { ResumeDates } from './ResumeDates';
 import { ResumeStep } from './ResumeStep';
 import { HhResumeStep } from './hh/HhResumeStep';
-import { approvedLabel, NeedsLetter, SendStep } from './SendStep';
+import { approvedLabel, NeedsLetter, NeedsResume, SendStep } from './SendStep';
+import { useShownResume, type ShownResume } from './useShownResume';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
 import { openExistingFirst, useSentElsewhere } from './existingResponse';
 import { useApplyCluster } from './useApplyCluster';
@@ -140,7 +141,8 @@ interface BodyProps {
   readonly resumeOk: boolean;
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
-  readonly onResumeOk: () => void;
+  readonly onResumeOk: (versionId: string | null) => Promise<void>;
+  readonly resume: ShownResume;
   readonly manual: ManualApplyFlow | null;
   readonly ats: AtsFlow;
   readonly questionnaire: QuestionnaireState;
@@ -211,7 +213,24 @@ function ManualSendBody({
   );
 }
 
+/** Уходит только одобренная версия резюме (B785). */
 function SendBody(props: BodyProps) {
+  const { gate } = props.resume;
+  if (gate === 'checking') return <LoadingApply />;
+  if (gate === 'changed') {
+    return (
+      <>
+        <div className="col">
+          <NeedsResume onResume={() => props.setStep('resume')} />
+        </div>
+        <div className="col" />
+      </>
+    );
+  }
+  return <OpenSendBody {...props} />;
+}
+
+function OpenSendBody(props: BodyProps) {
   const { vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, ask, manual } =
     props;
   // hh.ru в приложении уходит из входа кандидата: там же и вход, и проверка.
@@ -261,15 +280,15 @@ function EditorBody(props: BodyProps) {
           <HhResumeStep
             vacancyId={vacancyId}
             confirmed={resumeOk}
-            onConfirm={props.onResumeOk}
+            onConfirm={() => void props.onResumeOk(null)}
             dock={dock}
           />
         ) : null}
-        {!onHh && resumeSeen ? (
+        {!onHh && resumeSeen && props.resume.gate !== 'checking' ? (
           <div hidden={step !== 'resume'}>
             <ResumeStep
               vacancyId={vacancyId}
-              approved={letter.approval.saved?.resume ?? null}
+              approved={props.resume.shown}
               confirmed={resumeOk}
               onConfirm={props.onResumeOk}
               dock={dock}
@@ -340,6 +359,13 @@ interface FlowState {
   readonly wide: boolean;
 }
 
+/** Одобрение с тем резюме, которое приложено сейчас. */
+function withResume(letter: LetterScreenState, { attached }: ShownResume): LetterScreenState {
+  const { saved } = letter.approval;
+  if (!saved || saved.resume === attached) return letter;
+  return { ...letter, approval: { ...letter.approval, saved: { ...saved, resume: attached } } };
+}
+
 /** Письмо отклика: черновик, варианты и одобрение. */
 function useApplyLetter(vacancyId: string) {
   // Одобренное письмо открывается своим текстом: черновик не просим, пока одобрение не снято.
@@ -348,11 +374,13 @@ function useApplyLetter(vacancyId: string) {
     holdDraft: approvalHold.hold,
   });
   const variants = useLetterVariants(vacancyId, draft);
-  const letter = useVariantApproval(vacancyId, draft, variants, approvalHold);
+  const own = useVariantApproval(vacancyId, draft, variants, approvalHold);
+  const shownResume = useShownResume(vacancyId, own.approval.saved);
+  const letter = withResume(own, shownResume);
   // B678: до чтения одобрения шаг не показывает ни «Сначала одобрите», ни «Собираем письмо».
   // Письмо с опровергнутыми фактами уже прочитано, хотя одобрения у него больше нет.
   const known = Boolean(letter.approval.saved) || letter.approval.stale === true;
-  return { letter, variants, approvalPending: approvalHold.hold && !known };
+  return { letter, variants, shownResume, approvalPending: approvalHold.hold && !known };
 }
 
 /** Анкета для шага «Отправка»: ответы одним текстом и вопросы, прочитанные в окне hh.ru (B641). */
@@ -436,16 +464,17 @@ function doneSteps(
 function useResumeStep(
   step: ApplyStep,
   setStep: (step: ApplyStep) => void,
-  letter: LetterScreenState,
+  resume: ShownResume,
 ): Pick<BodyProps, 'resumeOk' | 'resumeSeen' | 'onResumeOk'> {
   const [confirmed, setConfirmed] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
-  const onResumeOk = () => {
+  const onResumeOk = async (versionId: string | null) => {
+    await resume.approve(versionId);
     setConfirmed(true);
     setStep('letter');
   };
-  const resumeOk = confirmed || Boolean(letter.approval.saved?.resume);
+  const resumeOk = resume.gate === 'open' && (confirmed || Boolean(resume.attached));
   return { resumeOk, resumeSeen, onResumeOk };
 }
 
@@ -476,7 +505,7 @@ function useNamedHead(sources: Parameters<typeof buildHead>[0]): ApplyHead {
 function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): FlowState {
   const { search } = useShell();
   const [step, setStep] = useState(() => parseStep(search, manual ? 'send' : 'letter'));
-  const { letter, variants, approvalPending } = useApplyLetter(target.vacancyId);
+  const { letter, variants, approvalPending, shownResume } = useApplyLetter(target.vacancyId);
   const quota = useExhaustedQuota(letter);
   const questionnaire = useQuestionnaire(target.vacancyId);
   const ask = useSendAsk(questionnaire, setStep, press);
@@ -491,7 +520,7 @@ function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): F
     ...{ step, setStep, letter, questionnaire },
   });
   const shown = shownStep(step, Boolean(questionnaire.form ?? ats.apply));
-  const resume = useResumeStep(step, setStep, letter);
+  const resume = useResumeStep(step, setStep, shownResume);
   return {
     shown,
     setStep,
@@ -518,6 +547,7 @@ function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): F
       ats: pressedAts(ats, press),
       onLetterSend: withPress(press)(() => setStep('send')),
       questionnaire,
+      resume: shownResume,
       ...resume,
     },
   };

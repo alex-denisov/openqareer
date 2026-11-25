@@ -1,7 +1,11 @@
 /** Only explicit provider period metadata is accepted; unknown provider values stay unknown. */
 export type VacancySalaryPeriod = 'hour' | 'month' | 'year';
 export interface SalaryPeriodEvidence {
-  readonly field: 'lever.salaryRange.interval' | 'himalayas.salaryPeriod' | 'hh.compensation.mode';
+  readonly field:
+    | 'lever.salaryRange.interval'
+    | 'himalayas.salaryPeriod'
+    | 'hh.compensation.mode'
+    | 'recruitee.salary.period';
   readonly value: string;
 }
 
@@ -51,6 +55,11 @@ export function hhSalaryPeriod(value: unknown): VacancySalaryPeriod | undefined 
   return value === 'MONTH' ? 'month' : undefined;
 }
 
+/** Recruitee names the period of min/max in `salary.period` (live `/api/offers/`, 25.11.2026). */
+export function recruiteeSalaryPeriod(value: unknown): VacancySalaryPeriod | undefined {
+  return value === 'hour' || value === 'month' || value === 'year' ? value : undefined;
+}
+
 /** The period a stored evidence pair proves, or `undefined` for any other pair. */
 export function periodOfEvidence(evidence: unknown): VacancySalaryPeriod | undefined {
   if (evidence === null || typeof evidence !== 'object') return undefined;
@@ -62,6 +71,8 @@ export function periodOfEvidence(evidence: unknown): VacancySalaryPeriod | undef
       return himalayasSalaryPeriod(value);
     case 'hh.compensation.mode':
       return hhSalaryPeriod(value);
+    case 'recruitee.salary.period':
+      return recruiteeSalaryPeriod(value);
     default:
       return undefined;
   }
