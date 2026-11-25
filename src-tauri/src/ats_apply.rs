@@ -13,7 +13,8 @@ use crate::ats_model::{
     FormReport, OpenRequest, Receipt, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
-    is_confirmation, navigation_allowed, on_target, resolve, top_level_allowed, AtsTarget,
+    is_confirmation, navigation_allowed, on_target, resolve, thanks_in_place, thanks_path,
+    top_level_allowed, AtsTarget,
 };
 use crate::connector_session::{
     append_connector_diagnostic, candidate_store, candidate_store_of, eval_json,
@@ -304,7 +305,7 @@ pub async fn read_form(app: &AppHandle, vacancy_id: &str) -> Result<FormReport, 
 }
 
 async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, String> {
-    let form = poll(app, "read", &Value::Null, READ_WAIT, |value| {
+    let form = poll(app, "read", &place_of(&target), READ_WAIT, |value| {
         value["state"] == "ready" && (value["submitButtons"] == 1 || value["step"] == "next")
     })
     .await?;
@@ -403,6 +404,7 @@ async fn read_outcome(
         .and_then(|run| run.as_ref().map(|run| run.invalid_before.clone()));
     let argument = json!({
         "confirmationPath": target.confirmation_path,
+        "thanksPath": thanks_path(target),
         "invalidBefore": invalid_before,
     });
     let last = poll(app, "outcome", &argument, wait, |value| {
@@ -416,7 +418,9 @@ async fn read_outcome(
     if !still_on_target(app, target) {
         return ("unconfirmed", Vec::new());
     }
-    let confirmed = window_location(app).is_some_and(|url| is_confirmation(target, url.as_str()));
+    let confirmed = window_location(app).is_some_and(|url| {
+        is_confirmation(target, url.as_str()) || thanks_in_place(target, url.as_str())
+    });
     outcome_of(&last, confirmed)
 }
 
