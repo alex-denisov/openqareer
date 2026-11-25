@@ -20,6 +20,7 @@ import {
 const green = [
   { name: 'Plan gates', conclusion: 'SUCCESS' },
   { name: 'Unit', conclusion: 'SKIPPED' },
+  { name: 'Verify', conclusion: 'SUCCESS' },
 ];
 const pr = (number, over = {}) => ({
   number,
@@ -197,6 +198,39 @@ describe('deferStacked', () => {
   });
 });
 
+describe('label run that skips every job (B804)', () => {
+  const at = (name, conclusion, time) => ({
+    name,
+    workflowName: 'Verify and deploy',
+    conclusion,
+    status: 'COMPLETED',
+    completedAt: time && `2026-11-25T10:${time}:00Z`,
+  });
+  const label = [at('Plan gates', 'SUCCESS', '30'), at('Verify', 'SKIPPED', '30')];
+  const reason = (...checks) => rejectReason(pr(1, { statusCheckRollup: checks }));
+
+  it('does not pass for a light run', () => {
+    expect(reason(...label)).toBe('no light run yet');
+  });
+  it('does not hide an earlier red light run', () => {
+    expect(reason(at('Verify', 'FAILURE', '10'), ...label)).toMatch(/Verify: FAILURE/);
+  });
+  it('does not hide a cancelled light run', () => {
+    expect(reason(at('Verify', 'CANCELLED', '10'), ...label)).toMatch(/Verify: CANCELLED/);
+  });
+  it('waits for a light run still going', () => {
+    const going = { ...at('Lint', '', ''), status: 'IN_PROGRESS' };
+    expect(reason(going, ...label)).toMatch(/Lint: IN_PROGRESS/);
+  });
+  it('reuses the green light run of the push', () => {
+    expect(reason(at('Verify', 'SUCCESS', '10'), ...label)).toBeNull();
+  });
+  it('starts a single PR when its checks finish', () => {
+    expect(shouldStart([pr(1)], 'checks')).toBe(true);
+    expect(shouldStart([pr(1)], 'schedule')).toBe(false);
+  });
+});
+
 describe('effectiveChecks / cancelledOnlyRuns', () => {
   const run = (id, conclusion, completedAt) => ({
     name: 'Plan gates',
@@ -210,6 +244,7 @@ describe('effectiveChecks / cancelledOnlyRuns', () => {
     const rollup = [
       run(44450053730, 'CANCELLED', '2026-11-19T04:00:05Z'),
       run(44450054137, 'SUCCESS', '2026-11-19T04:09:00Z'),
+      { ...run(44450054137, 'SUCCESS', '2026-11-19T04:10:00Z'), name: 'Verify' },
     ];
     expect(rejectReason(pr(742, { statusCheckRollup: rollup }))).toBeNull();
     expect(cancelledOnlyRuns(pr(742, { statusCheckRollup: rollup }))).toEqual([]);

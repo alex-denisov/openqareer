@@ -27,12 +27,15 @@ env:
   VITE_OPENQAREER_RELEASE: ${{ github.sha }}
 
 concurrency:
+  # Label runs have a group of their own: they must not cancel the push run
+  # whose light result the batcher uses (B804).
   # Light and full runs of one PR live in separate groups so a push does not
   # cancel the pre-merge full run; a label other than merge-ready is a no-op.
   group: >-
     ${{ inputs.batch && format('batch-{0}', github.ref)
     || (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && 'openqareer-production'
     || (github.event.action == 'labeled' && github.event.label.name != 'merge-ready') && format('noop-{0}', github.run_id)
+    || github.event.action == 'labeled' && format('label-{0}', github.ref)
     || format('verify-{0}-{1}', github.ref, contains(github.event.pull_request.labels.*.name, 'merge-ready') && 'full' || 'light') }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -41,7 +44,9 @@ jobs:
   # Verify skips the gates and only rebuilds the stamped archive. The ruleset
   # on main requires an up-to-date branch, so a squash merge keeps that tree.
   # Anything else (direct push, stale merge, manual run) runs every gate.
-  # Three modes keep the 20-job account limit free for parallel PRs:
+  # Four modes keep the 20-job account limit free for parallel PRs:
+  # none   - the merge-ready label on a PR the batcher takes: the light run of
+  #          its push is reused, nothing repeats.
   # light  - a PR push: one quick-gates job + one job with the affected tests
   #          (8 shards when the diff reaches more than 250 browser tests).
   # full   - a PR labelled merge-ready (or merge_group / manual run / a push to
@@ -76,6 +81,7 @@ jobs:
           MERGE_BATCH: ${{ vars.MERGE_BATCH_ENABLED == 'true' }}
           PR: ${{ github.event.pull_request.number }}
           DEPLOY_VERIFIED: ${{ inputs.deploy_verified == true }}
+          ACTION: ${{ github.event.action }}
         run: |
           set -euo pipefail
           mode=full
@@ -85,7 +91,12 @@ jobs:
           if [ "$EVENT" = "pull_request" ] && [ "$MERGE_READY" = "true" ] && [ "$MERGE_BATCH" = "true" ]; then
             workflows="$(gh api "repos/$REPO/pulls/$PR/files" --paginate \
               --jq '[.[].filename | select(startswith(".github/workflows/"))] | length' | paste -sd+ - | bc)"
-            if [ "$workflows" = "0" ]; then mode=light; fi
+            # B804: the light run of this head already ran or runs on its push;
+            # the label must not repeat it. The batcher waits for that run.
+            if [ "$workflows" = "0" ]; then
+              mode=light
+              if [ "$ACTION" = "labeled" ]; then mode=none; fi
+            fi
           fi
           if [ "$EVENT" = "push" ] || [ "$DEPLOY_VERIFIED" = "true" ]; then
             pr=""
@@ -160,7 +171,7 @@ jobs:
   static:
     name: Lint, types, audit, built shell
     needs: plan
-    if: needs.plan.outputs.mode != 'deploy'
+    if: needs.plan.outputs.mode != 'deploy' && needs.plan.outputs.mode != 'none'
     runs-on: ubuntu-latest
     # Chromium and its system libraries ship in the image: no apt step.
     container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
@@ -496,7 +507,7 @@ jobs:
 
   verify:
     name: Verify
-    if: always() && needs.plan.result != 'skipped'
+    if: always() && needs.plan.result != 'skipped' && needs.plan.outputs.mode != 'none'
     needs: [plan, static, affected, unit, coverage, e2e, e2e-webkit, release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
