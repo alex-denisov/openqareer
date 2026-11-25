@@ -4,17 +4,41 @@ import type {
   AtsEntry,
   AtsFillReport,
   AtsFormReport,
+  AtsOption,
   AtsReceipt,
+  AtsStepReport,
 } from './atsFormTypes';
 
 /** B787: форма работодателя в скрытом окне приложения. Вне приложения каждая команда отвечает `null`. */
-export function openAtsForm(
-  vacancyId: string,
-  url: string,
-  board?: string,
-): Promise<AtsFormReport | null> {
+export function openAtsForm(vacancyId: string, url: string): Promise<AtsFormReport | null> {
   return invokeDesktopCommand<AtsFormReport>('ats_form_open', {
-    request: { vacancyId, url, board: board ?? null },
+    request: { vacancyId, url },
+  });
+}
+
+/** Открытая форма как она есть сейчас: ответ мог добавить на страницу новые вопросы. */
+export function readAtsForm(vacancyId: string): Promise<AtsFormReport | null> {
+  return invokeDesktopCommand<AtsFormReport>('ats_form_read', { vacancyId });
+}
+
+/** Варианты одного списка, суженные введённым текстом. */
+export function readAtsOptions(
+  vacancyId: string,
+  key: string,
+  query = '',
+): Promise<readonly AtsOption[] | null> {
+  return invokeDesktopCommand<readonly AtsOption[]>('ats_form_options', {
+    request: { vacancyId, key, query },
+  });
+}
+
+/** Следующая страница формы: только после «Отправить» кандидата и только с его значениями. */
+export function nextAtsStep(
+  vacancyId: string,
+  values: Readonly<Record<string, string>>,
+): Promise<AtsStepReport | null> {
+  return invokeDesktopCommand<AtsStepReport>('ats_form_next', {
+    request: { vacancyId, confirmed: true, values },
   });
 }
 

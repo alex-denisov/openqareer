@@ -1,4 +1,8 @@
-import { desktopNativeFetch, isTauriEnvironment } from '../../services/desktop/desktopBridge';
+import {
+  desktopNativeFetch,
+  isTauriEnvironment,
+  type DesktopNativeHttpResponse,
+} from '../../services/desktop/desktopBridge';
 import { mirrorDesktopSessionToken } from '../../services/desktop/desktopSessionToken';
 
 /**
@@ -123,6 +127,13 @@ function notifyWrite(): void {
   writeListeners.forEach((listener) => listener());
 }
 
+/** Тело ответа приложения: файл приходит байтами. */
+function nativeBody({ body, body_base64 }: DesktopNativeHttpResponse): BodyInit {
+  return body_base64 === undefined
+    ? body
+    : Uint8Array.from(atob(body_base64), (char) => char.charCodeAt(0));
+}
+
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method ?? 'GET').toUpperCase();
   if (method === 'GET' || method === 'HEAD') return apiFetchOnce(input, init);
@@ -164,7 +175,7 @@ async function apiFetchOnce(input: string, init: RequestInit): Promise<Response>
       if (nativeRes) {
         // Fetch forbids a body on these statuses, including an empty string.
         // Throwing here used to replay successful logout/deletion in WebKit.
-        return new Response([204, 205, 304].includes(nativeRes.status) ? null : nativeRes.body, {
+        return new Response([204, 205, 304].includes(nativeRes.status) ? null : nativeBody(nativeRes), {
           status: nativeRes.status,
           statusText: nativeRes.ok ? 'OK' : 'Error',
           headers: new Headers(nativeRes.headers),

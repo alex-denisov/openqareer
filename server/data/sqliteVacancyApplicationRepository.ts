@@ -42,7 +42,8 @@ export class SqliteVacancyApplicationRepository {
     const next: VacancyApplication = {
       clusterId: input.clusterId,
       status: existing?.status === 'applied' ? 'applied' : input.status,
-      vacancy: input.vacancy,
+      // Площадка отправленного отклика — та, через которую он ушёл: повторное открытие её не меняет.
+      vacancy: existing?.status === 'applied' ? existing.vacancy : input.vacancy,
       openedAt: existing?.openedAt ?? now,
       appliedAt:
         existing?.appliedAt ?? (input.status === 'applied' ? now : null),
