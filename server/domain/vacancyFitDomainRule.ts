@@ -13,12 +13,13 @@ const INDUSTRIES: readonly RegExp[] = [
   stem('advertis|рекламн|marketing agenc'),
   stem('consult(?:ing|anc)|консалтинг'),
   stem('pharma|фарм|аптеч'),
+  // The name of a bank carries the stem inside: Сбербанк, Газпромбанк, Sberbank.
   stem(
-    'bank(?!rupt)|банк(?!рот)|fintech|финтех|financial services|финансов\\S* (?:организац|сектор|услуг)',
+    '\\p{L}*(?<!em|data|power|food)bank(?!rupt|ment)|\\p{L}*банк(?!рот|ет|\\S* (?:данных|знаний|идей|решений))|fintech|финтех|financial services|финансов\\S* (?:организац|сектор|услуг)',
   ),
   stem('retail|ритейл|ретейл|розничн|e-?commerce|маркетплейс|marketplace'),
   stem('health\\s?care|behavioral health|clinical|hospital|медицин|клиник|стоматолог'),
-  stem('real estate|property management|недвижимост|жкх|ук\\b|многоквартирн'),
+  stem('real estate|property management|недвижимост|жкх|ук(?![\\p{L}\\p{N}]|\\s+рф)|многоквартирн'),
   stem('construction|строительств|строительн|девелопмент'),
   stem('nuclear|атомн|аэс|ядерн'),
   stem('government|public sector|госсектор|государственн\\S* (?:сектор|заказ|орган)'),
@@ -28,7 +29,7 @@ const INDUSTRIES: readonly RegExp[] = [
   stem('gaming|game ?dev|геймдев|игров\\S* индустри'),
   stem('blockchain|блокчейн|crypto(?!graph)|крипто(?!граф)|web3'),
   stem('hotel|hospitality|гостинич|отел[ье]|ресторан'),
-  stem('non-?profit|нко\\b|благотворит'),
+  stem('non-?profit|нко(?![\\p{L}\\p{N}])|благотворит'),
 ];
 /** Named tools: a general skill never shows them, so even `partial` needs the name in the profile. */
 const TOOLS: readonly RegExp[] = [
