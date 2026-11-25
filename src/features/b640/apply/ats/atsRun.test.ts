@@ -92,6 +92,12 @@ describe('числовое поле формы', () => {
     expect(desktop.submitAtsForm).not.toHaveBeenCalled();
   });
 
+  it('без ответа кандидата ползунок остаётся вопросом, нажатия нет', async () => {
+    expect((await answer('')).kind).toBe('ask');
+    expect(desktop.fillAtsForm).not.toHaveBeenCalled();
+    expect(desktop.submitAtsForm).not.toHaveBeenCalled();
+  });
+
   it.each([true, false])(
     'форма держит другое число (required %s): нажатия нет',
     async (required) => {

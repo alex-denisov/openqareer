@@ -534,6 +534,23 @@ mod tests {
     }
 
     #[test]
+    fn a_field_that_would_send_its_own_number_is_never_optional() {
+        let html = r#"<form id="job-application-form">
+<label for="pay">Salary</label><input id="pay" type="range" min="0" max="50000">
+<label for="team">Team</label><input id="team" type="number" value="1">
+<label for="years">Years</label><input id="years" type="number">
+<button type="submit">Send</button></form>"#;
+        let Some(out) = run(html, "/acme", "", &[op("read", json!(null))]) else {
+            return;
+        };
+        let fields = parsed(&out, 0)["fields"].clone();
+        let required: Vec<bool> = (0..3)
+            .map(|at| fields[at]["required"].as_bool().unwrap())
+            .collect();
+        assert_eq!(required, [true, true, false]);
+    }
+
+    #[test]
     fn a_number_goes_into_a_slider_only_when_it_holds_exactly_that_number() {
         let html = r#"<form id="job-application-form"><label for="pay">Salary, monthly</label>
 <input id="pay" type="range" min="0" max="50000" step="500" value="0" data-unit="$" required>

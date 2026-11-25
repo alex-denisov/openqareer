@@ -515,7 +515,7 @@
         label: label.replace(/\s*[*✱]\s*$/, ''),
         kind: kind,
         role: node.getAttribute('role'),
-        required: isRequired(node, label),
+        required: isRequired(node, label) || sendsDefault(node, kind),
         autocomplete: node.getAttribute('autocomplete'),
         options: optionsOf(node, kind, form),
         accept: kind === 'file' ? node.getAttribute('accept') : null,
@@ -692,6 +692,11 @@
       step: step === 'any' || given <= 0 ? null : given,
       unit: (node.getAttribute('data-unit') || '').trim().slice(0, 20) || null,
     };
+  }
+  // The page sends a number of its own unless the candidate gives one: a slider
+  // always stands somewhere, a number field may come filled in.
+  function sendsDefault(node, kind) {
+    return kind === 'range' || (kind === 'number' && Boolean(node.getAttribute('value')));
   }
   // A slider moves a value it cannot hold to one it can: the field is left as it
   // was unless it holds exactly the answer.
