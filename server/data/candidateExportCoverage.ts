@@ -76,6 +76,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   career_commands: { export: 'tracker' },
   career_command_approvals: { export: 'tracker' },
   application_questionnaires: { export: 'tracker' },
+  manual_apply_queue: { export: 'tracker' },
   application_rejection_reasons: { export: 'tracker' },
   rejection_review_feedback: { export: 'tracker' },
   candidate_action_batches: { export: 'tracker' },

@@ -136,7 +136,7 @@ function writerInput(
 /** Model writing is bounded. `refused` means the whole chain refused: the route answers with an error. */
 export async function writeCoverLetterBody(
   writer: CoverLetterWriter | undefined,
-  request: FastifyRequest,
+  request: Pick<FastifyRequest, 'log'>,
   letter: LetterWritingRequest,
 ): Promise<WrittenLetterBody> {
   if (!writer) return {};

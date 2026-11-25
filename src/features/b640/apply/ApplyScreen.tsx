@@ -1,4 +1,11 @@
-import { useCallback, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
 import { listApplications, type ApplicationView } from '../../applications/applicationsApi';
 import { fetchTariffQuotas, type TariffQuotaStatus } from '../../tariffs/tariffQuotaApi';
@@ -8,6 +15,7 @@ import {
   type LetterScreenState,
 } from '../../vacancies/vacancyLetterController';
 import type { ResumeDocument } from '../../resume/resumeTypes';
+import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { Button, Icon, InfoTip, Link, StatusLine, useIsMobile } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
@@ -37,6 +45,8 @@ import { ResumeStep } from './ResumeStep';
 import { SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
 import { useApplyCluster } from './useApplyCluster';
+import { ManualSendStep } from './ManualSendStep';
+import { useManualApply, type ManualApplyFlow } from './useManualApply';
 import { useApprovalHold, useVariantApproval } from './useVariantApproval';
 
 const COLD_CIRCLE = 3;
@@ -128,6 +138,8 @@ function VacancyColumn({
 
 interface FlowProps {
   readonly target: ApplyTarget;
+  /** Отклик из очереди «отправить вручную» (B787). */
+  readonly manual?: ManualApplyFlow | null;
   readonly cluster: Parameters<typeof buildHead>[0]['cluster'];
 }
 
@@ -156,19 +168,33 @@ interface BodyProps {
   /** Шаг «Резюме» уже открывали: его содержимое держим смонтированным. */
   readonly resumeSeen: boolean;
   readonly onResumeOk: () => void;
+  readonly manual: ManualApplyFlow | null;
+  readonly questionnaire: QuestionnaireState;
 }
 
-function SendBody({
-  vacancyId,
-  head,
-  sourceType,
-  setStep,
-  letter,
-  answers,
-  hhForm,
-  onHhForm,
-  ask,
-}: BodyProps) {
+function SendBody(props: BodyProps) {
+  const { vacancyId, head, sourceType, setStep, letter, answers, hhForm, onHhForm, ask, manual } =
+    props;
+  // hh.ru в приложении уходит из входа кандидата: там же и вход, и проверка.
+  const inApp = isTauriEnvironment() && Boolean(head.url && hhVacancyIdFromUrl(head.url));
+  if (manual && !inApp) {
+    return (
+      <>
+        <div className="col">
+          <ManualSendStep
+            manual={manual}
+            letterText={letter.draft.text}
+            letterStale={letter.approval.stale === true}
+            letterLoading={letter.draft.loading}
+            resume={letter.approval.saved?.resume ?? null}
+            questionnaire={props.questionnaire}
+            onStep={setStep}
+          />
+        </div>
+        <div className="col" />
+      </>
+    );
+  }
   return (
     <>
       <div className="col">
@@ -346,10 +372,35 @@ function useSendAsk(
   };
 }
 
+/** Вопросы очереди читаются в фоне: после сбора экран берёт их сразу (B787). */
+function useQueuedQuestions(
+  manual: ManualApplyFlow | null,
+  { reload }: Pick<QuestionnaireState, 'reload'>,
+): void {
+  const state = manual?.item.state;
+  useEffect(() => {
+    if (state && state !== 'preparing') reload();
+  }, [state, reload]);
+}
+
+/** Пройденные шаги отклика. */
+function doneSteps(
+  resume: boolean,
+  letter: LetterScreenState,
+  questionnaire: QuestionnaireState,
+): FlowState['done'] {
+  return {
+    resume,
+    letter: Boolean(letter.approval.saved),
+    form: questionnaire.submitted.kind === 'done',
+    send: false,
+  };
+}
+
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
-function useApplyFlow({ target, cluster }: FlowProps): FlowState {
+function useApplyFlow({ target, cluster, manual = null }: FlowProps): FlowState {
   const { search } = useShell();
-  const [step, setStep] = useState<ApplyStep>(() => parseStep(search));
+  const [step, setStep] = useState(() => parseStep(search, manual ? 'send' : 'letter'));
   const [resumeOk, setResumeOk] = useState(false);
   const [resumeSeen, setResumeSeen] = useState(step === 'resume');
   if (step === 'resume' && !resumeSeen) setResumeSeen(true);
@@ -358,12 +409,12 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
   const questionnaire = useQuestionnaire(target.vacancyId);
   const ask = useSendAsk(questionnaire, setStep);
   const form = questionnaire.form;
+  useQueuedQuestions(manual, questionnaire);
   // Шаг «Анкета» из адреса открывается, когда анкета прочитана; до того — письмо.
   const shown: ApplyStep = step === 'form' && !form ? 'letter' : step;
   // Название вакансии: из связей по вакансии, а если их нет — из ответа об анкете.
   const known = letter.circles.data ?? questionnaire.known;
   const head = buildHead({ application: target.application, known, cluster });
-  const saved = Boolean(letter.approval.saved);
   // Письмо одобрено вместе с резюме: вкладка и сам шаг показывают одно состояние.
   const resumeDone = resumeOk || Boolean(letter.approval.saved?.resume);
   return {
@@ -374,12 +425,7 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
     questionnaire,
     opening: stepOpening({ step, approvalPending, formLoading: questionnaire.loading }),
     wide: shown !== 'send' && shown !== 'form' && !quota,
-    done: {
-      resume: resumeDone,
-      letter: saved,
-      form: questionnaire.submitted.kind === 'done',
-      send: false,
-    },
+    done: doneSteps(resumeDone, letter, questionnaire),
     body: {
       vacancyId: target.vacancyId,
       head,
@@ -390,6 +436,8 @@ function useApplyFlow({ target, cluster }: FlowProps): FlowState {
       variants,
       ask,
       ...applyForm(questionnaire, ask.visibility, setStep),
+      manual,
+      questionnaire,
       resumeOk: resumeDone,
       resumeSeen,
       onResumeOk: () => {
@@ -475,13 +523,29 @@ function LoadFailed({ text, onRetry }: { readonly text: string; readonly onRetry
   );
 }
 
+/** До отправки: отклик, который кандидат отправляет сам, собран заранее (B787). */
+function WithManual({ target, cluster }: FlowProps) {
+  const manual = useManualApply(
+    target,
+    applyRoute({ application: target.application, cluster }).source,
+  );
+  if (manual === 'loading') {
+    return (
+      <Pending>
+        <LoadingApply />
+      </Pending>
+    );
+  }
+  return <ApplyFlow target={target} cluster={cluster} manual={manual} />;
+}
+
 /**
  * Отклик не отправлен: площадка сверяется с вакансией подбора (B678). Пока она не определена,
  * экран ничего не называет и действий не предлагает: после открытия площадка не меняется.
  */
 function FromPool({ target }: { readonly target: ApplyTarget }) {
   const { state, retry } = useApplyCluster(target.vacancyId);
-  if (state.status === 'ready') return <ApplyFlow target={target} cluster={state.cluster} />;
+  if (state.status === 'ready') return <WithManual target={target} cluster={state.cluster} />;
   return (
     <Pending>
       {state.status === 'failed' ? (
@@ -531,6 +595,6 @@ export function ApplyScreen({ responseId }: { readonly responseId: string }) {
   return needsPoolRoute(target.application) ? (
     <FromPool key={target.vacancyId} target={target} />
   ) : (
-    <ApplyFlow key={target.vacancyId} target={target} cluster={null} />
+    <WithManual key={target.vacancyId} target={target} cluster={null} />
   );
 }

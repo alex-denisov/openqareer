@@ -1014,3 +1014,75 @@ test.describe('B657: единый экран отклика', () => {
     }
   });
 });
+
+test.describe('Отклик, который кандидат отправляет сам (B787)', () => {
+  test('очередь в «Откликах», всё собрано, «Отправлено» записывает отклик', async ({
+    page,
+  }, testInfo) => {
+    await mockApply(page, { questionnaire: true });
+    const closed: string[] = [];
+    const item = {
+      vacancyId: 'cluster-a-draft',
+      applicationId: 'a-draft',
+      title: 'Head of Engineering',
+      company: 'Гринкод',
+      url: 'https://acme.myworkdayjobs.com/job/1',
+      reason: 'account_required',
+      host: 'acme.myworkdayjobs.com',
+      state: 'ready',
+      preparing: false,
+      missingAnswers: 0,
+      letter: LETTER,
+      createdAt: new Date().toISOString(),
+    };
+    await page.route('**/api/v1/candidate/manual-applications**', async (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (route.request().method() === 'POST') {
+        closed.push(path.split('/').at(-1) ?? '');
+        await route.fulfill({ json: { data: { applicationId: 'a-draft' } } });
+        return;
+      }
+      const list = path.endsWith('/manual-applications');
+      await route.fulfill({ json: { data: list ? [item] : item } });
+    });
+    await page.goto('/app/responses', { waitUntil: 'domcontentloaded' });
+    const row = page.locator('[data-response-id="a-draft"]');
+    await expect(row).toContainText('Нужен аккаунт на acme.myworkdayjobs.com');
+    await expectGates(page);
+    await row.getByRole('link', { name: 'Отправить' }).click();
+
+    await expect(page.locator('#w-title')).toHaveText('Нужен аккаунт на acme.myworkdayjobs.com');
+    const list = page.getByRole('list', { name: 'Резюме, письмо и ответы' });
+    await expect(list).toContainText('За пять лет я вырастила группу');
+    await expect(list).toContainText('от 500 000 ₽');
+    await expect(page.getByRole('link', { name: 'Открыть вакансию' })).toHaveAttribute(
+      'href',
+      item.url,
+    );
+    // Обязательный вопрос без ответа: сначала ответить.
+    await page.getByRole('button', { name: 'Ответить · 1 вопрос' }).click();
+    await page.getByLabel('Ваш ответ: Сколько человек было в вашей команде?').fill('9 человек');
+    await page.getByRole('link', { name: 'Отправка' }).click();
+    await expect(list).toContainText('9 человек');
+    const box = await list
+      .locator('.cb-item')
+      .first()
+      .evaluate((node) => {
+        const style = getComputedStyle(node);
+        return [style.display, style.padding, style.gap, style.borderTopWidth];
+      });
+    // Макет o04d: отступ и промежуток 12 px, край 1 px.
+    expect(box).toEqual(['flex', '12px', '12px', '1px']);
+    await expectGates(page);
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({
+        path: `${SHOTS}/manual-${testInfo.project.name}.png`,
+        fullPage: true,
+      });
+    }
+    await page.getByRole('button', { name: 'Отправлено' }).click();
+    await expect(page.getByText('Отклик отмечен как отправленный')).toBeVisible();
+    expect(closed).toEqual(['sent']);
+  });
+});

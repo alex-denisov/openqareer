@@ -76,7 +76,8 @@ function TableHead({ sort, onSort }: HeadProps) {
 export function actionPath(row: ResponseRow): string {
   if (row.action?.kind === 'offer') return buildNodePath('o06a', { offerId: row.id });
   if (row.action?.kind === 'debrief') return buildNodePath('o01c', { responseId: row.id });
-  return buildNodePath('o02', { responseId: row.id });
+  const path = buildNodePath('o02', { responseId: row.id });
+  return row.action?.step ? `${path}?step=${row.action.step}` : path;
 }
 
 function RowActionCell({ row, primary }: { readonly row: ResponseRow; readonly primary: boolean }) {
