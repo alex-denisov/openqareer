@@ -1,3 +1,4 @@
+/* global __WANTS_FORM__ */
 /** Read only: is this a page to keep, or LinkedIn refusing requests (999, 429, an error page). */
 (function (wantsForm) {
   var nav = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;

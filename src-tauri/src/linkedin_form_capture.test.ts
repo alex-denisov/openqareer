@@ -50,7 +50,7 @@ function state(html: string, wantsForm = true, status = 200): string {
   Object.defineProperty(dom.window.performance, 'getEntriesByType', {
     value: () => [{ responseStatus: status }],
   });
-  return dom.window.eval(stateSource.replace('__WANTS_FORM__', String(wantsForm))) as string;
+  return dom.window.eval(stateSource.replaceAll('__WANTS_FORM__', String(wantsForm))) as string;
 }
 
 describe('страница формы LinkedIn', () => {
