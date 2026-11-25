@@ -64,6 +64,8 @@ export interface ResumeExperienceInput {
   readonly employerGroupKey?: string;
   /** v2: how many people the candidate led in this role; absent means unknown. */
   readonly teamSize?: number;
+  /** B801: кандидат не хочет указывать размер команды; вопрос больше не задаётся. */
+  readonly teamSizeDeclined?: boolean;
   /**
    * B639: настоящее название компании, если `employer` — маска для LinkedIn («Enterprise Energy IT Services»).
    * Его назвал кандидат; оно опирается на подтверждённый факт `employerNameMemoryId` и идёт в письмо.
@@ -453,6 +455,7 @@ export const resumeDraftSchema = z
             employerLogoMediaId: mediaIdSchema.optional(),
             employerGroupKey: labelSchema.optional(),
             teamSize: z.number().int().min(1).max(100_000).optional(),
+            teamSizeDeclined: z.boolean().optional(),
             employerRealName: labelSchema.optional(),
             employerNameMemoryId: memoryIdSchema.optional(),
             employerMaskKept: z.boolean().optional(),
