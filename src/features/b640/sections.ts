@@ -13,7 +13,7 @@ type SectionEntry = RetryableChunk<SectionProps>;
 /** Модуль входа раздела: экран по умолчанию и, если есть, раннее чтение данных узла. */
 interface SectionModule {
   readonly default: ComponentType<SectionProps>;
-  readonly preload?: (code: string) => void;
+  readonly preload?: (code: string, search: string) => void;
 }
 
 const SECTION_LOADERS: Readonly<Record<B640Section, () => Promise<SectionModule>>> = {
@@ -43,10 +43,16 @@ export const SECTION_ENTRIES = Object.fromEntries(
  * B773: код раздела и данные экрана — вместе с вопросом о сессии, а не после него и
  * отрисовки оболочки. Сбой здесь не мешает: экран прочитает сам, как прежде.
  */
-export function preloadSection(pathname: string): Promise<void> {
+export function preloadSection(pathname: string, search = ''): Promise<void> {
   const match = matchNode(pathname);
   if (!match) return Promise.resolve();
   return SECTION_LOADERS[match.node.section]()
-    .then((module) => module.preload?.(match.node.code))
+    .then((module) => module.preload?.(match.node.code, search))
     .catch(() => undefined);
+}
+
+/** B792: наведение или касание ссылки — код раздела заранее; данные читает сам экран. */
+export function preloadSectionCode(pathname: string): void {
+  const match = matchNode(pathname);
+  if (match) void SECTION_LOADERS[match.node.section]().catch(() => undefined);
 }

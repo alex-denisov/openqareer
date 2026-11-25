@@ -17,6 +17,7 @@ import {
 import type { ResumeFactRewriteRecord, ResumePendingFactRewrite } from '../domain/resumeDraft';
 import { confirmRewrittenPlaces, restoreRewrittenPlaces } from './factRewriteConfirmation';
 import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
+import { createFactCorrectionMethods } from './factCorrectionMethods';
 import { answerEmployerName, type EmployerNameAnswer } from './employerNameMethod';
 
 /** What the dossier-review methods need from `SqliteCandidateStore` (kept out of it for the 800-line gate). */
@@ -183,6 +184,7 @@ function revertExperienceFactRewrite(
 
 export function createMemoryMethods(deps: MemoryMethodDeps) {
   return {
+    ...createFactCorrectionMethods(deps),
     addManualExperienceFact: (
       candidateId: string,
       memoryId: string,

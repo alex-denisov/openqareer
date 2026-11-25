@@ -38,3 +38,7 @@ it('B759: правка вырезанного кода не меняет бан�
   );
   expect(after).toBe(before);
 });
+
+it('keeps Cyrillic as UTF-8 so the release fits the unpack limit', () => {
+  expect(SERVER_MINIFY.charset).toBe('utf8');
+});

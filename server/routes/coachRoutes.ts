@@ -1,3 +1,5 @@
+import { withoutWriteClaims } from '../domain/factCorrection';
+import { factCorrectionProposals } from '../domain/factCorrectionProposals';
 import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
 import { selectionClaimsHold, withoutBrokenClaims } from '../coach/selectionClaims';
@@ -136,6 +138,19 @@ function withCheckedMessage<T extends { readonly message: string }>(
   return message !== result.message && isFinishedReply(message) ? { ...result, message } : result;
 }
 
+/** B796: консультант в профиль не пишет — слова «исправил» заменяются карточкой правки или отказом. */
+function honestReply(
+  deps: RouteDeps,
+  candidateId: string,
+  input: Parameters<CoachProvider['createTurn']>[0],
+): (message: string) => string {
+  const latest = input.messages.at(-1);
+  if (input.internalPurpose || latest?.role !== 'user') return (message) => message;
+  const snapshot = deps.candidateStore.getSnapshot(candidateId);
+  const hasCard = factCorrectionProposals(snapshot, latest.content).length > 0;
+  return (message) => withoutWriteClaims(message, hasCard);
+}
+
 async function completeTurnWithProvider(
   deps: RouteDeps,
   candidateId: string,
@@ -150,14 +165,16 @@ async function completeTurnWithProvider(
     // 29.10: the consultant's words reach the stream reader while they are written.
     const stream = turnStreamHub(deps);
     const streamId = turnStreamId(candidateId, key);
-    const onMessageText = (text: string) => stream.publish(streamId, text);
+    const honest = honestReply(deps, candidateId, input);
+    const onMessageText = (text: string) => stream.publish(streamId, honest(text));
     // B735: ответ, которому строки подборки противоречат, пишет следующая ступень.
     const selection = input.careerContext?.selection;
     const prefer = (result: { readonly message: string }) =>
       preferFinishedReply(result) && selectionClaimsHold(result.message, selection);
     const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText, prefer };
     const answered = await deps.coachProvider.createTurn(input, key, options);
-    const turn = { ...answered, result: withCheckedMessage(answered.result, selection) };
+    const checked = withCheckedMessage(answered.result, selection);
+    const turn = { ...answered, result: { ...checked, message: honest(checked.message) } };
     const pending = { analysis: 'pending' as const, analysisStartedAt: new Date().toISOString() };
     const replied = split ? { ...turn, result: { ...turn.result, ...pending } } : turn;
     const raw = decorateAdaptationResult(replied, input);
