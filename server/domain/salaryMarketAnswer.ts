@@ -8,6 +8,7 @@ import {
   type SalaryMarketGroup,
   type SalaryMarketSnapshot,
 } from '../../shared/salaryMarketSnapshot';
+import { nearestAccepted } from '../../shared/questionnaireNumber';
 import { pluralRu } from '../../shared/pluralRu';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import { salaryGeography } from '../salaryMarket/salaryMarketGeography';
@@ -185,7 +186,10 @@ function answerText(
   const period = ask.period ?? figure.period;
   const note = converted && rates ? `, курс ЦБ на ${dateOf(rates.date)}` : '';
   const source = `${figure.source}${note}`;
-  if (question.numeric) return { text: String(round(amount)), source };
+  if (question.numeric) {
+    const fits = nearestAccepted(round(amount), question.limits);
+    return fits === null ? null : { text: String(fits), source };
+  }
   const language = /\p{Script=Cyrillic}/u.test(question.text) ? 0 : 1;
   const basis = figure.basis === 'unknown' ? null : BASIS_WORDS[figure.basis][language];
   const text = [

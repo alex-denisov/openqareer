@@ -11,7 +11,8 @@ import {
 } from './atsFieldPlan';
 import type { AtsEntry, AtsField, AtsFile, AtsFormReport, AtsReceipt } from './atsFormTypes';
 import type { IdentityFacts } from './atsIdentity';
-import { askedFields, fieldAnswers, isBeyondForm, missingAnswers } from './atsQuestions';
+import { acceptedNumber } from '../../../../../shared/questionnaireNumber';
+import { askedFields, fieldAnswers, isBeyondForm, isNumeric, missingAnswers } from './atsQuestions';
 import { sendAtsForm } from './atsSend';
 
 /** B787: форма работодателя целиком — от чтения до одного нажатия. Экрана здесь нет. */
@@ -144,12 +145,21 @@ interface Filled {
   readonly failed: readonly AtsField[];
 }
 
+/** Форма держит ровно то число, которое ей дали. */
+const sameNumber = (given: string, held: string | undefined): boolean =>
+  Boolean(held) && acceptedNumber(given) !== null && acceptedNumber(given) === Number(held);
+
 const wrote = (
   entry: AtsEntry,
+  field: AtsField | undefined,
   results: Readonly<Record<string, string>>,
   values: Readonly<Record<string, string>>,
 ): boolean =>
-  results[entry.key] === 'set' && (!(entry.value || entry.file) || Boolean(values[entry.key]));
+  results[entry.key] === 'set' &&
+  (!(entry.value || entry.file) ||
+    (field && isNumeric(field)
+      ? sameNumber(entry.value, values[entry.key])
+      : Boolean(values[entry.key])));
 
 /** Галочки, которые страница поставила сама: кандидат их не подтверждал. */
 function tickedByPage(
@@ -174,7 +184,8 @@ async function fill(
   const first = await deps.desktop.fillAtsForm(input.vacancyId, entries);
   if (!first) return null;
   const missed = (values: Filled['values']): readonly AtsField[] => {
-    const failed = entries.filter((entry) => !wrote(entry, first.results, values));
+    const fieldOf = (entry: AtsEntry) => page.find((field) => field.key === entry.key);
+    const failed = entries.filter((entry) => !wrote(entry, fieldOf(entry), first.results, values));
     return page.filter((field) => failed.some((entry) => entry.key === field.key));
   };
   const ticked = tickedByPage(page, entries, first.values);
@@ -205,7 +216,10 @@ async function withOptions(
         : null;
     if (options && options.length > 0) read.set(field.key, { ...field, options });
   }
-  const left = failed.filter((field) => field.required && !read.has(field.key));
+  // Не то число форма отправила бы вместо ответа, поэтому и необязательное останавливает.
+  const left = failed.filter(
+    (field) => (field.required || isNumeric(field)) && !read.has(field.key),
+  );
   if (left.length > 0) {
     const asked = new Set(askedFields(left).map((field) => field.key));
     if (asked.size < left.length) return manual('other', form.host);
