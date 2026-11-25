@@ -125,6 +125,11 @@ export interface TriageSource {
   readonly query: string | null;
   /** Число вакансий из шапки списка: показывается, пока разбор идёт. */
   readonly expected: number;
+  /** `false`: список ещё ставит свои роли; нажатие дождётся их, чтобы разобрать ту же выборку. */
+  readonly ready?: boolean;
+  /** Подборка не прочиталась, пока нажатие её ждёт: ошибка разбора, «Повторить» читает подборку. */
+  readonly failed?: boolean;
+  readonly retry?: () => void;
 }
 
 const SHOWN_ROWS: TriageSource = { query: null, expected: 0 };
@@ -169,6 +174,34 @@ function progressOf(
   return { status, total: shown };
 }
 
+function rowView(
+  active: boolean,
+  rows: ReadonlyMap<string, VacancyTriageRow>,
+  unchecked: ReadonlySet<string>,
+): Pick<Triage, 'rowFor' | 'isPicked'> {
+  return {
+    rowFor: (id) => (active ? rows.get(id) : undefined),
+    isPicked: (id) => active && rows.get(id)?.verdict === 'hide' && !unchecked.has(id),
+  };
+}
+
+const waitStatus = (source: TriageSource): TriageStatus => (source.failed ? 'failed' : 'loading');
+
+/** Нажатие: сразу или когда список поставит свои роли. */
+function useStart(
+  ready: boolean,
+  waiting: boolean,
+  setWaiting: (value: boolean) => void,
+  begin: () => void,
+): () => void {
+  useEffect(() => {
+    if (!waiting || !ready) return;
+    setWaiting(false);
+    begin();
+  }, [waiting, ready, setWaiting, begin]);
+  return useCallback(() => (ready ? begin() : setWaiting(true)), [ready, begin, setWaiting]);
+}
+
 /** Режим «Помочь выбрать»: разбор всей подборки, флажки, вопросы по одному, скрытие серией. */
 export function useTriage(
   items: readonly MatchedVacancyItem[],
@@ -176,10 +209,10 @@ export function useTriage(
   source: TriageSource = SHOWN_ROWS,
 ): Triage {
   const [active, setActive] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const [answers, setAnswers] = useState<VacancyTriageAnswers>(NO_ANSWERS);
   const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(NONE);
-  const series = useHideSeries(hideMany);
-  const { state: hide, reset: resetSeries } = series;
+  const { state: hide, reset: resetSeries, run: runSeries } = useHideSeries(hideMany);
   const { target, capture } = useTriageTarget(items, source.query);
   const request = useTriageRequest(active, hide.status === 'busy', target, answers);
   const rows = useMemo(() => triageRowMap(request.triage), [request.triage]);
@@ -187,6 +220,7 @@ export function useTriage(
 
   const cancel = useCallback(() => {
     setActive(false);
+    setWaiting(false);
     setAnswers(NO_ANSWERS);
     setUnchecked(NONE);
     resetSeries();
@@ -194,34 +228,33 @@ export function useTriage(
 
   const result = useNothingResult(active && request.status === 'ready' ? request.triage : null, cancel);
 
-  const start = useCallback(() => {
+  const begin = useCallback(() => {
     result.clearResult();
     capture();
     setActive(true);
   }, [capture, result]);
+  const start = useStart(source.ready !== false, waiting, setWaiting, begin);
 
   const hideSelected = useCallback(() => {
-    if (picked.length === 0) return;
     const { entries, lost } = entriesFor(picked, rows, items);
-    series.run(entries, lost.length, cancel);
-  }, [picked, rows, items, series, cancel]);
+    if (picked.length > 0) runSeries(entries, lost.length, cancel);
+  }, [picked, rows, items, runSeries, cancel]);
 
   return {
-    active,
+    active: active || waiting,
     triage: request.triage,
-    ...progressOf(request.status, request.triage, target, source.expected),
+    ...progressOf(waiting ? waitStatus(source) : request.status, request.triage, waiting ? null : target, source.expected),
     ...result,
     question: currentQuestion(request.triage),
     picked: picked.length,
     weak: request.triage ? isWeakMatch(request.triage.summary) : false,
     hide,
-    rowFor: (id) => (active ? rows.get(id) : undefined),
-    isPicked: (id) => active && rows.get(id)?.verdict === 'hide' && !unchecked.has(id),
+    ...rowView(active, rows, unchecked),
     toggle: (id) => setUnchecked((current) => toggleUnchecked(current, id)),
     answer: (value) => setAnswers((current) => withAnswer(current, request.triage, value)),
     start,
     cancel,
-    retry: request.retry,
+    retry: (waiting && source.retry) || request.retry,
     hideSelected,
   };
 }
