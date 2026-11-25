@@ -27,6 +27,11 @@ describe('maskPrivateEmployers', () => {
     expect(masked[0]!.cluster.employerIsPerson).toBe(true);
   });
 
+  it('B801: страница-сообщество вакансий не показывается работодателем', () => {
+    const [masked] = maskPrivateEmployers([item('Medical Billing/RCM Jobs - Pakistan')]);
+    expect(masked!.cluster.canonicalCompany).toBe('');
+  });
+
   it('keeps a private employer out of the companies list', () => {
     expect(isPrivateEmployerCluster({ canonicalCompany: 'Матузова Олеся Васильевна' })).toBe(true);
     expect(

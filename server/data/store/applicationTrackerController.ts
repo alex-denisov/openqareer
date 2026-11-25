@@ -26,6 +26,7 @@ import type { ApplicationStage } from '../../../shared/applicationStage';
 import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../../../shared/applicationArchive';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
+import { employerOrNone } from '../../../shared/jobCommunity';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
 import { defaultProcessProfile } from '../../vacancies/processProfileDefault';
 import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './errors';
@@ -376,12 +377,17 @@ export class ApplicationTrackerController {
     });
     return {
       ...application,
-      vacancy: withSentChannel(application, sent),
+      vacancy: namedEmployer(withSentChannel(application, sent)),
       ...derived,
       offer: offer ?? null,
       archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
     };
   }
+}
+
+/** B801: имя страницы-сообщества в снимке отклика — не работодатель. */
+function namedEmployer(vacancy: ApplicationView['vacancy']): ApplicationView['vacancy'] {
+  return vacancy ? { ...vacancy, company: employerOrNone(vacancy.company) } : vacancy;
 }
 
 /** Kept for readability at call sites that only need the event-kind union. */
