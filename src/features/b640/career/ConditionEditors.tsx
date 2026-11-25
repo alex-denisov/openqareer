@@ -8,6 +8,7 @@ import { ToggleChecks, useToggleList } from './ToggleChecks';
 function SalaryEditor({ value, onSave, ...rest }: EditorProps) {
   const id = useId();
   const [text, setText] = useState(formatSalaryInput(value.salaryFrom.amountRubles));
+  const [showWithoutSalary, setShowWithoutSalary] = useState(value.salaryFrom.showWithoutSalary);
   const [error, setError] = useState<string | null>(null);
   const save = () => {
     const parsed = parseSalary(text);
@@ -16,7 +17,7 @@ function SalaryEditor({ value, onSave, ...rest }: EditorProps) {
       return;
     }
     setError(null);
-    onSave({ ...value, salaryFrom: { ...value.salaryFrom, amountRubles: parsed.value } });
+    onSave({ ...value, salaryFrom: { amountRubles: parsed.value, showWithoutSalary } });
   };
   return (
     <EditFrame label="Зарплата от" onSave={save} {...rest}>
@@ -38,6 +39,15 @@ function SalaryEditor({ value, onSave, ...rest }: EditorProps) {
             {error}
           </small>
         ) : null}
+      </div>
+      <div className="check">
+        <input
+          id={`${id}-none`}
+          type="checkbox"
+          checked={showWithoutSalary}
+          onChange={(event) => setShowWithoutSalary(event.target.checked)}
+        />
+        <label htmlFor={`${id}-none`}>Показывать вакансии без зарплаты</label>
       </div>
     </EditFrame>
   );
