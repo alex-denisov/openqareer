@@ -21,7 +21,12 @@ import {
   type ExperienceForm,
   type ExperienceFormErrors,
 } from './experienceForm';
-import { addDescription, createTextKeys, saveTexts } from './experienceResults';
+import {
+  addDescription,
+  createFactWriter,
+  dropUnusedDescription,
+  saveTexts,
+} from './experienceResults';
 import { DescriptionField, ResultsField } from './ExperienceTexts';
 import { blankEntry, withNewEntry } from './newExperience';
 
@@ -30,7 +35,7 @@ function useNewEntry() {
   const toast = useToast();
   const [entry] = useState(() => blankEntry(crypto.randomUUID()));
   const [form, setForm] = useState<ExperienceForm>(() => formOf(entry));
-  const [keyOf] = useState(createTextKeys);
+  const [facts] = useState(createFactWriter);
   const [errors, setErrors] = useState<ExperienceFormErrors>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,11 +46,11 @@ function useNewEntry() {
     try {
       forgetSharedRead('resume');
       const { draft } = await getResumeStudio();
-      const descriptionId = await addDescription(entry, form, keyOf);
-      await saveResumeStudioDraft(
-        withDescription(withNewEntry(draft, entry, form), entry.id, descriptionId),
-      );
-      await saveTexts(entry, formOf(entry), form, () => undefined);
+      const base = withNewEntry(draft, entry, form);
+      await dropUnusedDescription(form, base, facts);
+      const descriptionId = await addDescription(entry, form, facts);
+      await saveResumeStudioDraft(withDescription(base, entry.id, descriptionId));
+      await saveTexts(entry, formOf(entry), form, facts, () => undefined);
       window.dispatchEvent(new Event(PROFILE_CHANGED));
       toast.show({ text: 'Сохранено' });
       navigate(buildNodePath('s01'));

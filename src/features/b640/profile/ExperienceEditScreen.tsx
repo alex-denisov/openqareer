@@ -30,7 +30,14 @@ import {
   type ExperienceForm,
   type ExperienceFormErrors,
 } from './experienceForm';
-import { addDescription, createTextKeys, revertTexts, saveTexts } from './experienceResults';
+import {
+  addDescription,
+  createFactWriter,
+  dropUnusedDescription,
+  revertTexts,
+  saveTexts,
+  type FactWriter,
+} from './experienceResults';
 import { DescriptionField, ResultsField } from './ExperienceTexts';
 import { statementsOf } from './profileModel';
 
@@ -70,15 +77,16 @@ type SavedTexts = FactCorrectionOutcome;
 async function saveEntry(
   { entry, initial }: EditorProps,
   form: ExperienceForm,
-  keyOf: (text: string) => string,
+  facts: FactWriter,
   onSaved: (outcome: SavedTexts) => void,
 ): Promise<void> {
-  await saveTexts(entry, initial, form, onSaved);
-  const descriptionId = await addDescription(entry, form, keyOf);
+  await saveTexts(entry, initial, form, facts, onSaved);
+  const descriptionId = await addDescription(entry, form, facts);
   const draft = await freshDraft();
   if (!draft.experience.some((item) => item.id === entry.id)) {
     throw new Error('profile_entry_missing');
   }
+  await dropUnusedDescription(form, draft, facts);
   await saveResumeStudioDraft(
     withDescription(applyForm(draft, entry.id, form), entry.id, descriptionId),
   );
@@ -98,7 +106,7 @@ function useSave(props: EditorProps) {
   const { entry } = props;
   // Тексты, записанные до сбоя: «Отменить» после повтора вернёт и их.
   const saved = useRef<readonly SavedTexts[]>([]);
-  const [keyOf] = useState(createTextKeys);
+  const [facts] = useState(createFactWriter);
   const { navigate } = useShell();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -120,7 +128,7 @@ function useSave(props: EditorProps) {
     setBusy(true);
     setError(null);
     try {
-      await saveEntry(props, form, keyOf, (outcome) => {
+      await saveEntry(props, form, facts, (outcome) => {
         saved.current = [...saved.current, outcome];
       });
       window.dispatchEvent(new Event(PROFILE_CHANGED));

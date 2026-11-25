@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeDraft, ResumeExperienceInput } from '../../resume/resumeTypes';
-import { createTextKeys, editedTexts } from './experienceResults';
+import { editedTexts } from './experienceResults';
 import {
   applyForm,
   citySuggestions,
@@ -64,9 +64,6 @@ describe('b640 profile: форма места работы', () => {
     const draft = { ...DRAFT, experience: [ENTRY] };
     expect(withDescription(draft, ENTRY.id, 'd1').experience[0].descriptionMemoryId).toBe('d1');
     expect(withDescription(draft, ENTRY.id, null)).toBe(draft);
-    const keyOf = createTextKeys();
-    expect(keyOf('а')).toBe(keyOf('а'));
-    expect(keyOf('б')).not.toBe(keyOf('а'));
   });
 
   it('результаты и описание берутся из записей; убранный результат уходит из места работы', () => {
