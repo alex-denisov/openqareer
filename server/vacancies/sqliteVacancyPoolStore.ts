@@ -89,7 +89,6 @@ import type {
   MergeSliceResult,
   SliceWriteOptions,
   StoredSourceState,
-  UnseenLink,
   VacancyLink,
   VacancyPoolStore,
   ClusterMerge,
@@ -1038,29 +1037,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * сколько записей похоронено этим вызовом: уже похороненное не переписывается
    * — первая дата смерти и есть дата смерти.
    */
-  loadUnseenLinks(
-    sourceIds: readonly string[],
-    beforeMs: number,
-    limit: number,
-    after?: UnseenLink,
-  ): UnseenLink[] {
+  loadUnseenLinks(sourceIds: readonly string[], beforeMs: number, limit: number): VacancyLink[] {
     if (sourceIds.length === 0 || limit <= 0) return [];
-    const fromMs = Math.min(beforeMs, after ? after.seenMs + 1 : beforeMs);
     return this.database
       .prepare(
-        `SELECT i.id, i.url, i.observed_ms AS seenMs
-           FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
-          WHERE i.expired = 0 AND i.source_id IN (SELECT value FROM json_each(?1)) AND i.observed_ms < ?2
-            AND (?3 IS NULL OR i.observed_ms < ?3 OR i.id > ?4)
-          ORDER BY i.observed_ms DESC, i.id LIMIT ?5`,
+        `SELECT i.id, i.url FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
+          WHERE i.expired = 0 AND i.source_id IN (SELECT value FROM json_each(?)) AND i.observed_ms < ?
+          ORDER BY i.observed_ms LIMIT ?`,
       )
-      .all(
-        JSON.stringify(sourceIds),
-        fromMs,
-        after?.seenMs ?? null,
-        after?.id ?? null,
-        limit,
-      ) as unknown as UnseenLink[];
+      .all(JSON.stringify(sourceIds), beforeMs, limit) as unknown as VacancyLink[];
   }
 
   markSeen(vacancyIds: readonly string[], nowMs: number): void {

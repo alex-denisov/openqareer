@@ -1,5 +1,5 @@
 import { probeVacancyLinks, type LinkProbe } from './linkLivenessProbe';
-import type { UnseenLink, VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
+import type { VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
 
 /**
  * B642 — вакансия работодателя, которой не было в последнем полном чтении
@@ -14,58 +14,56 @@ export const UNSEEN_PROBE_AFTER_MS = 24 * 60 * 60 * 1000;
 export const UNSEEN_REPROBE_MS = 6 * 60 * 60 * 1000;
 /** Ссылок за такт. */
 export const UNSEEN_PROBE_LIMIT = 100;
-/** Невиденных читается за такт; следующий такт продолжает с места остановки. */
-export const UNSEEN_PAGE_ROWS = 2_000;
-/** Ссылок одного хоста за такт: чужой сервер не нагружается, молчащая площадка не занимает весь такт. */
-export const UNSEEN_PER_HOST = 5;
+/** Ссылок одного источника за такт: чужой сервер не нагружается, молчащий не занимает весь такт. */
+export const UNSEEN_PER_SOURCE = 2;
+/** Источников за такт не больше: у каждого — одно короткое чтение по индексу. */
+export const UNSEEN_SOURCES_PER_TICK = 2_000;
+/** Из стольких невиденных записей источника выбираются ссылки такта. */
+const UNSEEN_SOURCE_ROWS = 50;
 const UNSEEN_CONCURRENCY = 4;
 
-/** Память обхода: когда спрашивали ссылку и где остановились. */
+/** Память обхода: когда спрашивали ссылку и с какого источника продолжать. */
 export class UnseenLinkWalk {
   readonly askedAt = new Map<string, number>();
-  cursor: UnseenLink | undefined;
+  /** Начало случайное: после перезапуска обход не проходит одно и то же начало списка. */
+  constructor(
+    public position = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER),
+    readonly random: () => number = Math.random,
+  ) {}
 }
 
-function hostOf(link: VacancyLink): string {
-  return URL.canParse(link.url) ? new URL(link.url).hostname : '';
-}
-
-function pickDue(
-  candidates: readonly UnseenLink[],
+/** Несколько ссылок источника, каждый раз другие: первые без ответа не закрывают остальные. */
+function pickFromSource(
+  links: readonly VacancyLink[],
   walk: UnseenLinkWalk,
   nowMs: number,
-): VacancyLink[] {
-  const perHost = new Map<string, number>();
-  const due: VacancyLink[] = [];
-  for (const link of candidates) {
-    if (due.length >= UNSEEN_PROBE_LIMIT) break;
-    if (nowMs - (walk.askedAt.get(link.id) ?? 0) < UNSEEN_REPROBE_MS) continue;
-    const host = hostOf(link);
-    const taken = perHost.get(host) ?? 0;
-    if (taken >= UNSEEN_PER_HOST) continue;
-    perHost.set(host, taken + 1);
-    due.push(link);
-  }
-  return due;
+): readonly VacancyLink[] {
+  const due = links.filter((link) => nowMs - (walk.askedAt.get(link.id) ?? 0) >= UNSEEN_REPROBE_MS);
+  if (due.length <= UNSEEN_PER_SOURCE) return due;
+  const start = Math.floor(walk.random() * due.length);
+  return Array.from({ length: UNSEEN_PER_SOURCE }, (_, step) => due[(start + step) % due.length]!);
 }
 
 /**
- * Страница невиденных, недавние первыми. Раньше каждый такт читал одни и те же самые давние
- * записи: площадка без ответа («неизвестно») держала очередь, до остальных она не доходила.
+ * Ссылки такта — по кругу источников. Раньше каждый такт читал одни и те же самые давние записи
+ * пула: площадка без ответа («неизвестно») держала очередь, до остальных она не доходила.
  */
-function nextPage(
+function nextDue(
   pool: VacancyPoolStore,
   sourceIds: readonly string[],
   walk: UnseenLinkWalk,
   nowMs: number,
-): readonly UnseenLink[] {
-  const read = (after?: UnseenLink) =>
-    pool.loadUnseenLinks?.(sourceIds, nowMs - UNSEEN_PROBE_AFTER_MS, UNSEEN_PAGE_ROWS, after) ?? [];
-  const page = walk.cursor ? read(walk.cursor) : [];
-  const links = page.length > 0 ? page : read();
-  const last = links.at(-1);
-  walk.cursor = last && links.length === UNSEEN_PAGE_ROWS ? last : undefined;
-  return links;
+): readonly VacancyLink[] {
+  const due: VacancyLink[] = [];
+  const turns = Math.min(sourceIds.length, UNSEEN_SOURCES_PER_TICK);
+  for (let turn = 0; turn < turns && due.length < UNSEEN_PROBE_LIMIT; turn += 1) {
+    const sourceId = sourceIds[walk.position % sourceIds.length]!;
+    walk.position = (walk.position + 1) % sourceIds.length;
+    const links =
+      pool.loadUnseenLinks?.([sourceId], nowMs - UNSEEN_PROBE_AFTER_MS, UNSEEN_SOURCE_ROWS) ?? [];
+    due.push(...pickFromSource(links, walk, nowMs));
+  }
+  return due.slice(0, UNSEEN_PROBE_LIMIT);
 }
 
 export interface UnseenLinkReport {
@@ -89,7 +87,7 @@ export async function checkUnseenLinks(
   nowMs: number,
 ): Promise<UnseenLinkResult> {
   if (!pool.loadUnseenLinks || !pool.markSeen) return EMPTY;
-  const due = pickDue(nextPage(pool, sourceIds, walk, nowMs), walk, nowMs);
+  const due = nextDue(pool, sourceIds, walk, nowMs);
   if (due.length === 0) return EMPTY;
   // Забытые отметки не копятся: дольше срока повтора они ни на что не влияют.
   for (const [id, at] of walk.askedAt) if (nowMs - at >= UNSEEN_REPROBE_MS) walk.askedAt.delete(id);

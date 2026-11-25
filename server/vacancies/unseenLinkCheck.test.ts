@@ -7,12 +7,7 @@ import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacan
 import { judgeLinkOutcome } from './linkLivenessProbe';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
-import {
-  checkUnseenLinks,
-  UNSEEN_PAGE_ROWS,
-  UNSEEN_PER_HOST,
-  UnseenLinkWalk,
-} from './unseenLinkCheck';
+import { checkUnseenLinks, UNSEEN_PER_SOURCE, UnseenLinkWalk } from './unseenLinkCheck';
 
 const DAY = 24 * 60 * 60 * 1000;
 const SOURCE = 'ats-greenhouse-acme';
@@ -107,24 +102,27 @@ describe('проверка ссылок, невиденных в последн�
   it('площадка без ответа не держит очередь: до снятой вакансии другого работодателя обход доходит', async () => {
     const pool = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
     cleanup.push(() => pool.close());
-    const silent = Array.from({ length: UNSEEN_PAGE_ROWS + 50 }, (_, index) => ({
-      ...vacancy(`s${index}`, 2),
-      url: `https://silent.example.com/jobs/${index}`,
-    }));
-    pool.replaceSourceSlice(SOURCE, [...silent, vacancy('dead', 3)]);
-    const walk = new UnseenLinkWalk();
+    const silent = Array.from({ length: 30 }, (_, index) => vacancy(`s${index}`, 5));
+    const dead = vacancy('dead', 2);
+    const OTHER = 'ats-teamtailor-other';
+    pool.replaceSourceSlice(SOURCE, silent);
+    pool.replaceSourceSlice(OTHER, [
+      { ...dead, provenance: { ...dead.provenance, sourceId: OTHER } },
+    ]);
+    const walk = new UnseenLinkWalk(0);
     const asked: string[] = [];
     const probe = async (url: string) => {
       asked.push(url);
       return url.endsWith('/dead') ? { status: 404 } : { status: 403 };
     };
 
-    const first = await checkUnseenLinks(pool, probe, [SOURCE], walk, Date.now());
-    const second = await checkUnseenLinks(pool, probe, [SOURCE], walk, Date.now());
+    const ids = [SOURCE, OTHER];
+    const first = await checkUnseenLinks(pool, probe, ids, walk, Date.now());
+    const second = await checkUnseenLinks(pool, probe, ids, walk, Date.now());
 
-    expect(first).toMatchObject({ checked: UNSEEN_PER_HOST, gone: 0 });
-    expect(second).toMatchObject({ checked: UNSEEN_PER_HOST + 1, gone: 1 });
-    expect(second.goneLinks.map((link) => link.id)).toEqual(['dead']);
+    expect(first).toMatchObject({ checked: UNSEEN_PER_SOURCE + 1, gone: 1 });
+    expect(first.goneLinks.map((link) => link.id)).toEqual(['dead']);
+    expect(second).toMatchObject({ checked: UNSEEN_PER_SOURCE, gone: 0 });
     expect(new Set(asked).size).toBe(asked.length);
   });
 });
