@@ -45,11 +45,10 @@ function formatOf(cluster: MatchedVacancyItem['cluster']): string | null {
   return remoteScopeLabel(parseRemoteScope(cluster.remoteScope)).slice(0, 120);
 }
 
-function rowOf(item: MatchedVacancyItem, index: number, percentOf: PercentOf): SelectionRow {
+function rowOf(item: MatchedVacancyItem, percentOf: PercentOf): SelectionRow {
   const { cluster } = item;
   const location = locationOf(cluster.canonicalLocation);
   return {
-    n: index + 1,
     title: cluster.canonicalTitle.slice(0, 200),
     // Имя частного лица — не компания, в ход оно не идёт (INC-023).
     company: cluster.employerIsPerson ? null : cluster.canonicalCompany.slice(0, 200) || null,
@@ -61,14 +60,14 @@ function rowOf(item: MatchedVacancyItem, index: number, percentOf: PercentOf): S
   };
 }
 
-/** Пронумерованные строки подборки в порядке списка и готовая сводка по ним (B735). */
+/** Строки подборки в порядке списка и готовая сводка по ним (B735). */
 export function selectionContextOf(
   items: readonly MatchedVacancyItem[],
   percentOf: PercentOf = defaultPercentOf,
 ): SelectionContext {
   const rows = items
     .slice(0, SELECTION_CONTEXT_ROWS)
-    .map((item, index) => rowOf(item, index, percentOf));
+    .map((item) => rowOf(item, percentOf));
   return { total: items.length, summary: selectionSummary(rows), rows };
 }
 

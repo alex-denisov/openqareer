@@ -11,17 +11,21 @@ type SelectionGroup = SelectionContext['summary']['byCountry'][number];
 /** Данных в вакансии нет: отдельная группа, а не чужая. */
 export const SELECTION_UNKNOWN = 'неизвестно';
 
+/** Вакансия словами: номеров строк в списке кандидата нет. */
+const nameOf = ({ company, title }: SelectionRow): string =>
+  company ? `${company}: ${title}` : title;
+
 function grouped(
   rows: readonly SelectionRow[],
   labelOf: (row: SelectionRow) => string | null,
 ): SelectionGroup[] {
-  const groups = new Map<string, number[]>();
+  const groups = new Map<string, string[]>();
   for (const row of rows) {
     const label = labelOf(row) ?? SELECTION_UNKNOWN;
-    groups.set(label, [...(groups.get(label) ?? []), row.n]);
+    groups.set(label, [...(groups.get(label) ?? []), nameOf(row)]);
   }
   return [...groups]
-    .map(([label, numbers]) => ({ label, count: numbers.length, rows: numbers }))
+    .map(([label, vacancies]) => ({ label, count: vacancies.length, vacancies }))
     .sort(
       (a, b) =>
         Number(a.label === SELECTION_UNKNOWN) - Number(b.label === SELECTION_UNKNOWN) ||
