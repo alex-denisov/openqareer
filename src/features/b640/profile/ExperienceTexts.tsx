@@ -1,6 +1,11 @@
-import { MEMORY_TEXT_MAX } from '../../../../shared/factCorrection';
 import { Icon } from '../kit';
-import { RESULT_MAX_LENGTH, type ExperienceForm, type ResultRow } from './experienceForm';
+import { FieldError } from './ExperienceFields';
+import {
+  RESULT_MAX_LENGTH,
+  type ExperienceForm,
+  type ExperienceFormErrors,
+  type ResultRow,
+} from './experienceForm';
 
 interface TextsProps {
   readonly form: ExperienceForm;
@@ -10,7 +15,11 @@ interface TextsProps {
 const DESCRIPTION_ROWS = 3;
 
 /** «Что делали»: описание места работы. */
-export function DescriptionField({ form, onChange }: TextsProps) {
+export function DescriptionField({
+  form,
+  errors,
+  onChange,
+}: TextsProps & { readonly errors: ExperienceFormErrors }) {
   if (form.description === null) return null;
   return (
     <div className="pf-f">
@@ -18,10 +27,12 @@ export function DescriptionField({ form, onChange }: TextsProps) {
       <textarea
         id="wk"
         rows={DESCRIPTION_ROWS}
-        maxLength={MEMORY_TEXT_MAX}
+        aria-invalid={errors.description ? true : undefined}
+        aria-describedby={errors.description ? 'wk-e' : undefined}
         value={form.description}
         onChange={(event) => onChange({ description: event.target.value })}
       />
+      <FieldError id="wk-e" text={errors.description} />
     </div>
   );
 }
