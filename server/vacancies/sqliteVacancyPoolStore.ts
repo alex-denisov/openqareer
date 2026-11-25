@@ -221,6 +221,8 @@ export const CATALOG_BACKFILL_CHUNK = 100;
 
 /** Дальше этого корзина ключа не считается: сторона и так «большая» (B230). */
 const BUCKET_SIZE_CAP = 2_000;
+/** Во сколько раз большая сторона пары ещё читается целиком, а не точечно. */
+const COMPARABLE_BUCKET_RATIO = 8;
 
 /** Живые строки индекса: похороненная запись из пула не отдаётся (B200 срез 2). */
 const ALIVE = 'i.expired = 0';
@@ -2624,14 +2626,26 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         : (['title_token', title.keys, 'company_token', company.keys] as const);
     const outerMarks = outerKeys.map(() => '?').join(', ');
     const innerMarks = innerKeys.map(() => '?').join(', ');
+    // B761 25.11, прод: при близких корзинах точечная проверка каждого кластера бьёт по
+    // разным страницам индекса (в среднем 25 мс, до 456), две корзины подряд — 1,4 мс, до 10.
+    const comparable =
+      Math.max(company.size, title.size) <=
+      Math.min(company.size, title.size) * COMPARABLE_BUCKET_RATIO;
     const rows = this.database
       .prepare(
         `SELECT DISTINCT o.cluster_id AS cluster_id FROM vacancy_cluster_keys o
           WHERE o.kind = ? AND o.key IN (${outerMarks})
-            AND EXISTS (
+            AND ${
+              comparable
+                ? `+o.cluster_id IN (
+              SELECT i.cluster_id FROM vacancy_cluster_keys i
+               WHERE i.kind = ? AND i.key IN (${innerMarks})
+            )`
+                : `EXISTS (
               SELECT 1 FROM vacancy_cluster_keys i
                WHERE i.cluster_id = o.cluster_id AND i.kind = ? AND i.key IN (${innerMarks})
-            )`,
+            )`
+            }`,
       )
       .all(outerKind, ...outerKeys, innerKind, ...innerKeys) as unknown as Array<{
       cluster_id: string;

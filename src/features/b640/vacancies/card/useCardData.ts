@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
+import { isHhSource } from '../../../../../shared/hhVacancySource';
 import type { RecruiterContact } from '../../../../../shared/recruiterContact';
 import { CoachApiError } from '../../../coach/apiClient';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import type { CampaignMetaView } from '../../../coach/matchedVacancyApi';
 import { getRecruiterContacts } from '../../../vacancies/recruiterContactsApi';
 import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
-import { useMatchedPool } from '../../../vacancies/useMatchedPool';
+import { useMatchedPool, type MatchedPoolOptions } from '../../../vacancies/useMatchedPool';
 import {
   getVacancyConnectionCircles,
   type VacancyConnectionCircles,
@@ -103,6 +104,25 @@ function useSingleVacancy(
   return { read: read?.key === vacancyId ? read : undefined, retry };
 }
 
+/** Строка подборки со склейкой hh.ru и других площадок: чья это запись hh.ru, знает карточка. */
+function hasGluedHh(item: MatchedVacancyItem | undefined): boolean {
+  const sources = item?.cluster.sources ?? [];
+  return sources.length > 1 && sources.some(isHhSource);
+}
+
+/** Площадки строки — сверенные сервером; до ответа hh.ru в склейке не показывается (B787). */
+function withOwnSources(
+  pooled: MatchedVacancyItem | undefined,
+  single: SingleRead | undefined,
+): MatchedVacancyItem | undefined {
+  const own = single?.state === 'ready' ? single.item : undefined;
+  if (!pooled || !hasGluedHh(pooled)) return pooled ?? own;
+  const sources =
+    own?.cluster.sources ?? pooled.cluster.sources.filter((source) => !isHhSource(source));
+  const primaryUrl = own?.cluster.primaryUrl ?? pooled.cluster.primaryUrl;
+  return { ...pooled, cluster: { ...pooled.cluster, sources, primaryUrl } };
+}
+
 /** Сбой подборки не решает за карточку: отдельное чтение отвечает, есть ли вакансия. */
 function cardLoad(
   item: MatchedVacancyItem | undefined,
@@ -121,14 +141,20 @@ function expectationOf(
   return amount && amount > 0 ? { amount, currency: currency ?? 'RUB' } : undefined;
 }
 
+/**
+ * B770, прод 25.11: открытая карточка читала всю подборку — 46 страниц волнами по 8, p90 2,2 с.
+ * Вакансию даёт чтение по id, от подборки нужны кампания и то, что уже есть в кэше.
+ */
+const CARD_POOL: MatchedPoolOptions = { pageLimit: 1 };
+
 export function useCardData(vacancyId: string): CardData {
-  const pool = useMatchedPool();
+  const pool = useMatchedPool(undefined, CARD_POOL);
   const rates = useCurrencyRates();
   const links = useVacancyLinks();
   const pooled = pool.matched.find((entry) => entry.cluster.id === vacancyId);
   // B654: не ждём подборку (страницами — секунды): своя вакансия одним запросом по id.
-  const single = useSingleVacancy(vacancyId, !pooled);
-  const item = pooled ?? (single.read?.state === 'ready' ? single.read.item : undefined);
+  const single = useSingleVacancy(vacancyId, !pooled || hasGluedHh(pooled));
+  const item = withOwnSources(pooled, single.read);
   const contacts = useOptional(() => getRecruiterContacts(vacancyId), vacancyId);
   const circles = useOptional(() => getVacancyConnectionCircles(vacancyId), vacancyId);
   const company = item?.cluster.canonicalCompany ?? '';
