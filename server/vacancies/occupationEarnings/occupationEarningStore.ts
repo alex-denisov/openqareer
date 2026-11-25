@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS open_statistics_sources (
   attribution TEXT NOT NULL, url TEXT NOT NULL, loaded_at TEXT NOT NULL
 ) STRICT`;
 
-/** Меньше этого — ответ источника обрезан: прежние таблицы остаются. */
-const MIN_COUNTRIES = 50;
+/** Меньше этого — ответ источника обрезан (полный — 125 стран): прежние таблицы остаются. */
+const MIN_COUNTRIES = 100;
 
 export function writeOpenStatistics(
   database: DatabaseSync,

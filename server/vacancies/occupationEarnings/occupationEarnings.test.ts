@@ -52,7 +52,7 @@ describe('parseWdi', () => {
 
 const letters = (index: number) =>
   `${String.fromCharCode(65 + Math.floor(index / 26))}${String.fromCharCode(65 + (index % 26))}`;
-const filler = Array.from({ length: 60 }, (_, index) => `${letters(index)}`).filter(
+const filler = Array.from({ length: 120 }, (_, index) => `${letters(index)}`).filter(
   (code) => !['AE'].includes(code),
 );
 function statistics() {
