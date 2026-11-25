@@ -20,6 +20,8 @@ export interface QuestionnaireQuestion {
   readonly multiple?: boolean;
   /** Поле формы в одну строку: имя, почта, телефон. */
   readonly singleLine?: boolean;
+  /** Поле формы принимает только число. */
+  readonly numeric?: boolean;
 }
 
 export interface QuestionnaireAnswer {
@@ -33,6 +35,8 @@ export interface QuestionnaireSuggestion {
   readonly text: string;
   /** Откуда взято, словами кандидата: «Ожидания из вашего профиля». */
   readonly source: string;
+  /** Рыночная цифра: обновляется вместе с данными, пока кандидат не написал своё (B788). */
+  readonly live?: true;
 }
 
 export interface ApplicationQuestionnaire {

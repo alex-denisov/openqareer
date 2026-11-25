@@ -4,13 +4,17 @@ import {
   QUESTIONNAIRE_ANSWER_MAX_LENGTH,
   QUESTIONNAIRE_MAX_QUESTIONS,
   type ApplicationQuestionnaire,
+  type QuestionnaireAnswer,
   type QuestionnaireQuestion,
 } from '../../shared/applicationQuestionnaire';
 import {
   SqliteQuestionnaireRepository,
   type StoredQuestionnaire,
 } from '../candidate/sqliteQuestionnaireRepository';
-import type { CandidateDecisionProfile } from '../../shared/workPreferences';
+import {
+  DEFAULT_DECISION_PROFILE,
+  type CandidateDecisionProfile,
+} from '../../shared/workPreferences';
 import { hhFormUrl } from '../../shared/hhCandidateSession';
 import {
   answersToStore,
@@ -24,6 +28,11 @@ import {
   linkedinProfileLink,
   type QuestionnaireProfileFacts,
 } from '../domain/questionnaireProfileAnswers';
+import { learnedWorkRights, mergeWorkRights, withdrawnCountries } from '../domain/workRightAnswers';
+import type { SalaryMarketInput } from '../domain/salaryMarketAnswer';
+import { getCurrencyRates } from '../currency/cbrRates';
+import { readMarketSnapshot } from '../salaryMarket/readMarketSnapshot';
+import { salaryGeography } from '../salaryMarket/salaryMarketGeography';
 import { boardFormRef, readBoardFormQuestions } from '../vacancies/boardFormReader';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -147,6 +156,7 @@ const atsFormSchema = z
             required: z.boolean(),
             kind: z.enum(['text', 'choice']),
             singleLine: z.boolean().optional(),
+            numeric: z.boolean().optional(),
             options: z.array(z.string().min(1).max(200)).max(300).optional(),
             multiple: z.boolean().optional(),
             known: z.string().max(QUESTIONNAIRE_ANSWER_MAX_LENGTH).optional(),
@@ -257,6 +267,41 @@ function profileFacts(
   };
 }
 
+/** Вакансия из подбора для вопроса о зарплате и праве на работу. */
+function vacancyMarket(deps: RouteDeps, vacancyId: string): SalaryMarketInput | undefined {
+  const cluster = deps.multiSourceEngine.getActiveCluster?.(vacancyId);
+  const vacancy = deps.multiSourceEngine.getVacancy?.(vacancyId.replace(/^cluster-/u, ''));
+  const title = cluster?.canonicalTitle ?? vacancy?.title;
+  if (!title) return undefined;
+  const source = vacancy?.provenance ?? cluster?.sources[0];
+  const salary = vacancy?.salary ?? (cluster?.sources.length === 1 ? cluster.salary : undefined);
+  return {
+    vacancy: {
+      title,
+      location: vacancy?.location ?? cluster?.canonicalLocation ?? null,
+      isRemote: vacancy?.isRemote ?? cluster?.isRemote ?? false,
+      ...(salary ? { salary } : {}),
+      ...(source ? { sourceName: source.sourceName ?? sourceHost(source.sourceUrl) } : {}),
+      ...(source ? { observedAt: source.observedAt } : {}),
+    },
+    readSnapshot: (role) => readMarketSnapshot(deps.config.databasePath, role),
+    rates: getCurrencyRates(),
+  };
+}
+
+function sourceHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+function countryOf(market: SalaryMarketInput | undefined): string | undefined {
+  if (!market) return undefined;
+  return salaryGeography(market.vacancy.location, market.vacancy.isRemote).countryCode;
+}
+
 export function questionnaireView(
   deps: RouteDeps,
   who: Signed,
@@ -264,8 +309,12 @@ export function questionnaireView(
   fallback: { readonly state: ApplicationQuestionnaire['state']; readonly formUrl: string | null },
 ): ApplicationQuestionnaire {
   const decision = deps.candidateStore.decisionProfileRepo.get(who.candidateId);
+  const market = vacancyMarket(deps, who.vacancyId);
   return buildQuestionnaire({
     vacancyId: who.vacancyId,
+    workRights: decision?.workRights,
+    vacancyCountry: countryOf(market),
+    salaryMarket: market,
     ...vacancyLabel(deps, who.vacancyId),
     facts: profileFacts(deps, who, decision),
     state: stored ? 'ready' : fallback.state,
@@ -309,6 +358,43 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   };
 };
 
+/** Нетронутая рыночная цифра не сохраняется: она обновляется вместе с данными и со своим источником. */
+function withoutLive(
+  answers: readonly QuestionnaireAnswer[],
+  shown: ApplicationQuestionnaire,
+): readonly QuestionnaireAnswer[] {
+  const live = new Map(
+    shown.suggestions.filter((item) => item.live).map((item) => [item.questionId, item.text]),
+  );
+  return answers.filter((answer) => live.get(answer.questionId) !== answer.text);
+}
+
+/** Ответ кандидата о праве на работу остаётся в профиле для следующих анкет (B788). */
+function rememberWorkRights(
+  deps: RouteDeps,
+  who: Signed,
+  questions: readonly QuestionnaireQuestion[],
+  answers: readonly QuestionnaireAnswer[],
+  shown: ApplicationQuestionnaire,
+): void {
+  const before = new Map(shown.answers.map((answer) => [answer.questionId, answer.text]));
+  const changed = new Map(
+    answers
+      .filter((answer) => before.get(answer.questionId) !== answer.text)
+      .map((answer) => [answer.questionId, answer.text]),
+  );
+  const country = countryOf(vacancyMarket(deps, who.vacancyId));
+  const learned = learnedWorkRights(questions, changed, country);
+  const repo = deps.candidateStore.decisionProfileRepo;
+  const profile = repo.get(who.candidateId) ?? DEFAULT_DECISION_PROFILE;
+  const known = profile.workRights ?? [];
+  const withdrawn = withdrawnCountries(questions, changed, known, country);
+  const kept = known.filter((item) => !withdrawn.has(item.country));
+  if (learned.length === 0 && kept.length === known.length) return;
+  const workRights = mergeWorkRights(kept, learned);
+  repo.put(who.candidateId, { ...profile, workRights }, new Date().toISOString());
+}
+
 const putAnswers: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
@@ -327,7 +413,9 @@ const putAnswers: Handler = async (deps, request, reply) => {
   if (!stored) {
     return sendError(reply, request, 404, 'questionnaire_not_found', 'Анкета не найдена.', false);
   }
-  const answers = answersToStore(stored.questions, parsed.data.answers);
+  const shown = questionnaireView(deps, who, stored, { state: 'ready', formUrl: null });
+  const answers = withoutLive(answersToStore(stored.questions, parsed.data.answers), shown);
+  rememberWorkRights(deps, who, stored.questions, answers, shown);
   deps.forms.saveAnswers(who.candidateId, who.vacancyId, answers);
   return {
     data: questionnaireView(deps, who, { ...stored, answers }, { state: 'ready', formUrl: null }),
@@ -403,6 +491,15 @@ const postSubmitted: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const at = new Date().toISOString();
+  const stored = deps.forms.get(who.candidateId, who.vacancyId);
+  if (stored && !stored.submittedAt) {
+    // Отправленное остаётся таким, каким ушло: рыночная цифра фиксируется.
+    const sent = questionnaireView(deps, who, stored, { state: 'ready', formUrl: null });
+    if (sent.suggestions.some((item) => item.live)) {
+      const cleared = stored.answers.filter((answer) => !answer.text);
+      deps.forms.saveAnswers(who.candidateId, who.vacancyId, [...sent.answers, ...cleared]);
+    }
+  }
   if (!deps.forms.markSubmitted(who.candidateId, who.vacancyId, at)) {
     return sendError(reply, request, 404, 'questionnaire_not_found', 'Анкета не найдена.', false);
   }
