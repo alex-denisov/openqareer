@@ -663,14 +663,18 @@
       : { done: false, missing: true };
   }
 
-  function invalidKeys(form) {
-    return Array.prototype.slice
-      .call(form.querySelectorAll('[aria-invalid="true"]'))
-      .filter(shown)
+  function invalidNodes(form) {
+    return Array.prototype.slice.call(form.querySelectorAll('[aria-invalid="true"]'));
+  }
+  function keysOf(form, nodes) {
+    return nodes
       .map(function (node) {
         return keyOf(node, fieldKind(form, node));
       })
       .filter(Boolean);
+  }
+  function invalidKeys(form) {
+    return keysOf(form, invalidNodes(form).filter(shown));
   }
   // The page may have changed its own address since the app last looked.
   function inPlace() {
@@ -720,9 +724,10 @@
     if (buttons[0].disabled || buttons[0].getAttribute('aria-disabled') === 'true') {
       return { state: 'submit_disabled' };
     }
+    var marked = keysOf(form, invalidNodes(form));
     window.__oqAtsSubmitted = true;
     buttons[0].click();
-    return { state: 'clicked' };
+    return { state: 'clicked', invalidBefore: marked };
   }
   function outcome() {
     var confirmPath = ARG && ARG.confirmationPath;
@@ -731,12 +736,11 @@
     var form = findForm();
     if (captcha()) return { state: 'captcha' };
     if (form) {
-      var invalid = Array.prototype.slice
-        .call(form.querySelectorAll('[aria-invalid="true"]'))
-        .map(function (node) {
-          return keyOf(node, kindOf(node));
-        })
-        .filter(Boolean);
+      // A mark older than the press is not the board's answer to it.
+      var before = (ARG && ARG.invalidBefore) || [];
+      var invalid = keysOf(form, invalidNodes(form)).filter(function (key) {
+        return before.indexOf(key) < 0;
+      });
       if (invalid.length > 0) return { state: 'invalid', keys: invalid };
     }
     return { state: 'pending' };

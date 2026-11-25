@@ -326,10 +326,17 @@ mod tests {
             "https://job-boards.greenhouse.io/acme/jobs/123/",
             "https://job-boards.greenhouse.io/acme/jobs/123?gh_src=x#app",
             "https://job-boards.greenhouse.io/acme/jobs/123/confirmation",
-            "https://www.recaptcha.net/recaptcha/enterprise/anchor",
         ] {
             assert!(navigation_allowed(&acme(), url), "{url}");
         }
+        // Only macOS asks the rule for frames too.
+        assert_eq!(
+            navigation_allowed(
+                &acme(),
+                "https://www.recaptcha.net/recaptcha/enterprise/anchor"
+            ),
+            cfg!(target_os = "macos")
+        );
         assert!(!on_target(&acme(), "about:blank"));
         assert!(!on_target(
             &acme(),

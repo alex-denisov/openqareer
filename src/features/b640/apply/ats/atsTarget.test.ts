@@ -31,6 +31,16 @@ describe('адрес формы работодателя', () => {
     expect(atsAddressOf(tracker, null)).toBeNull();
   });
 
+  it('доска из параметров вакансии не берётся, форма доски приходит с сервера', () => {
+    const site = 'https://acme.example/jobs/1?gh_jid=1&board=evil';
+    expect(atsAddressOf(target('greenhouse', site), site)).toBeNull();
+    const form = 'https://job-boards.greenhouse.io/embed/job_app?for=acme&token=1';
+    expect(atsAddressOf(target('greenhouse', form), site)).toEqual({
+      url: form,
+      host: 'job-boards.greenhouse.io',
+    });
+  });
+
   it('в очередь встают только сайты работодателей', () => {
     expect(ownSiteReason(target('site', 'https://a.example/'))).toBe('other');
     expect(ownSiteReason(target('workday', 'https://a.example/'))).toBe('account_required');

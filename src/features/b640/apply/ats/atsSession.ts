@@ -63,7 +63,7 @@ export async function openForm(vacancyId: string, address: AtsAddress): Promise<
   await running.catch(() => undefined);
   const facts = await loadAtsFacts();
   try {
-    const report = await desktop.openAtsForm(vacancyId, address.url, address.board);
+    const report = await desktop.openAtsForm(vacancyId, address.url);
     if (!report) throw new Error('ats_no_answer');
     const form = formOf(report, address.host);
     return 'kind' in form ? form : { kind: 'form', form, facts };
