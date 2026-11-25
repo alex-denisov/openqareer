@@ -39,6 +39,8 @@ export interface AtsField {
   readonly limits?: NumberLimits | null;
   /** Ссылка из подписи галочки: обычно политика работодателя. */
   readonly link: string | null;
+  /** Номер вопроса на самой доске (Teamtailor): тот же, что на её открытой странице. */
+  readonly question?: string | null;
 }
 
 export type AtsFormState =
