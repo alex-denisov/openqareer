@@ -6,6 +6,7 @@ import { salaryBenchmarkSchema, type SalaryBenchmark } from './salaryBenchmark';
 import { importSalarySlices } from './salaryImport';
 import {
   createSalaryBenchmarkReader,
+  setSalaryCountryExcluded,
   setSalarySourceEnabled,
   writeSalarySlice,
 } from './sqliteSalaryBenchmarkStore';
@@ -333,6 +334,29 @@ describe('salary store', () => {
     writeSalarySlice(database, sliceOf([row({ low: 11 })], '2026-11-26', false));
     expect(read({ country: 'AE' })).toEqual([]);
     expect(() => setSalarySourceEnabled(database, 'Nobody', true)).toThrow();
+  });
+
+  it('an excluded country of a source leaves the answer and can come back', () => {
+    const { database, read } = opened();
+    writeSalarySlice(database, sliceOf([row(), row({ id: 'qa-row', country: 'QA' })]));
+    setSalaryCountryExcluded(database, 'Agency', 'AE', true);
+    expect(read({ country: 'AE' })).toEqual([]);
+    expect(read({ country: 'QA' })).toHaveLength(1);
+    setSalaryCountryExcluded(database, 'Agency', 'AE', false);
+    expect(read({ country: 'AE' })).toHaveLength(1);
+    expect(() => setSalaryCountryExcluded(database, 'Agency', 'Белоруссия', true)).toThrow();
+  });
+
+  it('a dry run counts and writes nothing', () => {
+    const { database } = opened();
+    const input = {
+      sources: [{ name: 'Agency', kind: 'agency', enabled: true }],
+      benchmarks: [row()],
+    };
+    expect(importSalarySlices(database, input, true)).toEqual([{ source: 'Agency', written: 1 }]);
+    expect(database.prepare('SELECT name FROM sqlite_master').all()).toEqual([]);
+    importSalarySlices(database, input);
+    expect(importSalarySlices(database, input, true)).toEqual([{ source: 'Agency', written: 0 }]);
   });
 
   it('imports source by source, twice without duplicates, with one failed source', () => {

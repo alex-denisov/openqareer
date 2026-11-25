@@ -18,6 +18,10 @@ import {
 const TABLES_SQL = `CREATE TABLE IF NOT EXISTS salary_sources (
   name TEXT PRIMARY KEY, kind TEXT NOT NULL, enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
 ) STRICT;
+CREATE TABLE IF NOT EXISTS salary_source_exclusions (
+  source TEXT NOT NULL REFERENCES salary_sources(name), country TEXT NOT NULL,
+  PRIMARY KEY (source, country)
+) STRICT, WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS salary_slices (
   id INTEGER PRIMARY KEY,
   source TEXT NOT NULL REFERENCES salary_sources(name),
@@ -54,7 +58,8 @@ const CURRENT_SQL = `SELECT r.row_json FROM salary_sources s
   JOIN salary_records r ON r.slice_id = (
     SELECT id FROM salary_slices WHERE source = s.name
     ORDER BY slice_date DESC, version DESC LIMIT 1)
-  WHERE s.enabled = 1`;
+  WHERE s.enabled = 1 AND NOT EXISTS (
+    SELECT 1 FROM salary_source_exclusions x WHERE x.source = s.name AND x.country = r.country)`;
 
 const placeKey = (row: SalaryBenchmark): string =>
   row.country ? `country:${row.country}` : `region:${row.region}`;
@@ -163,6 +168,46 @@ export function writeSalarySlice(
     const switchedOff = before?.enabled === 1 && !source.enabled;
     if (!repeated || switchedOff) publish(database);
     return { written: repeated ? 0 : benchmarks.length };
+  });
+}
+
+/** Что записал бы `writeSalarySlice`; базу не меняет и таблиц не создаёт. */
+export function previewSalarySlice(
+  database: DatabaseSync,
+  input: unknown,
+): { readonly written: number } {
+  const slice = salarySliceSchema.parse(input);
+  const table = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'salary_slices'")
+    .get();
+  const repeated =
+    table &&
+    database
+      .prepare('SELECT 1 FROM salary_slices WHERE source = ? AND digest = ?')
+      .get(slice.source.name, digestOf(slice));
+  return { written: repeated ? 0 : slice.benchmarks.length };
+}
+
+/** Страна источника, чьи цифры расходятся с остальными, не участвует в подборе; срезы остаются. */
+export function setSalaryCountryExcluded(
+  database: DatabaseSync,
+  source: string,
+  country: string,
+  excluded: boolean,
+): void {
+  if (!/^[A-Z]{2}$/u.test(country)) throw new Error('country code is expected');
+  database.exec(TABLES_SQL);
+  inTransaction(database, () => {
+    if (!database.prepare('SELECT 1 FROM salary_sources WHERE name = ?').get(source))
+      throw new Error('unknown salary source');
+    database
+      .prepare(
+        excluded
+          ? 'INSERT OR IGNORE INTO salary_source_exclusions VALUES (?, ?)'
+          : 'DELETE FROM salary_source_exclusions WHERE source = ? AND country = ?',
+      )
+      .run(source, country);
+    publish(database);
   });
 }
 
