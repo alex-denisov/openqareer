@@ -281,7 +281,9 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const known = deps.forms.get(who.candidateId, who.vacancyId);
-  if (known && isQuestionnaireFresh(known, Date.now())) {
+  // Список из окна приложения полнее открытого: его обновит само окно, иначе вопросы двоятся.
+  const fromWindow = known?.questions.some(({ id }) => id.startsWith('ats-'));
+  if (known && (fromWindow || isQuestionnaireFresh(known, Date.now()))) {
     return {
       data: questionnaireView(deps, who, known, { state: 'ready', formUrl: null }),
       meta: { requestId: request.id },
