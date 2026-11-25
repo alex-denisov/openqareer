@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { loadDetailText } from './vacancyDetailText';
+import { LISTED_TEXT_WAIT_MS, loadDetailText } from './vacancyDetailText';
 
 describe('loadDetailText (02.11: card open reads text first, never waits behind warm-ups)', () => {
   it('returns the load when it answers in time', async () => {
@@ -104,5 +104,28 @@ describe('loadDetailText (02.11: card open reads text first, never waits behind 
     await expect(loadDetailText(slow, 'src-remotive:1', 5)).resolves.toMatchObject({
       status: 'failed',
     });
+  });
+
+  it('B791: the wait for LinkedIn text is finite (429, removed post) and does not restart at once', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const vacancy = { id: 'src-linkedin-guest:9', description: 'CTO — Acme — Berlin' };
+      const engine = {
+        loadVacancyDescription: vi.fn(
+          async () => ({ vacancy, unavailable: false, status: 'skipped' }) as never,
+        ),
+        requestHhTextPriority: vi.fn(),
+      };
+      const ask = () => loadDetailText(engine, vacancy.id, 50);
+      await expect(ask()).resolves.toHaveProperty('pending', true);
+      vi.advanceTimersByTime(LISTED_TEXT_WAIT_MS);
+      const ended = await ask();
+      expect(ended).not.toHaveProperty('pending');
+      expect(ended.standIn).toBe(true);
+      vi.advanceTimersByTime(60 * 60_000);
+      await expect(ask()).resolves.toHaveProperty('pending', true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

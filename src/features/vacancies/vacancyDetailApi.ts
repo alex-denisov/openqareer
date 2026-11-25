@@ -49,9 +49,11 @@ export function useVacancyDetail(clusterId: string, enabled: boolean): VacancyDe
       fetchVacancyDetail(clusterId)
         .then((detail) => {
           if (!alive) return;
-          setState({ status: 'ready', detail });
           // 02.11: the worker reads an opened card first, usually within seconds.
-          if (detail.pending && attempt < DETAIL_PENDING_RETRIES) {
+          const again = Boolean(detail.pending) && attempt < DETAIL_PENDING_RETRIES;
+          // Попытки кончились — текста нет, а не «ещё читаем» без конца.
+          setState({ status: 'ready', detail: { ...detail, pending: again } });
+          if (again) {
             timer = setTimeout(() => read(attempt + 1), DETAIL_PENDING_DELAY_MS);
           }
         })
