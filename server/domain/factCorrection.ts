@@ -12,6 +12,9 @@ export interface NumberChange {
   readonly dropsBeside: boolean;
   /** Основы слов вокруг числа: узнают копию без пары чисел. */
   readonly words: readonly string[];
+  /** Основы слов части фразы с числом: чему равен показатель. */
+  readonly metric: readonly string[];
+  readonly percent: boolean;
 }
 
 interface NumberToken {
@@ -88,6 +91,8 @@ export function numberChanges(before: string, after: string): readonly NumberCha
     beside: pairedBefore(before, old, index)?.value ?? null,
     dropsBeside,
     words: stems(around(before, old[index]!)),
+    metric: metricOf(before, old[index]!),
+    percent: isPercent(before, old[index]!),
   });
   if (count === 2 && added.length === 1) {
     const last = removed.to - 1;
@@ -100,19 +105,63 @@ export function numberChanges(before: string, after: string): readonly NumberCha
   });
 }
 
-function isSameMetric(
+/** Где стоит копия относительно исправленной записи; не привязана к месту работы — `unknown`. */
+export type CopyPlace = 'same' | 'other' | 'unknown';
+type Match = (
   text: string,
   list: readonly NumberToken[],
   index: number,
   change: NumberChange,
-): boolean {
-  const token = list[index]!;
-  if (token.value !== change.from) return false;
-  if (change.beside !== null) return pairedBefore(text, list, index)?.value === change.beside;
-  if (pairedBefore(text, list, index)) return false;
-  const nearby = new Set(stems(around(text, token)));
-  return change.words.filter((word) => nearby.has(word)).length >= SHARED_WORDS;
+) => boolean;
+
+const CLAUSE_END = /[;,.!?]\s|\n|(?<!\p{L})(?:и|and)(?!\p{L})/giu;
+
+/** Слова о показателе: часть фразы, где стоит число. */
+function metricOf(text: string, token: NumberToken): readonly string[] {
+  const ends = [...text.matchAll(CLAUSE_END)].map(({ index, 0: mark }) => ({
+    index,
+    end: index + mark.length,
+  }));
+  const start = Math.max(0, ...ends.filter(({ end }) => end <= token.start).map(({ end }) => end));
+  const stop = ends.find(({ index }) => index >= token.end)?.index ?? text.length;
+  return stems(text.slice(start, stop));
 }
+
+const isPercent = (text: string, token: NumberToken): boolean => UNIT.test(text.slice(token.end));
+
+function sameMetricWords(left: readonly string[], right: readonly string[]): boolean {
+  const [short, long] = left.length <= right.length ? [left, right] : [right, left];
+  return short.length >= SHARED_WORDS && short.every((word) => long.includes(word));
+}
+
+const samePair: Match = (text, list, index, change) =>
+  change.beside !== null && pairedBefore(text, list, index)?.value === change.beside;
+
+const sameUnit: Match = (text, list, index, change) =>
+  list[index]!.value === change.from && isPercent(text, list[index]!) === change.percent;
+
+/** Тот же показатель наверняка: пара чисел или, у того же места, те же слова о числе. */
+const certain =
+  (place: CopyPlace): Match =>
+  (text, list, index, change) => {
+    if (list[index]!.value !== change.from) return false;
+    if (change.beside !== null) return place !== 'other' && samePair(text, list, index, change);
+    return (
+      place === 'same' &&
+      sameUnit(text, list, index, change) &&
+      !pairedBefore(text, list, index) &&
+      sameMetricWords(metricOf(text, list[index]!), change.metric)
+    );
+  };
+
+/** Похоже на тот же показатель: решает кандидат. */
+const likely: Match = (text, list, index, change) => {
+  if (list[index]!.value !== change.from) return false;
+  if (change.beside !== null) return samePair(text, list, index, change);
+  if (!sameUnit(text, list, index, change) || pairedBefore(text, list, index)) return false;
+  const nearby = new Set(stems(around(text, list[index]!)));
+  return change.words.filter((word) => nearby.has(word)).length >= SHARED_WORDS;
+};
 
 const FROM_WORD = /(?:from|с|со)\s*$/iu;
 
@@ -126,21 +175,31 @@ function replaced(text: string, list: readonly NumberToken[], index: number, cha
   return `${linked ? lead.replace(FROM_WORD, word) : lead}${change.to}${text.slice(token.end)}`;
 }
 
-/** Запись с исправленными числами; `null` — исправляемого факта в ней нет. */
-export function correctedCopy(text: string, changes: readonly NumberChange[]): string | null {
+function rewritten(text: string, changes: readonly NumberChange[], match: Match): string | null {
   // «Не 80 %, а 40 %» — сама правка словами кандидата: старое число в ней названо нарочно.
   if (statedCorrection(text)) return null;
   let current = text;
   for (const change of changes) {
-    let list = tokens(current);
-    for (let index = list.length - 1; index >= 0; index -= 1) {
-      if (!isSameMetric(current, list, index, change)) continue;
-      current = replaced(current, list, index, change);
-      list = tokens(current).slice(0, index);
-    }
+    const list = tokens(current);
+    const found = list.flatMap((_, index) => (match(current, list, index, change) ? [index] : []));
+    // Без пары и с двумя такими числами неясно, какое из них исправлено.
+    if (change.beside === null && found.length > 1) continue;
+    for (const index of found.reverse())
+      current = replaced(current, tokens(current), index, change);
   }
   return current === text ? null : current;
 }
+
+/** Запись с исправленными числами; `null` — того же факта наверняка в ней нет. */
+export const correctedCopy = (
+  text: string,
+  changes: readonly NumberChange[],
+  place: CopyPlace = 'unknown',
+): string | null => rewritten(text, changes, certain(place));
+
+/** Запись, где, похоже, тот же факт: меняется только с согласия кандидата. */
+export const suggestedCopy = (text: string, changes: readonly NumberChange[]): string | null =>
+  rewritten(text, changes, likely);
 
 export interface StatedCorrection {
   readonly from: string;

@@ -33,14 +33,15 @@ async function press(name: string): Promise<void> {
 const words = () => view!.container.textContent ?? '';
 
 it('«Применено» только после ответа о записи, отмена возвращает все копии', async () => {
-  api.correctFact.mockResolvedValue({ changes: [PROPOSAL] });
+  api.correctFact.mockResolvedValue({ id: 'c1', changes: [PROPOSAL], proposals: [{ ...PROPOSAL, before: 'маржа у другой записи 80 %', place: 'Проект' }] });
   api.revertFactCorrection.mockResolvedValue(undefined);
   view = mount(<FactCorrectionCard proposal={PROPOSAL} />);
   await press('Применить');
   expect(words()).toContain('Применено');
+  expect(words()).toContain('маржа у другой записи 80 %');
   await press('Отменить');
   expect(words()).toContain('Применить');
-  expect(api.revertFactCorrection).toHaveBeenCalledWith([PROPOSAL]);
+  expect(api.revertFactCorrection).toHaveBeenCalledWith('c1');
 });
 
 it('сбой записи виден, успеха нет', async () => {

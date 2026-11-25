@@ -1,8 +1,9 @@
-import type { FactCorrectionChange, FactCorrectionTarget } from '../../shared/factCorrection';
-import { correctedCopy, numberChanges, type NumberChange } from '../domain/factCorrection';
-import { factCopies } from '../domain/factCorrectionProposals';
+import type { FactCorrectionChange, FactCorrectionOutcome, FactCorrectionTarget } from '../../shared/factCorrection';
+import { correctedCopy, numberChanges, suggestedCopy } from '../domain/factCorrection';
+import { copyPlace, factCopies, placeOf, type FactCopy } from '../domain/factCorrectionProposals';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import { buildResumeStudioProjection } from '../domain/resumeStudio';
+import { FactCorrectionCopies } from './factCorrectionCopies';
 import type { MemoryMethodDeps } from './sqliteCandidateStoreMemoryMethods';
 import { CandidateStoreConflictError } from './store/errors';
 
@@ -13,14 +14,12 @@ export class FactCorrectionNotSavedError extends Error {
   }
 }
 
-export interface FactCorrectionResult {
-  readonly changes: readonly FactCorrectionChange[];
-  readonly numbers: readonly NumberChange[];
-}
+/** Запись профиля, не привязанная к месту работы. */
+const UNPLACED = 'Профиль';
 
 type Deps = Pick<
   MemoryMethodDeps,
-  'conversations' | 'profileChangeLog' | 'requireCandidate' | 'transaction' | 'getSnapshot' | 'saveResumeDraft'
+  'database' | 'sealedText' | 'conversations' | 'profileChangeLog' | 'requireCandidate' | 'transaction' | 'getSnapshot' | 'saveResumeDraft'
 >;
 
 function withDraftText(draft: ResumeDraft, target: FactCorrectionTarget, text: string): ResumeDraft {
@@ -69,53 +68,66 @@ function verify(deps: Deps, candidateId: string, changes: readonly FactCorrectio
 function correctFact(
   deps: Deps,
   candidateId: string,
-  input: { readonly target: FactCorrectionTarget; readonly before: string; readonly after: string },
-): FactCorrectionResult {
+  input: FactCorrectionChange,
+): FactCorrectionOutcome {
   deps.requireCandidate(candidateId);
   return deps.transaction(() => {
-    const copies = factCopies(deps.getSnapshot(candidateId));
+    const source = deps.getSnapshot(candidateId);
+    const copies = factCopies(source);
     const own = copies.find((copy) => sameTarget(copy.target, input.target));
     const after = input.after.trim();
+    const declined = source.resume?.draft.declinedFactIds ?? [];
     if (!own || own.text !== input.before || !after) throw new CandidateStoreConflictError();
+    if (own.target.kind === 'memory' && declined.includes(own.target.id))
+      throw new CandidateStoreConflictError();
     const numbers = numberChanges(own.text, after) ?? [];
+    const others = copies.filter(({ target, locked }) => !locked && !sameTarget(target, own.target));
+    const fixedOf = ({ text, placeKey }: FactCopy) =>
+      correctedCopy(text, numbers, copyPlace(own.placeKey, placeKey));
     const changes: FactCorrectionChange[] = [
       { target: own.target, before: own.text, after },
-      ...copies.flatMap(({ target, text }) => {
-        if (sameTarget(target, own.target)) return [];
-        const fixed = correctedCopy(text, numbers);
-        return fixed === null ? [] : [{ target, before: text, after: fixed }];
+      ...others.flatMap((copy) => {
+        const fixed = fixedOf(copy);
+        return fixed === null ? [] : [{ target: copy.target, before: copy.text, after: fixed }];
       }),
     ];
+    const proposals = others.flatMap((copy) => {
+      const fixed = fixedOf(copy) === null ? suggestedCopy(copy.text, numbers) : null;
+      const place = placeOf(source, copy.target) ?? UNPLACED;
+      return fixed === null ? [] : [{ target: copy.target, before: copy.text, after: fixed, place }];
+    });
     write(deps, candidateId, changes, own.target);
+    const stores = new FactCorrectionCopies(deps.database, deps.sealedText);
+    const counts = stores.apply(candidateId, changes, { target: own.target, placeKey: own.placeKey, numbers });
     verify(deps, candidateId, changes);
-    return { changes, numbers };
+    return { ...counts, changes, proposals };
   });
 }
 
 /** «Отменить»: каждая запись ещё та, что поставила правка, и возвращается к прежнему тексту. */
-function revertFactCorrection(
-  deps: Deps,
-  candidateId: string,
-  changes: readonly FactCorrectionChange[],
-): void {
+function revertFactCorrection(deps: Deps, candidateId: string, id: string): void {
   deps.requireCandidate(candidateId);
   deps.transaction(() => {
+    const stores = new FactCorrectionCopies(deps.database, deps.sealedText);
+    const changes = stores.changesOf(candidateId, id);
+    if (!changes) throw new CandidateStoreConflictError();
     const back = changes.map(({ target, before, after }) => ({ target, before: after, after: before }));
     const copies = factCopies(deps.getSnapshot(candidateId));
     const current = back.every(({ target, before }) =>
       copies.some((copy) => sameTarget(copy.target, target) && copy.text === before));
     if (!current) throw new CandidateStoreConflictError();
     write(deps, candidateId, back);
+    stores.revert(candidateId, id);
     verify(deps, candidateId, back);
   });
 }
 
 export function createFactCorrectionMethods(deps: Deps) {
   return {
-    correctFact: (candidateId: string, input: Parameters<typeof correctFact>[2]): FactCorrectionResult =>
+    correctFact: (candidateId: string, input: FactCorrectionChange): FactCorrectionOutcome =>
       correctFact(deps, candidateId, input),
-    revertFactCorrection: (candidateId: string, changes: readonly FactCorrectionChange[]): void =>
-      revertFactCorrection(deps, candidateId, changes),
+    revertFactCorrection: (candidateId: string, id: string): void =>
+      revertFactCorrection(deps, candidateId, id),
   };
 }
 

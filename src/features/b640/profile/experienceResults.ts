@@ -1,4 +1,4 @@
-import type { FactCorrectionChange } from '../../../../shared/factCorrection';
+import type { FactCorrectionOutcome } from '../../../../shared/factCorrection';
 import { addManualExperienceFact } from '../../resume/experienceFactApi';
 import { getResumeStudio } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
@@ -44,14 +44,14 @@ export async function saveTexts(
   entry: ResumeExperienceInput,
   initial: ExperienceForm,
   form: ExperienceForm,
-  onSaved: (changes: readonly FactCorrectionChange[]) => void,
+  onSaved: (outcome: FactCorrectionOutcome) => void,
 ): Promise<void> {
   for (const { memoryId, text } of editedTexts(entry, initial, form)) {
     const before = (await freshStatements()).get(memoryId);
     if (before === undefined) throw new Error('profile_fact_missing');
     if (before === text) continue;
     const target = { kind: 'memory' as const, id: memoryId };
-    onSaved((await correctFact({ target, before, after: text })).changes);
+    onSaved(await correctFact({ target, before, after: text }));
   }
   for (const { key, memoryId, text } of form.results) {
     const statement = text.trim();
@@ -62,7 +62,7 @@ export async function saveTexts(
 
 /** «Отменить»: правки возвращаются в обратном порядке. */
 export async function revertTexts(
-  saved: ReadonlyArray<readonly FactCorrectionChange[]>,
+  saved: readonly FactCorrectionOutcome[],
 ): Promise<void> {
-  for (const changes of [...saved].reverse()) await revertFactCorrection(changes);
+  for (const { id } of [...saved].reverse()) await revertFactCorrection(id);
 }

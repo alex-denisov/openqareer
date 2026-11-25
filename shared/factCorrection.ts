@@ -18,7 +18,7 @@ export const factCorrectionSchema = z
 export type FactCorrectionChange = z.infer<typeof factCorrectionSchema>;
 
 export const factCorrectionRevertSchema = z
-  .object({ changes: z.array(factCorrectionSchema).min(1).max(200) })
+  .object({ id: z.string().uuid() })
   .strict();
 
 /** Правка, которую кандидат назвал в разговоре: карточка «Было / Станет». */
@@ -28,7 +28,12 @@ export interface FactCorrectionProposal extends FactCorrectionChange {
 
 /** Исправлено столько-то записей; черновики сообщений пересобраны и ждут нового одобрения. */
 export interface FactCorrectionOutcome {
+  /** По нему правку отменяют. */
+  readonly id: string;
   readonly changes: readonly FactCorrectionChange[];
   readonly resetMessages: number;
-  readonly droppedVariants: number;
+  /** Наборы вариантов текста, помеченные к пересборке. */
+  readonly staleVariants: number;
+  /** Похожие записи: меняются только с согласия кандидата. */
+  readonly proposals: readonly FactCorrectionProposal[];
 }

@@ -1,9 +1,13 @@
 import { useRef, useState, type FormEvent } from 'react';
-import type { FactCorrectionChange } from '../../../../shared/factCorrection';
+import type {
+  FactCorrectionOutcome,
+  FactCorrectionProposal,
+} from '../../../../shared/factCorrection';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { getResumeStudio, saveResumeStudioDraft } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
 import type { ResumeDraft, ResumeExperienceInput } from '../../resume/resumeTypes';
+import { FactCorrectionCard } from '../consultant/FactCorrectionCard';
 import { Button, Icon, Link, StatusLine, useToast } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
@@ -60,12 +64,12 @@ export async function freshDraft(): Promise<ResumeDraft> {
   return view.draft;
 }
 
-type SavedTexts = readonly FactCorrectionChange[];
+type SavedTexts = FactCorrectionOutcome;
 
 async function saveEntry(
   { entry, initial }: EditorProps,
   form: ExperienceForm,
-  onSaved: (changes: SavedTexts) => void,
+  onSaved: (outcome: SavedTexts) => void,
 ): Promise<void> {
   await saveTexts(entry, initial, form, onSaved);
   const draft = await freshDraft();
@@ -94,6 +98,8 @@ function useSave(props: EditorProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [pending, setPending] = useState<readonly FactCorrectionProposal[]>([]);
+
   async function undo() {
     try {
       await undoEntry(entry, saved.current);
@@ -108,19 +114,21 @@ function useSave(props: EditorProps) {
     setBusy(true);
     setError(null);
     try {
-      await saveEntry(props, form, (changes) => {
-        saved.current = [...saved.current, changes];
+      await saveEntry(props, form, (outcome) => {
+        saved.current = [...saved.current, outcome];
       });
       window.dispatchEvent(new Event(PROFILE_CHANGED));
       toast.show({ text: 'Сохранено', undo: { label: 'Отменить', onUndo: () => void undo() } });
-      navigate(PROFILE_PATH);
+      const similar = saved.current.flatMap(({ proposals }) => proposals);
+      if (similar.length === 0) navigate(PROFILE_PATH);
+      else setPending(similar);
     } catch (reason) {
       setError(apiErrorMessage(reason, 'Не удалось сохранить. Нажмите ещё раз.'));
       setBusy(false);
     }
   }
 
-  return { busy, error, save };
+  return { busy, error, save, pending };
 }
 
 /** Кнопки формы: на 390 — закреплённая полоса, на широком окне — под формой. */
@@ -152,7 +160,7 @@ function Editor(props: EditorProps) {
   const { entry, initial } = props;
   const [form, setForm] = useState<ExperienceForm>(initial);
   const [errors, setErrors] = useState<ExperienceFormErrors>({});
-  const { busy, error, save } = useSave(props);
+  const { busy, error, save, pending } = useSave(props);
   const change = (patch: Partial<ExperienceForm>) => {
     setForm((current) => ({ ...current, ...patch }));
     setErrors({});
@@ -165,6 +173,7 @@ function Editor(props: EditorProps) {
     if (Object.keys(found).length === 0) void save(form);
   }
 
+  if (pending.length > 0) return <Similar proposals={pending} />;
   const fields = { form, errors, onChange: change };
   return (
     <form className="pf-form" aria-label="Правка места работы" noValidate onSubmit={submit}>
@@ -196,6 +205,23 @@ function Editor(props: EditorProps) {
       {error ? <StatusLine state="err" text={error} /> : null}
       <FormActions busy={busy} />
     </form>
+  );
+}
+
+/** Похожие записи после правки: меняются только с согласия кандидата. */
+function Similar({ proposals }: { readonly proposals: readonly FactCorrectionProposal[] }) {
+  return (
+    <>
+      {proposals.map((proposal) => (
+        <FactCorrectionCard key={proposal.before} proposal={proposal} />
+      ))}
+      <div className="actions">
+        <Link className="btn" to={PROFILE_PATH}>
+          <Icon name="back" />
+          Открыть профиль
+        </Link>
+      </div>
+    </>
   );
 }
 

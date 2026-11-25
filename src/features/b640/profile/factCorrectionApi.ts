@@ -24,8 +24,6 @@ export async function correctFact(change: FactCorrectionChange): Promise<FactCor
   return outcome;
 }
 
-export async function revertFactCorrection(
-  changes: readonly FactCorrectionChange[],
-): Promise<void> {
-  await post<{ reverted: boolean }>(`${URL}/revert`, { changes });
+export async function revertFactCorrection(id: string): Promise<void> {
+  await post<{ reverted: boolean }>(`${URL}/revert`, { id });
 }

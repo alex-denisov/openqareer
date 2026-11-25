@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type {
-  FactCorrectionChange,
+  FactCorrectionOutcome,
   FactCorrectionProposal,
 } from '../../../../shared/factCorrection';
 import { forgetSharedRead } from '../../resume/sharedRead';
@@ -13,7 +13,7 @@ import { ErrorRow } from './parts';
 type State =
   | { readonly kind: 'ask' }
   | { readonly kind: 'declined' }
-  | { readonly kind: 'applied'; readonly changes: readonly FactCorrectionChange[] };
+  | { readonly kind: 'applied'; readonly outcome: FactCorrectionOutcome };
 
 function Diff({ before, after }: Pick<FactCorrectionProposal, 'before' | 'after'>) {
   const now = (
@@ -103,23 +103,20 @@ export function FactCorrectionCard({ proposal }: { readonly proposal: FactCorrec
   const { target, before, after } = proposal;
   const apply = () =>
     void run(
-      async () => ({
-        kind: 'applied',
-        changes: (await correctFact({ target, before, after })).changes,
-      }),
+      async () => ({ kind: 'applied', outcome: await correctFact({ target, before, after }) }),
       'Правка не применилась',
     );
-  const undo = (changes: readonly FactCorrectionChange[]) =>
+  const similar = state.kind === 'applied' ? state.outcome.proposals : [];
+  const undo = (id: string) =>
     void run(async () => {
-      await revertFactCorrection(changes);
+      await revertFactCorrection(id);
       return { kind: 'ask' };
     }, 'Не сохранилось');
-
   if (state.kind === 'declined') return null;
   return (
     <>
       {state.kind === 'applied' ? (
-        <ResultLine text="Применено" onUndo={busy ? undefined : () => undo(state.changes)} />
+        <ResultLine text="Применено" onUndo={busy ? undefined : () => undo(state.outcome.id)} />
       ) : (
         <Ask
           proposal={proposal}
@@ -128,6 +125,9 @@ export function FactCorrectionCard({ proposal }: { readonly proposal: FactCorrec
           onDecline={() => setState({ kind: 'declined' })}
         />
       )}
+      {similar.map((item) => (
+        <FactCorrectionCard key={item.before} proposal={item} />
+      ))}
       {failed ? <ErrorRow text={failed} /> : null}
     </>
   );

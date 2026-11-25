@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyStated,
   correctedCopy,
+  suggestedCopy,
   numberChanges,
   statedCorrection,
   withoutWriteClaims,
@@ -23,6 +24,7 @@ describe('B796: копии исправленного факта', () => {
   });
 
   it('чужие 80 % не трогает', () => {
+    expect(correctedCopy('Margin from 16% to 80%', changes, 'other')).toBeNull();
     expect(correctedCopy('CSAT from 25% to 80%', changes)).toBeNull();
     expect(correctedCopy('Сократил обращения на 80%', changes)).toBeNull();
   });
@@ -37,10 +39,19 @@ describe('B796: копии исправленного факта', () => {
 
   it('без пары узнаёт копию по словам рядом', () => {
     const one = changesOf('Reached operating margin of 40%', 'Reached operating margin of 80%');
-    expect(correctedCopy('Operating margin reached 80% in 2023', one)).toBe(
+    expect(correctedCopy('Operating margin reached 80% in 2023', one, 'same')).toBe(
       'Operating margin reached 40% in 2023',
     );
-    expect(correctedCopy('Automated 80% of tickets', one)).toBeNull();
+    expect(correctedCopy('Operating margin reached 80% in 2023', one)).toBeNull();
+    expect(suggestedCopy('Operating margin reached 80% in 2023', one)).not.toBeNull();
+    expect(correctedCopy('Automated 80% of tickets', one, 'same')).toBeNull();
+    const support = changesOf(
+      'Автоматизировал 40% обращений в поддержку',
+      'Автоматизировал 80% обращений в поддержку',
+    );
+    const cut = 'Сократил обращения в поддержку на 80%';
+    expect(correctedCopy(cut, support, 'same')).toBeNull();
+    expect(suggestedCopy(cut, support)).not.toBeNull();
   });
 
   it('правка слов чисел не меняет, а лишнее число не угадывается', () => {

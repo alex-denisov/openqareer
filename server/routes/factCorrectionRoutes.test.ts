@@ -8,6 +8,9 @@ import type { SessionAuth } from '../auth/authService';
 import { SqliteContactMessageRepository } from '../data/sqliteContactMessageRepository';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { output, turnRequest } from '../data/sqliteTestHarness';
+import { DatabaseSync } from 'node:sqlite';
+import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
+import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 
 const cleanups: Array<() => Promise<void> | void> = [];
@@ -82,6 +85,10 @@ async function setup(asked = 'Рентабельность была не 80%, а
     ],
   } as ResumeDraft;
   store.saveResumeDraft(candidate.id, draft, []);
+  const database = new DatabaseSync(config.databasePath);
+  const edits = new SqliteResumeEditChoicesRepository(database, config.dataEncryptionKey);
+  const variants = new SqliteTextVariantRepository(database, config.dataEncryptionKey);
+  cleanups.push(() => database.close());
   messages.create({
     id: 'msg',
     candidateId: candidate.id,
@@ -112,7 +119,7 @@ async function setup(asked = 'Рентабельность была не 80%, а
   const text = (id: string) =>
     store.getSnapshot(candidate.id).memory.find((item) => item.id === id)?.statement;
   const about = () => store.getSnapshot(candidate.id).resume?.draft.candidate.about;
-  return { store, candidate, messages, call, text, about };
+  return { database, edits, variants, store, candidate, messages, call, text, about };
 }
 
 const URL = '/api/v1/candidate/fact-corrections';
@@ -131,13 +138,111 @@ describe('B796: исправление факта', () => {
       text: 'Маржа с 16% до 40%',
       state: 'draft',
     });
-    const { changes } = response.json().data;
-    expect((await call('POST', `${URL}/revert`, { changes })).statusCode).toBe(200);
+    const { id } = response.json().data;
+    expect((await call('POST', `${URL}/revert`, { id })).statusCode).toBe(200);
     expect([text(BULLET), text(COPY), about()]).toEqual([
       OLD,
       'Рентабельность выросла с 16% до 80%',
       'Leader. Margin 16% to 80% in two years.',
     ]);
+  });
+
+  // Набор из аудита 25.11 (S13-80pct-audit.md): память ×3, «О себе», правки и переводы, черновик, варианты.
+  it('неотправленное меняется и возвращается, ушедшее с откликом цело', async () => {
+    const { call, text, messages, candidate, edits, variants, database, store } = await setup();
+    const now = '2026-11-25T00:00:00.000Z';
+    const open = 'Открыто: рентабельность 16% до 80%';
+    store.addManualExperienceFact(candidate.id, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4', open);
+    const choices = {
+      cancelled: [],
+      texts: { [`exp-2:${BULLET}`]: OLD },
+      translations: { [`ru:${OLD}`]: 'Рост маржи с 16% до 80%', 'ru:Team': 'Команда' },
+    };
+    for (const id of ['open', 'sent']) {
+      edits.save(candidate.id, id, choices, now);
+      const subject = { candidateId: candidate.id, kind: 'letter' as const, subjectId: id };
+      variants.add({
+        ...subject,
+        text: 'Margin from 16% to 80%',
+        wish: { chips: [], text: '' },
+        createdAt: now,
+      });
+    }
+    const list = (subjectId: string) =>
+      variants.list({ candidateId: candidate.id, kind: 'letter', subjectId }).variants.length;
+    database
+      .prepare(
+        `INSERT INTO applications (id, candidate_id, cluster_id, stage, stage_changed_at, created_at, updated_at)
+         VALUES ('app', ?, 'sent', 'applied', ?, ?, ?)`,
+      )
+      .run(candidate.id, now, now, now);
+    const sentMessage = { ...messages.get(candidate.id, 'msg')!, id: 'gone' };
+    messages.create(sentMessage);
+    messages.approve(candidate.id, 'gone', now);
+    messages.markSent(candidate.id, 'gone', now);
+    for (const kind of ['cover_letter', 'resume'] as const) {
+      store.saveDocument(candidate.id, {
+        kind,
+        source: 'generated',
+        fileName: `${kind}.txt`,
+        mimeType: 'text/plain',
+        contentBase64: Buffer.from(`${kind}: margin from 16% to 80%`).toString('base64'),
+        extractedText: `${kind}: margin from 16% to 80%`,
+        parseStatus: 'ready',
+      });
+    }
+    const files = () => database.prepare('SELECT * FROM candidate_documents').all();
+    const filesBefore = files();
+
+    const response = await call('POST', URL, { target, before: OLD, after: NEW });
+    expect(response.json().data).toMatchObject({ resetMessages: 1, staleVariants: 1 });
+    expect(edits.read(candidate.id, 'open')).toEqual({
+      cancelled: [],
+      texts: { [`exp-2:${BULLET}`]: NEW },
+      translations: { 'ru:Team': 'Команда' },
+    });
+    expect(edits.read(candidate.id, 'sent')).toEqual(choices);
+    expect([list('open'), list('sent')]).toEqual([0, 1]);
+    expect(messages.get(candidate.id, 'gone')).toMatchObject({
+      text: 'Маржа с 16% до 80%',
+      state: 'sent',
+    });
+    expect(files()).toEqual(filesBefore);
+    expect(filesBefore).toHaveLength(2);
+
+    const { id } = response.json().data;
+    expect((await call('POST', `${URL}/revert`, { id })).statusCode).toBe(200);
+    expect(edits.read(candidate.id, 'open')).toEqual(choices);
+    expect(list('open')).toBe(1);
+    expect(messages.get(candidate.id, 'msg')).toMatchObject({
+      text: 'Маржа с 16% до 80%',
+      state: 'approved',
+    });
+    expect(text(BULLET)).toBe(OLD);
+    expect((await call('POST', `${URL}/revert`, { id })).statusCode).toBe(409);
+  });
+
+  it('сбой на копиях откатывает и профиль', async () => {
+    const { call, text, database } = await setup();
+    database.exec(
+      "CREATE TRIGGER broken BEFORE UPDATE ON candidate_contact_messages BEGIN SELECT RAISE(ABORT, 'x'); END",
+    );
+    expect((await call('POST', URL, { target, before: OLD, after: NEW })).statusCode).toBe(500);
+    expect(text(BULLET)).toBe(OLD);
+    expect(text(COPY)).toContain('80%');
+  });
+
+  it('отклонённая и чувствительная записи не меняются', async () => {
+    const { call, text, store, candidate, database } = await setup();
+    const draft = store.getSnapshot(candidate.id).resume!.draft;
+    store.saveResumeDraft(candidate.id, { ...draft, declinedFactIds: [COPY] }, []);
+    const SENSITIVE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5';
+    store.addManualExperienceFact(candidate.id, SENSITIVE, 'Маржа 16% до 80%');
+    database.prepare('UPDATE memory SET sensitive = 1 WHERE id = ?').run(SENSITIVE);
+    store.saveResumeDraft(candidate.id, { ...draft, declinedFactIds: [COPY] }, []);
+    await call('POST', URL, { target, before: OLD, after: NEW });
+    expect(text(COPY)).toContain('80%');
+    expect(text(SENSITIVE)).toContain('80%');
   });
 
   it('запись с тех пор изменилась — 409, ничего не записано', async () => {

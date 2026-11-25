@@ -1,16 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { DatabaseSync } from 'node:sqlite';
-import {
-  factCorrectionRevertSchema,
-  factCorrectionSchema,
-  type FactCorrectionOutcome,
-} from '../../shared/factCorrection';
-import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
-import { SqliteTextVariantRepository } from '../candidate/sqliteTextVariantRepository';
+import { factCorrectionRevertSchema, factCorrectionSchema } from '../../shared/factCorrection';
 import { FactCorrectionNotSavedError } from '../data/factCorrectionMethods';
-import { SqliteContactMessageRepository } from '../data/sqliteContactMessageRepository';
 import { CandidateStoreConflictError } from '../data/store/errors';
-import { correctedCopy, type NumberChange } from '../domain/factCorrection';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { sendError, withDeps } from './helpers';
@@ -21,57 +12,6 @@ import { sendError, withDeps } from './helpers';
  * сообщения (снова ждут одобрения), варианты текстов. Письма сверяет с профилем `letterFreshness`.
  */
 const BASE = '/api/v1/candidate/fact-corrections';
-
-interface Stores {
-  readonly edits: SqliteResumeEditChoicesRepository;
-  readonly variants: SqliteTextVariantRepository;
-  readonly messages: SqliteContactMessageRepository;
-}
-
-function refreshEdits(stores: Stores, candidateId: string, changes: readonly NumberChange[]) {
-  for (const { vacancyId, choices } of stores.edits.list(candidateId)) {
-    const isStale = (text: string) => correctedCopy(text, changes) !== null;
-    const texts = Object.fromEntries(
-      Object.entries(choices.texts).map(([id, text]) => [id, correctedCopy(text, changes) ?? text]),
-    );
-    const translations = Object.fromEntries(
-      Object.entries(choices.translations ?? {}).filter(
-        ([key, value]) => !isStale(key) && !isStale(value),
-      ),
-    );
-    const next = {
-      ...choices,
-      texts,
-      ...(choices.translations ? { translations } : {}),
-    };
-    if (JSON.stringify(next) !== JSON.stringify(choices)) {
-      stores.edits.save(candidateId, vacancyId, next, new Date().toISOString());
-    }
-  }
-}
-
-function refreshMessages(
-  stores: Stores,
-  candidateId: string,
-  changes: readonly NumberChange[],
-): number {
-  return stores.messages.listUnsent(candidateId).filter(({ id, text }) => {
-    const fixed = correctedCopy(text, changes);
-    return fixed !== null && stores.messages.updateText(candidateId, id, fixed);
-  }).length;
-}
-
-function refreshUnsent(stores: Stores, candidateId: string, changes: readonly NumberChange[]) {
-  if (changes.length === 0) return { resetMessages: 0, droppedVariants: 0 };
-  refreshEdits(stores, candidateId, changes);
-  return {
-    resetMessages: refreshMessages(stores, candidateId, changes),
-    droppedVariants: stores.variants.removeStale(
-      candidateId,
-      (text) => correctedCopy(text, changes) !== null,
-    ),
-  };
-}
 
 function failure(error: unknown, request: FastifyRequest, reply: FastifyReply) {
   if (error instanceof CandidateStoreConflictError) {
@@ -96,19 +36,13 @@ function candidateOf(deps: RouteDeps, request: FastifyRequest, reply: FastifyRep
 const invalid = (request: FastifyRequest, reply: FastifyReply) =>
   sendError(reply, request, 400, 'invalid_fact_correction', 'Правка не прошла проверку.', false);
 
-async function handleCorrect(
-  deps: RouteDeps,
-  stores: Stores,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) {
+async function handleCorrect(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const candidateId = candidateOf(deps, request, reply);
   if (!candidateId) return reply;
   const parsed = factCorrectionSchema.safeParse(request.body);
   if (!parsed.success) return invalid(request, reply);
   try {
-    const { changes, numbers } = deps.candidateStore.correctFact(candidateId, parsed.data);
-    const data: FactCorrectionOutcome = { changes, ...refreshUnsent(stores, candidateId, numbers) };
+    const data = deps.candidateStore.correctFact(candidateId, parsed.data);
     return { data, meta: { requestId: request.id } };
   } catch (error) {
     return failure(error, request, reply);
@@ -121,7 +55,7 @@ async function handleRevert(deps: RouteDeps, request: FastifyRequest, reply: Fas
   const parsed = factCorrectionRevertSchema.safeParse(request.body);
   if (!parsed.success) return invalid(request, reply);
   try {
-    deps.candidateStore.revertFactCorrection(candidateId, parsed.data.changes);
+    deps.candidateStore.revertFactCorrection(candidateId, parsed.data.id);
     return { data: { reverted: true }, meta: { requestId: request.id } };
   } catch (error) {
     return failure(error, request, reply);
@@ -129,24 +63,7 @@ async function handleRevert(deps: RouteDeps, request: FastifyRequest, reply: Fas
 }
 
 export function registerFactCorrectionRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  const { databasePath, dataEncryptionKey } = deps.config;
-  const database = new DatabaseSync(databasePath);
-  database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-  const messages = new SqliteContactMessageRepository({ databasePath });
-  app.addHook('onClose', async () => {
-    messages.close();
-    database.close();
-  });
-  const stores: Stores = {
-    edits: new SqliteResumeEditChoicesRepository(database, dataEncryptionKey),
-    variants: new SqliteTextVariantRepository(database, dataEncryptionKey),
-    messages,
-  };
   const limit = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
-  app.post(
-    BASE,
-    limit,
-    withDeps(deps, (d, request, reply) => handleCorrect(d, stores, request, reply)),
-  );
+  app.post(BASE, limit, withDeps(deps, handleCorrect));
   app.post(`${BASE}/revert`, limit, withDeps(deps, handleRevert));
 }
