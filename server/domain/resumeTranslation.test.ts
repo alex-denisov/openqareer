@@ -210,9 +210,9 @@ describe('RU и EN — один состав фактов (B785)', () => {
 
   it('должность, сохранённая непереведённой, спрашивается снова', async () => {
     const result = await toRu({ ...RU, 'Premium Support Lead': 'Premium Support Lead' });
-    expect(
-      translatedDocument(english, 'ru', result.translations).experience[2]?.title?.value,
-    ).toBe('Premium Support Lead');
+    expect(translatedDocument(english, 'ru', result.translations).experience[2]?.title?.value).toBe(
+      'Premium Support Lead',
+    );
     const rewriter = translator(RU);
     const again = await translateDocument(english, 'ru', result.translations, rewriter, 5_000);
     expect(rewriter.translate).toHaveBeenCalledTimes(1);

@@ -43,7 +43,8 @@ function tidy(text: string): string {
 }
 
 /** «Предстоит:», «Ключевые цели:» — задачи; разметка процента этих заголовков не меняется. */
-const DUTY_LINE = /^[ \t]*(?:(?:вам )?предстоит|(?:ключевые |основные )?цели|вы будете)[ \t]*:[ \t]*$/gimu;
+const DUTY_LINE =
+  /^[ \t]*(?:(?:вам )?предстоит|(?:ключевые |основные )?цели|вы будете)[ \t]*:[ \t]*$/gimu;
 const withDutyHeadings = (text: string): string =>
   vacancySourceText(text).replace(DUTY_LINE, 'Обязанности:');
 
