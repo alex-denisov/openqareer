@@ -12,11 +12,13 @@ import {
   openForm,
   priorAttempt,
   sendSession,
+  windowOutcome,
   type AtsApplyState,
   type AtsSession,
 } from './atsSession';
 import { sentItems, type AtsSentItem } from './atsSentItems';
 import type { AtsAddress } from './atsTarget';
+import { isLive, useAtsWindow } from './useAtsWindow';
 
 export type { AtsApplyState } from './atsSession';
 
@@ -61,6 +63,8 @@ export interface AtsApplyControls {
   readonly send: () => void;
   readonly retry: () => void;
   readonly cancel: () => void;
+  /** Окно формы на экран: код и отправку в нём делает кандидат. */
+  readonly showForm: () => void;
 }
 
 const closeWindow = (): void => {
@@ -75,6 +79,8 @@ interface Core {
   readonly latest: Box<AtsApplyInput>;
   readonly alive: Box<boolean>;
   readonly inFlight: Box<boolean>;
+  /** Форма ждёт кандидата: уход с экрана её не закрывает. */
+  readonly held: Box<boolean>;
   readonly session: AtsSession | null;
   readonly show: (next: AtsApplyState) => void;
   /** Вопросы формы встают в «Анкету»; ответ не из списка стирается. */
@@ -100,6 +106,7 @@ function useCore(
   latest.current = input;
   const inFlight = useRef(false);
   const alive = useRef(true);
+  const held = useRef(false);
   const show = useCallback(
     (next: AtsApplyState) => {
       if (alive.current) setState(next);
@@ -124,7 +131,7 @@ function useCore(
     [show],
   );
   const dropSession = useCallback(() => setSession(null), []);
-  return { latest, alive, inFlight, session, show, takeForm, dropSession, reject, toManual };
+  return { latest, alive, inFlight, held, session, show, takeForm, dropSession, reject, toManual };
 }
 
 /** Открыть форму; прежнее нажатие показывает свой итог вместо неё. */
@@ -154,16 +161,20 @@ function useOpen({ latest, alive, show, takeForm, toManual }: Core): () => Promi
 }
 
 /** Форма читается один раз, когда открыт её шаг; уход с экрана закрывает окно. */
-function useAutoOpen({ alive, inFlight }: Core, wanted: boolean, open: () => Promise<void>): void {
+function useAutoOpen(
+  { alive, inFlight, held }: Core,
+  wanted: boolean,
+  open: () => Promise<void>,
+): void {
   const started = useRef(false);
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      // Идущую отправку закрытие окна оборвало бы.
-      if (started.current && !inFlight.current) closeWindow();
+      // Идущую отправку и шаг кандидата в форме закрытие окна оборвало бы.
+      if (started.current && !inFlight.current && !held.current) closeWindow();
     };
-  }, [alive, inFlight]);
+  }, [alive, inFlight, held]);
   useEffect(() => {
     if (!wanted || started.current) return;
     started.current = true;
@@ -192,8 +203,12 @@ async function finish(core: Core, result: AtsRunResult, current: AtsSession): Pr
     if (alive.current) closeWindow();
     return latest.current.onSent().catch(() => undefined);
   }
+  if (result.kind === 'code' || result.kind === 'captcha' || result.kind === 'unconfirmed') {
+    core.held.current = (await windowOutcome(latest.current.vacancyId)) !== null;
+    return show({ ...result, live: core.held.current });
+  }
   // Страница уже видела нажатие или потеряна: следующая попытка открывает её заново.
-  if (result.kind !== 'unconfirmed') core.dropSession();
+  core.dropSession();
   return show(result);
 }
 
@@ -218,6 +233,24 @@ async function sendNow(core: Core, open: () => Promise<void>): Promise<void> {
   return finish(core, result, current);
 }
 
+/** Кандидат закончил в окне формы: квитанция та же, что после нажатия приложения. */
+function useCandidateWindow(
+  { latest }: Core,
+  state: AtsApplyState,
+  setState: (update: AtsApplyState | ((now: AtsApplyState) => AtsApplyState)) => void,
+): () => void {
+  return useAtsWindow({
+    vacancyId: latest.current.vacancyId,
+    state,
+    setState,
+    onConfirmed: ({ host, path, pressedAtMs }) => {
+      setState({ kind: 'sent', receipt: { host, path, pressedAtMs } });
+      closeWindow();
+      void latest.current.onSent().catch(() => undefined);
+    },
+  });
+}
+
 /** Форма с сайта работодателя: чтение, вопросы «Анкеты», одно нажатие и его итог (B787). */
 export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
   const { address, wanted, questionnaire } = input;
@@ -228,7 +261,9 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
   );
   const { session, inFlight, alive } = core;
   const open = useOpen(core);
+  core.held.current = isLive(state);
   useAutoOpen(core, wanted && address !== null, open);
+  const showForm = useCandidateWindow(core, state, setState);
   useSeconds(state.kind === 'sending', setState);
 
   const send = () => {
@@ -236,7 +271,7 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
     inFlight.current = true;
     void sendNow(core, open).finally(() => {
       inFlight.current = false;
-      if (!alive.current) closeWindow();
+      if (!alive.current && !core.held.current) closeWindow();
     });
   };
   const missing = useMemo(
@@ -256,6 +291,7 @@ export function useAtsApply(input: AtsApplyInput): AtsApplyControls {
     items,
     send,
     retry: () => void open(),
+    showForm,
     cancel: () => setState((now) => (now.kind === 'mandate' ? { kind: 'ready' } : now)),
   };
 }

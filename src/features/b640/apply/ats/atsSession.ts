@@ -4,7 +4,7 @@ import { serverConsentJournal } from './atsConsentJournal';
 import * as desktop from './atsDesktop';
 import { loadAtsFacts, loadAtsResume } from './atsFacts';
 import { isResumeFile } from './atsFieldPlan';
-import type { AtsConfirmation } from './atsFormTypes';
+import type { AtsConfirmation, AtsReceipt } from './atsFormTypes';
 import type { IdentityFacts } from './atsIdentity';
 import { hasApplyMandate } from './atsMandate';
 import {
@@ -30,7 +30,12 @@ export type AtsApplyState =
   | { readonly kind: 'mandate' }
   | { readonly kind: 'sending'; readonly seconds: number }
   | { readonly kind: 'sent'; readonly receipt: AtsConfirmation }
-  | { readonly kind: 'unconfirmed'; readonly host: string }
+  /** `live` — окно формы открыто, и кандидат может закончить в нём сам. */
+  | {
+      readonly kind: 'unconfirmed' | 'code' | 'captcha';
+      readonly host: string;
+      readonly live: boolean;
+    }
   | { readonly kind: 'refused'; readonly host: string }
   | { readonly kind: 'failed'; readonly rejected?: AtsObstacle }
   /** Отклик уходит в очередь кандидата. */
@@ -74,14 +79,32 @@ export async function openForm(vacancyId: string, address: AtsAddress): Promise<
   }
 }
 
+/** Что сейчас в окне, где форма уже отправлялась; `null` — такого окна нет. */
+export async function windowOutcome(vacancyId: string): Promise<AtsReceipt | null> {
+  return desktop.readAtsOutcome(vacancyId).catch(() => null);
+}
+
+/** Отклик подтверждён позже нажатия: итог дописывается согласиям. */
+export async function settleLater(vacancyId: string): Promise<void> {
+  const attempt = await desktop.readAtsAttempt(vacancyId);
+  if (attempt) await settleAtsConsents(attempt, serverConsentJournal);
+}
+
 /** Прежнее нажатие: его итог показывается, второго не будет. */
 export async function priorAttempt(vacancyId: string): Promise<AtsApplyState | null> {
+  // Сначала окно: подтверждение в нём меняет и запись попытки.
+  const seen = (await desktop.readAtsAttempt(vacancyId)) ? await windowOutcome(vacancyId) : null;
   const attempt = await desktop.readAtsAttempt(vacancyId);
   if (!attempt) return null;
-  await settleAtsConsents(attempt, serverConsentJournal);
+  if (seen?.outcome !== 'code') await settleAtsConsents(attempt, serverConsentJournal);
+  if (seen?.outcome === 'code' && attempt.result !== 'sent')
+    return { kind: 'code', host: seen.host, live: true };
   if (attempt.result === 'failed') return null;
   const host = URL.canParse(attempt.entryUrl) ? new URL(attempt.entryUrl).hostname : '';
-  if (attempt.result !== 'sent') return { kind: 'unconfirmed', host };
+  if (attempt.result !== 'sent') {
+    const kind = seen?.outcome === 'captcha' ? 'captcha' : 'unconfirmed';
+    return { kind, host, live: seen !== null };
+  }
   const pressedAtMs = attempt.startedAtMs;
   return { kind: 'sent', receipt: attempt.confirmation ?? { host, path: '', pressedAtMs } };
 }

@@ -75,7 +75,14 @@ export interface AtsFillReport {
   readonly values: Readonly<Record<string, string>>;
 }
 
-export type AtsOutcome = 'confirmed' | 'unconfirmed' | 'rejected' | 'captcha' | 'not_submitted';
+export type AtsOutcome =
+  | 'confirmed'
+  | 'unconfirmed'
+  | 'rejected'
+  | 'captcha'
+  /** Доска прислала кандидату код; без него отклик она не приняла. */
+  | 'code'
+  | 'not_submitted';
 
 /** Почему кнопка не нажата: закрытый список приложения, текста страницы в нём нет. */
 export type AtsReason =

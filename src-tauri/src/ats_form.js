@@ -87,6 +87,8 @@
     /^(next|next step|continue|save (and|&) continue|далее|продолжить|siguiente|suivant|weiter)$/i;
   var BACK_TEXT = /^(back|previous|cancel|назад|отмена)$/i;
   // A trap for robots: the form itself asks to leave it empty.
+  // Greenhouse mails a code after the press; only the candidate types it.
+  var CODE_INPUTS = 'fieldset#email-verification input, input[id^="security-input-"]';
   var LEAVE_BLANK = /leave (this|it)( field)? (blank|empty)/i;
   var CALLING_CODE = /calling code|country code|dial code|phone code/i;
   var CONTROLS =
@@ -321,6 +323,7 @@
           (node.tagName === 'BUTTON' && Boolean(profile().menuButtons))) &&
         node.getAttribute('aria-hidden') !== 'true' &&
         !node.disabled &&
+        !node.matches(CODE_INPUTS) &&
         !(profile().skip && up(node, profile().skip)) &&
         !/^(g-recaptcha|h-captcha)-response/.test(node.id + node.name) &&
         !(node.tagName === 'DIV' && node.querySelector('input')) &&
@@ -486,6 +489,17 @@
         var parked = frame.getBoundingClientRect().bottom + window.scrollY < 0;
         return shown(frame) && !parked && getComputedStyle(frame).visibility !== 'hidden';
       });
+  }
+
+  function codeInput() {
+    return Array.prototype.slice.call(document.querySelectorAll(CODE_INPUTS)).filter(shown)[0];
+  }
+  function showCode() {
+    var input = codeInput();
+    if (!input) return { state: 'none' };
+    input.scrollIntoView({ block: 'center' });
+    input.focus();
+    return { state: 'shown' };
   }
 
   // The board's own number of the question: its open page names the same one.
@@ -1192,9 +1206,7 @@
     if (!base || document.readyState === 'loading') return false;
     var here = location.pathname.replace(/\/+$/, '');
     if (here.indexOf(base) !== 0 || !/^[\w-]{6,}$/.test(here.slice(base.length))) return false;
-    if (
-      document.querySelector('form#job-application-form, input[type="file"], .turbo-frame-error')
-    )
+    if (document.querySelector('form#job-application-form, input[type="file"], .turbo-frame-error'))
       return false;
     return visible('h1, h2, h3').some(function (head) {
       return text(head) !== '' && !head.closest('dialog, [role="dialog"]');
@@ -1207,6 +1219,7 @@
     var form = findForm();
     if (sentPage() || thanked(form)) return { state: 'confirmed', path: location.pathname };
     if (captcha()) return { state: 'captcha' };
+    if (codeInput()) return { state: 'code' };
     if (form) {
       // A mark older than the press is not the board's answer to it.
       var before = (ARG && ARG.invalidBefore) || [];
@@ -1227,6 +1240,7 @@
     next: next,
     moved: moved,
     submit: submit,
+    show_code: showCode,
     outcome: outcome,
   };
   try {

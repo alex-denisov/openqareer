@@ -45,6 +45,8 @@ export type AtsRunResult =
   | { readonly kind: 'sent'; readonly receipt: AtsReceipt }
   /** Нажатие было, подтверждения нет: второго нажатия не будет. */
   | { readonly kind: 'unconfirmed'; readonly host: string }
+  /** Окно формы ждёт кандидата: код из письма или проверка на сайте. */
+  | { readonly kind: 'code' | 'captcha'; readonly host: string }
   /** Появились вопросы, на которые отвечает кандидат. */
   | {
       readonly kind: 'ask';
@@ -325,6 +327,8 @@ function resultOfReceipt(receipt: AtsReceipt, fallbackHost: string): AtsRunResul
   if (receipt.reason === 'already_submitted') return { kind: 'unconfirmed', host };
   if (receipt.outcome === 'rejected') return { kind: 'refused', host };
   if (receipt.outcome === 'captcha' && receipt.pressedAtMs === null) return manual('captcha', host);
+  if (receipt.outcome === 'code' || receipt.outcome === 'captcha')
+    return { kind: receipt.outcome, host };
   if (receipt.outcome !== 'not_submitted') return { kind: 'unconfirmed', host };
   if (receipt.pressedAtMs !== null) return { kind: 'unconfirmed', host };
   if (receipt.reason && NO_BUTTON.has(receipt.reason))

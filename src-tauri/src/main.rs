@@ -255,7 +255,7 @@ async fn ats_form_show(
     vacancy_id: String,
 ) -> Result<bool, String> {
     cabinet_only(&webview)?;
-    ats_apply::show_form_window(&app, &vacancy_id)
+    ats_apply::show_form_window(&app, &vacancy_id).await
 }
 
 #[tauri::command]
@@ -739,6 +739,13 @@ fn main() {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     hide_closed_main_window(window);
+                }
+            }
+            // The form window's close button hides it: the code step must outlive it.
+            if window.label() == ats_apply::FORM_WINDOW_LABEL {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
                 }
             }
         })

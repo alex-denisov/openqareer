@@ -52,6 +52,7 @@ export function manualCaseBeforeSubmit(
 
 const RECEIPT_CODES: Partial<Record<AtsReceipt['outcome'], AtsManualCode>> = {
   captcha: 'captcha',
+  code: 'unconfirmed',
   rejected: 'rejected_form',
   unconfirmed: 'unconfirmed',
   not_submitted: 'unreadable_form',
