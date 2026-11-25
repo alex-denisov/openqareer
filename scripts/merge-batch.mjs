@@ -31,6 +31,7 @@ import {
   creditDecision,
   deferStacked,
   parseGhJson,
+  parseLines,
   rejectReason,
   resolveRound,
   selectCandidates,
@@ -105,12 +106,16 @@ function listPrs() {
         }
       : raw;
     if (!(pr.labels ?? []).some((l) => l.name === READY_LABEL)) return pr;
-    const files = ghJson(
-      'api',
-      `repos/${repo()}/pulls/${pr.number}/files`,
-      '--paginate',
-      '--jq',
-      '[.[].filename]',
+    // One name per line: --paginate applies --jq page by page, so a JSON array
+    // per page would not parse for a PR of more than 30 files.
+    const files = parseLines(
+      gh(
+        'api',
+        `repos/${repo()}/pulls/${pr.number}/files?per_page=100`,
+        '--paginate',
+        '--jq',
+        '.[].filename',
+      ),
     );
     const withFiles = {
       ...pr,

@@ -7,7 +7,7 @@ import { getDecisionProfile } from '../../../coach/decisionProfileApi';
 import { generateInterviewPrepBrief } from '../../../interview/interviewPrepEngine';
 import { getStarStories } from '../../../interview/starStoriesApi';
 import type { TariffQuotaStatus } from '../../../tariffs/tariffQuotaApi';
-import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
+import { formatStatedCompensation } from '../../../vacancies/vacancyCompensation';
 import { getB640Company } from '../../companies/companiesApi';
 import { getVacancyCard } from '../../vacancies/b640Api';
 import { companyFacts, type CompanyFacts } from '../model/companyFacts';
@@ -83,7 +83,7 @@ async function vacancyPay(response: ApplicationView, signal: AbortSignal): Promi
   const clusterId = response.clusterId;
   if (!clusterId) return null;
   const card = await optional(() => getVacancyCard(clusterId, signal));
-  return card ? formatCompensationCompact(card.cluster.salary) : null;
+  return card ? formatStatedCompensation(card.cluster.salary) : null;
 }
 
 /** «Что известно о компании»: карточка компании платформы по названию из отклика. */

@@ -8,7 +8,7 @@ import type { ApplicationView } from '../applications/applicationsApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { vacancyAge } from './vacancyFilters';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { formatStatedCompensation } from './vacancyCompensation';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { VacancyInfoModal } from './VacancyInfoModal';
@@ -246,7 +246,7 @@ function VacancyProfileEvidence({
 
       <div className="vacancies-detail-description vacancies-req-block">
         <h4>Вилка</h4>
-        <p className="vacancies-comp-note">{formatCompensationCompact(cluster.salary)}</p>
+        <p className="vacancies-comp-note">{formatStatedCompensation(cluster.salary)}</p>
       </div>
     </>
   );

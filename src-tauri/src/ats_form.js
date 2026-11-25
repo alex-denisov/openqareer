@@ -488,9 +488,19 @@
       });
   }
 
+  // The board's own number of the question: its open page names the same one.
+  function questionNumber(form, node, asked) {
+    var group = /^candidate\[answers_attributes\]\[\d{1,3}\]/.exec(nameOf(node) || '');
+    var holder = group && form.querySelector('input[name="' + group[0] + '[question_id]"]');
+    var number = holder && /^\d{1,20}$/.test(holder.value) ? holder.value : null;
+    if (!number || asked[number]) return null;
+    asked[number] = true;
+    return number;
+  }
   function readFields(form) {
     var seen = {};
     var fields = [];
+    var asked = {};
     var unkeyed = 0;
     controls(form).forEach(function (node) {
       var kind = fieldKind(form, node);
@@ -521,6 +531,7 @@
         accept: kind === 'file' ? node.getAttribute('accept') : null,
         limits: limitsOf(node, kind),
         link: kind === 'checkbox' ? linkOf(node) : null,
+        question: questionNumber(form, node, asked),
       });
     });
     return { fields: fields, unkeyed: unkeyed };

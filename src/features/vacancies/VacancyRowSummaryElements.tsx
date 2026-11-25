@@ -1,6 +1,6 @@
 import { CaretDown, CaretUp, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { formatStatedCompensation } from './vacancyCompensation';
 import { vacancyAge } from './vacancyFilters';
 import { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
 import { extractVacancyRequirements } from './vacancyLevel';
@@ -137,7 +137,7 @@ export function VacancyDefaultSummaryContent({
           trust={trust}
         />
         <VacancyRowMeta
-          comp={formatCompensationCompact(cluster.salary)}
+          comp={formatStatedCompensation(cluster.salary)}
           age={age}
           alreadyApplied={alreadyApplied}
           applicationArchived={applicationArchived}

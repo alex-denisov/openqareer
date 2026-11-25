@@ -150,6 +150,14 @@ export function parseGhJson(out) {
   }
 }
 
+/** Scalar gh output, one value per line; pages of --paginate simply follow each other. */
+export function parseLines(out) {
+  return (out ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
 /**
  * Stacked PRs: a PR whose head contains another candidate's head is deferred.
  * Once the lower PR is squash-merged, the upper branch no longer updates onto

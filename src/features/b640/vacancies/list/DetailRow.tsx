@@ -3,6 +3,9 @@ import { useCallback, useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
+import { sameCurrency } from '../../../../../shared/currencyRates';
+import { monthlySalary } from '../../../../../shared/monthlyRubSalary';
+import { formatMarketSalaryRange } from '../../../../../shared/marketSalaryEstimate';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
 import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
@@ -62,11 +65,11 @@ function marketRange(item: MatchedVacancyItem) {
 }
 
 /** Вилка на шкале рынка; считается только при оценке рынка в той же валюте. */
-function forkOf(item: MatchedVacancyItem): Fork | undefined {
+export function forkOf(item: MatchedVacancyItem, rates: RowEnv['rates']): Fork | undefined {
   const market = marketRange(item);
   if (!market) return undefined;
-  const salary = item.cluster.salary;
-  const same = salary?.currency && salary.currency === market.currency;
+  const salary = monthlySalary(item.cluster.salary, rates);
+  const same = salary?.currency && sameCurrency(salary.currency, market.currency);
   const from = same ? (salary.from ?? salary.to ?? market.low) : market.low;
   const to = same ? (salary.to ?? salary.from ?? market.high) : market.high;
   const top = Math.max(to, market.high) * 1.25;
@@ -83,7 +86,7 @@ function moneyNote(item: MatchedVacancyItem): string {
   const market = marketRange(item);
   const base = item.cluster.salary ? 'Вилка — из текста вакансии.' : 'В вакансии зарплата не указана.';
   if (!market) return base;
-  const range = formatCompensationCompact({ from: market.low, to: market.high, currency: market.currency });
+  const range = formatMarketSalaryRange(market);
   const day = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(new Date(market.at));
   return `${base} Рынок по роли ${range} — ${market.sample} вакансий с зарплатой, ${day}.`;
 }
@@ -106,7 +109,7 @@ function FitScale({ item }: { item: MatchedVacancyItem }) {
 
 function MoneyScale({ item, env }: { item: MatchedVacancyItem; env: RowEnv }) {
   const money = moneyView(item, { currency: env.currency, rates: env.rates });
-  const fork = forkOf(item);
+  const fork = forkOf(item, env.rates);
   return (
     <div className="vs-sc">
       <span className="vs-k">Деньги</span>

@@ -8,6 +8,7 @@ import {
   shouldNoticeStuck,
   deferStacked,
   parseGhJson,
+  parseLines,
   rejectReason,
   resolveRound,
   selectCandidates,
@@ -179,6 +180,20 @@ describe('parseGhJson', () => {
   });
   it('rejects a bare sha with a clear message (scalar --jq is read as text)', () => {
     expect(() => parseGhJson('4ef6a1b2c3\n')).toThrow(/read scalar --jq output as text/);
+  });
+});
+
+describe('parseLines', () => {
+  it('reads every page of a paginated scalar --jq (PR of 150 files, B804)', () => {
+    expect(parseLines('a.ts\nb.ts\n\n.github/workflows/x.yml\r\n')).toEqual([
+      'a.ts',
+      'b.ts',
+      '.github/workflows/x.yml',
+    ]);
+  });
+  it('returns an empty list for no output', () => {
+    expect(parseLines('')).toEqual([]);
+    expect(parseLines(undefined)).toEqual([]);
   });
 });
 
