@@ -5,6 +5,7 @@ import {
   type SystemDesignTask,
   type SystemDesignTaskInput,
 } from './systemDesignTask';
+import { trainingCase, type TrainingCase } from './trainingCase';
 import type { TaskSpec } from './systemDesignTaskSpecs';
 
 /**
@@ -12,7 +13,7 @@ import type { TaskSpec } from './systemDesignTaskSpecs';
  * уже извлечённым из него. Ответ строго по схеме; не прошёл проверку — шаблон по области
  * вакансии или семье роли (`buildSystemDesignTask`). Данных кандидата во входе нет.
  */
-export const SYSTEM_DESIGN_TASK_PROMPT_VERSION = 1;
+export const SYSTEM_DESIGN_TASK_PROMPT_VERSION = 2;
 
 const DESCRIPTION_CHARS = 4000;
 const REQUIREMENTS_MAX = 12;
@@ -51,17 +52,25 @@ export const SYSTEM_DESIGN_TASK_JSON_SCHEMA = {
 
 export function systemDesignTaskInstructions(): string {
   return [
-    'Ты — интервьюер на техническом собеседовании. Составь одну задачу System Design на 45 минут под эту вакансию.',
-    'Задача о системе, которую кандидат строил бы в этой роли и этой компании: возьми предметную область, нагрузку и технологии из текста вакансии и её требований.',
+    'Ты — интервьюер. Составь одну задачу на 45 минут под эту вакансию; её вид указан в строке «Вид задачи».',
+    'System Design — о системе, которую кандидат строил бы в этой роли и этой компании: возьми предметную область, нагрузку и технологии из текста вакансии и её требований.',
+    'Управленческий кейс — о решении руководителя: люди, приоритеты, бюджет, смежные команды, показатели. Рабочая задача — о деле этой роли. В них нет архитектуры программ и микросервисов; service — план или решение, components — этапы и ответственность, operations — показатели, риски, запасной план.',
+    'Отрасль бери из названия роли и текста: технический директор солнечных электростанций отвечает за станции, а не за программы.',
     'Не давай общих задач вроде «основной API продукта», «URL-сокращатель» или «чат», если вакансия не о них.',
     'Всё по-русски, без markdown. Поля:',
     '- title — заголовок задачи, до 70 знаков, с цифрой нагрузки, если она уместна («Приём платежей на 2 000 в секунду»);',
-    '- service — что спроектировать, винительный падеж с маленькой буквы, до 90 знаков («сервис приёма платежей»);',
+    '- service — что спроектировать, винительный падеж с маленькой буквы, до 90 знаков («сервис приёма платежей», «план вывода станций на плановую выработку»);',
     '- scope — что система делает, одна фраза до 200 знаков, без точки в конце;',
     '- points — ровно 4 коротких пункта «что важно в задаче», каждый до 80 знаков, без точки в конце, разные по смыслу;',
     '- requirements, components, tradeoff, operations — тезисы сильного ответа: требования и нагрузка, компоненты, один компромисс с причиной, эксплуатация (мониторинг, отказы, откат); каждое до 240 знаков.',
   ].join('\n');
 }
+
+const CASE_NAME: Readonly<Record<TrainingCase, string>> = {
+  system: 'System Design',
+  leadership: 'управленческий кейс',
+  work: 'рабочая задача',
+};
 
 export function systemDesignTaskUserMessage(input: SystemDesignModelInput): string {
   const requirements = (input.requirements ?? [])
@@ -69,6 +78,7 @@ export function systemDesignTaskUserMessage(input: SystemDesignModelInput): stri
     .filter(Boolean)
     .slice(0, REQUIREMENTS_MAX);
   return [
+    `Вид задачи: ${CASE_NAME[trainingCase(input)]}`,
     `Вакансия: ${input.vacancyTitle.trim()}`,
     input.company?.trim() ? `Компания: ${input.company.trim()}` : null,
     requirements.length

@@ -62,7 +62,9 @@ function readPortion({
   getSortedMatchedPage(sort, roles, offset, controller.signal, days, money)
     .then((page) => {
       if (seq.current !== id) return;
-      const rows = [...base.rows, ...page.rows];
+      // Порядок мог сдвинуться между порциями: строка не показывается дважды.
+      const seen = new Set(base.rows.map((row) => row.cluster.id));
+      const rows = [...base.rows, ...page.rows.filter((row) => !seen.has(row.cluster.id))];
       setState({
         key,
         rows,

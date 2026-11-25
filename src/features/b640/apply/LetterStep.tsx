@@ -236,7 +236,7 @@ function Approval({ letter, variants, onSend }: ApprovalProps) {
 }
 
 function DraftFailure({ letter }: { readonly letter: LetterScreenState }) {
-  const { circles, draft } = letter;
+  const { draft } = letter;
   return (
     <StatusLine
       state="err"
@@ -246,7 +246,7 @@ function DraftFailure({ letter }: { readonly letter: LetterScreenState }) {
           size="sm"
           variant="primary"
           icon="repeat"
-          onClick={circles.error ? circles.retry : draft.retry}
+          onClick={draft.retry}
         >
           Повторить
         </Button>
@@ -273,7 +273,7 @@ export function LetterStep({ letter, variants, head, onSend }: LetterStepProps) 
   const kept = !saved && draft.text.trim() !== '';
   const rebuilding = !saved && draft.loading && !approval.keepsText;
   const pending = !saved && !kept && (circles.loading || (draft.loading && !draft.pitch));
-  const failed = !saved && Boolean(circles.error || draft.error);
+  const failed = !saved && Boolean(draft.error);
   return (
     <section className="lead" aria-labelledby="lt-title">
       <h2 className="lead-title is-long" id="lt-title">

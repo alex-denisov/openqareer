@@ -252,12 +252,13 @@ export function AtsSendStep(props: AtsSendStepProps) {
   const { state } = apply;
   const marking = useMarkSent(props.onSent);
   const path = buildNodePath('o01c', { responseId: props.applicationId });
-  const done = state.kind === 'sent' || marking.state.kind === 'done';
+  const marked = state.kind !== 'sent' && marking.state.kind === 'done';
+  const done = marked || state.kind === 'sent';
   const noun = pluralRu(answered, ['ответ', 'ответа', 'ответов']);
   return (
     <section className="lead" aria-labelledby="w-title">
       <h2 className="lead-title is-long" id="w-title">
-        {titleOf(apply)}
+        {marked ? 'Отклик отправлен' : titleOf(apply)}
       </h2>
       <ul className="rows exp-rows ap-parts" aria-label="Что уйдёт в отклике">
         <li className="row">
@@ -283,10 +284,11 @@ export function AtsSendStep(props: AtsSendStepProps) {
       </ul>
       <Answers items={apply.items} />
       {done ? null : <SendActions props={props} marking={marking} />}
-      <Outcome state={state} host={apply.host} path={path} onRetry={apply.retry} />
-      {state.kind !== 'sent' && marking.state.kind === 'done' ? (
+      {marked ? (
         <Done text="Отклик отмечен как отправленный" path={path} />
-      ) : null}
+      ) : (
+        <Outcome state={state} host={apply.host} path={path} onRetry={apply.retry} />
+      )}
       {marking.state.kind === 'error' ? <StatusLine state="err" text={marking.state.text} /> : null}
       <MandateDialog apply={apply} />
     </section>

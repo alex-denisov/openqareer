@@ -33,6 +33,8 @@ export function resolveVacancyApplyTarget(
   // Записи нет: известен только адрес кластера, сверять двойников не с чем.
   if (!own) {
     const known = applyAddress(cluster.primaryUrl);
+    // Записи есть, но ни одна не та, что показывает карточка: на hh.ru ушёл бы отклик на другую.
+    if (known?.channel === 'hh' && (founder || members.length > 0)) return null;
     return known && { ...known, origin: 'url' };
   }
   const others = members.filter((member) => member.id !== own.id);

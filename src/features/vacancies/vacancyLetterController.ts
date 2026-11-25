@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CoachApiError } from '../coach/apiClient';
 import type {
   ApprovedVacancyLetterResult,
   CandidateWorkplaceForLetter,
@@ -75,6 +76,10 @@ export interface LetterScreenState {
   readonly approval: ApprovalState;
 }
 
+/** Вакансия открыта по id, в подборке её нет: знакомых по ней просто нет. */
+const hasNoCircles = (reason: unknown): boolean =>
+  reason instanceof CoachApiError && reason.code === 'vacancy_not_in_candidate_selection';
+
 function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
   const [data, setData] = useState<Awaited<ReturnType<typeof getVacancyConnectionCircles>> | null>(
     null,
@@ -91,7 +96,9 @@ function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
         if (active) setData(result);
       })
       .catch((reason: unknown) => {
-        if (active)
+        if (!active) return;
+        if (hasNoCircles(reason)) setData(null);
+        else
           setError(reason instanceof Error ? reason.message : 'Не удалось загрузить пути.');
       })
       .finally(() => {
@@ -320,13 +327,11 @@ export function useVacancyLetterController(
     language,
     enabled:
       !held &&
-      Boolean(circles.data) &&
+      // Работодателю напрямую письмо пишется и без знакомых.
       !circles.loading &&
-      !circles.error &&
       (circle.circle === 3 || Boolean(circle.selectedPath)),
     resetWhenDisabled:
       !held &&
-      Boolean(circles.data) &&
       !circles.loading &&
       !circles.error &&
       circle.circle !== 3 &&

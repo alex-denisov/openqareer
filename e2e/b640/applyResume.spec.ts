@@ -283,6 +283,13 @@ test.describe('отклик на hh.ru: шаг «Резюме»', () => {
   async function openHh(page: Page, data: object | null) {
     const prepared: string[] = [];
     await mockResponses(page);
+    // Вакансии в подборке уже нет: площадка — из снимка отклика.
+    await page.route('**/api/v1/candidate/b640/vacancies/*', (route) =>
+      route.fulfill({
+        status: 404,
+        json: { error: { code: 'vacancy_not_found', message: 'Вакансия не найдена.' } },
+      }),
+    );
     await page.route('**/api/v1/candidate/vacancies/*/letter-approvals/latest', (route) =>
       route.fulfill({ json: { data: { approval: null } } }),
     );

@@ -8,7 +8,7 @@ export interface InterviewDesignTaskKey {
   readonly applicationId: string;
 }
 
-/** B750: задача System Design по отклику; первая записанная остаётся навсегда. */
+/** B750: задача System Design по отклику; первая записанная остаётся, пока подходит роли (B635). */
 export class SqliteInterviewDesignTaskRepository {
   constructor(
     private readonly database: DatabaseSync,
@@ -42,6 +42,35 @@ export class SqliteInterviewDesignTaskRepository {
         this.sealedText.seal(JSON.stringify(task), associatedData(key)),
         now,
       );
+    return this.get(key) ?? task;
+  }
+
+  /** B635: задача другого вида, на которую не отвечали, заменяется; гонку решает прежний текст. */
+  replace(
+    key: InterviewDesignTaskKey,
+    previous: SystemDesignTask,
+    task: SystemDesignTask,
+  ): SystemDesignTask {
+    const row = this.database
+      .prepare(
+        `SELECT body_cipher FROM candidate_interview_design_tasks
+         WHERE candidate_id = ? AND application_id = ?`,
+      )
+      .get(key.candidateId, key.applicationId) as { body_cipher: string } | undefined;
+    const body = row && this.sealedText.open(row.body_cipher, associatedData(key));
+    if (row && body === JSON.stringify(previous)) {
+      this.database
+        .prepare(
+          `UPDATE candidate_interview_design_tasks SET body_cipher = ?
+           WHERE candidate_id = ? AND application_id = ? AND body_cipher = ?`,
+        )
+        .run(
+          this.sealedText.seal(JSON.stringify(task), associatedData(key)),
+          key.candidateId,
+          key.applicationId,
+          row.body_cipher,
+        );
+    }
     return this.get(key) ?? task;
   }
 
