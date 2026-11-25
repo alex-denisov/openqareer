@@ -29,7 +29,6 @@ import { useHiddenSection, type HiddenSection } from './useHiddenSection';
 import { useRowInteractions, type RowInteractions } from './useRowInteractions';
 import { usePoolRetry } from './usePoolRetry';
 import { useOwnSection, type OwnSection } from './useOwnSection';
-import { useRolesReady } from './useRolesReady';
 import { useTriage, type Triage } from './useTriage';
 import { isNarrowed, useVacancyList, type VacancyList } from './useVacancyList';
 
@@ -159,7 +158,7 @@ function useListTriage(list: VacancyList, rows: RowInteractions): Triage {
   const triage = useTriage(list.all, rows.hideMany, {
     query: triageQuery,
     expected: list.count,
-    ready: useRolesReady(list.filters, list.pool),
+    ready: list.rolesReady,
     failed: list.pool.failed,
     retry: list.pool.refresh,
   });

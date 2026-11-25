@@ -72,6 +72,8 @@ export interface VacancyList {
     readonly retry: () => void;
   };
   readonly noRole: boolean;
+  /** Список выбрал роли — или выбирать их нечего (ролей нет, чтение сорвалось). */
+  readonly rolesReady: boolean;
 }
 
 /**
@@ -353,6 +355,7 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
     ...derived,
     showMore: serverMode ? server.loadMore : () => setShown((value) => value + PAGE_SIZE),
     server: { active: serverMode, status: server.status, retry: server.retry },
+    rolesReady,
     noRole: pool.campaign !== undefined && pool.campaign.roles.value.length === 0,
   };
 }
