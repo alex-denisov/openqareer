@@ -95,7 +95,7 @@ export class FactCorrectionCopies {
       candidateId,
       id,
       (text) => suggestedCopy(text, fact.numbers) !== null,
-      (subject) => this.isSent(subject, sent),
+      (subject, payload) => this.isSent(subject, payload, sent),
     );
     this.database
       .prepare('INSERT INTO candidate_fact_corrections (id, candidate_id, payload_cipher, created_at) VALUES (?, ?, ?, ?)')
@@ -122,9 +122,25 @@ export class FactCorrectionCopies {
     this.database.prepare('DELETE FROM candidate_fact_corrections WHERE id = ?').run(id);
   }
 
-  private isSent({ candidateId, kind, subjectId }: TextSubject, sent: ReadonlySet<string>): boolean {
+  /** Текст уже у работодателя или в LinkedIn; чей он, неизвестно — тоже не трогаем. */
+  private isSent({ candidateId, kind, subjectId }: TextSubject, payload: unknown, sent: ReadonlySet<string>): boolean {
     if (kind === 'letter') return sent.has(subjectId);
-    return kind === 'message' && this.messages.get(candidateId, subjectId)?.state === 'sent';
+    if (kind === 'resume') {
+      const vacancyId = (payload as { vacancyId?: unknown } | null)?.vacancyId;
+      return typeof vacancyId !== 'string' || sent.has(vacancyId);
+    }
+    if (kind === 'post' || kind === 'comment') return this.isPublished(candidateId, subjectId);
+    return kind === 'headline' || this.messages.get(candidateId, subjectId)?.state === 'sent';
+  }
+
+  /** Опубликован или уже скопирован для LinkedIn. */
+  private isPublished(candidateId: string, draftId: string): boolean {
+    const queries: readonly (readonly [string, string])[] = [
+      ['candidate_linkedin_queue', "SELECT 1 FROM candidate_linkedin_queue WHERE candidate_id = ? AND draft_id = ? AND state = 'done'"],
+      ['candidate_drafts', "SELECT 1 FROM candidate_drafts WHERE candidate_id = ? AND id = ? AND status = 'copied'"],
+    ];
+    return queries.some(([table, sql]) =>
+      tableExists(this.database, table) && this.database.prepare(sql).get(candidateId, draftId) !== undefined);
   }
 
   private applyEdits(candidateId: string, fact: Corrected, sent: ReadonlySet<string>): EditChange[] {
