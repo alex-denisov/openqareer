@@ -21,7 +21,13 @@ import { getRejectionReview, saveReviewFeedback } from './data/rejectionReviewAp
 import { useAsync } from './data/useAsync';
 import { longDate, pluralRu } from './model/responseRow';
 import { checksBasis } from './model/reviewChecks';
-import { guessLine, recommendationText, rejectionsTitle, reviewTitle } from './model/reviewText';
+import {
+  guessLine,
+  recommendationText,
+  rejectionsTitle,
+  resumePathOf,
+  reviewTitle,
+} from './model/reviewText';
 import { ReviewChecks, ReviewThreshold } from './ReviewChecks';
 
 /** Ширина полосы шагами по 5 %: атрибут `style` в кабинете запрещён. */
@@ -87,12 +93,13 @@ function RejectedList({ items, total }: RejectedListProps) {
 
 interface StepActionProps {
   readonly step: RejectionRecommendation;
+  readonly rejections: readonly RejectionReviewItem[];
   readonly primary: boolean;
 }
 
-/** «Поправить резюме» открывает у консультанта готовую правку; остальное — переход. */
-function StepButton({ step, primary }: StepActionProps) {
-  const { openConsultant } = useShell();
+/** «Поправить резюме» — готовая правка у консультанта над «Резюме» отклика (k06); остальное — переход. */
+function StepButton({ step, rejections, primary }: StepActionProps) {
+  const { navigate, openConsultant } = useShell();
   const text = recommendationText(step);
   const { resumeFactId } = step;
   if (resumeFactId) {
@@ -100,7 +107,11 @@ function StepButton({ step, primary }: StepActionProps) {
       <Button
         variant={primary ? 'primary' : undefined}
         icon={text.icon}
-        onClick={() => openConsultant({ kind: 'dialog', resumeFactId, resumeReason: text.why })}
+        onClick={() => {
+          const path = resumePathOf(step, rejections);
+          openConsultant({ kind: 'dialog', resumeFactId, resumeReason: text.why });
+          if (path) navigate(path);
+        }}
       >
         {text.action}
       </Button>
@@ -114,7 +125,12 @@ function StepButton({ step, primary }: StepActionProps) {
   );
 }
 
-function OtherSteps({ steps }: { readonly steps: readonly RejectionRecommendation[] }) {
+interface OtherStepsProps {
+  readonly steps: readonly RejectionRecommendation[];
+  readonly rejections: readonly RejectionReviewItem[];
+}
+
+function OtherSteps({ steps, rejections }: OtherStepsProps) {
   if (steps.length === 0) return null;
   return (
     <section className="mod" aria-labelledby="fn-alt">
@@ -133,7 +149,7 @@ function OtherSteps({ steps }: { readonly steps: readonly RejectionRecommendatio
                 <h4 className="rec-t">{text.title}</h4>
                 <p className="rec-why">{text.why}</p>
                 <div className="actions">
-                  <StepButton step={step} primary={false} />
+                  <StepButton step={step} rejections={rejections} primary={false} />
                 </div>
               </div>
             </li>
@@ -201,10 +217,11 @@ function Helped({ initial }: { readonly initial: boolean | null }) {
  * Главное действие экрана. На 390 — закреплённая полоса над навигацией (она сама оставляет
  * место под собой); на 1440 и 1176 кнопка стоит в блоке, как в макете.
  */
-function LeadAction({ step }: { readonly step: RejectionRecommendation | null }) {
+function LeadAction({ review }: { readonly review: RejectionReview }) {
+  const step = review.firstStep;
   const mobile = useIsMobile();
   const link = step ? (
-    <StepButton step={step} primary />
+    <StepButton step={step} rejections={review.rejections} primary />
   ) : (
     <Link className="btn is-primary" to={buildNodePath('s07')}>
       <Icon name="vacancies" />
@@ -235,7 +252,7 @@ function ReviewLead({ review }: { readonly review: RejectionReview }) {
       {low ? <DataMeter review={review} /> : null}
       {step && !low ? <p className="lead-text">{recommendationText(step).why}</p> : null}
       {/* B645: при малых данных главное действие — в первой из трёх проверок, как в O7c. */}
-      {low && review.checks ? <ReviewChecks checks={review.checks} /> : <LeadAction step={step} />}
+      {low && review.checks ? <ReviewChecks checks={review.checks} /> : <LeadAction review={review} />}
     </section>
   );
 }
@@ -250,7 +267,7 @@ function Review({ review }: { readonly review: RejectionReview }) {
       </div>
       <div className="col">
         {!ready && review.checks ? <ReviewThreshold threshold={review.threshold} /> : null}
-        {ready ? <OtherSteps steps={review.recommendations} /> : null}
+        {ready ? <OtherSteps steps={review.recommendations} rejections={review.rejections} /> : null}
         {ready && review.firstStep ? <Helped initial={review.helped} /> : null}
       </div>
     </div>
