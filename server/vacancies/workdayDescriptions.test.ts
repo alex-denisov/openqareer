@@ -309,3 +309,64 @@ describe('Workday list adapter', () => {
     expect(listed?.fullDescription).toBeUndefined();
   });
 });
+
+describe('площадка, где дочитывать нечего (B761)', () => {
+  const SOURCE = 'ats-workday-sonyglobal';
+  const IDLE_MS = 60 * 60_000;
+
+  function setup() {
+    const rows = new Map<string, UnifiedVacancy[]>([[SOURCE, []]]);
+    const pool = new FakePool(rows);
+    let scans = 0;
+    let nowMs = 0;
+    const load = pool.loadVacanciesWithoutFullText.bind(pool);
+    pool.loadVacanciesWithoutFullText = (...args) => {
+      scans += 1;
+      return load(...args);
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => [SOURCE],
+      now: () => nowMs,
+      defaultIntervalMs: 20_000,
+      fetchDetail: async () => ({ status: 429 }),
+    });
+    return {
+      rows,
+      backfill,
+      scans: () => scans,
+      at: (ms: number) => {
+        nowMs = ms;
+        return backfill.step();
+      },
+    };
+  }
+
+  it('не читается на каждом такте, а снова смотрится через час', async () => {
+    const { at, scans } = setup();
+    await at(0);
+    await at(20_000);
+    await at(IDLE_MS - 1);
+    expect(scans()).toBe(1);
+    await at(IDLE_MS);
+    expect(scans()).toBe(2);
+  });
+
+  it('просыпается, когда принято новое чтение площадки', async () => {
+    const { at, scans, rows, backfill } = setup();
+    await at(0);
+    rows.set(SOURCE, [vacancy('v1', SOURCE)]);
+    backfill.wake(SOURCE);
+    expect((await at(20_000)).requested).toBe(1);
+    expect(scans()).toBe(2);
+  });
+
+  it('новое чтение не снимает паузу после 429', async () => {
+    const { at, scans, rows, backfill } = setup();
+    rows.set(SOURCE, [vacancy('v1', SOURCE)]);
+    await at(0);
+    backfill.wake(SOURCE);
+    await at(20_000);
+    expect(scans()).toBe(1);
+  });
+});

@@ -132,6 +132,12 @@ export const fetchWorkdayDetail: WorkdayDetailFetch = async (url, format) => {
 type Outcome = 'loaded' | 'gone' | 'failed' | 'throttled';
 
 const DEFAULT_THROTTLE_PAUSE_MS = 15 * 60_000;
+/**
+ * B761 25.11, прод: 12,7 из 13,7 тыс. площадок без единой записи на дочитку стоили 87 с
+ * чтения пула за проход, а проход шёл каждые 20 с. Пустая площадка ждёт час или нового
+ * принятого чтения (`wake`).
+ */
+const IDLE_PAUSE_MS = 60 * 60_000;
 const EMPTY_REPORT: WorkdayDescriptionReport = {
   requested: 0,
   loaded: 0,
@@ -154,6 +160,8 @@ export class WorkdayDescriptionBackfill {
   private readonly defaultIntervalMs: number;
   /** Когда источник снова можно спрашивать (темп и пауза после 429). */
   private readonly nextDueAt = new Map<string, number>();
+  /** Площадки, где дочитывать было нечего. */
+  private readonly idle = new Set<string>();
   /** Неудачи по id: после `maxAttempts` запись больше не запрашивается до перезапуска. */
   private readonly attempts = new Map<string, number>();
   private running = false;
@@ -214,6 +222,11 @@ export class WorkdayDescriptionBackfill {
     }
   }
 
+  /** Принято новое чтение: пустая площадка смотрится на ближайшем такте. Паузу 429 не снимает. */
+  wake(sourceId: string): void {
+    if (this.idle.delete(sourceId)) this.nextDueAt.delete(sourceId);
+  }
+
   private exhaustedIds(): string[] {
     return [...this.attempts].filter(([, count]) => count >= this.maxAttempts).map(([id]) => id);
   }
@@ -230,6 +243,12 @@ export class WorkdayDescriptionBackfill {
       paced ? 1 : this.perSource,
       this.exhaustedIds(),
     );
+    if (batch.length === 0) {
+      this.idle.add(sourceId);
+      this.nextDueAt.set(sourceId, this.now() + IDLE_PAUSE_MS);
+      return [];
+    }
+    this.idle.delete(sourceId);
     const outcomes: Outcome[] = [];
     for (let index = 0; index < batch.length; index += 1) {
       if (index > 0) await this.sleep(this.delayMs);
