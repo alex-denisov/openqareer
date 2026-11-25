@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { createB640Harness, poolItem } from '../testHelpers/b640VacancyHarness';
 import { forgetMatchedListsForTests } from './matchedVacancyList';
 
@@ -66,6 +67,25 @@ describe('B715: GET b640/vacancies/:id — карточка вакансии в�
       (await h.post(`${BASE}/cluster-src-hh-search:99999999/apply-target`, {}, 'flagged.test'))
         .statusCode,
     ).toBe(404);
+  });
+  it('B787: пока отклик уходит через hh.ru, цель карточки не меняется', async () => {
+    const h = await setup();
+    const card = 'cluster-src-hh-search:139180469';
+    const path = `${BASE}/${encodeURIComponent(card)}`;
+    const hh = new SqliteHhSessionRepository({ databasePath: h.databasePath, encryptionKey: Buffer.alloc(32, 8) });
+    closers.push(async () => hh.close());
+    const start = (cardId: string, vacancyId: string, now = new Date()) =>
+      hh.startAttempt(h.candidateIds['flagged.test'], { vacancyId, resumeId: 'r', cardId, now });
+    const first = async () => (await h.get(path, 'flagged.test')).json().data.cluster.sources[0].sourceUrl;
+    start('cluster-other', '555');
+    start(card, '666', new Date(Date.now() - 6 * 60_000));
+    expect(await first()).toBe(LIVE.url);
+    const attempt = start(card, '777');
+    expect(await first()).toBe('https://hh.ru/vacancy/777');
+    const queued = await h.post('/api/v1/candidate/manual-applications', { vacancyId: card, reason: 'linkedin' }, 'flagged.test');
+    expect([queued.statusCode, queued.json().error.code]).toEqual([409, 'hh_apply_in_progress']);
+    hh.finishAttempt(h.candidateIds['flagged.test'], attempt, { outcome: 'failed', failureCode: null, now: new Date() });
+    expect(await first()).toBe(LIVE.url);
   });
   it('без сессии и без флага — 404', async () => {
     const h = await setup();

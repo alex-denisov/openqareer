@@ -21,6 +21,7 @@ import {
   type LetterFactSource,
 } from '../domain/letterFreshness';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { snapshotWithDescription } from './applicationVacancyText';
 import { requireCabinetB640 } from './cabinetB640Flag';
@@ -53,6 +54,7 @@ export type QueuedLetterWriter = (
 
 type Bound = ResumeEditDeps & {
   readonly queue: SqliteManualApplyRepository;
+  readonly hh: SqliteHhSessionRepository;
   readonly forms: SqliteQuestionnaireRepository;
   readonly writeLetter: QueuedLetterWriter;
   readonly inFlight: Map<string, Promise<void>>;
@@ -360,6 +362,16 @@ const enqueue: Handler = async (deps, request, reply) => {
       false,
     );
   }
+  if (deps.hh.vacancyInProgress(who.candidateId, parsed.data.vacancyId, new Date())) {
+    return sendError(
+      reply,
+      request,
+      409,
+      'hh_apply_in_progress',
+      'Отклик уже отправляется через hh.ru.',
+      false,
+    );
+  }
   return enqueueVacancy(deps, request, reply, who, parsed.data);
 };
 
@@ -454,6 +466,10 @@ export function registerManualApplyRoutes(
   const key = deps.config.dataEncryptionKey;
   const bound: Bound = {
     ...deps,
+    hh: new SqliteHhSessionRepository({
+      databasePath: deps.config.databasePath,
+      encryptionKey: key,
+    }),
     queue: new SqliteManualApplyRepository(database, key),
     forms: new SqliteQuestionnaireRepository(database, key),
     writeLetter,
@@ -466,7 +482,10 @@ export function registerManualApplyRoutes(
   app.get(`${BASE}/:id`, withDeps(bound, readItem));
   app.post(`${BASE}/:id/sent`, write, withDeps(bound, markSent));
   app.post(`${BASE}/:id/skip`, write, withDeps(bound, skip));
-  app.addHook('onClose', async () => void (await Promise.allSettled(bound.inFlight.values())));
+  app.addHook('onClose', async () => {
+    await Promise.allSettled(bound.inFlight.values());
+    bound.hh.close();
+  });
   return {
     async preparedPitch(candidateId, vacancyId) {
       await bound.inFlight.get(flightKey(candidateId, vacancyId));

@@ -2,6 +2,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ApplyTarget } from '../../shared/applyTarget';
 import { applyRedirects } from '../vacancies/applyRedirect';
 import { resolveVacancyApplyTarget } from '../vacancies/vacancyApplyTarget';
+import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { withHhAttempt } from '../vacancies/hhAttemptHold';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import { matchCandidateWithVacancy } from '../vacancies/vacancyMatcher';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -16,13 +19,16 @@ const ID_MAX = 200;
 
 type VacancyCard = MatchedVacancyItem & { readonly applyTarget: ApplyTarget | null };
 
+type CardDeps = RouteDeps & { readonly hh: SqliteHhSessionRepository };
+
+function cardCluster(deps: CardDeps, candidateId: string, id: string): VacancyCluster | undefined {
+  const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, id);
+  return cluster && withHhAttempt(cluster, deps.hh.vacancyInProgress(candidateId, id, new Date()));
+}
+
 /** Объяснение совпадения для одной вакансии — тем же сравнением, что и строка подборки. */
-function cardItem(
-  deps: RouteDeps,
-  candidateId: string,
-  clusterId: string,
-): VacancyCard | undefined {
-  const cluster = resolveRowVacancyCluster(deps.multiSourceEngine, clusterId);
+function cardItem(deps: CardDeps, candidateId: string, clusterId: string): VacancyCard | undefined {
+  const cluster = cardCluster(deps, candidateId, clusterId);
   if (!cluster) return undefined;
   const context = readB640ListContext(deps, candidateId);
   const explanation = matchCandidateWithVacancy(
@@ -48,7 +54,7 @@ function cardItem(
  * B715: карточка v04 для вакансии, которой нет в загруженной подборке кандидата — ссылка hh.ru
  * из «Своей вакансии» (`in_pool`), вакансия после отклика, переход по прямому адресу.
  */
-function getVacancyCard(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return reply;
   const candidate = sessionCandidate(request, reply, principal.candidate);
@@ -63,14 +69,13 @@ function getVacancyCard(deps: RouteDeps, request: FastifyRequest, reply: Fastify
 }
 
 /** B787: кандидат открыл отклик — адрес трекера раскрывается одним переходом и запоминается. */
-async function postApplyTarget(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+async function postApplyTarget(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return reply;
   const candidate = sessionCandidate(request, reply, principal.candidate);
   if (!candidate) return reply;
   const id = (request.params as { id?: string }).id ?? '';
-  const cluster =
-    id && id.length <= ID_MAX ? resolveRowVacancyCluster(deps.multiSourceEngine, id) : undefined;
+  const cluster = id && id.length <= ID_MAX ? cardCluster(deps, candidate.id, id) : undefined;
   if (!cluster)
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   const read = () =>
@@ -83,6 +88,12 @@ async function postApplyTarget(deps: RouteDeps, request: FastifyRequest, reply: 
 }
 
 export function registerB640VacancyCardRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.post(`${BASE}/:id/apply-target`, withDeps(deps, postApplyTarget));
-  app.get(`${BASE}/:id`, withDeps(deps, getVacancyCard));
+  const hh = new SqliteHhSessionRepository({
+    databasePath: deps.config.databasePath,
+    encryptionKey: deps.config.dataEncryptionKey,
+  });
+  app.addHook('onClose', async () => hh.close());
+  const bound: CardDeps = { ...deps, hh };
+  app.post(`${BASE}/:id/apply-target`, withDeps(bound, postApplyTarget));
+  app.get(`${BASE}/:id`, withDeps(bound, getVacancyCard));
 }
