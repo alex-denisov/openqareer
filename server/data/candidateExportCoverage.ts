@@ -72,6 +72,7 @@ export const CANDIDATE_TABLE_COVERAGE: Readonly<Record<string, CandidateTableCov
   candidate_application_labels: { export: 'tracker' },
   candidate_outreach: { export: 'tracker' },
   vacancy_applications: { export: 'tracker' },
+  application_sent_postings: { internal: 'отпечаток объявления отправленного отклика: поиск дубля' },
   vacancy_skips: { export: 'tracker' },
   career_commands: { export: 'tracker' },
   career_command_approvals: { export: 'tracker' },

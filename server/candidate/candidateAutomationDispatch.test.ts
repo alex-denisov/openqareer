@@ -96,7 +96,7 @@ describe('CandidateAutomationDispatch', () => {
     const { repository } = setup();
     const item = addApproved(repository);
     const executor = fakeExecutor();
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     expect(await dispatch.runCandidate('alice', new Date(NOW))).toMatchObject({
       status: 'waiting',
@@ -113,6 +113,24 @@ describe('CandidateAutomationDispatch', () => {
     expect(
       repository.schedulerRepository.listJournal('alice', { now: '2026-10-12T07:03:00.000Z' }),
     ).toMatchObject([{ result: 'delivered', receiptId: item.id, company: 'Acme' }]);
+  });
+
+  it('B801: отклик по дублю объявления перед отправкой снимается и не уходит', async () => {
+    const { repository } = setup();
+    const item = addApproved(repository);
+    repository.schedulerRepository.setRuntime('alice', { nextSendAt: NOW }, NOW);
+    const executor = fakeExecutor();
+    const dispatch = new CandidateAutomationDispatch({
+      repository,
+      executor,
+      alreadySent: (_candidateId, { payload }) => payload.targetUrl === 'https://hh.ru/vacancy/1',
+    });
+
+    const result = await dispatch.runCandidate('alice', new Date(NOW));
+
+    expect(result).toMatchObject({ queueItemId: item.id, failureCode: 'already_applied' });
+    expect(executor.calls).toHaveLength(0);
+    expect(repository.getQueueItem('alice', item.id)?.status).toBe('removed');
   });
 
   it('records the daily limit and does not call the executor after quota is used', async () => {
@@ -139,7 +157,7 @@ describe('CandidateAutomationDispatch', () => {
     addApproved(repository, { clusterId: 'cluster-next' });
     repository.schedulerRepository.setRuntime('alice', { nextSendAt: NOW }, NOW);
     const executor = fakeExecutor();
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     const result = await dispatch.runCandidate('alice', new Date(NOW));
 
@@ -154,7 +172,7 @@ describe('CandidateAutomationDispatch', () => {
     addApproved(repository, { clusterId: 'cluster-next' });
     repository.schedulerRepository.setRuntime('alice', { nextSendAt: NOW }, NOW);
     const executor = fakeExecutor('failed');
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     const result = await dispatch.runCandidate('alice', new Date(NOW));
 
@@ -181,7 +199,7 @@ describe('CandidateAutomationDispatch', () => {
         throw new CandidateRunnerNotConnectedError();
       },
     };
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     const result = await dispatch.runCandidate('alice', new Date(NOW));
     const journal = repository.schedulerRepository.listJournal('alice', {
@@ -206,7 +224,7 @@ describe('CandidateAutomationDispatch', () => {
         throw new CandidateConsentRequiredError();
       },
     };
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     const result = await dispatch.runCandidate('alice', new Date(NOW));
 
@@ -234,7 +252,7 @@ describe('CandidateAutomationDispatch', () => {
         throw new Error('provider execution should be blocked after revocation');
       },
     };
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     const result = await dispatch.runCandidate('alice', new Date(NOW));
 
@@ -251,7 +269,7 @@ describe('CandidateAutomationDispatch', () => {
     addApproved(repository, { clusterId: 'error-c' });
     repository.schedulerRepository.setRuntime('alice', { nextSendAt: NOW }, NOW);
     const executor = fakeExecutor('failed');
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     const first = await dispatch.runCandidate('alice', new Date(NOW));
 
@@ -276,7 +294,7 @@ describe('CandidateAutomationDispatch', () => {
       NOW,
     );
     const executor = fakeExecutor();
-    const dispatch = new CandidateAutomationDispatch({ repository, executor, random: () => 0 });
+    const dispatch = new CandidateAutomationDispatch({ alreadySent: () => false, repository, executor, random: () => 0 });
 
     for (let index = 0; index < 8; index += 1) {
       await dispatch.runCandidate('alice', new Date(firstSend.getTime() + index * 2 * 60_000));

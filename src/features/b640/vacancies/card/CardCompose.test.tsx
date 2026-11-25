@@ -60,7 +60,7 @@ vi.mock('./useCardData', () => ({
   useCardData: () => ({
     load: 'ready',
     item: makeItem({ id: 'v1', title: 'Руководитель разработки', company: 'Ладога Банк' }),
-    links: {},
+    links: { byCluster: new Map() },
     people: { items: people, total: people.length, offset: 0, nextOffset: null },
     reload: () => undefined,
   }),

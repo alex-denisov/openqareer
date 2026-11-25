@@ -45,6 +45,7 @@ import { ResumeStep } from './ResumeStep';
 import { HhResumeStep } from './hh/HhResumeStep';
 import { approvedLabel, NeedsLetter, SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
+import { openExistingFirst, useSentElsewhere } from './existingResponse';
 import { useApplyCluster } from './useApplyCluster';
 import { Pending, useOpenedName } from './ApplyPending';
 import { VacancyColumn, VacancyText } from './VacancyColumn';
@@ -680,7 +681,12 @@ interface ApplyTargetProps {
 
 /** Единый экран отклика (O2): резюме, письмо и отправка под одну вакансию. */
 export function ApplyScreen({ responseId }: { readonly responseId: string }) {
-  const load = useCallback((signal: AbortSignal) => loadApplications(signal), []);
+  useSentElsewhere(responseId);
+  const load = useCallback(
+    async (signal: AbortSignal) =>
+      openExistingFirst(responseId, await loadApplications(signal), signal),
+    [responseId],
+  );
   const { state, reload } = useAsync(load, 'Отклик не загрузился.');
   const target = state.data ? resolveTarget(responseId, state.data) : null;
   const opened = useShell().journey?.vacancy?.vacancyId;

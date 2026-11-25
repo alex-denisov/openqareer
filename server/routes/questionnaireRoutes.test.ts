@@ -591,6 +591,17 @@ describe('B787: форма работодателя из приложения', 
     expect((await call(app, 'GET', url('v1'), other)).json().data.total).not.toBe(3);
   });
 
+  it('открытая вкладка со старыми номерами не стирает ответы новой формы', async () => {
+    const { app, seed } = await setup();
+    seed(flagged, 'v1');
+    await call(app, 'PUT', url('v1', '/ats-form'), flagged, ATS_FORM);
+    const italy = [{ questionId: 'ats-3', text: 'Italy' }];
+    await call(app, 'PUT', url('v1', '/answers'), flagged, { answers: italy });
+    const old = [{ questionId: 'teamtailor_1', text: '5000' }];
+    const after = await call(app, 'PUT', url('v1', '/answers'), flagged, { answers: old });
+    expect(after.json().data.answers).toContainEqual(italy[0]);
+  });
+
   it.each([
     { ...ATS_FORM, url: 'http://jobs.lever.co/x' },
     { ...ATS_FORM, questions: [] },

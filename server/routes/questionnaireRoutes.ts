@@ -424,7 +424,11 @@ const putAnswers: Handler = async (deps, request, reply) => {
     return sendError(reply, request, 404, 'questionnaire_not_found', 'Анкета не найдена.', false);
   }
   const shown = questionnaireView(deps, who, stored, { state: 'ready', formUrl: null });
-  const answers = withoutLive(answersToStore(stored.questions, parsed.data.answers), shown);
+  const sent = answersToStore(stored.questions, parsed.data.answers);
+  const named = new Set(sent.map((answer) => answer.questionId));
+  // Список вопросов мог смениться, пока форма открыта: о чём клиент не знал, то он и не стёр.
+  const kept = stored.answers.filter((answer) => !named.has(answer.questionId));
+  const answers = answersToStore(stored.questions, [...kept, ...withoutLive(sent, shown)]);
   rememberWorkRights(deps, who, stored.questions, answers, shown);
   deps.forms.saveAnswers(who.candidateId, who.vacancyId, answers);
   return {

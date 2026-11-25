@@ -89,7 +89,8 @@ function nextQueueStatus(
     if (action === 'remove') return 'removed';
     if (action === 'consultant') return 'consultant';
   }
-  if (current === 'approved' && ['remove', 'sent', 'attempted', 'failed'].includes(action)) {
+  if (current === 'approved' && action === 'remove') return 'removed';
+  if (current === 'approved' && ['sent', 'attempted', 'failed'].includes(action)) {
     return action as CandidateAutomationQueueStatus;
   }
   return null;

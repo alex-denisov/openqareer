@@ -28,6 +28,8 @@ export interface B640Notification {
   readonly readAt: string | null;
   readonly sourceType: string;
   readonly sourceId: string;
+  /** Непрочитанные повторы того же дня, свёрнутые в эту строку: читаются вместе с ней. */
+  readonly mergedUnreadIds?: readonly string[];
 }
 
 export interface B640NotificationPage {
