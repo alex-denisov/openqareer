@@ -189,6 +189,7 @@ install_sudoers() {
   sudoers_temp="$(mktemp)"
   {
     printf '%s\n' \
+      'openqareer-deploy ALL=(root) NOPASSWD: /usr/local/sbin/openqareer-salary-fetch ""' \
       'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service' \
       'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl disable --now openqareer-static.service' \
       'openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-maintenance.service' \
@@ -220,6 +221,11 @@ install_zero_downtime_files() {
     "$SCRIPT_DIR/openqareer-upstream" /usr/local/bin/openqareer-upstream
   install -o root -g root -m 0755 \
     "$SCRIPT_DIR/openqareer-activate" /usr/local/bin/openqareer-activate
+  # B803: файл данных зарплат шагом выкатки.
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-salary-fetch" /usr/local/sbin/openqareer-salary-fetch
+  install -o root -g root -m 0755 \
+    "$SCRIPT_DIR/openqareer-salary-sync" /usr/local/bin/openqareer-salary-sync
   install -o root -g root -m 0755 \
     "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
   install -o root -g root -m 0644 \

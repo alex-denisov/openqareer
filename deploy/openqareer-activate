@@ -7,6 +7,7 @@ readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
 readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
 # B759: обслуживание и воркер соответствия работают со своих ссылок на релиз и
 # перезапускаются, только когда отпечаток их кода (с источниками схемы) другой.
+readonly SALARY_SYNC="${OPENQAREER_SALARY_SYNC:-/usr/local/bin/openqareer-salary-sync}"
 readonly MAINTENANCE_LINK=maintenance
 readonly MECHANICS_LINK=mechanics
 
@@ -183,7 +184,7 @@ refresh_worker() {
   running_fingerprint=""
   [[ -z "$running_target" ]] ||
     running_fingerprint="$(fingerprint_in "$RELEASE_ROOT/$running_target" "$fingerprint_file")"
-  if [[ -n "$next_fingerprint" && "$next_fingerprint" == "$running_fingerprint" ]] &&
+  if [[ "${4:-}" != updated && -n "$next_fingerprint" && "$next_fingerprint" == "$running_fingerprint" ]] &&
     unit_runs_from_link "$service" "$link_name" &&
     systemctl is-active --quiet "$service"; then
     printf 'kept'
@@ -200,7 +201,14 @@ refresh_worker() {
   printf 'restarted'
 }
 
-maintenance_state="$(refresh_worker "$MAINTENANCE_SERVICE" "$MAINTENANCE_LINK" maintenance.fingerprint)" ||
+# B803: обслуживание читает файл данных при старте, поэтому новый файл — повод для перезапуска.
+# Сбой скачивания выкатку не роняет: остаётся прежний файл.
+salary_state=none
+if [[ -x "$SALARY_SYNC" ]]; then
+  salary_state="$("$SALARY_SYNC" "$release_dir/data/salary-benchmarks.manifest")" || salary_state=failed
+fi
+
+maintenance_state="$(refresh_worker "$MAINTENANCE_SERVICE" "$MAINTENANCE_LINK" maintenance.fingerprint "$salary_state")" ||
   fail "maintenance service is not active after release restart; check journalctl -u $MAINTENANCE_SERVICE"
 
 # Хост без юнита воркера соответствия (до bootstrap) пропускается, установленный обязан подняться.
@@ -227,6 +235,6 @@ done < <(find releases -regextype posix-extended -mindepth 1 -maxdepth 1 \
   -type d -regex '.*/[0-9a-f]{40}' -printf '%T@ %p\n' |
   sort -rn | awk 'NR > 5 {print $2}')
 
-printf 'release=%s health=ok port=%s reserve=%s previous=%s maintenance=%s mechanics=%s\n' \
+printf 'release=%s health=ok port=%s reserve=%s previous=%s maintenance=%s mechanics=%s salary=%s\n' \
   "$release_sha" "$next_port" "$([[ "$reserve" == "1" ]] && printf '%s' "$live_port" || printf none)" \
-  "${old_target:-none}" "$maintenance_state" "$mechanics_state"
+  "${old_target:-none}" "$maintenance_state" "$mechanics_state" "$salary_state"

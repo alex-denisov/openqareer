@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# B803: файл данных зарплат по манифесту релиза (version, sha256). Хеш тот же — ничего не делает.
+# Любой сбой: прежний файл остаётся, код 0, выкатка идёт дальше. stdout — none|kept|updated|failed.
+set -Euo pipefail
+umask 077
+
+readonly MANIFEST="${1:?manifest}"
+readonly TARGET="${OPENQAREER_SALARY_FILE:-/var/lib/openqareer/salary-benchmarks.json}"
+readonly MAX_BYTES=$((32 * 1024 * 1024))
+
+[[ -f "$MANIFEST" ]] || { printf 'none'; exit 0; }
+temp=""
+trap '[[ -z "$temp" ]] || rm -f -- "$temp"' EXIT
+failed() {
+  printf 'openqareer-salary-sync: %s; previous file stays\n' "$1" >&2
+  printf 'failed'
+  exit 0
+}
+sha_of() { sha256sum "$1" 2>/dev/null | awk '{print $1}'; }
+
+expected="$(sed -n 's/^sha256=//p' "$MANIFEST" | tail -1 | tr -d '\r\n')"
+[[ "$expected" =~ ^[0-9a-f]{64}$ ]] || failed 'manifest has no sha256'
+if [[ -f "$TARGET" && "$(sha_of "$TARGET")" == "$expected" ]]; then
+  printf 'kept'
+  exit 0
+fi
+
+temp="$(mktemp "$TARGET.XXXXXX" 2>/dev/null)" || failed 'cannot write next to the data file'
+printf '%s\n' "$expected" | timeout 150 sudo -n /usr/local/sbin/openqareer-salary-fetch 2>/dev/null |
+  head -c "$MAX_BYTES" > "$temp" || failed 'download failed'
+[[ "$(sha_of "$temp")" == "$expected" ]] || failed 'checksum mismatch'
+mv -f -- "$temp" "$TARGET" || failed 'cannot replace the data file'
+temp=""
+printf 'updated'

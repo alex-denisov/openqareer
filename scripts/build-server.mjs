@@ -98,5 +98,8 @@ for (const name of ['employer-boards.ndjson', 'LICENSE', 'CONTRIBUTIONS.md']) {
   await copyFile(`server/companyDirectory/careerOps/data/${name}`, `dist/data/careerOps/${name}`);
 }
 
+// B803: hash of the salary data file; the file itself is downloaded by the deploy step.
+await copyFile('deploy/salary-benchmarks.manifest', 'dist/data/salary-benchmarks.manifest');
+
 // B759: deploy restarts maintenance and the mechanics worker only when these change.
 writeFingerprints('dist', release, web.metafile);

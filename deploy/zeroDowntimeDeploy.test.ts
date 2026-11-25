@@ -33,6 +33,8 @@ case "$1" in -un) echo openqareer-deploy ;; -u) echo 1000 ;; *) exec /usr/bin/id
 printf '%s\\n' "$*" >> "$STATE/flock.log"
 [[ -f "$STATE/lock-held" ]] && exit 1
 exit 0`,
+  'salary-sync': `#!/usr/bin/env bash
+cat "$STATE/salary" 2>/dev/null || printf none`,
   sleep: '#!/usr/bin/env bash\nexit 0',
   // BSD mv has no -T; the scripts only use it to replace a symlink atomically.
   mv: `#!/usr/bin/env bash
@@ -122,6 +124,7 @@ function makeHost(): Host {
       DEPLOY_DIR: DEPLOY,
       RELEASE_ROOT: root,
       OPENQAREER_RELEASE_ROOT: root,
+      OPENQAREER_SALARY_SYNC: join(bin, 'salary-sync'),
       OPENQAREER_SLOTS_LIB: join(DEPLOY, 'openqareer-slots.sh'),
       OPENQAREER_UPSTREAM_FILE: snippet,
       OPENQAREER_CADDYFILE: join(base, 'Caddyfile'),
@@ -457,6 +460,7 @@ describe('bootstrap.sh: sudoers покрывает каждый вызов sudo 
     expect(allowed).toContain('/usr/local/bin/openqareer-upstream 3210 3211');
     expect(allowed).toContain('/usr/local/bin/openqareer-upstream 3211 3210');
     expect(scripts).toContain('sudo -n "$UPSTREAM_HELPER"');
+    expect(allowed).toContain('/usr/local/sbin/openqareer-salary-fetch ""');
     expect([...allowed].every((line) => !line.includes('*'))).toBe(true);
   });
 });
@@ -591,6 +595,22 @@ describe.runIf(isLinux)(
       expect(restarts(host)).toEqual([`restart ${MAINTENANCE}`]);
       expect(link(host, 'maintenance')).toBe(`releases/${SHA_C}`);
       expect(link(host, 'mechanics')).toBe(`releases/${SHA_B}`);
+    });
+
+    it.each([
+      ['updated', 'restarted'],
+      ['failed', 'kept'],
+    ])('файл зарплат %s — обслуживание %s (B803)', (salary, maintenance) => {
+      const host = makeHost();
+      serving(host, SHA_B, '3211', { fingerprints: SAME });
+      workersOnLinks(host, SHA_B);
+      writeFileSync(join(host.state, 'salary'), salary);
+      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME });
+
+      const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
+
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`maintenance=${maintenance} mechanics=kept salary=${salary}`);
     });
 
     it('юнит ещё смотрит на current (до bootstrap) — перезапуск всегда, как раньше', () => {
