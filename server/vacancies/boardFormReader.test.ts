@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { carryAnswers } from '../domain/applicationQuestionnaire';
+import { parseTeamtailorQuestions } from '../domain/boardFormQuestions';
 import { boardFormRef, readBoardFormQuestions, resetBoardFormCache } from './boardFormReader';
 
 beforeEach(() => resetBoardFormCache());
@@ -15,8 +16,8 @@ const job = (id: string) =>
   `<input type="hidden" value="${id}" name="candidate[job_applications_attributes][0][job_id]" />`;
 const PAGE = `
   ${start(0, 501)}<fieldset><legend><span>French &amp; English?<sup aria-hidden="true">*</sup><span>Required</span></span></legend>
-  <input type="radio" value="true" ${name(0, 'boolean')} /><label for="a"> Yes </label>
-  <input type="radio" value="false" ${name(0, 'boolean')} /><label for="b"> No </label></fieldset>
+  <input id="a" type="radio" value="true" ${name(0, 'boolean')} /><label for="a"> Yes </label>
+  <input id="b" type="radio" value="false" ${name(0, 'boolean')} /><label for="b"> No </label></fieldset>
   ${start(1, 502)}<label for="c">Why us?</label><textarea ${name(1, 'text')}></textarea>
   ${start(2, 503)}<label for="v">Video</label><input ${name(2, 'picked_video_attributes')} />
   ${start(3, 504)}<fieldset><legend><span>Languages</span></legend>
@@ -65,7 +66,7 @@ describe('B787: вопросы Recruitee', () => {
         question(3, 'multi_choice', {
           open_question_options: [{ body: 'A &amp; B' }, { body: 'C' }],
         }),
-        question(4, 'video'),
+        question(4, 'video', { required: false }),
         { id: 'x' },
       ],
       location_question_visible: true,
@@ -139,6 +140,42 @@ describe('B787: вопросы Teamtailor', () => {
     expect(await readBoardFormQuestions(teamtailor, answering(job('77')) as never)).toEqual([]);
     const other = { ...teamtailor, job: '78' };
     expect(await readBoardFormQuestions(other, answering(PAGE) as never)).toBeNull();
+  });
+});
+
+describe('B787: неполная и враждебная форма', () => {
+  it('обязательный файл или видео — анкета не готова', async () => {
+    const file = { id: 1, kind: 'video', body: 'Видео', required: true };
+    const offer = { slug: 'cto', open_questions: [file] };
+    const json = answering(JSON.stringify({ offer }));
+    expect(await readBoardFormQuestions(recruitee, json as never)).toBeNull();
+    for (const page of [
+      PAGE.replace('Video</label>', 'Video<sup>*</sup></label>'),
+      `<div data-question-mandatory="true">${start(0, 1)}<input ${name(0, 'picked_video_attributes')}></div>${job('77')}`,
+    ]) {
+      resetBoardFormCache();
+      expect(await readBoardFormQuestions(teamtailor, answering(page) as never)).toBeNull();
+    }
+  });
+
+  it.each([
+    ['тег без конца', '<input ' + 'value="1" '.repeat(38_000)],
+    ['много начал тега', '<input value="1" '.repeat(23_000)],
+    ['кавычки без конца', '<input value="'.repeat(27_000) + '>'],
+    ['много вопросов', start(0, 1).repeat(4_000)],
+    ['много заголовков', start(0, 1) + '<label for="a">'.repeat(25_000) + job('77')],
+    [
+      'много полей',
+      start(0, 1) +
+        `<input id="a" ${name(0, 'choices')}>`.repeat(2_000) +
+        '<label for="a">'.repeat(16_000) +
+        job('77'),
+    ],
+    ['больше предела', 'x'.repeat(450_000)],
+  ])('%s: разбор не останавливает сервер', (_, page) => {
+    const began = performance.now();
+    parseTeamtailorQuestions(page, '77');
+    expect(performance.now() - began).toBeLessThan(1_000);
   });
 });
 
