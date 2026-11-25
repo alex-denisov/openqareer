@@ -62,6 +62,7 @@ import { readTargetLevel } from './vacancyRoleContext';
 import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { engineListReads } from './matchedVacancyList';
 import { SELECTION_LIVENESS_TOP } from '../vacancies/selectionLiveness';
 import type { ListPhasesMs } from './matchedListPhases';
 
@@ -154,7 +155,7 @@ function buildMatchedResponse(
     page,
     facets: filters.offset === 0 ? list.facets : undefined,
     filteredObserved: list.filteredObserved,
-    ...fitWorkIds(list.filtered, filters.offset, fitLimit),
+    ...fitWorkIds(list.filtered, filters.offset, fitLimit, list.heldIds),
     campaignWithHypotheses: list.campaignWithHypotheses,
     listCached: served !== 'built',
     listServed: served,
@@ -204,12 +205,17 @@ function topSelectionIds(items: readonly MatchedVacancyItem[]): string[] {
 }
 
 /** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
-export function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLimit: number) {
+export function fitWorkIds(
+  items: readonly MatchedVacancyItem[],
+  offset: number,
+  fitLimit: number,
+  heldIds: readonly string[] = [],
+) {
   return {
     warmIds: vacanciesToWarm(items),
     countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
     readIds: offset === 0 ? selectionToRead(items) : [],
-    livenessIds: offset === 0 ? topSelectionIds(items) : [],
+    livenessIds: offset === 0 ? [...heldIds, ...topSelectionIds(items)] : [],
     selectionKey: selectionStamp(items.map((item) => item.cluster.id)),
   };
 }
@@ -362,12 +368,8 @@ async function readMatchedPage(
     geography,
   );
   const snapshotMs = elapsedMs(startedAt);
-  const catalogTotals =
-    typeof engine.getCatalogTotals === 'function'
-      ? { catalogTotals: () => engine.getCatalogTotals!() }
-      : {};
   const { list, served } = await readMatchedList(
-    { ...read, snapshot, geography, ...catalogTotals },
+    { ...read, snapshot, geography, ...engineListReads(engine) },
     log,
   );
   const built = served === 'built';

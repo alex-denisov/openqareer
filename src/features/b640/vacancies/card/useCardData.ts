@@ -108,6 +108,11 @@ function useSingleVacancy(
   return { read: read?.key === vacancyId ? read : undefined, retry };
 }
 
+/** Запись hh.ru карточка сверяет с площадкой при открытии (B797). */
+function hasHh(item: MatchedVacancyItem): boolean {
+  return (item.cluster.sources ?? []).some(isHhSource);
+}
+
 /** Строка подборки со склейкой hh.ru и других площадок: чья это запись hh.ru, знает карточка. */
 function hasGluedHh(item: MatchedVacancyItem | undefined): boolean {
   const sources = item?.cluster.sources ?? [];
@@ -123,6 +128,8 @@ function withOwnSources(
   single: SingleRead | undefined,
 ): MatchedVacancyItem | undefined {
   const own = single?.state === 'ready' ? single.item : undefined;
+  // B797: карточка снята с площадки, хотя строка подборки ещё есть.
+  if (single?.state === 'closed') return undefined;
   if (!pooled || !hasGluedHh(pooled)) return pooled ?? own;
   if (single?.state === 'failed') return undefined;
   const sources =
@@ -162,7 +169,7 @@ export function useCardData(vacancyId: string): CardData {
   const links = useVacancyLinks();
   const pooled = pool.matched.find((entry) => entry.cluster.id === vacancyId);
   // B654: не ждём подборку (страницами — секунды): своя вакансия одним запросом по id.
-  const single = useSingleVacancy(vacancyId, !pooled || hasGluedHh(pooled));
+  const single = useSingleVacancy(vacancyId, !pooled || hasHh(pooled));
   const item = withOwnSources(pooled, single.read);
   const contacts = useOptional(() => getRecruiterContacts(vacancyId), vacancyId);
   const circles = useOptional(() => getVacancyConnectionCircles(vacancyId), vacancyId);

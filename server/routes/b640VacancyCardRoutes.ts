@@ -54,15 +54,16 @@ function cardItem(deps: CardDeps, candidateId: string, clusterId: string): Vacan
  * B715: карточка v04 для вакансии, которой нет в загруженной подборке кандидата — ссылка hh.ru
  * из «Своей вакансии» (`in_pool`), вакансия после отклика, переход по прямому адресу.
  */
-function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
+async function getVacancyCard(deps: CardDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireCabinetB640(request, reply, deps);
   if (!principal) return reply;
   const candidate = sessionCandidate(request, reply, principal.candidate);
   if (!candidate) return reply;
   const id = (request.params as { id?: string }).id ?? '';
   const item = id && id.length <= ID_MAX ? cardItem(deps, candidate.id, id) : undefined;
-  if (item) return { data: item, meta: { requestId: request.id } };
-  if (id && deps.multiSourceEngine.isKnownVacancyGone?.(id)) {
+  const closed = item && (await deps.multiSourceEngine.openedVacancyGone?.(id));
+  if (item && !closed) return { data: item, meta: { requestId: request.id } };
+  if (closed || (id && deps.multiSourceEngine.isKnownVacancyGone?.(id))) {
     return sendError(reply, request, 410, 'vacancy_gone', 'Вакансия снята с площадки.', false);
   }
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);

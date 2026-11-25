@@ -1526,6 +1526,39 @@ export class MultiSourceVacancyEngine {
     this.pool.requestSelectionLiveness?.(ids);
   }
 
+  /** B797: записи подборки, ещё не сверенные ни разу. */
+  public uncheckedSelection(ids: readonly string[]): ReadonlySet<string> {
+    return this.pool.uncheckedSelection?.(ids) ?? new Set();
+  }
+
+  /**
+   * B797: открытая карточка hh, которую сутки не сверяли, читается сразу. `true` — снята. Список
+   * снимает запись индексом; кластер сведёт воркер, как у `retireArchivedVacancy`.
+   */
+  public async openedVacancyGone(clusterId: string, waitMs = OPENED_CHECK_WAIT_MS): Promise<boolean> {
+    const id = clusterId.replace(/^cluster-/u, '');
+    if (!id.startsWith('src-hh-search:')) return false;
+    const vacancy = this.pool.getVacancy(id);
+    if (!vacancy || !this.descriptionLoader?.recheck) return false;
+    if (this.pool.selectionRecentlyChecked?.(id) !== false) return false;
+    const check = this.settleOpenedCheck(vacancy).catch(() => false);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), waitMs);
+    });
+    const gone = await Promise.race([check, late]);
+    clearTimeout(timer);
+    return gone;
+  }
+
+  private async settleOpenedCheck(vacancy: UnifiedVacancy): Promise<boolean> {
+    const verdict = await this.checkHhLiveness(vacancy);
+    if (verdict === 'blocked') return false;
+    if (verdict === 'gone') this.pool.markExpired([vacancy.id], new Date().toISOString());
+    this.pool.markSelectionLivenessChecked?.(vacancy.id);
+    return verdict === 'gone';
+  }
+
   /** B797: один такт сверки живости верха подборок. Зовёт только воркер обслуживания. */
   public runSelectionLivenessStep(stopped: () => boolean): Promise<SelectionLivenessReport> {
     const pool = this.pool;
@@ -2710,6 +2743,8 @@ const HIDDEN_TEXT_ANSWERS = 2;
 
 /** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
 const EXPIRED_CLUSTER_BATCH = 50;
+/** B797: столько карточка ждёт ответа площадки о живости. */
+const OPENED_CHECK_WAIT_MS = 4_000;
 const LIVENESS_COUNT_CHUNK = 50;
 
 function yieldTurn(): Promise<void> {

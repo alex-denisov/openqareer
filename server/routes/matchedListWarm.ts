@@ -1,7 +1,7 @@
 import type { RouteDeps } from './deps';
 import { readCampaign } from './campaignContext';
 import { withWantedCompanyOrder } from './matchedVacancyFit';
-import { warmMatchedListCache } from './matchedVacancyList';
+import { engineListReads, warmMatchedListCache } from './matchedVacancyList';
 import { readSortedFilters } from './matchedVacancySort';
 import { readTargetLevel } from './vacancyRoleContext';
 import { matchGeographyOf } from '../vacancies/matchGeography';
@@ -60,17 +60,32 @@ export async function warmMatchedList(
     filters,
     sourceRegistry: cachedMatchedSourceRegistry(engine).registry,
     order: withWantedCompanyOrder(deps, candidateId, sort, orderLog, 'background', targetRoles),
-    ...(typeof engine.getCatalogTotals === 'function'
-      ? { catalogTotals: () => engine.getCatalogTotals!() }
-      : {}),
+    ...engineListReads(engine),
   };
   const list = await backgroundStep('list:build', () => warmMatchedListCache(input, log));
   if (!list) return;
+  requestHeldCheck(engine, list.heldIds, log);
   const { prepareMs, prepareRows, listMs, phasesMs, filtered } = list;
   log?.info(
     { warmFitIdsMs, prepareMs, prepareRows, listMs, phasesMs, rows: filtered.length },
     'matched-list-warmed',
   );
+}
+
+/** B797: фоновая сборка ставит скрытые строки в сверку до того, как кандидат откроет список. */
+function requestHeldCheck(
+  engine: RouteDeps['multiSourceEngine'],
+  heldIds: readonly string[],
+  log: WarmLog | undefined,
+): void {
+  if (heldIds.length === 0) return;
+  try {
+    engine.requestSelectionLiveness?.(heldIds);
+  } catch (error: unknown) {
+    // База занята: строки поставит следующая сборка или чтение списка.
+    const errorName = error instanceof Error ? error.name : 'UnknownError';
+    log?.error({ errorName }, 'selection-liveness-request-failed');
+  }
 }
 
 const rebuildingBehindSealed = new Set<string>();

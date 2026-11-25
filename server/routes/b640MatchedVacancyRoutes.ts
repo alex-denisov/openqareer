@@ -31,7 +31,7 @@ import {
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
 import { withOrderedPercents, withShownPageFitViews, withWantedCompanyOrder } from './matchedVacancyFit';
-import { readMatchedList } from './matchedVacancyList';
+import { engineListReads, readMatchedList } from './matchedVacancyList';
 import { fitWorkIds, prepareMatchedRead, startFitWork, startShownPageFit, withMarketSalary } from './matchedVacancyRoutes';
 import { createListPages } from './b640ListPages';
 import { readB640Sealed } from './b640SealedAnswer';
@@ -141,9 +141,7 @@ async function readList(
       sourceRegistry,
       order: read.order,
       seal: sealsMainView(filters),
-      ...(typeof deps.multiSourceEngine.getCatalogTotals === 'function'
-        ? { catalogTotals: () => deps.multiSourceEngine.getCatalogTotals!() }
-        : {}),
+      ...engineListReads(deps.multiSourceEngine),
     },
     request.log,
   );
@@ -327,7 +325,7 @@ const getMatchedVacancies = async (
   const live = await withShownPageFitViews(deps, candidate.id, levels);
   const data = withMarketSalary(deps, withOrderedPercents(live, rows.slice(query.offset)));
   // Подсчёт процентов идёт по порядку совпадения, а не по выбранному столбцу.
-  const work = fitWorkIds(byFit, query.offset, fitLimit);
+  const work = fitWorkIds(byFit, query.offset, fitLimit, list.heldIds);
   startFitWork(backgroundDeps, candidate.id, { ...work, data: live }, { offset: query.offset, fitLimit }, request);
   return {
     data,

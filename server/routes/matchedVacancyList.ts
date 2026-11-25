@@ -1,3 +1,4 @@
+import { holdUncheckedRows, type UncheckedReader } from '../vacancies/selectionHold';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
@@ -121,11 +122,27 @@ export interface MatchedList {
   readonly campaignWithHypotheses: ReturnType<typeof readCampaign>;
   /** B729: моменты появления строк выдачи — для чисел «Даты» по поясу кандидата на ответе. */
   readonly filteredObserved: readonly number[];
+  /** B797: записи верха, скрытые до первой сверки живости. */
+  readonly heldIds: readonly string[];
   readonly prepareMs: number;
   readonly prepareRows: number;
   readonly listMs: number;
   /** B770: время каждой фазы сборки без чужих ходов event loop. */
   readonly phasesMs: ListPhasesMs;
+}
+
+/** Чтения движка для сборки списка: итоги каталога и сверка живости (B797); заглушки тестов — без них. */
+export function engineListReads(
+  engine: RouteDeps['multiSourceEngine'],
+): Pick<MatchedListInput, 'unchecked' | 'catalogTotals'> {
+  return {
+    ...(typeof engine.uncheckedSelection === 'function'
+      ? { unchecked: (ids: readonly string[]) => engine.uncheckedSelection(ids) }
+      : {}),
+    ...(typeof engine.getCatalogTotals === 'function'
+      ? { catalogTotals: () => engine.getCatalogTotals() }
+      : {}),
+  };
 }
 
 export interface MatchedListInput {
@@ -141,6 +158,8 @@ export interface MatchedListInput {
   readonly filters: MatchedVacancyFilters;
   readonly sourceRegistry: readonly MatchedVacancySourceDefinition[];
   readonly order: MatchedOrder;
+  /** B797: какие записи ещё не сверены с площадкой. */
+  readonly unchecked?: UncheckedReader;
   readonly catalogTotals?: () => CatalogTotals | undefined;
   /** B674: `false` — список читают, но запечатанную строку кандидата не пишут. По умолчанию пишут. */
   readonly seal?: boolean;
@@ -301,7 +320,10 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
   yield;
   const hypotheses = phase.run('hypotheses', () => hypothesisRows(input));
   const counts = yield* phase.steps('roleCounts', matchedRoleCountSteps(hypotheses, targetRoles));
-  const { facets, filtered } = yield* facetAndFilterSteps(input, matched, phase);
+  const { facets, filtered: selected } = yield* facetAndFilterSteps(input, matched, phase);
+  const { rows: filtered, heldIds } = phase.run('hold', () =>
+    holdUncheckedRows(selected, input.unchecked),
+  );
   const totals = phase.run('catalogTotals', () => input.catalogTotals?.());
   const catalogSummary = phase.run('catalogSummary', () =>
     matchedCatalogSummary(totals, roleLevelCount(hypotheses, targetRoles), {
@@ -322,6 +344,7 @@ function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
   const withFiltered = { ...facets, filtered: filteredCounts };
   return {
     filtered,
+    heldIds,
     pageOffsets,
     facets: catalogSummary ? { ...withFiltered, catalogSummary } : withFiltered,
     campaignWithHypotheses,

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
-import { LIVENESS_PER_TICK, LIVENESS_RECHECK_MS, runSelectionLiveness } from './selectionLiveness';
+import { LIVENESS_HOLD_MS, LIVENESS_PER_TICK, LIVENESS_RECHECK_MS, runSelectionLiveness } from './selectionLiveness';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
@@ -107,6 +107,44 @@ describe('B797: сверка живости верха подборок', () => 
     expect(pool.dueSelectionLiveness(10)).toHaveLength(2);
   });
 
+  it('отказ hh не останавливает другие площадки', async () => {
+    const pool = openStore();
+    pool.mergeSourceSlice(HH, [hh(1), hh(2)]);
+    pool.mergeSourceSlice('src-other', [vacancy('x:1', 'src-other', 'https://jobs.example.com/1')]);
+    const { engine } = engineOf(pool, () => ({ status: 403, body: '' }));
+    engine.requestSelectionLiveness([`${HH}:1`, `${HH}:2`, 'x:1']);
+    expect(await step(engine)).toEqual({ checked: 1, gone: 1, open: 0, unknown: 0, blocked: true });
+  });
+
+  it('не сверенные: новые и недолго ждущие; сверенные и ждущие дольше получаса — нет', () => {
+    const pool = openStore();
+    const now = Date.now();
+    pool.mergeSourceSlice(HH, [hh(1), hh(2), hh(3)]);
+    pool.requestSelectionLiveness([`${HH}:1`], now);
+    pool.requestSelectionLiveness([`${HH}:2`], now - LIVENESS_HOLD_MS - 1);
+    pool.markSelectionLivenessChecked(`${HH}:3`, now);
+    const ids = [1, 2, 3, 4].map((n) => `${HH}:${n}`);
+    expect([...pool.uncheckedSelection(ids, now)]).toEqual([`${HH}:1`, `${HH}:4`]);
+  });
+
+  it('открытая карточка сверяется сразу, раз в сутки; отказ площадки её не закрывает', async () => {
+    const pool = openStore();
+    pool.mergeSourceSlice(HH, [hh(1), hh(2), hh(3)]);
+    let status = 200;
+    const { engine, asked } = engineOf(pool, (url) => ({
+      status,
+      body: url.endsWith('/1') ? ARCHIVED : OPEN,
+    }));
+    expect(await engine.openedVacancyGone(`cluster-${HH}:1`)).toBe(true);
+    expect(pool.getVacancy(`${HH}:1`)).toBeUndefined();
+    expect(await engine.openedVacancyGone(`cluster-${HH}:2`)).toBe(false);
+    expect(await engine.openedVacancyGone(`cluster-${HH}:2`)).toBe(false);
+    expect(asked).toHaveLength(2);
+    status = 403;
+    expect(await engine.openedVacancyGone(`cluster-${HH}:3`)).toBe(false);
+    expect(pool.selectionRecentlyChecked(`${HH}:3`)).toBe(false);
+  });
+
   it('одна вакансия — раз в сутки, по новой читает площадку, а не память', async () => {
     const pool = openStore();
     pool.mergeSourceSlice(HH, [hh(1)]);
@@ -122,10 +160,10 @@ describe('B797: сверка живости верха подборок', () => 
 
   it('порядок: место в подборке; остановка прерывает такт', async () => {
     const pool = openStore();
-    const rows = Array.from({ length: 8 }, (_, n) => hh(n + 1));
+    const rows = Array.from({ length: LIVENESS_PER_TICK + 3 }, (_, n) => hh(n + 1));
     pool.mergeSourceSlice(HH, rows);
     pool.requestSelectionLiveness(rows.map((row) => row.id).reverse());
-    expect(pool.dueSelectionLiveness(LIVENESS_PER_TICK)[0]).toBe(`${HH}:8`);
+    expect(pool.dueSelectionLiveness(LIVENESS_PER_TICK)[0]).toBe(rows.at(-1)!.id);
     const { engine, asked } = engineOf(pool, () => ({ status: 200, body: OPEN }));
     await engine.runSelectionLivenessStep(() => true);
     expect(asked).toEqual([]);
