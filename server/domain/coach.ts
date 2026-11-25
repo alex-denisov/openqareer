@@ -332,7 +332,7 @@ const selectionGroupsSchema = z
       .object({
         label: z.string().max(200),
         count: z.number().int().min(1),
-        rows: z.array(z.number().int().min(1).max(20)).max(20),
+        vacancies: z.array(z.string().max(402)).max(20),
       })
       .strict(),
   )
@@ -375,7 +375,6 @@ export const coachTurnInputSchema = z.object({
             .array(
               z
                 .object({
-                  n: z.number().int().min(1).max(20),
                   title: z.string().max(200),
                   company: z.string().max(200).nullable(),
                   location: z.string().max(200).nullable(),

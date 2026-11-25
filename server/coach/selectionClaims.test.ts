@@ -3,7 +3,6 @@ import { selectionClaimsHold, withoutBrokenClaims } from './selectionClaims';
 import { selectionSummary, type SelectionContext, type SelectionRow } from './selectionSummary';
 
 const row = (n: number, company: string, place: Partial<SelectionRow>): SelectionRow => ({
-  n,
   title: `Роль ${n}`,
   company,
   location: null,
@@ -35,6 +34,7 @@ describe('B735: утверждения о подборке против стро
     'Из списка 3 из 20 в Москве.',
     'Удалёнку из РФ в списке не видно.',
     'В Москве Free Martlet и Ромашка, остальные идут как Remote.',
+    'В Москве две вакансии — строки 1 и 5.',
   ])('опровергается: %s', (message) => {
     expect(selectionClaimsHold(message, selection)).toBe(false);
   });
@@ -43,6 +43,10 @@ describe('B735: утверждения о подборке против стро
     'Начните с Free Martlet: Москва, офис.',
     'В Москве — две вакансии: Free Martlet и Ромашка.',
     '2 из 5 в Москве.',
+    'Премии — 10, 12, 15 тысяч.',
+    'Совпадение 96, 94, 92: начните с Free Martlet.',
+    'Это первые 5 строк списка из 34.',
+    'Совпадение 96, 94, 92 %: начните с Free Martlet.',
     'IT Director Group — зарубежная вакансия, Шарджа.',
     'У Q-Tech страна неизвестна, зарубежная она или нет, по данным не сказать: не указана.',
     'Первый проектный офис — Тверь, удалённо по России.',

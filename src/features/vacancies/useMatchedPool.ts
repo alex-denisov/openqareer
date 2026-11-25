@@ -20,6 +20,8 @@ export interface MatchedPool {
   readonly poolTotal: number;
   readonly loading: boolean;
   readonly failed: boolean;
+  /** Чтение ещё идёт, в том числе после первой страницы: отсутствие строки ещё не ответ. */
+  readonly reading?: boolean;
   /** Прочитан ли пул целиком: выборка по половине пула — не выборка по пулу. */
   readonly complete: boolean;
   /** Кампания и гипотезы роли — только с первой страницы (B248). */
@@ -38,6 +40,7 @@ interface PoolReaderSetters {
   readonly setTotal: Dispatch<SetStateAction<number>>;
   readonly setPoolTotal: Dispatch<SetStateAction<number>>;
   readonly setLoading: Dispatch<SetStateAction<boolean>>;
+  readonly setReading: Dispatch<SetStateAction<boolean>>;
   readonly setFailed: Dispatch<SetStateAction<boolean>>;
   readonly setComplete: Dispatch<SetStateAction<boolean>>;
   readonly setCampaign: Dispatch<SetStateAction<CampaignMetaView | undefined>>;
@@ -80,6 +83,7 @@ export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptio
   const [total, setTotal] = useState(cached?.total ?? 0);
   const [poolTotal, setPoolTotal] = useState(cached?.poolTotal ?? 0);
   const [loading, setLoading] = useState(!cached);
+  const [reading, setReading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [complete, setComplete] = useState(cached?.complete ?? false);
   const [campaign, setCampaign] = useState<CampaignMetaView | undefined>(cached?.campaign);
@@ -94,7 +98,7 @@ export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptio
   // a filter change shows its own loading as before.
   const silentRead = useRef(Boolean(cached));
   useMatchedPoolReader(initialPool, readAttempt, filters, silentRead, options.pageLimit, {
-    setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
+    setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setReading, setFailed, setComplete,
     setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
   useEffect(() => {
@@ -109,7 +113,7 @@ export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptio
   ]);
   if (initialPool) return { ...initialPool, setFilters };
   return withCabinetHeader({
-    facets, initialFilters, sort, setFilters, matched, total, poolTotal, loading, failed, complete,
+    facets, initialFilters, sort, setFilters, matched, total, poolTotal, loading, reading, failed, complete,
     campaign, candidateLevel, failureSourceLabel, refresh,
   }, provided);
 }
@@ -160,6 +164,7 @@ function useMatchedPoolReader(
     setTotal,
     setPoolTotal,
     setLoading,
+    setReading,
     setFailed,
     setComplete,
     setCampaign,
@@ -180,6 +185,7 @@ function useMatchedPoolReader(
     setTotal,
     setPoolTotal,
     setLoading,
+    setReading,
     setFailed,
     setComplete,
     setCampaign,
@@ -201,10 +207,13 @@ function startPoolRead(
   const silent = silentRead.current && !filters && readAttempt === 0;
   silentRead.current = false;
   let finished = false;
+  setters.setReading(true);
   if (!silent) resetPoolRead(setters);
   void loadMatchedPool(setters, () => active, filters, silent, pageLimit).finally(() => {
     finished = true;
-    if (active) setters.setLoading(false);
+    if (!active) return;
+    setters.setLoading(false);
+    setters.setReading(false);
   });
   return () => {
     active = false;
