@@ -744,6 +744,9 @@ export interface CandidateStore extends ConsultantHistoryMethods {
     documentId: string,
   ): StoredApplicationMaterial;
 
+  /** Документ, приложенный к отклику сейчас. */
+  linkedMaterialId(candidateId: string, applicationId: string, role: ApplicationMaterialRole): string | null;
+
   createApplicationInterview(
     candidateId: string,
     applicationId: string,
