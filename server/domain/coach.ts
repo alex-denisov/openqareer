@@ -392,6 +392,11 @@ export const coachTurnInputSchema = z.object({
     })
     .strict()
     .optional(),
+  /** B796: под этой репликой встанут карточки правки факта с «Применить». */
+  correctionCards: z
+    .array(z.object({ place: z.string().max(300), from: z.string(), to: z.string() }).strict())
+    .max(4)
+    .optional(),
   stageContext: z.string().trim().max(10_000).optional(),
   rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),
   messages: z.array(coachMessageSchema).min(1).max(30),
