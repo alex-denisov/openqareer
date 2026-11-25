@@ -74,9 +74,14 @@ function sliceOf(deps: RouteDeps, { candidateId, cluster, onHh }: Found) {
 
 type Slice = NonNullable<ReturnType<typeof sliceOf>>;
 
-function stateOf(slice: Slice | null, stored: ResumeEditChoices, cluster: VacancyCluster): ResumeEditsState {
+function stateOf(
+  deps: RouteDeps,
+  slice: Slice | null,
+  stored: ResumeEditChoices,
+  cluster: VacancyCluster,
+): ResumeEditsState {
   if (!slice) return { edits: [], lang: null };
-  const choices = withVacancyLang(stored, slice, cluster);
+  const choices = withVacancyLang(deps, stored, slice, cluster);
   const { document } = tailorResumeSlice(slice, choices);
   const shown =
     choices.lang && isTranslated(document, choices.lang, choices.translations ?? {})
@@ -91,18 +96,19 @@ async function handleRead(deps: ResumeEditDeps, request: FastifyRequest, reply: 
   const slice = sliceOf(deps, found);
   const choices = deps.resumeEdits.read(found.candidateId, found.cluster.id);
   reply.header('cache-control', 'private, no-store');
-  return { data: stateOf(slice, choices, found.cluster), meta: { requestId: request.id } };
+  return { data: stateOf(deps, slice, choices, found.cluster), meta: { requestId: request.id } };
 }
 
 /** Что кандидат решил; отказ — код и слова ответа. */
 function decided(
+  deps: RouteDeps,
   slice: Slice,
   current: ResumeEditChoices,
   decision: ResumeEditDecision,
   cluster: VacancyCluster,
 ): ResumeEditChoices | Refusal {
   if (decision.action === 'lang') {
-    const lang = decision.lang === vacancyLang(cluster) ? undefined : decision.lang;
+    const lang = decision.lang === vacancyLang(deps, cluster) ? undefined : decision.lang;
     return { ...current, lang };
   }
   const source = editSource(slice, decision.id);
@@ -118,7 +124,7 @@ async function translated(
   slice: Slice,
   choices: ResumeEditChoices,
 ): Promise<ResumeEditChoices | Refusal> {
-  const { lang } = withVacancyLang(choices, slice, found.cluster);
+  const { lang } = withVacancyLang(deps, choices, slice, found.cluster);
   if (!lang || lang === documentLang(slice.document)) return choices;
   const result = await translateDocument(
     tailorResumeSlice(slice, choices).document,
@@ -147,19 +153,19 @@ async function handleDecide(deps: ResumeEditDeps, request: FastifyRequest, reply
   const slice = sliceOf(deps, found);
   if (!slice) return refuse(STALE);
   const read = () => deps.resumeEdits.read(candidateId, cluster.id);
-  const wanted = decided(slice, read(), parsed.data, cluster);
+  const wanted = decided(deps, slice, read(), parsed.data, cluster);
   if (isRefusal(wanted)) return refuse(wanted);
   // Языка по умолчанию кандидат не просил: сбой его перевода правку не держит.
   const asked = parsed.data.action === 'lang' || Boolean(wanted.lang);
   const ready = asked ? await translated(deps, found, slice, wanted) : wanted;
   if (isRefusal(ready)) return refuse(ready);
   // Пока шёл перевод, кандидат мог решить другую правку: решение ложится на свежие.
-  const latest = decided(slice, read(), parsed.data, cluster);
+  const latest = decided(deps, slice, read(), parsed.data, cluster);
   if (isRefusal(latest)) return refuse(latest);
   const translations = { ...latest.translations, ...ready.translations };
   const choices = Object.keys(translations).length > 0 ? { ...latest, translations } : latest;
   deps.resumeEdits.save(candidateId, cluster.id, choices, nowIso());
-  return { data: stateOf(slice, choices, cluster), meta: { requestId: request.id } };
+  return { data: stateOf(deps, slice, choices, cluster), meta: { requestId: request.id } };
 }
 
 /** B785, o03: правки резюме под вакансию — список и решения кандидата. */

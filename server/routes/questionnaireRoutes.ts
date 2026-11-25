@@ -16,6 +16,7 @@ import {
   answersToStore,
   atsQuestions,
   buildQuestionnaire,
+  carryAnswers,
   hhQuestions,
   withKnownAnswers,
 } from '../domain/applicationQuestionnaire';
@@ -23,6 +24,7 @@ import {
   linkedinProfileLink,
   type QuestionnaireProfileFacts,
 } from '../domain/questionnaireProfileAnswers';
+import { boardFormRef, readBoardFormQuestions } from '../vacancies/boardFormReader';
 import { greenhouseJobRef, readGreenhouseQuestions } from '../vacancies/greenhouseQuestions';
 import { requireCabinetB640 } from './cabinetB640Flag';
 import type { RouteDeps } from './deps';
@@ -172,16 +174,16 @@ function safeUrl(url: string | undefined): string | null {
   }
 }
 
-/** Вопросы по записи подбора: читаем заранее только у Greenhouse. */
+/** Вопросы по записи подбора: заранее читаем Greenhouse, Recruitee и Teamtailor. */
 export function poolReader(deps: RouteDeps): QuestionnaireReader {
   return async (vacancyId) => {
     const vacancy = deps.multiSourceEngine.getVacancy?.(vacancyId.replace(/^cluster-/u, ''));
     if (!vacancy) return null;
     const ref = greenhouseJobRef(vacancy);
     const formUrl = safeUrl(vacancy.url);
-    return ref
-      ? { questions: await readGreenhouseQuestions(ref), formUrl }
-      : { questions: null, formUrl };
+    if (ref) return { questions: await readGreenhouseQuestions(ref), formUrl };
+    const form = boardFormRef(vacancy.url);
+    return { questions: form ? await readBoardFormQuestions(form) : null, formUrl };
   };
 }
 
@@ -279,7 +281,9 @@ const getQuestionnaire: Handler = async (deps, request, reply) => {
   const who = signed(deps, request, reply);
   if (!who) return reply;
   const known = deps.forms.get(who.candidateId, who.vacancyId);
-  if (known && isQuestionnaireFresh(known, Date.now())) {
+  // Список из окна приложения полнее открытого: его обновит само окно, иначе вопросы двоятся.
+  const fromWindow = known?.questions.some(({ id }) => id.startsWith('ats-'));
+  if (known && (fromWindow || isQuestionnaireFresh(known, Date.now()))) {
     return {
       data: questionnaireView(deps, who, known, { state: 'ready', formUrl: null }),
       meta: { requestId: request.id },
@@ -384,7 +388,8 @@ const putAtsForm: Handler = async (deps, request, reply) => {
     formUrl,
     readAt: new Date().toISOString(),
   });
-  const answers = withKnownAnswers(known?.answers ?? [], parsed.data.questions);
+  const carried = carryAnswers(known?.questions ?? [], questions, known?.answers ?? []);
+  const answers = withKnownAnswers(carried, parsed.data.questions);
   deps.forms.saveAnswers(candidateId, vacancyId, answers);
   const stored = deps.forms.get(candidateId, vacancyId);
   return {

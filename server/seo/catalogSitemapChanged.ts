@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { readCatalogSitemaps } from './catalogSitemapJob';
-import { readRowsChunked } from '../data/chunkedRows';
+import { nextTurn, readRowsChunked } from '../data/chunkedRows';
+import { syncSection } from '../observability/syncSections';
 import type { SitemapFile } from './sitemapXml';
 
 /**
@@ -34,6 +34,44 @@ async function readSignature(database: DatabaseSync): Promise<string | null> {
   return row?.signature ?? null;
 }
 
+interface SitemapRow {
+  readonly name: string;
+  readonly xml: string;
+  readonly url_count: number;
+  readonly lastmod: string | null;
+}
+
+/**
+ * B702 (прод 25.11): 22 файла, 30 МБ, шли одним `.all()` при старте слота и после каждой сборки.
+ * Порядок берётся без xml (сортировка по position читала бы весь текст до первой строки), каждый
+ * файл — своим тактом, в одной транзакции чтения: файлы одной сборки.
+ */
+async function readFilesByTurn(database: DatabaseSync): Promise<SitemapFile[] | null> {
+  database.exec('BEGIN');
+  try {
+    const names = database
+      .prepare('SELECT name FROM catalog_sitemaps ORDER BY position')
+      .all() as unknown as ReadonlyArray<{ name: string }>;
+    const one = database.prepare(
+      'SELECT name, xml, url_count, lastmod FROM catalog_sitemaps WHERE name = ?',
+    );
+    const files: SitemapFile[] = [];
+    for (const { name } of names) {
+      await nextTurn();
+      const row = syncSection('sitemap:file', () => one.get(name)) as unknown as SitemapRow;
+      files.push({
+        name: row.name,
+        xml: row.xml,
+        urlCount: row.url_count,
+        ...(row.lastmod ? { lastmod: row.lastmod } : {}),
+      });
+    }
+    return files.length > 0 ? files : null;
+  } finally {
+    database.exec('COMMIT');
+  }
+}
+
 export class CatalogSitemapReader {
   private seen: string | null = null;
 
@@ -42,7 +80,8 @@ export class CatalogSitemapReader {
     if (!tableExists(database, 'catalog_sitemaps')) return null;
     const signature = await readSignature(database);
     if (!signature || signature === this.seen) return null;
-    const files = readCatalogSitemaps(database);
+    await nextTurn();
+    const files = await readFilesByTurn(database);
     if (files) this.seen = signature;
     return files;
   }

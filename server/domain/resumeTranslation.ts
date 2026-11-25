@@ -1,6 +1,6 @@
 import type { ResumeLang } from '../../shared/resumeVacancyEdits';
 import type { LetterFactTranslator } from './letterFactTranslation';
-import { transliterate } from './letterLatinEmployers';
+import { latinEmployerNames, transliterate, withLatinEmployerNames } from './letterLatinEmployers';
 import { textLanguage } from './profileLanguage';
 import type { ResumeDocument, ResumeExperience, ResumeProject } from './resumeStudioTypes';
 import {
@@ -42,8 +42,26 @@ function claim<T extends Claim>(item: T | null | undefined, map: Map1, kind: Kin
   return value ? { ...item, value } : null;
 }
 
-const named = (lang: ResumeLang) => (text: string) =>
-  lang === 'en' && CYRILLIC.test(text) ? transliterate(text) : text;
+/** Название латиницей: написание кандидата, иначе транслитерация. */
+const named = (lang: ResumeLang, names: ReadonlyMap<string, string>) => (text: string) =>
+  lang === 'en' && CYRILLIC.test(text) ? transliterate(withLatinEmployerNames(text, names)) : text;
+
+/** Где кандидат сам пишет названия: резюме и подтверждённые факты. */
+function latinNamesOf(
+  document: ResumeDocument,
+  facts: readonly string[],
+): ReadonlyMap<string, string> {
+  const employers = document.experience.flatMap(({ employer }) => employer?.value ?? []);
+  const institutions = document.education.flatMap(({ institution }) => institution?.value ?? []);
+  const texts = document.experience.flatMap((place) => [
+    place.description?.value ?? '',
+    ...place.bullets.map(({ value }) => value),
+  ]);
+  return latinEmployerNames(
+    [...employers, ...institutions],
+    [...facts, document.about ?? '', ...texts],
+  );
+}
 
 const linesOf = (text: string) =>
   text
@@ -69,18 +87,29 @@ function mapPlace(place: ResumeExperience, map: Map1, name: (text: string) => st
   };
 }
 
+/** Имя из одного слова («OptiLab», «e-therapy») — собственное: его не переводят. */
+const isProperName = (text: string) => !/\s/u.test(text.trim());
+
+const projectName = (text: string, map: Map1, name: (text: string) => string) =>
+  isProperName(text) ? name(text) : name(map(text, 'term'));
+
 function mapProject(project: ResumeProject, map: Map1, name: (text: string) => string) {
   return {
     ...project,
-    name: { ...project.name, value: name(project.name.value) },
+    name: { ...project.name, value: projectName(project.name.value, map, name) },
     employer: claim(project.employer, name, 'label'),
     description: claim(project.description, (text) => mapLines(text, map), 'text'),
   };
 }
 
 /** Всё, что показывает лист и файл резюме. */
-function mapDocument(document: ResumeDocument, lang: ResumeLang, map: Map1): ResumeDocument {
-  const name = named(lang);
+function mapDocument(
+  document: ResumeDocument,
+  lang: ResumeLang,
+  map: Map1,
+  names: ReadonlyMap<string, string> = new Map(),
+): ResumeDocument {
+  const name = named(lang, names);
   const { contact } = document;
   return {
     ...document,
@@ -108,7 +137,7 @@ function mapDocument(document: ResumeDocument, lang: ResumeLang, map: Map1): Res
       ? {
           courses: document.courses.map((item) => ({
             ...item,
-            name: map(item.name, 'label'),
+            name: name(map(item.name, 'term')),
             ...(item.provider ? { provider: name(item.provider) } : {}),
             ...(item.institution ? { institution: name(item.institution) } : {}),
           })),
@@ -147,8 +176,24 @@ export function documentLang(document: ResumeDocument): ResumeLang {
 }
 
 /** Названия компаний остаются в переводе как есть. */
-const companiesOf = (document: ResumeDocument) =>
-  document.experience.flatMap(({ employer }) => employer?.value.trim() || []);
+function companiesOf(document: ResumeDocument): string[] {
+  const projects = (document.projects ?? []).map(({ name }) => name.value.trim());
+  const employers = document.experience.flatMap(({ employer }) => employer?.value.trim() || []);
+  // «e-therapy» в названии проекта или компании — имя продукта.
+  const products = [...projects, ...employers].flatMap(
+    (text) =>
+      text.match(
+        /(?<![\p{L}\p{N}-])e-(?!commerce|learning|mail|gov|sign|doc)\p{Script=Latin}+(?![\p{L}\p{N}-])/giu,
+      ) ?? [],
+  );
+  return [
+    ...new Set([
+      ...employers,
+      ...projects.filter((text) => text && isProperName(text)),
+      ...products,
+    ]),
+  ];
+}
 
 type Answered = 'translated' | 'rejected' | 'missing';
 
@@ -175,17 +220,24 @@ export function translatedDocument(
   lang: ResumeLang | undefined,
   translations: ResumeTranslations,
   basis: ResumeDocument = document,
+  facts: readonly string[] = [],
 ): ResumeDocument {
-  if (!lang || lang === documentLang(basis) || !isTranslated(basis, lang, translations))
-    return document;
+  const own = documentLang(basis);
+  // Английское резюме без перевода: названия и имена латиницей, остальное прежнее.
+  if (own === 'en' && (lang ?? own) === own) {
+    const names = latinNamesOf(basis, facts);
+    return mapDocument(document, 'en', (text) => withLatinEmployerNames(text, names), names);
+  }
+  if (!lang || lang === own || !isTranslated(basis, lang, translations)) return document;
   const read = reader(basis, lang, translations);
-  return mapDocument(document, lang, (text, kind) => {
+  const translate: Map1 = (text, kind) => {
     const line = { text, kind };
     if (!needsTranslation(line, lang)) return text;
     const known = languageName(text, lang);
     if (known) return known;
     return read(line) === 'translated' ? (translations[translationKey(lang, text)] ?? text) : text;
-  });
+  };
+  return mapDocument(document, lang, translate, latinNamesOf(basis, facts));
 }
 
 export function isTranslated(

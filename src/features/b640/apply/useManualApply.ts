@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ManualApplyItem, ManualApplyReason } from '../../../../shared/manualApply';
 import { platformOf } from '../responses/model/platform';
 import { getManualApply, queueManualApply } from './data/manualApplyApi';
+import { applyPressed, forgetApply } from './applyIntent';
 import type { ApplyTarget } from './model/applyModel';
 
 const REFRESH_MS = 3000;
@@ -22,6 +23,13 @@ export function isUnsent({ application }: ApplyTarget): boolean {
   return !application || application.stage === 'saved' || application.stage === 'archived';
 }
 
+/** После «Не откликаюсь» отклик возвращает в очередь только нажатие «Откликнуться». */
+function useDeclined({ vacancyId, application }: ApplyTarget): boolean {
+  const [pressed] = useState(() => applyPressed(vacancyId));
+  useEffect(() => forgetApply(vacancyId), [vacancyId]);
+  return application?.stage === 'archived' && !pressed;
+}
+
 /**
  * Отклик, который кандидат отправляет сам (B787). LinkedIn встаёт в очередь нажатием
  * «Откликнуться»; остальные попадают в неё по причине площадки. Не в очереди — обычный отклик.
@@ -29,8 +37,13 @@ export function isUnsent({ application }: ApplyTarget): boolean {
 export function useManualApply(
   target: ApplyTarget,
   source: string | undefined,
-): { readonly manual: ManualApplyFlow | 'loading' | null; readonly queue: QueueManual } {
+): {
+  readonly manual: ManualApplyFlow | 'loading' | null;
+  readonly queue: QueueManual;
+  readonly declined: boolean;
+} {
   const { vacancyId } = target;
+  const declined = useDeclined(target);
   const unsent = isUnsent(target);
   const linkedin = Boolean(source) && platformOf(source).label === 'LinkedIn';
   const [known, setKnown] = useState<Known>(unsent ? 'loading' : null);
@@ -38,14 +51,15 @@ export function useManualApply(
   useEffect(() => {
     if (!unsent) return undefined;
     let active = true;
-    const read = linkedin
-      ? queueManualApply({ vacancyId, reason: 'linkedin' })
-      : getManualApply(vacancyId);
+    const read =
+      linkedin && !declined
+        ? queueManualApply({ vacancyId, reason: 'linkedin' })
+        : getManualApply(vacancyId);
     read.then((item) => active && setKnown(item)).catch(() => active && setKnown(null));
     return () => {
       active = false;
     };
-  }, [vacancyId, unsent, linkedin]);
+  }, [vacancyId, unsent, linkedin, declined]);
 
   const refresh = useCallback(() => {
     getManualApply(vacancyId)
@@ -72,5 +86,5 @@ export function useManualApply(
     [vacancyId],
   );
   const manual = known === null || known === 'loading' ? known : { item: known, refresh };
-  return { manual, queue };
+  return { manual, queue, declined };
 }

@@ -4,7 +4,9 @@ import { tailorResumeSlice } from '../domain/resumeVacancyEdits';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { detectVacancyLanguage } from '../domain/vacancyPitchService';
 import { hasAttachableResume, letterResumeKind, targetedSliceFor } from './letterApprovalResume';
+import type { RouteDeps } from './deps';
 import type { ResumeEditDeps } from './resumeEditRoutes';
+import { readVacancyFitTarget } from './vacancyFitContext';
 import { currentMaster } from './resumeMaster';
 
 /** Первый перевод всего резюме: десятки строк параллельно. */
@@ -12,23 +14,24 @@ export const TRANSLATION_BUDGET_MS = 40_000;
 
 type Slice = ReturnType<typeof targetedSliceFor>;
 
-export function vacancyLang(cluster: VacancyCluster): ResumeLang {
+export function vacancyLang(deps: Pick<RouteDeps, 'multiSourceEngine'>, cluster: VacancyCluster): ResumeLang {
   return detectVacancyLanguage({
     id: cluster.id,
     title: cluster.canonicalTitle,
     company: cluster.canonicalCompany,
-    description: cluster.descriptionSummary,
+    description: readVacancyFitTarget(deps, cluster.id)?.description || cluster.descriptionSummary,
   });
 }
 
 /** Пока кандидат не выбрал язык сам, резюме — на языке вакансии. */
 export function withVacancyLang(
+  deps: Pick<RouteDeps, 'multiSourceEngine'>,
   choices: ResumeEditChoices,
   slice: Slice,
   cluster: VacancyCluster,
 ): ResumeEditChoices {
   if (choices.lang) return choices;
-  const lang = vacancyLang(cluster);
+  const lang = vacancyLang(deps, cluster);
   return lang === documentLang(slice.document) ? choices : { ...choices, lang };
 }
 
@@ -46,7 +49,7 @@ export async function prepareVacancyLang(
   if (stored.lang || letterResumeKind(deps, candidateId) === 'master') return stored;
   if (!hasAttachableResume(master.document)) return stored;
   const slice = targetedSliceFor(master, cluster);
-  const { lang } = withVacancyLang(stored, slice, cluster);
+  const { lang } = withVacancyLang(deps, stored, slice, cluster);
   if (!lang) return stored;
   const { document } = tailorResumeSlice(slice, stored);
   const known = stored.translations ?? {};
@@ -63,5 +66,5 @@ export async function prepareVacancyLang(
   if (Object.keys(translations).length > Object.keys(known).length) {
     deps.resumeEdits.save(candidateId, cluster.id, next, new Date().toISOString());
   }
-  return withVacancyLang(next, slice, cluster);
+  return withVacancyLang(deps, next, slice, cluster);
 }
