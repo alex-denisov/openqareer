@@ -563,6 +563,13 @@ function isPartialCioMatch(variant: OntologyVariant, normalized: string): boolea
 const DEPARTMENT_CHIEF =
   /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
 
+/**
+ * B803: «Head of Technology Recruitment» нанимает инженеров, а не руководит ими. Только head, director и
+ * vp и только «technology/engineering» вплотную перед наймом: продукт или инженеры найма — не HR.
+ */
+const RECRUITMENT_LEADER =
+  /\b(?:head|director|vp|vice president)\s+(?:of\s+|,\s*)?(?:technology|technical|tech|engineering)\s+(?:recruitment|recruiting|talent acquisition)\s*$/iu;
+
 /** `freehireFallback: false` is for offline measurement only (freehireClassify/measure.ts). */
 export function rulesParse(
   title: string,
@@ -582,6 +589,9 @@ export function rulesParse(
       levelRank: LEVEL_RANK['c-level'],
       roleId: 'it-ops.cio',
     };
+  }
+  if (RECRUITMENT_LEADER.test(title) && (ontologyVariant?.function as string) !== 'hr') {
+    return { functions: ['hr'], levelRank: LEVEL_RANK[inferRulesLevel(title)] };
   }
   if (
     ontologyVariant &&
