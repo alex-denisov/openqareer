@@ -39,3 +39,39 @@ describe('захват формы LinkedIn', () => {
     );
   });
 });
+
+const stateSource = readFileSync(join(__dirname, 'linkedin_form_state.js'), 'utf8');
+
+function state(html: string, wantsForm = true, status = 200): string {
+  const dom = new JSDOM(html, { runScripts: 'outside-only' });
+  dom.window.Element.prototype.getClientRects = function () {
+    return (this.closest('[hidden]') ? [] : [{}]) as unknown as DOMRectList;
+  };
+  Object.defineProperty(dom.window.performance, 'getEntriesByType', {
+    value: () => [{ responseStatus: status }],
+  });
+  return dom.window.eval(stateSource.replace('__WANTS_FORM__', String(wantsForm))) as string;
+}
+
+describe('страница формы LinkedIn', () => {
+  const form = '<body><div role="dialog"><textarea></textarea></div></body>';
+
+  it('принимает страницу с формой и профиль без неё', () => {
+    expect(state(form)).toBe('ok');
+    expect(state('<body><main>Profile</main></body>', false)).toBe('ok');
+  });
+
+  it('узнаёт блокировку запросов по ответу и по тексту', () => {
+    expect(state(form, true, 999)).toBe('request_blocked');
+    expect(state(form, true, 429)).toBe('request_blocked');
+    expect(state('<title>LinkedIn: Request Denied</title><body></body>', false)).toBe(
+      'request_blocked',
+    );
+    expect(state('<body><h1>Too many requests</h1></body>', false)).toBe('request_blocked');
+  });
+
+  it('не принимает страницу без видимой формы', () => {
+    expect(state('<body><input type="text" aria-label="Search"></body>')).toBe('form_missing');
+    expect(state('<body><form hidden><textarea></textarea></form></body>')).toBe('form_missing');
+  });
+});

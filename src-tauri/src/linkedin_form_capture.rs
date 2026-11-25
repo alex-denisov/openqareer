@@ -20,6 +20,9 @@ use tauri::{AppHandle, Manager, Url, Webview};
 const FLAG: &str = "linkedin-form-capture";
 const PROFILE_URL: &str = "https://www.linkedin.com/in/me/";
 const CAPTURE_SCRIPT: &str = include_str!("linkedin_form_capture.js");
+const STATE_SCRIPT: &str = include_str!("linkedin_form_state.js");
+/// An older flag is forgotten, not obeyed.
+const FLAG_MAX_AGE: Duration = Duration::from_secs(10 * 60);
 /// File name, and the path that follows `/in/<slug>/` on the form's page.
 const FORMS: [(&str, &str); 3] = [
     ("summary", "edit/forms/summary/"),
@@ -45,10 +48,28 @@ fn root(app: &AppHandle) -> Result<PathBuf, &'static str> {
         .map_err(|_| "data_dir_unavailable")
 }
 
-/// Takes the flag away; `false` when there is none, so a run never repeats itself.
+/// A fresh flag (a plain file); a stale or future-dated one is removed here.
+fn fresh_flag(path: &Path) -> bool {
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return false;
+    };
+    if !meta.is_file() {
+        return false;
+    }
+    let fresh = meta
+        .modified()
+        .ok()
+        .and_then(|at| at.elapsed().ok())
+        .is_some_and(|age| age <= FLAG_MAX_AGE);
+    if !fresh {
+        let _ = std::fs::remove_file(path);
+    }
+    fresh
+}
+
+/// Takes a fresh flag away, so a run never repeats itself.
 fn take_flag(path: &Path) -> bool {
-    std::fs::symlink_metadata(path).is_ok_and(|meta| meta.is_file())
-        && std::fs::remove_file(path).is_ok()
+    fresh_flag(path) && std::fs::remove_file(path).is_ok()
 }
 
 /// Where the page is, as a refusal code; `Ok` only on the candidate's own profile.
@@ -64,12 +85,36 @@ fn check_page(url: &Url) -> Result<(), &'static str> {
     }
 }
 
-/// `/in/<slug>/<form>`: the form's own page and nothing else.
-fn is_form(url: &Url, form: &str) -> bool {
-    let mut parts = url.path().splitn(4, '/');
-    check_page(url).is_ok()
-        && matches!((parts.next(), parts.next(), parts.next()), (Some(""), Some("in"), Some(slug)) if !slug.is_empty())
-        && parts.next().is_some_and(|rest| rest.starts_with(form))
+fn slug_of(url: &Url) -> Option<String> {
+    let mut parts = url.path().split('/').skip(1);
+    (check_page(url).is_ok() && parts.next() == Some("in"))
+        .then(|| parts.next())
+        .flatten()
+        .filter(|slug| !slug.is_empty())
+        .map(str::to_lowercase)
+}
+
+/// `/in/<slug>/<form>` of this profile: the form's own page and nothing else.
+fn is_form(url: &Url, slug: &str, form: &str) -> bool {
+    slug_of(url).as_deref() == Some(slug)
+        && url
+            .path()
+            .splitn(4, '/')
+            .nth(3)
+            .is_some_and(|rest| rest.starts_with(form))
+}
+
+fn state_script(wants_form: bool) -> String {
+    STATE_SCRIPT.replace("__WANTS_FORM__", if wants_form { "true" } else { "false" })
+}
+
+/// `Ok` only on a page LinkedIn really served, with the form on it when one is due.
+async fn check_served(window: &Webview, wants_form: bool) -> Result<(), &'static str> {
+    match read_text(window, &state_script(wants_form)).await?.as_str() {
+        "ok" => Ok(()),
+        "form_missing" => Err("form_missing"),
+        _ => Err("request_blocked"),
+    }
 }
 
 fn link_script(form: &str) -> String {
@@ -109,12 +154,16 @@ async fn capture(
     folder: &Path,
 ) -> Result<(), &'static str> {
     tokio::time::sleep(PAGE_SETTLE).await;
-    still_ours(app, window, key)?;
+    let profile = still_ours(app, window, key)?;
+    let slug = slug_of(&profile)
+        .filter(|slug| slug != "me")
+        .ok_or("profile_unknown")?;
+    check_served(window, false).await?;
     let mut links = Vec::new();
     for (name, form) in FORMS {
         let link = Url::parse(&read_text(window, &link_script(form)).await?)
             .ok()
-            .filter(|url| is_form(url, form));
+            .filter(|url| is_form(url, &slug, form));
         if link.is_none() {
             note(app, "no_link", Some(name));
         }
@@ -126,9 +175,10 @@ async fn capture(
         still_ours(app, window, key)?;
         window.navigate(link).map_err(|_| "navigate_failed")?;
         tokio::time::sleep(PAGE_SETTLE).await;
-        if !is_form(&still_ours(app, window, key)?, form) {
+        if !is_form(&still_ours(app, window, key)?, &slug, form) {
             return Err("page_changed");
         }
+        check_served(window, true).await?;
         let html = read_text(window, CAPTURE_SCRIPT).await?;
         if html.len() > MAX_HTML_BYTES {
             return Err("page_too_big");
@@ -179,7 +229,7 @@ pub fn start_if_flagged(app: &AppHandle) {
     let Ok(flag) = root(app).map(|root| root.join("diagnostics").join(FLAG)) else {
         return;
     };
-    if !flag.is_file() || RUNNING.swap(true, Ordering::SeqCst) {
+    if !fresh_flag(&flag) || RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
     let app = app.clone();
@@ -226,16 +276,18 @@ mod tests {
         for (_, form) in FORMS {
             assert!(is_form(
                 &url(&format!("https://www.linkedin.com/in/ivan/{form}new/")),
+                "ivan",
                 form
             ));
         }
         for raw in [
             "https://www.linkedin.com/in/ivan/",
             "https://www.linkedin.com/in/ivan/edit/forms/education/new/",
+            "https://www.linkedin.com/in/petr/edit/forms/summary/new/",
             "https://www.linkedin.com/company/in/x/edit/forms/summary/",
             "https://evil.example/in/ivan/edit/forms/summary/new/",
         ] {
-            assert!(!is_form(&url(raw), "edit/forms/summary/"), "{raw}");
+            assert!(!is_form(&url(raw), "ivan", "edit/forms/summary/"), "{raw}");
         }
     }
 
@@ -249,8 +301,19 @@ mod tests {
     }
 
     #[test]
+    fn an_old_flag_is_removed_and_not_obeyed() {
+        let flag = std::env::temp_dir().join(format!("oq-b802-old-{}", std::process::id()));
+        let file = std::fs::File::create(&flag).expect("flag");
+        let past = std::time::SystemTime::now() - FLAG_MAX_AGE - Duration::from_secs(1);
+        file.set_modified(past).expect("mtime");
+        assert!(!fresh_flag(&flag));
+        assert!(!flag.exists());
+    }
+
+    #[test]
     fn the_scripts_only_read() {
-        let scripts = FORMS.map(|(_, form)| link_script(form)).join("") + CAPTURE_SCRIPT;
+        let scripts =
+            FORMS.map(|(_, form)| link_script(form)).join("") + CAPTURE_SCRIPT + STATE_SCRIPT;
         for act in [
             "click(",
             "submit(",
