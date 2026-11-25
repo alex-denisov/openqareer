@@ -146,9 +146,9 @@ const handleReview: Handler = async (deps, request, reply) => {
       // B647: на экране i03 задача отклика, а не вопрос сессии — судим по ней.
       question: task ? taskQuestion(task) : question.prompt,
       answer: question.answer.text,
-      ...(task ? { taskPoints: task.points } : {}),
+      ...(task ? { taskPoints: task.points, caseKind: task.caseKind } : {}),
     },
-    scoreInterviewAnswerWithQuotes(question.answer.text, question.type),
+    scoreInterviewAnswerWithQuotes(question.answer.text, question.type, task?.caseKind),
   );
   const facts = deps.candidateStore.getSnapshot(candidate.id).memory;
   const helpful = deps.candidateStore.interviewSimulatorRepo.reviewHelpful.get({
@@ -163,6 +163,7 @@ const handleReview: Handler = async (deps, request, reply) => {
       evaluation: schema ? linkReviewToSchema(evaluation, schema.schema) : evaluation,
       numbers: checkAnswerNumbers(question.answer.text, facts),
       exampleAnswer: task?.exampleAnswer ?? null,
+      caseKind: task?.caseKind ?? 'system',
       helpful,
       schema,
     },
