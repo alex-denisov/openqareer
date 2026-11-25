@@ -1,3 +1,4 @@
+import { type ClosedReader, withoutClosedRows } from '../vacancies/closedRows';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
@@ -128,6 +129,20 @@ export interface MatchedList {
   readonly phasesMs: ListPhasesMs;
 }
 
+/** Чтения движка для сборки списка: итоги каталога и снятые вакансии (B797); заглушки тестов — без них. */
+export function engineListReads(
+  engine: RouteDeps['multiSourceEngine'],
+): Pick<MatchedListInput, 'closed' | 'catalogTotals'> {
+  return {
+    ...(typeof engine.closedSelection === 'function'
+      ? { closed: () => engine.closedSelection() }
+      : {}),
+    ...(typeof engine.getCatalogTotals === 'function'
+      ? { catalogTotals: () => engine.getCatalogTotals() }
+      : {}),
+  };
+}
+
 export interface MatchedListInput {
   readonly snapshot: readonly MatchedVacancyItem[];
   readonly targetRoles: string[];
@@ -141,6 +156,8 @@ export interface MatchedListInput {
   readonly filters: MatchedVacancyFilters;
   readonly sourceRegistry: readonly MatchedVacancySourceDefinition[];
   readonly order: MatchedOrder;
+  /** B797: какие записи сняты с площадки. */
+  readonly closed?: ClosedReader;
   readonly catalogTotals?: () => CatalogTotals | undefined;
   /** B674: `false` — список читают, но запечатанную строку кандидата не пишут. По умолчанию пишут. */
   readonly seal?: boolean;
@@ -286,7 +303,12 @@ function* facetAndFilterSteps(
   return { facets, filtered };
 }
 
-function* matchedListSteps(input: MatchedListInput, phase: PhaseTimer) {
+export function* matchedListSteps(read: MatchedListInput, phase: PhaseTimer) {
+  // B797: снятые уходят до всех чисел, поэтому числа фильтров равны строкам при любом фильтре.
+  const open = phase.run('closed', () =>
+    withoutClosedRows(read.snapshot, read.closed?.() ?? new Set<string>()),
+  );
+  const input = open === read.snapshot ? read : { ...read, snapshot: open };
   const { campaign, candidateStore, candidateId, targetRoles, snapshot } = input;
   const limits = phase.run('limits', () => readRowLimits(candidateStore, candidateId));
   yield;

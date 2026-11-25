@@ -112,6 +112,23 @@ describe('b640 profile: форма места работы', () => {
     expect(validateForm({ ...form, city: '', teamSize: '' }, ENTRY)).toEqual({});
   });
 
+  it('B801: старое описание длиннее 1000 не мешает сохранить другие поля, новая правка — ошибка', () => {
+    const entry = { ...ENTRY, descriptionMemoryId: 'd1' };
+    const old = `${'а'.repeat(3_000)}\n`;
+    const initial = formOf(entry, new Map([['d1', old]]));
+    const other = { ...initial, title: 'CTO' };
+    expect(validateForm(other, entry, initial)).toEqual({});
+    expect(editedTexts(entry, initial, other)).toEqual([]);
+    const edited = { ...initial, description: 'б'.repeat(1_200) };
+    expect(validateForm(edited, entry, initial)).toEqual({
+      description: 'Не длиннее 1000 знаков, сейчас 1200',
+    });
+    const fresh = { ...formOf(ENTRY), description: 'в'.repeat(1_001) };
+    expect(validateForm(fresh, ENTRY).description).toBe('Не длиннее 1000 знаков, сейчас 1001');
+    const short = { ...initial, description: 'б'.repeat(1_000) };
+    expect(validateForm(short, entry, initial)).toEqual({});
+  });
+
   it('прежний город вне справочника не мешает сохранить другие поля', () => {
     const legacy = { ...ENTRY, location: 'Москва, Россия' };
     expect(validateForm(formOf(legacy), legacy)).toEqual({});

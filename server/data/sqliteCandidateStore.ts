@@ -650,6 +650,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare recordApplicationEvent: ApplicationTrackerMethods['recordApplicationEvent'];
   declare applicationFunnel: ApplicationTrackerMethods['applicationFunnel'];
   declare linkApplicationMaterial: ApplicationTrackerMethods['linkApplicationMaterial'];
+  declare linkedMaterialId: ApplicationTrackerMethods['linkedMaterialId'];
   declare createApplicationInterview: ApplicationTrackerMethods['createApplicationInterview'];
   declare patchApplicationInterview: ApplicationTrackerMethods['patchApplicationInterview'];
   declare getInterviewSubject: ApplicationTrackerMethods['getInterviewSubject'];

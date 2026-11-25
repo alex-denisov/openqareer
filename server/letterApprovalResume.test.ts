@@ -72,6 +72,66 @@ describe('B601: одобрение письма прикладывает рез�
   });
 });
 
+describe('B785: одобренный, но не отправленный отклик', () => {
+  const PATH = '/api/v1/candidate/vacancies/cluster-99/letter-resume';
+
+  async function approvedThenChanged() {
+    const kit = await setup('Head of Platform');
+    const first = (await kit.approve()).json().data;
+    seedResume(kit.candidates, kit.candidateId, 'VP Platform Engineering');
+    const prepared = (await kit.prepareResume()).json().data;
+    return { ...kit, first, prepared };
+  }
+
+  it('подготовка ничего не прикладывает; «Одобрить» прикладывает ровно показанную версию', async () => {
+    const { call, candidates, candidateId, first, prepared, linkedResume, resumeDocuments, readApproval } =
+      await approvedThenChanged();
+    expect(prepared.replaceable).toBe(true);
+    expect(prepared.versionId).not.toBe(first.resume.versionId);
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+    expect(resumeDocuments()).toHaveLength(1);
+    // Пока кандидат смотрел версию, профиль снова изменился.
+    seedResume(candidates, candidateId, 'Chief Platform Officer');
+    const attached = (await call('PUT', PATH, { versionId: prepared.versionId })).json().data.resume;
+    expect(attached.versionId).toBe(prepared.versionId);
+    expect(linkedResume(first.applicationId)).toBe(attached.documentId);
+    expect((await readApproval()).json().data.approval.resume.versionId).toBe(prepared.versionId);
+    await call('PUT', PATH, { versionId: prepared.versionId });
+    expect(resumeDocuments()).toHaveLength(2);
+    expect(candidates.listApplications(candidateId).map(({ stage }) => stage)).toEqual(['saved']);
+  });
+
+  it('файл, приложенный кандидатом, и отправленный отклик не меняются', async () => {
+    const { call, candidates, candidateId, first, prepared, prepareResume, linkedResume } =
+      await approvedThenChanged();
+    const { document: own } = candidates.saveDocument(candidateId, {
+      kind: 'resume', source: 'upload', fileName: 'own.pdf', mimeType: 'application/pdf',
+      contentBase64: Buffer.from('pdf').toString('base64'), parseStatus: 'not_applicable',
+    } as never);
+    candidates.linkApplicationMaterial(candidateId, first.applicationId, 'resume', own.id);
+    expect((await prepareResume()).json().data.replaceable).toBe(false);
+    expect((await call('PUT', PATH, { versionId: prepared.versionId })).statusCode).toBe(409);
+    expect(linkedResume(first.applicationId)).toBe(own.id);
+
+    const sent = await approvedThenChanged();
+    const application = sent.candidates.getApplication(sent.candidateId, sent.first.applicationId)!;
+    await sent.call('PATCH', '/api/v1/candidate/applications/' + application.id, {
+      expectedVersion: application.version,
+      stage: 'applied',
+    });
+    expect((await sent.prepareResume()).json().data.replaceable).toBe(false);
+    expect((await sent.call('PUT', PATH, { versionId: sent.prepared.versionId })).statusCode).toBe(409);
+    expect(sent.linkedResume(sent.first.applicationId)).toBe(sent.first.resume.documentId);
+  });
+
+  it('чужая или неверная версия не прикладывается', async () => {
+    const { call, first, linkedResume } = await approvedThenChanged();
+    expect((await call('PUT', PATH, { versionId: 'x' })).statusCode).toBe(400);
+    expect((await call('PUT', PATH, { versionId: '11111111-1111-5111-8111-111111111111' })).statusCode).toBe(409);
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+  });
+});
+
 describe('B785: резюме отправленного отклика', () => {
   it('после отправки версия не меняется и отклик не открывается заново', async () => {
     const { call, candidates, candidateId, approve, prepareResume, versions, linkedResume, resumeDocuments } =

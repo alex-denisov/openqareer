@@ -5,7 +5,7 @@ import { addManualExperienceFact } from '../../resume/experienceFactApi';
 import { getResumeStudio } from '../../resume/resumeApi';
 import { forgetSharedRead } from '../../resume/sharedRead';
 import type { ResumeDraft, ResumeExperienceInput } from '../../resume/resumeTypes';
-import type { ExperienceForm } from './experienceForm';
+import { editedDescription, type ExperienceForm } from './experienceForm';
 import { correctFact, revertFactCorrection } from './factCorrectionApi';
 import { statementsOf } from './profileModel';
 
@@ -32,8 +32,8 @@ export function editedTexts(
       : [],
   );
   const { descriptionMemoryId } = entry;
-  const description = form.description?.trim();
-  return descriptionMemoryId && description && description !== initial.description
+  const description = editedDescription(initial, form);
+  return descriptionMemoryId && description
     ? [{ memoryId: descriptionMemoryId, text: description }, ...results]
     : results;
 }

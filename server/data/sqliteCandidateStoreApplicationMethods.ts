@@ -112,6 +112,7 @@ export interface ApplicationTrackerMethods
     role: ApplicationMaterialRole,
     documentId: string,
   ): StoredApplicationMaterial;
+  linkedMaterialId(candidateId: string, applicationId: string, role: ApplicationMaterialRole): string | null;
   createApplicationInterview(
     candidateId: string,
     applicationId: string,
@@ -245,8 +246,12 @@ function createCoreApplicationMethods(
 function createApplicationMutationMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
-): Pick<ApplicationTrackerMethods, 'patchApplication' | 'restoreApplication'> {
+): Pick<ApplicationTrackerMethods, 'patchApplication' | 'restoreApplication' | 'linkedMaterialId'> {
   return {
+    linkedMaterialId(candidateId, applicationId, role) {
+      requireCandidate(candidateId);
+      return tracker.linkedMaterialId(candidateId, applicationId, role);
+    },
     patchApplication(candidateId, applicationId, input, archiveStaleDays) {
       requireCandidate(candidateId);
       return tracker.patch(candidateId, applicationId, input, archiveStaleDays);
