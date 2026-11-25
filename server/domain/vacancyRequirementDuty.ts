@@ -36,7 +36,7 @@ function headingOf(line: string): Section | null {
 const DUTY_TOPIC =
   /^(?!.*(?<!\p{L})(?:skills?|experience|expertise|qualif\S*|competenc\S*|required|preferred|must|requirements?|навык\S*|опыт\S*|знани\S*|требовани\S*|условия)(?!\p{L})).*(?:(?<!\p{L})(?:leadership|management|operations?|collaboration|excellence|governance|strategy|planning|reporting|partnership|delivery|engagement|execution|oversight)|^(?:управление|развитие команды|операционн\p{L}* (?:управление|эффективность)|финансов\p{L}* (?:управление|контроль)).*)[:：]?$/iu;
 /** Заголовок, приклеенный к последнему пункту: «- Отчётность Требования:». */
-const GLUED_REQUIREMENTS = /(?<!\p{L})(?:требования|requirements|qualifications)\s*[:：]$/iu;
+const GLUED_REQUIREMENTS = /(?<!\p{L})(?<!(?:salary|visa|travel|physical|work|system|pay|legal|business|compliance|security|project|product|client|customer|technical|regulatory)\s)(?:требования|requirements|qualifications)\s*[:：]$/iu;
 
 const isShortPlainLine = (line: string) => {
   const text = line.trim();
@@ -55,7 +55,8 @@ function sectionsOf(description: string): readonly { readonly line: string; read
     const named = GLUED_REQUIREMENTS.test(line.trim())
       ? 'requirement'
       : (headingOf(line) ?? (bulleted && isShortPlainLine(line) ? 'other' : null));
-    const isTopic = named === 'other' && section === 'duty' && DUTY_TOPIC.test(line.trim());
+    // A bare «Leadership:» may as well open the list of qualities, so one word never continues duties.
+    const isTopic = named === 'other' && section === 'duty' && /\S\s+\S/u.test(line.trim()) && DUTY_TOPIC.test(line.trim());
     const heading = isTopic ? 'duty' : named;
     if (heading) {
       section = heading;
