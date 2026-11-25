@@ -23,6 +23,7 @@ export function resumeContextOf(
       endDate: experience.endDate ?? null,
       current: experience.current,
       teamSize: experience.teamSize ?? null,
+      ...(experience.teamSizeDeclined ? { teamSizeDeclined: true } : {}),
       descriptionMemoryId: experience.descriptionMemoryId ?? null,
       bulletMemoryIds: [...experience.bulletMemoryIds],
     })),

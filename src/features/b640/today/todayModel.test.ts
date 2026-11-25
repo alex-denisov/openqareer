@@ -40,6 +40,24 @@ describe('b640 today: действие строки очереди', () => {
       icon: 'send',
       path: '/app/responses/a1/letter',
     });
+    // B801 (s05b): письмо на проверку.
+    expect(
+      queueAction(
+        item({
+          material: 'letter_draft',
+          applicationId: 'a1',
+          title: 'CTO',
+          company: 'Гринкод',
+          eyebrow: 'черновик',
+        }),
+      ),
+    ).toMatchObject({
+      title: 'CTO',
+      sub: 'Гринкод · черновик',
+      label: 'Проверить письмо',
+      shortLabel: 'Проверить',
+      path: '/app/responses/a1/letter',
+    });
     expect(queueAction(item({ material: 'cover_letter', applicationId: 'a1' })).sub).toBe(
       'Письмо одобрено',
     );

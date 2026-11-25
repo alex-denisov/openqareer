@@ -75,6 +75,17 @@ export function mergeDigestMarks(
   return serialize({ floor: sameFloor ? tag : MIXED_FLOOR, marks });
 }
 
+/** Сводит записи одного дня в одну: отпечатки объединяются, разные пороги — без подписи. */
+export function unionDigestMarks(left: string, right: string): string {
+  const a = parse(left);
+  const b = parse(right);
+  if (a.marks.size === 0) return right;
+  if (b.marks.size === 0) return left;
+  const marks = new Map(a.marks);
+  for (const [mark, above] of b.marks) marks.set(mark, above || marks.get(mark) === true);
+  return serialize({ floor: a.floor === b.floor ? a.floor : MIXED_FLOOR, marks });
+}
+
 export function digestCount(sourceType: string, sourceId: string): number | null {
   if (sourceType !== ROLE_DIGEST_SOURCE_TYPE) return null;
   const count = parse(sourceId).marks.size;

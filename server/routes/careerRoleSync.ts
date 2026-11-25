@@ -163,7 +163,9 @@ export function persistCareerRoles(
     ...workspace,
     campaign: { ...campaign, careerRoles: next },
   });
-  deps.matchedPoolPrecompute?.prioritizeCampaign(candidateId);
+  // B801: чтение «Карьеры» записывало роли и стирало все снимки подбора, следующее чтение ждало
+  // 12 с и получало 503 (прод 25.11, 13:28). Ключ снимка содержит роли: стирать нечего (B702).
+  deps.matchedPoolPrecompute?.refreshCampaign?.(candidateId);
   return true;
 }
 

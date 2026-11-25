@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { saveResumeStudioDraft } from '../../resume/resumeApi';
 import type { ResumeDraft } from '../../resume/resumeTypes';
-import { ActionDock, Button, Icon, Link } from '../kit';
+import { Button, Icon, Link } from '../kit';
 import { buildNodePath, type B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
@@ -15,14 +15,16 @@ function loadDraft(): Promise<ResumeDraft> {
   return freshDraft();
 }
 
-/** Записывает размер команды в свежепрочитанный профиль: чужие правки не затираются. */
-async function saveTeamSize(entryId: string, teamSize: number): Promise<void> {
+type TeamAnswer = { readonly teamSize: number } | { readonly teamSizeDeclined: true };
+
+/** Записывает ответ о команде в свежепрочитанный профиль: чужие правки не затираются. */
+async function saveAnswer(entryId: string, answer: TeamAnswer): Promise<void> {
   const draft = await freshDraft();
   if (!draft.experience.some((entry) => entry.id === entryId)) throw new Error('entry_missing');
   await saveResumeStudioDraft({
     ...draft,
     experience: draft.experience.map((entry) =>
-      entry.id === entryId ? { ...entry, teamSize } : entry,
+      entry.id === entryId ? { ...entry, ...answer } : entry,
     ),
   });
 }
@@ -35,6 +37,7 @@ interface Answered {
 interface AskProps {
   readonly question: ProfileQuestion;
   readonly onAnswered: (answered: Answered) => void;
+  readonly onDeclined: () => void;
 }
 
 interface AskFieldProps {
@@ -68,40 +71,45 @@ function AskField({ label, value, error, onChange }: AskFieldProps) {
   );
 }
 
-function AskActions({ busy }: { readonly busy: boolean }) {
+interface AskActionsProps {
+  readonly busy: boolean;
+  readonly onDecline: () => void;
+}
+
+function AskActions({ busy, onDecline }: AskActionsProps) {
   return (
-    <ActionDock
-      kind="commit"
-      secondary={
-        <Link className="btn is-quiet" to={PROFILE_PATH}>
-          <Icon name="clock" />
-          Не сейчас
-        </Link>
-      }
-      primary={
-        <Button type="submit" variant="primary" icon="check" busy={busy}>
-          Ответить
-        </Button>
-      }
-    />
+    <div className="actions">
+      <Button type="submit" variant="primary" icon="check" busy={busy}>
+        Ответить
+      </Button>
+      <Link className="btn is-quiet" to={PROFILE_PATH}>
+        <Icon name="clock" />
+        Не сейчас
+      </Link>
+      <Button variant="quiet" icon="eyeoff" disabled={busy} onClick={onDecline}>
+        Не хочу указывать
+      </Button>
+    </div>
   );
 }
 
-function Ask({ question, onAnswered }: AskProps) {
+function answeredWith({ entryId, employer }: ProfileQuestion, size: number): Answered {
+  const place = employer ? ` в «${employer}»` : '';
+  return { entryId, text: `Записано: команда${place} — ${teamLabel(size)}` };
+}
+
+function Ask({ question, onAnswered, onDeclined }: AskProps) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function answer(size: number) {
+  async function send(answer: TeamAnswer, onSaved: () => void) {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
-      await saveTeamSize(question.entryId, size);
-      const place = question.employer ? ` в «${question.employer}»` : '';
-      onAnswered({
-        entryId: question.entryId,
-        text: `Записано: команда${place} — ${teamLabel(size)}`,
-      });
+      await saveAnswer(question.entryId, answer);
+      onSaved();
     } catch {
       setError('Ответ не сохранился');
       setBusy(false);
@@ -113,7 +121,7 @@ function Ask({ question, onAnswered }: AskProps) {
     const size = teamAnswer(text);
     if (busy) return;
     if (size === null) setError('Только число');
-    else void answer(size);
+    else void send({ teamSize: size }, () => onAnswered(answeredWith(question, size)));
   }
 
   return (
@@ -127,7 +135,7 @@ function Ask({ question, onAnswered }: AskProps) {
           setError(null);
         }}
       />
-      <AskActions busy={busy} />
+      <AskActions busy={busy} onDecline={() => void send({ teamSizeDeclined: true }, onDeclined)} />
     </form>
   );
 }
@@ -177,6 +185,10 @@ export function QuestionScreen({ node }: { readonly node: B640Node }) {
               question={question}
               onAnswered={(next) => {
                 setAnswered(next);
+                draft.retry();
+              }}
+              onDeclined={() => {
+                setAnswered(null);
                 draft.retry();
               }}
             />

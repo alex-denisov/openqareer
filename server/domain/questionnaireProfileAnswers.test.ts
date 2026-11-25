@@ -100,6 +100,19 @@ describe('B641: ответы анкеты из профиля', () => {
     }
   });
 
+  it('имя и фамилия отдельными полями, как в приложении', () => {
+    const asked = ['First name', 'Last name *', 'Nombre', 'Manager first name'].map((text) => ({
+      id: text, text, required: true, kind: 'text' as const,
+    }));
+    const facts = { fullName: 'Марина Соколова' };
+    expect(profileAnswers(asked, facts).map((item) => [item.questionId, item.text])).toEqual([
+      ['First name', 'Марина'],
+      ['Last name *', 'Соколова'],
+      ['Nombre', 'Марина'],
+    ]);
+    expect(profileAnswers(asked, { fullName: 'Anna Maria Lopez' })).toEqual([]);
+  });
+
   it('у вопроса с выбором подставляет только совпавший вариант', () => {
     const choice = (options: readonly string[]): QuestionnaireQuestion => ({
       id: 'c', text: 'Country of residence', required: true, kind: 'choice', options,

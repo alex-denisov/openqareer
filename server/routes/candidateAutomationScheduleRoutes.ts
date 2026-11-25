@@ -186,6 +186,12 @@ async function dispatchDueItem(
     const dispatch = new CandidateAutomationDispatch({
       repository: deps.automationRepository,
       executor: deps.candidateActionExecutor,
+      alreadySent: (candidateId, { payload }) =>
+        deps.candidateStore.findSentApplication(candidateId, {
+          clusterId: payload.clusterId,
+          title: payload.title,
+          urls: [payload.targetUrl],
+        }) !== null,
     });
     return reply.send({ data: await dispatch.runCandidate(candidate.id) });
   } catch (error: unknown) {

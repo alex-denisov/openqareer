@@ -40,6 +40,9 @@ export interface CandidateAutomationDispatchResult {
   readonly failureCode?: string | null;
 }
 
+/** B801: отклик на эту вакансию уже отправлен, в том числе с карточки-дубля. */
+type AlreadySent = (candidateId: string, item: CandidateAutomationQueueItem) => boolean;
+
 type DispatchExecutor = Pick<CandidateActionExecutor, 'executeBatch'> &
   Partial<Pick<CandidateActionExecutor, 'findStoredReceipt'>>;
 
@@ -47,15 +50,18 @@ export class CandidateAutomationDispatch {
   private readonly repository: SqliteCandidateAutomationRepository;
   private readonly executor?: DispatchExecutor;
   private readonly random: () => number;
+  private readonly alreadySent: AlreadySent;
 
   constructor(options: {
     readonly repository: SqliteCandidateAutomationRepository;
     readonly executor?: DispatchExecutor;
     readonly random?: () => number;
+    readonly alreadySent: AlreadySent;
   }) {
     this.repository = options.repository;
     this.executor = options.executor;
     this.random = options.random ?? Math.random;
+    this.alreadySent = options.alreadySent;
   }
 
   async runDue(
@@ -149,7 +155,18 @@ export class CandidateAutomationDispatch {
     if (!this.executor) return this.prepared(candidateId, now, item.id);
     const existing = this.executor.findStoredReceipt?.(candidateId, item.id);
     if (existing) return this.handleReceipt(candidateId, item, existing, now, schedule, localDate);
+    if (this.alreadySent(candidateId, item)) return this.dropSent(candidateId, item, now);
     return this.executeItem(candidateId, item, now, schedule, localDate);
+  }
+
+  /** Повторно не отправляется: выходит из очереди, следующий такт берёт следующий отклик. */
+  private dropSent(
+    candidateId: string,
+    item: CandidateAutomationQueueItem,
+    now: Date,
+  ): CandidateAutomationDispatchResult {
+    this.repository.transitionQueueItem(candidateId, item.id, 'remove', now.toISOString());
+    return { candidateId, status: 'idle', queueItemId: item.id, failureCode: 'already_applied' };
   }
 
   private async executeItem(
@@ -203,6 +220,7 @@ export class CandidateAutomationDispatch {
           );
     }
     if (error instanceof CandidateConsentRequiredError) {
+      if (this.alreadySent(candidateId, item)) return this.dropSent(candidateId, item, now);
       return this.handleConsentGuardFailure(candidateId, item.id, now);
     }
     if (error instanceof CandidateRunnerNotConnectedError) {
@@ -262,7 +280,7 @@ export class CandidateAutomationDispatch {
     const item = this.repository.getQueueItem(candidateId, queueItemId);
     return settings.enabled && settings.mode === 'approval_required' &&
       hasAutomationConsent(this.repository, candidateId) && !isPaused(settings.pausedUntil, now) &&
-      !runtime.emergencyPaused && item?.status === 'approved';
+      !runtime.emergencyPaused && item?.status === 'approved' && !this.alreadySent(candidateId, item);
   }
 
   private handleConsentGuardFailure(

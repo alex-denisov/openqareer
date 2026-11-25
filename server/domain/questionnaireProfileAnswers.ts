@@ -2,6 +2,7 @@ import type {
   QuestionnaireQuestion,
   QuestionnaireSuggestion,
 } from '../../shared/applicationQuestionnaire';
+import { nameFact, splitName } from '../../shared/candidateName';
 
 /**
  * B641: ответы анкеты из того, что точно есть в профиле кандидата. Каждое правило берёт одно
@@ -141,6 +142,22 @@ function forQuestion(question: QuestionnaireQuestion, value: string): string | u
   return question.options?.find((option) => option.trim().toLocaleLowerCase() === wanted);
 }
 
+const labelOf = (question: QuestionnaireQuestion): string =>
+  question.text.trim().replace(/\s*[:*✱]+$/u, '');
+
+/** Имя, фамилия или полное имя — тем же правилом, что в форме приложения. */
+function nameAnswer(
+  question: QuestionnaireQuestion,
+  questions: readonly QuestionnaireQuestion[],
+  facts: QuestionnaireProfileFacts,
+): string | null | undefined {
+  const fact = nameFact(labelOf(question), questions.map(labelOf));
+  if (!fact) return null;
+  const fullName = clean(facts.fullName);
+  if (!fullName) return undefined;
+  return fact === 'fullName' ? fullName : splitName(fullName)[fact];
+}
+
 /** Ответы из профиля: по одному на вопрос, первый подошедший по правилам. */
 export function profileAnswers(
   questions: readonly QuestionnaireQuestion[],
@@ -148,6 +165,11 @@ export function profileAnswers(
 ): readonly QuestionnaireSuggestion[] {
   if (!facts) return [];
   return questions.flatMap((question) => {
+    const name = nameAnswer(question, questions, facts);
+    if (name !== null) {
+      const text = name ? forQuestion(question, name) : undefined;
+      return text ? [{ questionId: question.id, text, source: SOURCE_CONTACTS }] : [];
+    }
     for (const rule of RULES) {
       if (!rule.matches.test(question.text) || rule.except?.test(question.text)) continue;
       if (NOT_ABOUT_CANDIDATE.test(question.text)) return [];

@@ -268,9 +268,22 @@ const SHORT_CLAIM_WORDS = 3;
 const FOREIGN_SUBJECT =
   /(?<!\p{L})(?:вы|вами|вас|you|кто|который|которая|команда|компания)(?!\p{L})/iu;
 
+const CARD_DENIAL =
+  /(?<!\p{L})не\s+(?:(?:меняю|изменяю|правлю|исправляю|вношу|обновляю|записываю)|(?:могу|буду)\s+(?:сам[аи]?\s+)?(?:менять|изменить|править|исправить|исправлять|вносить|внести|обновить|записать))(?!\p{L})|(?:can't|cannot|won't|don't)\s+(?:change|edit|update|correct)(?!\p{L})/iu;
+const MANUAL_EDIT =
+  /(?<!\p{L})(?:вносите|внесите|исправьте|исправляйте|поправьте|замените|измените|обновите|edit|change|update|correct)(?!\p{L})/iu;
+const MANUAL_PLACE = /карточк|профил|резюме|«О себе»|вручную|profile|resume|manually/iu;
+
+/** Карточка под репликой вносит правку сама: отказ и «внесите сами» ей противоречат. */
+const contradictsCard = (sentence: string): boolean =>
+  !sentence.includes('Применить') &&
+  ((CARD_DENIAL.test(sentence) &&
+    (PROFILE_OBJECT.test(sentence) || /текст|text/iu.test(sentence))) ||
+    (MANUAL_EDIT.test(sentence) && MANUAL_PLACE.test(sentence)));
+
 /**
  * Консультант не пишет в профиль: слова «исправил» в его реплике — ложный успех. Такие предложения
- * заменяются правдой: карточка правки или отказ.
+ * заменяются правдой: карточка правки или отказ. Под карточкой правдой заменяется и сам отказ.
  */
 export function withoutWriteClaims(message: string, hasCard: boolean): string {
   let found = false;
@@ -278,11 +291,12 @@ export function withoutWriteClaims(message: string, hasCard: boolean): string {
     .split(/(?<=[.!?…])(?=\s)|(?=\n)/u)
     .filter((sentence) => {
       const claim =
-        WRITE_CLAIM.test(sentence) &&
-        (PROFILE_OBJECT.test(sentence) ||
-          sentence.trim().split(/\s+/u).length <= SHORT_CLAIM_WORDS) &&
-        !FOREIGN_SUBJECT.test(sentence) &&
-        !sentence.includes('?');
+        (hasCard && contradictsCard(sentence)) ||
+        (WRITE_CLAIM.test(sentence) &&
+          (PROFILE_OBJECT.test(sentence) ||
+            sentence.trim().split(/\s+/u).length <= SHORT_CLAIM_WORDS) &&
+          !FOREIGN_SUBJECT.test(sentence) &&
+          !sentence.includes('?'));
       found ||= claim;
       return !claim;
     })

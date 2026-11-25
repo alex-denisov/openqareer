@@ -131,6 +131,37 @@ describe('очередь «отправить вручную»', () => {
     expect(row.c).not.toContain('Пишу');
   });
 
+  it('B801: отправленный отклик рядом с черновиком-дублем — нового письма, очереди и карточки нет', async () => {
+    const { call, inputs, candidates, candidateId } = await setup();
+    const vacancy = {
+      title: cluster.canonicalTitle,
+      company: cluster.canonicalCompany,
+      url: cluster.primaryUrl,
+      source: 'LinkedIn',
+    };
+    candidates.createApplication(candidateId, { clusterId: 'cluster-99', stage: 'saved', manualVacancy: vacancy });
+    candidates.recordVacancyApplication(candidateId, { clusterId: 'other-99', status: 'applied', vacancy });
+    const sent = candidates.listApplications(candidateId).find((item) => item.stage === 'applied')!;
+    const snapshot = {
+      circle: 3, language: 'ru', tone: 'executive', body: 'Здравствуйте!',
+      usedEvidenceIds: [], includedWorkplaceIds: [],
+    };
+    for (const response of [
+      await call('POST', PITCH, { tone: 'executive' }),
+      await call('POST', APPROVAL, snapshot),
+      await call('POST', QUEUE, put),
+      await call('POST', `${PITCH}/variants`, {}),
+    ]) {
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error).toMatchObject({
+        code: 'already_applied',
+        details: { applicationId: sent.id },
+      });
+    }
+    expect(candidates.listApplications(candidateId)).toHaveLength(2);
+    expect(inputs).toHaveLength(0);
+  });
+
   it('факты изменились — экран письма получает новое письмо, а не прежнее из очереди', async () => {
     const { call, inputs, candidates, candidateId } = await setup({ resume: true });
     seedResume(candidates, candidateId, 'Head of Platform', ['CSAT вырос с 23% до 68%']);

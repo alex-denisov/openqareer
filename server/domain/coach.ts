@@ -171,6 +171,7 @@ const resumeContextSchema = z
             endDate: z.string().nullable().optional(),
             current: z.boolean().optional(),
             teamSize: z.number().int().positive().nullable().optional(),
+            teamSizeDeclined: z.boolean().optional(),
             descriptionMemoryId: z.string().min(1).max(80).nullable().optional(),
             bulletMemoryIds: z.array(z.string().min(1).max(80)).max(MAX_BULLETS_PER_PLACE),
           })
@@ -391,6 +392,11 @@ export const coachTurnInputSchema = z.object({
         .optional(),
     })
     .strict()
+    .optional(),
+  /** B796: под этой репликой встанут карточки правки факта с «Применить». */
+  correctionCards: z
+    .array(z.object({ place: z.string().max(300), from: z.string(), to: z.string() }).strict())
+    .max(4)
     .optional(),
   stageContext: z.string().trim().max(10_000).optional(),
   rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),

@@ -110,6 +110,41 @@ describe('a recount of one candidate (04.11)', () => {
   });
 });
 
+describe('the last result after a profile edit (25.11)', () => {
+  const edit = (row: VacancyFitInput, statement: string): VacancyFitInput => ({ ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, statement }] });
+  /** Puts in the latest table what a release with other rules stored. */
+  const stored = (percent: number) => {
+    const { database, store } = setup();
+    const row = input();
+    store.putCache(row, evaluateVacancyFit({ ...row, assessments: row.assessments!.slice(0, 2) }, now), now);
+    const { latest_key: key } = database.prepare('SELECT latest_key FROM vacancy_fit_latest').get() as { latest_key: string };
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const { result_cipher: cipher } = database.prepare('SELECT result_cipher FROM vacancy_fit_latest').get() as { result_cipher: string };
+    database.prepare('UPDATE vacancy_fit_latest SET result_cipher = ?').run(sealed.seal(JSON.stringify({ ...JSON.parse(sealed.open(cipher, key)), coveragePercent: percent }), key));
+    return { database, store, row };
+  };
+  it('shows the percent of the current rules, not the higher one stored under earlier rules', () => {
+    const { database, store, row } = stored(100);
+    const percent = evaluateVacancyFit({ ...row, assessments: row.assessments!.slice(0, 2) }, now).coveragePercent;
+    expect(percent).toBeLessThan(100);
+    expect(store.getPreviousCache(edit(row, `${row.facts[0]!.statement}, Go`))?.coveragePercent).toBe(percent);
+    database.close();
+  });
+  it('a deleted or corrected fact holds no percent', () => {
+    const { database, store, row } = stored(100);
+    const deleted = { ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2', statement: 'Go services' }] };
+    expect(store.getPreviousCache(edit(row, 'Go services'))?.coveragePercent).toBe(0);
+    expect(store.getPreviousCache(deleted)?.coveragePercent).toBe(0);
+    database.close();
+  });
+  it('a text that only moved to another id keeps its verdicts', () => {
+    const { database, store, row } = stored(100);
+    const moved = { ...row, profileContextHash: 'edited', facts: [{ ...row.facts[0]!, id: 'f2' }] };
+    expect(store.getPreviousCache(moved)?.coveragePercent).toBe(71);
+    database.close();
+  });
+});
+
 describe('duties of the text (04.11)', () => {
   it('a row stored before the rule still reads, with its verdicts, and asks the model nothing', () => {
     const { database, store } = setup();

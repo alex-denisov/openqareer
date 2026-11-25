@@ -242,7 +242,7 @@ export function isPersonName(value: string | null | undefined): boolean {
 export function queueActionTitle(item: {
   readonly kind:
     'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview' | 'linkedin_post';
-  readonly material?: 'cover_letter';
+  readonly material?: 'cover_letter' | 'letter_draft';
   readonly company: string | null;
   readonly title: string;
   readonly contactName?: string;
@@ -259,6 +259,7 @@ export function queueActionTitle(item: {
   // Письмо в очереди уже одобрено (B717): следующий шаг — отправить отклик.
   if (item.kind === 'candidate_turn' && item.material === 'cover_letter')
     return named ? `Отправить отклик в «${named}»` : 'Отправить отклик';
+  if (item.material === 'letter_draft') return item.title;
   if (item.kind === 'candidate_turn') return `Ваш ход: ${item.title}`;
   if (item.kind === 'shortlist') return `Из подборки: ${item.title}`;
   return `Новая вакансия: ${item.title}`;
@@ -416,6 +417,7 @@ export function queueDesktopSubtitle(item: TodayQueueItem): string {
 export function queueMobileSubtitle(item: TodayQueueItem, overdue: boolean): string {
   const company = queueCompanyLabel(item.company);
   if (item.material === 'cover_letter') return 'Письмо одобрено, ждёт отправки';
+  if (item.material === 'letter_draft') return queueDesktopSubtitle(item);
   if (item.kind === 'linkedin_post') return 'LinkedIn · ждёт вашего одобрения';
   if (item.kind === 'candidate_turn') return `${company} · ждёт вашего ответа`;
   if (item.kind === 'interview') return `${company} · ${queueDateLabel(item.dueAt, item.kind)}`;
