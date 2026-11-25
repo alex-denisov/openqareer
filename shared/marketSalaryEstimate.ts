@@ -11,7 +11,6 @@
  * converted: a group keeps its dominant currency and other currencies are
  * left out of it. Its dominant period wins the same way (B803).
  */
-import { pluralWordRu } from './pluralRu';
 import { normalizeCityLabel } from './cityLabel';
 import { isCountryName } from './placeNames';
 
@@ -36,10 +35,17 @@ export type MarketSalaryPeriod = 'month' | 'year';
 
 export type MarketSalaryBasis = 'city' | 'country';
 
-/** What the matched-vacancies response carries for a vacancy without salary. */
-export interface MarketSalaryEstimateView extends MarketSalaryEstimate {
-  readonly basis: MarketSalaryBasis;
-  /** ISO time of the batch that computed the estimate: the date of the cut. */
+/**
+ * B803: «Оценка openqareer» у вакансии без зарплаты, в месяц. Источники, выборка и ступень остаются
+ * на сервере.
+ */
+export interface MarketSalaryEstimateView {
+  readonly low: number;
+  readonly high: number;
+  readonly currency: string;
+  readonly period: MarketSalaryPeriod;
+  readonly tax: 'gross' | 'net' | 'unknown';
+  /** ISO time of the computation: the date the screen shows. */
   readonly computedAt: string;
 }
 
@@ -76,16 +82,17 @@ function estimateStep(low: number, high: number): number {
  * Колонка «Деньги» — в месяц (B765): годовая оценка делится на 12 один раз, на сервере, и все
  * экраны, фильтр и порядок получают месячную сумму.
  */
-export function monthlyMarketEstimate<T extends MarketSalaryEstimate>(estimate: T): T {
-  const { low, high, period } = estimate;
-  if (period !== 'year') return estimate;
-  if (low === undefined || high === undefined) return { ...estimate, period: 'month' };
-  const month = [low / MONTHS, high / MONTHS] as const;
-  const step = estimateStep(...month);
+export function monthlyMarketEstimate<
+  T extends { readonly low: number; readonly high: number; readonly period: MarketSalaryPeriod },
+>(estimate: T): T {
+  if (estimate.period !== 'year') return estimate;
+  const low = estimate.low / MONTHS;
+  const high = estimate.high / MONTHS;
+  const step = estimateStep(low, high);
   return {
     ...estimate,
-    low: roundEstimate(month[0], step),
-    high: roundEstimate(month[1], step),
+    low: roundEstimate(low, step),
+    high: roundEstimate(high, step),
     period: 'month',
   };
 }
@@ -105,22 +112,6 @@ export function estimateFromMidpoints(
   // euro salary of 6 000 would round to zero, so small amounts use a smaller one.
   const step = estimateStep(p25, p75);
   return { low: roundEstimate(p25, step), high: roundEstimate(p75, step), ...group };
-}
-
-function hasNumber(estimate: MarketSalaryEstimate | undefined): boolean {
-  return estimate?.low !== undefined && estimate.high !== undefined;
-}
-
-/** City first; the country when the city has no number; otherwise the larger thin sample. */
-export function pickMarketSalaryEstimate(
-  city: MarketSalaryEstimate | undefined,
-  country: MarketSalaryEstimate | undefined,
-): (MarketSalaryEstimate & { readonly basis: MarketSalaryBasis }) | undefined {
-  if (city && hasNumber(city)) return { ...city, basis: 'city' };
-  if (country && hasNumber(country)) return { ...country, basis: 'country' };
-  if (city && (!country || city.sampleSize >= country.sampleSize))
-    return { ...city, basis: 'city' };
-  return country ? { ...country, basis: 'country' } : undefined;
 }
 
 export function marketSalaryKey(
@@ -178,9 +169,8 @@ function cutDate(iso: string): string | undefined {
   }).format(date);
 }
 
-/** «по 41 вакансии, 05.10» — sample size and the date of the cut. */
-export function marketSalaryBasis(sampleSize: number, computedAt: string): string {
-  const word = pluralWordRu(sampleSize, ['вакансии', 'вакансиям', 'вакансиям']);
+/** «Оценка openqareer, 05.10»: источники не показываем, дата расчёта есть всегда. */
+export function marketSalaryLabel(computedAt: string): string {
   const date = cutDate(computedAt);
-  return `по ${sampleSize} ${word}${date ? `, ${date}` : ''}`;
+  return date ? `Оценка openqareer, ${date}` : 'Оценка openqareer';
 }

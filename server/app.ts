@@ -7,7 +7,7 @@ import { backfillRoleTitlesRu } from './routes/careerRoleTitleRuBackfill';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
 import { redactRequestUrlForLogs } from './observability/redactRequestUrl';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
-import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
+import { SqliteSalaryEstimateReader } from './vacancies/openqareerSalary/salaryEstimateReader';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
@@ -628,10 +628,10 @@ function createCandidateDraftDeps(
 function attachMarketSalaryStore(
   deps: { marketSalaryEstimates?: RouteDeps['marketSalaryEstimates'] },
   options: BuildAppOptions,
-): SqliteMarketSalaryEstimateStore | undefined {
+): SqliteSalaryEstimateReader | undefined {
   const owned = options.marketSalaryEstimates
     ? undefined
-    : new SqliteMarketSalaryEstimateStore({ databasePath: options.config.databasePath });
+    : new SqliteSalaryEstimateReader(options.config.databasePath);
   deps.marketSalaryEstimates = options.marketSalaryEstimates ?? owned;
   return owned;
 }

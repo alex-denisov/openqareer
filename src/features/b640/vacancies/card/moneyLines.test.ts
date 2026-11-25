@@ -35,13 +35,12 @@ describe('moneyLines', () => {
     expect(lines.tip).toContain('Пересчёт валют — по курсу ЦБ на 10.11.');
   });
 
-  it('нет зарплаты, есть оценка рынка — крупно она, подпись «оценка рынка»', () => {
-    const market = { low: 380_000, high: 520_000, currency: 'RUB', sampleSize: 96, basis: 'city', computedAt: '2026-11-10T00:00:00Z' };
+  it('нет зарплаты, есть оценка рынка — крупно она, подпись «Оценка openqareer»', () => {
+    const market = { low: 380_000, high: 520_000, currency: 'RUB', period: 'month', tax: 'unknown', computedAt: '2026-11-10T00:00:00Z' };
     const lines = moneyLines(item(undefined, market), undefined, 'RUB')!;
     expect(lines.big).toContain('380–520');
-    expect(lines.small).toBe('оценка рынка');
-    expect(lines.tip).toContain('Рынок по роли');
-    expect(lines.tip).toContain('96');
+    expect(lines.small).toBe('Оценка openqareer');
+    expect(lines.tip).toBe('Оценка openqareer, 10.11: ≈ 380–520 тыс. ₽.');
   });
 
   it('нет ни зарплаты, ни оценки — блока нет', () => {

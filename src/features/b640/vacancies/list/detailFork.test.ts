@@ -6,7 +6,7 @@ const item = (salary: unknown) =>
   ({
     cluster: { salary },
     explanation: {
-      marketSalary: { low: 5_000, high: 7_500, currency: 'EUR', period: 'month', sampleSize: 9, basis: 'country', computedAt: '2026-11-25T00:00:00Z' },
+      marketSalary: { low: 5_000, high: 7_500, currency: 'EUR', period: 'month', tax: 'unknown', computedAt: '2026-11-25T00:00:00Z' },
     },
   }) as unknown as MatchedVacancyItem;
 const rates = { date: '2026-11-25', rubPerUnit: { EUR: 98 } };

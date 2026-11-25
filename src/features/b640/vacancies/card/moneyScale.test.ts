@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { moneyScale } from './moneyScale';
 
-const market = { low: 380_000, high: 520_000, currency: 'RUB', sampleSize: 96 };
+const market = {
+  low: 380_000,
+  high: 520_000,
+  currency: 'RUB',
+  period: 'month',
+  tax: 'unknown',
+  computedAt: '2026-11-10T00:00:00Z',
+} as const;
 
 describe('moneyScale', () => {
   it('рынок и вилка — доли шкалы с запасом по краям', () => {
@@ -25,8 +32,8 @@ describe('moneyScale', () => {
     expect(scale!.fork).toBeUndefined();
   });
 
-  it('нет границ рынка — шкалы нет', () => {
-    expect(moneyScale({ currency: 'RUB', sampleSize: 2 }, undefined, undefined)).toBeNull();
+  it('нет ни рынка, ни вилки — шкалы нет', () => {
+    expect(moneyScale(undefined, undefined, undefined)).toBeNull();
   });
 
   it('все доли в пределах 0–100', () => {

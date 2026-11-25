@@ -67,6 +67,7 @@ import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
 import { loadSalaryBenchmarksFile } from './vacancies/salaryBenchmarks/sqliteSalaryBenchmarkStore';
 import { scheduleOpenStatisticsJob } from './vacancies/occupationEarnings/occupationEarningSchedule';
+import { scheduleEmployerCountryJob } from './vacancies/vacancyCountry/employerCountryJob';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { scheduleSemanticCoverIndex } from './vacancies/semanticCoverIndex';
@@ -437,6 +438,8 @@ try {
   stopJobs.push(scheduleMarketSalaryEstimateJob(semanticDatabase, log));
   // B803: открытая статистика заработков, раз в неделю.
   stopJobs.push(scheduleOpenStatisticsJob(semanticDatabase, log));
+  // B803: страны работодателей и словарь городов для вакансий без названной страны.
+  stopJobs.push(scheduleEmployerCountryJob(semanticDatabase, log));
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   stopJobs.push(scheduleRemoteScopeBackfill(semanticDatabase, log));
   // B725: покрывающий индекс подбора — один раз, вне старта веб-процесса.

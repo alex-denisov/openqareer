@@ -1,4 +1,4 @@
-import { formatMarketSalaryRange, marketSalaryBasis } from '../../../../../shared/marketSalaryEstimate';
+import { formatMarketSalaryRange, marketSalaryLabel } from '../../../../../shared/marketSalaryEstimate';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { formatStatedCompensation } from '../../../vacancies/vacancyCompensation';
@@ -29,17 +29,17 @@ function ratesDate(rates: CurrencyRates): string {
 
 function hasMarket(item: MatchedVacancyItem): boolean {
   const market = item.explanation.marketSalary;
-  return market?.low !== undefined && market.high !== undefined;
+  return market !== undefined;
 }
 
 function marketLines(item: MatchedVacancyItem): MoneyLines | null {
   const market = item.explanation.marketSalary;
-  if (!market || market.low === undefined || market.high === undefined) return null;
+  if (!market) return null;
   const range = formatMarketSalaryRange({ low: market.low, high: market.high, currency: market.currency });
   return {
     big: range,
-    small: 'оценка рынка',
-    tip: `Рынок по роли ${range}, ${marketSalaryBasis(market.sampleSize, market.computedAt)}.`,
+    small: 'Оценка openqareer',
+    tip: `${marketSalaryLabel(market.computedAt)}: ${range}.`,
   };
 }
 

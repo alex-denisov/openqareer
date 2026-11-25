@@ -5,7 +5,7 @@ import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { sameCurrency } from '../../../../../shared/currencyRates';
 import { monthlySalary } from '../../../../../shared/monthlyRubSalary';
-import { formatMarketSalaryRange } from '../../../../../shared/marketSalaryEstimate';
+import { formatMarketSalaryRange, marketSalaryLabel } from '../../../../../shared/marketSalaryEstimate';
 import { formatCompensationCompact } from '../../../vacancies/vacancyCompensation';
 import { getVacancyConnectionCircles } from '../../../vacancies/vacancyLetterApi';
 import { ActionDock, Icon, Link, useIsMobile } from '../../kit';
@@ -59,9 +59,7 @@ interface Fork {
 }
 
 function marketRange(item: MatchedVacancyItem) {
-  const market = item.explanation.marketSalary;
-  if (market?.low === undefined || market.high === undefined) return undefined;
-  return { low: market.low, high: market.high, currency: market.currency, sample: market.sampleSize, at: market.computedAt };
+  return item.explanation.marketSalary;
 }
 
 /** Вилка на шкале рынка; считается только при оценке рынка в той же валюте. */
@@ -87,8 +85,7 @@ function moneyNote(item: MatchedVacancyItem): string {
   const base = item.cluster.salary ? 'Вилка — из текста вакансии.' : 'В вакансии зарплата не указана.';
   if (!market) return base;
   const range = formatMarketSalaryRange(market);
-  const day = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(new Date(market.at));
-  return `${base} Рынок по роли ${range} — ${market.sample} вакансий с зарплатой, ${day}.`;
+  return `${base} ${marketSalaryLabel(market.computedAt)}: ${range}.`;
 }
 
 function FitScale({ item }: { item: MatchedVacancyItem }) {
