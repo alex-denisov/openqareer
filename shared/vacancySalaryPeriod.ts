@@ -1,7 +1,7 @@
 /** Only explicit provider period metadata is accepted; unknown provider values stay unknown. */
 export type VacancySalaryPeriod = 'hour' | 'month' | 'year';
 export interface SalaryPeriodEvidence {
-  readonly field: 
+  readonly field:
     | 'lever.salaryRange.interval'
     | 'himalayas.salaryPeriod'
     | 'hh.compensation.mode'
