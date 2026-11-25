@@ -50,7 +50,7 @@ function Sections({ duties, requirements, conditions }: VacancySections) {
             {mark ? (
               <>
                 {' · '}
-                <span className="miss">{mark}</span>
+                <span className={mark === 'желательно' ? 'wish' : 'miss'}>{mark}</span>
               </>
             ) : null}
           </li>

@@ -4,9 +4,10 @@ import { vacancyFitPercent } from '../../../../../shared/vacancyFitPercent';
 import {
   countedSkillRequirements,
   requirementVerdict,
+  wishRequirements,
 } from '../../../vacancies/vacancyRequirementChips';
 
-export type RequirementMark = 'частично' | 'нет в профиле';
+export type RequirementMark = 'частично' | 'нет в профиле' | 'желательно';
 
 export interface RequirementLine {
   readonly text: string;
@@ -50,6 +51,16 @@ function markOf(
     : undefined;
 }
 
+/** Строка из одних пожеланий вне счёта — с той же пометкой, что в «Почему N %». */
+function wishMarkOf(
+  view: VacancyFitView,
+  wishes: readonly Counted[],
+): RequirementMark | undefined {
+  if (wishes.length === 0) return undefined;
+  const partial = wishes.every(({ id }) => requirementVerdict(view, id).status === 'partial');
+  return partial ? 'частично' : 'желательно';
+}
+
 function unique(lines: readonly string[]): readonly string[] {
   const keys = lines.map(words);
   return lines.filter((_, index) => keys.indexOf(keys[index]!) === index);
@@ -63,8 +74,17 @@ function requirementLines(
   const counted = ready
     ? countedSkillRequirements(ready).filter(({ origin }) => origin !== 'inferred')
     : [];
-  const line = (text: string, own: readonly Counted[]): RequirementLine => {
-    const mark = ready ? markOf(ready, own) : undefined;
+  const wishes = wishRequirements(ready);
+  const line = (
+    text: string,
+    own: readonly Counted[],
+    ownWishes: readonly Counted[],
+  ): RequirementLine => {
+    const mark = ready
+      ? own.length > 0
+        ? markOf(ready, own)
+        : wishMarkOf(ready, ownWishes)
+      : undefined;
     return mark ? { text, mark } : { text };
   };
   if (brief.requirements.length > 0) {
@@ -72,10 +92,14 @@ function requirementLines(
       line(
         text,
         counted.filter((requirement) => belongsTo(text, requirement)),
+        wishes.filter((requirement) => belongsTo(text, requirement)),
       ),
     );
   }
-  return counted.map((requirement) => line(requirement.text.trim(), [requirement]));
+  return [
+    ...counted.map((requirement) => line(requirement.text.trim(), [requirement], [])),
+    ...wishes.map((requirement) => line(requirement.text.trim(), [], [requirement])),
+  ];
 }
 
 /** Разделы карточки (B800); `null` — в тексте их нет, показываются абзацы. */

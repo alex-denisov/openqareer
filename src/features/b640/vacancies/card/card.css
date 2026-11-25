@@ -9,6 +9,7 @@
   .b640 .vt-txt :is(p, ul) { margin: 0; font-size: var(--career-text-sm); line-height: 1.5; overflow-wrap: anywhere; }
   .b640 .vt-txt ul { padding-inline-start: 1.1em; list-style: disc; }
   .b640 .vt-txt .miss { color: var(--career-warning); white-space: nowrap; }
+  .b640 .vt-txt .wish { color: var(--career-text-dim); white-space: nowrap; }
   .b640 .vt-txt.is-skel { gap: var(--career-space-2); }
   .b640 .vt-txt.is-skel > span { block-size: calc(var(--career-text-sm) * 1.25); border-radius: var(--career-radius-sm); background: var(--career-line); }
   .b640 .vt-txt.is-skel > span:nth-child(even) { inline-size: 75%; }

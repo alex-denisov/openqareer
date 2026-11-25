@@ -61,6 +61,38 @@ describe('vacancySections (B800)', () => {
     });
   });
 
+  it('пожелание вне счёта помечено так же, как в «Почему N %»', () => {
+    const wished = {
+      ...fit,
+      requirements: [
+        requirement('1', 'Go'),
+        requirement('6', 'Опыт работы в рознице'),
+        requirement('7', 'Lean'),
+      ],
+      result: {
+        ...fit.result,
+        coverage: { matched: 3, total: 3, unknown: 0 },
+        duties: ['6', '7'],
+        wishes: ['6', '7'],
+        assessments: [
+          { requirementId: '1', status: 'matched', evidence: [] },
+          { requirementId: '6', status: 'unmatched', evidence: [] },
+          { requirementId: '7', status: 'partial', evidence: [] },
+        ],
+      },
+    } as unknown as VacancyFitView;
+    const expected = [
+      { text: 'Go' },
+      { text: 'Опыт работы в рознице', mark: 'желательно' },
+      { text: 'Lean', mark: 'частично' },
+    ];
+    const lines = ['Go', 'Опыт работы в рознице', 'Lean'];
+    expect(vacancySections({ ...brief, requirements: lines }, wished)?.requirements).toEqual(
+      expected,
+    );
+    expect(vacancySections({ ...brief, requirements: [] }, wished)?.requirements).toEqual(expected);
+  });
+
   it('расчёта нет или он не готов — без пометок', () => {
     const counting = {
       ...fit,
