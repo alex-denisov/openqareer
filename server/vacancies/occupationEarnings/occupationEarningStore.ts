@@ -1,6 +1,10 @@
 /** B803: таблицы открытой статистики и заработок страны: прямой или с поправкой на доход региона. */
 import type { DatabaseSync } from 'node:sqlite';
-import type { CountryIncome, OccupationEarning } from './openStatistics';
+import {
+  OPEN_STATISTICS_SOURCES,
+  type CountryIncome,
+  type OccupationEarning,
+} from './openStatistics';
 
 const TABLES_SQL = `CREATE TABLE IF NOT EXISTS occupation_earnings (
   country TEXT NOT NULL, isco TEXT NOT NULL, year INTEGER NOT NULL, monthly_usd REAL NOT NULL,
@@ -8,6 +12,10 @@ const TABLES_SQL = `CREATE TABLE IF NOT EXISTS occupation_earnings (
 ) STRICT;
 CREATE TABLE IF NOT EXISTS country_income (
   country TEXT PRIMARY KEY, year INTEGER NOT NULL, per_capita_usd REAL NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS open_statistics_sources (
+  table_name TEXT PRIMARY KEY, name TEXT NOT NULL, license TEXT NOT NULL,
+  attribution TEXT NOT NULL, url TEXT NOT NULL, loaded_at TEXT NOT NULL
 ) STRICT`;
 
 /** Меньше этого — ответ источника обрезан: прежние таблицы остаются. */
@@ -34,12 +42,29 @@ export function writeOpenStatistics(
     for (const row of known) earning.run(row.country, row.isco, row.year, row.monthlyUsd);
     const income = database.prepare('INSERT INTO country_income VALUES (?, ?, ?)');
     for (const row of incomes) income.run(row.iso2, row.year, row.perCapitaUsd);
+    const source = database.prepare(
+      'INSERT OR REPLACE INTO open_statistics_sources VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    const loadedAt = new Date().toISOString();
+    for (const row of OPEN_STATISTICS_SOURCES)
+      source.run(row.table, row.name, row.license, row.attribution, row.url, loadedAt);
     database.exec('COMMIT');
   } catch (error: unknown) {
     database.exec('ROLLBACK');
     throw error;
   }
   return { earnings: known.length, countries };
+}
+
+/** Когда данные загружены в последний раз, мс. */
+export function openStatisticsLoadedAt(database: DatabaseSync): number | undefined {
+  if (!hasTables(database)) return undefined;
+  const row = database
+    .prepare('SELECT MIN(loaded_at) AS at FROM open_statistics_sources')
+    .get() as {
+    at: string | null;
+  };
+  return row.at ? Date.parse(row.at) : undefined;
 }
 
 export interface CountryEarning {

@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { iscoOfFunction } from './iscoOfFunction';
 import { countryEarning, writeOpenStatistics } from './occupationEarningStore';
-import { refreshOpenStatistics } from './occupationEarningSchedule';
+import { refreshOpenStatistics, refreshWhenDue } from './occupationEarningSchedule';
 import { parseIlostat, parseWdi } from './openStatistics';
 
 const HEADER =
@@ -97,6 +97,11 @@ describe('countryEarning', () => {
     const { incomes, earnings } = statistics();
     writeOpenStatistics(database, earnings, incomes);
     const log = { info: vi.fn(), error: vi.fn() };
+    expect(database.prepare('SELECT DISTINCT license FROM open_statistics_sources').all()).toEqual([
+      { license: 'CC BY 4.0' },
+    ]);
+    const huge = async () => new Response('x'.repeat(17 * 1024 * 1024));
+    expect(await refreshOpenStatistics(database, log, huge)).toBe(false);
     const short = async (url: string) =>
       new Response(url.includes('ilo') ? `${HEADER}\n` : JSON.stringify([{ pages: 1 }, []]));
     expect(await refreshOpenStatistics(database, log, short)).toBe(false);
@@ -104,6 +109,21 @@ describe('countryEarning', () => {
       await refreshOpenStatistics(database, log, async () => new Response('', { status: 503 })),
     ).toBe(false);
     expect(countryEarning(database, 'SA', '1', [])?.monthlyUsd).toBe(4000);
+  });
+});
+
+describe('refreshWhenDue', () => {
+  it('waits a week after a load and asks again after a failure', async () => {
+    const database = new DatabaseSync(':memory:');
+    const log = { info: vi.fn(), error: vi.fn() };
+    const down = vi.fn(async () => new Response('', { status: 503 }));
+    expect(await refreshWhenDue(database, log, down)).toBe(false);
+    const { incomes, earnings } = statistics();
+    writeOpenStatistics(database, earnings, incomes);
+    expect(await refreshWhenDue(database, log, down)).toBe(true);
+    expect(down).toHaveBeenCalledOnce();
+    database.exec("UPDATE open_statistics_sources SET loaded_at = '2020-01-01T00:00:00Z'");
+    expect(await refreshWhenDue(database, log, down)).toBe(false);
   });
 });
 

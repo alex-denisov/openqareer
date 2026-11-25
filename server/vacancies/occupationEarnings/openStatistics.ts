@@ -8,6 +8,25 @@ export const ILOSTAT_URL =
 export const WDI_URL =
   'https://api.worldbank.org/v2/country/all/indicator/NY.GNP.PCAP.CD?format=json&date=2018:2030&per_page=20000';
 
+/** Серверная запись источника: лицензия CC BY 4.0 требует её хранить; кандидату не показываем. */
+export const OPEN_STATISTICS_SOURCES = [
+  {
+    table: 'occupation_earnings',
+    name: 'ILOSTAT, International Labour Organization',
+    license: 'CC BY 4.0',
+    attribution: `Source: International Labour Organization, ILOSTAT, ${INDICATOR}; filtered by openqareer`,
+    url: ILOSTAT_URL,
+  },
+  {
+    table: 'country_income',
+    name: 'World Development Indicators, World Bank',
+    license: 'CC BY 4.0',
+    attribution:
+      'Source: World Bank, World Development Indicators, NY.GNP.PCAP.CD; filtered by openqareer',
+    url: WDI_URL,
+  },
+] as const;
+
 /** Среднемесячный заработок в долларах США по крупной группе ISCO-08. */
 export interface OccupationEarning {
   readonly iso3: string;
