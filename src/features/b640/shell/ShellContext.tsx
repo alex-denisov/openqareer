@@ -11,6 +11,7 @@ import {
 import type { AuthUser } from '../../coach/coachApi';
 import { panelPath, type PanelView } from '../consultant/panelRoute';
 import { B640_HOME_PATH, type B640Match } from '../routes';
+import type { Journey } from './journey';
 import type { B640ThemeState } from '../theme';
 
 /** Что экран раздела может поменять в оболочке вокруг себя. */
@@ -44,6 +45,8 @@ export interface ShellContextValue extends B640ThemeState {
   readonly path: string;
   /** Параметры адреса после `?`, вместе со знаком; пусто, если их нет. */
   readonly search: string;
+  /** Откуда пришли: путь и название вакансии, известное до ответа сервера (B798). */
+  readonly journey?: Journey;
   /** Узел карты по адресу; `null` — адрес не из карты. У адресов консультанта — «Сегодня». */
   readonly match: B640Match | null;
   /** Адрес сам открывает панель консультанта (`/app/consultant…`): её вид; иначе `null`. */
@@ -65,7 +68,7 @@ export interface ShellContextValue extends B640ThemeState {
   readonly setCtxSlot: (slot: HTMLElement | null) => void;
 }
 
-const ShellContext = createContext<ShellContextValue | null>(null);
+export const ShellContext = createContext<ShellContextValue | null>(null);
 
 const EMPTY_ENTRIES: Readonly<Record<string, ScreenChrome>> = {};
 

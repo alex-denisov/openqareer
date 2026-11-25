@@ -132,6 +132,7 @@ const deliveryReceiptSchema = z
 const patchApplicationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   stage: stageSchema.optional(),
+  starred: z.boolean().optional(),
   occurredAt: isoDateField.optional(),
   notes: z.string().max(20_000).nullable().optional(),
   processProfile: z.enum(['standard', 'executive']).optional(),
@@ -495,7 +496,7 @@ function todayTeamSizeDecision(
   now: Date,
 ) {
   const experience = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
-  if (!experience.some((entry) => entry.current && !entry.teamSize)) return undefined;
+  if (!experience.some((entry) => entry.current && !entry.teamSize && !entry.teamSizeDeclined)) return undefined;
   const summaries = new Map(
     matched.map((item) => [item.cluster.id, item.cluster.descriptionSummary]),
   );

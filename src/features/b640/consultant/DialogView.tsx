@@ -14,6 +14,7 @@ import {
   type ConsultantLimit,
 } from './model';
 import { ErrorRow, Message, Reply } from './parts';
+import { FactCorrectionCard } from './FactCorrectionCard';
 import { ResumeEditCard } from './ResumeEditCard';
 import { ReplyExtras } from './ReplyExtras';
 import { useDialog, type DialogState, type FactDecision } from './useDialog';
@@ -94,6 +95,9 @@ function Feed({ dialog, placed, onDecide, resumeFactId, resumeReason }: FeedProp
               message={message}
               extra={extra ? <ReplyExtras extras={extra} memory={dialog.memory} /> : null}
             />
+            {extra?.corrections?.map((proposal) => (
+              <FactCorrectionCard key={proposal.before} proposal={proposal} />
+            ))}
             {placed.get(message.id)?.map((fact) => (
               <FactCard key={fact.id} fact={fact} onDecide={onDecide} />
             ))}

@@ -121,6 +121,26 @@ describe('B656: воронка', () => {
   });
 });
 
+describe('B801: числа и площадки воронки', () => {
+  it('дошедшие до интервью без отметки «ответили» — ответившие', () => {
+    const summary = funnelSummary([
+      listed({ id: 'i1', stage: 'archived', reachedStages: ['applied', 'interview', 'archived'] }),
+      listed({ id: 'i2', stage: 'interview', reachedStages: ['applied', 'interview'] }),
+    ]);
+    expect([summary.responded, summary.interview]).toEqual([2, 2]);
+    expect(summary.sources.map((source) => source.responded)).toEqual([2]);
+  });
+
+  it('доска работодателя — «Сайт компании», площадка вакансий — своим именем', () => {
+    const labels = funnelSummary([
+      listed({ id: 'q', clusterId: 'cluster-ats-teamtailor-qtech:1', vacancy: { title: 'А', company: 'Q-Tech', url: '', source: 'Q-Tech' } }),
+      listed({ id: 'g', vacancy: { title: 'Б', company: 'getmatch', url: '', source: 'src-fh-getmatch' } }),
+      listed({ id: 's', vacancy: { title: 'В', company: 'В', url: '', source: 'superjob' } }),
+    ]).sources.map((source) => source.sourceLabel);
+    expect([...labels].sort()).toEqual(['Getmatch', 'Superjob', 'Сайт компании']);
+  });
+});
+
 describe('B656: что было', () => {
   it('собирает события с датами, свежие сверху', () => {
     const events = timeline(

@@ -2,7 +2,7 @@ import type { ResumeLang } from '../../shared/resumeVacancyEdits';
 import type { LetterFactTranslator } from './letterFactTranslation';
 import { latinEmployerNames, transliterate, withLatinEmployerNames } from './letterLatinEmployers';
 import { textLanguage } from './profileLanguage';
-import { withRussianProjectEmployers } from './resumeProjectEmployer';
+import { withProjectEmployers } from './resumeProjectEmployer';
 import type { ResumeDocument, ResumeExperience, ResumeProject } from './resumeStudioTypes';
 import {
   checkedTranslation,
@@ -237,7 +237,13 @@ export function translatedDocument(
   // Английское резюме без перевода: названия и имена латиницей, остальное прежнее.
   if (own === 'en' && (lang ?? own) === own) {
     const names = latinNamesOf(basis, facts);
-    return mapDocument(document, 'en', (text) => withLatinEmployerNames(text, names), names);
+    const latin = mapDocument(
+      document,
+      'en',
+      (text) => withLatinEmployerNames(text, names),
+      names,
+    );
+    return withProjectEmployers(latin, basis, 'en');
   }
   if (!lang || lang === own || !isTranslated(basis, lang, translations)) return document;
   const read = reader(basis, lang, translations);
@@ -249,7 +255,7 @@ export function translatedDocument(
     return read(line) === 'translated' ? (translations[translationKey(lang, text)] ?? text) : text;
   };
   const result = mapDocument(document, lang, translate, latinNamesOf(basis, facts));
-  return lang === 'ru' ? withRussianProjectEmployers(result, basis) : result;
+  return withProjectEmployers(result, basis, lang);
 }
 
 export function isTranslated(

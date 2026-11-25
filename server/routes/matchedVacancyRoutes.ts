@@ -62,6 +62,7 @@ import { readTargetLevel } from './vacancyRoleContext';
 import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { SELECTION_LIVENESS_TOP } from '../vacancies/selectionLiveness';
 import type { ListPhasesMs } from './matchedListPhases';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -195,12 +196,20 @@ function logMatchedTiming(
   );
 }
 
+/** B797: записи верха подборки для сверки живости. */
+function topSelectionIds(items: readonly MatchedVacancyItem[]): string[] {
+  return items
+    .slice(0, SELECTION_LIVENESS_TOP)
+    .map((item) => item.cluster.id.replace(/^cluster-/u, ''));
+}
+
 /** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
 export function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLimit: number) {
   return {
     warmIds: vacanciesToWarm(items),
     countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
     readIds: offset === 0 ? selectionToRead(items) : [],
+    livenessIds: offset === 0 ? topSelectionIds(items) : [],
     selectionKey: selectionStamp(items.map((item) => item.cluster.id)),
   };
 }
@@ -236,6 +245,7 @@ export function startFitWork(
     readonly warmIds: readonly string[];
     readonly countIds: readonly string[];
     readonly readIds: readonly string[];
+    readonly livenessIds?: readonly string[];
     readonly selectionKey: string;
   },
   { offset, fitLimit }: { readonly offset: number; readonly fitLimit: number },
@@ -248,6 +258,15 @@ export function startFitWork(
     void requestFitForVacancyIds(deps, candidateId, ids).catch(logFailure(ids.length));
   };
   preloadTopMatchedDescriptions(engine, response.warmIds, offset, request, requestFit);
+  try {
+    if (response.livenessIds?.length) engine.requestSelectionLiveness?.(response.livenessIds);
+  } catch (error: unknown) {
+    // База занята: верх подборки запишется при следующем чтении списка.
+    request.log.warn(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'selection-liveness-request-failed',
+    );
+  }
   if (typeof engine.requestHhTextPriority !== 'function') return;
   void sweepSelectionFit(
     candidateId,

@@ -67,3 +67,19 @@ describe('B787: вопрос hh.ru о показе резюме в анкете'
     expect(onSend).toHaveBeenCalledOnce();
   });
 });
+
+describe('B801: анкета на сайте компании (o04b)', () => {
+  it('«Скопировать ответы» — главная и при неполных обязательных', () => {
+    const questions = [...form.questions, { id: 'q2', text: 'Когда?', required: true, kind: 'text' }];
+    const partial = { ...form, formUrl: 'https://jobs.example.com/apply', questions } as ApplicationQuestionnaire;
+    function Site() {
+      const visibility = useVisibilityQuestion();
+      return <FormStep state={{ ...state, form: partial }} form={partial} visibility={visibility} onSend={onSend} />;
+    }
+    view = mount(<Site />);
+    const copy = named('Скопировать ответы');
+    expect(copy.disabled).toBe(false);
+    expect(copy.className).toContain('is-primary');
+    expect(view.container.textContent).not.toContain('Ответьте');
+  });
+});
