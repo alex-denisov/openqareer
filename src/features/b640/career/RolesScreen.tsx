@@ -1,15 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import type { CampaignMetaView } from '../../coach/matchedVacancyApi';
+import { SECTION_CACHE_KEYS } from '../../shell/sectionCache';
 import { useShell } from '../shell/ShellContext';
 import { Icon, Link } from '../kit';
 import type { B640Node } from '../routes';
 import { BlockError, BlockSkeleton } from '../today/parts';
 import { useLoad } from '../today/useLoad';
-import { loadRoles, loadSelectionTotal, loadSkillStrip, type RolesData } from './careerApi';
+import {
+  loadCampaign,
+  loadRoles,
+  loadSelectionTotal,
+  loadSkillStrip,
+  type RolesData,
+} from './careerApi';
 import { conditionsPath, pageAttrs } from './careerPaths';
-import { RolePickDialog } from './RolePickDialog';
+import { RolePickLoad } from './RolePickDialog';
 import { RoleTable } from './RoleTable';
 import { searchStrip } from './rolesModel';
-import { SkillStrip } from './SkillStrip';
+import { SkillStrip, SkillStripPlace } from './SkillStrip';
 
 /** Ожидание и ошибка первого чтения ролей — на месте страницы. */
 export function RolesLoad({
@@ -21,7 +29,7 @@ export function RolesLoad({
   readonly state?: string;
   readonly children: (data: RolesData, reload: () => void) => ReactNode;
 }) {
-  const load = useLoad(loadRoles);
+  const load = useLoad(loadRoles, SECTION_CACHE_KEYS.careerRoles);
   if (load.state === 'ready') return <>{children(load.data, load.retry)}</>;
   return (
     <div className="page" {...pageAttrs(node, state)}>
@@ -49,15 +57,21 @@ function useSelectionTotal(titles: readonly string[]): number | null {
   return total;
 }
 
+const NO_TITLES: readonly string[] = [];
+
 function SearchRoleStrip({
-  data,
+  campaign,
+  counting,
   onEdit,
 }: {
-  readonly data: RolesData;
+  readonly campaign: CampaignMetaView;
+  /** Число вакансий спрашиваем после таблицы: расчёт подборки её задержал бы. */
+  readonly counting: boolean;
   readonly onEdit: () => void;
 }) {
-  const total = useSelectionTotal(data.searchTitles);
-  const strip = searchStrip(data.searchTitles, total, data.campaign.titlesRu);
+  const titles = campaign.roles.value;
+  const total = useSelectionTotal(counting ? titles : NO_TITLES);
+  const strip = searchStrip(titles, total, campaign.titlesRu);
   return (
     <section className="role-strip" aria-labelledby="role-title">
       <p className="role-strip-t">
@@ -77,33 +91,40 @@ function SearchRoleStrip({
 
 /** Полоса «Проверьте N навыков» читается отдельно: таблица ролей её не ждёт. */
 function SkillStripLoad() {
-  const strip = useLoad(loadSkillStrip);
+  const strip = useLoad(loadSkillStrip, SECTION_CACHE_KEYS.careerSkills);
+  if (strip.state === 'loading') return <SkillStripPlace />;
   if (strip.state !== 'ready' || !strip.data) return null;
   return <SkillStrip gap={strip.data.gap} role={strip.data.role} />;
 }
 
-/** S9 «Карьера» при «Ищу работу»: роль поиска, проверка навыков, роли по профилю. */
-export function RolesView({ node, data }: { readonly node: B640Node; readonly data: RolesData }) {
+/**
+ * S9 «Карьера» при «Ищу работу»: роль поиска, проверка навыков, роли по профилю.
+ * B792: полоса роли и таблица читаются независимо; полоса навыков ждёт таблицу.
+ */
+export function RolesView({ node }: { readonly node: B640Node }) {
   const { search } = useShell();
   // «Выбрать роль» из проверки навыков открывает выбор роли поиска сразу (B645).
   const [picking, setPicking] = useState(() => new URLSearchParams(search).get('pick') === '1');
+  const campaign = useLoad(loadCampaign, SECTION_CACHE_KEYS.careerCampaign);
+  const roles = useLoad(loadRoles, SECTION_CACHE_KEYS.careerRoles);
+  const data = roles.state === 'ready' ? roles.data : null;
+  const meta = data?.campaign ?? (campaign.state === 'ready' ? campaign.data : null);
   return (
     <div className="page" {...pageAttrs(node)}>
-      <SearchRoleStrip data={data} onEdit={() => setPicking(true)} />
-      <SkillStripLoad />
-      <RoleTable rows={data.rows} />
+      {meta ? (
+        <SearchRoleStrip campaign={meta} counting={data !== null} onEdit={() => setPicking(true)} />
+      ) : null}
+      {data ? <SkillStripLoad /> : <SkillStripPlace />}
+      {data ? <RoleTable rows={data.rows} /> : null}
+      {roles.state === 'loading' ? <BlockSkeleton label="Подбираем роли" rows={3} /> : null}
+      {roles.state === 'error' ? (
+        <BlockError text="Не удалось загрузить роли." onRetry={roles.retry} />
+      ) : null}
       <Link className="row-act is-sm" to={conditionsPath()}>
         <Icon name="sliders" />
         Условия поиска
       </Link>
-      {picking ? (
-        <RolePickDialog
-          open
-          onClose={() => setPicking(false)}
-          rows={data.rows}
-          campaign={data.campaign}
-        />
-      ) : null}
+      {picking && data ? <RolePickLoad rows={data.rows} onClose={() => setPicking(false)} /> : null}
     </div>
   );
 }
