@@ -108,6 +108,22 @@ export function NeedsLetter({ onLetter }: { readonly onLetter: () => void }) {
   );
 }
 
+/** Версия резюме собрана заново: сначала её одобряют. */
+export function NeedsResume({ onResume }: { readonly onResume: () => void }) {
+  return (
+    <section className="lead" aria-labelledby="w-title">
+      <h2 className="lead-title is-long" id="w-title">
+        Сначала одобрите резюме
+      </h2>
+      <div className="actions">
+        <Button variant="primary" icon="file" onClick={onResume}>
+          К резюме
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 interface SentActionsProps {
   readonly sent: Sent;
   readonly responsePath: string;

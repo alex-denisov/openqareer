@@ -40,13 +40,21 @@ describe('vacancyCountryHint', () => {
     ['Atlanta, Georgia', 'US'],
     ['Tbilisi, Georgia', 'GE'],
     ['Perth, WA', 'AU'],
+    ['Windsor, CA', 'CA'],
+    ['Hyderabad, IN', 'IN'],
+    ['Moscow, ID', 'US'],
+    ['Dublin, CA', 'US'],
+    ['Cambridge, MA', 'US'],
+    ['San Jose, CA', 'US'],
+    ['Santa Clara, CA', 'US'],
+    ['Birmingham, AL', 'US'],
     ['Milano, MI', 'IT'],
     ['Rotterdam, NL', 'NL'],
     ['Bengaluru, IN', 'IN'],
     ['Palo Alto, CA', 'US'],
     ['Toronto; Vancouver', 'CA'],
   ])('a dictionary city is a separate basis: %s', (location, country) => {
-    expect(hint(location)).toEqual({ country, basis: 'city', lowConfidence: false });
+    expect(hint(location, [], 'FR')).toEqual({ country, basis: 'city', lowConfidence: false });
   });
 
   it('regions and common words are not cities', () => {
@@ -69,15 +77,27 @@ describe('vacancyCountryHint', () => {
       'New York; Berlin; Toronto',
       'Canada, Texas',
       'Warsaw, IN',
-      'Moscow, ID',
-      'Dublin, CA',
       'Berlin, London',
+      'New York or London',
       'Москва, Минск',
     ]) {
       expect(hint(location, [], 'DE')).toBeUndefined();
     }
     expect(hint('Georgia')).toBeUndefined();
     expect(hint('Remote')).toBeUndefined();
+  });
+
+  it('a code of two countries leaves the choice between them to the next signs', () => {
+    for (const city of ['Vancouver', 'Hamilton', 'Burlington', 'Richmond', 'Victoria']) {
+      expect(hint(`${city}, CA`, [], 'CA')).toMatchObject({ country: 'CA', basis: 'employer' });
+      expect(hint(`${city}, CA`, [], 'US')).toMatchObject({ country: 'US', basis: 'employer' });
+    }
+    for (const place of ['Vancouver, CA', 'Hamilton, CA'])
+      expect(hint(place, [], 'DE')).toEqual({ country: 'CA', basis: 'city', lowConfidence: true });
+    expect(hint('Nowhereville, CA', [], 'US')?.country).toBe('US');
+    for (const place of ['Salem, IN', 'Mobile, AL'])
+      expect(hint(place, ['https://acme.ca/1'], 'CA')?.country).not.toBe('CA');
+    expect(hint('Vancouver, CA; Berlin', [], 'CA')).toBeUndefined();
   });
 
   it('reads the Workday address, then the employer, then the domain', () => {

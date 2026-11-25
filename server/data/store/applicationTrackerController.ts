@@ -200,6 +200,11 @@ export class ApplicationTrackerController {
     return linked;
   }
 
+  linkedMaterialId(candidateId: string, applicationId: string, role: ApplicationMaterialRole): string | null {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.materials.list(applicationId).find((item) => item.role === role)?.documentId ?? null;
+  }
+
   createInterview(candidateId: string, applicationId: string, input: CreateInterviewInput): StoredApplicationInterview {
     return this.transaction(() => {
       const application = this.mustGetOwn(candidateId, applicationId);

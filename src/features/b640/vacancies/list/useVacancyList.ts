@@ -22,10 +22,13 @@ import {
 import { defaultRoles } from './defaultRoles';
 import { buildOptions, countPending, listCount, serverCountState, type FilterOptions } from './filterOptions';
 import {
+  firstPortionOf,
   useServerSortedList,
+  type FirstPortion,
   type ServerListStatus,
   type ServerSortedList,
 } from './useServerSortedList';
+import { getFirstListPage } from '../b640Api';
 import { usePreferredMoneyCurrency } from '../../account/usePreferredMoneyCurrency';
 import {
   PAGE_SIZE,
@@ -280,7 +283,7 @@ function usePreferredListCurrency() {
  * B645 s07: первая страница пула и число от сервера; дальше и в другом порядке строки дают
  * порции сервера по 20 «Показать ещё» (useServerSortedList), всю подборку не читаем.
  */
-const S07_POOL: MatchedPoolOptions = { pageLimit: 1 };
+const S07_POOL: MatchedPoolOptions = { pageLimit: 1, firstPage: getFirstListPage };
 
 /**
  * B768: роль и «Дата» из адреса — фильтры с первого кадра, и пул читается сразу с ролью.
@@ -307,6 +310,15 @@ function seedWith(setFilters: (update: (current: ListFilters) => ListFilters) =>
     setFilters((current) => ({ ...current, roles, ...(date ? { date } : {}) }));
 }
 
+/** Первая порция уже пришла с пулом: список сервера её не читает второй раз. */
+function useFirstPortion(pool: MatchedPool): FirstPortion | undefined {
+  const { matched, total, readRoles, reading } = pool;
+  return useMemo(
+    () => firstPortionOf({ matched, total, readRoles, reading }),
+    [matched, total, readRoles, reading],
+  );
+}
+
 export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>): VacancyList {
   const { search } = useShell();
   const [start] = useState(() => linkedStart(search));
@@ -323,16 +335,15 @@ export function useVacancyList(links: VacancyLinks, hidden: ReadonlySet<string>)
   useEffect(() => setShown(PAGE_SIZE), [filters, sortState]);
 
   const serverMode = serverSortApplies(pool);
-  const server = useServerSortedList(serverMode, sortState, filters.roles, hidden, serverDays(filters), serverMoney(filters, currency));
+  const [days, money] = [serverDays(filters), serverMoney(filters, currency)];
+  const first = useFirstPortion(pool);
+  const server = useServerSortedList(serverMode, sortState, filters.roles, hidden, days, money, first);
   const derived = useListRows({
     pool,
     hidden,
     filters,
     currency,
-    rates,
-    now,
-    sortState,
-    ...{ serverMode, rolesReady, server, shown },
+    ...{ rates, now, sortState, serverMode, rolesReady, server, shown },
   });
   return {
     pool,

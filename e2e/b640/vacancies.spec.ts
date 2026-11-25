@@ -298,10 +298,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
     const rows: string[] = [];
     page.on('request', (request) => {
       const url = new URL(request.url());
-      if (
-        url.pathname.endsWith('/candidate/matched-vacancies') &&
-        url.searchParams.get('part') === 'rows'
-      )
+      if (url.pathname.endsWith('/candidate/b640/matched-vacancies'))
         rows.push(url.searchParams.getAll('role').join('|'));
     });
     await openCabinet(page, '/app/vacancies?role=CTO&date=30', {
@@ -315,6 +312,22 @@ test.describe('B654: раздел «Вакансии», подборка и со
     expect(rows.every((roles) => roles !== '')).toBe(true);
     await page.getByRole('button', { name: 'Убрать: Технический директор (CTO)' }).click();
     await expect.poll(() => rows.includes('')).toBe(true);
+  });
+
+  test('холодный вход читает подборку одним запросом, роли подставляет сервер', async ({
+    page,
+  }) => {
+    const reads: URL[] = [];
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('matched-vacancies')) reads.push(url);
+    });
+    await openCabinet(page, '/app/vacancies', { campaignRoles: ['CTO'], total: 450 });
+    await expect(page.locator('.vt-chips .vt-chip').first()).toBeVisible();
+    await expect(page.locator(ROWS)).toHaveCount(20);
+    await page.waitForLoadState('networkidle');
+    expect(reads.map((url) => url.search)).toHaveLength(1);
+    expect(reads[0]?.searchParams.get('roles')).toBe('campaign');
   });
 
   test('B645: строка «Проверить N навыка» ведёт в проверку навыков', async ({ page }) => {
@@ -342,7 +355,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
     const asked: string[] = [];
     page.on('request', (request) => {
       const url = new URL(request.url());
-      if (url.pathname.endsWith('/candidate/matched-vacancies')) {
+      if (url.pathname.endsWith('/candidate/b640/matched-vacancies')) {
         asked.push(...url.searchParams.getAll('role'));
       }
     });
@@ -558,7 +571,7 @@ test.describe('B654: раздел «Вакансии», подборка и со
   }) => {
     await openCabinet(page, '/app/vacancies', { total: 450 });
     // Следующие порции подборки приходят с задержкой: разбор их не ждёт.
-    await page.route('**/api/v1/candidate/matched-vacancies?**', async (route) => {
+    await page.route('**/api/v1/candidate/b640/matched-vacancies?**', async (route) => {
       const offset = Number(new URL(route.request().url()).searchParams.get('offset') ?? '0');
       if (offset > 0) await new Promise((resolve) => setTimeout(resolve, 1_500));
       return route.fallback();

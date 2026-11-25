@@ -37,7 +37,11 @@ export function readCachedMatchedPool(
   );
 }
 
-export function writeCachedMatchedPool(pool: CachedMatchedPool): void {
+/** `latest` — сужённая подборка: за всю её не выдаём, даже прочитанную до конца. */
+export function writeCachedMatchedPool(
+  pool: CachedMatchedPool,
+  kind: CachedPoolKind = 'whole',
+): void {
   writeSectionCache<CachedMatchedPool>(SECTION_CACHE_KEYS.matchedPoolLatest, pool);
-  if (pool.complete) writeSectionCache<CachedMatchedPool>(SECTION_CACHE_KEYS.matchedPool, pool);
+  if (kind === 'whole' && pool.complete) writeSectionCache<CachedMatchedPool>(SECTION_CACHE_KEYS.matchedPool, pool);
 }

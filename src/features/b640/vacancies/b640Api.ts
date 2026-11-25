@@ -2,8 +2,13 @@ import type { B640ApplicationQuota, B640HiddenInfo, B640SortKey } from '../../..
 import type { ApplyTarget } from '../../../../shared/applyTarget';
 import type { MatchedVacancyItem } from '../../coach/cabinetTypes';
 import { apiFetch, malformedResponseError, readDataObject, throwApiError } from '../../coach/apiClient';
-import { matchedVacancyQuery } from '../../coach/matchedVacancyApi';
-import type { SortKey, SortState } from './list/sortModel';
+import {
+  matchedVacancyQuery,
+  readMatchedPage,
+  type MatchedVacancyPage,
+} from '../../coach/matchedVacancyApi';
+import type { VacanciesScreenState } from '../../vacancies/VacanciesScreenFilters';
+import { DEFAULT_LIST_SORT, type SortKey, type SortState } from './list/sortModel';
 
 const BASE = '/api/v1/candidate/b640';
 export const B640_PAGE_SIZE = 20;
@@ -104,6 +109,20 @@ export async function getSortedMatchedPage(
     signal,
   });
   return readPage<MatchedVacancyItem>(response);
+}
+
+/**
+ * Первое чтение списка s07 (25.11: на холодном старте их было шесть): строки, число, фасеты и
+ * кампания одним запросом. Без `filters` роли поиска подставляет сервер.
+ */
+export async function getFirstListPage(
+  signal: AbortSignal,
+  filters?: VacanciesScreenState,
+): Promise<MatchedVacancyPage> {
+  const query = new URLSearchParams(matchedPageQuery(DEFAULT_LIST_SORT, filters?.roles ?? [], 0));
+  query.set('tz', candidateTimeZone());
+  if (!filters) query.set('roles', 'campaign');
+  return readMatchedPage(await apiFetch(`${BASE}/matched-vacancies?${query}`, { signal }));
 }
 
 export async function getApplicationQuota(signal?: AbortSignal): Promise<B640ApplicationQuota> {

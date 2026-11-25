@@ -48,4 +48,11 @@ describe('latinEmployerNames (B640): латиница названий рабо�
     const other = 'Корпоративный университет Сбербанкаудит';
     expect(withLatinEmployerNames(other, new Map())).toBe(other);
   });
+
+  it('одна компания называется одинаково: транслитерация уступает написанию кандидата', () => {
+    const names = latinEmployerNames(['Энерго Цифра'], ['Restructured divisions at Energo Digital.']);
+    expect(withLatinEmployerNames('Энерго Цифра, Energo Tsifra, Energo Digital', names)).toBe(
+      'Energo Digital, Energo Digital, Energo Digital',
+    );
+  });
 });
