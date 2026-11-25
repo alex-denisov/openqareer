@@ -41,6 +41,10 @@ pub struct Attempt {
     /// Where and when the board confirmed the application.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirmation: Option<Confirmation>,
+    /// When the candidate stated that this application did not leave: the record
+    /// stays, but no longer blocks a new attempt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub released_at_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +119,11 @@ fn save(directory: &Path, attempts: &[Attempt]) -> Result<(), String> {
 
 fn blocks(attempt: &Attempt, vacancy_id: &str, entry_url: &str) -> bool {
     (attempt.vacancy_id == vacancy_id || attempt.entry_url == entry_url)
-        && attempt.result != Some(AttemptResult::Failed)
+        && match attempt.result {
+            Some(AttemptResult::Sent) => true,
+            Some(AttemptResult::Failed) => false,
+            Some(AttemptResult::Unconfirmed) | None => attempt.released_at_ms.is_none(),
+        }
 }
 
 pub fn is_blocked(directory: &Path, vacancy_id: &str, entry_url: &str) -> Result<bool, String> {
@@ -161,6 +169,38 @@ pub fn finish(
     save(directory, &next)
 }
 
+/// The candidate stated that nothing left: unconfirmed attempts of the vacancy's
+/// own form stop blocking. A confirmed sending never does.
+pub fn release(directory: &Path, vacancy_id: &str, now_ms: u64) -> Result<(), String> {
+    let attempts = load(directory)?;
+    let entry_url = attempts
+        .iter()
+        .rev()
+        .find(|attempt| attempt.vacancy_id == vacancy_id)
+        .map(|attempt| attempt.entry_url.clone())
+        .ok_or("attempt_missing")?;
+    let sent = attempts.iter().any(|attempt| {
+        blocks(attempt, vacancy_id, &entry_url) && attempt.result == Some(AttemptResult::Sent)
+    });
+    if sent {
+        return Err("already_submitted".to_string());
+    }
+    let next: Vec<Attempt> = attempts
+        .into_iter()
+        .map(|attempt| {
+            if blocks(&attempt, vacancy_id, &entry_url) {
+                Attempt {
+                    released_at_ms: Some(now_ms),
+                    ..attempt
+                }
+            } else {
+                attempt
+            }
+        })
+        .collect();
+    save(directory, &next)
+}
+
 pub fn latest(directory: &Path, vacancy_id: &str) -> Result<Option<Attempt>, String> {
     Ok(load(directory)?
         .into_iter()
@@ -196,6 +236,7 @@ mod tests {
             consent_ids: vec![Uuid::new_v4()],
             result: None,
             confirmation: None,
+            released_at_ms: None,
         }
     }
 
@@ -224,6 +265,33 @@ mod tests {
             begin(&folder.0, attempt("v3", "https://a/3")).unwrap();
             assert_eq!(latest(&folder.0, "v1").unwrap().unwrap().id, first.id);
         }
+    }
+
+    #[test]
+    fn the_candidate_s_statement_frees_an_unconfirmed_attempt_once() {
+        let folder = Folder::new();
+        // A record as earlier versions of the app wrote it.
+        let id = Uuid::new_v4();
+        let old = format!(
+            r#"[{{"id":"{id}","vacancyId":"v1","entryUrl":"https://a/1","startedAtMs":1,"consentIds":[],"result":"unconfirmed"}}]"#
+        );
+        fs::write(folder.0.join(FILE), old).unwrap();
+        assert!(begin(&folder.0, attempt("v1", "https://a/1")).is_err());
+        release(&folder.0, "v1", 7).unwrap();
+        let kept = latest(&folder.0, "v1").unwrap().unwrap();
+        assert_eq!((kept.id, kept.released_at_ms), (id, Some(7)));
+        assert_eq!(kept.result, Some(AttemptResult::Unconfirmed));
+        begin(&folder.0, attempt("v1", "https://a/1")).unwrap();
+        // The new attempt blocks again, and the first one is still on record.
+        assert!(begin(&folder.0, attempt("v1", "https://a/1")).is_err());
+        assert_eq!(load(&folder.0).unwrap().len(), 2);
+        // A confirmation read late blocks whatever was stated.
+        finish(&folder.0, id, AttemptResult::Sent, None).unwrap();
+        assert_eq!(
+            release(&folder.0, "v1", 8).unwrap_err(),
+            "already_submitted"
+        );
+        assert!(release(&folder.0, "v9", 8).is_err());
     }
 
     #[test]

@@ -132,10 +132,18 @@ pub struct FillReport {
     pub values: Values,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReleaseRequest {
+    pub vacancy_id: String,
+    /// The candidate confirmed that the earlier application did not leave.
+    pub confirmed: bool,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Receipt {
-    /// confirmed | unconfirmed | rejected | captcha | not_submitted
+    /// confirmed | unconfirmed | rejected | captcha | code | not_submitted
     pub outcome: String,
     pub reason: Option<String>,
     pub host: String,
@@ -268,7 +276,8 @@ pub(crate) fn attempt_result(outcome: &str) -> AttemptResult {
     match outcome {
         "confirmed" => AttemptResult::Sent,
         // The form refused its own fields: nothing was sent.
-        "rejected" | "not_submitted" => AttemptResult::Failed,
+        // A board that asks for a mailed code has not taken the application yet.
+        "rejected" | "not_submitted" | "code" => AttemptResult::Failed,
         _ => AttemptResult::Unconfirmed,
     }
 }
@@ -329,6 +338,7 @@ pub(crate) fn outcome_of(last: &Value, on_confirmation: bool) -> (&'static str, 
         Some("confirmed") if on_confirmation => ("confirmed", Vec::new()),
         Some("invalid") => ("rejected", keys()),
         Some("captcha") => ("captcha", Vec::new()),
+        Some("code") => ("code", Vec::new()),
         _ => ("unconfirmed", Vec::new()),
     }
 }
@@ -505,6 +515,7 @@ mod tests {
             outcome_of(&json!({ "state": "captcha" }), false).0,
             "captcha"
         );
+        assert_eq!(outcome_of(&json!({ "state": "code" }), false).0, "code");
         for silent in [
             json!({ "state": "pending" }),
             Value::Null,
@@ -535,6 +546,7 @@ mod tests {
             ("confirmed", AttemptResult::Sent),
             ("rejected", AttemptResult::Failed),
             ("not_submitted", AttemptResult::Failed),
+            ("code", AttemptResult::Failed),
             ("captcha", AttemptResult::Unconfirmed),
             ("unconfirmed", AttemptResult::Unconfirmed),
         ] {

@@ -72,7 +72,9 @@ export async function sendAtsForm(input: AtsSendInput, deps: AtsSendDeps): Promi
   }
   const attempt = { id: deps.newId(), consentIds };
   const receipt = await deps.submit(input.vacancyId, input.values, attempt).catch(() => null);
-  await settle(deps.journal, consentIds, receipt ? resultOf(receipt) : 'unconfirmed');
+  // Код ещё не введён: итог согласия пишется, когда он станет известен.
+  if (receipt?.outcome !== 'code')
+    await settle(deps.journal, consentIds, receipt ? resultOf(receipt) : 'unconfirmed');
   return receipt ? { kind: 'receipt', receipt } : { kind: 'unknown' };
 }
 

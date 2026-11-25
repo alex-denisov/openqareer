@@ -9,7 +9,16 @@ const OP_PLACEHOLDER: &str = "__OQ_ATS_OP__";
 const ARG_PLACEHOLDER: &str = "__OQ_ATS_ARG__";
 
 pub const OPERATIONS: &[&str] = &[
-    "read", "snapshot", "fill", "job", "options", "next", "moved", "submit", "outcome",
+    "read",
+    "snapshot",
+    "fill",
+    "job",
+    "options",
+    "next",
+    "moved",
+    "submit",
+    "outcome",
+    "show_code",
 ];
 
 /// `</script>` and line separators cannot end the literal early.
@@ -244,6 +253,46 @@ mod tests {
             parsed(&out, 0),
             json!({ "state": "invalid", "keys": ["id:email"] })
         );
+    }
+
+    #[test]
+    fn a_mailed_code_is_its_own_step_and_its_field_is_never_read() {
+        let panel = include_str!("ats_fixtures/greenhouse_code.html");
+        let asked = BOARD.replace("</form>", &format!("{panel}</form>"));
+        assert_ne!(asked, BOARD);
+        let wrong = asked.replace(r#"aria-invalid="false""#, r#"aria-invalid="true""#);
+        let hidden = asked.replace(r#"class="email-verification""#, "hidden");
+        let path = "/acme/jobs/1";
+        for (html, at, state) in [
+            (&asked, path, "code"),
+            (&wrong, path, "code"),
+            (&hidden, path, "pending"),
+            (&asked, "/acme/jobs/1/confirmation", "confirmed"),
+        ] {
+            let outcome = json!({ "confirmationPath": "/acme/jobs/1/confirmation" });
+            let scripts = [
+                op("outcome", outcome),
+                op("read", json!({})),
+                op("snapshot", Value::Null),
+                op("show_code", Value::Null),
+            ];
+            let setup = "window.__oqSeen = 0; Element.prototype.scrollIntoView = function () { window.__oqSeen += 1; };";
+            let Some(out) = run(html, at, setup, &scripts) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], state);
+            if html != &hidden {
+                assert_eq!(parsed(&out, 3)["state"], "shown");
+            }
+            for index in [1, 2] {
+                assert!(!out["results"][index]
+                    .as_str()
+                    .unwrap()
+                    .contains("security-input"));
+            }
+            assert_eq!(out["typed"], json!([]));
+            assert_eq!(out["clicks"], json!([]));
+        }
     }
 
     #[test]

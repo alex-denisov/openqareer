@@ -240,6 +240,17 @@ async fn ats_form_attempt(
     ats_apply::read_attempt(&app, &vacancy_id)
 }
 
+/// Lets the candidate send again after they confirm that nothing left.
+#[tauri::command]
+async fn ats_form_release(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::ReleaseRequest,
+) -> Result<(), String> {
+    cabinet_only(&webview)?;
+    ats_apply::release_attempt(&app, request)
+}
+
 /// Removes the cookies and files of employer forms when the candidate leaves.
 #[tauri::command]
 async fn ats_form_erase(app: AppHandle, webview: tauri::Webview) -> Result<(), String> {
@@ -255,7 +266,7 @@ async fn ats_form_show(
     vacancy_id: String,
 ) -> Result<bool, String> {
     cabinet_only(&webview)?;
-    ats_apply::show_form_window(&app, &vacancy_id)
+    ats_apply::show_form_window(&app, &vacancy_id).await
 }
 
 #[tauri::command]
@@ -741,6 +752,13 @@ fn main() {
                     hide_closed_main_window(window);
                 }
             }
+            // The form window's close button hides it: the code step must outlive it.
+            if window.label() == ats_apply::FORM_WINDOW_LABEL {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
         })
         // A reload of our own page destroys the interface that owned the
         // platform sign-in window, but not the window: it stayed on screen with
@@ -770,6 +788,7 @@ fn main() {
             ats_form_next,
             ats_form_submit,
             ats_form_outcome,
+            ats_form_release,
             ats_form_attempt,
             ats_form_erase,
             ats_form_show,

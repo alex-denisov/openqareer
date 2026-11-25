@@ -232,7 +232,8 @@ describe('отклик формой работодателя', () => {
 
   it.each([
     [receipt({ outcome: 'unconfirmed' }), 'unconfirmed'],
-    [receipt({ outcome: 'captcha' }), 'unconfirmed'],
+    [receipt({ outcome: 'captcha' }), 'captcha'],
+    [receipt({ outcome: 'code' }), 'code'],
     [receipt({ outcome: 'not_submitted', reason: 'already_submitted' }), 'unconfirmed'],
     [receipt({ outcome: 'rejected' }), 'refused'],
     [receipt({ outcome: 'captcha', pressedAtMs: null }), 'manual'],
