@@ -65,6 +65,19 @@ describe('B656: список откликов', () => {
     ]);
   });
 
+  it('«Не откликаюсь»: неотправленный в архиве — не отправлен и не в воронке (Д2)', () => {
+    const declined = listed({
+      id: 'declined',
+      stage: 'archived',
+      appliedAt: null,
+      reachedStages: ['saved', 'archived'],
+      archivePreviousStage: 'saved',
+    });
+    expect(declined.row.next).toBe('Не отправлен');
+    expect(declined.row.sent).toBe('не отправлен');
+    expect(funnelSummary([...ITEMS, declined]).sent).toBe(funnelSummary(ITEMS).sent);
+  });
+
   it('по умолчанию сверху то, что ждёт кандидата', () => {
     const ids = sortRows(ITEMS, { key: 'next', direction: 'asc' }).map((item) => item.row.id);
     expect(ids.slice(0, 2)).toEqual(['draft', 'offer']);

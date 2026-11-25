@@ -21,6 +21,13 @@ describe('название площадки для кандидата', () => {
     expect(platformOf('my-linkedin-clone').label).toBe('My-linkedin-clone');
   });
 
+  it('коды freehire: площадка — одним именем, карьерный сайт — сайт компании (Д10)', () => {
+    expect(platformOf('src-fh-getmatch')).toEqual(platformOf('getmatch'));
+    expect(platformOf('fh-getmatch').label).toBe('Getmatch');
+    expect(platformOf('src-fh-habr-career').label).toBe('Хабр Карьера');
+    expect(platformOf('src-fh-rwb')).toEqual({ label: 'сайт компании', site: true });
+  });
+
   it('предлоги согласованы', () => {
     const site = platformOf('ats-ashby-snowflake');
     expect(viaPlatform(site)).toBe('через сайт компании');

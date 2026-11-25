@@ -1,3 +1,4 @@
+import { wasSent } from './sentState';
 import { deliveryState } from '../../../../../shared/applicationStage';
 import type { ApplicationView } from '../../../applications/applicationsApi';
 import { manualApplyReasonText, type ManualApplyItem } from '../../../../../shared/manualApply';
@@ -252,13 +253,14 @@ function closedFace(application: ApplicationView): Face {
   return {
     ...base,
     tag: { tone: '', label: closed ? 'вакансия закрыта' : 'в архиве' },
-    next: 'Без ответа',
+    next: wasSent(application) ? 'Без ответа' : 'Не отправлен',
     event: withDate(closed ? 'закрыта' : 'в архиве', dotDate(application.stageChangedAt)),
   };
 }
 
 /** Колонка «Отправлен» у неотправленного: черновик или одобренное письмо (B723). */
 function savedLabel(application: ApplicationView): string | null {
+  if (application.stage === 'archived' && !wasSent(application)) return 'не отправлен';
   if (application.stage !== 'saved') return null;
   return application.materials.coverLetter ? 'не отправлен' : 'черновик';
 }

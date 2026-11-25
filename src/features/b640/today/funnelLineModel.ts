@@ -1,5 +1,6 @@
 import type { ApplicationView } from '../../applications/applicationsApi';
 import { applicationReachedStage } from '../../applications/pipelineAnalytics';
+import { wasSent } from '../responses/model/sentState';
 import { longDate, pluralRu } from '../responses/model/responseRow';
 
 function sentAt(application: ApplicationView): number {
@@ -21,7 +22,7 @@ export function funnelLine(
 ): string | null {
   const from = statusSince ? new Date(statusSince).getTime() : Number.NEGATIVE_INFINITY;
   const sent = applications.filter(
-    (item) => item.stage !== 'saved' && Number.isFinite(sentAt(item)) && sentAt(item) >= from,
+    (item) => wasSent(item) && Number.isFinite(sentAt(item)) && sentAt(item) >= from,
   );
   if (sent.length === 0) return null;
   const start = statusSince ?? new Date(Math.min(...sent.map(sentAt))).toISOString();

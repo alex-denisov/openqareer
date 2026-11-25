@@ -35,14 +35,15 @@ export function SavedScreen() {
     () =>
       sortItems(
         pool.matched.filter(
-          (item) => isSaved(links.byCluster.get(item.cluster.id)) && !rows.hiddenIds.has(item.cluster.id),
+          (item) =>
+            isSaved(links.byCluster.get(item.cluster.id)) && !rows.hiddenIds.has(item.cluster.id),
         ),
         sortState,
         rates,
       ),
     [pool.matched, links.byCluster, rows.hiddenIds, sortState, rates],
   );
-  const waiting = (pool.loading && pool.matched.length === 0) || links.loading;
+  const waiting = items.length === 0 && (pool.loading || pool.reading === true || links.loading);
   const env = { currency: 'RUB' as const, rates, noRole: false };
   const empty = !waiting && items.length === 0 && !pool.failed && !links.failed;
   return (

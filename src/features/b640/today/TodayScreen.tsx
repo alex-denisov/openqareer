@@ -5,6 +5,8 @@ import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
 import { useIsMobile } from '../kit/useMediaQuery';
 import { BlockError, BlockSkeleton, LeadQuietContext } from './parts';
+import { useManualQueue } from '../responses/data/manualQueue';
+import { responseEvents } from './responseEventsModel';
 import { ResponseEventsBlock } from './ResponseEventsBlock';
 import {
   OnboardingPlanModule,
@@ -84,6 +86,8 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
   // Сбой чтения откликов строку пути прячет: она второстепенна, а «Отклики» покажут ошибку сами.
   const applications = useLoad(loadApplications);
   const items = applications.state === 'ready' ? applications.data : null;
+  const manual = useManualQueue();
+  const events = items ? responseEvents(items, new Date(), manual) : [];
   const funnel = items ? funnelLine(items, status.since) : null;
   // Макет s04: при «Присматриваюсь» вопрос стоит над колонками, иначе — в правой (s05b).
   const wideSignal = status.status === 'looking' || layout.side.length === 0;
@@ -103,7 +107,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
       />
     ));
   return (
-    <LeadQuietContext.Provider value={mobile && wideSignal && signalShown}>
+    <LeadQuietContext.Provider value={events.length > 0 || (mobile && wideSignal && signalShown)}>
       <StatusStrip
         status={status}
         revertedTitle={revertedTitle}
@@ -113,7 +117,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
       {wideSignal ? signal : null}
       <div className="col">
         {/* Макет s05b: события откликов первыми в левой колонке; нет событий — блока нет. */}
-        <ResponseEventsBlock applications={items} />
+        <ResponseEventsBlock events={events} />
         {modules(layout.main, true)}
       </div>
       {layout.side.length > 0 ? (
