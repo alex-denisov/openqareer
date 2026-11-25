@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { vacancyFitSentence } from '../../../vacancies/vacancyFitModel';
 import { Icon } from '../../kit';
-import { fitRows, sourceLine } from './fitRows';
+import { listedRows, sourceLine } from './fitRows';
 import { RequirementList } from './RequirementList';
 
 export interface FitWhyProps {
@@ -42,7 +42,7 @@ function FitDialog({ dialogRef, id, percent, view, sourceName, open, onClose }: 
         </div>
         <div className="v4-fd-b">
           <p className="v4-fd-v">{vacancyFitSentence(view)}</p>
-          <RequirementList rows={fitRows(view)} />
+          <RequirementList rows={listedRows(view)} />
         </div>
         <p className="v4-fd-src">{sourceLine(view, sourceName)}</p>
         <div className="v4-fd-f">

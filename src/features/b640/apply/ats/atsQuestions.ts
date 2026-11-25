@@ -43,10 +43,11 @@ function hash(text: string, seed: number): string {
   return (4294967296 * (2097151 & low) + (high >>> 0)).toString(16);
 }
 
-/** Вопрос Greenhouse несёт тот же номер, что в его открытом списке: ответ не спрашивается дважды. */
+/** Вопрос Greenhouse и Teamtailor несёт тот же номер, что в открытом списке: ответ не спрашивается дважды. */
 export function questionIdOf(field: AtsField): string {
   const open = /^(?:id|name):(question_\d{1,20}(?:\[\])?)$/u.exec(field.key)?.[1];
   if (open) return open;
+  if (field.question && /^\d{1,20}$/u.test(field.question)) return `teamtailor_${field.question}`;
   const text = JSON.stringify([field.key, tidy(field.label)]);
   return `ats-${hash(text, 1)}${hash(text, 2)}`;
 }

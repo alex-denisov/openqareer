@@ -4,7 +4,7 @@ import type { OwnVacancy, OwnVacancyDetail } from '../../../../../shared/b640Own
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
 import { workFormatLabel } from '../../../../../shared/vacancyWorkFormat';
 import { Icon, useIsMobile } from '../../kit';
-import { fitRows } from '../card/fitRows';
+import { fitRows, listedRows } from '../card/fitRows';
 import { RequirementList } from '../card/RequirementList';
 import { textBlocks } from '../card/textBlocks';
 import { isoRowDate, safeHttpUrl, salaryMoneyView, type MoneyOptions } from '../format';
@@ -103,7 +103,7 @@ function OwnDetailBody({ detail }: { detail: OwnVacancyDetail }) {
         <div className="v4-box v4-reqs-box">
           <p className="v4-req-row">{ownNoScoreReason(detail.fit) ?? coverageLabel(detail.fit, rows.length)}</p>
           <div className="v4-reqs-open">
-            <RequirementList rows={rows} />
+            <RequirementList rows={listedRows(detail.fit)} />
           </div>
         </div>
       ) : null}

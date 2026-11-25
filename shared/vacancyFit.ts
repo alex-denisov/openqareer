@@ -107,6 +107,8 @@ export interface VacancyFitResult {
    * («будет плюсом») the profile does not show (25.11).
    */
   readonly duties?: readonly string[];
+  /** The wishes among `duties`: the card lists them after the counted lines, outside «N из M». */
+  readonly wishes?: readonly string[];
   /**
    * 03.11: location lines (an onsite city, a format) the search conditions cover. Met whatever the
    * profile city says; the stored assessments stay as the model gave them, like `implied`.

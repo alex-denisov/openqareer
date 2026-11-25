@@ -17,9 +17,17 @@ import {
 import {
   formOf,
   validateForm,
+  withDescription,
   type ExperienceForm,
   type ExperienceFormErrors,
 } from './experienceForm';
+import {
+  addDescription,
+  createFactWriter,
+  dropUnusedDescription,
+  saveTexts,
+} from './experienceResults';
+import { DescriptionField, ResultsField } from './ExperienceTexts';
 import { blankEntry, withNewEntry } from './newExperience';
 
 function useNewEntry() {
@@ -27,6 +35,7 @@ function useNewEntry() {
   const toast = useToast();
   const [entry] = useState(() => blankEntry(crypto.randomUUID()));
   const [form, setForm] = useState<ExperienceForm>(() => formOf(entry));
+  const [facts] = useState(createFactWriter);
   const [errors, setErrors] = useState<ExperienceFormErrors>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +46,11 @@ function useNewEntry() {
     try {
       forgetSharedRead('resume');
       const { draft } = await getResumeStudio();
-      await saveResumeStudioDraft(withNewEntry(draft, entry, form));
+      const base = withNewEntry(draft, entry, form);
+      await dropUnusedDescription(form, base, facts);
+      const descriptionId = await addDescription(entry, form, facts);
+      await saveResumeStudioDraft(withDescription(base, entry.id, descriptionId));
+      await saveTexts(entry, formOf(entry), form, facts, () => undefined);
       window.dispatchEvent(new Event(PROFILE_CHANGED));
       toast.show({ text: 'Сохранено' });
       navigate(buildNodePath('s01'));
@@ -95,6 +108,8 @@ export function ExperienceNewScreen({ node }: { readonly node: B640Node }) {
               <FormatField form={form} onChange={change} />
               <TeamField {...fields} />
             </div>
+            <DescriptionField form={form} onChange={change} isNew />
+            <ResultsField form={form} onChange={change} />
             <SkillsField form={form} onChange={change} />
             {error ? <StatusLine state="err" text={error} /> : null}
             <FormActions busy={busy} />

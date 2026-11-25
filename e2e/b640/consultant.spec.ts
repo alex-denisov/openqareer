@@ -110,8 +110,10 @@ async function mockConsultant(page: Page, mocks: ConsultantMocks = {}) {
   await page.route('**/api/v1/candidate/status/today', (route) =>
     route.fulfill({ json: { data: { today: STATUS_TODAY } } }),
   );
-  await page.route('**/api/v1/candidate/notifications?**', (route) =>
-    route.fulfill({ json: { data: { items: [], unreadCount: 2, nextCursor: null } } }),
+  await page.route('**/api/v1/candidate/b640/notifications?**', (route) =>
+    route.fulfill({
+      json: { data: { items: [], pinned: [], unreadCount: 2, nextCursor: null } },
+    }),
   );
   const feed = [...FEED];
   await page.route('**/api/v1/candidate/me/messages**', (route) =>
