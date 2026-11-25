@@ -329,6 +329,7 @@ describe('площадка, где дочитывать нечего (B761)', ()
       sourceIds: () => [SOURCE],
       now: () => nowMs,
       defaultIntervalMs: 20_000,
+      random: () => 0.5,
       fetchDetail: async () => ({ status: 429 }),
     });
     return {
@@ -359,6 +360,47 @@ describe('площадка, где дочитывать нечего (B761)', ()
     backfill.wake(SOURCE);
     expect((await at(20_000)).requested).toBe(1);
     expect(scans()).toBe(2);
+  });
+
+  it('пауза разбросана на ±20 %, чтобы площадки не сходились в один такт', async () => {
+    const seen: string[] = [];
+    let nowMs = 0;
+    const draws = [0, 1];
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = (sourceId) => {
+      seen.push(sourceId);
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => ['ats-workday-a', 'ats-workday-b'],
+      now: () => nowMs,
+      random: () => draws.shift() ?? 0.5,
+    });
+    await backfill.step();
+    seen.length = 0;
+    nowMs = IDLE_MS * 0.8;
+    await backfill.step();
+    expect(seen).toEqual(['ats-workday-a']);
+    nowMs = IDLE_MS * 1.2;
+    await backfill.step();
+    expect(seen).toContain('ats-workday-b');
+  });
+
+  it('первый проход растянут: не больше 200 площадок за такт, и доходит до всех', async () => {
+    const ids = Array.from({ length: 450 }, (_, index) => `ats-workday-s${index}`);
+    const seen: string[] = [];
+    const pool = new FakePool(new Map());
+    pool.loadVacanciesWithoutFullText = (sourceId) => {
+      seen.push(sourceId);
+      return [];
+    };
+    const backfill = new WorkdayDescriptionBackfill({ pool, sourceIds: () => ids, now: () => 0 });
+    await backfill.step();
+    expect(seen).toHaveLength(200);
+    await backfill.step();
+    await backfill.step();
+    expect(new Set(seen).size).toBe(450);
   });
 
   it('новое чтение не снимает паузу после 429', async () => {

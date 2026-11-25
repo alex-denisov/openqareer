@@ -138,6 +138,10 @@ const DEFAULT_THROTTLE_PAUSE_MS = 15 * 60_000;
  * принятого чтения (`wake`).
  */
 const IDLE_PAUSE_MS = 60 * 60_000;
+/** Разброс паузы: без него пустые площадки снова смотрелись бы все разом раз в час. */
+const IDLE_PAUSE_JITTER = 0.2;
+/** Сколько площадок без известной работы смотрится за такт: первый проход растянут, а не залпом. */
+const PROBES_PER_STEP = 200;
 const EMPTY_REPORT: WorkdayDescriptionReport = {
   requested: 0,
   loaded: 0,
@@ -196,9 +200,7 @@ export class WorkdayDescriptionBackfill {
     this.running = true;
     try {
       const startedAt = this.now();
-      const sources = this.sourceIds()
-        .filter(isDetailTextSource)
-        .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= startedAt);
+      const sources = this.dueSources(startedAt);
       // B641 10.11: выборка площадки без текста — до 100 мс; 147 площадок подряд
       // держали цикл событий до 8 с. Каждая площадка начинается в своём обороте.
       const started: Promise<Outcome[]>[] = [];
@@ -220,6 +222,20 @@ export class WorkdayDescriptionBackfill {
     } finally {
       this.running = false;
     }
+  }
+
+  /** Площадки с работой — все; новые, разбуженные и пустые — не больше предела за такт. */
+  private dueSources(nowMs: number): string[] {
+    const due = this.sourceIds()
+      .filter(isDetailTextSource)
+      .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= nowMs);
+    const isProbe = (sourceId: string) => this.idle.has(sourceId) || !this.nextDueAt.has(sourceId);
+    const probes = due.filter(isProbe).slice(0, PROBES_PER_STEP);
+    return [...due.filter((sourceId) => !isProbe(sourceId)), ...probes];
+  }
+
+  private idlePauseMs(): number {
+    return Math.round(IDLE_PAUSE_MS * (1 + IDLE_PAUSE_JITTER * (2 * this.random() - 1)));
   }
 
   /** Принято новое чтение: пустая площадка смотрится на ближайшем такте. Паузу 429 не снимает. */
@@ -245,7 +261,7 @@ export class WorkdayDescriptionBackfill {
     );
     if (batch.length === 0) {
       this.idle.add(sourceId);
-      this.nextDueAt.set(sourceId, this.now() + IDLE_PAUSE_MS);
+      this.nextDueAt.set(sourceId, this.now() + this.idlePauseMs());
       return [];
     }
     this.idle.delete(sourceId);
