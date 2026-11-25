@@ -19,6 +19,8 @@ pub const OPERATIONS: &[&str] = &[
     "submit",
     "outcome",
     "show_code",
+    "code_fill",
+    "code_submit",
 ];
 
 /// `</script>` and line separators cannot end the literal early.
@@ -291,6 +293,95 @@ mod tests {
                     .contains("security-input"));
             }
             assert_eq!(out["typed"], json!([]));
+            assert_eq!(out["clicks"], json!([]));
+        }
+    }
+
+    const CODE: &str = "aB3dE9x0";
+
+    fn code_page() -> String {
+        let panel = include_str!("ats_fixtures/greenhouse_code.html");
+        BOARD.replace("</form>", &format!("{panel}</form>"))
+    }
+
+    fn code_scripts(code: &str) -> Vec<String> {
+        let place = json!({ "hosts": ["hh.ru"], "path": "/acme", "code": code });
+        vec![
+            op("code_fill", place),
+            press("code_submit"),
+            press("code_submit"),
+            op("outcome", json!({ "codeSent": true })),
+        ]
+    }
+
+    /// What the board does: the mark goes at the press and returns with a refusal.
+    fn board_answers(after: &str) -> String {
+        format!(
+            "window.__sent = []; const cells = [...document.querySelectorAll('[id^=security-input]')];
+             document.querySelector('button[type=submit]').addEventListener('click', e => {{ e.preventDefault();
+               window.__sent.push(cells.map(c => c.value).join('')); {after} }});"
+        )
+    }
+
+    #[test]
+    fn the_typed_code_is_written_into_the_form_and_sent_once() {
+        let Some(out) = run(
+            &code_page(),
+            "/acme/jobs/1",
+            &board_answers(""),
+            &code_scripts(CODE),
+        ) else {
+            return;
+        };
+        assert_eq!(parsed(&out, 0)["state"], "filled");
+        assert_eq!(parsed(&out, 1)["state"], "clicked");
+        assert_eq!(parsed(&out, 2)["state"], "code_missing");
+        assert_eq!(parsed(&out, 3)["state"], "pending");
+        assert_eq!(out["clicks"].as_array().unwrap().len(), 1);
+        let typed: String = out["typed"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert_eq!(typed, CODE);
+        for index in 0..4 {
+            assert!(!out["results"][index].as_str().unwrap().contains(CODE));
+        }
+    }
+
+    #[test]
+    fn a_wrong_code_and_an_expired_one_are_told_apart() {
+        let mark = "cells.forEach(c => c.setAttribute('aria-invalid', 'true'));";
+        let off = format!("{mark} e.target.setAttribute('aria-disabled', 'true');");
+        for (after, state) in [(mark, "code_wrong"), (off.as_str(), "code_expired")] {
+            let setup = board_answers(after);
+            let Some(out) = run(&code_page(), "/acme/jobs/1", &setup, &code_scripts(CODE)) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 3)["state"], state);
+        }
+    }
+
+    #[test]
+    fn a_code_is_not_sent_where_the_form_cannot_take_it() {
+        let html = code_page();
+        let off = html.replace(r#"aria-disabled="false""#, r#"aria-disabled="true""#);
+        let fewer = html.replace("security-input-7", "other-7");
+        let check = format!(
+            r#"{html}<iframe src="https://www.google.com/recaptcha/api2/bframe"></iframe>"#
+        );
+        for (html, path, filled, pressed) in [
+            (&off, "/acme/jobs/1", "filled", "submit_disabled"),
+            (&fewer, "/acme/jobs/1", "code_missing", "code_missing"),
+            (&html, "/other", "off_target", "off_target"),
+            (&check, "/acme/jobs/1", "captcha", "captcha"),
+        ] {
+            let Some(out) = run(html, path, "", &code_scripts(CODE)) else {
+                return;
+            };
+            assert_eq!(parsed(&out, 0)["state"], filled);
+            assert_eq!(parsed(&out, 1)["state"], pressed);
             assert_eq!(out["clicks"], json!([]));
         }
     }

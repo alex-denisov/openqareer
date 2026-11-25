@@ -241,6 +241,22 @@ describe('d00 «Записи»', () => {
     const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
     expect(page.querySelector('[role="alert"]')?.textContent).toContain('Записи не загрузились');
   });
+
+  it('B801: сбой чтения не выдаёт «плана нет»; «Повторить» перечитывает и план', async () => {
+    api.listEntries.mockRejectedValueOnce(new Error('down'));
+    api.getOverview.mockRejectedValueOnce(new Error('down'));
+    api.listGoalCards.mockRejectedValueOnce(new Error('down'));
+    const page = await open(<EntriesScreen node={nodeByCode('d00')!} />);
+    expect(page.textContent).not.toContain('Добавить план');
+    expect(page.textContent).not.toContain('Задать цель');
+    api.getOverview.mockResolvedValue({
+      platformStartedAt: null,
+      primaryWorkplace: { company: 'Гринкод', title: 'CTO', startDate: '2026-10-14' },
+    });
+    click(page.querySelector('[role="alert"] button'));
+    await settle();
+    expect(page.textContent).toContain('Открыть план');
+  });
 });
 
 describe('d00 пустой дневник (d00a, d00b)', () => {

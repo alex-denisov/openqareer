@@ -69,6 +69,16 @@ export function submitAtsForm(
   });
 }
 
+/**
+ * Код из поля кандидата — в открытую форму и одно нажатие её кнопки. Только по нажатию кандидата;
+ * код нигде не хранится и не пишется.
+ */
+export function sendAtsCode(vacancyId: string, code: string): Promise<AtsReceipt | null> {
+  return invokeDesktopCommand<AtsReceipt>('ats_form_code', {
+    request: { vacancyId, confirmed: true, code },
+  });
+}
+
 export function readAtsOutcome(vacancyId: string): Promise<AtsReceipt | null> {
   return invokeDesktopCommand<AtsReceipt>('ats_form_outcome', { vacancyId });
 }

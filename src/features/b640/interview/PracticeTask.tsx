@@ -84,7 +84,9 @@ export function PracticeTask(props: {
   readonly voice: boolean;
   readonly quota: TariffQuotaStatus | null;
   readonly busy: boolean;
-  /** Тренировка уже идёт: вместо «Начать» — возврат к ответу. */
+  /** Тренировка уже идёт: способ ответа выбран. */
+  readonly running: boolean;
+  /** Вместо «Начать»: возврат к ответу или переход на тариф. */
   readonly action: ReactNode | null;
   readonly onMode: (mode: InterviewAnswerMode) => void;
   readonly onStart: () => void;
@@ -98,9 +100,11 @@ export function PracticeTask(props: {
       </h2>
       <p className="lead-sub">{props.subtitle}</p>
       <Requirements task={task} />
+      {props.running ? null : (
+        <HowToAnswer mode={props.mode} voice={props.voice} onMode={props.onMode} />
+      )}
       {props.action ?? (
         <>
-          <HowToAnswer mode={props.mode} voice={props.voice} onMode={props.onMode} />
           <div className="actions">
             <Button variant="primary" busy={props.busy} onClick={props.onStart}>
               <Icon name="play" />

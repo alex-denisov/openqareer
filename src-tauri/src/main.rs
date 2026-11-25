@@ -220,6 +220,17 @@ async fn ats_form_submit(
     ats_apply::submit_form(&app, request).await
 }
 
+/// Sends the code the candidate typed in the cabinet through the open form.
+#[tauri::command]
+async fn ats_form_code(
+    app: AppHandle,
+    webview: tauri::Webview,
+    request: ats_model::CodeRequest,
+) -> Result<ats_model::Receipt, String> {
+    cabinet_only(&webview)?;
+    ats_apply::submit_code(&app, request).await
+}
+
 #[tauri::command]
 async fn ats_form_outcome(
     app: AppHandle,
@@ -787,6 +798,7 @@ fn main() {
             ats_form_options,
             ats_form_next,
             ats_form_submit,
+            ats_form_code,
             ats_form_outcome,
             ats_form_release,
             ats_form_attempt,

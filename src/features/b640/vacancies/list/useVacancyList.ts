@@ -69,6 +69,8 @@ export interface VacancyList {
   /** `false`: число в шапке было бы меньше реального (серверный режим с клиентскими фильтрами). */
   readonly countKnown: boolean;
   /** Подборка прочитана не целиком и выбран столбец: строки и порядок отдаёт сервер. */
+  /** Прочитанное фильтрам не подошло, дочитываем остаток: «ничего» писать рано. */
+  readonly hunting: boolean;
   readonly server: {
     readonly active: boolean;
     readonly status: ServerListStatus;
@@ -153,10 +155,10 @@ interface RowsInput {
 
 type DerivedRows = Pick<
   VacancyList,
-  'options' | 'all' | 'visible' | 'count' | 'blockers' | 'more' | 'countKnown'
+  'options' | 'all' | 'visible' | 'count' | 'blockers' | 'more' | 'countKnown' | 'hunting'
 >;
 
-type FilterContext = Parameters<typeof applyFilters>[2];
+type FilterContext = Parameters<typeof blockersOf>[2];
 
 function useBlockers(
   empty: boolean,
@@ -164,8 +166,25 @@ function useBlockers(
   filters: ListFilters,
   context: FilterContext,
 ): readonly Blocker[] {
-  const { currency, rates, now } = context;
-  return useMemo(() => (empty ? blockersOf(base, filters, context) : []), [empty, base, filters, currency, rates, now]);
+  const { currency, rates, now, titlesRu, serverCut } = context;
+  return useMemo(
+    () => (empty ? blockersOf(base, filters, context) : []),
+    [empty, base, filters, currency, rates, now, titlesRu, serverCut],
+  );
+}
+
+/**
+ * v06p: «По фильтрам ничего» и «0 вакансий» — только когда прочитана вся подборка. Пока среди
+ * прочитанного ничего не подошло, порции читаются дальше сами.
+ */
+function useHunt(wanted: boolean, server: ServerSortedList): boolean {
+  const hunting = wanted && server.hasMore;
+  const { status, loadMore } = server;
+  const loaded = server.rows.length;
+  useEffect(() => {
+    if (hunting && status === 'ready') loadMore();
+  }, [hunting, status, loaded]);
+  return hunting;
 }
 
 /** «Дата» в днях для сервера (B726); «Любая» — `null`. */
@@ -256,7 +275,9 @@ function useListRows(input: RowsInput): DerivedRows {
   });
   const read = serverMode ? { total: foot.total, shown: foot.shown } : { total: count, shown: visible.length };
   const more = pending && visible.length > 0 ? { ...read, total: null } : read;
-  const blockers = useBlockers(all.length === 0 && !pool.loading, base, filters, { currency, rates, now });
+  const hunting = useHunt(serverMode && all.length === 0 && base.length > 0, server);
+  const context = { currency, rates, now, serverCut: serverMode, titlesRu: pool.campaign?.titlesRu };
+  const blockers = useBlockers(all.length === 0 && !pool.loading, base, filters, context);
   return {
     options,
     all,
@@ -264,6 +285,7 @@ function useListRows(input: RowsInput): DerivedRows {
     count,
     blockers,
     more,
+    hunting,
     countKnown: countKnown && (!serverMode || foot.countKnown),
   };
 }

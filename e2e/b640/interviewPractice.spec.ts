@@ -223,6 +223,15 @@ test.describe('B750: «Тренировка System Design» (I3)', () => {
     );
   });
 
+  test('B801 t04: на Free вместо «Начать» — переход на Basic', async ({ page }) => {
+    await open(page, { free: true });
+    const block = page.locator('.pm-block');
+    await expect(block).toContainText('Пробные интервью — с Basic · 10 в месяц');
+    await expect(block.getByRole('link', { name: 'Перейти на Basic' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Начать' })).toHaveCount(0);
+    await expect(page.getByRole('radiogroup', { name: 'Как отвечать' })).toBeVisible();
+  });
+
   test('снимки I3a, I3b, I3c на 1440 и 390', async ({ page }) => {
     for (const [width, height] of [
       [1440, 900],

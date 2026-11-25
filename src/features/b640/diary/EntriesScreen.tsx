@@ -176,11 +176,22 @@ function BlankDiary(props: {
   );
 }
 
+/** «Повторить» перечитывает ленту и то, что показано рядом с ней. */
+function useRetriedContext(retryFeed: () => void) {
+  const [attempt, setAttempt] = useState(0);
+  const context = useDiaryContext(attempt);
+  const retry = () => {
+    retryFeed();
+    setAttempt((value) => value + 1);
+  };
+  return [context, retry] as const;
+}
+
 /** Экран d00 «Записи»: быстрая запись, фильтр по типу, лента по неделям. */
 export function EntriesScreen({ node }: { readonly node: B640Node }) {
   const [kind, setKind] = useState<CareerDiaryEntryKind | null>(null);
   const feed = useEntries(kind);
-  const context = useDiaryContext();
+  const [context, retry] = useRetriedContext(feed.retry);
   const remove = useRemoveEntry(feed);
   const next = nearestDue(context.goals, today());
   const { state } = feed;
@@ -202,7 +213,7 @@ export function EntriesScreen({ node }: { readonly node: B640Node }) {
           <StatusLine
             state="err"
             text="Записи не загрузились"
-            action={<RetryButton onClick={feed.retry} />}
+            action={<RetryButton onClick={retry} />}
           />
         ) : null}
         {state.state === 'ready' ? (
