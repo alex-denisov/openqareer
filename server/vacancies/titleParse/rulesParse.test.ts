@@ -474,6 +474,16 @@ describe('B803: найм инженеров — HR', () => {
     expect(rulesParse(title)).toMatchObject({ functions: ['hr'], levelRank: 2 });
   });
 
+  it.each([
+    'Engineering Manager, Recruiting Tools',
+    'Lead Engineer, Recruitment',
+    'Product Manager, Recruiting',
+    'Director of Engineering, Recruiting',
+    'Head of Engineering Recruitment Platform',
+  ])('%s — не найм', (title) => {
+    expect(rulesParse(title).functions[0]).not.toBe('hr');
+  });
+
   it('технология найма и обычный руководитель технологии остаются собой', () => {
     expect(rulesParse('Head of Recruitment Technology').functions).not.toContain('hr');
     expect(rulesParse('Head of Technology').functions).toEqual(['eng-mgmt']);

@@ -564,11 +564,11 @@ const DEPARTMENT_CHIEF =
   /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
 
 /**
- * B803: «Head of Technology Recruitment» нанимает инженеров, а не руководит ими: найм в конце
- * названия — HR. «Recruitment technology» и «recruitment marketing» — не найм.
+ * B803: «Head of Technology Recruitment» нанимает инженеров, а не руководит ими. Только head, director и
+ * vp и только «technology/engineering» вплотную перед наймом: продукт или инженеры найма — не HR.
  */
 const RECRUITMENT_LEADER =
-  /\b(?:head|director|vp|vice president|lead|manager)\b.*\b(?:recruitment|recruiting|talent acquisition)\b(?!\s+(?:technology|systems?|platforms?|software|products?|marketing|operations))/iu;
+  /\b(?:head|director|vp|vice president)\s+(?:of\s+|,\s*)?(?:technology|technical|tech|engineering)\s+(?:recruitment|recruiting|talent acquisition)\s*$/iu;
 
 /** `freehireFallback: false` is for offline measurement only (freehireClassify/measure.ts). */
 export function rulesParse(
