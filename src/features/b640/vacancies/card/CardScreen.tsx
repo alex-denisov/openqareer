@@ -181,7 +181,7 @@ function Notice({ data }: { readonly data: CardData }) {
   }
   return (
     <p className="ls-state" role="status">
-      Вакансия не найдена
+      {data.load === 'closed' ? 'Вакансия закрыта' : 'Вакансия не найдена'}
       <Link className="btn is-sm" to={buildNodePath('s07')}>
         К подборке
       </Link>

@@ -26,6 +26,12 @@ import {
   peekDetailTextPriority,
   requestDetailTextPriority,
 } from './detailTextPriority';
+import {
+  dueSelectionLiveness,
+  markSelectionLivenessChecked,
+  requestSelectionLiveness,
+  SELECTION_LIVENESS_TABLE,
+} from './selectionLiveness';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
@@ -480,7 +486,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE + CATALOG_ENTRIES_TOTAL_TABLE);
     this.database.exec(
-      HH_TEXT_PRIORITY_TABLE + DETAIL_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE,
+      HH_TEXT_PRIORITY_TABLE + DETAIL_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE +
+        SELECTION_LIVENESS_TABLE,
     );
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES + CLUSTER_SPLIT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
@@ -2047,6 +2054,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .filter((row) => row.need === 1)
       .slice(0, want)
       .map((row) => row.id);
+  }
+
+  /** B797: верх подборки в сверку живости. */
+  requestSelectionLiveness(vacancyIds: readonly string[], nowMs: number = Date.now()): void {
+    requestSelectionLiveness(this.database, vacancyIds, nowMs);
+  }
+
+  dueSelectionLiveness(limit: number, nowMs: number = Date.now()): string[] {
+    return dueSelectionLiveness(this.database, limit, nowMs);
+  }
+
+  markSelectionLivenessChecked(vacancyId: string, nowMs: number = Date.now()): void {
+    markSelectionLivenessChecked(this.database, vacancyId, nowMs);
   }
 
   dropHhTextPriority(vacancyIds: readonly string[]): void {
