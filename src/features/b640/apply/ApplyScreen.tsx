@@ -594,11 +594,11 @@ function ApplyFlow(props: FlowProps) {
   const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
   useScreenChrome({
-    crumb: head.title,
-    ...(shown === 'letter' ? {} : { title: shown === 'resume' ? 'Резюме' : 'Отклик' }),
+    crumb: quota ? 'Закончились отклики' : head.title,
+    ...(shown === 'letter' && !quota ? {} : { title: shown === 'resume' && !quota ? 'Резюме' : 'Отклик' }),
     rootData: {
       // «Резюме» (o03) и «Отправка» в вебе (o04d) без плотных отступов; письмо, анкета и a01 — с ними.
-      ...((shown === 'resume' || (shown === 'send' && !isTauriEnvironment())) && !quota ? {} : { mtight: '1' }),
+      ...(quota || shown === 'resume' || (shown === 'send' && !isTauriEnvironment()) ? {} : { mtight: '1' }),
       ...(wide ? { 'main-right': '1' } : {}),
       // Открытое «Что поменять» на 390 — лист снизу (признак макета `data-vsheet`).
       ...(body.variants.wishOpen ? { vsheet: '1' } : {}),
@@ -606,20 +606,26 @@ function ApplyFlow(props: FlowProps) {
   });
   return (
     <>
-      <StepTabs
-        step={shown}
-        done={flow.done}
-        hasForm={Boolean(form ?? body.ats.apply)}
-        onStep={flow.setStep}
-      />
+      {/* t02: отклики закончились — ни шагов, ни шапки отклика. */}
+      {quota ? null : (
+        <StepTabs
+          step={shown}
+          done={flow.done}
+          hasForm={Boolean(form ?? body.ats.apply)}
+          onStep={flow.setStep}
+        />
+      )}
       <div
         className={wide ? 'page two split-editor' : 'page two'}
         data-b640-node="o02"
         data-b640-section="apply"
         data-apply-step={shown}
       >
-        <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
-        {quota ? <QuotaBlock head={head} quota={quota} /> : null}
+        {quota ? (
+          <QuotaBlock head={head} quota={quota} />
+        ) : (
+          <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
+        )}
         {opening && !quota && wide ? <OpeningEditor body={body} /> : null}
         {opening && !quota && !wide ? <LoadingApply /> : null}
         {ready && shown === 'send' ? <SendBody {...body} /> : null}

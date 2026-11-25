@@ -577,6 +577,9 @@ test.describe('B657: единый экран отклика', () => {
     await open(page, '/app/responses/a-draft/letter', { quotaExhausted: true, plan: 'free' });
     await expect(page.getByRole('heading', { name: 'Отклики закончились' })).toBeVisible();
     await expect(page.getByText('20 откликов → 5 ответов → 1 интервью')).toBeVisible();
+    // Макет t02: ни шагов, ни шапки отклика.
+    await expect(page.getByRole('navigation', { name: 'Отклик', exact: true })).toHaveCount(0);
+    await expect(page.locator('.ctx-head')).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Перейти на Basic' })).toHaveAttribute(
       'href',
       '/app/account/billing',

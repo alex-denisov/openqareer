@@ -8,8 +8,11 @@ import {
 } from '../../automation/automationApi';
 import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, Dialog, Icon, Link, SegControl, StatusLine } from '../kit';
+import { loadCampaign } from '../career/careerApi';
 import { DateInput } from '../kit/DateInput';
 import { buildNodePath } from '../routes';
+import { useAsync } from './data/useAsync';
+import { automationRoleOptions, type AutomationRoleOption } from './model/automationRoles';
 import {
   DAY_LIMIT_MAX,
   PLATFORM_LABELS,
@@ -135,7 +138,7 @@ interface FieldsProps {
   readonly id: string;
   readonly draft: AutomationDraft;
   readonly setDraft: (draft: AutomationDraft) => void;
-  readonly roles: readonly string[];
+  readonly roles: readonly AutomationRoleOption[];
   readonly canSendAtOnce: boolean;
 }
 
@@ -166,7 +169,7 @@ function SheetFields({ id, draft, setDraft, roles, canSendAtOnce }: FieldsProps)
         <CheckList
           idPrefix={`${id}-r`}
           legend="Роли"
-          options={roles.map((role) => ({ value: role, label: role }))}
+          options={roles}
           selected={draft.roles}
           onChange={(next) => setDraft({ ...draft, roles: next })}
         />
@@ -268,6 +271,12 @@ function ConsentCheck({ id, draft, setDraft }: Pick<FieldsProps, 'id' | 'draft' 
   );
 }
 
+/** Роли поиска не прочитались — остаются роли правил. */
+function useRoleOptions(ruleRoles: readonly string[]): readonly AutomationRoleOption[] {
+  const campaign = useAsync(loadCampaign, '').state.data;
+  return automationRoleOptions(ruleRoles, campaign?.roles.value ?? [], campaign?.titlesRu);
+}
+
 function RulesSheet({ open, snapshot, view, onClose, onSaved, onFailed }: AutomationSheetProps) {
   const id = useId();
   const { settings } = snapshot;
@@ -279,11 +288,12 @@ function RulesSheet({ open, snapshot, view, onClose, onSaved, onFailed }: Automa
     pauseUntil: '',
     consent: false,
   }));
+  const roles = useRoleOptions(settings.rules.roles);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    const problem = validateAutomationDraft(draft, settings.rules.roles.length > 0, !view.consented);
+    const problem = validateAutomationDraft(draft, roles.length > 0, !view.consented);
     setError(problem);
     if (problem) return;
     setBusy(true);
@@ -309,7 +319,7 @@ function RulesSheet({ open, snapshot, view, onClose, onSaved, onFailed }: Automa
         id={id}
         draft={draft}
         setDraft={setDraft}
-        roles={settings.rules.roles}
+        roles={roles}
         canSendAtOnce={view.canSendAtOnce}
       />
       {view.consented ? null : <ConsentCheck id={id} draft={draft} setDraft={setDraft} />}
