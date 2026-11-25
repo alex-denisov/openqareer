@@ -152,6 +152,17 @@ function sourceCandidate(
   return [{ precision: first.precision, inputs }];
 }
 
+/** VP и выше в объявлениях — малые компании: лучшая цифра каталога и источники вместе. */
+function catalogWithSources(
+  catalog: readonly Candidate[],
+  sources: readonly Candidate[],
+): Candidate | undefined {
+  const own = bestCandidate(catalog);
+  const guide = bestCandidate(sources);
+  if (!own || !guide) return own ?? guide;
+  return { precision: guide.precision, inputs: [...own.inputs, ...guide.inputs] };
+}
+
 /** Каталог с достаточной выборкой стоит один; иначе все цифры самой точной ступени. */
 function bestCandidate(candidates: readonly Candidate[]): Candidate | undefined {
   const measured = candidates.find(({ enough }) => enough);
@@ -264,10 +275,12 @@ export function openqareerEstimate(
     region: regionOfCountry(country),
   };
   if (query.functionCode === NO_FUNCTION) return statisticsStep(query, place, deps);
-  const direct = bestCandidate([
-    ...catalogCandidates(query, query.levelRank, place, deps),
-    ...sourceCandidate(query, query.levelRank, place, deps),
-  ]);
+  const catalog = catalogCandidates(query, query.levelRank, place, deps);
+  const sources = sourceCandidate(query, query.levelRank, place, deps);
+  const direct =
+    (query.levelRank ?? 0) >= VP_RANK
+      ? catalogWithSources(catalog, sources)
+      : bestCandidate([...catalog, ...sources]);
   return (
     blended(direct, deps, 'direct') ??
     levelStep(query, place, deps) ??

@@ -101,6 +101,20 @@ describe('openqareerEstimate', () => {
     expect(result?.estimate).toMatchObject({ low: 1_800, high: 3_300 });
   });
 
+  it('a chief is blended from adverts and guides', () => {
+    const catalog = {
+      get: (key: string) =>
+        key === 'data|4|country|de'
+          ? ({ low: 2_000, high: 3_000, currency: 'EUR', period: 'month', sampleSize: 99 } as const)
+          : undefined,
+    };
+    const chief = query({ title: 'Chief Widget Officer', levelRank: 4 });
+    const result = openqareerEstimate(chief, deps({ catalog }));
+    expect(result?.estimate.low).toBeGreaterThan(30_000);
+    expect(result?.estimate.low).toBeLessThan(48_000);
+    expect(result?.estimate.period).toBe('year');
+  });
+
   it('moves a level inside the country by the measured ratio, two levels at most', () => {
     const lead = openqareerEstimate(query({ levelRank: 3 }), deps());
     expect(lead?.step).not.toBe('level');
