@@ -274,7 +274,8 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
     if !is_id(&request.vacancy_id) {
         return Err("ats_open_invalid".to_string());
     }
-    let target = resolve(&request.url, request.board.as_deref())?;
+    let url = crate::ats_smartrecruiters::form_address(&request.url).await?;
+    let target = resolve(&url, request.board.as_deref())?;
     let state = app.state::<AtsFormState>();
     {
         let _guard = state.store.lock().await;
