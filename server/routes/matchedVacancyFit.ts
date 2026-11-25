@@ -1,4 +1,5 @@
 import { leanFitView } from '../vacancies/leanMatchedPage';
+import { isCountedLine } from '../../shared/vacancyWorkTerm';
 import { VACANCY_FIT_ALGORITHM_VERSION } from '../../shared/vacancyFit';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareListed, compareListedGroup } from '../../shared/vacancyListOrder';
@@ -624,8 +625,14 @@ function explanationWithFitPoints(explanation: Explanation, fitView: VacancyFitV
  * только сводка; раскрытая карточка читает полный разбор сама.
  */
 export function compactFitView(view: VacancyFitView): VacancyFitView {
-  const text = new Map(view.requirements.map((item) => [item.id, item.text]));
-  const implied = new Set((view.result?.implied ?? []).map((item) => item.requirementId));
+  // B794: the points are the lines «N из M» counts; terms, conditions and duties are not among them.
+  const duties = new Set(view.result?.duties ?? []);
+  const asked = view.requirements.filter((item) => !duties.has(item.id) && isCountedLine(item));
+  const text = new Map(asked.map((item) => [item.id, item.text]));
+  const implied = new Set([
+    ...(view.result?.implied ?? []).map((item) => item.requirementId),
+    ...(view.result?.placeCovered ?? []),
+  ]);
   const points = (view.result?.assessments ?? [])
     .filter((item) => text.has(item.requirementId))
     .slice(0, MAX_FIT_POINTS)
