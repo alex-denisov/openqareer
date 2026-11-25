@@ -1,3 +1,4 @@
+import { vacancyBrief } from '../domain/vacancyBrief';
 import { roleTitleRu } from '../vacancies/roleTitleRu';
 import { loadDetailText } from './vacancyDetailText';
 import { registerResumeBuilderRoutes } from './resumeBuilderRoutes';
@@ -604,20 +605,21 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
     }
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   }
-  const sourceDescriptions = [full?.fullDescription, full?.description]
+  const sourceDescriptions = (loaded.standIn ? [] : [full?.fullDescription, full?.description])
     .map((value) => value?.trim() ?? '')
     .filter(Boolean);
   const description = sourceDescriptions.reduce(
     (longest, value) => (value.length > longest.length ? value : longest),
     '',
   );
+  const clusterSummary = loaded.standIn ? '' : (cluster?.descriptionSummary?.trim() ?? '');
   const truncated = loaded.unavailable || description.length === 0 || looksLikeExcerpt(description);
   return {
     data: {
       id: clusterId,
-      description: description || cluster?.descriptionSummary?.trim() || '',
+      description: description || clusterSummary,
       // B446-g4: страница подборки обрезает выжимку ради веса — карточка берёт её здесь.
-      summary: cluster?.descriptionSummary?.trim() ?? '',
+      summary: clusterSummary,
       truncated,
       ...(loaded.unavailable ? { unavailable: true } : {}),
       // 02.11: the worker reads this card next; the card shows «загружаем» and asks again.
@@ -628,6 +630,8 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
         : {}),
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
       responsibilities: full?.responsibilities ?? [],
+      // B791: краткое содержание раскрытой строки — правилами из того же текста.
+      brief: vacancyBrief(description || cluster?.descriptionSummary?.trim() || ''),
     },
     meta: { requestId: request.id },
   };

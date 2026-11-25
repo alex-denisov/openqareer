@@ -24,6 +24,7 @@ vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getR
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
 vi.mock('../vacancies/list/selectionCount', () => ({ readSelectionTotal: api.readSelectionTotal }));
 
+import { clearEarlyReads } from '../../shell/earlyRead';
 import {
   addOwnRole,
   loadRoles,
@@ -39,6 +40,7 @@ const campaign = (roles: string[]) => ({
 });
 
 beforeEach(() => {
+  clearEarlyReads();
   vi.clearAllMocks();
   api.getRoleHypotheses.mockResolvedValue([]);
   api.getCheckedRoles.mockResolvedValue([]);
@@ -75,7 +77,7 @@ describe('loadRoles', () => {
       ],
     });
     const data = await loadRoles(new AbortController().signal);
-    await expect(loadSkillStrip(new AbortController().signal)).resolves.toEqual({
+    await expect(loadSkillStrip()).resolves.toEqual({
       gap: 2,
       role: 'Аналитик',
     });
@@ -97,7 +99,7 @@ describe('loadRoles', () => {
         }),
     );
     api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
-    const strip = loadSkillStrip(new AbortController().signal);
+    const strip = loadSkillStrip();
     await vi.waitFor(() => expect(api.getCurrentRoleSkillAssessment).toHaveBeenCalledTimes(3));
     // Все три запроса ушли до первого ответа; последний отвечает первым.
     [...pending].reverse().forEach((answer) => answer());
@@ -121,7 +123,7 @@ describe('loadRoles', () => {
       state: 'ready',
       roles: [{ roleTitle: 'Аналитик', skills: [{ name: 'SQL', inProfile: false }] }],
     });
-    await expect(loadSkillStrip(new AbortController().signal)).resolves.toBeNull();
+    await expect(loadSkillStrip()).resolves.toBeNull();
   });
 
   it('«Чего не хватает» без данных роли — первый навык из вакансий, которого нет в профиле (B645 s10)', async () => {
@@ -183,7 +185,7 @@ describe('loadRoles', () => {
     api.getRoleSkillDemand.mockRejectedValue(new Error('сбой'));
     const data = await loadRoles(new AbortController().signal);
     expect(data.rows).toHaveLength(1);
-    await expect(loadSkillStrip(new AbortController().signal)).resolves.toEqual({
+    await expect(loadSkillStrip()).resolves.toEqual({
       gap: 0,
       role: 'Аналитик',
     });

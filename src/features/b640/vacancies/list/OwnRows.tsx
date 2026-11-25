@@ -1,3 +1,4 @@
+import { isWorkTerm } from '../../../../../shared/vacancyWorkTerm';
 import { useEffect, useState } from 'react';
 import type { OwnVacancy, OwnVacancyDetail } from '../../../../../shared/b640OwnVacancy';
 import type { VacancyFitView } from '../../../../../shared/vacancyFit';
@@ -77,7 +78,7 @@ function OwnText({ text }: { text: string }) {
 function NoScore({ view }: { view: VacancyFitView }) {
   const reason = ownNoScoreReason(view);
   if (!reason) return null;
-  const others = view.requirements;
+  const others = view.requirements.filter((item) => !isWorkTerm(item));
   return (
     <div className={others.length > 0 ? 'v4-box v4-reqs-box' : 'v4-box'}>
       <p className="v4-req-row">{reason}</p>

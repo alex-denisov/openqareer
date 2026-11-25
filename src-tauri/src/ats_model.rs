@@ -54,6 +54,7 @@ pub(crate) const PRESS_REFUSALS: &[&str] = &[
 pub(crate) const FILL_RESULTS: &[&str] = &[
     "set",
     "option_missing",
+    "value_refused",
     "menu_missing",
     "field_missing",
     "file_missing",
@@ -208,6 +209,7 @@ const FIELD_KINDS: &[&str] = &[
     "tel",
     "url",
     "number",
+    "range",
     "date",
     "password",
     "select",

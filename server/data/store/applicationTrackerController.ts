@@ -1,3 +1,4 @@
+import { isStarred, markOfEvents } from '../applicationStar';
 import { interviewDayIsOver, stageShowsInterview } from '../../../shared/interviewDate';
 import type { DatabaseSync } from 'node:sqlite';
 import {
@@ -378,6 +379,7 @@ export class ApplicationTrackerController {
       ...application,
       vacancy: withSentChannel(application, sent),
       ...derived,
+      starred: isStarred(application.stage, markOfEvents(events)),
       offer: offer ?? null,
       archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
     };

@@ -21,9 +21,10 @@ export class SqliteResumeEditChoicesRepository {
   private readonly database: DatabaseSync;
   private readonly sealed: SealedText;
 
-  constructor(database: DatabaseSync, encryptionKey: Buffer) {
+  constructor(database: DatabaseSync, encryptionKey: Buffer | SealedText) {
     this.database = database;
-    this.sealed = new SealedText(encryptionKey);
+    this.sealed =
+      encryptionKey instanceof SealedText ? encryptionKey : new SealedText(encryptionKey);
     applySqliteBusyTimeout(database);
     database.exec(RESUME_EDIT_CHOICES_SCHEMA);
   }
