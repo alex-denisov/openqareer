@@ -5,6 +5,9 @@
   .b640 .cb-item > .cv-dl > .icon-btn { inline-size: var(--career-target-min); block-size: var(--career-target-min); }
   /* Д7: кнопка полосы анкеты стоит на вертикали карточки готовности. */
   .b640 .act-dock.qa-dock { padding-inline-start: calc(var(--career-space-4) + var(--career-border-width)); }
+  @media (min-width: 768px) {
+    .b640 .page:has(> .act-dock.qa-dock) { padding-block-end: 0; }
+  }
   /* Д6: действие и ссылка анкеты на 390 — в один ряд. */
   @media (max-width: 767px) {
     .b640 .lead > .actions.m-commit.m-commit.m-commit.qa-mob:has(> .row-act) {
