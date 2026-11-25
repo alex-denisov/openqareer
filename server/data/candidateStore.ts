@@ -705,6 +705,8 @@ export interface CandidateStore extends ConsultantHistoryMethods {
 
   getApplication(candidateId: string, applicationId: string): ApplicationView | null;
 
+  findSentApplication(candidateId: string, lookup: import('../domain/sentApplication').SentLookup): string | null;
+
   createApplication(
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: import('../../shared/vacancyApplication').VacancyApplicationSnapshot },

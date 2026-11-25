@@ -48,6 +48,8 @@ const CLIENT_DEVICE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
  * первым получил `401` (PRB-038). App слушает его и уводит на вход один раз.
  */
 export const SESSION_EXPIRED_EVENT = 'openqareer:session-expired';
+/** B801: сервер отказал, потому что отклик на эту вакансию уже отправлен; экран отклика открывает его. */
+export const ALREADY_APPLIED_EVENT = 'openqareer:already-applied';
 export const API_READ_TIMEOUT_MS = 20_000;
 export const API_MUTATION_TIMEOUT_MS = 30_000;
 
@@ -311,6 +313,14 @@ export async function throwApiError(response: Response): Promise<never> {
   }
   if (response.status === 401 && typeof window !== 'undefined') {
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+  const sentId = envelope.error?.details?.applicationId;
+  if (
+    envelope.error?.code === 'already_applied' &&
+    typeof sentId === 'string' &&
+    typeof window !== 'undefined'
+  ) {
+    window.dispatchEvent(new CustomEvent(ALREADY_APPLIED_EVENT, { detail: sentId }));
   }
   // A missing route means this client is newer than the server; the raw text is internal.
   const message =

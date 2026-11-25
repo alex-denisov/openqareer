@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type { ApplicationView } from '../../applications/applicationsApi';
-import { existingResponseId, openExistingFirst } from './existingResponse';
+import { createElement } from 'react';
+import { throwApiError } from '../../coach/apiClient';
+import { mount } from '../kit/testDom';
+import { existingResponseId, openExistingFirst, useSentElsewhere } from './existingResponse';
 
 const application = (stage: string) =>
   ({ id: 'r1', clusterId: 'v1', stage }) as unknown as ApplicationView;
@@ -30,5 +33,18 @@ describe('повторный отклик на ту же вакансию (B801)
     expect(moved).toHaveBeenCalledOnce();
     expect(window.history.state).toEqual(state);
     expect(window.location.pathname).toContain('r1');
+  });
+  it('сервер узнал дубль по объявлению: 409 открывает отправленный отклик', async () => {
+    window.history.replaceState({ journey: ['a'] }, '', '/app/responses/v2');
+    mount(
+      createElement(function Screen() {
+        useSentElsewhere('v2');
+        return null;
+      }),
+    );
+    const error = { code: 'already_applied', message: 'Отклик уже отправлен.', details: { applicationId: 'r9' } };
+    await throwApiError(new Response(JSON.stringify({ error }), { status: 409 })).catch(() => undefined);
+    expect(window.location.pathname).toContain('r9');
+    expect(window.history.state).toEqual({ journey: ['a'] });
   });
 });

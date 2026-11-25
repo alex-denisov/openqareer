@@ -30,6 +30,8 @@ import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
 import { defaultProcessProfile } from '../../vacancies/processProfileDefault';
 import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './errors';
+import type { SentLookup } from '../../domain/sentApplication';
+import { SentPostingIndex } from '../sentPostingIndex';
 import { InterviewStagePromotions } from '../interviewStagePromotion';
 
 export interface ReadApplicationOptions {
@@ -68,6 +70,7 @@ export class ApplicationTrackerController {
   private readonly skips: SqliteVacancySkipRepository;
   private readonly visits: SqliteCandidateVisitRepository;
   private readonly promotions: InterviewStagePromotions;
+  private readonly sentPostings: SentPostingIndex;
 
   constructor(
     database: DatabaseSync,
@@ -84,6 +87,11 @@ export class ApplicationTrackerController {
     this.skips = new SqliteVacancySkipRepository(database);
     this.visits = new SqliteCandidateVisitRepository(database);
     this.promotions = new InterviewStagePromotions(database);
+    this.sentPostings = new SentPostingIndex(database, sealedText, (candidateId, id) => {
+      const application = this.applications.get(candidateId, id);
+      if (!application?.clusterId) return application?.vacancy ?? null;
+      return withSentChannel(application, legacyApplications.get(candidateId, application.clusterId));
+    });
   }
 
   listLegacy(candidateId: string): VacancyApplication[] {
@@ -117,6 +125,11 @@ export class ApplicationTrackerController {
     return applications.map((application) =>
       this.toView(application, options, sentByCluster.get(application.clusterId ?? '') ?? null),
     );
+  }
+
+  /** B801: id отправленного отклика на эту же вакансию; весь список не читается. */
+  findSent(candidateId: string, lookup: SentLookup): string | null {
+    return this.sentPostings.find(candidateId, lookup);
   }
 
   get(candidateId: string, id: string, options: ReadApplicationOptions = {}): ApplicationView | null {

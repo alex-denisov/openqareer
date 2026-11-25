@@ -27,6 +27,7 @@ import {
   type CandidateAutomationQueueItem,
 } from '../candidate/sqliteCandidateAutomationRepository';
 import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStore';
+import { sentApplicationFor } from './sentApplicationGuard';
 import type { RouteDeps } from './deps';
 import { snapshotWithDescription } from './applicationVacancyText';
 import { createAutomationPausePort } from '../candidate/automationPausePort';
@@ -538,6 +539,8 @@ function ensureSavedApplication(
   cluster: VacancyCluster,
   platform: CandidateAutomationPlatform,
 ): string | null {
+  // B801: отклик на эту вакансию уже отправлен — второй в автоочередь не встаёт.
+  if (sentApplicationFor(deps, candidateId, cluster.id, cluster)) return null;
   if (applicationId) {
     const existing = deps.candidateStore.getApplication(candidateId, applicationId);
     return existing?.clusterId === cluster.id && existing.stage === 'saved' ? existing.id : null;
@@ -554,7 +557,6 @@ function ensureSavedApplication(
         source: platform === 'hh' ? 'hh.ru' : 'LinkedIn',
       }),
     });
-    // B801: по этому кластеру отклик уже отправлен — второй в автоочередь не встаёт.
     return application.stage === 'saved' ? application.id : null;
   } catch (error) {
     request.log.warn({ event: 'automation-application-create-failed', candidateId, failureType: failureType(error) }, 'candidate-automation-queue');

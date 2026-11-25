@@ -407,7 +407,9 @@ async function enqueueVacancy(
   }
   const application = savedApplication(deps, candidateId, vacancyId, facts, known);
   if (application.stage !== 'saved') {
-    return sendError(reply, request, 409, 'already_applied', 'Отклик уже отправлен.', false);
+    return sendError(reply, request, 409, 'already_applied', 'Отклик уже отправлен.', false, undefined, {
+      applicationId: application.id,
+    });
   }
   if (
     !known?.prepared &&

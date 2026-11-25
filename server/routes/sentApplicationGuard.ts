@@ -1,5 +1,4 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { findSentApplication } from '../domain/sentApplication';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { resolveRowVacancyCluster } from '../vacancies/poolVacancyCluster';
 import type { RouteDeps } from './deps';
@@ -13,8 +12,8 @@ export function sentApplicationFor(
   candidateId: string,
   vacancyId: string,
   cluster: VacancyCluster | undefined = resolveRowVacancyCluster(deps.multiSourceEngine, vacancyId),
-) {
-  return findSentApplication(deps.candidateStore.listApplications(candidateId), {
+) : string | null {
+  return deps.candidateStore.findSentApplication(candidateId, {
     clusterId: vacancyId,
     title: cluster?.canonicalTitle,
     urls: cluster ? [cluster.primaryUrl, ...cluster.sources.map((source) => source.sourceUrl)] : [],
@@ -32,7 +31,7 @@ export function refuseWhenSent(
   const sent = sentApplicationFor(deps, candidateId, vacancyId);
   if (!sent) return false;
   sendError(reply, request, 409, 'already_applied', 'Отклик уже отправлен.', false, undefined, {
-    applicationId: sent.id,
+    applicationId: sent,
   });
   return true;
 }
