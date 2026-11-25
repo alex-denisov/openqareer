@@ -6,6 +6,7 @@
  * остаются запасным путём, когда модели нет или её ответ не прошёл проверку.
  */
 import { z } from 'zod';
+import type { TrainingCase } from './trainingCase';
 import type { InterviewQuestionType } from './interviewSimulator';
 import type { QuotedAnswerEvaluation, QuotedCriterion } from './interviewAnswerReview';
 
@@ -30,7 +31,16 @@ export const JUDGE_CRITERIA: Readonly<
   },
 };
 
+/** B635: управленческий кейс и рабочая задача — те же ключи, другой смысл. */
+const CASE_JUDGE_CRITERIA: Readonly<Record<string, string>> = {
+  requirements: 'Цели, сроки и ограничения названы и учтены в решении.',
+  architecture: 'Решение по шагам: этапы, роли и ответственность.',
+  tradeoffs: 'Выбор объяснён: с чем сравнили и чем пожертвовали.',
+  operations: 'Как проверить результат: показатели, риски, запасной план.',
+};
+
 export interface JudgeInput {
+  readonly caseKind?: TrainingCase;
   readonly type: InterviewQuestionType;
   readonly question: string;
   readonly answer: string;
@@ -75,7 +85,11 @@ export function judgeJsonSchema(type: InterviewQuestionType) {
 }
 
 export function judgeInstructions(input: JudgeInput): string {
-  const criteria = Object.entries(JUDGE_CRITERIA[input.type])
+  const wanted =
+    input.type === 'system_design' && (input.caseKind ?? 'system') !== 'system'
+      ? CASE_JUDGE_CRITERIA
+      : JUDGE_CRITERIA[input.type];
+  const criteria = Object.entries(wanted)
     .map(([key, text]) => `- ${key}: ${text}`)
     .join('\n');
   const points = input.taskPoints?.length

@@ -1,6 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { DECISION_WORK_FORMATS, type CandidateDecisionProfile } from '../../shared/workPreferences';
+import {
+  DECISION_WORK_FORMATS,
+  workRightsSchema,
+  type CandidateDecisionProfile,
+} from '../../shared/workPreferences';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
 
@@ -11,6 +15,7 @@ const formatIds = DECISION_WORK_FORMATS.map((format) => format.id) as [string, .
 export const putDecisionProfileSchema = z
   .object({
     citizenship: z.array(z.string().max(80)).max(10).default([]),
+    workRights: workRightsSchema.optional(),
     searchLocations: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
     taxStatus: z.string().max(120).optional(),
     languages: z
@@ -56,9 +61,12 @@ const handlePut: Handler = async (deps, request, reply) => {
       },
     });
   }
+  // Экраны условий о праве на работу не знают: без поля прежние факты остаются (B788).
+  const workRights =
+    parsed.data.workRights ?? candidateStore.decisionProfileRepo.get(candidate.id)?.workRights;
   const data = candidateStore.decisionProfileRepo.put(
     candidate.id,
-    parsed.data as CandidateDecisionProfile,
+    { ...parsed.data, ...(workRights ? { workRights } : {}) } as CandidateDecisionProfile,
     new Date().toISOString(),
   );
   return { data, meta: { requestId: request.id } };
