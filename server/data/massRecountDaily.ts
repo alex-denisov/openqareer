@@ -8,7 +8,7 @@ export type MassRecountKind = 'requirements' | 'fit' | 'fit_refresh';
 
 export const MASS_REQUIREMENTS_DAY_LIMIT = 5000;
 export const MASS_FIT_DAY_LIMIT = 5000;
-export const MASS_FIT_REFRESH_DAY_LIMIT = 5000;
+export const MASS_FIT_REFRESH_DAY_LIMIT = 1000;
 
 export function ensureMassRecountTable(database: DatabaseSync): void {
   database.exec(`CREATE TABLE IF NOT EXISTS mass_recount_daily (

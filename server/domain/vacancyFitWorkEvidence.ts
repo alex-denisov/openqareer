@@ -84,6 +84,15 @@ const isWork = (fact: WorkFact) => /^profile:(?:experience|project|achievement):
 const label = (fact: WorkFact) =>
   (fact.statement.split(';')[0] ?? '').replace(/\s+[—–]\s+/u, ', ').slice(0, 80);
 
+/** A budget counts for a leading IT post with its dates: «budget» in a project says not whose it was. */
+function isDatedLeadership(fact: WorkFact): boolean {
+  if (!fact.id.startsWith('profile:experience:')) return false;
+  const [role = '', when = ''] = fact.statement.split(';');
+  const title = role.split(/\s+[—–]\s+/u)[0] ?? '';
+  const start = when.split(/\s+–\s+/u)[0]?.trim();
+  return isLeadingItTitle(title) && monthIndex(start) !== null;
+}
+
 /** The place or project that shows the first area, when every area the line asks is shown. */
 export function workShownRole(text: string, facts: readonly WorkFact[]): string | undefined {
   if (text.length > MAX_CHARS || /\d/u.test(text)) return undefined;
@@ -97,7 +106,13 @@ export function workShownRole(text: string, facts: readonly WorkFact[]): string 
   const work = facts
     .filter(isWork)
     .map((fact) => ({ fact, text: fact.statement.replace(SKILLS_TAIL, '') }));
-  const shown = [...asked].map((item) => work.find((entry) => item.shown.test(entry.text))?.fact);
+  const shown = [...asked].map(
+    (item) =>
+      work.find(
+        (entry) =>
+          item.shown.test(entry.text) && (item.name !== 'budget' || isDatedLeadership(entry.fact)),
+      )?.fact,
+  );
   return shown.every(Boolean) ? label(shown[0]!) : undefined;
 }
 

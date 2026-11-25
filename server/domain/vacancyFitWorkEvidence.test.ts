@@ -58,6 +58,12 @@ describe('B794: experience the model could not add up', () => {
       ),
     ).toBe('IT Lead, Университет'));
   it.each([
+    { id: 'profile:project:0', statement: 'Портал — IT Lead; Dec 2012 – Jul 2016; IT budget $4M' },
+    { id: 'profile:experience:0', statement: 'IT Lead — Университет; IT budget $4M' },
+    { id: 'profile:experience:0', statement: 'Инженер — Завод; Dec 2012 – Jul 2016; IT budget' },
+  ])('takes no budget from «$statement»: no dated leading post', (fact) =>
+    expect(workShownRole('Формирование ИТ-бюджета', [fact])).toBeUndefined());
+  it.each([
     'Опыт внедрения 1С и ведения бюджета',
     'Управление бюджетом в ритейле',
     'Управление облаком',

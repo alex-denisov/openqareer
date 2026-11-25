@@ -127,6 +127,27 @@ describe('B562: a stored result under an older profile key is computed again', (
     expect(enqueue).toHaveBeenCalledTimes(STALE_REFIT_LIMIT);
     expect(enqueue.mock.calls.map(([input]) => input.vacancyId)).not.toContain('fresh');
   });
+
+  it("stops at the day's ceiling of recounts", async () => {
+    const enqueue = vi.fn();
+    const base = deps({ fresh: 80 });
+    const stale = ['c0', 'c1', 'c2'];
+    let slots = 2;
+    const runtime = {
+      ...(base.vacancyMechanics as object),
+      cachedVacancyIds: () => new Set(stale),
+      takeFitRefreshSlot: () => slots-- > 0,
+      enqueue,
+    };
+    withVacancyFitOrder(
+      { ...base, vacancyMechanics: runtime } as unknown as RouteDeps,
+      'order-capped',
+      { by: 'fit', dir: 'desc' },
+    )(stale.map(item));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(enqueue).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('B422: компании «Хочу» в порядке подборки', () => {
