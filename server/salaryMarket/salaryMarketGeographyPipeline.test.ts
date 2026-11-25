@@ -51,6 +51,25 @@ function add(
 }
 
 describe('prepared salary geographic cohorts', () => {
+  it('B788: keeps every explicit country apart and publishes it from 20 ranges', () => {
+    const db = database();
+    add(db, 'de', 20, 'Berlin, Germany', false, 100000, 'Go');
+    add(db, 'fr', 19, 'France', false, 50000, 'Go');
+    add(db, 'city', 20, 'Berlin', true, 10000, 'Go');
+    const [snapshot] = computeSalaryMarketSnapshots(db, now);
+    expect(
+      snapshot!.countrySlices!.map(({ country, grade, groups }) => [
+        country,
+        grade,
+        groups[0]!.sampleSize,
+        groups[0]!.lower.p50,
+      ]),
+    ).toEqual([
+      ['DE', 'all', 20, 100000],
+      ['DE', 'senior', 20, 100000],
+    ]);
+  });
+
   it('keeps independent denominators, Top15, grade slices and closed-range percentiles', () => {
     const db = database();
     add(db, 'de-senior', 5, 'Berlin, Germany', true, 100000, 'TypeScript');

@@ -402,6 +402,8 @@ test.describe('B651: «Проверка записей» (p06)', () => {
       // Д13: «Дальше» видно на первом экране, полоса у низа окна.
       const dock = screen.locator('.act-dock');
       const box = await dock.boundingBox();
+      const next = await dock.getByRole('link', { name: 'Дальше' }).boundingBox();
+      expect(next?.x).toBe(box?.x);
       expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(page.viewportSize()?.height);
       await expect(dock.getByRole('link', { name: 'Дальше' })).toBeInViewport();
     }

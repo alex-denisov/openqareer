@@ -2335,6 +2335,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .filter((vacancy): vacancy is UnifiedVacancy => vacancy !== undefined);
   }
 
+  /** Те из `ids` площадки, что живы и всё ещё без текста; порядок — как у `ids` (B761). */
+  reloadVacanciesWithoutFullText(sourceId: string, ids: readonly string[]): UnifiedVacancy[] {
+    const statement = this.database.prepare(
+      `SELECT payload FROM vacancy_pool
+        WHERE id = ? AND source_id = ? AND expired_at IS NULL
+          AND length(trim(coalesce(json_extract(payload, '$.fullDescription'), ''))) = 0`,
+    );
+    return ids
+      .map((id) => statement.get(id, sourceId) as { payload: string } | undefined)
+      .map((row) => (row ? parseVacancy(row.payload) : undefined))
+      .filter((vacancy): vacancy is UnifiedVacancy => vacancy !== undefined);
+  }
+
   /**
    * Один шаг обогащения вакансий с описанием, но без ключевых навыков (B307).
    * Идёт пачками по `rowid`, не перегружая память и уступая цикл событий.
