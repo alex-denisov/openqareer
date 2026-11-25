@@ -302,6 +302,16 @@ test.describe('B651: «Уточнение профиля» (p09)', () => {
     );
   });
 
+  test('390: кнопки закреплены над навигацией, все три видны', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openCabinet(page, '/app/profile/question');
+    const actions = node(page, 'p09').locator('.actions');
+    await expect(actions).toHaveCSS('position', 'fixed');
+    for (const name of ['Ответить', 'Не сейчас', 'Не хочу указывать']) {
+      await expect(actions.getByText(name)).toBeInViewport();
+    }
+  });
+
   test('«Не сейчас» возвращает в профиль', async ({ page }) => {
     await openCabinet(page, '/app/profile/question');
     await page.getByRole('link', { name: 'Не сейчас' }).click();

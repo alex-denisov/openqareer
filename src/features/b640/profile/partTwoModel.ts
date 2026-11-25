@@ -11,7 +11,8 @@ export interface ProfileQuestion {
 
 /**
  * Один вопрос о профиле: размер команды у первого места работы, где он не
- * указан и кандидат не отказался его указывать. Отдельного списка вопросов на сервере нет — вопрос выводим из профиля.
+ * указан и кандидат не отказался его указывать. Отдельного списка вопросов
+ * на сервере нет — вопрос выводим из профиля.
  */
 export function nextQuestion(draft: ResumeDraft): ProfileQuestion | null {
   const entry = draft.experience.find(unanswered);
