@@ -16,6 +16,7 @@ import {
   DEFAULT_CANDIDATE_STATUS,
   type CandidateStatusId,
 } from '../../../../shared/candidateStatus';
+import { dropSectionCache, SECTION_CACHE_KEYS } from '../../shell/sectionCache';
 import { getStatus } from '../profile/statusChoice';
 import { readSelectionTotal } from '../vacancies/list/selectionCount';
 import { buildRoleRows, type RoleRow } from './rolesModel';
@@ -129,6 +130,14 @@ export async function readSkillGap(
   return ready ? { gap: gapOf(demand, ready), role: ready.title } : { gap: 0, role: null };
 }
 
+/** B792: роль поиска читается быстро и отдельно — полоса не ждёт расчёта ролей. */
+export function loadCampaign(signal: AbortSignal): Promise<CampaignMetaView> {
+  return getCandidateCampaign(signal);
+}
+
+const forgetRoles = () =>
+  dropSectionCache(SECTION_CACHE_KEYS.careerCampaign, SECTION_CACHE_KEYS.careerRoles);
+
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
     getRoleHypotheses(signal, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
@@ -211,12 +220,14 @@ export async function saveSearchRoles(
   campaign: CampaignMetaView,
 ): Promise<readonly string[]> {
   const saved = await updateCampaignRoles(titles, campaign);
+  forgetRoles();
   return saved.roles.value;
 }
 
 /** «Назвать свою роль»: роль становится ролью поиска. */
-export function addOwnRole(title: string): Promise<void> {
-  return changeCareerRole('add', title);
+export async function addOwnRole(title: string): Promise<void> {
+  await changeCareerRole('add', title);
+  forgetRoles();
 }
 
 /** Статус кандидата для выбора экрана; не прочитался — экран как при «Ищу работу». */
