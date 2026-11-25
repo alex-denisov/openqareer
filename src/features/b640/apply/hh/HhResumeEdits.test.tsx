@@ -114,8 +114,11 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     click(buttons('Применить все на hh.ru')[0]!);
     await settle();
     expect(desktop.applyHhResumeEditInSession).not.toHaveBeenCalled();
-    expect(document.body.textContent).toContain('изменит: Должность, Опыт по местам, Навыки, О себе');
-    click(buttons('Изменить')[0]!);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('h2')!.textContent).toBe('Применить все на hh.ru?');
+    expect(dialog.querySelector('.hh-ok-d')!.textContent).toMatch(/^Резюме «.+» изменится на hh\.ru для всех работодателей\.$/);
+    expect([...dialog.querySelectorAll('.pf-df button')].map((item) => item.textContent?.trim())).toEqual(['Применить', 'Отмена']);
+    click(document.querySelector('.pf-df button.is-primary')!);
     await settle();
     await settle();
     await settle();
@@ -128,7 +131,7 @@ describe('B678, срез 3: «Применить» на hh.ru', () => {
     render();
     click(buttons('Применить все на hh.ru')[0]!);
     await settle();
-    click(buttons('Изменить')[0]!);
+    click(document.querySelector('.pf-df button.is-primary')!);
     await settle();
     expect(desktop.applyHhResumeEditInSession).toHaveBeenCalledTimes(1);
     expect(view!.container.querySelector('.hh2-err')?.textContent).toContain('не робот');

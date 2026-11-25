@@ -98,6 +98,15 @@ function SortMenu({ sort, onPick }: SortMenuProps) {
   );
 }
 
+function OwnResponseLink() {
+  return (
+    <Link className="row-act" to={ownPanelPath()}>
+      <Icon name="plus" />
+      Откликнулся сам — добавить
+    </Link>
+  );
+}
+
 function EmptyResponses({ nodeCode }: { readonly nodeCode: string }) {
   return (
     <div className="page" data-b640-node={nodeCode} data-b640-section="responses">
@@ -112,6 +121,7 @@ function EmptyResponses({ nodeCode }: { readonly nodeCode: string }) {
               Подобрать вакансии
             </Link>
           </div>
+          <OwnResponseLink />
         </div>
       </section>
     </div>
@@ -374,10 +384,7 @@ function ListFoot({ view, missing, onMore }: FootProps) {
         </div>
       ) : null}
       <div className="vl-foot">
-        <Link className="row-act" to={ownPanelPath()}>
-          <Icon name="plus" />
-          Откликнулся сам — добавить
-        </Link>
+        <OwnResponseLink />
       </div>
     </>
   );

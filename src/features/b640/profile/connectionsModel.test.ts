@@ -45,7 +45,7 @@ describe('b640 profile: связи (p11)', () => {
     });
     expect(connectionsHeading(512, 21).short).toBe('Знакомые в 21 компании');
     expect(connectionsHeading(512, 0).full).toBe('512 связей');
-    expect(connectionsHeading(0, 0).full).toBe('Связей пока нет');
+    expect(connectionsHeading(0, 0).full).toBe('Связи ещё не подключены');
   });
 
   it('повторная порция не дублирует людей', () => {
