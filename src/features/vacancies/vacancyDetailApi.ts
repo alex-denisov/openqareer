@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, readData } from '../coach/apiClient';
+import type { VacancyBrief } from '../../../shared/vacancyBrief';
 import { decodeVacancyText } from './vacancyText';
 
 export interface VacancyDetailText {
@@ -14,6 +15,8 @@ export interface VacancyDetailText {
   readonly pending?: boolean;
   /** 02.11: the employer opened the text only to some applicants on hh. */
   readonly textHidden?: boolean;
+  /** B791: задачи и требования строками текста. */
+  readonly brief?: VacancyBrief;
 }
 
 /** Full vacancy text for «Подробнее»; the matched list carries none (B266). */

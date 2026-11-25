@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { act } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { click, mount, press, type Mounted } from './testDom';
 import { InfoTip } from './InfoTip';
@@ -30,6 +31,25 @@ describe('InfoTip', () => {
     expect(tip.classList.contains('kit-pinned')).toBe(true);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     click(button);
+    expect(tip.classList.contains('kit-pinned')).toBe(false);
+  });
+  it('снимается и без всплытия нажатия, и по уходу фокуса', () => {
+    view = mount(
+      <>
+        <InfoTip label="Что это" text="Пояснение" />
+        <button type="button" id="row" onClick={(event) => event.stopPropagation()}>
+          Строка
+        </button>
+      </>,
+    );
+    const { tip, button } = parts(view);
+    const row = view.container.querySelector<HTMLButtonElement>('#row')!;
+    row.addEventListener('click', (event) => event.stopPropagation());
+    click(button);
+    click(row);
+    expect(tip.classList.contains('kit-pinned')).toBe(false);
+    click(button);
+    act(() => row.focus());
     expect(tip.classList.contains('kit-pinned')).toBe(false);
   });
   it('Esc и нажатие мимо закрывают', () => {

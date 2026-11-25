@@ -5,6 +5,7 @@ import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resume
 import { isImportedMemoryId } from './resumeImport';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { impliedSoftRole, isCompensationLine, isSoftRequirementText } from './vacancyRequirementKind';
+import { leadershipMet, workShownRole } from './vacancyFitWorkEvidence';
 import { vacancyDutyIds } from './vacancyRequirementDuty';
 import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
@@ -207,19 +208,27 @@ function conditionBlocks(requirements: readonly VacancyRequirement[], assessment
 }
 
 /** Weights and implied soft skills of one evaluation (03.11); see the rules in the body. */
-function weighting(requirements: readonly VacancyRequirement[], skills: readonly VacancyFitRequirementAssessment[], facts: readonly VacancyFitFact[], canScore: boolean) {
+function weighting(requirements: readonly VacancyRequirement[], skills: readonly VacancyFitRequirementAssessment[], facts: readonly VacancyFitFact[], canScore: boolean, now: string) {
   // 01.11: met 1 whether stated or checked by a skill check (`checked` is a label), partial 0.5, else 0.
   // 03.11: weighted mean; a soft trait weighs 0.25, a hard or mandatory requirement 1.5 (owner decision).
   // A soft trait that experience implies counts as met unless a quoted fact contradicts it; the
   // stored assessment is left as it was, so reading an old result needs no model call.
   const byId = new Map(requirements.map((item) => [item.id, item]));
   const roleFacts = facts.map((fact) => ({ id: fact.id, statement: fact.statement }));
-  const implied = skills
-    .filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && isSoftRequirementText(byId.get(item.requirementId)?.text ?? ''))
+  // B794: partial work evidence and summed leading years settle a line the model could not add up.
+  const shown = skills.filter((item) => item.status === 'partial').flatMap((item) => {
+    const text = byId.get(item.requirementId)?.text ?? '';
+    const role = leadershipMet(text, roleFacts, new Date(now)) ?? workShownRole(text, roleFacts);
+    return role ? [{ requirementId: item.requirementId, role }] : [];
+  });
+  const shownIds = new Set(shown.map((item) => item.requirementId));
+  const soft = skills
+    .filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && !shownIds.has(item.requirementId) && isSoftRequirementText(byId.get(item.requirementId)?.text ?? ''))
     .flatMap((item) => {
       const role = impliedSoftRole(roleFacts, byId.get(item.requirementId)?.text ?? '');
       return role ? [{ requirementId: item.requirementId, role }] : [];
     });
+  const implied = [...shown, ...soft];
   const impliedIds = new Set(implied.map((item) => item.requirementId));
   const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
   const weight = (item: VacancyFitRequirementAssessment) => {
@@ -270,7 +279,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const required = new Set(requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor)).map((item) => item.id));
   const requiredSkills = skills.filter((item) => required.has(item.requirementId));
   const canScore = reason === 'assessed';
-  const { implied, impliedIds, percent } = weighting(requirements, skills, facts, canScore);
+  const { implied, impliedIds, percent } = weighting(requirements, skills, facts, canScore, now);
   const placed = placeCoveredIds(input, requirements, assessments);
   // B654 23.11: a requirement met by implication or by place is met only — never also partial or unknown.
   const met = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) || placed.has(item.requirementId);

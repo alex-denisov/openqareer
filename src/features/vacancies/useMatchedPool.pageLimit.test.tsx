@@ -58,3 +58,47 @@ describe('B645 s07: подборка не читает весь список д�
     expect(pool.complete).toBe(true);
   });
 });
+
+describe('B792: роли, которые ставит сам экран, не опустошают список', () => {
+  afterEach(() => vi.clearAllMocks());
+
+  async function narrowed(keepRows: boolean, answer: Promise<MatchedVacancyPage>) {
+    vi.mocked(getMatchedVacancyPage).mockResolvedValueOnce(pageAt(0)).mockReturnValueOnce(answer);
+    let pool!: MatchedPool;
+    function Reader() {
+      pool = useMatchedPool(undefined, { pageLimit: 1 });
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Reader />));
+    await act(async () => undefined);
+    await act(async () =>
+      pool.setFilters?.({ roles: ['CTO'], regions: [], remoteOnly: false }, keepRows),
+    );
+    return { root, read: () => pool };
+  }
+
+  it('строки остаются до ответа и заменяются разом; выбор кандидата — как прежде', async () => {
+    let done!: (page: MatchedVacancyPage) => void;
+    const answer = new Promise<MatchedVacancyPage>((resolve) => (done = resolve));
+    const own = await narrowed(true, answer);
+    expect(own.read()).toMatchObject({ loading: false, reading: true });
+    expect(own.read().matched).toHaveLength(20);
+    await act(async () => done({ ...pageAt(100), total: 7 }));
+    expect(own.read().matched[0]?.cluster.id).toBe('v-100');
+    expect(own.read().total).toBe(7);
+    await act(async () => own.root.unmount());
+
+    const picked = await narrowed(false, new Promise(() => undefined));
+    expect(picked.read()).toMatchObject({ loading: true, matched: [] });
+    await act(async () => picked.root.unmount());
+  });
+
+  it('сужение не прочиталось — ошибка, а не молчаливый прежний список', async () => {
+    const answer = Promise.reject(new Error('сбой'));
+    answer.catch(() => undefined);
+    const own = await narrowed(true, answer);
+    expect(own.read().failed).toBe(true);
+    await act(async () => own.root.unmount());
+  });
+});

@@ -64,7 +64,15 @@ const toMessage = (row: Row): StoredContactMessage => ({
 export class SqliteContactMessageRepository {
   private readonly database: DatabaseSync;
 
-  constructor(options: { databasePath: string }) {
+  private readonly ownsDatabase: boolean;
+
+  constructor(options: { databasePath: string } | DatabaseSync) {
+    this.ownsDatabase = !(options instanceof DatabaseSync);
+    if (options instanceof DatabaseSync) {
+      this.database = options;
+      this.database.exec(CANDIDATE_CONTACT_MESSAGES_TABLE);
+      return;
+    }
     if (options.databasePath !== ':memory:') {
       mkdirSync(dirname(options.databasePath), { recursive: true, mode: 0o700 });
     }
@@ -117,6 +125,14 @@ export class SqliteContactMessageRepository {
     return rows.map(toMessage);
   }
 
+  /** B796: ещё не отправленные — их текст пересобирается после исправления факта. */
+  listUnsent(candidateId: string): StoredContactMessage[] {
+    const rows = this.database
+      .prepare(`SELECT * FROM candidate_contact_messages WHERE candidate_id = ? AND state != 'sent'`)
+      .all(candidateId) as unknown as Row[];
+    return rows.map(toMessage);
+  }
+
   /** Отправленные по вакансии, свежие сверху: «Что было» в отклике. */
   listSentForVacancy(candidateId: string, vacancyId: string, limit: number): StoredContactMessage[] {
     const rows = this.database
@@ -137,6 +153,16 @@ export class SqliteContactMessageRepository {
          WHERE candidate_id = ? AND id = ? AND state != 'sent'`,
       )
       .run(text, candidateId, id).changes === 1;
+  }
+
+  /** B796: отмена правки факта возвращает неотправленному тексту прежний вид и одобрение. */
+  restoreText(candidateId: string, id: string, was: Pick<StoredContactMessage, 'text' | 'state' | 'approvedAt'>): void {
+    this.database
+      .prepare(
+        `UPDATE candidate_contact_messages SET text = ?, state = ?, approved_at = ?
+         WHERE candidate_id = ? AND id = ? AND state != 'sent'`,
+      )
+      .run(was.text, was.state, was.approvedAt, candidateId, id);
   }
 
   approve(candidateId: string, id: string, now: string): boolean {
@@ -165,6 +191,6 @@ export class SqliteContactMessageRepository {
   }
 
   close(): void {
-    this.database.close();
+    if (this.ownsDatabase) this.database.close();
   }
 }
