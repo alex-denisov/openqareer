@@ -4,6 +4,7 @@ import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { vacancyFitMark } from '../../../vacancies/vacancyFitModel';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
+import { vacancyFitTone } from '../../../../../shared/vacancyFitPercent';
 import { fitTierWord, moneyView, rowDate, rowFormat, rowGeo, type MoneyCurrency } from '../format';
 import { appliedOn, isSaved } from '../vacancyLinks';
 import { NO_COMPANY, companyNodePath } from '../companyPath';
@@ -42,7 +43,7 @@ export function FitCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv }
   const mark = vacancyFitMark(item.explanation.fitView);
   if (mark.kind === 'number') {
     return (
-      <span className={`fit vt-fit is-${mark.tier} num`}>
+      <span className={`fit vt-fit ${vacancyFitTone(mark.percent)} num`}>
         {mark.percent}
         <small>%</small>
         <span className="vh"> совпадение, {fitTierWord(mark.tier)}</span>

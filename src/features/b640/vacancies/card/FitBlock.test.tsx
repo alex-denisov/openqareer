@@ -71,7 +71,7 @@ describe('FitBlock', () => {
     const html = render('ready', view);
     expect(html).toContain('Совпадение 75 %');
     expect(html).toContain('role="img" aria-label="Совпадение 75 %"');
-    expect(html).toContain('class="is-good"');
+    expect(html).toContain('class="is-mid"');
     expect(html).toContain('aria-label="Почему 75 %"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('role="dialog"');

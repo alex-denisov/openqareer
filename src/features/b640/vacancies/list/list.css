@@ -3,6 +3,8 @@
    Столбцы не убираем из таблицы, а сводим к нулевой ширине: раскрытая строка занимает
    восемь колонок, и без этого лишние колонки отняли бы место у роли. */
 @layer b640.sections {
+  .b640 .vt-tone.is-hi { color: var(--career-success); }
+  .b640 .vt-tone.is-mid { color: var(--career-warning); }
   @media (min-width: 768px) {
     @container main (max-width: 1091px) {
       .b640 .vt-th.vt-format,

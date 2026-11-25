@@ -1,4 +1,6 @@
 @layer b640.sections {
+  .b640 .vt-tone.is-hi { color: var(--career-success); }
+  .b640 .vt-tone.is-mid { color: var(--career-warning); }
   .b640 .v4-fd-l li.is-unk > .ico,
   .b640 .v4-fd-l li.is-no > .ico { color: var(--career-text-soft); }
   .b640 .v4-fd-l li.is-no .v4-fd-ev { color: var(--career-text-dim); }

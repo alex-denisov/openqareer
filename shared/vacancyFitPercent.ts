@@ -30,6 +30,11 @@ export function vacancyFitTier(percent: number): VacancyFitTier {
   return 'low';
 }
 
+/** B790 (владелец 25.11): от 80 % — зелёный, ниже — жёлтый. */
+export function vacancyFitTone(percent: number): 'is-hi' | 'is-mid' {
+  return vacancyFitTier(percent) === 'hi' ? 'is-hi' : 'is-mid';
+}
+
 /**
  * States whose percent is still coming: the row says «считаем» (28.10 mockup). A failed count is
  * one of them (29.10): the shown page re-queues it, and the mockup has no «failed» state.

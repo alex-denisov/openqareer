@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { VacancyFitResult, VacancyFitView } from './vacancyFit';
 import {
   compareFitPercent,
+  vacancyFitTone,
   vacancyFitPercent,
   vacancyFitStage,
   vacancyFitTier,
@@ -96,5 +97,17 @@ describe('compareFitPercent: the CPO order of 02.11', () => {
     // 29.10: a failed count is re-queued on show and reads «считаем».
     expect(vacancyFitStage({ state: 'failed', requirements: [] })).toBe('counting');
     expect(vacancyFitStage({ state: 'no_requirements', requirements: [] })).toBe('none');
+  });
+});
+
+describe('цвет процента (B790)', () => {
+  it('от 80 — зелёный, ниже — жёлтый', () => {
+    expect([100, 80, 79, 40, 0].map(vacancyFitTone)).toEqual([
+      'is-hi',
+      'is-hi',
+      'is-mid',
+      'is-mid',
+      'is-mid',
+    ]);
   });
 });
