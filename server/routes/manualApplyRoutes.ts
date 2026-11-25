@@ -13,6 +13,7 @@ import {
   SqliteManualApplyRepository,
   type StoredManualApply,
 } from '../candidate/sqliteManualApplyRepository';
+import { candidateFlagLookup } from '../candidate/hhRaiseQueue';
 import { SqliteQuestionnaireRepository } from '../candidate/sqliteQuestionnaireRepository';
 import { knownAnswers, skillYearAnswers, standardQuestions } from '../domain/manualApplyQuestions';
 import {
@@ -56,6 +57,8 @@ type Bound = ResumeEditDeps & {
   readonly forms: SqliteQuestionnaireRepository;
   readonly writeLetter: QueuedLetterWriter;
   readonly inFlight: Map<string, Promise<void>>;
+  /** B649: фоновая задача кандидата без флага нового кабинета не берёт. */
+  readonly isFlagged: (candidateId: string) => boolean;
 };
 /** Фону нужен только журнал запроса. */
 type LogContext = Pick<FastifyRequest, 'log'>;
@@ -223,7 +226,8 @@ function startPreparing(
 /** Фоновый такт: сбор, прерванный перезапуском, продолжается без участия кандидата. */
 export function resumeStalled(deps: Bound, request: LogContext, now: number): void {
   const before = new Date(now - STALE_MS).toISOString();
-  for (const { candidateId, item } of deps.queue.listStale(before, MAX_ATTEMPTS, TICK_LIMIT)) {
+  const stale = deps.queue.listStale(before, MAX_ATTEMPTS, TICK_LIMIT, deps.isFlagged);
+  for (const { candidateId, item } of stale) {
     if (deps.inFlight.has(flightKey(candidateId, item.vacancyId))) continue;
     if (item.attempts >= MAX_ATTEMPTS) giveUp(deps, candidateId, item.vacancyId);
     else startPreparing(deps, request, candidateId, item);
@@ -458,6 +462,7 @@ export function registerManualApplyRoutes(
     forms: new SqliteQuestionnaireRepository(database, key),
     writeLetter,
     inFlight: new Map(),
+    isFlagged: (candidateId) => candidateFlagLookup(database, deps.config)(candidateId),
   };
   const write = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
   startTick(app, bound);

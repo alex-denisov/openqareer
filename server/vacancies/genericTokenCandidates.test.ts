@@ -50,9 +50,12 @@ const FILLERS = Array.from({ length: 6 }, (_, index) =>
   vacancy('alpha', `f${index}`, `Senior Manager Role${index}x`, `Filler${index}x Group`),
 );
 
-async function build(pair: readonly [UnifiedVacancy, UnifiedVacancy]) {
+async function build(
+  pair: readonly [UnifiedVacancy, UnifiedVacancy],
+  extra: readonly UnifiedVacancy[] = [],
+) {
   const readings = new Map<string, UnifiedVacancy[]>([
-    ['alpha', [...FILLERS]],
+    ['alpha', [...FILLERS, ...extra]],
     ['beta', []],
   ]);
   const pool = new SqliteVacancyPoolStore({ databasePath: ':memory:', bucketSizeCap: 3 });
@@ -63,10 +66,11 @@ async function build(pair: readonly [UnifiedVacancy, UnifiedVacancy]) {
     recluster: { mode: 'keyed', batchSize: 10 },
   });
   await engine.syncSource('alpha');
-  readings.set('alpha', [...FILLERS, pair[0]]);
+  readings.set('alpha', [...FILLERS, ...extra, pair[0]]);
   await engine.syncSource('alpha');
   const database = (pool as unknown as { database: DatabaseSync }).database;
   const tokenParams: unknown[][] = [];
+  const queries: string[] = [];
   const prepare = database.prepare.bind(database);
   database.prepare = ((sql: string) => {
     const statement = prepare(sql);
@@ -74,6 +78,7 @@ async function build(pair: readonly [UnifiedVacancy, UnifiedVacancy]) {
     const all = statement.all.bind(statement);
     statement.all = ((...params: Parameters<typeof all>) => {
       tokenParams.push(params);
+      queries.push(sql);
       return all(...params);
     }) as typeof statement.all;
     return statement;
@@ -81,7 +86,7 @@ async function build(pair: readonly [UnifiedVacancy, UnifiedVacancy]) {
   readings.set('beta', [pair[1]]);
   await engine.syncSource('beta');
   const shared = pool.loadClusters().find((cluster) => cluster.vacanciesCount === 2);
-  return { pool, tokenParams, shared };
+  return { pool, tokenParams, queries, shared };
 }
 
 describe('company+title neighbours skip tokens over the bucket cap (B761)', () => {
@@ -105,6 +110,33 @@ describe('company+title neighbours skip tokens over the bucket cap (B761)', () =
       vacancy('beta', 'p2', 'Senior Manager', 'Acme Group'),
     ]);
     expect(shared?.sources.map((s) => s.sourceId).sort()).toEqual(['alpha', 'beta']);
+    pool.close();
+  });
+
+  it('reads two comparable buckets in sequence instead of probing every cluster (B761)', async () => {
+    const { pool, queries, shared } = await build([
+      vacancy('alpha', 'p3', 'Senior Manager Payroll', 'Acme Group'),
+      vacancy('beta', 'p3', 'Senior Manager Payroll', 'Acme Group'),
+    ]);
+    expect(shared?.vacanciesCount).toBe(2);
+    expect(queries.length).toBeGreaterThan(0);
+    for (const sql of queries) expect(sql).not.toContain('EXISTS');
+    pool.close();
+  });
+
+  it('keeps the point probe when one side is far larger than the other (B761)', async () => {
+    const many = Array.from({ length: 20 }, (_, index) =>
+      vacancy('alpha', `m${index}`, 'Senior Manager', `Other${index}y Group`),
+    );
+    const { pool, queries, shared } = await build(
+      [
+        vacancy('alpha', 'p4', 'Senior Manager', 'Acme Group'),
+        vacancy('beta', 'p4', 'Senior Manager', 'Acme Group'),
+      ],
+      many,
+    );
+    expect(shared?.vacanciesCount).toBe(2);
+    expect(queries.some((sql) => sql.includes('EXISTS'))).toBe(true);
     pool.close();
   });
 });

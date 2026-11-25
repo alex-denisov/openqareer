@@ -10,7 +10,7 @@ import {
   parseHttpUrl,
   type ApplyAddress,
 } from './applyAddress';
-import { isSameVacancy } from './sameVacancy';
+import { isSameVacancy, isShownPlace } from './sameVacancy';
 import { atsInText, emailInText, mailtoOf, telegramInText } from './textTarget';
 
 const JOB_ID = /^\d{1,20}$/u;
@@ -72,7 +72,12 @@ function clusterAddress(
 ): ApplyAddress | null {
   const same = members
     .filter((member) => member.id !== vacancy.id && isSameVacancy(vacancy, member))
-    .flatMap((member) => recordAddress(member) ?? []);
+    .flatMap((member) => {
+      const address = recordAddress(member);
+      // hh.ru берётся только с подтверждённым местом: «место не указано» его не подтверждает.
+      const other = address?.channel === 'hh' && !isShownPlace(vacancy, member);
+      return address && !other ? [address] : [];
+    });
   const hh = same.find(({ channel }) => channel === 'hh');
   if (hh) return hh;
   const employers = new Map(

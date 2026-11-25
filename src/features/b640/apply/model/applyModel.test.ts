@@ -133,11 +133,19 @@ describe('B657: шапка отклика', () => {
     });
   });
 
-  it('B678: снимок hh.ru не меняется на другой источник hh.ru', () => {
+  it('B787: неотправленный снимок чужой записи hh.ru уступает площадке карточки', () => {
     const saved = application({ stage: 'saved', appliedAt: null });
     expect(buildHead({ application: saved, cluster: twoSources }).url).toBe(
-      'https://hh.ru/vacancy/1',
+      'https://hh.ru/vacancy/139180469',
     );
+    const own = { ...twoSources, sources: twoSources.sources.slice(0, 1) };
+    expect(buildHead({ application: saved, cluster: own })).toMatchObject({
+      source: 'Getmatch',
+      url: 'https://getmatch.ru/vacancies/7',
+    });
+    expect(buildHead({ application: saved, cluster: null }).url).toBe('https://hh.ru/vacancy/1');
+    const sent = application({ stage: 'applied' });
+    expect(buildHead({ application: sent, cluster: own }).url).toBe('https://hh.ru/vacancy/1');
   });
 
   it('скрытая компания не подставляется', () => {
