@@ -289,6 +289,33 @@ describe('questionnaire routes with the B640 flag', () => {
     expect((await call(app, 'GET', url('v2'), other)).json().data.answers).toEqual([]);
   });
 
+  it('B788: remembers the answer about the right to work and fills the next form', async () => {
+    const { app, forms, sessions, candidateStore } = await setup();
+    const candidateId = sessions.get(flagged)!.candidate!.id;
+    const ask = (vacancyId: string, text: string) =>
+      forms.saveQuestions(candidateId, vacancyId, {
+        questions: [{ id: 'q1', text, required: true, kind: 'choice', options: ['Yes', 'No'] }],
+        formUrl: null,
+        readAt: new Date().toISOString(),
+      });
+    ask('v1', 'Are you legally authorized to work in the United States?');
+    ask('v2', 'Will you now or in the future require visa sponsorship to work in the US?');
+    const before = (await call(app, 'GET', url('v2'), flagged)).json().data;
+    expect(before.answers).toEqual([]);
+    const answers = [{ questionId: 'q1', text: 'No' }];
+    await call(app, 'PUT', url('v1', '/answers'), flagged, { answers });
+    const next = (await call(app, 'GET', url('v2'), flagged)).json().data;
+    expect(next.answers).toEqual([{ questionId: 'q1', text: 'Yes' }]);
+    expect(next.suggestions[0].source).toBe('Из ваших ответов о праве на работу');
+    // Условия поиска о праве на работу не знают и стереть его не могут.
+    const path = '/api/v1/candidate/decision-profile';
+    await call(app, 'PUT', path, flagged, { workFormats: ['office'] });
+    expect(candidateStore.decisionProfileRepo.get(candidateId)).toMatchObject({
+      workFormats: ['office'],
+      workRights: [{ country: 'US', status: 'needs_visa' }],
+    });
+  });
+
   it('B641: fills LinkedIn from a profile link written without https', async () => {
     const { app, forms, sessions, candidateStore } = await setup();
     const candidateId = sessions.get(flagged)!.candidate!.id;
