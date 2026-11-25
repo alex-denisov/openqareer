@@ -10,7 +10,7 @@ export interface FieldsProps {
   readonly onChange: (patch: Partial<ExperienceForm>) => void;
 }
 
-function FieldError({ id, text }: { readonly id: string; readonly text: string | undefined }) {
+export function FieldError({ id, text }: { readonly id: string; readonly text: string | undefined }) {
   if (!text) return null;
   return (
     <small className="is-err" id={id}>
