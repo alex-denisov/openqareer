@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MAINTENANCE_FILES, fingerprintOf, schemaSourcesOf } from './maintenanceFingerprint.mjs';
+import { MAINTENANCE_FILES, fingerprintOf, schemaSourcesOf, schemaSourcesUsedBy } from './maintenanceFingerprint.mjs';
 
 const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
@@ -145,5 +145,34 @@ describe('источники схемы из metafile сборки веб-про
         `const TABLE = '${table}';\nconst SQL = \`CREATE TABLE IF NOT EXISTS \${TABLE} (id TEXT)\`;`;
       expect(sources(named('t2'))).not.toEqual(sources(named('t1')));
     });
+  });
+});
+
+describe('таблицы только веб-процесса (B759, выкат af80b90e2)', () => {
+  const bundle = 'db.prepare("SELECT 1 FROM vacancy_pool")';
+  const source = (text) => ({ path: 'server/data/x.ts', text });
+
+  it('новая таблица, которой нет в бандле, в отпечаток не входит', () => {
+    const own = source('CREATE TABLE IF NOT EXISTS manual_apply (id TEXT)\nCREATE INDEX IF NOT EXISTS ma_i ON manual_apply(id)');
+    expect(schemaSourcesUsedBy(bundle, [own])).toEqual([]);
+  });
+
+  it('таблица, индекс и ALTER из бандла остаются, чужие из того же файла — нет', () => {
+    const kept = 'CREATE UNIQUE INDEX i ON vacancy_pool(id)\nALTER TABLE "vacancy_pool" ADD COLUMN b TEXT\nCREATE TABLE vacancy_pool (id)';
+    const [used] = schemaSourcesUsedBy(bundle, [source(`${kept}\nCREATE TABLE manual_apply (id)`)]);
+    expect(used.text).toBe(kept);
+  });
+
+  it('имя-часть другого имени — не та же таблица', () => {
+    expect(schemaSourcesUsedBy(bundle, [source('CREATE TABLE pool (id)')])).toEqual([]);
+  });
+
+  it('цель не ясна (триггер, DROP INDEX, файл с подстановкой) — входит', () => {
+    const unclear = [
+      source('CREATE TRIGGER t AFTER INSERT ON manual_apply BEGIN SELECT 1'),
+      source('DROP INDEX some_i'),
+      source('const t = "x"; db.exec(`ALTER TABLE ${t} ADD COLUMN y`)'),
+    ];
+    expect(schemaSourcesUsedBy(bundle, unclear)).toEqual(unclear);
   });
 });

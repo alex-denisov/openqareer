@@ -16,7 +16,6 @@ import {
 import { Button, Icon, InfoTip, Link, StatusLine, useToast } from '../kit';
 import { useAsync } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
-import { HhResumeSelect } from './HhResumeSelect';
 import { editsWord } from './hh/HhResumeEdits';
 import { decideResumeEdit, getResumeEdits } from './model/resumeEditsApi';
 import { ResumeEdits } from './ResumeEdits';
@@ -102,8 +101,6 @@ export interface ResumeStepProps {
   /** Резюме уже одобрено на этом шаге. */
   readonly confirmed: boolean;
   readonly onConfirm: () => void;
-  /** Отклик на hh.ru: рядом выбор резюме hh.ru, которым он уйдёт. */
-  readonly onHh: boolean;
   /** Полоса действия страницы (макет o03, от 768); без неё кнопка стоит под листом. */
   readonly dock: HTMLElement | null;
   readonly onDocument: (document: ResumeDocument | null) => void;
@@ -191,7 +188,7 @@ function titleOf(preview: LetterResumePreview, edits: ResumeEditsState['edits'])
 
 /** Шаг «Резюме» (O3): то резюме, которое уйдёт с откликом. */
 export function ResumeStep(props: ResumeStepProps) {
-  const { vacancyId, approved, confirmed, onConfirm, onHh, dock, onDocument } = props;
+  const { vacancyId, approved, confirmed, onConfirm, dock, onDocument } = props;
   const { state, reload, decide, lang } = useResumeStep(vacancyId, approved);
   const preview = state.data?.preview;
   const edits = state.data?.choices.edits ?? [];
@@ -210,7 +207,6 @@ export function ResumeStep(props: ResumeStepProps) {
       {edits.length > 0 ? (
         <ResumeEdits edits={edits} readOnly={Boolean(approved)} onDecide={decide} />
       ) : null}
-      {onHh && !approved && preview.kind !== 'none' ? <HhResumeSelect /> : null}
       {state.status === 'error' ? (
         <StatusLine
           state="err"

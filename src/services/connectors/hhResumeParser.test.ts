@@ -149,6 +149,53 @@ describe('hhResumeParser', () => {
  *
  * The markup below is the live shape with the account's own values replaced.
  */
+describe('страница hh.ru/resume/<id>, разметка 25.11.2026', () => {
+  const step = (title: string, period: string, text: string, n: number) => `
+    <li data-qa="magritte-stepper-step"><div class="track"></div>
+      <div data-qa="magritte-stepper-step-content"><div>
+        <div><span>${title}</span></div><div><span>${period}</span></div>
+        <div class="clamp"><p>${text}</p></div>
+        <button data-qa="expand"><span>Развернуть</span></button>
+        <button data-qa="edit-experience-button-${n}"><svg><path d="M0"></path></svg></button>
+      </div></div>
+    </li>`;
+  const company = (name: string, steps: string) => `
+    <div data-qa="profile-experience-company-card"><div data-qa="cell"><div data-qa="cell-left-side">
+      <div data-qa="cell-text"><span data-qa="cell-text-content">${name}</span><span data-qa="cell-text-content">4 года</span></div>
+    </div></div><ol data-qa="magritte-stepper">${steps}</ol></div>`;
+  const page = (experience: string) => `
+    <main><div data-qa="resume-position-card"><h1 data-qa="resume-block-title-position">IT Директор / CIO / CTO</h1>
+      <div data-qa="resume-position-field-employmentForms"><div data-qa="cell-text-content">Постоянная работа</div></div></div>
+    <div data-qa="resume-list-card-experience"><div data-qa="title-container"><h4>Опыт работы</h4></div>${experience}</div>
+    <div data-qa="resume-about-card"><div data-qa="title-container"><h4>О себе</h4></div>
+      <div><p>Руковожу ИТ&nbsp;15 лет.</p><p>Строю команды.</p></div><button data-qa="resume-edit-button-about">Изменить</button></div>
+    <div data-qa="skills-card"><div data-qa="skill-tag-1"><div><span>ITIL</span></div></div></div></main>`;
+  const full = page(
+    company('Россети Цифра',
+      step('Директор по поддержке', 'Апрель 2023 — Октябрь 2025 (2 года и 7 месяцев)', 'Отвечал за поддержку.<br>Выручка 920 млн', 0) +
+      step('Руководитель группы', 'Май 2021 — Апрель 2023 (2 года)', 'Вёл группу', 1)) +
+      company('Kaspersky', step('Support Lead', 'April 2010 — present (2 years)', 'Premium support', 2)),
+  );
+
+  it('читает места по компаниям, «О себе» и навыки; условия поиска в «О себе» не попадают', () => {
+    const parsed = parseHhResumeHtml(full, 'https://hh.ru/resume/a');
+    expect(parsed.experience.map((p) => [p.employer, p.title, p.startDate, p.endDate, p.current, p.responsibilities])).toEqual([
+      ['Россети Цифра', 'Директор по поддержке', 'Апрель 2023', 'Октябрь 2025', false, ['Отвечал за поддержку.\nВыручка 920 млн']],
+      ['Россети Цифра', 'Руководитель группы', 'Май 2021', 'Апрель 2023', false, ['Вёл группу']],
+      ['Kaspersky', 'Support Lead', 'April 2010', undefined, true, ['Premium support']],
+    ]);
+    expect(parsed.about).toBe('Руковожу ИТ 15 лет.\nСтрою команды.');
+    expect(parsed.skills).toEqual(['ITIL']);
+    expect(parsed.targetRole).toBe('IT Директор / CIO / CTO');
+    expect(parsed.rawText).toContain('Выручка 920 млн');
+  });
+
+  it('незнакомая разметка опыта — места нет, а не выдумано', () => {
+    const parsed = parseHhResumeHtml(page('<div><div>Директор</div></div>'), 'https://hh.ru/resume/a');
+    expect(parsed.experience).toEqual([]);
+  });
+});
+
 describe('the hh.ru profile surface as it is served today', () => {
   const PROFILE_PAGE = `
     <div data-qa="resume-position-card" class="magritte-card___bhGKz">

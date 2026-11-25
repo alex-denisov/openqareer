@@ -1,63 +1,34 @@
-import { useCallback, useId, useState } from 'react';
-import type { HhResumeSnapshot, HhResumeSummary } from '../../../../shared/hhCandidateSession';
+import { useId, useState } from 'react';
+import type { HhResumeSummary } from '../../../../shared/hhCandidateSession';
 import { apiErrorMessage } from '../../coach/apiClient';
-import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
 import { StatusLine, useToast } from '../kit';
-import { useAsync } from '../responses/data/useAsync';
-import { readHhResumeContent } from './hh/hhDesktop';
-import { getHhResumes, saveHhResumes } from './hh/hhSessionApi';
 
-function knownContent(snapshot: HhResumeSnapshot, id: string) {
-  if (snapshot.selected?.id === id) return snapshot.selected;
-  return snapshot.contents?.find((item) => item.id === id) ?? null;
-}
-
-async function select(snapshot: HhResumeSnapshot, item: HhResumeSummary) {
-  const known = knownContent(snapshot, item.id);
-  if (known) return saveHhResumes(snapshot.resumes, known, undefined, false);
-  const content = await readHhResumeContent({
-    id: item.id,
-    title: item.title,
-    url: `https://hh.ru/resume/${item.id}`,
-  });
-  return saveHhResumes(snapshot.resumes, content);
-}
-
-function ResumeOptions({ snapshot }: { readonly snapshot: HhResumeSnapshot }) {
-  return snapshot.resumes.map((item) => (
-    <option
-      key={item.id}
-      value={item.id}
-      disabled={!isTauriEnvironment() && !knownContent(snapshot, item.id)}
-    >
-      {item.title}
-    </option>
-  ));
+interface HhResumeSelectProps {
+  readonly resumes: readonly HhResumeSummary[];
+  readonly selectedId: string | null;
+  /** Страница выбранного резюме читается в окне hh.ru. */
+  readonly reading: boolean;
+  readonly onPick: (resumeId: string) => Promise<void>;
 }
 
 /** «Резюме hh.ru» (макет o03): каким резюме уйдёт отклик на hh.ru. */
-export function HhResumeSelect() {
+export function HhResumeSelect({ resumes, selectedId, reading, onPick }: HhResumeSelectProps) {
   const id = useId();
   const toast = useToast();
-  // Выбранное видно сразу, пока страница резюме читается; сбой возвращает прежнее.
+  // Выбранное видно сразу, пока выбор сохраняется; сбой возвращает прежнее.
   const [picked, setPicked] = useState<string | null>(null);
-  const busy = picked !== null;
-  const load = useCallback((signal: AbortSignal) => getHhResumes(signal), []);
-  const { state, replaceData } = useAsync(load, '');
-  const snapshot = state.data;
-  if (!snapshot || snapshot.resumes.length === 0) return null;
+  const busy = picked !== null || reading;
   const change = async (resumeId: string) => {
-    const item = snapshot.resumes.find((resume) => resume.id === resumeId);
-    if (!item) return;
     setPicked(resumeId);
     try {
-      replaceData(await select(snapshot, item));
+      await onPick(resumeId);
     } catch (reason) {
-      toast.show({ text: apiErrorMessage(reason, 'Резюме hh.ru не прочиталось. Повторите.') });
+      toast.show({ text: apiErrorMessage(reason, 'Резюме hh.ru не выбралось. Повторите.') });
     } finally {
       setPicked(null);
     }
   };
+  const value = picked ?? selectedId ?? '';
   return (
     <div className="cv-hh">
       <label className="cv-hh-l" htmlFor={id}>
@@ -65,19 +36,23 @@ export function HhResumeSelect() {
       </label>
       <select
         id={id}
-        value={picked ?? snapshot.selected?.id ?? ''}
+        value={value}
         aria-busy={busy}
         disabled={busy}
         onChange={(event) => void change(event.currentTarget.value)}
       >
-        {snapshot.selected || busy ? null : (
+        {value ? null : (
           <option value="" disabled>
             Не выбрано
           </option>
         )}
-        <ResumeOptions snapshot={snapshot} />
+        {resumes.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.title}
+          </option>
+        ))}
       </select>
-      {busy ? <StatusLine state="wait" text="Читаем резюме в hh.ru" /> : null}
+      {reading ? <StatusLine state="wait" text="Читаем резюме в hh.ru" /> : null}
     </div>
   );
 }

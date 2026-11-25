@@ -57,4 +57,16 @@ describe('B678: сверка резюме hh.ru с вакансией', () => {
     const review = reviewHhResumes(snapshot, [' Go ', 'go', '', 'Kubernetes']);
     expect(review.requirements).toEqual(['Go', 'Kubernetes']);
   });
+
+  it('подходящее по роли важнее выбранного прежде, даже непрочитанное', () => {
+    const roles: Readonly<Record<string, 0 | 1>> = { 'IT Директор / CIO / CTO': 1 };
+    const cio = { id: 'cio', title: 'IT Директор / CIO / CTO' };
+    const coo = { id: 'coo', title: 'COO' };
+    const review = reviewHhResumes(
+      { resumes: [coo, cio], selected: { ...coo, text: 'DevOps' }, readAt: 'x' },
+      ['DevOps'],
+      (title) => ({ role: roles[title] ?? 0, words: 0 }),
+    );
+    expect(review.recommendedId).toBe('cio');
+  });
 });
