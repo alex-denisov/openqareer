@@ -73,7 +73,6 @@ const MAX_OPEN = 200;
 const TICK_MS = 60_000;
 const STALE_MS = 5 * 60_000;
 const TICK_LIMIT = 10;
-const STALE_READ_LIMIT = 200;
 
 const enqueueSchema = z
   .object({
@@ -227,11 +226,8 @@ function startPreparing(
 /** Фоновый такт: сбор, прерванный перезапуском, продолжается без участия кандидата. */
 export function resumeStalled(deps: Bound, request: LogContext, now: number): void {
   const before = new Date(now - STALE_MS).toISOString();
-  // Строки без флага ждут его возврата и не занимают места в такте.
-  const stale = deps.queue
-    .listStale(before, MAX_ATTEMPTS, STALE_READ_LIMIT)
-    .filter(({ candidateId }) => deps.isFlagged(candidateId));
-  for (const { candidateId, item } of stale.slice(0, TICK_LIMIT)) {
+  const stale = deps.queue.listStale(before, MAX_ATTEMPTS, TICK_LIMIT, deps.isFlagged);
+  for (const { candidateId, item } of stale) {
     if (deps.inFlight.has(flightKey(candidateId, item.vacancyId))) continue;
     if (item.attempts >= MAX_ATTEMPTS) giveUp(deps, candidateId, item.vacancyId);
     else startPreparing(deps, request, candidateId, item);
