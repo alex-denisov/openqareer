@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { bundledCities } from './bundledCities';
+import { createCities } from './cityCountry';
 import { dominantEmployerCountry, vacancyCountryHint } from './vacancyCountryHint';
 
+const cities = createCities(bundledCities());
 const PLACES: Readonly<Record<string, string>> = { zürich: 'CH', 'mclean, va': 'US', berlin: 'DE' };
 const hint = (location: string | null, urls: readonly string[] = [], employer?: string) =>
   vacancyCountryHint(
     { location, company: 'Acme', urls },
     {
       resolvePlace: (place) => PLACES[place.toLowerCase()],
+      cities,
       employerCountry: () => employer,
     },
   );
@@ -110,7 +114,7 @@ describe('vacancyCountryHint', () => {
     const read = (text: string, employer?: string) =>
       vacancyCountryHint(
         { location: 'Remote', company: 'Acme', urls: [], text },
-        { resolvePlace: () => undefined, employerCountry: () => employer },
+        { resolvePlace: () => undefined, cities, employerCountry: () => employer },
       );
     expect(read('Our team in South Korea and Japan')).toEqual({
       country: 'KR',

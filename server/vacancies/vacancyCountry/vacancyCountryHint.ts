@@ -3,7 +3,7 @@
  * пусто). Порядок — от места в тексте к адресу вакансии и к стране работодателя; ничего не нашли или
  * признаки спорят — страны нет.
  */
-import { cityCountries, cityCountry, cityCountryInText } from './cityCountry';
+import type { Cities } from './cityCountry';
 
 /** `place` — страна или штат названы, либо место знает общий разбор; `city` — догадка по словарю. */
 export type CountryHintBasis = 'place' | 'city' | 'address' | 'employer' | 'domain' | 'text';
@@ -26,6 +26,7 @@ export interface CountryHintInput {
 export interface CountryHintDeps {
   /** Страна места по общему разбору. */
   readonly resolvePlace: (place: string) => string | undefined;
+  readonly cities: Cities;
   readonly employerCountry: (company: string) => string | undefined;
 }
 
@@ -142,7 +143,7 @@ function agreed(answers: readonly PlaceAnswer[]): PlaceAnswer {
 }
 
 function cityRead(part: string, deps: CountryHintDeps): PlaceAnswer {
-  return read(deps.resolvePlace(part), 'place') ?? read(cityCountry(part), 'city');
+  return read(deps.resolvePlace(part), 'place') ?? read(deps.cities.country(part), 'city');
 }
 
 function regionOf(code: string): 'US' | 'CA' | undefined {
@@ -161,7 +162,9 @@ function codeRead(code: string, city: string, deps: CountryHintDeps): PlaceAnswe
   const foreign = FOREIGN_REGIONS.get(code);
   if (found && found !== 'dispute' && found.country === foreign) return found;
   if (!isCountry || COUNTRY_NAMESAKES.has(city.toLowerCase())) return read(region, 'place');
-  const pair = cityCountries(city).filter((country) => country === region || country === code);
+  const pair = deps.cities
+    .countries(city)
+    .filter((country) => country === region || country === code);
   if (pair.length > 0) return read(single(pair), 'city') ?? 'dispute';
   const fits = found && found !== 'dispute' && [region, code].includes(found.country);
   return fits ? found : 'dispute';
@@ -187,7 +190,7 @@ function stateRead(
     const country = single(named);
     // «Amsterdam, NH, Netherlands»: названная страна важнее кода, но не полного имени штата.
     const agrees =
-      regionOf(state) !== undefined || country === 'US' || cityCountry(state) === country;
+      regionOf(state) !== undefined || country === 'US' || deps.cities.country(state) === country;
     return { answer: (agrees ? read(country, 'place') : undefined) ?? 'dispute' };
   }
   if (regionOf(state)) return { answer: codeRead(state, before[0] ?? '', deps) };
@@ -220,7 +223,7 @@ function clauseRead(clause: string, deps: CountryHintDeps): PlaceAnswer {
   if (places === 'dispute') return places;
   return (
     read(deps.resolvePlace(parts.join(', ')) ?? deps.resolvePlace(first), 'place') ??
-    read(cityCountry(first) ?? single(parts.map(cityCountryInText)), 'city')
+    read(deps.cities.country(first) ?? single(parts.map(deps.cities.inText)), 'city')
   );
 }
 

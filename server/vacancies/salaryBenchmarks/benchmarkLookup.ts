@@ -45,8 +45,7 @@ export function createBenchmarkLookup(database: DatabaseSync): BenchmarkLookup {
       return row ? (JSON.parse(row.result_json) as BlendResult) : undefined;
     },
     multipliers: {
-      get: (key) =>
-        (prepared()?.multiplier.get(key) as { value: number } | undefined)?.value,
+      get: (key) => (prepared()?.multiplier.get(key) as { value: number } | undefined)?.value,
     },
   };
 }
