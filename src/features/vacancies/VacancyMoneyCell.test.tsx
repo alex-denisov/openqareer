@@ -65,7 +65,7 @@ describe('VacancyMoneyCell (B546)', () => {
   it('says «мало данных» without a number when the sample is thin', () => {
     const markup = renderToStaticMarkup(
       <VacancyMoneyCell
-        item={item(undefined, { currency: 'RUR', sampleSize: 3, basis: 'region', computedAt })}
+        item={item(undefined, { currency: 'RUR', sampleSize: 3, basis: 'country', computedAt })}
         observedDate="05.10"
       />,
     );

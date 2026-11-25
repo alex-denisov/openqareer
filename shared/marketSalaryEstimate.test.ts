@@ -5,6 +5,7 @@ import {
   formatMarketSalaryRange,
   marketSalaryBasis,
   marketSalaryKey,
+  monthlyMarketEstimate,
   pickMarketSalaryEstimate,
   salaryMidpoint,
 } from './marketSalaryEstimate';
@@ -40,9 +41,9 @@ describe('estimateFromMidpoints', () => {
     });
   });
 
-  it('rounds small monthly foreign amounts to a thousand instead of zeroing them', () => {
+  it('rounds small monthly foreign amounts to a hundred instead of zeroing them', () => {
     const estimate = estimateFromMidpoints([5_000, 5_500, 6_000, 6_500, 7_000], 'EUR');
-    expect(estimate).toEqual({ low: 6_000, high: 7_000, currency: 'EUR', sampleSize: 5 });
+    expect(estimate).toEqual({ low: 5_500, high: 6_500, currency: 'EUR', sampleSize: 5 });
   });
 });
 
@@ -53,7 +54,7 @@ describe('pickMarketSalaryEstimate', () => {
     expect(pickMarketSalaryEstimate(city, region)).toEqual({ ...city, basis: 'city' });
     expect(pickMarketSalaryEstimate({ currency: 'RUR', sampleSize: 2 }, region)).toEqual({
       ...region,
-      basis: 'region',
+      basis: 'country',
     });
   });
 
@@ -63,7 +64,7 @@ describe('pickMarketSalaryEstimate', () => {
         { currency: 'RUR', sampleSize: 3 },
         { currency: 'RUR', sampleSize: 4 },
       ),
-    ).toEqual({ currency: 'RUR', sampleSize: 4, basis: 'region' });
+    ).toEqual({ currency: 'RUR', sampleSize: 4, basis: 'country' });
     expect(pickMarketSalaryEstimate(undefined, undefined)).toBeUndefined();
   });
 });
@@ -71,7 +72,25 @@ describe('pickMarketSalaryEstimate', () => {
 describe('marketSalaryKey', () => {
   it('normalises the place and marks an unknown level', () => {
     expect(marketSalaryKey('it-eng', 4, 'city', ' Москва ')).toBe('it-eng|4|city|москва');
-    expect(marketSalaryKey('it-eng', null, 'region', 'russia')).toBe('it-eng|-|region|russia');
+    expect(marketSalaryKey('it-eng', null, 'country', 'RU')).toBe('it-eng|-|country|ru');
+  });
+});
+
+describe('monthlyMarketEstimate', () => {
+  it('shows a yearly group per month and leaves a monthly one', () => {
+    const yearly = {
+      low: 60_000,
+      high: 90_000,
+      currency: 'EUR',
+      period: 'year',
+      sampleSize: 9,
+    } as const;
+    const monthly = monthlyMarketEstimate(yearly);
+    expect(monthly).toEqual({ ...yearly, low: 5_000, high: 7_500, period: 'month' });
+    expect(formatMarketSalaryRange({ low: 5_000, high: 7_500, currency: 'EUR' })).toBe(
+      '≈ €5–7,5 тыс.',
+    );
+    expect(monthlyMarketEstimate(monthly)).toBe(monthly);
   });
 });
 
