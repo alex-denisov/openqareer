@@ -54,6 +54,8 @@ function writeCopy(path: string): void {
   refuseProd(path);
   const db = new DatabaseSync(path);
   db.exec(CLUSTER_SPLIT_TABLES);
+  // Как водитель: накопленный WAL — до первой записи.
+  db.exec('PRAGMA wal_checkpoint(PASSIVE)');
   const totals = { steps: 0, scanned: 0, split: 0, pieces: 0, catalogMoved: 0, skipped: 0 };
   const pages = { kept: 0, redirect: 0, gone: 0, unresolved: 0 };
   const started = performance.now();
@@ -63,7 +65,7 @@ function writeCopy(path: string): void {
     const at = performance.now();
     const step = splitClustersStep(db);
     const ms = Math.round(performance.now() - at);
-    db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    db.exec('PRAGMA wal_checkpoint(PASSIVE)');
     if (step.completed) break;
     maxStepMs = Math.max(maxStepMs, ms);
     maxWriteMs = Math.max(maxWriteMs, step.writeMs);

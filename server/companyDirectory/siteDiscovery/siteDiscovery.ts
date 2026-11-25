@@ -102,7 +102,13 @@ const toPending = (row: PendingRow): PendingCompany => ({
  * looked at, by key. Companies already holding an ATS placement (sources, B645
  * freehire MCP) are skipped. Paging keeps each read short on the 165k directory.
  */
-export function readPendingPage(database: DatabaseSync, afterKey: string, limit: number, directSince?: number): readonly PendingCompany[] {
+export function readPendingPage(
+  database: DatabaseSync,
+  afterKey: string,
+  limit: number,
+  directSince?: number,
+  untilKey?: string,
+): readonly PendingCompany[] {
   const hasCards = directSince !== undefined &&
     database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='freehire_company_source_candidates'").get();
   const eligible = directSince === undefined ? SITE_NOT_SEARCHED
@@ -119,10 +125,22 @@ export function readPendingPage(database: DatabaseSync, afterKey: string, limit:
         ${hasCards ? `LEFT JOIN freehire_company_source_candidates f
           ON f.slug = json_extract(d.evidence, '$.freehire.value')
           AND json_array_length(f.evidence, '$.boards') > 0` : ''}
-        WHERE d.company_key > ? AND ${PENDING_WHERE} AND ${eligible} ${directFilter} ORDER BY d.company_key LIMIT ?`,
+        WHERE d.company_key > ? AND ${PENDING_WHERE} AND ${eligible} ${directFilter}
+          ${untilKey === undefined ? '' : 'AND d.company_key <= ?'} ORDER BY d.company_key LIMIT ?`,
     )
-    .all(afterKey, ...(directSince === undefined ? [] : [directSince]), limit) as unknown as PendingRow[];
+    .all(afterKey, ...(directSince === undefined ? [] : [directSince]), ...(untilKey === undefined ? [] : [untilKey]), limit) as unknown as PendingRow[];
   return rows.map(toPending);
+}
+
+/** Last key of the next `size` directory rows; undefined when none are left. */
+export function directoryWindowEnd(database: DatabaseSync, afterKey: string, size: number): string | undefined {
+  const row = database
+    .prepare(
+      `SELECT max(company_key) AS last FROM (
+         SELECT company_key FROM company_directory WHERE company_key > ? ORDER BY company_key LIMIT ?)`,
+    )
+    .get(afterKey, size) as { last: string | null };
+  return row.last ?? undefined;
 }
 
 /** Pool vacancies per company (B643-8 links): the queue order. */
