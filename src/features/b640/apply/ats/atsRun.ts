@@ -46,7 +46,8 @@ export type AtsRunResult =
   /** Нажатие было, подтверждения нет: второго нажатия не будет. */
   | { readonly kind: 'unconfirmed'; readonly host: string }
   /** Окно формы ждёт кандидата: код из письма или проверка на сайте. */
-  | { readonly kind: 'code' | 'captcha'; readonly host: string }
+  | { readonly kind: 'code'; readonly host: string }
+  | { readonly kind: 'captcha'; readonly host: string }
   /** Появились вопросы, на которые отвечает кандидат. */
   | {
       readonly kind: 'ask';
