@@ -114,28 +114,41 @@ export function estimateView(result: EstimateResult): MarketSalaryEstimateView {
   return { ...month, tax, computedAt };
 }
 
+export type SalaryEstimator = (
+  cluster: EstimateCluster,
+  readTitle: ReadTitle,
+  rates: EstimateDeps['rates'],
+  now: Date,
+) => EstimateResult | undefined;
+
+/** Единственная сборка модуля подбора: веб, обслуживание и анкеты считают одинаково. */
+export function createSalaryEstimator(database: DatabaseSync): SalaryEstimator {
+  const employer = sqliteEmployerCountry(database);
+  const deps = {
+    catalog: new SqliteMarketSalaryEstimateStore({ database }),
+    lookup: createBenchmarkLookup(database),
+    earning: (country: string, isco: string, neighbours: readonly string[]) =>
+      countryEarning(database, country, isco, neighbours),
+  };
+  const hint: CountryHintDeps = {
+    resolvePlace: marketSalaryCountry,
+    cities: createCities(sqliteCities(database)),
+    employerCountry: (company) => employer(employerKey(company)),
+  };
+  return (cluster, readTitle, rates, now) =>
+    estimateResult(cluster, readTitle, { ...deps, rates, now }, hint);
+}
+
 export class SqliteSalaryEstimateReader implements SalaryEstimateReader {
   private readonly database: DatabaseSync;
-  private readonly deps: Omit<EstimateDeps, 'rates' | 'now'>;
-  private readonly hint: CountryHintDeps;
+  private readonly estimator: SalaryEstimator;
   private cache = new Map<string, MarketSalaryEstimateView | undefined>();
   private cachedAt = 0;
 
   constructor(databasePath: string) {
     this.database = new DatabaseSync(databasePath);
     applySqliteBusyTimeout(this.database);
-    const employer = sqliteEmployerCountry(this.database);
-    this.deps = {
-      catalog: new SqliteMarketSalaryEstimateStore({ database: this.database }),
-      lookup: createBenchmarkLookup(this.database),
-      earning: (country, isco, neighbours) =>
-        countryEarning(this.database, country, isco, neighbours),
-    };
-    this.hint = {
-      resolvePlace: marketSalaryCountry,
-      cities: createCities(sqliteCities(this.database)),
-      employerCountry: (company) => employer(employerKey(company)),
-    };
+    this.estimator = createSalaryEstimator(this.database);
   }
 
   estimate(cluster: EstimateCluster, readTitle: ReadTitle): MarketSalaryEstimateView | undefined {
@@ -147,8 +160,7 @@ export class SqliteSalaryEstimateReader implements SalaryEstimateReader {
     const { canonicalTitle, canonicalLocation, canonicalCompany, primaryUrl } = cluster;
     const key = JSON.stringify([canonicalTitle, canonicalLocation, canonicalCompany, primaryUrl]);
     if (this.cache.has(key)) return this.cache.get(key);
-    const deps = { ...this.deps, rates: getCurrencyRates(), now: new Date(now) };
-    const result = estimateResult(cluster, readTitle, deps, this.hint);
+    const result = this.estimator(cluster, readTitle, getCurrencyRates(), new Date(now));
     const view = result ? estimateView(result) : undefined;
     this.cache.set(key, view);
     return view;

@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { readCurrencyRates } from '../../currency/cbrRates';
 import { ROLLUP_TABLES_SQL, writeRollups } from './benchmarkRollups';
+import { PRICE_TABLE_SQL, pricesOf } from './priceIndex';
 import {
   plausible,
   salaryBenchmarkSchema,
@@ -52,7 +53,8 @@ CREATE INDEX IF NOT EXISTS salary_benchmarks_place ON salary_benchmarks(place);
 CREATE TABLE IF NOT EXISTS salary_benchmarks_version (
   id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL
 ) STRICT;
-${ROLLUP_TABLES_SQL}`;
+${ROLLUP_TABLES_SQL};
+${PRICE_TABLE_SQL}`;
 
 const CURRENT_SQL = `SELECT r.row_json FROM salary_sources s
   JOIN salary_records r ON r.slice_id = (
@@ -114,9 +116,10 @@ function insertRecords(database: DatabaseSync, sliceId: number, rows: readonly S
 /** Пересборка таблицы подбора из последних срезов; возвращает число строк. */
 function publish(database: DatabaseSync): number {
   const texts = database.prepare(CURRENT_SQL).all() as { row_json: string }[];
-  const rows = texts.flatMap(({ row_json }) =>
-    plausible(salaryBenchmarkSchema.parse(JSON.parse(row_json))),
-  );
+  const toToday = pricesOf(database);
+  const rows = texts
+    .flatMap(({ row_json }) => plausible(salaryBenchmarkSchema.parse(JSON.parse(row_json))))
+    .map(toToday);
   database.exec('DELETE FROM salary_benchmarks');
   const insert = database.prepare(
     'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',
@@ -169,6 +172,12 @@ export function writeSalarySlice(
     if (!repeated || switchedOff) publish(database);
     return { written: repeated ? 0 : benchmarks.length };
   });
+}
+
+/** Пересборка без нового среза: изменились цены, курсы или правила. */
+export function rebuildSalaryBenchmarks(database: DatabaseSync): number {
+  database.exec(TABLES_SQL);
+  return inTransaction(database, () => publish(database));
 }
 
 /** Что записал бы `writeSalarySlice`; базу не меняет и таблиц не создаёт. */

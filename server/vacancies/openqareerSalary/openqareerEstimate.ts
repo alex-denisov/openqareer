@@ -274,7 +274,12 @@ export function openqareerEstimate(
     city: marketSalaryCity(query.location),
     region: regionOfCountry(country),
   };
-  if (query.functionCode === NO_FUNCTION) return statisticsStep(query, place, deps);
+  if (query.functionCode === NO_FUNCTION) {
+    const named = sourceCandidate(query, query.levelRank, place, deps).filter(({ precision }) =>
+      precision.startsWith('role-'),
+    );
+    return blended(bestCandidate(named), deps, 'direct') ?? statisticsStep(query, place, deps);
+  }
   const catalog = catalogCandidates(query, query.levelRank, place, deps);
   const sources = sourceCandidate(query, query.levelRank, place, deps);
   const direct =
