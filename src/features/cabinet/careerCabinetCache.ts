@@ -1,5 +1,6 @@
 import type { CandidateSnapshot, AccountSnapshot } from '../coach/coachApi';
 import type { ResumeStudioView } from '../resume/resumeTypes';
+import { forgetVacancies } from '../b640/shell/vacancyNames';
 import { clearSectionCache } from '../shell/sectionCache';
 
 const CACHE_PREFIX = 'openqareer:cabinet:v1:';
@@ -47,6 +48,7 @@ export function writeCareerCabinetCache(
 export function clearCareerCabinetCache(storage?: Storage): void {
   // Sign-out and identity changes drop the in-memory section snapshots too (B589).
   clearSectionCache();
+  forgetVacancies();
   try {
     const target = storage ?? (typeof window !== 'undefined' ? window.sessionStorage : undefined);
     if (!target) return;

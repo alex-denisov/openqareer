@@ -1,3 +1,4 @@
+import type { FactCorrectionMethods } from './factCorrectionMethods';
 import type { FactProvenance, ImportPlatform, ImportWalk } from '../domain/factProvenance';
 import type { ConsultantHistoryMethods } from './consultantHistoryContract';
 import type { EmployerRead } from './applicationEmployerReads';
@@ -541,6 +542,9 @@ export interface CandidateStore extends ConsultantHistoryMethods {
   /** B639: настоящее название вместо маски работодателя или ответ «это и есть название». */
   answerEmployerName(candidateId: string, memoryId: string, employer: string,
     answer: { readonly name: string } | { readonly keepAsIs: true }): StoredMemory | null;
+  /** B796: исправление факта во всех его копиях; записанное перечитано в той же транзакции. */
+  correctFact: FactCorrectionMethods['correctFact'];
+  revertFactCorrection: FactCorrectionMethods['revertFactCorrection'];
   changeMemory(
     candidateId: string,
     memoryId: string,

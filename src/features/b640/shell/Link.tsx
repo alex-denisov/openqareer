@@ -1,4 +1,5 @@
 import type { AnchorHTMLAttributes, MouseEvent } from 'react';
+import { preloadSectionCode } from '../sections';
 import { useShell } from './ShellContext';
 
 export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
@@ -7,7 +8,7 @@ export interface LinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>,
 }
 
 /** Ссылка внутри кабинета: обычное нажатие меняет адрес без перезагрузки страницы. */
-export function Link({ to, onClick, children, ...rest }: LinkProps) {
+export function Link({ to, onClick, onPointerEnter, onFocus, children, ...rest }: LinkProps) {
   const { navigate } = useShell();
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     onClick?.(event);
@@ -17,8 +18,21 @@ export function Link({ to, onClick, children, ...rest }: LinkProps) {
     event.preventDefault();
     navigate(to);
   }
+  const warm = () => preloadSectionCode(to.split(/[?#]/u)[0]);
   return (
-    <a {...rest} href={to} onClick={handleClick}>
+    <a
+      {...rest}
+      href={to}
+      onClick={handleClick}
+      onPointerEnter={(event) => {
+        onPointerEnter?.(event);
+        warm();
+      }}
+      onFocus={(event) => {
+        onFocus?.(event);
+        warm();
+      }}
+    >
       {children}
     </a>
   );

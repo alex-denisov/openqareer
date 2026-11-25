@@ -1,9 +1,32 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   removeCandidateCompanyWant,
   setCandidateCompanyWant,
 } from '../../vacancies/candidateCompaniesApi';
 import { useToast } from '../kit';
+
+const WANT_EVENT = 'b640:company-want';
+
+interface WantChange {
+  readonly key: string;
+  readonly want: boolean;
+}
+
+function announceWant(key: string, want: boolean): void {
+  window.dispatchEvent(new CustomEvent<WantChange>(WANT_EVENT, { detail: { key, want } }));
+}
+
+/** Отметку поменяли на карточке компании: список, оставленный под ней, узнаёт о ней (B798). */
+export function useWantChanges(onChanged: (key: string, want: boolean) => void): void {
+  useEffect(() => {
+    const listen = (event: Event) => {
+      const { key, want } = (event as CustomEvent<WantChange>).detail;
+      onChanged(key, want);
+    };
+    window.addEventListener(WANT_EVENT, listen);
+    return () => window.removeEventListener(WANT_EVENT, listen);
+  }, [onChanged]);
+}
 
 export interface WantTarget {
   readonly key: string;
@@ -38,6 +61,7 @@ export function useCompanyWant(onChanged: (key: string, want: boolean) => void):
         if (next) await setCandidateCompanyWant(target.key);
         else await removeCandidateCompanyWant(target.key);
         onChanged(target.key, next);
+        announceWant(target.key, next);
         if (withUndo) {
           toast.show({
             text: next ? `${target.name} — в списке «Хочу»` : `${target.name} убрана из «Хочу»`,
