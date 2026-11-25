@@ -16,6 +16,7 @@ import {
   DEFAULT_CANDIDATE_STATUS,
   type CandidateStatusId,
 } from '../../../../shared/candidateStatus';
+import { shareRead } from '../../shell/earlyRead';
 import { dropSectionCache, SECTION_CACHE_KEYS } from '../../shell/sectionCache';
 import { getStatus } from '../profile/statusChoice';
 import { readSelectionTotal } from '../vacancies/list/selectionCount';
@@ -131,17 +132,28 @@ export async function readSkillGap(
 }
 
 /** B792: роль поиска читается быстро и отдельно — полоса не ждёт расчёта ролей. */
-export function loadCampaign(signal: AbortSignal): Promise<CampaignMetaView> {
+export function loadCampaign(): Promise<CampaignMetaView> {
+  return shareRead(loadFreshCampaign);
+}
+
+/** Выбор ролей правит кампанию — открывается по свежей, не по показанной раньше. */
+export function loadFreshCampaign(signal: AbortSignal): Promise<CampaignMetaView> {
   return getCandidateCampaign(signal);
 }
 
 const forgetRoles = () =>
-  dropSectionCache(SECTION_CACHE_KEYS.careerCampaign, SECTION_CACHE_KEYS.careerRoles);
+  dropSectionCache(
+    SECTION_CACHE_KEYS.careerCampaign,
+    SECTION_CACHE_KEYS.careerRoles,
+    SECTION_CACHE_KEYS.careerSkills,
+    SECTION_CACHE_KEYS.matchedPool,
+    SECTION_CACHE_KEYS.matchedPoolLatest,
+  );
 
 export async function loadRoles(signal: AbortSignal): Promise<RolesData> {
   const [roles, campaign, checked, demand] = await Promise.all([
     getRoleHypotheses(signal, Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
-    getCandidateCampaign(signal),
+    loadCampaign(),
     getCheckedRoles(signal),
     readDemand(),
   ]);
@@ -165,9 +177,9 @@ export function loadSelectionTotal(
 }
 
 /** Полоса навыков догружается после таблицы ролей и её не держит. */
-export async function loadSkillStrip(signal: AbortSignal): Promise<SkillStripData | null> {
+export async function loadSkillStrip(): Promise<SkillStripData | null> {
   const demandRead = readDemand();
-  const campaign = await getCandidateCampaign(signal);
+  const campaign = await loadCampaign();
   const [ready, demand] = await Promise.all([readyRole(campaign.roles.value), demandRead]);
   return ready ? { gap: gapOf(demand, ready), role: ready.title } : null;
 }

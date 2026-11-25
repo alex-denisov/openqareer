@@ -104,4 +104,21 @@ describe('useLoad с кэшем прошлого чтения (B792)', () => {
     }
     clearSectionCache();
   });
+
+  it('чтение, начатое до правки, в кэш не пишет', async () => {
+    bindSectionCacheOwner('a');
+    let done!: (value: string) => void;
+    const loader = vi
+      .fn<() => Promise<string>>()
+      .mockReturnValueOnce(new Promise((resolve) => (done = resolve)))
+      .mockResolvedValue('после правки');
+    view = mount(<Cached loader={loader} />);
+    dropSectionCache('другое');
+    await act(async () => done('до правки'));
+    view.unmount();
+    view = mount(<Cached loader={loader} />);
+    expect(text(view)).toBe('loading');
+    await act(async () => undefined);
+    clearSectionCache();
+  });
 });

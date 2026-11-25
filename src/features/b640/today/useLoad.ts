@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { readEarlyOr } from '../../shell/earlyRead';
-import { readSectionCache, writeSectionCache } from '../../shell/sectionCache';
+import { readSectionCache, sectionCacheRevision, writeSectionCache } from '../../shell/sectionCache';
 
 export type LoadState<T> =
   | { readonly state: 'loading' }
@@ -26,12 +26,13 @@ export function useLoad<T>(
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
+    const revision = sectionCacheRevision();
     // Повторное чтение не прячет уже показанные данные: экран не мигает скелетом.
     setResult((previous) => (previous.state === 'ready' ? previous : { state: 'loading' }));
     readEarlyOr(loader, controller.signal).then(
       (data) => {
         if (controller.signal.aborted) return;
-        if (cacheKey) writeSectionCache(cacheKey, { data });
+        if (cacheKey && revision === sectionCacheRevision()) writeSectionCache(cacheKey, { data });
         setResult({ state: 'ready', data });
       },
       () => {

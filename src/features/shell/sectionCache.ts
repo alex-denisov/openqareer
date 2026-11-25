@@ -15,6 +15,12 @@ import { clearEarlyReads } from './earlyRead';
 
 const entries = new Map<string, unknown>();
 let owner: string | null = null;
+let revision = 0;
+
+/** Меняется при правке, выходе и смене кандидата: чтение, начатое раньше, в кэш не пишет. */
+export function sectionCacheRevision(): number {
+  return revision;
+}
 
 /** Called by the shell on every render with the signed-in candidate (or none). */
 export function bindSectionCacheOwner(candidateId: string | null | undefined): void {
@@ -22,6 +28,7 @@ export function bindSectionCacheOwner(candidateId: string | null | undefined): v
   if (next === owner) return;
   // Чтения, начатые до ответа о сессии, принадлежат первому вошедшему, но не следующему.
   if (owner) clearEarlyReads();
+  revision += 1;
   entries.clear();
   owner = next;
 }
@@ -39,11 +46,13 @@ export function writeSectionCache<T>(key: string, value: T): void {
 /** После своей правки: прежнее чтение больше не показываем, в том числе начатое до неё. */
 export function dropSectionCache(...keys: readonly string[]): void {
   clearEarlyReads();
+  revision += 1;
   keys.forEach((key) => entries.delete(key));
 }
 
 export function clearSectionCache(): void {
   clearEarlyReads();
+  revision += 1;
   entries.clear();
   owner = null;
 }
@@ -59,6 +68,7 @@ export const SECTION_CACHE_KEYS = {
   careerStatus: 'career:status',
   careerCampaign: 'career:campaign',
   careerRoles: 'career:roles',
+  careerSkills: 'career:skills',
   automationSnapshot: 'automation:snapshot',
   automationQueue: 'automation:queue',
   automationJournal: 'automation:journal',

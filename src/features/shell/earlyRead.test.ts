@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearEarlyReads, readEarlyOr, startEarlyRead } from './earlyRead';
+import { clearEarlyReads, readEarlyOr, shareRead, startEarlyRead } from './earlyRead';
 import { bindSectionCacheOwner, clearSectionCache, dropSectionCache } from './sectionCache';
 
 const signal = new AbortController().signal;
@@ -43,5 +43,23 @@ describe('B792: раннее чтение', () => {
       drop();
       expect(await readEarlyOr(reader, signal)).toBe('своё');
     }
+  });
+});
+
+describe('B792: общее чтение экрана', () => {
+  it('одно на блоки, после сброса, срока и сбоя — новое', async () => {
+    vi.useFakeTimers();
+    const reader = vi.fn().mockResolvedValue('кампания');
+    await Promise.all([shareRead(reader), shareRead(reader)]);
+    expect(reader).toHaveBeenCalledTimes(1);
+    dropSectionCache('k');
+    await shareRead(reader);
+    expect(reader).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(10_000);
+    await shareRead(reader);
+    expect(reader).toHaveBeenCalledTimes(3);
+    const failing = vi.fn().mockRejectedValueOnce(new Error('сбой')).mockResolvedValue('ок');
+    await shareRead(failing).catch(() => undefined);
+    expect(await shareRead(failing)).toBe('ок');
   });
 });

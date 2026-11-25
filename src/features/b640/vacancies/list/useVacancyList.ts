@@ -102,7 +102,8 @@ function useServerRoles(
       seed([linked], linkedPeriod ?? undefined);
       return;
     }
-    if (!initial && !campaign) return;
+    // Из кэша роли не ставим: их могли сменить после прошлого чтения (B792).
+    if (pool.reading === true || (!initial && !campaign)) return;
     seeded.current = true;
     // Сервер уже отдал подборку с сохранёнными ролями; роли «Карьеры» подборку ещё не сузили.
     sent.current = (initial?.roles ?? []).join('\n');
@@ -111,7 +112,7 @@ function useServerRoles(
       seedKey.current = start.join('\n');
       seed(start);
     }
-  }, [initial, campaign, seed, linked, linkedPeriod]);
+  }, [initial, campaign, pool.reading, seed, linked, linkedPeriod]);
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;

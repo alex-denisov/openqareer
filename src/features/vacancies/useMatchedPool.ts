@@ -101,7 +101,8 @@ export function useMatchedPool(provided?: MatchedPool, options: MatchedPoolOptio
   const [cached] = useState(() => cachedStart(provided, options));
   const [facets, setFacets] = useState<MatchedVacancyFacets | undefined>(cached?.facets);
   const [initialFilters, setInitialFilters] = useState<VacanciesScreenState | undefined>(
-    cached?.initialFilters,
+    // Сохранённый выбор ролей мог смениться на самой странице: страница ждёт ответа сервера.
+    options.pageLimit === undefined ? cached?.initialFilters : undefined,
   );
   const [sort, setSort] = useState<VacancySort | undefined>(cached?.sort);
   const { filters, setFilters, keepRows } = usePoolFilters(options.initialFilters);

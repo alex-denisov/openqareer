@@ -14,10 +14,10 @@ import {
   type RolesData,
 } from './careerApi';
 import { conditionsPath, pageAttrs } from './careerPaths';
-import { RolePickDialog } from './RolePickDialog';
+import { RolePickLoad } from './RolePickDialog';
 import { RoleTable } from './RoleTable';
 import { searchStrip } from './rolesModel';
-import { SkillStrip } from './SkillStrip';
+import { SkillStrip, SkillStripPlace } from './SkillStrip';
 
 /** Ожидание и ошибка первого чтения ролей — на месте страницы. */
 export function RolesLoad({
@@ -91,7 +91,8 @@ function SearchRoleStrip({
 
 /** Полоса «Проверьте N навыков» читается отдельно: таблица ролей её не ждёт. */
 function SkillStripLoad() {
-  const strip = useLoad(loadSkillStrip);
+  const strip = useLoad(loadSkillStrip, SECTION_CACHE_KEYS.careerSkills);
+  if (strip.state === 'loading') return <SkillStripPlace />;
   if (strip.state !== 'ready' || !strip.data) return null;
   return <SkillStrip gap={strip.data.gap} role={strip.data.role} />;
 }
@@ -113,7 +114,7 @@ export function RolesView({ node }: { readonly node: B640Node }) {
       {meta ? (
         <SearchRoleStrip campaign={meta} counting={data !== null} onEdit={() => setPicking(true)} />
       ) : null}
-      {data ? <SkillStripLoad /> : null}
+      {data ? <SkillStripLoad /> : <SkillStripPlace />}
       {data ? <RoleTable rows={data.rows} /> : null}
       {roles.state === 'loading' ? <BlockSkeleton label="Подбираем роли" rows={3} /> : null}
       {roles.state === 'error' ? (
@@ -123,14 +124,7 @@ export function RolesView({ node }: { readonly node: B640Node }) {
         <Icon name="sliders" />
         Условия поиска
       </Link>
-      {picking && data ? (
-        <RolePickDialog
-          open
-          onClose={() => setPicking(false)}
-          rows={data.rows}
-          campaign={data.campaign}
-        />
-      ) : null}
+      {picking && data ? <RolePickLoad rows={data.rows} onClose={() => setPicking(false)} /> : null}
     </div>
   );
 }
