@@ -282,7 +282,7 @@ describe('один язык листа (Д17)', () => {
       const text = JSON.stringify(result);
       expect(text).not.toMatch(/[а-яё]/iu);
       expect(text).toContain('Joined Rosseti Tsifra');
-      expect(text).toContain('Korporativnyy universitet Sberbanka');
+      expect(text).toContain('Corporate University of Sberbank (SberUniversity)');
     },
   );
 
