@@ -204,7 +204,7 @@ export function computeTodayFunnel(
     cohort.filter((application) => stages.has(application.stage)).length;
   return {
     favorites: applications.filter(
-      (application) => application.stage === 'saved' && application.starred !== false,
+      (application) => application.stage === 'saved' && application.starred === true,
     ).length,
     applied: reached(APPLIED_STAGES),
     responses: reached(ANSWERED_STAGES),

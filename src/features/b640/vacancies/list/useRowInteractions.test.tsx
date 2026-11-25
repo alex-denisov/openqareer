@@ -19,7 +19,7 @@ const item = makeItem({ id: 'c1' });
 let server: ApplicationView;
 
 beforeEach(() => {
-  server = { id: 'a1', clusterId: 'c1', stage: 'saved', version: 1 } as ApplicationView;
+  server = { id: 'a1', clusterId: 'c1', stage: 'saved', starred: true, version: 1 } as ApplicationView;
   vi.mocked(listApplications).mockImplementation(async () => [server]);
   vi.mocked(hideVacancy).mockImplementation(async () => {
     server = { ...server, stage: 'archived', version: 2 };

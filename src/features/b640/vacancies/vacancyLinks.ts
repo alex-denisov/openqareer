@@ -21,7 +21,7 @@ type Cluster = MatchedVacancyItem['cluster'];
 
 /** Только звезда кандидата: черновик отклика в той же стадии звездой не считается (B798). */
 export function isSaved(application: ApplicationView | undefined): boolean {
-  return application?.stage === 'saved' && application.starred !== false;
+  return application?.stage === 'saved' && application.starred === true;
 }
 
 /** Кандидат уже откликнулся: карточка есть и она не «сохранено» и не архив. */

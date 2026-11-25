@@ -595,8 +595,9 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
     const recent = '2026-10-01T00:00:00.000Z';
     const funnel = computeTodayFunnel(
       [
-        application({ id: 's1', stage: 'saved', stageChangedAt: '2026-01-01T00:00:00.000Z' }),
-        application({ id: 's2', stage: 'saved' }),
+        application({ id: 's1', stage: 'saved', starred: true, stageChangedAt: '2026-01-01T00:00:00.000Z' }),
+        application({ id: 's2', stage: 'saved', starred: true }),
+        application({ id: 'draft', stage: 'saved' }),
         application({ id: 'r1', stage: 'responded', stageChangedAt: recent }),
         application({ id: 'i1', stage: 'interview', stageChangedAt: recent }),
         application({ id: 'o1', stage: 'offer', stageChangedAt: recent }),
@@ -612,7 +613,7 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
     const snapshot = buildTodaySnapshot({
       ...BASE_INPUT,
       now,
-      applications: [application({ stage: 'saved' })],
+      applications: [application({ stage: 'saved', starred: true })],
       newVacancies: [],
     });
     expect(snapshot.funnel).toEqual({
