@@ -165,6 +165,46 @@ describe('B797: сверка живости верха подборок', () => 
     expect(await engine.openedVacancyGone(glued)).toBe(true);
   });
 
+  it('основатель — другая площадка: после такта карточка hh жива, пока жива вторая запись', async () => {
+    const pool = openStore();
+    const posting = (row: UnifiedVacancy, externalId: string): UnifiedVacancy => ({
+      ...row,
+      title: 'Директор по развитию продуктов',
+      company: 'Северная Верфь',
+      provenance: { ...row.provenance, externalId },
+    });
+    const own = posting(hh(1), '1');
+    const other = posting(vacancy('src-other:7', 'src-other', 'https://jobs.example.com/7'), '7');
+    pool.mergeSourceSlice(HH, [own]);
+    pool.mergeSourceSlice('src-other', [other]);
+    const base = createClusterFromVacancy(other);
+    const sources = [...base.sources, ...createClusterFromVacancy(own).sources];
+    pool.saveClusters([{ ...base, sources, vacanciesCount: 2 }]);
+    const { engine } = engineOf(pool, () => ({ status: 200, body: ARCHIVED }));
+    engine.requestSelectionLiveness([own.id]);
+    expect(await step(engine)).toMatchObject({ gone: 1 });
+    const rowId = `cluster-${own.id}`;
+    expect(engine.getActiveCluster(rowId)).toBeUndefined();
+    expect(engine.isKnownVacancyGone(rowId)).toBe(true);
+    expect(engine.detachedRowGone(rowId)).toBe(false);
+    pool.markExpired([other.id], new Date().toISOString());
+    expect(engine.detachedRowGone(rowId)).toBe(true);
+  });
+
+  it('повтор без ответа не опережает давние сверки; след попытки чистится', async () => {
+    const pool = openStore();
+    pool.mergeSourceSlice(HH, [hh(1), hh(2)]);
+    const now = Date.now();
+    pool.requestSelectionLiveness([`${HH}:1`, `${HH}:2`]);
+    pool.markSelectionLivenessTried(`${HH}:1`, now - LIVENESS_RETRY_MS - 1_000);
+    pool.markSelectionLivenessChecked(`${HH}:2`, now - LIVENESS_RECHECK_MS - 1_000);
+    expect(pool.dueSelectionLiveness(10)).toEqual([`${HH}:2`, `${HH}:1`]);
+    pool.markSelectionLivenessTried(`${HH}:1`, now);
+    expect(pool.dueSelectionLiveness(10)).toEqual([`${HH}:2`]);
+    pool.markSelectionLivenessChecked(`${HH}:1`, now - LIVENESS_RECHECK_MS - 1);
+    expect(pool.dueSelectionLiveness(10)).toContain(`${HH}:1`);
+  });
+
   it('такт без ответа о вакансии не отмечает её сверенной, повтор — через час', async () => {
     const pool = openStore();
     pool.mergeSourceSlice(HH, [hh(1)]);

@@ -24,7 +24,8 @@ async function setup() {
       getVacancy: (id: string) => (id === LIVE.id ? LIVE : undefined),
       getActiveCluster: () => undefined,
       openedVacancyGone: async () => true,
-      isKnownVacancyGone: (id: string) => id === 'cluster-src-hh-search:44444444',
+      detachedRowGone: (id: string) => id === 'cluster-src-hh-search:44444444',
+      isKnownVacancyGone: (id: string) => /:4444444[45]$/u.test(id),
     },
   });
   closers.push(harness.close);
@@ -52,6 +53,8 @@ describe('B715: GET b640/vacancies/:id — карточка вакансии в�
     expect((await h.get(path, 'flagged.test')).statusCode).toBe(200);
     const gone = `${BASE}/cluster-src-hh-search:44444444/liveness`;
     expect((await h.post(gone, {}, 'flagged.test')).json().data).toEqual({ closed: true });
+    const glued = `${BASE}/cluster-src-hh-search:44444445/liveness`;
+    expect((await h.post(glued, {}, 'flagged.test')).json().data).toEqual({ closed: false });
     const unknown = `${BASE}/cluster-src-hh-search:99999999/liveness`;
     expect((await h.post(unknown, {}, 'flagged.test')).statusCode).toBe(404);
   });

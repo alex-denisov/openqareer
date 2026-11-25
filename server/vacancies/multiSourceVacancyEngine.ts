@@ -25,8 +25,11 @@ import {
   clusterVacanciesAsync,
   clusterVacancySteps,
   IncrementalClusterBuilder,
+  isDuplicatePrepared,
   memberKeysOf,
+  prepareVacancy,
   sourceMemberKey,
+  vacancyClusterLookup,
 } from './vacancyDeduplicator';
 import { clusterOfRecord } from './vacancyIdentity';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
@@ -1555,6 +1558,30 @@ export class MultiSourceVacancyEngine {
       if (known) return this.recordGone(key);
       // Источник hh без внешнего id — запись самой карточки.
       return isHhSource(source) && this.recordGone(id);
+    });
+  }
+
+  /**
+   * B797: кластера у снятой записи нет — такт убрал её ключ из склейки с другой площадкой. Строка
+   * закрыта, если по правилам склейки у неё не осталось живой записи на другой площадке.
+   */
+  public detachedRowGone(rowId: string): boolean {
+    const id = rowId.replace(/^cluster-/u, '');
+    const record = this.pool.getVacancyIncludingExpired?.(id);
+    const load = this.pool.loadClusterRepresentatives?.bind(this.pool);
+    if (!record || !load) return true;
+    const prepared = prepareVacancy(record);
+    return !load([vacancyClusterLookup(record)]).some((candidate) => {
+      if (!isDuplicatePrepared(prepared, candidate.prepared)) return false;
+      const cluster = this.getPublicCatalogCluster(candidate.clusterId);
+      return cluster?.status === 'active' && this.hasOtherLiveSource(cluster, id);
+    });
+  }
+
+  private hasOtherLiveSource(cluster: VacancyCluster, ownId: string): boolean {
+    return cluster.sources.some((source) => {
+      const key = sourceMemberKey(source);
+      return key !== undefined && key !== ownId && this.pool.getVacancy(key)?.status === 'active';
     });
   }
 

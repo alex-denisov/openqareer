@@ -22,6 +22,8 @@ const HH_ID_PREFIX = 'src-hh-search:';
 const HOUR_MS = 60 * 60 * 1_000;
 /** Верх одной подборки. */
 export const SELECTION_LIVENESS_TOP = 200;
+/** Записей в одном запросе: строки верха и остальные записи их склеек. */
+const LIVENESS_REQUEST_MAX = SELECTION_LIVENESS_TOP * 5;
 /** Строка, записанная недавно, повторно не пишется: чтение списка почти всегда обходится чтением. */
 export const LIVENESS_REQUEST_FRESH_MS = 3 * 24 * HOUR_MS;
 /** Подборка, которую не открывали дольше, больше не сверяется. */
@@ -41,7 +43,7 @@ export function requestSelectionLiveness(
   ids: readonly string[],
   nowMs: number,
 ): void {
-  const top = [...new Set(ids)].slice(0, SELECTION_LIVENESS_TOP);
+  const top = [...new Set(ids)].slice(0, LIVENESS_REQUEST_MAX);
   if (top.length === 0) return;
   const fresh = new Set(
     (
@@ -86,7 +88,7 @@ export function recentlyChecked(database: DatabaseSync, id: string, nowMs: numbe
 }
 
 /**
- * Сначала ни разу не сверенные по месту в подборке, потом самые давние сверки. У hh и остальных
+ * Сначала ни разу не сверенные по месту в подборке, потом самые давние сверки и попытки. У hh и остальных
  * площадок свои `limit` строк: отказ hh не занимает весь такт его же строками.
  */
 export function dueSelectionLiveness(
@@ -97,11 +99,11 @@ export function dueSelectionLiveness(
   const read = database.prepare(
     `SELECT q.vacancy_id AS id FROM selection_liveness q
        JOIN vacancy_pool_index i ON i.id = q.vacancy_id AND i.expired = 0
+       LEFT JOIN selection_liveness_tried t ON t.vacancy_id = q.vacancy_id
       WHERE q.requested_ms >= ? AND q.checked_ms < ?
-        AND NOT EXISTS (SELECT 1 FROM selection_liveness_tried t
-                         WHERE t.vacancy_id = q.vacancy_id AND t.tried_ms >= ?)
+        AND coalesce(t.tried_ms, 0) < ?
         AND (q.vacancy_id LIKE 'src-hh-search:%') = ?
-      ORDER BY q.checked_ms, q.rank LIMIT ?`,
+      ORDER BY max(q.checked_ms, coalesce(t.tried_ms, 0)), q.rank LIMIT ?`,
   );
   return [1, 0].flatMap((hh) =>
     (
@@ -118,6 +120,7 @@ export function dueSelectionLiveness(
   );
 }
 
+/** Запоминает попытку; записи, выпавшие из очереди по сроку, из таблицы уходят. */
 export function markSelectionLivenessTried(
   database: DatabaseSync,
   id: string,
@@ -129,6 +132,9 @@ export function markSelectionLivenessTried(
        ON CONFLICT(vacancy_id) DO UPDATE SET tried_ms = excluded.tried_ms`,
     )
     .run(id, nowMs);
+  database
+    .prepare('DELETE FROM selection_liveness_tried WHERE tried_ms < ?')
+    .run(nowMs - LIVENESS_REQUEST_TTL_MS);
 }
 
 export function markSelectionLivenessChecked(
@@ -143,6 +149,7 @@ export function markSelectionLivenessChecked(
        ON CONFLICT(vacancy_id) DO UPDATE SET checked_ms = excluded.checked_ms`,
     )
     .run(id, SELECTION_LIVENESS_TOP, nowMs);
+  database.prepare('DELETE FROM selection_liveness_tried WHERE vacancy_id = ?').run(id);
 }
 
 export interface SelectionLivenessReport {

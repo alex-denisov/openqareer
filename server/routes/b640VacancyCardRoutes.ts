@@ -94,7 +94,9 @@ async function postVacancyLiveness(deps: CardDeps, request: FastifyRequest, repl
   if (!cluster && !(id && deps.multiSourceEngine.isKnownVacancyGone?.(id))) {
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
   }
-  const closed = !cluster || (await openedClusterGone(deps, request, { ...cluster, id }));
+  const closed = cluster
+    ? await openedClusterGone(deps, request, { ...cluster, id })
+    : (deps.multiSourceEngine.detachedRowGone?.(id) ?? true);
   return { data: { closed }, meta: { requestId: request.id } };
 }
 
