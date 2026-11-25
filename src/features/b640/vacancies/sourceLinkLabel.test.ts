@@ -48,6 +48,18 @@ describe('sourceLinkLabel: ссылка вакансии называется т
     ).toBe('Открыть на jobs.example');
   });
 
+  it('агрегатор с компанией — имя площадки, карьерный сайт — работодатель (B801)', () => {
+    const at = (sourceId: string, sourceUrl: string) =>
+      sourceLinkLabel({
+        primaryUrl: sourceUrl,
+        sources: [{ sourceType: 'json_api', sourceId, sourceUrl }],
+        canonicalCompany: 'Ozon Банк',
+      });
+    expect(at('src-fh-getmatch', 'https://getmatch.ru/vacancies/37235')).toBe('Открыть на Getmatch');
+    expect(at('src-fh-habr-career', 'https://career.habr.com/vacancies/1')).toBe('Открыть на Хабр Карьера');
+    expect(at('src-fh-ozon', 'https://career.ozon.ru/vacancy/1')).toBe('Открыть на сайте работодателя');
+  });
+
   it('с компанией — сайт работодателя, как раньше', () => {
     expect(
       sourceLinkLabel({
@@ -78,7 +90,8 @@ describe('sourceLinkLabel: ссылка вакансии называется т
     });
     expect(sourceLinkTarget({ ...base, url: board.sourceUrl, canonicalCompany: 'Ладога' })).toEqual(
       {
-        kind: 'employer',
+        kind: 'source',
+        name: 'Himalayas',
       },
     );
   });
