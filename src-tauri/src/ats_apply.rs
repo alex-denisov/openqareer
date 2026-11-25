@@ -8,9 +8,10 @@
 use crate::ats_attempts::{self, Attempt, Confirmation};
 use crate::ats_form_scripts::script;
 use crate::ats_model::{
-    attempt_result, decode, file_fields_of, form_report, is_id, listed, outcome_of, press_refusal,
-    rejection_of, submit_refusal, validate_fill, values_of, FileFields, FillReport, FillRequest,
-    FormReport, OpenRequest, Receipt, SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
+    attempt_result, decode, file_fields_of, form_report, is_id, kinds_of, listed, outcome_of,
+    press_refusal, rejected_fields, rejection_of, submit_refusal, validate_fill, values_of,
+    FileFields, FillReport, FillRequest, FormReport, OpenRequest, Receipt, SubmitRequest, Values,
+    FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
     is_confirmation, navigation_allowed, on_target, resolve, thanks_in_place, thanks_path,
@@ -46,6 +47,8 @@ pub(crate) struct Run {
     /// What the form held right after filling; the candidate confirms these.
     pub(crate) filled: Option<Values>,
     pub(crate) file_fields: FileFields,
+    /// Kinds of the fields read, for diagnostics.
+    pub(crate) kinds: BTreeMap<String, &'static str>,
     attempt: Option<Uuid>,
     /// Fields the page had already marked when the button was pressed.
     invalid_before: Value,
@@ -288,6 +291,7 @@ pub async fn open_form(app: &AppHandle, request: OpenRequest) -> Result<FormRepo
             target: target.clone(),
             filled: None,
             file_fields: FileFields::new(),
+            kinds: BTreeMap::new(),
             attempt: None,
             invalid_before: Value::Null,
         });
@@ -317,22 +321,25 @@ async fn read_page(app: &AppHandle, target: &AtsTarget) -> Result<FormReport, St
         .as_mut()
     {
         run.file_fields = file_fields_of(&form);
+        run.kinds = kinds_of(&form);
     }
+    let fields = kinds_of(&form).len();
     let form = crate::ats_steps::with_menus(app, form).await;
     let report = form_report(target, form, still_on_target(app, target));
-    note(app, "read", &format!("{}_{}", target.adapter, report.state));
+    let detail = format!("{}_{}_fields{fields}", target.adapter, report.state);
+    note(app, "read", &detail);
     Ok(report)
 }
 
 pub async fn fill_form(app: &AppHandle, request: FillRequest) -> Result<FillReport, String> {
     let target = current_target(app, &request.vacancy_id)?;
-    let file_fields = app
+    let (file_fields, kinds) = app
         .state::<AtsFormState>()
         .run
         .lock()
         .map_err(|_| "form_state_unavailable")?
         .as_ref()
-        .map(|run| run.file_fields.clone())
+        .map(|run| (run.file_fields.clone(), run.kinds.clone()))
         .unwrap_or_default();
     validate_fill(&request, &file_fields)?;
     if !still_on_target(app, &target) {
@@ -369,6 +376,9 @@ pub async fn fill_form(app: &AppHandle, request: FillRequest) -> Result<FillRepo
         run.filled = Some(values.clone());
     }
     note(app, "fill", &format!("fields{}", results.len()));
+    for rejected in rejected_fields(&request.entries, &results, &values, &kinds) {
+        note(app, "fill_rejected", &rejected);
+    }
     Ok(FillReport { results, values })
 }
 
