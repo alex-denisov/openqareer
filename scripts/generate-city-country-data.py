@@ -54,6 +54,20 @@ def read(path: str) -> tuple[Names, Names]:
     return best, largest
 
 
+def namesakes(best: Names, largest: Names) -> dict[str, list[str]]:
+    """Тёзки: имя → все страны. Читаются только рядом с кодом штата («Cambridge, MA»)."""
+    result: dict[str, list[str]] = collections.defaultdict(list)
+    for key, countries in best.items():
+        ranked = sorted(countries.items(), key=lambda item: -item[1])
+        if len(ranked) < 2 or not {"US", "CA"} & countries.keys():
+            if "IN" not in countries or len(ranked) < 2:
+                continue
+        codes = sorted(code for code in countries if largest[key][code] >= WORD_POPULATION)
+        if codes:
+            result["~" + ",".join(codes)].append(key)
+    return result
+
+
 def unambiguous(best: Names, largest: Names) -> dict[str, list[str]]:
     result: dict[str, list[str]] = collections.defaultdict(list)
     for key, countries in best.items():
@@ -69,7 +83,8 @@ def unambiguous(best: Names, largest: Names) -> dict[str, list[str]]:
 
 
 def main() -> None:
-    rows = unambiguous(*read(sys.argv[1]))
+    best, largest = read(sys.argv[1])
+    rows = {**unambiguous(best, largest), **namesakes(best, largest)}
     text = "\n".join(f"{code}|{'|'.join(sorted(names))}" for code, names in sorted(rows.items()))
     data = base64.b64encode(gzip.compress(text.encode(), 9, mtime=0)).decode()
     chunks = "".join(f"  '{data[at:at + CHUNK]}',\n" for at in range(0, len(data), CHUNK))

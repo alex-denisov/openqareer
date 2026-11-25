@@ -3,7 +3,7 @@
  * пусто). Порядок — от места в тексте к адресу вакансии и к стране работодателя; ничего не нашли или
  * признаки спорят — страны нет.
  */
-import { cityCountry, cityCountryInText } from './cityCountry';
+import { cityCountries, cityCountry, cityCountryInText } from './cityCountry';
 
 /** `place` — страна или штат названы, либо место знает общий разбор; `city` — догадка по словарю. */
 export type CountryHintBasis = 'place' | 'city' | 'address' | 'employer' | 'domain' | 'text';
@@ -161,8 +161,10 @@ function codeRead(code: string, city: string, deps: CountryHintDeps): PlaceAnswe
   const foreign = FOREIGN_REGIONS.get(code);
   if (found && found !== 'dispute' && found.country === foreign) return found;
   if (!isCountry || COUNTRY_NAMESAKES.has(city.toLowerCase())) return read(region, 'place');
-  if (!found || found === 'dispute') return found;
-  return found.country === region || found.country === code ? found : 'dispute';
+  const pair = cityCountries(city).filter((country) => country === region || country === code);
+  if (pair.length > 0) return read(single(pair), 'city') ?? 'dispute';
+  const fits = found && found !== 'dispute' && [region, code].includes(found.country);
+  return fits ? found : 'dispute';
 }
 
 /** «Город, штат»: полное имя штата или его код. `undefined` — штата в месте нет. */
@@ -224,7 +226,9 @@ function clauseRead(clause: string, deps: CountryHintDeps): PlaceAnswer {
 
 /** Места через «;», «/», «|» разбираются порознь: разные страны — спор. */
 function placeRead(location: string, deps: CountryHintDeps): PlaceAnswer {
-  return agreed(location.split(/[;|/·]+/u).map((clause) => clauseRead(clause, deps)));
+  return agreed(
+    location.split(/[;|/·]+|\s(?:or|или)\s/iu).map((clause) => clauseRead(clause, deps)),
+  );
 }
 
 /** Workday пишет место в адрес вакансии: `/job/McLean-VA/…`. */

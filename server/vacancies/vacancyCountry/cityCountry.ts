@@ -11,6 +11,7 @@ interface City {
   readonly large: boolean;
 }
 
+let namesakes: ReadonlyMap<string, readonly string[]> | undefined;
 let index: ReadonlyMap<string, City> | undefined;
 
 /** Регионы и обычные слова, которые где-то ещё и город. */
@@ -31,12 +32,33 @@ function onlyCommonWords(name: string): boolean {
   return name.split(/[\s-]+/u).every((word) => NOT_CITIES.has(word));
 }
 
+function lines(): readonly string[] {
+  return gunzipSync(Buffer.from(CITY_COUNTRY_GZIP_BASE64.join(''), 'base64'))
+    .toString()
+    .split('\n');
+}
+
+/** Страны, где есть город с таким именем; у однозначного — одна. */
+export function cityCountries(city: string): readonly string[] {
+  namesakes ??= new Map(
+    lines().flatMap((line) => {
+      if (!line.startsWith('~')) return [];
+      const [key = '', ...names] = line.slice(1).split('|');
+      return names.map((name) => [name, key.split(',')] as const);
+    }),
+  );
+  const found = namesakes.get(city.normalize('NFC').trim().toLowerCase());
+  if (found) return found;
+  const only = cityCountry(city);
+  return only ? [only] : [];
+}
+
 function cities(): ReadonlyMap<string, City> {
   if (!index) {
-    const text = gunzipSync(Buffer.from(CITY_COUNTRY_GZIP_BASE64.join(''), 'base64')).toString();
     index = new Map(
-      text.split('\n').flatMap((line) => {
+      lines().flatMap((line) => {
         const [key = '', ...names] = line.split('|');
+        if (key.startsWith('~')) return [];
         const city = { country: key.slice(0, 2), large: key.endsWith('+') };
         return names.map((name) => [name, city] as const);
       }),
