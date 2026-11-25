@@ -5,11 +5,17 @@ const MAX_CHARACTERS = 700;
 const MAX_SENTENCES = 5;
 const EMOJI =
   /(?![©®™])\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\u{FE0F}|\u{200D}|\u{20E3}/gu;
-const MARK = /^[\s•·●▪◦*✓–—-]+(?=\S)/u;
+/** Метка пункта; «-5%» и перенос «— не только» — не метка. */
+const MARK = /^\s*(?:[•·●▪◦*✓]\s*|[–—-]\s+(?=[\p{Lu}\d$€£₽]))/u;
+const PHONE = /(?<!\d)\+?\d(?:[\s()-]*\d){9,}/u;
 const CONTACT =
-  /\S@\S+\.\p{L}{2,}|(?<![\p{L}\d])@\w{3,}|\bt\.me\/|linkedin\.com|(?<!\p{L})(?:contacts?|e-?mail|telegram|whatsapp|phone|контакты?|почта|телеграм|телефон)\s*:|\+\d[\d\s()-]{8,}/iu;
+  /\S@\S+\.\p{L}{2,}|(?<![\p{L}\d])@\w{3,}|\bt\.me\/|linkedin\.com|(?<!\p{L})(?:contacts?|e-?mail|telegram|whatsapp|phone|контакты?|почта|телеграм|телефон)\s*(?::|@|\+?\d|$)/iu;
 const SEARCH =
-  /^(?:open to|available for|open for|seeking|looking for|reach out|let['’]s (?:connect|talk)|feel free|ищу|открыт[аы]? (?:к|для)|готов[аы]? к (?:переезд|релокац)\p{L}*|рассматриваю|в поиске|свяжитесь|пишите)(?!\p{L})/iu;
+  /^(?:(?:i am|i['’]m|i|currently|now|actively|also|я|сейчас|активно|также)\s+)*(?:open (?:to|for)|available (?:for|from|immediately|now)|seeking|looking for|searching for|ready to relocate|willing to|interested in\b.{0,80}\b(?:roles?|positions?|opportunit|jobs?|offers?|work)|reach out|contact me|let['’]s (?:connect|talk)|feel free|ищу|в поиске|открыт[аы]? (?:к|для)|готов[аы]? (?:к (?:переезд|релокац|предложени)|рассмотреть|переехать)|рассм[ао]тр\p{L}*|интересу(?:ют|ет|юсь).{0,60}(?:ваканси|позици|предложени|должност|рол[ьи])|свяжитесь|пишите|звоните)/iu;
+const RELOCATE = /\b(?:willing|ready|open|able) to relocate\b|готов[аы]? к (?:переезд|релокац)/iu;
+/** Слово, которым фраза не кончается: следующая строка её продолжает. */
+const OPEN_END =
+  /(?:[,&/–—-]|(?<!\p{L})(?:and|or|of|the|a|an|to|for|with|in|on|at|by|from|that|и|или|в|во|на|с|со|по|для|от|до|из|к|о|об|за|над|при|что))$/iu;
 
 const isHeading = (line: string): boolean =>
   /\p{L}/u.test(line) &&
@@ -26,21 +32,53 @@ const sentencesOf = (line: string): string[] =>
   line.split(/(?<=[.!?…])\s+(?=[\p{Lu}\d«"$])/u).filter(Boolean);
 
 const isOwnSentence = (text: string): boolean =>
-  !CONTACT.test(text) && !SEARCH.test(text) && !isSearchIntent(text);
+  !CONTACT.test(text) &&
+  !PHONE.test(text) &&
+  !SEARCH.test(text) &&
+  !RELOCATE.test(text) &&
+  !isSearchIntent(text);
+
+/** Строки профиля; перенос внутри фразы склеен обратно. */
+function linesOf(about: string): string[] {
+  const lines: string[] = [];
+  for (const raw of about.split('\n')) {
+    const plain = raw.replace(EMOJI, '');
+    const marked = plain !== raw || MARK.test(plain);
+    const line = plain.replace(MARK, '').replace(/\s+/gu, ' ').trim();
+    const last = lines.at(-1) ?? '';
+    const broken =
+      !marked &&
+      last !== '' &&
+      line !== '' &&
+      !/[.!?…:]$/u.test(last) &&
+      !isHeading(line) &&
+      (/^[\p{Ll}–—(]/u.test(line) || OPEN_END.test(last));
+    if (broken) lines.splice(-1, 1, `${last} ${line}`);
+    else lines.push(line);
+  }
+  return lines;
+}
+
+/** Слишком длинная фраза кончается на границе своей части. */
+function cut(text: string): string {
+  if (text.length <= MAX_CHARACTERS) return text;
+  const head = text.slice(0, MAX_CHARACTERS - 1);
+  const end = Math.max(...[';', ' — ', ' – ', ','].map((mark) => head.lastIndexOf(mark)));
+  const part = end > 0 ? head.slice(0, end) : head.slice(0, head.lastIndexOf(' '));
+  return part ? `${part.trimEnd()}.` : '';
+}
 
 export function vacancyAbout(about: string): string {
-  const sentences = about
-    .split('\n')
-    .map((line) => line.replace(EMOJI, '').replace(MARK, '').replace(/\s+/gu, ' ').trim())
+  const sentences = linesOf(about)
     .filter(isOwnLine)
     .flatMap(sentencesOf)
     .filter(isOwnSentence)
-    .map((text) => (/[.!?…]$/u.test(text) ? text : `${text}.`));
-  const first = sentences.slice(0, MAX_SENTENCES);
-  const kept: string[] = [];
-  for (const text of first) {
-    if (kept.length > 0 && [...kept, text].join(' ').length > MAX_CHARACTERS) break;
-    kept.push(text);
-  }
-  return kept.join(' ');
+    .map((text) => cut(/[.!?…]$/u.test(text) ? text : `${text}.`))
+    .filter(Boolean);
+  return sentences.slice(0, MAX_SENTENCES).reduce((kept, text, index, all) => {
+    const before = all.slice(0, index).join(' ');
+    if (kept !== before) return kept;
+    const next = kept ? `${kept} ${text}` : text;
+    return next.length <= MAX_CHARACTERS ? next : kept;
+  }, '');
 }

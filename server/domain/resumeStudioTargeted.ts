@@ -1,7 +1,7 @@
 import { vacancyAbout } from './resumeAbout';
 import { languageRequirementMet } from './resumeLanguageRequirement';
 import { termAppears } from './requirementTerm';
-import { resultStrength } from './resumeResult';
+import { isResult, resultStrength } from './resumeResult';
 import { withoutIntentLines, withoutSearchIntent } from './resumeSearchIntent';
 import { estimateLength } from './resumeStudioInternals';
 import type {
@@ -171,8 +171,9 @@ function endMonth(role: ResumeExperience): number {
 
 /** Измеримые результаты места стоят первыми; правки под вакансию ложатся поверх этого порядка. */
 function resultsFirst(role: ResumeExperience): ResumeExperience {
+  const order = ({ value }: ResumeAssertion) => (isResult(value) ? resultStrength(value) : 0);
   const bullets = [...role.bullets].sort(
-    (left, right) => resultStrength(right.value) - resultStrength(left.value),
+    (left, right) => order(right) - order(left),
   );
   return { ...role, bullets };
 }

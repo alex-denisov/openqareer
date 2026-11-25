@@ -40,4 +40,48 @@ describe('«О себе» в резюме под вакансию', () => {
     ).toBe('Руковожу поддержкой 10 лет.');
     expect(vacancyAbout('Ищу работу')).toBe('');
   });
+
+  it('перенос внутри фразы её не рвёт', () => {
+    expect(
+      vacancyAbout(
+        'I build organizations that\ndrive revenue — not just\nsupport the business.\nLed IT.',
+      ),
+    ).toBe('I build organizations that drive revenue — not just support the business. Led IT.');
+    expect(vacancyAbout('Отвечаю за\nСАП и склад.')).toBe('Отвечаю за САП и склад.');
+    expect(vacancyAbout('• Grew revenue to $5M\n• Built a team')).toBe(
+      'Grew revenue to $5M. Built a team.',
+    );
+  });
+
+  it('минус у числа остаётся', () => {
+    expect(vacancyAbout('-5% churn in a year')).toBe('-5% churn in a year.');
+    expect(vacancyAbout('- Built a team')).toBe('Built a team.');
+  });
+
+  it.each([
+    'Interested in VP roles',
+    'Currently seeking work',
+    'I am willing to relocate',
+    'Based in Dubai, willing to relocate',
+    'Рассмотрю предложения',
+    'Мой телефон 8 916 123-45-67',
+    'Call +7 (916) 123-45-67',
+    'Готова рассмотреть предложения',
+    'Интересуют позиции CIO',
+  ])('«%s» в резюме не попадает', (line) => {
+    expect(vacancyAbout(`Руковожу поддержкой.\n${line}`)).toBe('Руковожу поддержкой.');
+  });
+
+  it.each(['Interested in distributed systems since school.', 'Вела проект 01.2023 - 05.2024.'])(
+    '«%s» остаётся',
+    (line) => expect(vacancyAbout(line)).toBe(line),
+  );
+
+  it('длинное предложение не выходит за 700 знаков', () => {
+    const long = 'Руковожу поддержкой и эксплуатацией, '.repeat(28);
+    const result = vacancyAbout(long);
+    expect(result.length).toBeLessThanOrEqual(700);
+    expect(result).toMatch(/эксплуатацией\.$/u);
+    expect(vacancyAbout('слово '.repeat(200)).length).toBeLessThanOrEqual(700);
+  });
 });

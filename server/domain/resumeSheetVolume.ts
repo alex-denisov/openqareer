@@ -25,8 +25,10 @@ const OLDER_BULLETS = 1;
 /** Столько остаётся в разделе, когда он уступает место пунктам опыта. */
 const MIN_SKILLS = 8;
 const MIN_CERTIFICATES = 2;
-/** Больше любой суммы совпадений: число в пункте всегда важнее. */
+/** Больше любой суммы совпадений: результат всегда важнее. */
 const RESULT_WEIGHT = 1000;
+/** Количество без изменения решает только при равном совпадении. */
+const COUNT_WEIGHT = 0.25;
 const REASON = 'В пункте меньше всего совпадений с требованиями вакансии.';
 
 const wrapped = (text: string): number =>
@@ -99,8 +101,9 @@ function yieldSection(document: ResumeDocument, relevance: ResumeRelevance): Res
 
 /** Сначала измеримые результаты, среди равных — отвечающие вакансии. */
 function rankOf(bullet: ResumeAssertion, relevance: ResumeRelevance): number {
+  const strength = resultStrength(bullet.value);
   return (
-    resultStrength(bullet.value) * RESULT_WEIGHT +
+    (strength >= 2 ? strength * RESULT_WEIGHT : strength * COUNT_WEIGHT) +
     relevanceScore(relevance, bullet.value, bullet.memoryId)
   );
 }
