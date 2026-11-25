@@ -1,3 +1,4 @@
+import { pressApply } from '../../apply/applyIntent';
 import type { RecruiterContact } from '../../../../../shared/recruiterContact';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { pluralWordRu } from '../../../../../shared/pluralRu';
@@ -116,7 +117,7 @@ export function CompanyBlock(props: CompanyBlockProps) {
             <b>{recruiter.fullName}</b>
             {recruiter.roleTitle ? ` · ${recruiter.roleTitle}` : ''}
           </p>
-          <Link className="row-act" to={buildNodePath('o02', { responseId: vacancyId })}>
+          <Link className="row-act" to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
             <Icon name="send" />
             Откликнуться напрямую
           </Link>

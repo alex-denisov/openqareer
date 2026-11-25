@@ -206,6 +206,20 @@ pub fn is_confirmation(target: &AtsTarget, url: &str) -> bool {
         })
 }
 
+/// Where a board that thanks on the vacancy's own address does so.
+pub fn thanks_path(target: &AtsTarget) -> Option<String> {
+    (target.adapter == "bamboohr")
+        .then(|| Url::parse(&target.entry_url).ok())
+        .flatten()
+        .map(|url| url.path().trim_end_matches('/').to_string())
+}
+
+pub fn thanks_in_place(target: &AtsTarget, url: &str) -> bool {
+    thanks_path(target).is_some_and(|path| {
+        on_target_host(target, url).is_some_and(|next| next.path().trim_end_matches('/') == path)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

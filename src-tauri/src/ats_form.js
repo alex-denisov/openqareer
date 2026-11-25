@@ -473,6 +473,7 @@
   }
   // BambooHR shows the form only after this press; the button sends nothing.
   function openForm() {
+    if (!inPlace()) return;
     if (window.__oqAtsOpened || !/^\/careers\/\d+\/?$/.test(location.pathname)) return;
     if (!document.querySelector('[data-fabric-component]')) return;
     var openers = Array.prototype.slice
@@ -860,11 +861,27 @@
     buttons[0].click();
     return { state: 'clicked', invalidBefore: marked };
   }
+  // BambooHR thanks on the vacancy's own address, in place of the form.
+  function thanked(form) {
+    if (form || !ARG || !ARG.thanksPath) return false;
+    if (location.pathname.replace(/\/+$/, '') !== ARG.thanksPath) return false;
+    var heads = Array.prototype.slice.call(document.querySelectorAll('h2')).filter(shown);
+    return heads.some(function (head) {
+      var said = head.nextElementSibling;
+      return (
+        text(head) === 'Thank You' &&
+        Boolean(said) &&
+        shown(said) &&
+        text(said) === 'Your application was submitted successfully'
+      );
+    });
+  }
   function outcome() {
     var confirmPath = ARG && ARG.confirmationPath;
     var here = location.pathname.replace(/\/+$/, '');
     if (confirmPath && here === confirmPath) return { state: 'confirmed', path: location.pathname };
     var form = findForm();
+    if (thanked(form)) return { state: 'confirmed', path: location.pathname };
     if (captcha()) return { state: 'captcha' };
     if (form) {
       // A mark older than the press is not the board's answer to it.

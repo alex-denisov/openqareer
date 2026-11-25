@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { HhCatalogTextBackfill, type HhCatalogTextEngine } from './hhCatalogText';
-import { HH_TEXT_ROLE_REST_MS } from './hhTextRolePosition';
+import { HH_TEXT_ROLE_REST_MS, loadRoleTextPage } from './hhTextRolePosition';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 
 const HH = 'src-hh-search';
@@ -29,7 +29,9 @@ function open(): { store: SqliteVacancyPoolStore; path: string } {
 function targetOwners(path: string): string[] {
   const raw = new DatabaseSync(path, { readOnly: true });
   try {
-    const rows = raw.prepare('SELECT candidate_id AS id FROM hh_text_role_targets ORDER BY id').all() as Array<{ id: string }>;
+    const rows = raw
+      .prepare('SELECT candidate_id AS id FROM hh_text_role_targets ORDER BY id')
+      .all() as Array<{ id: string }>;
     return rows.map((row) => row.id);
   } finally {
     raw.close();
@@ -119,6 +121,48 @@ describe('hh role text position (04.11)', () => {
     expect(seen).toEqual([cto.id, qa.id, cio.id]);
   });
 
+  it('seeks to the position and rereads only the exhausted function (B761)', () => {
+    const { store, path } = open();
+    // Equal dates across pages and one row under two functions: nothing lost, nothing twice.
+    const eng = Array.from({ length: 60 }, (_, n) => hh(1_000 + n, 1));
+    const day = eng[0].publishedAt;
+    const rows = eng.map((row) => ({ ...row, publishedAt: day }));
+    const qa = hh(5_000, 3);
+    store.mergeSourceSlice(HH, [...rows, qa]);
+    classify(path, [
+      ...rows.map((row): [UnifiedVacancy, string, number | null] => [row, 'eng', 3]),
+      [rows[0], 'qa', 3],
+      [qa, 'qa', 3],
+    ]);
+    const raw = new DatabaseSync(path, { readOnly: true });
+    const queries: string[] = [];
+    const database = {
+      prepare: (sql: string) => {
+        queries.push(sql);
+        return raw.prepare(sql);
+      },
+    } as unknown as DatabaseSync;
+    try {
+      const page = loadRoleTextPage({
+        database,
+        sourceId: HH,
+        targets: [{ codes: ['eng', 'qa'], floor: null }],
+        position: undefined,
+        limit: 100,
+        nowMs: Date.now(),
+        needsText: () => true,
+      });
+      expect(page.ids).toEqual([...rows.map((row) => row.id).sort(), qa.id]);
+      expect(queries).toHaveLength(4);
+      const plan = raw
+        .prepare(`EXPLAIN QUERY PLAN ${queries[0]}`)
+        .all('eng', 1, 1, '', HH, 1) as Array<{ detail: string }>;
+      expect(plan[0].detail).toContain('published_ms<');
+    } finally {
+      raw.close();
+    }
+  });
+
   it('rests after a whole pass, then starts from the newest rows again', () => {
     const { store, path } = open();
     const row = hh(1, 1);
@@ -132,7 +176,11 @@ describe('hh role text position (04.11)', () => {
     expect(end.ids).toEqual([]);
     const resting = store.loadHhRoleTextCandidates(end.position, 5, now + 1_000);
     expect(resting.ids).toEqual([]);
-    const later = store.loadHhRoleTextCandidates(resting.position, 5, now + HH_TEXT_ROLE_REST_MS + 1);
+    const later = store.loadHhRoleTextCandidates(
+      resting.position,
+      5,
+      now + HH_TEXT_ROLE_REST_MS + 1,
+    );
     expect(later.ids).toEqual([row.id]);
   });
 
@@ -190,7 +238,11 @@ describe('HhCatalogTextBackfill role position (04.11)', () => {
     const loaded: string[] = [];
     const saved: Array<string | undefined> = [];
     const generalSaved: Array<string | undefined> = [];
-    const pages = [{ ids: ['r1'], position: 'p1' }, { ids: ['r2'], position: 'p2' }, { ids: [], position: 'p3' }];
+    const pages = [
+      { ids: ['r1'], position: 'p1' },
+      { ids: ['r2'], position: 'p2' },
+      { ids: [], position: 'p3' },
+    ];
     const backfill = new HhCatalogTextBackfill({
       perTick: 5,
       engine: engineWith({
@@ -237,7 +289,11 @@ describe('HhCatalogTextBackfill role position (04.11)', () => {
       engine: engineWith({
         loadRoleCandidates: () => ({ ids: ['r1'], position: 'p1' }),
         saveRolePosition: (position) => saved.push(position),
-        loadVacancyDescription: async () => ({ status: 'failed', unavailable: false, blocked: 'refused' }),
+        loadVacancyDescription: async () => ({
+          status: 'failed',
+          unavailable: false,
+          blocked: 'refused',
+        }),
       }),
     });
     expect((await backfill.step()).blocked).toBe(true);

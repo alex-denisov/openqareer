@@ -139,7 +139,7 @@ fn breezy(host: &str, parts: &[&str]) -> Option<AtsTarget> {
     Some(target("breezy", host, &path, confirmation))
 }
 
-/// The form opens on the job's own page; no confirmation address is known.
+/// The form opens on the job's own page; it thanks there too (`thanks_in_place`).
 fn bamboohr(host: &str, parts: &[&str]) -> Option<AtsTarget> {
     let ["careers", job] = parts else {
         return None;
@@ -190,7 +190,7 @@ pub fn resolve(url: &Url, board: Option<&str>) -> Option<Result<AtsTarget, Strin
 
 #[cfg(test)]
 mod tests {
-    use crate::ats_target::{is_confirmation, on_target, resolve};
+    use crate::ats_target::{is_confirmation, on_target, resolve, thanks_in_place};
 
     const JOB: &str = "fca52e03-9e9d-4dcd-bda8-c27dbdd0e0a4";
 
@@ -266,6 +266,13 @@ mod tests {
             "https://acme.bamboohr.com/careers/1334"
         ));
         assert!(!is_confirmation(&bamboo, &bamboo.entry_url));
+        assert!(thanks_in_place(&bamboo, &bamboo.entry_url));
+        assert!(!thanks_in_place(
+            &bamboo,
+            "https://other.bamboohr.com/careers/90"
+        ));
+        assert!(!thanks_in_place(&bamboo, &format!("{}1", bamboo.entry_url)));
+        assert!(!thanks_in_place(&breezy, &breezy.entry_url));
         let form =
             format!("https://jobs.smartrecruiters.com/oneclick-ui/company/Acme/publication/{JOB}");
         let smart = resolve(&format!("{form}?dcr_ci=Acme"), None).unwrap();

@@ -213,10 +213,11 @@ function repeatsProfile(statement: string, draft: ResumeDraft): boolean {
  * подсказывает цифру, которой в профиле нет.
  */
 const MIN_NOTE_WORDS = 4;
-const NOT_A_BASIS_DOMAINS: ReadonlySet<string> = new Set(['gap']);
+const NOT_A_BASIS_DOMAINS: ReadonlySet<string> = new Set(['gap', 'preference']);
 
 /** Короткая реплика с числом остаётся: «Команда 250+ человек» — факт, а «Стало семь» — нет. */
 function isLetterBasis(fact: VacancyPitchInputFact): boolean {
+  // Желаемое — не опыт: «ищу роль в FinTech» письмо выдавало за работу в FinTech.
   if (fact.domain && NOT_A_BASIS_DOMAINS.has(fact.domain)) return false;
   return /\d/u.test(fact.statement) || (fact.statement.match(/[\p{L}\p{N}]+/gu) ?? []).length >= MIN_NOTE_WORDS;
 }
@@ -263,6 +264,8 @@ function candidateNotes(draft: ResumeDraft, usable: readonly VacancyPitchInputFa
   return noteFacts(draft, usable).map((fact) => `- ${fact.statement.trim()}`);
 }
 
+const STUDY_TITLE = 'CERTIFICATIONS AND COURSES (учёба, не опыт работы)';
+
 function draftSections(draft: ResumeDraft, withheld: ReadonlySet<string>): string[] {
   const projects = visibleItems(draft.projects, withheld);
   return [
@@ -272,13 +275,30 @@ function draftSections(draft: ResumeDraft, withheld: ReadonlySet<string>): strin
     ])),
     ...section('ACHIEVEMENTS', visibleItems(draft.achievements, withheld).map((item) =>
       line(item.title, item.issuer, item.date, item.description))),
-    ...section('EDUCATION', visibleItems(draft.education, withheld).map((item) =>
+    ...section('EDUCATION (учёба, не опыт работы)', visibleItems(draft.education, withheld).map((item) =>
       line(item.institution, item.qualification, period(item.startDate, item.endDate), item.description))),
-    ...section('CERTIFICATIONS AND COURSES', [
+    ...section(STUDY_TITLE, [
       ...visibleItems(draft.certifications, withheld).map((item) => line(item.name, item.issuer, item.issuedAt)),
       ...visibleItems(draft.courses, withheld).map((item) => line(item.name, item.provider ?? item.institution, item.year)),
       ...visibleItems(draft.tests, withheld).map((item) => line(item.name, item.provider, item.score, item.year)),
     ]),
+  ];
+}
+
+/** Навык, который в профиле стоит только в учёбе, работой не подтверждён. */
+function workSkills(names: readonly string[], work: readonly string[], study: readonly string[]): string[] {
+  const has = (lines: readonly string[], name: string) => {
+    const wanted = ` ${normalized(name)} `;
+    return lines.some((text) => ` ${normalized(text)} `.includes(wanted));
+  };
+  return names.filter((name) => !has(study, name) || has(work, name));
+}
+
+function studyLines(draft: ResumeDraft, withheld: ReadonlySet<string>): string[] {
+  return [
+    ...visibleItems(draft.education, withheld).map((item) => line(item.qualification, item.description)),
+    ...visibleItems(draft.courses, withheld).map((item) => item.name),
+    ...visibleItems(draft.certifications, withheld).map((item) => item.name),
   ];
 }
 
@@ -308,15 +328,18 @@ export function letterProfileText({
   const usable = filterUsablePitchFacts(facts);
   const usableById = new Map(usable.map((fact) => [fact.id, fact.statement.trim()]));
   const notes = candidateNotes(draft, usable);
+  const work = draft.experience.flatMap((place) =>
+    experienceLines(place, usableById, placedRewriteFacts(draft, usable, place.id)));
+  const projects = visibleItems(draft.projects, withheldEvidenceIds).map((item) => line(item.name, item.description));
+  const skills = visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name);
   return withinLimit([
     ...(headline ? [`HEADLINE: ${headline}`, ''] : []),
     ...(aboutVisible ? ['ABOUT:', about, ''] : []),
     ...(contact?.location ? [`LOCATION: ${contact.location}`, ''] : []),
-    ...section('EXPERIENCE', draft.experience.flatMap((place) =>
-      experienceLines(place, usableById, placedRewriteFacts(draft, usable, place.id)))),
+    ...section('EXPERIENCE', work),
     ...draftSections(draft, withheldEvidenceIds),
     ...joinedLine('LANGUAGES', visibleItems(draft.languages, withheldEvidenceIds).map((item) => [item.name, item.cefr ?? item.sourceLabel].filter(Boolean).join(' '))),
-    ...joinedLine('SKILLS', visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name)),
+    ...joinedLine('SKILLS', workSkills(skills, [...work, ...projects], studyLines(draft, withheldEvidenceIds))),
     ...section(CANDIDATE_NOTES_TITLE, notes),
   ]
     .map(withoutContacts)

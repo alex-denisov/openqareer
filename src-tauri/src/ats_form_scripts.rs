@@ -396,13 +396,43 @@ mod tests {
     #[test]
     fn bamboohr_s_form_is_opened_once_and_only_on_a_vacancy_page() {
         let page = r#"<div data-fabric-component="Box"><button type="button" id="open">Apply for This Job</button></div>"#;
-        let read = || op("read", json!(null));
-        for (path, presses) in [("/careers/1", 1), ("/careers", 0), ("/x/careers/1", 0)] {
+        let read = || op("read", json!({ "hosts": ["hh.ru"], "path": "/careers/1" }));
+        for (path, presses) in [
+            ("/careers/1", 1),
+            ("/careers/2", 0),
+            ("/careers", 0),
+            ("/x/careers/1", 0),
+        ] {
             let Some(out) = run(page, path, "", &[read(), read()]) else {
                 return;
             };
             assert_eq!(parsed(&out, 1)["state"], "form_missing");
             assert_eq!(out["clicks"].as_array().unwrap().len(), presses, "{path}");
+        }
+    }
+
+    #[test]
+    fn bamboohr_confirms_only_by_its_own_words_in_place_of_the_form() {
+        let said =
+            "<div><h2>Thank You</h2><p>Your application was submitted successfully</p></div>";
+        let other = "<div><h2>Thank You</h2><p>Your application was saved</p></div>";
+        let with_form = format!("{BAMBOOHR}{said}");
+        let cases = [
+            (said, "/careers/1", "confirmed"),
+            (said, "/careers/2", "pending"),
+            (other, "/careers/1", "pending"),
+            (with_form.as_str(), "/careers/1", "pending"),
+        ];
+        for (html, path, state) in cases {
+            let script = op("outcome", json!({ "thanksPath": "/careers/1" }));
+            let Some(out) = run(html, path, "", &[script]) else {
+                return;
+            };
+            assert_ne!(
+                parsed(&out, 0)["state"] == "confirmed",
+                state != "confirmed",
+                "{path}"
+            );
         }
     }
 

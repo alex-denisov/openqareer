@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isJobTitle } from './jobTitleName';
 import type {
   QuestionnaireAnswer,
   QuestionnaireQuestion,
@@ -38,10 +39,20 @@ const choice = (id: string, label: string): QuestionnaireQuestion => ({
   options: YES_NO,
 });
 
+/** Вопросы, сохранённые до отсева должностей из навыков, их больше не показывают. */
+export function withoutTitleQuestions(
+  questions: readonly QuestionnaireQuestion[],
+): readonly QuestionnaireQuestion[] {
+  return questions.filter(({ id, text: label }) => {
+    const skill = id.startsWith('std-years-') ? /: (.+)\?$/u.exec(label)?.[1] : undefined;
+    return !skill || !isJobTitle(skill);
+  });
+}
+
 function uniqueSkills(skills: readonly string[]): readonly string[] {
   const names = skills
     .map((skill) => skill.trim())
-    .filter((skill) => skill && skill.length <= MAX_SKILL_LENGTH);
+    .filter((skill) => skill && skill.length <= MAX_SKILL_LENGTH && !isJobTitle(skill));
   const seen = new Set<string>();
   return names
     .filter((skill) => {
