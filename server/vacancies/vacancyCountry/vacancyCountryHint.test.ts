@@ -40,6 +40,7 @@ describe('vacancyCountryHint', () => {
     ['Atlanta, Georgia', 'US'],
     ['Tbilisi, Georgia', 'GE'],
     ['Perth, WA', 'AU'],
+    ['Windsor, CA', 'CA'],
     ['Hyderabad, IN', 'IN'],
     ['Moscow, ID', 'US'],
     ['Dublin, CA', 'US'],
