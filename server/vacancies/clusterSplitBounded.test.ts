@@ -185,6 +185,37 @@ describe('cluster split step within a write budget (B752)', () => {
     expect(endState(db)).toEqual(endState(whole));
   });
 
+  it('time spent inside one cluster cuts it into parts too', () => {
+    const db = seed();
+    const first = splitClustersStep(db, { now: 1_000, maxPieces: 1_000, budgetMs: 0 });
+    expect(first).toMatchObject({ split: 0, pieces: 1 });
+  });
+
+  it('planning stops after its time, one cluster per step at least', () => {
+    const db = seed();
+    const steps = runToEnd(db, { maxPieces: 1_000, planMs: 0 });
+    expect(steps.every((step) => step.scanned === 1)).toBe(true);
+  });
+
+  it('pages of a write are read before the write lock is taken', () => {
+    const db = seed();
+    const log: string[] = [];
+    const prepare = db.prepare.bind(db);
+    const exec = db.exec.bind(db);
+    const spied = new Proxy(db, {
+      get: (target, name) => {
+        if (name === 'exec') return (sql: string) => (log.push(sql), exec(sql));
+        if (name === 'prepare') return (sql: string) => (log.push(sql), prepare(sql));
+        return Reflect.get(target, name);
+      },
+    });
+    splitClustersStep(spied, { now: 1_000 });
+    const lock = log.indexOf('BEGIN IMMEDIATE');
+    const keyRead = log.findIndex((sql) => /SELECT 1 FROM vacancy_cluster_keys/u.test(sql));
+    expect(keyRead).toBeGreaterThanOrEqual(0);
+    expect(keyRead).toBeLessThan(lock);
+  });
+
   it('every part reports the step id that reverts the whole cluster', () => {
     const db = seed();
     const before = endState(db).slice(0, 4);

@@ -61,6 +61,30 @@ export function schemaSourcesOf(metafile, readText = (path) => readFileSync(path
     .filter((source) => source.text.length > 0);
 }
 
+/** Таблица оператора; у триггера, DROP INDEX и прочего её по тексту не узнать. */
+const STATEMENT_TABLE =
+  /^(?:CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|ALTER\s+TABLE|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|CREATE\s+(?:UNIQUE\s+)?INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+\S+\s+ON)\s+["'[]?(\w+)/i;
+
+/**
+ * Прод 25.11: выкаты с новой таблицей веба (`manual_apply_*`) перезапускали обслуживание при
+ * побайтно том же бандле. Таблицу, имени которой в бандле нет, процесс не читает и не пишет.
+ */
+export function schemaSourcesUsedBy(bundleText, schemaSources) {
+  const names = new Set(bundleText.match(/\w+/g) ?? []);
+  const used = (statement) => {
+    const table = STATEMENT_TABLE.exec(statement)?.[1];
+    return table === undefined || names.has(table);
+  };
+  return schemaSources
+    .map((source) =>
+      // Файл с подстановкой в DDL входит целиком: от него зависит неизвестная таблица.
+      source.text.includes('${')
+        ? source
+        : { ...source, text: source.text.split('\n').filter(used).join('\n') },
+    )
+    .filter((source) => source.text.length > 0);
+}
+
 export function fingerprintOf(distDir, entries, release, schemaSources) {
   const hash = createHash('sha256');
   const files = entries.flatMap((entry) => filesUnder(distDir, entry));
@@ -85,6 +109,11 @@ export function writeFingerprints(distDir, release, serverMetafile) {
     ['vacancy-mechanics.fingerprint', MECHANICS_FILES],
   ];
   for (const [name, entries] of outputs) {
-    writeFileSync(join(distDir, name), `${fingerprintOf(distDir, entries, release, schema)}\n`);
+    const bundleText = entries
+      .filter((entry) => entry.endsWith('.mjs'))
+      .map((entry) => readFileSync(join(distDir, entry), 'utf8'))
+      .join('\n');
+    const used = schemaSourcesUsedBy(bundleText, schema);
+    writeFileSync(join(distDir, name), `${fingerprintOf(distDir, entries, release, used)}\n`);
   }
 }
