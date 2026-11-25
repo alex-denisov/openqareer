@@ -1,3 +1,4 @@
+import { pressApply } from '../../apply/applyIntent';
 import { useId, useState } from 'react';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -36,7 +37,7 @@ function WayAction({ way, action, vacancyId, onCompose }: WayActionProps) {
     );
   }
   return (
-    <Link className="btn" to={buildNodePath('o02', { responseId: vacancyId })}>
+    <Link className="btn" to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
       {icon}
       {action.label}
     </Link>

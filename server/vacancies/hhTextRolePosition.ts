@@ -22,7 +22,8 @@ export interface HhRoleTextPage {
 
 /** Строк просматривается за такт: половина из них уже с текстом, порция тика набирается. */
 const HH_TEXT_ROLE_SCAN_PER_TICK = 400;
-const HH_TEXT_ROLE_PAGE = 100;
+/** Порция одной функции: слияние по дате добирает только опустевшую, а не все сразу. */
+const HH_TEXT_ROLE_PAGE = 25;
 /** После полного прохода позиция отдыхает: такт идёт в общий обход, а не по готовым строкам. */
 export const HH_TEXT_ROLE_REST_MS = 10 * 60 * 1_000;
 
@@ -52,7 +53,9 @@ function parsePosition(position: string | undefined): RoleRow {
   if (!position) return { ms: NEWEST.ms, id: NEWEST.id };
   const [ms, ...id] = position.split('|');
   const parsed = Number(ms);
-  return Number.isFinite(parsed) ? { ms: parsed, id: id.join('|') } : { ms: NEWEST.ms, id: NEWEST.id };
+  return Number.isFinite(parsed)
+    ? { ms: parsed, id: id.join('|') }
+    : { ms: NEWEST.ms, id: NEWEST.id };
 }
 
 function functionPage(
@@ -63,14 +66,16 @@ function functionPage(
   at: RoleRow,
 ): RoleRow[] {
   const level = floor === null ? '' : 'AND (s.level_rank >= ? OR s.level_rank IS NULL)';
-  // CROSS JOIN keeps the planner on the semantic index: its order needs no sort.
+  // CROSS JOIN keeps the planner on the semantic index: its order needs no sort. The plain
+  // `published_ms <= ?` makes the index seek to the position; the OR alone reread every newer row.
   return database
     .prepare(
       `SELECT s.id AS id, s.published_ms AS ms
          FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
          CROSS JOIN vacancy_pool_index i ON i.id = s.id
         WHERE s.function_code = ? ${level}
-          AND (s.published_ms < ? OR (s.published_ms = ? AND s.id > ?))
+          AND s.published_ms <= ?
+          AND (s.published_ms < ? OR s.id > ?)
           AND i.source_id = ? AND i.expired = 0
         ORDER BY s.published_ms DESC, s.id ASC
         LIMIT ?`,
@@ -86,16 +91,42 @@ function functionPage(
     ) as unknown as RoleRow[];
 }
 
-function nextRows(
+function newestFirst(a: RoleRow, b: RoleRow): number {
+  return b.ms - a.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/** Строки всех функций одним порядком; функция читается дальше, только когда её порция кончилась. */
+function* mergedRows(
   database: DatabaseSync,
   sourceId: string,
   floors: ReadonlyMap<string, number | null>,
-  at: RoleRow,
-): RoleRow[] {
-  return [...floors]
-    .flatMap(([code, floor]) => functionPage(database, sourceId, code, floor, at))
-    .sort((a, b) => b.ms - a.ms || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .slice(0, HH_TEXT_ROLE_PAGE);
+  start: RoleRow,
+): Generator<RoleRow> {
+  const read = (code: string, floor: number | null, at: RoleRow) => {
+    const rows = functionPage(database, sourceId, code, floor, at);
+    return { code, floor, rows, next: 0 };
+  };
+  let streams = [...floors].map(([code, floor]) => read(code, floor, start));
+  for (;;) {
+    streams = streams
+      .map((stream) =>
+        stream.next === HH_TEXT_ROLE_PAGE
+          ? read(stream.code, stream.floor, stream.rows[stream.next - 1])
+          : stream,
+      )
+      .filter((stream) => stream.next < stream.rows.length);
+    if (streams.length === 0) return;
+    const head = streams
+      .map((stream) => stream.rows[stream.next])
+      .reduce((best, row) => (newestFirst(row, best) < 0 ? row : best));
+    // The same id may stand under two functions: every copy moves on, the row comes once.
+    streams = streams.map((stream) =>
+      newestFirst(stream.rows[stream.next], head) === 0
+        ? { ...stream, next: stream.next + 1 }
+        : stream,
+    );
+    yield head;
+  }
 }
 
 /** Следующие строки ролей без текста и позиция после них; строки не читаются дальше порции. */
@@ -110,23 +141,20 @@ export function loadRoleTextPage(input: {
 }): HhRoleTextPage {
   const { position, nowMs } = input;
   const resting = position?.startsWith(REST_PREFIX);
-  if (resting && Number(position!.slice(REST_PREFIX.length)) > nowMs) return { ids: [], position: position! };
+  if (resting && Number(position!.slice(REST_PREFIX.length)) > nowMs)
+    return { ids: [], position: position! };
   const floors = floorsByFunction(input.targets);
   let at = resting ? { ms: NEWEST.ms, id: NEWEST.id } : parsePosition(position);
   const ids: string[] = [];
   let scanned = 0;
-  while (ids.length < input.limit && scanned < HH_TEXT_ROLE_SCAN_PER_TICK) {
-    const rows = nextRows(input.database, input.sourceId, floors, at);
-    if (rows.length === 0) {
-      // A page with ids comes first; the rest starts when a walk finds nothing further.
-      return { ids, position: `${REST_PREFIX}${nowMs + HH_TEXT_ROLE_REST_MS}` };
-    }
-    for (const row of rows) {
-      scanned += 1;
-      at = row;
-      if (input.needsText(row.id)) ids.push(row.id);
-      if (ids.length >= input.limit) break;
+  for (const row of mergedRows(input.database, input.sourceId, floors, at)) {
+    scanned += 1;
+    at = row;
+    if (input.needsText(row.id)) ids.push(row.id);
+    if (ids.length >= input.limit || scanned >= HH_TEXT_ROLE_SCAN_PER_TICK) {
+      return { ids, position: `${at.ms}|${at.id}` };
     }
   }
-  return { ids, position: `${at.ms}|${at.id}` };
+  // The walk is over: the rest starts now, a page with ids comes with it.
+  return { ids, position: `${REST_PREFIX}${nowMs + HH_TEXT_ROLE_REST_MS}` };
 }

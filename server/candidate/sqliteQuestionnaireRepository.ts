@@ -1,3 +1,4 @@
+import { withoutTitleQuestions } from '../domain/manualApplyQuestions';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   QuestionnaireAnswer,
@@ -110,7 +111,7 @@ export class SqliteQuestionnaireRepository {
     return {
       vacancyId: row.vacancy_id,
       formUrl: row.form_url,
-      questions: JSON.parse(row.questions_json) as QuestionnaireQuestion[],
+      questions: withoutTitleQuestions(JSON.parse(row.questions_json) as QuestionnaireQuestion[]),
       answers: this.openAnswers(candidateId, row),
       readAt: row.read_at,
       submittedAt: row.submitted_at,
