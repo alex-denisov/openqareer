@@ -18,9 +18,9 @@ const STATES_A_QUALITY =
 const MAX_HEADING_CHARS = 70;
 const BULLET = /^\s*(?:[-–—*•▪·]+|\d+[.)])\s*/u;
 
-type Section = 'duty' | 'requirement' | 'other';
+export type Section = 'duty' | 'requirement' | 'other';
 
-function headingOf(line: string): Section | null {
+export function headingOf(line: string): Section | null {
   const text = line.replace(BULLET, '').trim();
   if (BULLET.test(line) || !text || text.length > MAX_HEADING_CHARS) return null;
   if (DUTY_HEADING.test(text)) return 'duty';
