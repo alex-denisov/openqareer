@@ -40,13 +40,20 @@ describe('vacancyCountryHint', () => {
     ['Atlanta, Georgia', 'US'],
     ['Tbilisi, Georgia', 'GE'],
     ['Perth, WA', 'AU'],
+    ['Hyderabad, IN', 'IN'],
+    ['Moscow, ID', 'US'],
+    ['Dublin, CA', 'US'],
+    ['Cambridge, MA', 'US'],
+    ['San Jose, CA', 'US'],
+    ['Santa Clara, CA', 'US'],
+    ['Birmingham, AL', 'US'],
     ['Milano, MI', 'IT'],
     ['Rotterdam, NL', 'NL'],
     ['Bengaluru, IN', 'IN'],
     ['Palo Alto, CA', 'US'],
     ['Toronto; Vancouver', 'CA'],
   ])('a dictionary city is a separate basis: %s', (location, country) => {
-    expect(hint(location)).toEqual({ country, basis: 'city', lowConfidence: false });
+    expect(hint(location, [], 'FR')).toEqual({ country, basis: 'city', lowConfidence: false });
   });
 
   it('regions and common words are not cities', () => {
@@ -69,9 +76,9 @@ describe('vacancyCountryHint', () => {
       'New York; Berlin; Toronto',
       'Canada, Texas',
       'Warsaw, IN',
-      'Moscow, ID',
-      'Dublin, CA',
       'Berlin, London',
+      'New York or London',
+      'Nowhereville, CA',
       'Москва, Минск',
     ]) {
       expect(hint(location, [], 'DE')).toBeUndefined();
