@@ -73,7 +73,7 @@ function precisionOf(
   return sameFamily(row, query) ? `family-${place}` : undefined;
 }
 
-export function comparePrecision(
+function comparePrecision(
   left: { readonly precision: BenchmarkPrecision; readonly kind: BenchmarkSourceKind },
   right: { readonly precision: BenchmarkPrecision; readonly kind: BenchmarkSourceKind },
 ): number {
@@ -95,29 +95,22 @@ function compareMatches(left: BenchmarkMatch, right: BenchmarkMatch): number {
   );
 }
 
-export function pickSalaryBenchmark(
+/** Все цифры самой точной ступени, от приоритетной и свежей. */
+export function matchSalaryBenchmarks(
   rows: readonly SalaryBenchmark[],
   query: BenchmarkQuery,
-): BenchmarkMatch | undefined {
+): BenchmarkMatch[] {
   const titleKey = normalizeTitleKey(query.title);
-  return rows
+  const matches = rows
     .flatMap((benchmark) => {
       const precision = precisionOf(benchmark, query, titleKey);
       return precision ? [{ benchmark, precision }] : [];
     })
-    .sort(compareMatches)[0];
+    .sort(compareMatches);
+  return matches.filter(({ precision }) => precision === matches[0]?.precision);
 }
 
-/** Оценка каталога — портальный слой: она уступает только более точной или агентской той же точности. */
-export function benchmarkBeatsCatalog(
-  match: BenchmarkMatch,
-  catalogBasis: 'city' | 'country' | undefined,
-): boolean {
-  if (!catalogBasis) return true;
-  return (
-    comparePrecision(
-      { precision: match.precision, kind: match.benchmark.sourceKind },
-      { precision: `family-${catalogBasis}`, kind: 'portal' },
-    ) < 0
-  );
+/** Оценка каталога по городу или стране — портальный слой ступени «функция + уровень». */
+export function catalogPrecision(basis: 'city' | 'country'): BenchmarkPrecision {
+  return `family-${basis}`;
 }

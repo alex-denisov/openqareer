@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { benchmarkBeatsCatalog, pickSalaryBenchmark } from './pickSalaryBenchmark';
+import { blendInputOf, blendSalary } from './blendSalaryBenchmarks';
+import { matchSalaryBenchmarks, type BenchmarkQuery } from './pickSalaryBenchmark';
 import { salaryBenchmarkSchema, type SalaryBenchmark } from './salaryBenchmark';
 import {
   SALARY_BENCHMARKS_FILE,
@@ -65,7 +66,10 @@ describe('salaryBenchmarkSchema', () => {
   });
 });
 
-describe('pickSalaryBenchmark', () => {
+const pickSalaryBenchmark = (rows: readonly SalaryBenchmark[], query: BenchmarkQuery) =>
+  matchSalaryBenchmarks(rows, query)[0];
+
+describe('matchSalaryBenchmarks', () => {
   it('finds the CTO of the UAE by title and by family', () => {
     expect(pickSalaryBenchmark([row()], dubaiCto)?.precision).toBe('role-country');
     expect(
@@ -100,18 +104,79 @@ describe('pickSalaryBenchmark', () => {
     );
   });
 
-  it('takes the catalogue as the portal layer', () => {
-    const match = (precision: 'role-country' | 'family-country', patch = {}) => ({
-      benchmark: row(patch),
-      precision,
+  it('gives every figure of the best step and none of a coarser one', () => {
+    const portal = row({ id: 'portal', sourceKind: 'portal' });
+    const region = row({ id: 'region', country: null, region: 'mena' });
+    expect(
+      matchSalaryBenchmarks([region, portal, row()], dubaiCto).map(({ benchmark }) => benchmark.id),
+    ).toEqual(['agency-ae-cto', 'portal']);
+  });
+});
+
+describe('blendSalary', () => {
+  const now = new Date('2026-11-25T12:00:00.000Z');
+  const input = (patch: Partial<SalaryBenchmark> = {}) =>
+    blendInputOf(row({ low: 40_000, high: 60_000, ...patch }))!;
+  const blend = (...inputs: ReturnType<typeof input>[]) =>
+    blendSalary(inputs, 'role-country', undefined, now);
+
+  it('has no estimate without data', () => {
+    expect(blend()).toBeUndefined();
+  });
+
+  it('widens a single source and marks it as low confidence', () => {
+    expect(blend(input())).toEqual({
+      estimate: {
+        low: 36_000,
+        high: 66_000,
+        currency: 'AED',
+        period: 'month',
+        computedAt: now.toISOString(),
+      },
+      precision: 'role-country',
+      lowConfidence: true,
     });
-    expect(benchmarkBeatsCatalog(match('role-country'), 'city')).toBe(true);
-    expect(benchmarkBeatsCatalog(match('family-country'), 'city')).toBe(false);
-    expect(benchmarkBeatsCatalog(match('family-country'), 'country')).toBe(true);
-    expect(benchmarkBeatsCatalog(match('family-country', { sourceKind: 'gov' }), 'country')).toBe(
-      false,
-    );
-    expect(benchmarkBeatsCatalog(match('family-country'), undefined)).toBe(true);
+    expect(blend(input(), input())?.lowConfidence).toBe(true);
+  });
+
+  it('weights sources by priority and freshness', () => {
+    const gov = input({ sourceKind: 'gov', sourceName: 'Gov', low: 20_000, high: 30_000 });
+    expect(blend(input(), gov)?.estimate).toMatchObject({ low: 36_000, high: 54_000 });
+    const old = input({ sourceName: 'Old', low: 20_000, high: 30_000, year: 2016 });
+    expect(blend(input(), old)?.estimate.low).toBe(39_000);
+  });
+
+  it('brings a year to a month and never mixes gross with net or currencies without rates', () => {
+    const yearly = input({
+      sourceName: 'Y',
+      low: 480_000,
+      high: 720_000,
+      period: 'year',
+      year: 2025,
+    });
+    expect(blend(input(), yearly)?.estimate).toMatchObject({ low: 40_000, high: 60_000 });
+    const net = input({ sourceName: 'N', tax: 'net', low: 1, high: 2, year: 2025 });
+    expect(blend(input({ tax: 'gross' }), net)?.estimate.low).toBe(36_000);
+    const usd = input({ sourceName: 'U', currency: 'USD', year: 2025 });
+    expect(blend(input(), usd)?.lowConfidence).toBe(true);
+  });
+
+  it('gives the outside no source name, link or sample', () => {
+    const estimate = blend(input({ sampleSize: 777 }), input({ sourceName: 'B' }))!.estimate;
+    expect(Object.keys(estimate).sort()).toEqual([
+      'computedAt',
+      'currency',
+      'high',
+      'low',
+      'period',
+    ]);
+  });
+
+  it('makes a range of a median alone', () => {
+    expect(blend(input({ low: null, high: null, median: 50_000 }))?.estimate).toMatchObject({
+      low: 38_000,
+      high: 63_000,
+    });
   });
 });
 
@@ -125,13 +190,9 @@ describe('salary_benchmarks', () => {
     expect(readSalaryBenchmarks(database, { country: 'QA' })).toHaveLength(1);
   });
 
-  it('limits a source to 30 figures and refuses an unlisted or refused source', () => {
-    const rows = (count: number) =>
-      Array.from({ length: count }, (_, index) => row({ id: `row-${index}` }));
+  it('refuses an unlisted or refused source', () => {
     const database = new DatabaseSync(':memory:');
-    expect(writeSalaryBenchmarks(database, fileOf(rows(30)))).toBe(30);
     for (const bad of [
-      rows(31),
       [row({ sourceName: 'Other' })],
       [row({ sourceKind: 'gov' })],
       [row({ sourceUrl: 'https://www.glassdoor.co.uk/x' })],
