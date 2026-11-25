@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { identityFact, identityOf, splitName } from './atsIdentity';
+import { splitName } from '../../../../../shared/candidateName';
+import { identityFact, identityOf } from './atsIdentity';
 import type { AtsField } from './atsFormTypes';
 import { consentOption, isCoverLetter, isResumeFile } from './atsFieldPlan';
 

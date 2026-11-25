@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { vacancySourceLabel } from '../../../../../shared/vacancySourceLabel';
 import { Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
@@ -6,6 +6,7 @@ import { useScreenChrome } from '../../shell/ShellContext';
 import { acquaintancesOf, friendOf, pathLine, writeLabel } from './acquaintances';
 import { AcquaintBlock } from './AcquaintBlock';
 import { ActBar } from './ActBar';
+import { rememberClusters } from '../../shell/vacancyNames';
 import { companyNodePath } from '../companyPath';
 import './card.css';
 import { CompanyBlock } from './CompanyBlock';
@@ -16,14 +17,14 @@ import { Head } from './Head';
 import { LetterBlock } from './LetterBlock';
 import { MoneyBlock } from './MoneyBlock';
 import { QuotaLine } from './QuotaLine';
-import { ReqsBox } from './ReqsBox';
 import { StepTabs } from './StepTabs';
-import { TextDialog } from './TextDialog';
 import { useCardData, type CardData } from './useCardData';
 import { useSave } from './useSave';
 import { useVacancyFit } from './useVacancyFit';
+import { VacancyText } from './VacancyText';
+import { appliedOn } from '../vacancyLinks';
 import { WaysBlock } from './WaysBlock';
-import { applyWays, type ApplyWay, type ComposeAction } from './waysModel';
+import { applyWays, sourceLinkOf, type ApplyWay, type ComposeAction } from './waysModel';
 
 type LoadedItem = NonNullable<CardData['item']>;
 
@@ -122,11 +123,14 @@ interface CardBodyProps {
 }
 
 function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyProps) {
-  const [textOpen, setTextOpen] = useState(false);
+  // Отклик, открытый с карточки, называет вакансию с первого кадра.
+  useEffect(() => rememberClusters([item]), [item]);
   const fit = useVacancyFit(vacancyId);
   const save = useSave(item, data.links);
   const state = fitBlockState(fit.view, fit.failed);
   const ways = waysFor(item, data);
+  const existing = data.links.byCluster.get(item.cluster.id);
+  const responseId = appliedOn(existing) ? existing?.id : undefined;
   return (
     <>
       <QuotaLine />
@@ -139,16 +143,20 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
             sourceName={sourceName(item)}
             onRetry={fit.retry}
           />
-          <ReqsBox view={fit.view} />
           <ActBar
             vacancyId={vacancyId}
+            responseId={responseId}
             noProfile={state === 'none'}
             save={save.button}
-            onOpenText={() => setTextOpen(true)}
           />
           {save.failed ? <SaveFailure onRetry={save.retry} /> : null}
         </div>
-        <WaysBlock ways={ways} vacancyId={vacancyId} onCompose={onCompose} />
+        <VacancyText
+          clusterId={vacancyId}
+          fit={fit.view}
+          source={sourceLinkOf(item.cluster, ways)}
+        />
+        <WaysBlock ways={ways} vacancyId={vacancyId} responseId={responseId} onCompose={onCompose} />
       </div>
       <RightColumn
         vacancyId={vacancyId}
@@ -157,7 +165,6 @@ function CardBody({ vacancyId, item, data, companyPath, onCompose }: CardBodyPro
         ways={ways}
         companyPath={companyPath}
       />
-      <TextDialog open={textOpen} onClose={() => setTextOpen(false)} item={item} />
     </>
   );
 }
@@ -182,7 +189,7 @@ function Notice({ data }: { readonly data: CardData }) {
   }
   return (
     <p className="ls-state" role="status">
-      Вакансия не найдена
+      {data.load === 'closed' ? 'Вакансия закрыта' : 'Вакансия не найдена'}
       <Link className="btn is-sm" to={buildNodePath('s07')}>
         К подборке
       </Link>

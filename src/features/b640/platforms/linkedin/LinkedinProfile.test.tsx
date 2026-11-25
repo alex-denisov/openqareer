@@ -105,6 +105,21 @@ describe('a03: профиль LinkedIn по макету', () => {
     expect(root.querySelector('[aria-label="Скопировать: Навыки"]')).not.toBeNull();
   });
 
+  it('B801: «Скопировать» с подписью перед «Выполнено» копирует показанный текст; залитая кнопка одна', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const root = (await open()).container;
+    const rec = root.querySelector('#ls-headline ~ .li-rec')!;
+    const buttons = [...rec.querySelectorAll('.li-offer-a button.btn')];
+    expect(buttons.map((item) => item.textContent)).toEqual(['Скопировать', 'Выполнено']);
+    click(buttons[0] as HTMLElement);
+    await flush();
+    expect(writeText).toHaveBeenCalledWith(rec.querySelector('.li-new')!.textContent);
+    expect(root.querySelectorAll('.is-primary')).toHaveLength(1);
+    // Разделы без предложения — без кнопки.
+    expect(root.querySelectorAll('#ls-courses ~ .li-rec button')).toHaveLength(0);
+  });
+
   it('«Опыт» как в «Профиле»: два места на виду, остальные под «Ещё N мест работы»', async () => {
     const root = (await open()).container;
     const more = root.querySelector('.li-sec details.more-n')!;

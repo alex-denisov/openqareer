@@ -465,7 +465,7 @@ fn can_clear_managed_profile(
     store_isolation_available || (!profile_exists && !window_open)
 }
 
-fn create_private_directory(path: &std::path::Path) -> Result<(), String> {
+pub(crate) fn create_private_directory(path: &std::path::Path) -> Result<(), String> {
     create_dir_all(path)
         .map_err(|error| format!("managed_session_data_dir_create_failed: {error}"))?;
     let metadata = symlink_metadata(path)

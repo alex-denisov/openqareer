@@ -2,10 +2,10 @@ import type { VacancyBrief } from '../../shared/vacancyBrief';
 import { headingOf, type Section } from './vacancyRequirementDuty';
 import { vacancySourceText } from './vacancyRequirements';
 
-/** Строк каждого раздела хватает, чтобы клиент взял три после сверки с профилем. */
-const MAX_LINES = 12;
+/** Карточка (B800) показывает раздел целиком, строка подборки берёт из него три. */
+const MAX_LINES = 60;
 const MIN_LINE_CHARS = 3;
-const MAX_LINE_CHARS = 400;
+const MAX_LINE_CHARS = 1_500;
 const OPENING_CHARS = 280;
 const MIN_PARAGRAPH_CHARS = 40;
 const MIN_ITEMS_IN_RUN_ON = 2;
@@ -35,10 +35,16 @@ const MAX_SUBHEADING_CHARS = 60;
 /** Площадка отдала не текст, а строку «Должность — Компания — Город». */
 const MIN_TEXT_CHARS = 140;
 
+/** Условия — раздел карточки; для процента это по-прежнему «прочее». */
+const CONDITION =
+  /^(?:условия|(?:что )?(?:мы )?предлагаем|бонусы|график|what we offer|we offer|(?:our |the |key )?(?:benefits|perks)|compensation|salary|pay(?! attention)|schedule|work location)(?!\p{L})/iu;
+
+type BriefSection = Section | 'condition';
+
 interface Line {
   readonly text: string;
   readonly bulleted: boolean;
-  readonly section: Section | null;
+  readonly section: BriefSection | null;
 }
 
 function cleaned(line: string): string {
@@ -50,10 +56,11 @@ function cleaned(line: string): string {
     .trim();
 }
 
-function headingSection(line: string): Section | null {
+function headingSection(line: string): BriefSection | null {
   const marked = MARKDOWN_HEADING.exec(line.trim())?.[1]?.trim() ?? '';
   const isMarked = /^(?:#{1,6}\s|\*\*|__)/u.test(line.trim());
   if (!marked || marked.length > MAX_HEADING_CHARS || (BULLET.test(line) && !isMarked)) return null;
+  if (CONDITION.test(marked) && !/[.;,]$/u.test(line.trim())) return 'condition';
   if (EXTRA_OTHER.test(marked)) return 'other';
   if (EXTRA_DUTY.test(marked)) return 'duty';
   if (EXTRA_REQUIREMENT.test(marked)) return 'requirement';
@@ -73,13 +80,18 @@ function items(line: string): readonly string[] {
 
 function linesOf(description: string): readonly Line[] {
   const text = vacancySourceText(description).replace(RUN_ON, '$1\n$2\n');
-  let section: Section | null = null;
+  let section: BriefSection | null = null;
   return text.split('\n').flatMap((line): readonly Line[] => {
     if (!LETTER.test(line)) return [];
     const heading = headingSection(line);
     if (heading) {
+      // «График: 5/2» и «Бонусы по итогам года» внутри условий — сами условия, не заголовок.
+      const isItem =
+        heading === 'condition' &&
+        (/[:：]\s*\S/u.test(cleaned(line)) ||
+          (section === 'condition' && !/[:：]$/u.test(cleaned(line))));
       section = heading;
-      return [];
+      return isItem ? [{ text: cleaned(line), section, bulleted: true }] : [];
     }
     const pieces = items(line);
     const bulleted = BULLET.test(line) || pieces.length > 1;
@@ -93,7 +105,7 @@ const isItem = (text: string): boolean =>
 const looksLikeSubheading = ({ text, bulleted }: Line): boolean =>
   !bulleted && text.length <= MAX_SUBHEADING_CHARS && !/[.;,!]$/u.test(text);
 
-function ofSection(lines: readonly Line[], section: Section): readonly string[] {
+function ofSection(lines: readonly Line[], section: BriefSection): readonly string[] {
   const own = lines.filter((line) => line.section === section && isItem(line.text));
   const sure = own.filter((line) => !looksLikeSubheading(line));
   // Весь раздел короткими строками без маркеров — это и есть пункты.
@@ -130,6 +142,7 @@ export function vacancyBrief(description: string): VacancyBrief | undefined {
   return {
     duties: ofSection(lines, 'duty'),
     requirements: ofSection(lines, 'requirement'),
+    conditions: ofSection(lines, 'condition'),
     opening,
   };
 }

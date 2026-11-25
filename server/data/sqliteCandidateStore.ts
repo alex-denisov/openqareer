@@ -46,10 +46,7 @@ import type { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import type { SqliteMarketRepository } from './sqliteMarketRepository';
 import type { SqliteResumeRepository } from './sqliteResumeRepository';
 import type { SqliteResumeVersionRepository } from './sqliteResumeVersionRepository';
-import type {
-  SqliteCandidateMediaRepository,
-  StoredCandidateMedia,
-} from './sqliteCandidateMediaRepository';
+import type { SqliteCandidateMediaRepository, StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
@@ -646,6 +643,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare recordVacancyApplication: ApplicationTrackerMethods['recordVacancyApplication'];
   declare listApplications: ApplicationTrackerMethods['listApplications'];
   declare getApplication: ApplicationTrackerMethods['getApplication'];
+  declare findSentApplication: ApplicationTrackerMethods['findSentApplication'];
   declare createApplication: ApplicationTrackerMethods['createApplication'];
   declare patchApplication: ApplicationTrackerMethods['patchApplication'];
   declare restoreApplication: ApplicationTrackerMethods['restoreApplication'];
@@ -807,8 +805,8 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   declare addManualExperienceFact: MemoryMethods['addManualExperienceFact'];
-  declare answerEmployerName: MemoryMethods['answerEmployerName'];
-  declare reviewMemories: MemoryMethods['reviewMemories'];
+  declare correctFact: MemoryMethods['correctFact']; declare revertFactCorrection: MemoryMethods['revertFactCorrection'];
+  declare answerEmployerName: MemoryMethods['answerEmployerName']; declare reviewMemories: MemoryMethods['reviewMemories'];
   declare applyExperienceFactRewrite: MemoryMethods['applyExperienceFactRewrite'];
   declare revertExperienceFactRewrite: MemoryMethods['revertExperienceFactRewrite'];
   declare saveFactRewriteProposal: MemoryMethods['saveFactRewriteProposal'];

@@ -5,7 +5,7 @@ import type { ApplyConsentEntry } from '../../../../shared/applyConsent';
 import { ConsentItems, ConsentTextLink } from '../account/consentParts';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
-import { onPlatform, platformOf } from './model/platform';
+import { onPlatform, responsePlatform } from './model/platform';
 import { reminderDraft } from './model/reminderDraft';
 import { pluralRu } from './model/responseRow';
 import { RejectionReasonForm } from './RejectionReasonForm';
@@ -298,7 +298,7 @@ function NoteField({ fieldId, application, writer }: NoteProps) {
 function VacancyLink({ application }: { readonly application: ApplicationView }) {
   const url = application.vacancy?.url;
   if (!url || !/^https?:\/\//u.test(url)) return null;
-  const place = onPlatform(platformOf(application.vacancy?.source));
+  const place = onPlatform(responsePlatform(application));
   return (
     <a className="row-act" href={url} target="_blank" rel="noopener noreferrer">
       <Icon name="out" /> {`Вакансия ${place}`}

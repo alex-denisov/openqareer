@@ -270,7 +270,7 @@ function focusField(fieldId: string): void {
   field?.focus();
 }
 
-/** Главное действие анкеты: дойти до пропущенного обязательного вопроса или скопировать ответы. */
+/** Главное действие: ответы для сайта копируются всегда (o04b), отправка ведёт к обязательным. */
 function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   const toast = useToast();
   const copy = () => {
@@ -287,7 +287,11 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
   };
   return (
     <>
-      {ready.nextRequired ? (
+      {!onSend ? (
+        <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
+          Скопировать ответы
+        </Button>
+      ) : ready.nextRequired ? (
         <Button
           variant="primary"
           icon="edit"
@@ -298,11 +302,7 @@ function FormActions({ form, ready, state, onSend, declined }: ActionsProps) {
             {` · ${ready.missingRequired}`}
           </span>
         </Button>
-      ) : onSend ? null : (
-        <Button variant="primary" icon="copy" disabled={ready.answered === 0} onClick={copy}>
-          Скопировать ответы
-        </Button>
-      )}
+      ) : null}
       {onSend ? (
         <Button
           variant={ready.nextRequired ? undefined : 'primary'}

@@ -41,6 +41,7 @@ import {
   withDeps,
 } from './helpers';
 import { SqliteResumeEditChoicesRepository } from '../candidate/sqliteResumeEditChoicesRepository';
+import { refuseWhenSent } from './sentApplicationGuard';
 import { registerResumeEditRoutes, type ResumeEditDeps } from './resumeEditRoutes';
 import { DatabaseSync } from 'node:sqlite';
 import { pitchRankingContext } from './pitchRankingContext';
@@ -523,6 +524,11 @@ const handleGenerateVacancyPitch = async (deps: PitchDeps, request: FastifyReque
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const access = await retryOnSqliteBusy(() => readPitchAccess(deps, request, reply));
   if (!access) return undefined;
+  // Письмо знакомому и письмо самого отклика пишутся и после отправки.
+  if (!access.body?.recipient && !access.body?.applicationId) {
+    const vacancyId = (request.params as { id: string }).id;
+    if (await retryOnSqliteBusy(() => refuseWhenSent(deps, request, reply, access.candidateId, vacancyId))) return undefined;
+  }
   const queued = await queuedPitch(deps, request, access);
   if (queued) return { data: queued, meta: { requestId: request.id } };
   const prepared = await prepareVacancyPitch(deps, request, reply, access);
@@ -600,6 +606,7 @@ const handleApproveVacancyLetter = async (deps: LetterDeps, request: FastifyRequ
   if (!parsed.success) return invalidLetterSnapshot(reply, request);
   const cluster = resolveRowVacancyCluster(multiSourceEngine, vacancyId);
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
+  if (!parsed.data.recipient && refuseWhenSent(deps, request, reply, candidate.id, vacancyId)) return undefined;
   const profile = candidateStore.getSnapshot(candidate.id);
   const evidenceIds = new Set(filterUsablePitchFacts(profile.memory).map((fact) => fact.id));
   if (parsed.data.usedEvidenceIds.some((id) => !evidenceIds.has(id))) {
@@ -667,6 +674,7 @@ function persistApprovedLetterSnapshot(
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
       stage: 'saved',
+      draft: true,
       manualVacancy,
     });
     // Сначала резюме: снимок письма помнит его, и одобрение читается целиком после перезапуска (B711).

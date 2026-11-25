@@ -2,11 +2,14 @@ import { pressApply } from '../../apply/applyIntent';
 import { useId, useState } from 'react';
 import { Icon, Link } from '../../kit';
 import { buildNodePath } from '../../routes';
+import { AppliedLink } from './AppliedLink';
 import type { ApplyWay, ComposeAction, WayAction as WayActionModel } from './waysModel';
 
 export interface WaysBlockProps {
   readonly ways: readonly ApplyWay[];
   readonly vacancyId: string;
+  /** Отклик по вакансии уже отправлен: письмо открывает его. */
+  readonly responseId?: string | undefined;
   /** «Написать <имя>»: карточка переходит в шаг «Отклик» с черновиком (a02d). */
   readonly onCompose: (action: ComposeAction) => void;
 }
@@ -15,10 +18,12 @@ interface WayActionProps {
   readonly way: ApplyWay;
   readonly action: WayActionModel;
   readonly vacancyId: string;
+  /** Отклик по вакансии уже отправлен: письмо открывает его. */
+  readonly responseId?: string | undefined;
   readonly onCompose: (action: ComposeAction) => void;
 }
 
-function WayAction({ way, action, vacancyId, onCompose }: WayActionProps) {
+function WayAction({ way, action, vacancyId, responseId, onCompose }: WayActionProps) {
   const icon = <Icon name={way.icon} />;
   if (action.kind === 'compose') {
     return (
@@ -36,6 +41,7 @@ function WayAction({ way, action, vacancyId, onCompose }: WayActionProps) {
       </a>
     );
   }
+  if (responseId) return <AppliedLink responseId={responseId} className="btn" />;
   return (
     <Link className="btn" to={buildNodePath('o02', { responseId: vacancyId })} onClick={() => pressApply(vacancyId)}>
       {icon}
@@ -47,13 +53,15 @@ function WayAction({ way, action, vacancyId, onCompose }: WayActionProps) {
 interface WayItemProps {
   readonly way: ApplyWay;
   readonly vacancyId: string;
+  /** Отклик по вакансии уже отправлен: письмо открывает его. */
+  readonly responseId?: string | undefined;
   readonly group: string;
   readonly checked: boolean;
   readonly onSelect: () => void;
   readonly onCompose: (action: ComposeAction) => void;
 }
 
-function WayItem({ way, vacancyId, group, checked, onSelect, onCompose }: WayItemProps) {
+function WayItem({ way, vacancyId, responseId, group, checked, onSelect, onCompose }: WayItemProps) {
   return (
     <li className={way.recommended ? 'ha-item is-next' : 'ha-item'}>
       <label className="ha-opt">
@@ -68,7 +76,7 @@ function WayItem({ way, vacancyId, group, checked, onSelect, onCompose }: WayIte
       </label>
       {way.action ? (
         <div className="ha-go">
-          <WayAction way={way} action={way.action} vacancyId={vacancyId} onCompose={onCompose} />
+          <WayAction way={way} action={way.action} vacancyId={vacancyId} responseId={responseId} onCompose={onCompose} />
         </div>
       ) : null}
     </li>
@@ -76,7 +84,7 @@ function WayItem({ way, vacancyId, group, checked, onSelect, onCompose }: WayIte
 }
 
 /** «Как откликнуться»: только способы, известные по вакансии; выбран первый (рекомендуемый). */
-export function WaysBlock({ ways, vacancyId, onCompose }: WaysBlockProps) {
+export function WaysBlock({ ways, vacancyId, responseId, onCompose }: WaysBlockProps) {
   const headId = useId();
   const group = useId();
   const [selected, setSelected] = useState<ApplyWay['id']>();
@@ -95,6 +103,7 @@ export function WaysBlock({ ways, vacancyId, onCompose }: WaysBlockProps) {
                 key={way.id}
                 way={way}
                 vacancyId={vacancyId}
+                responseId={responseId}
                 group={group}
                 checked={current === way.id}
                 onSelect={() => setSelected(way.id)}

@@ -3,7 +3,6 @@ import {
   useEffect,
   useState,
   type Dispatch,
-  type ReactNode,
   type SetStateAction,
 } from 'react';
 import { hhVacancyIdFromUrl } from '../../../../shared/hhCandidateSession';
@@ -16,9 +15,10 @@ import {
 } from '../../vacancies/vacancyLetterController';
 import type { ResumeDocument } from '../../resume/resumeTypes';
 import { isTauriEnvironment } from '../../../services/desktop/desktopBridge';
-import { Button, Icon, InfoTip, Link, StatusLine, useIsMobile } from '../kit';
-import { useAsync } from '../responses/data/useAsync';
+import { Button, Icon, Link, StatusLine, useIsMobile } from '../kit';
+import { useAsync, type AsyncState } from '../responses/data/useAsync';
 import { buildNodePath } from '../routes';
+import { vacancyName } from '../shell/vacancyNames';
 import { CtxHead } from '../shell/CtxHead';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
 import { FormStep, useQuestionnaire, type QuestionnaireState } from './FormStep';
@@ -31,10 +31,10 @@ import {
   applyRoute,
   buildHead,
   needsPoolRoute,
-  paragraphs,
   parseStep,
   resolveTarget,
   stepOpening,
+  UNKNOWN_VACANCY_TITLE,
   type ApplyHead,
   type ApplyStep,
   type ApplyTarget,
@@ -45,7 +45,10 @@ import { ResumeStep } from './ResumeStep';
 import { HhResumeStep } from './hh/HhResumeStep';
 import { approvedLabel, NeedsLetter, SendStep } from './SendStep';
 import { useLetterVariants, type LetterVariantsState } from './useLetterVariants';
+import { openExistingFirst, useSentElsewhere } from './existingResponse';
 import { useApplyCluster } from './useApplyCluster';
+import { Pending, useOpenedName } from './ApplyPending';
+import { VacancyColumn, VacancyText } from './VacancyColumn';
 import { AtsSendStep } from './ats/AtsSendStep';
 import { canSendAts, type AtsApplyControls } from './ats/useAtsApply';
 import { useAtsFlow, type AtsFlow } from './ats/useAtsFlow';
@@ -88,58 +91,6 @@ function StepTabs({ step, done, hasForm, onStep }: TabsProps) {
   );
 }
 
-/** Левая колонка: текст вакансии, под которую идёт отклик. */
-function VacancyColumn({
-  vacancyId,
-  head,
-  children,
-}: {
-  readonly vacancyId: string;
-  readonly head: ApplyHead;
-  readonly children?: ReactNode;
-}) {
-  const detail = useVacancyDetail(vacancyId, true);
-  const text =
-    detail.status === 'ready' ? detail.detail.description || detail.detail.summary || '' : '';
-  return (
-    <div className="col vac-col">
-      <section className="mod" aria-labelledby="vp-title">
-        <div className="lead-head">
-          <h3 className="mod-title" id="vp-title">
-            {head.title}
-          </h3>
-          {head.source ? (
-            <InfoTip label="Источник" text={`Текст вакансии: ${head.source}.`} />
-          ) : null}
-        </div>
-        {detail.status === 'loading' || detail.status === 'idle' ? (
-          <p className="ls-state" role="status">
-            Загружаем текст вакансии…
-          </p>
-        ) : null}
-        {detail.status === 'failed' ? (
-          <StatusLine state="err" text="Текст вакансии не загрузился" />
-        ) : null}
-        {text ? (
-          // B645: длинный текст прокручивается внутри карточки и не растягивает страницу.
-          <div
-            className="letter full vac-text"
-            role="region"
-            aria-label="Текст вакансии"
-            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки текста с клавиатуры.
-            tabIndex={0}
-          >
-            {paragraphs(text).map((line, index) => (
-              <div key={`${index}-${line.slice(0, 24)}`}>{line}</div>
-            ))}
-          </div>
-        ) : null}
-      </section>
-      {children}
-    </div>
-  );
-}
-
 interface FlowProps {
   readonly target: ApplyTarget;
   /** Отклик из очереди «отправить вручную» (B787). */
@@ -148,8 +99,19 @@ interface FlowProps {
   readonly declined: boolean;
   readonly held: boolean;
   readonly press: () => void;
-  readonly cluster: Parameters<typeof buildHead>[0]['cluster'];
+  readonly cluster: ApplyCluster;
 }
+
+type ApplyCluster =
+  | (NonNullable<Parameters<typeof buildHead>[0]['cluster']> & {
+      readonly descriptionSummary?: string;
+    })
+  | null;
+
+const textsOf = ({ target, cluster }: Pick<FlowProps, 'target' | 'cluster'>) => [
+  cluster?.descriptionSummary,
+  target.application?.vacancy?.description,
+];
 
 interface SendAsk {
   /** o04: отправка открыта кнопкой «Отправить отклик с анкетой». */
@@ -162,6 +124,8 @@ interface SendAsk {
 interface BodyProps {
   readonly onLetterSend: () => void;
   readonly vacancyId: string;
+  /** Описания вакансии из прочитанных записей: на случай, если полного текста нет. */
+  readonly texts: readonly (string | null | undefined)[];
   readonly head: ApplyHead;
   readonly sourceType: string;
   readonly step: ApplyStep;
@@ -288,7 +252,7 @@ function EditorBody(props: BodyProps) {
   const onHh = Boolean(head.url && hhVacancyIdFromUrl(head.url));
   return (
     <>
-      <VacancyColumn vacancyId={vacancyId} head={head}>
+      <VacancyColumn head={head} fallbacks={props.texts}>
         {step === 'resume' ? <ResumeDates document={document} /> : null}
       </VacancyColumn>
       <div className="col">
@@ -345,10 +309,11 @@ interface FlowHeadProps {
 
 /** Шапка контекста: над какой вакансией идёт работа. */
 function FlowHead({ head, applicationId }: FlowHeadProps) {
+  const opened = useOpenedName();
   return (
     <CtxHead
       kind="Отклик"
-      title={[head.title, head.company].filter(Boolean).join(' · ')}
+      title={opened ?? vacancyName(head)}
       meta={head.source ? [head.source] : undefined}
       open={
         applicationId
@@ -369,6 +334,8 @@ interface FlowState {
   readonly done: Readonly<Record<ApplyStep, boolean>>;
   /** Ещё не известно, что показать на шаге: читается одобрение письма или анкета из адреса. */
   readonly opening: boolean;
+  /** Шаг ещё открывается, но текст вакансии уже слева. */
+  readonly textFirst: boolean;
   /** Два окна: вакансия и редактор. */
   readonly wide: boolean;
 }
@@ -494,6 +461,17 @@ const withPress = (press: () => void) => (action: () => void) => () => {
 const pressedAts = (ats: AtsFlow, press: () => void): AtsFlow =>
   ats.apply ? { ...ats, apply: { ...ats.apply, send: withPress(press)(ats.apply.send) } } : ats;
 
+/**
+ * Название вакансии: из связей по вакансии, а если их нет — из ответа об анкете. Пока оно
+ * читается — известное со списка: «Вакансия» не мелькает (B798).
+ */
+function useNamedHead(sources: Parameters<typeof buildHead>[0]): ApplyHead {
+  const read = buildHead(sources);
+  const opened = useShell().journey?.vacancy;
+  if (!opened || read.title !== UNKNOWN_VACANCY_TITLE) return read;
+  return { ...read, title: opened.title, company: read.company || opened.company };
+}
+
 /** Состояние единого отклика: шаг, письмо, анкета и остаток откликов. */
 function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): FlowState {
   const { search } = useShell();
@@ -503,19 +481,14 @@ function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): F
   const questionnaire = useQuestionnaire(target.vacancyId);
   const ask = useSendAsk(questionnaire, setStep, press);
   useQueuedQuestions(manual, questionnaire);
-  // Название вакансии: из связей по вакансии, а если их нет — из ответа об анкете.
   const known = letter.circles.data ?? questionnaire.known;
-  const head = buildHead({ application: target.application, known, cluster });
+  const head = useNamedHead({ application: target.application, known, cluster });
   const sourceType = applyRoute({ application: target.application, cluster }).source ?? 'manual';
-  const destination = cluster?.applyTarget ?? null;
   const ats = useAtsFlow({
-    ...{ target, destination, head, sourceType },
+    ...{ target, destination: cluster?.applyTarget ?? null, head, sourceType },
     manual: manual?.item ?? null,
     ...rest,
-    step,
-    setStep,
-    letter,
-    questionnaire,
+    ...{ step, setStep, letter, questionnaire },
   });
   const shown = shownStep(step, Boolean(questionnaire.form ?? ats.apply));
   const resume = useResumeStep(step, setStep, letter);
@@ -526,10 +499,12 @@ function useApplyFlow({ target, cluster, manual, press, ...rest }: FlowProps): F
     quota,
     questionnaire,
     opening: stepOpening({ step, approvalPending, formLoading: questionnaire.loading }),
+    textFirst: step === 'letter' || step === 'resume',
     wide: shown !== 'send' && shown !== 'form' && !quota,
     done: doneSteps(resume.resumeOk, letter, questionnaire),
     body: {
       vacancyId: target.vacancyId,
+      texts: textsOf({ target, cluster }),
       head,
       sourceType,
       step: shown,
@@ -569,10 +544,22 @@ function FormBody({ body }: { readonly body: BodyProps }) {
   );
 }
 
+/** Одобрение письма ещё читается: текст вакансии слева уже на месте. */
+function OpeningEditor({ body }: { readonly body: BodyProps }) {
+  return (
+    <>
+      <VacancyColumn head={body.head} fallbacks={body.texts} />
+      <div className="col">
+        <LoadingApply />
+      </div>
+    </>
+  );
+}
+
 function ApplyFlow(props: FlowProps) {
   const flow = useApplyFlow(props);
   const { shown, head, quota, questionnaire, opening, body } = flow;
-  const wide = flow.wide && !opening;
+  const wide = flow.wide && (!opening || flow.textFirst);
   const ready = !quota && !opening;
   const form = questionnaire.form;
   // Два окна (вакансия и письмо) включает признак макета `data-main-right`.
@@ -603,20 +590,13 @@ function ApplyFlow(props: FlowProps) {
       >
         <FlowHead head={head} applicationId={props.target.application?.id ?? null} />
         {quota ? <QuotaBlock head={head} quota={quota} /> : null}
-        {opening && !quota ? <LoadingApply /> : null}
+        {opening && !quota && wide ? <OpeningEditor body={body} /> : null}
+        {opening && !quota && !wide ? <LoadingApply /> : null}
         {ready && shown === 'send' ? <SendBody {...body} /> : null}
         {ready && shown === 'form' ? <FormBody body={body} /> : null}
         {ready && shown !== 'send' && shown !== 'form' ? <EditorBody {...body} /> : null}
       </div>
     </>
-  );
-}
-
-function Pending({ children }: { readonly children: ReactNode }) {
-  return (
-    <div className="page two" data-b640-node="o02" data-b640-section="apply">
-      {children}
-    </div>
   );
 }
 
@@ -650,7 +630,7 @@ function WithManual({ target, cluster }: Omit<FlowProps, 'manual' | 'queue' | 'd
   );
   if (manual === 'loading') {
     return (
-      <Pending>
+      <Pending loading fallbacks={textsOf({ target, cluster })}>
         <LoadingApply />
       </Pending>
     );
@@ -676,7 +656,10 @@ function FromPool({ target }: { readonly target: ApplyTarget }) {
   const { state, retry } = useApplyCluster(target.vacancyId);
   if (state.status === 'ready') return <WithManual target={target} cluster={state.cluster} />;
   return (
-    <Pending>
+    <Pending
+      loading={state.status !== 'failed'}
+      fallbacks={textsOf({ target, cluster: null })}
+    >
       {state.status === 'failed' ? (
         <LoadFailed text="Отклик не загрузился." onRetry={retry} />
       ) : (
@@ -690,22 +673,44 @@ async function loadApplications(signal: AbortSignal): Promise<readonly Applicati
   return listApplications(signal);
 }
 
+interface ApplyTargetProps {
+  readonly state: AsyncState<readonly ApplicationView[]>;
+  readonly target: ApplyTarget | null;
+  readonly onRetry: () => void;
+}
+
 /** Единый экран отклика (O2): резюме, письмо и отправка под одну вакансию. */
 export function ApplyScreen({ responseId }: { readonly responseId: string }) {
-  const load = useCallback((signal: AbortSignal) => loadApplications(signal), []);
+  useSentElsewhere(responseId);
+  const load = useCallback(
+    async (signal: AbortSignal) =>
+      openExistingFirst(responseId, await loadApplications(signal), signal),
+    [responseId],
+  );
   const { state, reload } = useAsync(load, 'Отклик не загрузился.');
+  const target = state.data ? resolveTarget(responseId, state.data) : null;
+  const opened = useShell().journey?.vacancy?.vacancyId;
+  const vacancyId = target?.vacancyId ?? (state.data ? undefined : opened) ?? '';
+  const text = useVacancyDetail(vacancyId, vacancyId !== '');
+  return (
+    <VacancyText.Provider value={text}>
+      <ApplyTargetScreen state={state} target={target} onRetry={reload} />
+    </VacancyText.Provider>
+  );
+}
+
+function ApplyTargetScreen({ state, target, onRetry }: ApplyTargetProps) {
   if (!state.data) {
     return (
-      <Pending>
+      <Pending loading={state.status !== 'error'}>
         {state.status === 'error' ? (
-          <LoadFailed text={state.error} onRetry={reload} />
+          <LoadFailed text={state.error} onRetry={onRetry} />
         ) : (
           <LoadingApply />
         )}
       </Pending>
     );
   }
-  const target = resolveTarget(responseId, state.data);
   if (!target) {
     return (
       <Pending>

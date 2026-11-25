@@ -26,6 +26,7 @@ function useReadMarks(setPage: SetPage, setActionError: (text: string | null) =>
       if (item.readAt !== null) return;
       try {
         const { readAt } = await markNotificationRead(item.id);
+        await Promise.all((item.mergedUnreadIds ?? []).map((id) => markNotificationRead(id)));
         setPage((current) => ({
           ...current,
           unreadCount: Math.max(0, current.unreadCount - 1),

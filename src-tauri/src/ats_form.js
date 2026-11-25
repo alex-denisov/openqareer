@@ -1174,12 +1174,27 @@
     var here = location.pathname.replace(/\/+$/, '');
     return Boolean(sign) && (ARG.thanksPaths || []).indexOf(here) >= 0 && sign(form);
   }
+  // The page of the sent application: its own address, no form left and a heading
+  // of its own. The cookie notice over it is a dialog and says nothing either way.
+  function sentPage() {
+    var base = ARG && ARG.sentBase;
+    if (!base || document.readyState === 'loading') return false;
+    var here = location.pathname.replace(/\/+$/, '');
+    if (here.indexOf(base) !== 0 || !/^[\w-]{6,}$/.test(here.slice(base.length))) return false;
+    if (
+      document.querySelector('form#job-application-form, input[type="file"], .turbo-frame-error')
+    )
+      return false;
+    return visible('h1, h2, h3').some(function (head) {
+      return text(head) !== '' && !head.closest('dialog, [role="dialog"]');
+    });
+  }
   function outcome() {
     var confirmPath = ARG && ARG.confirmationPath;
     var here = location.pathname.replace(/\/+$/, '');
     if (confirmPath && here === confirmPath) return { state: 'confirmed', path: location.pathname };
     var form = findForm();
-    if (thanked(form)) return { state: 'confirmed', path: location.pathname };
+    if (sentPage() || thanked(form)) return { state: 'confirmed', path: location.pathname };
     if (captcha()) return { state: 'captcha' };
     if (form) {
       // A mark older than the press is not the board's answer to it.

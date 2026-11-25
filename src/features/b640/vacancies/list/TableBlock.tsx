@@ -1,8 +1,9 @@
 // Общая таблица «Подборки» и «Сохранённых»: стили узкой области грузятся вместе с ней.
 import './list.css';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import type { CurrencyRates } from '../../../../../shared/currencyRates';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
+import { rememberClusters } from '../../shell/vacancyNames';
 import type { VacancyLinks } from '../vacancyLinks';
 import { ratesTipText } from './ratesNote';
 import type { SortKey, SortState } from './sortModel';
@@ -25,6 +26,8 @@ export interface TableBlockProps {
 
 /** Таблица подборки с общим состоянием строк: раскрытие, окно действий, ☆. */
 export function TableBlock({ items, env, sort, onSort, links, rows, rates, hidden, own, pickFor }: TableBlockProps) {
+  // Отклик, открытый из строки, называет вакансию с первого кадра.
+  useEffect(() => rememberClusters(items), [items]);
   return (
     <VacancyTable
       items={items}

@@ -123,11 +123,13 @@ describe('hh text for the whole matched list (01.11)', () => {
       row('cluster-src-remotive:2'),
       row('cluster-src-hh-search:3'),
       row('cluster-src-hh-search:4', 'refreshing', 40),
+      row('cluster-src-linkedin-guest:5'),
     ];
     expect(selectionToRead(items)).toEqual([
       'cluster-src-hh-search:1',
       'cluster-src-hh-search:3',
       'cluster-src-hh-search:4',
+      'cluster-src-linkedin-guest:5',
     ]);
   });
 

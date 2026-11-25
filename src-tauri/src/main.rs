@@ -27,6 +27,7 @@ mod hh_resume_experience;
 mod hh_resume_experience_scripts;
 mod linkedin_edit;
 mod linkedin_edit_scripts;
+mod linkedin_form_capture;
 mod linkedin_read_guard;
 mod native_answer;
 mod network_probe;
@@ -588,7 +589,11 @@ fn close_connector_session(app: AppHandle, platform: String, session_key: Option
 /// (a SHA-256 hex digest), or unbinds them on sign-out (INC-039).
 #[tauri::command]
 fn bind_connector_account(app: AppHandle, account_key: Option<String>) -> Result<bool, String> {
-    bind_candidate_account(&app, account_key)
+    let bound = bind_candidate_account(&app, account_key)?;
+    if bound {
+        linkedin_form_capture::start_if_flagged(&app);
+    }
+    Ok(bound)
 }
 
 #[tauri::command]

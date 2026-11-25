@@ -24,6 +24,8 @@ vi.mock('../../skills/roleSkillDemandApi', () => ({ getRoleSkillDemand: api.getR
 vi.mock('../../career-map/careerRoleApi', () => ({ changeCareerRole: api.changeCareerRole }));
 vi.mock('../vacancies/list/selectionCount', () => ({ readSelectionTotal: api.readSelectionTotal }));
 
+import { clearEarlyReads } from '../../shell/earlyRead';
+import { CoachApiError } from '../../coach/apiClient';
 import {
   addOwnRole,
   loadRoles,
@@ -39,6 +41,7 @@ const campaign = (roles: string[]) => ({
 });
 
 beforeEach(() => {
+  clearEarlyReads();
   vi.clearAllMocks();
   api.getRoleHypotheses.mockResolvedValue([]);
   api.getCheckedRoles.mockResolvedValue([]);
@@ -51,6 +54,28 @@ beforeEach(() => {
 });
 
 describe('loadRoles', () => {
+  it('B801: подбор ещё считается — роли читаются снова без ошибки на экране', async () => {
+    vi.useFakeTimers();
+    try {
+      api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
+      api.getRoleHypotheses.mockRejectedValueOnce(
+        new CoachApiError('Подбор считается.', 'vacancy_match_busy', true),
+      );
+      const read = loadRoles(new AbortController().signal);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect((await read).searchTitles).toEqual(['Аналитик']);
+      expect(api.getRoleHypotheses).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('B801: другой сбой не повторяется', async () => {
+    api.getRoleHypotheses.mockRejectedValue(new CoachApiError('Сбой', 'internal_error', true));
+    await expect(loadRoles(new AbortController().signal)).rejects.toThrow('Сбой');
+    expect(api.getRoleHypotheses).toHaveBeenCalledTimes(1);
+  });
+
   it('B768: таблица ролей не ждёт числа вакансий выбора (на проде 3,6 с)', async () => {
     api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
     api.readSelectionTotal.mockReturnValue(new Promise(() => {}));
@@ -75,7 +100,7 @@ describe('loadRoles', () => {
       ],
     });
     const data = await loadRoles(new AbortController().signal);
-    await expect(loadSkillStrip(new AbortController().signal)).resolves.toEqual({
+    await expect(loadSkillStrip()).resolves.toEqual({
       gap: 2,
       role: 'Аналитик',
     });
@@ -97,7 +122,7 @@ describe('loadRoles', () => {
         }),
     );
     api.getRoleSkillDemand.mockResolvedValue({ state: 'ready', roles: [] });
-    const strip = loadSkillStrip(new AbortController().signal);
+    const strip = loadSkillStrip();
     await vi.waitFor(() => expect(api.getCurrentRoleSkillAssessment).toHaveBeenCalledTimes(3));
     // Все три запроса ушли до первого ответа; последний отвечает первым.
     [...pending].reverse().forEach((answer) => answer());
@@ -121,7 +146,7 @@ describe('loadRoles', () => {
       state: 'ready',
       roles: [{ roleTitle: 'Аналитик', skills: [{ name: 'SQL', inProfile: false }] }],
     });
-    await expect(loadSkillStrip(new AbortController().signal)).resolves.toBeNull();
+    await expect(loadSkillStrip()).resolves.toBeNull();
   });
 
   it('«Чего не хватает» без данных роли — первый навык из вакансий, которого нет в профиле (B645 s10)', async () => {
@@ -183,7 +208,7 @@ describe('loadRoles', () => {
     api.getRoleSkillDemand.mockRejectedValue(new Error('сбой'));
     const data = await loadRoles(new AbortController().signal);
     expect(data.rows).toHaveLength(1);
-    await expect(loadSkillStrip(new AbortController().signal)).resolves.toEqual({
+    await expect(loadSkillStrip()).resolves.toEqual({
       gap: 0,
       role: 'Аналитик',
     });

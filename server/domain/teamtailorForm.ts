@@ -1,3 +1,4 @@
+import type { NumberLimits } from '../../shared/questionnaireNumber';
 import { plain, withChoice, type ParsedQuestion } from './boardFormText';
 import { OPTION_MAX_LENGTH, QUESTION_TEXT_MAX_LENGTH } from './questionText';
 
@@ -24,6 +25,8 @@ const WANTED = new Set([
 ]);
 const ANSWER_NAME = /^candidate\[answers_attributes\]\[(\d{1,3})\]\[(\w{1,60})\]/u;
 const TEXT_FIELDS = new Set(['text', 'number', 'range', 'date']);
+const NUMBER_FIELDS = new Set(['number', 'range']);
+const MAX_UNIT = 20;
 const CHOICE_FIELDS = new Set(['boolean', 'choices']);
 const JOB_NAME = 'candidate[job_applications_attributes][0][job_id]';
 
@@ -114,6 +117,25 @@ function optionsOf(html: string, tags: readonly Tag[], fields: readonly Tag[]): 
   return labels.slice(0, MAX_LABELS).map((at) => textAfter(html, tags, at, false));
 }
 
+/** Границы числа со страницы; у ползунка они есть, даже когда не названы — как в приложении. */
+function limitsOf(answers: readonly Tag[]): NumberLimits {
+  const tag = answers.find(({ attributes }) => attributes.has('max')) ?? answers[0];
+  const slider = tag.attributes.get('type') === 'range';
+  const number = (name: string, otherwise: number | null): number | null => {
+    const raw = tag.attributes.get(name)?.trim();
+    const value = Number(raw);
+    return raw && Number.isFinite(value) ? value : otherwise;
+  };
+  const step = number('step', 1);
+  const unit = plain(tag.attributes.get('data-unit') ?? '', MAX_UNIT);
+  return {
+    min: number('min', slider ? 0 : null),
+    max: number('max', slider ? 100 : null),
+    step: tag.attributes.get('step') === 'any' || step === null || step <= 0 ? null : step,
+    unit: unit || null,
+  };
+}
+
 function questionOf(html: string, { id, index, mandatory, tags }: Block): ParsedQuestion {
   const titleAt = tags.findIndex(
     (tag) => !tag.closing && (tag.name === 'legend' || tag.name === 'label'),
@@ -129,6 +151,9 @@ function questionOf(html: string, { id, index, mandatory, tags }: Block): Parsed
   if (answers.length === 0 || !text) return unknown;
   const base = { id: `teamtailor_${id}`, text, required };
   const kind = fieldOf(answers[0])?.field ?? '';
+  if (NUMBER_FIELDS.has(kind)) {
+    return { ...base, kind: 'text', singleLine: true, numeric: true, limits: limitsOf(answers) };
+  }
   if (TEXT_FIELDS.has(kind)) return { ...base, kind: 'text' };
   const multiple =
     kind === 'choices' &&

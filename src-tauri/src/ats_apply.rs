@@ -14,8 +14,8 @@ use crate::ats_model::{
     SubmitRequest, Values, FILL_RESULTS, MAX_CONSENTS,
 };
 use crate::ats_target::{
-    is_confirmation, navigation_allowed, on_target, resolve, thanks_in_place, thanks_paths,
-    top_level_allowed, AtsTarget,
+    is_confirmation, navigation_allowed, on_target, resolve, sent_base, thanks_in_place,
+    thanks_paths, top_level_allowed, AtsTarget,
 };
 use crate::connector_session::{
     append_connector_diagnostic, candidate_store, candidate_store_of, eval_json,
@@ -451,6 +451,7 @@ async fn read_outcome(
         "confirmationPath": target.confirmation_path,
         "thanks": target.adapter,
         "thanksPaths": thanks_paths(target),
+        "sentBase": sent_base(target),
         "invalidBefore": invalid_before,
         "countedBefore": counted_before,
     });

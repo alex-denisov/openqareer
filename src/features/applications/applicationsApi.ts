@@ -52,6 +52,8 @@ export interface CreateApplicationInput {
 export interface PatchApplicationInput {
   readonly expectedVersion: number;
   readonly stage?: ApplicationStage;
+  /** B798: звезда карточки `saved`; черновик отклика не меняется. */
+  readonly starred?: boolean;
   readonly occurredAt?: string;
   readonly notes?: string | null;
   readonly followUpDueAt?: string | null;
