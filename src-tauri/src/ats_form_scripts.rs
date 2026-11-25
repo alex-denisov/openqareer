@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn bamboohr_s_form_is_opened_once_and_only_on_a_vacancy_page() {
-        let page = r#"<div data-fabric-component="Box"><button type="button" id="open">Apply for This Job</button></div>"#;
+        let page = r#"<div data-fabric-component="Box"><button type="button" id="open">Apply for This Job</button><button type="button" id="again">Apply for This Job</button></div>"#;
         let read = || op("read", json!({ "hosts": ["hh.ru"], "path": "/careers/1" }));
         for (path, presses) in [
             ("/careers/1", 1),
@@ -409,6 +409,27 @@ mod tests {
             assert_eq!(parsed(&out, 1)["state"], "form_missing");
             assert_eq!(out["clicks"].as_array().unwrap().len(), presses, "{path}");
         }
+    }
+
+    #[test]
+    fn bamboohr_s_date_keeps_its_key_and_the_way_the_field_spells_it() {
+        let page = r#"<form id="job-application-form"><div data-fabric-component="TextInputWrapper"><label for="FabricTextField-77">Date Available</label><input type="text" id="FabricTextField-77" placeholder="mm/dd/yyyy"></div><button type="submit">Submit Application</button></form>"#;
+        let key = "label:Date Available";
+        let Some(out) = run(
+            page,
+            "/careers/1",
+            "",
+            &[
+                op("read", Value::Null),
+                op("fill", json!({ "entries": [{ "key": key, "value": "2027-01-15" }] })),
+                op("job", Value::Null),
+                op("snapshot", Value::Null),
+            ],
+        ) else {
+            return;
+        };
+        assert_eq!(parsed(&out, 0)["fields"][0]["key"], key);
+        assert_eq!(parsed(&out, 3)["values"][key], "01/15/2027");
     }
 
     #[test]
