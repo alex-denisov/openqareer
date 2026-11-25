@@ -162,7 +162,8 @@ function codeRead(code: string, city: string, deps: CountryHintDeps): PlaceAnswe
   if (found && found !== 'dispute' && found.country === foreign) return found;
   if (!isCountry || COUNTRY_NAMESAKES.has(city.toLowerCase())) return read(region, 'place');
   const pair = cityCountries(city).filter((country) => country === region || country === code);
-  if (pair.length > 0) return read(single(pair), 'city') ?? 'dispute';
+  const only = single(pair);
+  if (only) return read(only, 'city');
   const fits = found && found !== 'dispute' && [region, code].includes(found.country);
   return fits ? found : 'dispute';
 }
