@@ -1,4 +1,6 @@
 import './today.css';
+import { startEarlyRead } from '../../shell/earlyRead';
+import { getStatusToday } from './statusApi';
 import { NodeStub } from '../shell/NodeStub';
 import { useShell } from '../shell/ShellContext';
 import type { SectionProps } from '../sections';
@@ -13,6 +15,11 @@ import { useB640Title } from '../kit/useB640Title';
 export function todayTitle(code: string, consultantOpen: boolean): string {
   if (consultantOpen) return 'Консультант';
   return code === 'n01b' ? 'Уведомления' : 'Сегодня';
+}
+
+/** B792: состав «Сегодня» — рядом с вопросом о сессии. */
+export function preload(code: string): void {
+  if (code === 's03') startEarlyRead(getStatusToday);
 }
 
 /** Вход раздела «Сегодня и уведомления»: экран по коду узла (см. ../README.md). */

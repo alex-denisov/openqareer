@@ -1,3 +1,5 @@
+import type { NumberLimits } from '../../../../../shared/questionnaireNumber';
+
 /** B787: форма работодателя, как её прочитало настольное приложение (src-tauri/src/ats_form.js). */
 export type AtsFieldKind =
   | 'text'
@@ -6,6 +8,8 @@ export type AtsFieldKind =
   | 'tel'
   | 'url'
   | 'number'
+  /** Ползунок: значение — число. */
+  | 'range'
   | 'date'
   | 'password'
   | 'select'
@@ -31,6 +35,8 @@ export interface AtsField {
   readonly autocomplete?: string | null;
   readonly options: readonly AtsOption[];
   readonly accept: string | null;
+  /** Границы числа у `number` и `range`. */
+  readonly limits?: NumberLimits | null;
   /** Ссылка из подписи галочки: обычно политика работодателя. */
   readonly link: string | null;
 }

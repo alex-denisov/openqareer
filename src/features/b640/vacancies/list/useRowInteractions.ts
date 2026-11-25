@@ -8,6 +8,7 @@ import {
 } from '../../../vacancies/vacancyScreenCollections';
 import { useShell } from '../../shell/ShellContext';
 import { useToast } from '../../kit';
+import { useOnReveal } from '../../kit/screenActive';
 import { buildNodePath } from '../../routes';
 import type { SkipReasonId } from '../../../../../shared/skipReasons';
 import type { HiddenRow } from '../b640Api';
@@ -43,6 +44,8 @@ function errorText(reason: unknown, fallback: string): string {
 /** Компании, отмеченные «Хочу»; сбой чтения — меток нет, строка работает как раньше. */
 function useWantRecords() {
   const [records, setRecords] = useState(() => wantedCompanyRecords([]));
+  const [attempt, setAttempt] = useState(0);
+  useOnReveal(useCallback(() => setAttempt((value) => value + 1), []));
   useEffect(() => {
     let alive = true;
     listCandidateCompanyWants()
@@ -53,7 +56,7 @@ function useWantRecords() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [attempt]);
   return records;
 }
 

@@ -38,6 +38,19 @@ const gdpr = field('id:gdpr', 'I agree to the privacy policy', { kind: 'checkbox
 const fields = [name, resume, letter, visa, news, gdpr];
 
 describe('вопросы формы работодателя в «Анкете»', () => {
+  it('ползунок — числовой вопрос с границами формы', () => {
+    const limits = { min: 0, max: 50_000, step: 500, unit: '$' };
+    const pay = field('id:pay', 'Salary', { kind: 'range', limits });
+    expect(atsFormInput('https://a.example/', [pay], {}).questions[0]).toMatchObject({
+      kind: 'text',
+      singleLine: true,
+      numeric: true,
+      limits,
+    });
+    expect(missingAnswers([pay], { [questionIdOf(pay)]: 'от 5 000 $' })).toBe(1);
+    expect(missingAnswers([pay], { [questionIdOf(pay)]: '5 000' })).toBe(0);
+  });
+
   it('письмо, резюме и согласия вопросами не становятся, имя уже стоит', () => {
     const input = atsFormInput('https://a.example/', fields, { fullName: 'Марина Соколова' });
     expect(input.questions.map((item) => [item.text, item.known])).toEqual([
