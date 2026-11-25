@@ -65,6 +65,8 @@ function setup() {
         : { status: 500 },
     sleep: async () => undefined,
     maxAttempts: 1,
+    // Ожидание занятой базы съедает бюджет пробы; здесь нужен такт, в котором начались обе площадки.
+    elapsed: () => 0,
   });
   return { pool, other, backfill, sony, unhandled };
 }
