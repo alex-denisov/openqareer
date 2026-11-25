@@ -65,6 +65,13 @@ function recordFinished(database: DatabaseSync, job: string, finishedMs: number)
     .run(job, finishedMs);
 }
 
+function reportFailure(log: PersistedJobLog, job: string, error: unknown): void {
+  log.error(
+    { job, errorName: error instanceof Error ? error.name : 'UnknownError' },
+    'maintenance-job-state-failed',
+  );
+}
+
 /**
  * Тяжёлый шаг обслуживания со сроком в базе, а не в таймере процесса. Прод
  * 05.11: зарплатные шаги держат очередь событий 300 с одним куском, а шли через
@@ -75,19 +82,9 @@ export function schedulePersistedJob(
   log: PersistedJobLog,
   options: PersistedJobOptions,
 ): () => void {
-  const {
-    job,
-    firstRunMs,
-    intervalMs,
-    dailyAtUtcMinute,
-    run,
-    dailyCatchUpMs: catchUpMs = DAILY_CATCH_UP_MS,
-  } = options;
-  const reportStateFailure = (error: unknown) =>
-    log.error(
-      { job, errorName: error instanceof Error ? error.name : 'UnknownError' },
-      'maintenance-job-state-failed',
-    );
+  const { job, firstRunMs, intervalMs, dailyAtUtcMinute, run } = options;
+  const { dailyCatchUpMs: catchUpMs = DAILY_CATCH_UP_MS } = options;
+  const reportStateFailure = (error: unknown) => reportFailure(log, job, error);
 
   const firstDelayMs = (): number => {
     try {
