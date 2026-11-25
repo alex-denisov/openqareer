@@ -28,4 +28,24 @@ describe('latinEmployerNames (B640): латиница названий рабо�
     expect(names.get(name)).toBe(official);
     expect(withLatinEmployerNames(`IT Lead at ${name}`, new Map())).toBe(`IT Lead at ${official}`);
   });
+
+  it.each([
+    'Корпоративный университет Сбербанка',
+    'Корпоративном университете Сбербанка',
+    'корпоративного университета Сбербанка',
+    'Корпоративным университетом Сбербанка',
+    'Корпоративному университету Сбербанка',
+    'Корпоративный университет Сбербанка (Сберуниверситет)',
+    'Корпоративном университете Сбербанка («СберУниверситет»)',
+  ])('%s — официальное название один раз', (form) => {
+    const official = 'Corporate University of Sberbank (SberUniversity)';
+    const short = latinEmployerNames(['Корпоративный университет Сбербанка'], []);
+    expect(withLatinEmployerNames(`Опыт: ${form}, 2012`, short)).toBe(`Опыт: ${official}, 2012`);
+    expect(latinEmployerNames([form], []).get(form)).toBe(official);
+  });
+
+  it('похожее название не заменяется', () => {
+    const other = 'Корпоративный университет Сбербанкаудит';
+    expect(withLatinEmployerNames(other, new Map())).toBe(other);
+  });
 });

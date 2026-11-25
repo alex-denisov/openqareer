@@ -1,4 +1,4 @@
-import { OFFICIAL_EMPLOYER_NAMES } from './officialEmployerNames';
+import { officialName, withOfficialNames } from './officialEmployerNames';
 
 /**
  * B640, 10.11 (решение CPO): в английском письме название работодателя не пишется кириллицей
@@ -56,11 +56,14 @@ export function latinEmployerNames(
       .sort((left, right) => right.length - left.length)
       .map((name) => [
         name,
-        OFFICIAL_EMPLOYER_NAMES.get(name) ?? latinFromTexts(name, candidateTexts) ?? transliterate(name),
+        officialName(name) ?? latinFromTexts(name, candidateTexts) ?? transliterate(name),
       ] as const),
   );
 }
 
 export function withLatinEmployerNames(text: string, names: ReadonlyMap<string, string>): string {
-  return [...names, ...OFFICIAL_EMPLOYER_NAMES].reduce((result, [name, latin]) => result.split(name).join(latin), text);
+  return [...names].reduce(
+    (result, [name, latin]) => result.split(name).join(latin),
+    withOfficialNames(text),
+  );
 }
