@@ -37,7 +37,7 @@ export interface TodayQueueItem {
   /** Черновик поста LinkedIn, который ждёт одобрения. */
   readonly draftId?: string;
   /** Материал, который ждёт одобрения кандидата (черновик письма). */
-  readonly material?: 'cover_letter';
+  readonly material?: 'cover_letter' | 'letter_draft';
   readonly applicationId?: string;
   readonly clusterId?: string;
   readonly title: string;
@@ -227,6 +227,8 @@ export interface BuildTodaySnapshotInput {
    * без отклика добирают очередь дня, когда новых с прошлого визита нет.
    */
   readonly shortlist?: readonly TodayNewVacancy[];
+  /** Отклики с одобренным, но ещё не привязанным письмом: их черновик проверять не нужно. */
+  readonly approvedLetterIds?: ReadonlySet<string>;
   /** Черновики постов LinkedIn со статусом «черновик»: публикует только кандидат. */
   readonly pendingLinkedinPosts?: readonly TodayPendingPost[];
   /** Контакты откликов: id отклика → «Имя Фамилия» (B542). */
@@ -492,7 +494,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     (application) => application.whoseTurn === 'candidate',
   );
   // Очередь — только то, что ждёт ответа или имеет срок: избранная вакансия без материалов
-  // в неё не идёт, а сохранённая с одобренным письмом идёт как «отправить отклик» (B717).
+  // идёт письмом на проверку (`letterDrafts`), а сохранённая с одобренным письмом идёт как «отправить отклик» (B717).
   const queueApplications = input.applications.filter((application) =>
     application.stage === 'saved'
       ? application.materials.coverLetter
@@ -521,6 +523,9 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     },
     queue: buildQueue(
       queueApplications,
+      input.applications
+        .filter((item) => isLetterDraft(item, input.approvedLetterIds ?? new Set()))
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
       input.contacts ?? new Map(),
       input.pendingLinkedinPosts ?? [],
     ),
@@ -550,25 +555,53 @@ function postQueueItem(post: TodayPendingPost): TodayQueueItem {
  */
 function buildQueue(
   waitingApplications: readonly ApplicationView[],
+  letterDrafts: readonly ApplicationView[],
   contacts: ReadonlyMap<string, string>,
   pendingPosts: readonly TodayPendingPost[],
 ): TodayQueueItem[] {
+  const rows = [...waitingApplications].sort(byQueueUrgency).map((application) => ({
+    kind: queueKindFor(application),
+    ...(queueKindFor(application) === 'candidate_turn' && application.materials.coverLetter
+      ? { material: 'cover_letter' as const }
+      : {}),
+    applicationId: application.id,
+    title: application.vacancy?.title ?? '',
+    company: companyOf(application),
+    ...followUpContact(application, contacts),
+    eyebrow: eyebrowFor(application),
+    dueAt: application.followUp?.dueAt ?? application.nearestInterview?.scheduledAt ?? null,
+    fit: null,
+  }));
+  // Макет s05b: главное дело, затем письма на проверку, затем остальные дела и посты.
   return [
-    ...[...waitingApplications].sort(byQueueUrgency).map((application) => ({
-      kind: queueKindFor(application),
-      ...(queueKindFor(application) === 'candidate_turn' && application.materials.coverLetter
-        ? { material: 'cover_letter' as const }
-        : {}),
-      applicationId: application.id,
-      title: application.vacancy?.title ?? '',
-      company: companyOf(application),
-      ...followUpContact(application, contacts),
-      eyebrow: eyebrowFor(application),
-      dueAt: application.followUp?.dueAt ?? application.nearestInterview?.scheduledAt ?? null,
-      fit: null,
-    })),
+    ...rows.slice(0, 1),
+    ...letterDrafts.map(draftQueueItem),
+    ...rows.slice(1),
     ...pendingPosts.map(postQueueItem),
   ];
+}
+
+/** Черновик письма: то же правило, что у строки «Черновик» в «Откликах» (B723). */
+function isLetterDraft(application: ApplicationView, approved: ReadonlySet<string>): boolean {
+  return (
+    application.stage === 'saved' &&
+    Boolean(application.clusterId) &&
+    !application.materials.coverLetter &&
+    !approved.has(application.id)
+  );
+}
+
+function draftQueueItem(application: ApplicationView): TodayQueueItem {
+  return {
+    kind: 'candidate_turn',
+    material: 'letter_draft',
+    applicationId: application.id,
+    title: application.vacancy?.title ?? '',
+    company: companyOf(application),
+    eyebrow: 'черновик',
+    dueAt: null,
+    fit: null,
+  };
 }
 
 function upcomingInterviewsOf(applications: readonly ApplicationView[]): ApplicationView[] {
