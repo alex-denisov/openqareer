@@ -20,4 +20,12 @@ describe('latinEmployerNames (B640): латиница названий рабо�
       'VP at Rosseti Tsifra. Rosseti Tsifra grew.',
     );
   });
+
+  it('официальное название важнее написания кандидата и транслитерации', () => {
+    const name = 'Корпоративный университет Сбербанка';
+    const official = 'Corporate University of Sberbank (SberUniversity)';
+    const names = latinEmployerNames([name], ['I worked at Korporativnyy Universitet Sberbanka.']);
+    expect(names.get(name)).toBe(official);
+    expect(withLatinEmployerNames(`IT Lead at ${name}`, new Map())).toBe(`IT Lead at ${official}`);
+  });
 });
