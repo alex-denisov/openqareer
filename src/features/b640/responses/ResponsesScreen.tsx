@@ -3,7 +3,7 @@ import { listApplicationsPool, type ApplicationView } from '../../applications/a
 import { Button, Icon, Link, StatusLine } from '../kit';
 import { buildNodePath } from '../routes';
 import { useScreenChrome, useShell } from '../shell/ShellContext';
-import { AutomationBar } from './AutomationBar';
+import { AutomationBar, useAutomationLoad } from './AutomationBar';
 import { useResponseMarks } from './data/responseSummaryApi';
 import { useManualQueue } from './data/manualQueue';
 import { useAsync, type AsyncState } from './data/useAsync';
@@ -284,9 +284,10 @@ function ListRows({ view, sort, onSort, opened, onToggle, onChanged }: RowsProps
 interface BodyProps extends ResponsesScreenProps {
   readonly list: ListState;
   readonly opened: ListedResponse | null;
+  readonly automation: ReturnType<typeof useAutomationLoad>;
 }
 
-function ListBody({ nodeCode, openId, list, opened }: BodyProps) {
+function ListBody({ nodeCode, openId, list, opened, automation }: BodyProps) {
   const { navigate } = useShell();
   const titleId = useId();
   const [chips, setChips] = useState<readonly StageChip[]>([]);
@@ -304,7 +305,7 @@ function ListBody({ nodeCode, openId, list, opened }: BodyProps) {
         </header>
       ) : null}
       <section className="col-wide ot-wrap" aria-labelledby={titleId}>
-        <AutomationBar />
+        <AutomationBar {...automation} />
         <ListHead
           titleId={titleId}
           total={list.all.length}
@@ -383,13 +384,15 @@ export interface ResponsesScreenProps {
 export function ResponsesScreen({ nodeCode, openId }: ResponsesScreenProps) {
   const { navigate } = useShell();
   const list = useResponsesList();
+  const automation = useAutomationLoad();
   const opened = openId ? (list.all.find((item) => item.row.id === openId) ?? null) : null;
   useScreenChrome(
     nodeCode === 'o01c' ? { crumb: opened?.row.company, rootData: { mtight: '1' } } : {},
   );
   useEscapeToList(Boolean(openId), navigate);
 
-  if (!list.state.data) {
+  const waitsForBar = automation.state.status === 'loading' && !automation.state.data;
+  if (!list.state.data || (waitsForBar && list.all.length > 0)) {
     return (
       <div className="page two" data-b640-node={nodeCode} data-b640-section="responses">
         {list.state.status === 'error' ? (
@@ -403,5 +406,5 @@ export function ResponsesScreen({ nodeCode, openId }: ResponsesScreenProps) {
     );
   }
   if (list.all.length === 0) return <EmptyResponses nodeCode={nodeCode} />;
-  return <ListBody nodeCode={nodeCode} openId={openId} list={list} opened={opened} />;
+  return <ListBody nodeCode={nodeCode} openId={openId} list={list} opened={opened} automation={automation} />;
 }

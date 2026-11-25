@@ -51,4 +51,22 @@ describe('B776: веб-процесс перечитывает карты сай
     expect((await reader.readIfChanged(database))?.[0]?.xml).toBe('<a/>');
     expect(await reader.readIfChanged(database)).toBeNull();
   });
+
+  // Прод 25.11: 22 файла, 30 МБ, одним чтением — 1,2–1,7 с цикла событий при старте слота.
+  it('каждый файл читается своим тактом, порядок — по position, а не по имени', async () => {
+    const database = new DatabaseSync(':memory:');
+    const files = ['c.xml', 'a.xml', 'b.xml'].map((name) => file(name, `<${name}/>`));
+    writeCatalogSitemaps(database, files, new Date('2026-11-25T01:00:00Z'));
+    let turns = 0;
+    let reading = true;
+    const count = () => {
+      turns += 1;
+      if (reading) setImmediate(count);
+    };
+    setImmediate(count);
+    const read = await new CatalogSitemapReader().readIfChanged(database);
+    reading = false;
+    expect(read?.map((f) => f.name)).toEqual(['c.xml', 'a.xml', 'b.xml']);
+    expect(turns).toBeGreaterThanOrEqual(files.length);
+  });
 });

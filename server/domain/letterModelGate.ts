@@ -5,6 +5,7 @@
  * цифру, которой нет в профиле, и компанию, которой нет ни в профиле, ни в вакансии. Стиль, самооценка
  * и термины направления не отклоняются. Цифры прописью и слово в начале фразы не проверяются.
  */
+import { withWrittenAmounts } from './writtenAmounts';
 import { letterPlaceCheck } from './letterPlaces';
 import { distortedWords } from './letterWordDistortion';
 
@@ -47,7 +48,7 @@ interface Quantity {
 
 const NUMBER = String.raw`\d{1,3}(?:[ \u00a0,.]\d{3})+(?!\d)|\d+(?:[.,]\d+)?`;
 const CURRENCY = String.raw`[$€£₽]|usd|eur|gbp|rub(?:les?)?|руб\p{L}*|доллар\p{L}*|евро|dollars?|euros?`;
-const SCALE = String.raw`млн|млрд|тыс|million|billion|thousand|mln|bn|[kKmMкК](?!\p{L})`;
+const SCALE = String.raw`млн|млрд|тыс|миллион\p{L}*|миллиард\p{L}*|тысяч\p{L}*|million|billion|thousand|mln|bn|[kKmMкК](?!\p{L})`;
 const KIND = String.raw`%|процент\p{L}*|percent|раза?(?!\p{L})|times|[xXхХ](?!\p{L})`;
 const QUANTITY = new RegExp(
   String.raw`(?<![\p{L}\p{N}.,/])([-−](?=\d))?([$€£₽]|usd|eur)?\s?(${NUMBER})(?:\s?(${KIND}))?(?:\s?(${SCALE})\.?)?(?:\s?(${CURRENCY}))?(?![\p{L}\p{N}]|\/\d)`,
@@ -57,6 +58,15 @@ const QUANTITY = new RegExp(
 const SCALE_VALUES: Readonly<Record<string, number>> = {
   млн: 1e6, млрд: 1e9, тыс: 1e3, million: 1e6, billion: 1e9, thousand: 1e3, mln: 1e6, bn: 1e9, k: 1e3, m: 1e6, к: 1e3, м: 1e6,
 };
+
+function scaleOf(raw: string | undefined): number {
+  const text = raw?.toLocaleLowerCase();
+  if (!text) return 1;
+  if (text.startsWith('миллион')) return 1e6;
+  if (text.startsWith('миллиард')) return 1e9;
+  if (text.startsWith('тысяч')) return 1e3;
+  return SCALE_VALUES[text] ?? 1;
+}
 
 function currencyOf(raw: string | undefined): string | undefined {
   const text = raw?.toLocaleLowerCase();
@@ -97,9 +107,9 @@ function withSharedPercent(text: string): string {
 }
 
 function quantities(text: string): Quantity[] {
-  return [...withSharedPercent(text).matchAll(QUANTITY)].map(([, sign, before, number = '', kind, scale, after]) => {
+  return [...withSharedPercent(withWrittenAmounts(text)).matchAll(QUANTITY)].map(([, sign, before, number = '', kind, scale, after]) => {
     const written = numberOf(number) * (sign ? -1 : 1);
-    const unit = scale ? SCALE_VALUES[scale.toLocaleLowerCase()] ?? 1 : 1;
+    const unit = scaleOf(scale);
     const currency = currencyOf(before ?? after);
     return {
       kind: kindOf(kind, Boolean(currency), scale),
@@ -332,7 +342,13 @@ function sentencesOf(body: string): string[] {
 
 /** Название вакансии цитируется как есть: его числа и слова — не заслуги кандидата. */
 function withoutVacancyText(sentence: string, vacancy: readonly string[]): string {
-  return vacancy.reduce((text, part) => (part ? text.split(part).join(' ') : text), sentence);
+  // Число без слов и кусок внутри числа или слова — не цитата вакансии.
+  return vacancy
+    .filter((part) => /\p{L}/u.test(part) && sentence.includes(part))
+    .reduce((text, part) => {
+      const quoted = part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+      return text.replace(new RegExp(`(?<![\\p{L}\\p{N}])${quoted}(?![\\p{L}\\p{N}])`, 'gu'), ' ');
+    }, sentence);
 }
 
 /** Названия компаний из строк мест работы профиля («## Должность | Компания | …») и из вакансии. */
