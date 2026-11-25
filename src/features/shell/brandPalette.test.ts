@@ -68,6 +68,8 @@ describe('brand and interface share one hue family', () => {
  */
 const B640_TOKENS = 'src/features/b640/tokens.css';
 const B640_BOOTSTRAP = 'src/features/b640/bootstrap.css';
+/** B790: ступени процента — отдельные токены, акцент B640 зелёный. */
+const B640_FIT_TONES = 'src/features/b640/fit-tones.css';
 const B640_INTERFACE_HUE = 200;
 const B640_ACCENT_HUES = [170, 172, 175] as const;
 const B640_STATE_HUES = [135, 80, 28] as const;
@@ -91,6 +93,11 @@ describe('new cabinet B640 keeps its own pinned palette', () => {
     const hues = [...huesIn(readFileSync(B640_TOKENS, 'utf8')).keys()];
     expect(hues.filter((hue) => !allowed.has(hue))).toEqual([]);
     expect([...allowed].filter((hue) => !hues.includes(hue))).toEqual([]);
+  });
+
+  it('pins the four fit tones (B790): green, blue, amber, grey', () => {
+    const hues = [...huesIn(readFileSync(B640_FIT_TONES, 'utf8')).keys()].sort((a, b) => a - b);
+    expect(hues).toEqual([70, 79, 140, 154, 255, 256]);
   });
 
   it('keeps light as the default theme, dark and system behind data-theme', () => {

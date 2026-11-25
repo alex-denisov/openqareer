@@ -58,19 +58,65 @@ it('B759: зависшее чтение не держит остановку и 
   expect(engine.getSources()[0]!.lastStatus).toBeUndefined();
 });
 
-it('B759: обход, отдавший прочитанное после отмены, записывается', async () => {
+/** Чтение, которое отдаёт улов только на отмене. */
+const onAbort = <T>(signal: AbortSignal, value: T) =>
+  new Promise<T>((resolve) => signal.addEventListener('abort', () => resolve(value)));
+
+function stoppable(answer: never[] | { vacancies: never[]; partial: boolean }) {
   const stop = new AbortController();
-  const { started, fetcher } = announce(
-    () => new Promise<[]>((resolve) => stop.signal.addEventListener('abort', () => resolve([]))),
-  );
+  const { started, fetcher } = announce(() => onAbort(stop.signal, answer));
   const engine = new MultiSourceVacancyEngine({
     sources: [board(1)],
     signal: stop.signal,
     stopReadingGraceMs: 1_000,
     fetcher,
   });
+  return { stop, started, engine };
+}
+
+it.each([
+  [
+    'частичный обход, уже сдвинувший курсор, записывается',
+    { vacancies: [], partial: true },
+    'healthy',
+  ],
+  ['полное чтение не записывается — его повторит следующий старт', [], 'stopped'],
+] as const)('B759: %s', async (_, answer, status) => {
+  const { stop, started, engine } = stoppable(answer as never);
   const wave = engine.syncDue();
   await started;
   stop.abort();
-  expect((await wave).map((outcome) => outcome.status)).toEqual(['healthy']);
+  expect((await wave).map((outcome) => outcome.status)).toEqual([status]);
+});
+
+it('B759: зависший robots.txt не держит остановку', async () => {
+  const stop = new AbortController();
+  const asked = announce(() => new Promise<never>(() => undefined));
+  const engine = new MultiSourceVacancyEngine({
+    sources: [board(1)],
+    signal: stop.signal,
+    robots: { policyFor: asked.fetcher } as never,
+    fetcher: async () => [],
+  });
+  const wave = engine.syncDue();
+  await asked.started;
+  stop.abort();
+  expect((await wave).map((outcome) => outcome.status)).toEqual(['stopped']);
+});
+
+it('B759: зависшая проверка ссылок не держит остановку, после неё новая не начинается', async () => {
+  const stop = new AbortController();
+  const probe = announce(() => new Promise<never>(() => undefined));
+  const links = [{ id: 'v1', url: 'https://example.com/1', postedAt: new Date().toISOString() }];
+  const engine = new MultiSourceVacancyEngine({
+    sources: [board(1)],
+    signal: stop.signal,
+    linkProbe: probe.fetcher as never,
+  });
+  (engine as unknown as { pool: { loadSourceLinks: unknown } }).pool.loadSourceLinks = () => links;
+  const probing = engine.probeSourceLinks(board(1).id);
+  await probe.started;
+  stop.abort();
+  expect(await probing).toBeUndefined();
+  expect(await engine.probeUnseenEmployerLinks()).toMatchObject({ checked: 0 });
 });

@@ -45,7 +45,9 @@ export function isSalaryExpectation(question: QuestionnaireQuestion): boolean {
 /** `null` — вопрос называет две валюты, два периода или обе налоговые базы: ответ за кандидатом. */
 export function salaryAsk(question: QuestionnaireQuestion): SalaryAsk | null {
   if (!isSalaryExpectation(question)) return null;
-  const currencies = matches(CURRENCIES, question.text);
+  // Валюту поле может назвать не в вопросе, а рядом с числом.
+  const unit = question.limits?.unit ?? '';
+  const currencies = matches(CURRENCIES, `${question.text} ${unit}`);
   const periods = matches(PERIODS, question.text);
   const gross = GROSS.test(question.text);
   const net = NET.test(question.text);

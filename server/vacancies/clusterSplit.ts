@@ -1,5 +1,5 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
-import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster, VacancyProvenance } from '../domain/unifiedVacancy';
 import { vacancyKey } from '../../shared/vacancyCatalogRoutes';
 import { parseVacancy } from './sqliteVacancyPoolStore';
 import { clusterKeys, clusterVacancies, sourceMemberKey } from './vacancyDeduplicator';
@@ -31,9 +31,59 @@ function founderOf(cluster: VacancyCluster): string {
     : cluster.id;
 }
 
+function hostOf(source: VacancyProvenance): string {
+  try {
+    return new URL(source.sourceUrl).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 /**
- * Куски кластера. Один кусок — исходный кластер без изменений. Источник, чьей
- * записи нет в пуле, остаётся у основателя: свести его заново нечем.
+ * Источник без записи в пуле, чей номер есть у другой площадки кластера, попал сюда голым
+ * внешним id (acrylicize:27 у a5labs:27) и ведёт на чужую вакансию. Своим он остаётся, только
+ * если та же вакансия на том же хосте стоит у основателя (сайт компании поверх её ATS).
+ */
+function isForeignOrphan(
+  orphan: VacancyProvenance,
+  cluster: VacancyCluster,
+  founder: VacancyCluster,
+): boolean {
+  if (!orphan.externalId) return false;
+  const sameNumber = (source: VacancyProvenance) =>
+    source.externalId === orphan.externalId && source.sourceId !== orphan.sourceId;
+  if (!cluster.sources.some(sameNumber)) return false;
+  const host = hostOf(orphan);
+  return !founder.sources.some(
+    (source) => sameNumber(source) && host !== '' && hostOf(source) === host,
+  );
+}
+
+/** План ничего не меняет: кластер один и тот же. */
+export function isUnchangedPlan(
+  cluster: VacancyCluster,
+  pieces: readonly VacancyCluster[],
+): boolean {
+  return pieces.length === 1 && pieces[0] === cluster;
+}
+
+/**
+ * Источники кластера, которых нет ни в одном куске: они отброшены (журнал держит прежнюю строку).
+ * Запись, сменившая площадку при том же адресе (ATS → сайт компании), отброшенной не считается.
+ */
+export function droppedSources(
+  cluster: VacancyCluster,
+  pieces: readonly VacancyCluster[],
+): VacancyCluster['sources'] {
+  const kept = new Set(
+    pieces.flatMap((piece) => piece.sources.flatMap((s) => [sourceMemberKey(s), s.sourceUrl])),
+  );
+  return cluster.sources.filter((s) => !kept.has(sourceMemberKey(s)) && !kept.has(s.sourceUrl));
+}
+
+/**
+ * Куски кластера. Исходный кластер — без изменений. Источник, чьей записи нет в пуле,
+ * остаётся у основателя: свести его заново нечем; чужой по номеру отбрасывается.
  */
 export function planClusterSplit(
   cluster: VacancyCluster,
@@ -51,7 +101,7 @@ export function planClusterSplit(
   const founderRecord = vacancies.get(founderId);
   if (founderRecord && !members.includes(founderRecord)) members.unshift(founderRecord);
   const rebuilt = clusterVacancies(members);
-  if (rebuilt.length <= 1) return [cluster];
+  if (rebuilt.length === 0) return [cluster];
   const founderKey = founderRecord ? sourceMemberKey(founderRecord.provenance) : undefined;
   const founderAt = Math.max(
     0,
@@ -59,13 +109,15 @@ export function planClusterSplit(
       piece.sources.some((s) => [founderId, founderKey].includes(sourceMemberKey(s))),
     ),
   );
+  const own = orphans.filter((orphan) => !isForeignOrphan(orphan, cluster, rebuilt[founderAt]!));
+  if (rebuilt.length === 1 && own.length === orphans.length) return [cluster];
   const pieces = rebuilt.map((piece, index) =>
     index === founderAt
       ? {
           ...piece,
           id: cluster.id,
-          sources: [...piece.sources, ...orphans],
-          vacanciesCount: piece.sources.length + orphans.length,
+          sources: [...piece.sources, ...own],
+          vacanciesCount: piece.sources.length + own.length,
         }
       : piece,
   );
@@ -81,6 +133,8 @@ export interface ClusterSplitCounts {
   clustersCollided: number;
   clustersSplit: number;
   piecesCreated: number;
+  /** Отброшенные чужие источники без записи в пуле. */
+  sourcesDropped: number;
   keysRewritten: number;
   catalogMoved: number;
   skippedCandidateRef: number;
@@ -204,7 +258,7 @@ function countCluster(context: DryRunContext, cluster: VacancyCluster): void {
   if (!hasCrossSourceIdCollision(cluster)) return;
   counts.clustersCollided += 1;
   const pieces = planClusterSplit(cluster, loadMemberVacancies(db, cluster));
-  if (pieces.length <= 1) {
+  if (isUnchangedPlan(cluster, pieces)) {
     counts.keysRewritten += clusterKeys(cluster).length;
     return;
   }
@@ -214,6 +268,7 @@ function countCluster(context: DryRunContext, cluster: VacancyCluster): void {
   }
   counts.clustersSplit += 1;
   counts.piecesCreated += pieces.length - 1;
+  counts.sourcesDropped += droppedSources(cluster, pieces).length;
   for (const piece of pieces) counts.keysRewritten += clusterKeys(piece).length;
   countCatalog(context, cluster, pieces);
   if (
@@ -247,6 +302,7 @@ export function runClusterSplitDryRun(
       clustersCollided: 0,
       clustersSplit: 0,
       piecesCreated: 0,
+      sourcesDropped: 0,
       keysRewritten: 0,
       catalogMoved: 0,
       skippedCandidateRef: 0,

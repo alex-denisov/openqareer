@@ -91,6 +91,7 @@ function useServerRoles(
   const linkedPeriod = linkedDate(search);
   const sent = useRef(readingRoles);
   const seeded = useRef(false);
+  const seedKey = useRef<string | null>(null);
   const initial = pool.initialFilters;
   const campaign = pool.campaign;
   useEffect(() => {
@@ -101,20 +102,27 @@ function useServerRoles(
       seed([linked], linkedPeriod ?? undefined);
       return;
     }
-    if (!initial && !campaign) return;
+    // Из кэша роли не ставим: их могли сменить после прошлого чтения (B792).
+    if (pool.reading === true || (!initial && !campaign)) return;
     seeded.current = true;
     // Сервер уже отдал подборку с сохранёнными ролями; роли «Карьеры» подборку ещё не сузили.
     sent.current = (initial?.roles ?? []).join('\n');
     const start = defaultRoles(initial?.roles, campaign?.roles);
-    if (start.length > 0) seed(start);
-  }, [initial, campaign, seed, linked, linkedPeriod]);
+    if (start.length > 0) {
+      seedKey.current = start.join('\n');
+      seed(start);
+    }
+  }, [initial, campaign, pool.reading, seed, linked, linkedPeriod]);
   const key = roles.join('\n');
   useEffect(() => {
     if (key === sent.current) return;
     // Кандидат выбрал роли сам — сохранённый выбор сервера их уже не заменит.
     seeded.current = true;
     sent.current = key;
-    pool.setFilters?.({ roles: [...roles], regions: [], remoteOnly: false });
+    // B792: роли ставит сам экран — прочитанные строки остаются до сужения, список не пустеет.
+    const own = seedKey.current === key;
+    seedKey.current = null;
+    pool.setFilters?.({ roles: [...roles], regions: [], remoteOnly: false }, own);
   }, [key]);
 }
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { readEarlyOr } from '../../../shell/earlyRead';
 import { apiErrorMessage } from '../../../coach/apiClient';
 
 export type AsyncState<T> =
@@ -26,7 +27,7 @@ export function useAsync<T>(load: (signal: AbortSignal) => Promise<T>, fallback:
   useEffect(() => {
     const controller = new AbortController();
     setState((current) => ({ status: 'loading', data: current.data }));
-    load(controller.signal)
+    readEarlyOr(load, controller.signal)
       .then((data) => {
         if (!controller.signal.aborted) setState({ status: 'ready', data });
       })

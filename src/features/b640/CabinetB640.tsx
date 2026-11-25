@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { bindSectionCacheOwner } from '../shell/sectionCache';
 import { logout, type AuthUser } from '../coach/coachApi';
 import { startHhRaisePoller } from './apply/hh/hhRaisePoller';
 import { panelViewOf, type PanelView } from './consultant/panelRoute';
@@ -23,6 +24,8 @@ export interface CabinetB640Props {
  * каскада и не зависит от прежних стилей кабинета.
  */
 export function CabinetB640({ session, path, onNavigate, onSessionChange }: CabinetB640Props) {
+  // B792: без владельца кэш прошлого чтения молчал — его привязывала только прежняя оболочка.
+  bindSectionCacheOwner(session.candidateId);
   const { theme, setTheme } = useB640Theme(preferredTheme);
   // B699: автоподнятие резюме hh.ru; только в настольном приложении, в браузере не запускается.
   useEffect(() => startHhRaisePoller(), []);
