@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeDraft, ResumeExperienceInput } from '../../resume/resumeTypes';
-import { editedTexts } from './experienceResults';
+import { createTextKeys, editedTexts } from './experienceResults';
 import {
   applyForm,
   citySuggestions,
@@ -9,6 +9,7 @@ import {
   monthLabel,
   reviewRows,
   validateForm,
+  withDescription,
 } from './experienceForm';
 
 const ENTRY: ResumeExperienceInput = {
@@ -45,7 +46,7 @@ describe('b640 profile: форма места работы', () => {
       workplaceType: 'remote',
       teamSize: '18',
       skills: ['Go', 'PostgreSQL'],
-      description: null,
+      description: '',
       results: [],
       removed: [],
     });
@@ -56,6 +57,16 @@ describe('b640 profile: форма места работы', () => {
       teamSize: '',
       workplaceType: null,
     });
+  });
+
+  it('B801: «Что делали» есть и у места без описания; новая запись встаёт в это место', () => {
+    expect(formOf({ ...ENTRY, descriptionMemoryId: 'd9' }).description).toBeNull();
+    const draft = { ...DRAFT, experience: [ENTRY] };
+    expect(withDescription(draft, ENTRY.id, 'd1').experience[0].descriptionMemoryId).toBe('d1');
+    expect(withDescription(draft, ENTRY.id, null)).toBe(draft);
+    const keyOf = createTextKeys();
+    expect(keyOf('а')).toBe(keyOf('а'));
+    expect(keyOf('б')).not.toBe(keyOf('а'));
   });
 
   it('результаты и описание берутся из записей; убранный результат уходит из места работы', () => {

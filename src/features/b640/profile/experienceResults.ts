@@ -36,6 +36,29 @@ export function editedTexts(
     : results;
 }
 
+/** Ключ записи по её тексту: повтор после сбоя не заводит вторую, другой текст — новая запись. */
+export function createTextKeys(): (text: string) => string {
+  const keys = new Map<string, string>();
+  return (text) => {
+    const known = keys.get(text);
+    if (known) return known;
+    const key = crypto.randomUUID();
+    keys.set(text, key);
+    return key;
+  };
+}
+
+/** Первое «Что делали» места: запись со слов кандидата. `null` — заводить нечего. */
+export async function addDescription(
+  entry: ResumeExperienceInput,
+  form: ExperienceForm,
+  keyOf: (text: string) => string,
+): Promise<string | null> {
+  const statement = form.description?.trim();
+  if (entry.descriptionMemoryId || !statement) return null;
+  return (await addManualExperienceFact({ statement, idempotencyKey: keyOf(statement) })).id;
+}
+
 /**
  * Сохраняет тексты места работы. Правка одной записи меняет и её копии, поэтому перед каждой следующей
  * записи перечитываются: копию, уже ставшую нужной, второй раз не пишем.
