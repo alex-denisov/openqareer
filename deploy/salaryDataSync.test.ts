@@ -17,8 +17,8 @@ const BODY = '{"rows":[]}\n';
 const sha = (text: string): string => createHash('sha256').update(text).digest('hex');
 
 const STUBS: Record<string, string> = {
-  timeout: 'shift; exec "$@"',
-  sudo: 'cat > "$BASE/asked"; echo "$*" > "$BASE/command"; [[ -f "$BASE/down" ]] && exit 1; cat "$BASE/object"',
+  timeout: 'shift 3; exec "$@"',
+  sudo: 'cat > "$BASE/asked"; echo "$*" > "$BASE/command"; [[ -f "$BASE/nokey" ]] && exit 3; [[ -f "$BASE/down" ]] && exit 1; cat "$BASE/object"',
   sha256sum:
     'exec python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],\'rb\').read()).hexdigest())" "$1"',
 };
@@ -69,11 +69,12 @@ describe('openqareer-salary-sync', () => {
   it.each([
     ['the download fails', 'down', ''],
     ['the object is not the one named', 'object', 'other'],
-  ])('keeps the previous file when %s', (_name, file, content) => {
+    ['there is no key', 'nokey', '', 'no-key'],
+  ])('keeps the previous file when %s', (_name, file, content, state = 'failed') => {
     const { base, data, target, run } = setup();
     writeFileSync(target, 'previous');
     writeFileSync(join(base, file), content);
-    expect(run()).toMatchObject({ status: 0, stdout: 'failed' });
+    expect(run()).toMatchObject({ status: 0, stdout: state });
     expect(readFileSync(target, 'utf8')).toBe('previous');
     expect(readdirSync(data)).toEqual(['salary-benchmarks.json']);
   });
@@ -92,4 +93,11 @@ it('the fetch helper takes only a hash', () => {
     encoding: 'utf8',
   });
   expect(result.status).toBe(2);
+  const noKey = spawnSync('bash', [join(import.meta.dirname, 'openqareer-salary-fetch')], {
+    input: `${sha(BODY)}\n`,
+    encoding: 'utf8',
+    env: { ...process.env, OPENQAREER_SALARY_KEY_ENV: '/nonexistent/salary.env' },
+  });
+  expect(noKey.status).toBe(3);
+  expect(noKey.stderr).toContain('нет ключа');
 });

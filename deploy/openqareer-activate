@@ -184,7 +184,7 @@ refresh_worker() {
   running_fingerprint=""
   [[ -z "$running_target" ]] ||
     running_fingerprint="$(fingerprint_in "$RELEASE_ROOT/$running_target" "$fingerprint_file")"
-  if [[ "${4:-}" != updated && -n "$next_fingerprint" && "$next_fingerprint" == "$running_fingerprint" ]] &&
+  if [[ -z "${4:-}" && -n "$next_fingerprint" && "$next_fingerprint" == "$running_fingerprint" ]] &&
     unit_runs_from_link "$service" "$link_name" &&
     systemctl is-active --quiet "$service"; then
     printf 'kept'
@@ -208,8 +208,17 @@ if [[ -x "$SALARY_SYNC" ]]; then
   salary_state="$("$SALARY_SYNC" "$release_dir/data/salary-benchmarks.manifest")" || salary_state=failed
 fi
 
-maintenance_state="$(refresh_worker "$MAINTENANCE_SERVICE" "$MAINTENANCE_LINK" maintenance.fingerprint "$salary_state")" ||
+# Обрыв между заменой файла и перезапуском: сравнение с хешем, который обслуживание уже прочитало.
+salary_sha=""
+salary_refresh=""
+if [[ "$salary_state" == kept || "$salary_state" == updated ]]; then
+  salary_sha="$(sed -n 's/^sha256=//p' "$release_dir/data/salary-benchmarks.manifest" | tail -1)"
+  [[ "$salary_sha" == "$(cat "$RELEASE_ROOT/.salary-loaded" 2>/dev/null || true)" ]] || salary_refresh=1
+fi
+
+maintenance_state="$(refresh_worker "$MAINTENANCE_SERVICE" "$MAINTENANCE_LINK" maintenance.fingerprint "$salary_refresh")" ||
   fail "maintenance service is not active after release restart; check journalctl -u $MAINTENANCE_SERVICE"
+[[ -z "$salary_sha" ]] || printf '%s\n' "$salary_sha" > "$RELEASE_ROOT/.salary-loaded"
 
 # Хост без юнита воркера соответствия (до bootstrap) пропускается, установленный обязан подняться.
 mechanics_state=none

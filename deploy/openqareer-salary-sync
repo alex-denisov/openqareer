@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # B803: файл данных зарплат по манифесту релиза (version, sha256). Хеш тот же — ничего не делает.
-# Любой сбой: прежний файл остаётся, код 0, выкатка идёт дальше. stdout — none|kept|updated|failed.
+# Любой сбой: прежний файл остаётся, код 0, выкатка идёт дальше. stdout — none|kept|updated|failed|no-key.
 set -Euo pipefail
 umask 077
 
@@ -26,8 +26,15 @@ if [[ -f "$TARGET" && "$(sha_of "$TARGET")" == "$expected" ]]; then
 fi
 
 temp="$(mktemp "$TARGET.XXXXXX" 2>/dev/null)" || failed 'cannot write next to the data file'
-printf '%s\n' "$expected" | timeout 150 sudo -n /usr/local/sbin/openqareer-salary-fetch 2>/dev/null |
-  head -c "$MAX_BYTES" > "$temp" || failed 'download failed'
+printf '%s\n' "$expected" | timeout -k 10 150 sudo -n /usr/local/sbin/openqareer-salary-fetch 2>/dev/null |
+  head -c "$MAX_BYTES" > "$temp"
+codes=("${PIPESTATUS[@]}")
+if [[ "${codes[1]}" == 3 ]]; then
+  printf 'openqareer-salary-sync: нет ключа; previous file stays\n' >&2
+  printf 'no-key'
+  exit 0
+fi
+[[ "${codes[1]}" == 0 && "${codes[2]}" == 0 ]] || failed 'download failed'
 [[ "$(sha_of "$temp")" == "$expected" ]] || failed 'checksum mismatch'
 mv -f -- "$temp" "$TARGET" || failed 'cannot replace the data file'
 temp=""

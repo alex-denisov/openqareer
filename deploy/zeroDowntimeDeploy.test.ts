@@ -209,13 +209,17 @@ const link = (host: Host, name: string): string => readlinkSync(join(host.root, 
 function stageArchive(
   host: Host,
   sha: string,
-  options: { noReserve?: boolean; fingerprints?: Fingerprints } = {},
+  options: { noReserve?: boolean; fingerprints?: Fingerprints; salarySha?: string } = {},
 ): string {
   const src = mkdtempSync(join(tmpdir(), 'oq-zdd-src-'));
   for (const file of ['index.html', 'server.mjs', 'maintenance.mjs'])
     writeFileSync(join(src, file), '');
   if (options.noReserve) writeFileSync(join(src, 'no-warm-reserve'), '');
   writeFingerprints(src, options.fingerprints);
+  if (options.salarySha) {
+    mkdirSync(join(src, 'data'));
+    writeFileSync(join(src, 'data', 'salary-benchmarks.manifest'), `sha256=${options.salarySha}\n`);
+  }
   writeFileSync(join(src, 'health'), `${sha}\n`);
   const archive = join(host.root, 'incoming', `${sha}.tar.gz`);
   execFileSync('tar', ['-czf', archive, '-C', src, '.']);
@@ -598,14 +602,18 @@ describe.runIf(isLinux)(
     });
 
     it.each([
-      ['updated', 'restarted'],
-      ['failed', 'kept'],
-    ])('файл зарплат %s — обслуживание %s (B803)', (salary, maintenance) => {
+      ['updated', 'old', 'restarted'],
+      ['kept', 'old', 'restarted'],
+      ['kept', 'new', 'kept'],
+      ['failed', 'old', 'kept'],
+      ['no-key', 'old', 'kept'],
+    ])('файл зарплат %s, прочитан %s — обслуживание %s (B803)', (salary, loaded, maintenance) => {
       const host = makeHost();
       serving(host, SHA_B, '3211', { fingerprints: SAME });
       workersOnLinks(host, SHA_B);
       writeFileSync(join(host.state, 'salary'), salary);
-      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME });
+      writeFileSync(join(host.root, '.salary-loaded'), `${loaded}\n`);
+      const checksum = stageArchive(host, SHA_C, { fingerprints: SAME, salarySha: 'new' });
 
       const result = run(host, 'openqareer-activate', [SHA_C, checksum]);
 

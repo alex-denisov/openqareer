@@ -4,22 +4,24 @@
 set -Eeuo pipefail
 umask 077
 
-readonly BACKUP_ENV=/etc/openqareer/backup.env
+# Отдельный ключ: только GetObject на salary-benchmarks/*. Ключ бэкапов здесь не используется.
+readonly KEY_ENV="${OPENQAREER_SALARY_KEY_ENV:-/etc/openqareer/salary-data.env}"
 readonly BUCKET=openqareer-data
 
 sha=""
 IFS= read -r sha || true
 [[ "$sha" =~ ^[0-9a-f]{64}$ ]] || { printf 'openqareer-salary-fetch: invalid sha256\n' >&2; exit 2; }
 
+[[ -f "$KEY_ENV" ]] || { printf 'нет ключа\n' >&2; exit 3; }
 set -a
 # shellcheck disable=SC1090
-. "$BACKUP_ENV"
+. "$KEY_ENV"
 set +a
 export RCLONE_CONFIG=/dev/null \
   RCLONE_CONFIG_OQS3_TYPE=s3 RCLONE_CONFIG_OQS3_PROVIDER=Other \
   RCLONE_CONFIG_OQS3_ENDPOINT=https://s3.cloud.ru RCLONE_CONFIG_OQS3_REGION=ru-central-1 \
-  RCLONE_CONFIG_OQS3_ACCESS_KEY_ID="${CLOUDRU_PROJECT_ID}:${CLOUDRU_S3_KEY_ID}" \
-  RCLONE_CONFIG_OQS3_SECRET_ACCESS_KEY="$CLOUDRU_S3_KEY_SECRET" \
+  RCLONE_CONFIG_OQS3_ACCESS_KEY_ID="${SALARY_S3_PROJECT_ID}:${SALARY_S3_KEY_ID}" \
+  RCLONE_CONFIG_OQS3_SECRET_ACCESS_KEY="$SALARY_S3_KEY_SECRET" \
   RCLONE_CONFIG_OQS3_NO_CHECK_BUCKET=true
-exec timeout 120 rclone --retries 2 --contimeout 10s --timeout 30s \
+exec timeout -k 10 120 rclone --retries 2 --contimeout 10s --timeout 30s \
   cat "OQS3:$BUCKET/salary-benchmarks/$sha.json"
