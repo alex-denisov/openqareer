@@ -5,6 +5,7 @@ import type {
   ParsedResumeLanguage,
 } from '../../features/workspace/resumeParser';
 import type { CefrLevel } from '../../features/resume/resumeTypes';
+import { hhResumeAboutCard, hhResumeExperienceCards } from './hhResumeCards';
 import { extractAllTagContents, extractTagContent, plainText } from './hhMarkup';
 
 // One parser, one document shape: splitting it would scatter the field map.
@@ -33,6 +34,7 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
     undefined;
 
   const about =
+    hhResumeAboutCard(html) ??
     extractTagContent(
       html,
       /data-qa=["']resume-block-about["'][^>]*>([\s\S]*?)<\/div>/iu,
@@ -72,8 +74,8 @@ export function parseHhResumeHtml(html: string, sourceUrl: string): ParsedResume
   );
 
   // Extract Experience items
-  const experience: ParsedResumeExperience[] = [];
-  const expItems = html.split(/class=["'][^"']*resume-block-item-gap[^"']*["']/giu);
+  const experience: ParsedResumeExperience[] = hhResumeExperienceCards(html);
+  const expItems = experience.length > 0 ? [] : html.split(/class=["'][^"']*resume-block-item-gap[^"']*["']/giu);
   if (expItems.length > 1) {
     for (let i = 1; i < expItems.length; i += 1) {
       const itemHtml = expItems[i];

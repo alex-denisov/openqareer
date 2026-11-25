@@ -8,6 +8,7 @@ import type { HhSendForm } from './HhSendStep';
 const api = vi.hoisted(() => ({
   getHhResumes: vi.fn(),
   saveHhResumes: vi.fn(),
+  chooseHhResumeFor: vi.fn(),
   getHhResumeReview: vi.fn(),
   getHhResumeEdits: vi.fn(),
   startHhApply: vi.fn(),
@@ -24,6 +25,10 @@ const desktop = vi.hoisted(() => ({
   readHhApplyWindow: vi.fn(),
 }));
 vi.mock('./hhSessionApi', () => api);
+vi.mock('../../../../services/desktop/desktopBridge', async (original) => ({
+  ...(await original<object>()),
+  isTauriEnvironment: () => true,
+}));
 vi.mock('./hhDesktop', () => desktop);
 // Темп чтения страниц hh.ru проверяет hhResumeReading.test.ts; здесь читаем без пауз.
 vi.mock('./hhResumeReading', () => ({
@@ -63,6 +68,7 @@ beforeEach(() => {
   onForm.mockResolvedValue(undefined);
   desktop.summaryOf.mockImplementation((item) => ({ id: item.id, title: item.title }));
   api.getHhResumes.mockResolvedValue(snapshot);
+  api.chooseHhResumeFor.mockResolvedValue(snapshot);
   desktop.readHhResumeContent.mockRejectedValue(new Error('hh_resume_not_read'));
   api.getHhResumeEdits.mockResolvedValue({ resumeId: 'abc1', vacancyId: 'cluster-1', edits: [] });
   api.startHhApply.mockResolvedValue({ attemptId: 'att-1', remainingToday: 14 });
@@ -373,11 +379,14 @@ describe('B704: отклик через hh.ru в приложении', () => {
     expect(api.saveHhResumes).toHaveBeenLastCalledWith(
       [{ id: 'abc1', title: 'CDO' }, { id: 'def2', title: 'Head of Data' }],
       { id: 'def2', title: 'Head of Data', text: 'Опыт' },
+      undefined,
+      'cluster-1',
     );
+    expect(api.chooseHhResumeFor).toHaveBeenCalledWith('cluster-1', 'def2');
   });
 
   it('B678: лист a01b — «N правок» с «Оптимизировать» ведёт в разбор, «Без правок» — сразу к отправке', async () => {
-    const sections = { title: 'CDO', about: '', skills: [], places: [] };
+    const sections = { title: 'CDO', about: '', skills: [], places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }] };
     const items = ['abc1', 'def2'].map((id) => ({ id, title: id, url: `https://hh.ru/resume/${id}` }));
     desktop.readHhResumes.mockResolvedValue({ kind: 'ready', resumes: items });
     desktop.readHhResumeContent.mockImplementation(async (item: { id: string; title: string }) => ({ ...item, text: 'Опыт', sections }));
@@ -389,6 +398,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
         { resumeId: 'def2', title: 'def2', status: 'fits', matched: [], missing: [], editCount: 0 },
       ],
     });
+    api.chooseHhResumeFor.mockImplementation(async (_vacancy, id) => ({ resumes: items, selected: { id, title: id, text: 'Опыт', sections }, readAt: String(Math.random()) }));
     api.getHhResumeEdits.mockResolvedValue({
       resumeId: 'abc1', vacancyId: 'cluster-1', edits: [{ id: 'title', section: 'title', was: 'a', now: 'b' }],
     });
@@ -417,7 +427,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
   });
 
   it('B678: прежний снимок без разделов перечитывается сам, выбирать резюме заново не нужно', async () => {
-    const sections = { title: 'CDO', about: '', skills: [], places: [] };
+    const sections = { title: 'CDO', about: '', skills: [], places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }] };
     desktop.readHhResumeContent.mockResolvedValue({ ...snapshot.selected, sections });
     api.saveHhResumes.mockImplementation(async (resumes, selected) => ({ resumes, selected, readAt: 'x' }));
     await render();
@@ -427,7 +437,7 @@ describe('B704: отклик через hh.ru в приложении', () => {
   });
 
   it('B678: «N правок» открывает разбор резюме «сейчас → предложение» и возвращает к отправке', async () => {
-    const sections = { title: 'CDO', about: '', skills: ['SQL'], places: [] };
+    const sections = { title: 'CDO', about: '', skills: ['SQL'], places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }] };
     api.getHhResumes.mockResolvedValue({ ...snapshot, selected: { ...snapshot.selected, sections } });
     api.getHhResumeEdits.mockResolvedValue({
       resumeId: 'abc1',

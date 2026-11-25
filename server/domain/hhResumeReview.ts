@@ -1,8 +1,9 @@
-import type {
-  HhResumeContent,
-  HhResumeFit,
-  HhResumeReview,
-  HhResumeSnapshot,
+import {
+  hhSectionsRead,
+  type HhResumeContent,
+  type HhResumeFit,
+  type HhResumeReview,
+  type HhResumeSnapshot,
 } from '../../shared/hhCandidateSession';
 
 /**
@@ -32,7 +33,8 @@ function uniqueRequirements(requirements: readonly string[]): string[] {
 function readContents(snapshot: HhResumeSnapshot): Map<string, HhResumeContent> {
   const contents = new Map((snapshot.contents ?? []).map((content) => [content.id, content]));
   if (snapshot.selected) contents.set(snapshot.selected.id, snapshot.selected);
-  return contents;
+  // Без опыта страница не прочиталась: «не хватает» по такому тексту было бы неправдой.
+  return new Map([...contents].filter(([, content]) => !content.sections || hhSectionsRead(content.sections)));
 }
 
 function fitOf(
@@ -48,20 +50,47 @@ function fitOf(
   return { ...base, status: missing.length === 0 ? 'fits' : 'gaps', matched, missing };
 }
 
-function recommended(fits: readonly HhResumeFit[], selectedId: string | undefined): string | null {
-  const read = fits.filter((fit) => fit.status !== 'unread');
-  if (read.length === 0) return null;
-  const best = Math.max(...read.map((fit) => fit.matched.length));
-  const top = read.filter((fit) => fit.matched.length === best);
-  return (top.find((fit) => fit.resumeId === selectedId) ?? top[0]!).resumeId;
+/** Насколько заголовок резюме подходит вакансии: сначала родство ролей, затем общие слова. */
+export interface HhTitleRank {
+  readonly role: number;
+  readonly words: number;
+}
+
+const NO_RANK = (): HhTitleRank => ({ role: 0, words: 0 });
+
+/** Заголовок важнее совпавших требований: ими богато и резюме другой роли; прежний выбор — при равенстве. */
+function recommended(
+  fits: readonly HhResumeFit[],
+  selectedId: string | undefined,
+  rank: (title: string) => HhTitleRank,
+): string | null {
+  const scored = fits
+    .map((fit) => ({ fit, title: rank(fit.title) }))
+    .filter(({ fit, title }) => fit.status !== 'unread' || title.role > 0);
+  const weights = ({ fit, title }: (typeof scored)[number]) => [
+    title.role,
+    fit.matched.length,
+    title.words,
+    fit.resumeId === selectedId ? 1 : 0,
+  ];
+  const better = (a: readonly number[], b: readonly number[]) => {
+    const index = a.findIndex((value, position) => value !== b[position]);
+    return index >= 0 && a[index]! > b[index]!;
+  };
+  const best = scored.reduce<(typeof scored)[number] | null>(
+    (top, item) => (!top || better(weights(item), weights(top)) ? item : top),
+    null,
+  );
+  return best?.fit.resumeId ?? null;
 }
 
 export function reviewHhResumes(
   snapshot: HhResumeSnapshot,
   rawRequirements: readonly string[],
+  rank: (title: string) => HhTitleRank = NO_RANK,
 ): HhResumeReview {
   const requirements = uniqueRequirements(rawRequirements);
   const contents = readContents(snapshot);
   const resumes = snapshot.resumes.map((summary) => fitOf(summary, contents.get(summary.id), requirements));
-  return { requirements, resumes, recommendedId: recommended(resumes, snapshot.selected?.id) };
+  return { requirements, resumes, recommendedId: recommended(resumes, snapshot.selected?.id, rank) };
 }

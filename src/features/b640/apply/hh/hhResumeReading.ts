@@ -2,6 +2,7 @@ import {
   HH_REVIEW_RESUMES_MAX,
   HH_REVIEW_SECTIONS_MAX_LENGTH,
   HH_REVIEW_TEXT_MAX_LENGTH,
+  hhSectionsRead,
   type HhResumeContent,
 } from '../../../../../shared/hhCandidateSession';
 import type { HhResumeItem } from '../../../connections/hhSessionPoll';
@@ -59,7 +60,8 @@ export async function readResumesForReview(
     pageReads += 1;
     try {
       const content = await readHhResumeContent(item);
-      cache.set(item.id, { content, at: Date.now(), updated: item.updatedLabel });
+      // Страница без опыта не прочитана: в следующий раз читаем её снова.
+      if (hhSectionsRead(content.sections)) cache.set(item.id, { content, at: Date.now(), updated: item.updatedLabel });
       contents.push(content);
     } catch {
       // Страница не прочиталась (капча, вход, сбой): дальше hh.ru не трогаем, сверка по прочитанным.

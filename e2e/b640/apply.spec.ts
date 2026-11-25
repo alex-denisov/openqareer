@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
 import { expectLastActionReachable } from './lastActionReachable';
 import { installDesktopApiTestBridge } from '../../scripts/desktop-api-test-bridge.mjs';
-import { mockResponses, type ResponsesMockOptions } from './responsesFixture';
+import { siteDraft, mockResponses, type ResponsesMockOptions } from './responsesFixture';
 
 const SHOTS = process.env.B640_SHOTS;
 const LETTER =
@@ -589,7 +589,7 @@ test.describe('B657: единый экран отклика', () => {
   });
 
   test('резюме: шаг открывается по адресу, без опыта ведёт в профиль', async ({ page }) => {
-    await open(page, '/app/responses/a-draft/letter?step=resume');
+    await open(page, '/app/responses/a-draft/letter?step=resume', { applications: siteDraft() });
     await expect(step(page, 'Резюме')).toHaveAttribute('aria-current', 'page');
     // Макет o03 без `data-mtight`: отступ страницы обычный и на 390.
     await expect(page.locator('[data-b640-node="o02"]')).toHaveCSS('padding-top', '16px');
@@ -803,7 +803,7 @@ test.describe('B657: единый экран отклика', () => {
           },
         };
     });
-    await page.route('**/api/v1/candidate/hh/resumes', (route) =>
+    await page.route('**/api/v1/candidate/hh/resumes*', (route) =>
       route.fulfill({ json: { data: null } }),
     );
     await open(page, '/app/responses/a-draft/letter');
@@ -874,10 +874,17 @@ test.describe('B657: единый экран отклика', () => {
       id: 'abc1',
       title: 'Руководитель разработки',
       text: 'Опыт',
-      sections: { title: 'Руководитель', about: '', skills: [], places: [] },
+      sections: {
+        title: 'Руководитель',
+        about: '',
+        skills: [],
+        places: [
+          { employer: 'Финтех Лаб', title: 'Руководитель', period: '2021', text: 'Вёл платформу.' },
+        ],
+      },
     };
     const snapshot = { resumes: [{ id: 'abc1', title: selected.title }], selected, readAt: 'x' };
-    await page.route('**/api/v1/candidate/hh/resumes', (route) =>
+    await page.route('**/api/v1/candidate/hh/resumes*', (route) =>
       route.fulfill({ json: { data: snapshot } }),
     );
     await page.route('**/api/v1/candidate/hh/resumes/edits**', (route) =>

@@ -13,7 +13,18 @@ const items = Array.from({ length: 7 }, (_, index) => ({
   url: `https://hh.ru/resume/r${index}`,
   updatedLabel: 'обновлено 3 ноября',
 }));
-const content = (item: { id: string; title: string }) => ({ id: item.id, title: item.title, text: 'Опыт' });
+const sections = {
+  title: 'CTO',
+  about: '',
+  skills: [],
+  places: [{ employer: 'Ромашка', title: 'CTO', period: '2020', text: 'Опыт' }],
+};
+const content = (item: { id: string; title: string }) => ({
+  id: item.id,
+  title: item.title,
+  text: 'Опыт',
+  sections,
+});
 
 afterEach(() => {
   vi.clearAllMocks();

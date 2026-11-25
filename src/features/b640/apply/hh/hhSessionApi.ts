@@ -14,8 +14,13 @@ const BASE = '/api/v1/candidate/hh';
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 /** Резюме hh.ru, прочитанные в прошлый раз; `null` — ещё не читали. */
-export async function getHhResumes(signal?: AbortSignal): Promise<HhResumeSnapshot | null> {
-  const response = await apiFetch(`${BASE}/resumes`, { signal });
+export async function getHhResumes(
+  signal?: AbortSignal,
+  /** Резюме, выбранное или подходящее этой вакансии. */
+  vacancyId?: string,
+): Promise<HhResumeSnapshot | null> {
+  const query = vacancyId ? `?${new URLSearchParams({ vacancyId }).toString()}` : '';
+  const response = await apiFetch(`${BASE}/resumes${query}`, { signal });
   const body = (await response.json()) as { data?: HhResumeSnapshot | null };
   if (!response.ok) throw new Error('hh_resumes_unavailable');
   return body.data ?? null;
@@ -25,8 +30,8 @@ export async function saveHhResumes(
   resumes: readonly HhResumeSummary[],
   selected: HhResumeContent | null,
   contents?: readonly HhResumeContent[],
-  /** `false` — выбрано из прочитанного раньше, дата чтения прежняя. */
-  contentRead = true,
+  /** Отклик на вакансию: общий выбор резюме не меняется. */
+  vacancyId?: string,
 ): Promise<HhResumeSnapshot> {
   const response = await apiFetch(`${BASE}/resumes`, {
     method: 'PUT',
@@ -35,8 +40,18 @@ export async function saveHhResumes(
       resumes,
       selected,
       ...(contents ? { contents } : {}),
-      ...(contentRead ? {} : { contentRead }),
+      ...(vacancyId ? { vacancyId } : {}),
     }),
+  });
+  return readDataObject<HhResumeSnapshot>(response);
+}
+
+/** Каким резюме откликаться на эту вакансию. */
+export async function chooseHhResumeFor(vacancyId: string, resumeId: string): Promise<HhResumeSnapshot> {
+  const response = await apiFetch(`${BASE}/resumes/choice`, {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ vacancyId, resumeId }),
   });
   return readDataObject<HhResumeSnapshot>(response);
 }
