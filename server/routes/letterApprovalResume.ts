@@ -278,6 +278,14 @@ export function prepareLetterResume(
   }
 }
 
+/** Отклик одобрен, но не отправлен: вместо прежней версии под вакансию прикладывается свежая (B785). */
+export function refreshAttachedResume(deps: RouteDeps, candidateId: string, applicationId: string, cluster: VacancyCluster, choices: ResumeEditChoices): void {
+  const application = deps.candidateStore.getApplication(candidateId, applicationId);
+  if (!application || wasSent(application)) return;
+  deps.candidateStore.transaction(() =>
+    attachApprovedResume(deps, candidateId, { applicationId, cluster, approvedAt: new Date().toISOString(), choices }));
+}
+
 /** Снимок не создался, и кандидат выбрал своё общее резюме: привязываем его как есть. */
 function attachGeneralResume(deps: RouteDeps, candidateId: string, applicationId: string, documentId: string): AttachedResume | undefined {
   const general = generalResumeOf(deps, candidateId);

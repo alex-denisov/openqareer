@@ -72,6 +72,34 @@ describe('B601: одобрение письма прикладывает рез�
   });
 });
 
+describe('B785: одобренный, но не отправленный отклик', () => {
+  it('получает свежую версию резюме; письмо и стадия прежние', async () => {
+    const { candidates, candidateId, approve, prepareResume, linkedResume, resumeDocuments } =
+      await setup('Head of Platform');
+    const first = (await approve()).json().data;
+    expect((await prepareResume()).json().data.versionId).toBe(first.resume.versionId);
+    expect(linkedResume(first.applicationId)).toBe(first.resume.documentId);
+    seedResume(candidates, candidateId, 'VP Platform Engineering');
+    const fresh = (await prepareResume()).json().data.versionId;
+    expect(fresh).not.toBe(first.resume.versionId);
+    const attached = linkedResume(first.applicationId);
+    expect(attached).not.toBe(first.resume.documentId);
+    const file = candidates.getDocument(candidateId, attached!)!;
+    expect(file.fileName).toContain(fresh);
+    await prepareResume();
+    expect(resumeDocuments()).toHaveLength(2);
+    expect(candidates.listApplications(candidateId).map(({ id, stage }) => [id, stage])).toEqual([
+      [first.applicationId, 'saved'],
+    ]);
+  });
+
+  it('без одобрения ничего не прикладывается', async () => {
+    const { prepareResume, resumeDocuments } = await setup('Head of Platform');
+    await prepareResume();
+    expect(resumeDocuments()).toHaveLength(0);
+  });
+});
+
 describe('B785: резюме отправленного отклика', () => {
   it('после отправки версия не меняется и отклик не открывается заново', async () => {
     const { call, candidates, candidateId, approve, prepareResume, versions, linkedResume, resumeDocuments } =

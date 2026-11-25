@@ -15,6 +15,8 @@ export interface LetterResumePreview {
   readonly text: string;
   /** Документ, из которого собран текст: лист страницы и файл PDF/DOCX строятся из него. */
   readonly document?: ResumeDocument;
+  /** Показанная версия под вакансию. */
+  readonly versionId?: string;
 }
 
 type ApprovedResume = NonNullable<ApprovedVacancyLetterResult['resume']>;
@@ -26,6 +28,7 @@ async function targetedPreview(versionId: string, signal?: AbortSignal) {
     title: 'Резюме под вакансию',
     text: formatTargetedResumeAsAtsText(version.snapshot),
     document: version.snapshot.document,
+    versionId,
   } satisfies LetterResumePreview;
 }
 
@@ -43,8 +46,8 @@ const GENERAL: LetterResumePreview = { kind: 'general', title: 'Ваше общ�
 const NONE: LetterResumePreview = { kind: 'none', title: 'Резюме', text: '' };
 
 /**
- * After approval the attached resume is read as it is; before approval the letter prepares the
- * targeted version it will attach (one per vacancy and master revision, so nothing duplicates).
+ * The targeted version is prepared anew until the response is sent (B785): the server keeps the sent
+ * one and attaches the fresh one to an approved response. The approved one is read when it fails.
  */
 export async function loadLetterResumePreview(
   vacancyId: string,
@@ -53,7 +56,9 @@ export async function loadLetterResumePreview(
 ): Promise<LetterResumePreview> {
   if (approved) {
     if (approved.kind === 'general') return GENERAL;
-    return approved.versionId ? targetedPreview(approved.versionId, signal) : masterPreview();
+    if (!approved.versionId) return masterPreview();
+    const fresh = await prepareVacancyLetterResume(vacancyId).catch(() => null);
+    return targetedPreview(fresh?.versionId ?? approved.versionId, signal);
   }
   const prepared = await prepareVacancyLetterResume(vacancyId);
   if (!prepared.ready) return NONE;

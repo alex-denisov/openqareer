@@ -186,12 +186,27 @@ function titleOf(preview: LetterResumePreview, edits: ResumeEditsState['edits'])
   return active > 0 ? `${editsWord(active)} под эту вакансию` : TITLES[preview.kind];
 }
 
+/** Версия собрана заново после одобрения: её одобряют тем же действием (B785). */
+function useCurrentApproval(
+  { approved, confirmed, onConfirm }: ResumeStepProps,
+  versionId: string | undefined,
+) {
+  const [seen, setSeen] = useState<string | null>(null);
+  const changed = Boolean(approved?.versionId && versionId && versionId !== approved.versionId);
+  const confirm = () => {
+    setSeen(versionId ?? null);
+    onConfirm();
+  };
+  return { current: confirmed && (!changed || seen === versionId), confirm };
+}
+
 /** Шаг «Резюме» (O3): то резюме, которое уйдёт с откликом. */
 export function ResumeStep(props: ResumeStepProps) {
-  const { vacancyId, approved, confirmed, onConfirm, dock, onDocument } = props;
+  const { vacancyId, approved, dock, onDocument } = props;
   const { state, reload, decide, lang } = useResumeStep(vacancyId, approved);
   const preview = state.data?.preview;
   const edits = state.data?.choices.edits ?? [];
+  const { current, confirm } = useCurrentApproval(props, preview?.versionId);
   useEffect(() => onDocument(preview?.document ?? null), [onDocument, preview?.document]);
   if (!preview) {
     return <ResumePending error={state.status === 'error' ? state.error : null} onRetry={reload} />;
@@ -223,9 +238,9 @@ export function ResumeStep(props: ResumeStepProps) {
       ) : null}
       <StepActions
         kind={preview.kind}
-        confirmed={confirmed}
+        confirmed={current}
         disabled={state.status !== 'ready' || Boolean(lang?.busy)}
-        onConfirm={onConfirm}
+        onConfirm={confirm}
         dock={dock}
       />
     </section>

@@ -20,6 +20,7 @@ import {
   attachApprovedResume,
   generalResumeOf,
   letterResumeState,
+  refreshAttachedResume,
   prepareLetterResume,
   ResumeSnapshotError,
 } from './letterApprovalResume';
@@ -27,7 +28,7 @@ import type { ResumeEditChoices } from '../../shared/resumeVacancyEdits';
 import { appliesOnHh } from '../vacancies/applyOnHh';
 import { prepareVacancyLang } from './resumeDefaultLang';
 import { currentMaster, masterProjectionOf } from './resumeMaster';
-import { APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
+import { latestLetterApproval, APPROVED_LETTER_PREFIX, handleReadLetterApproval } from './letterApprovalRead';
 import { letterVacancyTexts, registerLetterDraftRoutes, type LetterDraftDeps } from './letterDraftRoutes';
 import { SqliteLetterDraftRepository } from '../candidate/sqliteLetterDraftRepository';
 import { letterFactMark, letterFactSource, type LetterFactMark } from '../domain/letterFreshness';
@@ -574,7 +575,7 @@ function changedLetterFacts(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 409, 'letter_facts_changed', 'Факты профиля изменились. Письмо подготовлено заново: проверьте его и одобрите.', false);
 }
 
-/** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
+/** «Подготовить резюме»: повторяет снимок резюме под вакансию под вакансию, письмо не трогает; неотправленный отклик получает свежую версию. */
 const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyRequest, reply: FastifyReply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -588,7 +589,12 @@ const handlePrepareLetterResume = async (deps: ResumeEditDeps, request: FastifyR
       const state = letterResumeState(deps, candidate.id, currentMaster(deps, candidate.id).document);
       return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: false, versionId: null }, meta: { requestId: request.id } };
     }
-    const state = prepareLetterResume(deps, candidate.id, cluster, await prepareVacancyLang(deps, candidate.id, cluster));
+    const choices = await prepareVacancyLang(deps, candidate.id, cluster);
+    const state = prepareLetterResume(deps, candidate.id, cluster, choices);
+    const approval = latestLetterApproval(deps, candidate.id, vacancyId, letterFactSource(candidateStore.getSnapshot(candidate.id)));
+    if (approval?.resume?.kind === 'targeted' && state.versionId) {
+      refreshAttachedResume(deps, candidate.id, approval.applicationId, cluster, choices);
+    }
     return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId }, meta: { requestId: request.id } };
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
