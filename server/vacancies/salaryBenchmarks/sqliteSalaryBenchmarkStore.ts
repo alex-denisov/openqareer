@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
+  enabledBenchmarks,
   salaryBenchmarkSchema,
-  salaryBenchmarksSchema,
+  salaryBenchmarksFileSchema,
   type SalaryBenchmark,
 } from './salaryBenchmark';
 
@@ -22,7 +23,7 @@ const placeKey = (row: SalaryBenchmark): string =>
 
 /** Заменяет таблицу целиком; неверный файл не меняет ничего. */
 export function writeSalaryBenchmarks(database: DatabaseSync, input: unknown): number {
-  const rows = salaryBenchmarksSchema.parse(input);
+  const rows = enabledBenchmarks(salaryBenchmarksFileSchema.parse(input));
   database.exec(TABLE_SQL);
   const insert = database.prepare(
     'INSERT INTO salary_benchmarks (id, place, row_json) VALUES (?, ?, ?)',

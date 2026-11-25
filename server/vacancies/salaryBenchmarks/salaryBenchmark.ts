@@ -58,7 +58,44 @@ export const salaryBenchmarkSchema = z
 
 export type SalaryBenchmark = z.infer<typeof salaryBenchmarkSchema>;
 
-export const salaryBenchmarksSchema = z
-  .array(salaryBenchmarkSchema)
-  .max(20_000)
-  .refine((rows) => new Set(rows.map(({ id }) => id)).size === rows.length, 'duplicate id');
+/** Не больше стольких цифр одного источника: отдельные цифры, а не копия его таблицы. */
+export const MAX_BENCHMARKS_PER_SOURCE = 30;
+/** Источники, которыми не пользуемся. */
+const REFUSED_HOSTS = /(?:^|\.)(?:glassdoor\.[a-z.]+|levels\.fyi)$/u;
+
+const usesRefusedHost = (url: string) => REFUSED_HOSTS.test(new URL(url).hostname);
+
+export const salaryBenchmarkSourceSchema = z.strictObject({
+  name,
+  kind: z.enum(BENCHMARK_SOURCE_KINDS),
+  /** `false` убирает все цифры источника при следующей загрузке. */
+  enabled: z.boolean(),
+});
+
+/** Файл: список источников и цифры; `sourceName` и `sourceKind` цифры — из списка. */
+export const salaryBenchmarksFileSchema = z
+  .strictObject({
+    sources: z.array(salaryBenchmarkSourceSchema).max(500),
+    benchmarks: z.array(salaryBenchmarkSchema).max(15_000),
+  })
+  .superRefine(({ sources, benchmarks }, context) => {
+    const fail = (message: string) => context.addIssue({ code: 'custom', message });
+    const kinds = new Map(sources.map(({ name: source, kind }) => [source, kind]));
+    if (kinds.size !== sources.length) fail('duplicate source');
+    if (new Set(benchmarks.map(({ id }) => id)).size !== benchmarks.length) fail('duplicate id');
+    for (const [source, kind] of kinds) {
+      const count = benchmarks.filter((row) => row.sourceName === source).length;
+      if (count > MAX_BENCHMARKS_PER_SOURCE) fail(`too many rows of ${source} (${kind})`);
+    }
+    for (const row of benchmarks) {
+      if (kinds.get(row.sourceName) !== row.sourceKind) fail(`unknown source of ${row.id}`);
+      if (usesRefusedHost(row.sourceUrl)) fail(`refused source of ${row.id}`);
+    }
+  });
+
+export function enabledBenchmarks(
+  file: z.infer<typeof salaryBenchmarksFileSchema>,
+): SalaryBenchmark[] {
+  const enabled = new Set(file.sources.filter((row) => row.enabled).map((row) => row.name));
+  return file.benchmarks.filter((row) => enabled.has(row.sourceName));
+}

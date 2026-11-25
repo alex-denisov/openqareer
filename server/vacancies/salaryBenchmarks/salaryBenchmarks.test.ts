@@ -36,6 +36,10 @@ const row = (patch: Partial<SalaryBenchmark> = {}): SalaryBenchmark => ({
   readOn: '2026-11-25',
   ...patch,
 });
+const fileOf = (benchmarks: readonly SalaryBenchmark[], enabled = true) => ({
+  sources: [{ name: 'Agency', kind: 'agency', enabled }],
+  benchmarks,
+});
 const dubaiCto = {
   title: 'Chief Technology Officer (CTO)',
   functionCode: 'eng-mgmt',
@@ -115,10 +119,33 @@ describe('salary_benchmarks', () => {
   it('replaces the table and keeps it when the file is wrong', () => {
     const database = new DatabaseSync(':memory:');
     expect(readSalaryBenchmarks(database, { country: 'AE' })).toEqual([]);
-    writeSalaryBenchmarks(database, [row(), row({ id: 'qa-row', country: 'QA' })]);
+    writeSalaryBenchmarks(database, fileOf([row(), row({ id: 'qa-row', country: 'QA' })]));
     expect(readSalaryBenchmarks(database, { country: 'AE', region: 'mena' })).toEqual([row()]);
-    expect(() => writeSalaryBenchmarks(database, [row(), row()])).toThrow();
+    expect(() => writeSalaryBenchmarks(database, fileOf([row(), row()]))).toThrow();
     expect(readSalaryBenchmarks(database, { country: 'QA' })).toHaveLength(1);
+  });
+
+  it('limits a source to 30 figures and refuses an unlisted or refused source', () => {
+    const rows = (count: number) =>
+      Array.from({ length: count }, (_, index) => row({ id: `row-${index}` }));
+    const database = new DatabaseSync(':memory:');
+    expect(writeSalaryBenchmarks(database, fileOf(rows(30)))).toBe(30);
+    for (const bad of [
+      rows(31),
+      [row({ sourceName: 'Other' })],
+      [row({ sourceKind: 'gov' })],
+      [row({ sourceUrl: 'https://www.glassdoor.co.uk/x' })],
+      [row({ sourceUrl: 'https://www.levels.fyi/x' })],
+    ]) {
+      expect(() => writeSalaryBenchmarks(database, fileOf(bad))).toThrow();
+    }
+  });
+
+  it('removes a source by one flag', () => {
+    const database = new DatabaseSync(':memory:');
+    writeSalaryBenchmarks(database, fileOf([row()]));
+    expect(writeSalaryBenchmarks(database, fileOf([row()], false))).toBe(0);
+    expect(readSalaryBenchmarks(database, { country: 'AE' })).toEqual([]);
   });
 
   it('loads the file beside the database and stays quiet without it', () => {
@@ -129,7 +156,7 @@ describe('salary_benchmarks', () => {
       const path = join(directory, 'openqareer.db');
       loadSalaryBenchmarksFile(database, path, log);
       expect(log.info).not.toHaveBeenCalled();
-      writeFileSync(join(directory, SALARY_BENCHMARKS_FILE), JSON.stringify([row()]));
+      writeFileSync(join(directory, SALARY_BENCHMARKS_FILE), JSON.stringify(fileOf([row()])));
       loadSalaryBenchmarksFile(database, path, log);
       expect(log.info).toHaveBeenCalledWith({ rows: 1 }, 'salary-benchmarks-loaded');
       writeFileSync(join(directory, SALARY_BENCHMARKS_FILE), '{');
