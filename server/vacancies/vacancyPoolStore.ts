@@ -304,6 +304,8 @@ export interface VacancyPoolStore {
     limit: number,
     excludeIds: readonly string[],
   ): UnifiedVacancy[];
+  /** Те из `ids` площадки, что живы и всё ещё без текста: по ключу, без обхода среза (B761). */
+  reloadVacanciesWithoutFullText?(sourceId: string, ids: readonly string[]): UnifiedVacancy[];
   /** Bounded maintenance tick: enriches stored vacancies that have descriptions with management skills (B307). */
   backfillDescriptionSkillsStep?(chunk?: number): {
     inspected: number;

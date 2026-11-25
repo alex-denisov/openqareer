@@ -103,9 +103,9 @@ function isHhSnapshot(snapshot: ApplicationView['vacancy']): boolean {
   );
 }
 
-/** Отклик не отправлен, а в его снимке не hh.ru: площадку сверяем с подборкой (B678). */
+/** Отклик не отправлен: площадку сверяем с подборкой — снимок мог сохранить чужую запись hh.ru. */
 export function needsPoolRoute(application: ApplicationView | null): boolean {
-  return !application || (application.stage === 'saved' && !isHhSnapshot(application.vacancy));
+  return !application || application.stage === 'saved';
 }
 
 /**
@@ -122,7 +122,7 @@ function targetRoute(target: ApplyDestination | null | undefined, poolSource: st
 
 /**
  * Площадка отклика и её адрес (B678): hh.ru первым, как на карточке вакансии. Снимок отклика
- * главнее подборки; на hh.ru переходит только неотправленный со снимком другой площадки.
+ * главнее подборки; площадка неотправленного — из подборки.
  */
 export function applyRoute({
   application,
@@ -137,9 +137,14 @@ export function applyRoute({
     return { source: pool.source, url: pool.url };
   }
   const target = needsPoolRoute(application)
-    ? targetRoute(cluster?.applyTarget, snapshot?.source || pool?.source)
+    ? targetRoute(
+        cluster?.applyTarget,
+        (isHhSnapshot(snapshot) ? pool?.source : snapshot?.source) || pool?.source,
+      )
     : null;
   if (target) return target;
+  const stale = isHhSnapshot(snapshot) && needsPoolRoute(application);
+  if (stale && pool && safeUrl(pool.url)) return { source: pool.source, url: pool.url };
   return {
     source: snapshot?.source || pool?.source,
     url: safeUrl(snapshot?.url) ?? safeUrl(pool?.url),

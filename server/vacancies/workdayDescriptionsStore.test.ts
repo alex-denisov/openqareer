@@ -64,6 +64,14 @@ describe.each([
     ]);
     expect(store.loadVacanciesWithoutFullText(SOURCE, 1, [])).toHaveLength(1);
     expect(store.loadVacanciesWithoutFullText('ats-workday-other', 5, [])).toEqual([]);
+    const all = [1, 2, 3, 4].map((n) => workday(n).id);
+    expect(
+      store
+        .reloadVacanciesWithoutFullText(SOURCE, all)
+        .map((v) => v.id)
+        .sort(),
+    ).toEqual([workday(1).id, workday(3).id]);
+    expect(store.reloadVacanciesWithoutFullText('ats-workday-other', all)).toEqual([]);
   });
 
   it('keeps loaded text when the list sync writes the record again', () => {
