@@ -38,6 +38,11 @@ export function rememberClusters(
   }
 }
 
+/** Выход и смена аккаунта: названия прежнего кандидата не остаются. */
+export function forgetVacancies(): void {
+  known.clear();
+}
+
 /** «Название · компания». */
 export function vacancyName({ title, company }: Pick<KnownVacancy, 'title' | 'company'>): string {
   return [title, company].filter(Boolean).join(' · ');
