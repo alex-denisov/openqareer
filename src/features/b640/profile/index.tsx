@@ -1,15 +1,28 @@
+import { startEarlyRead } from '../../shell/earlyRead';
 import { NodeStub } from '../shell/NodeStub';
 import type { SectionProps } from '../sections';
 import { ConnectionsScreen } from './ConnectionsScreen';
 import { ExperienceEditScreen } from './ExperienceEditScreen';
 import { HistoryScreen } from './HistoryScreen';
 import { PhotoScreen } from './PhotoScreen';
-import { ProfileScreen } from './ProfileScreen';
+import { loadTerms } from './profileAsideApi';
+import { getIncome } from './profileExtrasApi';
+import { getStatus } from './statusChoice';
+import { loadProfile, ProfileScreen } from './ProfileScreen';
 import { QuestionScreen } from './QuestionScreen';
 import { ReviewScreen } from './ReviewScreen';
 import { SourcesScreen } from './SourcesScreen';
 import { StatusChoiceScreen } from './StatusChoiceScreen';
 import { useB640Title } from '../kit/useB640Title';
+
+/** B792: данные «Профиля» — рядом с вопросом о сессии. */
+export function preload(code: string): void {
+  if (code !== 's01') return;
+  startEarlyRead(loadProfile);
+  startEarlyRead(getStatus);
+  startEarlyRead(getIncome);
+  startEarlyRead(loadTerms);
+}
 
 /** Вход раздела «Профиль»: экран по коду узла (см. ../README.md). */
 export default function Section({ node, params }: SectionProps) {

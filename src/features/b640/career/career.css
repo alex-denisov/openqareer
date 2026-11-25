@@ -1,5 +1,7 @@
 /* «Карьера»: только то, чего нет в стилях макета. */
 @layer b640.sections {
+  /* s09: место полосы навыков, пока она читается (B792). */
+  .b640 .sk-place { visibility: hidden; }
   /* s10: столбцы ролей равной ширины в любом движке (макет 166/166/172; WebKit делил 159/193). */
   .b640 .cmp.cmp-roles { table-layout: fixed; }
   .b640 .cmp.cmp-roles thead th:first-child { inline-size: var(--career-label-col); }

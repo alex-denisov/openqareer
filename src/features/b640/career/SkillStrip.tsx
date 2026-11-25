@@ -22,6 +22,24 @@ function writeHidden(hidden: boolean): void {
   }
 }
 
+/** Место полосы, пока она читается: таблица ролей под ней не прыгает. */
+export function SkillStripPlace() {
+  const [hidden] = useState(readHidden);
+  if (hidden) return null;
+  return (
+    <div className="gap-strip sk-strip sk-place" aria-hidden="true">
+      <p>{skillStripText(1)}</p>
+      <span className="btn">
+        <Icon name="checkc" />
+        Проверить
+      </span>
+      <span className="icon-btn sk-x">
+        <Icon name="close" />
+      </span>
+    </div>
+  );
+}
+
 /** «Проверьте N навыков — точнее подбор»: ведёт в проверку навыков, крестик скрывает. */
 export function SkillStrip({ gap, role }: { readonly gap: number; readonly role?: string }) {
   const [hidden, setHidden] = useState(readHidden);
