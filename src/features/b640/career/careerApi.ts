@@ -41,7 +41,7 @@ const key = (title: string): string => title.trim().toLocaleLowerCase('ru');
 /** Требования ролей из вакансий; не прочитались — пустой список, экран читается. */
 async function readDemand(): Promise<readonly RoleSkillDemand[]> {
   try {
-    return (await getRoleSkillDemand()).roles;
+    return (await shareRead(getRoleSkillDemand)).roles;
   } catch {
     return [];
   }

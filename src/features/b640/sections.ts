@@ -39,13 +39,18 @@ export const SECTION_ENTRIES = Object.fromEntries(
   Object.entries(SECTION_LOADERS).map(([section, load]) => [section, retryableChunk<SectionProps>(load)]),
 ) as Readonly<Record<B640Section, SectionEntry>>;
 
+/** B792: корень просят дважды — до сессии и при показе; второе раннее чтение было лишним. */
+let preloaded: string | null = null;
+
 /**
  * B773: код раздела и данные экрана — вместе с вопросом о сессии, а не после него и
  * отрисовки оболочки. Сбой здесь не мешает: экран прочитает сам, как прежде.
  */
 export function preloadSection(pathname: string, search = ''): Promise<void> {
   const match = matchNode(pathname);
-  if (!match) return Promise.resolve();
+  const address = pathname + search;
+  if (!match || preloaded === address) return Promise.resolve();
+  preloaded = address;
   return SECTION_LOADERS[match.node.section]()
     .then((module) => module.preload?.(match.node.code, search))
     .catch(() => undefined);
