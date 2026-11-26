@@ -1,5 +1,6 @@
-import type { HhResumeEdit } from '../../shared/hhCandidateSession';
-import { checkedBullet } from './experienceFactRewrite';
+import type { HhResumeEdit, HhResumeEditSection } from '../../shared/hhCandidateSession';
+import { arithmeticFails, numbersAreSourced, speaksInFirstPerson } from './experienceFactRewrite';
+import { textLanguage } from './profileLanguage';
 import { addsPersonalAction, type LetterFactTranslator } from './letterFactTranslation';
 import type { HhEditDraft, HhEditLanguage } from './hhResumeEdits';
 
@@ -9,11 +10,12 @@ import type { HhEditDraft, HhEditLanguage } from './hhResumeEdits';
  * Строка не перевелась за отведённое время — правка не показывается: смеси языков в резюме нет.
  * Переводим не больше TRANSLATED_LINES_MAX строк на разбор: правки сверх потолка не показываются.
  */
-export const TRANSLATED_LINES_MAX = 24;
+export const TRANSLATED_LINES_MAX = 40;
 
 interface Line {
   readonly key: string;
   readonly text: string;
+  readonly section: HhResumeEditSection;
 }
 
 function expiresIn(budgetMs: number): { readonly promise: Promise<void>; readonly cancel: () => void } {
@@ -24,10 +26,47 @@ function expiresIn(budgetMs: number): { readonly promise: Promise<void>; readonl
   return { promise, cancel: () => clearTimeout(timer) };
 }
 
+/** Перевод не длиннее вдвое: «О себе» длиннее пункта опыта, но перевод не дописывает своего. */
+const LENGTH_RATIO = 2;
+const LENGTH_FLOOR = 320;
+/**
+ * B787: пункт резюме начинается с глагола кандидата («Grew revenue…», «Improved…»): действие в нём
+ * уже названо, и русское «Увеличил выручку» его не добавляет. Проверка личного действия нужна там,
+ * где исходник без субъекта говорит о событии («команда выросла»).
+ */
+const OPENS_WITH_VERB = /^(?:[-–—•*]\s*)?(?:\p{Lu}\p{Ll}+ed|Grew|Rebuilt|Built|Brought|Sold|Won|Made|Ran|Took|Set|Kept|Led|Drove|Oversaw|Cut|Began|Became|Wrote|Taught)(?!\p{L})/u;
+
+const opensWithOwnVerb = (text: string) => text.split(/(?<=[.;!?])\s+|\n+/u).some((sentence) => OPENS_WITH_VERB.test(sentence.trim()));
+
+const SCRIPT: Readonly<Record<HhEditLanguage, RegExp>> = { ru: /\p{Script=Cyrillic}/u, en: /\p{Script=Latin}/u };
+
+/** Язык перевода: в строке есть буквы нужного письма; почта и ники латиницей языка строки не меняют. */
+function inLanguage(text: string, language: HhEditLanguage): boolean {
+  const written = textLanguage(text);
+  return !written || written === language || SCRIPT[language].test(text);
+}
+
+/**
+ * Проверка перевода строки правки hh.ru: те же числа, тот же язык, лица и действия не больше, чем в
+ * исходнике. Это перевод уже подтверждённого текста, а не новый пункт: длина и «я» берутся от исходника.
+ * «О себе» — собственный текст кандидата от первого лица: проверка личного действия нужна только опыту.
+ */
+export function checkedTranslation(
+  source: string,
+  answer: string | undefined,
+  language: HhEditLanguage,
+  section: HhResumeEditSection = 'experience',
+): string | null {
+  const text = answer?.trim() ?? '';
+  if (!text || text.length > Math.max(LENGTH_FLOOR, source.length * LENGTH_RATIO)) return null;
+  if (!numbersAreSourced(text, [source]) || arithmeticFails(text) || !inLanguage(text, language)) return null;
+  if (speaksInFirstPerson(text) && !speaksInFirstPerson(source)) return null;
+  if (section === 'experience' && !opensWithOwnVerb(source) && addsPersonalAction(source, text)) return null;
+  return text;
+}
+
 function checkedLine(line: Line, answer: string | undefined, language: HhEditLanguage): string | null {
-  if (!answer) return null;
-  const checked = checkedBullet({ text: answer, sourceFactIds: ['0'] }, new Map([['0', line.text]]), language);
-  return checked && !addsPersonalAction(line.text, checked.text) ? checked.text : null;
+  return checkedTranslation(line.text, answer, language, line.section);
 }
 
 async function translateLines(
@@ -37,7 +76,8 @@ async function translateLines(
 ): Promise<ReadonlyArray<readonly [string, string]>> {
   try {
     const output = await translate({
-      bullets: lines.map((line) => ({ key: line.key, language, text: line.text, facts: [line.text] })),
+      // Строка готового резюме: переводится целиком, без сжатия до «пункта достижения» (B785).
+      bullets: lines.map((line) => ({ key: line.key, language, text: line.text, facts: [line.text], line: 'text' as const })),
     });
     return lines.flatMap((line) => {
       const text = checkedLine(line, output?.bullets.find((bullet) => bullet.key === line.key)?.text, language);
@@ -59,9 +99,13 @@ function withinLineCap(foreign: readonly HhEditDraft[]): HhEditDraft[] {
   ).kept;
 }
 
+/**
+ * B787: «О себе» уходит в перевод абзацами: ответ переводчика держит до 1000 знаков на строку, а
+ * «О себе» бывает вдвое длиннее — целиком оно не переводилось никогда. Абзацы собираются обратно.
+ */
 function linesOf(draft: HhEditDraft): Line[] {
-  const lines = draft.lines ?? [draft.now];
-  return lines.map((text, index) => ({ key: `${draft.id}#${index}`, text }));
+  const lines = draft.lines ?? draft.now.split(/\n+/u).filter((line) => line.trim());
+  return lines.map((text, index) => ({ key: `${draft.id}#${index}`, text, section: draft.section }));
 }
 
 function publicEdit(draft: HhEditDraft, now: string): HhResumeEdit {
