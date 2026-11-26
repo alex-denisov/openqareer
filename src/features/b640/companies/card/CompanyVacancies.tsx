@@ -4,7 +4,9 @@ import type { ApplicationStage } from '../../../../../shared/applicationStage';
 import type { MatchedVacancyItem } from '../../../coach/cabinetTypes';
 import { Button, Icon, InfoTip, Link, StatusLine } from '../../kit';
 import { buildNodePath } from '../../routes';
-import { rowMoneyView, rowDate, rowFormat } from '../../vacancies/format';
+import { rowMoneyView, rowDate, rowFormat, type MoneyView } from '../../vacancies/format';
+import type { CurrencyRates } from '../../../../../shared/currencyRates';
+import { useCurrencyRates } from '../../../vacancies/useCurrencyRates';
 import { rememberClusters } from '../../shell/vacancyNames';
 import { FitCell } from '../../vacancies/list/VacancyRow';
 import { applicationTag, formatCount } from '../format';
@@ -25,19 +27,31 @@ const ENV = { currency: 'RUB', noRole: false } as const;
 const FIT_TIP = 'Совпадение требований вакансии с подтверждённым опытом профиля.';
 
 /** Деньги, формат и дата строки вакансии; пустая часть выпадает. */
-function vacancyParts(item: MatchedVacancyItem) {
+function vacancyParts(item: MatchedVacancyItem, rates: CurrencyRates | undefined) {
   return {
-    money: rowMoneyView(item, { currency: 'RUB' }).text,
+    money: rowMoneyView(item, { currency: 'RUB', rates }),
     format: rowFormat(item).toLocaleLowerCase('ru-RU'),
     date: rowDate(item),
   };
 }
 
+/** Деньги строки в рублях, как в подборке; у оценки источник в title и скрытом тексте (B803). */
+function Money({ money }: { readonly money: MoneyView }) {
+  return (
+    <span className="num" title={money.title}>
+      {money.text}
+      {money.estimate ? <span className="vh">, {money.title}</span> : null}
+    </span>
+  );
+}
+
+type RowProps = { readonly item: MatchedVacancyItem; readonly rates: CurrencyRates | undefined };
+
 /** «480–580 тыс. ₽ · гибрид · 11.11»: деньги и дата — числа, формат — обычный текст. */
-function RoleSub({ item }: { readonly item: MatchedVacancyItem }) {
-  const { money, format, date } = vacancyParts(item);
+function RoleSub({ item, rates }: RowProps) {
+  const { money, format, date } = vacancyParts(item, rates);
   const parts: ReactNode[] = [
-    money ? <span className="num" key="money">{money}</span> : null,
+    money.text ? <Money money={money} key="money" /> : null,
     format || null,
     date ? <span className="num" key="date">{date}</span> : null,
   ].filter(Boolean);
@@ -45,18 +59,19 @@ function RoleSub({ item }: { readonly item: MatchedVacancyItem }) {
 }
 
 /** «320–380 тыс. ₽ · 09.11» — другие вакансии: деньги и дата. */
-function othersSub(item: MatchedVacancyItem): string {
-  const { money, date } = vacancyParts(item);
-  return [money, date].filter(Boolean).join(' · ');
+function OthersSub({ item, rates }: RowProps) {
+  const { money, date } = vacancyParts(item, rates);
+  const parts: ReactNode[] = [money.text ? <Money money={money} key="money" /> : null, date || null].filter(Boolean);
+  return <div className="row-sub num">{parts.flatMap((part, index) => (index ? [' · ', part] : [part]))}</div>;
 }
 
-function RoleRow({ item, stage }: { readonly item: MatchedVacancyItem; readonly stage: ApplicationStage | undefined }) {
+function RoleRow({ item, stage, rates }: RowProps & { readonly stage: ApplicationStage | undefined }) {
   const tag = applicationTag(stage);
   return (
     <li className="row co-vrow">
       <div className="co-vmain">
         <div className="row-title">{item.cluster.canonicalTitle}</div>
-        <RoleSub item={item} />
+        <RoleSub item={item} rates={rates} />
       </div>
       <span className="co-vfit">
         <FitCell item={item} env={ENV} />
@@ -74,7 +89,7 @@ function RoleRow({ item, stage }: { readonly item: MatchedVacancyItem; readonly 
   );
 }
 
-function Others({ others, total }: { readonly others: readonly MatchedVacancyItem[]; readonly total: number }) {
+function Others({ others, total, rates }: { readonly others: readonly MatchedVacancyItem[]; readonly total: number; readonly rates: CurrencyRates | undefined }) {
   if (total === 0) return null;
   return (
     <details className="more-n">
@@ -87,7 +102,7 @@ function Others({ others, total }: { readonly others: readonly MatchedVacancyIte
           <li className="row" key={item.cluster.id}>
             <div>
               <div className="row-title">{item.cluster.canonicalTitle}</div>
-              <div className="row-sub num">{othersSub(item)}</div>
+              <OthersSub item={item} rates={rates} />
             </div>
           </li>
         ))}
@@ -101,6 +116,7 @@ export function CompanyVacancies(props: CompanyVacanciesProps) {
   const { vacancies, total, applications, moreBusy, moreFailed, onMore } = props;
   // Отклик, открытый из строки, называет вакансию с первого кадра.
   useEffect(() => rememberClusters(vacancies), [vacancies]);
+  const rates = useCurrencyRates();
   const left = total - vacancies.length;
   return (
     <section className="mod" aria-labelledby="co-vac">
@@ -113,7 +129,7 @@ export function CompanyVacancies(props: CompanyVacanciesProps) {
       ) : (
         <ul className="rows co-vlist">
           {vacancies.map((item) => (
-            <RoleRow key={item.cluster.id} item={item} stage={applications[item.cluster.id]} />
+            <RoleRow key={item.cluster.id} item={item} stage={applications[item.cluster.id]} rates={rates} />
           ))}
         </ul>
       )}
@@ -125,7 +141,7 @@ export function CompanyVacancies(props: CompanyVacanciesProps) {
         </div>
       ) : null}
       {moreFailed ? <StatusLine state="err" text="Не удалось загрузить. Нажмите ещё раз." /> : null}
-      <Others others={props.others} total={props.othersTotal} />
+      <Others others={props.others} total={props.othersTotal} rates={rates} />
     </section>
   );
 }

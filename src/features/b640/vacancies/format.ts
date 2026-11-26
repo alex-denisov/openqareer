@@ -167,7 +167,9 @@ export function rowMoneyView(item: MatchedVacancyItem, options: MoneyOptions): M
     ...view,
     text,
     ...(amount ? { amount } : {}),
-    title: view.title ? `${label}. ${view.title}` : label,
+    title: view.title
+      ? `${label}. ${view.title.replace(/^В вакансии /u, 'В валюте оценки ')}`
+      : label,
     estimate: true,
   };
 }
