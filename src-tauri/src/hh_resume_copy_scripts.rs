@@ -49,8 +49,11 @@ var m=/^\\/resume\\/([A-Za-z0-9]+)\\/?$/.exec(a.pathname);return m?m[1]:null;}})
 return ids.length>0&&ids.every(function(id){{return id===S;}});}});\
 if(mine.length===0)return {{code:'waiting'}};if(mine.length>1)return {{code:'source_ambiguous'}};\
 if(all({item}).length>0)return {{code:st.menu?'menu_open':'menu_unexpected'}};\
-var more=all({more},mine[0]);if(more.length!==1)return {{code:'waiting'}};\
-if(!st.menu){{st.menu=1;more[0].click();}}return {{code:'waiting'}};",
+var more=all({more},mine[0]);if(more.length===0){{var cards=all({card}),every=all({more});\
+if(every.length===cards.length)more=[every[cards.indexOf(mine[0])]];}}\
+if(more.length!==1)return {{code:'waiting'}};\
+if(!st.menu){{st.menu=1;var b=more[0];['pointerdown','mousedown','pointerup','mouseup'].forEach(function(t){{\
+b.dispatchEvent(new MouseEvent(t,{{bubbles:true,cancelable:true,view:window}}));}});b.click();}}return {{code:'waiting'}};",
         source = literal(source_id),
         card = literal(HH_CARD),
         item = literal(HH_MENU_ITEM),
