@@ -1,5 +1,6 @@
 import type { ParsedResumeExperience } from '../../features/workspace/resumeParser';
 import { decodeHtmlText } from './hhMarkup';
+import { HH_MONTH_PATTERN } from './hhMonths';
 
 /**
  * Карточки страницы `hh.ru/resume/<id>` (разметка 25.11.2026): опыт — по компаниям, внутри
@@ -93,15 +94,23 @@ function textLines(html: string): string[] {
     .filter(Boolean);
 }
 
-const PERIOD =
-  /(\p{L}+\s+\d{4})\s*[—–-]\s*(?:(\p{L}+\s+\d{4})|(?:по\s+)?(?:настоящее время|сейчас)|present|now|currently|till now|to date)(?:\s*\([^)]*\))?/iu;
+/** Начало срока: «Апрель 2023», «янв. 2020», «Jan 2020» или только год (B787). */
+const PERIOD_POINT = String.raw`(?<!\p{L})(?:${HH_MONTH_PATTERN}\.?\s+)?\d{4}`;
+const PERIOD = new RegExp(
+  String.raw`(${PERIOD_POINT})\s*[—–-]\s*(?:(${PERIOD_POINT})|(?:по\s+)?(?:настоящее время|н\.\s*в\.|сейчас)|present|now|currently|till now|to date)(?:\s*\([^)]*\))?`,
+  'iu',
+);
 
-/** Ступень без срока — не место работы: должность и текст в ней не различить. */
-function placeOf(step: string, employer: string): ParsedResumeExperience[] {
+/**
+ * Ступень без срока — не место работы: должность и текст в ней не различить. Должность до срока;
+ * если её там нет (одна ступень, должность в шапке карточки — B787), берётся из шапки.
+ */
+function placeOf(step: string, employer: string, headerTitle: string): ParsedResumeExperience[] {
   const text = textLines(step).join('\n');
   const period = PERIOD.exec(text);
-  const title = period ? text.slice(0, period.index).replace(/\s+/gu, ' ').trim() : '';
-  if (!period || !title) return [];
+  if (!period) return [];
+  const title = text.slice(0, period.index).replace(/\s+/gu, ' ').trim() || headerTitle;
+  if (!title) return [];
   const description = text.slice(period.index + period[0].length).trim();
   return [
     {
@@ -116,12 +125,24 @@ function placeOf(step: string, employer: string): ParsedResumeExperience[] {
   ];
 }
 
+const isStepper = (_tag: string, attributes: string) =>
+  qaOf(attributes).some((qa) => qa === 'magritte-stepper' || qa === 'magritte-stepper-step');
+
+/** Строки шапки карточки: всё, кроме ступеней. Срок работы («4 года») — не должность. */
+function headerLines(card: string): string[] {
+  const named = byQa(card, 'cell-left-side')[0];
+  const [employer, ...rest] = textLines(named ?? without(card, isStepper));
+  return employer ? [employer, ...rest.filter((line) => !/^\d/u.test(line))] : [];
+}
+
 export function hhResumeExperienceCards(html: string): ParsedResumeExperience[] {
   return byQa(html, 'profile-experience-company-card').flatMap((card) => {
-    const employer = textLines(byQa(card, 'cell-left-side')[0] ?? '')[0];
+    const [employer, headerTitle = ''] = headerLines(card);
     if (!employer) return [];
-    return byQa(card, 'magritte-stepper-step').flatMap((step) =>
-      placeOf(byQa(step, 'magritte-stepper-step-content')[0] ?? step, employer),
+    const steps = byQa(card, 'magritte-stepper-step');
+    const title = steps.length === 1 ? headerTitle : '';
+    return steps.flatMap((step) =>
+      placeOf(byQa(step, 'magritte-stepper-step-content')[0] ?? step, employer, title),
     );
   });
 }
@@ -139,4 +160,11 @@ export function hhResumeAboutCard(html: string): string | undefined {
   return textLines(body)
     .filter((line, index) => index > 0 || !ABOUT_HEADING.test(line))
     .join('\n');
+}
+
+/** Элементы с `data-qa` целиком, с открывающим тегом: для локальной диагностики разметки (B787). */
+export function hhQaBlocks(html: string, qa: string): string[] {
+  return elements(html, (_tag, attributes) => qaOf(attributes).includes(qa)).map(({ start, end }) =>
+    html.slice(start, end),
+  );
 }

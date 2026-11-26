@@ -1,17 +1,11 @@
-import {
-  parseHhResumeHtml,
-  parseHhResumesList,
-} from '../../services/connectors/hhResumeParser';
+import { parseHhResumeHtml, parseHhResumesList } from '../../services/connectors/hhResumeParser';
 import {
   parseHhProfilePage,
   withHhProfileIdentity,
   type HhProfileIdentity,
 } from '../../services/connectors/hhProfileParser';
 import type { ParsedResume } from '../workspace/resumeParser';
-import type {
-  SessionInspectionResult,
-  SessionPageResult,
-} from './connectorSession';
+import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
 import { captureSignedInPage } from './sessionCapture';
 import {
   sessionWaitingNotice,
@@ -42,10 +36,7 @@ const HH_WAITING_COPY = {
     'Вход выполнен, но OpenQareer не узнаёт страницу hh.ru. Откройте на hh.ru раздел «Мои резюме» или загрузите PDF-резюме.',
 } as const;
 
-export function hhWaitingNotice(
-  stage: HhWaitingStage,
-  unrecognisedPolls: number,
-): HhWaitingNotice {
+export function hhWaitingNotice(stage: HhWaitingStage, unrecognisedPolls: number): HhWaitingNotice {
   return sessionWaitingNotice(stage, unrecognisedPolls, HH_WAITING_COPY);
 }
 
@@ -215,10 +206,13 @@ function isSessionWindowMissing(reason: unknown): boolean {
 export async function readHhResumeFromSession(
   url: string,
   readCurrentSession: (url: string) => Promise<SessionPageResult>,
+  /** B787: страница прочиталась, а мест работы в ней не нашлось. */
+  onNoExperience?: (body: string) => void,
 ): Promise<ParsedResume | undefined> {
   const page = await readCurrentSession(url);
   if (!page.ok || !page.body || !sameResumeUrl(page.url, url)) return undefined;
   const parsed = parseHhResumeHtml(page.body, url);
+  if (parsed.experience.length === 0) onNoExperience?.(page.body);
   return parsed.rawText.trim() ? parsed : undefined;
 }
 
@@ -226,9 +220,7 @@ export async function readHhResumeFromSession(
  * Polls the candidate-owned hh.ru webview without touching its current page
  * until the page itself contains a positive signed-in applicant marker.
  */
-export function createHhSessionPoller(
-  dependencies: HhSessionPollDependencies,
-): HhSessionPoller {
+export function createHhSessionPoller(dependencies: HhSessionPollDependencies): HhSessionPoller {
   let inFlight: Promise<HhSessionPollResult> | undefined;
   return {
     poll() {
@@ -241,9 +233,7 @@ export function createHhSessionPoller(
   };
 }
 
-async function pollOnce(
-  dependencies: HhSessionPollDependencies,
-): Promise<HhSessionPollResult> {
+async function pollOnce(dependencies: HhSessionPollDependencies): Promise<HhSessionPollResult> {
   const current = await dependencies.inspectCurrentPage();
   if (!isSignedInApplicantPage(current)) {
     return { status: 'waiting_for_sign_in', stage: sessionWaitingStage(current) };
@@ -287,10 +277,9 @@ async function pollOnce(
   }
 
   const first = resumes[0];
-  const read = await readHhResumeFromSession(
-    first.url,
-    dependencies.readSessionPage,
-  ).catch(() => undefined);
+  const read = await readHhResumeFromSession(first.url, dependencies.readSessionPage).catch(
+    () => undefined,
+  );
   return {
     status: 'ready',
     resumes,
@@ -370,7 +359,10 @@ function isAllowedHhUrl(rawUrl: string): boolean {
     const host = url.hostname.toLowerCase();
     return (
       url.protocol === 'https:' &&
-      (host === 'hh.ru' || host.endsWith('.hh.ru') || host === 'headhunter.ru' || host.endsWith('.headhunter.ru'))
+      (host === 'hh.ru' ||
+        host.endsWith('.hh.ru') ||
+        host === 'headhunter.ru' ||
+        host.endsWith('.headhunter.ru'))
     );
   } catch {
     return false;

@@ -2484,6 +2484,31 @@ fn diagnostic_line(millis: u128, scope: &str, event: &str, detail: Option<&str>)
     Some(format!("{millis} {scope} {event}{detail}\n"))
 }
 
+/// B787: masked sketch of the hh.ru experience block, overwritten on each unread resume.
+const HH_RESUME_MARKUP_FILE: &str = "hh-resume-markup.txt";
+const HH_RESUME_MARKUP_MAX_CHARS: usize = 16_000;
+
+/// The sketch is masked in the web layer; plain ASCII here means no resume text got through.
+fn valid_markup_sketch(sketch: &str) -> bool {
+    !sketch.is_empty()
+        && sketch.len() <= HH_RESUME_MARKUP_MAX_CHARS
+        && sketch.chars().all(|c| c == '\n' || (' '..='~').contains(&c))
+}
+
+pub fn write_hh_resume_markup(app: &AppHandle, sketch: &str) -> Result<(), String> {
+    if !valid_markup_sketch(sketch) {
+        return Err("markup_sketch_invalid".to_string());
+    }
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
+        .join(DIAGNOSTICS_DIR);
+    create_private_directory(&root)?;
+    std::fs::write(root.join(HH_RESUME_MARKUP_FILE), sketch)
+        .map_err(|error| format!("diagnostics_write_failed: {error}"))
+}
+
 pub fn append_connector_diagnostic(
     app: &AppHandle,
     scope: &str,
@@ -2517,6 +2542,14 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn markup_sketch_accepts_only_masked_ascii() {
+        assert!(super::valid_markup_sketch("li[magritte-stepper-step]\n  \"MON_04 2023 - xxx\""));
+        assert!(!super::valid_markup_sketch(""));
+        assert!(!super::valid_markup_sketch("\"Россети\""));
+        assert!(!super::valid_markup_sketch(&"x".repeat(super::HH_RESUME_MARKUP_MAX_CHARS + 1)));
+    }
+
     #[test]
     fn a_background_session_is_never_built_on_screen() {
         let request = |background| SessionWindowRequest {

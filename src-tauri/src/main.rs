@@ -693,6 +693,12 @@ fn log_connector_diagnostic(
     connector_session::append_connector_diagnostic(&app, &scope, &event, detail.as_deref())
 }
 
+/// B787: masked hh.ru experience markup next to the diagnostics log; never sent anywhere.
+#[tauri::command]
+fn write_hh_resume_markup(app: AppHandle, sketch: String) -> Result<(), String> {
+    connector_session::write_hh_resume_markup(&app, &sketch)
+}
+
 /// Inspects the current page without redirecting an in-progress login flow.
 #[tauri::command]
 async fn inspect_connector_session_page(
@@ -868,6 +874,7 @@ fn main() {
             read_connector_session_page,
             save_connector_capture_dump,
             log_connector_diagnostic,
+            write_hh_resume_markup,
             inspect_connector_session_page,
             get_desktop_environment_info,
             read_session_token,

@@ -1,3 +1,4 @@
+import { hhResumeMarkupSketch } from '../../../../services/connectors/hhResumeMarkupSketch';
 import {
   HH_RESUME_ID,
   HH_RESUME_TEXT_MAX_LENGTH,
@@ -14,10 +15,7 @@ import {
   type HhResumeSections,
   type HhResumeSummary,
 } from '../../../../../shared/hhCandidateSession';
-import {
-  inspectSessionPage,
-  readSessionPage,
-} from '../../../connections/connectorSession';
+import { inspectSessionPage, readSessionPage } from '../../../connections/connectorSession';
 import {
   createHhSessionPoller,
   readHhResumeFromSession,
@@ -68,7 +66,9 @@ export async function readHhResumes(): Promise<HhSessionRead> {
   await reportHhAlive();
   if (result.status === 'authenticated_empty') return { kind: 'empty' };
   const usable = result.resumes.filter((item) => HH_RESUME_ID.test(item.id) && item.title.trim());
-  return usable.length > 0 ? { kind: 'ready', resumes: usable.slice(0, HH_RESUMES_MAX) } : { kind: 'empty' };
+  return usable.length > 0
+    ? { kind: 'ready', resumes: usable.slice(0, HH_RESUMES_MAX) }
+    : { kind: 'empty' };
 }
 
 const clip = (value: string | undefined, max: number) => (value ?? '').trim().slice(0, max);
@@ -79,20 +79,42 @@ export function sectionsOf(parsed: ParsedResume, fallbackTitle: string): HhResum
     title: clip(parsed.targetRole || fallbackTitle, HH_RESUME_TITLE_MAX_LENGTH),
     about: clip(parsed.about, HH_SECTION_TEXT_MAX_LENGTH),
     aboutRead: parsed.about !== undefined,
-    skills: parsed.skills.map((skill) => clip(skill, 200)).filter(Boolean).slice(0, HH_SECTION_SKILLS_MAX),
+    skills: parsed.skills
+      .map((skill) => clip(skill, 200))
+      .filter(Boolean)
+      .slice(0, HH_SECTION_SKILLS_MAX),
     places: parsed.experience.slice(0, HH_SECTION_PLACES_MAX).map((place) => ({
       employer: clip(place.employer, 300),
       title: clip(place.title, 300),
-      period: clip([place.startDate, place.current ? 'по настоящее время' : place.endDate].filter(Boolean).join(' — '), 120),
-      text: clip([...place.responsibilities, ...place.achievements].join('\n'), HH_SECTION_TEXT_MAX_LENGTH),
+      period: clip(
+        [place.startDate, place.current ? 'по настоящее время' : place.endDate]
+          .filter(Boolean)
+          .join(' — '),
+        120,
+      ),
+      text: clip(
+        [...place.responsibilities, ...place.achievements].join('\n'),
+        HH_SECTION_TEXT_MAX_LENGTH,
+      ),
     })),
   };
+}
+
+/** B787: набросок разметки опыта — в локальный файл диагностики; сбой записи чтению не мешает. */
+function saveMarkupSketch(body: string): void {
+  void invokeDesktopCommand<void>('write_hh_resume_markup', {
+    sketch: hhResumeMarkupSketch(body),
+  }).catch(() => undefined);
 }
 
 /** Содержимое выбранного резюме — страница резюме в сессии кандидата, как её показывает hh.ru. */
 export async function readHhResumeContent(item: HhResumeItem): Promise<HhResumeContent> {
   if ((await ensureHhWindow()) === 'signed_out') throw new Error('hh_resume_not_read');
-  const parsed = await readHhResumeFromSession(item.url, (url) => readSessionPage('hh', url));
+  const parsed = await readHhResumeFromSession(
+    item.url,
+    (url) => readSessionPage('hh', url),
+    saveMarkupSketch,
+  );
   const text = parsed?.rawText.trim();
   if (!parsed || !text) throw new Error('hh_resume_not_read');
   const title = item.title.trim().slice(0, HH_RESUME_TITLE_MAX_LENGTH);
@@ -126,7 +148,8 @@ export async function runHhApplyInSession(input: {
   readonly agreedRelocation?: boolean;
   readonly agreedVisibility?: boolean;
 }): Promise<HhDesktopReport> {
-  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
+  if ((await ensureHhWindow()) === 'signed_out')
+    return { outcome: 'failed', failureCode: 'not_signed_in' };
   await hideHhWindow();
   const report = await invokeDesktopCommand<HhDesktopReport>('run_hh_apply', { request: input });
   if (!report) throw new Error('desktop_unavailable');
@@ -165,13 +188,22 @@ export interface HhResumeEditReport {
 }
 
 /** B678: раздел резюме hh.ru в окне кандидата. Вызывается только после его «Применить». */
-export async function applyHhResumeEditInSession(input: HhResumeEditInput): Promise<HhResumeEditReport> {
-  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
+export async function applyHhResumeEditInSession(
+  input: HhResumeEditInput,
+): Promise<HhResumeEditReport> {
+  if ((await ensureHhWindow()) === 'signed_out')
+    return { outcome: 'failed', failureCode: 'not_signed_in' };
   await hideHhWindow();
   const report =
     input.section === 'experience'
       ? await invokeDesktopCommand<HhResumeEditReport>('run_hh_experience_edit', {
-          request: { resumeId: input.resumeId, employer: input.employer, position: input.position, was: input.was, text: input.text },
+          request: {
+            resumeId: input.resumeId,
+            employer: input.employer,
+            position: input.position,
+            was: input.was,
+            text: input.text,
+          },
         })
       : await invokeDesktopCommand<HhResumeEditReport>('run_hh_resume_edit', { request: input });
   if (!report) throw new Error('desktop_unavailable');
@@ -184,8 +216,12 @@ export interface HhCopyReport {
   readonly failureCode?: string | null;
 }
 
-async function copyCommand(command: string, request: Record<string, unknown>): Promise<HhCopyReport> {
-  if ((await ensureHhWindow()) === 'signed_out') return { outcome: 'failed', failureCode: 'not_signed_in' };
+async function copyCommand(
+  command: string,
+  request: Record<string, unknown>,
+): Promise<HhCopyReport> {
+  if ((await ensureHhWindow()) === 'signed_out')
+    return { outcome: 'failed', failureCode: 'not_signed_in' };
   await hideHhWindow();
   const report = await invokeDesktopCommand<HhCopyReport>(command, { request });
   if (!report) throw new Error('desktop_unavailable');
