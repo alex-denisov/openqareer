@@ -44,11 +44,13 @@ function platformPlaces(deps: RouteDeps, candidateId: string, cluster: VacancyCl
       ),
     };
   });
-  const facts = [
-    master.document.about ?? '',
-    ...places.flatMap((place) => place.bullets),
-  ].filter(Boolean);
-  return { about: master.document.about?.trim() || null, places, facts };
+  // B787: подтверждённые факты профиля («Верно» у консультанта) — их сверяет правка «исправить факт».
+  const confirmed = [...deps.candidateStore.getSnapshot(candidateId).memory]
+    .filter((fact) => (fact.status === 'confirmed' || fact.status === 'corrected') && !fact.sensitive)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .map((fact) => fact.statement.trim());
+  const facts = [master.document.about ?? '', ...places.flatMap((place) => place.bullets), ...confirmed].filter(Boolean);
+  return { about: master.document.about?.trim() || null, places, facts, confirmed };
 }
 
 /** Отклик на этот id сохранён под другим названием: вакансия из пула — не его. */
