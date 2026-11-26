@@ -17,6 +17,7 @@ import { conditionsPath, pageAttrs } from './careerPaths';
 import { RolePickLoad } from './RolePickDialog';
 import { RoleTable } from './RoleTable';
 import { searchStrip } from './rolesModel';
+import { useCareerMark } from './loadMarks';
 import { SkillStrip, SkillStripPlace } from './SkillStrip';
 
 /** Ожидание и ошибка первого чтения ролей — на месте страницы. */
@@ -42,13 +43,20 @@ export function RolesLoad({
   );
 }
 
-/** B768: число вакансий выбора догружается в полосу роли, таблица его не ждёт. */
-function useSelectionTotal(titles: readonly string[]): number | null {
-  const [total, setTotal] = useState<number | null>(null);
-  const key = titles.join('\n');
+/**
+ * B768: число вакансий выбора догружается в полосу роли, таблица его не ждёт.
+ * `undefined` — ещё считается (на месте числа скелетон), `null` — не прочиталось.
+ */
+function useSelectionTotal(
+  titles: readonly string[],
+  counting: boolean,
+): number | null | undefined {
+  const [total, setTotal] = useState<number | null | undefined>(undefined);
+  const key = counting ? titles.join('\n') : null;
   useEffect(() => {
+    setTotal(undefined);
+    if (key === null) return undefined;
     const controller = new AbortController();
-    setTotal(null);
     void loadSelectionTotal(key ? key.split('\n') : [], controller.signal).then((value) => {
       if (!controller.signal.aborted) setTotal(value);
     });
@@ -57,7 +65,31 @@ function useSelectionTotal(titles: readonly string[]): number | null {
   return total;
 }
 
-const NO_TITLES: readonly string[] = [];
+/** B792: место числа вакансий, пока подборка считается (на проде до 15 с). */
+function CountPlace() {
+  useCareerMark('skeleton');
+  return (
+    <span
+      className="ls-bar role-strip-sk role-strip-sk-n"
+      role="status"
+      aria-busy="true"
+      aria-label="Считаем вакансии"
+    />
+  );
+}
+
+/** B792: каркас полосы роли поиска до ответа кампании — подпись на месте, роль скелетоном. */
+export function RoleStripPlace() {
+  useCareerMark('skeleton');
+  return (
+    <section className="role-strip" role="status" aria-busy="true" aria-label="Роль поиска">
+      <p className="role-strip-t">
+        <span className="role-strip-k">Роль поиска</span>
+        <span className="ls-bar role-strip-sk" />
+      </p>
+    </section>
+  );
+}
 
 function SearchRoleStrip({
   campaign,
@@ -70,8 +102,10 @@ function SearchRoleStrip({
   readonly onEdit: () => void;
 }) {
   const titles = campaign.roles.value;
-  const total = useSelectionTotal(counting ? titles : NO_TITLES);
-  const strip = searchStrip(titles, total, campaign.titlesRu);
+  const total = useSelectionTotal(titles, counting);
+  const strip = searchStrip(titles, total ?? null, campaign.titlesRu);
+  useCareerMark('role');
+  useCareerMark('count', Boolean(strip?.count));
   return (
     <section className="role-strip" aria-labelledby="role-title">
       <p className="role-strip-t">
@@ -79,6 +113,7 @@ function SearchRoleStrip({
         <span className="role-strip-r" role="heading" aria-level={2} id="role-title">
           {strip?.title ?? 'не выбрана'}
         </span>
+        {strip && total === undefined ? <CountPlace /> : null}
         {strip?.count ? <span className="role-strip-n num">{strip.count}</span> : null}
       </p>
       <button className="row-act role-strip-b" type="button" onClick={onEdit}>
@@ -100,6 +135,7 @@ function SkillStripLoad() {
 /**
  * S9 «Карьера» при «Ищу работу»: роль поиска, проверка навыков, роли по профилю.
  * B792: полоса роли и таблица читаются независимо; полоса навыков ждёт таблицу.
+ * Пока часть читается, на её месте каркас: роль поиска, число вакансий, роли.
  */
 export function RolesView({ node }: { readonly node: B640Node }) {
   const { search } = useShell();
@@ -109,10 +145,13 @@ export function RolesView({ node }: { readonly node: B640Node }) {
   const roles = useLoad(loadRoles, SECTION_CACHE_KEYS.careerRoles);
   const data = roles.state === 'ready' ? roles.data : null;
   const meta = data?.campaign ?? (campaign.state === 'ready' ? campaign.data : null);
+  useCareerMark('roles', data !== null);
   return (
     <div className="page" {...pageAttrs(node)}>
       {meta ? (
         <SearchRoleStrip campaign={meta} counting={data !== null} onEdit={() => setPicking(true)} />
+      ) : campaign.state === 'loading' ? (
+        <RoleStripPlace />
       ) : null}
       {data ? <SkillStripLoad /> : <SkillStripPlace />}
       {data ? <RoleTable rows={data.rows} /> : null}
