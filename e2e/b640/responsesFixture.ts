@@ -232,12 +232,22 @@ export const RESUME_VARIANT = 'Вёл бэкенд: в группе 18 чело�
 export const RESUME_BULLET = 'Руководил группой бэкенда из 18 человек.';
 
 /** Разговор раздела, запись из него и место работы, куда встанет пункт. */
-async function mockResumeConversation(page: Page): Promise<void> {
+/** B786: прямая просьба консультанту и его ответ; правка K6 встаёт под ответом. */
+export const RESUME_ASK = 'Поправь в резюме формулировку опыта в Сфере Платежи';
+
+async function mockResumeConversation(page: Page, asked: boolean): Promise<void> {
   const said = {
     id: 'u1',
     role: 'user',
     content: 'Команда была 18 человек.',
     createdAt: '2026-11-11T10:00:00.000Z',
+  };
+  const ask = { id: 'u2', role: 'user', content: RESUME_ASK, createdAt: iso(0) };
+  const answer = {
+    id: 'a2',
+    role: 'assistant',
+    content: 'Правка готова ниже: в резюме она встанет после «Применить».',
+    createdAt: iso(0),
   };
   const memory = [
     {
@@ -273,8 +283,10 @@ async function mockResumeConversation(page: Page): Promise<void> {
     stage: 'responses',
     startedAt: said.createdAt,
     closedAt: null,
-    messages: [said],
-    replies: [],
+    messages: asked ? [said, ask, answer] : [said],
+    replies: asked
+      ? [{ messageId: answer.id, actions: [], memoryIds: [], resumeFactId: RESUME_FACT_ID }]
+      : [],
     analysisPending: false,
   };
   await page.route('**/api/v1/candidate/consultant/current**', (route) =>
@@ -380,6 +392,8 @@ export interface ResponsesMockOptions {
   readonly reviewReady?: boolean;
   /** Факт рекомендации есть в беседе, но не в резюме: «Поправить резюме». */
   readonly resumeFact?: boolean;
+  /** B786: в разговоре кандидат попросил поправить резюме, под ответом готовая правка. */
+  readonly askedResumeEdit?: boolean;
   /** Тариф: на Free автооткликов нет. По умолчанию Pro. */
   readonly plan?: 'free' | 'pro';
   /** Сводка B680: какие отклики — автоотклики. Без опции сводка не отвечает. */
@@ -453,7 +467,9 @@ export async function mockResponses(
   });
 
   await mockFactRewrite(page, calls);
-  if (options.resumeFact) await mockResumeConversation(page);
+  if (options.resumeFact || options.askedResumeEdit) {
+    await mockResumeConversation(page, options.askedResumeEdit === true);
+  }
   await page.route('**/api/v1/candidate/automation**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     const method = route.request().method();
