@@ -20,7 +20,12 @@ import { useScreenChrome } from '../shell/ShellContext';
 import type { ChatMessage } from './model';
 import { ErrorRow, Message, Reply } from './parts';
 import { ResumeEditVariantButton, ResumeEditWish } from './ResumeEditVariant';
-import { declineResumeEdit, loadResumeEdit, type ResumeEdit } from './resumeEdit';
+import {
+  declineResumeEdit,
+  loadResumeEdit,
+  loadResumeReword,
+  type ResumeEdit,
+} from './resumeEdit';
 
 type Loaded =
   | { readonly kind: 'loading' }
@@ -35,20 +40,35 @@ function isStale(reason: unknown): boolean {
   return reason instanceof CoachApiError && reason.code === 'rewrite_stale';
 }
 
-/** Чтение правки; ответ, пришедший после ухода или смены факта, отбрасывается. */
-function useEdit(factId: string) {
+/** Откуда правка: пункт из факта беседы или, B786, новая формулировка первой строки места. */
+export type EditSource =
+  | { readonly kind: 'fact'; readonly factId: string }
+  | { readonly kind: 'reword'; readonly experienceId: string };
+
+const FACT = 'fact:';
+const REWORD = 'reword:';
+const sourceKey = (source: EditSource) =>
+  source.kind === 'fact' ? `${FACT}${source.factId}` : `${REWORD}${source.experienceId}`;
+const loadByKey = (key: string) =>
+  key.startsWith(FACT)
+    ? loadResumeEdit(key.slice(FACT.length))
+    : loadResumeReword(key.slice(REWORD.length));
+
+/** Чтение правки; ответ, пришедший после ухода или смены источника, отбрасывается. */
+function useEdit(source: EditSource) {
   const [state, setState] = useState<Loaded>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  const key = sourceKey(source);
   useEffect(() => {
     let live = true;
     setState({ kind: 'loading' });
-    loadResumeEdit(factId)
+    loadByKey(key)
       .then((edit) => live && setState({ kind: 'ready', edit }))
       .catch(() => live && setState({ kind: 'failed' }));
     return () => {
       live = false;
     };
-  }, [factId, attempt]);
+  }, [key, attempt]);
   const reload = useCallback(() => setAttempt((value) => value + 1), []);
   return { state, setState, reload };
 }
@@ -74,8 +94,8 @@ function useRun() {
 }
 
 /** Решения кандидата: применить, отклонить, отменить применённое. */
-function useResumeEdit(factId: string) {
-  const { state, setState, reload } = useEdit(factId);
+function useResumeEdit(source: EditSource) {
+  const { state, setState, reload } = useEdit(source);
   const { busy, failure, setFailure, run } = useRun();
 
   function reread() {
@@ -122,6 +142,7 @@ export function editReply(
   messages: readonly ChatMessage[],
 ): string {
   const facts = edit.sourceFactIds.flatMap((id) => {
+    if (id === edit.replaces) return [];
     const fact = memory.find((item) => item.id === id && !item.sensitive);
     if (!fact) return [];
     const said = messages.find((item) => fact.sourceMessageIds.includes(item.id));
@@ -130,7 +151,12 @@ export function editReply(
     const confirmed = said && fact.status === 'confirmed' ? ', запись вы подтвердили: «Верно»' : '';
     return [`«${fact.statement}»${from}${confirmed}.`];
   });
-  return [edit.place ? `Новая строка: «${edit.place}».` : 'Новая строка.', ...facts].join(' ');
+  const head = edit.replaces
+    ? `Новая формулировка первой строки: «${edit.place}».`
+    : edit.place
+      ? `Новая строка: «${edit.place}».`
+      : 'Новая строка.';
+  return [head, ...facts].join(' ');
 }
 
 const HALF_SHEET = { rootData: { half: '1' } } as const;
@@ -160,6 +186,39 @@ function useEditVariants(edit: ResumeEdit) {
   return { text, variants: useTextVariants(source, { draftText: edit.text, text, setText }) };
 }
 
+/** «Было → Станет»: на 1440 «Было» блоком, на 390 — свёрнутым «Показать, что было» (k06). */
+function EditDiff({ edit, text, reason }: { edit: ResumeEdit; text: string; reason?: string }) {
+  return (
+    <>
+      <p className="ec-title">
+        {edit.replaces ? `${edit.place} · первая строка` : edit.place}
+        {reason ? <InfoTip label="Причина правки" text={reason} /> : null}
+      </p>
+      <dl className="ec-diff">
+        {edit.before ? (
+          <div className="was">
+            <dt>Было</dt>
+            <dd>{edit.before}</dd>
+          </div>
+        ) : null}
+        <div className="now">
+          <dt>Станет</dt>
+          <dd aria-live="polite">{text}</dd>
+        </div>
+      </dl>
+      {edit.before ? (
+        <details className="ec-was">
+          <summary>
+            <Icon name="down" />
+            Показать, что было
+          </summary>
+          <p>{edit.before}</p>
+        </details>
+      ) : null}
+    </>
+  );
+}
+
 interface EditBodyProps {
   readonly edit: ResumeEdit;
   readonly text: string;
@@ -175,16 +234,7 @@ function EditBody({ edit, text, variants, popId, reason, busy, onApply, onDeclin
   const locked = busy || variants.busy;
   return (
     <>
-      <p className="ec-title">
-        {edit.place}
-        {reason ? <InfoTip label="Причина правки" text={reason} /> : null}
-      </p>
-      <dl className="ec-diff">
-        <div className="now">
-          <dt>Станет</dt>
-          <dd aria-live="polite">{text}</dd>
-        </div>
-      </dl>
+      <EditDiff edit={edit} text={text} reason={reason} />
       <VariantSwitch variants={{ ...variants, locked }} label="Варианты правки" />
       <div className="msg-acts act-row ec-acts">
         <button className="btn is-sm is-primary" type="button" disabled={locked} onClick={onApply}>
@@ -245,20 +295,31 @@ function EditSection({ edit, reason, busy, error, onApply, onDecline }: EditSect
   );
 }
 
+/** Правка не подготовилась: под ответом понятная строка и повтор, а не «Ответ не пришёл». */
+function NotPrepared({ onRetry }: { onRetry: () => void }) {
+  return (
+    <ErrorRow
+      text="Не получилось подготовить правку"
+      onRetry={onRetry}
+      retryLabel="Попробовать ещё раз"
+    />
+  );
+}
+
 export interface ResumeEditCardProps {
-  /** Факт из беседы, который надо показать в резюме. */
-  readonly factId: string;
+  /** Факт из беседы, который надо показать в резюме, или строка места, которую переписать. */
+  readonly source: EditSource;
   readonly reason?: string;
   readonly memory: readonly CandidateMemory[];
   readonly messages: readonly ChatMessage[];
 }
 
 /** K6: готовая правка резюме; в резюме она попадает только после «Применить». */
-export function ResumeEditCard({ factId, reason, memory, messages }: ResumeEditCardProps) {
-  const { state, busy, failure, reload, apply, decline, revert } = useResumeEdit(factId);
+export function ResumeEditCard({ source, reason, memory, messages }: ResumeEditCardProps) {
+  const { state, busy, failure, reload, apply, decline, revert } = useResumeEdit(source);
   const error = failure ? <ErrorRow text={failure.text} onRetry={failure.retry} /> : null;
   if (state.kind === 'loading') return <Reply text="" />;
-  if (state.kind === 'failed') return <ErrorRow text="Ответ не пришёл" onRetry={reload} />;
+  if (state.kind === 'failed') return <NotPrepared onRetry={reload} />;
   if (state.kind === 'declined') return null;
   if (state.kind === 'applied') {
     return (

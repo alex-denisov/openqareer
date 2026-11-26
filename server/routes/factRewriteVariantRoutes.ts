@@ -28,6 +28,7 @@ export interface FactRewriteVariantSource {
   readonly current: (
     deps: RouteDeps,
     candidateId: string,
+    proposalId: string,
   ) => { readonly proposal: FactRewriteProposal; readonly request: FactRewriteRequest } | null;
 }
 
@@ -44,7 +45,7 @@ export function factRewriteSubject(candidateId: string, proposalId: string, key:
 function locate(
   deps: RouteDeps, source: FactRewriteVariantSource, candidateId: string, id: string, key: string,
 ): Located | null {
-  const found = source.current(deps, candidateId);
+  const found = source.current(deps, candidateId, id);
   if (found?.proposal.id !== id) return null;
   const bullet = bulletAt(found.proposal, key);
   return bullet ? { subject: factRewriteSubject(candidateId, id, key), bullet, request: found.request } : null;

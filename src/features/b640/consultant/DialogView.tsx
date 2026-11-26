@@ -15,7 +15,8 @@ import {
 } from './model';
 import { ErrorRow, Message, Reply } from './parts';
 import { FactCorrectionCard } from './FactCorrectionCard';
-import { ResumeEditCard } from './ResumeEditCard';
+import { ResumeEditCard, type EditSource } from './ResumeEditCard';
+import type { ConsultantReplyExtras } from './replyModel';
 import { ReplyExtras } from './ReplyExtras';
 import { useDialog, type DialogState, type FactDecision } from './useDialog';
 import { useVoiceInput } from '../voice/useVoiceInput';
@@ -62,12 +63,23 @@ export function PendingBanner({ count, to, onOpen }: PendingBannerProps) {
 }
 
 /** B786: правка K6 под ответом на просьбу кандидата поправить резюме. */
-function AskedResumeEdit({ factId, dialog }: { factId?: string; dialog: DialogState }) {
-  if (!factId) return null;
+function AskedResumeEdit({
+  extra,
+  dialog,
+}: {
+  extra?: ConsultantReplyExtras;
+  dialog: DialogState;
+}) {
+  const source: EditSource | null = extra?.resumeFactId
+    ? { kind: 'fact', factId: extra.resumeFactId }
+    : extra?.resumeRewordPlace
+      ? { kind: 'reword', experienceId: extra.resumeRewordPlace }
+      : null;
+  if (!source) return null;
   return (
     <ResumeEditCard
-      key={factId}
-      factId={factId}
+      key={JSON.stringify(source)}
+      source={source}
       memory={dialog.memory}
       messages={dialog.messages}
     />
@@ -114,13 +126,13 @@ function Feed({ dialog, placed, onDecide, resumeFactId, resumeReason }: FeedProp
             {placed.get(message.id)?.map((fact) => (
               <FactCard key={fact.id} fact={fact} onDecide={onDecide} />
             ))}
-            {resumeFactId ? null : <AskedResumeEdit factId={extra?.resumeFactId} dialog={dialog} />}
+            {resumeFactId ? null : <AskedResumeEdit extra={extra} dialog={dialog} />}
           </Fragment>
         );
       })}
       {resumeFactId ? (
         <ResumeEditCard
-          factId={resumeFactId}
+          source={{ kind: 'fact', factId: resumeFactId }}
           reason={resumeReason}
           memory={dialog.memory}
           messages={dialog.messages}

@@ -1,4 +1,9 @@
-import { rewriteSourceFacts, type RewriteMemory } from './experienceFactRewrite';
+import {
+  buildFactRewriteRequest,
+  factRewriteDigest,
+  rewriteSourceFacts,
+  type RewriteMemory,
+} from './experienceFactRewrite';
 import type { ResumeDraft } from './resumeDraft';
 
 /**
@@ -11,12 +16,13 @@ export interface ResumeEditSource {
   readonly resume?: { readonly draft: ResumeDraft } | null;
 }
 
-export interface ResumeEditRequest {
-  /** Факт беседы, из которого собирается пункт резюме. */
-  readonly factId: string;
-  /** Место работы, куда встанет пункт; пусто — место выберет сама правка. */
-  readonly place: string;
-}
+/**
+ * Какую правку K6 поставить под ответом: пункт из нового факта беседы или, когда новых фактов
+ * для места нет, новую формулировку первой строки места. `place` — место работы; пусто — выберет правка.
+ */
+export type ResumeEditRequest =
+  | { readonly kind: 'fact'; readonly factId: string; readonly place: string }
+  | { readonly kind: 'reword'; readonly experienceId: string; readonly place: string };
 
 const RESUME = /резюм|\bresume\b|\bcv\b/iu;
 const EDIT =
@@ -34,7 +40,7 @@ function stem(word: string): string {
   return word.length >= 5 ? word.slice(0, -1) : word;
 }
 
-function nameMatches(name: string, text: string): boolean {
+export function nameMatches(name: string, text: string): boolean {
   const words = normalize(name)
     .replace(/\([^)]*\)/gu, ' ')
     .split(/[^\p{L}\p{N}]+/u)
@@ -51,13 +57,18 @@ function namedPlaces(draft: ResumeDraft, message: string): readonly Entry[] {
   return draft.experience.filter((entry) => entry.employer && nameMatches(entry.employer, message));
 }
 
-/** Факт из уже готового предложения консультанта для этого места. */
+/** Факт из готового и ещё действующего предложения консультанта: правку не надо ждать от модели. */
 function proposedFact(
+  source: ResumeEditSource,
   draft: ResumeDraft,
   placeIds: ReadonlySet<string> | null,
-  open: ReadonlySet<string>,
 ): string | null {
-  const places = draft.factRewriteProposal?.proposal.places ?? [];
+  const pending = draft.factRewriteProposal;
+  if (!pending) return null;
+  const request = buildFactRewriteRequest(draft, source.memory);
+  if (pending.digest !== factRewriteDigest(request)) return null;
+  const open = new Set(rewriteSourceFacts(draft, source.memory).map(({ id }) => id));
+  const places = pending.proposal.places;
   for (const place of places) {
     if (placeIds && !placeIds.has(place.experienceId)) continue;
     for (const bullet of place.bullets) {
@@ -68,26 +79,18 @@ function proposedFact(
   return null;
 }
 
-/** Готовая правка K6 по просьбе кандидата; `null` — просьбы нет или ставить в резюме нечего. */
+/** Готовая правка K6 по просьбе кандидата; `null` — просьбы нет или поправить нечего. */
 export function resumeEditRequest(
   source: ResumeEditSource,
   message: string,
 ): ResumeEditRequest | null {
   const draft = source.resume?.draft;
   if (!draft || !asksResumeEdit(message)) return null;
-  const facts = rewriteSourceFacts(draft, source.memory);
-  if (facts.length === 0) return null;
-  const open = new Set(facts.map(({ id }) => id));
   const named = namedPlaces(draft, message);
-  if (named.length === 0) {
-    const factId = proposedFact(draft, null, open);
-    return factId ? { factId, place: '' } : null;
-  }
+  const ids = named.length > 0 ? new Set(named.map(({ id }) => id)) : null;
   const place = named[0]?.employer ?? '';
-  const fromProposal = proposedFact(draft, new Set(named.map(({ id }) => id)), open);
-  if (fromProposal) return { factId: fromProposal, place };
-  const said = facts.find(({ statement }) =>
-    named.some(({ employer }) => nameMatches(employer ?? '', statement)),
-  );
-  return said ? { factId: said.id, place } : null;
+  const factId = proposedFact(source, draft, ids);
+  if (factId) return { kind: 'fact', factId, place };
+  const lined = named.find((entry) => entry.bulletMemoryIds.length > 0);
+  return lined ? { kind: 'reword', experienceId: lined.id, place: lined.employer ?? '' } : null;
 }
