@@ -22,7 +22,7 @@ import { EMPTY_RESUME_DRAFT, MAX_REWRITE_BULLETS, type ResumePendingFactRewrite 
 import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
 import { factRewriteSubject, registerFactRewriteVariantRoutes } from './factRewriteVariantRoutes';
-import { registerFactRewordRoutes } from './factRewordRoutes';
+import { keptRewordTarget, registerFactRewordRoutes } from './factRewordRoutes';
 import {
   authenticateCandidate,
   csrfError,
@@ -271,11 +271,10 @@ function variantSourceOf(snapshot: CandidateSnapshot, id: string) {
   if (pending !== snapshot.resume?.draft.factRewordProposal) {
     return { proposal: pending.proposal, request };
   }
-  const wanted = new Set(pending.proposal.sourceFactIds);
-  const facts = snapshot.memory
-    .filter((item) => wanted.has(item.id))
-    .map(({ id: factId, domain, statement }) => ({ id: factId, domain, statement }));
-  return { proposal: pending.proposal, request: { ...request, facts } };
+  // Факты строятся заново, как при подготовке: ставшие чувствительными или неподтверждёнными к модели не идут.
+  const target = keptRewordTarget(snapshot, pending.proposal);
+  if (!target) return null;
+  return { proposal: pending.proposal, request: { ...request, facts: target.facts } };
 }
 
 const handleApply = (variants: SqliteTextVariantRepository): Handler => async (deps, request, reply) => {

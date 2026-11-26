@@ -34,14 +34,27 @@ function digestOf(snapshot: CandidateSnapshot): string {
   return factRewriteDigest(buildFactRewriteRequest(draft, snapshot.memory));
 }
 
+/** Цель сохранённой правки, если строка и факты места те же, что при её подготовке. */
+export function keptRewordTarget(
+  snapshot: CandidateSnapshot,
+  proposal: FactRewriteProposal,
+): RewordTarget | null {
+  const place = proposal.places[0];
+  const draft = snapshot.resume?.draft;
+  const target = place && draft ? rewordTarget(draft, snapshot.memory, place.experienceId) : null;
+  if (!target || place?.bullets[0]?.replacesMemoryId !== target.memoryId) return null;
+  const ids = target.facts.map((item) => item.id);
+  const same =
+    ids.length === proposal.sourceFactIds.length &&
+    ids.every((id) => proposal.sourceFactIds.includes(id));
+  return same ? target : null;
+}
+
 function keptFor(snapshot: CandidateSnapshot, target: RewordTarget): FactRewriteProposal | null {
   const kept = snapshot.resume?.draft.factRewordProposal;
-  const bullet = kept?.proposal.places[0]?.bullets[0];
-  const fits =
-    kept?.digest === digestOf(snapshot) &&
-    kept.proposal.places[0]?.experienceId === target.experienceId &&
-    bullet?.replacesMemoryId === target.memoryId;
-  return fits ? kept.proposal : null;
+  if (kept?.digest !== digestOf(snapshot)) return null;
+  const same = keptRewordTarget(snapshot, kept.proposal);
+  return same?.experienceId === target.experienceId ? kept.proposal : null;
 }
 
 async function writeReword(

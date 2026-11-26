@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FactRewriteVariantRequest } from '../domain/factRewriteVariant';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import type { CandidateSnapshot } from '../data/candidateStore';
+import { rewordProposal, rewordTarget } from '../domain/factReword';
 import { createApp, login } from '../testHelpers/vacancyPitchHarness';
+import { keptRewordTarget } from './factRewordRoutes';
 
 const URL = '/api/v1/candidate/experience-fact-rewrite';
 const PLACE = 'e-rosseti';
@@ -87,5 +90,28 @@ describe('B786: k06 переписывает строку места, когда
     const { call } = await harness([REWORDED]);
     const none = await call('POST', `${URL}/reword`, { experienceId: 'missing' });
     expect([none.statusCode, none.json().data.proposal]).toEqual([200, null]);
+  });
+});
+
+describe('B786: сохранённая правка строки места', () => {
+  it('не отдаёт модели факт, ставший чувствительным после подготовки', () => {
+    const fact = (id: string, statement: string, extra: object = {}) => ({
+      id, kind: 'fact', domain: 'outcome', statement, status: 'confirmed',
+      provenance: { kind: 'candidate' }, ...extra,
+    });
+    const draft = {
+      ...EMPTY_RESUME_DRAFT,
+      experience: [{
+        id: PLACE, chronologyMemoryId: 'c1', title: 'VP', employer: 'Россети Цифра',
+        current: false, bulletMemoryIds: ['line-1'],
+      }],
+    };
+    const memory = [fact('line-1', LINE, { provenance: { kind: 'import' } }), fact('margin', 'Россети Цифра: рентабельность 40 %')];
+    const snapshot = (items: object[]) => ({ resume: { draft }, memory: items }) as unknown as CandidateSnapshot;
+    const target = rewordTarget(draft as never, memory as never, PLACE)!;
+    const proposal = rewordProposal(target, REWORDED, 'r1');
+    expect(keptRewordTarget(snapshot(memory), proposal)?.facts.map((item) => item.id)).toEqual(['line-1', 'margin']);
+    const hidden = [memory[0], { ...memory[1], sensitive: true }];
+    expect(keptRewordTarget(snapshot(hidden), proposal)).toBeNull();
   });
 });
