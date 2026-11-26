@@ -121,6 +121,30 @@ function CopyStatus({
   ) : null;
 }
 
+function EditsStatus({
+  loading,
+  failed,
+  retry,
+}: {
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly retry: () => void;
+}) {
+  if (loading) return <StatusLine state="wait" text="Готовим правки" />;
+  if (!failed) return null;
+  return (
+    <StatusLine
+      state="err"
+      text="Правки под вакансию не подготовились."
+      action={
+        <button className="res-act" type="button" onClick={retry}>
+          Повторить
+        </button>
+      }
+    />
+  );
+}
+
 interface ResumeBodyProps {
   readonly resumes: HhResumesState;
   readonly edits: HhResumeEditsState;
@@ -159,18 +183,7 @@ function ResumeBody({
       ) : null}
       <CopyStatus copy={copy} missing={missing} ready={copyReady} />
       {selected && !read && !resumes.loading ? <NotRead onRetry={resumes.reread} /> : null}
-      {loading && !running ? <StatusLine state="wait" text="Готовим правки" /> : null}
-      {failed && !running ? (
-        <StatusLine
-          state="err"
-          text="Правки под вакансию не подготовились."
-          action={
-            <button className="res-act" type="button" onClick={retry}>
-              Повторить
-            </button>
-          }
-        />
-      ) : null}
+      {running ? null : <EditsStatus loading={loading} failed={failed} retry={retry} />}
       {selected && edits.length > 0 ? (
         <HhEditsList
           key={selected.id}
@@ -238,6 +251,26 @@ function StepActions({ resumes, copy, offer, unfinished, confirmed, onConfirm }:
   );
 }
 
+function StepSheet({
+  resumes,
+  currentId,
+}: {
+  readonly resumes: HhResumesState;
+  readonly currentId: string | null;
+}) {
+  return (
+    <HhResumeSheet
+      picker={resumes.picker}
+      currentId={currentId}
+      saving={resumes.saving}
+      onClose={resumes.closePicker}
+      onSignIn={resumes.signIn}
+      onRetry={resumes.openPicker}
+      onChoose={(item) => resumes.choose(item)}
+    />
+  );
+}
+
 type HhEditMode = 'copy' | 'current';
 
 const EDIT_MODES = [
@@ -268,6 +301,13 @@ function EditModeChoice({
   );
 }
 
+/** B787: копия начата, а её id ещё не подтверждён — она «за» исходным резюме: продолжить, а не начать заново. */
+function ownCopyOf(snapshot: HhResumesState['snapshot'], selectedId: string | null) {
+  const copy = snapshot?.copy;
+  if (!copy) return null;
+  return copy.copyId === selectedId || (!copy.copyId && copy.sourceId === selectedId) ? copy : null;
+}
+
 /** Шаг «Резюме» отклика на hh.ru: отклик уходит резюме hh.ru, своё резюме не готовится. */
 export function HhResumeStep({
   vacancyId,
@@ -282,13 +322,7 @@ export function HhResumeStep({
   const missing = useHhMissing(vacancyId, snapshot);
   const copy = useHhHiddenCopy(vacancyId, vacancyTitle, snapshot, resumes.replace);
   const selectedId = snapshot?.selected?.id ?? null;
-  // B787: копия начата, а её id ещё не подтверждён — она «за» исходным резюме: продолжить, а не начать заново.
-  const ownCopy =
-    snapshot?.copy &&
-    (snapshot.copy.copyId === selectedId ||
-      (!snapshot.copy.copyId && snapshot.copy.sourceId === selectedId))
-      ? snapshot.copy
-      : null;
+  const ownCopy = ownCopyOf(snapshot, selectedId);
   // Править нечем — новое резюме повторило бы прежнее.
   const choice = isTauriEnvironment() && !ownCopy && missing.length > 0 && edits.edits.length > 0;
   // B787: кандидат выбирает — скрытая копия под вакансию или правки в текущее резюме.
@@ -318,15 +352,7 @@ export function HhResumeStep({
         canWrite={isTauriEnvironment() && !offer && !ownCopy}
       />
       {dock ? createPortal(action, dock) : <div className="actions">{action}</div>}
-      <HhResumeSheet
-        picker={resumes.picker}
-        currentId={selectedId}
-        saving={resumes.saving}
-        onClose={resumes.closePicker}
-        onSignIn={resumes.signIn}
-        onRetry={resumes.openPicker}
-        onChoose={(item) => resumes.choose(item)}
-      />
+      <StepSheet resumes={resumes} currentId={selectedId} />
     </section>
   );
 }

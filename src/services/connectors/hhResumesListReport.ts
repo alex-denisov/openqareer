@@ -23,7 +23,10 @@ function visibilityById(html: string): ReadonlyMap<string, string> {
         /data-qa=["']resume-card-link-([A-Za-z0-9]+)["']/u.exec(card)?.[1];
       // B787: у видимого резюме в `title-description` — доход и формат работы, не видимость;
       // о видимости говорит только вариант `title-description_changeVisibility`.
-      const described = hhQaBlocks(card, 'title-description_changeVisibility').map(plainText).join(' ').trim();
+      const described = hhQaBlocks(card, 'title-description_changeVisibility')
+        .map(plainText)
+        .join(' ')
+        .trim();
       const shown = VISIBILITY.exec(plainText(card))?.[1] ?? (described || undefined);
       return id ? [[id, shown ? clean(shown) : '-'] as const] : [];
     }),
