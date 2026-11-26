@@ -38,6 +38,14 @@
         .replace(/[^A-Za-z0-9_ .-]/g, '?')
         .slice(0, 120);
     };
+    var idMask = function (href) {
+      return String(href)
+        .split('?')[0]
+        .replace(/[0-9a-f]{20,64}/gi, 'ID')
+        .replace(/[A-Za-z0-9]{30,}/g, 'ID')
+        .replace(/[^A-Za-z0-9_./-]/g, '?')
+        .slice(0, 120);
+    };
     var state = document.getElementById('HH-Lux-InitialState');
     var userType = '';
     try {
@@ -60,6 +68,13 @@
           : 0),
       'resume_cards ' + document.querySelectorAll('[data-qa="resume"]').length,
       'menu_buttons ' + document.querySelectorAll('[data-qa="resume-list-action-more"]').length,
+      'menu_buttons_shown ' +
+        Array.prototype.filter.call(
+          document.querySelectorAll('[data-qa="resume-list-action-more"]'),
+          function (b) {
+            return b.getClientRects().length > 0;
+          },
+        ).length,
       'menu_items ' + document.querySelectorAll('[data-qa^="operations-list-"]').length,
       '--- markup',
     ];
@@ -75,15 +90,43 @@
       var tag = node.tagName.toLowerCase();
       if (tag === 'script' || tag === 'style' || tag === 'svg' || tag === 'noscript') return;
       var qa = node.getAttribute('data-qa');
-      push(depth, tag + (qa ? '[' + safe(qa) + ']' : ''));
-      for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i], depth + 1);
+      var hidden = typeof node.getClientRects === 'function' && node.getClientRects().length === 0;
+      var href =
+        tag === 'a' && node.getAttribute('href')
+          ? ' href=' + idMask(node.getAttribute('href'))
+          : '';
+      // B787: в списке резюме обёртки без data-qa не печатаются — иначе лимит кончается на первой карточке.
+      var bare = compact && !qa && !href && (tag === 'div' || tag === 'span');
+      if (!bare || hidden)
+        push(depth, tag + (qa ? '[' + safe(qa) + ']' : '') + href + (hidden ? ' shown=0' : ''));
+      var next = bare && !hidden ? depth : depth + 1;
+      for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i], next);
     };
     var push = function (depth, line) {
       var row = new Array(depth + 1).join(' ') + line;
       size += row.length + 1;
       if (size <= MAX) out.push(row);
     };
-    walk(document.querySelector('main') || document.body || document.documentElement, 0);
+    // B787: на списке резюме набросок начинается с карточки источника копии, затем весь список.
+    var list = document.querySelector('[data-qa="compact-resume-list"]');
+    var compact = false;
+    if (list) {
+      compact = true;
+      var source = (window.__oqCopy && window.__oqCopy.source) || '';
+      var cards = Array.prototype.slice.call(list.querySelectorAll('[data-qa="resume"]'));
+      var mine = cards.filter(function (c) {
+        return (
+          source &&
+          c.querySelector('a[href*="' + source + '"], [data-qa="resume-card-link-' + source + '"]')
+        );
+      });
+      push(0, 'source_card ' + (mine.length ? cards.indexOf(mine[0]) : -1) + ' of ' + cards.length);
+      if (mine.length) walk(mine[0], 0);
+      push(0, '--- list');
+      walk(list, 0);
+    } else {
+      walk(document.querySelector('main') || document.body || document.documentElement, 0);
+    }
     return out.join('\n').slice(0, MAX);
   } catch (_e) {
     return 'sketch_failed';

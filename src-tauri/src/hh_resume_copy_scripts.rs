@@ -39,25 +39,39 @@ var st=window.__oqCopy=window.__oqCopy||{};";
 /// The list may be on screen as `/applicant/resumes` or, after a redirect, the profile.
 const ON_LIST: &str = "/^\\/applicant\\/(resumes|profile)(\\/|$)/.test(location.pathname)";
 
+/// Pressed once when the source's card is in a folded list: «Показать все», «Ещё 3».
+const EXPANDER: &str = "/^(показать\\s+(все|ещё|еще)|ещё\\s+\\d+|еще\\s+\\d+|все\\s+резюме)/i";
+
 /// Polled on the list: opens the menu of the source's card, of no other one, once.
+/// The card is found by its id among all cards, shown or not (B787: on `/applicant/profile/me`
+/// the list may be folded or scrolled away); a card out of view is unfolded once, scrolled to,
+/// and only a shown button is pressed.
 pub fn menu_script(source_id: &str) -> String {
     wrap(&format!(
-        "{GUARD}if(!{ON_LIST})return {{code:'waiting'}};var S={source};\
-var mine=all({card}).filter(function(c){{\
-var ids=Array.prototype.map.call(c.querySelectorAll('a[href]'),function(a){{\
+        "{GUARD}if(!{ON_LIST})return {{code:'waiting'}};var S={source};st.source=S;\
+var idsOf=function(c){{var ids=Array.prototype.map.call(c.querySelectorAll('a[href]'),function(a){{\
 var m=/^\\/resume\\/([A-Za-z0-9]+)\\/?$/.exec(a.pathname);return m?m[1]:null;}}).filter(Boolean);\
-return ids.length>0&&ids.every(function(id){{return id===S;}});}});\
-if(mine.length===0)return {{code:'waiting'}};if(mine.length>1)return {{code:'source_ambiguous'}};\
+Array.prototype.forEach.call(c.querySelectorAll('[data-qa^=\"resume-card-link-\"]'),function(a){{\
+ids.push(a.getAttribute('data-qa').slice(17));}});return ids;}};\
+var cards=Array.prototype.slice.call(document.querySelectorAll({card}));\
+var mine=cards.filter(function(c){{var ids=idsOf(c);return ids.length>0&&ids.every(function(id){{return id===S;}});}});\
+var unfold=function(){{if(st.expanded)return false;var e=all('button, a, [role=\"button\"]').filter(function(x){{\
+return !x.closest({card})&&{expander}.test((x.textContent||'').replace(/\\s+/g,' ').trim());}});\
+if(e.length===0)return false;st.expanded=1;e[0].click();return true;}};\
+var into=function(e){{if(typeof e.scrollIntoView==='function')e.scrollIntoView({{block:'center'}});}};\
+if(mine.length===0){{unfold();return {{code:'waiting'}};}}if(mine.length>1)return {{code:'source_ambiguous'}};\
 if(all({item}).length>0)return {{code:st.menu?'menu_open':'menu_unexpected'}};\
-var more=all({more},mine[0]);if(more.length===0){{var cards=all({card}),every=all({more});\
-if(every.length===cards.length)more=[every[cards.indexOf(mine[0])]];}}\
-if(more.length!==1)return {{code:'waiting'}};\
-if(!st.menu){{st.menu=1;var b=more[0];['pointerdown','mousedown','pointerup','mouseup'].forEach(function(t){{\
+var c=mine[0];if(!shown(c)){{if(!unfold()&&!st.scrolled){{st.scrolled=1;into(c);}}return {{code:'waiting'}};}}\
+var more=all({more},c);if(more.length===0){{var shownCards=all({card}),every=all({more});\
+if(every.length===shownCards.length)more=[every[shownCards.indexOf(c)]];}}\
+if(more.length!==1||!more[0])return {{code:'waiting'}};\
+if(!st.menu){{st.menu=1;var b=more[0];into(b);['pointerdown','mousedown','pointerup','mouseup'].forEach(function(t){{\
 b.dispatchEvent(new MouseEvent(t,{{bubbles:true,cancelable:true,view:window}}));}});b.click();}}return {{code:'waiting'}};",
         source = literal(source_id),
         card = literal(HH_CARD),
         item = literal(HH_MENU_ITEM),
         more = literal(HH_CARD_MENU),
+        expander = EXPANDER,
     ))
 }
 
