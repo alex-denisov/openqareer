@@ -1,3 +1,4 @@
+import { factEdits } from './hhResumeFactEdits';
 import { isPositionTerms } from '../../shared/hhPositionTerms';
 import { hhSectionsRead, type HhResumeEdit, type HhResumeSections } from '../../shared/hhCandidateSession';
 
@@ -160,5 +161,7 @@ function aboutEdit(input: HhEditsInput): HhEditDraft[] {
 
 export function draftHhResumeEdits(input: HhEditsInput): HhEditDraft[] {
   if (!hhSectionsRead(input.resume.sections)) return [];
-  return [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  const drafted = [...experienceEdits(input), ...skillsEdit(input), ...aboutEdit(input)];
+  const covered = new Set(drafted.map((edit) => edit.id));
+  return [...drafted, ...factEdits(input.resume.sections, input.platform.facts, covered)];
 }
