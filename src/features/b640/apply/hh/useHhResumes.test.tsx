@@ -6,7 +6,12 @@ import type { HhResumeSnapshot } from '../../../../../shared/hhCandidateSession'
 import { forgetReadResumes } from './hhResumeReading';
 import { useHhResumes, type HhResumesState } from './useHhResumes';
 
-const api = vi.hoisted(() => ({ getHhResumes: vi.fn(), saveHhResumes: vi.fn(), chooseHhResumeFor: vi.fn(), getHhResumeReview: vi.fn() }));
+const api = vi.hoisted(() => ({
+  getHhResumes: vi.fn(),
+  saveHhResumes: vi.fn(),
+  chooseHhResumeFor: vi.fn(),
+  getHhResumeReview: vi.fn(),
+}));
 const desktop = vi.hoisted(() => ({
   readHhResumes: vi.fn(),
   readHhResumeContent: vi.fn(),
@@ -25,8 +30,19 @@ vi.mock('./hhDesktop', async (original) => ({
 const ITEM = { id: 'r1', title: 'COO', url: 'https://hh.ru/resume/r1' };
 const SAVED = {
   resumes: [{ id: 'r1', title: 'COO' }],
-  selected: { id: 'r1', title: 'COO', text: 'Опыт', sections: { title: 'COO', about: '', skills: [], places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }] } },
-  readAt: '2026-11-19T00:00:00.000Z',
+  selected: {
+    id: 'r1',
+    title: 'COO',
+    text: 'Опыт',
+    sections: {
+      title: 'COO',
+      about: '',
+      skills: [],
+      places: [{ employer: 'Ромашка', title: 'CDO', period: '2020', text: 'Вёл данные.' }],
+    },
+  },
+  // Свежий снимок: старый перечитывается при открытии шага (B787).
+  readAt: new Date().toISOString(),
 } as unknown as HhResumeSnapshot;
 
 const roots: Array<ReturnType<typeof createRoot>> = [];
@@ -85,8 +101,16 @@ describe('useHhResumes (B710)', () => {
     api.getHhResumes.mockResolvedValue(SAVED);
     desktop.readHhResumes.mockResolvedValue({ kind: 'ready', resumes: [ITEM, SECOND] });
     desktop.readHhResumeContent.mockImplementation(async (item: { id: string; title: string }) =>
-      item.id === 'r2' ? Promise.reject(new Error('hh_resume_not_read')) : { ...SAVED.selected, id: item.id, title: item.title });
-    api.saveHhResumes.mockImplementation(async (resumes, selected, contents) => ({ resumes, selected, contents, readAt: 'x' }));
+      item.id === 'r2'
+        ? Promise.reject(new Error('hh_resume_not_read'))
+        : { ...SAVED.selected, id: item.id, title: item.title },
+    );
+    api.saveHhResumes.mockImplementation(async (resumes, selected, contents) => ({
+      resumes,
+      selected,
+      contents,
+      readAt: new Date().toISOString(),
+    }));
     api.getHhResumeReview.mockResolvedValue(review);
     const state = await mount();
 
@@ -95,7 +119,10 @@ describe('useHhResumes (B710)', () => {
     expect(desktop.readHhResumeContent).toHaveBeenCalledTimes(2);
     // Не прочиталось одно резюме — чтение остановлено, сверка идёт по прочитанным.
     expect(api.saveHhResumes).toHaveBeenCalledWith(
-      [{ id: 'r1', title: 'COO' }, { id: 'r2', title: 'CTO' }],
+      [
+        { id: 'r1', title: 'COO' },
+        { id: 'r2', title: 'CTO' },
+      ],
       SAVED.selected,
       [SAVED.selected],
       'cluster-1',

@@ -194,3 +194,22 @@ it.each([['hidden', false], ['ready', true]])('B787: копия «%s» — од�
   expect(button('Продолжить создание') !== undefined).toBe(!can);
   expect(text.includes('не видно никому')).toBe(can);
 });
+
+it('B787: правки не подготовились — сообщение и «Повторить», повтор запрашивает снова', async () => {
+  api.getHhResumeEdits.mockRejectedValueOnce(new Error('edits_failed')).mockResolvedValue({ edits: [] });
+  const text = await render();
+  expect(text).toContain('Правки под вакансию не подготовились.');
+  click(button('Повторить'));
+  await act(async () => undefined);
+  await act(async () => undefined);
+  expect(api.getHhResumeEdits).toHaveBeenCalledTimes(2);
+  expect(view?.container.textContent).not.toContain('не подготовились');
+});
+
+it('B787: начатая копия без подтверждённого id — «Продолжить создание» у исходного резюме', async () => {
+  bridge.isTauriEnvironment.mockReturnValue(true);
+  api.getHhResumes.mockResolvedValue({ ...READ, readAt: new Date().toISOString(), copy: { sourceId: 'cio', knownIds: ['cio', 'coo'], stage: 'creating' } });
+  const text = await render();
+  expect(text).toContain('Продолжить создание');
+  expect(text).not.toContain('Одобрить резюме');
+});
