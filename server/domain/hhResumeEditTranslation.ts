@@ -51,6 +51,20 @@ function inLanguage(text: string, language: HhEditLanguage): boolean {
  * исходнике. Это перевод уже подтверждённого текста, а не новый пункт: длина и «я» берутся от исходника.
  * «О себе» — собственный текст кандидата от первого лица: проверка личного действия нужна только опыту.
  */
+/** B787: exit через продажу — продажа компании; «вышла из бизнеса» по-русски значит «закрылась». */
+const EXIT_SOURCE = /\b(?:exit|acquisition|acquired)\b/iu;
+const EXIT_AS_CLOSURE = /(?:вы(?:шл|ход|ше)\p{L}*|покину\p{L}*|уш[её]л\p{L}*)\s+(?:из\s+)?бизнес/iu;
+
+const MONEY_UNIT: Readonly<Record<string, string>> = { k: 'тыс.', m: 'млн', b: 'млрд' };
+
+/** B787: суммы по-русски одним видом: «$73K» — «73 тыс. $», «$50M+» — «более 50 млн $». */
+export function russianMoney(text: string): string {
+  return text.replace(/\$\s?(\d+(?:[.,]\d+)?)\s?([KMB])?(\+)?(?![\p{L}\d])/giu, (_all, amount: string, unit?: string, plus?: string) => {
+    const value = [amount.replace('.', ','), unit ? MONEY_UNIT[unit.toLowerCase()] : null, '$'].filter(Boolean).join(' ');
+    return plus ? `более ${value}` : value;
+  }).replace(/(?<!\p{L})(?:свыше|больше|более чем)(?=\s+\d[\d,]*\s(?:тыс\.|млн|млрд)\s\$)/giu, 'более');
+}
+
 export function checkedTranslation(
   source: string,
   answer: string | undefined,
@@ -61,6 +75,7 @@ export function checkedTranslation(
   if (!text || text.length > Math.max(LENGTH_FLOOR, source.length * LENGTH_RATIO)) return null;
   if (!numbersAreSourced(text, [source]) || arithmeticFails(text) || !inLanguage(text, language)) return null;
   if (speaksInFirstPerson(text) && !speaksInFirstPerson(source)) return null;
+  if (language === 'ru' && EXIT_SOURCE.test(source) && EXIT_AS_CLOSURE.test(text)) return null;
   if (section === 'experience' && !opensWithOwnVerb(source) && addsPersonalAction(source, text)) return null;
   return text;
 }
@@ -81,7 +96,7 @@ async function translateLines(
     });
     return lines.flatMap((line) => {
       const text = checkedLine(line, output?.bullets.find((bullet) => bullet.key === line.key)?.text, language);
-      return text ? [[line.key, text] as const] : [];
+      return text ? [[line.key, language === 'ru' ? russianMoney(text) : text] as const] : [];
     });
   } catch {
     return [];
