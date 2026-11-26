@@ -238,3 +238,59 @@ fn the_list_without_the_profile_menu_still_counts_as_signed_in() {
     let out = run(&list(), "/vacancy/1", &anon, &[menu_script(SRC)]).expect("jsdom");
     assert_eq!(codes(&out), ["not_signed_in"]);
 }
+
+/// B787, дамп 1.1.297: на /applicant/profile/me карточка источника — в свёрнутой части
+/// compact-resume-list, а ссылка карточки помечена `resume-card-link-<id>`.
+fn folded_profile() -> String {
+    let card = |id: &str| {
+        format!(
+            r#"<div data-qa="resume"><a data-qa="resume-card-link-{id}" href="/resume/{id}">x</a><button data-qa="resume-list-action-more" name="{id}"></button></div>"#
+        )
+    };
+    format!(
+        r#"<div data-qa="compact-resume-list">{}<div id="rest" hidden>{}</div></div><button id="all" onclick="document.getElementById('rest').hidden=false">Показать все</button><div id=drop></div>"#,
+        card("other1"),
+        card(SRC)
+    )
+}
+
+#[test]
+fn a_folded_source_card_is_unfolded_and_only_its_menu_is_pressed() {
+    let setup = format!(
+        "{}document.getElementById('all').addEventListener('click',function(){{document.getElementById('rest').hidden=false;}});",
+        menu(FULL)
+    );
+    let steps = [
+        menu_script(SRC),
+        menu_script(SRC),
+        menu_script(SRC),
+        duplicate_script(),
+        "JSON.stringify({code:window.__card})".to_string(),
+    ];
+    let Some(out) = run(&folded_profile(), "/applicant/profile/me", &setup, &steps) else {
+        return;
+    };
+    assert_eq!(
+        codes(&out),
+        ["waiting", "waiting", "menu_open", "duplicate_clicked", SRC]
+    );
+    assert_eq!(
+        clicks(&out),
+        [
+            "all",
+            "resume-list-action-more",
+            "operations-list-duplicate-resume"
+        ]
+    );
+}
+
+#[test]
+fn a_source_card_out_of_view_without_an_expander_is_never_pressed_hidden() {
+    let html = folded_profile().replace(">Показать все<", "><");
+    let steps = [menu_script(SRC), menu_script(SRC)];
+    let Some(out) = run(&html, "/applicant/profile/me", &menu(FULL), &steps) else {
+        return;
+    };
+    assert_eq!(codes(&out), ["waiting", "waiting"]);
+    assert!(clicks(&out).is_empty());
+}

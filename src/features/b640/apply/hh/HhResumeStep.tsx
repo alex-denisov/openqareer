@@ -1,9 +1,9 @@
 import { createPortal } from 'react-dom';
-import { useId, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { hhSectionsRead, type HhResumeSections } from '../../../../../shared/hhCandidateSession';
 import { isPositionTerms } from '../../../../../shared/hhPositionTerms';
 import { isTauriEnvironment } from '../../../../services/desktop/desktopBridge';
-import { Button, StatusLine } from '../../kit';
+import { Button, SegControl, StatusLine } from '../../kit';
 import { HhResumeSelect } from '../HhResumeSelect';
 import { editsWord, HhEditsList } from './HhResumeEdits';
 import { HhResumeSheet } from './HhResumeSheet';
@@ -96,7 +96,15 @@ function NotRead({ onRetry }: { readonly onRetry: () => void }) {
 }
 
 /** B787: сверка с вакансией и ход создания резюме под неё. */
-function CopyStatus({ copy, missing, ready }: { readonly copy: HhHiddenCopy; readonly missing: readonly string[]; readonly ready: boolean }) {
+function CopyStatus({
+  copy,
+  missing,
+  ready,
+}: {
+  readonly copy: HhHiddenCopy;
+  readonly missing: readonly string[];
+  readonly ready: boolean;
+}) {
   const { state } = copy;
   if (state.kind === 'running') return <StatusLine state="wait" text={state.text} />;
   if (state.kind === 'failed') {
@@ -108,7 +116,33 @@ function CopyStatus({ copy, missing, ready }: { readonly copy: HhHiddenCopy; rea
     return <StatusLine state="err" text={state.text} action={state.window ? open : undefined} />;
   }
   if (ready) return <StatusLine state="ok" text="Создано под вакансию, на hh.ru не видно никому" />;
-  return missing.length > 0 ? <StatusLine state="err" text={`Не хватает: ${missing.join(', ')}`} /> : null;
+  return missing.length > 0 ? (
+    <StatusLine state="err" text={`Не хватает: ${missing.join(', ')}`} />
+  ) : null;
+}
+
+function EditsStatus({
+  loading,
+  failed,
+  retry,
+}: {
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly retry: () => void;
+}) {
+  if (loading) return <StatusLine state="wait" text="Готовим правки" />;
+  if (!failed) return null;
+  return (
+    <StatusLine
+      state="err"
+      text="Правки под вакансию не подготовились."
+      action={
+        <button className="res-act" type="button" onClick={retry}>
+          Повторить
+        </button>
+      }
+    />
+  );
 }
 
 interface ResumeBodyProps {
@@ -121,7 +155,14 @@ interface ResumeBodyProps {
   readonly canWrite: boolean;
 }
 
-function ResumeBody({ resumes, edits: { edits, loading, failed, retry }, copy, missing, copyReady, canWrite }: ResumeBodyProps) {
+function ResumeBody({
+  resumes,
+  edits: { edits, loading, failed, retry },
+  copy,
+  missing,
+  copyReady,
+  canWrite,
+}: ResumeBodyProps) {
   const selected = resumes.snapshot?.selected ?? null;
   const read = selected !== null && hhSectionsRead(selected.sections) ? selected.sections : null;
   const running = copy.state.kind === 'running';
@@ -142,18 +183,7 @@ function ResumeBody({ resumes, edits: { edits, loading, failed, retry }, copy, m
       ) : null}
       <CopyStatus copy={copy} missing={missing} ready={copyReady} />
       {selected && !read && !resumes.loading ? <NotRead onRetry={resumes.reread} /> : null}
-      {loading && !running ? <StatusLine state="wait" text="Готовим правки" /> : null}
-      {failed && !running ? (
-        <StatusLine
-          state="err"
-          text="Правки под вакансию не подготовились."
-          action={
-            <button className="res-act" type="button" onClick={retry}>
-              Повторить
-            </button>
-          }
-        />
-      ) : null}
+      {running ? null : <EditsStatus loading={loading} failed={failed} retry={retry} />}
       {selected && edits.length > 0 ? (
         <HhEditsList
           key={selected.id}
@@ -194,12 +224,26 @@ function StepActions({ resumes, copy, offer, unfinished, confirmed, onConfirm }:
   return (
     <>
       {create ? (
-        <Button variant="primary" busy={running} disabled={running || resumes.loading} onClick={copy.create}>
-          {failed ? 'Повторить' : unfinished ? 'Продолжить создание' : 'Создать резюме под вакансию'}
+        <Button
+          variant="primary"
+          busy={running}
+          disabled={running || resumes.loading}
+          onClick={copy.create}
+        >
+          {failed
+            ? 'Повторить'
+            : unfinished
+              ? 'Продолжить создание'
+              : 'Создать резюме под вакансию'}
         </Button>
       ) : null}
       {unfinished ? null : (
-        <Button variant={create ? 'quiet' : 'primary'} icon="check" disabled={resumes.loading || running} onClick={onConfirm}>
+        <Button
+          variant={create ? 'quiet' : 'primary'}
+          icon="check"
+          disabled={resumes.loading || running}
+          onClick={onConfirm}
+        >
           {confirmed || !selected ? 'К письму' : 'Одобрить резюме'}
         </Button>
       )}
@@ -207,21 +251,83 @@ function StepActions({ resumes, copy, offer, unfinished, confirmed, onConfirm }:
   );
 }
 
+function StepSheet({
+  resumes,
+  currentId,
+}: {
+  readonly resumes: HhResumesState;
+  readonly currentId: string | null;
+}) {
+  return (
+    <HhResumeSheet
+      picker={resumes.picker}
+      currentId={currentId}
+      saving={resumes.saving}
+      onClose={resumes.closePicker}
+      onSignIn={resumes.signIn}
+      onRetry={resumes.openPicker}
+      onChoose={(item) => resumes.choose(item)}
+    />
+  );
+}
+
+type HhEditMode = 'copy' | 'current';
+
+const EDIT_MODES = [
+  { value: 'copy', label: 'Копия под вакансию' },
+  { value: 'current', label: 'Правки в текущее' },
+] as const;
+
+function EditModeChoice({
+  mode,
+  disabled,
+  onChange,
+}: {
+  readonly mode: HhEditMode;
+  readonly disabled: boolean;
+  readonly onChange: (mode: HhEditMode) => void;
+}) {
+  const name = useId();
+  return (
+    <SegControl
+      label="Куда внести правки"
+      name={name}
+      value={mode}
+      options={EDIT_MODES}
+      onChange={(next) => {
+        if (!disabled) onChange(next);
+      }}
+    />
+  );
+}
+
+/** B787: копия начата, а её id ещё не подтверждён — она «за» исходным резюме: продолжить, а не начать заново. */
+function ownCopyOf(snapshot: HhResumesState['snapshot'], selectedId: string | null) {
+  const copy = snapshot?.copy;
+  if (!copy) return null;
+  return copy.copyId === selectedId || (!copy.copyId && copy.sourceId === selectedId) ? copy : null;
+}
+
 /** Шаг «Резюме» отклика на hh.ru: отклик уходит резюме hh.ru, своё резюме не готовится. */
-export function HhResumeStep({ vacancyId, vacancyTitle, confirmed, onConfirm, dock }: HhResumeStepProps) {
+export function HhResumeStep({
+  vacancyId,
+  vacancyTitle,
+  confirmed,
+  onConfirm,
+  dock,
+}: HhResumeStepProps) {
   const resumes = useHhResumes(vacancyId);
   const { snapshot } = resumes;
   const edits = useHhResumeEdits(vacancyId, snapshot);
   const missing = useHhMissing(vacancyId, snapshot);
   const copy = useHhHiddenCopy(vacancyId, vacancyTitle, snapshot, resumes.replace);
   const selectedId = snapshot?.selected?.id ?? null;
-  // B787: копия начата, а её id ещё не подтверждён — она «за» исходным резюме: продолжить, а не начать заново.
-  const ownCopy =
-    snapshot?.copy && (snapshot.copy.copyId === selectedId || (!snapshot.copy.copyId && snapshot.copy.sourceId === selectedId))
-      ? snapshot.copy
-      : null;
+  const ownCopy = ownCopyOf(snapshot, selectedId);
   // Править нечем — новое резюме повторило бы прежнее.
-  const offer = isTauriEnvironment() && !ownCopy && missing.length > 0 && edits.edits.length > 0;
+  const choice = isTauriEnvironment() && !ownCopy && missing.length > 0 && edits.edits.length > 0;
+  // B787: кандидат выбирает — скрытая копия под вакансию или правки в текущее резюме.
+  const [mode, setMode] = useState<HhEditMode>('copy');
+  const offer = choice && mode === 'copy';
   const action = (
     <StepActions
       resumes={resumes}
@@ -234,6 +340,9 @@ export function HhResumeStep({ vacancyId, vacancyTitle, confirmed, onConfirm, do
   );
   return (
     <section className="lead cv-lead" aria-labelledby="rs-title">
+      {choice ? (
+        <EditModeChoice mode={mode} disabled={copy.state.kind === 'running'} onChange={setMode} />
+      ) : null}
       <ResumeBody
         resumes={resumes}
         edits={edits}
@@ -243,15 +352,7 @@ export function HhResumeStep({ vacancyId, vacancyTitle, confirmed, onConfirm, do
         canWrite={isTauriEnvironment() && !offer && !ownCopy}
       />
       {dock ? createPortal(action, dock) : <div className="actions">{action}</div>}
-      <HhResumeSheet
-        picker={resumes.picker}
-        currentId={selectedId}
-        saving={resumes.saving}
-        onClose={resumes.closePicker}
-        onSignIn={resumes.signIn}
-        onRetry={resumes.openPicker}
-        onChoose={(item) => resumes.choose(item)}
-      />
+      <StepSheet resumes={resumes} currentId={selectedId} />
     </section>
   );
 }

@@ -14,7 +14,12 @@ const api = vi.hoisted(() => ({
   HH_EDITS_POLL_MS: 3_000,
   HH_EDITS_POLL_MAX: 10,
 }));
-const desktop = vi.hoisted(() => ({ readHhResumeContent: vi.fn(), readHhResumes: vi.fn(), copyHhResume: vi.fn(), hideHhCopy: vi.fn() }));
+const desktop = vi.hoisted(() => ({
+  readHhResumeContent: vi.fn(),
+  readHhResumes: vi.fn(),
+  copyHhResume: vi.fn(),
+  hideHhCopy: vi.fn(),
+}));
 const bridge = vi.hoisted(() => ({ isTauriEnvironment: vi.fn() }));
 vi.mock('./hhSessionApi', () => api);
 vi.mock('./hhDesktop', async (original) => ({ ...(await original<object>()), ...desktop }));
@@ -50,7 +55,9 @@ beforeEach(() => {
   vi.resetAllMocks();
   api.getHhResumes.mockResolvedValue(READ);
   api.getHhResumeEdits.mockResolvedValue({ edits: [] });
-  api.getHhResumeReview.mockResolvedValue({ resumes: [{ resumeId: 'cio', status: 'fits', matched: [], missing: [] }] });
+  api.getHhResumeReview.mockResolvedValue({
+    resumes: [{ resumeId: 'cio', status: 'fits', matched: [], missing: [] }],
+  });
   bridge.isTauriEnvironment.mockReturnValue(false);
   desktop.readHhResumeContent.mockRejectedValue(new Error('hh_resume_not_read'));
 });
@@ -58,7 +65,13 @@ afterEach(() => view?.unmount());
 
 async function render(): Promise<string> {
   view = await mount(
-    <HhResumeStep vacancyId="v1" vacancyTitle="Head of Platform" confirmed={false} onConfirm={onConfirm} dock={null} />,
+    <HhResumeStep
+      vacancyId="v1"
+      vacancyTitle="Head of Platform"
+      confirmed={false}
+      onConfirm={onConfirm}
+      dock={null}
+    />,
   );
   await act(async () => undefined);
   await act(async () => undefined);
@@ -150,7 +163,9 @@ it('в браузере без прочитанных резюме — без в
 });
 
 const GAPS = { resumes: [{ resumeId: 'cio', status: 'gaps', matched: [], missing: ['Kotlin'] }] };
-const EDITS = { edits: [{ id: 's', section: 'skills', was: 'ITIL', now: 'ITIL, Kotlin', added: ['Kotlin'] }] };
+const EDITS = {
+  edits: [{ id: 's', section: 'skills', was: 'ITIL', now: 'ITIL, Kotlin', added: ['Kotlin'] }],
+};
 const COPY = { sourceId: 'cio', knownIds: ['cio', 'coo'], copyId: 'new' };
 
 it('B787: резюме подходит — создавать другое не предлагаем', async () => {
@@ -189,9 +204,16 @@ it('B787: править нечем или не приложение — не п
   expect(button('Создать резюме под вакансию')).toBeUndefined();
 });
 
-it.each([['hidden', false], ['ready', true]])('B787: копия «%s» — одобрить можно: %s', async (stage, can) => {
+it.each([
+  ['hidden', false],
+  ['ready', true],
+])('B787: копия «%s» — одобрить можно: %s', async (stage, can) => {
   bridge.isTauriEnvironment.mockReturnValue(true);
-  api.getHhResumes.mockResolvedValue({ ...READ, selected: { ...READ.selected, id: 'new' }, copy: { ...COPY, stage } });
+  api.getHhResumes.mockResolvedValue({
+    ...READ,
+    selected: { ...READ.selected, id: 'new' },
+    copy: { ...COPY, stage },
+  });
   const text = await render();
   expect(button('Одобрить резюме') !== undefined).toBe(can);
   expect(button('Продолжить создание') !== undefined).toBe(!can);
@@ -199,7 +221,9 @@ it.each([['hidden', false], ['ready', true]])('B787: копия «%s» — од�
 });
 
 it('B787: правки не подготовились — сообщение и «Повторить», повтор запрашивает снова', async () => {
-  api.getHhResumeEdits.mockRejectedValueOnce(new Error('edits_failed')).mockResolvedValue({ edits: [] });
+  api.getHhResumeEdits
+    .mockRejectedValueOnce(new Error('edits_failed'))
+    .mockResolvedValue({ edits: [] });
   const text = await render();
   expect(text).toContain('Правки под вакансию не подготовились.');
   click(button('Повторить'));
@@ -211,7 +235,11 @@ it('B787: правки не подготовились — сообщение и
 
 it('B787: начатая копия без подтверждённого id — «Продолжить создание» у исходного резюме', async () => {
   bridge.isTauriEnvironment.mockReturnValue(true);
-  api.getHhResumes.mockResolvedValue({ ...READ, readAt: new Date().toISOString(), copy: { sourceId: 'cio', knownIds: ['cio', 'coo'], stage: 'creating' } });
+  api.getHhResumes.mockResolvedValue({
+    ...READ,
+    readAt: new Date().toISOString(),
+    copy: { sourceId: 'cio', knownIds: ['cio', 'coo'], stage: 'creating' },
+  });
   const text = await render();
   expect(text).toContain('Продолжить создание');
   expect(text).not.toContain('Одобрить резюме');
@@ -220,7 +248,15 @@ it('B787: начатая копия без подтверждённого id —
 it('B787: перевод правок ещё идёт — шаг переспрашивает и показывает дошедшие правки', async () => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
   try {
-    const edit = { id: 'experience:0', section: 'experience', place: 'Fishance', employer: 'Fishance', position: 'CTO', was: 'Старый', now: 'Построил платформу.' };
+    const edit = {
+      id: 'experience:0',
+      section: 'experience',
+      place: 'Fishance',
+      employer: 'Fishance',
+      position: 'CTO',
+      was: 'Старый',
+      now: 'Построил платформу.',
+    };
     api.getHhResumeEdits
       .mockResolvedValueOnce({ resumeId: 'cio', vacancyId: 'v1', edits: [], pending: true })
       .mockResolvedValue({ resumeId: 'cio', vacancyId: 'v1', edits: [edit] });
@@ -236,4 +272,23 @@ it('B787: перевод правок ещё идёт — шаг переспр�
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('B787: выбор «Правки в текущее» — без копии, правки применяются к выбранному резюме', async () => {
+  bridge.isTauriEnvironment.mockReturnValue(true);
+  api.getHhResumeReview.mockResolvedValue(GAPS);
+  api.getHhResumeEdits.mockResolvedValue(EDITS);
+  desktop.readHhResumes.mockResolvedValue({ kind: 'ready', resumes: RESUMES });
+  await render();
+  const group = document.querySelector('[role="radiogroup"][aria-label="Куда внести правки"]')!;
+  expect(group.textContent).toContain('Копия под вакансию');
+  expect(button('Создать резюме под вакансию')).toBeDefined();
+  const current = [...group.querySelectorAll('label')].find(
+    (label) => label.textContent === 'Правки в текущее',
+  )!;
+  click(current.querySelector('input')!);
+  await act(async () => undefined);
+  expect(button('Создать резюме под вакансию')).toBeUndefined();
+  expect(button('Применить')).toBeDefined();
+  expect(desktop.copyHhResume).not.toHaveBeenCalled();
 });

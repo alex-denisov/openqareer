@@ -18,8 +18,15 @@ const clean = (value: string) =>
 function visibilityById(html: string): ReadonlyMap<string, string> {
   return new Map(
     hhQaBlocks(html, 'resume').flatMap((card) => {
-      const id = /href=["']\/resume\/([A-Za-z0-9]+)\/?(?:\?[^"']*)?["']/u.exec(card)?.[1];
-      const described = hhQaBlocks(card, 'title-description').map(plainText).join(' ').trim();
+      const id =
+        /href=["']\/resume\/([A-Za-z0-9]+)\/?(?:\?[^"']*)?["']/u.exec(card)?.[1] ??
+        /data-qa=["']resume-card-link-([A-Za-z0-9]+)["']/u.exec(card)?.[1];
+      // B787: у видимого резюме в `title-description` — доход и формат работы, не видимость;
+      // о видимости говорит только вариант `title-description_changeVisibility`.
+      const described = hhQaBlocks(card, 'title-description_changeVisibility')
+        .map(plainText)
+        .join(' ')
+        .trim();
       const shown = VISIBILITY.exec(plainText(card))?.[1] ?? (described || undefined);
       return id ? [[id, shown ? clean(shown) : '-'] as const] : [];
     }),
