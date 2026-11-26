@@ -10,6 +10,9 @@ const api = vi.hoisted(() => ({
   chooseHhResumeFor: vi.fn(),
   getHhResumeReview: vi.fn(),
   saveHhCopyFor: vi.fn(),
+  getSettledHhResumeEdits: vi.fn(),
+  HH_EDITS_POLL_MS: 3_000,
+  HH_EDITS_POLL_MAX: 10,
 }));
 const desktop = vi.hoisted(() => ({ readHhResumeContent: vi.fn(), readHhResumes: vi.fn(), copyHhResume: vi.fn(), hideHhCopy: vi.fn() }));
 const bridge = vi.hoisted(() => ({ isTauriEnvironment: vi.fn() }));
@@ -212,4 +215,25 @@ it('B787: начатая копия без подтверждённого id —
   const text = await render();
   expect(text).toContain('Продолжить создание');
   expect(text).not.toContain('Одобрить резюме');
+});
+
+it('B787: перевод правок ещё идёт — шаг переспрашивает и показывает дошедшие правки', async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const edit = { id: 'experience:0', section: 'experience', place: 'Fishance', employer: 'Fishance', position: 'CTO', was: 'Старый', now: 'Построил платформу.' };
+    api.getHhResumeEdits
+      .mockResolvedValueOnce({ resumeId: 'cio', vacancyId: 'v1', edits: [], pending: true })
+      .mockResolvedValue({ resumeId: 'cio', vacancyId: 'v1', edits: [edit] });
+    const text = await render();
+    expect(text).toContain('Готовим правки');
+    expect(text).not.toContain('не подготовились');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+    await act(async () => undefined);
+    expect(api.getHhResumeEdits).toHaveBeenCalledTimes(2);
+    expect(view?.container.textContent).toContain('Построил платформу.');
+  } finally {
+    vi.useRealTimers();
+  }
 });

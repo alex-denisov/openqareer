@@ -77,12 +77,35 @@ function publicEdit(draft: HhEditDraft, now: string): HhResumeEdit {
   };
 }
 
-export async function localizeHhResumeEdits(
+/** B787: правки к показу и полный результат перевода, который дойдёт и после срока. */
+export interface LocalizedHhEdits {
+  readonly edits: HhResumeEdit[];
+  /** Перевод уложился в срок: ничего не отброшено из-за ожидания. */
+  readonly complete: boolean;
+  /** Все правки, когда перевод закончится (или сразу, если он уже закончен). */
+  readonly settled: Promise<HhResumeEdit[]>;
+}
+
+function assemble(
+  drafts: readonly HhEditDraft[],
+  foreign: readonly HhEditDraft[],
+  skipped: ReadonlySet<HhEditDraft>,
+  arrived: ReadonlyMap<string, string>,
+): HhResumeEdit[] {
+  return drafts.flatMap((draft) => {
+    if (skipped.has(draft)) return [];
+    if (!foreign.includes(draft)) return [publicEdit(draft, draft.now)];
+    const lines = linesOf(draft).map((line) => arrived.get(line.key));
+    return lines.every((line): line is string => Boolean(line)) ? [publicEdit(draft, lines.join('\n'))] : [];
+  });
+}
+
+export async function localizeHhResumeEditsDetailed(
   drafts: readonly HhEditDraft[],
   language: HhEditLanguage,
   translator: LetterFactTranslator | undefined,
   budgetMs: number,
-): Promise<HhResumeEdit[]> {
+): Promise<LocalizedHhEdits> {
   const foreign = withinLineCap(
     drafts.filter((draft) => draft.section !== 'title' && draft.section !== 'skills' && draft.language !== language),
   );
@@ -91,17 +114,33 @@ export async function localizeHhResumeEdits(
   );
   const translate = translator?.translate?.bind(translator);
   const arrived = new Map<string, string>();
-  if (foreign.length > 0 && translate) {
-    const jobs = foreign.map((draft) =>
-      translateLines(translate, linesOf(draft), language).then((pairs) => pairs.forEach(([key, text]) => arrived.set(key, text))),
-    );
-    const deadline = expiresIn(budgetMs);
-    await Promise.race([Promise.all(jobs), deadline.promise]).finally(deadline.cancel);
+  if (foreign.length === 0 || !translate) {
+    const edits = assemble(drafts, foreign, skipped, arrived);
+    return { edits, complete: true, settled: Promise.resolve(edits) };
   }
-  return drafts.flatMap((draft) => {
-    if (skipped.has(draft)) return [];
-    if (!foreign.includes(draft)) return [publicEdit(draft, draft.now)];
-    const lines = linesOf(draft).map((line) => arrived.get(line.key));
-    return lines.every((line): line is string => Boolean(line)) ? [publicEdit(draft, lines.join('\n'))] : [];
+  let done = false;
+  const all = Promise.all(
+    foreign.map((draft) =>
+      translateLines(translate, linesOf(draft), language).then((pairs) => pairs.forEach(([key, text]) => arrived.set(key, text))),
+    ),
+  ).then(() => {
+    done = true;
   });
+  const deadline = expiresIn(budgetMs);
+  await Promise.race([all, deadline.promise]).finally(deadline.cancel);
+  const edits = assemble(drafts, foreign, skipped, arrived);
+  return {
+    edits,
+    complete: done,
+    settled: done ? Promise.resolve(edits) : all.then(() => assemble(drafts, foreign, skipped, arrived)),
+  };
+}
+
+export async function localizeHhResumeEdits(
+  drafts: readonly HhEditDraft[],
+  language: HhEditLanguage,
+  translator: LetterFactTranslator | undefined,
+  budgetMs: number,
+): Promise<HhResumeEdit[]> {
+  return (await localizeHhResumeEditsDetailed(drafts, language, translator, budgetMs)).edits;
 }

@@ -23,7 +23,7 @@ import type { SqliteApplyConsentJournal } from '../candidate/sqliteApplyConsentJ
 import { SqliteHhSessionRepository } from '../candidate/sqliteHhSessionRepository';
 import { hhApplyGate, type HhApplyRefusal } from '../domain/hhApplyGate';
 import { draftHhResumeEdits, hhResumeLanguage } from '../domain/hhResumeEdits';
-import { localizeHhResumeEdits } from '../domain/hhResumeEditTranslation';
+import { localizeHhResumeEditsDetailed, type LocalizedHhEdits } from '../domain/hhResumeEditTranslation';
 import { hasVariants, hhResumeVariantSubject } from '../domain/hhResumeVariant';
 import { reviewHhResumes } from '../domain/hhResumeReview';
 import { chooseHhResume, mergedContents, resumesForVacancy, saveHhCopy, titleRank, withoutOtherCopies } from './hhVacancyResume';
@@ -292,10 +292,20 @@ async function freshEdits(
   selected: SelectedWithSections,
   cluster: VacancyCluster,
   vacancyId: string,
-): Promise<HhResumeEdit[]> {
+): Promise<LocalizedHhEdits> {
   const drafts = draftHhResumeEdits(hhEditsInput(deps, candidateId, selected, cluster, vacancyId));
   const language = hhResumeLanguage(selected.sections);
-  return localizeHhResumeEdits(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
+  return localizeHhResumeEditsDetailed(drafts, language, deps.experienceFactRewriter, EDITS_TRANSLATION_BUDGET_MS);
+}
+
+/**
+ * B787: перевод не уложился в срок — неполный результат не кэшируется (иначе 10 минут правок нет),
+ * а дошедший перевод кладётся в кэш: следующий запрос получит все правки сразу.
+ */
+const editsInFlight = new Map<string, Promise<readonly HhResumeEdit[]>>();
+
+export function editsPending(key: string): boolean {
+  return editsInFlight.has(key);
 }
 
 export async function hhResumeEditsOf(
@@ -306,9 +316,26 @@ export async function hhResumeEditsOf(
   vacancyId: string,
 ): Promise<readonly HhResumeEdit[]> {
   const key = editsCacheKey(candidateId, resume, vacancyId);
-  const edits = cachedEdits(key) ?? (await freshEdits(deps, candidateId, resume, cluster, vacancyId));
-  rememberEdits(key, edits);
-  return edits;
+  const cached = cachedEdits(key);
+  if (cached) return cached;
+  if (editsInFlight.has(key)) return [];
+  const localized = await freshEdits(deps, candidateId, resume, cluster, vacancyId);
+  if (localized.complete) {
+    rememberEdits(key, localized.edits);
+    return localized.edits;
+  }
+  const settled = localized.settled
+    .then((edits) => {
+      rememberEdits(key, edits);
+      return edits;
+    })
+    .catch((error: unknown) => {
+      console.error('[hh-edits] translation failed', { error: error instanceof Error ? error.message : String(error) });
+      return localized.edits;
+    })
+    .finally(() => editsInFlight.delete(key));
+  editsInFlight.set(key, settled);
+  return localized.edits;
 }
 
 /** B682: ключ вариантов у правок с «Другим вариантом»; считается по правке до перевода. */
@@ -361,7 +388,9 @@ const getEdits: Handler = async (deps, request, reply) => {
   const { vacancyId } = query.data;
   const found = await hhResumeEditsOf(deps, candidateId, selected, cluster, vacancyId);
   const edits = withVariantSubjects(deps, candidateId, selected, cluster, vacancyId, found);
-  return { data: { resumeId: selected.id, vacancyId, edits }, meta: { requestId: request.id } };
+  // B787: перевод ещё идёт — экран повторит запрос, а не покажет «правок нет».
+  const pending = editsPending(editsCacheKey(candidateId, selected, vacancyId));
+  return { data: { resumeId: selected.id, vacancyId, edits, ...(pending ? { pending } : {}) }, meta: { requestId: request.id } };
 };
 
 const postAttempt: Handler = async (deps, request, reply) => {

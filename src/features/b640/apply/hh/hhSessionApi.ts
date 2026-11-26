@@ -112,6 +112,24 @@ export interface HhResumeEdits {
   readonly resumeId: string;
   readonly vacancyId: string;
   readonly edits: readonly HhResumeEdit[];
+  /** B787: перевод правок ещё идёт: запрос повторяется, «правок нет» не показывается. */
+  readonly pending?: boolean;
+}
+
+export const HH_EDITS_POLL_MS = 3_000;
+export const HH_EDITS_POLL_MAX = 10;
+
+/** Правки, когда перевод закончился; не закончился за отведённые попытки — ошибка. */
+export async function getSettledHhResumeEdits(
+  vacancyId: string,
+  wait: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): Promise<HhResumeEdits> {
+  for (let attempt = 0; attempt < HH_EDITS_POLL_MAX; attempt += 1) {
+    const result = await getHhResumeEdits(vacancyId);
+    if (!result.pending) return result;
+    await wait(HH_EDITS_POLL_MS);
+  }
+  throw new Error('hh_edits_pending');
 }
 
 /** B678: правки выбранного резюме hh.ru «было → станет» по профилю платформы. */
