@@ -83,7 +83,6 @@ export function MoneyCell({ item, env }: { item: MatchedVacancyItem; env: RowEnv
       {money.amount ?? money.text}
       {money.unit ? <span className="vt-cur"> {money.unit}</span> : null}
       {money.estimate ? <span className="vh">, {money.title}</span> : null}
-      {money.estimate ? <span className="vt-est" aria-hidden="true">оценка</span> : null}
     </span>
   );
 }
