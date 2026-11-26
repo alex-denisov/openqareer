@@ -169,25 +169,21 @@ test.describe('B798: список → объект → назад', () => {
 });
 
 test.describe('B791: «Откликнуться» на 390 (v06b2)', () => {
-  test('полоса над навигацией, в строке «Открыть», конец списка не перекрыт', async ({ page }) => {
+  // Макеты v06b и v06b2 (M9-2): «Откликнуться» и «Открыть» — в самой раскрытой строке, полосы над навигацией нет.
+  test('«Откликнуться» в строке рядом с «Открыть», полосы нет, конец списка не перекрыт', async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openList(page);
     await page.locator(`${ROWS} .vt-toggle`).first().click();
-    const apply = page.locator('.page > .act-dock.is-auto').getByRole('link');
-    await expect(apply).toHaveText('Откликнуться');
-    const button = (await apply.boundingBox())!;
-    expect([button.x, button.width, button.height]).toEqual([16, 358, 44]);
-    const inRow = page.locator('.vs-acts a');
-    await expect(inRow).toHaveCount(1);
-    await expect(inRow).toHaveAccessibleName('Открыть полностью');
+    const acts = page.locator('.vs-acts');
+    await expect(acts.getByRole('link', { name: 'Откликнуться' })).toBeVisible();
+    await expect(acts.getByRole('link', { name: 'Открыть полностью' })).toHaveCount(1);
+    await expect(page.locator('.act-dock.is-auto')).toHaveCount(0);
     const more = page.getByRole('button', { name: /Показать ещё/u });
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    const dock = (await page.locator('.act-dock.is-auto').boundingBox())!;
     const nav = (await page.locator('nav').last().boundingBox())!;
     const last = (await more.boundingBox())!;
-    expect(dock.y + dock.height).toBeLessThanOrEqual(nav.y + 1);
-    expect(last.y + last.height).toBeLessThanOrEqual(dock.y);
-    await page.locator(`${ROWS} .vt-toggle`).first().click();
-    await expect(page.locator('.act-dock.is-auto')).toHaveCount(0);
+    expect(last.y + last.height).toBeLessThanOrEqual(nav.y + 1);
   });
 });
