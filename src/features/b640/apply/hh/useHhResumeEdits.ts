@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { hhSectionsRead, type HhResumeEdit, type HhResumeSnapshot } from '../../../../../shared/hhCandidateSession';
-import { getHhResumeEdits } from './hhSessionApi';
+import { getHhResumeEdits, HH_EDITS_POLL_MAX, HH_EDITS_POLL_MS } from './hhSessionApi';
 
 /**
  * B678: правки выбранного резюме hh.ru. Просим их, когда у выбранного резюме прочитаны разделы;
@@ -31,10 +31,23 @@ export function useHhResumeEdits(vacancyId: string, snapshot: HhResumeSnapshot |
     const settle = (edits: readonly HhResumeEdit[], failed: boolean) => {
       if (!controller.signal.aborted) setLoaded({ key, edits, failed });
     };
-    getHhResumeEdits(vacancyId, controller.signal)
-      .then((result) => settle(result.edits, false))
-      .catch(() => settle([], true));
-    return () => controller.abort();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ask = (round: number) => {
+      getHhResumeEdits(vacancyId, controller.signal)
+        .then((result) => {
+          if (!result.pending) return settle(result.edits, false);
+          // B787: перевод ещё идёт — спрашиваем снова; не дождались — ошибка с «Повторить».
+          if (round + 1 >= HH_EDITS_POLL_MAX) return settle([], true);
+          timer = setTimeout(() => ask(round + 1), HH_EDITS_POLL_MS);
+          return undefined;
+        })
+        .catch(() => settle([], true));
+    };
+    ask(0);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
   }, [vacancyId, key]);
   const current = loaded !== null && loaded.key === key;
   return {

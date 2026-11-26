@@ -4,7 +4,7 @@ import { applyHhResumeEditInSession, copyHhResume, deleteHhCopy, hideHhCopy, rea
 import { pauseBetweenEdits } from './hhEditPace';
 import { createHiddenCopy, type HiddenCopyDeps, type HiddenCopyStep } from './hhHiddenCopy';
 import { forgetReadResumes } from './hhResumeReading';
-import { chooseHhResumeFor, getHhResumeEdits, getHhResumeReview, saveHhCopyFor, saveHhResumes } from './hhSessionApi';
+import { chooseHhResumeFor, getHhResumeReview, getSettledHhResumeEdits, saveHhCopyFor, saveHhResumes } from './hhSessionApi';
 import { failureText } from './useHhResumeApply';
 
 /** B787: ход создания резюме под вакансию. */
@@ -56,7 +56,7 @@ function depsFor(vacancyId: string, replace: (saved: HhResumeSnapshot) => void):
       await saveHhResumes(list.map(summaryOf), content, undefined, vacancyId);
       replace(await chooseHhResumeFor(vacancyId, content.id));
     },
-    edits: async () => (await getHhResumeEdits(vacancyId)).edits,
+    edits: async () => (await getSettledHhResumeEdits(vacancyId)).edits,
     pause: pauseBetweenEdits,
   };
 }
