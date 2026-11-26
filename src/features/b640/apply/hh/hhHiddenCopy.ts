@@ -84,13 +84,13 @@ async function newCopy(deps: HiddenCopyDeps, source: HhResumeSummary, list: read
   const made = await report(() => deps.copy(source.id, started.knownIds));
   const code = made.failureCode ?? 'copy_unconfirmed';
   if (made.outcome === 'copied' && made.copyId) return { ...started, copyId: made.copyId };
-  if (BEFORE_COPY.has(code)) {
-    await deps.saveCopy(null);
-    stop(code);
-  }
-  // Нажатие могло дойти до hh.ru: копию ищем в списке, второй раз не нажимаем.
-  const found = appeared(await listOf(deps), started, source);
-  return found ? { ...started, copyId: found } : stop(code);
+  // Нажатие могло дойти до hh.ru и при коде «до копии» (страница сменилась после нажатия):
+  // копию ищем в списке, второй раз не нажимаем. Список не прочитался — начатое не забываем.
+  const after = await listOf(deps).catch(() => null);
+  const found = after ? appeared(after, started, source) : null;
+  if (found) return { ...started, copyId: found };
+  if (after && BEFORE_COPY.has(code)) await deps.saveCopy(null);
+  return stop(code);
 }
 
 /** Копия, начатая раньше, или новая. */

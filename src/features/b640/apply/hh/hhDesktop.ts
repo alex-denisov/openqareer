@@ -1,3 +1,4 @@
+import { hhResumesListReport } from '../../../../services/connectors/hhResumesListReport';
 import { hhResumeMarkupSketch } from '../../../../services/connectors/hhResumeMarkupSketch';
 import {
   HH_RESUME_ID,
@@ -49,9 +50,22 @@ export interface HhDesktopReport {
 /** hh.ru просит проверку: её проходит кандидат в окне hh.ru. */
 export const HH_CAPTCHA = 'hh_captcha';
 
+/** B787: локальный файл диагностики; ни сбор, ни запись чтению не мешают. */
+function writeDiagnosticFile(command: string, args: () => Record<string, unknown>): void {
+  void Promise.resolve()
+    .then(() => invokeDesktopCommand<void>(command, args()))
+    .catch(() => undefined);
+}
+
+/** B787: список резюме — в локальный файл диагностики; сбой записи чтению не мешает. */
+function saveResumesList(body: string): void {
+  writeDiagnosticFile('write_hh_resumes_list', () => ({ report: hhResumesListReport(body) }));
+}
+
 const poller = createHhSessionPoller({
   inspectCurrentPage: () => inspectSessionPage('hh'),
   readSessionPage: (url) => readSessionPage('hh', url),
+  onResumeList: saveResumesList,
 });
 
 /** Список резюме кандидата в его сессии hh.ru; «нужен вход» — только когда его показывает сама страница. */
@@ -102,9 +116,7 @@ export function sectionsOf(parsed: ParsedResume, fallbackTitle: string): HhResum
 
 /** B787: набросок разметки опыта — в локальный файл диагностики; сбой записи чтению не мешает. */
 function saveMarkupSketch(body: string): void {
-  void invokeDesktopCommand<void>('write_hh_resume_markup', {
-    sketch: hhResumeMarkupSketch(body),
-  }).catch(() => undefined);
+  writeDiagnosticFile('write_hh_resume_markup', () => ({ sketch: hhResumeMarkupSketch(body) }));
 }
 
 /** Содержимое выбранного резюме — страница резюме в сессии кандидата, как её показывает hh.ru. */

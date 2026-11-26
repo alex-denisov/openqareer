@@ -699,6 +699,12 @@ fn write_hh_resume_markup(app: AppHandle, sketch: String) -> Result<(), String> 
     connector_session::write_hh_resume_markup(&app, &sketch)
 }
 
+/// B787: the candidate's hh.ru resume list next to the diagnostics log; never sent anywhere.
+#[tauri::command]
+fn write_hh_resumes_list(app: AppHandle, report: String) -> Result<(), String> {
+    connector_session::write_hh_resumes_list(&app, &report)
+}
+
 /// Inspects the current page without redirecting an in-progress login flow.
 #[tauri::command]
 async fn inspect_connector_session_page(
@@ -875,6 +881,7 @@ fn main() {
             save_connector_capture_dump,
             log_connector_diagnostic,
             write_hh_resume_markup,
+            write_hh_resumes_list,
             inspect_connector_session_page,
             get_desktop_environment_info,
             read_session_token,
