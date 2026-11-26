@@ -2492,7 +2492,9 @@ const HH_RESUME_MARKUP_MAX_CHARS: usize = 16_000;
 fn valid_markup_sketch(sketch: &str) -> bool {
     !sketch.is_empty()
         && sketch.len() <= HH_RESUME_MARKUP_MAX_CHARS
-        && sketch.chars().all(|c| c == '\n' || (' '..='~').contains(&c))
+        && sketch
+            .chars()
+            .all(|c| c == '\n' || (' '..='~').contains(&c))
 }
 
 pub fn write_hh_resume_markup(app: &AppHandle, sketch: &str) -> Result<(), String> {
@@ -2505,7 +2507,9 @@ const HH_RESUMES_LIST_FILE: &str = "hh-resumes-list.txt";
 fn valid_resumes_report(report: &str) -> bool {
     !report.is_empty()
         && report.chars().count() <= HH_RESUME_MARKUP_MAX_CHARS
-        && report.chars().all(|c| c == '\n' || c == '\t' || !c.is_control())
+        && report
+            .chars()
+            .all(|c| c == '\n' || c == '\t' || !c.is_control())
 }
 
 pub fn write_hh_resumes_list(app: &AppHandle, report: &str) -> Result<(), String> {
@@ -2575,12 +2579,18 @@ pub fn append_connector_diagnostic(
 mod tests {
     #[test]
     fn markup_sketch_accepts_only_masked_ascii() {
-        assert!(super::valid_markup_sketch("li[magritte-stepper-step]\n  \"MON_04 2023 - xxx\""));
+        assert!(super::valid_markup_sketch(
+            "li[magritte-stepper-step]\n  \"MON_04 2023 - xxx\""
+        ));
         assert!(!super::valid_markup_sketch(""));
-        assert!(super::valid_resumes_report("resumes 1\nabc\tIT Директор\tНе видно никому\t-"));
+        assert!(super::valid_resumes_report(
+            "resumes 1\nabc\tIT Директор\tНе видно никому\t-"
+        ));
         assert!(!super::valid_resumes_report("a\u{0}b"));
         assert!(!super::valid_markup_sketch("\"Россети\""));
-        assert!(!super::valid_markup_sketch(&"x".repeat(super::HH_RESUME_MARKUP_MAX_CHARS + 1)));
+        assert!(!super::valid_markup_sketch(
+            &"x".repeat(super::HH_RESUME_MARKUP_MAX_CHARS + 1)
+        ));
     }
 
     #[test]
