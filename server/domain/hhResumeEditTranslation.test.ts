@@ -69,8 +69,10 @@ describe('B678: «станет» на языке резюме hh.ru', () => {
       id, section: 'experience', was: '', now: '', language: 'en', lines: Array.from({ length: count }, () => line),
     });
     const ru = translator(RU);
-    const edits = await localizeHhResumeEdits([big('experience:0', 8), big('experience:1', 8), big('experience:2', 8), big('experience:3', 8)], 'ru', ru, 1_000);
-    expect(edits.map((edit) => edit.id)).toEqual(['experience:0', 'experience:1', 'experience:2']);
+    const size = TRANSLATED_LINES_MAX / 4;
+    const drafts = Array.from({ length: 5 }, (_, index) => big(`experience:${index}`, size));
+    const edits = await localizeHhResumeEdits(drafts, 'ru', ru, 1_000);
+    expect(edits.map((edit) => edit.id)).toEqual(['experience:0', 'experience:1', 'experience:2', 'experience:3']);
     const sent = ru.translate.mock.calls.reduce((total, [request]) => total + request.bullets.length, 0);
     expect(sent).toBe(TRANSLATED_LINES_MAX);
   });
