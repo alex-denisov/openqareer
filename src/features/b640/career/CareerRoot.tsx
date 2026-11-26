@@ -7,7 +7,8 @@ import { CompareView } from './CompareView';
 import { pageAttrs } from './careerPaths';
 import { GrowthScreen } from './GrowthScreen';
 import { ProfessionScreen } from './ProfessionScreen';
-import { RolesLoad, RolesView } from './RolesScreen';
+import { RoleStripPlace, RolesLoad, RolesView } from './RolesScreen';
+import { SkillStripPlace } from './SkillStrip';
 
 /**
  * Корень «Карьеры» по статусу кандидата (B665): «Ищу, кем работать» — сравнение ролей (s10),
@@ -18,6 +19,9 @@ export function CareerRoot({ node }: { readonly node: B640Node }) {
   if (status.state !== 'ready') {
     return (
       <div className="page" {...pageAttrs(node)}>
+        {/* B792: каркас s09 — экран большинства статусов, иначе страница прыгнула бы. */}
+        <RoleStripPlace />
+        <SkillStripPlace />
         <BlockSkeleton label="Подбираем роли" rows={3} />
       </div>
     );

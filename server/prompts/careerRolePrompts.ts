@@ -2,7 +2,7 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.8-2026-11-25',
+  career_consultant: 'career-consultant-v1.9-2026-11-26',
   career_strategist: 'career-strategist-v1.8-2026-11-22',
   career_expert: 'career-expert-v1.6-2026-11-22',
 };
@@ -25,6 +25,10 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   кнопка «Применить» вносит правку во все записи этого факта. Если они есть, скажи,
   что правка готова ниже и встанет после «Применить». Не отвечай, что текст не меняешь,
   и не проси вносить правку вручную. Если их нет, карточку не обещай.
+- resumeEditCard — под этой репликой кандидат увидит готовую правку резюме
+  «Было / Станет» (place — место работы) с «Применить», «Другой вариант» и «Отклонить».
+  Если оно есть, не задавай уточняющих вопросов о формулировке: коротко скажи, что
+  правка ниже и встанет в резюме после «Применить». Если его нет, правку резюме не обещай.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
 - nextSection — раздел кабинета, где кандидат делает то, что ты советуешь:

@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectGates } from './gates';
 import {
   mockResponses,
+  RESUME_ASK,
   RESUME_BULLET,
   RESUME_VARIANT,
   responseFixtures,
@@ -366,6 +367,44 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     expect(mock.calls).toEqual(['variant', 'apply e1#0 v1']);
     await panel.getByRole('button', { name: 'Отменить' }).click();
     await expect(card).toBeVisible();
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1', 'revert']);
+  });
+
+  test('B786: в «Мало данных» правка резюме — прямой просьбой консультанту (o07c → k06)', async ({
+    page,
+  }, info) => {
+    const mock = await open(page, '/app/responses/review', 'o07', { askedResumeEdit: true });
+    await expect(
+      page.getByRole('heading', { name: 'Мало данных для вывода: 6 откликов' }),
+    ).toBeVisible();
+    // Макет o07c: кнопки «Поправить резюме» здесь нет, путь к k06 — через консультанта.
+    await expect(page.getByRole('button', { name: 'Поправить резюме' })).toHaveCount(0);
+    const opener =
+      info.project.name === 'mobile-390'
+        ? page.getByRole('link', { name: /Консультант: открыть/u })
+        : page.locator('.b640 .top-actions .btn-panel');
+    await opener.click({ timeout: 15_000 });
+    const panel = page.locator('.b640 .app.has-panel > aside.panel-col');
+    await expect(panel.getByText(RESUME_ASK)).toBeVisible();
+    const card = panel.locator('.ec');
+    await expect(card.locator('.now dd')).toHaveText(RESUME_BULLET);
+    await expect(card.getByRole('button', { name: 'Применить' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Отклонить' })).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    if (SHOTS) {
+      mkdirSync(SHOTS, { recursive: true });
+      await page.screenshot({ path: `${SHOTS}/k06-ask-${info.project.name}.png` });
+    }
+    await card.getByRole('button', { name: 'Другой вариант' }).click();
+    const wish = page.getByRole('dialog', { name: 'Что поменять' });
+    await wish.getByRole('button', { name: 'Сделать вариант' }).click();
+    await expect(card.locator('.now dd')).toHaveText(RESUME_VARIANT);
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/k06-ask-variant-${info.project.name}.png` });
+    expect(mock.calls).toEqual(['variant']);
+    await card.getByRole('button', { name: 'Применить' }).click();
+    await expect(panel.getByText('Применено', { exact: true })).toBeVisible();
+    expect(mock.calls).toEqual(['variant', 'apply e1#0 v1']);
+    await panel.getByRole('button', { name: 'Отменить' }).click();
     expect(mock.calls).toEqual(['variant', 'apply e1#0 v1', 'revert']);
   });
 
